@@ -152,7 +152,7 @@ public:
     	   uint64_t align)> MatrixTest;
 
   void StartDeferred(size_t min_alloc_size) {
-    SetVal(g_conf, "bluestore_min_alloc_size", stringify(min_alloc_size).c_str());
+    SetVal(g_conf(), "bluestore_min_alloc_size", stringify(min_alloc_size).c_str());
     DeferredSetup();
   }
 
@@ -175,7 +175,7 @@ protected:
       return stringify(num_ops);
     } else {
       char *buf;
-      g_conf->get_val(k, &buf, -1);
+      g_conf().get_val(k, &buf, -1);
       string v = buf;
       free(buf);
       return v;
@@ -192,7 +192,7 @@ protected:
     } else if (string(k) == "num_ops") {
       num_ops = atoll(v);
     } else {
-      SetVal(g_conf, k, v);
+      SetVal(g_conf(), k, v);
     }
   }
 
@@ -217,7 +217,7 @@ protected:
         cout << "  " << matrix[k][0] << " = " << matrix_get(matrix[k][0])
 	     << std::endl;
       }
-      g_ceph_context->_conf->apply_changes(NULL);
+      g_ceph_context->_conf.apply_changes(nullptr);
       fn(num_ops, max_size, max_write, alignment);
     }
   }
@@ -589,7 +589,7 @@ TEST_P(StoreTest, SimpleColPreHashTest) {
   std::ostringstream oss;
   if (merge_threshold > 0) {
     oss << "-" << merge_threshold;
-    SetVal(g_conf, "filestore_merge_threshold", oss.str().c_str());
+    SetVal(g_conf(), "filestore_merge_threshold", oss.str().c_str());
   }
 
   uint32_t pg_num = 128;
@@ -1051,8 +1051,8 @@ void StoreTest::doCompressionTest()
   EXPECT_EQ(store->mount(), 0);
   ch = store->open_collection(cid);
   auto settingsBookmark = BookmarkSettings();
-  SetVal(g_conf, "bluestore_compression_min_blob_size", "262144");
-  g_ceph_context->_conf->apply_changes(NULL);
+  SetVal(g_conf(), "bluestore_compression_min_blob_size", "262144");
+  g_ceph_context->_conf.apply_changes(nullptr);
   {
     data.resize(0x10000*6);
 
@@ -1085,14 +1085,14 @@ TEST_P(StoreTest, CompressionTest) {
   if (string(GetParam()) != "bluestore")
     return;
 
-  SetVal(g_conf, "bluestore_compression_algorithm", "snappy");
-  SetVal(g_conf, "bluestore_compression_mode", "force");
-  g_ceph_context->_conf->apply_changes(NULL);
+  SetVal(g_conf(), "bluestore_compression_algorithm", "snappy");
+  SetVal(g_conf(), "bluestore_compression_mode", "force");
+  g_ceph_context->_conf.apply_changes(nullptr);
   doCompressionTest();
 
-  SetVal(g_conf, "bluestore_compression_algorithm", "zlib");
-  SetVal(g_conf, "bluestore_compression_mode", "aggressive");
-  g_ceph_context->_conf->apply_changes(NULL);
+  SetVal(g_conf(), "bluestore_compression_algorithm", "zlib");
+  SetVal(g_conf(), "bluestore_compression_mode", "aggressive");
+  g_ceph_context->_conf.apply_changes(nullptr);
   doCompressionTest();
 }
 
@@ -1316,10 +1316,10 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
   if(string(GetParam()) != "bluestore")
     return;
   StartDeferred(65536);
-  SetVal(g_conf, "bluestore_compression_mode", "force");
+  SetVal(g_conf(), "bluestore_compression_mode", "force");
   // just a big number to disble gc
-  SetVal(g_conf, "bluestore_gc_enable_total_threshold", "100000");
-  g_conf->apply_changes(NULL);
+  SetVal(g_conf(), "bluestore_gc_enable_total_threshold", "100000");
+  g_conf().apply_changes(nullptr);
   int r;
 
   coll_t cid;
@@ -1357,8 +1357,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     ASSERT_EQ(r, 0);
     ASSERT_EQ( 0u, statfs.allocated);
     ASSERT_EQ( 0u, statfs.stored);
-    ASSERT_EQ(g_conf->bluestore_block_size, statfs.total);
-    ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf->bluestore_block_size);
+    ASSERT_EQ(g_conf()->bluestore_block_size, statfs.total);
+    ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf()->bluestore_block_size);
     //force fsck
     ch.reset();
     EXPECT_EQ(store->umount(), 0);
@@ -1604,10 +1604,10 @@ TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
     struct store_statfs_t statfs;
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ(g_conf->bluestore_block_size, statfs.total);
+    ASSERT_EQ(g_conf()->bluestore_block_size, statfs.total);
     ASSERT_EQ(0u, statfs.allocated);
     ASSERT_EQ(0u, statfs.stored);
-    ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf->bluestore_block_size);
+    ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf()->bluestore_block_size);
   }
   std::string data;
   data.resize(0x10000 * 3);
@@ -1931,7 +1931,7 @@ TEST_P(StoreTest, AppendDeferredVsTailCache) {
     r = store->queue_transaction(ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  unsigned min_alloc = g_conf->bluestore_min_alloc_size;
+  unsigned min_alloc = g_conf()->bluestore_min_alloc_size;
   unsigned size = min_alloc / 3;
   bufferptr bpa(size);
   memset(bpa.c_str(), 1, bpa.length());
@@ -2008,7 +2008,7 @@ TEST_P(StoreTest, AppendZeroTrailingSharedBlock) {
     r = store->queue_transaction(ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  unsigned min_alloc = g_conf->bluestore_min_alloc_size;
+  unsigned min_alloc = g_conf()->bluestore_min_alloc_size;
   unsigned size = min_alloc / 3;
   bufferptr bpa(size);
   memset(bpa.c_str(), 1, bpa.length());
@@ -4261,9 +4261,9 @@ void StoreTest::doSyntheticTest(
   gen_type rng(time(NULL));
   coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
 
-  SetVal(g_conf, "bluestore_fsck_on_mount", "false");
-  SetVal(g_conf, "bluestore_fsck_on_umount", "false");
-  g_ceph_context->_conf->apply_changes(NULL);
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   SyntheticWorkloadState test_obj(store.get(), &gen, &rng, cid,
 				  max_obj, max_wr, align);
@@ -5538,8 +5538,8 @@ TEST_P(StoreTest, TryMoveRename) {
 TEST_P(StoreTest, BluestoreOnOffCSumTest) {
   if (string(GetParam()) != "bluestore")
     return;
-  SetVal(g_conf, "bluestore_csum_type", "crc32c");
-  g_conf->apply_changes(NULL);
+  SetVal(g_conf(), "bluestore_csum_type", "crc32c");
+  g_conf().apply_changes(nullptr);
 
   int r;
   coll_t cid;
@@ -5570,8 +5570,8 @@ TEST_P(StoreTest, BluestoreOnOffCSumTest) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
 
-    SetVal(g_conf, "bluestore_csum_type", "none");
-    g_conf->apply_changes(NULL);
+    SetVal(g_conf(), "bluestore_csum_type", "none");
+    g_conf().apply_changes(nullptr);
 
     bufferlist in;
     r = store->read(ch, hoid, 0, block_size, in);
@@ -5594,8 +5594,8 @@ TEST_P(StoreTest, BluestoreOnOffCSumTest) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
 
-    SetVal(g_conf, "bluestore_csum_type", "crc32c");
-    g_conf->apply_changes(NULL);
+    SetVal(g_conf(), "bluestore_csum_type", "crc32c");
+    g_conf().apply_changes(nullptr);
 
     bufferlist in;
     r = store->read(ch, hoid, 0, block_size, in);
@@ -5616,8 +5616,8 @@ TEST_P(StoreTest, BluestoreOnOffCSumTest) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
 
-    SetVal(g_conf, "bluestore_csum_type", "none");
-    g_conf->apply_changes(NULL);
+    SetVal(g_conf(), "bluestore_csum_type", "none");
+    g_conf().apply_changes(nullptr);
 
     ObjectStore::Transaction t2;
     t2.write(cid, hoid, block_size*2, bl.length(), bl);
@@ -5634,8 +5634,8 @@ TEST_P(StoreTest, BluestoreOnOffCSumTest) {
     ASSERT_EQ((int)block_size, r);
     ASSERT_TRUE(bl_eq(orig, in));
 
-    SetVal(g_conf, "bluestore_csum_type", "crc32c");
-    g_conf->apply_changes(NULL);
+    SetVal(g_conf(), "bluestore_csum_type", "crc32c");
+    g_conf().apply_changes(nullptr);
     in.clear();
     r = store->read(ch, hoid, 0, block_size, in);
     ASSERT_EQ((int)block_size, r);
@@ -5661,8 +5661,8 @@ TEST_P(StoreTest, BluestoreOnOffCSumTest) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
 
-    SetVal(g_conf, "bluestore_csum_type", "none");
-    g_conf->apply_changes(NULL);
+    SetVal(g_conf(), "bluestore_csum_type", "none");
+    g_conf().apply_changes(nullptr);
 
     ObjectStore::Transaction t2;
     bl.clear();
@@ -5686,8 +5686,8 @@ TEST_P(StoreTest, BluestoreOnOffCSumTest) {
     ASSERT_EQ((int)block_size, r);
     ASSERT_TRUE(bl_eq(orig2, in));
 
-    SetVal(g_conf, "bluestore_csum_type", "crc32c");
-    g_conf->apply_changes(NULL);
+    SetVal(g_conf(), "bluestore_csum_type", "crc32c");
+    g_conf().apply_changes(nullptr);
 
     ObjectStore::Transaction t3;
     bl.clear();
@@ -5811,8 +5811,8 @@ TEST_P(StoreTestSpecificAUSize, Many4KWritesNoCSumTest) {
   if (string(GetParam()) != "bluestore")
     return;
   StartDeferred(0x10000);
-  SetVal(g_conf, "bluestore_csum_type", "none");
-  g_ceph_context->_conf->apply_changes(NULL);
+  SetVal(g_conf(), "bluestore_csum_type", "none");
+  g_ceph_context->_conf.apply_changes(nullptr);
   const unsigned max_object = 4*1024*1024;
 
   doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0 );
@@ -5848,11 +5848,11 @@ TEST_P(StoreTestSpecificAUSize, OnodeSizeTracking) {
 
   size_t block_size = 4096;
   StartDeferred(block_size);
-  SetVal(g_conf, "bluestore_compression_mode", "none");
-  SetVal(g_conf, "bluestore_csum_type", "none");
-  SetVal(g_conf, "bluestore_cache_size_hdd", "400000000");
-  SetVal(g_conf, "bluestore_cache_size_ssd", "400000000");
-  g_conf->apply_changes(NULL);
+  SetVal(g_conf(), "bluestore_compression_mode", "none");
+  SetVal(g_conf(), "bluestore_csum_type", "none");
+  SetVal(g_conf(), "bluestore_cache_size_hdd", "400000000");
+  SetVal(g_conf(), "bluestore_cache_size_ssd", "400000000");
+  g_conf().apply_changes(nullptr);
 
   int r;
   coll_t cid;
@@ -5948,8 +5948,8 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
 
   size_t block_size = 4096;
   StartDeferred(block_size);
-  SetVal(g_conf, "bluestore_max_blob_size", "65536");
-  g_conf->apply_changes(NULL);
+  SetVal(g_conf(), "bluestore_max_blob_size", "65536");
+  g_conf().apply_changes(nullptr);
 
   int r;
   coll_t cid;
@@ -6121,8 +6121,8 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
 
   size_t block_size = 4096;
   StartDeferred(block_size);
-  SetVal(g_conf, "bluestore_max_blob_size", "65536");
-  g_conf->apply_changes(NULL);
+  SetVal(g_conf(), "bluestore_max_blob_size", "65536");
+  g_conf().apply_changes(nullptr);
 
   int r;
   coll_t cid;
@@ -6302,8 +6302,8 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
 
   size_t block_size = 4096;
   StartDeferred(block_size);
-  SetVal(g_conf, "bluestore_max_blob_size", "65536");
-  g_conf->apply_changes(NULL);
+  SetVal(g_conf(), "bluestore_max_blob_size", "65536");
+  g_conf().apply_changes(nullptr);
 
   int r;
   coll_t cid;
@@ -6381,10 +6381,10 @@ TEST_P(StoreTestSpecificAUSize, SmallWriteOnShardedExtents) {
   size_t block_size = 0x10000;
   StartDeferred(block_size);
 
-  SetVal(g_conf, "bluestore_csum_type", "xxhash64");
-  SetVal(g_conf, "bluestore_max_blob_size", "524288"); // for sure
+  SetVal(g_conf(), "bluestore_csum_type", "xxhash64");
+  SetVal(g_conf(), "bluestore_max_blob_size", "524288"); // for sure
 
-  g_conf->apply_changes(NULL);
+  g_conf().apply_changes(nullptr);
 
   int r;
   coll_t cid;
@@ -6462,10 +6462,10 @@ TEST_P(StoreTestSpecificAUSize, ExcessiveFragmentation) {
   if (string(GetParam()) != "bluestore")
     return;
 
-  SetVal(g_conf, "bluestore_block_size",
+  SetVal(g_conf(), "bluestore_block_size",
     stringify((uint64_t)2048 * 1024 * 1024).c_str());
 
-  ASSERT_EQ(g_conf->get_val<uint64_t>("bluefs_alloc_size"),
+  ASSERT_EQ(g_conf().get_val<uint64_t>("bluefs_alloc_size"),
 	    1024 * 1024);
 
   size_t block_size = 0x10000;
@@ -6536,7 +6536,7 @@ TEST_P(StoreTestSpecificAUSize, ExcessiveFragmentation) {
   }
 
   auto to_sleep = 5 *
-    (int)g_conf->get_val<double>("bluestore_bluefs_balance_interval");
+    (int)g_conf().get_val<double>("bluestore_bluefs_balance_interval");
   std::cout<<"sleeping... " << std::endl;
   sleep(to_sleep);
 
@@ -6599,11 +6599,11 @@ TEST_P(StoreTest, KVDBStatsTest) {
   if (string(GetParam()) != "bluestore")
     return;
 
-  SetVal(g_conf, "rocksdb_perf", "true");
-  SetVal(g_conf, "rocksdb_collect_compaction_stats", "true");
-  SetVal(g_conf, "rocksdb_collect_extended_stats","true");
-  SetVal(g_conf, "rocksdb_collect_memory_stats","true");
-  g_ceph_context->_conf->apply_changes(NULL);
+  SetVal(g_conf(), "rocksdb_perf", "true");
+  SetVal(g_conf(), "rocksdb_collect_compaction_stats", "true");
+  SetVal(g_conf(), "rocksdb_collect_extended_stats","true");
+  SetVal(g_conf(), "rocksdb_collect_memory_stats","true");
+  g_ceph_context->_conf.apply_changes(nullptr);
   int r = store->umount();
   ASSERT_EQ(r, 0);
   r = store->mount(); //to force rocksdb stats
@@ -6665,10 +6665,10 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
 
   StartDeferred(65536);
 
-  SetVal(g_conf, "bluestore_compression_max_blob_size", "524288");
-  SetVal(g_conf, "bluestore_compression_min_blob_size", "262144");
-  SetVal(g_conf, "bluestore_compression_mode", "force");
-  g_conf->apply_changes(NULL);
+  SetVal(g_conf(), "bluestore_compression_max_blob_size", "524288");
+  SetVal(g_conf(), "bluestore_compression_min_blob_size", "262144");
+  SetVal(g_conf(), "bluestore_compression_mode", "force");
+  g_conf().apply_changes(nullptr);
 
   auto ch = store->create_new_collection(cid);
 
@@ -6772,7 +6772,7 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
       const PerfCounters* counters = store->get_perf_counters();
       ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x40001u);
     }
-    SetVal(g_conf, "bluestore_gc_enable_total_threshold", "1"); //forbid GC when saving = 0
+    SetVal(g_conf(), "bluestore_gc_enable_total_threshold", "1"); //forbid GC when saving = 0
     {
       struct store_statfs_t statfs;
       WRITE_AT(1, overlap_offset-2);
@@ -6806,10 +6806,10 @@ TEST_P(StoreTestSpecificAUSize, fsckOnUnalignedDevice) {
   if (string(GetParam()) != "bluestore")
     return;
 
-  SetVal(g_conf, "bluestore_block_size",
+  SetVal(g_conf(), "bluestore_block_size",
     stringify(0x280005000).c_str()); //10 Gb + 4K
-  SetVal(g_conf, "bluestore_fsck_on_mount", "false");
-  SetVal(g_conf, "bluestore_fsck_on_umount", "false");
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
   StartDeferred(0x4000);
   store->umount();
   ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
@@ -6821,10 +6821,10 @@ TEST_P(StoreTestSpecificAUSize, fsckOnUnalignedDevice2) {
   if (string(GetParam()) != "bluestore")
     return;
 
-  SetVal(g_conf, "bluestore_block_size",
+  SetVal(g_conf(), "bluestore_block_size",
     stringify(0x280005000).c_str()); //10 Gb + 20K
-  SetVal(g_conf, "bluestore_fsck_on_mount", "false");
-  SetVal(g_conf, "bluestore_fsck_on_umount", "false");
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
   StartDeferred(0x1000);
   store->umount();
   ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
@@ -6836,12 +6836,12 @@ TEST_P(StoreTest, BluestoreRepairTest) {
     return;
   const size_t offs_base = 65536 / 2;
 
-  SetVal(g_conf, "bluestore_fsck_on_mount", "false");
-  SetVal(g_conf, "bluestore_fsck_on_umount", "false");
-  SetVal(g_conf, "bluestore_max_blob_size",
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
+  SetVal(g_conf(), "bluestore_max_blob_size",
     stringify(2 * offs_base).c_str());
-  SetVal(g_conf, "bluestore_extent_map_shard_max_size", "12000");
-  g_ceph_context->_conf->apply_changes(NULL);
+  SetVal(g_conf(), "bluestore_extent_map_shard_max_size", "12000");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
 
@@ -6947,8 +6947,8 @@ TEST_P(StoreTest, BluestoreRepairTest) {
   ASSERT_EQ(bstore->fsck(true), 0);
 
   // reproducing issues #21040 & 20983
-  SetVal(g_conf, "bluestore_debug_inject_bug21040", "true");
-  g_ceph_context->_conf->apply_changes(NULL);
+  SetVal(g_conf(), "bluestore_debug_inject_bug21040", "true");
+  g_ceph_context->_conf.apply_changes(nullptr);
   bstore->mount();
 
   cerr << "repro bug #21040" << std::endl;
@@ -6976,8 +6976,8 @@ TEST_P(StoreTest, BluestoreRepairTest) {
     ASSERT_EQ(bstore->fsck(false), 3);
     ASSERT_LE(bstore->repair(false), 0);
     ASSERT_EQ(bstore->fsck(false), 0);
-    SetVal(g_conf, "bluestore_debug_inject_bug21040", "true");
-    g_ceph_context->_conf->apply_changes(NULL);
+    SetVal(g_conf(), "bluestore_debug_inject_bug21040", "true");
+    g_ceph_context->_conf.apply_changes(nullptr);
   }
 
 
@@ -6988,16 +6988,16 @@ TEST_P(StoreTest, BluestoreStatistics) {
   if (string(GetParam()) != "bluestore")
     return;
 
-  SetVal(g_conf, "rocksdb_perf", "true");
-  SetVal(g_conf, "rocksdb_collect_compaction_stats", "true");
-  SetVal(g_conf, "rocksdb_collect_extended_stats","true");
-  SetVal(g_conf, "rocksdb_collect_memory_stats","true");
+  SetVal(g_conf(), "rocksdb_perf", "true");
+  SetVal(g_conf(), "rocksdb_collect_compaction_stats", "true");
+  SetVal(g_conf(), "rocksdb_collect_extended_stats","true");
+  SetVal(g_conf(), "rocksdb_collect_memory_stats","true");
 
   // disable cache
-  SetVal(g_conf, "bluestore_cache_size_ssd", "0");
-  SetVal(g_conf, "bluestore_cache_size_hdd", "0");
-  SetVal(g_conf, "bluestore_cache_size", "0");
-  g_ceph_context->_conf->apply_changes(NULL);
+  SetVal(g_conf(), "bluestore_cache_size_ssd", "0");
+  SetVal(g_conf(), "bluestore_cache_size_hdd", "0");
+  SetVal(g_conf(), "bluestore_cache_size", "0");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   int r = store->umount();
   ASSERT_EQ(r, 0);
@@ -7044,41 +7044,41 @@ int main(int argc, char **argv) {
   common_init_finish(g_ceph_context);
 
   // make sure we can adjust any config settings
-  g_ceph_context->_conf->_clear_safe_to_start_threads();
+  g_ceph_context->_conf._clear_safe_to_start_threads();
 
-  g_ceph_context->_conf->set_val_or_die("osd_journal_size", "400");
-  g_ceph_context->_conf->set_val_or_die("filestore_index_retry_probability", "0.5");
-  g_ceph_context->_conf->set_val_or_die("filestore_op_thread_timeout", "1000");
-  g_ceph_context->_conf->set_val_or_die("filestore_op_thread_suicide_timeout", "10000");
-  //g_ceph_context->_conf->set_val_or_die("filestore_fiemap", "true");
-  g_ceph_context->_conf->set_val_or_die("bluestore_fsck_on_mkfs", "false");
-  g_ceph_context->_conf->set_val_or_die("bluestore_fsck_on_mount", "false");
-  g_ceph_context->_conf->set_val_or_die("bluestore_fsck_on_umount", "false");
-  g_ceph_context->_conf->set_val_or_die("bluestore_debug_misc", "true");
-  g_ceph_context->_conf->set_val_or_die("bluestore_debug_small_allocations", "4");
-  g_ceph_context->_conf->set_val_or_die("bluestore_debug_freelist", "true");
-  g_ceph_context->_conf->set_val_or_die("bluestore_clone_cow", "true");
-  g_ceph_context->_conf->set_val_or_die("bluestore_max_alloc_size", "196608");
+  g_ceph_context->_conf.set_val_or_die("osd_journal_size", "400");
+  g_ceph_context->_conf.set_val_or_die("filestore_index_retry_probability", "0.5");
+  g_ceph_context->_conf.set_val_or_die("filestore_op_thread_timeout", "1000");
+  g_ceph_context->_conf.set_val_or_die("filestore_op_thread_suicide_timeout", "10000");
+  //g_ceph_context->_conf.set_val_or_die("filestore_fiemap", "true");
+  g_ceph_context->_conf.set_val_or_die("bluestore_fsck_on_mkfs", "false");
+  g_ceph_context->_conf.set_val_or_die("bluestore_fsck_on_mount", "false");
+  g_ceph_context->_conf.set_val_or_die("bluestore_fsck_on_umount", "false");
+  g_ceph_context->_conf.set_val_or_die("bluestore_debug_misc", "true");
+  g_ceph_context->_conf.set_val_or_die("bluestore_debug_small_allocations", "4");
+  g_ceph_context->_conf.set_val_or_die("bluestore_debug_freelist", "true");
+  g_ceph_context->_conf.set_val_or_die("bluestore_clone_cow", "true");
+  g_ceph_context->_conf.set_val_or_die("bluestore_max_alloc_size", "196608");
 
   // set small cache sizes so we see trimming during Synthetic tests
-  g_ceph_context->_conf->set_val_or_die("bluestore_cache_size_hdd", "4000000");
-  g_ceph_context->_conf->set_val_or_die("bluestore_cache_size_ssd", "4000000");
+  g_ceph_context->_conf.set_val_or_die("bluestore_cache_size_hdd", "4000000");
+  g_ceph_context->_conf.set_val_or_die("bluestore_cache_size_ssd", "4000000");
 
   // very short *_max prealloc so that we fall back to async submits
-  g_ceph_context->_conf->set_val_or_die("bluestore_blobid_prealloc", "10");
-  g_ceph_context->_conf->set_val_or_die("bluestore_nid_prealloc", "10");
-  g_ceph_context->_conf->set_val_or_die("bluestore_debug_randomize_serial_transaction",
+  g_ceph_context->_conf.set_val_or_die("bluestore_blobid_prealloc", "10");
+  g_ceph_context->_conf.set_val_or_die("bluestore_nid_prealloc", "10");
+  g_ceph_context->_conf.set_val_or_die("bluestore_debug_randomize_serial_transaction",
 				 "10");
 
-  g_ceph_context->_conf->set_val_or_die("bdev_debug_aio", "true");
+  g_ceph_context->_conf.set_val_or_die("bdev_debug_aio", "true");
 
   // specify device size
-  g_ceph_context->_conf->set_val_or_die("bluestore_block_size",
+  g_ceph_context->_conf.set_val_or_die("bluestore_block_size",
     stringify(DEF_STORE_TEST_BLOCKDEV_SIZE));
 
-  g_ceph_context->_conf->set_val_or_die(
+  g_ceph_context->_conf.set_val_or_die(
     "enable_experimental_unrecoverable_data_corrupting_features", "*");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

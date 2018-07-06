@@ -199,7 +199,7 @@ private:
     };
     return KEYS;
   }
-  void handle_conf_change(const md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string> &changed) override;
 };
 #endif

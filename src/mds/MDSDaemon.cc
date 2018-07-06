@@ -365,7 +365,7 @@ const char** MDSDaemon::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void MDSDaemon::handle_conf_change(const md_config_t *mconf,
+void MDSDaemon::handle_conf_change(const ConfigProxy& conf,
 			     const std::set <std::string> &changed)
 {
   // We may be called within mds_lock (via `tell`) or outwith the
@@ -375,7 +375,6 @@ void MDSDaemon::handle_conf_change(const md_config_t *mconf,
     mds_lock.Lock();
   }
 
-  ConfigReader conf{mconf};
   if (changed.count("mds_op_complaint_time") ||
       changed.count("mds_op_log_threshold")) {
     if (mds_rank) {
@@ -416,7 +415,7 @@ void MDSDaemon::handle_conf_change(const md_config_t *mconf,
   }
 
   if (mds_rank) {
-    mds_rank->handle_conf_change(mconf, changed);
+    mds_rank->handle_conf_change(conf, changed);
   }
 
   if (!initially_locked) {

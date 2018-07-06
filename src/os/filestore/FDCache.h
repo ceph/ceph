@@ -97,9 +97,8 @@ public:
     };
     return KEYS;
   }
-  void handle_conf_change(const md_config_t *mconf,
+  void handle_conf_change(const ConfigProxy& conf,
 			  const std::set<std::string> &changed) override {
-    ConfigReader conf{mconf};
     if (changed.count("filestore_fd_cache_size")) {
       for (int i = 0; i < registry_shards; ++i)
         registry[i].set_size(

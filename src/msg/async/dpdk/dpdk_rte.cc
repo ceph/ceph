@@ -52,7 +52,7 @@ namespace dpdk {
     }
 
     bool done = false;
-    auto num = std::stoull(c->_conf->get_val<std::string>("ms_dpdk_coremask"),
+    auto num = std::stoull(c->_conf.get_val<std::string>("ms_dpdk_coremask"),
                            nullptr, 16);
     unsigned int coremaskbit = bitcount(num);
 
@@ -62,7 +62,7 @@ namespace dpdk {
       // TODO: Inherit these from the app parameters - "opts"
       std::vector<std::vector<char>> args {
           string2vector(string("ceph")),
-          string2vector("-c"), string2vector(c->_conf->get_val<std::string>("ms_dpdk_coremask")),
+          string2vector("-c"), string2vector(c->_conf.get_val<std::string>("ms_dpdk_coremask")),
           string2vector("-n"), string2vector(c->_conf->ms_dpdk_memory_channel),
       };
 

@@ -37,7 +37,7 @@ struct ImportDiffContext {
   ImportDiffContext(librbd::Image *image, int fd, size_t size, bool no_progress)
     : image(image), fd(fd), size(size), pc("Importing image diff", no_progress),
       throttle((fd == STDIN_FILENO) ? 1 :
-                  g_conf->get_val<int64_t>("rbd_concurrent_management_ops"),
+                  g_conf().get_val<int64_t>("rbd_concurrent_management_ops"),
                false),
       last_offset(0) {
   }
@@ -744,7 +744,7 @@ static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
     throttle.reset(new SimpleThrottle(1, false));
   } else {
     throttle.reset(new SimpleThrottle(
-      g_conf->get_val<int64_t>("rbd_concurrent_management_ops"), false));
+      g_conf().get_val<int64_t>("rbd_concurrent_management_ops"), false));
   }
 
   reqlen = min<uint64_t>(reqlen, size);
@@ -838,7 +838,7 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
 
   uint64_t order;
   if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
-    order = g_conf->get_val<int64_t>("rbd_default_order");
+    order = g_conf().get_val<int64_t>("rbd_default_order");
   }
 
   // try to fill whole imgblklen blocks for sparsification

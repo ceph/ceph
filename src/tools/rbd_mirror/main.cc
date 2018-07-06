@@ -46,7 +46,7 @@ int main(int argc, const char **argv)
 			 CODE_ENVIRONMENT_DAEMON,
 			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
-  if (g_conf->daemonize) {
+  if (g_conf()->daemonize) {
     global_init_daemonize(g_ceph_context);
   }
   g_ceph_context->enable_perf_counter();
@@ -62,7 +62,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, cmd_args);
 
   // disable unnecessary librbd cache
-  g_ceph_context->_conf->set_val_or_die("rbd_cache", "false");
+  g_ceph_context->_conf.set_val_or_die("rbd_cache", "false");
 
   mirror = new rbd::mirror::Mirror(g_ceph_context, cmd_args);
   int r = mirror->init();

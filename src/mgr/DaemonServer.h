@@ -145,7 +145,7 @@ public:
   void _send_configure(ConnectionRef c);
 
   virtual const char** get_tracked_conf_keys() const override;
-  virtual void handle_conf_change(const md_config_t *conf,
+  virtual void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
 };
 

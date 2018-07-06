@@ -495,7 +495,7 @@ const char** Monitor::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void Monitor::handle_conf_change(const md_config_t *mconf,
+void Monitor::handle_conf_change(const ConfigProxy& conf,
                                  const std::set<std::string> &changed)
 {
   sanitize_options();
@@ -521,7 +521,6 @@ void Monitor::handle_conf_change(const md_config_t *mconf,
   }
 
   if (changed.count("mon_scrub_interval")) {
-    ConfigReader conf{mconf};
     scrub_update_interval(conf->mon_scrub_interval);
   }
 }

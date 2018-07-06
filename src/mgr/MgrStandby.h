@@ -35,7 +35,7 @@ class MgrStandby : public Dispatcher,
 public:
   // config observer bits
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
 			  const std::set <std::string> &changed) override;
 
 protected:

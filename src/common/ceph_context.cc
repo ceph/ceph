@@ -61,12 +61,12 @@ public:
     return KEYS;
   }
 
-  void handle_conf_change(const md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override {
-    if (conf->values.lockdep && !m_registered) {
+    if (conf->lockdep && !m_registered) {
       lockdep_register_ceph_context(m_cct);
       m_registered = true;
-    } else if (!conf->values.lockdep && m_registered) {
+    } else if (!conf->lockdep && m_registered) {
       lockdep_unregister_ceph_context(m_cct);
       m_registered = false;
     }
@@ -104,7 +104,7 @@ public:
     return KEYS;
   }
 
-  void handle_conf_change(const md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override {
     if (changed.count("mempool_debug")) {
       mempool::set_debug_mode(cct->_conf->mempool_debug);
@@ -224,9 +224,8 @@ public:
     return KEYS;
   }
 
-  void handle_conf_change(const md_config_t *mconf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override {
-    ConfigReader conf{mconf};
     // stderr
     if (changed.count("log_to_stderr") || changed.count("err_to_stderr")) {
       int l = conf->log_to_stderr ? 99 : (conf->err_to_stderr ? -1 : -2);
@@ -306,11 +305,10 @@ public:
     return KEYS;
   }
 
-  void handle_conf_change(const md_config_t *mconf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override {
     if (changed.count(
 	  "enable_experimental_unrecoverable_data_corrupting_features")) {
-      ConfigReader conf{mconf};
       std::lock_guard<ceph::spinlock> lg(cct->_feature_lock);
       get_str_set(
 	conf->enable_experimental_unrecoverable_data_corrupting_features,

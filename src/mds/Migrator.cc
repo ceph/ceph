@@ -3438,12 +3438,12 @@ void Migrator::logged_import_caps(CInode *in,
   in->auth_unpin(this);
 }
 
-void Migrator::handle_conf_change(const md_config_t* conf,
+void Migrator::handle_conf_change(const ConfigProxy& conf,
                                   const std::set <std::string> &changed,
                                   const MDSMap &mds_map)
 {
   if (changed.count("mds_inject_migrator_session_race")) {
-    inject_session_race = conf->get_val<bool>("mds_inject_migrator_session_race");
+    inject_session_race = conf.get_val<bool>("mds_inject_migrator_session_race");
     dout(0) << "mds_inject_migrator_session_race is " << inject_session_race << dendl;
   }
 }

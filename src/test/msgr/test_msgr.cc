@@ -390,7 +390,7 @@ TEST_P(MessengerTest, FeatureTest) {
 }
 
 TEST_P(MessengerTest, TimeoutTest) {
-  g_ceph_context->_conf->set_val("ms_tcp_read_timeout", "1");
+  g_ceph_context->_conf.set_val("ms_tcp_read_timeout", "1");
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
   bind_addr.parse("127.0.0.1");
@@ -425,7 +425,7 @@ TEST_P(MessengerTest, TimeoutTest) {
 
   client_msgr->shutdown();
   client_msgr->wait();
-  g_ceph_context->_conf->set_val("ms_tcp_read_timeout", "900");
+  g_ceph_context->_conf.set_val("ms_tcp_read_timeout", "900");
 }
 
 TEST_P(MessengerTest, StatefulTest) {
@@ -677,9 +677,9 @@ TEST_P(MessengerTest, ClientStandbyTest) {
 }
 
 TEST_P(MessengerTest, AuthTest) {
-  g_ceph_context->_conf->set_val("auth_cluster_required", "cephx");
-  g_ceph_context->_conf->set_val("auth_service_required", "cephx");
-  g_ceph_context->_conf->set_val("auth_client_required", "cephx");
+  g_ceph_context->_conf.set_val("auth_cluster_required", "cephx");
+  g_ceph_context->_conf.set_val("auth_service_required", "cephx");
+  g_ceph_context->_conf.set_val("auth_client_required", "cephx");
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
   bind_addr.parse("127.0.0.1");
@@ -705,9 +705,9 @@ TEST_P(MessengerTest, AuthTest) {
   ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
 
   // 2. mix auth
-  g_ceph_context->_conf->set_val("auth_cluster_required", "none");
-  g_ceph_context->_conf->set_val("auth_service_required", "none");
-  g_ceph_context->_conf->set_val("auth_client_required", "none");
+  g_ceph_context->_conf.set_val("auth_cluster_required", "none");
+  g_ceph_context->_conf.set_val("auth_service_required", "none");
+  g_ceph_context->_conf.set_val("auth_client_required", "none");
   conn->mark_down();
   ASSERT_FALSE(conn->is_connected());
   conn = client_msgr->connect_to(server_msgr->get_mytype(),
@@ -1253,9 +1253,9 @@ TEST_P(MessengerTest, SyntheticStressTest1) {
 
 TEST_P(MessengerTest, SyntheticInjectTest) {
   uint64_t dispatch_throttle_bytes = g_ceph_context->_conf->ms_dispatch_throttle_bytes;
-  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "30");
-  g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
-  g_ceph_context->_conf->set_val("ms_dispatch_throttle_bytes", "16777216");
+  g_ceph_context->_conf.set_val("ms_inject_socket_failures", "30");
+  g_ceph_context->_conf.set_val("ms_inject_internal_delays", "0.1");
+  g_ceph_context->_conf.set_val("ms_dispatch_throttle_bytes", "16777216");
   SyntheticWorkload test_msg(8, 32, GetParam(), 100,
                              Messenger::Policy::stateful_server(0),
                              Messenger::Policy::lossless_client(0));
@@ -1282,15 +1282,15 @@ TEST_P(MessengerTest, SyntheticInjectTest) {
     }
   }
   test_msg.wait_for_done();
-  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "0");
-  g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0");
-  g_ceph_context->_conf->set_val(
+  g_ceph_context->_conf.set_val("ms_inject_socket_failures", "0");
+  g_ceph_context->_conf.set_val("ms_inject_internal_delays", "0");
+  g_ceph_context->_conf.set_val(
       "ms_dispatch_throttle_bytes", std::to_string(dispatch_throttle_bytes));
 }
 
 TEST_P(MessengerTest, SyntheticInjectTest2) {
-  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "30");
-  g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
+  g_ceph_context->_conf.set_val("ms_inject_socket_failures", "30");
+  g_ceph_context->_conf.set_val("ms_inject_internal_delays", "0.1");
   SyntheticWorkload test_msg(8, 16, GetParam(), 100,
                              Messenger::Policy::lossless_peer_reuse(0),
                              Messenger::Policy::lossless_peer_reuse(0));
@@ -1317,13 +1317,13 @@ TEST_P(MessengerTest, SyntheticInjectTest2) {
     }
   }
   test_msg.wait_for_done();
-  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "0");
-  g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0");
+  g_ceph_context->_conf.set_val("ms_inject_socket_failures", "0");
+  g_ceph_context->_conf.set_val("ms_inject_internal_delays", "0");
 }
 
 TEST_P(MessengerTest, SyntheticInjectTest3) {
-  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "600");
-  g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
+  g_ceph_context->_conf.set_val("ms_inject_socket_failures", "600");
+  g_ceph_context->_conf.set_val("ms_inject_internal_delays", "0.1");
   SyntheticWorkload test_msg(8, 16, GetParam(), 100,
                              Messenger::Policy::stateless_server(0),
                              Messenger::Policy::lossy_client(0));
@@ -1350,17 +1350,17 @@ TEST_P(MessengerTest, SyntheticInjectTest3) {
     }
   }
   test_msg.wait_for_done();
-  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "0");
-  g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0");
+  g_ceph_context->_conf.set_val("ms_inject_socket_failures", "0");
+  g_ceph_context->_conf.set_val("ms_inject_internal_delays", "0");
 }
 
 
 TEST_P(MessengerTest, SyntheticInjectTest4) {
-  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "30");
-  g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
-  g_ceph_context->_conf->set_val("ms_inject_delay_probability", "1");
-  g_ceph_context->_conf->set_val("ms_inject_delay_type", "client osd");
-  g_ceph_context->_conf->set_val("ms_inject_delay_max", "5");
+  g_ceph_context->_conf.set_val("ms_inject_socket_failures", "30");
+  g_ceph_context->_conf.set_val("ms_inject_internal_delays", "0.1");
+  g_ceph_context->_conf.set_val("ms_inject_delay_probability", "1");
+  g_ceph_context->_conf.set_val("ms_inject_delay_type", "client osd");
+  g_ceph_context->_conf.set_val("ms_inject_delay_max", "5");
   SyntheticWorkload test_msg(16, 32, GetParam(), 100,
                              Messenger::Policy::lossless_peer(0),
                              Messenger::Policy::lossless_peer(0));
@@ -1387,11 +1387,11 @@ TEST_P(MessengerTest, SyntheticInjectTest4) {
     }
   }
   test_msg.wait_for_done();
-  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "0");
-  g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0");
-  g_ceph_context->_conf->set_val("ms_inject_delay_probability", "0");
-  g_ceph_context->_conf->set_val("ms_inject_delay_type", "");
-  g_ceph_context->_conf->set_val("ms_inject_delay_max", "0");
+  g_ceph_context->_conf.set_val("ms_inject_socket_failures", "0");
+  g_ceph_context->_conf.set_val("ms_inject_internal_delays", "0");
+  g_ceph_context->_conf.set_val("ms_inject_delay_probability", "0");
+  g_ceph_context->_conf.set_val("ms_inject_delay_type", "");
+  g_ceph_context->_conf.set_val("ms_inject_delay_max", "0");
 }
 
 
@@ -1556,13 +1556,13 @@ int main(int argc, char **argv) {
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
-  g_ceph_context->_conf->set_val("auth_cluster_required", "none");
-  g_ceph_context->_conf->set_val("auth_service_required", "none");
-  g_ceph_context->_conf->set_val("auth_client_required", "none");
-  g_ceph_context->_conf->set_val("enable_experimental_unrecoverable_data_corrupting_features", "ms-type-async");
-  g_ceph_context->_conf->set_val("ms_die_on_bad_msg", "true");
-  g_ceph_context->_conf->set_val("ms_die_on_old_message", "true");
-  g_ceph_context->_conf->set_val("ms_max_backoff", "1");
+  g_ceph_context->_conf.set_val("auth_cluster_required", "none");
+  g_ceph_context->_conf.set_val("auth_service_required", "none");
+  g_ceph_context->_conf.set_val("auth_client_required", "none");
+  g_ceph_context->_conf.set_val("enable_experimental_unrecoverable_data_corrupting_features", "ms-type-async");
+  g_ceph_context->_conf.set_val("ms_die_on_bad_msg", "true");
+  g_ceph_context->_conf.set_val("ms_die_on_old_message", "true");
+  g_ceph_context->_conf.set_val("ms_max_backoff", "1");
   common_init_finish(g_ceph_context);
 
   ::testing::InitGoogleTest(&argc, argv);

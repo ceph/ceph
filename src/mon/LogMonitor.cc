@@ -828,7 +828,7 @@ ceph::logging::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
   return graylogs[channel];
 }
 
-void LogMonitor::handle_conf_change(const md_config_t *conf,
+void LogMonitor::handle_conf_change(const ConfigProxy& conf,
                                     const std::set<std::string> &changed)
 {
   if (changed.count("mon_cluster_log_to_syslog") ||

@@ -8,7 +8,7 @@
 #include "include/krbd.h"
 #include "include/stringify.h"
 #include "include/uuid.h"
-#include "common/config.h"
+#include "common/config_proxy.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/strtol.h"
@@ -430,7 +430,7 @@ int execute_map(const po::variables_map &vm,
 
   // parse default options first so they can be overwritten by cli options
   r = parse_map_options(
-      g_conf->get_val<std::string>("rbd_default_map_options"));
+      g_conf().get_val<std::string>("rbd_default_map_options"));
   if (r < 0) {
     std::cerr << "rbd: couldn't parse default map options" << std::endl;
     return r;

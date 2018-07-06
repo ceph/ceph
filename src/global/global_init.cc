@@ -305,7 +305,7 @@ global_init(const std::map<std::string,std::string> *defaults,
 #endif
 
   // Expand metavariables. Invoke configuration observers. Open log file.
-  g_conf().apply_changes(NULL);
+  g_conf().apply_changes(nullptr);
 
   if (g_conf()->run_dir.length() &&
       code_env == CODE_ENVIRONMENT_DAEMON &&

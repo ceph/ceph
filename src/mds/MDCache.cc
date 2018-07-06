@@ -7657,10 +7657,10 @@ void MDCache::shutdown_check()
   char *o = old_val;
   g_conf().get_val("debug_mds", &o, sizeof(old_val));
   g_conf().set_val("debug_mds", "10");
-  g_conf().apply_changes(NULL);
+  g_conf().apply_changes(nullptr);
   show_cache();
   g_conf().set_val("debug_mds", old_val);
-  g_conf().apply_changes(NULL);
+  g_conf().apply_changes(nullptr);
   mds->timer.add_event_after(g_conf()->mds_shutdown_check, new C_MDC_ShutdownCheck(this));
 
   // this

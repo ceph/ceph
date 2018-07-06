@@ -594,7 +594,7 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   ASSERT_NE(ip, iam_env.end());
   EXPECT_EQ(ip->second, "192.168.1.1");
 
-  ASSERT_EQ(cct.get()->_conf->set_val("rgw_remote_addr_param", "SOME_VAR"), 0);
+  ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "SOME_VAR"), 0);
   EXPECT_EQ(cct.get()->_conf->rgw_remote_addr_param, "SOME_VAR");
   iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
   ip = iam_env.find("aws:SourceIp");
@@ -606,7 +606,7 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   ASSERT_NE(ip, iam_env.end());
   EXPECT_EQ(ip->second, "192.168.1.2");
 
-  ASSERT_EQ(cct.get()->_conf->set_val("rgw_remote_addr_param", "HTTP_X_FORWARDED_FOR"), 0);
+  ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "HTTP_X_FORWARDED_FOR"), 0);
   rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.3");
   iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
   ip = iam_env.find("aws:SourceIp");

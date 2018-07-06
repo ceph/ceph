@@ -276,7 +276,7 @@ struct Engine {
       cct->get_perfcounters_collection()->dump_formatted(f, false);
       ostr << "FIO plugin ";
       f->flush(ostr);
-      if (g_conf->rocksdb_perf) {
+      if (g_conf()->rocksdb_perf) {
         os->get_db_statistics(f);
         ostr << "FIO get_db_statistics ";
         f->flush(ostr);
@@ -327,19 +327,19 @@ Engine::Engine(thread_data* td)
 
   // create the ObjectStore
   os.reset(ObjectStore::create(g_ceph_context,
-                               g_conf->osd_objectstore,
-                               g_conf->osd_data,
-                               g_conf->osd_journal));
+                               g_conf()->osd_objectstore,
+                               g_conf()->osd_data,
+                               g_conf()->osd_journal));
   if (!os)
-    throw std::runtime_error("bad objectstore type " + g_conf->osd_objectstore);
+    throw std::runtime_error("bad objectstore type " + g_conf()->osd_objectstore);
 
   unsigned num_shards;
-  if(g_conf->osd_op_num_shards)
-    num_shards = g_conf->osd_op_num_shards;
+  if(g_conf()->osd_op_num_shards)
+    num_shards = g_conf()->osd_op_num_shards;
   else if(os->is_rotational())
-    num_shards = g_conf->osd_op_num_shards_hdd;
+    num_shards = g_conf()->osd_op_num_shards_hdd;
   else
-    num_shards = g_conf->osd_op_num_shards_ssd;
+    num_shards = g_conf()->osd_op_num_shards_ssd;
   os->set_cache_shards(num_shards);
 
   //normalize options
@@ -363,7 +363,7 @@ Engine::Engine(thread_data* td)
 
   // create shared collections up to osd_pool_default_pg_num
   if (o->single_pool_mode) {
-    uint64_t count = g_conf->get_val<uint64_t>("osd_pool_default_pg_num");
+    uint64_t count = g_conf()->get_val<uint64_t>("osd_pool_default_pg_num");
     if (count > td->o.nr_files)
       count = td->o.nr_files;
     init_collections(os, Collection::MIN_POOL_ID, collections, count);
@@ -417,7 +417,7 @@ Job::Job(Engine* engine, const thread_data* td)
   std::vector<Collection>* colls;
   // create private collections up to osd_pool_default_pg_num
   if (!o->single_pool_mode) {
-    uint64_t count = g_conf->get_val<uint64_t>("osd_pool_default_pg_num");
+    uint64_t count = g_conf()->get_val<uint64_t>("osd_pool_default_pg_num");
     if (count > td->o.nr_files)
       count = td->o.nr_files;
     // use the fio thread_number for our unique pool id
@@ -606,18 +606,18 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
 	if (o->pglog_omap_len_high &&
 	    pglog_ver_cnt >=
 	      coll.pglog_ver_tail +
-	        g_conf->osd_min_pg_log_entries + g_conf->osd_pg_log_trim_min) {
+	        g_conf()->osd_min_pg_log_entries + g_conf()->osd_pg_log_trim_min) {
 	  pglog_trim_tail = coll.pglog_ver_tail;
 	  coll.pglog_ver_tail = pglog_trim_head =
-	    pglog_trim_tail + g_conf->osd_pg_log_trim_min;
+	    pglog_trim_tail + g_conf()->osd_pg_log_trim_min;
 
 	  if (o->pglog_dup_omap_len_high &&
 	      pglog_ver_cnt >=
-		coll.pglog_dup_ver_tail + g_conf->osd_pg_log_dups_tracked +
-		  g_conf->osd_pg_log_trim_min) {
+		coll.pglog_dup_ver_tail + g_conf()->osd_pg_log_dups_tracked +
+		  g_conf()->osd_pg_log_trim_min) {
 	    pglog_dup_trim_tail = coll.pglog_dup_ver_tail;
 	    coll.pglog_dup_ver_tail = pglog_dup_trim_head =
-	      pglog_dup_trim_tail + g_conf->osd_pg_log_trim_min;
+	      pglog_dup_trim_tail + g_conf()->osd_pg_log_trim_min;
 	  }
 	}
       }

@@ -197,8 +197,8 @@ int main(int argc, const char **argv)
     flags);
 
   list<string> frontends;
-  g_conf->early_expand_meta(g_conf->rgw_frontends, &cerr);
-  get_str_list(g_conf->rgw_frontends, ",", frontends);
+  g_conf().early_expand_meta(g_conf()->rgw_frontends, &cerr);
+  get_str_list(g_conf()->rgw_frontends, ",", frontends);
   multimap<string, RGWFrontendConfig *> fe_map;
   list<RGWFrontendConfig *> configs;
   if (frontends.empty()) {
@@ -245,32 +245,32 @@ int main(int argc, const char **argv)
 			 flags, "rgw_data", false);
 
   // maintain existing region root pool for new multisite objects
-  if (!g_conf->rgw_region_root_pool.empty()) {
-    const char *root_pool = g_conf->rgw_region_root_pool.c_str();
-    if (g_conf->rgw_zonegroup_root_pool.empty()) {
-      g_conf->set_val_or_die("rgw_zonegroup_root_pool", root_pool);
+  if (!g_conf()->rgw_region_root_pool.empty()) {
+    const char *root_pool = g_conf()->rgw_region_root_pool.c_str();
+    if (g_conf()->rgw_zonegroup_root_pool.empty()) {
+      g_conf().set_val_or_die("rgw_zonegroup_root_pool", root_pool);
     }
-    if (g_conf->rgw_period_root_pool.empty()) {
-      g_conf->set_val_or_die("rgw_period_root_pool", root_pool);
+    if (g_conf()->rgw_period_root_pool.empty()) {
+      g_conf().set_val_or_die("rgw_period_root_pool", root_pool);
     }
-    if (g_conf->rgw_realm_root_pool.empty()) {
-      g_conf->set_val_or_die("rgw_realm_root_pool", root_pool);
+    if (g_conf()->rgw_realm_root_pool.empty()) {
+      g_conf().set_val_or_die("rgw_realm_root_pool", root_pool);
     }
   }
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
-  if (!g_conf->rgw_region.empty() && g_conf->rgw_zonegroup.empty()) {
-    g_conf->set_val_or_die("rgw_zonegroup", g_conf->rgw_region.c_str());
+  if (!g_conf()->rgw_region.empty() && g_conf()->rgw_zonegroup.empty()) {
+    g_conf().set_val_or_die("rgw_zonegroup", g_conf()->rgw_region.c_str());
   }
 
-  if (g_conf->daemonize) {
+  if (g_conf()->daemonize) {
     global_init_daemonize(g_ceph_context);
   }
   Mutex mutex("main");
   SafeTimer init_timer(g_ceph_context, mutex);
   init_timer.init();
   mutex.Lock();
-  init_timer.add_event_after(g_conf->rgw_init_timeout, new C_InitTimeout);
+  init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
   mutex.Unlock();
 
   // Enable the perf counter before starting the service thread
@@ -299,8 +299,8 @@ int main(int argc, const char **argv)
 #endif
 
   RGWRados *store = RGWStoreManager::get_storage(g_ceph_context,
-      g_conf->rgw_enable_gc_threads, g_conf->rgw_enable_lc_threads, g_conf->rgw_enable_quota_threads,
-      g_conf->rgw_run_sync_thread, g_conf->rgw_dynamic_resharding, g_conf->rgw_cache_enabled);
+      g_conf()->rgw_enable_gc_threads, g_conf()->rgw_enable_lc_threads, g_conf()->rgw_enable_quota_threads,
+      g_conf()->rgw_run_sync_thread, g_conf()->rgw_dynamic_resharding, g_conf()->rgw_cache_enabled);
   if (!store) {
     mutex.Lock();
     init_timer.cancel_all_events();
@@ -332,7 +332,7 @@ int main(int argc, const char **argv)
 
   list<string> apis;
 
-  get_str_list(g_conf->rgw_enable_apis, apis);
+  get_str_list(g_conf()->rgw_enable_apis, apis);
 
   map<string, bool> apis_map;
   for (list<string>::iterator li = apis.begin(); li != apis.end(); ++li) {
@@ -342,7 +342,7 @@ int main(int argc, const char **argv)
   // S3 website mode is a specialization of S3
   const bool s3website_enabled = apis_map.count("s3website") > 0;
   // Swift API entrypoint could placed in the root instead of S3
-  const bool swift_at_root = g_conf->rgw_swift_url_prefix == "/";
+  const bool swift_at_root = g_conf()->rgw_swift_url_prefix == "/";
   if (apis_map.count("s3") > 0 || s3website_enabled) {
     if (! swift_at_root) {
       rest.register_default_mgr(set_logging(rest_filter(store, RGW_REST_S3,
@@ -357,7 +357,7 @@ int main(int argc, const char **argv)
   if (apis_map.count("swift") > 0) {
     RGWRESTMgr_SWIFT* const swift_resource = new RGWRESTMgr_SWIFT;
 
-    if (! g_conf->rgw_cross_domain_policy.empty()) {
+    if (! g_conf()->rgw_cross_domain_policy.empty()) {
       swift_resource->register_resource("crossdomain.xml",
                           set_logging(new RGWRESTMgr_SWIFT_CrossDomain));
     }
@@ -369,7 +369,7 @@ int main(int argc, const char **argv)
                           set_logging(new RGWRESTMgr_SWIFT_Info));
 
     if (! swift_at_root) {
-      rest.register_resource(g_conf->rgw_swift_url_prefix,
+      rest.register_resource(g_conf()->rgw_swift_url_prefix,
                           set_logging(rest_filter(store, RGW_REST_SWIFT,
                                                   swift_resource)));
     } else {
@@ -384,7 +384,7 @@ int main(int argc, const char **argv)
   }
 
   if (apis_map.count("swift_auth") > 0) {
-    rest.register_resource(g_conf->rgw_swift_auth_entry,
+    rest.register_resource(g_conf()->rgw_swift_auth_entry,
                set_logging(new RGWRESTMgr_SWIFT_Auth));
   }
 
@@ -400,7 +400,7 @@ int main(int argc, const char **argv)
     admin_resource->register_resource("opstate", new RGWRESTMgr_Opstate);
     admin_resource->register_resource("config", new RGWRESTMgr_Config);
     admin_resource->register_resource("realm", new RGWRESTMgr_Realm);
-    rest.register_resource(g_conf->rgw_admin_entry, admin_resource);
+    rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);
   }
 
   /* Initialize the registry of auth strategies which will coordinate
@@ -409,13 +409,13 @@ int main(int argc, const char **argv)
     rgw::auth::StrategyRegistry::create(g_ceph_context, store);
 
   /* Header custom behavior */
-  rest.register_x_headers(g_conf->rgw_log_http_headers);
+  rest.register_x_headers(g_conf()->rgw_log_http_headers);
 
   OpsLogSocket *olog = NULL;
 
-  if (!g_conf->rgw_ops_log_socket_path.empty()) {
-    olog = new OpsLogSocket(g_ceph_context, g_conf->rgw_ops_log_data_backlog);
-    olog->init(g_conf->rgw_ops_log_socket_path);
+  if (!g_conf()->rgw_ops_log_socket_path.empty()) {
+    olog = new OpsLogSocket(g_ceph_context, g_conf()->rgw_ops_log_data_backlog);
+    olog->init(g_conf()->rgw_ops_log_socket_path);
   }
 
   r = signal_fd_init();

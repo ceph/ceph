@@ -216,7 +216,7 @@ const char** Objecter::get_tracked_conf_keys() const
 }
 
 
-void Objecter::handle_conf_change(const md_config_t *conf,
+void Objecter::handle_conf_change(const ConfigProxy& conf,
 				  const std::set <std::string> &changed)
 {
   if (changed.count("crush_location")) {

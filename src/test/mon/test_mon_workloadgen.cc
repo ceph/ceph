@@ -361,12 +361,12 @@ class OSDStub : public TestStub
 	     << cct->_conf->auth_supported << dendl;
     stringstream ss;
     ss << "client-osd" << whoami;
-    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
+    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf.get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
     messenger.reset(Messenger::create(cct, public_msgr_type, entity_name_t::OSD(whoami),
 				      ss.str().c_str(), getpid(), 0));
 
     Throttle throttler(g_ceph_context, "osd_client_bytes",
-	g_conf->osd_client_message_size_cap);
+	g_conf()->osd_client_message_size_cap);
 
     messenger->set_default_policy(
 	Messenger::Policy::stateless_server(0));
@@ -380,8 +380,8 @@ class OSDStub : public TestStub
     messenger->set_policy(entity_name_t::TYPE_OSD,
 	Messenger::Policy::stateless_server(0));
 
-    dout(10) << __func__ << " public addr " << g_conf->public_addr << dendl;
-    int err = messenger->bind(g_conf->public_addr);
+    dout(10) << __func__ << " public addr " << g_conf()->public_addr << dendl;
+    int err = messenger->bind(g_conf()->public_addr);
     if (err < 0)
       exit(1);
 
@@ -397,8 +397,8 @@ class OSDStub : public TestStub
     Mutex::Locker l(lock);
 
     dout(1) << __func__ << " fsid " << monc.monmap.fsid
-	    << " osd_fsid " << g_conf->osd_uuid << dendl;
-    dout(1) << __func__ << " name " << g_conf->name << dendl;
+	    << " osd_fsid " << g_conf()->osd_uuid << dendl;
+    dout(1) << __func__ << " name " << g_conf()->name << dendl;
 
     timer.init();
     messenger->add_dispatcher_head(this);
@@ -1001,7 +1001,7 @@ int main(int argc, const char *argv[])
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   set<int> stub_ids;
   double duration = 300.0;
