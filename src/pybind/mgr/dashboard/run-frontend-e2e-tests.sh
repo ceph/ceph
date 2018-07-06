@@ -44,19 +44,18 @@ if [ "$BASE_URL" == "" ]; then
     sleep 10
 
     BASE_URL=`./bin/ceph mgr services | jq .dashboard`
-    BASE_URL=${BASE_URL//\"}
 fi
 
 cd $DASH_DIR/frontend
+jq '.["/api/"].target'=$BASE_URL proxy.conf.json.sample | jq '.["/ui-api/"].target'=$BASE_URL > proxy.conf.json
 . $BUILD_DIR/src/pybind/mgr/dashboard/node-env/bin/activate
 npm install
-npm run build -- --prod
 
 if [ $DEVICE == "chrome" ]; then
-    npm run e2e -- --serve=false --base-href $BASE_URL || stop
+    npm run e2e || stop
 elif [ $DEVICE == "docker" ]; then
     docker run -d -v $(pwd):/workdir --net=host --name angular-e2e-container rogargon/angular-e2e || stop
-    docker exec angular-e2e-container npm run e2e -- --serve=false --base-href $BASE_URL
+    docker exec angular-e2e-container npm run e2e
     docker stop angular-e2e-container
     docker rm angular-e2e-container
 else
