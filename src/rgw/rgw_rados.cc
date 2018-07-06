@@ -4634,6 +4634,14 @@ int RGWRados::init_complete()
   }
 
   if (run_sync_thread) {
+
+    for (const auto &pt: get_zonegroup().placement_targets) {
+      if (get_zone_params().placement_pools.find(pt.second.name)
+          == get_zone_params().placement_pools.end()){
+        ldout(cct, 0) << "WARNING: This zone does not contain the placement target "
+                      << pt.second.name << " present in zonegroup" << dendl;
+      }
+    }
     Mutex::Locker l(meta_sync_thread_lock);
     meta_sync_processor_thread = new RGWMetaSyncProcessorThread(this, async_rados);
     ret = meta_sync_processor_thread->init();
@@ -6211,6 +6219,8 @@ int RGWRados::select_bucket_location_by_rule(const string& location_rule, RGWZon
     if (get_zonegroup().equals(zonegroup.get_id())) {
       /* that's a configuration error, zone should have that rule, as we're within the requested
        * zonegroup */
+      ldout(cct, 0) << "ERROR: This zone does not contain placement rule"
+                    << location_rule << " present in the zonegroup!" << dendl;
       return -EINVAL;
     } else {
       /* oh, well, data is not going to be placed here, bucket object is just a placeholder */
