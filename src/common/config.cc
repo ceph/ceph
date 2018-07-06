@@ -1413,6 +1413,9 @@ void md_config_t::_refresh(const Option& opt)
 
 int md_config_t::_rm_val(const std::string& key, int level)
 {
+  if (schema.count(key) == 0) {
+    return -EINVAL;
+  }
   auto i = values.find(key);
   if (i == values.end()) {
     return -ENOENT;

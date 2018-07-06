@@ -817,6 +817,9 @@ int MDSDaemon::_handle_command(
     if (r == 0) {
       cct->_conf->apply_changes(nullptr);
     }
+    if (r == -ENOENT) {
+      r = 0; // idempotent
+    }
   } else if (prefix == "exit") {
     // We will send response before executing
     ss << "Exiting...";

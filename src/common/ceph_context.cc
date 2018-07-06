@@ -441,7 +441,7 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
         f->dump_string("error", "syntax error: 'config unset <var>'");
       } else {
         int r = _conf->rm_val(var.c_str());
-        if (r < 0) {
+        if (r < 0 && r != -ENOENT) {
           f->dump_stream("error") << "error unsetting '" << var << "': "
 				  << cpp_strerror(r);
         } else {
