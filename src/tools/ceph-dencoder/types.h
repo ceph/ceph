@@ -261,57 +261,57 @@ TYPE(InoTable)
 TYPE_STRAYDATA(SnapServer)
 
 #include "mds/events/ECommitted.h"
-TYPE_FEATUREFUL(ECommitted)
+TYPE_FEATUREFUL_NOCOPY(ECommitted)
 
 #include "mds/events/EExport.h"
-TYPE_FEATUREFUL(EExport)
+TYPE_FEATUREFUL_NOCOPY(EExport)
 
 #include "mds/events/EFragment.h"
-TYPE_FEATUREFUL(EFragment)
+TYPE_FEATUREFUL_NOCOPY(EFragment)
 
 #include "mds/events/EImportFinish.h"
-TYPE_FEATUREFUL(EImportFinish)
+TYPE_FEATUREFUL_NOCOPY(EImportFinish)
 
 #include "mds/events/EImportStart.h"
-TYPE_FEATUREFUL(EImportStart)
+TYPE_FEATUREFUL_NOCOPY(EImportStart)
 
 #include "mds/events/EMetaBlob.h"
 TYPE_FEATUREFUL_NOCOPY(EMetaBlob::fullbit)
 TYPE(EMetaBlob::remotebit)
 TYPE(EMetaBlob::nullbit)
-TYPE_FEATUREFUL(EMetaBlob::dirlump)
-TYPE_FEATUREFUL(EMetaBlob)
+TYPE_FEATUREFUL_NOCOPY(EMetaBlob::dirlump)
+TYPE_FEATUREFUL_NOCOPY(EMetaBlob)
 
 #include "mds/events/EOpen.h"
-TYPE_FEATUREFUL(EOpen)
+TYPE_FEATUREFUL_NOCOPY(EOpen)
 
 #include "mds/events/EResetJournal.h"
-TYPE_FEATUREFUL(EResetJournal)
+TYPE_FEATUREFUL_NOCOPY(EResetJournal)
 
 #include "mds/events/ESession.h"
-TYPE_FEATUREFUL(ESession)
+TYPE_FEATUREFUL_NOCOPY(ESession)
 
 #include "mds/events/ESessions.h"
-TYPE_FEATUREFUL(ESessions)
+TYPE_FEATUREFUL_NOCOPY(ESessions)
 
 #include "mds/events/ESlaveUpdate.h"
 TYPE(link_rollback)
 TYPE(rmdir_rollback)
 TYPE(rename_rollback::drec)
 TYPE(rename_rollback)
-TYPE_FEATUREFUL(ESlaveUpdate)
+TYPE_FEATUREFUL_NOCOPY(ESlaveUpdate)
 
 #include "mds/events/ESubtreeMap.h"
-TYPE_FEATUREFUL(ESubtreeMap)
+TYPE_FEATUREFUL_NOCOPY(ESubtreeMap)
 
 #include "mds/events/ETableClient.h"
-TYPE_FEATUREFUL(ETableClient)
+TYPE_FEATUREFUL_NOCOPY(ETableClient)
 
 #include "mds/events/ETableServer.h"
-TYPE_FEATUREFUL(ETableServer)
+TYPE_FEATUREFUL_NOCOPY(ETableServer)
 
 #include "mds/events/EUpdate.h"
-TYPE_FEATUREFUL(EUpdate)
+TYPE_FEATUREFUL_NOCOPY(EUpdate)
 
 #ifdef WITH_RBD
 #include "librbd/journal/Types.h"
