@@ -60,18 +60,6 @@ class Module(MgrModule):
             'default': 43200
         },
         {
-            'name': 'diskprediction_cert_path',
-            'default': ''
-        },
-        {
-            'name': 'diskprediction_ssl_target_name_override',
-            'default': 'localhost'
-        },
-        {
-            'name': 'diskprediction_default_authority',
-            'default': 'localhost'
-        },
-        {
             'name': 'diskprediction_smart_relied_device_health',
             'default': 'true'
         }
@@ -88,24 +76,6 @@ class Module(MgrModule):
             'cmd': 'diskprediction set-smart-relied-device-health '
                    'name=relied,type=CephString,req=true',
             'desc': 'Set device health data from device health plugin',
-            'perm': 'rw'
-        },
-        {
-            'cmd': 'diskprediction set-cert-path '
-                   'name=cert_path,type=CephString,req=true',
-            'desc': 'Set SSL connection certification file path',
-            'perm': 'rw'
-        },
-        {
-            'cmd': 'diskprediction set-ssl-target-name '
-                   'name=ssl_target_name,type=CephString,req=true',
-            'desc': 'Set SSL target name',
-            'perm': 'rw'
-        },
-        {
-            'cmd': 'diskprediction set-ssl-default-authority '
-                   'name=ssl_authority,type=CephString,req=true',
-            'desc': 'Set SSL default authority',
             'perm': 'rw'
         },
         {
@@ -217,35 +187,7 @@ class Module(MgrModule):
                     'success to config device data %s on the device plugin'
                     % 'not relied' if str_relied.lower() == 'false' else 'relied', 0)
         except Exception as e:
-            return 0, str(e), ''
-
-    def _set_cert_path(self, inbuf, cmd):
-        str_cert_path = cmd.get('cert_path', '')
-        try:
-            self.set_config('diskprediction_cert_path', str_cert_path)
-            return (0,
-                    'success to config ssl certification file path %s'
-                    % str_cert_path, 0)
-        except Exception as e:
-            return 0, str(e), ''
-
-    def _set_ssl_target_name(self, inbuf, cmd):
-        str_ssl_target = cmd.get('ssl_target_name', '')
-        try:
-            self.set_config('diskprediction_ssl_target_name_override', str_ssl_target)
-            return (0,
-                    'success to config ssl target name', 0)
-        except Exception as e:
-            return 0, str(e), ''
-
-    def _set_ssl_default_authority(self, inbuf, cmd):
-        str_ssl_authority = cmd.get('ssl_authority', '')
-        try:
-            self.set_config('diskprediction_default_authority', str_ssl_authority)
-            return (0,
-                    'success to config ssl default authority', 0)
-        except Exception as e:
-            return 0, str(e), ''
+            return 0, 'command failed, %s' % str(e), ''
 
     def _self_test(self, inbuf, cmd):
         return 0, 'self-test completed', ''

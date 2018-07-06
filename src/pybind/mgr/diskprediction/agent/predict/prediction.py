@@ -212,8 +212,17 @@ class Prediction_Agent(BaseAgent):
                 devs_info = obj_api.get_osd_device_id(osd_id)
                 if disk_info.get('prediction', {}).get('predicted'):
                     predicted = int(disk_info['prediction']['predicted'])
-                if disk_info.get('prediction', {}).get('life_expectancy_day'):
-                    life_expectancy_day = int(disk_info['prediction']['life_expectancy_day'])
+                if disk_info.get('prediction', {}).get('near_failure'):
+                    if disk_info['prediction']['near_failure'] == 'Good':
+                        life_expectancy_day = (TIME_WEEK * 6) + TIME_DAYS
+                    elif disk_info['prediction']['near_failure'] == 'Warning':
+                        life_expectancy_day = (TIME_WEEK * 6) - TIME_DAYS
+                    elif disk_info['prediction']['near_failure'] == 'Bad':
+                        life_expectancy_day = (TIME_WEEK * 2) - TIME_DAYS
+                    else:
+                        # Near failure state is unknown.
+                        predicted = None
+                        life_expectancy_day = None
                 check_dev_id = ''
                 if model:
                     check_dev_id += str(model).upper()

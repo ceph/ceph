@@ -83,7 +83,7 @@ class MetricsAgent(BaseAgent):
                 try:
                     resp = self._command.send_info(data=data, measurement=measurement)
                     status_code = resp.status_code
-                    if status_code >= 200 or status_code < 300:
+                    if status_code >= 200 and status_code < 300:
                         self._logger.debug(
                             "%s send diskprediction api success" % measurement)
                         status_info['success_count'] += 1

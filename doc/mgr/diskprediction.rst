@@ -35,10 +35,10 @@ DiskPrediction server.
     ceph diskprediction config-set <diskprediction_server> <diskprediction_user> <diskprediction_password>
 	
 
-The <diskprediction_server> parameter is DiskPrediction server name, and it
+The ``<diskprediction_server>`` parameter is DiskPrediction server name, and it
 could be an IP address if required.
 
-The <diskprediction_user> and <diskprediction_password> parameters are the user
+The ``<diskprediction_user>`` and ``<diskprediction_password>`` parameters are the user
 id and password logging in to DiskPrediction server.
 
 

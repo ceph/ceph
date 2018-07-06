@@ -127,7 +127,7 @@ class SAI_DiskAgent(MetricsAgent):
                 if vendor:
                     d_data.fields['vendor'] = str(vendor)
                 if sata_version:
-                    d_data.fields['sata_version'] = sata_version
+                    d_data.fields['sata_version'] = str(sata_version)
                 if s_val.get('logical_block_size'):
                     d_data.fields['sector_size'] = \
                         str(str(s_val['logical_block_size']))
