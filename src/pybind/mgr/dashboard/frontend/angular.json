@@ -54,7 +54,8 @@
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
-            "browserTarget": "ceph-dashboard:build"
+            "browserTarget": "ceph-dashboard:build",
+            "proxyConfig": "proxy.conf.json"
           },
           "configurations": {
             "production": {
