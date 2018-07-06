@@ -83,7 +83,7 @@ void CloneRequest<I>::validate_options() {
     m_use_p_features = false;
   }
 
-  std::string default_clone_format = m_cct->_conf->get_val<std::string>(
+  std::string default_clone_format = m_cct->_conf.get_val<std::string>(
     "rbd_default_clone_format");
   if (default_clone_format == "1") {
     m_clone_format = 1;

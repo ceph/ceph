@@ -76,7 +76,7 @@ private:
   Mutex m_lock;
   void* m_handle = nullptr;
 
-  void verify_config(const md_config_t *conf);
+  void verify_config(const ConfigProxy& conf);
 };
 
 #endif // CEPH_TRACEPOINT_PROVIDER_H

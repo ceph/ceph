@@ -690,7 +690,7 @@ void BlueStore::GarbageCollector::process_protrusive_extents(
                << " expected_allocations=" << bi.expected_allocations
                << dendl;
       int64_t benefit = blob_expected_for_release - bi.expected_allocations;
-      if (benefit >= g_conf->bluestore_gc_enable_blob_threshold) {
+      if (benefit >= g_conf()->bluestore_gc_enable_blob_threshold) {
         if (bi.collect_candidate) {
           auto it = bi.first_lextent;
           bool bExit = false;
@@ -837,7 +837,7 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
   assert(p != onode_lru.begin());
   --p;
   int skipped = 0;
-  int max_skipped = g_conf->bluestore_cache_trim_max_skip_pinned;
+  int max_skipped = g_conf()->bluestore_cache_trim_max_skip_pinned;
   while (num > 0) {
     Onode *o = &*p;
     int refs = o->nref.load();
@@ -1134,7 +1134,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
   assert(p != onode_lru.begin());
   --p;
   int skipped = 0;
-  int max_skipped = g_conf->bluestore_cache_trim_max_skip_pinned;
+  int max_skipped = g_conf()->bluestore_cache_trim_max_skip_pinned;
   while (num > 0) {
     Onode *o = &*p;
     dout(20) << __func__ << " considering " << o << dendl;
@@ -2098,7 +2098,7 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 	  }
 	  // avoid resharding the trailing shard, even if it is small
 	  else if (n != shards.end() &&
-		   len < g_conf->bluestore_extent_map_shard_min_size) {
+		   len < g_conf()->bluestore_extent_map_shard_min_size) {
             assert(endoff != OBJECT_MAX_SIZE);
 	    if (p == shards.begin()) {
 	      // we are the first shard, combine with next shard
@@ -3750,7 +3750,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     mempool_thread(this)
 {
   _init_logger();
-  cct->_conf->add_observer(this);
+  cct->_conf.add_observer(this);
   set_cache_shards(1);
 }
 
@@ -3771,7 +3771,7 @@ BlueStore::BlueStore(CephContext *cct,
     mempool_thread(this)
 {
   _init_logger();
-  cct->_conf->add_observer(this);
+  cct->_conf.add_observer(this);
   set_cache_shards(1);
 }
 
@@ -3782,7 +3782,7 @@ BlueStore::~BlueStore()
   }
   finishers.clear();
 
-  cct->_conf->remove_observer(this);
+  cct->_conf.remove_observer(this);
   _shutdown_logger();
   assert(!mounted);
   assert(db == NULL);
@@ -3828,7 +3828,7 @@ const char **BlueStore::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void BlueStore::handle_conf_change(const md_config_t *conf,
+void BlueStore::handle_conf_change(const md_config_t *mconf,
 				   const std::set<std::string> &changed)
 {
   if (changed.count("bluestore_csum_type")) {
@@ -3869,6 +3869,7 @@ void BlueStore::handle_conf_change(const md_config_t *conf,
       _set_throttle_params();
     }
   }
+  ConfigReader conf{mconf};
   if (changed.count("bluestore_throttle_bytes")) {
     throttle_bytes.reset_max(conf->bluestore_throttle_bytes);
     throttle_deferred_bytes.reset_max(
@@ -4003,11 +4004,11 @@ void BlueStore::_set_finisher_num()
 int BlueStore::_set_cache_sizes()
 {
   assert(bdev);
-  cache_autotune = cct->_conf->get_val<bool>("bluestore_cache_autotune");
+  cache_autotune = cct->_conf.get_val<bool>("bluestore_cache_autotune");
   cache_autotune_chunk_size = 
-      cct->_conf->get_val<uint64_t>("bluestore_cache_autotune_chunk_size");
+      cct->_conf.get_val<uint64_t>("bluestore_cache_autotune_chunk_size");
   cache_autotune_interval =
-      cct->_conf->get_val<double>("bluestore_cache_autotune_interval");
+      cct->_conf.get_val<double>("bluestore_cache_autotune_interval");
 
   if (cct->_conf->bluestore_cache_size) {
     cache_size = cct->_conf->bluestore_cache_size;
@@ -4268,7 +4269,7 @@ int BlueStore::_open_path()
 {
   // sanity check(s)
   auto osd_max_object_size =
-    cct->_conf->get_val<uint64_t>("osd_max_object_size");
+    cct->_conf.get_val<uint64_t>("osd_max_object_size");
   if (osd_max_object_size >= (uint64_t)OBJECT_MAX_SIZE) {
     derr << __func__ << " osd_max_object_size >= 0x" << std::hex << OBJECT_MAX_SIZE
       << "; BlueStore has hard limit of 0x" << OBJECT_MAX_SIZE << "." <<  std::dec << dendl;
@@ -4470,7 +4471,7 @@ int BlueStore::_open_bdev(bool create)
     dout(1) << __func__ << " main device size " << byte_u_t(dev_size)
             << " is too small, disable bluestore_bluefs_min for now"
             << dendl;
-    int r = cct->_conf->set_val("bluestore_bluefs_min", "0");
+    int r = cct->_conf.set_val("bluestore_bluefs_min", "0");
     assert(r == 0);
   }
   return 0;
@@ -5063,7 +5064,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
     options = cct->_conf->bluestore_rocksdb_options;
 
     map<string,string> cf_map;
-    cct->_conf->with_val<string>("bluestore_rocksdb_cfs",
+    cct->_conf.with_val<string>("bluestore_rocksdb_cfs",
                                  get_str_map,
                                  &cf_map,
                                  " \t");
@@ -5077,7 +5078,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   if (to_repair_db)
     return 0;
   if (create) {
-    if (cct->_conf->get_val<bool>("bluestore_rocksdb_cf")) {
+    if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
       r = db->create_and_open(err, cfs);
     } else {
       r = db->create_and_open(err);
@@ -5228,7 +5229,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
       gift = g;
     reclaim = 0;
   }
-  uint64_t min_free = cct->_conf->get_val<uint64_t>("bluestore_bluefs_min_free");
+  uint64_t min_free = cct->_conf.get_val<uint64_t>("bluestore_bluefs_min_free");
   if (bluefs_free < min_free &&
       min_free < free_cap) {
     uint64_t g = min_free - bluefs_free;
@@ -6042,7 +6043,7 @@ int BlueStore::_fsck(bool deep, bool repair)
     spg_t pgid;
     mempool::bluestore_fsck::list<string> expecting_shards;
     for (it->lower_bound(string()); it->valid(); it->next()) {
-      if (g_conf->bluestore_debug_fsck_abort) {
+      if (g_conf()->bluestore_debug_fsck_abort) {
 	goto out_scan;
       }
       dout(30) << __func__ << " key "
@@ -8780,7 +8781,7 @@ void BlueStore::_txc_finish(TransContext *txc)
           notify = true;
 	}
 	if (txc->state == TransContext::STATE_DEFERRED_QUEUED &&
-	    osr->q.size() > g_conf->bluestore_max_deferred_txc) {
+	    osr->q.size() > g_conf()->bluestore_max_deferred_txc) {
 	  submit_deferred = true;
 	}
         break;
@@ -9407,7 +9408,7 @@ void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
 	dout(20) << __func__ << " write 0x" << std::hex
 		 << start << "~" << bl.length()
 		 << " crc " << bl.crc32c(-1) << std::dec << dendl;
-	if (!g_conf->bluestore_debug_omit_block_device_write) {
+	if (!g_conf()->bluestore_debug_omit_block_device_write) {
 	  logger->inc(l_bluestore_deferred_write_ops);
 	  logger->inc(l_bluestore_deferred_write_bytes, bl.length());
 	  int r = bdev->aio_write(start, bl, &b->ioc, false);
@@ -10230,7 +10231,7 @@ void BlueStore::_do_write_small(
 	  _buffer_cache_write(txc, b, b_off, bl,
 			      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
-	  if (!g_conf->bluestore_debug_omit_block_device_write) {
+	  if (!g_conf()->bluestore_debug_omit_block_device_write) {
 	    if (b_len <= prefer_deferred_size) {
 	      dout(20) << __func__ << " deferring small 0x" << std::hex
 		       << b_len << std::dec << " unused write via deferred" << dendl;
@@ -10766,7 +10767,7 @@ int BlueStore::_do_alloc_write(
                         wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
     // queue io
-    if (!g_conf->bluestore_debug_omit_block_device_write) {
+    if (!g_conf()->bluestore_debug_omit_block_device_write) {
       if (l->length() <= prefer_deferred_size.load()) {
 	dout(20) << __func__ << " deferring small 0x" << std::hex
 		 << l->length() << std::dec << " write via deferred" << dendl;
@@ -11120,7 +11121,7 @@ int BlueStore::_do_write(
     o->onode.size = end;
   }
 
-  if (benefit >= g_conf->bluestore_gc_enable_total_threshold) {
+  if (benefit >= g_conf()->bluestore_gc_enable_total_threshold) {
     if (!gc.get_extents_to_collect().empty()) {
       dout(20) << __func__ << " perform garbage collection, "
                << "expected benefit = " << benefit << " AUs" << dendl;

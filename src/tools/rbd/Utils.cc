@@ -494,7 +494,7 @@ int get_image_options(const boost::program_options::variables_map &vm,
     }
 
     if (format_specified) {
-      int r = g_conf->set_val("rbd_default_format", stringify(format));
+      int r = g_conf().set_val("rbd_default_format", stringify(format));
       assert(r == 0);
       opts->set(RBD_IMAGE_OPTION_FORMAT, format);
     }

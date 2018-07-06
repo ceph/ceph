@@ -18,13 +18,13 @@
 #include <map>
 #include <boost/container/small_vector.hpp>
 #include "common/ConfUtils.h"
-#include "common/entity_name.h"
 #include "common/code_environment.h"
 #include "common/Mutex.h"
 #include "log/SubsystemMap.h"
 #include "common/options.h"
 #include "common/subsys_types.h"
 #include "common/config_fwd.h"
+#include "common/config_values.h"
 #include "common/lock_mutex.h"
 
 class CephContext;
@@ -75,14 +75,14 @@ namespace ceph::internal {
 template<LockPolicy lock_policy>
 struct md_config_impl {
 public:
-  typedef boost::variant<int64_t md_config_t::*,
-                         uint64_t md_config_t::*,
-                         std::string md_config_t::*,
-                         double md_config_t::*,
-                         bool md_config_t::*,
-                         entity_addr_t md_config_t::*,
-			 entity_addrvec_t md_config_t::*,
-                         uuid_d md_config_t::*> member_ptr_t;
+  typedef boost::variant<int64_t ConfigValues::*,
+                         uint64_t ConfigValues::*,
+                         std::string ConfigValues::*,
+                         double ConfigValues::*,
+                         bool ConfigValues::*,
+                         entity_addr_t ConfigValues::*,
+			 entity_addrvec_t ConfigValues::*,
+                         uuid_d ConfigValues::*> member_ptr_t;
 
   // For use when intercepting configuration updates
   typedef std::function<bool(
@@ -101,7 +101,7 @@ public:
   /*
    * Mapping from legacy config option names to class members
    */
-  std::map<std::string, md_config_impl::member_ptr_t> legacy_values;
+  std::map<std::string, member_ptr_t> legacy_values;
 
   /**
    * The configuration schema, in the form of Option objects describing
@@ -112,7 +112,7 @@ public:
   /**
    * The current values of all settings described by the schema
    */
-  std::map<std::string, map<int32_t,Option::value_t>> values;
+  ConfigValues values;
 
   /// values from mon that we failed to set
   std::map<std::string,std::string> ignored_mon_values;
@@ -304,8 +304,7 @@ private:
 
 
   void update_legacy_vals();
-  void update_legacy_val(const Option &opt,
-      md_config_impl::member_ptr_t member);
+  void update_legacy_val(const Option &opt, member_ptr_t member);
 
   Option::value_t _expand_meta(
     const Option::value_t& in,
@@ -343,52 +342,7 @@ private:
   vector<Option> subsys_options;
 
 public:
-  ceph::logging::SubsystemMap subsys;
-
-  EntityName name;
   string data_dir_option;  ///< data_dir config option, if any
-
-  /// cluster name
-  string cluster;
-
-  bool no_mon_config = false;
-
-// This macro block defines C members of the md_config_t struct
-// corresponding to the definitions in legacy_config_opts.h.
-// These C members are consumed by code that was written before
-// the new options.cc infrastructure: all newer code should
-// be consume options via explicit get() rather than C members.
-#define OPTION_OPT_INT(name) int64_t name;
-#define OPTION_OPT_LONGLONG(name) int64_t name;
-#define OPTION_OPT_STR(name) std::string name;
-#define OPTION_OPT_DOUBLE(name) double name;
-#define OPTION_OPT_FLOAT(name) double name;
-#define OPTION_OPT_BOOL(name) bool name;
-#define OPTION_OPT_ADDR(name) entity_addr_t name;
-#define OPTION_OPT_ADDRVEC(name) entity_addrvec_t name;
-#define OPTION_OPT_U32(name) uint64_t name;
-#define OPTION_OPT_U64(name) uint64_t name;
-#define OPTION_OPT_UUID(name) uuid_d name;
-#define OPTION(name, ty) \
-  public:                      \
-    OPTION_##ty(name)          
-#define SAFE_OPTION(name, ty) \
-  protected:                        \
-    OPTION_##ty(name)               
-#include "common/legacy_config_opts.h"
-#undef OPTION_OPT_INT
-#undef OPTION_OPT_LONGLONG
-#undef OPTION_OPT_STR
-#undef OPTION_OPT_DOUBLE
-#undef OPTION_OPT_FLOAT
-#undef OPTION_OPT_BOOL
-#undef OPTION_OPT_ADDR
-#undef OPTION_OPT_ADDRVEC
-#undef OPTION_OPT_U32
-#undef OPTION_OPT_U64
-#undef OPTION_OPT_UUID
-#undef OPTION
-#undef SAFE_OPTION
 
 public:
   unsigned get_osd_pool_default_min_size() const {

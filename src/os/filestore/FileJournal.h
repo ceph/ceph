@@ -443,12 +443,12 @@ private:
       }
 #endif
 
-      cct->_conf->add_observer(this);
+      cct->_conf.add_observer(this);
   }
   ~FileJournal() override {
     assert(fd == -1);
     delete[] zero_buf;
-    cct->_conf->remove_observer(this);
+    cct->_conf.remove_observer(this);
   }
 
   int check() override;

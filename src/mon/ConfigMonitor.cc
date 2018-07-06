@@ -148,7 +148,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
   if (prefix == "config help") {
     string name;
     cmd_getval(g_ceph_context, cmdmap, "key", name);
-    const Option *opt = g_conf->find_option(name);
+    const Option *opt = g_conf().find_option(name);
     if (!opt) {
       ss << "configuration option '" << name << "' not recognized";
       err = -ENOENT;
@@ -254,7 +254,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	odata.append("\n");
 	goto reply;
       }
-      const Option *opt = g_conf->find_option(name);
+      const Option *opt = g_conf().find_option(name);
       if (!opt) {
 	err = -ENOENT;
 	goto reply;
@@ -399,7 +399,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 
     if (prefix == "config set") {
       if (name.substr(0, 4) != "mgr/") {
-	const Option *opt = g_conf->find_option(name);
+	const Option *opt = g_conf().find_option(name);
 	if (!opt) {
 	  ss << "unrecognized config option '" << name << "'";
 	  err = -EINVAL;
@@ -500,7 +500,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 	  continue;
 	}
 	// a known and worthy option?
-	const Option *o = g_conf->find_option(j.key);
+	const Option *o = g_conf().find_option(j.key);
 	if (!o ||
 	    o->flags & Option::FLAG_NO_MON_UPDATE) {
 	  goto skip;
@@ -649,7 +649,7 @@ void ConfigMonitor::load_config()
       section->options.insert(make_pair(name, std::move(mopt)));
       ++num;      
     } else {
-      const Option *opt = g_conf->find_option(name);
+      const Option *opt = g_conf().find_option(name);
       if (!opt) {
 	dout(10) << __func__ << " unrecognized option '" << name << "'" << dendl;
 	opt = new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN);
@@ -694,15 +694,15 @@ void ConfigMonitor::load_config()
   {
     const OSDMap& osdmap = mon->osdmon()->osdmap;
     map<string,string> crush_location;
-    osdmap.crush->get_full_location(g_conf->host, &crush_location);
+    osdmap.crush->get_full_location(g_conf()->host, &crush_location);
     map<string,string> out;
     config_map.generate_entity_map(
-      g_conf->name,
+      g_conf()->name,
       crush_location,
       osdmap.crush.get(),
       string(), // no device class
       &out);
-    g_conf->set_mon_vals(g_ceph_context, out, nullptr);
+    g_conf().set_mon_vals(g_ceph_context, out, nullptr);
   }
 }
 

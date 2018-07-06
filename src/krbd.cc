@@ -134,11 +134,11 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
 
   KeyRing keyring;
   auto auth_client_required =
-    cct->_conf->get_val<std::string>("auth_client_required");
+    cct->_conf.get_val<std::string>("auth_client_required");
   if (auth_client_required != "none") {
     r = keyring.from_ceph_context(cct);
-    auto keyfile = cct->_conf->get_val<std::string>("keyfile");
-    auto key = cct->_conf->get_val<std::string>("key");
+    auto keyfile = cct->_conf.get_val<std::string>("keyfile");
+    auto key = cct->_conf.get_val<std::string>("key");
     if (r == -ENOENT && keyfile.empty() && key.empty())
       r = 0;
     if (r < 0) {

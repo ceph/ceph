@@ -359,8 +359,8 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
 
   int r = 0;
   uint64_t lba_off, lba_count;
-  uint32_t max_io_completion = (uint32_t)g_conf->get_val<uint64_t>("bluestore_spdk_max_io_completion");
-  uint64_t io_sleep_in_us = g_conf->get_val<uint64_t>("bluestore_spdk_io_sleep");
+  uint32_t max_io_completion = (uint32_t)g_conf().get_val<uint64_t>("bluestore_spdk_max_io_completion");
+  uint64_t io_sleep_in_us = g_conf().get_val<uint64_t>("bluestore_spdk_io_sleep");
 
   ceph::coarse_real_clock::time_point cur, start
     = ceph::coarse_real_clock::now();
@@ -593,7 +593,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
     }
   }
 
-  auto coremask_arg = g_conf->get_val<std::string>("bluestore_spdk_coremask");
+  auto coremask_arg = g_conf().get_val<std::string>("bluestore_spdk_coremask");
   int m_core_arg = -1;
   try {
     auto core_value = stoull(coremask_arg, nullptr, 16);
@@ -611,7 +611,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
   }
   m_core_arg -= 1;
 
-  uint32_t mem_size_arg = (uint32_t)g_conf->get_val<uint64_t>("bluestore_spdk_mem");
+  uint32_t mem_size_arg = (uint32_t)g_conf().get_val<uint64_t>("bluestore_spdk_mem");
 
 
   if (!init) {

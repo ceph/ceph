@@ -43,7 +43,7 @@ class librados::RadosClient : public Dispatcher
 
 public:
   using Dispatcher::cct;
-  md_config_t *conf;
+  const ConfigProxy& conf;
 private:
   enum {
     DISCONNECTED,

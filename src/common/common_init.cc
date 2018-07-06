@@ -36,7 +36,7 @@ CephContext *common_preinit(const CephInitParameters &iparams,
   // Create a configuration object
   CephContext *cct = new CephContext(iparams.module_type, code_env, flags);
 
-  md_config_t *conf = cct->_conf;
+  auto& conf = cct->_conf;
   // add config observers here
 
   // Set up our entity name.
@@ -46,26 +46,26 @@ CephContext *common_preinit(const CephInitParameters &iparams,
   // for backward compatibility.  moving forward, we want all keyrings
   // in these locations.  the mon already forces $mon_data/keyring.
   if (conf->name.is_mds()) {
-    conf->set_val_default("keyring", "$mds_data/keyring");
+    conf.set_val_default("keyring", "$mds_data/keyring");
   } else if (conf->name.is_osd()) {
-    conf->set_val_default("keyring", "$osd_data/keyring");
+    conf.set_val_default("keyring", "$osd_data/keyring");
   }
 
   if ((flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS)) {
     // make this unique despite multiple instances by the same name.
-    conf->set_val_default("admin_socket",
+    conf.set_val_default("admin_socket",
 			  "$run_dir/$cluster-$name.$pid.$cctid.asok");
   }
 
   if (code_env == CODE_ENVIRONMENT_LIBRARY ||
       code_env == CODE_ENVIRONMENT_UTILITY_NODOUT) {
-    conf->set_val_default("log_to_stderr", "false");
-    conf->set_val_default("err_to_stderr", "false");
-    conf->set_val_default("log_flush_on_exit", "false");
+    conf.set_val_default("log_to_stderr", "false");
+    conf.set_val_default("err_to_stderr", "false");
+    conf.set_val_default("log_flush_on_exit", "false");
   }
   if (code_env != CODE_ENVIRONMENT_DAEMON) {
     // NOTE: disable ms subsystem gathering in clients by default
-    conf->set_val_default("debug_ms", "0/0");
+    conf.set_val_default("debug_ms", "0/0");
   }
 
   return cct;
@@ -113,7 +113,7 @@ void common_init_finish(CephContext *cct)
     cct->get_admin_socket()->chown(cct->get_set_uid(), cct->get_set_gid());
   }
 
-  md_config_t *conf = cct->_conf;
+  const auto& conf = cct->_conf;
 
   if (!conf->admin_socket.empty() && !conf->admin_socket_mode.empty()) {
     int ret = 0;

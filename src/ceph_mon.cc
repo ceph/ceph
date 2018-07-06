@@ -104,7 +104,7 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
 
 int check_mon_data_exists()
 {
-  string mon_data = g_conf->mon_data;
+  string mon_data = g_conf()->mon_data;
   struct stat buf;
   if (::stat(mon_data.c_str(), &buf)) {
     if (errno != ENOENT) {
@@ -128,7 +128,7 @@ int check_mon_data_exists()
  */
 int check_mon_data_empty()
 {
-  string mon_data = g_conf->mon_data;
+  string mon_data = g_conf()->mon_data;
 
   DIR *dir = ::opendir(mon_data.c_str());
   if (!dir) {
@@ -286,12 +286,12 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  if (g_conf->mon_data.empty()) {
+  if (g_conf()->mon_data.empty()) {
     cerr << "must specify '--mon-data=foo' data path" << std::endl;
     exit(1);
   }
 
-  if (g_conf->name.get_id().empty()) {
+  if (g_conf()->name.get_id().empty()) {
     cerr << "must specify id (--id <id> or --name mon.<id>)" << std::endl;
     exit(1);
   }
@@ -301,13 +301,13 @@ int main(int argc, const char **argv)
 
     int err = check_mon_data_exists();
     if (err == -ENOENT) {
-      if (::mkdir(g_conf->mon_data.c_str(), 0755)) {
-	derr << "mkdir(" << g_conf->mon_data << ") : "
+      if (::mkdir(g_conf()->mon_data.c_str(), 0755)) {
+	derr << "mkdir(" << g_conf()->mon_data << ") : "
 	     << cpp_strerror(errno) << dendl;
 	exit(1);
       }
     } else if (err < 0) {
-      derr << "error opening '" << g_conf->mon_data << "': "
+      derr << "error opening '" << g_conf()->mon_data << "': "
            << cpp_strerror(-err) << dendl;
       exit(-err);
     }
@@ -315,11 +315,11 @@ int main(int argc, const char **argv)
     err = check_mon_data_empty();
     if (err == -ENOTEMPTY) {
       // Mon may exist.  Let the user know and exit gracefully.
-      derr << "'" << g_conf->mon_data << "' already exists and is not empty"
+      derr << "'" << g_conf()->mon_data << "' already exists and is not empty"
            << ": monitor may already exist" << dendl;
       exit(0);
     } else if (err < 0) {
-      derr << "error checking if '" << g_conf->mon_data << "' is empty: "
+      derr << "error checking if '" << g_conf()->mon_data << "' is empty: "
            << cpp_strerror(-err) << dendl;
       exit(-err);
     }
@@ -334,7 +334,7 @@ int main(int argc, const char **argv)
     MonMap monmap;
 
     // load or generate monmap
-    const auto monmap_fn = g_conf->get_val<string>("monmap");
+    const auto monmap_fn = g_conf().get_val<string>("monmap");
     if (monmap_fn.length()) {
       int err = monmapbl.read_file(monmap_fn.c_str(), &error);
       if (err < 0) {
@@ -360,19 +360,19 @@ int main(int argc, const char **argv)
       }
 
       // am i part of the initial quorum?
-      if (monmap.contains(g_conf->name.get_id())) {
+      if (monmap.contains(g_conf()->name.get_id())) {
 	// hmm, make sure the ip listed exists on the current host?
 	// maybe later.
-      } else if (!g_conf->public_addr.is_blank_ip()) {
-	entity_addr_t a = g_conf->public_addr;
+      } else if (!g_conf()->public_addr.is_blank_ip()) {
+	entity_addr_t a = g_conf()->public_addr;
 	if (a.get_port() == 0)
 	  a.set_port(CEPH_MON_PORT_LEGACY);
 	if (monmap.contains(a)) {
 	  string name;
 	  monmap.get_addr_name(a, name);
-	  monmap.rename(name, g_conf->name.get_id());
+	  monmap.rename(name, g_conf()->name.get_id());
 	  dout(0) << argv[0] << ": renaming mon." << name << " " << a
-	       << " to mon." << g_conf->name.get_id() << dendl;
+		  << " to mon." << g_conf()->name.get_id() << dendl;
 	}
       } else {
 	// is a local address listed without a name?  if so, name myself.
@@ -386,8 +386,8 @@ int main(int argc, const char **argv)
 
 	  if (name.compare(0, 7, "noname-") == 0) {
 	    dout(0) << argv[0] << ": mon." << name << " " << local
-		 << " is local, renaming to mon." << g_conf->name.get_id() << dendl;
-	    monmap.rename(name, g_conf->name.get_id());
+		    << " is local, renaming to mon." << g_conf()->name.get_id() << dendl;
+	    monmap.rename(name, g_conf()->name.get_id());
 	  } else {
 	    dout(0) << argv[0] << ": mon." << name << " " << local
 		 << " is local, but not 'noname-' + something; not assuming it's me" << dendl;
@@ -396,7 +396,7 @@ int main(int argc, const char **argv)
       }
     }
 
-    const auto fsid = g_conf->get_val<uuid_d>("fsid");
+    const auto fsid = g_conf().get_val<uuid_d>("fsid");
     if (!fsid.is_zero()) {
       monmap.fsid = fsid;
       dout(0) << argv[0] << ": set fsid to " << fsid << dendl;
@@ -420,49 +420,49 @@ int main(int argc, const char **argv)
     }
 
     // go
-    MonitorDBStore store(g_conf->mon_data);
+    MonitorDBStore store(g_conf()->mon_data);
     ostringstream oss;
     int r = store.create_and_open(oss);
     if (oss.tellp())
       derr << oss.str() << dendl;
     if (r < 0) {
       derr << argv[0] << ": error opening mon data directory at '"
-           << g_conf->mon_data << "': " << cpp_strerror(r) << dendl;
+           << g_conf()->mon_data << "': " << cpp_strerror(r) << dendl;
       exit(1);
     }
     assert(r == 0);
 
-    Monitor mon(g_ceph_context, g_conf->name.get_id(), &store, 0, 0, &monmap);
+    Monitor mon(g_ceph_context, g_conf()->name.get_id(), &store, 0, 0, &monmap);
     r = mon.mkfs(osdmapbl);
     if (r < 0) {
       derr << argv[0] << ": error creating monfs: " << cpp_strerror(r) << dendl;
       exit(1);
     }
     store.close();
-    dout(0) << argv[0] << ": created monfs at " << g_conf->mon_data 
-	 << " for " << g_conf->name << dendl;
+    dout(0) << argv[0] << ": created monfs at " << g_conf()->mon_data 
+	    << " for " << g_conf()->name << dendl;
     return 0;
   }
 
   err = check_mon_data_exists();
   if (err < 0 && err == -ENOENT) {
-    derr << "monitor data directory at '" << g_conf->mon_data << "'"
+    derr << "monitor data directory at '" << g_conf()->mon_data << "'"
          << " does not exist: have you run 'mkfs'?" << dendl;
     exit(1);
   } else if (err < 0) {
     derr << "error accessing monitor data directory at '"
-         << g_conf->mon_data << "': " << cpp_strerror(-err) << dendl;
+         << g_conf()->mon_data << "': " << cpp_strerror(-err) << dendl;
     exit(1);
   }
 
   err = check_mon_data_empty();
   if (err == 0) {
-    derr << "monitor data directory at '" << g_conf->mon_data
+    derr << "monitor data directory at '" << g_conf()->mon_data
       << "' is empty: have you run 'mkfs'?" << dendl;
     exit(1);
   } else if (err < 0 && err != -ENOTEMPTY) {
     // we don't want an empty data dir by now
-    derr << "error accessing '" << g_conf->mon_data << "': "
+    derr << "error accessing '" << g_conf()->mon_data << "': "
          << cpp_strerror(-err) << dendl;
     exit(1);
   }
@@ -470,18 +470,18 @@ int main(int argc, const char **argv)
   {
     // check fs stats. don't start if it's critically close to full.
     ceph_data_stats_t stats;
-    int err = get_fs_stats(stats, g_conf->mon_data.c_str());
+    int err = get_fs_stats(stats, g_conf()->mon_data.c_str());
     if (err < 0) {
       derr << "error checking monitor data's fs stats: " << cpp_strerror(err)
            << dendl;
       exit(-err);
     }
-    if (stats.avail_percent <= g_conf->mon_data_avail_crit) {
+    if (stats.avail_percent <= g_conf()->mon_data_avail_crit) {
       derr << "error: monitor data filesystem reached concerning levels of"
            << " available storage space (available: "
            << stats.avail_percent << "% " << byte_u_t(stats.byte_avail)
            << ")\nyou may adjust 'mon data avail crit' to a lower value"
-           << " to make this go away (default: " << g_conf->mon_data_avail_crit
+           << " to make this go away (default: " << g_conf()->mon_data_avail_crit
            << "%)\n" << dendl;
       exit(ENOSPC);
     }
@@ -517,7 +517,7 @@ int main(int argc, const char **argv)
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
 
-  MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
+  MonitorDBStore *store = new MonitorDBStore(g_conf()->mon_data);
   {
     ostringstream oss;
     err = store->open(oss);
@@ -525,7 +525,7 @@ int main(int argc, const char **argv)
       derr << oss.str() << dendl;
     if (err < 0) {
       derr << "error opening mon data directory at '"
-           << g_conf->mon_data << "': " << cpp_strerror(err) << dendl;
+           << g_conf()->mon_data << "': " << cpp_strerror(err) << dendl;
       prefork.exit(1);
     }
   }
@@ -621,15 +621,15 @@ int main(int argc, const char **argv)
   // this is what i will bind to
   entity_addr_t ipaddr;
 
-  if (monmap.contains(g_conf->name.get_id())) {
-    ipaddr = monmap.get_addr(g_conf->name.get_id());
+  if (monmap.contains(g_conf()->name.get_id())) {
+    ipaddr = monmap.get_addr(g_conf()->name.get_id());
 
     // print helpful warning if the conf file doesn't match
     entity_addr_t conf_addr;
     std::vector <std::string> my_sections;
-    g_conf->get_my_sections(my_sections);
+    g_conf().get_my_sections(my_sections);
     std::string mon_addr_str;
-    if (g_conf->get_val_from_conf_file(my_sections, "mon addr",
+    if (g_conf().get_val_from_conf_file(my_sections, "mon addr",
 				       mon_addr_str, true) == 0) {
       if (conf_addr.parse(mon_addr_str.c_str())) {
         if (conf_addr.get_port() == 0)
@@ -644,14 +644,14 @@ int main(int argc, const char **argv)
                << "         continuing with monmap configuration" << dendl;
     }
   } else {
-    dout(0) << g_conf->name << " does not exist in monmap, will attempt to join an existing cluster" << dendl;
+    dout(0) << g_conf()->name << " does not exist in monmap, will attempt to join an existing cluster" << dendl;
 
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
-    if (!g_conf->public_addr.is_blank_ip()) {
-      ipaddr = g_conf->public_addr;
+    if (!g_conf()->public_addr.is_blank_ip()) {
+      ipaddr = g_conf()->public_addr;
       if (ipaddr.get_port() == 0)
 	ipaddr.set_port(CEPH_MON_PORT_LEGACY);
-      dout(0) << "using public_addr " << g_conf->public_addr << " -> "
+      dout(0) << "using public_addr " << g_conf()->public_addr << " -> "
 	      << ipaddr << dendl;
     } else {
       MonMap tmpmap;
@@ -664,10 +664,10 @@ int main(int argc, const char **argv)
              << cpp_strerror(err) << dendl;
 	prefork.exit(1);
       }
-      if (tmpmap.contains(g_conf->name.get_id())) {
-	ipaddr = tmpmap.get_addr(g_conf->name.get_id());
+      if (tmpmap.contains(g_conf()->name.get_id())) {
+	ipaddr = tmpmap.get_addr(g_conf()->name.get_id());
       } else {
-	derr << "no public_addr or public_network specified, and " << g_conf->name
+	derr << "no public_addr or public_network specified, and " << g_conf()->name
 	     << " not present in monmap or ceph.conf" << dendl;
 	prefork.exit(1);
       }
@@ -675,8 +675,8 @@ int main(int argc, const char **argv)
   }
 
   // bind
-  int rank = monmap.get_rank(g_conf->name.get_id());
-  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
+  int rank = monmap.get_rank(g_conf()->name.get_id());
+  std::string public_msgr_type = g_conf()->ms_public_type.empty() ? g_conf().get_val<std::string>("ms_type") : g_conf()->ms_public_type;
   Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
 				      entity_name_t::MON(rank), "mon",
 				      0, Messenger::HAS_MANY_CONNECTIONS);
@@ -699,7 +699,7 @@ int main(int argc, const char **argv)
 
   // throttle client traffic
   Throttle *client_throttler = new Throttle(g_ceph_context, "mon_client_bytes",
-					    g_conf->mon_client_bytes);
+					    g_conf()->mon_client_bytes);
   msgr->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
 				     client_throttler, NULL);
 
@@ -707,7 +707,7 @@ int main(int argc, const char **argv)
   // NOTE: actual usage on the leader may multiply by the number of
   // monitors if they forward large update messages from daemons.
   Throttle *daemon_throttler = new Throttle(g_ceph_context, "mon_daemon_bytes",
-					    g_conf->mon_daemon_bytes);
+					    g_conf()->mon_daemon_bytes);
   msgr->set_policy_throttlers(entity_name_t::TYPE_OSD, daemon_throttler,
 				     NULL);
   msgr->set_policy_throttlers(entity_name_t::TYPE_MDS, daemon_throttler,
@@ -717,8 +717,8 @@ int main(int argc, const char **argv)
   entity_addr_t public_addr = ipaddr;
 
   // check if the public_bind_addr option is set
-  if (!g_conf->public_bind_addr.is_blank_ip()) {
-    bind_addr = g_conf->public_bind_addr;
+  if (!g_conf()->public_bind_addr.is_blank_ip()) {
+    bind_addr = g_conf()->public_bind_addr;
 
     // set the default port if not already set
     if (bind_addr.get_port() == 0) {
@@ -726,10 +726,10 @@ int main(int argc, const char **argv)
     }
   }
 
-  dout(0) << "starting " << g_conf->name << " rank " << rank
+  dout(0) << "starting " << g_conf()->name << " rank " << rank
        << " at public addr " << public_addr
        << " at bind addr " << bind_addr
-       << " mon_data " << g_conf->mon_data
+       << " mon_data " << g_conf()->mon_data
        << " fsid " << monmap.get_fsid()
        << dendl;
 
@@ -753,14 +753,14 @@ int main(int argc, const char **argv)
     prefork.exit(1);
   }
 
-  dout(0) << "starting " << g_conf->name << " rank " << rank
+  dout(0) << "starting " << g_conf()->name << " rank " << rank
        << " at " << ipaddr
-       << " mon_data " << g_conf->mon_data
+       << " mon_data " << g_conf()->mon_data
        << " fsid " << monmap.get_fsid()
        << dendl;
 
   // start monitor
-  mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store,
+  mon = new Monitor(g_ceph_context, g_conf()->name.get_id(), store,
 		    msgr, mgr_msgr, &monmap);
 
   if (force_sync) {
@@ -777,13 +777,13 @@ int main(int argc, const char **argv)
     prefork.exit(1);
   }
 
-  if (compact || g_conf->mon_compact_on_start) {
+  if (compact || g_conf()->mon_compact_on_start) {
     derr << "compacting monitor store ..." << dendl;
     mon->store->compact();
     derr << "done compacting" << dendl;
   }
 
-  if (g_conf->daemonize) {
+  if (g_conf()->daemonize) {
     global_init_postfork_finish(g_ceph_context);
     prefork.daemonize();
   }
@@ -796,7 +796,7 @@ int main(int argc, const char **argv)
   register_async_signal_handler_oneshot(SIGINT, handle_mon_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mon_signal);
 
-  if (g_conf->inject_early_sigterm)
+  if (g_conf()->inject_early_sigterm)
     kill(getpid(), SIGTERM);
 
   msgr->wait();

@@ -78,7 +78,7 @@ int Accepter::create_selfpipe(int *pipe_rd, int *pipe_wr) {
 
 int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 {
-  const md_config_t *conf = msgr->cct->_conf;
+  const auto& conf = msgr->cct->_conf;
   // bind to a socket
   ldout(msgr->cct,10) <<  __func__ << dendl;
   

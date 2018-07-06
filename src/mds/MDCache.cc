@@ -188,9 +188,9 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   num_shadow_inodes = 0;
   num_inodes_with_caps = 0;
 
-  max_dir_commit_size = g_conf->mds_dir_max_commit_size ?
-                        (g_conf->mds_dir_max_commit_size << 20) :
-                        (0.9 *(g_conf->osd_max_write_size << 20));
+  max_dir_commit_size = g_conf()->mds_dir_max_commit_size ?
+                        (g_conf()->mds_dir_max_commit_size << 20) :
+                        (0.9 *(g_conf()->osd_max_write_size << 20));
 
   discover_last_tid = 0;
   open_ino_last_tid = 0;
@@ -211,7 +211,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
 
   bottom_lru.lru_set_midpoint(0);
 
-  decayrate.set_halflife(g_conf->mds_decay_halflife);
+  decayrate.set_halflife(g_conf()->mds_decay_halflife);
 
   did_shutdown_log_cap = false;
 
@@ -348,9 +348,9 @@ file_layout_t MDCache::gen_default_log_layout(const MDSMap &mdsmap)
 {
   file_layout_t result = file_layout_t::get_default();
   result.pool_id = mdsmap.get_metadata_pool();
-  if (g_conf->mds_log_segment_size > 0) {
-    result.object_size = g_conf->mds_log_segment_size;
-    result.stripe_unit = g_conf->mds_log_segment_size;
+  if (g_conf()->mds_log_segment_size > 0) {
+    result.object_size = g_conf()->mds_log_segment_size;
+    result.stripe_unit = g_conf()->mds_log_segment_size;
   }
   return result;
 }
@@ -379,7 +379,7 @@ void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
 
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir()) {
-    in->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
+    in->inode.dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
     ++in->inode.rstat.rsubdirs;
   } else {
     in->inode.layout = default_file_layout;
@@ -410,8 +410,8 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
 CInode *MDCache::create_root_inode()
 {
   CInode *i = create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);
-  i->inode.uid = g_conf->mds_root_ino_uid;
-  i->inode.gid = g_conf->mds_root_ino_gid;
+  i->inode.uid = g_conf()->mds_root_ino_uid;
+  i->inode.gid = g_conf()->mds_root_ino_gid;
   i->inode.layout = default_file_layout;
   i->inode.layout.pool_id = mds->mdsmap->get_first_data_pool();
   return i;
@@ -1797,7 +1797,7 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
 				 linkunlink, update);
   }
 
-  if (g_conf->mds_snap_rstat) {
+  if (g_conf()->mds_snap_rstat) {
     for (const auto &p : cur->dirty_old_rstats) {
       auto &old = cur->old_inodes[p];
       snapid_t ofirst = std::max(old.first, floor);
@@ -1844,7 +1844,7 @@ void MDCache::_project_rstat_inode_to_frag(CInode::mempool_inode& inode, snapid_
     snapid_t first;
     fnode_t *pf = parent->get_projected_fnode();
     if (last == CEPH_NOSNAP) {
-      if (g_conf->mds_snap_rstat)
+      if (g_conf()->mds_snap_rstat)
 	first = std::max(ofirst, parent->first);
       else
 	first = parent->first;
@@ -1862,7 +1862,7 @@ void MDCache::_project_rstat_inode_to_frag(CInode::mempool_inode& inode, snapid_
 	parent->dirty_old_rstat[first-1].accounted_rstat = pf->accounted_rstat;
       }
       parent->first = first;
-    } else if (!g_conf->mds_snap_rstat) {
+    } else if (!g_conf()->mds_snap_rstat) {
       // drop snapshots' rstats
       break;
     } else if (last >= parent->first) {
@@ -2230,11 +2230,11 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
     // delay propagating until later?
     if (!stop && !first &&
-	g_conf->mds_dirstat_min_interval > 0) {
+	g_conf()->mds_dirstat_min_interval > 0) {
       double since_last_prop = mut->get_mds_stamp() - pin->last_dirstat_prop;
-      if (since_last_prop < g_conf->mds_dirstat_min_interval) {
+      if (since_last_prop < g_conf()->mds_dirstat_min_interval) {
 	dout(10) << "predirty_journal_parents last prop " << since_last_prop
-		 << " < " << g_conf->mds_dirstat_min_interval
+		 << " < " << g_conf()->mds_dirstat_min_interval
 		 << ", stopping" << dendl;
 	stop = true;
       } else {
@@ -2299,7 +2299,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
 	if (pi.inode.dirstat.size() < 0)
-	  assert(!"negative dirstat size" == g_conf->mds_verify_scatter);
+	  assert(!"negative dirstat size" == g_conf()->mds_verify_scatter);
 	if (pi.inode.dirstat.size() != pf->fragstat.size()) {
 	  mds->clog->error() << "unmatched fragstat size on single dirfrag "
 	     << parent->dirfrag() << ", inode has " << pi.inode.dirstat
@@ -2308,7 +2308,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 	  // trust the dirfrag for now
 	  pi.inode.dirstat = pf->fragstat;
 
-	  assert(!"unmatched fragstat size" == g_conf->mds_verify_scatter);
+	  assert(!"unmatched fragstat size" == g_conf()->mds_verify_scatter);
 	}
       }
     }
@@ -2335,7 +2335,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     // first, if the frag is stale, bring it back in sync.
     parent->resync_accounted_rstat();
 
-    if (g_conf->mds_snap_rstat) {
+    if (g_conf()->mds_snap_rstat) {
       for (auto &p : parent->dirty_old_rstat) {
 	project_rstat_frag_to_inode(p.second.rstat, p.second.accounted_rstat, p.second.first,
 				    p.first, pin, true);
@@ -2355,7 +2355,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 	// trust the dirfrag for now
 	pi.inode.rstat = pf->rstat;
 
-	assert(!"unmatched rstat rbytes" == g_conf->mds_verify_scatter);
+	assert(!"unmatched rstat rbytes" == g_conf()->mds_verify_scatter);
       }
     }
 
@@ -4683,7 +4683,7 @@ CDir *MDCache::rejoin_invent_dirfrag(dirfrag_t df)
   if (!in->is_dir()) {
     assert(in->state_test(CInode::STATE_REJOINUNDEF));
     in->inode.mode = S_IFDIR;
-    in->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
+    in->inode.dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
   }
   CDir *dir = in->get_or_open_dirfrag(this, df.frag);
   dir->state_set(CDir::STATE_REJOINUNDEF);
@@ -5001,7 +5001,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 	diri = new CInode(this, false);
 	diri->inode.ino = p->first.ino;
 	diri->inode.mode = S_IFDIR;
-	diri->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
+	diri->inode.dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
 	add_inode(diri);
 	if (MDS_INO_MDSDIR(from) == p->first.ino) {
 	  diri->inode_auth = mds_authority_t(from, CDIR_AUTH_UNKNOWN);
@@ -5073,7 +5073,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 	    in = new CInode(this, false, q->second.first, q->first.snapid);
 	    in->inode.ino = q->second.ino;
 	    in->inode.mode = S_IFDIR;
-	    in->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
+	    in->inode.dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
 	    add_inode(in);
 	    dout(10) << " add inode " << *in << dendl;
 	  } else if (in->get_parent_dn()) {
@@ -6029,7 +6029,7 @@ void MDCache::opened_undef_inode(CInode *in) {
   rejoin_undef_inodes.erase(in);
   if (in->is_dir()) {
     // FIXME: re-hash dentries if necessary
-    assert(in->inode.dir_layout.dl_dir_hash == g_conf->mds_default_dir_hash);
+    assert(in->inode.dir_layout.dl_dir_hash == g_conf()->mds_default_dir_hash);
     if (in->has_dirfrags() && !in->dirfragtree.is_leaf(frag_t())) {
       CDir *dir = in->get_dirfrag(frag_t());
       assert(dir);
@@ -7655,13 +7655,13 @@ void MDCache::shutdown_check()
   // cache
   char old_val[32] = { 0 };
   char *o = old_val;
-  g_conf->get_val("debug_mds", &o, sizeof(old_val));
-  g_conf->set_val("debug_mds", "10");
-  g_conf->apply_changes(NULL);
+  g_conf().get_val("debug_mds", &o, sizeof(old_val));
+  g_conf().set_val("debug_mds", "10");
+  g_conf().apply_changes(NULL);
   show_cache();
-  g_conf->set_val("debug_mds", old_val);
-  g_conf->apply_changes(NULL);
-  mds->timer.add_event_after(g_conf->mds_shutdown_check, new C_MDC_ShutdownCheck(this));
+  g_conf().set_val("debug_mds", old_val);
+  g_conf().apply_changes(NULL);
+  mds->timer.add_event_after(g_conf()->mds_shutdown_check, new C_MDC_ShutdownCheck(this));
 
   // this
   dout(0) << "lru size now " << lru.lru_get_size() << "/" << bottom_lru.lru_get_size() << dendl;
@@ -7679,10 +7679,10 @@ void MDCache::shutdown_start()
 {
   dout(2) << "shutdown_start" << dendl;
 
-  if (g_conf->mds_shutdown_check)
-    mds->timer.add_event_after(g_conf->mds_shutdown_check, new C_MDC_ShutdownCheck(this));
+  if (g_conf()->mds_shutdown_check)
+    mds->timer.add_event_after(g_conf()->mds_shutdown_check, new C_MDC_ShutdownCheck(this));
 
-  //  g_conf->debug_mds = 10;
+  //  g_conf()->debug_mds = 10;
 }
 
 
@@ -11348,7 +11348,7 @@ void MDCache::find_stale_fragment_freeze()
   // see comment in Migrator::find_stale_export_freeze()
   utime_t now = ceph_clock_now();
   utime_t cutoff = now;
-  cutoff -= g_conf->mds_freeze_tree_timeout;
+  cutoff -= g_conf()->mds_freeze_tree_timeout;
 
   for (map<dirfrag_t,fragment_info_t>::iterator p = fragments.begin();
        p != fragments.end(); ) {
@@ -11508,7 +11508,7 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
   list<MDSInternalContextBase*> waiters;
   adjust_dir_fragments(diri, info.dirs, basedirfrag.frag, info.bits,
 		       info.resultfrags, waiters, false);
-  if (g_conf->mds_debug_frag)
+  if (g_conf()->mds_debug_frag)
     diri->verify_dirfrags();
   mds->queue_waiters(waiters);
 
@@ -11752,7 +11752,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
     list<MDSInternalContextBase*> waiters;
     list<CDir*> resultfrags;
     adjust_dir_fragments(diri, base, bits, resultfrags, waiters, false);
-    if (g_conf->mds_debug_frag)
+    if (g_conf()->mds_debug_frag)
       diri->verify_dirfrags();
     
     for (list<CDir*>::iterator p = resultfrags.begin(); p != resultfrags.end(); ++p)
@@ -11903,7 +11903,7 @@ void MDCache::rollback_uncommitted_fragments()
       ls->dirty_dirfrag_dirfragtree.push_back(&diri->item_dirty_dirfrag_dirfragtree);
     }
 
-    if (g_conf->mds_debug_frag)
+    if (g_conf()->mds_debug_frag)
       diri->verify_dirfrags();
 
     for (list<frag_t>::iterator q = old_frags.begin(); q != old_frags.end(); ++q)
@@ -11950,12 +11950,12 @@ void MDCache::force_readonly()
 
 void MDCache::show_subtrees(int dbl)
 {
-  if (g_conf->mds_thrash_exports)
+  if (g_conf()->mds_thrash_exports)
     dbl += 15;
 
   //dout(10) << "show_subtrees" << dendl;
 
-  if (!g_conf->subsys.should_gather(ceph_subsys_mds, dbl))
+  if (!g_conf()->subsys.should_gather(ceph_subsys_mds, dbl))
     return;  // i won't print anything.
 
   if (subtrees.empty()) {

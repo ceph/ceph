@@ -654,7 +654,7 @@ void ImageReplayer<I>::handle_start_replay(int r) {
 
   {
     CephContext *cct = static_cast<CephContext *>(m_local->cct());
-    double poll_seconds = cct->_conf->get_val<double>(
+    double poll_seconds = cct->_conf.get_val<double>(
       "rbd_mirror_journal_poll_age");
 
     Mutex::Locker locker(m_lock);

@@ -162,7 +162,7 @@ AsyncConnection::~AsyncConnection()
 void AsyncConnection::maybe_start_delay_thread()
 {
   if (!delay_state) {
-    async_msgr->cct->_conf->with_val<std::string>(
+    async_msgr->cct->_conf.with_val<std::string>(
       "ms_inject_delay_type",
       [this](const string& s) {
 	if (s.find(ceph_entity_type_name(peer_type)) != string::npos) {

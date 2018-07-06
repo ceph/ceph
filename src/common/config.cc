@@ -102,7 +102,6 @@ namespace ceph::internal {
 template<LockPolicy lp>
 md_config_impl<lp>::md_config_impl(bool is_daemon)
   : is_daemon(is_daemon),
-    cluster(""),
     lock("md_config_t", true, false)
 {
   // Load the compile-time list of Option into
@@ -120,15 +119,15 @@ md_config_impl<lp>::md_config_impl(bool is_daemon)
   }
 
   // Define the debug_* options as well.
-  subsys_options.reserve(subsys.get_num());
-  for (unsigned i = 0; i < subsys.get_num(); ++i) {
-    string name = string("debug_") + subsys.get_name(i);
+  subsys_options.reserve(values.subsys.get_num());
+  for (unsigned i = 0; i < values.subsys.get_num(); ++i) {
+    string name = string("debug_") + values.subsys.get_name(i);
     subsys_options.push_back(
       Option(name, Option::TYPE_STR, Option::LEVEL_ADVANCED));
     Option& opt = subsys_options.back();
-    opt.set_default(stringify(subsys.get_log_level(i)) + "/" +
-		    stringify(subsys.get_gather_level(i)));
-    string desc = string("Debug level for ") + subsys.get_name(i);
+    opt.set_default(stringify(values.subsys.get_log_level(i)) + "/" +
+		    stringify(values.subsys.get_gather_level(i)));
+    string desc = string("Debug level for ") + values.subsys.get_name(i);
     opt.set_description(desc.c_str());
     opt.set_flag(Option::FLAG_RUNTIME);
     opt.set_long_description("The value takes the form 'N' or 'N/M' where N and M are values between 0 and 99.  N is the debug level to log (all values below this are included), and M is the level to gather and buffer in memory.  In the event of a crash, the most recent items <= M are dumped to the log file.");
@@ -169,7 +168,7 @@ md_config_impl<lp>::md_config_impl(bool is_daemon)
   // members if present.
   legacy_values = {
 #define OPTION(name, type) \
-    {std::string(STRINGIFY(name)), &md_config_impl::name},
+    {std::string(STRINGIFY(name)), &ConfigValues::name},
 #define SAFE_OPTION(name, type) OPTION(name, type)
 #include "common/legacy_config_opts.h"
 #undef OPTION
@@ -312,17 +311,19 @@ int md_config_impl<lp>::set_mon_vals(CephContext *cct,
       ceph_abort();
     }
   }
-  for (const auto& [name,configs] : values) {
-    auto j = configs.find(CONF_MON);
-    if (j != configs.end()) {
-      if (kv.find(name) == kv.end()) {
-	ldout(cct,10) << __func__ << " " << name
-		      << " cleared (was " << Option::to_str(j->second) << ")"
-		      << dendl;
-	_rm_val(name, CONF_MON);
-      }
+  values.for_each([&] (auto name, auto configs) {
+    auto config = configs.find(CONF_MON);
+    if (config == configs.end()) {
+      return;
     }
-  }
+    if (kv.find(name) != kv.end()) {
+      return;
+    }
+    ldout(cct,10) << __func__ << " " << name
+		  << " cleared (was " << Option::to_str(config->second) << ")"
+		  << dendl;
+    values.rm_val(name, CONF_MON);
+  });
   values_bl.clear();
   _apply_changes(nullptr);
   return 0;
@@ -365,12 +366,12 @@ int md_config_impl<lp>::parse_config_files(const char *conf_files_str,
   if (safe_to_start_threads)
     return -ENOSYS;
 
-  if (!cluster.size() && !conf_files_str) {
+  if (!values.cluster.size() && !conf_files_str) {
     /*
      * set the cluster name to 'ceph' when neither cluster name nor
      * configuration file are specified.
      */
-    cluster = "ceph";
+    values.cluster = "ceph";
   }
 
   if (!conf_files_str) {
@@ -416,7 +417,7 @@ int md_config_impl<lp>::parse_config_files(const char *conf_files_str,
   if (c == conf_files.end())
     return -ENOENT;
 
-  if (cluster.size() == 0) {
+  if (values.cluster.size() == 0) {
     /*
      * If cluster name is not set yet, use the prefix of the
      * basename of configuration file as cluster name.
@@ -429,9 +430,9 @@ int md_config_impl<lp>::parse_config_files(const char *conf_files_str,
          * convention, we do the last try and assign the cluster to
          * 'ceph'.
          */
-        cluster = "ceph";
+        values.cluster = "ceph";
     } else {
-      cluster = c->substr(start, end - start);
+      values.cluster = c->substr(start, end - start);
     }
   }
 
@@ -492,8 +493,8 @@ void md_config_impl<lp>::parse_env(const char *args_var)
   }
   if (getenv("CEPH_KEYRING")) {
     auto locker = lock();
-    string k = getenv("CEPH_KEYRING");
-    values["keyring"][CONF_ENV] = Option::value_t(k);
+    _set_val(getenv("CEPH_KEYRING"), *find_option("keyring"),
+	     CONF_ENV, nullptr);
   }
   if (const char *dir = getenv("CEPH_LIB")) {
     auto locker = lock();
@@ -540,12 +541,12 @@ template<LockPolicy lp>
 void md_config_impl<lp>::_show_config(std::ostream *out, Formatter *f)
 {
   if (out) {
-    *out << "name = " << name << std::endl;
-    *out << "cluster = " << cluster << std::endl;
+    *out << "name = " << values.name << std::endl;
+    *out << "cluster = " << values.cluster << std::endl;
   }
   if (f) {
-    f->dump_string("name", stringify(name));
-    f->dump_string("cluster", cluster);
+    f->dump_string("name", stringify(values.name));
+    f->dump_string("cluster", values.cluster);
   }
   for (const auto& i: schema) {
     const Option &opt = i.second;
@@ -590,10 +591,10 @@ int md_config_impl<lp>::parse_argv(std::vector<const char*>& args, int level)
       do_show_config_value = val;
     }
     else if (ceph_argparse_flag(args, i, "--no-mon-config", (char*)NULL)) {
-      no_mon_config = true;
+      values.no_mon_config = true;
     }
     else if (ceph_argparse_flag(args, i, "--mon-config", (char*)NULL)) {
-      no_mon_config = false;
+      values.no_mon_config = false;
     }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
       set_val_or_die("daemonize", "false");
@@ -773,7 +774,7 @@ void md_config_impl<lp>::apply_changes(std::ostream *oss)
   /*
    * apply changes until the cluster name is assigned
    */
-  if (cluster.size())
+  if (values.cluster.size())
     _apply_changes(oss);
 }
 
@@ -954,17 +955,14 @@ void md_config_impl<lp>::get_defaults_bl(bufferlist *bl)
     for (const auto &i : schema) {
       ++n;
       encode(i.second.name, bl);
-      auto j = values.find(i.second.name);
-      if (j != values.end()) {
-	auto k = j->second.find(CONF_DEFAULT);
-	if (k != j->second.end()) {
-	  encode(Option::to_str(k->second), bl);
-	  continue;
-	}
+      auto [value, found] = values.get_value(i.second.name, CONF_DEFAULT);
+      if (found) {
+	encode(Option::to_str(value), bl);
+      } else {
+	string val;
+	conf_stringify(_get_val_default(i.second), &val);
+	encode(val, bl);
       }
-      string val;
-      conf_stringify(_get_val_default(i.second), &val);
-      encode(val, bl);
     }
     encode(n, defaults_bl);
     defaults_bl.claim_append(bl);
@@ -982,22 +980,22 @@ void md_config_impl<lp>::get_config_bl(
   if (values_bl.length() == 0) {
     uint32_t n = 0;
     bufferlist bl;
-    for (auto& i : values) {
-      if (i.first == "fsid" ||
-	  i.first == "host") {
-	continue;
+    values.for_each([&](auto& name, auto& configs) {
+      if (name == "fsid" ||
+	  name == "host") {
+	return;
       }
       ++n;
-      encode(i.first, bl);
-      encode((uint32_t)i.second.size(), bl);
-      for (auto& j : i.second) {
+      encode(name, bl);
+      encode((uint32_t)configs.size(), bl);
+      for (auto& j : configs) {
 	encode(j.first, bl);
 	encode(Option::to_str(j.second), bl);
       }
-    }
+    });
     // make sure overridden items appear, and include the default value
     for (auto& i : ignored_mon_values) {
-      if (values.count(i.first)) {
+      if (values.contains(i.first)) {
 	continue;
       }
       if (i.first == "fsid" ||
@@ -1084,25 +1082,17 @@ Option::value_t md_config_impl<lp>::_get_val(
   if (!stack) {
     stack = &a_stack;
   }
-
-  auto p = values.find(o.name);
-  if (p != values.end() && !p->second.empty()) {
-    // use highest-priority value available (see CONF_*)
-    return _expand_meta(p->second.rbegin()->second, &o, stack, err);
-  }
-
-  return _expand_meta(_get_val_default(o), &o, stack, err);
+  return _expand_meta(_get_val_nometa(o), &o, stack, err);
 }
 
 template<LockPolicy lp>
 Option::value_t md_config_impl<lp>::_get_val_nometa(const Option& o) const
 {
-  auto p = values.find(o.name);
-  if (p != values.end() && !p->second.empty()) {
-    // use highest-priority value available (see CONF_*)
-    return p->second.rbegin()->second;
+  if (auto [value, found] = values.get_value(o.name, -1); found) {
+    return value;
+  } else {
+    return _get_val_default(o);
   }
-  return _get_val_default(o);
 }
 
 template<LockPolicy lp>
@@ -1202,21 +1192,21 @@ Option::value_t md_config_impl<lp>::_expand_meta(
       //cout << " found var " << var << std::endl;
       // special metavariable?
       if (var == "type") {
-	out += name.get_type_name();
+	out += values.name.get_type_name();
       } else if (var == "cluster") {
-	out += cluster;
+	out += values.cluster;
       } else if (var == "name") {
-	out += name.to_cstr();
+	out += values.name.to_cstr();
       } else if (var == "host") {
-	if (host == "") {
+	if (values.host == "") {
 	  out += ceph_get_short_hostname();
 	} else {
-	  out += host;
+	  out += values.host;
 	}
       } else if (var == "num") {
-	out += name.get_id().c_str();
+	out += values.name.get_id().c_str();
       } else if (var == "id") {
-	out += name.get_id();
+	out += values.name.get_id();
       } else if (var == "pid") {
 	out += stringify(getpid());
         if (o) {
@@ -1333,9 +1323,9 @@ template<LockPolicy lp>
 void md_config_impl<lp>::_get_my_sections(std::vector <std::string> &sections) const
 {
   assert(lock.is_locked());
-  sections.push_back(name.to_str());
+  sections.push_back(values.name.to_str());
 
-  sections.push_back(name.get_type_name());
+  sections.push_back(values.name.get_type_name());
 
   sections.push_back("global");
 }
@@ -1420,30 +1410,20 @@ int md_config_impl<lp>::_set_val(
   }
 
   // Apply the value to its entry in the `values` map
-  auto p = values.find(opt.name);
-  if (p != values.end()) {
-    auto q = p->second.find(level);
-    if (q != p->second.end()) {
-      if (new_value == q->second) {
-	// no change!
-	return 0;
-      }
-      q->second = new_value;
-    } else {
-      p->second[level] = new_value;
-    }
+  auto result = values.set_value(opt.name, std::move(new_value), level);
+  switch (result) {
+  case ConfigValues::SET_NO_CHANGE:
+    return 0;
+  case ConfigValues::SET_NO_EFFECT:
     values_bl.clear();
-    if (p->second.rbegin()->first > level) {
-      // there was a higher priority value; no effect
-      return 0;
-    }
-  } else {
+    return 0;
+  case ConfigValues::SET_HAVE_EFFECT:
+    // fallthrough
+  default:
     values_bl.clear();
-    values[opt.name][level] = new_value;
+    _refresh(opt);
+    return 1;
   }
-
-  _refresh(opt);
-  return 1;
 }
 
 template<LockPolicy lp>
@@ -1454,20 +1434,11 @@ void md_config_impl<lp>::_refresh(const Option& opt)
   if (legacy_ptr_iter != legacy_values.end()) {
     update_legacy_val(opt, legacy_ptr_iter->second);
   }
-
   // Was this a debug_* option update?
   if (opt.subsys >= 0) {
     string actual_val;
     conf_stringify(_get_val(opt), &actual_val);
-    int log, gather;
-    int r = sscanf(actual_val.c_str(), "%d/%d", &log, &gather);
-    if (r >= 1) {
-      if (r < 2) {
-	gather = log;
-      }
-      subsys.set_log_level(opt.subsys, log);
-      subsys.set_gather_level(opt.subsys, gather);
-    }
+    values.set_logging(opt.subsys, actual_val.c_str());
   } else {
     // normal option, advertise the change.
     changed.insert(opt.name);
@@ -1480,17 +1451,11 @@ int md_config_impl<lp>::_rm_val(const std::string& key, int level)
   if (schema.count(key) == 0) {
     return -EINVAL;
   }
-  auto i = values.find(key);
-  if (i == values.end()) {
-    return -ENOENT;
+  auto ret = values.rm_val(key, level);
+  if (ret < 0) {
+    return ret;
   }
-  auto j = i->second.find(level);
-  if (j == i->second.end()) {
-    return -ENOENT;
-  }
-  bool matters = (j->first == i->second.rbegin()->first);
-  i->second.erase(j);
-  if (matters) {
+  if (ret == ConfigValues::SET_HAVE_EFFECT) {
     _refresh(*find_option(key));
   }
   values_bl.clear();
@@ -1565,7 +1530,7 @@ void md_config_impl<lp>::update_legacy_val(const Option &opt,
                                     md_config_impl::member_ptr_t member_ptr)
 {
   Option::value_t v = _get_val(opt);
-  boost::apply_visitor(assign_visitor(this, v), member_ptr);
+  boost::apply_visitor(assign_visitor(&values, v), member_ptr);
 }
 
 static void dump(Formatter *f, int level, Option::value_t in)
@@ -1589,21 +1554,21 @@ void md_config_impl<lp>::diff(
   string name) const
 {
   auto locker = lock();
-  for (auto& i : values) {
-    if (i.second.size() == 1 &&
-	i.second.begin()->first == CONF_DEFAULT) {
+  values.for_each([this, f] (auto& name, auto& configs) {
+    if (configs.size() == 1 &&
+	configs.begin()->first == CONF_DEFAULT) {
       // we only have a default value; exclude from diff
-      continue;
+      return;
     }
-    f->open_object_section(i.first.c_str());
-    const Option *o = find_option(i.first);
+    f->open_object_section(name.c_str());
+    const Option *o = find_option(name);
     dump(f, CONF_DEFAULT, _get_val_default(*o));
-    for (auto& j : i.second) {
+    for (auto& j : configs) {
       dump(f, j.first, j.second);
     }
     dump(f, CONF_FINAL, _get_val(*o));
     f->close_section();
-  }
+  });
 }
 
 template<LockPolicy lp>

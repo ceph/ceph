@@ -2008,7 +2008,7 @@ done:
     for (auto &it : crypt_http_responses)
       dump_header(s, it.first, it.second);
     s->formatter->open_object_section("PostResponse");
-    if (g_conf->rgw_dns_name.length())
+    if (g_conf()->rgw_dns_name.length())
       s->formatter->dump_format("Location", "%s/%s",
 				s->info.script_uri.c_str(),
 				s->object.name.c_str());

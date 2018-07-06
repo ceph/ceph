@@ -1828,7 +1828,7 @@ namespace librbd {
       return -EINVAL;
     }
 
-    bool discard_zero = ictx->cct->_conf->get_val<bool>("rbd_discard_on_zeroed_write_same");
+    bool discard_zero = ictx->cct->_conf.get_val<bool>("rbd_discard_on_zeroed_write_same");
     if (discard_zero && mem_is_zero(bl.c_str(), bl.length())) {
       int r = ictx->io_work_queue->discard(ofs, len, false);
       tracepoint(librbd, writesame_exit, r);
@@ -1960,7 +1960,7 @@ namespace librbd {
       return -EINVAL;
     }
 
-    bool discard_zero = ictx->cct->_conf->get_val<bool>("rbd_discard_on_zeroed_write_same");
+    bool discard_zero = ictx->cct->_conf.get_val<bool>("rbd_discard_on_zeroed_write_same");
     if (discard_zero && mem_is_zero(bl.c_str(), bl.length())) {
       ictx->io_work_queue->aio_discard(get_aio_completion(c), off, len, false);
       tracepoint(librbd, aio_writesame_exit, 0);
@@ -4035,7 +4035,7 @@ extern "C" ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
     return -EINVAL;
   }
 
-  bool discard_zero = ictx->cct->_conf->get_val<bool>("rbd_discard_on_zeroed_write_same");
+  bool discard_zero = ictx->cct->_conf.get_val<bool>("rbd_discard_on_zeroed_write_same");
   if (discard_zero && mem_is_zero(buf, data_len)) {
     int r = ictx->io_work_queue->discard(ofs, len, false);
     tracepoint(librbd, writesame_exit, r);
@@ -4257,7 +4257,7 @@ extern "C" int rbd_aio_writesame(rbd_image_t image, uint64_t off, size_t len,
     return -EINVAL;
   }
 
-  bool discard_zero = ictx->cct->_conf->get_val<bool>("rbd_discard_on_zeroed_write_same");
+  bool discard_zero = ictx->cct->_conf.get_val<bool>("rbd_discard_on_zeroed_write_same");
   if (discard_zero && mem_is_zero(buf, data_len)) {
     ictx->io_work_queue->aio_discard(get_aio_completion(comp), off, len, false);
     tracepoint(librbd, aio_writesame_exit, 0);

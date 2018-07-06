@@ -20,7 +20,7 @@
 
 template <typename ValueT>
 class md_config_cacher_t : public md_config_obs_t {
-  md_config_t& conf;
+  ConfigProxy& conf;
   const char* const option_name;
   std::atomic<ValueT> value_cache;
 
@@ -37,7 +37,7 @@ class md_config_cacher_t : public md_config_obs_t {
   }
 
 public:
-  md_config_cacher_t(md_config_t& conf,
+  md_config_cacher_t(ConfigProxy& conf,
                      const char* const option_name)
     : conf(conf),
       option_name(option_name) {

@@ -385,7 +385,7 @@ void Objecter::init()
 
   update_crush_location();
 
-  cct->_conf->add_observer(this);
+  cct->_conf.add_observer(this);
 
   initialized = true;
 }
@@ -413,7 +413,7 @@ void Objecter::shutdown()
 
   initialized = false;
 
-  cct->_conf->remove_observer(this);
+  cct->_conf.remove_observer(this);
 
   map<int,OSDSession*>::iterator p;
   while (!osd_sessions.empty()) {

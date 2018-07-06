@@ -207,7 +207,7 @@ bool DamageTable::notify_remote_damaged(inodeno_t ino, std::string_view path)
 
 bool DamageTable::oversized() const
 {
-  return by_id.size() > (size_t)(g_conf->mds_damage_table_max_entries);
+  return by_id.size() > (size_t)(g_conf()->mds_damage_table_max_entries);
 }
 
 bool DamageTable::is_dentry_damaged(

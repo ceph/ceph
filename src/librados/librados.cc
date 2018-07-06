@@ -2389,8 +2389,8 @@ int librados::Rados::conf_set(const char *option, const char *value)
 int librados::Rados::conf_get(const char *option, std::string &val)
 {
   char *str = NULL;
-  md_config_t *conf = client->cct->_conf;
-  int ret = conf->get_val(option, &str, -1);
+  const auto& conf = client->cct->_conf;
+  int ret = conf.get_val(option, &str, -1);
   if (ret) {
     free(str);
     return ret;
@@ -2823,8 +2823,8 @@ static CephContext *rados_create_cct(const char * const clustername,
   CephContext *cct = common_preinit(*iparams, CODE_ENVIRONMENT_LIBRARY, 0);
   if (clustername)
     cct->_conf->cluster = clustername;
-  cct->_conf->parse_env(); // environment variables override
-  cct->_conf->apply_changes(NULL);
+  cct->_conf.parse_env(); // environment variables override
+  cct->_conf.apply_changes(nullptr);
 
   TracepointProvider::initialize<tracepoint_traits>(cct);
   return cct;
@@ -2952,20 +2952,20 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path_list)
 {
   tracepoint(librados, rados_conf_read_file_enter, cluster, path_list);
   librados::RadosClient *client = (librados::RadosClient *)cluster;
-  md_config_t *conf = client->cct->_conf;
+  auto& conf = client->cct->_conf;
   ostringstream warnings;
-  int ret = conf->parse_config_files(path_list, &warnings, 0);
+  int ret = conf.parse_config_files(path_list, &warnings, 0);
   if (ret) {
     if (warnings.tellp() > 0)
       lderr(client->cct) << warnings.str() << dendl;
-    client->cct->_conf->complain_about_parse_errors(client->cct);
+    client->cct->_conf.complain_about_parse_errors(client->cct);
     tracepoint(librados, rados_conf_read_file_exit, ret);
     return ret;
   }
-  conf->parse_env(); // environment variables override
+  conf.parse_env(); // environment variables override
 
-  conf->apply_changes(NULL);
-  client->cct->_conf->complain_about_parse_errors(client->cct);
+  conf.apply_changes(nullptr);
+  client->cct->_conf.complain_about_parse_errors(client->cct);
   tracepoint(librados, rados_conf_read_file_exit, 0);
   return 0;
 }
@@ -2978,15 +2978,15 @@ extern "C" int rados_conf_parse_argv(rados_t cluster, int argc, const char **arg
     tracepoint(librados, rados_conf_parse_argv_arg, argv[i]);
   }
   librados::RadosClient *client = (librados::RadosClient *)cluster;
-  md_config_t *conf = client->cct->_conf;
+  auto& conf = client->cct->_conf;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  int ret = conf->parse_argv(args);
+  int ret = conf.parse_argv(args);
   if (ret) {
     tracepoint(librados, rados_conf_parse_argv_exit, ret);
     return ret;
   }
-  conf->apply_changes(NULL);
+  conf.apply_changes(nullptr);
   tracepoint(librados, rados_conf_parse_argv_exit, 0);
   return 0;
 }
@@ -3006,16 +3006,16 @@ extern "C" int rados_conf_parse_argv_remainder(rados_t cluster, int argc,
     tracepoint(librados, rados_conf_parse_argv_remainder_arg, argv[i]);
   }
   librados::RadosClient *client = (librados::RadosClient *)cluster;
-  md_config_t *conf = client->cct->_conf;
+  auto& conf = client->cct->_conf;
   vector<const char*> args;
   for (int i=0; i<argc; i++)
     args.push_back(argv[i]);
-  int ret = conf->parse_argv(args);
+  int ret = conf.parse_argv(args);
   if (ret) {
     tracepoint(librados, rados_conf_parse_argv_remainder_exit, ret);
     return ret;
   }
-  conf->apply_changes(NULL);
+  conf.apply_changes(NULL);
   assert(args.size() <= (unsigned int)argc);
   for (i = 0; i < (unsigned int)argc; ++i) {
     if (i < args.size())
@@ -3032,9 +3032,9 @@ extern "C" int rados_conf_parse_env(rados_t cluster, const char *env)
 {
   tracepoint(librados, rados_conf_parse_env_enter, cluster, env);
   librados::RadosClient *client = (librados::RadosClient *)cluster;
-  md_config_t *conf = client->cct->_conf;
-  conf->parse_env(env);
-  conf->apply_changes(NULL);
+  auto& conf = client->cct->_conf;
+  conf.parse_env(env);
+  conf.apply_changes(nullptr);
   tracepoint(librados, rados_conf_parse_env_exit, 0);
   return 0;
 }
@@ -3043,13 +3043,13 @@ extern "C" int rados_conf_set(rados_t cluster, const char *option, const char *v
 {
   tracepoint(librados, rados_conf_set_enter, cluster, option, value);
   librados::RadosClient *client = (librados::RadosClient *)cluster;
-  md_config_t *conf = client->cct->_conf;
-  int ret = conf->set_val(option, value);
+  auto& conf = client->cct->_conf;
+  int ret = conf.set_val(option, value);
   if (ret) {
     tracepoint(librados, rados_conf_set_exit, ret);
     return ret;
   }
-  conf->apply_changes(NULL);
+  conf.apply_changes(nullptr);
   tracepoint(librados, rados_conf_set_exit, 0);
   return 0;
 }
@@ -3075,8 +3075,8 @@ extern "C" int rados_conf_get(rados_t cluster, const char *option, char *buf, si
   tracepoint(librados, rados_conf_get_enter, cluster, option, len);
   char *tmp = buf;
   librados::RadosClient *client = (librados::RadosClient *)cluster;
-  md_config_t *conf = client->cct->_conf;
-  int retval = conf->get_val(option, &tmp, len);
+  const auto& conf = client->cct->_conf;
+  int retval = conf.get_val(option, &tmp, len);
   tracepoint(librados, rados_conf_get_exit, retval, retval ? "" : option);
   return retval;
 }

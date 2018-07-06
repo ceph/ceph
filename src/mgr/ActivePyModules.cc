@@ -191,9 +191,9 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   } else if (what.substr(0, 6) == "config") {
     PyFormatter f;
     if (what == "config_options") {
-      g_conf->config_options(&f);  
+      g_conf().config_options(&f);
     } else if (what == "config") {
-      g_conf->show_config(&f);
+      g_conf().show_config(&f);
     }
     return f.get();
   } else if (what == "mon_map") {

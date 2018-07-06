@@ -60,7 +60,7 @@ int PyModuleRunner::serve()
     std::string exc_msg = peek_pyerror();
     
     clog->error() << "Unhandled exception from module '" << get_name()
-                  << "' while running on mgr." << g_conf->name.get_id()
+                  << "' while running on mgr." << g_conf()->name.get_id()
                   << ": " << exc_msg;
     derr << get_name() << ".serve:" << dendl;
     derr << handle_pyerror() << dendl;

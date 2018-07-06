@@ -41,7 +41,7 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
   monc{g_ceph_context},
   client_messenger(Messenger::create(
 		     g_ceph_context,
-		     cct->_conf->get_val<std::string>("ms_type"),
+		     cct->_conf.get_val<std::string>("ms_type"),
 		     entity_name_t::MGR(),
 		     "mgr",
 		     getpid(),
@@ -208,7 +208,7 @@ void MgrStandby::send_beacon()
 
   MMgrBeacon *m = new MMgrBeacon(monc.get_fsid(),
 				 monc.get_global_id(),
-                                 g_conf->name.get_id(),
+                                 g_conf()->name.get_id(),
                                  addrs,
                                  available,
 				 std::move(module_info),
@@ -243,7 +243,7 @@ void MgrStandby::tick()
   }
 
   timer.add_event_after(
-      g_conf->get_val<std::chrono::seconds>("mgr_tick_period").count(),
+      g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count(),
       new FunctionContext([this](int r){
           tick();
       }
@@ -396,7 +396,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
     derr << "I was active but no longer am" << dendl;
     respawn();
   } else {
-    if (map.active_gid != 0 && map.active_name != g_conf->name.get_id()) {
+    if (map.active_gid != 0 && map.active_name != g_conf()->name.get_id()) {
       // I am the standby and someone else is active, start modules
       // in standby mode to do redirects if needed
       if (!py_module_registry.is_standby_running()) {
