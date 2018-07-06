@@ -1,90 +1,34 @@
 <div *ngIf="contentData">
   <div class="row">
     <!-- HEALTH -->
-    <div class="col-md-6">
-      <div class="well">
-        <fieldset>
-          <legend i18n>Health</legend>
-          <ng-container i18n>Overall status: </ng-container>
-          <span [ngStyle]="contentData.health.status | healthColor">{{ contentData.health.status }}</span>
-          <ul>
-            <li *ngFor="let check of contentData.health.checks">
-              <span [ngStyle]="check.severity | healthColor">{{ check.type }}</span>: {{ check.summary.message }}
-            </li>
-          </ul>
-        </fieldset>
-      </div>
-    </div>
+    <cd-info-card
+      *ngIf="healthStatusCard"
+      [infoCard]="healthStatusCard">
+    </cd-info-card>
 
     <div class="col-md-6">
       <!--STATS -->
       <div class="row">
-        <div class="col-md-6">
-          <div class="well"
-               *ngIf="contentData.mon_status">
-            <div class="media">
-              <div class="media-left">
-                <i class="fa fa-database fa-fw"></i>
-              </div>
-              <div class="media-body">
-                <span class="media-heading"
-                      i18n="ceph monitors">
-                  <a routerLink="/monitor/">Monitors</a>
-                </span>
-                <span class="media-text">{{ contentData.mon_status | monSummary }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="col-md-6">
-          <div class="well"
-               *ngIf="contentData.osd_map">
-            <div class="media">
-              <div class="media-left">
-                <i class="fa fa-hdd-o fa-fw"></i>
-              </div>
-              <div class="media-body">
-                <span class="media-heading"
-                      i18n="ceph OSDs">
-                  <a routerLink="/osd/">OSDs</a>
-                </span>
-                <span class="media-text">{{ contentData.osd_map | osdSummary }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <cd-info-card
+          *ngIf="monitorsCard"
+          [infoCard]="monitorsCard">
+        </cd-info-card>
+
+        <cd-info-card
+          *ngIf="osdCard"
+          [infoCard]="osdCard">
+        </cd-info-card>
       </div>
       <div class="row">
-        <div class="col-md-6">
-          <div class="well"
-               *ngIf="contentData.fs_map">
-            <div class="media">
-              <div class="media-left">
-                <i class="fa fa-folder fa-fw"></i>
-              </div>
-              <div class="media-body">
-                <span class="media-heading"
-                      i18n>Metadata servers</span>
-                <span class="media-text">{{ contentData.fs_map | mdsSummary }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="col-md-6">
-          <div class="well"
-               *ngIf="contentData.mgr_map">
-            <div class="media">
-              <div class="media-left">
-                <i class="fa fa-cog fa-fw"></i>
-              </div>
-              <div class="media-body">
-                <span class="media-heading"
-                      i18n>Manager daemons</span>
-                <span class="media-text">{{ contentData.mgr_map | mgrSummary }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <cd-info-card
+          *ngIf="mdsCard"
+          [infoCard]="mdsCard">
+        </cd-info-card>
+
+        <cd-info-card
+          *ngIf="mgrCard"
+          [infoCard]="mgrCard">
+        </cd-info-card>
       </div>
     </div>
   </div>
