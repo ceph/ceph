@@ -236,14 +236,14 @@ void CopyupRequest<I>::send()
   m_state = STATE_READ_FROM_PARENT;
 
   if (is_deep_copy()) {
-    bool flatten = is_copyup_required() ? true : m_ictx->migration_info.flatten;
+    m_flatten = is_copyup_required() ? true : m_ictx->migration_info.flatten;
     auto req = deep_copy::ObjectCopyRequest<I>::create(
         m_ictx->parent, m_ictx->migration_parent, m_ictx,
-        m_ictx->migration_info.snap_map, m_object_no, flatten,
+        m_ictx->migration_info.snap_map, m_object_no, m_flatten,
         util::create_context_callback(this));
     ldout(m_ictx->cct, 20) << "deep copy object req " << req
                            << ", object_no " << m_object_no
-                           << ", flatten " << flatten
+                           << ", flatten " << m_flatten
                            << dendl;
     req->send();
     return;
@@ -279,7 +279,16 @@ bool CopyupRequest<I>::should_complete(int *r) {
   switch (m_state) {
   case STATE_READ_FROM_PARENT:
     ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
-    remove_from_list();
+    m_ictx->copyup_list_lock.Lock();
+    if (*r == -ENOENT && is_deep_copy() && m_ictx->migration_parent &&
+        !m_flatten && is_copyup_required()) {
+      ldout(cct, 5) << "restart deep copy with flatten" << dendl;
+      m_ictx->copyup_list_lock.Unlock();
+      send();
+      return false;
+    }
+    remove_from_list(m_ictx->copyup_list_lock);
+    m_ictx->copyup_list_lock.Unlock();
     if (*r >= 0 || *r == -ENOENT) {
       if (!is_copyup_required() && !is_update_object_map_required(*r)) {
         if (*r == -ENOENT && is_deep_copy()) {
@@ -335,9 +344,15 @@ bool CopyupRequest<I>::should_complete(int *r) {
 }
 
 template <typename I>
-void CopyupRequest<I>::remove_from_list()
-{
+void CopyupRequest<I>::remove_from_list() {
   Mutex::Locker l(m_ictx->copyup_list_lock);
+
+  remove_from_list(m_ictx->copyup_list_lock);
+}
+
+template <typename I>
+void CopyupRequest<I>::remove_from_list(Mutex &lock) {
+  assert(m_ictx->copyup_list_lock.is_locked());
 
   auto it = m_ictx->copyup_list.find(m_object_no);
   assert(it != m_ictx->copyup_list.end());
