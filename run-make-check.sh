@@ -89,6 +89,7 @@ function run() {
     # Init defaults after deps are installed. get_processors() depends on coreutils nproc.
     DEFAULT_MAKEOPTS=${DEFAULT_MAKEOPTS:--j$(get_processors)}
     BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
+    test "$BUILD_MAKEOPTS" && echo "make will run with option(s) $BUILD_MAKEOPTS"
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
 
     CMAKE_PYTHON_OPTS=
