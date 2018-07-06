@@ -58,6 +58,14 @@
   .oadatatableactions {
     display: inline-block;
   }
+  ::ng-deep .table-filters {
+    float: right;
+    border-left: 1px solid $color-table-seperator-border;
+    padding-left: 8px;
+  }
+  ::ng-deep .table-filters label {
+    margin-right: 4px;
+  }
   .form-group {
     padding-left: 8px;
   }
@@ -65,6 +73,7 @@
     float: right;
     border-left: 1px solid $color-table-input-border;
     padding-left: 8px;
+    padding-right: 8px;
     width: 40%;
     max-width: 250px;
     .form-control {
