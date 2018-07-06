@@ -7358,7 +7358,11 @@ void OSD::handle_osd_map(MOSDMap *m)
   OSDMapRef lastmap;
   for (auto& i : added_maps) {
     if (!lastmap) {
-      lastmap = get_map(i.first - 1);
+      if (!(lastmap = service.try_get_map(i.first - 1))) {
+        dout(10) << __func__ << " can't get previous map " << i.first - 1
+                 << " probably first start of this osd" << dendl;
+        continue;
+      }
     }
     assert(lastmap->get_epoch() + 1 == i.second->get_epoch());
     for (auto& j : lastmap->get_pools()) {
