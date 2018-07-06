@@ -106,7 +106,7 @@ public:
     inject_session_race = g_conf().get_val<bool>("mds_inject_migrator_session_race");
   }
 
-  void handle_conf_change(const md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed,
                           const MDSMap &mds_map);
 

@@ -17,7 +17,7 @@
 
 void RGWProcess::RGWWQ::_dump_queue()
 {
-  if (!g_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
+  if (!g_conf()->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     return;
   }
   deque<RGWRequest *>::iterator iter;

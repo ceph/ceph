@@ -84,7 +84,7 @@ const char** MgrStandby::get_tracked_conf_keys() const
 }
 
 void MgrStandby::handle_conf_change(
-  const md_config_t *conf,
+  const ConfigProxy& conf,
   const std::set <std::string> &changed)
 {
   if (changed.count("clog_to_monitors") ||

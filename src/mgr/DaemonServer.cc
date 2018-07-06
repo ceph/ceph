@@ -2206,7 +2206,7 @@ const char** DaemonServer::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void DaemonServer::handle_conf_change(const md_config_t *conf,
+void DaemonServer::handle_conf_change(const ConfigProxy& conf,
 				      const std::set <std::string> &changed)
 {
   // We may be called within lock (via MCommand `config set`) or outwith the

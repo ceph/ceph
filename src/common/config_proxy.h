@@ -8,33 +8,36 @@
 #include "common/config.h"
 #include "common/config_fwd.h"
 
-template<bool is_const>
-class ConfigProxyBase {
-protected:
-  using config_t = std::conditional_t<is_const,
-				      const md_config_t,
-				      md_config_t>;
-  config_t* config;
-  ConfigProxyBase(config_t* c)
-    : config{c}
-  {}
+class ConfigProxy {
+  /**
+   * The current values of all settings described by the schema
+   */
+
+  ConfigValues values;
+  std::unique_ptr<md_config_t> config;
 public:
+  explicit ConfigProxy(bool is_daemon)
+    : config{std::make_unique<md_config_t>(values, is_daemon)}
+  {}
   const ConfigValues* operator->() const noexcept {
-    return &config->values;
+    return &values;
+  }
+  ConfigValues* operator->() noexcept {
+    return &values;
   }
   int get_val(const std::string& key, char** buf, int len) const {
-    return config->get_val(key, buf, len);
+    return config->get_val(values, key, buf, len);
   }
   int get_val(const std::string &key, std::string *val) const {
-    return config->get_val(key, val);
+    return config->get_val(values, key, val);
   }
   template<typename T>
   const T get_val(const std::string& key) const {
-    return config->template get_val<T>(key);
+    return config->template get_val<T>(values, key);
   }
   template<typename T, typename Callback, typename...Args>
   auto with_val(const string& key, Callback&& cb, Args&&... args) const {
-    return config->template with_val<T>(key, std::forward<Callback>(cb),
+    return config->template with_val<T>(values, key, std::forward<Callback>(cb),
 					std::forward<Args>(args)...);
   }
   const Option* get_schema(const std::string& key) const {
@@ -49,10 +52,10 @@ public:
     return config->find_option(name);
   }
   void diff(Formatter *f, const std::string& name=string{}) const {
-    return config->diff(f, name);
+    return config->diff(values, f, name);
   }
   void get_my_sections(std::vector <std::string> &sections) const {
-    config->get_my_sections(sections);
+    config->get_my_sections(values, sections);
   }
   int get_all_sections(std::vector<std::string>& sections) const {
     return config->get_all_sections(sections);
@@ -60,32 +63,17 @@ public:
   int get_val_from_conf_file(const std::vector<std::string>& sections,
 			     const std::string& key, std::string& out,
 			     bool emeta) const {
-    return config->get_val_from_conf_file(sections, key, out, emeta);
+    return config->get_val_from_conf_file(values, sections, key, out, emeta);
   }
   unsigned get_osd_pool_default_min_size() const {
-    return config->get_osd_pool_default_min_size();
+    return config->get_osd_pool_default_min_size(values);
   }
   void early_expand_meta(std::string &val,
 			 std::ostream *oss) const {
-    return config->early_expand_meta(val, oss);
+    return config->early_expand_meta(values, val, oss);
   }
-};
-
-class ConfigReader final : public ConfigProxyBase<true> {
-public:
-  explicit ConfigReader(const md_config_t* config)
-    : ConfigProxyBase<true>{config}
-  {}
-};
-
-class ConfigProxy final : public ConfigProxyBase<false> {
-  std::unique_ptr<md_config_t> conf;
-public:
-  explicit ConfigProxy(bool is_daemon)
-    : ConfigProxyBase{nullptr},
-      conf{std::make_unique<md_config_t>(is_daemon)}
-  {
-    config = conf.get();
+  void finalize_reexpand_meta() {
+    config->finalize_reexpand_meta(values, *this);
   }
   void add_observer(md_config_obs_t* obs) {
     config->add_observer(obs);
@@ -100,63 +88,66 @@ public:
     config->_clear_safe_to_start_threads();
   }
   void call_all_observers() {
-    config->call_all_observers();
+    config->call_all_observers(*this);
   }
   void show_config(std::ostream& out) {
-    config->show_config(out);
+    config->show_config(values, out);
   }
   void show_config(Formatter *f) {
-    config->show_config(f);
+    config->show_config(values, f);
   }
   void config_options(Formatter *f) {
     config->config_options(f);
   }
   int rm_val(const std::string& key) {
-    return config->rm_val(key);
+    return config->rm_val(values, key);
   }
   void apply_changes(std::ostream* oss) {
-    config->apply_changes(oss);
+    config->apply_changes(values, *this, oss);
   }
   int set_val(const std::string& key, const string& s,
               std::stringstream* err_ss=nullptr) {
-    return config->set_val(key, s, err_ss);
+    return config->set_val(values, key, s, err_ss);
   }
   void set_val_default(const std::string& key, const std::string& val) {
-    config->set_val_default(key, val);
+    config->set_val_default(values, key, val);
   }
   void set_val_or_die(const std::string& key, const std::string& val) {
-    config->set_val_or_die(key, val);
+    config->set_val_or_die(values, key, val);
   }
   int set_mon_vals(CephContext *cct,
 		   const map<std::string,std::string>& kv,
 		   md_config_t::config_callback config_cb) {
-    return config->set_mon_vals(cct, kv, config_cb);
+    return config->set_mon_vals(cct, values, *this, kv, config_cb);
   }
   int injectargs(const std::string &s, std::ostream *oss) {
-    return config->injectargs(s, oss);
+    return config->injectargs(values, *this, s, oss);
   }
   void parse_env(const char *env_var = "CEPH_ARGS") {
-    config->parse_env(env_var);
+    config->parse_env(values, env_var);
   }
   int parse_argv(std::vector<const char*>& args, int level=CONF_CMDLINE) {
-    return config->parse_argv(args, level);
+    return config->parse_argv(values, args, level);
   }
   int parse_config_files(const char *conf_files,
 			 std::ostream *warnings, int flags) {
-    return config->parse_config_files(conf_files, warnings, flags);
+    return config->parse_config_files(values, conf_files, warnings, flags);
+  }
+  size_t num_parse_errors() const {
+    return config->parse_errors.size();
   }
   void complain_about_parse_errors(CephContext *cct) {
     return config->complain_about_parse_errors(cct);
   }
   void do_argv_commands() {
-    config->do_argv_commands();
+    config->do_argv_commands(values);
   }
   void get_config_bl(uint64_t have_version,
 		     bufferlist *bl,
 		     uint64_t *got_version) {
-    config->get_config_bl(have_version, bl, got_version);
+    config->get_config_bl(values, have_version, bl, got_version);
   }
   void get_defaults_bl(bufferlist *bl) {
-    config->get_defaults_bl(bl);
+    config->get_defaults_bl(values, bl);
   }
 };

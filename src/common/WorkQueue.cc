@@ -62,12 +62,12 @@ ThreadPool::~ThreadPool()
   delete[] _conf_keys;
 }
 
-void ThreadPool::handle_conf_change(const md_config_t *conf,
+void ThreadPool::handle_conf_change(const ConfigProxy& conf,
 				    const std::set <std::string> &changed)
 {
   if (changed.count(_thread_num_option)) {
     char *buf;
-    int r = conf->get_val(_thread_num_option.c_str(), &buf, -1);
+    int r = conf.get_val(_thread_num_option.c_str(), &buf, -1);
     assert(r >= 0);
     int v = atoi(buf);
     free(buf);

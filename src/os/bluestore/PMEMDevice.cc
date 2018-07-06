@@ -95,7 +95,7 @@ int PMEMDevice::open(const string& p)
   // blksize doesn't strictly matter except that some file systems may
   // require a read/modify/write if we write something smaller than
   // it.
-  block_size = g_conf->bdev_block_size;
+  block_size = g_conf()->bdev_block_size;
   if (block_size != (unsigned)st.st_blksize) {
     dout(1) << __func__ << " backing device/file reports st_blksize "
       << st.st_blksize << ", using bdev_block_size "
@@ -219,8 +219,8 @@ int PMEMDevice::write(uint64_t off, bufferlist& bl, bool buffered)
   bl.hexdump(*_dout);
   *_dout << dendl;
 
-  if (g_conf->bdev_inject_crash &&
-      rand() % g_conf->bdev_inject_crash == 0) {
+  if (g_conf()->bdev_inject_crash &&
+      rand() % g_conf()->bdev_inject_crash == 0) {
     derr << __func__ << " bdev_inject_crash: dropping io " << off << "~" << len
       << dendl;
     ++injecting_crash;

@@ -89,7 +89,7 @@ int ErasureCodeCommand::setup(int argc, char** argv) {
     CODE_ENVIRONMENT_UTILITY,
     CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   if (vm.count("help")) {
     cout << desc << std::endl;
@@ -128,7 +128,7 @@ int ErasureCodeCommand::plugin_exists() {
   Mutex::Locker l(instance.lock);
   stringstream ss;
   int code = instance.load(vm["plugin_exists"].as<string>(),
-			   g_conf->get_val<std::string>("erasure_code_dir"), &plugin, &ss);
+			   g_conf().get_val<std::string>("erasure_code_dir"), &plugin, &ss);
   if (code)
     cerr << ss.str() << endl;
   return code;
@@ -144,7 +144,7 @@ int ErasureCodeCommand::display_information() {
   }
 
   int code = instance.factory(profile["plugin"],
-			      g_conf->get_val<std::string>("erasure_code_dir"),
+			      g_conf().get_val<std::string>("erasure_code_dir"),
 			      profile,
 			      &erasure_code, &cerr);
   if (code)

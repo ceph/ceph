@@ -590,7 +590,7 @@ void PurgeQueue::update_op_limit(const MDSMap &mds_map)
   }
 }
 
-void PurgeQueue::handle_conf_change(const md_config_t *mconf,
+void PurgeQueue::handle_conf_change(const ConfigProxy& conf,
 			     const std::set <std::string> &changed,
                              const MDSMap &mds_map)
 {
@@ -598,7 +598,6 @@ void PurgeQueue::handle_conf_change(const md_config_t *mconf,
       || changed.count("mds_max_purge_ops_per_pg")) {
     update_op_limit(mds_map);
   } else if (changed.count("mds_max_purge_files")) {
-    ConfigReader conf{mconf};
     Mutex::Locker l(lock);
     if (in_flight.empty()) {
       // We might have gone from zero to a finite limit, so

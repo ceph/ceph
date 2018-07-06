@@ -202,10 +202,10 @@ const char** ImageSyncThrottler<I>::get_tracked_conf_keys() const {
 }
 
 template <typename I>
-void ImageSyncThrottler<I>::handle_conf_change(const md_config_t *conf,
+void ImageSyncThrottler<I>::handle_conf_change(const ConfigProxy& conf,
                                       const set<string> &changed) {
   if (changed.count("rbd_mirror_concurrent_image_syncs")) {
-    set_max_concurrent_syncs(conf->get_val<uint64_t>("rbd_mirror_concurrent_image_syncs"));
+    set_max_concurrent_syncs(conf.get_val<uint64_t>("rbd_mirror_concurrent_image_syncs"));
   }
 }
 

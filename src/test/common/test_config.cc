@@ -19,21 +19,20 @@
  *
  *
  */
-#include "common/config.h"
+#include "common/config_proxy.h"
 #include "common/errno.h"
 #include "gtest/gtest.h"
 
 extern std::string exec(const char* cmd); // defined in test_hostname.cc
 
-class test_md_config_t : public md_config_t, public ::testing::Test {
+class test_config_proxy : public ConfigProxy, public ::testing::Test {
 public:
 
-  test_md_config_t()
-    : md_config_t(true), Test()
+  test_config_proxy()
+    : ConfigProxy{true}, Test()
   {}
 
   void test_expand_meta() {
-    auto locker = lock();
     // successfull meta expansion $run_dir and ${run_dir}
     {
       ostringstream oss;
@@ -126,7 +125,7 @@ public:
   }
 };
 
-TEST_F(test_md_config_t, expand_meta)
+TEST_F(test_config_proxy, expand_meta)
 {
   test_expand_meta();
 }
@@ -134,7 +133,7 @@ TEST_F(test_md_config_t, expand_meta)
 TEST(md_config_t, set_val)
 {
   int buf_size = 1024;
-  md_config_t conf;
+  ConfigProxy conf{false};
   {
     char *run_dir = (char*)malloc(buf_size);
     EXPECT_EQ(0, conf.get_val("run_dir", &run_dir, buf_size));

@@ -221,7 +221,7 @@ class MDSRank {
 
     void handle_write_error(int err);
 
-    void handle_conf_change(const md_config_t *conf,
+    void handle_conf_change(const ConfigProxy& conf,
                             const std::set <std::string> &changed)
     {
       mdcache->migrator->handle_conf_change(conf, changed, *mdsmap);

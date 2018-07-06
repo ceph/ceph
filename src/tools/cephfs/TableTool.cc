@@ -227,7 +227,7 @@ public:
     while(true) {
       std::map<std::string, bufferlist> values;
       int r = io->omap_get_vals(object_name, last_key,
-          g_conf->mds_sessionmap_keys_per_op, &values);
+          g_conf()->mds_sessionmap_keys_per_op, &values);
 
       if (r != 0) {
         derr << "error reading values: " << cpp_strerror(r) << dendl;

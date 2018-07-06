@@ -93,7 +93,7 @@ static int do_map(int argc, const char *argv[])
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_DAEMON,
                          CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
-  g_ceph_context->_conf->set_val_or_die("pid_file", "");
+  g_ceph_context->_conf.set_val_or_die("pid_file", "");
 
   if (global_init_prefork(g_ceph_context) >= 0) {
     std::string err;
@@ -116,7 +116,7 @@ static int do_map(int argc, const char *argv[])
   global_init_chdir(g_ceph_context);
 
   if (poolname.empty()) {
-    poolname = g_ceph_context->_conf->get_val<std::string>("rbd_default_pool");
+    poolname = g_ceph_context->_conf.get_val<std::string>("rbd_default_pool");
   }
 
   std::string devname = boost::starts_with(devpath, "/dev/") ?
@@ -200,7 +200,7 @@ static int do_map(int argc, const char *argv[])
 
   std::cout << "/dev/" << drv->get_devname() << std::endl;
 
-  if (g_conf->daemonize) {
+  if (g_conf()->daemonize) {
     forker.daemonize();
     global_init_postfork_start(g_ceph_context);
     global_init_postfork_finish(g_ceph_context);

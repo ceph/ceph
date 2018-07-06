@@ -351,14 +351,14 @@ int MetadataDriver::inject_unlinked_inode(
   inode.inode.nlink = 1;
   inode.inode.truncate_size = -1ull;
   inode.inode.truncate_seq = 1;
-  inode.inode.uid = g_conf->mds_root_ino_uid;
-  inode.inode.gid = g_conf->mds_root_ino_gid;
+  inode.inode.uid = g_conf()->mds_root_ino_uid;
+  inode.inode.gid = g_conf()->mds_root_ino_gid;
 
   // Force layout to default: should we let users override this so that
   // they don't have to mount the filesystem to correct it?
   inode.inode.layout = file_layout_t::get_default();
   inode.inode.layout.pool_id = data_pool_id;
-  inode.inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
+  inode.inode.dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
 
   // Assume that we will get our stats wrong, and that we may
   // be ignoring dirfrags that exist
@@ -1644,12 +1644,12 @@ int MetadataDriver::inject_with_backtrace(
 
         ancestor_dentry.inode.dirstat.nfiles = 1;
         ancestor_dentry.inode.dir_layout.dl_dir_hash =
-                                               g_conf->mds_default_dir_hash;
+                                               g_conf()->mds_default_dir_hash;
 
         ancestor_dentry.inode.nlink = 1;
         ancestor_dentry.inode.ino = ino;
-        ancestor_dentry.inode.uid = g_conf->mds_root_ino_uid;
-        ancestor_dentry.inode.gid = g_conf->mds_root_ino_gid;
+        ancestor_dentry.inode.uid = g_conf()->mds_root_ino_uid;
+        ancestor_dentry.inode.gid = g_conf()->mds_root_ino_gid;
         ancestor_dentry.inode.version = 1;
         ancestor_dentry.inode.backtrace_version = 1;
         r = inject_linkage(parent_ino, dname, fragment, ancestor_dentry);
@@ -1974,8 +1974,8 @@ void MetadataTool::build_file_dentry(
   out->inode.ino = ino;
   out->inode.version = 1;
   out->inode.backtrace_version = 1;
-  out->inode.uid = g_conf->mds_root_ino_uid;
-  out->inode.gid = g_conf->mds_root_ino_gid;
+  out->inode.uid = g_conf()->mds_root_ino_uid;
+  out->inode.gid = g_conf()->mds_root_ino_gid;
 }
 
 void MetadataTool::build_dir_dentry(
@@ -1991,7 +1991,7 @@ void MetadataTool::build_dir_dentry(
   out->inode.ctime.tv.tv_sec = fragstat.mtime;
 
   out->inode.layout = layout;
-  out->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
+  out->inode.dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
 
   out->inode.truncate_seq = 1;
   out->inode.truncate_size = -1ull;
@@ -2002,7 +2002,7 @@ void MetadataTool::build_dir_dentry(
   out->inode.ino = ino;
   out->inode.version = 1;
   out->inode.backtrace_version = 1;
-  out->inode.uid = g_conf->mds_root_ino_uid;
-  out->inode.gid = g_conf->mds_root_ino_gid;
+  out->inode.uid = g_conf()->mds_root_ino_uid;
+  out->inode.gid = g_conf()->mds_root_ino_gid;
 }
 

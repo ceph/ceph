@@ -633,14 +633,14 @@ TEST(pick_address, filtering)
   ipv6(&a_three, "2001:1234:5678:90ab::cdef");
 
   CephContext *cct = new CephContext(CEPH_ENTITY_TYPE_MON);
-  cct->_conf->_clear_safe_to_start_threads();  // so we can set configs
+  cct->_conf._clear_safe_to_start_threads();  // so we can set configs
 
-  cct->_conf->set_val("public_addr", "");
-  cct->_conf->set_val("public_network", "");
-  cct->_conf->set_val("public_network_interface", "");
-  cct->_conf->set_val("cluster_addr", "");
-  cct->_conf->set_val("cluster_network", "");
-  cct->_conf->set_val("cluster_network_interface", "");
+  cct->_conf.set_val("public_addr", "");
+  cct->_conf.set_val("public_network", "");
+  cct->_conf.set_val("public_network_interface", "");
+  cct->_conf.set_val("cluster_addr", "");
+  cct->_conf.set_val("cluster_network", "");
+  cct->_conf.set_val("cluster_network_interface", "");
 
   entity_addrvec_t av;
   {
@@ -666,7 +666,7 @@ TEST(pick_address, filtering)
     ASSERT_EQ(string("[::]:0/0"), stringify(av.v[0]));
   }
   {
-    cct->_conf->set_val("public_network", "10.2.0.0/16");
+    cct->_conf.set_val("public_network", "10.2.0.0/16");
     int r = pick_addresses(cct,
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV4 |
@@ -676,11 +676,11 @@ TEST(pick_address, filtering)
     ASSERT_EQ(0, r);
     ASSERT_EQ(1, av.v.size());
     ASSERT_EQ(string("10.2.1.123:0/0"), stringify(av.v[0]));
-    cct->_conf->set_val("public_network", "");
+    cct->_conf.set_val("public_network", "");
   }
   {
-    cct->_conf->set_val("public_network", "10.0.0.0/8");
-    cct->_conf->set_val("public_network_interface", "eth1");
+    cct->_conf.set_val("public_network", "10.0.0.0/8");
+    cct->_conf.set_val("public_network_interface", "eth1");
     int r = pick_addresses(cct,
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV4 |
@@ -690,12 +690,12 @@ TEST(pick_address, filtering)
     ASSERT_EQ(0, r);
     ASSERT_EQ(1, av.v.size());
     ASSERT_EQ(string("10.2.1.123:0/0"), stringify(av.v[0]));
-    cct->_conf->set_val("public_network", "");
-    cct->_conf->set_val("public_network_interface", "");
+    cct->_conf.set_val("public_network", "");
+    cct->_conf.set_val("public_network_interface", "");
   }
   {
-    cct->_conf->set_val("public_network", "10.2.0.0/16");
-    cct->_conf->set_val("cluster_network", "10.1.0.0/16");
+    cct->_conf.set_val("public_network", "10.2.0.0/16");
+    cct->_conf.set_val("cluster_network", "10.1.0.0/16");
     int r = pick_addresses(cct,
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV4 |
@@ -705,12 +705,12 @@ TEST(pick_address, filtering)
     ASSERT_EQ(0, r);
     ASSERT_EQ(1, av.v.size());
     ASSERT_EQ(string("10.2.1.123:0/0"), stringify(av.v[0]));
-    cct->_conf->set_val("public_network", "");
-    cct->_conf->set_val("cluster_network", "");
+    cct->_conf.set_val("public_network", "");
+    cct->_conf.set_val("cluster_network", "");
   }
   {
-    cct->_conf->set_val("public_network", "10.2.0.0/16");
-    cct->_conf->set_val("cluster_network", "10.1.0.0/16");
+    cct->_conf.set_val("public_network", "10.2.0.0/16");
+    cct->_conf.set_val("cluster_network", "10.1.0.0/16");
     int r = pick_addresses(cct,
 			   CEPH_PICK_ADDRESS_CLUSTER |
 			   CEPH_PICK_ADDRESS_IPV4 |
@@ -720,12 +720,12 @@ TEST(pick_address, filtering)
     ASSERT_EQ(0, r);
     ASSERT_EQ(1, av.v.size());
     ASSERT_EQ(string("10.1.1.2:0/0"), stringify(av.v[0]));
-    cct->_conf->set_val("public_network", "");
-    cct->_conf->set_val("cluster_network", "");
+    cct->_conf.set_val("public_network", "");
+    cct->_conf.set_val("cluster_network", "");
   }
 
   {
-    cct->_conf->set_val("public_network", "2001::/16");
+    cct->_conf.set_val("public_network", "2001::/16");
     int r = pick_addresses(cct,
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV6 |
@@ -735,11 +735,11 @@ TEST(pick_address, filtering)
     ASSERT_EQ(0, r);
     ASSERT_EQ(1, av.v.size());
     ASSERT_EQ(string("[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[0]));
-    cct->_conf->set_val("public_network", "");
+    cct->_conf.set_val("public_network", "");
   }
   {
-    cct->_conf->set_val("public_network", "2001::/16 10.0.0.0/8");
-    cct->_conf->set_val("public_network_interface", "eth1");
+    cct->_conf.set_val("public_network", "2001::/16 10.0.0.0/8");
+    cct->_conf.set_val("public_network_interface", "eth1");
     int r = pick_addresses(cct,
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV4 |
@@ -751,12 +751,12 @@ TEST(pick_address, filtering)
     ASSERT_EQ(2, av.v.size());
     ASSERT_EQ(string("[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[0]));
     ASSERT_EQ(string("10.2.1.123:0/0"), stringify(av.v[1]));
-    cct->_conf->set_val("public_network", "");
-    cct->_conf->set_val("public_network_interface", "");
+    cct->_conf.set_val("public_network", "");
+    cct->_conf.set_val("public_network_interface", "");
   }
   {
-    cct->_conf->set_val("public_network", "2001::/16 10.0.0.0/8");
-    cct->_conf->set_val("public_network_interface", "eth1");
+    cct->_conf.set_val("public_network", "2001::/16 10.0.0.0/8");
+    cct->_conf.set_val("public_network_interface", "eth1");
     int r = pick_addresses(cct,
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV4 |
@@ -769,12 +769,12 @@ TEST(pick_address, filtering)
     ASSERT_EQ(2, av.v.size());
     ASSERT_EQ(string("10.2.1.123:0/0"), stringify(av.v[0]));
     ASSERT_EQ(string("[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[1]));
-    cct->_conf->set_val("public_network", "");
-    cct->_conf->set_val("public_network_interface", "");
+    cct->_conf.set_val("public_network", "");
+    cct->_conf.set_val("public_network_interface", "");
   }
 
   {
-    cct->_conf->set_val("public_network", "2001::/16");
+    cct->_conf.set_val("public_network", "2001::/16");
     int r = pick_addresses(cct,
 			   CEPH_PICK_ADDRESS_PUBLIC |
 			   CEPH_PICK_ADDRESS_IPV6 |
@@ -786,7 +786,7 @@ TEST(pick_address, filtering)
     ASSERT_EQ(2, av.v.size());
     ASSERT_EQ(string("msgr2:[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[0]));
     ASSERT_EQ(string("[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[1]));
-    cct->_conf->set_val("public_network", "");
+    cct->_conf.set_val("public_network", "");
   }
 
   {

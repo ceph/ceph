@@ -159,7 +159,7 @@ int Resetter::reset_hard()
 
   file_layout_t default_log_layout = MDCache::gen_default_log_layout(
       fsmap->get_filesystem(role.fscid)->mds_map);
-  journaler.create(&default_log_layout, g_conf->mds_journal_format);
+  journaler.create(&default_log_layout, g_conf()->mds_journal_format);
 
   C_SaferCond cond;
   {

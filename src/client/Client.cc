@@ -5963,7 +5963,7 @@ void Client::tick()
   if (cct->_conf->client_debug_inject_tick_delay > 0) {
     sleep(cct->_conf->client_debug_inject_tick_delay);
     assert(0 == cct->_conf.set_val("client_debug_inject_tick_delay", "0"));
-    cct->_conf.apply_changes(NULL);
+    cct->_conf.apply_changes(nullptr);
   }
 
   ldout(cct, 21) << "tick" << dendl;
@@ -13949,7 +13949,7 @@ const char** Client::get_tracked_conf_keys() const
   return keys;
 }
 
-void Client::handle_conf_change(const md_config_t *conf,
+void Client::handle_conf_change(const ConfigProxy& conf,
 				const std::set <std::string> &changed)
 {
   Mutex::Locker lock(client_lock);

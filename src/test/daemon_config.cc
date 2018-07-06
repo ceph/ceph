@@ -98,7 +98,7 @@ TEST(DaemonConfig, SubstitutionBracesTrailing) {
   ASSERT_EQ(0, ret);
   ret = g_ceph_context->_conf.set_val("public_network", "bar${host}");
   ASSERT_EQ(0, ret);
-  g_ceph_context->_conf.apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
   char buf[128];
   memset(buf, 0, sizeof(buf));
   char *tmp = buf;
@@ -114,7 +114,7 @@ TEST(DaemonConfig, SubstitutionMultiple) {
   ASSERT_EQ(0, ret);
   ret = g_ceph_context->_conf.set_val("keyring", "$mon_host/$cluster.keyring,$mon_host/$cluster.mon.keyring");
   ASSERT_EQ(0, ret);
-  g_ceph_context->_conf.apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
   char buf[512];
   memset(buf, 0, sizeof(buf));
   char *tmp = buf;
@@ -302,7 +302,7 @@ TEST(DaemonConfig, InjectArgsLogfile) {
   // Let's turn off the logfile.
   ret = g_ceph_context->_conf.set_val("log_file", "");
   ASSERT_EQ(0, ret);
-  g_ceph_context->_conf.apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
   ret = g_ceph_context->_conf.get_val("log_file", &tmp, sizeof(buf));
   ASSERT_EQ(0, ret);
   ASSERT_EQ(string(""), string(buf));

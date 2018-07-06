@@ -3828,7 +3828,7 @@ const char **BlueStore::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void BlueStore::handle_conf_change(const md_config_t *mconf,
+void BlueStore::handle_conf_change(const ConfigProxy& conf,
 				   const std::set<std::string> &changed)
 {
   if (changed.count("bluestore_csum_type")) {
@@ -3869,7 +3869,6 @@ void BlueStore::handle_conf_change(const md_config_t *mconf,
       _set_throttle_params();
     }
   }
-  ConfigReader conf{mconf};
   if (changed.count("bluestore_throttle_bytes")) {
     throttle_bytes.reset_max(conf->bluestore_throttle_bytes);
     throttle_deferred_bytes.reset_max(

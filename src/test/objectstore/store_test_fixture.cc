@@ -77,10 +77,10 @@ void StoreTestFixture::TearDown()
   }
 }
 
-void StoreTestFixture::SetVal(md_config_t* _conf, const char* key, const char* val)
+void StoreTestFixture::SetVal(ConfigProxy& _conf, const char* key, const char* val)
 {
-  assert(!conf || conf == _conf);
-  conf = _conf;
+  assert(!conf || conf == &_conf);
+  conf = &_conf;
   std::string skey(key);
   std::string prev_val;
   conf->get_val(skey, &prev_val);

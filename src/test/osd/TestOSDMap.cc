@@ -19,9 +19,9 @@ int main(int argc, char **argv) {
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   // make sure we have 3 copies, or some tests won't work
-  g_ceph_context->_conf->set_val("osd_pool_default_size", "3");
+  g_ceph_context->_conf.set_val("osd_pool_default_size", "3");
   // our map is flat, so just try and split across OSDs, not hosts or whatever
-  g_ceph_context->_conf->set_val("osd_crush_chooseleaf_type", "0");
+  g_ceph_context->_conf.set_val("osd_crush_chooseleaf_type", "0");
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

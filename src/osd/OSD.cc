@@ -3259,7 +3259,7 @@ int OSD::shutdown()
     cct->_conf.set_val("debug_filestore", "100");
     cct->_conf.set_val("debug_bluestore", "100");
     cct->_conf.set_val("debug_ms", "100");
-    cct->_conf.apply_changes(NULL);
+    cct->_conf.apply_changes(nullptr);
   }
 
   // stop MgrClient earlier as it's more like an internal consumer of OSD
@@ -5002,7 +5002,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 	 << r;
       return;
     }
-    service->cct->_conf.apply_changes(NULL);
+    service->cct->_conf.apply_changes(nullptr);
     ss << "set_recovery_delay: set osd_recovery_delay_start "
        << "to " << service->cct->_conf->osd_recovery_delay_start;
     return;
@@ -6126,7 +6126,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
 	 << r;
       goto out;
     }
-    cct->_conf.apply_changes(NULL);
+    cct->_conf.apply_changes(nullptr);
     ss << "kicking recovery queue. set osd_recovery_delay_start "
        << "to " << cct->_conf->osd_recovery_delay_start;
   }
@@ -8986,7 +8986,7 @@ const char** OSD::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void OSD::handle_conf_change(const md_config_t *conf,
+void OSD::handle_conf_change(const ConfigProxy& conf,
 			     const std::set <std::string> &changed)
 {
   if (changed.count("osd_max_backfills")) {
@@ -9035,7 +9035,7 @@ void OSD::handle_conf_change(const md_config_t *conf,
     update_log_config();
   }
   if (changed.count("osd_pg_epoch_max_lag_factor")) {
-    m_osd_pg_epoch_max_lag_factor = conf->get_val<double>(
+    m_osd_pg_epoch_max_lag_factor = conf.get_val<double>(
       "osd_pg_epoch_max_lag_factor");
   }
 

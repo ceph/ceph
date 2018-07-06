@@ -195,7 +195,7 @@ static void handle_fatal_signal(int signum)
 	jf.open_object_section("crash");
 	jf.dump_string("crash_id", id);
 	now.gmtime(jf.dump_stream("timestamp"));
-	jf.dump_string("entity_name", g_ceph_context->_conf.name().to_str());
+	jf.dump_string("entity_name", g_ceph_context->_conf->name.to_str());
 	jf.dump_string("ceph_version", ceph_version_to_str());
 
 	struct utsname u;

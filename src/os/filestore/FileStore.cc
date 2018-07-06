@@ -5882,7 +5882,7 @@ const char** FileStore::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void FileStore::handle_conf_change(const md_config_t *mconf,
+void FileStore::handle_conf_change(const ConfigProxy& conf,
 			  const std::set <std::string> &changed)
 {
   if (changed.count("filestore_max_inline_xattr_size") ||
@@ -5915,7 +5915,6 @@ void FileStore::handle_conf_change(const md_config_t *mconf,
     set_throttle_params();
   }
 
-  ConfigReader conf{mconf};
   if (changed.count("filestore_min_sync_interval") ||
       changed.count("filestore_max_sync_interval") ||
       changed.count("filestore_kill_at") ||

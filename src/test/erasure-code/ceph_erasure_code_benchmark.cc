@@ -87,7 +87,7 @@ int ErasureCodeBench::setup(int argc, char** argv) {
     CODE_ENVIRONMENT_UTILITY,
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   if (vm.count("help")) {
     cout << desc << std::endl;
@@ -154,7 +154,7 @@ int ErasureCodeBench::encode()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->get_val<std::string>("erasure_code_dir"),
+			      g_conf().get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
@@ -258,7 +258,7 @@ int ErasureCodeBench::decode()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->get_val<std::string>("erasure_code_dir"),
+			      g_conf().get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;

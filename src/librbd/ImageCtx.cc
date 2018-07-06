@@ -778,7 +778,7 @@ public:
 	"rbd_qos_read_bps_limit", false)(
 	"rbd_qos_write_bps_limit", false);
 
-    md_config_t local_config_t;
+    ConfigProxy local_config_t{false};
     std::map<std::string, bufferlist> res;
 
     _filter_metadata_confs(METADATA_CONF_PREFIX, configs, meta, &res);

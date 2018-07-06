@@ -205,7 +205,7 @@ public:
       .WillOnce(DoAll(WithArg<1>(Invoke([this](Context *ctx) {
                 // disable rebalance so as to not reschedule it again
                 CephContext *cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
-                cct->_conf->set_val("rbd_mirror_image_policy_rebalance_timeout", "0");
+                cct->_conf.set_val("rbd_mirror_image_policy_rebalance_timeout", "0");
 
                 auto wrapped_ctx = new FunctionContext([this, ctx](int r) {
                     Mutex::Locker timer_locker(m_threads->timer_lock);
@@ -1563,7 +1563,7 @@ TEST_F(TestMockImageMap, RebalanceImageMap) {
 
   // set rebalance interval
   CephContext *cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
-  cct->_conf->set_val("rbd_mirror_image_policy_rebalance_timeout", "5");
+  cct->_conf.set_val("rbd_mirror_image_policy_rebalance_timeout", "5");
   remote_peer_ack_nowait(mock_image_map.get(), new_global_image_ids_ack, 0,
                          &peer_ack_ctxs);
 

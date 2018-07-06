@@ -118,7 +118,7 @@ void WBThrottle::set_from_conf()
   cond.Signal();
 }
 
-void WBThrottle::handle_conf_change(const md_config_t *conf,
+void WBThrottle::handle_conf_change(const ConfigProxy& conf,
 				    const std::set<std::string> &changed)
 {
   Mutex::Locker l(lock);

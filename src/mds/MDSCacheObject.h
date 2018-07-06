@@ -329,7 +329,7 @@ protected:
     waiting->insert(pair<uint64_t, pair<uint64_t, MDSInternalContextBase*> >(
 			    mask,
 			    pair<uint64_t, MDSInternalContextBase*>(seq, c)));
-//    pdout(10,g_conf->debug_mds) << (mdsco_db_line_prefix(this)) 
+//    pdout(10,g_conf()->debug_mds) << (mdsco_db_line_prefix(this)) 
 //			       << "add_waiter " << hex << mask << dec << " " << c
 //			       << " on " << *this
 //			       << dendl;
@@ -348,14 +348,14 @@ protected:
 	    } else {
 	      ls.push_back(it->second.second);
         }
-//	pdout(10,g_conf->debug_mds) << (mdsco_db_line_prefix(this))
+//	pdout(10,g_conf()->debug_mds) << (mdsco_db_line_prefix(this))
 //				   << "take_waiting mask " << hex << mask << dec << " took " << it->second
 //				   << " tag " << hex << it->first << dec
 //				   << " on " << *this
 //				   << dendl;
         waiting->erase(it++);
       } else {
-//	pdout(10,g_conf->debug_mds) << "take_waiting mask " << hex << mask << dec << " SKIPPING " << it->second
+//	pdout(10,g_conf()->debug_mds) << "take_waiting mask " << hex << mask << dec << " SKIPPING " << it->second
 //				   << " tag " << hex << it->first << dec
 //				   << " on " << *this 
 //				   << dendl;

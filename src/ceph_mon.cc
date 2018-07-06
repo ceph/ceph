@@ -118,9 +118,9 @@ int check_mon_data_exists()
 /** Check whether **mon data** is empty.
  *
  * Being empty means mkfs has not been run and there's no monitor setup
- * at **g_conf->mon_data**.
+ * at **g_conf()->mon_data**.
  *
- * If the directory g_conf->mon_data is not empty we will return -ENOTEMPTY.
+ * If the directory g_conf()->mon_data is not empty we will return -ENOTEMPTY.
  * Otherwise we will return 0.  Any other negative returns will represent
  * a failure to be handled by the caller.
  *

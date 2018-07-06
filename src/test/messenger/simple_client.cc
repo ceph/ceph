@@ -102,7 +102,7 @@ int main(int argc, const char **argv)
 	  "initial msgs (pipe depth) " << n_msgs << " " <<
 	  "data buffer size " << n_dsize << std::endl;
 
-	messenger = Messenger::create(g_ceph_context, g_conf->get_val<std::string>("ms_type"),
+	messenger = Messenger::create(g_ceph_context, g_conf().get_val<std::string>("ms_type"),
 				      entity_name_t::MON(-1),
 				      "client",
 				      getpid(), 0);

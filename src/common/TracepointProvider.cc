@@ -20,9 +20,9 @@ TracepointProvider::~TracepointProvider() {
 }
 
 void TracepointProvider::handle_conf_change(
-    const md_config_t *conf, const std::set<std::string> &changed) {
+    const ConfigProxy& conf, const std::set<std::string> &changed) {
   if (changed.count(m_config_keys[0])) {
-    verify_config(ConfigProxy{conf});
+    verify_config(conf);
   }
 }
 

@@ -130,7 +130,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 #endif
 
   Preforker forker;
-  auto daemonize = g_conf->get_val<bool>("daemonize");
+  auto daemonize = g_conf().get_val<bool>("daemonize");
   if (daemonize) {
     global_init_prefork(g_ceph_context);
     int r;
@@ -156,7 +156,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
 
   {
-    g_ceph_context->_conf->finalize_reexpand_meta();
+    g_ceph_context->_conf.finalize_reexpand_meta();
     common_init_finish(g_ceph_context);
    
     init_async_signal_handler();
@@ -177,12 +177,12 @@ int main(int argc, const char **argv, const char *envp[]) {
 #if defined(__linux__)
 	int ver = get_linux_version();
 	assert(ver != 0);
-        bool client_try_dentry_invalidate = g_conf->get_val<bool>(
+        bool client_try_dentry_invalidate = g_conf().get_val<bool>(
           "client_try_dentry_invalidate");
 	bool can_invalidate_dentries =
           client_try_dentry_invalidate && ver < KERNEL_VERSION(3, 18, 0);
 	int tr = client->test_dentry_handling(can_invalidate_dentries);
-        bool client_die_on_failed_dentry_invalidate = g_conf->get_val<bool>(
+        bool client_die_on_failed_dentry_invalidate = g_conf().get_val<bool>(
           "client_die_on_failed_dentry_invalidate");
 	if (tr != 0 && client_die_on_failed_dentry_invalidate) {
 	  cerr << "ceph-fuse[" << getpid()
@@ -270,10 +270,10 @@ int main(int argc, const char **argv, const char *envp[]) {
     {
       // start up fuse
       // use my argc, argv (make sure you pass a mount point!)
-      auto client_mountpoint = g_conf->get_val<std::string>(
+      auto client_mountpoint = g_conf().get_val<std::string>(
         "client_mountpoint");
       auto mountpoint = client_mountpoint.c_str();
-      auto fuse_require_active_mds = g_conf->get_val<bool>(
+      auto fuse_require_active_mds = g_conf().get_val<bool>(
         "fuse_require_active_mds");
       r = client->mount(mountpoint, perms, fuse_require_active_mds);
       if (r < 0) {
