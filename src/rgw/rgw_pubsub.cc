@@ -52,17 +52,24 @@ void rgw_pubsub_event::dump(Formatter *f) const
   }
 }
 
-void rgw_pubsub_user_topic::dump(Formatter *f) const
-{
-  encode_json("name", name, f);
-  encode_json("bucket", bucket, f);
-}
-
-void rgw_pubsub_user_topic_info::dump(Formatter *f) const
+void rgw_pubsub_topic::dump(Formatter *f) const
 {
   encode_json("user", user, f);
+  encode_json("name", name, f);
+}
+
+void rgw_pubsub_topic_subs::dump(Formatter *f) const
+{
   encode_json("topic", topic, f);
   encode_json("subs", subs, f);
+}
+
+void rgw_pubsub_bucket_topics::dump(Formatter *f) const
+{
+  Formatter::ObjectSection s(*f, "topics");
+  for (auto& t : topics) {
+    encode_json(t.first.c_str(), t.second, f);
+  }
 }
 
 void rgw_pubsub_user_topics::dump(Formatter *f) const
@@ -73,14 +80,14 @@ void rgw_pubsub_user_topics::dump(Formatter *f) const
   }
 }
 
-void rgw_pubsub_user_sub_dest::dump(Formatter *f) const
+void rgw_pubsub_sub_dest::dump(Formatter *f) const
 {
   encode_json("bucket_name", bucket_name, f);
   encode_json("oid_prefix", oid_prefix, f);
   encode_json("push_endpoint", push_endpoint, f);
 }
 
-void rgw_pubsub_user_sub_config::dump(Formatter *f) const
+void rgw_pubsub_sub_config::dump(Formatter *f) const
 {
   encode_json("user", user, f);
   encode_json("name", name, f);
@@ -99,13 +106,9 @@ int RGWUserPubSub::remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tra
   return 0;
 }
 
-int RGWUserPubSub::get_topics(rgw_pubsub_user_topics *result)
+int RGWUserPubSub::read_user_topics(rgw_pubsub_user_topics *result, RGWObjVersionTracker *objv_tracker)
 {
-  rgw_raw_obj obj;
-  get_user_meta_obj(&obj);
-
-  RGWObjVersionTracker objv_tracker;
-  int ret = read(obj, result, &objv_tracker);
+  int ret = read(user_meta_obj, result, objv_tracker);
   if (ret < 0 && ret != -ENOENT) {
     ldout(store->ctx(), 0) << "ERROR: failed to read topics info: ret=" << ret << dendl;
     return ret;
@@ -113,13 +116,9 @@ int RGWUserPubSub::get_topics(rgw_pubsub_user_topics *result)
   return 0;
 }
 
-int RGWUserPubSub::get_bucket_topics(const rgw_bucket& bucket, rgw_pubsub_user_topics *result)
+int RGWUserPubSub::write_user_topics(const rgw_pubsub_user_topics& topics, RGWObjVersionTracker *objv_tracker)
 {
-  rgw_raw_obj obj;
-  get_bucket_meta_obj(bucket, &obj);
-
-  RGWObjVersionTracker objv_tracker;
-  int ret = read(obj, result, &objv_tracker);
+  int ret = write(user_meta_obj, topics, objv_tracker);
   if (ret < 0 && ret != -ENOENT) {
     ldout(store->ctx(), 0) << "ERROR: failed to read topics info: ret=" << ret << dendl;
     return ret;
@@ -127,15 +126,41 @@ int RGWUserPubSub::get_bucket_topics(const rgw_bucket& bucket, rgw_pubsub_user_t
   return 0;
 }
 
-int RGWUserPubSub::get_topic(const string& name, rgw_pubsub_user_topic_info *result)
+int RGWUserPubSub::get_user_topics(rgw_pubsub_user_topics *result)
 {
-  rgw_raw_obj obj;
-  get_user_meta_obj(&obj);
+  return read_user_topics(result, nullptr);
+}
 
-  RGWObjVersionTracker objv_tracker;
+int RGWUserPubSub::Bucket::read_topics(rgw_pubsub_bucket_topics *result, RGWObjVersionTracker *objv_tracker)
+{
+  int ret = ps->read(bucket_meta_obj, result, objv_tracker);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(ps->store->ctx(), 0) << "ERROR: failed to read bucket topics info: ret=" << ret << dendl;
+    return ret;
+  }
+  return 0;
+}
+
+int RGWUserPubSub::Bucket::write_topics(const rgw_pubsub_bucket_topics& topics, RGWObjVersionTracker *objv_tracker)
+{
+  int ret = ps->write(bucket_meta_obj, topics, objv_tracker);
+  if (ret < 0) {
+    ldout(ps->store->ctx(), 0) << "ERROR: failed to write bucket topics info: ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+int RGWUserPubSub::Bucket::get_topics(rgw_pubsub_bucket_topics *result)
+{
+  return read_topics(result, nullptr);
+}
+
+int RGWUserPubSub::get_topic(const string& name, rgw_pubsub_topic_subs *result)
+{
   rgw_pubsub_user_topics topics;
-
-  int ret = read(obj, &topics, &objv_tracker);
+  int ret = get_user_topics(&topics);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to read topics info: ret=" << ret << dendl;
     return ret;
@@ -152,34 +177,86 @@ int RGWUserPubSub::get_topic(const string& name, rgw_pubsub_user_topic_info *res
 }
 
 
-int RGWUserPubSub::create_topic(const string& name, const rgw_bucket& bucket)
+int RGWUserPubSub::Bucket::create_notification(const string& topic_name)
 {
-  rgw_raw_obj obj;
-  get_user_meta_obj(&obj);
+  rgw_pubsub_topic_subs user_topic_info;
+  RGWRados *store = ps->store;
 
-  RGWObjVersionTracker objv_tracker;
-  rgw_pubsub_user_topics topics;
-
-  int ret = read(obj, &topics, &objv_tracker);
-  if (ret < 0 && ret != -ENOENT) {
-    ldout(store->ctx(), 0) << "ERROR: failed to read topics info: ret=" << ret << dendl;
+  int ret = ps->get_topic(topic_name, &user_topic_info);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to read topic info: ret=" << ret << dendl;
     return ret;
   }
 
-  rgw_pubsub_user_topic_info& new_topic = topics.topics[name];
-  new_topic.user = user;
-  new_topic.topic.name = name;
-  new_topic.topic.bucket = bucket;
+  RGWObjVersionTracker objv_tracker;
+  rgw_pubsub_bucket_topics bucket_topics;
 
-  ret = write(obj, topics, &objv_tracker);
+  ret = read_topics(&bucket_topics, &objv_tracker);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(store->ctx(), 0) << "ERROR: failed to read bucket topics info: ret=" << ret << dendl;
+    return ret;
+  }
+
+  bucket_topics.topics[topic_name] = user_topic_info.topic;
+
+  ret = write_topics(bucket_topics, &objv_tracker);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
   }
 
-  ret = update_bucket(topics, bucket);
+  return 0;
+}
+
+int RGWUserPubSub::Bucket::remove_notification(const string& topic_name)
+{
+  rgw_pubsub_topic_subs user_topic_info;
+  RGWRados *store = ps->store;
+
+  int ret = ps->get_topic(topic_name, &user_topic_info);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to write bucket topics info: ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "ERROR: failed to read topic info: ret=" << ret << dendl;
+    return ret;
+  }
+
+  RGWObjVersionTracker objv_tracker;
+  rgw_pubsub_bucket_topics bucket_topics;
+
+  ret = read_topics(&bucket_topics, &objv_tracker);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(store->ctx(), 0) << "ERROR: failed to read bucket topics info: ret=" << ret << dendl;
+    return ret;
+  }
+
+  bucket_topics.topics.erase(topic_name);
+
+  ret = write_topics(bucket_topics, &objv_tracker);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to write topics info: ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+int RGWUserPubSub::create_topic(const string& name)
+{
+  RGWObjVersionTracker objv_tracker;
+  rgw_pubsub_user_topics topics;
+
+  int ret = read_user_topics(&topics, &objv_tracker);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(store->ctx(), 0) << "ERROR: failed to read topics info: ret=" << ret << dendl;
+    return ret;
+  }
+
+  rgw_pubsub_topic_subs& new_topic = topics.topics[name];
+  new_topic.topic.user = user;
+  new_topic.topic.name = name;
+
+  ret = write_user_topics(topics, &objv_tracker);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
   }
 
@@ -188,85 +265,70 @@ int RGWUserPubSub::create_topic(const string& name, const rgw_bucket& bucket)
 
 int RGWUserPubSub::remove_topic(const string& name)
 {
-  rgw_raw_obj obj;
-  get_user_meta_obj(&obj);
-
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_user_topics topics;
 
-  int ret = read(obj, &topics, &objv_tracker);
+  int ret = read_user_topics(&topics, &objv_tracker);
   if (ret < 0 && ret != -ENOENT) {
     ldout(store->ctx(), 0) << "ERROR: failed to read topics info: ret=" << ret << dendl;
     return ret;
   }
 
-  rgw_bucket bucket;
-  auto t = topics.topics.find(name);
-  if (t != topics.topics.end()) {
-    bucket = t->second.topic.bucket;
-  }
-
   topics.topics.erase(name);
 
-  ret = write(obj, topics, &objv_tracker);
+  ret = write_user_topics(topics, &objv_tracker);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
   }
 
-  if (bucket.name.empty()) {
-    return 0;
-  }
+  return 0;
+}
 
-  ret = update_bucket(topics, bucket);
+int RGWUserPubSub::Sub::read_sub(rgw_pubsub_sub_config *result, RGWObjVersionTracker *objv_tracker)
+{
+  int ret = ps->read(sub_meta_obj, result, objv_tracker);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(ps->store->ctx(), 0) << "ERROR: failed to read subscription info: ret=" << ret << dendl;
+    return ret;
+  }
+  return 0;
+}
+
+int RGWUserPubSub::Sub::write_sub(const rgw_pubsub_sub_config& sub_conf, RGWObjVersionTracker *objv_tracker)
+{
+  int ret = ps->write(sub_meta_obj, sub_conf, objv_tracker);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to write bucket topics info: ret=" << ret << dendl;
+    ldout(ps->store->ctx(), 0) << "ERROR: failed to write subscription info: ret=" << ret << dendl;
     return ret;
   }
 
   return 0;
 }
 
-int RGWUserPubSub::update_bucket(const rgw_pubsub_user_topics& topics, const rgw_bucket& bucket)
+int RGWUserPubSub::Sub::remove_sub(RGWObjVersionTracker *objv_tracker)
 {
-  rgw_pubsub_user_topics bucket_topics;
-  for (auto& t : topics.topics) {
-    if (t.second.topic.bucket == bucket) {
-      bucket_topics.topics.insert(t);
-    }
-  }
-
-  rgw_raw_obj bobj;
-  get_bucket_meta_obj(bucket, &bobj);
-  int ret = write(bobj, bucket_topics, nullptr);
+  int ret = ps->remove(sub_meta_obj, objv_tracker);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to write topics info: ret=" << ret << dendl;
+    ldout(ps->store->ctx(), 0) << "ERROR: failed to write subscription info: ret=" << ret << dendl;
     return ret;
   }
+
   return 0;
 }
 
-int RGWUserPubSub::get_sub(const string& name, rgw_pubsub_user_sub_config *result)
+int RGWUserPubSub::Sub::get_conf(rgw_pubsub_sub_config *result)
 {
-  rgw_raw_obj obj;
-  get_sub_meta_obj(name, &obj);
-  int ret = read(obj, result, nullptr);
-  if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to read subscription info: ret=" << ret << dendl;
-    return ret;
-  }
-  return 0;
+  return read_sub(result, nullptr);
 }
 
-int RGWUserPubSub::add_sub(const string& name, const string& topic, const rgw_pubsub_user_sub_dest& dest)
+int RGWUserPubSub::Sub::subscribe(const string& topic, const rgw_pubsub_sub_dest& dest)
 {
-  rgw_raw_obj obj;
-  get_user_meta_obj(&obj);
-
-  RGWObjVersionTracker objv_tracker;
+  RGWObjVersionTracker user_objv_tracker;
   rgw_pubsub_user_topics topics;
+  RGWRados *store = ps->store;
 
-  int ret = read(obj, &topics, &objv_tracker);
+  int ret = ps->read_user_topics(&topics, &user_objv_tracker);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to read topics info: ret=" << ret << dendl;
     return ret;
@@ -280,30 +342,22 @@ int RGWUserPubSub::add_sub(const string& name, const string& topic, const rgw_pu
 
   auto& t = iter->second;
 
-  rgw_pubsub_user_sub_config sub_conf;
+  rgw_pubsub_sub_config sub_conf;
 
-  sub_conf.user = user;
-  sub_conf.name = name;
+  sub_conf.user = ps->user;
+  sub_conf.name = sub;
   sub_conf.topic = topic;
   sub_conf.dest = dest;
 
-  t.subs.insert(name);
+  t.subs.insert(sub);
 
-  ret = write(obj, topics, &objv_tracker);
+  ret = ps->write_user_topics(topics, &user_objv_tracker);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
   }
 
-  ret = update_bucket(topics, t.topic.bucket);
-  if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to write bucket topics info: ret=" << ret << dendl;
-    return ret;
-  }
-
-  rgw_raw_obj sobj;
-  get_sub_meta_obj(name, &sobj);
-  ret = write(sobj, sub_conf, nullptr);
+  ret = write_sub(sub_conf, nullptr);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to write subscription info: ret=" << ret << dendl;
     return ret;
@@ -311,17 +365,15 @@ int RGWUserPubSub::add_sub(const string& name, const string& topic, const rgw_pu
   return 0;
 }
 
-int RGWUserPubSub::remove_sub(const string& name, const string& _topic)
+int RGWUserPubSub::Sub::unsubscribe(const string& _topic)
 {
   string topic = _topic;
-
   RGWObjVersionTracker sobjv_tracker;
-  rgw_raw_obj sobj;
-  get_sub_meta_obj(name, &sobj);
+  RGWRados *store = ps->store;
 
   if (topic.empty()) {
-    rgw_pubsub_user_sub_config sub_conf;
-    int ret = read(sobj, &sub_conf, &sobjv_tracker);
+    rgw_pubsub_sub_config sub_conf;
+    int ret = read_sub(&sub_conf, &sobjv_tracker);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: failed to read subscription info: ret=" << ret << dendl;
       return ret;
@@ -329,27 +381,22 @@ int RGWUserPubSub::remove_sub(const string& name, const string& _topic)
     topic = sub_conf.topic;
   }
 
-  rgw_raw_obj obj;
-  get_user_meta_obj(&obj);
-
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_user_topics topics;
 
-  int ret = read(obj, &topics, &objv_tracker);
+  int ret = ps->read_user_topics(&topics, &objv_tracker);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to read topics info: ret=" << ret << dendl;
   }
 
   if (ret >= 0) {
     auto iter = topics.topics.find(topic);
-    if (iter == topics.topics.end()) {
-      ldout(store->ctx(), 20) << "ERROR: cannot add subscription to topic: topic not found" << dendl;
-    } else {
+    if (iter != topics.topics.end()) {
       auto& t = iter->second;
 
-      t.subs.erase(name);
+      t.subs.erase(sub);
 
-      ret = write(obj, topics, &objv_tracker);
+      ret = ps->write_user_topics(topics, &objv_tracker);
       if (ret < 0) {
         ldout(store->ctx(), 0) << "ERROR: failed to write topics info: ret=" << ret << dendl;
         return ret;
@@ -357,15 +404,15 @@ int RGWUserPubSub::remove_sub(const string& name, const string& _topic)
     }
   }
 
-  ret = remove(sobj, &sobjv_tracker);
+  ret = remove_sub(&sobjv_tracker);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to write subscription info: ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "ERROR: failed to delete subscription info: ret=" << ret << dendl;
     return ret;
   }
   return 0;
 }
 
-void RGWUserPubSub::list_events_result::dump(Formatter *f) const
+void RGWUserPubSub::Sub::list_events_result::dump(Formatter *f) const
 {
   encode_json("next_marker", next_marker, f);
   encode_json("is_truncated", is_truncated, f);
@@ -376,12 +423,12 @@ void RGWUserPubSub::list_events_result::dump(Formatter *f) const
   }
 }
 
-int RGWUserPubSub::list_events(const string& sub_name,
-                               const string& marker, int max_events,
+int RGWUserPubSub::Sub::list_events(const string& marker, int max_events,
                                list_events_result *result)
 {
-  rgw_pubsub_user_sub_config sub_conf;
-  int ret = get_sub(sub_name, &sub_conf);
+  RGWRados *store = ps->store;
+  rgw_pubsub_sub_config sub_conf;
+  int ret = get_conf(&sub_conf);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to read sub config: ret=" << ret << dendl;
     return ret;
@@ -438,10 +485,11 @@ int RGWUserPubSub::list_events(const string& sub_name,
   return 0;
 }
 
-int RGWUserPubSub::remove_event(const string& sub_name, const string& event_id)
+int RGWUserPubSub::Sub::remove_event(const string& event_id)
 {
-  rgw_pubsub_user_sub_config sub_conf;
-  int ret = get_sub(sub_name, &sub_conf);
+  RGWRados *store = ps->store;
+  rgw_pubsub_sub_config sub_conf;
+  int ret = get_conf(&sub_conf);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to read sub config: ret=" << ret << dendl;
     return ret;
