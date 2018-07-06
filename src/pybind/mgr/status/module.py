@@ -5,9 +5,10 @@ High level status display commands
 
 from collections import defaultdict
 from prettytable import PrettyTable
-import prettytable
-import fnmatch
 import errno
+import fnmatch
+import prettytable
+import six
 
 from mgr_module import MgrModule
 
@@ -187,7 +188,7 @@ class Module(MgrModule):
                     ])
 
             # Find the standby replays
-            for gid_str, daemon_info in mdsmap['info'].iteritems():
+            for gid_str, daemon_info in six.iteritems(mdsmap['info']):
                 if daemon_info['state'] != "up:standby-replay":
                     continue
 
@@ -242,7 +243,7 @@ class Module(MgrModule):
             output += "MDS version: {0}".format(mds_versions.keys()[0])
         else:
             version_table = PrettyTable(["version", "daemons"])
-            for version, daemons in mds_versions.iteritems():
+            for version, daemons in six.iteritems(mds_versions):
                 version_table.add_row([
                     version,
                     ", ".join(daemons)
