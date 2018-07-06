@@ -277,6 +277,9 @@ public:
 
 class RGWHandler_REST_PSTopic_S3 : public RGWHandler_REST_S3 {
 protected:
+  bool supports_quota() override {
+    return false;
+  }
   RGWOp *op_get() override {
     if (s->init_state.url_bucket.empty()) {
       return nullptr;
