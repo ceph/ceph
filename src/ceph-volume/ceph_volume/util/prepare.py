@@ -124,7 +124,7 @@ def create_osd_path(osd_id, tmpfs=False):
 
 def format_device(device):
     # only supports xfs
-    command = ['mkfs', '-t', 'xfs']
+    command = ['sudo', 'mkfs', '-t', 'xfs']
 
     # get the mkfs options if any for xfs,
     # fallback to the default options defined in constants.mkfs
