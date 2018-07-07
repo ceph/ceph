@@ -74,7 +74,7 @@ function run() {
         CMAKE_PYTHON_OPTS="-DWITH_PYTHON2=OFF -DWITH_PYTHON3=ON -DMGR_PYTHON_VERSION=3"
     fi
 
-    CMAKE_BUILD_OPTS="-DWITH_FIO=ON -DWITH_GTEST_PARALLEL=ON"
+    CMAKE_BUILD_OPTS="-DWITH_FIO=ON"
 
     # Are we in the CI ?
     if [ -n "$JENKINS_HOME" ]; then
