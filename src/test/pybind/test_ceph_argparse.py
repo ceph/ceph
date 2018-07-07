@@ -24,7 +24,10 @@ import os
 import re
 import sys
 import json
-from StringIO import StringIO
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 
 def get_command_descriptions(what):
     CEPH_BIN = os.environ['CEPH_BIN']
