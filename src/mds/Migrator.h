@@ -301,7 +301,7 @@ public:
     export_queue.clear();
   }
   
-  void get_export_lock_set(CDir *dir, set<SimpleLock*>& locks);
+  void get_export_lock_set(CDir *dir, MutationImpl::LockOpVec& lov);
   void get_export_client_set(CInode *in, set<client_t> &client_set);
 
   void encode_export_inode(CInode *in, bufferlist& bl, 

@@ -738,18 +738,22 @@ public:
 };
 
 
-void Migrator::get_export_lock_set(CDir *dir, set<SimpleLock*>& locks)
+void Migrator::get_export_lock_set(CDir *dir, MutationImpl::LockOpVec& lov)
 {
   // path
   vector<CDentry*> trace;
   cache->make_trace(trace, dir->inode);
-  for (vector<CDentry*>::iterator it = trace.begin();
-       it != trace.end();
-       ++it)
-    locks.insert(&(*it)->lock);
+
+  set<CDir*> wouldbe_bounds;
+  cache->get_wouldbe_subtree_bounds(dir, wouldbe_bounds);
+
+  lov.reserve(trace.size() + wouldbe_bounds.size() + 8);
+
+  for (auto& dn : trace)
+    lov.add_rdlock(&dn->lock);
 
   // prevent scatter gather race
-  locks.insert(&dir->get_inode()->dirfragtreelock);
+  lov.add_rdlock(&dir->get_inode()->dirfragtreelock);
 
   // bound dftlocks:
   // NOTE: We need to take an rdlock on bounding dirfrags during
@@ -760,10 +764,8 @@ void Migrator::get_export_lock_set(CDir *dir, set<SimpleLock*>& locks)
   //  redivvy it up.  And it's needed for the scatterlocks to work
   //  properly: when the auth is in a sync/lock state it keeps each
   //  dirfrag's portion in the local (auth OR replica) dirfrag.
-  set<CDir*> wouldbe_bounds;
-  cache->get_wouldbe_subtree_bounds(dir, wouldbe_bounds);
-  for (set<CDir*>::iterator p = wouldbe_bounds.begin(); p != wouldbe_bounds.end(); ++p)
-    locks.insert(&(*p)->get_inode()->dirfragtreelock);
+  for (auto& dir : wouldbe_bounds)
+    lov.add_rdlock(&dir->get_inode()->dirfragtreelock);
 }
 
 
@@ -922,10 +924,8 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
   }
 
   // locks?
-  set<SimpleLock*> rdlocks;
-  set<SimpleLock*> xlocks;
-  set<SimpleLock*> wrlocks;
-  get_export_lock_set(dir, rdlocks);
+  MutationImpl::LockOpVec lov;
+  get_export_lock_set(dir, lov);
   // If auth MDS of the subtree root inode is neither the exporter MDS
   // nor the importer MDS and it gathers subtree root's fragstat/neststat
   // while the subtree is exporting. It's possible that the exporter MDS
@@ -933,14 +933,14 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
   // are not auth MDS of the subtree root at the time they receive the
   // lock messages. So the auth MDS of the subtree root inode may get no
   // or duplicated fragstat/neststat for the subtree root dirfrag.
-  wrlocks.insert(&dir->get_inode()->filelock);
-  wrlocks.insert(&dir->get_inode()->nestlock);
+  lov.add_wrlock(&dir->get_inode()->filelock);
+  lov.add_wrlock(&dir->get_inode()->nestlock);
   if (dir->get_inode()->is_auth()) {
     dir->get_inode()->filelock.set_scatter_wanted();
     dir->get_inode()->nestlock.set_scatter_wanted();
   }
 
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks, NULL, NULL, true)) {
+  if (!mds->locker->acquire_locks(mdr, lov, NULL, true)) {
     if (mdr->aborted)
       export_try_cancel(dir);
     return;
@@ -1061,10 +1061,10 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   CInode *diri = dir->get_inode();
 
   // ok, try to grab all my locks.
-  set<SimpleLock*> rdlocks;
-  get_export_lock_set(dir, rdlocks);
+  MutationImpl::LockOpVec lov;
+  get_export_lock_set(dir, lov);
   if ((diri->is_auth() && diri->is_frozen()) ||
-      !mds->locker->can_rdlock_set(rdlocks) ||
+      !mds->locker->can_rdlock_set(lov) ||
       !diri->filelock.can_wrlock(-1) ||
       !diri->nestlock.can_wrlock(-1)) {
     dout(7) << "export_dir couldn't acquire all needed locks, failing. "
@@ -1084,7 +1084,7 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   it->second.mut = new MutationImpl();
   if (diri->is_auth())
     it->second.mut->auth_pin(diri);
-  mds->locker->rdlock_take_set(rdlocks, it->second.mut);
+  mds->locker->rdlock_take_set(lov, it->second.mut);
   mds->locker->wrlock_force(&diri->filelock, it->second.mut);
   mds->locker->wrlock_force(&diri->nestlock, it->second.mut);
 
