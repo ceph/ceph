@@ -149,10 +149,8 @@ function(do_build_boost version)
     endif()
     set(source_dir
       URL ${boost_url}
-      URL_HASH SHA256=${boost_sha256})
-    if(CMAKE_VERSION VERSION_GREATER 3.1)
-      list(APPEND source_dir DOWNLOAD_NO_PROGRESS 1)
-    endif()
+      URL_HASH SHA256=${boost_sha256}
+      DOWNLOAD_NO_PROGRESS 1)
   endif()
   # build all components in a single shot
   include(ExternalProject)
@@ -230,16 +228,10 @@ macro(build_boost version)
   endforeach()
 
   # for header-only libraries
-  if(CMAKE_VERSION VERSION_LESS 3.3)
-    # only ALIAS and INTERFACE target names allow ":" in it, but
-    # INTERFACE library is not allowed until cmake 3.1
-    add_custom_target(Boost.boost DEPENDS Boost)
-  else()
-    add_library(Boost::boost INTERFACE IMPORTED)
-    set_target_properties(Boost::boost PROPERTIES
-      INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
-    add_dependencies(Boost::boost Boost)
-  endif()
+  add_library(Boost::boost INTERFACE IMPORTED)
+  set_target_properties(Boost::boost PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
+  add_dependencies(Boost::boost Boost)
   find_package_handle_standard_args(Boost DEFAULT_MSG
     Boost_INCLUDE_DIRS Boost_LIBRARIES)
   mark_as_advanced(Boost_LIBRARIES BOOST_INCLUDE_DIRS)
@@ -251,18 +243,12 @@ function(maybe_add_boost_dep target)
     return()
   endif()
   get_target_property(sources ${target} SOURCES)
-  if(NOT CMAKE_VERSION VERSION_LESS 3.1)
-    string(GENEX_STRIP "${sources}" sources)
-  endif()
+  string(GENEX_STRIP "${sources}" sources)
   foreach(src ${sources})
     get_filename_component(ext ${src} EXT)
     # assuming all cxx source files include boost header(s)
     if(ext MATCHES ".cc|.cpp|.cxx")
-      if(CMAKE_VERSION VERSION_LESS 3.3)
-        add_dependencies(${target} Boost.boost)
-      else()
-        add_dependencies(${target} Boost::boost)
-      endif()
+      add_dependencies(${target} Boost::boost)
       return()
     endif()
   endforeach()
