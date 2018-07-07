@@ -23,19 +23,6 @@ function(add_ceph_test test_name test_path)
     PROPERTY TIMEOUT 3600)
 endfunction()
 
-option(WITH_GTEST_PARALLEL "Enable running gtest based tests in parallel" OFF)
-if(WITH_GTEST_PARALLEL)
-  include(ExternalProject)
-  ExternalProject_Add(gtest-parallel_ext
-    SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/gtest-parallel
-    GIT_REPOSITORY "https://github.com/google/gtest-parallel.git"
-    GIT_TAG "master"
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND ""
-    INSTALL_COMMAND "")
-  add_dependencies(tests gtest-parallel_ext)
-endif()
-
 #sets uniform compiler flags and link libraries
 function(add_ceph_unittest unittest_name)
   add_ceph_test(${unittest_name} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${unittest_name})
