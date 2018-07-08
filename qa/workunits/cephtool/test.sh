@@ -1950,6 +1950,9 @@ function test_mon_pg()
   expect_false ceph osd pg-temp 1.0 asdf
   ceph osd pg-temp 1.0 # cleanup pg-temp
 
+  ceph pg repeer 1.0
+  expect_false ceph pg repeer 0.0   # pool 0 shouldn't exist anymore
+
   # don't test ceph osd primary-temp for now
 }
 
