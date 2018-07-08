@@ -62,25 +62,6 @@ class BucketStats:
     def get_num_shards(self, ctx, client):
         self.num_shards = get_bucket_num_shards(ctx, client, self.bucket_name, self.bucket_id)
 
-def get_acl(key):
-    """
-    Helper function to get the xml acl from a key, ensuring that the xml
-    version tag is removed from the acl response
-    """
-    raw_acl = key.get_xml_acl()
-
-    def remove_version(string):
-        return string.split(
-            '<?xml version="1.0" encoding="UTF-8"?>'
-        )[-1]
-
-    def remove_newlines(string):
-        return string.strip('\n')
-
-    return remove_version(
-        remove_newlines(raw_acl)
-    )
-
 def  get_bucket_stats(ctx, client, bucket_name):
     """
     function to get bucket stats
@@ -181,6 +162,10 @@ def task(ctx, config):
     bucket_stats2 = get_bucket_stats(ctx, client, bucket_name2)
     ver_bucket_stats = get_bucket_stats(ctx, client, ver_bucket_name)
 
+    bucket1_acl = bucket1.get_xml_acl()
+    bucket2_acl = bucket2.get_xml_acl()
+    ver_bucket_acl = ver_bucket.get_xml_acl()
+
     # TESTCASE 'reshard-list','reshard','list','no resharding','succeeds, empty list'
     log.debug(' test: empty reshard list')
     (err, out) = rgwadmin(ctx, client, ['reshard', 'list'], check_status=True)
@@ -248,7 +233,6 @@ def task(ctx, config):
 
     # check bucket shards num
     (err, out) = rgwadmin(ctx, client, ['reshard', 'list'], check_status=True)
-    log.debug('len %d', len(out))
     assert len(out) == 1
     log.debug('bucket name %s', out[0]['bucket_name'])
     assert out[0]['bucket_name'] == bucket_name2
@@ -280,6 +264,14 @@ def task(ctx, config):
     assert ver_bucket_stats.num_shards == num_shards
     new_user_stats = get_user_stats(ctx, client, user)
     assert old_user_stats == new_user_stats
+
+    # TESTCASE 'check acl'
+    new_bucket1_acl = bucket1.get_xml_acl()
+    assert new_bucket1_acl == bucket1_acl
+    new_bucket2_acl = bucket2.get_xml_acl()
+    assert new_bucket2_acl == bucket2_acl
+    new_ver_bucket_acl = ver_bucket.get_xml_acl()
+    assert new_ver_bucket_acl == ver_bucket_acl
 
     # Clean up
     log.debug("Deleting bucket %s", bucket_name1)
