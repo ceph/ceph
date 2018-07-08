@@ -10,3 +10,4 @@ overrides:
     conf:
       client:
         rgw reshard max num obj: 10
+        rgw reshard thread interval: 30
