@@ -3193,20 +3193,6 @@ BlueStore::Collection::Collection(BlueStore *store_, Cache *c, coll_t cid)
     exists(true),
     onode_map(c)
 {
-  {
-    std::lock_guard<std::mutex> l(store->zombie_osr_lock);
-    auto p = store->zombie_osr_set.find(cid);
-    if (p == store->zombie_osr_set.end()) {
-      osr = new OpSequencer(store, cid);
-      osr->shard = cid.hash_to_shard(store->m_finisher_num);
-    } else {
-      osr = p->second;
-      store->zombie_osr_set.erase(p);
-      ldout(store->cct, 10) << "resurrecting zombie osr " << osr << dendl;
-      osr->zombie = false;
-      ceph_assert(osr->shard == cid.hash_to_shard(store->m_finisher_num));
-    }
-  }
 }
 
 bool BlueStore::Collection::flush_commit(Context *c)
@@ -5468,6 +5454,7 @@ int BlueStore::_open_collections(int *errors)
       }   
       dout(20) << __func__ << " opened " << cid << " " << c
 	       << " " << c->cnode << dendl;
+      _osr_attach(c.get());
       coll_map[cid] = c;
     } else {
       derr << __func__ << " unrecognized collection " << it->key() << dendl;
@@ -7257,6 +7244,7 @@ ObjectStore::CollectionHandle BlueStore::create_new_collection(
     cache_shards[cid.hash_to_shard(cache_shards.size())],
     cid);
   new_coll_map[cid] = c;
+  _osr_attach(c);
   return c;
 }
 
@@ -9030,13 +9018,43 @@ out:
   txc->released.clear();
 }
 
+void BlueStore::_osr_attach(Collection *c)
+{
+  // note: caller has RWLock on coll_map
+  auto q = coll_map.find(c->cid);
+  if (q != coll_map.end()) {
+    c->osr = q->second->osr;
+    ceph_assert(c->osr->shard == c->cid.hash_to_shard(m_finisher_num));
+    ldout(cct, 10) << __func__ << " " << c->cid
+		   << " reusing osr " << c->osr << " from existing coll "
+		   << q->second << dendl;
+  } else {
+    std::lock_guard<std::mutex> l(zombie_osr_lock);
+    auto p = zombie_osr_set.find(c->cid);
+    if (p == zombie_osr_set.end()) {
+      c->osr = new OpSequencer(this, c->cid);
+      c->osr->shard = c->cid.hash_to_shard(m_finisher_num);
+      ldout(cct, 10) << __func__ << " " << c->cid
+		     << " fresh osr " << c->osr << dendl;
+    } else {
+      c->osr = p->second;
+      zombie_osr_set.erase(p);
+      ldout(cct, 10) << __func__ << " " << c->cid
+		     << " resurrecting zombie osr " << c->osr << dendl;
+      c->osr->zombie = false;
+      ceph_assert(c->osr->shard == c->cid.hash_to_shard(m_finisher_num));
+    }
+  }
+}
+
 void BlueStore::_osr_register_zombie(OpSequencer *osr)
 {
   std::lock_guard<std::mutex> l(zombie_osr_lock);
   dout(10) << __func__ << " " << osr << " " << osr->cid << dendl;
   osr->zombie = true;
   auto i = zombie_osr_set.emplace(osr->cid, osr);
-  ceph_assert(i.second); // this should be a new insertion
+  // this is either a new insertion or the same osr is already there
+  ceph_assert(i.second || i.first->second == osr);
 }
 
 void BlueStore::_osr_drain_preceding(TransContext *txc)
