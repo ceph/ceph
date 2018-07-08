@@ -1,0 +1,10 @@
+tasks:
+- rgw_reshard:
+    client.0:
+      rgw_server: client.0
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw reshard max num obj: 10
+        rgw reshard thread interval: 30
