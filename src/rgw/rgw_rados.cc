@@ -1417,7 +1417,6 @@ int RGWRados::init_rados()
   return ret;
 }
 
-
 int RGWRados::register_to_service_map(const string& daemon_type, const map<string, string>& meta)
 {
   map<string,string> metadata = meta;
@@ -1458,19 +1457,20 @@ int RGWRados::init_complete()
 {
   int ret;
 
-  if (run_sync_thread) {
-    auto& zone_public_config = svc.zone->get_zone();
-    ret = svc.sync_modules->get_manager()->create_instance(cct, zone_public_config.tier_type, svc.zone->get_zone_params().tier_config, &sync_module);
-    if (ret < 0) {
-      lderr(cct) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
-      if (ret == -ENOENT) {
-        lderr(cct) << "ERROR: " << zone_public_config.tier_type 
-                   << " sync module does not exist. valid sync modules: " 
-                   << svc.sync_modules->get_manager()->get_registered_module_names()
-                   << dendl;
-      }
-      return ret;
+  /* 
+   * create sync module instance even if we don't run sync thread, might need it for radosgw-admin
+   */
+  auto& zone_public_config = svc.zone->get_zone();
+  ret = svc.sync_modules->get_manager()->create_instance(cct, zone_public_config.tier_type, svc.zone->get_zone_params().tier_config, &sync_module);
+  if (ret < 0) {
+    lderr(cct) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
+    if (ret == -ENOENT) {
+      lderr(cct) << "ERROR: " << zone_public_config.tier_type 
+        << " sync module does not exist. valid sync modules: " 
+        << svc.sync_modules->get_manager()->get_registered_module_names()
+        << dendl;
     }
+    return ret;
   }
 
   period_puller.reset(new RGWPeriodPuller(this));
