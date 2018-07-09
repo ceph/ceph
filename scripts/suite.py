@@ -127,7 +127,8 @@ Scheduler arguments:
                               [default: fail,dead]
  --seed SEED                  An random number mostly useful when used along
                               with --rerun argument. This number can be found
-                              in the output of teuthology-suite command.
+                              in the output of teuthology-suite command. -1
+                              for a random seed [default: -1].
 
 """.format(
     default_machine_type=config.default_machine_type,

@@ -38,7 +38,7 @@ def process_args(args):
             value = normalize_suite_name(value)
         if key == 'suite_relpath' and value is None:
             value = ''
-        elif key in ('limit', 'priority', 'num', 'newest'):
+        elif key in ('limit', 'priority', 'num', 'newest', 'seed'):
             value = int(value)
         elif key == 'subset' and value is not None:
             # take input string '2/3' and turn into (2, 3)
@@ -83,7 +83,8 @@ def main(args):
             return
         conf.filter_in.extend(rerun_filters['descriptions'])
         conf.suite = normalize_suite_name(rerun_filters['suite'])
-    if conf.seed is None:
+        conf.subset, conf.seed = get_rerun_conf(conf)
+    if conf.seed < 0:
         conf.seed = random.randint(0, 9999)
         log.info('Using random seed=%s', conf.seed)
 
@@ -106,6 +107,28 @@ def get_rerun_filters(name, statuses):
             jobs.append(job)
     filters['descriptions'] = [job['description'] for job in jobs if job['description']]
     return filters
+
+
+def get_rerun_conf(conf):
+    reporter = ResultsReporter()
+    subset, seed = reporter.get_rerun_conf(conf.rerun)
+    if seed < 0:
+        return conf.subset, conf.seed
+    if conf.seed < 0:
+        log.info('Using stored seed=%s', seed)
+    elif conf.seed != seed:
+        log.error('--seed {conf_seed} does not match with ' +
+                  'stored seed: {stored_seed}',
+                  conf_seed=conf.seed,
+                  stored_seed=seed)
+    if conf.subset is None:
+        log.info('Using stored subset=%s', subset)
+    elif conf.subset != subset:
+        log.error('--subset {conf_subset} does not match with ' +
+                  'stored subset: {stored_subset}',
+                  conf_subset=conf.subset,
+                  stored_subset=subset)
+    return subset, seed
 
 
 class WaitException(Exception):

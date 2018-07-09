@@ -1,5 +1,5 @@
 """
-usage: teuthology-results [-h] [-v] [--dry-run] [--email EMAIL] [--timeout TIMEOUT] --archive-dir DIR --name NAME
+usage: teuthology-results [-h] [-v] [--dry-run] [--email EMAIL] [--timeout TIMEOUT] --archive-dir DIR --name NAME --subset SUBSET --seed SEED
 
 Email teuthology suite results
 
@@ -12,6 +12,8 @@ optional arguments:
                      [default: 0]
   --archive-dir DIR  path under which results for the suite are stored
   --name NAME        name of the suite
+  --subset SUBSET    subset passed to teuthology-suite
+  --seed SEED        random seed used in teuthology-suite
 """
 import docopt
 import teuthology.results

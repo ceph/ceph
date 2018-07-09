@@ -308,17 +308,22 @@ class Run(object):
 
         num_jobs = self.schedule_suite()
 
-        if self.base_config.email and num_jobs:
+        if num_jobs:
             arg = copy.deepcopy(self.base_args)
             arg.append('--last-in-suite')
-            arg.extend(['--email', self.base_config.email])
+            if self.base_config.email:
+                arg.extend(['--email', self.base_config.email])
+            if self.args.subset:
+                subset = '/'.join(str(i) for i in self.args.subset)
+                arg.extend(['--subset', subset])
+            arg.extend(['--seed', str(self.args.seed)])
             if self.args.timeout:
                 arg.extend(['--timeout', self.args.timeout])
             util.teuthology_schedule(
                 args=arg,
                 dry_run=self.args.dry_run,
                 verbose=self.args.verbose,
-                log_prefix="Results email: ",
+                log_prefix="Results: ",
             )
             results_url = get_results_url(self.base_config.name)
             if results_url:
