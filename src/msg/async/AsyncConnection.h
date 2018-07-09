@@ -372,6 +372,7 @@ class AsyncConnection : public Connection {
   Worker *worker;
   EventCenter *center;
   std::shared_ptr<AuthSessionHandler> session_security;
+  std::unique_ptr<AuthAuthorizerChallenge> authorizer_challenge; // accept side
 
  public:
   // used by eventcallback
