@@ -83,17 +83,9 @@
 	mon osd prime pg temp = true
 	mon reweight min bytes per osd = 10
 
-[mds]
-        mds debug scatterstat = true
-        mds verify scatter = true
-        mds debug frag = true
-
 [client]
-        rgw cache enabled = true
+	rgw cache enabled = true
 	rgw enable ops log = true
 	rgw enable usage log = true
 	log file = /var/log/ceph/$cluster-$name.$pid.log
 	admin socket = /var/run/ceph/$cluster-$name.$pid.asok
-
-
-	client mount timeout = 600
