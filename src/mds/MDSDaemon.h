@@ -146,11 +146,12 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			       bool& isvalid, CryptoKey& session_key);
-  void ms_handle_accept(Connection *con);
-  void ms_handle_connect(Connection *con);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con);
+			    bool& isvalid, CryptoKey& session_key,
+			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override;
+  void ms_handle_accept(Connection *con) override;
+  void ms_handle_connect(Connection *con) override;
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override;
 
  protected:
   // admin socket handling

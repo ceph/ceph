@@ -288,6 +288,10 @@ int Pipe::accept()
   // used for reading in the remote acked seq on connect
   uint64_t newly_acked_seq = 0;
 
+  bool need_challenge = false;
+  bool had_challenge = false;
+  std::unique_ptr<AuthAuthorizerChallenge> authorizer_challenge;
+
   recv_reset();
 
   set_socket_options();
@@ -418,11 +422,21 @@ int Pipe::accept()
 	  ldout(msgr->cct,10) << "using cephx, requiring MSG_AUTH feature bit for cluster" << dendl;
 	  policy.features_required |= CEPH_FEATURE_MSG_AUTH;
 	}
+	if (msgr->cct->_conf->cephx_require_version >= 2 ||
+	    msgr->cct->_conf->cephx_cluster_require_version >= 2) {
+	  ldout(msgr->cct,10) << "using cephx, requiring cephx v2 feature bit for cluster" << dendl;
+	  policy.features_required |= CEPH_FEATURE_CEPHX_V2;
+	}
       } else {
 	if (msgr->cct->_conf->cephx_require_signatures ||
 	    msgr->cct->_conf->cephx_service_require_signatures) {
 	  ldout(msgr->cct,10) << "using cephx, requiring MSG_AUTH feature bit for service" << dendl;
 	  policy.features_required |= CEPH_FEATURE_MSG_AUTH;
+	}
+	if (msgr->cct->_conf->cephx_require_version >= 2 ||
+	    msgr->cct->_conf->cephx_service_require_version >= 2) {
+	  ldout(msgr->cct,10) << "using cephx, requiring cephx v2 feature bit for cluster" << dendl;
+	  policy.features_required |= CEPH_FEATURE_CEPHX_V2;
 	}
       }
     }
@@ -438,14 +452,27 @@ int Pipe::accept()
 
     pipe_lock.Unlock();
 
-    if (!msgr->verify_authorizer(connection_state.get(), peer_type, connect.authorizer_protocol, authorizer,
-				 authorizer_reply, authorizer_valid, session_key) ||
+    need_challenge = connect.features & CEPH_FEATURE_CEPHX_V2;
+    had_challenge = (bool)authorizer_challenge;
+    authorizer_reply.clear();
+    if (!msgr->verify_authorizer(
+	  connection_state.get(), peer_type, connect.authorizer_protocol, authorizer,
+	  authorizer_reply, authorizer_valid, session_key,
+	  need_challenge ? &authorizer_challenge : nullptr) ||
 	!authorizer_valid) {
-      ldout(msgr->cct,0) << "accept: got bad authorizer" << dendl;
       pipe_lock.Lock();
       if (state != STATE_ACCEPTING)
 	goto shutting_down_msgr_unlocked;
-      reply.tag = CEPH_MSGR_TAG_BADAUTHORIZER;
+      if (!had_challenge && need_challenge && authorizer_challenge) {
+	ldout(msgr->cct,0) << "accept: challenging authorizer "
+			   << authorizer_reply.length()
+			   << " bytes" << dendl;
+	assert(authorizer_reply.length());
+	reply.tag = CEPH_MSGR_TAG_CHALLENGE_AUTHORIZER;
+      } else {
+	ldout(msgr->cct,0) << "accept: got bad authorizer" << dendl;
+	reply.tag = CEPH_MSGR_TAG_BADAUTHORIZER;
+      }
       session_security.reset();
       goto reply;
     } 
@@ -1032,8 +1059,9 @@ int Pipe::connect()
 
 
   while (1) {
-    delete authorizer;
-    authorizer = msgr->get_authorizer(peer_type, false);
+    if (!authorizer) {
+      authorizer = msgr->get_authorizer(peer_type, false);
+    }
     bufferlist authorizer_reply;
 
     ceph_msg_connect connect;
@@ -1101,6 +1129,13 @@ int Pipe::connect()
 	goto fail;
       }
       authorizer_reply.push_back(bp);
+    }
+
+    if (reply.tag == CEPH_MSGR_TAG_CHALLENGE_AUTHORIZER) {
+      authorizer->add_challenge(msgr->cct, authorizer_reply);
+      ldout(msgr->cct,10) << " got authorizer challenge, " << authorizer_reply.length()
+			  << " bytes" << dendl;
+      continue;
     }
 
     if (authorizer) {

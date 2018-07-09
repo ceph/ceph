@@ -1295,7 +1295,8 @@ void MDSDaemon::ms_handle_remote_reset(Connection *con)
 
 bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			       bool& is_valid, CryptoKey& session_key)
+				     bool& is_valid, CryptoKey& session_key,
+				     std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
   Mutex::Locker l(mds_lock);
   if (stopping) {
@@ -1322,8 +1323,16 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
   EntityName name;
   uint64_t global_id;
 
-  is_valid = authorize_handler->verify_authorizer(cct, monc->rotating_secrets,
-						  authorizer_data, authorizer_reply, name, global_id, caps_info, session_key);
+  RotatingKeyRing *keys = monc->rotating_secrets;
+  if (keys) {
+    is_valid = authorize_handler->verify_authorizer(
+      cct, keys,
+      authorizer_data, authorizer_reply, name, global_id, caps_info,
+      session_key, nullptr, challenge);
+  } else {
+    dout(10) << __func__ << " no rotating_keys (yet), denied" << dendl;
+    is_valid = false;
+  }
 
   if (is_valid) {
     entity_name_t n(con->get_peer_type(), global_id);

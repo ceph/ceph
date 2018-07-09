@@ -197,7 +197,8 @@ class FakeDispatcher : public Dispatcher {
 
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                             bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key) {
+                            bool& isvalid, CryptoKey& session_key,
+			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
     isvalid = true;
     return true;
   }
@@ -815,7 +816,8 @@ class SyntheticDispatcher : public Dispatcher {
 
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                             bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key) {
+                            bool& isvalid, CryptoKey& session_key,
+			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
     isvalid = true;
     return true;
   }
@@ -1347,7 +1349,8 @@ class MarkdownDispatcher : public Dispatcher {
   }
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                             bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key) {
+                            bool& isvalid, CryptoKey& session_key,
+			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
     isvalid = true;
     return true;
   }
