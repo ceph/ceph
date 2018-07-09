@@ -2194,6 +2194,7 @@ private:
 
   void _osr_attach(Collection *c);
   void _osr_register_zombie(OpSequencer *osr);
+  void _osr_drain(OpSequencer *osr);
   void _osr_drain_preceding(TransContext *txc);
   void _osr_drain_all();
 
