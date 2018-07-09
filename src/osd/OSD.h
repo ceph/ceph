@@ -1140,7 +1140,7 @@ struct OSDShard {
       boost::intrusive::set_member_hook<>,
       &OSDShardPGSlot::pg_epoch_item>,
     boost::intrusive::compare<pg_slot_compare_by_epoch>> pg_slots_by_epoch;
-  bool waiting_for_min_pg_epoch = false;
+  int waiting_for_min_pg_epoch = 0;
   Cond min_pg_epoch_cond;
 
   /// priority queue
