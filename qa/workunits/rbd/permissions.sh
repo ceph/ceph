@@ -21,11 +21,23 @@ recreate_pools() {
 delete_users() {
     (ceph auth del client.volumes || true) >/dev/null 2>&1
     (ceph auth del client.images || true) >/dev/null 2>&1
+
+    (ceph auth del client.snap_none || true) >/dev/null 2>&1
+    (ceph auth del client.snap_all || true) >/dev/null 2>&1
+    (ceph auth del client.snap_pool || true) >/dev/null 2>&1
+
+    (ceph auth del client.mon_write || true) >/dev/null 2>&1
 }
 
 create_users() {
     ceph auth get-or-create client.volumes mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow r class-read pool images, allow rwx pool volumes' >> $KEYRING
     ceph auth get-or-create client.images mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool images' >> $KEYRING
+
+    ceph auth get-or-create client.snap_none mon 'allow r' >> $KEYRING
+    ceph auth get-or-create client.snap_all mon 'allow r' osd 'allow w' >> $KEYRING
+    ceph auth get-or-create client.snap_pool mon 'allow r' osd 'allow w pool=images' >> $KEYRING
+
+    ceph auth get-or-create client.mon_write mon 'allow *' >> $KEYRING
 }
 
 expect() {
@@ -124,9 +136,71 @@ test_volumes_access() {
     rbd -k $KEYRING --id volumes rm volumes/child
 }
 
+create_self_managed_snapshot() {
+  ID=$1
+  POOL=$2
+
+  cat << EOF | CEPH_KEYRING="$KEYRING" python
+import rados
+
+cluster = rados.Rados(conffile="", rados_id="${ID}")
+cluster.connect()
+ioctx = cluster.open_ioctx("${POOL}")
+
+snap_id = ioctx.create_self_managed_snap()
+print ("Created snap id {}".format(snap_id))
+EOF
+}
+
+remove_self_managed_snapshot() {
+  ID=$1
+  POOL=$2
+
+  cat << EOF | CEPH_KEYRING="$KEYRING" python
+import rados
+
+cluster1 = rados.Rados(conffile="", rados_id="mon_write")
+cluster1.connect()
+ioctx1 = cluster1.open_ioctx("${POOL}")
+
+snap_id = ioctx1.create_self_managed_snap()
+print ("Created snap id {}".format(snap_id))
+
+cluster2 = rados.Rados(conffile="", rados_id="${ID}")
+cluster2.connect()
+ioctx2 = cluster2.open_ioctx("${POOL}")
+
+ioctx2.remove_self_managed_snap(snap_id)
+print ("Removed snap id {}".format(snap_id))
+EOF
+}
+
+test_remove_self_managed_snapshots() {
+    # Ensure users cannot create self-managed snapshots w/o permissions
+    expect 1 create_self_managed_snapshot snap_none images
+    expect 1 create_self_managed_snapshot snap_none volumes
+
+    create_self_managed_snapshot snap_all images
+    create_self_managed_snapshot snap_all volumes
+
+    create_self_managed_snapshot snap_pool images
+    expect 1 create_self_managed_snapshot snap_pool volumes
+
+    # Ensure users cannot delete self-managed snapshots w/o permissions
+    expect 1 remove_self_managed_snapshot snap_none images
+    expect 1 remove_self_managed_snapshot snap_none volumes
+
+    remove_self_managed_snapshot snap_all images
+    remove_self_managed_snapshot snap_all volumes
+
+    remove_self_managed_snapshot snap_pool images
+    expect 1 remove_self_managed_snapshot snap_pool volumes
+}
+
 cleanup() {
     rm -f $KEYRING
 }
+
 KEYRING=$(mktemp)
 trap cleanup EXIT ERR HUP INT QUIT
 
@@ -138,6 +212,8 @@ test_images_access
 
 recreate_pools
 test_volumes_access
+
+test_remove_self_managed_snapshots
 
 delete_pools
 delete_users

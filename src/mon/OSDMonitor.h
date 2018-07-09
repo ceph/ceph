@@ -277,6 +277,7 @@ private:
   int _prepare_remove_pool(int64_t pool, ostream *ss);
   int _prepare_rename_pool(int64_t pool, string newname);
 
+  bool enforce_pool_op_caps(MonOpRequestRef op);
   bool preprocess_pool_op (MonOpRequestRef op);
   bool preprocess_pool_op_create (MonOpRequestRef op);
   bool prepare_pool_op (MonOpRequestRef op);
