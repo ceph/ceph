@@ -211,8 +211,9 @@ For example::
 
         rbd trash restore swimmingpool/2bf4474b0dc51
 
-Also you can use *--image* to rename the iamge when restore it, for 
-example::
+You can also use ``--image`` to rename the image while restoring it. 
+
+For example::
 
         rbd trash restore swimmingpool/2bf4474b0dc51 --image new-name
 
