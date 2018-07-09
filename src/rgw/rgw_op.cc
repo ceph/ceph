@@ -1645,7 +1645,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 
     slo_parts[total_len] = part;
     total_len += part.size;
-  }
+  } /* foreach entry */
 
   complete_etag(etag_sum, &lo_etag);
 

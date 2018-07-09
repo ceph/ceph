@@ -1053,7 +1053,6 @@ public:
 
   virtual RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart);
   void dispose_processor(RGWPutObjDataProcessor *processor);
-
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;

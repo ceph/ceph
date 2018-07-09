@@ -121,6 +121,8 @@ public:
   RGWPutObj_ObjStore_SWIFT() {}
   ~RGWPutObj_ObjStore_SWIFT() override {}
 
+  int update_slo_segment_size(rgw_slo_entry& entry);
+
   int verify_permission() override;
   int get_params() override;
   void send_response() override;
