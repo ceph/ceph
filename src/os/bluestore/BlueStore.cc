@@ -11033,7 +11033,6 @@ int BlueStore::_do_gc(
     int r = _do_read(c.get(), o, it->offset, it->length, bl, 0);
     assert(r == (int)it->length);
 
-    o->extent_map.fault_range(db, it->offset, it->length);
     _do_write_data(txc, c, o, it->offset, it->length, bl, &wctx_gc);
     logger->inc(l_bluestore_gc_merged, it->length);
 
