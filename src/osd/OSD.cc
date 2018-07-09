@@ -9460,14 +9460,14 @@ epoch_t OSDShard::get_min_pg_epoch()
 void OSDShard::wait_min_pg_epoch(epoch_t need)
 {
   Mutex::Locker l(shard_lock);
-  waiting_for_min_pg_epoch = true;
+  ++waiting_for_min_pg_epoch;
   while (!pg_slots_by_epoch.empty() &&
 	 pg_slots_by_epoch.begin()->epoch < need) {
     dout(10) << need << " waiting on "
 	     << pg_slots_by_epoch.begin()->epoch << dendl;
     min_pg_epoch_cond.Wait(shard_lock);
   }
-  waiting_for_min_pg_epoch = false;
+  --waiting_for_min_pg_epoch;
 }
 
 epoch_t OSDShard::get_max_waiting_epoch()
