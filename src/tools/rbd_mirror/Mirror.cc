@@ -206,7 +206,7 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args) :
 {
   m_threads =
     &(cct->lookup_or_create_singleton_object<Threads<librbd::ImageCtx>>(
-	"rbd_mirror::threads", false, cct));
+	"rbd_mirror::threads", cct));
   m_service_daemon.reset(new ServiceDaemon<>(m_cct, m_local, m_threads));
 }
 

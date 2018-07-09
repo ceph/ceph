@@ -57,7 +57,7 @@ public:
   static void initialize(CephContext *cct) {
 #ifdef WITH_LTTNG
      cct->lookup_or_create_singleton_object<TypedSingleton<traits>>(
-       traits.library, false, cct);
+       traits.library, cct);
 #endif
   }
 

@@ -446,6 +446,13 @@ void global_init_postfork_start(CephContext *cct)
 	 << err << dendl;
     exit(1);
   }
+  VOID_TEMP_FAILURE_RETRY(close(STDOUT_FILENO));
+  if (open("/dev/null", O_RDONLY) < 0) {
+    int err = errno;
+    derr << "global_init_daemonize: open(/dev/null) failed: error "
+	 << err << dendl;
+    exit(1);
+  }
 
   const md_config_t *conf = cct->_conf;
   if (pidfile_write(conf) < 0)
@@ -460,8 +467,8 @@ void global_init_postfork_start(CephContext *cct)
 
 void global_init_postfork_finish(CephContext *cct)
 {
-  /* We only close stdout+stderr once the caller decides the daemonization
-   * process is finished.  This way we can allow error or other messages to be
+  /* We only close stderr once the caller decides the daemonization
+   * process is finished.  This way we can allow error messages to be
    * propagated in a manner that the user is able to see.
    */
   if (!(cct->get_init_flags() & CINIT_FLAG_NO_CLOSE_STDERR)) {
@@ -472,15 +479,6 @@ void global_init_postfork_finish(CephContext *cct)
       exit(1);
     }
   }
-
-  VOID_TEMP_FAILURE_RETRY(close(STDOUT_FILENO));
-  if (open("/dev/null", O_RDONLY) < 0) {
-    int err = errno;
-    derr << "global_init_daemonize: open(/dev/null) failed: error "
-	 << err << dendl;
-    exit(1);
-  }
-
   ldout(cct, 1) << "finished global_init_daemonize" << dendl;
 }
 

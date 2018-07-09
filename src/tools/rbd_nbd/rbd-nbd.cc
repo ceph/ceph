@@ -686,13 +686,14 @@ static int do_map(int argc, const char *argv[], Config *cfg)
       cerr << err << std::endl;
       return r;
     }
+
     if (forker.is_parent()) {
+      global_init_postfork_start(g_ceph_context);
       if (forker.parent_wait(err) != 0) {
         return -ENXIO;
       }
       return 0;
     }
-    global_init_postfork_start(g_ceph_context);
   }
 
   common_init_finish(g_ceph_context);
@@ -861,8 +862,9 @@ static int do_map(int argc, const char *argv[], Config *cfg)
     cout << cfg->devpath << std::endl;
 
     if (g_conf->daemonize) {
-      global_init_postfork_finish(g_ceph_context);
       forker.daemonize();
+      global_init_postfork_start(g_ceph_context);
+      global_init_postfork_finish(g_ceph_context);
     }
 
     {
