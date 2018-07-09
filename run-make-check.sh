@@ -54,7 +54,7 @@ function run() {
         exit 1
     fi
     if [ -n "$install_cmd" ]; then
-        $DRY_RUN sudo $install_cmd ccache jq $which_pkg
+        $DRY_RUN sudo $install_cmd ccache $which_pkg
     else
         echo "WARNING: Don't know how to install packages" >&2
         echo "This probably means distribution $ID is not supported by run-make-check.sh" >&2
