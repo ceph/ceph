@@ -259,12 +259,15 @@ TEST_F(TestMockIoImageRequestWQ, AcquireLockError) {
   MockExclusiveLock mock_exclusive_lock;
   mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
+  auto mock_queued_image_request = new MockImageDispatchSpec();
+  expect_was_throttled(*mock_queued_image_request, false);
+  expect_set_throttled(*mock_queued_image_request);
+
   InSequence seq;
   MockImageRequestWQ mock_image_request_wq(&mock_image_ctx, "io", 60, nullptr);
   expect_signal(mock_image_request_wq);
   mock_image_request_wq.set_require_lock(DIRECTION_WRITE, true);
 
-  auto mock_queued_image_request = new MockImageDispatchSpec();
   expect_is_write_op(*mock_queued_image_request, true);
   expect_queue(mock_image_request_wq);
   auto *aio_comp = new librbd::io::AioCompletion();
