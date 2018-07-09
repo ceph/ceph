@@ -15,9 +15,9 @@
 #include "include/compat.h"
 #include "mdstypes.h"
 
+#include "mon/MonClient.h"
 #include "MDBalancer.h"
 #include "MDSRank.h"
-#include "mon/MonClient.h"
 #include "MDSMap.h"
 #include "CInode.h"
 #include "CDir.h"
@@ -75,6 +75,20 @@ int MDBalancer::proc_message(Message *m)
   }
 
   return 0;
+}
+
+MDBalancer::MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc) :
+    mds(m), messenger(msgr), mon_client(monc)
+{
+  bal_fragment_interval = g_conf->get_val<int64_t>("mds_bal_fragment_interval");
+}
+
+void MDBalancer::handle_conf_change(const struct md_config_t *conf,
+				    const std::set <std::string> &changed,
+				    const MDSMap &mds_map)
+{
+  if (changed.count("mds_bal_fragment_interval"))
+    bal_fragment_interval = g_conf->get_val<int64_t>("mds_bal_fragment_interval");
 }
 
 void MDBalancer::handle_export_pins(void)
@@ -150,8 +164,8 @@ void MDBalancer::tick()
   static int num_bal_times = g_conf->mds_bal_max;
   static utime_t first = ceph_clock_now();
   utime_t now = ceph_clock_now();
-  utime_t elapsed = now;
-  elapsed -= first;
+  auto bal_interval = g_conf->get_val<int64_t>("mds_bal_interval");
+  auto bal_max_until = g_conf->get_val<int64_t>("mds_bal_max_until");
 
   if (g_conf->mds_bal_export_pin) {
     handle_export_pins();
@@ -165,12 +179,11 @@ void MDBalancer::tick()
 
   // balance?
   if (mds->get_nodeid() == 0 &&
-      g_conf->mds_bal_interval > 0 &&
-      (num_bal_times ||
-       (g_conf->mds_bal_max_until >= 0 &&
-	elapsed.sec() > g_conf->mds_bal_max_until)) &&
       mds->is_active() &&
-      now.sec() - last_heartbeat.sec() >= g_conf->mds_bal_interval) {
+      bal_interval > 0 &&
+      (now - last_heartbeat).sec() >= bal_interval &&
+      (num_bal_times ||
+       (bal_max_until >= 0 && (now - first).sec() > bal_max_until))) {
     last_heartbeat = now;
     send_heartbeat();
     num_bal_times--;
@@ -282,11 +295,9 @@ int MDBalancer::localize_balancer()
            << " oid=" << oid << " oloc=" << oloc << dendl;
 
   /* timeout: if we waste half our time waiting for RADOS, then abort! */
-  double t = ceph_clock_now() + g_conf->mds_bal_interval/2;
-  utime_t timeout;
-  timeout.set_from_double(t);
+  auto bal_interval = g_conf->get_val<int64_t>("mds_bal_interval");
   lock.Lock();
-  int ret_t = cond.WaitUntil(lock, timeout);
+  int ret_t = cond.WaitInterval(lock, utime_t(bal_interval / 2, 0));
   lock.Unlock();
 
   /* success: store the balancer in memory and set the version. */
@@ -506,7 +517,7 @@ void MDBalancer::queue_split(const CDir *dir, bool fast)
     // Set a timer to really do the split: we don't do it immediately
     // so that bursts of ops on a directory have a chance to go through
     // before we freeze it.
-    mds->timer.add_event_after(g_conf->mds_bal_fragment_interval,
+    mds->timer.add_event_after(bal_fragment_interval,
                                new FunctionContext(callback));
   }
 }
@@ -570,7 +581,7 @@ void MDBalancer::queue_merge(CDir *dir)
   if (merge_pending.count(frag) == 0) {
     dout(20) << __func__ << " enqueued dir " << *dir << dendl;
     merge_pending.insert(frag);
-    mds->timer.add_event_after(g_conf->mds_bal_fragment_interval,
+    mds->timer.add_event_after(bal_fragment_interval,
         new FunctionContext(callback));
   } else {
     dout(20) << __func__ << " dir already in queue " << *dir << dendl;
@@ -1114,9 +1125,8 @@ void MDBalancer::hit_inode(const utime_t& now, CInode *in, int type, int who)
 void MDBalancer::maybe_fragment(CDir *dir, bool hot)
 {
   // split/merge
-  if (g_conf->mds_bal_frag && g_conf->mds_bal_fragment_interval > 0 &&
-      !dir->inode->is_base() &&        // not root/base (for now at least)
-      dir->is_auth()) {
+  if (g_conf->mds_bal_frag && bal_fragment_interval > 0 &&
+      dir->is_auth() && !dir->inode->is_base()) {  // not root/base (for now at least)
 
     // split
     if (g_conf->mds_bal_split_size > 0 &&

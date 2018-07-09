@@ -358,15 +358,24 @@ const char** MDSDaemon::get_tracked_conf_keys() const
     "clog_to_syslog",
     "clog_to_syslog_facility",
     "clog_to_syslog_level",
+    "clog_to_graylog",
+    "clog_to_graylog_host",
+    "clog_to_graylog_port",
+    // MDCache
+    "mds_cache_size",
+    "mds_cache_memory_limit",
+    "mds_cache_reservation",
+    "mds_health_cache_threshold",
+    "mds_cache_mid",
+    // MDBalancer
+    "mds_bal_fragment_interval",
     // PurgeQueue
     "mds_max_purge_ops",
     "mds_max_purge_ops_per_pg",
     "mds_max_purge_files",
+    // Migrator
     "mds_inject_migrator_session_race",
     "mds_inject_migrator_message_loss",
-    "clog_to_graylog",
-    "clog_to_graylog_host",
-    "clog_to_graylog_port",
     "host",
     "fsid",
     NULL
