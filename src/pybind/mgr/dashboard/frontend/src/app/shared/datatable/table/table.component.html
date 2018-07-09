@@ -111,7 +111,8 @@
 <ng-template #routerLinkTpl
              let-row="row"
              let-value="value">
-  <a [routerLink]="[row.cdLink]">{{ value }}</a>
+  <a [routerLink]="[row.cdLink]"
+     [queryParams]="row.cdParams">{{ value }}</a>
 </ng-template>
 
 <ng-template #checkIconTpl

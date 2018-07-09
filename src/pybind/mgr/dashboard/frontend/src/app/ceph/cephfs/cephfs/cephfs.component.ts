@@ -1,8 +1,7 @@
-import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 
 import * as _ from 'lodash';
-import { Subscription } from 'rxjs/Subscription';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
@@ -13,11 +12,9 @@ import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
   templateUrl: './cephfs.component.html',
   styleUrls: ['./cephfs.component.scss']
 })
-export class CephfsComponent implements OnInit, OnDestroy {
+export class CephfsComponent implements OnInit {
   @ViewChild('poolUsageTpl') poolUsageTpl: TemplateRef<any>;
   @ViewChild('activityTmpl') activityTmpl: TemplateRef<any>;
-
-  routeParamsSubscribe: Subscription;
 
   objectValues = Object.values;
 
@@ -77,7 +74,7 @@ export class CephfsComponent implements OnInit, OnDestroy {
       data: []
     };
 
-    this.routeParamsSubscribe = this.route.params.subscribe((params: { id: number }) => {
+    this.route.params.subscribe((params: { id: number }) => {
       this.id = params.id;
 
       this.ranks.data = [];
@@ -85,10 +82,6 @@ export class CephfsComponent implements OnInit, OnDestroy {
       this.standbys = [];
       this.mdsCounters = {};
     });
-  }
-
-  ngOnDestroy() {
-    this.routeParamsSubscribe.unsubscribe();
   }
 
   refresh() {
