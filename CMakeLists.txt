@@ -171,6 +171,11 @@ if(WITH_STATIC_LIBSTDCXX)
     message(FATAL_ERROR "Please use GCC to enable WITH_STATIC_LIBSTDCXX")
   endif()
 endif()
+include(CheckCxxAtomic)
+if(NOT HAVE_CXX11_ATOMIC)
+  set(CMAKE_CXX_STANDARD_LIBRARIES
+    "${CMAKE_CXX_STANDARD_LIBRARIES} ${LIBATOMIC_LINK_FLAGS}")
+endif()
 
 option(WITH_RDMA "Enable RDMA in async messenger" ON)
 if(WITH_RDMA)
