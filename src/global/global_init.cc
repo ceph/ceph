@@ -393,6 +393,29 @@ void global_init_daemonize(CephContext *cct)
 #endif
 }
 
+int reopen_as_null(CephContext *cct, int fd)
+{
+  int newfd = open("/dev/null", O_RDONLY);
+  if (newfd < 0) {
+    int err = errno;
+    lderr(cct) << __func__ << " failed to open /dev/null: " << cpp_strerror(err)
+	       << dendl;
+    return -1;
+  }
+  // atomically dup newfd to target fd.  target fd is implicitly closed if
+  // open and atomically replaced; see man dup2
+  int r = dup2(newfd, fd);
+  if (r < 0) {
+    int err = errno;
+    lderr(cct) << __func__ << " failed to dup2 " << fd << ": "
+	       << cpp_strerror(err) << dendl;
+    return -1;
+  }
+  // close newfd (we cloned it to target fd)
+  VOID_TEMP_FAILURE_RETRY(close(newfd));
+  return 0;
+}
+
 void global_init_postfork_start(CephContext *cct)
 {
   // restart log thread
@@ -407,13 +430,7 @@ void global_init_postfork_start(CephContext *cct)
    * guarantee that nobody ever writes to stdout, even though they're not
    * supposed to.
    */
-  VOID_TEMP_FAILURE_RETRY(close(STDIN_FILENO));
-  if (open("/dev/null", O_RDONLY) < 0) {
-    int err = errno;
-    derr << "global_init_daemonize: open(/dev/null) failed: error "
-	 << err << dendl;
-    exit(1);
-  }
+  reopen_as_null(cct, STDIN_FILENO);
 
   const md_config_t *conf = cct->_conf;
   if (pidfile_write(conf) < 0)
@@ -441,13 +458,7 @@ void global_init_postfork_finish(CephContext *cct)
     }
   }
 
-  VOID_TEMP_FAILURE_RETRY(close(STDOUT_FILENO));
-  if (open("/dev/null", O_RDONLY) < 0) {
-    int err = errno;
-    derr << "global_init_daemonize: open(/dev/null) failed: error "
-	 << err << dendl;
-    exit(1);
-  }
+  reopen_as_null(cct, STDOUT_FILENO);
 
   ldout(cct, 1) << "finished global_init_daemonize" << dendl;
 }
@@ -471,13 +482,7 @@ void global_init_chdir(const CephContext *cct)
  */
 int global_init_shutdown_stderr(CephContext *cct)
 {
-  VOID_TEMP_FAILURE_RETRY(close(STDERR_FILENO));
-  if (open("/dev/null", O_RDONLY) < 0) {
-    int err = errno;
-    derr << "global_init_shutdown_stderr: open(/dev/null) failed: error "
-	 << err << dendl;
-    return 1;
-  }
+  reopen_as_null(cct, STDERR_FILENO);
   cct->_log->set_stderr_level(-1, -1);
   return 0;
 }
