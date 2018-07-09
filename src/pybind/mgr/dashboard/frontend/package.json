@@ -4,7 +4,7 @@
   "license": "MIT",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve --proxy-config proxy.conf.json --host 0.0.0.0",
+    "start": "ng serve --host 0.0.0.0",
     "build": "ng build",
     "test": "jest --watch",
     "test:ci": "jest --coverage",
