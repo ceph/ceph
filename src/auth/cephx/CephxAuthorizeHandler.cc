@@ -6,9 +6,12 @@
 
 
 
-bool CephxAuthorizeHandler::verify_authorizer(CephContext *cct, KeyStore *keys,
-					      bufferlist& authorizer_data, bufferlist& authorizer_reply,
-                                              EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info, CryptoKey& session_key,  uint64_t *auid)
+bool CephxAuthorizeHandler::verify_authorizer(
+  CephContext *cct, KeyStore *keys,
+  bufferlist& authorizer_data, bufferlist& authorizer_reply,
+  EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info,
+  CryptoKey& session_key, uint64_t *auid,
+  std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
   bufferlist::iterator iter = authorizer_data.begin();
 
@@ -19,7 +22,8 @@ bool CephxAuthorizeHandler::verify_authorizer(CephContext *cct, KeyStore *keys,
 
   CephXServiceTicketInfo auth_ticket_info;
 
-  bool isvalid = cephx_verify_authorizer(cct, keys, iter, auth_ticket_info, authorizer_reply);
+  bool isvalid = cephx_verify_authorizer(cct, keys, iter, auth_ticket_info, challenge,
+					 authorizer_reply);
 
   if (isvalid) {
     caps_info = auth_ticket_info.ticket.caps;
