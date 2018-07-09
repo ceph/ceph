@@ -150,13 +150,15 @@ entity_addrvec_t DaemonServer::get_myaddrs() const
 }
 
 
-bool DaemonServer::ms_verify_authorizer(Connection *con,
-    int peer_type,
-    int protocol,
-    ceph::bufferlist& authorizer_data,
-    ceph::bufferlist& authorizer_reply,
-    bool& is_valid,
-    CryptoKey& session_key)
+bool DaemonServer::ms_verify_authorizer(
+  Connection *con,
+  int peer_type,
+  int protocol,
+  ceph::bufferlist& authorizer_data,
+  ceph::bufferlist& authorizer_reply,
+  bool& is_valid,
+  CryptoKey& session_key,
+  std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
   AuthAuthorizeHandler *handler = nullptr;
   if (peer_type == CEPH_ENTITY_TYPE_OSD ||
@@ -184,7 +186,9 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
       authorizer_data,
       authorizer_reply, s->entity_name,
       s->global_id, caps_info,
-      session_key);
+      session_key,
+      nullptr,
+      challenge);
   } else {
     dout(10) << __func__ << " no rotating_keys (yet), denied" << dendl;
     is_valid = false;
