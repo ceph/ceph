@@ -152,7 +152,9 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 
       bufferlist tmp_bl;
       CephXServiceTicketInfo auth_ticket_info;
-      if (!cephx_verify_authorizer(cct, key_server, indata, auth_ticket_info, tmp_bl)) {
+      // note: no challenge here.
+      if (!cephx_verify_authorizer(cct, key_server, indata, auth_ticket_info, nullptr,
+				   tmp_bl)) {
         ret = -EPERM;
 	break;
       }

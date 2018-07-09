@@ -273,12 +273,14 @@ private:
   CephContext *cct;
 public:
   uint64_t nonce;
+  bufferlist base_bl;
 
   explicit CephXAuthorizer(CephContext *cct_)
     : AuthAuthorizer(CEPH_AUTH_CEPHX), cct(cct_), nonce(0) {}
 
   bool build_authorizer();
   bool verify_reply(bufferlist::iterator& reply) override;
+  bool add_challenge(CephContext *cct, bufferlist& challenge) override;
 };
 
 
@@ -384,17 +386,41 @@ struct CephXServiceTicketInfo {
 };
 WRITE_CLASS_ENCODER(CephXServiceTicketInfo)
 
-struct CephXAuthorize {
-  uint64_t nonce;
+struct CephXAuthorizeChallenge : public AuthAuthorizerChallenge {
+  uint64_t server_challenge;
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
+    ::encode(server_challenge, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(server_challenge, bl);
+  }
+};
+WRITE_CLASS_ENCODER(CephXAuthorizeChallenge)
+
+struct CephXAuthorize {
+  uint64_t nonce;
+  bool have_challenge = false;
+  uint64_t server_challenge_plus_one = 0;
+  void encode(bufferlist& bl) const {
+    __u8 struct_v = 2;
+    ::encode(struct_v, bl);
     ::encode(nonce, bl);
+    ::encode(have_challenge, bl);
+    ::encode(server_challenge_plus_one, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
     ::decode(nonce, bl);
+    if (struct_v >= 2) {
+      ::decode(have_challenge, bl);
+      ::decode(server_challenge_plus_one, bl);
+    }
+
   }
 };
 WRITE_CLASS_ENCODER(CephXAuthorize)
@@ -409,9 +435,12 @@ bool cephx_decode_ticket(CephContext *cct, KeyStore *keys,
 /*
  * Verify authorizer and generate reply authorizer
  */
-extern bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
-				    bufferlist::iterator& indata,
-				    CephXServiceTicketInfo& ticket_info, bufferlist& reply_bl);
+extern bool cephx_verify_authorizer(
+  CephContext *cct, KeyStore *keys,
+  bufferlist::iterator& indata,
+  CephXServiceTicketInfo& ticket_info,
+  std::unique_ptr<AuthAuthorizerChallenge> *challenge,
+  bufferlist& reply_bl);
 
 
 

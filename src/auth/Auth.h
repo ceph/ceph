@@ -136,6 +136,11 @@ struct AuthAuthorizer {
   explicit AuthAuthorizer(__u32 p) : protocol(p) {}
   virtual ~AuthAuthorizer() {}
   virtual bool verify_reply(bufferlist::iterator& reply) = 0;
+  virtual bool add_challenge(CephContext *cct, bufferlist& challenge) = 0;
+};
+
+struct AuthAuthorizerChallenge {
+  virtual ~AuthAuthorizerChallenge() {}
 };
 
 

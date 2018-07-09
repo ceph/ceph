@@ -806,11 +806,13 @@ public:
    */
   bool ms_deliver_verify_authorizer(Connection *con, int peer_type,
 				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-				    bool& isvalid, CryptoKey& session_key) {
+				    bool& isvalid, CryptoKey& session_key,
+				    std::unique_ptr<AuthAuthorizerChallenge> *challenge) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 ++p) {
-      if ((*p)->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid, session_key))
+      if ((*p)->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply,
+				     isvalid, session_key, challenge))
 	return true;
     }
     return false;

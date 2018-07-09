@@ -384,9 +384,10 @@ public:
    * This wraps ms_deliver_verify_authorizer; we use it for AsyncConnection.
    */
   bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth, bufferlist& auth_reply,
-                         bool& isvalid, CryptoKey& session_key) {
+                         bool& isvalid, CryptoKey& session_key,
+			 std::unique_ptr<AuthAuthorizerChallenge> *challenge) {
     return ms_deliver_verify_authorizer(con, peer_type, protocol, auth,
-                                        auth_reply, isvalid, session_key);
+                                        auth_reply, isvalid, session_key, challenge);
   }
   /**
    * Increment the global sequence for this AsyncMessenger and return it.

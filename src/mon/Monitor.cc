@@ -5898,7 +5898,8 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer,
 bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
 				   int protocol, bufferlist& authorizer_data,
 				   bufferlist& authorizer_reply,
-				   bool& isvalid, CryptoKey& session_key)
+				   bool& isvalid, CryptoKey& session_key,
+				   std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
   dout(10) << "ms_verify_authorizer " << con->get_peer_addr()
 	   << " " << ceph_entity_type_name(peer_type)
@@ -5917,7 +5918,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
       
       if (authorizer_data.length()) {
 	bool ret = cephx_verify_authorizer(g_ceph_context, &keyring, iter,
-					  auth_ticket_info, authorizer_reply);
+					   auth_ticket_info, challenge, authorizer_reply);
 	if (ret) {
 	  session_key = auth_ticket_info.session_key;
 	  isvalid = true;

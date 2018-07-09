@@ -7238,9 +7238,11 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
 }
 
 
-bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
-			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			       bool& isvalid, CryptoKey& session_key)
+bool OSD::ms_verify_authorizer(
+  Connection *con, int peer_type,
+  int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
+  bool& isvalid, CryptoKey& session_key,
+  std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
   AuthAuthorizeHandler *authorize_handler = 0;
   switch (peer_type) {
@@ -7272,7 +7274,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
     isvalid = authorize_handler->verify_authorizer(
       cct, keys,
       authorizer_data, authorizer_reply, name, global_id, caps_info, session_key,
-      &auid);
+      &auid, challenge);
   } else {
     dout(10) << __func__ << " no rotating_keys (yet), denied" << dendl;
     isvalid = false;
