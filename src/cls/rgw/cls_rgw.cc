@@ -1902,7 +1902,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
     string cur_change_key;
     encode_obj_index_key(cur_change.key, &cur_change_key);
     int ret = cls_cxx_map_get_val(hctx, cur_change_key, &cur_disk_bl);
-    if (ret < 0 && ret != -ENOENT)
+    if (ret < 0)
       return -EINVAL;
 
     if (cur_disk_bl.length()) {
