@@ -27,10 +27,10 @@ Major Changes from Luminous
 
   * RGW can now replicate a zone (or a subset of buckets) to an
     external cloud storage service like S3.
-  * RGW now supports the S3 multi-factor authentication api on
+  * RGW now supports the S3 multi-factor authentication API on
     versioned buckets.
-  * The Beast frontend is no long expermiental and is considered stable
-    and ready for use.
+  * The Beast frontend is no longer experimental, and is considered
+    stable and ready for use.
 
 - *CephFS*:
 
@@ -69,8 +69,38 @@ Notes
 Instructions
 ~~~~~~~~~~~~
 
+#. If your cluster was originally installed with a version prior to
+   Luminous, ensure that it has completed at least one full scrub of
+   all PGs while running Luminous.  Failure to do so will cause your
+   monitor daemons to refuse to join the quorum on start, leaving them
+   non-functional.
+
+   If you are unsure whether or not your Luminous cluster has
+   completed a full scrub of all PGs, you can check your cluster's
+   state by running::
+
+     # ceph osd dump | grep ^flags
+
+   In order to be able to proceed to Mimic, your OSD map must include
+   the ``recovery_deletes`` and ``purged_snapdirs`` flags.
+
+   If your OSD map does not contain both these flags, you can simply
+   wait for approximately 24-48 hours, which in a standard cluster
+   configuration should be ample time for all your placement groups to
+   be scrubbed at least once, and then repeat the above process to
+   recheck.
+
+   However, if you have just completed an upgrade to Luminous and want
+   to proceed to Mimic in short order, you can force a scrub on all
+   placement groups with a one-line shell command, like::
+
+     # ceph pg dump pgs_brief | cut -d " " -f 1 | xargs -n1 ceph pg scrub
+
+   You should take into consideration that this forced scrub may
+   possibly have a negative impact on your Ceph clients' performance.
+
 #. Make sure your cluster is stable and healthy (no down or
-   recoverying OSDs).  (Optional, but recommended.)
+   recovering OSDs).  (Optional, but recommended.)
 
 #. Set the ``noout`` flag for the duration of the upgrade. (Optional,
    but recommended.)::
@@ -82,9 +112,9 @@ Instructions
 
      # systemctl restart ceph-mon.target
 
-   Verify the monitor upgrade is complete once all monitors are up by
-   looking for the ``mimic`` feature string in the mon map.  For
-   example::
+   Once all monitors are up, verify that the monitor upgrade is
+   complete by looking for the ``mimic`` feature string in the mon
+   map.  For example::
 
      # ceph mon feature ls
 
@@ -99,7 +129,8 @@ Instructions
 
      # systemctl restart ceph-mgr.target
 
-   Verify the ceph-mgr daemons are running by checking ``ceph -s``::
+   Verify the ``ceph-mgr`` daemons are running by checking ``ceph
+   -s``::
 
      # ceph -s
 
@@ -162,7 +193,7 @@ Instructions
 
      # systemctl restart radosgw.target
 
-#. Complete the upgrade by disallowing pre-mimic OSDs and enabling
+#. Complete the upgrade by disallowing pre-Mimic OSDs and enabling
    all new Mimic-only functionality::
 
      # ceph osd require-osd-release mimic
@@ -177,7 +208,9 @@ Upgrading from pre-Luminous releases (like Jewel)
 -------------------------------------------------
 
 You *must* first upgrade to Luminous (12.2.z) before attempting an
-upgrade to Mimic.
+upgrade to Mimic.  In addition, your cluster must have completed at
+least one scrub of all PGs while running Luminous, setting the
+``recovery_deletes`` and ``purged_snapdirs`` flags in the OSD map.
 
 Upgrade compatibility notes
 ---------------------------
