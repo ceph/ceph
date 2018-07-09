@@ -1164,11 +1164,21 @@ public:
                             << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
     return new RGWPSGenericObjEventCBCR(sync_env, env, bucket_info, key, mtime, DELETE_MARKER_CREATE);
   }
+
+  PSConfigRef& get_conf() { return conf; }
 };
 
 RGWPSSyncModuleInstance::RGWPSSyncModuleInstance(CephContext *cct, const JSONFormattable& config)
 {
   data_handler = std::unique_ptr<RGWPSDataSyncModule>(new RGWPSDataSyncModule(cct, config));
+  string jconf = json_str("conf", *data_handler->get_conf());
+  JSONParser p;
+  if (!p.parse(jconf.c_str(), jconf.size())) {
+    ldout(cct, 0) << "ERROR: failed to parse sync module effective conf: " << jconf << dendl;
+    effective_conf = config;
+  } else {
+    effective_conf.decode_json(&p);
+  }
 }
 
 RGWDataSyncModule *RGWPSSyncModuleInstance::get_data_handler()

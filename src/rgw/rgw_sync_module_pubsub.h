@@ -17,12 +17,16 @@ class RGWRESTConn;
 
 class RGWPSSyncModuleInstance : public RGWSyncModuleInstance {
   std::unique_ptr<RGWPSDataSyncModule> data_handler;
+  JSONFormattable effective_conf;
 public:
   RGWPSSyncModuleInstance(CephContext *cct, const JSONFormattable& config);
   RGWDataSyncModule *get_data_handler() override;
   RGWRESTMgr *get_rest_filter(int dialect, RGWRESTMgr *orig) override;
   bool supports_user_writes() override {
     return true;
+  }
+  const JSONFormattable& get_effective_conf() {
+    return effective_conf;
   }
 };
 
