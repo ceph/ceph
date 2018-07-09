@@ -254,6 +254,30 @@ in the Ceph source code for the full list of methods.
 For an example of how to use this interface, look at the source code
 of the ``dashboard`` module.
 
+Communicating between modules
+-----------------------------
+
+Modules can invoke member functions of other modules.
+
+.. automethod:: MgrModule.remote
+
+Be sure to handle ``ImportError`` to deal with the case that the desired
+module is not enabled.
+
+If the remote method raises a python exception, this will be converted
+to a RuntimeError on the calling side, where the message string describes
+the exception that was originally thrown.  If your logic intends
+to handle certain errors cleanly, it is better to modify the remote method
+to return an error value instead of raising an exception.
+
+At time of writing, inter-module calls are implemented without
+copies or serialization, so when you return a python object, you're 
+returning a reference to that object to the calling module.  It
+is recommend *not* to rely on this reference passing, as in future the
+implementation may change to serialize arguments and return
+values.
+
+
 Logging
 -------
 
