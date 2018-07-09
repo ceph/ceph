@@ -24,6 +24,9 @@ function(add_ceph_test test_name test_path)
 endfunction()
 
 option(WITH_GTEST_PARALLEL "Enable running gtest based tests in parallel" OFF)
+if(WITH_GTEST_PARALLEL AND NOT WITH_PYTHON2)
+  message(FATAL_ERROR "WITH_GTEST_PARALLEL requires WITH_PYTHON2")
+endif()
 if(WITH_GTEST_PARALLEL)
   include(ExternalProject)
   ExternalProject_Add(gtest-parallel_ext
