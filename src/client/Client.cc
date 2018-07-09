@@ -675,32 +675,10 @@ void Client::trim_dentry(Dentry *dn)
 }
 
 
-void Client::update_inode_file_bits(Inode *in,
-				    uint64_t truncate_seq, uint64_t truncate_size,
-				    uint64_t size, uint64_t change_attr,
-				    uint64_t time_warp_seq, utime_t ctime,
-				    utime_t mtime,
-				    utime_t atime,
-				    version_t inline_version,
-				    bufferlist& inline_data,
-				    int issued)
+void Client::update_inode_file_size(Inode *in, int issued, uint64_t size,
+				    uint64_t truncate_seq, uint64_t truncate_size)
 {
-  bool warn = false;
-  ldout(cct, 10) << __func__ << " " << *in << " " << ccap_string(issued)
-	   << " mtime " << mtime << dendl;
-  ldout(cct, 25) << "truncate_seq: mds " << truncate_seq <<  " local "
-	   << in->truncate_seq << " time_warp_seq: mds " << time_warp_seq
-	   << " local " << in->time_warp_seq << dendl;
   uint64_t prior_size = in->size;
-
-  if (inline_version > in->inline_version) {
-    in->inline_data = inline_data;
-    in->inline_version = inline_version;
-  }
-
-  /* always take a newer change attr */
-  if (change_attr > in->change_attr)
-    in->change_attr = change_attr;
 
   if (truncate_seq > in->truncate_seq ||
       (truncate_seq == in->truncate_seq && size > in->size)) {
@@ -737,7 +715,20 @@ void Client::update_inode_file_bits(Inode *in,
       ldout(cct, 0) << "Hmmm, truncate_seq && truncate_size changed on non-file inode!" << dendl;
     }
   }
-  
+}
+
+void Client::update_inode_file_time(Inode *in, int issued, uint64_t time_warp_seq,
+				    utime_t ctime, utime_t mtime, utime_t atime)
+{
+  ldout(cct, 10) << __func__ << " " << *in << " " << ccap_string(issued)
+		 << " ctime " << ctime << " mtime " << mtime << dendl;
+
+  if (time_warp_seq > in->time_warp_seq)
+    ldout(cct, 10) << " mds time_warp_seq " << time_warp_seq
+		   << " is higher than local time_warp_seq "
+		   << in->time_warp_seq << dendl;
+
+  int warn = false;
   // be careful with size, mtime, atime
   if (issued & (CEPH_CAP_FILE_EXCL|
 		CEPH_CAP_FILE_WR|
@@ -748,9 +739,6 @@ void Client::update_inode_file_bits(Inode *in,
     if (ctime > in->ctime) 
       in->ctime = ctime;
     if (time_warp_seq > in->time_warp_seq) {
-      ldout(cct, 10) << "mds time_warp_seq " << time_warp_seq << " on inode " << *in
-	       << " is higher than local time_warp_seq "
-	       << in->time_warp_seq << dendl;
       //the mds updated times, so take those!
       in->mtime = mtime;
       in->atime = atime;
@@ -835,53 +823,59 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   if (in->is_symlink())
     in->symlink = st->symlink;
 
-  if (was_new)
-    ldout(cct, 12) << __func__ << " adding " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
-
-  if (!st->cap.caps)
-    return in;   // as with readdir returning indoes in different snaprealms (no caps!)
-
   // only update inode if mds info is strictly newer, or it is the same and projected (odd).
-  bool updating_inode = false;
-  int issued = 0;
-  if (st->version == 0 ||
-      (in->version & ~1) < st->version) {
-    updating_inode = true;
+  bool new_version = false;
+  if (in->version == 0 ||
+      ((st->cap.flags & CEPH_CAP_FLAG_AUTH) &&
+       (in->version & ~1) < st->version))
+    new_version = true;
 
-    int implemented = 0;
-    issued = in->caps_issued(&implemented) | in->caps_dirty();
-    issued |= implemented;
+  int issued;
+  in->caps_issued(&issued);
+  issued |= in->caps_dirty();
+  int new_issued = ~issued & (int)st->cap.caps;
 
-    in->version = st->version;
+  if ((new_version || (new_issued & CEPH_CAP_AUTH_SHARED)) &&
+      !(issued & CEPH_CAP_AUTH_EXCL)) {
+    in->mode = st->mode;
+    in->uid = st->uid;
+    in->gid = st->gid;
+    in->btime = st->btime;
+  }
 
-    if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
-      in->mode = st->mode;
-      in->uid = st->uid;
-      in->gid = st->gid;
-      in->btime = st->btime;
-    }
+  if ((new_version || (new_issued & CEPH_CAP_LINK_SHARED)) &&
+      !(issued & CEPH_CAP_LINK_EXCL)) {
+    in->nlink = st->nlink;
+  }
 
-    if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
-      in->nlink = st->nlink;
-    }
+  if (new_version || (new_issued & CEPH_CAP_ANY_RD)) {
+    update_inode_file_time(in, issued, st->time_warp_seq,
+			   st->ctime, st->mtime, st->atime);
+  }
 
-    in->dirstat = st->dirstat;
-    in->rstat = st->rstat;
-    in->quota = st->quota;
+  if (new_version ||
+      (new_issued & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR))) {
     in->layout = st->layout;
+    update_inode_file_size(in, issued, st->size, st->truncate_seq, st->truncate_size);
+  }
 
-    if (in->is_dir()) {
+  if (in->is_dir()) {
+    if (new_version || (new_issued & CEPH_CAP_FILE_SHARED)) {
+      in->dirstat = st->dirstat;
+    }
+    // dir_layout/rstat/quota are not tracked by capability, update them only if
+    // the inode stat is from auth mds
+    if (new_version || (st->cap.flags & CEPH_CAP_FLAG_AUTH)) {
       in->dir_layout = st->dir_layout;
       ldout(cct, 20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << dendl;
+      in->rstat = st->rstat;
+      in->quota = st->quota;
     }
-
-    update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
-			   st->change_attr, st->time_warp_seq, st->ctime,
-			   st->mtime, st->atime, st->inline_version,
-			   st->inline_data, issued);
-  } else if (st->inline_version > in->inline_version) {
-    in->inline_data = st->inline_data;
-    in->inline_version = st->inline_version;
+    // move me if/when version reflects fragtree changes.
+    if (in->dirfragtree != st->dirfragtree) {
+      in->dirfragtree = st->dirfragtree;
+      _fragmap_remove_non_leaves(in);
+    }
   }
 
   if ((in->xattr_version  == 0 || !(issued & CEPH_CAP_XATTR_EXCL)) &&
@@ -892,11 +886,23 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     in->xattr_version = st->xattr_version;
   }
 
-  // move me if/when version reflects fragtree changes.
-  if (in->dirfragtree != st->dirfragtree) {
-    in->dirfragtree = st->dirfragtree;
-    _fragmap_remove_non_leaves(in);
+  if (st->inline_version > in->inline_version) {
+    in->inline_data = st->inline_data;
+    in->inline_version = st->inline_version;
   }
+
+  /* always take a newer change attr */
+  if (st->change_attr > in->change_attr)
+    in->change_attr = st->change_attr;
+
+  if (st->version > in->version)
+    in->version = st->version;
+
+  if (was_new)
+    ldout(cct, 12) << __func__ << " adding " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
+
+  if (!st->cap.caps)
+    return in;   // as with readdir returning indoes in different snaprealms (no caps!)
 
   if (in->snapid == CEPH_NOSNAP) {
     add_update_cap(in, session, st->cap.cap_id, st->cap.caps, st->cap.seq,
@@ -906,31 +912,28 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       in->max_size = st->max_size;
       in->rstat = st->rstat;
     }
-  } else
-    in->snap_caps |= st->cap.caps;
 
-  // setting I_COMPLETE needs to happen after adding the cap
-  if (updating_inode &&
-      in->snapid == CEPH_NOSNAP &&
-      in->is_dir() &&
-      (st->cap.caps & CEPH_CAP_FILE_SHARED) &&
-      (issued & CEPH_CAP_FILE_EXCL) == 0 &&
-      in->dirstat.nfiles == 0 &&
-      in->dirstat.nsubdirs == 0) {
-    ldout(cct, 10) << " marking (I_COMPLETE|I_DIR_ORDERED) on empty dir " << *in << dendl;
-    in->flags |= I_COMPLETE | I_DIR_ORDERED;
-    if (in->dir) {
-      ldout(cct, 10) << " dir is open on empty dir " << in->ino << " with "
-		     << in->dir->dentries.size() << " entries, marking all dentries null" << dendl;
-      in->dir->readdir_cache.clear();
-      for (auto p = in->dir->dentries.begin();
-	   p != in->dir->dentries.end();
-	   ++p) {
-	unlink(p->second, true, true);  // keep dir, keep dentry
+    // setting I_COMPLETE needs to happen after adding the cap
+    if (in->is_dir() &&
+	(st->cap.caps & CEPH_CAP_FILE_SHARED) &&
+	(issued & CEPH_CAP_FILE_EXCL) == 0 &&
+	in->dirstat.nfiles == 0 &&
+	in->dirstat.nsubdirs == 0) {
+      ldout(cct, 10) << " marking (I_COMPLETE|I_DIR_ORDERED) on empty dir " << *in << dendl;
+      in->flags |= I_COMPLETE | I_DIR_ORDERED;
+      if (in->dir) {
+	ldout(cct, 10) << " dir is open on empty dir " << in->ino << " with "
+		       << in->dir->dentries.size() << " entries, marking all dentries null" << dendl;
+	in->dir->readdir_cache.clear();
+	for (const auto& p : in->dir->dentries) {
+	  unlink(p.second, true, true);  // keep dir, keep dentry
+	}
+	if (in->dir->dentries.empty())
+	  close_dir(in->dir);
       }
-      if (in->dir->dentries.empty())
-	close_dir(in->dir);
     }
+  } else {
+    in->snap_caps |= st->cap.caps;
   }
 
   return in;
@@ -4829,13 +4832,11 @@ void Client::handle_cap_trunc(MetaSession *session, Inode *in, MClientCaps *m)
 	   << " size " << in->size << " -> " << m->get_size()
 	   << dendl;
   
-  int implemented = 0;
-  int issued = in->caps_issued(&implemented) | in->caps_dirty();
-  issued |= implemented;
-  update_inode_file_bits(in, m->get_truncate_seq(), m->get_truncate_size(),
-			 m->get_size(), m->get_change_attr(), m->get_time_warp_seq(),
-			 m->get_ctime(), m->get_mtime(), m->get_atime(),
-                         m->inline_version, m->inline_data, issued);
+  int issued;
+  in->caps_issued(&issued);
+  issued |= in->caps_dirty();
+  update_inode_file_size(in, issued, m->get_size(),
+			 m->get_truncate_seq(), m->get_truncate_size());
   m->put();
 }
 
@@ -5037,27 +5038,27 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   cap->seq = m->get_seq();
   cap->gen = session->cap_gen;
 
-  in->layout = m->get_layout();
-
   // update inode
-  int implemented = 0;
-  int issued = in->caps_issued(&implemented) | in->caps_dirty();
-  issued |= implemented;
+  int issued;
+  in->caps_issued(&issued);
+  issued |= in->caps_dirty();
 
-  if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
+  if ((new_caps & CEPH_CAP_AUTH_SHARED) &&
+      !(issued & CEPH_CAP_AUTH_EXCL)) {
     in->mode = m->head.mode;
     in->uid = m->head.uid;
     in->gid = m->head.gid;
     in->btime = m->btime;
   }
   bool deleted_inode = false;
-  if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
+  if ((new_caps & CEPH_CAP_LINK_SHARED) &&
+      !(issued & CEPH_CAP_LINK_EXCL)) {
     in->nlink = m->head.nlink;
     if (in->nlink == 0 &&
 	(new_caps & (CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL)))
       deleted_inode = true;
   }
-  if ((issued & CEPH_CAP_XATTR_EXCL) == 0 &&
+  if (!(issued & CEPH_CAP_XATTR_EXCL) &&
       m->xattrbl.length() &&
       m->head.xattr_version > in->xattr_version) {
     bufferlist::iterator p = m->xattrbl.begin();
@@ -5070,14 +5071,30 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     in->dirstat.nsubdirs = m->get_nsubdirs();
   }
 
-  update_inode_file_bits(in, m->get_truncate_seq(), m->get_truncate_size(), m->get_size(),
-			 m->get_change_attr(), m->get_time_warp_seq(), m->get_ctime(),
-			 m->get_mtime(), m->get_atime(),
-			 m->inline_version, m->inline_data, issued);
+  if (new_caps & CEPH_CAP_ANY_RD) {
+    update_inode_file_time(in, issued, m->get_time_warp_seq(),
+			   m->get_ctime(), m->get_mtime(), m->get_atime());
+  }
+
+  if (new_caps & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR)) {
+    in->layout = m->get_layout();
+    update_inode_file_size(in, issued, m->get_size(),
+			   m->get_truncate_seq(), m->get_truncate_size());
+  }
+
+  if (m->inline_version > in->inline_version) {
+    in->inline_data = m->inline_data;
+    in->inline_version = m->inline_version;
+  }
+
+  /* always take a newer change attr */
+  if (m->get_change_attr() > in->change_attr)
+    in->change_attr = m->get_change_attr();
 
   // max_size
   if (cap == in->auth_cap &&
-      m->get_max_size() != in->max_size) {
+      (new_caps & CEPH_CAP_ANY_FILE_WR) &&
+      (m->get_max_size() != in->max_size)) {
     ldout(cct, 10) << "max_size " << in->max_size << " -> " << m->get_max_size() << dendl;
     in->max_size = m->get_max_size();
     if (in->max_size > in->wanted_max_size) {
