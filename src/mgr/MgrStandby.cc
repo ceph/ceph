@@ -180,7 +180,7 @@ int MgrStandby::init()
 void MgrStandby::send_beacon()
 {
   assert(lock.is_locked_by_me());
-  dout(1) << state_str() << dendl;
+  dout(4) << state_str() << dendl;
 
   std::list<PyModuleRef> modules = py_module_registry.get_modules();
 
