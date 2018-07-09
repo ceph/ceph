@@ -354,7 +354,6 @@ int main(int argc, char **argv)
     for (auto kk : {
 	"whoami",
 	  "osd_key",
-	  "path_block", "path_block.db", "path_block.wal",
 	  "ceph_fsid",
 	  "fsid",
 	  "type",
@@ -372,49 +371,20 @@ int main(int argc, char **argv)
 	v += label.meta["whoami"];
 	v += "]\nkey = " + i->second;
       }
-      if (k.find("path_") == 0) {
-	p = path + "/" + k.substr(5);
-	int r = ::symlink(v.c_str(), p.c_str());
-	if (r < 0 && errno == EEXIST) {
-	  struct stat st;
-	  r = ::stat(p.c_str(), &st);
-	  if (r == 0 && S_ISLNK(st.st_mode)) {
-	    char target[PATH_MAX];
-	    r = ::readlink(p.c_str(), target, sizeof(target));
-	    if (r > 0) {
-	      if (v == target) {
-		r = 0;  // already matches our target
-	      } else {
-		::unlink(p.c_str());
-		r = ::symlink(v.c_str(), p.c_str());
-	      }
-	    } else {
-	      cerr << "error reading existing link at " << p << ": " << cpp_strerror(errno)
-		   << std::endl;
-	    }
-	  }
-	}
-	if (r < 0) {
-	  cerr << "error symlinking " << p << ": " << cpp_strerror(errno)
-	       << std::endl;
-	  exit(EXIT_FAILURE);
-	}
-      } else {
-	v += "\n";
-	int fd = ::open(p.c_str(), O_CREAT|O_TRUNC|O_WRONLY, 0600);
-	if (fd < 0) {
-	  cerr << "error writing " << p << ": " << cpp_strerror(errno)
-	       << std::endl;
-	  exit(EXIT_FAILURE);
-	}
-	int r = safe_write(fd, v.c_str(), v.size());
-	if (r < 0) {
-	  cerr << "error writing to " << p << ": " << cpp_strerror(errno)
-	       << std::endl;
-	  exit(EXIT_FAILURE);
-	}
-	::close(fd);
+      v += "\n";
+      int fd = ::open(p.c_str(), O_CREAT|O_TRUNC|O_WRONLY, 0600);
+      if (fd < 0) {
+	cerr << "error writing " << p << ": " << cpp_strerror(errno)
+	     << std::endl;
+	exit(EXIT_FAILURE);
       }
+      int r = safe_write(fd, v.c_str(), v.size());
+      if (r < 0) {
+	cerr << "error writing to " << p << ": " << cpp_strerror(errno)
+	     << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      ::close(fd);
     }
   }
   else if (action == "show-label") {
