@@ -9081,6 +9081,29 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
   dout(10) << __func__ << " " << osr << " done" << dendl;
 }
 
+void BlueStore::_osr_drain(OpSequencer *osr)
+{
+  dout(10) << __func__ << " " << osr << dendl;
+  ++deferred_aggressive; // FIXME: maybe osr-local aggressive flag?
+  {
+    // submit anything pending
+    deferred_lock.lock();
+    if (osr->deferred_pending && !osr->deferred_running) {
+      _deferred_submit_unlock(osr);
+    } else {
+      deferred_lock.unlock();
+    }
+  }
+  {
+    // wake up any previously finished deferred events
+    std::lock_guard<std::mutex> l(kv_lock);
+    kv_cond.notify_one();
+  }
+  osr->drain();
+  --deferred_aggressive;
+  dout(10) << __func__ << " " << osr << " done" << dendl;
+}
+
 void BlueStore::_osr_drain_all()
 {
   dout(10) << __func__ << dendl;
@@ -12263,12 +12286,11 @@ int BlueStore::_merge_collection(
 
   coll_t cid = (*c)->cid;
 
-  // flush all previous deferred writes on this sequencer.  this is a bit
-  // heavyweight, but we need to make sure all deferred writes complete
-  // before we split as the new collection's sequencer may need to order
-  // this after those writes, and we don't bother with the complexity of
-  // moving those TransContexts over to the new osr.
-  _osr_drain_preceding(txc);
+  // flush all previous deferred writes on the source collection to ensure
+  // that all deferred writes complete before we merge as the target collection's
+  // sequencer may need to order new ops after those writes.
+
+  _osr_drain((*c)->osr.get());
 
   // move any cached items (onodes and referenced shared blobs) that will
   // belong to the child collection post-split.  leave everything else behind.
