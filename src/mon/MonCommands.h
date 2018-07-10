@@ -122,6 +122,8 @@
 
 COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
 	"pg", "r", "cli,rest")
+COMMAND("pg repeer name=pgid,type=CephPgid", "force a PG to repeer",
+	"osd", "rw", "cli,rest")
 COMMAND("osd last-stat-seq name=id,type=CephOsdName", \
 	"get the last pg stats sequence number reported for this osd", \
 	"osd", "r", "cli,rest")

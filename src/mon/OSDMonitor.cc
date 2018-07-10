@@ -10242,6 +10242,51 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     pending_inc.new_primary_temp[pgid] = osd;
     ss << "set " << pgid << " primary_temp mapping to " << osd;
     goto update;
+  } else if (prefix == "pg repeer") {
+    pg_t pgid;
+    string pgidstr;
+    cmd_getval(cct, cmdmap, "pgid", pgidstr);
+    if (!pgid.parse(pgidstr.c_str())) {
+      ss << "invalid pgid '" << pgidstr << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (!osdmap.pg_exists(pgid)) {
+      ss << "pg '" << pgidstr << "' does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    vector<int> acting;
+    int primary;
+    osdmap.pg_to_acting_osds(pgid, &acting, &primary);
+    if (primary < 0) {
+      err = -EAGAIN;
+      ss << "pg currently has no primary";
+      goto reply;
+    }
+    if (acting.size() > 1) {
+      // map to just primary; it will map back to what it wants
+      pending_inc.new_pg_temp[pgid] = { primary };
+    } else {
+      // hmm, pick another arbitrary osd to induce a change.  Note
+      // that this won't work if there is only one suitable OSD in the cluster.
+      int i;
+      bool done = false;
+      for (i = 0; i < osdmap.get_max_osd(); ++i) {
+	if (i == primary || !osdmap.is_up(i) || !osdmap.exists(i)) {
+	  continue;
+	}
+	pending_inc.new_pg_temp[pgid] = { primary, i };
+	done = true;
+	break;
+      }
+      if (!done) {
+	err = -EAGAIN;
+	ss << "not enough up OSDs in the cluster to force repeer";
+	goto reply;
+      }
+    }
+    goto update;
   } else if (prefix == "osd pg-upmap" ||
              prefix == "osd rm-pg-upmap" ||
              prefix == "osd pg-upmap-items" ||

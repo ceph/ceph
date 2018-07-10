@@ -3128,7 +3128,9 @@ void Monitor::handle_command(MonOpRequestRef op)
     mdsmon()->dispatch(op);
     return;
   }
-  if ((module == "osd" || prefix == "pg map") &&
+  if ((module == "osd" ||
+       prefix == "pg map" ||
+       prefix == "pg repeer") &&
       prefix != "osd last-stat-seq") {
     osdmon()->dispatch(op);
     return;
