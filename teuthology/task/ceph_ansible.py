@@ -53,6 +53,7 @@ class CephAnsible(Task):
         osds='osd',
         rgws='rgw',
         clients='client',
+        nfss='nfs',
     )
 
     def __init__(self, ctx, config):
