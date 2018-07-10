@@ -6679,7 +6679,7 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_beacon_grace", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(15)
-    .set_description("tolerance in seconds for missed beacons from monitors"),
+    .set_description("tolerance in seconds for missed MDS beacons to monitors"),
 
     Option("mds_enforce_unique_name", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
