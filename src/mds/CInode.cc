@@ -130,7 +130,7 @@ ostream& operator<<(ostream& out, const CInode& in)
   if (in.is_auth_pinned()) {
     out << " ap=" << in.get_num_auth_pins() << "+" << in.get_num_nested_auth_pins();
 #ifdef MDS_AUTHPIN_SET
-    out << "(" << in.auth_pin_set << ")";
+    in.print_authpin_set(out);
 #endif
   }
 
@@ -2572,8 +2572,11 @@ void CInode::auth_unpin(void *by)
   auth_pins--;
 
 #ifdef MDS_AUTHPIN_SET
-  ceph_assert(auth_pin_set.count(by));
-  auth_pin_set.erase(auth_pin_set.find(by));
+  {
+    auto it = auth_pin_set.find(by);
+    ceph_assert(it != auth_pin_set.end());
+    auth_pin_set.erase(it);
+  }
 #endif
 
   if (auth_pins == 0)
