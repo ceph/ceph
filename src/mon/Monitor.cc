@@ -1898,7 +1898,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
     } else {
       dout(10) << " ready to join, but i'm not in the monmap or my addr is blank, trying to join" << dendl;
       send_mon_message(
-	new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
+	new MMonJoin(monmap->fsid, name, messenger->get_myaddrs()),
 	*m->quorum.begin());
     }
   } else {
@@ -2158,7 +2158,7 @@ void Monitor::finish_election()
   if (cur_name != name) {
     dout(10) << " renaming myself from " << cur_name << " -> " << name << dendl;
     send_mon_message(
-      new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
+      new MMonJoin(monmap->fsid, name, messenger->get_myaddrs()),
       *quorum.begin());
   }
 }
