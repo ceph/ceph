@@ -291,6 +291,13 @@ public:
     return true;
   }
 
+  entity_addrvec_t get_addrs(const string& n) const {
+    return entity_addrvec_t(get_addr(n));
+  }
+  entity_addrvec_t get_addrs(unsigned m) const {
+    return entity_addrvec_t(get_addr(m));
+  }
+
   const entity_addr_t& get_addr(const string& n) const {
     assert(mon_info.count(n));
     map<string,mon_info_t>::const_iterator p = mon_info.find(n);
