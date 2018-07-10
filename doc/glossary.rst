@@ -69,7 +69,9 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Ceph Filesystem
 	CephFS
 	Ceph FS
-		The POSIX filesystem components of Ceph.
+		The POSIX filesystem components of Ceph. Refer
+		:ref:`CephFS Architecture <arch-cephfs>` and :ref:`ceph-filesystem` for
+		more details.
 
 	Cloud Platforms
 	Cloud Stacks

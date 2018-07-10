@@ -1,8 +1,10 @@
+.. _ceph-filesystem:
+
 =================
  Ceph Filesystem
 =================
 
-The :term:`Ceph Filesystem` (Ceph FS) is a POSIX-compliant filesystem that uses
+The Ceph Filesystem (CephFS) is a POSIX-compliant filesystem that uses
 a Ceph Storage Cluster to store its data. The Ceph filesystem uses the same Ceph
 Storage Cluster system as Ceph Block Devices, Ceph Object Storage with its S3
 and Swift APIs, or native bindings (librados).
