@@ -111,6 +111,8 @@ cdef extern from "cephfs/libcephfs.h" nogil:
 
     int ceph_mount(ceph_mount_info *cmount, const char *root)
     int ceph_unmount(ceph_mount_info *cmount)
+    int ceph_abort_conn(ceph_mount_info *cmount)
+    uint64_t ceph_get_instance_id(ceph_mount_info *cmount)
     int ceph_fstatx(ceph_mount_info *cmount, int fd, statx *stx, unsigned want, unsigned flags)
     int ceph_statx(ceph_mount_info *cmount, const char *path, statx *stx, unsigned want, unsigned flags)
     int ceph_statfs(ceph_mount_info *cmount, const char *path, statvfs *stbuf)
@@ -558,6 +560,26 @@ cdef class LibCephFS(object):
         if ret != 0:
             raise make_ex(ret, "error calling ceph_unmount")
         self.state = "initialized"
+
+    def abort_conn(self):
+        """
+        Abort mds connections.
+        """
+        self.require_state("mounted")
+        with nogil:
+            ret = ceph_abort_conn(self.cluster)
+        if ret != 0:
+            raise make_ex(ret, "error calling ceph_abort_conn")
+        self.state = "initialized"
+
+    def get_instance_id(self):
+        """
+        Get a global id for current instance
+        """
+        self.require_state("initialized", "mounted")
+        with nogil:
+            ret = ceph_get_instance_id(self.cluster)
+        return ret;
 
     def statfs(self, path):
         """

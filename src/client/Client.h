@@ -381,10 +381,10 @@ protected:
   void handle_client_reply(MClientReply *reply);
   bool is_dir_operation(MetaRequest *request);
 
-  bool   initialized;
-  bool   mounted;
-  bool   unmounting;
-  bool   blacklisted;
+  bool   initialized = false;
+  bool   mounted = false;
+  bool   unmounting = false;
+  bool   blacklisted = false;
 
   // When an MDS has sent us a REJECT, remember that and don't
   // contact it again.  Remember which inst rejected us, so that
@@ -492,8 +492,9 @@ protected:
   void put_inode(Inode *in, int n=1);
   void close_dir(Dir *dir);
 
+  void _abort_mds_sessions(int err);
   // same as unmount() but for when the client_lock is already held
-  void _unmount();
+  void _unmount(bool abort);
 
   friend class C_Client_FlushComplete; // calls put_inode()
   friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
@@ -953,6 +954,7 @@ public:
   int mount(const std::string &mount_root, const UserPerm& perms,
 	    bool require_mds=false);
   void unmount();
+  void abort_conn();
 
   int mds_command(
     const std::string &mds_spec,

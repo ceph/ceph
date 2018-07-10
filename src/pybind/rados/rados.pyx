@@ -130,6 +130,7 @@ cdef extern from "rados/librados.h" nogil:
     int rados_create_with_context(rados_t *cluster, rados_config_t cct)
     int rados_connect(rados_t cluster)
     void rados_shutdown(rados_t cluster)
+    uint64_t rados_get_instance_id(rados_t cluster)
     int rados_conf_read_file(rados_t cluster, const char *path)
     int rados_conf_parse_argv_remainder(rados_t cluster, int argc, const char **argv, const char **remargv)
     int rados_conf_parse_env(rados_t cluster, const char *var)
@@ -892,6 +893,15 @@ Rados object in state %s." % self.state)
         if ret != 0:
             raise make_ex(ret, "error connecting to the cluster")
         self.state = "connected"
+
+    def get_instance_id(self):
+        """
+        Get a global id for current instance
+        """
+        self.require_state("connected")
+        with nogil:
+            ret = rados_get_instance_id(self.cluster)
+        return ret;
 
     def get_cluster_stats(self):
         """
