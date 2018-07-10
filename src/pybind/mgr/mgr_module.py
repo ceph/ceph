@@ -687,7 +687,13 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Run a self-test on the module. Override this function and implement
         a best as possible self-test for (automated) testing of the module
-        :return: bool
+
+        Indicate any failures by raising an exception.  This does not have
+        to be pretty, it's mainly for picking up regressions during
+        development, rather than use in the field.
+
+        :return: None, or an advisory string for developer interest, such
+                 as a json dump of some state.
         """
         pass
 

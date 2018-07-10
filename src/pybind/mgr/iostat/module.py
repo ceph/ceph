@@ -10,17 +10,21 @@ class Module(MgrModule):
             "perm": "r",
             "poll": "true"
         },
-        {
-            "cmd": "iostat self-test",
-            "desc": "Run a self test the iostat module",
-            "perm": "r"
-        }
     ]
 
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
 
+    def self_test(self):
+        r = self.get('io_rate')
+        assert('pg_stats_delta' in r)
+        assert('stamp_delta' in r['pg_stats_delta'])
+        assert('stat_sum' in r['pg_stats_delta'])
+        assert('num_read_kb' in r['pg_stats_delta']['stat_sum'])
+        assert('num_write_kb' in r['pg_stats_delta']['stat_sum'])
+        assert('num_write' in r['pg_stats_delta']['stat_sum'])
+        assert('num_read' in r['pg_stats_delta']['stat_sum'])
 
     def handle_command(self, inbuf, command):
         rd = 0
@@ -65,16 +69,5 @@ class Module(MgrModule):
                 int(total_ops)
             ]
             ret += self.get_pretty_row(elems, width)
-
-        elif command['prefix'] == 'iostat self-test':
-            r = self.get('io_rate')
-            assert('pg_stats_delta' in r)
-            assert('stamp_delta' in r['pg_stats_delta'])
-            assert('stat_sum' in r['pg_stats_delta'])
-            assert('num_read_kb' in r['pg_stats_delta']['stat_sum'])
-            assert('num_write_kb' in r['pg_stats_delta']['stat_sum'])
-            assert('num_write' in r['pg_stats_delta']['stat_sum'])
-            assert('num_read' in r['pg_stats_delta']['stat_sum'])
-            ret = 'iostat self-test OK'
 
         return 0, '', ret

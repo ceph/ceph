@@ -65,6 +65,11 @@ class Module(MgrModule):
                 "desc": "Test inter-module calls",
                 "perm": "r"
             },
+            {
+                "cmd": "mgr self-test module name=module,type=CephString",
+                "desc": "Run another module's self_test() method",
+                "perm": "r"
+            },
             ]
 
     def __init__(self, *args, **kwargs):
@@ -101,6 +106,13 @@ class Module(MgrModule):
         elif command['prefix'] == 'mgr self-test remote':
             self._test_remote_calls()
             return 0, '', 'Successfully called'
+        elif command['prefix'] == 'mgr self-test module':
+            try:
+                r = self.remote(command['module'], "self_test")
+            except RuntimeError as e:
+                return -1, '', "Test failed: {0}".format(e.message)
+            else:
+                return 0, str(r), "Self-test OK"
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))

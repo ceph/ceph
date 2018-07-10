@@ -172,14 +172,12 @@ class Module(MgrModule):
 
         return 0, '', json.dumps(report)
 
-    def do_self_test(self, cmd, inbuf):
+    def self_test(self):
         # test time conversion
         timestr = '2018-06-22 20:35:38.058818Z'
         dt = self.time_from_string(timestr)
         if dt != datetime.datetime(2018, 6, 22, 20, 35, 38, 58818):
-            return errno.EINVAL, '', 'time_from_string() failed'
-
-        return 0, '', 'self-test succeeded'
+            raise RuntimeError('time_from_string() failed')
 
     COMMANDS = [
         {
@@ -211,12 +209,6 @@ class Module(MgrModule):
             'desc': 'Remove a saved crash <id>',
             'perm': 'rw',
             'handler': do_rm,
-        },
-        {
-            'cmd': 'crash self-test',
-            'desc': 'Run a self test of the crash module',
-            'perm': 'r',
-            'handler': do_self_test,
         },
         {
             'cmd': 'crash stat',

@@ -26,10 +26,12 @@ class TestModuleSelftest(MgrTestCase):
         self.setup_mgrs()
 
     def _selftest_plugin(self, module_name):
+        self._load_module("selftest")
         self._load_module(module_name)
 
-        # Execute the module's self-test routine
-        self.mgr_cluster.mon_manager.raw_cluster_cmd(module_name, "self-test")
+        # Execute the module's self_test() method
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "mgr", "self-test", "module", module_name)
 
     def test_zabbix(self):
         # Set these mandatory config fields so that the zabbix module

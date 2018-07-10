@@ -88,11 +88,6 @@ class Module(MgrModule):
             "desc": "Show last report or report to be sent",
             "perm": "r"
         },
-        {
-            "cmd": "telemetry self-test",
-            "desc": "Perform a self-test",
-            "perm": "r"
-        }
     ]
 
     @property
@@ -309,9 +304,6 @@ class Module(MgrModule):
             if not report:
                 report = self.compile_report()
             return 0, json.dumps(report), ''
-        elif command['prefix'] == 'telemetry self-test':
-            self.self_test()
-            return 0, 'Self-test succeeded', ''
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
