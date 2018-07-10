@@ -299,6 +299,14 @@ void ceph_buffer_free(char *buf);
 int ceph_unmount(struct ceph_mount_info *cmount);
 
 /**
+ * Abort mds connections
+ *
+ * @param cmount the mount handle
+ * @return 0 on success, negative error code on failure
+ */
+int ceph_abort_conn(struct ceph_mount_info *cmount);
+
+/**
  * Destroy the mount handle.
  *
  * The handle should not be mounted. This should be called on completion of
@@ -318,6 +326,17 @@ int ceph_release(struct ceph_mount_info *cmount);
  * @param cmount the mount handle to shutdown
  */
 void ceph_shutdown(struct ceph_mount_info *cmount);
+
+/**
+ * Get a global id for current instance
+ *
+ * The handle should not be mounted. This should be called on completion of
+ * all libcephfs functions.
+ *
+ * @param cmount the mount handle
+ * @returns instance global id
+ */
+uint64_t ceph_get_instance_id(struct ceph_mount_info *cmount);
 
 /**
  * Extract the CephContext from the mount point handle.

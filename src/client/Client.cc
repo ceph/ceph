@@ -248,8 +248,6 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     objecter(objecter_),
     whoami(mc->get_global_id()), cap_epoch_barrier(0),
     last_tid(0), oldest_tid(0), last_flush_tid(1),
-    initialized(false),
-    mounted(false), unmounting(false), blacklisted(false),
     local_osd(-ENXIO), local_osd_epoch(0),
     unsafe_sync_write(0),
     client_lock("Client::client_lock"),
@@ -2433,29 +2431,8 @@ void Client::handle_osd_map(MOSDMap *m)
         });
     lderr(cct) << "I was blacklisted at osd epoch " << epoch << dendl;
     blacklisted = true;
-    for (std::map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
-         p != mds_requests.end(); ) {
-      auto req = p->second;
-      ++p;
-      req->abort(-EBLACKLISTED);
-      if (req->caller_cond) {
-	req->kick = true;
-	req->caller_cond->Signal();
-      }
-    }
 
-    // Progress aborts on any requests that were on this waitlist.  Any
-    // requests that were on a waiting_for_open session waitlist
-    // will get kicked during close session below.
-    signal_cond_list(waiting_for_mdsmap);
-
-    // Force-close all sessions: assume this is not abandoning any state
-    // on the MDS side because the MDS will have seen the blacklist too.
-    while(!mds_sessions.empty()) {
-      auto i = mds_sessions.begin();
-      auto &session = i->second;
-      _closed_mds_session(&session);
-    }
+    _abort_mds_sessions(-EBLACKLISTED);
 
     // Since we know all our OSD ops will fail, cancel them all preemtively,
     // so that on an unhealthy cluster we can umount promptly even if e.g.
@@ -5812,17 +5789,58 @@ void Client::flush_mdlog(MetaSession *session)
 }
 
 
-void Client::_unmount()
+void Client::_abort_mds_sessions(int err)
+{
+  for (auto p = mds_requests.begin(); p != mds_requests.end(); ) {
+    auto req = p->second;
+    ++p;
+    // unsafe requests will be removed during close session below.
+    if (req->got_unsafe)
+      continue;
+
+    req->abort(err);
+    if (req->caller_cond) {
+      req->kick = true;
+      req->caller_cond->Signal();
+    }
+  }
+
+  // Process aborts on any requests that were on this waitlist.
+  // Any requests that were on a waiting_for_open session waitlist
+  // will get kicked during close session below.
+  signal_cond_list(waiting_for_mdsmap);
+
+  // Force-close all sessions
+  while(!mds_sessions.empty()) {
+    auto& session = mds_sessions.begin()->second;
+    _closed_mds_session(&session);
+  }
+}
+
+void Client::_unmount(bool abort)
 {
   if (unmounting)
     return;
 
-  ldout(cct, 2) << "unmounting" << dendl;
+  if (abort || blacklisted) {
+    ldout(cct, 2) << "unmounting (" << (abort ? "abort)" : "blacklisted)") << dendl;
+  } else {
+    ldout(cct, 2) << "unmounting" << dendl;
+  }
   unmounting = true;
 
   deleg_timeout = 0;
 
-  flush_mdlog_sync(); // flush the mdlog for pending requests, if any
+  if (abort) {
+    // Abort all mds sessions
+    _abort_mds_sessions(-ENOTCONN);
+
+    objecter->op_cancel_writes(-ENOTCONN);
+  } else {
+    // flush the mdlog for pending requests, if any
+    flush_mdlog_sync();
+  }
+
   while (!mds_requests.empty()) {
     ldout(cct, 10) << "waiting on " << mds_requests.size() << " requests" << dendl;
     mount_cond.Wait(client_lock);
@@ -5858,23 +5876,6 @@ void Client::_unmount()
 
   _ll_drop_pins();
 
-  if (blacklisted) {
-    ldout(cct, 0) << " skipping clean shutdown, we are blacklisted" << dendl;
-
-    if (cct->_conf->client_oc) {
-      // Purge all cached data so that ObjectCacher doesn't get hung up
-      // trying to flush it.  ObjectCacher's behaviour on EBLACKLISTED
-      // is to just leave things marked dirty
-      // (http://tracker.ceph.com/issues/9105)
-      for (const auto &i : inode_map) {
-        objectcacher->purge_set(&(i.second->oset));
-      }
-    }
-
-    mounted = false;
-    return;
-  }
-
   while (unsafe_sync_write > 0) {
     ldout(cct, 0) << unsafe_sync_write << " unsafe_sync_writes, waiting"  << dendl;
     mount_cond.Wait(client_lock);
@@ -5882,27 +5883,40 @@ void Client::_unmount()
 
   if (cct->_conf->client_oc) {
     // flush/release all buffered data
-    ceph::unordered_map<vinodeno_t, Inode*>::iterator next;
-    for (ceph::unordered_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
-	 p != inode_map.end();
-	 p = next) {
-      next = p;
-      ++next;
-      Inode *in = p->second;
+    std::list<InodeRef> anchor;
+    for (auto& p : inode_map) {
+      Inode *in = p.second;
       if (!in) {
-	ldout(cct, 0) << "null inode_map entry ino " << p->first << dendl;
+	ldout(cct, 0) << "null inode_map entry ino " << p.first << dendl;
 	assert(in);
       }
-      if (!in->caps.empty()) {
-	InodeRef tmp_ref(in);
+
+      // prevent inode from getting freed
+      anchor.emplace_back(in);
+
+      if (abort || blacklisted) {
+        objectcacher->purge_set(&in->oset);
+      } else if (!in->caps.empty()) {
 	_release(in);
 	_flush(in, new C_Client_FlushComplete(this, in));
       }
     }
   }
 
-  flush_caps_sync();
-  wait_sync_caps(last_flush_tid);
+  if (abort || blacklisted) {
+    for (auto p = dirty_list.begin(); !p.end(); ) {
+      Inode *in = *p;
+      ++p;
+      if (in->dirty_caps) {
+	ldout(cct, 0) << " drop dirty caps on " << *in << dendl;
+	in->mark_caps_clean();
+	put_inode(in);
+      }
+    }
+  } else {
+    flush_caps_sync();
+    wait_sync_caps(last_flush_tid);
+  }
 
   // empty lru cache
   trim_cache();
@@ -5938,7 +5952,13 @@ void Client::_unmount()
 void Client::unmount()
 {
   Mutex::Locker lock(client_lock);
-  _unmount();
+  _unmount(false);
+}
+
+void Client::abort_conn()
+{
+  Mutex::Locker lock(client_lock);
+  _unmount(true);
 }
 
 void Client::flush_cap_releases()
@@ -9921,6 +9941,10 @@ void Client::_release_filelocks(Fh *fh)
   }
 
   if (to_release.empty())
+    return;
+
+  // mds has already released filelocks if session was closed.
+  if (in->caps.empty())
     return;
 
   struct flock fl;
