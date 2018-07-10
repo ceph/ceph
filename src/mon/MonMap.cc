@@ -28,18 +28,26 @@ using ceph::Formatter;
 
 void mon_info_t::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(2, 1, bl);
+  uint8_t v = 3;
+  if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+    v = 2;
+  }
+  ENCODE_START(v, 1, bl);
   encode(name, bl);
-  encode(public_addr, bl, features);
+  if (v < 3) {
+    encode(public_addrs.legacy_addr(), bl, features);
+  } else {
+    encode(public_addrs, bl, features);
+  }
   encode(priority, bl);
   ENCODE_FINISH(bl);
 }
 
 void mon_info_t::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START(1, p);
+  DECODE_START(3, p);
   decode(name, p);
-  decode(public_addr, p);
+  decode(public_addrs, p);
   if (struct_v >= 2) {
     decode(priority, p);
   }
@@ -49,16 +57,16 @@ void mon_info_t::decode(bufferlist::const_iterator& p)
 void mon_info_t::print(ostream& out) const
 {
   out << "mon." << name
-      << " public " << public_addr
+      << " addrs " << public_addrs
       << " priority " << priority;
 }
 
 namespace {
   struct rank_cmp {
     bool operator()(const mon_info_t &a, const mon_info_t &b) const {
-      if (a.public_addr == b.public_addr)
+      if (a.public_addrs.legacy_or_front_addr() == b.public_addrs.legacy_or_front_addr())
         return a.name < b.name;
-      return a.public_addr < b.public_addr;
+      return a.public_addrs.legacy_or_front_addr() < b.public_addrs.legacy_or_front_addr();
     }
   };
 }
@@ -119,11 +127,14 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
   }
 
   map<string,entity_addr_t> legacy_mon_addr;
-  for (auto& [name, info] : mon_info) {
-    legacy_mon_addr[name] = info.public_addr;
+  if (!HAVE_FEATURE(con_features, MONENC) ||
+      !HAVE_FEATURE(con_features, SERVER_NAUTILUS)) {
+    for (auto& [name, info] : mon_info) {
+      legacy_mon_addr[name] = info.public_addrs.legacy_addr();
+    }
   }
 
-  if ((con_features & CEPH_FEATURE_MONENC) == 0) {
+  if (!HAVE_FEATURE(con_features, MONENC)) {
     /* we keep the mon_addr map when encoding to ensure compatibility
        * with clients and other monitors that do not yet support the 'mons'
        * map. This map keeps its original behavior, containing a mapping of
@@ -198,7 +209,7 @@ void MonMap::decode(bufferlist::const_iterator& p)
     for (auto& [name, addr] : mon_addr) {
       mon_info_t &m = mon_info[name];
       m.name = name;
-      m.public_addr = addr;
+      m.public_addrs = entity_addrvec_t(addr);
     }
   } else {
     decode(mon_info, p);
@@ -239,7 +250,7 @@ void MonMap::generate_test_instances(list<MonMap*>& o)
     entity_addr_t local_pub_addr;
     local_pub_addr.parse(local_pub_addr_s, &end_p);
 
-    m->add(mon_info_t("filled_pub_addr", local_pub_addr, 1));
+    m->add(mon_info_t("filled_pub_addr", entity_addrvec_t(local_pub_addr), 1));
 
     m->add("empty_addr_zero", entity_addr_t());
   }
@@ -282,7 +293,7 @@ void MonMap::print_summary(ostream& out) const
        ++p) {
     if (has_printed)
       out << ",";
-    out << p->first << "=" << p->second.public_addr;
+    out << p->first << "=" << p->second.public_addrs;
     has_printed = true;
   }
   out << "}";
@@ -298,7 +309,7 @@ void MonMap::print(ostream& out) const
   for (vector<string>::const_iterator p = ranks.begin();
        p != ranks.end();
        ++p) {
-    out << i++ << ": " << get_addr(*p) << " mon." << *p << "\n";
+    out << i++ << ": " << get_addrs(*p) << " mon." << *p << "\n";
   }
 }
 
@@ -320,8 +331,10 @@ void MonMap::dump(Formatter *f) const
     f->open_object_section("mon");
     f->dump_int("rank", i);
     f->dump_string("name", *p);
-    f->dump_stream("addr") << get_addr(*p);
-    f->dump_stream("public_addr") << get_addr(*p);
+    f->dump_object("public_addrs", get_addrs(*p));
+    // compat: make these look like pre-nautilus entity_addr_t
+    f->dump_stream("addr") << get_addrs(*p).get_legacy_str();
+    f->dump_stream("public_addr") << get_addrs(*p).get_legacy_str();
     f->close_section();
   }
   f->close_section();
@@ -394,14 +407,17 @@ void MonMap::set_initial_members(CephContext *cct,
   while (i < size()) {
     string n = get_name(i);
     if (std::find(initial_members.begin(), initial_members.end(), n) != initial_members.end()) {
-      lgeneric_dout(cct, 1) << " keeping " << n << " " << get_addr(i) << dendl;
+      lgeneric_dout(cct, 1) << " keeping " << n << " " << get_addrs(i) << dendl;
       i++;
       continue;
     }
 
-    lgeneric_dout(cct, 1) << " removing " << get_name(i) << " " << get_addr(i) << dendl;
-    if (removed)
-      removed->insert(get_addr(i));
+    lgeneric_dout(cct, 1) << " removing " << get_name(i) << " " << get_addrs(i) << dendl;
+    if (removed) {
+      for (auto& j : get_addrs(i).v) {
+	removed->insert(j);
+      }
+    }
     remove(n);
     ceph_assert(!contains(n));
   }
