@@ -274,7 +274,6 @@ OSDMonitor::OSDMonitor(
    inc_osd_cache(g_conf->mon_osd_cache_size),
    full_osd_cache(g_conf->mon_osd_cache_size),
    has_osdmap_manifest(false),
-   last_attempted_minwait_time(utime_t()),
    mapper(mn->cct, &mn->cpu_tp)
 {}
 
@@ -2120,22 +2119,6 @@ bool OSDMonitor::should_propose(double& delay)
     delay = 0.0;
     osd_weight.clear();
     return true;
-  }
-
-  // propose as fast as possible if updating up_thru or pg_temp
-  // want to merge OSDMap changes as much as possible
-  if ((pending_inc.new_primary_temp.size() == 1
-      || pending_inc.new_up_thru.size() == 1)
-      && pending_inc.new_state.size() < 2) {
-    dout(15) << " propose as fast as possible for up_thru/pg_temp" << dendl;
-
-    utime_t now = ceph_clock_now();
-    if (now - last_attempted_minwait_time > g_conf->paxos_propose_interval
-	&& now - paxos->get_last_commit_time() > g_conf->paxos_min_wait) {
-      delay = g_conf->paxos_min_wait;
-      last_attempted_minwait_time = now;
-      return true;
-    }
   }
 
   return PaxosService::should_propose(delay);
