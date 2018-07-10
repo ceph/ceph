@@ -882,7 +882,8 @@ void Replay<I>::handle_event(const journal::UnknownEvent &event,
 
 template <typename I>
 void Replay<I>::handle_aio_modify_complete(Context *on_ready, Context *on_safe,
-                                           int r, std::set<int> &filters) {
+                                           int r, std::set<int> &filters,
+                                           bool writeback_cache_enabled) {
   Mutex::Locker locker(m_lock);
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": on_ready=" << on_ready << ", "
@@ -901,8 +902,23 @@ void Replay<I>::handle_aio_modify_complete(Context *on_ready, Context *on_safe,
     return;
   }
 
-  // will be completed after next flush operation completes
-  m_aio_modify_safe_contexts.insert(on_safe);
+  if (writeback_cache_enabled) {
+    // will be completed after next flush operation completes
+    m_aio_modify_safe_contexts.insert(on_safe);
+  } else {
+    // IO is safely stored on disk
+    assert(m_in_flight_aio_modify > 0);
+    --m_in_flight_aio_modify;
+
+    if (m_on_aio_ready != nullptr) {
+      ldout(cct, 10) << ": resuming paused AIO" << dendl;
+      m_on_aio_ready->complete(0);
+      m_on_aio_ready = nullptr;
+    }
+
+    ldout(cct, 20) << ": completing safe context: " << on_safe << dendl;
+    m_image_ctx.op_work_queue->queue(on_safe, 0);
+  }
 }
 
 template <typename I>
@@ -1081,13 +1097,18 @@ Replay<I>::create_aio_modify_completion(Context *on_ready,
   }
 
   ++m_in_flight_aio_modify;
-  m_aio_modify_unsafe_contexts.push_back(on_safe);
+
+  bool writeback_cache_enabled = m_image_ctx.is_writeback_cache_enabled();
+  if (writeback_cache_enabled) {
+    m_aio_modify_unsafe_contexts.push_back(on_safe);
+  }
 
   // FLUSH if we hit the low-water mark -- on_safe contexts are
   // completed by flushes-only so that we don't move the journal
   // commit position until safely on-disk
 
-  *flush_required = (m_aio_modify_unsafe_contexts.size() ==
+  *flush_required = (writeback_cache_enabled &&
+                     m_aio_modify_unsafe_contexts.size() ==
                        IN_FLIGHT_IO_LOW_WATER_MARK);
   if (*flush_required) {
     ldout(cct, 10) << ": hit AIO replay low-water mark: scheduling flush"
@@ -1110,7 +1131,8 @@ Replay<I>::create_aio_modify_completion(Context *on_ready,
   // event. when flushed, the completion of the next flush will fire the
   // on_safe callback
   auto aio_comp = io::AioCompletion::create_and_start<Context>(
-    new C_AioModifyComplete(this, on_ready, on_safe, std::move(filters)),
+    new C_AioModifyComplete(this, on_ready, on_safe, std::move(filters),
+                            writeback_cache_enabled),
     util::get_image_ctx(&m_image_ctx), aio_type);
   return aio_comp;
 }
