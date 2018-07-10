@@ -4342,6 +4342,10 @@ int main(int argc, const char **argv)
       break;
     case OPT_ZONE_GET:
       {
+	if (zone_id.empty() && zone_name.empty()) {
+	  cerr << "no zone name or id provided" << std::endl;
+	  return EINVAL;
+	}
 	RGWZoneParams zone(zone_id, zone_name);
 	int ret = zone.init(g_ceph_context, store);
 	if (ret < 0) {
