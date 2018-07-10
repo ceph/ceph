@@ -51,9 +51,23 @@ deb [arch=amd64] http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $dist main
 deb [arch=amd64,i386] http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $dist main
 EOF
 	# import PPA's signing key into APT's keyring
-	$SUDO apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 1E9377A2BA9EF27F
-	$SUDO apt-get -y update -o Acquire::Languages=none -o Acquire::Translation=none || true
-	$SUDO apt-get install -y g++-7
+	cat << ENDOFKEY | $SUDO apt-key add -
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+Version: SKS 1.1.6
+Comment: Hostname: keyserver.ubuntu.com
+
+mI0ESuBvRwEEAMi4cDba7xlKaaoXjO1n1HX8RKrkW+HEIl79nSOSJyvzysajs7zUow/OzCQp
+9NswqrDmNuH1+lPTTRNAGtK8r2ouq2rnXT1mTl23dpgHZ9spseR73s4ZBGw/ag4bpU5dNUSt
+vfmHhIjVCuiSpNn7cyy1JSSvSs3N2mxteKjXLBf7ABEBAAG0GkxhdW5jaHBhZCBUb29sY2hh
+aW4gYnVpbGRziLYEEwECACAFAkrgb0cCGwMGCwkIBwMCBBUCCAMEFgIDAQIeAQIXgAAKCRAe
+k3eiup7yfzGKA/4xzUqNACSlB+k+DxFFHqkwKa/ziFiAlkLQyyhm+iqz80htRZr7Ls/ZRYZl
+0aSU56/hLe0V+TviJ1s8qdN2lamkKdXIAFfavA04nOnTzyIBJ82EAUT3Nh45skMxo4z4iZMN
+msyaQpNl/m/lNtOLhR64v5ZybofB2EWkMxUzX8D/FQ==
+=LcUQ
+-----END PGP PUBLIC KEY BLOCK-----
+ENDOFKEY
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-7
     fi
 
     case $dist in
