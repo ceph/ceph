@@ -1654,11 +1654,6 @@ BlueStore::SharedBlob::SharedBlob(uint64_t i, Collection *_coll)
 
 BlueStore::SharedBlob::~SharedBlob()
 {
-  if (get_cache()) {   // the dummy instances have a nullptr
-    std::lock_guard<std::recursive_mutex> l(get_cache()->lock);
-    bc._clear(get_cache());
-    get_cache()->rm_blob();
-  }
   if (loaded && persistent) {
     delete persistent; 
   }
@@ -1670,8 +1665,17 @@ void BlueStore::SharedBlob::put()
     ldout(coll->store->cct, 20) << __func__ << " " << this
 			     << " removing self from set " << get_parent()
 			     << dendl;
-    if (get_parent()) {
-      get_parent()->remove(this);
+  again:
+    auto coll_snap = coll;
+    if (coll_snap) {
+      std::lock_guard<std::recursive_mutex> l(coll_snap->cache->lock);
+      if (coll_snap != coll) {
+	goto again;
+      }
+      coll_snap->shared_blob_set.remove(this);
+
+      bc._clear(coll_snap->cache);
+      coll_snap->cache->rm_blob();
     }
     delete this;
   }
