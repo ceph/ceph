@@ -131,7 +131,8 @@ class Module(MgrModule):
                 "osd_stats",
                 "health",
                 "mon_status",
-                "mgr_map"
+                "mgr_map",
+                "ec_profiles"
                 ]
         for obj in objects:
             self.get(obj)
