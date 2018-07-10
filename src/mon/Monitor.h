@@ -52,6 +52,7 @@
 #include "mon/MonOpRequest.h"
 #include "common/WorkQueue.h"
 
+#include "mon/command_multiplexer.h"
 
 #define CEPH_MON_PROTOCOL     13 /* cluster internal */
 
@@ -113,6 +114,8 @@ struct MMonHealth;
 
 #define COMPAT_SET_LOC "feature_set"
 
+struct MonitorProjection;
+
 class C_MonContext final : public FunctionContext {
   const Monitor *mon;
 public:
@@ -123,6 +126,11 @@ public:
 
 class Monitor : public Dispatcher,
                 public md_config_obs_t {
+
+public:
+  // Projection class (capture selected private members externally):
+  class multiplexer_projection;
+
 public:
   // me
   string name;
@@ -854,7 +862,7 @@ public:
     }
   };
 
- private:
+  private:
   class C_RetryMessage : public C_MonOp {
     Monitor *mon;
   public:
@@ -977,6 +985,22 @@ public:
 
   static bool is_keyring_required();
 };
+
+/* Projection class (capture selected private members externally): */
+
+namespace ceph::cmds::mon { struct MonitorProjection; }
+
+class Monitor::multiplexer_projection : public Monitor {
+  friend ceph::cmds::mon::MonitorProjection;
+
+  protected:
+  using C_Command      = Monitor::C_Command;		// already public, but now matches C_RetryMessage
+  using C_RetryMessage = Monitor::C_RetryMessage;
+  
+  multiplexer_projection() = delete;
+};
+
+
 
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")
 #define CEPH_MON_FEATURE_INCOMPAT_GV CompatSet::Feature (2, "global version sequencing (v0.52)")

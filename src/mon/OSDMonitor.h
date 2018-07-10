@@ -26,7 +26,9 @@
 
 #include "include/types.h"
 #include "include/encoding.h"
+
 #include "common/simple_cache.hpp"
+
 #include "msg/Messenger.h"
 
 #include "osd/OSDMap.h"
@@ -34,6 +36,8 @@
 
 #include "CreatingPGs.h"
 #include "PaxosService.h"
+
+#include "command_multiplexer.h"
 
 class Monitor;
 class PGMap;
@@ -127,6 +131,79 @@ public:
   epoch_t get_lower_bound(const OSDMap& latest) const;
 };
 
+namespace ceph::mon::cmds {
+
+/* Enviornment that OSDMonitor commands run in:
+	(It would be a good idea to dial in the const-ness and names a bit more...) */
+struct osdmonitor_command_ctx
+{
+ OSDMonitor&                  osdmonitor;
+ CephContext&                 cct;
+ Monitor&                     mon;
+ MMonCommand&                 mmon_command;    // aka "m"
+ mutable MonOpRequestRef      op;
+ Paxos&                       paxos;
+ const cmdmap_t&			  cmdmap;
+ OSDMap&                      osdmap;
+
+ Formatter*                   f;               // JFW: observing ptr
+ std::stringstream&           ss;
+ buffer::list&                rdata;
+ std::string&                 rs;			   // modified by side-effect
+ const std::string&           prefix;          // eg. the command ("osd new")
+
+ osdmonitor_command_ctx(OSDMonitor& osdmonitor_,
+                        CephContext& cct_,
+                        Monitor& mon_,
+                        MMonCommand& mmon_command_,
+                        MonOpRequestRef op_,
+                        Paxos& paxos_,
+                        const cmdmap_t& cmdmap_,
+                        OSDMap& osdmap_,
+                        Formatter* f_,
+                        std::stringstream& ss_,
+                        buffer::list& rdata_,
+                        std::string& rs_,
+                        const std::string& prefix_)
+  : osdmonitor(osdmonitor_),
+    cct(cct_),
+    mon(mon_),
+    mmon_command(mmon_command_),
+    op(op_),
+    paxos(paxos_),
+    cmdmap(cmdmap_),
+    osdmap(osdmap_),
+    f(f_),
+    ss(ss_),
+    rdata(rdata_),
+    rs(rs_),
+    prefix(prefix_)
+  {}
+};
+
+// Did the operation succeed, or did it fail:
+enum class osdmonitor_cmd_status : int { failure = 0, success };
+
+// Select access to private Monitor members (eg. filter out members):
+struct MonitorProjection : private Monitor::multiplexer_projection
+{
+ using C_Command      = Monitor::multiplexer_projection::C_Command;
+ using C_RetryMessage = Monitor::multiplexer_projection::C_RetryMessage;
+ 
+ private:
+ MonitorProjection() = delete;
+};
+
+// The result of the operation, plus a result code):
+using osdmonitor_cmd_result = std::tuple<osdmonitor_cmd_status, int>;
+
+using osdmonitor_command_result   = osdmonitor_cmd_result;
+using osdmonitor_command          = ceph::command<osdmonitor_command_ctx, osdmonitor_command_result>;
+using osdmonitor_command_registry = ceph::command_registry<osdmonitor_command>;
+
+auto multiplex_command(const ceph::operation_type op_type, ceph::mon::cmds::osdmonitor_command_ctx& cmdctx, std::string_view prefix);
+
+} // namespace ceph::mon::cmds
 
 struct osdmap_manifest_t {
   // all the maps we have pinned -- i.e., won't be removed unless
@@ -209,6 +286,10 @@ WRITE_CLASS_ENCODER(osdmap_manifest_t);
 
 class OSDMonitor : public PaxosService {
   CephContext *cct;
+
+  ceph::mon::cmds::osdmonitor_command_registry commands;
+
+  friend auto ceph::mon::cmds::multiplex_command(const ceph::operation_type, ceph::mon::cmds::osdmonitor_command_ctx&, std::string_view);
 
 public:
   OSDMap osdmap;
@@ -682,6 +763,10 @@ public:
       pending_inc.new_flags &= ~flag;
     }
   }
+
+ private:
+ // Allow access to the private types in OSDMonitor: 
+ friend ceph::mon::cmds::osdmonitor_command;
 };
 
 #endif

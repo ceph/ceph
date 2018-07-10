@@ -99,5 +99,15 @@ bool match_str(const std::string& s, const XS& ...xs)
  return ((s == xs) || ...);
 }
 
+// Sugar for getting a line from a stream as a string, returning the string:
+template <typename IStreamT>
+inline std::string get_line(IStreamT& is)
+{
+ std::string r;
+ std::getline(is, r);
+ return r;
+}
+
 } // namespace ceph::util
+
 #endif /* CEPH_UTIL_H */

@@ -177,6 +177,37 @@ bool is_unmanaged_snap_op_permitted(CephContext* cct,
 
 } // anonymous namespace
 
+namespace ceph::mon::cmds {
+
+auto multiplex_command(const ceph::operation_type op_type, ceph::mon::cmds::osdmonitor_command_ctx& state, std::string_view prefix) 
+{
+  using status_t = ceph::mon::cmds::osdmonitor_command_registry::op_result;
+
+  auto [status, result] = state.osdmonitor.commands.apply(op_type, prefix, state);
+
+  if (status_t::declined == status) {
+      return make_tuple(status, false);
+  }
+
+  auto& fn_status      = std::get<0>(result); // success/failure
+  auto& fn_result_code = std::get<1>(result); // error code returned by called function
+
+  // JFW: this should match what the reply: label currently does:
+  getline(state.ss, state.rs);
+
+  if (fn_result_code < 0 && state.rs.length() == 0) {
+      state.rs = cpp_strerror(fn_result_code);
+  }
+
+  state.mon.reply_command(state.op, fn_result_code, state.rs, state.rdata, state.osdmonitor.get_last_committed());
+
+  // This should match the role of "ret":
+  return make_tuple(status,
+                    ceph::mon::cmds::osdmonitor_cmd_status::success == fn_status ? true : false);
+}
+
+} // namespace ceph::mon::cmds
+
 void LastEpochClean::Lec::report(ps_t ps, epoch_t last_epoch_clean)
 {
   if (epoch_by_pg.size() <= ps) {
@@ -264,6 +295,12 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const OSDMap& osdmap)
 		<< ").osd e" << osdmap.get_epoch() << " ";
 }
 
+namespace ceph::mon::cmds::osdmonitor {
+
+void register_commands(ceph::mon::cmds::osdmonitor_command_registry&);
+
+} // namespace ceph::mon::cmds::osdmonitor
+
 OSDMonitor::OSDMonitor(
   CephContext *cct,
   Monitor *mn,
@@ -271,11 +308,14 @@ OSDMonitor::OSDMonitor(
   const string& service_name)
  : PaxosService(mn, p, service_name),
    cct(cct),
+   commands("OSDMonitor"),
    inc_osd_cache(g_conf->mon_osd_cache_size),
    full_osd_cache(g_conf->mon_osd_cache_size),
    has_osdmap_manifest(false),
    mapper(mn->cct, &mn->cpu_tp)
-{}
+{
+    ceph::mon::cmds::osdmonitor::register_commands(commands);
+}
 
 bool OSDMonitor::_have_pending_crush()
 {
@@ -4352,6 +4392,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   int r = 0;
   bufferlist rdata;
   stringstream ss, ds;
+  string rs;  
 
   cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
@@ -4372,6 +4413,17 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   string format;
   cmd_getval(cct, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
+
+/////// JFW: preprocess_command() multiplexer:
+  // Capture the context (state environment) required by commands:
+  ceph::mon::cmds::osdmonitor_command_ctx state(
+    *this, *cct, *mon, *m, op, *paxos, cmdmap, osdmap, f.get(), ss, rdata, rs, prefix);
+
+  if(auto [status, result ] = ceph::mon::cmds::multiplex_command(ceph::operation_type::preprocess, state, prefix);
+     ceph::mon::cmds::osdmonitor_command_registry::op_result::accepted == status) {
+    return result;
+  }
+/////// JFW: END preprocess_command() multiplexer:
 
   if (prefix == "osd stat") {
     osdmap.print_summary(f.get(), ds, "", true);
@@ -5681,7 +5733,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   }
 
  reply:
-  string rs;
   getline(ss, rs);
   mon->reply_command(op, r, rs, rdata, get_last_committed());
   return true;
@@ -8066,8 +8117,21 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   // This should be used as a general guideline for most commands handled
   // in this function.  Adapt as you see fit, but please bear in mind that
   // this is the expected behavior.
-   
- 
+
+  // Multiplex registered commands:   
+  {
+  using namespace ceph::mon::cmds;
+
+  // Capture the context (state environment) required by commands:
+  osdmonitor_command_ctx state(
+    *this, *cct, *mon, *m, op, *paxos, cmdmap, osdmap, f.get(), ss, rdata, rs, prefix);
+
+  if(auto [status, result ] = multiplex_command(ceph::operation_type::prepare, state, prefix);
+     osdmonitor_command_registry::op_result::accepted == status) {
+    return result;
+  }
+  }
+
   if (prefix == "osd setcrushmap" ||
       (prefix == "osd crush set" && !osdid_present)) {
     if (pending_inc.crush.length()) {
@@ -12445,3 +12509,210 @@ void OSDMonitor::_pool_op_reply(MonOpRequestRef op,
 					 ret, epoch, get_last_committed(), blp);
   mon->send_reply(op, reply);
 }
+
+////////// JFW: porting commands:
+
+namespace ceph::mon::cmds::osdmonitor {
+
+using namespace ceph::mon::cmds;
+
+struct osd_new : public osdmonitor_command
+{
+ vector<string> tags() { return { "osd new" }; }
+
+ osdmonitor_command_result at_prepare(const osdmonitor_command_ctx& state, string_view cmd)
+ {
+    auto* mon    = &state.mon;          // ptr, otherwise macro dout() fails
+    auto& osdmap = state.osdmap;        // otherwise macro dout() fails
+
+    auto& m      = state.mmon_command;
+
+    int err = 0; // sometimes used to indicate idempotent, but appears inconsistent...
+
+dout(10) << "JFW: in at_prepare()! HERE I AM!" << dendl;
+    // make sure authmon is writeable.
+    if (!mon->authmon()->is_writeable()) {
+      dout(10) << __func__ << " waiting for auth mon to be writeable for "
+               << "osd new" << dendl;
+      mon->authmon()->wait_for_writeable(state.op, new OSDMonitor::C_RetryMessage(&state.osdmonitor, state.op));
+      return { osdmonitor_cmd_status::failure, err };
+    }
+
+    bufferlist bl = m.get_data();
+    string param_json = bl.to_str();
+    dout(20) << __func__ << " osd new json = " << param_json << dendl;
+
+    map<string,string> param_map; 
+
+    err = get_json_str_map(param_json, state.ss, &param_map);
+    if (err < 0) {
+dout(10) << "JFW: get_json_str_map() failed, return failure" << dendl;
+      return { osdmonitor_cmd_status::failure, err };
+    }
+
+    dout(20) << __func__ << " osd new params " << param_map << dendl;
+
+    state.paxos.plug();
+    err = state.osdmonitor.prepare_command_osd_new(state.op, state.cmdmap, param_map, state.ss, state.f);
+    state.paxos.unplug();
+
+    if (err < 0) {
+dout(10) << "JFW: paxos/prepare_command_osd_new issue, return failure" << dendl;
+        return { osdmonitor_cmd_status::failure, err };
+    }
+
+    if (state.f) {
+      state.f->flush(state.rdata);
+    } else {
+      state.rdata.append(state.ss);
+    }
+
+    if (err == EEXIST) {
+dout(10) << "JFW: err == EEXIST, return ok" << dendl;
+      // idempotent operation
+// JFW: very hard to understand if this should be a success or a failure:
+      return { osdmonitor_cmd_status::success, 0 };
+    }
+
+    state.osdmonitor.wait_for_finished_proposal(state.op,
+        new MonitorProjection::C_Command(mon, state.op, 0, state.rs, state.rdata,
+                                         state.osdmonitor.get_last_committed() + 1));
+    state.osdmonitor.force_immediate_propose();
+
+dout(10) << "JFW: normal exit, return 1" << dendl;
+    return { osdmonitor_cmd_status::success, 1 };
+ }
+};
+
+struct osd_purge : public osdmonitor_command
+{
+ vector<string> tags() { return { "osd destroy", "osd purge" }; }
+
+ osdmonitor_command_result at_prepare(const osdmonitor_command_ctx& state, string_view cmd)
+ {
+    auto* mon    = &state.mon;          // ptr, otherwise macro dout() fails
+    auto& osdmap = state.osdmap;        // otherwise macro dout() fails
+
+    auto& ss     = state.ss;
+
+dout(10) << "JFW: osd_purge at_prepare()" << dendl;
+    /*
+     * Destroying an OSD means that we don't expect to further make use of
+     * the OSDs data (which may even become unreadable after this operation),
+     * and that we are okay with scrubbing all its cephx keys and config-key
+     * data (which may include lockbox keys, thus rendering the osd's data
+     * unreadable).
+     *
+     * The OSD will not be removed. Instead, we will mark it as destroyed,
+     * such that a subsequent call to `create` will not reuse the osd id.
+     * This will play into being able to recreate the OSD, at the same
+     * crush location, with minimal data movement.
+     *
+     * Note: this command requires the target OSD to be marked down. If you're
+     * trying to test this locally, using "osd down" may not work because the 
+     * target OSD may mark itself "up"-- so, kill the OSD process.
+     */
+
+    int err = 0;    // used for result checking 
+
+    // make sure authmon is writeable.
+    if (!mon->authmon()->is_writeable()) {
+      dout(10) << __func__ << " waiting for auth mon to be writeable for "
+               << "osd destroy" << dendl;
+      mon->authmon()->wait_for_writeable(state.op, new MonitorProjection::C_RetryMessage(mon, state.op));
+
+      return { osdmonitor_cmd_status::failure, 0 };
+    }
+
+    int64_t id;
+    if (!cmd_getval(&state.cct, state.cmdmap, "id", id)) {
+      state.ss << "unable to parse osd id value '"
+               << cmd_vartype_stringify(state.cmdmap.at("id")) << "";
+
+      return { osdmonitor_cmd_status::failure, -EINVAL };
+    }
+
+    bool is_destroy = (state.prefix == "osd destroy");
+    if (!is_destroy) {
+      assert("osd purge" == state.prefix);
+    }
+
+    string sure;
+    if (!cmd_getval(&state.cct, state.cmdmap, "sure", sure) ||
+        sure != "--yes-i-really-mean-it") {
+      ss << "Are you SURE? This will mean real, permanent data loss, as well "
+         << "as cephx and lockbox keys. Pass --yes-i-really-mean-it if you "
+         << "really do.";
+
+      return { osdmonitor_cmd_status::failure, -EPERM};
+    } else if (!osdmap.exists(id)) {
+      ss << "osd." << id << " does not exist";
+
+      return { osdmonitor_cmd_status::failure, 0 };
+    } else if (osdmap.is_up(id)) {
+      ss << "osd." << id << " is not `down`.";
+
+dout(10) << "JFW: osd_purge at_prepare() IS NOT DOWN" << dendl;
+      return { osdmonitor_cmd_status::failure, -EBUSY };
+    } else if (is_destroy && osdmap.is_destroyed(id)) {
+      ss << "destroyed osd." << id;
+
+      return { osdmonitor_cmd_status::failure, 0 };
+    }
+
+    bool goto_reply = false;
+
+    state.paxos.plug();
+    if (is_destroy) {
+      err = state.osdmonitor.prepare_command_osd_destroy(id, ss);
+      // we checked above that it should exist.
+      assert(err != -ENOENT);
+    } else {
+      err = state.osdmonitor.prepare_command_osd_purge(id, ss);
+      if (err == -ENOENT) {
+        err = 0;
+        ss << "osd." << id << " does not exist.";
+        goto_reply = true;
+      }
+    }
+    state.paxos.unplug();
+
+    if (err < 0 || goto_reply) {
+
+      return { osdmonitor_cmd_status::failure, err };
+    }
+
+    if (is_destroy) {
+      ss << "destroyed osd." << id;
+    } else {
+      ss << "purged osd." << id;
+    }
+
+    getline(ss, state.rs);
+    state.osdmonitor.wait_for_finished_proposal(state.op,
+        new MonitorProjection::C_Command(&state.mon, state.op, 0, state.rs, state.rdata, state.osdmonitor.get_last_committed() + 1));
+    state.osdmonitor.force_immediate_propose();
+
+    return { osdmonitor_cmd_status::success, 1 };
+ }
+};
+
+} // namespace ceph::mon::cmds::osdmonitor 
+
+/* Command registry:
+    - Add your function types here, watch them grow!  */
+namespace ceph::mon::cmds::osdmonitor {
+
+void register_commands(ceph::mon::cmds::osdmonitor_command_registry& commands)
+{
+ ceph::register_commands<osdmonitor_command_registry, 
+    osd_new,
+    osd_purge
+ >(commands);
+
+ /* If you require a non-default ctor, you can manually initialize and
+    add your types here: */
+}
+
+} // namespace ceph::mon::cmds::osdmonitor
+
