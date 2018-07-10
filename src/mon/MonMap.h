@@ -311,19 +311,6 @@ public:
     assert(mon_info.count(n));
     mon_info[n].public_addr = a;
   }
-  entity_inst_t get_inst(const string& n) {
-    assert(mon_info.count(n));
-    int m = get_rank(n);
-    assert(m >= 0); // vector can't take negative indicies
-    return get_inst(m);
-  }
-  entity_inst_t get_inst(unsigned m) const {
-    assert(m < ranks.size());
-    entity_inst_t i;
-    i.addr = get_addr(m);
-    i.name = entity_name_t::MON(m);
-    return i;
-  }
 
   void encode(bufferlist& blist, uint64_t con_features) const;
   void decode(bufferlist& blist) {
