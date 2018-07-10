@@ -141,7 +141,7 @@ class MDSCacheObject {
 protected:
   __s32      ref = 0;       // reference count
 #ifdef MDS_REF_SET
-  mempool::mds_co::map<int,int> ref_map;
+  mempool::mds_co::flat_map<int,int> ref_map;
 #endif
 
  public:
@@ -208,10 +208,8 @@ protected:
 
   void print_pin_set(std::ostream& out) const {
 #ifdef MDS_REF_SET
-    std::map<int, int>::const_iterator it = ref_map.begin();
-    while (it != ref_map.end()) {
-      out << " " << pin_name(it->first) << "=" << it->second;
-      ++it;
+    for(auto const &p : ref_map) {
+      out << " " << pin_name(p.first) << "=" << p.second;
     }
 #else
     out << " nref=" << ref;
@@ -229,6 +227,11 @@ protected:
   bool is_auth_pinned() const { return auth_pins || nested_auth_pins; }
   int get_num_auth_pins() const { return auth_pins; }
   int get_num_nested_auth_pins() const { return nested_auth_pins; }
+#ifdef MDS_AUTHPIN_SET
+  void print_authpin_set(std::ostream& out) const {
+    out << " (" << auth_pin_set << ")";
+  }
+#endif
 
   void dump_states(Formatter *f) const;
   void dump(Formatter *f) const;
