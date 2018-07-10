@@ -46,22 +46,28 @@ struct mon_info_t {
    */
   string name;
   /**
-   * monitor's public address
+   * monitor's public address(es)
    *
-   * public facing address, traditionally used to communicate with all clients
-   * and other monitors.
+   * public facing address(es), used to communicate with all clients
+   * and with other monitors.
    */
-  entity_addr_t public_addr;
+  entity_addrvec_t public_addrs;
   /**
    * the priority of the mon, the lower value the more preferred
    */
   uint16_t priority{0};
 
+  // <REMOVE ME>
   mon_info_t(const string& n, const entity_addr_t& p_addr, uint16_t p)
-    : name(n), public_addr(p_addr), priority(p)
+    : name(n), public_addrs(p_addr), priority(p)
   {}
-  mon_info_t(const string &n, const entity_addr_t& p_addr)
-    : name(n), public_addr(p_addr)
+  // </REMOVE ME>
+
+  mon_info_t(const string& n, const entity_addrvec_t& p_addrs, uint16_t p)
+    : name(n), public_addrs(p_addrs), priority(p)
+  {}
+  mon_info_t(const string &n, const entity_addrvec_t& p_addrs)
+    : name(n), public_addrs(p_addrs)
   { }
 
   mon_info_t() { }
@@ -131,7 +137,9 @@ public:
     // populate addr_mons
     addr_mons.clear();
     for (auto& p : mon_info) {
-      addr_mons[p.second.public_addr] = p.first;
+      for (auto& a : p.second.public_addrs.v) {
+	addr_mons[a] = p.first;
+      }
     }
   }
 
@@ -154,10 +162,10 @@ public:
    * @param ls list to populate with the monitors' addresses
    */
   void list_addrs(list<entity_addr_t>& ls) const {
-    for (map<string,mon_info_t>::const_iterator p = mon_info.begin();
-         p != mon_info.end();
-         ++p) {
-      ls.push_back(p->second.public_addr);
+    for (auto& i : mon_info) {
+      for (auto& j : i.second.public_addrs.v) {
+	ls.push_back(j);
+      }
     }
   }
 
@@ -168,7 +176,9 @@ public:
    */
   void add(const mon_info_t& m) {
     ceph_assert(mon_info.count(m.name) == 0);
-    ceph_assert(addr_mons.count(m.public_addr) == 0);
+    for (auto& a : m.public_addrs.v) {
+      ceph_assert(addr_mons.count(a) == 0);
+    }
     mon_info[m.name] = m;
     if (get_required_features().contains_all(
 	  ceph::features::mon::FEATURE_NAUTILUS)) {
@@ -186,8 +196,8 @@ public:
    * @param name Monitor name (i.e., 'foo' in 'mon.foo')
    * @param addr Monitor's public address
    */
-  void add(const string &name, const entity_addr_t &addr) {
-    add(mon_info_t(name, addr));
+  void add(const string &name, const entity_addrvec_t &addrv) {
+    add(mon_info_t(name, addrv));
   }
 
   /**
@@ -260,11 +270,24 @@ public:
    *          false otherwise.
    */
   bool contains(const entity_addr_t &a) const {
-    for (map<string,mon_info_t>::const_iterator p = mon_info.begin();
-         p != mon_info.end();
-         ++p) {
-      if (p->second.public_addr == a)
-        return true;
+    for (auto& i : mon_info) {
+      for (auto& j : i.second.public_addrs.v) {
+	if (j == a) {
+	  return true;
+	}
+      }
+    }
+    return false;
+  }
+  bool contains(const entity_addrvec_t &av) const {
+    for (auto& i : mon_info) {
+      for (auto& j : i.second.public_addrs.v) {
+	for (auto& k : av.v) {
+	  if (j == k) {
+	    return true;
+	  }
+	}
+      }
     }
     return false;
   }
@@ -279,6 +302,14 @@ public:
       return string();
     else
       return p->second;
+  }
+  string get_name(const entity_addrvec_t& av) const {
+    for (auto& i : av.v) {
+      map<entity_addr_t,string>::const_iterator p = addr_mons.find(i);
+      if (p != addr_mons.end())
+	return p->second;
+    }
+    return string();
   }
 
   int get_rank(const string& n) const {
@@ -303,25 +334,34 @@ public:
     return true;
   }
 
-  entity_addrvec_t get_addrs(const string& n) const {
-    return entity_addrvec_t(get_addr(n));
+  // <REMOVE ME>
+  entity_addr_t get_addr(const string& n) const {
+    return get_addrs(n).legacy_addr();
   }
-  entity_addrvec_t get_addrs(unsigned m) const {
-    return entity_addrvec_t(get_addr(m));
-  }
-
-  const entity_addr_t& get_addr(const string& n) const {
-    ceph_assert(mon_info.count(n));
-    map<string,mon_info_t>::const_iterator p = mon_info.find(n);
-    return p->second.public_addr;
-  }
-  const entity_addr_t& get_addr(unsigned m) const {
-    ceph_assert(m < ranks.size());
-    return get_addr(ranks[m]);
+  entity_addr_t get_addr(unsigned m) const {
+    return get_addrs(m).legacy_addr();
   }
   void set_addr(const string& n, const entity_addr_t& a) {
     ceph_assert(mon_info.count(n));
-    mon_info[n].public_addr = a;
+    mon_info[n].public_addrs = entity_addrvec_t(a);
+  }
+  void add(const string &name, const entity_addr_t &a) {
+    add(name, entity_addrvec_t(a));
+  }
+  // </REMOVE ME>
+
+  const entity_addrvec_t& get_addrs(const string& n) const {
+    ceph_assert(mon_info.count(n));
+    map<string,mon_info_t>::const_iterator p = mon_info.find(n);
+    return p->second.public_addrs;
+  }
+  const entity_addrvec_t& get_addrs(unsigned m) const {
+    ceph_assert(m < ranks.size());
+    return get_addrs(ranks[m]);
+  }
+  void set_addrvec(const string& n, const entity_addrvec_t& a) {
+    ceph_assert(mon_info.count(n));
+    mon_info[n].public_addrs = a;
   }
 
   void encode(bufferlist& blist, uint64_t con_features) const;
