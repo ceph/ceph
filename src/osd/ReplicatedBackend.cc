@@ -368,6 +368,9 @@ public:
     const hobject_t &hoid,
     map<string, bufferlist> &attrs
     ) {
+    for (auto& attr : attrs) {
+      attr.second.rebuild();
+    }
     t.setattrs(get_coll(hoid), ghobject_t(hoid), attrs);
   }
   void setattr(
@@ -375,6 +378,7 @@ public:
     const string &attrname,
     bufferlist &bl
     ) {
+    bl.rebuild();
     t.setattr(get_coll(hoid), ghobject_t(hoid), attrname, bl);
   }
   void rmattr(
