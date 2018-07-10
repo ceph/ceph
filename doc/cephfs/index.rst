@@ -103,6 +103,11 @@ authentication keyring.
     Configuring multiple active MDS daemons <multimds>
     Export over NFS <nfs>
 
+.. toctree:: 
+   :hidden:
+
+    Advanced: Metadata repair <disaster-recovery-experts>
+
 .. raw:: html
 
 	</td></tr></tbody></table>
