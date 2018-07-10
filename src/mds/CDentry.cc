@@ -83,8 +83,12 @@ ostream& operator<<(ostream& out, const CDentry& dn)
     out << " pv=" << dn.get_projected_version();
   out << " v=" << dn.get_version();
 
-  if (dn.is_auth_pinned())
+  if (dn.is_auth_pinned()) {
     out << " ap=" << dn.get_num_auth_pins() << "+" << dn.get_num_nested_auth_pins();
+#ifdef MDS_AUTHPIN_SET
+    dn.print_authpin_set(out);
+#endif
+  }
 
   {
     const CInode *inode = dn.get_linkage()->get_inode();
@@ -362,8 +366,11 @@ void CDentry::auth_unpin(void *by)
   auth_pins--;
 
 #ifdef MDS_AUTHPIN_SET
-  assert(auth_pin_set.count(by));
-  auth_pin_set.erase(auth_pin_set.find(by));
+  {
+    auto it = auth_pin_set.find(by);
+    assert(it != auth_pin_set.end());
+    auth_pin_set.erase(it);
+  }
 #endif
 
   if (auth_pins == 0)
