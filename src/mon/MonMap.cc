@@ -100,8 +100,10 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
     encode_raw(fsid, blist);
     encode(epoch, blist);
     vector<entity_inst_t> mon_inst(ranks.size());
-    for (unsigned n = 0; n < ranks.size(); n++)
-      mon_inst[n] = get_inst(n);
+    for (unsigned n = 0; n < ranks.size(); n++) {
+      mon_inst[n].name = entity_name_t::MON(n);
+      mon_inst[n].addr = get_addrs(n).legacy_addr();
+    }
     encode(mon_inst, blist, con_features);
     encode(last_changed, blist);
     encode(created, blist);

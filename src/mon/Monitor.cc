@@ -3941,7 +3941,7 @@ void Monitor::remove_all_sessions()
 
 void Monitor::send_mon_message(Message *m, int rank)
 {
-  messenger->send_message(m, monmap->get_inst(rank));
+  messenger->send_to_mon(m, monmap->get_addrs(rank));
 }
 
 void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
