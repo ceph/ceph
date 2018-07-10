@@ -50,11 +50,6 @@ class Module(MgrModule):
             "desc": "Show stored device metrics for the device",
             "perm": "r"
         },
-        {
-            "cmd": "devicehealth self-test",
-            "desc": "Run a self-test on the devicehealth module",
-            "perm": "rw",
-        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -97,8 +92,6 @@ class Module(MgrModule):
             return self.scrape_all();
         elif cmd['prefix'] == 'device show-health-metrics':
             return self.show_device_metrics(cmd['devid'], cmd.get('sample'))
-        elif cmd['prefix'] == 'devicehealth self-test':
-            return self.self_test()
         else:
             # mgr should respect our self.COMMANDS and not call us for
             # any prefix we don't advertise
@@ -119,7 +112,6 @@ class Module(MgrModule):
             (r, after, err) = self.show_device_metrics(devid, '')
             assert r == 0
             assert before != after
-        return (0, '', '')
 
     def refresh_config(self):
         self.enable_monitoring = self.get_config('enable_monitoring', '') is not '' or 'false'
