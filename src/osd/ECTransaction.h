@@ -63,11 +63,15 @@ public:
     map<string, bufferlist> attrs;
     SetAttrsOp(const hobject_t &oid, map<string, bufferlist> &_attrs)
       : oid(oid) {
+      for (auto& attr : attrs) {
+	attr.second.rebuild();
+      }
       attrs.swap(_attrs);
     }
     SetAttrsOp(const hobject_t &oid, const string &key, bufferlist &val)
       : oid(oid) {
-      attrs.insert(make_pair(key, val));
+      val.rebuild();
+      attrs.emplace(key, val);
     }
   };
   struct RmAttrOp {
