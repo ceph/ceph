@@ -747,7 +747,7 @@ reply:
 bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
 {
   MMonJoin *join = static_cast<MMonJoin*>(op->get_req());
-  dout(10) << __func__ << " " << join->name << " at " << join->addr << dendl;
+  dout(10) << __func__ << " " << join->name << " at " << join->addrs << dendl;
 
   MonSession *session = op->get_session();
   if (!session ||
@@ -756,12 +756,14 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
     return true;
   }
 
-  if (pending_map.contains(join->name) && !pending_map.get_addr(join->name).is_blank_ip()) {
+  if (pending_map.contains(join->name) &&
+      !pending_map.get_addr(join->name).is_blank_ip()) {
     dout(10) << " already have " << join->name << dendl;
     return true;
   }
-  if (pending_map.contains(join->addr) && pending_map.get_name(join->addr) == join->name) {
-    dout(10) << " already have " << join->addr << dendl;
+  if (pending_map.contains(join->addrs) &&
+      pending_map.get_name(join->addrs) == join->name) {
+    dout(10) << " already have " << join->addrs << dendl;
     return true;
   }
   return false;
@@ -769,12 +771,13 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
 bool MonmapMonitor::prepare_join(MonOpRequestRef op)
 {
   MMonJoin *join = static_cast<MMonJoin*>(op->get_req());
-  dout(0) << "adding/updating " << join->name << " at " << join->addr << " to monitor cluster" << dendl;
+  dout(0) << "adding/updating " << join->name
+	  << " at " << join->addrs << " to monitor cluster" << dendl;
   if (pending_map.contains(join->name))
     pending_map.remove(join->name);
-  if (pending_map.contains(join->addr))
-    pending_map.remove(pending_map.get_name(join->addr));
-  pending_map.add(join->name, join->addr);
+  if (pending_map.contains(join->addrs))
+    pending_map.remove(pending_map.get_name(join->addrs));
+  pending_map.add(join->name, join->addrs);
   pending_map.last_changed = ceph_clock_now();
   return true;
 }
