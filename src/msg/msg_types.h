@@ -554,6 +554,17 @@ struct entity_addrvec_t {
     }
     return entity_addr_t();
   }
+  entity_addr_t legacy_or_front_addr() const {
+    for (auto& a : v) {
+      if (a.type == entity_addr_t::TYPE_LEGACY) {
+	return a;
+      }
+    }
+    if (!v.empty()) {
+      return v.front();
+    }
+    return entity_addr_t();
+  }
 
   bool parse(const char *s, const char **end = 0);
 
