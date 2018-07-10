@@ -318,8 +318,15 @@ int Dumper::undump(const char *dump_file, bool force)
   {
     uint32_t const object_size = h.layout.object_size;
     assert(object_size > 0);
-    uint64_t const last_obj = h.write_pos / object_size;
-    uint64_t const purge_count = 2;
+    uint64_t last_obj = h.write_pos / object_size;
+    uint64_t purge_count = 2;
+    /* When the length is zero, the last_obj should be zeroed 
+     * from the offset determined by the new write_pos instead of being purged.
+     */
+    if (!len) {
+        purge_count = 1;
+        ++last_obj;
+    }
     C_SaferCond purge_cond;
     cout << "Purging " << purge_count << " objects from " << last_obj << std::endl;
     lock.Lock();
@@ -327,6 +334,20 @@ int Dumper::undump(const char *dump_file, bool force)
 		      ceph::real_clock::now(), 0, &purge_cond);
     lock.Unlock();
     purge_cond.wait();
+  }
+  /* When the length is zero, zero the last object 
+   * from the offset determined by the new write_pos.
+   */
+  if (!len) {
+    uint64_t offset_in_obj = h.write_pos % h.layout.object_size;
+    uint64_t len           = h.layout.object_size - offset_in_obj;
+    C_SaferCond zero_cond;
+    cout << "Zeroing " << len << " bytes in the last object." << std::endl;
+    
+    lock.Lock();
+    filer.zero(ino, &h.layout, snapc, h.write_pos, len, ceph::real_clock::now(), 0, &zero_cond);
+    lock.Unlock();
+    zero_cond.wait();
   }
 
   // Stream from `fd` to `filer`
