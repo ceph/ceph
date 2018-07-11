@@ -207,6 +207,12 @@ TokenEngine::result_t
 TokenEngine::authenticate(const std::string& token,
                           const req_state* const s) const
 {
+  //If Keystone is enabled and the request has a session token, then keystone shouldn't authenticate it.
+  if (s->info.args.exists("X-Amz-Security-Token") ||
+      s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
+    return result_t::deny();
+  }
+
   boost::optional<TokenEngine::token_envelope_t> t;
 
   /* This will be initialized on the first call to this method. In C++11 it's
