@@ -26,6 +26,8 @@
 #include "common/interval_map.h"
 #include "include/buffer.h"
 #include "common/hobject.h"
+#include "common/lru_map.h"
+#include "OSD.h"
 
 /**
    ExtentCache
@@ -133,6 +135,9 @@ private:
     uint64_t length;
     boost::optional<bufferlist> bl;
 
+    bool recommend_reserve = false;
+    entity_name_t from;
+
     uint64_t get_length() const {
       return length;
     }
@@ -201,10 +206,12 @@ private:
     struct update_action {
       enum type {
 	NONE,
-	UPDATE_PIN
+	UPDATE_PIN,
+	RESERVE_EXT
       };
       type action = NONE;
       boost::optional<bufferlist> bl;
+      boost::optional<entity_name_t> from;
     };
     template <typename F>
     void traverse_update(
@@ -297,6 +304,19 @@ private:
 		extoff, extlen);
 	    }
 	    final_extent->link(*this, pin);
+	  } else if (action.action == update_action::RESERVE_EXT) {
+	    bufferlist bl;
+            bl.substr_of(
+                *(ext->bl),
+                extoff - ext->offset,
+                extlen);
+	    final_extent = new ExtentCache::extent(
+                extoff,
+	        bl);
+	    final_extent->recommend_reserve = true;
+	    assert(action.from != boost::none);
+	    final_extent->from = *action.from;
+	    final_extent->link(*this, *ps);
 	  }
 	  delete ext;
 	}
@@ -377,16 +397,37 @@ private:
       tid = in_tid;
       pin_type = in_type;
     }
+    virtual void pin(extent& ext) {
+      pin_list.push_back(ext);
+    }
   };
 
   void release_pin(pin_state &p) {
     for (auto iter = p.pin_list.begin(); iter != p.pin_list.end(); ) {
-      unique_ptr<extent> extent(&*iter); // we now own this
-      iter++; // unlink will invalidate
-      assert(extent->parent_extent_set);
-      auto &eset = *(extent->parent_extent_set);
-      extent->unlink();
-      remove_and_destroy_if_empty(eset);
+      assert(iter->parent_extent_set);
+      if (iter->recommend_reserve) {
+	entity_name_t from = iter->from;
+	shared_ptr<reserve_pin> rpin;	
+
+	if(!reserve_pin_list.find(from, rpin)) {
+	  rpin = shared_ptr<reserve_pin>(new reserve_pin(this));
+	  open_reserve_pin(*rpin);
+	  reserve_pin_list.add(from, rpin);
+	}
+
+	auto extent = &*iter;
+	object_extent_set *pes = extent->parent_extent_set;
+	iter++;
+
+	extent->unlink();
+	extent->link(*pes, *rpin);
+      } else {
+	unique_ptr<extent> extent(&*iter); // we now own this
+	iter++; // unlink will invalidate
+	auto &eset = *(extent->parent_extent_set);
+	extent->unlink();
+	remove_and_destroy_if_empty(eset);
+      }
     }
     p.tid = 0;
     p.pin_type = pin_state::NONE;
@@ -403,7 +444,52 @@ public:
     write_pin() : pin_state() {}
   };
 
+  class reserve_pin : public pin_state {
+    friend class ExtentCache;
+    ExtentCache *parent;
+  private:
+    void open(uint64_t in_tid) {
+      _open(in_tid, pin_state::WRITE);
+    }
+
+  public:
+    reserve_pin(ExtentCache* parent) : pin_state(), parent(parent) {}
+    ~reserve_pin() {
+      for (auto iter = pin_list.begin(); iter != pin_list.end(); ) {
+	unique_ptr<extent> extent(&*iter); // we now own this
+	iter++; // unlink will invalidate
+	assert(extent->parent_extent_set);
+	auto &eset = *(extent->parent_extent_set);
+	extent->unlink();
+	parent->remove_and_destroy_if_empty(eset);
+      }
+    }
+    virtual void pin(extent& ext) {
+      pin_state::pin(ext);
+
+      if (pin_list.size() > parent->extents_per_clent) {
+        auto iter = pin_list.begin();
+	unique_ptr<extent> extent(&*iter); // we now own this
+        assert(extent->parent_extent_set);
+        auto &eset = *(extent->parent_extent_set);
+        extent->unlink();
+        parent->remove_and_destroy_if_empty(eset);
+      }
+    }
+  };
+
+  ExtentCache(unsigned max_client_num, unsigned extents_per_clent):
+    extents_per_clent(extents_per_clent),
+    reserve_pin_list(max_client_num) {}
+
+  unsigned extents_per_clent;
+  lru_map<entity_name_t, shared_ptr<reserve_pin>> reserve_pin_list;
+
   void open_write_pin(write_pin &pin) {
+    pin.open(next_write_tid++);
+  }
+
+  void open_reserve_pin(reserve_pin& pin) {
     pin.open(next_write_tid++);
   }
 
@@ -474,12 +560,25 @@ public:
     write_pin &pin,
     const extent_map &extents);
 
+  /*
+   *
+   */
+  void recommend_reserve(
+    const hobject_t &oid,
+    write_pin &pin,
+    const extent_set &to_reserve,
+    const entity_name_t &from);
+
   /**
    * Release all buffers pinned by pin
    */
   void release_write_pin(
     write_pin &pin) {
     release_pin(pin);
+  }
+
+  void clear_reserve() {
+    reserve_pin_list.clear();
   }
 
   ostream &print(

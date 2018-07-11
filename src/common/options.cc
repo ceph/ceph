@@ -2868,6 +2868,18 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("osd_extent_cache_reserve_enable", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
+    Option("osd_extent_cache_max_client_num", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(20)
+    .set_description(""),
+
+    Option("osd_extent_cache_extents_per_client", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(50)
+    .set_description(""),
+
     Option("osd_recover_clone_overlap_limit", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10)
     .set_description(""),

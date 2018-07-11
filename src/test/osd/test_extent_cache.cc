@@ -52,7 +52,7 @@ TEST(extentcache, simple_write)
 {
   hobject_t oid;
 
-  ExtentCache c;
+  ExtentCache c{0,0};
   ExtentCache::write_pin pin;
   c.open_write_pin(pin);
 
@@ -91,7 +91,7 @@ TEST(extentcache, write_write_overlap)
 {
   hobject_t oid;
 
-  ExtentCache c;
+  ExtentCache c{0,0};
   ExtentCache::write_pin pin;
   c.open_write_pin(pin);
 
@@ -171,7 +171,7 @@ TEST(extentcache, write_write_overlap2)
 {
   hobject_t oid;
 
-  ExtentCache c;
+  ExtentCache c{0,0};
   ExtentCache::write_pin pin;
   c.open_write_pin(pin);
 

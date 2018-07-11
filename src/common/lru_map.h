@@ -44,6 +44,7 @@ public:
   bool find_and_update(const K& key, V *value, UpdateContext *ctx);
   void add(const K& key, V& value);
   void erase(const K& key);
+  void clear();
 };
 
 template <class K, class V>
@@ -127,6 +128,15 @@ void lru_map<K, V>::erase(const K& key)
   entry& e = iter->second;
   entries_lru.erase(e.lru_iter);
   entries.erase(iter);
+}
+
+template <class K, class V>
+void lru_map<K, V>::clear()
+{
+  Mutex::Locker l(lock);
+
+  entries_lru.clear();  
+  entries.clear();
 }
 
 #endif

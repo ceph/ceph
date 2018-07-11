@@ -197,6 +197,8 @@ ECBackend::ECBackend(
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
   : PGBackend(cct, pg, store, coll, ch),
+    cache(cct->_conf->osd_extent_cache_max_client_num,
+      cct->_conf->osd_extent_cache_extents_per_client),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
   assert((ec_impl->get_data_chunk_count() *
@@ -1373,6 +1375,8 @@ void ECBackend::on_change()
   completed_to = eversion_t();
   committed_to = eversion_t();
   pipeline_state.clear();
+  if (pipeline_state.cache_invalid())
+    cache.clear_reserve();
   waiting_reads.clear();
   waiting_state.clear();
   waiting_commit.clear();
@@ -1891,7 +1895,7 @@ bool ECBackend::try_reads_to_commit()
   waiting_commit.push_back(*op);
 
   dout(10) << __func__ << ": starting commit on " << *op << dendl;
-  dout(20) << __func__ << ": " << cache << dendl;
+  //dout(20) << __func__ << ": " << cache << dendl;
 
   get_parent()->apply_stats(
     op->hoid,
@@ -1962,6 +1966,8 @@ bool ECBackend::try_reads_to_commit()
       dout(20) << __func__ << ": " << hpair << dendl;
       cache.present_rmw_update(hpair.first, op->pin, hpair.second);
     }
+    for (auto &&hpair: op->plan.to_read)
+    cache.recommend_reserve(hpair.first, op->pin, hpair.second, op->reqid.name);
   }
   op->remote_read.clear();
   op->remote_read_result.clear();
@@ -2079,6 +2085,7 @@ bool ECBackend::try_finish_rmw()
   if (waiting_reads.empty() &&
       waiting_commit.empty()) {
     pipeline_state.clear();
+    cache.clear_reserve();
     dout(20) << __func__ << ": clearing pipeline_state "
 	     << pipeline_state
 	     << dendl;

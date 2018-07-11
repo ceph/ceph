@@ -19,7 +19,8 @@ void ExtentCache::extent::_link_pin_state(pin_state &pin_state)
   assert(parent_extent_set);
   assert(!parent_pin_state);
   parent_pin_state = &pin_state;
-  pin_state.pin_list.push_back(*this);
+  pin_state.pin(*this);
+  //pin_state.pin_list.push_back(*this);
 }
 
 void ExtentCache::extent::_unlink_pin_state()
@@ -212,6 +213,30 @@ void ExtentCache::present_rmw_update(
 	  res.get_val(),
 	  off - res.get_off(),
 	  len);
+      });
+  }
+}
+
+void ExtentCache::recommend_reserve(
+  const hobject_t &oid,
+  write_pin &pin,
+  const extent_set &extents,
+  const entity_name_t &from)
+{
+  if (extents.empty()) {
+    return;
+  }
+  auto &eset = get_or_create(oid);
+  for (auto &&res: extents) {
+    eset.traverse_update(
+      pin,
+      res.first,
+      res.second,
+      [&](uint64_t off, uint64_t len,
+	  extent *ext, object_extent_set::update_action *action) {
+	action->action = object_extent_set::update_action::RESERVE_EXT;
+	action->from = from;
+	assert(ext && ext->pinned_by_write());
       });
   }
 }
