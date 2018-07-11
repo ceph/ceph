@@ -1947,7 +1947,7 @@ void MDSRankDispatcher::handle_mds_map(
       MDSInternalContextBase::vec ls;
       ls.swap(p->second);
       waiting_for_mdsmap.erase(p++);
-      finish_contexts(g_ceph_context, ls);
+      queue_waiters(ls);
     }
   }
 
