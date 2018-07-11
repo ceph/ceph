@@ -335,6 +335,12 @@ class Module(MgrModule):
         },
     ]
 
+    OPTIONS = [
+            {'name': 'server_addr'},
+            {'name': 'server_port'},
+            {'name': 'scrape_interval'},
+    ]
+
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.metrics = Metrics()
@@ -651,6 +657,9 @@ class Module(MgrModule):
                         return inst.collect_cache
                 else:
                     raise cherrypy.HTTPError(503, 'No MON connection')
+
+        # Make the cache timeout for collecting configurable
+        self.collect_timeout = self.get_localized_config('scrape_interval', 5.0)
 
         server_addr = self.get_localized_config('server_addr', DEFAULT_ADDR)
         server_port = self.get_localized_config('server_port', DEFAULT_PORT)
