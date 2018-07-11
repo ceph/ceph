@@ -1975,7 +1975,7 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
        * as ObjectStore::get_max_attr_name_length() can set the limit even
        * lower than the "osd_max_attr_name_len" configurable.  */
       const size_t max_attr_name_len = \
-        cct->_conf->get_val<size_t>("rgw_max_attr_name_len");
+        cct->_conf.get_val<size_t>("rgw_max_attr_name_len");
       if (max_attr_name_len && attr_name.length() > max_attr_name_len) {
         return -ENAMETOOLONG;
       }
@@ -1983,7 +1983,7 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
       /* Similar remarks apply to the check for value size. We're veryfing
        * it early at the RGW's side as it's being claimed in /info. */
       const size_t max_attr_size = \
-        cct->_conf->get_val<Option::size_t>("rgw_max_attr_size");
+        cct->_conf.get_val<Option::size_t>("rgw_max_attr_size");
       if (max_attr_size && xattr.length() > max_attr_size) {
         return -EFBIG;
       }
@@ -1991,7 +1991,7 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
       /* Swift allows administrators to limit the number of metadats items
        * send _in a single request_. */
       const auto rgw_max_attrs_num_in_req = \
-        cct->_conf->get_val<size_t>("rgw_max_attrs_num_in_req");
+        cct->_conf.get_val<size_t>("rgw_max_attrs_num_in_req");
       if (rgw_max_attrs_num_in_req &&
           ++valid_meta_count > rgw_max_attrs_num_in_req) {
         return -E2BIG;

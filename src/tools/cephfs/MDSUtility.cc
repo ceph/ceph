@@ -49,7 +49,7 @@ MDSUtility::~MDSUtility()
 int MDSUtility::init()
 {
   // Initialize Messenger
-  int r = messenger->bind(g_conf->public_addr);
+  int r = messenger->bind(g_conf()->public_addr);
   if (r < 0)
     return r;
 

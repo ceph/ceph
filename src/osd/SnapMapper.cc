@@ -184,7 +184,7 @@ void SnapMapper::clear_snaps(
   assert(check(oid));
   set<string> to_remove;
   to_remove.insert(to_object_key(oid));
-  if (g_conf->subsys.should_gather<ceph_subsys_osd, 20>()) {
+  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_remove) {
       dout(20) << __func__ << " rm " << i << dendl;
     }
@@ -203,7 +203,7 @@ void SnapMapper::set_snaps(
   encode(in, bl);
   to_set[to_object_key(oid)] = bl;
   dout(20) << __func__ << " " << oid << " " << in.snaps << dendl;
-  if (g_conf->subsys.should_gather<ceph_subsys_osd, 20>()) {
+  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_set) {
       dout(20) << __func__ << " set " << i.first << dendl;
     }
@@ -242,7 +242,7 @@ int SnapMapper::update_snaps(
       to_remove.insert(to_raw_key(make_pair(*i, oid)));
     }
   }
-  if (g_conf->subsys.should_gather<ceph_subsys_osd, 20>()) {
+  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_remove) {
       dout(20) << __func__ << " rm " << i << dendl;
     }
@@ -279,7 +279,7 @@ void SnapMapper::add_oid(
        ++i) {
     to_add.insert(to_raw(make_pair(*i, oid)));
   }
-  if (g_conf->subsys.should_gather<ceph_subsys_osd, 20>()) {
+  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_add) {
       dout(20) << __func__ << " set " << i.first << dendl;
     }
@@ -360,7 +360,7 @@ int SnapMapper::_remove_oid(
        ++i) {
     to_remove.insert(to_raw_key(make_pair(*i, oid)));
   }
-  if (g_conf->subsys.should_gather<ceph_subsys_osd, 20>()) {
+  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_remove) {
       dout(20) << __func__ << " rm " << i << dendl;
     }

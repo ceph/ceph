@@ -19,7 +19,7 @@
 
 // Write a pidfile with the current pid, using the configuration in the
 // provided conf structure.
-int pidfile_write(const md_config_t *conf);
+int pidfile_write(const ConfigProxy& conf);
 
 // Remove the pid file that was previously written by pidfile_write.
 // This is safe to call in a signal handler context.

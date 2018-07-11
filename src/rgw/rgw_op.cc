@@ -5584,7 +5584,7 @@ void RGWCompleteMultipart::execute()
   rgw_pool meta_pool;
   rgw_raw_obj raw_obj;
   int max_lock_secs_mp =
-    s->cct->_conf->get_val<int64_t>("rgw_mp_lock_max_time");
+    s->cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
   utime_t dur(max_lock_secs_mp, 0);
 
   store->obj_to_raw((s->bucket_info).placement_rule, meta_obj, &raw_obj);
@@ -5936,8 +5936,8 @@ void RGWListBucketMultiparts::execute()
 
 void RGWGetHealthCheck::execute()
 {
-  if (!g_conf->rgw_healthcheck_disabling_path.empty() &&
-      (::access(g_conf->rgw_healthcheck_disabling_path.c_str(), F_OK) == 0)) {
+  if (!g_conf()->rgw_healthcheck_disabling_path.empty() &&
+      (::access(g_conf()->rgw_healthcheck_disabling_path.c_str(), F_OK) == 0)) {
     /* Disabling path specified & existent in the filesystem. */
     op_ret = -ERR_SERVICE_UNAVAILABLE; /* 503 */
   } else {

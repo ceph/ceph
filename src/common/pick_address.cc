@@ -123,7 +123,7 @@ struct Observer : public md_config_obs_t {
   const char** get_tracked_conf_keys() const override {
     return (const char **)keys;
   }
-  void handle_conf_change(const md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
 			  const std::set <std::string> &changed) override {
     // do nothing.
   }
@@ -165,26 +165,26 @@ static void fill_in_one_address(CephContext *cct,
 
   Observer obs(conf_var);
 
-  cct->_conf->add_observer(&obs);
+  cct->_conf.add_observer(&obs);
 
-  cct->_conf->set_val_or_die(conf_var, buf);
-  cct->_conf->apply_changes(nullptr);
+  cct->_conf.set_val_or_die(conf_var, buf);
+  cct->_conf.apply_changes(nullptr);
 
-  cct->_conf->remove_observer(&obs);
+  cct->_conf.remove_observer(&obs);
 }
 
 void pick_addresses(CephContext *cct, int needs)
 {
   struct ifaddrs *ifa;
   int r = getifaddrs(&ifa);
-  auto public_addr = cct->_conf->get_val<entity_addr_t>("public_addr");
-  auto public_network = cct->_conf->get_val<std::string>("public_network");
+  auto public_addr = cct->_conf.get_val<entity_addr_t>("public_addr");
+  auto public_network = cct->_conf.get_val<std::string>("public_network");
   auto public_network_interface =
-    cct->_conf->get_val<std::string>("public_network_interface");
-  auto cluster_addr = cct->_conf->get_val<entity_addr_t>("cluster_addr");
-  auto cluster_network = cct->_conf->get_val<std::string>("cluster_network");
+    cct->_conf.get_val<std::string>("public_network_interface");
+  auto cluster_addr = cct->_conf.get_val<entity_addr_t>("cluster_addr");
+  auto cluster_network = cct->_conf.get_val<std::string>("cluster_network");
   auto cluster_network_interface =
-    cct->_conf->get_val<std::string>("cluster_network_interface");
+    cct->_conf.get_val<std::string>("cluster_network_interface");
 
   if (r < 0) {
     string err = cpp_strerror(errno);
@@ -272,10 +272,10 @@ int pick_addresses(
   unsigned msgrv = flags & (CEPH_PICK_ADDRESS_MSGR1 |
 			    CEPH_PICK_ADDRESS_MSGR2);
   if (msgrv == 0) {
-    if (cct->_conf->get_val<bool>("ms_bind_msgr1")) {
+    if (cct->_conf.get_val<bool>("ms_bind_msgr1")) {
       msgrv |= CEPH_PICK_ADDRESS_MSGR1;
     }
-    if (cct->_conf->get_val<bool>("ms_bind_msgr2")) {
+    if (cct->_conf.get_val<bool>("ms_bind_msgr2")) {
       msgrv |= CEPH_PICK_ADDRESS_MSGR2;
     }
     if (msgrv == 0) {
@@ -285,16 +285,16 @@ int pick_addresses(
   unsigned ipv = flags & (CEPH_PICK_ADDRESS_IPV4 |
 			  CEPH_PICK_ADDRESS_IPV6);
   if (ipv == 0) {
-    if (cct->_conf->get_val<bool>("ms_bind_ipv4")) {
+    if (cct->_conf.get_val<bool>("ms_bind_ipv4")) {
       ipv |= CEPH_PICK_ADDRESS_IPV4;
     }
-    if (cct->_conf->get_val<bool>("ms_bind_ipv6")) {
+    if (cct->_conf.get_val<bool>("ms_bind_ipv6")) {
       ipv |= CEPH_PICK_ADDRESS_IPV6;
     }
     if (ipv == 0) {
       return -EINVAL;
     }
-    if (cct->_conf->get_val<bool>("ms_bind_prefer_ipv4")) {
+    if (cct->_conf.get_val<bool>("ms_bind_prefer_ipv4")) {
       flags |= CEPH_PICK_ADDRESS_PREFER_IPV4;
     } else {
       flags &= ~CEPH_PICK_ADDRESS_PREFER_IPV4;
@@ -305,20 +305,20 @@ int pick_addresses(
   string networks;
   string interfaces;
   if (addrt & CEPH_PICK_ADDRESS_PUBLIC) {
-    addr = cct->_conf->get_val<entity_addr_t>("public_addr");
-    networks = cct->_conf->get_val<std::string>("public_network");
+    addr = cct->_conf.get_val<entity_addr_t>("public_addr");
+    networks = cct->_conf.get_val<std::string>("public_network");
     interfaces =
-      cct->_conf->get_val<std::string>("public_network_interface");
+      cct->_conf.get_val<std::string>("public_network_interface");
   } else {
-    addr = cct->_conf->get_val<entity_addr_t>("cluster_addr");
-    networks = cct->_conf->get_val<std::string>("cluster_network");
+    addr = cct->_conf.get_val<entity_addr_t>("cluster_addr");
+    networks = cct->_conf.get_val<std::string>("cluster_network");
     interfaces =
-      cct->_conf->get_val<std::string>("cluster_network_interface");
+      cct->_conf.get_val<std::string>("cluster_network_interface");
     if (networks.empty()) {
       // fall back to public_ network and interface if cluster is not set
-      networks = cct->_conf->get_val<std::string>("public_network");
+      networks = cct->_conf.get_val<std::string>("public_network");
       interfaces =
-	cct->_conf->get_val<std::string>("public_network_interface");
+	cct->_conf.get_val<std::string>("public_network_interface");
     }
   }
   if (addr.is_blank_ip() &&

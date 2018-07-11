@@ -1071,7 +1071,7 @@ int JournalTool::erase_region(JournalScanner const &js, uint64_t const pos, uint
 
   // Write log stream region to RADOS
   // FIXME: get object size somewhere common to scan_events
-  uint32_t object_size = g_conf->mds_log_segment_size;
+  uint32_t object_size = g_conf()->mds_log_segment_size;
   if (object_size == 0) {
     // Default layout object size
     object_size = file_layout_t::get_default().object_size;

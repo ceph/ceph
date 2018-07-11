@@ -551,7 +551,7 @@ public:
   CDir* get_dirfrag(frag_t fg) {
     auto pi = dirfrags.find(fg);
     if (pi != dirfrags.end()) {
-      //assert(g_conf->debug_mds < 2 || dirfragtree.is_leaf(fg)); // performance hack FIXME
+      //assert(g_conf()->debug_mds < 2 || dirfragtree.is_leaf(fg)); // performance hack FIXME
       return pi->second;
     } 
     return NULL;
@@ -1083,7 +1083,7 @@ public:
 public:
   void set_primary_parent(CDentry *p) {
     assert(parent == 0 ||
-	   g_conf->get_val<bool>("mds_hack_allow_loading_invalid_metadata"));
+	   g_conf().get_val<bool>("mds_hack_allow_loading_invalid_metadata"));
     parent = p;
   }
   void remove_primary_parent(CDentry *dn) {

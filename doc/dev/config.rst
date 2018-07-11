@@ -79,10 +79,10 @@ and not done in new code.  Do not ever alter g_conf.
 Changing configuration values
 ====================================================
 
-Configuration values can be changed by calling g_conf->set_val. After changing
-the configuration, you should call g_conf->apply_changes to re-run all the
+Configuration values can be changed by calling ``g_conf()->set_val``. After changing
+the configuration, you should call ``g_conf()->apply_changes`` to re-run all the
 affected configuration observers. For convenience, you can call
-g_conf->set_val_or_die to make a configuration change which you think should
+``g_conf()->set_val_or_die`` to make a configuration change which you think should
 never fail.
 
 Injectargs, parse_argv, and parse_env are three other functions which modify

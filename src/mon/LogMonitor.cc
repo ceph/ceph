@@ -62,7 +62,7 @@ void LogMonitor::create_initial()
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
   LogEntry e;
-  e.name = g_conf->name;
+  e.name = g_conf()->name;
   e.rank = entity_name_t::MON(mon->rank);
   e.addrs = mon->messenger->get_myaddrs();
   e.stamp = ceph_clock_now();
@@ -117,7 +117,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
       if (channel.empty()) // keep retrocompatibility
         channel = CLOG_CHANNEL_CLUSTER;
 
-      if (g_conf->get_val<bool>("mon_cluster_log_to_stderr")) {
+      if (g_conf().get_val<bool>("mon_cluster_log_to_stderr")) {
 	cerr << channel << " " << le << std::endl;
       }
 
@@ -170,7 +170,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     }
 
     summary.version++;
-    summary.prune(g_conf->mon_log_max_summary);
+    summary.prune(g_conf()->mon_log_max_summary);
   }
 
   dout(15) << __func__ << " logging for "
@@ -244,7 +244,7 @@ version_t LogMonitor::get_trim_to() const
   if (!mon->is_leader())
     return 0;
 
-  unsigned max = g_conf->mon_max_log_epochs;
+  unsigned max = g_conf()->mon_max_log_epochs;
   version_t version = get_last_committed();
   if (version > max)
     return version - max;
@@ -352,7 +352,7 @@ bool LogMonitor::prepare_log(MonOpRequestRef op)
       pending_log.insert(pair<utime_t,LogEntry>(p->stamp, *p));
     }
   }
-  pending_summary.prune(g_conf->mon_log_max_summary);
+  pending_summary.prune(g_conf()->mon_log_max_summary);
   wait_for_finished_proposal(op, new C_Log(this, op));
   return true;
 }
@@ -367,8 +367,8 @@ void LogMonitor::_updated_log(MonOpRequestRef op)
 bool LogMonitor::should_propose(double& delay)
 {
   // commit now if we have a lot of pending events
-  if (g_conf->mon_max_log_entries_per_event > 0 &&
-      pending_log.size() >= (unsigned)g_conf->mon_max_log_entries_per_event)
+  if (g_conf()->mon_max_log_entries_per_event > 0 &&
+      pending_log.size() >= (unsigned)g_conf()->mon_max_log_entries_per_event)
     return true;
 
   // otherwise fall back to generic policy
@@ -539,7 +539,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
     le.channel = CLOG_CHANNEL_DEFAULT;
     le.msg = str_join(logtext, " ");
     pending_summary.add(le);
-    pending_summary.prune(g_conf->mon_log_max_summary);
+    pending_summary.prune(g_conf()->mon_log_max_summary);
     pending_log.insert(pair<utime_t,LogEntry>(le.stamp, le));
     wait_for_finished_proposal(op, new Monitor::C_Command(
           mon, op, 0, string(), get_last_committed() + 1));
@@ -675,7 +675,7 @@ void LogMonitor::update_log_channels()
 
   channels.clear();
 
-  int r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_syslog,
+  int r = get_conf_str_map_helper(g_conf()->mon_cluster_log_to_syslog,
                                   oss, &channels.log_to_syslog,
                                   CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
@@ -683,7 +683,7 @@ void LogMonitor::update_log_channels()
     return;
   }
 
-  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_syslog_level,
+  r = get_conf_str_map_helper(g_conf()->mon_cluster_log_to_syslog_level,
                               oss, &channels.syslog_level,
                               CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
@@ -692,7 +692,7 @@ void LogMonitor::update_log_channels()
     return;
   }
 
-  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_syslog_facility,
+  r = get_conf_str_map_helper(g_conf()->mon_cluster_log_to_syslog_facility,
                               oss, &channels.syslog_facility,
                               CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
@@ -701,7 +701,7 @@ void LogMonitor::update_log_channels()
     return;
   }
 
-  r = get_conf_str_map_helper(g_conf->mon_cluster_log_file, oss,
+  r = get_conf_str_map_helper(g_conf()->mon_cluster_log_file, oss,
                               &channels.log_file,
                               CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
@@ -709,7 +709,7 @@ void LogMonitor::update_log_channels()
     return;
   }
 
-  r = get_conf_str_map_helper(g_conf->mon_cluster_log_file_level, oss,
+  r = get_conf_str_map_helper(g_conf()->mon_cluster_log_file_level, oss,
                               &channels.log_file_level,
                               CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
@@ -718,7 +718,7 @@ void LogMonitor::update_log_channels()
     return;
   }
 
-  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_graylog, oss,
+  r = get_conf_str_map_helper(g_conf()->mon_cluster_log_to_graylog, oss,
                               &channels.log_to_graylog,
                               CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
@@ -727,7 +727,7 @@ void LogMonitor::update_log_channels()
     return;
   }
 
-  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_graylog_host, oss,
+  r = get_conf_str_map_helper(g_conf()->mon_cluster_log_to_graylog_host, oss,
                               &channels.log_to_graylog_host,
                               CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
@@ -736,7 +736,7 @@ void LogMonitor::update_log_channels()
     return;
   }
 
-  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_graylog_port, oss,
+  r = get_conf_str_map_helper(g_conf()->mon_cluster_log_to_graylog_port, oss,
                               &channels.log_to_graylog_port,
                               CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
@@ -811,8 +811,8 @@ ceph::logging::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
   if (graylogs.count(channel) == 0) {
     auto graylog(std::make_shared<ceph::logging::Graylog>("mon"));
 
-    graylog->set_fsid(g_conf->get_val<uuid_d>("fsid"));
-    graylog->set_hostname(g_conf->host);
+    graylog->set_fsid(g_conf().get_val<uuid_d>("fsid"));
+    graylog->set_hostname(g_conf()->host);
     graylog->set_destination(get_str_map_key(log_to_graylog_host, channel,
 					     &CLOG_CONFIG_DEFAULT_KEY),
 			     atoi(get_str_map_key(log_to_graylog_port, channel,
@@ -828,7 +828,7 @@ ceph::logging::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
   return graylogs[channel];
 }
 
-void LogMonitor::handle_conf_change(const md_config_t *conf,
+void LogMonitor::handle_conf_change(const ConfigProxy& conf,
                                     const std::set<std::string> &changed)
 {
   if (changed.count("mon_cluster_log_to_syslog") ||

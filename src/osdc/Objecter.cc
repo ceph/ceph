@@ -216,7 +216,7 @@ const char** Objecter::get_tracked_conf_keys() const
 }
 
 
-void Objecter::handle_conf_change(const md_config_t *conf,
+void Objecter::handle_conf_change(const ConfigProxy& conf,
 				  const std::set <std::string> &changed)
 {
   if (changed.count("crush_location")) {
@@ -385,7 +385,7 @@ void Objecter::init()
 
   update_crush_location();
 
-  cct->_conf->add_observer(this);
+  cct->_conf.add_observer(this);
 
   initialized = true;
 }
@@ -413,7 +413,7 @@ void Objecter::shutdown()
 
   initialized = false;
 
-  cct->_conf->remove_observer(this);
+  cct->_conf.remove_observer(this);
 
   map<int,OSDSession*>::iterator p;
   while (!osd_sessions.empty()) {

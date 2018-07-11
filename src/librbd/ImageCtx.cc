@@ -62,7 +62,7 @@ public:
     : ThreadPool(cct, "librbd::thread_pool", "tp_librbd", 1,
                  "rbd_op_threads"),
       op_work_queue(new ContextWQ("librbd::op_work_queue",
-                                  cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
+                                  cct->_conf.get_val<int64_t>("rbd_op_thread_timeout"),
                                   this)) {
     start();
   }
@@ -138,11 +138,11 @@ public:
     get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
     io_work_queue = new io::ImageRequestWQ<>(
       this, "librbd::io_work_queue",
-      cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
+      cct->_conf.get_val<int64_t>("rbd_op_thread_timeout"),
       thread_pool);
     io_object_dispatcher = new io::ObjectDispatcher<>(this);
 
-    if (cct->_conf->get_val<bool>("rbd_auto_exclusive_lock_until_manual_request")) {
+    if (cct->_conf.get_val<bool>("rbd_auto_exclusive_lock_until_manual_request")) {
       exclusive_lock_policy = new exclusive_lock::AutomaticPolicy(this);
     } else {
       exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
@@ -778,7 +778,7 @@ public:
 	"rbd_qos_read_bps_limit", false)(
 	"rbd_qos_write_bps_limit", false);
 
-    md_config_t local_config_t;
+    ConfigProxy local_config_t{false};
     std::map<std::string, bufferlist> res;
 
     _filter_metadata_confs(METADATA_CONF_PREFIX, configs, meta, &res);
@@ -799,7 +799,7 @@ public:
       if (configs[key])                                                        \
         config = local_config_t.get_val<type>("rbd_"#config);                  \
       else                                                                     \
-        config = cct->_conf->get_val<type>("rbd_"#config);                     \
+        config = cct->_conf.get_val<type>("rbd_"#config);                      \
     } while (0);
 
     ASSIGN_OPTION(non_blocking_aio, bool);

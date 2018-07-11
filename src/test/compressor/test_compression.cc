@@ -33,7 +33,7 @@ public:
 
   CompressorTest() {
     // note for later
-    old_zlib_isal = g_conf->compressor_zlib_isal;
+    old_zlib_isal = g_conf()->compressor_zlib_isal;
 
     plugin = GetParam();
     size_t pos = plugin.find('/');
@@ -41,11 +41,11 @@ public:
       string isal = plugin.substr(pos + 1);
       plugin = plugin.substr(0, pos);
       if (isal == "isal") {
-	g_conf->set_val("compressor_zlib_isal", "true");
-	g_ceph_context->_conf->apply_changes(NULL);
+	g_conf().set_val("compressor_zlib_isal", "true");
+	g_ceph_context->_conf.apply_changes(nullptr);
       } else if (isal == "noisal") {
-	g_conf->set_val("compressor_zlib_isal", "false");
-	g_ceph_context->_conf->apply_changes(NULL);
+	g_conf().set_val("compressor_zlib_isal", "false");
+	g_ceph_context->_conf.apply_changes(nullptr);
       } else {
 	assert(0 == "bad option");
       }
@@ -53,8 +53,8 @@ public:
     cout << "[plugin " << plugin << " (" << GetParam() << ")]" << std::endl;
   }
   ~CompressorTest() override {
-    g_conf->set_val("compressor_zlib_isal", old_zlib_isal ? "true" : "false");
-    g_ceph_context->_conf->apply_changes(NULL);
+    g_conf().set_val("compressor_zlib_isal", old_zlib_isal ? "true" : "false");
+    g_ceph_context->_conf.apply_changes(nullptr);
   }
 
   void SetUp() override {
@@ -343,15 +343,15 @@ INSTANTIATE_TEST_CASE_P(
 
 TEST(ZlibCompressor, zlib_isal_compatibility)
 {
-  g_conf->set_val("compressor_zlib_isal", "true");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_conf().set_val("compressor_zlib_isal", "true");
+  g_ceph_context->_conf.apply_changes(nullptr);
   CompressorRef isal = Compressor::create(g_ceph_context, "zlib");
   if (!isal) {
     // skip the test if the plugin is not ready
     return;
   }
-  g_conf->set_val("compressor_zlib_isal", "false");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_conf().set_val("compressor_zlib_isal", "false");
+  g_ceph_context->_conf.apply_changes(nullptr);
   CompressorRef zlib = Compressor::create(g_ceph_context, "zlib");
   char test[101];
   srand(time(0));
@@ -407,15 +407,15 @@ TEST(CompressionPlugin, all)
 
 TEST(ZlibCompressor, isal_compress_zlib_decompress_random)
 {
-  g_conf->set_val("compressor_zlib_isal", "true");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_conf().set_val("compressor_zlib_isal", "true");
+  g_ceph_context->_conf.apply_changes(nullptr);
   CompressorRef isal = Compressor::create(g_ceph_context, "zlib");
   if (!isal) {
     // skip the test if the plugin is not ready
     return;
   }
-  g_conf->set_val("compressor_zlib_isal", "false");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_conf().set_val("compressor_zlib_isal", "false");
+  g_ceph_context->_conf.apply_changes(nullptr);
   CompressorRef zlib = Compressor::create(g_ceph_context, "zlib");
 
   for (int cnt=0; cnt<100; cnt++)
@@ -443,15 +443,15 @@ TEST(ZlibCompressor, isal_compress_zlib_decompress_random)
 
 TEST(ZlibCompressor, isal_compress_zlib_decompress_walk)
 {
-  g_conf->set_val("compressor_zlib_isal", "true");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_conf().set_val("compressor_zlib_isal", "true");
+  g_ceph_context->_conf.apply_changes(nullptr);
   CompressorRef isal = Compressor::create(g_ceph_context, "zlib");
   if (!isal) {
     // skip the test if the plugin is not ready
     return;
   }
-  g_conf->set_val("compressor_zlib_isal", "false");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_conf().set_val("compressor_zlib_isal", "false");
+  g_ceph_context->_conf.apply_changes(nullptr);
   CompressorRef zlib = Compressor::create(g_ceph_context, "zlib");
 
   for (int cnt=0; cnt<100; cnt++)
@@ -490,9 +490,9 @@ TEST(QAT, enc_qat_dec_noqat) {
   const char* alg_collection[] = {"zlib", "snappy"}; 
 #endif
   for (auto alg : alg_collection) {
-    g_conf->set_val("qat_compressor_enabled", "true");
+    g_conf().set_val("qat_compressor_enabled", "true");
     CompressorRef q = Compressor::create(g_ceph_context, alg);
-    g_conf->set_val("qat_compressor_enabled", "false");
+    g_conf().set_val("qat_compressor_enabled", "false");
     CompressorRef noq = Compressor::create(g_ceph_context, alg);
 
     // generate random buffer
@@ -526,9 +526,9 @@ TEST(QAT, enc_noqat_dec_qat) {
   const char* alg_collection[] = {"zlib", "snappy"}; 
 #endif
   for (auto alg : alg_collection) {
-    g_conf->set_val("qat_compressor_enabled", "true");
+    g_conf().set_val("qat_compressor_enabled", "true");
     CompressorRef q = Compressor::create(g_ceph_context, alg);
-    g_conf->set_val("qat_compressor_enabled", "false");
+    g_conf().set_val("qat_compressor_enabled", "false");
     CompressorRef noq = Compressor::create(g_ceph_context, alg);
 
     // generate random buffer

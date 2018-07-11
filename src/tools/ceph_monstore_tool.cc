@@ -603,7 +603,7 @@ static int update_mgrmap(MonitorDBStore& st)
     // mgr expects epoch > 1
     map.epoch++;
     auto initial_modules =
-      get_str_vec(g_ceph_context->_conf->get_val<string>("mgr_initial_modules"));
+      get_str_vec(g_ceph_context->_conf.get_val<string>("mgr_initial_modules"));
     copy(begin(initial_modules),
 	 end(initial_modules),
 	 inserter(map.modules, end(map.modules)));
@@ -840,8 +840,7 @@ int main(int argc, char **argv) {
     CODE_ENVIRONMENT_UTILITY,
     CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
-  g_conf = g_ceph_context->_conf;
+  cct->_conf.apply_changes(nullptr);
 
   // this is where we'll write *whatever*, on a per-command basis.
   // not all commands require some place to write their things.

@@ -2302,7 +2302,7 @@ public:
 uint64_t Locker::calc_new_max_size(CInode::mempool_inode *pi, uint64_t size)
 {
   uint64_t new_max = (size + 1) << 1;
-  uint64_t max_inc = g_conf->mds_client_writeable_range_max_inc_objs;
+  uint64_t max_inc = g_conf()->mds_client_writeable_range_max_inc_objs;
   if (max_inc > 0) {
     max_inc *= pi->layout.object_size;
     new_max = std::min(new_max, size + max_inc);
@@ -2712,11 +2712,11 @@ void Locker::handle_client_caps(MClientCaps *m)
       mds->mdlog->get_current_segment()->touched_sessions.insert(session->info.inst.name);
 
       if (session->get_num_trim_flushes_warnings() > 0 &&
-	  session->get_num_completed_flushes() * 2 < g_conf->mds_max_completed_flushes)
+	  session->get_num_completed_flushes() * 2 < g_conf()->mds_max_completed_flushes)
 	session->reset_num_trim_flushes_warnings();
     } else {
       if (session->get_num_completed_flushes() >=
-	  (g_conf->mds_max_completed_flushes << session->get_num_trim_flushes_warnings())) {
+	  (g_conf()->mds_max_completed_flushes << session->get_num_trim_flushes_warnings())) {
 	session->inc_num_trim_flushes_warnings();
 	stringstream ss;
 	ss << "client." << session->get_client() << " does not advance its oldest_flush_tid ("
@@ -3625,7 +3625,7 @@ void Locker::caps_tick()
     // snap inodes that needs flush are auth pinned, they affect
     // subtree/difrarg freeze.
     utime_t cutoff = now;
-    cutoff -= g_conf->mds_freeze_tree_timeout / 3;
+    cutoff -= g_conf()->mds_freeze_tree_timeout / 3;
 
     CInode *last = need_snapflush_inodes.back();
     while (!need_snapflush_inodes.empty()) {
@@ -4697,7 +4697,7 @@ void Locker::scatter_tick()
 	       << *lock << " " << *lock->get_parent() << dendl;
       continue;
     }
-    if (now - lock->get_update_stamp() < g_conf->mds_scatter_nudge_interval)
+    if (now - lock->get_update_stamp() < g_conf()->mds_scatter_nudge_interval)
       break;
     updated_scatterlocks.pop_front();
     scatter_nudge(lock, 0);

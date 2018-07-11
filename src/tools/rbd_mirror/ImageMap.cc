@@ -228,7 +228,7 @@ void ImageMap<I>::schedule_update_task(const Mutex &timer_lock) {
     });
 
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
-  double after = cct->_conf->get_val<double>("rbd_mirror_image_policy_update_throttle_interval");
+  double after = cct->_conf.get_val<double>("rbd_mirror_image_policy_update_throttle_interval");
 
   dout(20) << "scheduling image check update (" << m_timer_task << ")"
            << " after " << after << " second(s)" << dendl;
@@ -263,7 +263,7 @@ void ImageMap<I>::schedule_rebalance_task() {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
 
   // fetch the updated value of idle timeout for (re)scheduling
-  double resched_after = cct->_conf->get_val<double>(
+  double resched_after = cct->_conf.get_val<double>(
     "rbd_mirror_image_policy_rebalance_timeout");
   if (!resched_after) {
     return;
@@ -524,7 +524,7 @@ void ImageMap<I>::init(Context *on_finish) {
   dout(20) << dendl;
 
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
-  std::string policy_type = cct->_conf->get_val<string>("rbd_mirror_image_policy_type");
+  std::string policy_type = cct->_conf.get_val<string>("rbd_mirror_image_policy_type");
 
   if (policy_type == "none" || policy_type == "simple") {
     m_policy.reset(image_map::SimplePolicy::create(m_ioctx));
@@ -574,7 +574,7 @@ void ImageMap<I>::filter_instance_ids(
     const std::vector<std::string> &instance_ids,
     std::vector<std::string> *filtered_instance_ids, bool removal) const {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
-  std::string policy_type = cct->_conf->get_val<string>("rbd_mirror_image_policy_type");
+  std::string policy_type = cct->_conf.get_val<string>("rbd_mirror_image_policy_type");
 
   if (policy_type != "none") {
     *filtered_instance_ids = instance_ids;

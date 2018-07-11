@@ -102,7 +102,7 @@ struct Server {
   Server(CephContext* cct, const entity_inst_t& entity)
     : dispatcher(cct)
   {
-    msgr.reset(Messenger::create(cct, cct->_conf->get_val<string>("ms_type"),
+    msgr.reset(Messenger::create(cct, cct->_conf.get_val<string>("ms_type"),
                                  entity.name, "pong", entity.addr.get_nonce(), 0));
     msgr->set_cluster_protocol(CEPH_OSD_PROTOCOL);
     msgr->set_default_policy(Messenger::Policy::stateless_server(0));
@@ -164,7 +164,7 @@ struct Client {
   Client(CephContext *cct)
     : dispatcher(cct)
   {
-    msgr.reset(Messenger::create(cct, cct->_conf->get_val<string>("ms_type"),
+    msgr.reset(Messenger::create(cct, cct->_conf.get_val<string>("ms_type"),
                                  entity_name_t::CLIENT(-1), "ping",
                                  getpid(), 0));
     msgr->set_cluster_protocol(CEPH_OSD_PROTOCOL);

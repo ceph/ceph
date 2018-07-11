@@ -2691,9 +2691,9 @@ struct PGLogTrimTest :
     snprintf(max_entries_s, size, "%u", max_entries);
     snprintf(dup_track_s, size, "%u", dup_track);
 
-    cct->_conf->set_val_or_die("osd_min_pg_log_entries", min_entries_s);
-    cct->_conf->set_val_or_die("osd_max_pg_log_entries", max_entries_s);
-    cct->_conf->set_val_or_die("osd_pg_log_dups_tracked", dup_track_s);
+    cct->_conf.set_val_or_die("osd_min_pg_log_entries", min_entries_s);
+    cct->_conf.set_val_or_die("osd_max_pg_log_entries", max_entries_s);
+    cct->_conf.set_val_or_die("osd_pg_log_dups_tracked", dup_track_s);
   }
 }; // struct PGLogTrimTest
 

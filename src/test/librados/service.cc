@@ -1,8 +1,9 @@
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
+#include "include/stringify.h"
+#include "common/config_proxy.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
-#include "include/stringify.h"
 
 #include <algorithm>
 #include <thread>
@@ -134,8 +135,8 @@ TEST(LibRadosServicePP, Close) {
       cluster.shutdown();
     }
     // mgr updates servicemap every tick
-    //sleep(g_conf->get_val<int64_t>("mgr_tick_period"));
-    std::this_thread::sleep_for(g_conf->get_val<std::chrono::seconds>(
+    //sleep(g_conf().get_val<int64_t>("mgr_tick_period"));
+    std::this_thread::sleep_for(g_conf().get_val<std::chrono::seconds>(
 				  "mgr_tick_period"));
     // make sure we are deregistered
     {

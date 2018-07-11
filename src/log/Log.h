@@ -22,7 +22,7 @@ class Log : private Thread
   Log **m_indirect_this;
   log_clock clock;
 
-  SubsystemMap *m_subs;
+  const SubsystemMap *m_subs;
 
   pthread_mutex_t m_queue_mutex;
   pthread_mutex_t m_flush_mutex;
@@ -69,7 +69,7 @@ class Log : private Thread
   void _log_message(const char *s, bool crash);
 
 public:
-  Log(SubsystemMap *s);
+  Log(const SubsystemMap *s);
   ~Log() override;
 
   void set_flush_on_exit();

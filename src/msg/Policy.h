@@ -79,7 +79,7 @@ class PolicySet {
   /// the default Policy we use for Pipes
   policy_t default_policy;
   /// map specifying different Policies for specific peer types
-  map<int, policy_t> policy_map; // entity_name_t::type -> Policy
+  std::map<int, policy_t> policy_map; // entity_name_t::type -> Policy
 
 public:
   const policy_t& get(peer_type_t peer_type) const {

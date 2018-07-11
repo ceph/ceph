@@ -319,7 +319,7 @@ TEST_P(KVTest, RocksDBColumnFamilyTest) {
   std::vector<KeyValueDB::ColumnFamily> cfs;
   cfs.push_back(KeyValueDB::ColumnFamily("cf1", ""));
   cfs.push_back(KeyValueDB::ColumnFamily("cf2", ""));
-  ASSERT_EQ(0, db->init(g_conf->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
   cout << "creating two column families and opening them" << std::endl;
   ASSERT_EQ(0, db->create_and_open(cout, cfs));
   {
@@ -374,7 +374,7 @@ TEST_P(KVTest, RocksDBIteratorTest) {
 
   std::vector<KeyValueDB::ColumnFamily> cfs;
   cfs.push_back(KeyValueDB::ColumnFamily("cf1", ""));
-  ASSERT_EQ(0, db->init(g_conf->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
   cout << "creating one column family and opening it" << std::endl;
   ASSERT_EQ(0, db->create_and_open(cout, cfs));
   {
@@ -427,7 +427,7 @@ TEST_P(KVTest, RocksDBCFMerge) {
     return; // No merge operators for this database type
   std::vector<KeyValueDB::ColumnFamily> cfs;
   cfs.push_back(KeyValueDB::ColumnFamily("cf1", ""));
-  ASSERT_EQ(0, db->init(g_conf->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
   cout << "creating one column family and opening it" << std::endl;
   ASSERT_EQ(0, db->create_and_open(cout, cfs));
 
@@ -492,10 +492,10 @@ int main(int argc, char **argv) {
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->set_val(
+  g_ceph_context->_conf.set_val(
     "enable_experimental_unrecoverable_data_corrupting_features",
     "rocksdb, memdb");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

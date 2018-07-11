@@ -92,7 +92,7 @@ namespace rgw {
     SafeTimer init_timer(g_ceph_context, mutex);
     init_timer.init();
     mutex.Lock();
-    init_timer.add_event_after(g_conf->rgw_init_timeout, new C_InitTimeout);
+    init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
     mutex.Unlock();
 
     common_init_finish(g_ceph_context);

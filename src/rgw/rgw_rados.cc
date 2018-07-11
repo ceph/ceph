@@ -3175,7 +3175,7 @@ class RGWDataNotifier : public RGWRadosThread {
   RGWDataNotifierManager notify_mgr;
 
   uint64_t interval_msec() override {
-    return cct->_conf->get_val<int64_t>("rgw_data_notify_interval_msec");
+    return cct->_conf.get_val<int64_t>("rgw_data_notify_interval_msec");
   }
   void stop_process() override {
     notify_mgr.stop();

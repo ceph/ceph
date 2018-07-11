@@ -601,7 +601,7 @@ int ReplicatedBackend::be_deep_scrub(
                            CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
   bool skip_data_digest = store->has_builtin_csum() &&
-    g_conf->osd_skip_data_digest;
+    g_conf()->osd_skip_data_digest;
 
   utime_t sleeptime;
   sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
@@ -683,7 +683,7 @@ int ReplicatedBackend::be_deep_scrub(
   } else {
     iter->seek_to_first();
   }
-  int max = g_conf->osd_deep_scrub_keys;
+  int max = g_conf()->osd_deep_scrub_keys;
   while (iter->status() == 0 && iter->valid()) {
     pos.omap_bytes += iter->value().length();
     ++pos.omap_keys;

@@ -20,7 +20,7 @@
 class CephContext;
 
 extern CephContext *g_ceph_context;
-extern md_config_t *g_conf;
+ConfigProxy& g_conf();
 
 extern const char *g_assert_file;
 extern int g_assert_line;

@@ -976,17 +976,17 @@ namespace rgw {
 // read bucket trim configuration from ceph context
 void configure_bucket_trim(CephContext *cct, BucketTrimConfig& config)
 {
-  auto conf = cct->_conf;
+  const auto& conf = cct->_conf;
 
   config.trim_interval_sec =
-      conf->get_val<int64_t>("rgw_sync_log_trim_interval");
+      conf.get_val<int64_t>("rgw_sync_log_trim_interval");
   config.counter_size = 512;
   config.buckets_per_interval =
-      conf->get_val<int64_t>("rgw_sync_log_trim_max_buckets");
+      conf.get_val<int64_t>("rgw_sync_log_trim_max_buckets");
   config.min_cold_buckets_per_interval =
-      conf->get_val<int64_t>("rgw_sync_log_trim_min_cold_buckets");
+      conf.get_val<int64_t>("rgw_sync_log_trim_min_cold_buckets");
   config.concurrent_buckets =
-      conf->get_val<int64_t>("rgw_sync_log_trim_concurrent_buckets");
+      conf.get_val<int64_t>("rgw_sync_log_trim_concurrent_buckets");
   config.notify_timeout_ms = 10000;
   config.recent_size = 128;
   config.recent_duration = std::chrono::hours(2);

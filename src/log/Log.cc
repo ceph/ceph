@@ -39,7 +39,7 @@ static void log_on_exit(void *p)
   delete (Log **)p;// Delete allocated pointer (not Log object, the pointer only!)
 }
 
-Log::Log(SubsystemMap *s)
+Log::Log(const SubsystemMap *s)
   : m_indirect_this(NULL),
     m_subs(s),
     m_queue_mutex_holder(0),

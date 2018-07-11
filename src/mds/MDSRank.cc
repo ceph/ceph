@@ -65,8 +65,8 @@ MDSRank::MDSRank(
     damage_table(whoami_),
     inotable(NULL), snapserver(NULL), snapclient(NULL),
     sessionmap(this), logger(NULL), mlogger(NULL),
-    op_tracker(g_ceph_context, g_conf->mds_enable_op_tracker,
-               g_conf->osd_num_op_tracker_shard),
+    op_tracker(g_ceph_context, g_conf()->mds_enable_op_tracker,
+               g_conf()->osd_num_op_tracker_shard),
     last_state(MDSMap::STATE_BOOT),
     state(MDSMap::STATE_BOOT),
     cluster_degraded(false), stopping(false),
@@ -228,9 +228,9 @@ void MDSRank::update_targets()
 
 void MDSRank::hit_export_target(mds_rank_t rank, double amount)
 {
-  double rate = g_conf->mds_bal_target_decay;
+  double rate = g_conf()->mds_bal_target_decay;
   if (amount < 0.0) {
-    amount = 100.0/g_conf->mds_bal_target_decay; /* a good default for "i am trying to keep this export_target active" */
+    amount = 100.0/g_conf()->mds_bal_target_decay; /* a good default for "i am trying to keep this export_target active" */
   }
   auto em = export_targets.emplace(std::piecewise_construct, std::forward_as_tuple(rank), std::forward_as_tuple(DecayRate(rate)));
   auto &counter = em.first->second;
@@ -503,7 +503,7 @@ void MDSRank::damaged()
   beacon.set_want_state(mdsmap, MDSMap::STATE_DAMAGED);
   monc->flush_log();  // Flush any clog error from before we were called
   beacon.notify_health(this);  // Include latest status in our swan song
-  beacon.send_and_wait(g_conf->mds_mon_shutdown_timeout);
+  beacon.send_and_wait(g_conf()->mds_mon_shutdown_timeout);
 
   // It's okay if we timed out and the mon didn't get our beacon, because
   // another daemon (or ourselves after respawn) will eventually take the
@@ -526,10 +526,10 @@ void MDSRank::handle_write_error(int err)
     return;
   }
 
-  if (g_conf->mds_action_on_write_error >= 2) {
+  if (g_conf()->mds_action_on_write_error >= 2) {
     derr << "unhandled write error " << cpp_strerror(err) << ", suicide..." << dendl;
     respawn();
-  } else if (g_conf->mds_action_on_write_error == 1) {
+  } else if (g_conf()->mds_action_on_write_error == 1) {
     derr << "unhandled write error " << cpp_strerror(err) << ", force readonly..." << dendl;
     mdcache->force_readonly();
   } else {
@@ -640,17 +640,17 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
   /*double el = now - start;
   if (el > 30.0 &&
     el < 60.0)*/
-  for (int i=0; i<g_conf->mds_thrash_exports; i++) {
+  for (int i=0; i<g_conf()->mds_thrash_exports; i++) {
     set<mds_rank_t> s;
     if (!is_active()) break;
     mdsmap->get_mds_set(s, MDSMap::STATE_ACTIVE);
     if (s.size() < 2 || CInode::count() < 10)
       break;  // need peers for this to work.
-    if (mdcache->migrator->get_num_exporting() > g_conf->mds_thrash_exports * 5 ||
-	mdcache->migrator->get_export_queue_size() > g_conf->mds_thrash_exports * 10)
+    if (mdcache->migrator->get_num_exporting() > g_conf()->mds_thrash_exports * 5 ||
+	mdcache->migrator->get_export_queue_size() > g_conf()->mds_thrash_exports * 10)
       break;
 
-    dout(7) << "mds thrashing exports pass " << (i+1) << "/" << g_conf->mds_thrash_exports << dendl;
+    dout(7) << "mds thrashing exports pass " << (i+1) << "/" << g_conf()->mds_thrash_exports << dendl;
 
     // pick a random dir inode
     CInode *in = mdcache->hack_pick_random_inode();
@@ -677,10 +677,10 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
     }
   }
   // hack: thrash fragments
-  for (int i=0; i<g_conf->mds_thrash_fragments; i++) {
+  for (int i=0; i<g_conf()->mds_thrash_fragments; i++) {
     if (!is_active()) break;
-    if (mdcache->get_num_fragmenting_dirs() > 5 * g_conf->mds_thrash_fragments) break;
-    dout(7) << "mds thrashing fragments pass " << (i+1) << "/" << g_conf->mds_thrash_fragments << dendl;
+    if (mdcache->get_num_fragmenting_dirs() > 5 * g_conf()->mds_thrash_fragments) break;
+    dout(7) << "mds thrashing fragments pass " << (i+1) << "/" << g_conf()->mds_thrash_fragments << dendl;
 
     // pick a random dir inode
     CInode *in = mdcache->hack_pick_random_inode();
@@ -870,7 +870,7 @@ void MDSRank::heartbeat_reset()
   // NB not enabling suicide grace, because the mon takes care of killing us
   // (by blacklisting us) when we fail to send beacons, and it's simpler to
   // only have one way of dying.
-  g_ceph_context->get_heartbeat_map()->reset_timeout(hb, g_conf->mds_beacon_grace, 0);
+  g_ceph_context->get_heartbeat_map()->reset_timeout(hb, g_conf()->mds_beacon_grace, 0);
 }
 
 bool MDSRank::is_stale_message(Message *m) const
@@ -1363,7 +1363,7 @@ void MDSRank::replay_done()
     // The replay was done in standby state, and we are still in that state
     assert(standby_replaying);
     dout(10) << "setting replay timer" << dendl;
-    timer.add_event_after(g_conf->mds_replay_interval,
+    timer.add_event_after(g_conf()->mds_replay_interval,
                           new C_MDS_StandbyReplayRestart(this));
     return;
   } else if (standby_replaying) {
@@ -1378,7 +1378,7 @@ void MDSRank::replay_done()
     assert(!is_standby_replay());
 
     // Reformat and come back here
-    if (mdlog->get_journaler()->get_stream_format() < g_conf->mds_journal_format) {
+    if (mdlog->get_journaler()->get_stream_format() < g_conf()->mds_journal_format) {
         dout(4) << "reformatting journal on standbyreplay->replay transition" << dendl;
         mdlog->reopen(new C_MDS_BootStart(this, MDS_BOOT_REPLAY_DONE));
         return;
@@ -1395,18 +1395,18 @@ void MDSRank::replay_done()
     snapserver->save(new C_MDSInternalNoop);
   }
 
-  if (g_conf->mds_wipe_sessions) {
+  if (g_conf()->mds_wipe_sessions) {
     dout(1) << "wiping out client sessions" << dendl;
     sessionmap.wipe();
     sessionmap.save(new C_MDSInternalNoop);
   }
-  if (g_conf->mds_wipe_ino_prealloc) {
+  if (g_conf()->mds_wipe_ino_prealloc) {
     dout(1) << "wiping out ino prealloc from sessions" << dendl;
     sessionmap.wipe_ino_prealloc();
     sessionmap.save(new C_MDSInternalNoop);
   }
-  if (g_conf->mds_skip_ino) {
-    inodeno_t i = g_conf->mds_skip_ino;
+  if (g_conf()->mds_skip_ino) {
+    inodeno_t i = g_conf()->mds_skip_ino;
     dout(1) << "skipping " << i << " inodes" << dendl;
     inotable->skip_inos(i);
     inotable->save(new C_MDSInternalNoop);
@@ -1636,7 +1636,7 @@ void MDSRank::boot_create()
     snapserver->save(fin.new_sub());
   }
 
-  assert(g_conf->mds_kill_create_at != 1);
+  assert(g_conf()->mds_kill_create_at != 1);
 
   // ok now journal it
   mdlog->journal_segment_subtree_map(fin.new_sub());
@@ -1671,7 +1671,7 @@ void MDSRank::stopping_start()
     for (const auto &s : victims) {
       std::stringstream ss;
       evict_client(s->get_client().v, false,
-                   g_conf->mds_session_blacklist_on_evict, ss, gather.new_sub());
+                   g_conf()->mds_session_blacklist_on_evict, ss, gather.new_sub());
     }
     gather.activate();
   }
@@ -1737,7 +1737,7 @@ void MDSRankDispatcher::handle_mds_map(
     objecter->set_client_incarnation(incarnation);
 
   // for debug
-  if (g_conf->mds_dump_cache_on_map)
+  if (g_conf()->mds_dump_cache_on_map)
     mdcache->dump_cache();
 
   // did it change?
@@ -1822,7 +1822,7 @@ void MDSRankDispatcher::handle_mds_map(
       rejoin_joint_start();
 
     // did we finish?
-    if (g_conf->mds_dump_cache_after_rejoin &&
+    if (g_conf()->mds_dump_cache_after_rejoin &&
 	oldmap->is_rejoining() && !mdsmap->is_rejoining())
       mdcache->dump_cache();      // for DEBUG only
 
@@ -2034,7 +2034,7 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
     mds_lock.Lock();
     std::stringstream dss;
     bool evicted = evict_client(strtol(client_id.c_str(), 0, 10), true,
-        g_conf->mds_session_blacklist_on_evict, dss);
+        g_conf()->mds_session_blacklist_on_evict, dss);
     if (!evicted) {
       dout(15) << dss.str() << dendl;
       ss << dss.str();
@@ -2196,7 +2196,7 @@ void MDSRankDispatcher::evict_clients(const SessionFilter &filter, MCommand *m)
   for (const auto s : victims) {
     std::stringstream ss;
     evict_client(s->get_client().v, false,
-                 g_conf->mds_session_blacklist_on_evict, ss, gather.new_sub());
+                 g_conf()->mds_session_blacklist_on_evict, ss, gather.new_sub());
   }
   gather.activate();
 }

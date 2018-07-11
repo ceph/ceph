@@ -164,7 +164,7 @@ private:
 
   void init() override {
     generic_dout(10) << "LogMonitor::init" << dendl;
-    g_conf->add_observer(this);
+    g_conf().add_observer(this);
     update_log_channels();
   }
   
@@ -182,7 +182,7 @@ private:
   int sub_name_to_id(const string& n);
 
   void on_shutdown() override {
-    g_conf->remove_observer(this);
+    g_conf().remove_observer(this);
   }
 
   const char **get_tracked_conf_keys() const override {
@@ -199,7 +199,7 @@ private:
     };
     return KEYS;
   }
-  void handle_conf_change(const md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string> &changed) override;
 };
 #endif

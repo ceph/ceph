@@ -58,10 +58,10 @@ void Beacon::init(MDSMap const *mdsmap)
   assert(mdsmap != NULL);
 
   _notify_mdsmap(mdsmap);
-  standby_for_rank = mds_rank_t(g_conf->mds_standby_for_rank);
-  standby_for_name = g_conf->mds_standby_for_name;
-  standby_for_fscid = fs_cluster_id_t(g_conf->mds_standby_for_fscid);
-  standby_replay = g_conf->mds_standby_replay;
+  standby_for_rank = mds_rank_t(g_conf()->mds_standby_for_rank);
+  standby_for_name = g_conf()->mds_standby_for_name;
+  standby_for_fscid = fs_cluster_id_t(g_conf()->mds_standby_for_fscid);
+  standby_replay = g_conf()->mds_standby_replay;
 
   // Spawn threads and start messaging
   timer.init();
@@ -115,7 +115,7 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
       dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
 	       << " seq " << m->get_seq() << " rtt " << rtt << dendl;
 
-      if (was_laggy && rtt < g_conf->mds_beacon_grace) {
+      if (was_laggy && rtt < g_conf()->mds_beacon_grace) {
 	dout(0) << "handle_mds_beacon no longer laggy" << dendl;
 	was_laggy = false;
 	laggy_until = now;
@@ -125,7 +125,7 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
       // later beacons will clear it.
       dout(1) << "handle_mds_beacon system clock goes backwards, "
 	      << "mark myself laggy" << dendl;
-      last_acked_stamp = now - utime_t(g_conf->mds_beacon_grace + 1, 0);
+      last_acked_stamp = now - utime_t(g_conf()->mds_beacon_grace + 1, 0);
       was_laggy = true;
     }
 
@@ -181,7 +181,7 @@ void Beacon::_send()
     timer.cancel_event(sender);
   }
   sender = timer.add_event_after(
-    g_conf->mds_beacon_interval,
+    g_conf()->mds_beacon_interval,
     new FunctionContext([this](int) {
 	assert(lock.is_locked_by_me());
 	sender = nullptr;
@@ -261,12 +261,12 @@ bool Beacon::is_laggy()
 
   utime_t now = ceph_clock_now();
   utime_t since = now - last_acked_stamp;
-  if (since > g_conf->mds_beacon_grace) {
-    dout(5) << "is_laggy " << since << " > " << g_conf->mds_beacon_grace
+  if (since > g_conf()->mds_beacon_grace) {
+    dout(5) << "is_laggy " << since << " > " << g_conf()->mds_beacon_grace
 	    << " since last acked beacon" << dendl;
     was_laggy = true;
-    if (since > (g_conf->mds_beacon_grace*2) &&
-	now > last_mon_reconnect + g_conf->mds_beacon_interval) {
+    if (since > (g_conf()->mds_beacon_grace*2) &&
+	now > last_mon_reconnect + g_conf()->mds_beacon_interval) {
       // maybe it's not us?
       dout(5) << "initiating monitor reconnect; maybe we're not the slow one"
               << dendl;
@@ -333,14 +333,14 @@ void Beacon::notify_health(MDSRank const *mds)
   // Detect MDS_HEALTH_TRIM condition
   // Arbitrary factor of 2, indicates MDS is not trimming promptly
   {
-    if (mds->mdlog->get_num_segments() > (size_t)(g_conf->mds_log_max_segments * 2)) {
+    if (mds->mdlog->get_num_segments() > (size_t)(g_conf()->mds_log_max_segments * 2)) {
       std::ostringstream oss;
       oss << "Behind on trimming (" << mds->mdlog->get_num_segments()
-        << "/" << g_conf->mds_log_max_segments << ")";
+        << "/" << g_conf()->mds_log_max_segments << ")";
 
       MDSHealthMetric m(MDS_HEALTH_TRIM, HEALTH_WARN, oss.str());
       m.metadata["num_segments"] = stringify(mds->mdlog->get_num_segments());
-      m.metadata["max_segments"] = stringify(g_conf->mds_log_max_segments);
+      m.metadata["max_segments"] = stringify(g_conf()->mds_log_max_segments);
       health.metrics.push_back(m);
     }
   }
@@ -372,7 +372,7 @@ void Beacon::notify_health(MDSRank const *mds)
       late_cap_metrics.push_back(m);
     }
 
-    if (late_cap_metrics.size() <= (size_t)g_conf->mds_health_summarize_threshold) {
+    if (late_cap_metrics.size() <= (size_t)g_conf()->mds_health_summarize_threshold) {
       health.metrics.splice(health.metrics.end(), late_cap_metrics);
     } else {
       std::ostringstream oss;
@@ -394,7 +394,7 @@ void Beacon::notify_health(MDSRank const *mds)
     mds->sessionmap.get_client_session_set(sessions);
 
     utime_t cutoff = ceph_clock_now();
-    cutoff -= g_conf->mds_recall_state_timeout;
+    cutoff -= g_conf()->mds_recall_state_timeout;
     utime_t last_recall = mds->mdcache->last_recall_state;
 
     std::list<MDSHealthMetric> late_recall_metrics;
@@ -420,9 +420,9 @@ void Beacon::notify_health(MDSRank const *mds)
         }
       }
       if ((session->get_num_trim_requests_warnings() > 0 &&
-	   session->get_num_completed_requests() >= g_conf->mds_max_completed_requests) ||
+	   session->get_num_completed_requests() >= g_conf()->mds_max_completed_requests) ||
 	  (session->get_num_trim_flushes_warnings() > 0 &&
-	   session->get_num_completed_flushes() >= g_conf->mds_max_completed_flushes)) {
+	   session->get_num_completed_flushes() >= g_conf()->mds_max_completed_flushes)) {
 	std::ostringstream oss;
 	oss << "Client " << session->get_human_name() << " failing to advance its oldest client/flush tid";
 	MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID, HEALTH_WARN, oss.str());
@@ -431,7 +431,7 @@ void Beacon::notify_health(MDSRank const *mds)
       }
     }
 
-    if (late_recall_metrics.size() <= (size_t)g_conf->mds_health_summarize_threshold) {
+    if (late_recall_metrics.size() <= (size_t)g_conf()->mds_health_summarize_threshold) {
       health.metrics.splice(health.metrics.end(), late_recall_metrics);
     } else {
       std::ostringstream oss;
@@ -443,7 +443,7 @@ void Beacon::notify_health(MDSRank const *mds)
       late_recall_metrics.clear();
     }
 
-    if (large_completed_requests_metrics.size() <= (size_t)g_conf->mds_health_summarize_threshold) {
+    if (large_completed_requests_metrics.size() <= (size_t)g_conf()->mds_health_summarize_threshold) {
       health.metrics.splice(health.metrics.end(), large_completed_requests_metrics);
     } else {
       std::ostringstream oss;
@@ -462,7 +462,7 @@ void Beacon::notify_health(MDSRank const *mds)
     dout(20) << slow << " slow request found" << dendl;
     if (slow) {
       std::ostringstream oss;
-      oss << slow << " slow requests are blocked > " << g_conf->mds_op_complaint_time << " sec";
+      oss << slow << " slow requests are blocked > " << g_conf()->mds_op_complaint_time << " sec";
 
       MDSHealthMetric m(MDS_HEALTH_SLOW_REQUEST, HEALTH_WARN, oss.str());
       health.metrics.push_back(m);

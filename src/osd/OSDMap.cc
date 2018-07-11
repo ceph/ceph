@@ -3741,9 +3741,9 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
   } else {
     // count osds
     int maxosd = 0;
-    const md_config_t *conf = cct->_conf;
+    const auto& conf = cct->_conf;
     vector<string> sections;
-    conf->get_all_sections(sections);
+    conf.get_all_sections(sections);
 
     for (auto &section : sections) {
       if (section.find("osd.") != 0)
@@ -3800,8 +3800,8 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
 	pools[pool].set_flag(pg_pool_t::FLAG_NOPGCHANGE);
       if (cct->_conf->osd_pool_default_flag_nosizechange)
 	pools[pool].set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
-      pools[pool].size = cct->_conf->get_val<uint64_t>("osd_pool_default_size");
-      pools[pool].min_size = cct->_conf->get_osd_pool_default_min_size();
+      pools[pool].size = cct->_conf.get_val<uint64_t>("osd_pool_default_size");
+      pools[pool].min_size = cct->_conf.get_osd_pool_default_min_size();
       pools[pool].crush_rule = default_replicated_rule;
       pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
       pools[pool].set_pg_num(poolbase << pg_bits);
@@ -3833,7 +3833,7 @@ int OSDMap::get_erasure_code_profile_default(CephContext *cct,
 					     map<string,string> &profile_map,
 					     ostream *ss)
 {
-  int r = get_json_str_map(cct->_conf->get_val<string>("osd_pool_default_erasure_code_profile"),
+  int r = get_json_str_map(cct->_conf.get_val<string>("osd_pool_default_erasure_code_profile"),
 		      *ss,
 		      &profile_map);
   return r;
@@ -3890,7 +3890,7 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
 					     CrushWrapper& crush,
 					     ostream *ss)
 {
-  const md_config_t *conf = cct->_conf;
+  const auto& conf = cct->_conf;
 
   crush.create();
 
@@ -3905,7 +3905,7 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
 
   // add osds
   vector<string> sections;
-  conf->get_all_sections(sections);
+  conf.get_all_sections(sections);
 
   for (auto &section : sections) {
     if (section.find("osd.") != 0)
@@ -3921,12 +3921,12 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
     vector<string> sectiontmp;
     sectiontmp.push_back("osd");
     sectiontmp.push_back(section);
-    conf->get_val_from_conf_file(sectiontmp, "host", host, false);
-    conf->get_val_from_conf_file(sectiontmp, "rack", rack, false);
-    conf->get_val_from_conf_file(sectiontmp, "row", row, false);
-    conf->get_val_from_conf_file(sectiontmp, "room", room, false);
-    conf->get_val_from_conf_file(sectiontmp, "datacenter", dc, false);
-    conf->get_val_from_conf_file(sectiontmp, "root", pool, false);
+    conf.get_val_from_conf_file(sectiontmp, "host", host, false);
+    conf.get_val_from_conf_file(sectiontmp, "rack", rack, false);
+    conf.get_val_from_conf_file(sectiontmp, "row", row, false);
+    conf.get_val_from_conf_file(sectiontmp, "room", room, false);
+    conf.get_val_from_conf_file(sectiontmp, "datacenter", dc, false);
+    conf.get_val_from_conf_file(sectiontmp, "root", pool, false);
 
     if (host.length() == 0)
       host = "unknownhost";
@@ -4934,7 +4934,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
   {
     // An osd could configure failsafe ratio, to something different
     // but for now assume it is the same here.
-    float fsr = g_conf->osd_failsafe_full_ratio;
+    float fsr = g_conf()->osd_failsafe_full_ratio;
     if (fsr > 1.0) fsr /= 100;
     float fr = get_full_ratio();
     float br = get_backfillfull_ratio();
@@ -5063,19 +5063,19 @@ void OSDMap::check_health(health_check_map_t *checks) const
   }
 
   // OLD_CRUSH_TUNABLES
-  if (g_conf->mon_warn_on_legacy_crush_tunables) {
+  if (g_conf()->mon_warn_on_legacy_crush_tunables) {
     string min = crush->get_min_required_version();
-    if (min < g_conf->mon_crush_min_required_version) {
+    if (min < g_conf()->mon_crush_min_required_version) {
       ostringstream ss;
       ss << "crush map has legacy tunables (require " << min
-	 << ", min is " << g_conf->mon_crush_min_required_version << ")";
+	 << ", min is " << g_conf()->mon_crush_min_required_version << ")";
       auto& d = checks->add("OLD_CRUSH_TUNABLES", HEALTH_WARN, ss.str());
       d.detail.push_back("see http://docs.ceph.com/docs/master/rados/operations/crush-map/#tunables");
     }
   }
 
   // OLD_CRUSH_STRAW_CALC_VERSION
-  if (g_conf->mon_warn_on_crush_straw_calc_version_zero) {
+  if (g_conf()->mon_warn_on_crush_straw_calc_version_zero) {
     if (crush->get_straw_calc_version() == 0) {
       ostringstream ss;
       ss << "crush map has straw_calc_version=0";
@@ -5086,7 +5086,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
   }
 
   // CACHE_POOL_NO_HIT_SET
-  if (g_conf->mon_warn_on_cache_pools_without_hit_sets) {
+  if (g_conf()->mon_warn_on_cache_pools_without_hit_sets) {
     list<string> detail;
     for (map<int64_t, pg_pool_t>::const_iterator p = pools.begin();
 	 p != pools.end();
