@@ -12,8 +12,10 @@ export class FormatterService {
     if (parts.length === 1) {
       return value; // integer
     } else {
-      return Number.parseFloat(value).toPrecision(decimals + parts[0].length)
-        .toString().replace(/0+$/, '');
+      return Number.parseFloat(value)
+        .toPrecision(decimals + parts[0].length)
+        .toString()
+        .replace(/0+$/, '');
     }
   }
 
@@ -21,12 +23,12 @@ export class FormatterService {
     if (_.isString(n)) {
       n = Number(n);
     }
-    if (!(_.isNumber(n)) || n === 0) {
+    if (!_.isNumber(n)) {
       return '-';
     }
-    const unit = Math.floor(Math.log(n) / Math.log(divisor));
-    const truncatedFloat = this.truncate((n / Math.pow(divisor, unit)), decimals);
-    return truncatedFloat === '' ? '-' : (truncatedFloat + units[unit]);
+    const unit = n < 1 ? 0 : Math.floor(Math.log(n) / Math.log(divisor));
+    const truncatedFloat = this.truncate(n / Math.pow(divisor, unit), decimals);
+    return truncatedFloat === '' ? '-' : truncatedFloat + units[unit];
   }
 
   /**
@@ -38,7 +40,7 @@ export class FormatterService {
   toBytes(value: string): number | null {
     const base = 1024;
     const units = ['b', 'k', 'm', 'g', 't', 'p', 'e', 'z', 'y'];
-    const m = RegExp('^(\\d+(\.\\d+)?) ?(\[' + units.join('') + '\](b|ib)?)?$', 'i').exec(value);
+    const m = RegExp('^(\\d+(.\\d+)?) ?([' + units.join('') + '](b|ib)?)?$', 'i').exec(value);
     if (m === null) {
       return null;
     }
