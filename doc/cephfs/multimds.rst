@@ -1,3 +1,4 @@
+.. _cephfs-multimds:
 
 Configuring multiple active MDS daemons
 ---------------------------------------

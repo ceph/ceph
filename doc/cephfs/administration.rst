@@ -1,3 +1,4 @@
+.. _cephfs-administration:
 
 CephFS Administrative commands
 ==============================
