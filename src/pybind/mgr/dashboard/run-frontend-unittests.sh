@@ -1,24 +1,41 @@
 #!/usr/bin/env bash
 
-set -e
-
+failed=false
 cd $CEPH_ROOT/src/pybind/mgr/dashboard/frontend
+.  $CEPH_ROOT/build/src/pybind/mgr/dashboard/node-env/bin/activate
 
+# Build
+npm run build -- --prod --progress=false || failed=true
+
+# Unit Tests
 config='src/unit-test-configuration.ts'
 if [ -e $config ]; then
   mv $config ${config}_old
 fi
 cp ${config}.sample $config
 
-.  $CEPH_ROOT/build/src/pybind/mgr/dashboard/node-env/bin/activate
-
-npm run build -- --prod --progress=false
-npm run test:ci
-npm run lint
+npm run test:ci || failed=true
 
 rm $config
 if [ -e ${config}_old ]; then
   mv ${config}_old $config
 fi
 
+# Linting
+npm run lint --silent
+if [ $? -gt 0 ]; then
+  failed=true
+  echo -e "\nTry running 'npm run lint -- --fix' to fix some linting errors."
+fi
+
+npm run prettier:lint --silent
+if [ $? -gt 0 ]; then
+  failed=true
+  echo -e "\nTry running 'npm run prettier' to fix linting errors."
+fi
+
 deactivate
+
+if [ "$failed" = "true" ]; then
+  exit 1
+fi
