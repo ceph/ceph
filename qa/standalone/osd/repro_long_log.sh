@@ -138,10 +138,11 @@ function TEST_trim_max_entries()
     rados -p test rm foo
     test_log_size $PGID 3
     rados -p test rm foo
-    test_log_size $PGID 4
-
+    test_log_size $PGID 3
     rados -p test rm foo
-    test_log_size $PGID 2
+    test_log_size $PGID 3
+    rados -p test rm foo
+    test_log_size $PGID 3
 }
 
 main repro-long-log "$@"
