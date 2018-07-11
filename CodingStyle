@@ -52,7 +52,7 @@ by section.
          private:
           int m_foo;
    	};
-   
+
 * Naming > Constant Names:
 
    Google uses kSomeThing for constants.  We prefer SOME_THING.
@@ -148,8 +148,10 @@ For Angular code, we follow the official Angular style guide:
 
     https://angular.io/guide/styleguide
 
-To check whether your code is conformant with the style guide, we suggest
-using TSLint with Codelyzer:
+To check whether your code is conformant with the style guide, we use a
+combination of TSLint, Codelyzer and Prettier:
 
-    https://www.npmjs.com/package/codelyzer
+    https://palantir.github.io/tslint/
+    http://codelyzer.com/
+    https://prettier.io/
 
