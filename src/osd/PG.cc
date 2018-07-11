@@ -5153,18 +5153,12 @@ bool PG::append_log_entries_update_missing(
   assert(entries.begin()->version > info.last_update);
 
   PGLogEntryHandler rollbacker{this, &t};
-  if (roll_forward_to) {
-    pg_log.roll_forward(&rollbacker);
-  }
   bool invalidate_stats =
     pg_log.append_new_log_entries(info.last_backfill,
 				  info.last_backfill_bitwise,
 				  entries,
 				  &rollbacker);
 
-  if (roll_forward_to && entries.rbegin()->soid > info.last_backfill) {
-    pg_log.roll_forward(&rollbacker);
-  }
   if (roll_forward_to && *roll_forward_to > pg_log.get_can_rollback_to()) {
     pg_log.roll_forward_to(*roll_forward_to, &rollbacker);
     last_rollback_info_trimmed_to_applied = *roll_forward_to;
