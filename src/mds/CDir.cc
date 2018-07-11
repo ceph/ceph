@@ -1017,10 +1017,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
     CDir *f = new CDir(inode, *p, cache, is_auth());
     f->state_set(state & (MASK_STATE_FRAGMENT_KEPT | STATE_COMPLETE));
     f->get_replicas() = get_replicas();
-    f->dir_auth = dir_auth;
-    f->init_fragment_pins();
     f->set_version(get_version());
-
     f->pop_me = pop_me;
     f->pop_me.scale(fac);
 
@@ -1038,6 +1035,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
 
     f->set_dir_auth(get_dir_auth());
     f->prepare_new_fragment(replay);
+    f->init_fragment_pins();
   }
   
   // repartition dentries
@@ -2657,7 +2655,9 @@ void CDir::set_dir_auth(const mds_authority_t &a)
   // new subtree root?
   if (!was_subtree && is_subtree_root()) {
     dout(10) << " new subtree root, adjusting auth_pins" << dendl;
-    
+
+    inode->num_subtree_roots++;   
+
     // adjust nested auth pins
     if (get_cum_auth_pins())
       inode->adjust_nested_auth_pins(-1, NULL);
@@ -2671,7 +2671,9 @@ void CDir::set_dir_auth(const mds_authority_t &a)
   } 
   if (was_subtree && !is_subtree_root()) {
     dout(10) << " old subtree root, adjusting auth_pins" << dendl;
-    
+
+    inode->num_subtree_roots--;
+  
     // adjust nested auth pins
     if (get_cum_auth_pins())
       inode->adjust_nested_auth_pins(1, NULL);

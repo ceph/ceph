@@ -370,7 +370,7 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
 
     if (it->second.state == EXPORT_CANCELLED) {
       export_state.erase(it);
-      dir->state_clear(CDir::STATE_EXPORTING);
+      dir->clear_exporting();
       // send pending import_maps?
       cache->maybe_send_pending_resolves();
     }
@@ -395,7 +395,7 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
 void Migrator::export_cancel_finish(CDir *dir)
 {
   assert(dir->state_test(CDir::STATE_EXPORTING));
-  dir->state_clear(CDir::STATE_EXPORTING);
+  dir->clear_exporting();
 
   // pinned by Migrator::export_notify_abort()
   dir->auth_unpin(this);
@@ -860,7 +860,7 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   mds->hit_export_target(ceph_clock_now(), dest, -1);
 
   dir->auth_pin(this);
-  dir->state_set(CDir::STATE_EXPORTING);
+  dir->mark_exporting();
 
   MDRequestRef mdr = mds->mdcache->request_start_internal(CEPH_MDS_OP_EXPORTDIR);
   mdr->more()->export_dir = dir;
@@ -1074,7 +1074,7 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
     mds->send_message_mds(new MExportDirCancel(dir->dirfrag(), it->second.tid), it->second.peer);
     export_state.erase(it);
 
-    dir->state_clear(CDir::STATE_EXPORTING);
+    dir->clear_exporting();
     cache->maybe_send_pending_resolves();
     return;
   }
@@ -2071,7 +2071,7 @@ void Migrator::export_finish(CDir *dir)
   MutationRef mut = it->second.mut;
   // remove from exporting list, clean up state
   export_state.erase(it);
-  dir->state_clear(CDir::STATE_EXPORTING);
+  dir->clear_exporting();
 
   cache->show_subtrees();
   audit();
