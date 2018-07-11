@@ -73,6 +73,46 @@ void RGWREST_STS::send_response()
   end_header(s);
 }
 
+int RGWSTSGetSessionToken::verify_permission()
+{
+  return 0;
+}
+
+int RGWSTSGetSessionToken::get_params()
+{
+  duration = s->info.args.get("DurationSeconds");
+  serialNumber = s->info.args.get("SerialNumber");
+  tokenCode = s->info.args.get("TokenCode");
+
+  if (! duration.empty()) {
+    uint64_t duration_in_secs = stoull(duration);
+    if (duration_in_secs < STS::GetSessionTokenRequest::getMinDuration() ||
+            duration_in_secs > s->cct->_conf->rgw_sts_max_session_duration)
+      return -EINVAL;
+  }
+
+  return 0;
+}
+
+void RGWSTSGetSessionToken::execute()
+{
+  if (op_ret = get_params(); op_ret < 0) {
+    return;
+  }
+
+  STS::STSService sts(s->cct, store, s->user->user_id);
+
+  STS::GetSessionTokenRequest req(duration, serialNumber, tokenCode);
+  const auto& [ret, creds] = sts.getSessionToken(req);
+  op_ret = std::move(ret);
+  //Dump the output
+  if (op_ret == 0) {
+    s->formatter->open_object_section("Credentials");
+    creds.dump(s->formatter);
+    s->formatter->close_section();
+  }
+}
+
 int RGWSTSAssumeRole::get_params()
 {
   duration = s->info.args.get("DurationSeconds");
@@ -125,8 +165,11 @@ void RGWSTSAssumeRole::execute()
 RGWOp *RGWHandler_REST_STS::op_post()
 {
   if (s->info.args.exists("Action"))    {
-    if (string action = s->info.args.get("Action"); action == "AssumeRole") {
+    string action = s->info.args.get("Action");
+    if (action == "AssumeRole") {
       return new RGWSTSAssumeRole;
+    } else if (action == "GetSessionToken") {
+      return new RGWSTSGetSessionToken;
     }
   }
   return nullptr;

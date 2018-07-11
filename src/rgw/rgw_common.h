@@ -523,6 +523,7 @@ enum RGWOpType {
   RGW_OP_DEL_BUCKET_META_SEARCH,
   /* sts specific*/
   RGW_STS_ASSUME_ROLE,
+  RGW_STS_GET_SESSION_TOKEN,
 };
 
 class RGWAccessControlPolicy;

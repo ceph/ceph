@@ -1548,3 +1548,4 @@ OPTION(rgw_website_routing_rules_max_num, OPT_INT) // According to AWS S3, An we
 OPTION(rgw_sts_entry, OPT_STR)
 OPTION(rgw_sts_key, OPT_STR)
 OPTION(rgw_s3_auth_use_sts, OPT_BOOL)  // should we try to use sts for s3?
+OPTION(rgw_sts_max_session_duration, OPT_U64) // Max duration in seconds for which the session token is valid.
