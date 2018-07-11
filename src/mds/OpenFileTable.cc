@@ -1045,10 +1045,14 @@ void OpenFileTable::_prefetch_dirfrags()
   }
 
   MDSGatherBuilder gather(g_ceph_context);
+  int num_opening_dirfrags = 0;
   for (auto dir : fetch_queue) {
     if (dir->state_test(CDir::STATE_REJOINUNDEF))
       assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
     dir->fetch(gather.new_sub());
+
+    if (!(++num_opening_dirfrags % 1000))
+      mds->heartbeat_reset();
   }
 
   auto finish_func = [this](int r) {
@@ -1111,6 +1115,9 @@ void OpenFileTable::_prefetch_inodes()
 
     num_opening_inodes++;
     mdcache->open_ino(it.first, pool, new C_OFT_OpenInoFinish(this, it.first), false);
+
+    if (!(num_opening_inodes % 1000))
+      mds->heartbeat_reset();
   }
 
   _open_ino_finish(inodeno_t(0), 0);

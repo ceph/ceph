@@ -305,6 +305,10 @@ class MDSRank {
       finished_queue.splice( finished_queue.end(), ls );
       progress_thread.signal();
     }
+    void queue_waiters_front(std::list<MDSInternalContextBase*>& ls) {
+      finished_queue.splice(finished_queue.begin(), ls);
+      progress_thread.signal();
+    }
 
     MDSRank(
         mds_rank_t whoami_,
