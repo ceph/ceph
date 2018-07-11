@@ -92,19 +92,25 @@ void RGWRESTConn::populate_params(param_vec_t& params, const rgw_user *uid, cons
 int RGWRESTConn::forward(const rgw_user& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl)
 {
   string url;
-  int ret = get_url(url);
-  if (ret < 0)
-    return ret;
-  param_vec_t params;
-  populate_params(params, &uid, self_zone_group);
-  if (objv) {
-    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%lld", (long long)objv->ver);
-    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "ver", buf));
+  int ret = EINVAL;
+  /* we retry on all endpoints to handle the case when one is down */
+  for (auto&  e:  endpoints) {
+    if (ret < 0)
+      return ret;
+    param_vec_t params;
+    populate_params(params, &uid, self_zone_group);
+    if (objv) {
+      params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
+      char buf[16];
+      snprintf(buf, sizeof(buf), "%lld", (long long)objv->ver);
+      params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "ver", buf));
+    }
+    RGWRESTSimpleRequest req(cct, info.method, url, NULL, &params);
+    return req.forward_request(key, info, max_response, inbl, outbl);
   }
-  RGWRESTSimpleRequest req(cct, info.method, url, NULL, &params);
-  return req.forward_request(key, info, max_response, inbl, outbl);
+
+  ldout(cct, 0) << "WARNING: endpoints not configured for upstream zone" << dendl;
+  return ret;
 }
 
 class StreamObjData : public RGWGetDataCB {
