@@ -307,6 +307,12 @@ class MDSRank {
       std::copy(v.begin(), v.end(), std::back_inserter(finished_queue));
       progress_thread.signal();
     }
+    void queue_waiters_front(MDSInternalContextBase::vec& ls) {
+      MDSInternalContextBase::vec v;
+      v.swap(ls);
+      std::copy(v.rbegin(), v.rend(), std::front_inserter(finished_queue));
+      progress_thread.signal();
+    }
 
     MDSRank(
         mds_rank_t whoami_,
