@@ -207,7 +207,7 @@ function TEST_scrub_snaps() {
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" > $dir/csjson
-    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
 
     rados list-inconsistent-snapset $pgid > $dir/json || return 1
 
@@ -652,7 +652,7 @@ EOF
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" > $dir/csjson
-    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save1.json
@@ -1100,7 +1100,7 @@ EOF
 fi
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" > $dir/csjson
-    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save1.json

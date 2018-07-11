@@ -32,9 +32,15 @@ fi
 
 if [ `uname` = FreeBSD ]; then
     SED=gsed
+    DIFFCOLOPTS=""
     KERNCORE="kern.corefile"
 else
     SED=sed
+    termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
+    if [ -n "$termwidth" -a "$termwidth" != "0" ]; then
+        termwidth="-W ${termwidth}"
+    fi
+    DIFFCOLOPTS="-y $termwidth"
     KERNCORE="kernel.core_pattern"
 fi
 
@@ -139,6 +145,7 @@ function test_setup() {
 # subvolumes that relate to it.
 #
 # @param dir path name of the environment
+# @param dumplogs pass "1" to dump logs otherwise it will only if cores found
 # @return 0 on success, 1 on error
 #
 function teardown() {
@@ -168,7 +175,13 @@ function teardown() {
         fi
     fi
     if [ "$cores" = "yes" -o "$dumplogs" = "1" ]; then
-        display_logs $dir
+	if [ -n "$LOCALRUN" ]; then
+	    display_logs $dir
+        else
+	    # Move logs to where Teuthology will archive it
+	    mkdir -p $TESTDIR/archive/log
+	    mv $dir/*.log $TESTDIR/archive/log
+	fi
     fi
     rm -fr $dir
     rm -rf $(get_asok_dir)
@@ -1441,10 +1454,11 @@ function test_wait_for_clean() {
 #######################################################################
 
 ##
-# Wait until the cluster becomes HEALTH_OK again or if it does not make progress
-# for $TIMEOUT seconds.
+# Wait until the cluster has health condition passed as arg
+# again for $TIMEOUT seconds.
 #
-# @return 0 if the cluster is HEALTHY, 1 otherwise
+# @param string to grep for in health detail
+# @return 0 if the cluster health matches request, 1 otherwise
 #
 function wait_for_health() {
     local grepstr=$1
@@ -1461,6 +1475,12 @@ function wait_for_health() {
     done
 }
 
+##
+# Wait until the cluster becomes HEALTH_OK again or if it does not make progress
+# for $TIMEOUT seconds.
+#
+# @return 0 if the cluster is HEALTHY, 1 otherwise
+#
 function wait_for_health_ok() {
      wait_for_health "HEALTH_OK" || return 1
 }
@@ -1994,6 +2014,15 @@ function inject_eio() {
         fi
         sleep 1
     done
+}
+
+function multidiff() {
+    if ! diff $@ ; then
+        if [ "$DIFFCOLOPTS" = "" ]; then
+            return 1
+        fi
+        diff $DIFFCOLOPTS $@
+    fi
 }
 
 # Local Variables:
