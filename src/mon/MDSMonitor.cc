@@ -542,16 +542,8 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 
   for (const auto &new_metric: new_health) {
     if (old_types.count(new_metric.type) == 0) {
-      std::stringstream msg;
-      msg << "MDS health message (" << m->get_orig_source_inst().name << "): "
-          << new_metric.message;
-      if (new_metric.sev == HEALTH_ERR) {
-        mon->clog->error() << msg.str();
-      } else if (new_metric.sev == HEALTH_WARN) {
-        mon->clog->warn() << msg.str();
-      } else {
-        mon->clog->info() << msg.str();
-      }
+      dout(10) << "MDS health message (" << m->get_orig_source_inst().name
+	       << "): " << new_metric.sev << " " << new_metric.message << dendl;
     }
   }
 
