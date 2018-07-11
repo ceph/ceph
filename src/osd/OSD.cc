@@ -6233,13 +6233,11 @@ void OSD::probe_smart(const string& only_devid, ostream& ss)
     std::string result;
     if (probe_smart_device(("/dev/" + dev).c_str(), smart_timeout, &result)) {
       dout(10) << "probe_smart_device failed for /dev/" << dev << dendl;
-      //continue;
-      result = "{\"error\": \"smartctl failed\", \"dev\": \"" + dev + "\"}";
     }
 
     // TODO: change to read_or_throw?
     if (!json_spirit::read(result, smart_json)) {
-      derr << "smartctl JSON output of /dev/" + dev + " is invalid" << dendl;
+      derr << "smartctl JSON output of /dev/" + dev + " is invalid: " << result << dendl;
     } else { //json is valid, assigning
       json_map[devid] = smart_json;
     }
@@ -6264,23 +6262,46 @@ int OSD::probe_smart_device(const char *device, int timeout, std::string *result
 
   int ret = smartctl.spawn();
   if (ret != 0) {
-    derr << "failed run smartctl: " << smartctl.err() << dendl;
+    derr << "failed to run smartctl: " << smartctl.err() << dendl;
+    *result = "{\"error\": \"spawn() failure\", \"exit_code\": \"" + std::to_string(ret) + "\"}";
     return ret;
   }
 
   bufferlist output;
   ret = output.read_fd(smartctl.get_stdout(), 100*1024);
-  if (ret < 0) {
-    derr << "failed read from smartctl: " << cpp_strerror(-ret) << dendl;
+  // read failed, or immediately returned EOF; 
+  // or sudo failed, and since it writes to stderr, reading from stdout will return 0.
+  if (ret <= 0) { 
+    derr << "failed to read from smartctl: " << cpp_strerror(-ret) << dendl;
+    *result = "{\"error\": \"failed to read from smartctl\", \"exit_code\": \"" + std::to_string(ret) + "\"}";
   } else {
-    ret = 0;
     *result = output.to_str();
     dout(10) << "smartctl output is: " << *result << dendl;
   }
 
-  if (smartctl.join() != 0) {
+  ret = smartctl.join();
+  /*
+  The exit statuses of smartctl are defined by a bitmask.
+  if (ret == 1) : 
+    a. smartctl returned 1, which means command line did not parse.
+    b. there might be a sudoers permission problem;
+  if (ret == 2) :
+    smartctl returned 2 which means: 
+    device open failed,
+    device did not return an IDENTIFY DEVICE structure,
+    or device is in a low-power mode.
+  (ret == 3) is not expected (due to bitmask).
+  The rest of smartctl exit status suggest there might be something wrong with the device,
+  but the output might still be useful. When (0 < ret < 4)
+  there is no actual output about the device (such as attr table, etc.), 
+  and we need to check what went wrong.
+  */
+  if (ret != 0) {
     derr << smartctl.err() << dendl;
-    return -EINVAL;
+    // result should not be empty by now, since in case read/sudo failed 
+    // we already assigned an error message;
+    // and in case of a smartctl failure/warning - the error messages are read from buffer 
+    // and assigned to result.
   }
 
   return ret;
