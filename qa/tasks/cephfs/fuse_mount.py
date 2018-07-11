@@ -394,7 +394,7 @@ print find_socket("{client_name}")
 
         # Find the admin socket
         p = self.client_remote.run(args=[
-            'python', '-c', pyscript
+            'sudo', 'python2', '-c', pyscript
         ], stdout=StringIO())
         asok_path = p.stdout.getvalue().strip()
         log.info("Found client admin socket at {0}".format(asok_path))
