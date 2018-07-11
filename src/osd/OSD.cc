@@ -7664,9 +7664,14 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     else
       start_boot();
   }
-  else if (do_restart)
+  else if (do_restart) {
+    vector<PGRef> pgs;
+    _get_pgs(&pgs);
+    for (auto pg : pgs) {
+      pg->force_restart_peering();
+    }
     start_boot();
-
+  }
 }
 
 void OSD::check_osdmap_features()

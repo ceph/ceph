@@ -941,6 +941,12 @@ protected:
 
   bool send_notify;    ///< true if we are non-primary and should notify the primary
 
+  bool restart_peering;
+public:
+  void force_restart_peering() {
+    restart_peering = true;
+  }
+
 protected:
   eversion_t  last_update_ondisk;    // last_update that has committed; ONLY DEFINED WHEN is_active()
   eversion_t  last_complete_ondisk;  // last_complete that has committed.

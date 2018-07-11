@@ -335,6 +335,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   role(-1),
   state(0),
   send_notify(false),
+  restart_peering(false),
   pg_whoami(osd->whoami, p.shard),
   need_up_thru(false),
   last_peering_reset(0),
@@ -5790,6 +5791,9 @@ bool PG::should_restart_peering(
   OSDMapRef lastmap,
   OSDMapRef osdmap)
 {
+  if (restart_peering) {
+    return true;
+  }
   if (PastIntervals::is_new_interval(
 	primary.osd,
 	newactingprimary,
@@ -5881,6 +5885,8 @@ void PG::start_peering_interval(
   ObjectStore::Transaction *t)
 {
   const OSDMapRef osdmap = get_osdmap();
+
+  restart_peering = false;
 
   set_last_peering_reset();
 
