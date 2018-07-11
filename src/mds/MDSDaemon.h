@@ -29,7 +29,7 @@
 #include "MDSMap.h"
 #include "MDSRank.h"
 
-#define CEPH_MDS_PROTOCOL    32 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    33 /* cluster internal */
 
 class AuthAuthorizeHandlerRegistry;
 class Message;
