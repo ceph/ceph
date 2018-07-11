@@ -29,6 +29,20 @@ public:
   RGWOpType get_type() override { return RGW_STS_ASSUME_ROLE; }
 };
 
+class RGWSTSGetSessionToken : public RGWREST_STS {
+protected:
+  string duration;
+  string serialNumber;
+  string tokenCode;
+public:
+  RGWSTSGetSessionToken() = default;
+  void execute() override;
+  int verify_permission() override;
+  int get_params();
+  const char* name() const override { return "get_keystone_session_token"; }
+  RGWOpType get_type() override { return RGW_STS_GET_SESSION_TOKEN; }
+};
+
 class RGWHandler_REST_STS : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
   RGWOp *op_post() override;

@@ -115,7 +115,6 @@ int Credentials::generateCredentials(CephContext* cct,
     token.acct_type = TYPE_NONE;
   }
 
-  string encrypted_str;
   buffer::list input, enc_output;
   encode(token, input);
 
@@ -313,6 +312,33 @@ AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
   }
 
   return make_tuple(0, user, cred, packedPolicySize);
+}
+
+GetSessionTokenRequest::GetSessionTokenRequest(string& duration, string& serialNumber, string& tokenCode)
+{
+  if (duration.empty()) {
+    this->duration = DEFAULT_DURATION_IN_SECS;
+  } else {
+    this->duration = stoull(duration);
+  }
+  this->serialNumber = serialNumber;
+  this->tokenCode = tokenCode;
+}
+
+GetSessionTokenResponse STSService::getSessionToken(GetSessionTokenRequest& req)
+{
+  int ret;
+  Credentials cred;
+
+  //Generate Credentials
+  if (ret = cred.generateCredentials(cct,
+                                      req.getDuration(),
+                                      boost::none,
+                                      boost::none); ret < 0) {
+    return make_tuple(ret, cred);
+  }
+
+  return make_tuple(0, cred);
 }
 
 }

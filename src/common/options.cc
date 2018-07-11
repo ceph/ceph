@@ -6362,6 +6362,10 @@ std::vector<Option> get_rgw_options() {
     .set_default(false)
     .set_description("Should S3 authentication use STS."),
 
+    Option("rgw_sts_max_session_duration", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default("43200")
+    .set_description("Session token max duration")
+    .set_long_description("Max duration in seconds for which the session token is valid."),
   });
 }
 
