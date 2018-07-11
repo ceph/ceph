@@ -84,7 +84,7 @@ int read_string(int fd, unsigned max, std::string *out) {
 int extract_spec(const std::string &spec, std::string *pool_name,
                  std::string *namespace_name, std::string *name,
                  std::string *snap_name, SpecValidation spec_validation) {
-  if (!g_ceph_context->_conf->get_val<bool>("rbd_validate_names")) {
+  if (!g_ceph_context->_conf.get_val<bool>("rbd_validate_names")) {
     spec_validation = SPEC_VALIDATION_NONE;
   }
 
@@ -165,7 +165,7 @@ std::string get_positional_argument(const po::variables_map &vm, size_t index) {
 }
 
 std::string get_default_pool_name() {
-  return g_ceph_context->_conf->get_val<std::string>("rbd_default_pool");
+  return g_ceph_context->_conf.get_val<std::string>("rbd_default_pool");
 }
 
 std::string get_pool_name(const po::variables_map &vm, size_t *arg_index) {
@@ -494,7 +494,7 @@ int get_image_options(const boost::program_options::variables_map &vm,
     }
 
     if (format_specified) {
-      int r = g_conf->set_val("rbd_default_format", stringify(format));
+      int r = g_conf().set_val("rbd_default_format", stringify(format));
       assert(r == 0);
       opts->set(RBD_IMAGE_OPTION_FORMAT, format);
     }
@@ -538,14 +538,14 @@ int get_journal_options(const boost::program_options::variables_map &vm,
     }
     opts->set(RBD_IMAGE_OPTION_JOURNAL_ORDER, order);
 
-    int r = g_conf->set_val("rbd_journal_order", stringify(order));
+    int r = g_conf().set_val("rbd_journal_order", stringify(order));
     assert(r == 0);
   }
   if (vm.count(at::JOURNAL_SPLAY_WIDTH)) {
     opts->set(RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH,
 	      vm[at::JOURNAL_SPLAY_WIDTH].as<uint64_t>());
 
-    int r = g_conf->set_val("rbd_journal_splay_width",
+    int r = g_conf().set_val("rbd_journal_splay_width",
 			    stringify(
 			      vm[at::JOURNAL_SPLAY_WIDTH].as<uint64_t>()));
     assert(r == 0);
@@ -554,7 +554,7 @@ int get_journal_options(const boost::program_options::variables_map &vm,
     opts->set(RBD_IMAGE_OPTION_JOURNAL_POOL,
 	      vm[at::JOURNAL_POOL].as<std::string>());
 
-    int r = g_conf->set_val("rbd_journal_pool",
+    int r = g_conf().set_val("rbd_journal_pool",
 			    vm[at::JOURNAL_POOL].as<std::string>());
     assert(r == 0);
   }
@@ -621,8 +621,8 @@ int get_formatter(const po::variables_map &vm,
 }
 
 void init_context() {
-  g_conf->set_val_or_die("rbd_cache_writethrough_until_flush", "false");
-  g_conf->apply_changes(NULL);
+  g_conf().set_val_or_die("rbd_cache_writethrough_until_flush", "false");
+  g_conf().apply_changes(nullptr);
   common_init_finish(g_ceph_context);
 }
 
@@ -670,7 +670,7 @@ int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
 }
 
 void disable_cache() {
-  g_conf->set_val_or_die("rbd_cache", "false");
+  g_conf().set_val_or_die("rbd_cache", "false");
 }
 
 int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
@@ -844,7 +844,7 @@ std::string timestr(time_t t) {
 }
 
 uint64_t get_rbd_default_features(CephContext* cct) {
-  auto features = cct->_conf->get_val<std::string>("rbd_default_features");
+  auto features = cct->_conf.get_val<std::string>("rbd_default_features");
   return boost::lexical_cast<uint64_t>(features);
 }
 

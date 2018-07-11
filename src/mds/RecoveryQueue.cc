@@ -64,7 +64,7 @@ void RecoveryQueue::advance()
 	   << file_recover_queue_front_size << " prioritized, "
 	   << file_recovering.size() << " recovering" << dendl;
 
-  while (file_recovering.size() < g_conf->mds_max_file_recover) {
+  while (file_recovering.size() < g_conf()->mds_max_file_recover) {
     if (!file_recover_queue_front.empty()) {
       CInode *in = file_recover_queue_front.front();
       in->item_recover_queue_front.remove_myself();

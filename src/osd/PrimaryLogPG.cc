@@ -1750,7 +1750,7 @@ void PrimaryLogPG::do_request(
 	is_down() ||
 	is_incomplete() ||
 	(!is_active() && is_peered());
-      if (g_conf->osd_backoff_on_peering && !backoff) {
+      if (g_conf()->osd_backoff_on_peering && !backoff) {
 	if (is_peering()) {
 	  backoff = true;
 	}
@@ -2085,8 +2085,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       return;
     }
     if (can_backoff &&
-	(g_conf->osd_backoff_on_degraded ||
-	 (g_conf->osd_backoff_on_unfound && missing_loc.is_unfound(head)))) {
+	(g_conf()->osd_backoff_on_degraded ||
+	 (g_conf()->osd_backoff_on_unfound && missing_loc.is_unfound(head)))) {
       add_backoff(session, head, head);
       maybe_kick_recovery(head);
     } else {
@@ -2097,7 +2097,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   // degraded object?
   if (write_ordered && is_degraded_or_backfilling_object(head)) {
-    if (can_backoff && g_conf->osd_backoff_on_degraded) {
+    if (can_backoff && g_conf()->osd_backoff_on_degraded) {
       add_backoff(session, head, head);
       maybe_kick_recovery(head);
     } else {

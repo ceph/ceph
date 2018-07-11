@@ -14,7 +14,7 @@
 
 #include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"
-#include "common/config.h"
+#include "common/config_proxy.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 
@@ -168,7 +168,7 @@ int main(int argc, const char **argv)
   }
 
   common_init_finish(g_ceph_context);
-  EntityName ename(g_conf->name);
+  EntityName ename(g_conf()->name);
 
   // Enforce the use of gen-key or add-key when creating to avoid ending up
   // with an "empty" key (key = AAAAAAAAAAAAAAAA)

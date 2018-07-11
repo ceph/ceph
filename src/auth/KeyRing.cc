@@ -30,7 +30,7 @@
 
 int KeyRing::from_ceph_context(CephContext *cct)
 {
-  const md_config_t *conf = cct->_conf;
+  const auto& conf = cct->_conf;
   string filename;
 
   int ret = ceph_resolve_file_search(conf->keyring, filename);

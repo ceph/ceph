@@ -123,7 +123,7 @@ bool HeartbeatMap::is_healthy()
   if (m_cct->_conf->heartbeat_inject_failure) {
     ldout(m_cct, 0) << "is_healthy injecting failure for next " << m_cct->_conf->heartbeat_inject_failure << " seconds" << dendl;
     m_inject_unhealthy_until = now + std::chrono::seconds(m_cct->_conf->heartbeat_inject_failure);
-    m_cct->_conf->set_val("heartbeat_inject_failure", "0");
+    m_cct->_conf.set_val("heartbeat_inject_failure", "0");
   }
 
   bool healthy = true;

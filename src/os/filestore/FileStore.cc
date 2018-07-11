@@ -638,7 +638,7 @@ FileStore::FileStore(CephContext* cct, const std::string &base,
   logger = plb.create_perf_counters();
 
   cct->get_perfcounters_collection()->add(logger);
-  cct->_conf->add_observer(this);
+  cct->_conf.add_observer(this);
 
   superblock.compat_features = get_fs_initial_compat_set();
 }
@@ -653,7 +653,7 @@ FileStore::~FileStore()
     delete *it;
     *it = nullptr;
   }
-  cct->_conf->remove_observer(this);
+  cct->_conf.remove_observer(this);
   cct->get_perfcounters_collection()->remove(logger);
 
   if (journal)
@@ -2158,7 +2158,7 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
     int orig = cct->_conf->filestore_inject_stall;
     dout(5) << __FUNC__ << ": filestore_inject_stall " << orig << ", sleeping" << dendl;
     sleep(orig);
-    cct->_conf->set_val("filestore_inject_stall", "0");
+    cct->_conf.set_val("filestore_inject_stall", "0");
     dout(5) << __FUNC__ << ": done stalling" << dendl;
   }
 
@@ -5643,7 +5643,7 @@ int FileStore::_omap_setkeys(const coll_t& cid, const ghobject_t &hoid,
     }
   }
 skip:
-  if (g_conf->subsys.should_gather<ceph_subsys_filestore, 20>()) {
+  if (g_conf()->subsys.should_gather<ceph_subsys_filestore, 20>()) {
     for (auto& p : aset) {
       dout(20) << __FUNC__ << ":  set " << p.first << dendl;
     }
@@ -5882,7 +5882,7 @@ const char** FileStore::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void FileStore::handle_conf_change(const md_config_t *conf,
+void FileStore::handle_conf_change(const ConfigProxy& conf,
 			  const std::set <std::string> &changed)
 {
   if (changed.count("filestore_max_inline_xattr_size") ||

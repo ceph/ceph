@@ -119,9 +119,9 @@ int main(int argc, const char **argv)
       dout(0) << "requesting standby_replay for mds." << r << dendl;
       char rb[32];
       snprintf(rb, sizeof(rb), "%d", r);
-      g_conf->set_val("mds_standby_for_rank", rb);
-      g_conf->set_val("mds_standby_replay", "true");
-      g_conf->apply_changes(NULL);
+      g_conf().set_val("mds_standby_for_rank", rb);
+      g_conf().set_val("mds_standby_replay", "true");
+      g_conf().apply_changes(nullptr);
     }
     else {
       derr << "Error: can't understand argument: " << *i << "\n" << dendl;
@@ -135,14 +135,14 @@ int main(int argc, const char **argv)
   pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC, &addrs);
 
   // Normal startup
-  if (g_conf->name.has_default_id()) {
+  if (g_conf()->name.has_default_id()) {
     derr << "must specify '-i name' with the ceph-mds instance name" << dendl;
     exit(1);
   }
 
-  if (g_conf->name.get_id().empty() ||
-      (g_conf->name.get_id()[0] >= '0' && g_conf->name.get_id()[0] <= '9')) {
-    derr << "MDS id '" << g_conf->name << "' is invalid. "
+  if (g_conf()->name.get_id().empty() ||
+      (g_conf()->name.get_id()[0] >= '0' && g_conf()->name.get_id()[0] <= '9')) {
+    derr << "MDS id '" << g_conf()->name << "' is invalid. "
       "MDS names may not start with a numeric digit." << dendl;
     exit(1);
   }
@@ -167,7 +167,7 @@ int main(int argc, const char **argv)
 
   auto nonce = ceph::util::generate_random_number<uint64_t>();
 
-  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
+  std::string public_msgr_type = g_conf()->ms_public_type.empty() ? g_conf().get_val<std::string>("ms_type") : g_conf()->ms_public_type;
   Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
 				      entity_name_t::MDS(-1), "mds",
 				      nonce, Messenger::HAS_MANY_CONNECTIONS);
@@ -175,7 +175,7 @@ int main(int argc, const char **argv)
     forker.exit(1);
   msgr->set_cluster_protocol(CEPH_MDS_PROTOCOL);
 
-  cout << "starting " << g_conf->name << " at " << msgr->get_myaddrs()
+  cout << "starting " << g_conf()->name << " at " << msgr->get_myaddrs()
        << std::endl;
   uint64_t required =
     CEPH_FEATURE_OSDREPLYMUX;
@@ -206,13 +206,13 @@ int main(int argc, const char **argv)
   msgr->start();
 
   // start mds
-  mds = new MDSDaemon(g_conf->name.get_id().c_str(), msgr, &mc);
+  mds = new MDSDaemon(g_conf()->name.get_id().c_str(), msgr, &mc);
 
   // in case we have to respawn...
   mds->orig_argc = argc;
   mds->orig_argv = argv;
 
-  if (g_conf->daemonize) {
+  if (g_conf()->daemonize) {
     global_init_postfork_finish(g_ceph_context);
     forker.daemonize();
   }
@@ -226,7 +226,7 @@ int main(int argc, const char **argv)
   register_async_signal_handler_oneshot(SIGINT, handle_mds_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mds_signal);
 
-  if (g_conf->inject_early_sigterm)
+  if (g_conf()->inject_early_sigterm)
     kill(getpid(), SIGTERM);
 
   msgr->wait();

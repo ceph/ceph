@@ -154,7 +154,7 @@ ostream& operator<<(ostream& out, const CInode& in)
 
   if (in.inode.is_dir()) {
     out << " " << in.inode.dirstat;
-    if (g_conf->mds_debug_scatterstat && in.is_projected()) {
+    if (g_conf()->mds_debug_scatterstat && in.is_projected()) {
       const CInode::mempool_inode *pi = in.get_projected_inode();
       out << "->" << pi->dirstat;
     }
@@ -168,7 +168,7 @@ ostream& operator<<(ostream& out, const CInode& in)
   out << " " << in.inode.rstat;
   if (!(in.inode.rstat == in.inode.accounted_rstat))
     out << "/" << in.inode.accounted_rstat;
-  if (g_conf->mds_debug_scatterstat && in.is_projected()) {
+  if (g_conf()->mds_debug_scatterstat && in.is_projected()) {
     const CInode::mempool_inode *pi = in.get_projected_inode();
     out << "->" << pi->rstat;
     if (!(pi->rstat == pi->accounted_rstat))
@@ -1423,7 +1423,7 @@ void CInode::verify_diri_backtrace(bufferlist &bl, int err)
   if (err) {
     MDSRank *mds = mdcache->mds;
     mds->clog->error() << "bad backtrace on directory inode " << ino();
-    assert(!"bad backtrace" == (g_conf->mds_verify_backtrace > 1));
+    assert(!"bad backtrace" == (g_conf()->mds_verify_backtrace > 1));
 
     mark_dirty_parent(mds->mdlog->get_current_segment(), false);
     mds->mdlog->flush();
@@ -1768,7 +1768,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	    p.second->state_clear(CDir::STATE_DIRTYDFT);
 	}
       }
-      if (g_conf->mds_debug_frag)
+      if (g_conf()->mds_debug_frag)
 	verify_dirfrags();
     }
     break;
@@ -2195,7 +2195,7 @@ void CInode::finish_scatter_gather_update(int type)
 	    pf->fragstat.nsubdirs < 0) {
 	  clog->error() << "bad/negative dir size on "
 	      << dir->dirfrag() << " " << pf->fragstat;
-	  assert(!"bad/negative fragstat" == g_conf->mds_verify_scatter);
+	  assert(!"bad/negative fragstat" == g_conf()->mds_verify_scatter);
 	  
 	  if (pf->fragstat.nfiles < 0)
 	    pf->fragstat.nfiles = 0;
@@ -2232,7 +2232,7 @@ void CInode::finish_scatter_gather_update(int type)
 	  } else {
 	    clog->error() << "unmatched fragstat on " << ino() << ", inode has "
 			  << pi->dirstat << ", dirfrags have " << dirstat;
-	    assert(!"unmatched fragstat" == g_conf->mds_verify_scatter);
+	    assert(!"unmatched fragstat" == g_conf()->mds_verify_scatter);
 	  }
 	  // trust the dirfrags for now
 	  version_t v = pi->dirstat.version;
@@ -2251,7 +2251,7 @@ void CInode::finish_scatter_gather_update(int type)
         make_path_string(path);
 	clog->error() << "Inconsistent statistics detected: fragstat on inode "
                       << ino() << " (" << path << "), inode has " << pi->dirstat;
-	assert(!"bad/negative fragstat" == g_conf->mds_verify_scatter);
+	assert(!"bad/negative fragstat" == g_conf()->mds_verify_scatter);
 
 	if (pi->dirstat.nfiles < 0)
 	  pi->dirstat.nfiles = 0;
@@ -2343,7 +2343,7 @@ void CInode::finish_scatter_gather_update(int type)
 	    clog->error() << "inconsistent rstat on inode " << ino()
                           << ", inode has " << pi->rstat
                           << ", directory fragments have " << rstat;
-	    assert(!"unmatched rstat" == g_conf->mds_verify_scatter);
+	    assert(!"unmatched rstat" == g_conf()->mds_verify_scatter);
 	  }
 	  // trust the dirfrag for now
 	  version_t v = pi->rstat.version;
@@ -2616,7 +2616,7 @@ void CInode::adjust_nested_auth_pins(int a, void *by)
 	   << auth_pins << "+" << nested_auth_pins << dendl;
   assert(nested_auth_pins >= 0);
 
-  if (g_conf->mds_debug_auth_pins) {
+  if (g_conf()->mds_debug_auth_pins) {
     // audit
     int s = 0;
     for (const auto &p : dirfrags) {
@@ -2680,7 +2680,7 @@ CInode::mempool_old_inode& CInode::cow_old_inode(snapid_t follows, bool cow_head
 
   old.inode.trim_client_ranges(follows);
 
-  if (g_conf->mds_snap_rstat &&
+  if (g_conf()->mds_snap_rstat &&
       !(old.inode.rstat == old.inode.accounted_rstat))
     dirty_old_rstats.insert(follows);
   
@@ -4763,7 +4763,7 @@ int64_t CInode::get_backtrace_pool() const
 
 void CInode::maybe_export_pin(bool update)
 {
-  if (!g_conf->mds_bal_export_pin)
+  if (!g_conf()->mds_bal_export_pin)
     return;
   if (!is_dir() || !is_normal())
     return;

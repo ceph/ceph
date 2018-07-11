@@ -1414,7 +1414,7 @@ int Operations<I>::metadata_set(const std::string &key,
   bool config_override = util::is_metadata_config_override(key, &config_key);
   if (config_override) {
     // validate config setting
-    int r = md_config_t().set_val(config_key.c_str(), value);
+    int r = ConfigProxy{false}.set_val(config_key.c_str(), value);
     if (r < 0) {
       return r;
     }

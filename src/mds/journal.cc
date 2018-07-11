@@ -67,7 +67,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 
   dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire" << dendl;
 
-  assert(g_conf->mds_kill_journal_expire_at != 1);
+  assert(g_conf()->mds_kill_journal_expire_at != 1);
 
   // commit dirs
   for (elist<CDir*>::iterator p = new_dirfrags.begin(); !p.end(); ++p) {
@@ -143,7 +143,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     mds->locker->scatter_nudge(&in->nestlock, gather_bld.new_sub());
   }
 
-  assert(g_conf->mds_kill_journal_expire_at != 2);
+  assert(g_conf()->mds_kill_journal_expire_at != 2);
 
   // open files and snap inodes 
   if (!open_files.empty()) {
@@ -176,7 +176,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     }
   }
 
-  assert(g_conf->mds_kill_journal_expire_at != 3);
+  assert(g_conf()->mds_kill_journal_expire_at != 3);
 
   // backtraces to be stored/updated
   for (elist<CInode*>::iterator p = dirty_parent_inodes.begin(); !p.end(); ++p) {
@@ -191,7 +191,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     }
   }
 
-  assert(g_conf->mds_kill_journal_expire_at != 4);
+  assert(g_conf()->mds_kill_journal_expire_at != 4);
 
   // slave updates
   for (elist<MDSlaveUpdate*>::iterator p = slave_updates.begin(member_offset(MDSlaveUpdate,
@@ -266,7 +266,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire waiting" << dendl;
     mds->mdlog->flush();
   } else {
-    assert(g_conf->mds_kill_journal_expire_at != 5);
+    assert(g_conf()->mds_kill_journal_expire_at != 5);
     dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire success" << dendl;
   }
 }
@@ -1129,7 +1129,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 
   assert(logseg);
 
-  assert(g_conf->mds_kill_journal_replay_at != 1);
+  assert(g_conf()->mds_kill_journal_replay_at != 1);
 
   for (list<std::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); ++p) {
     CInode *in = mds->mdcache->get_inode((*p)->inode.ino);
@@ -1324,7 +1324,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	in->state_set(CInode::STATE_AUTH);
       else
 	in->state_clear(CInode::STATE_AUTH);
-      assert(g_conf->mds_kill_journal_replay_at != 2);
+      assert(g_conf()->mds_kill_journal_replay_at != 2);
     }
 
     // remote dentries
@@ -1398,7 +1398,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     }
   }
 
-  assert(g_conf->mds_kill_journal_replay_at != 3);
+  assert(g_conf()->mds_kill_journal_replay_at != 3);
 
   if (renamed_dirino) {
     if (renamed_diri) {
@@ -1569,7 +1569,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     } else {
       mds->clog->error() << "journal replay sessionmap v " << sessionmapv
 			<< " -(1|2) > table " << mds->sessionmap.get_version();
-      assert(g_conf->mds_wipe_sessions);
+      assert(g_conf()->mds_wipe_sessions);
       mds->sessionmap.wipe();
       mds->sessionmap.set_version(sessionmapv);
     }
@@ -1652,7 +1652,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
   // update segment
   update_segment(logseg);
 
-  assert(g_conf->mds_kill_journal_replay_at != 4);
+  assert(g_conf()->mds_kill_journal_replay_at != 4);
 }
 
 // -----------------------
@@ -2674,7 +2674,7 @@ void ESubtreeMap::replay(MDSRank *mds)
       dout(0) << "journal subtrees: " << subtrees << dendl;
       dout(0) << "journal ambig_subtrees: " << ambiguous_subtrees << dendl;
       mds->mdcache->show_subtrees();
-      assert(!g_conf->mds_debug_subtrees || errors == 0);
+      assert(!g_conf()->mds_debug_subtrees || errors == 0);
     }
     return;
   }
@@ -2757,7 +2757,7 @@ void EFragment::replay(MDSRank *mds)
   }
 
   metablob.replay(mds, _segment);
-  if (in && g_conf->mds_debug_frag)
+  if (in && g_conf()->mds_debug_frag)
     in->verify_dirfrags();
 }
 

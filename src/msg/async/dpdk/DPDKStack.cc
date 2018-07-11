@@ -181,14 +181,14 @@ DPDKWorker::Impl::Impl(CephContext *cct, unsigned i, EventCenter *c, std::shared
     : id(i), _netif(cct, dev, c), _dev(dev), _inet(cct, c, &_netif)
 {
   vector<AvailableIPAddress> tuples;
-  bool parsed = parse_available_address(cct->_conf->get_val<std::string>("ms_dpdk_host_ipv4_addr"),
-                                        cct->_conf->get_val<std::string>("ms_dpdk_gateway_ipv4_addr"),
-                                        cct->_conf->get_val<std::string>("ms_dpdk_netmask_ipv4_addr"), tuples);
+  bool parsed = parse_available_address(cct->_conf.get_val<std::string>("ms_dpdk_host_ipv4_addr"),
+                                        cct->_conf.get_val<std::string>("ms_dpdk_gateway_ipv4_addr"),
+                                        cct->_conf.get_val<std::string>("ms_dpdk_netmask_ipv4_addr"), tuples);
   if (!parsed) {
     lderr(cct) << __func__ << " no available address "
-               << cct->_conf->get_val<std::string>("ms_dpdk_host_ipv4_addr") << ", "
-               << cct->_conf->get_val<std::string>("ms_dpdk_gateway_ipv4_addr") << ", "
-               << cct->_conf->get_val<std::string>("ms_dpdk_netmask_ipv4_addr") << ", "
+               << cct->_conf.get_val<std::string>("ms_dpdk_host_ipv4_addr") << ", "
+               << cct->_conf.get_val<std::string>("ms_dpdk_gateway_ipv4_addr") << ", "
+               << cct->_conf.get_val<std::string>("ms_dpdk_netmask_ipv4_addr") << ", "
                << dendl;
     ceph_abort();
   }

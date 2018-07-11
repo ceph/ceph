@@ -52,7 +52,7 @@ int RGWCivetWebFrontend::run()
   auto& conf_map = conf->get_config_map();
 
   set_conf_default(conf_map, "num_threads",
-                   std::to_string(g_conf->rgw_thread_pool_size));
+                   std::to_string(g_conf()->rgw_thread_pool_size));
   set_conf_default(conf_map, "decode_url", "no");
   set_conf_default(conf_map, "enable_keep_alive", "yes");
   set_conf_default(conf_map, "validate_http_method", "no");

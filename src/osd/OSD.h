@@ -282,11 +282,11 @@ public:
   void enqueue_front(OpQueueItem&& qi);
 
   void maybe_inject_dispatch_delay() {
-    if (g_conf->osd_debug_inject_dispatch_delay_probability > 0) {
+    if (g_conf()->osd_debug_inject_dispatch_delay_probability > 0) {
       if (rand() % 10000 <
-	  g_conf->osd_debug_inject_dispatch_delay_probability * 10000) {
+	  g_conf()->osd_debug_inject_dispatch_delay_probability * 10000) {
 	utime_t t;
-	t.set_from_double(g_conf->osd_debug_inject_dispatch_delay_duration);
+	t.set_from_double(g_conf()->osd_debug_inject_dispatch_delay_duration);
 	t.sleep();
       }
     }
@@ -1230,7 +1230,7 @@ class OSD : public Dispatcher,
 public:
   // config observer bits
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
   void update_log_config();
   void check_config();

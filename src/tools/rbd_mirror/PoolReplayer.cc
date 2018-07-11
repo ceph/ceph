@@ -420,7 +420,7 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
   cct->_conf->cluster = cluster_name;
 
   // librados::Rados::conf_read_file
-  int r = cct->_conf->parse_config_files(nullptr, nullptr, 0);
+  int r = cct->_conf.parse_config_files(nullptr, nullptr, 0);
   if (r < 0) {
     derr << "could not read ceph conf for " << description << ": "
 	 << cpp_strerror(r) << dendl;
@@ -435,27 +435,27 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
     // remote peer connections shouldn't apply cluster-specific
     // configuration settings
     for (auto& key : UNIQUE_PEER_CONFIG_KEYS) {
-      config_values[key] = cct->_conf->get_val<std::string>(key);
+      config_values[key] = cct->_conf.get_val<std::string>(key);
     }
   }
 
-  cct->_conf->parse_env();
+  cct->_conf.parse_env();
 
   // librados::Rados::conf_parse_env
   std::vector<const char*> args;
-  r = cct->_conf->parse_argv(args);
+  r = cct->_conf.parse_argv(args);
   if (r < 0) {
     derr << "could not parse environment for " << description << ":"
          << cpp_strerror(r) << dendl;
     cct->put();
     return r;
   }
-  cct->_conf->parse_env();
+  cct->_conf.parse_env();
 
   if (!m_args.empty()) {
     // librados::Rados::conf_parse_argv
     args = m_args;
-    r = cct->_conf->parse_argv(args);
+    r = cct->_conf.parse_argv(args);
     if (r < 0) {
       derr << "could not parse command line args for " << description << ": "
 	   << cpp_strerror(r) << dendl;
@@ -468,25 +468,25 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
     // remote peer connections shouldn't apply cluster-specific
     // configuration settings
     for (auto& pair : config_values) {
-      auto value = cct->_conf->get_val<std::string>(pair.first);
+      auto value = cct->_conf.get_val<std::string>(pair.first);
       if (pair.second != value) {
         dout(0) << "reverting global config option override: "
                 << pair.first << ": " << value << " -> " << pair.second
                 << dendl;
-        cct->_conf->set_val_or_die(pair.first, pair.second);
+        cct->_conf.set_val_or_die(pair.first, pair.second);
       }
     }
   }
 
   if (!g_ceph_context->_conf->admin_socket.empty()) {
-    cct->_conf->set_val_or_die("admin_socket",
+    cct->_conf.set_val_or_die("admin_socket",
                                "$run_dir/$name.$pid.$cluster.$cctid.asok");
   }
 
   // disable unnecessary librbd cache
-  cct->_conf->set_val_or_die("rbd_cache", "false");
-  cct->_conf->apply_changes(nullptr);
-  cct->_conf->complain_about_parse_errors(cct);
+  cct->_conf.set_val_or_die("rbd_cache", "false");
+  cct->_conf.apply_changes(nullptr);
+  cct->_conf.complain_about_parse_errors(cct);
 
   r = (*rados_ref)->init_with_context(cct);
   assert(r == 0);
@@ -575,10 +575,10 @@ void PoolReplayer<I>::print_status(Formatter *f, stringstream *ss)
   }
 
   f->dump_string("local_cluster_admin_socket",
-                 reinterpret_cast<CephContext *>(m_local_io_ctx.cct())->_conf->
+                 reinterpret_cast<CephContext *>(m_local_io_ctx.cct())->_conf.
                      get_val<std::string>("admin_socket"));
   f->dump_string("remote_cluster_admin_socket",
-                 reinterpret_cast<CephContext *>(m_remote_io_ctx.cct())->_conf->
+                 reinterpret_cast<CephContext *>(m_remote_io_ctx.cct())->_conf.
                      get_val<std::string>("admin_socket"));
 
   f->open_object_section("sync_throttler");

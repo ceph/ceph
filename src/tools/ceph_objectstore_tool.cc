@@ -3267,12 +3267,11 @@ int main(int argc, char **argv)
     CODE_ENVIRONMENT_UTILITY_NODOUT,
     0);
   common_init_finish(g_ceph_context);
-  g_conf = g_ceph_context->_conf;
   if (debug) {
-    g_conf->set_val_or_die("log_to_stderr", "true");
-    g_conf->set_val_or_die("err_to_stderr", "true");
+    g_conf().set_val_or_die("log_to_stderr", "true");
+    g_conf().set_val_or_die("err_to_stderr", "true");
   }
-  g_conf->apply_changes(NULL);
+  g_conf().apply_changes(nullptr);
 
   // Special list handling.  Treating pretty_format as human readable,
   // with one object per line and not an enclosing array.
@@ -3290,7 +3289,7 @@ int main(int argc, char **argv)
 
   // Special handling for filestore journal, so we can dump it without mounting
   if (op == "dump-journal" && type == "filestore") {
-    int ret = mydump_journal(formatter, jpath, g_conf->journal_dio);
+    int ret = mydump_journal(formatter, jpath, g_conf()->journal_dio);
     if (ret < 0) {
       cerr << "journal-path: " << jpath << ": "
 	   << cpp_strerror(ret) << std::endl;

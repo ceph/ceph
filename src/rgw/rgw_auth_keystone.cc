@@ -283,7 +283,7 @@ TokenEngine::authenticate(const std::string& token,
   }
 
   ldout(cct, 0) << "user does not hold a matching role; required roles: "
-                << g_conf->rgw_keystone_accepted_roles << dendl;
+                << g_conf()->rgw_keystone_accepted_roles << dendl;
 
   return result_t::deny(-EPERM);
 }

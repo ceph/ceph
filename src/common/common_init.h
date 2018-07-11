@@ -54,8 +54,8 @@ enum common_init_flags_t {
  * the user asked for.
  *
  * This is usually done by something like this:
- * cct->_conf->parse_env();
- * cct->_conf->apply_changes();
+ * cct->_conf.parse_env();
+ * cct->_conf.apply_changes();
  *
  * Your library may also supply functions to read a configuration file.
  */

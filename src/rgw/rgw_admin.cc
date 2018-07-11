@@ -2588,8 +2588,8 @@ int main(int argc, const char **argv)
                          CODE_ENVIRONMENT_UTILITY, 0);
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
-  if (!g_conf->rgw_region.empty() && g_conf->rgw_zonegroup.empty()) {
-    g_conf->set_val_or_die("rgw_zonegroup", g_conf->rgw_region.c_str());
+  if (!g_conf()->rgw_region.empty() && g_conf()->rgw_zonegroup.empty()) {
+    g_conf().set_val_or_die("rgw_zonegroup", g_conf()->rgw_region.c_str());
   }
 
   common_init_finish(g_ceph_context);
@@ -3159,9 +3159,9 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  realm_name = g_conf->rgw_realm;
-  zone_name = g_conf->rgw_zone;
-  zonegroup_name = g_conf->rgw_zonegroup;
+  realm_name = g_conf()->rgw_realm;
+  zone_name = g_conf()->rgw_zone;
+  zonegroup_name = g_conf()->rgw_zonegroup;
 
   RGWStreamFlusher f(formatter, cout);
 
@@ -3254,7 +3254,7 @@ int main(int argc, const char **argv)
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
   } else {
     store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false, false,
-      need_cache && g_conf->rgw_cache_enabled);
+      need_cache && g_conf()->rgw_cache_enabled);
   }
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
@@ -6154,7 +6154,7 @@ next:
     int ret = br.cancel();
     if (ret < 0) {
       if (ret == -EBUSY) {
-	cerr << "There is ongoing resharding, please retry after " << g_conf->rgw_reshard_bucket_lock_duration <<
+	cerr << "There is ongoing resharding, please retry after " << g_conf()->rgw_reshard_bucket_lock_duration <<
 	     " seconds " << std::endl;
       } else {
 	cerr << "Error canceling bucket " << bucket_name << " resharding: " << cpp_strerror(-ret) <<
@@ -6679,7 +6679,7 @@ next:
       return -ret;
     }
 
-    auto num_shards = g_conf->rgw_md_log_max_shards;
+    auto num_shards = g_conf()->rgw_md_log_max_shards;
     ret = crs.run(create_admin_meta_log_trim_cr(store, &http, num_shards));
     if (ret < 0) {
       cerr << "automated mdlog trim failed with " << cpp_strerror(ret) << std::endl;

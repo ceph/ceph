@@ -315,7 +315,7 @@ int main(int argc, const char **argv)
     monmap.created = ceph_clock_now();
     monmap.last_changed = monmap.created;
     srand(getpid() + time(0));
-    if (g_conf->get_val<uuid_d>("fsid").is_zero()) {
+    if (g_conf().get_val<uuid_d>("fsid").is_zero()) {
       monmap.generate_fsid();
       cout << me << ": generated fsid " << monmap.fsid << std::endl;
     }
@@ -331,7 +331,7 @@ int main(int argc, const char **argv)
   if (filter) {
     // apply initial members
     list<string> initial_members;
-    get_str_list(g_conf->mon_initial_members, initial_members);
+    get_str_list(g_conf()->mon_initial_members, initial_members);
     if (!initial_members.empty()) {
       cout << "initial_members " << initial_members << ", filtering seed monmap" << std::endl;
       set<entity_addr_t> removed;
@@ -343,8 +343,8 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
-  if (!g_conf->get_val<uuid_d>("fsid").is_zero()) {
-    monmap.fsid = g_conf->get_val<uuid_d>("fsid");
+  if (!g_conf().get_val<uuid_d>("fsid").is_zero()) {
+    monmap.fsid = g_conf().get_val<uuid_d>("fsid");
     cout << me << ": set fsid to " << monmap.fsid << std::endl;
     modified = true;
   }

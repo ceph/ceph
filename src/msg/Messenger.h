@@ -84,15 +84,7 @@ public:
    * Messenger users should construct full implementations directly,
    * or use the create() function.
    */
-  Messenger(CephContext *cct_, entity_name_t w)
-    : trace_endpoint("0.0.0.0", 0, "Messenger"),
-      my_name(w),
-      default_send_priority(CEPH_MSG_PRIO_DEFAULT),
-      started(false),
-      magic(0),
-      socket_priority(-1),
-      cct(cct_),
-      crcflags(get_default_crc_flags(cct->_conf)) {}
+  Messenger(CephContext *cct_, entity_name_t w);
   virtual ~Messenger() {}
 
   /**
@@ -220,11 +212,6 @@ public:
    * (0 if the queue is empty)
    */
   virtual double get_dispatch_queue_max_age(utime_t now) = 0;
-  /**
-   * Get the default crc flags for this messenger.
-   * but not yet dispatched.
-   */
-  static int get_default_crc_flags(md_config_t *);
 
   /**
    * @} // Accessors

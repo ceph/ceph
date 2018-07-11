@@ -62,12 +62,12 @@ ThreadPool::~ThreadPool()
   delete[] _conf_keys;
 }
 
-void ThreadPool::handle_conf_change(const md_config_t *conf,
+void ThreadPool::handle_conf_change(const ConfigProxy& conf,
 				    const std::set <std::string> &changed)
 {
   if (changed.count(_thread_num_option)) {
     char *buf;
-    int r = conf->get_val(_thread_num_option.c_str(), &buf, -1);
+    int r = conf.get_val(_thread_num_option.c_str(), &buf, -1);
     assert(r >= 0);
     int v = atoi(buf);
     free(buf);
@@ -183,7 +183,7 @@ void ThreadPool::start()
 
   if (_thread_num_option.length()) {
     ldout(cct, 10) << " registering config observer on " << _thread_num_option << dendl;
-    cct->_conf->add_observer(this);
+    cct->_conf.add_observer(this);
   }
 
   _lock.Lock();
@@ -198,7 +198,7 @@ void ThreadPool::stop(bool clear_after)
 
   if (_thread_num_option.length()) {
     ldout(cct, 10) << " unregistering config observer on " << _thread_num_option << dendl;
-    cct->_conf->remove_observer(this);
+    cct->_conf.remove_observer(this);
   }
 
   _lock.Lock();

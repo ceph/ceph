@@ -63,7 +63,7 @@ int Processor::bind(const entity_addrvec_t &bind_addrs,
 		    const set<int>& avoid_ports,
 		    entity_addrvec_t* bound_addrs)
 {
-  const md_config_t *conf = msgr->cct->_conf;
+  const auto& conf = msgr->cct->_conf;
   // bind to socket(s)
   ldout(msgr->cct, 10) << __func__ << " " << bind_addrs << dendl;
 

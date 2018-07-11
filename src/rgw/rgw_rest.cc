@@ -422,7 +422,7 @@ void dump_etag(struct req_state* const s,
 
 void dump_bucket_from_state(struct req_state *s)
 {
-  if (g_conf->rgw_expose_bucket && ! s->bucket_name.empty()) {
+  if (g_conf()->rgw_expose_bucket && ! s->bucket_name.empty()) {
     if (! s->bucket_tenant.empty()) {
       dump_header(s, "Bucket",
                   url_encode(s->bucket_tenant + "/" + s->bucket_name));
@@ -1987,7 +1987,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   // Map the listing of rgw_enable_apis in REVERSE order, so that items near
   // the front of the list have a higher number assigned (and -1 for items not in the list).
   list<string> apis;
-  get_str_list(g_conf->rgw_enable_apis, apis);
+  get_str_list(g_conf()->rgw_enable_apis, apis);
   int api_priority_s3 = -1;
   int api_priority_s3website = -1;
   auto api_s3website_priority_rawpos = std::find(apis.begin(), apis.end(), "s3website");
@@ -2031,7 +2031,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
       << " in_hosted_domain_s3website=" << in_hosted_domain_s3website 
       << dendl;
 
-    if (g_conf->rgw_resolve_cname
+    if (g_conf()->rgw_resolve_cname
 	&& !in_hosted_domain
 	&& !in_hosted_domain_s3website) {
       string cname;
@@ -2212,7 +2212,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
     }
   }
 
-  if (g_conf->rgw_print_continue) {
+  if (g_conf()->rgw_print_continue) {
     const char *expect = info.env->get("HTTP_EXPECT");
     s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
   }

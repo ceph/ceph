@@ -533,7 +533,7 @@ private:
     double abs_skew = std::fabs(skew_bound);
     if (abs)
       *abs = abs_skew;
-    return (abs_skew > g_conf->mon_clock_drift_allowed);
+    return (abs_skew > g_conf()->mon_clock_drift_allowed);
   }
 
   /**
@@ -921,7 +921,7 @@ public:
 
   // config observer
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string> &changed) override;
 
   void update_log_clients();

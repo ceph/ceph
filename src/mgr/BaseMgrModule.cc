@@ -344,7 +344,7 @@ ceph_get_server(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_get_mgr_id(BaseMgrModule *self, PyObject *args)
 {
-  return PyString_FromString(g_conf->name.get_id().c_str());
+  return PyString_FromString(g_conf()->name.get_id().c_str());
 }
 
 static PyObject*

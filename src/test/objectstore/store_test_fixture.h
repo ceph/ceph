@@ -11,7 +11,7 @@ class StoreTestFixture : virtual public ::testing::Test {
   const std::string data_dir;
 
   std::stack<std::pair<std::string, std::string>> saved_settings;
-  md_config_t* conf = nullptr;
+  ConfigProxy* conf = nullptr;
 
 public:
   boost::scoped_ptr<ObjectStore> store;
@@ -23,7 +23,7 @@ public:
 
   void SetUp() override;
   void TearDown() override;
-  void SetVal(md_config_t* conf, const char* key, const char* val);
+  void SetVal(ConfigProxy& conf, const char* key, const char* val);
   struct SettingsBookmark {
     StoreTestFixture& s;
     size_t pos;

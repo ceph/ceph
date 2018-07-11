@@ -340,7 +340,7 @@ void FSMap::get_health_checks(health_check_map_t *checks) const
 
     for (const auto &rank : fs->mds_map.failed) {
       const mds_gid_t replacement = find_replacement_for(
-          {fs->fscid, rank}, {}, g_conf->mon_force_standby_active);
+          {fs->fscid, rank}, {}, g_conf()->mon_force_standby_active);
       if (replacement == MDS_GID_NONE) {
         stuck_failed.insert(rank);
       }

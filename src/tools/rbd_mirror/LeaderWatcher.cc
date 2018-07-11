@@ -34,7 +34,7 @@ LeaderWatcher<I>::LeaderWatcher(Threads<I> *threads, librados::IoCtx &io_ctx,
     m_notifier_id(librados::Rados(io_ctx).get_instance_id()),
     m_instance_id(stringify(m_notifier_id)),
     m_leader_lock(new LeaderLock(m_ioctx, m_work_queue, m_oid, this, true,
-                                 m_cct->_conf->get_val<int64_t>(
+                                 m_cct->_conf.get_val<int64_t>(
                                    "rbd_blacklist_expire_seconds"))) {
 }
 
@@ -371,7 +371,7 @@ void LeaderWatcher<I>::schedule_timer_task(const std::string &name,
       m_timer_gate->timer_callback = timer_callback;
     });
 
-  int after = delay_factor * m_cct->_conf->get_val<int64_t>(
+  int after = delay_factor * m_cct->_conf.get_val<int64_t>(
     "rbd_mirror_leader_heartbeat_interval");
 
   dout(10) << "scheduling " << name << " after " << after << " sec (task "
@@ -569,7 +569,7 @@ void LeaderWatcher<I>::handle_get_locker(int r,
     }
   }
 
-  if (m_acquire_attempts >= m_cct->_conf->get_val<int64_t>(
+  if (m_acquire_attempts >= m_cct->_conf.get_val<int64_t>(
         "rbd_mirror_leader_max_acquire_attempts_before_break")) {
     dout(0) << "breaking leader lock after " << m_acquire_attempts << " "
             << "failed attempts to acquire" << dendl;
@@ -606,7 +606,7 @@ void LeaderWatcher<I>::schedule_acquire_leader_lock(uint32_t delay_factor) {
 
   schedule_timer_task("acquire leader lock",
                       delay_factor *
-                        m_cct->_conf->get_val<int64_t>("rbd_mirror_leader_max_missed_heartbeats"),
+                        m_cct->_conf.get_val<int64_t>("rbd_mirror_leader_max_missed_heartbeats"),
                       false, &LeaderWatcher<I>::acquire_leader_lock, false);
 }
 

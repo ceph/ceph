@@ -207,7 +207,7 @@ void Pipe::start_reader()
 void Pipe::maybe_start_delay_thread()
 {
   if (!delay_thread) {
-    auto pos = msgr->cct->_conf->get_val<std::string>("ms_inject_delay_type").find(ceph_entity_type_name(connection_state->peer_type));
+    auto pos = msgr->cct->_conf.get_val<std::string>("ms_inject_delay_type").find(ceph_entity_type_name(connection_state->peer_type));
     if (pos != string::npos) {
       lsubdout(msgr->cct, ms, 1) << "setting up a delay queue on Pipe " << this << dendl;
       delay_thread = new DelayedDelivery(this);
@@ -1015,7 +1015,7 @@ int Pipe::connect()
   entity_addr_t peer_addr_for_me, socket_addr;
   AuthAuthorizer *authorizer = NULL;
   bufferlist addrbl, myaddrbl;
-  const md_config_t *conf = msgr->cct->_conf;
+  const auto& conf = msgr->cct->_conf;
 
   // close old socket.  this is safe because we stopped the reader thread above.
   if (sd >= 0)
@@ -1489,7 +1489,7 @@ void Pipe::discard_out_queue()
 
 void Pipe::fault(bool onread)
 {
-  const md_config_t *conf = msgr->cct->_conf;
+  const auto& conf = msgr->cct->_conf;
   assert(pipe_lock.is_locked());
   cond.Signal();
 

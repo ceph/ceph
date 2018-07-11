@@ -677,7 +677,7 @@ static int do_map(int argc, const char *argv[], Config *cfg)
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_DAEMON,
                          CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
-  g_ceph_context->_conf->set_val_or_die("pid_file", "");
+  g_ceph_context->_conf.set_val_or_die("pid_file", "");
 
   if (global_init_prefork(g_ceph_context) >= 0) {
     std::string err;
@@ -860,7 +860,7 @@ static int do_map(int argc, const char *argv[], Config *cfg)
 
     cout << cfg->devpath << std::endl;
 
-    if (g_conf->daemonize) {
+    if (g_conf()->daemonize) {
       global_init_postfork_finish(g_ceph_context);
       forker.daemonize();
     }
@@ -1026,9 +1026,9 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
   CephInitParameters iparams = ceph_argparse_early_args(
           args, CEPH_ENTITY_TYPE_CLIENT, &cluster, &conf_file_list);
 
-  md_config_t config;
-  config.name = iparams.name;
-  config.cluster = cluster;
+  ConfigProxy config{false};
+  config->name = iparams.name;
+  config->cluster = cluster;
 
   if (!conf_file_list.empty()) {
     config.parse_config_files(conf_file_list.c_str(), nullptr, 0);

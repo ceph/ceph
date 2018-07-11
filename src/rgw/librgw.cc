@@ -451,7 +451,7 @@ namespace rgw {
   int RGWLibFrontend::init()
   {
     pprocess = new RGWLibProcess(g_ceph_context, &env,
-				 g_conf->rgw_thread_pool_size, conf);
+				 g_conf()->rgw_thread_pool_size, conf);
     return 0;
   }
 
@@ -481,7 +481,7 @@ namespace rgw {
     SafeTimer init_timer(g_ceph_context, mutex);
     init_timer.init();
     mutex.Lock();
-    init_timer.add_event_after(g_conf->rgw_init_timeout, new C_InitTimeout);
+    init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
     mutex.Unlock();
 
     common_init_finish(g_ceph_context);
@@ -491,11 +491,11 @@ namespace rgw {
     rgw_init_resolver();
 
     store = RGWStoreManager::get_storage(g_ceph_context,
-					 g_conf->rgw_enable_gc_threads,
-					 g_conf->rgw_enable_lc_threads,
-					 g_conf->rgw_enable_quota_threads,
-					 g_conf->rgw_run_sync_thread,
-					 g_conf->rgw_dynamic_resharding);
+					 g_conf()->rgw_enable_gc_threads,
+					 g_conf()->rgw_enable_lc_threads,
+					 g_conf()->rgw_enable_quota_threads,
+					 g_conf()->rgw_run_sync_thread,
+					 g_conf()->rgw_dynamic_resharding);
 
     if (!store) {
       mutex.Lock();
@@ -538,9 +538,9 @@ namespace rgw {
 
     // XXX ex-RGWRESTMgr_lib, mgr->set_logging(true)
 
-    if (!g_conf->rgw_ops_log_socket_path.empty()) {
-      olog = new OpsLogSocket(g_ceph_context, g_conf->rgw_ops_log_data_backlog);
-      olog->init(g_conf->rgw_ops_log_socket_path);
+    if (!g_conf()->rgw_ops_log_socket_path.empty()) {
+      olog = new OpsLogSocket(g_ceph_context, g_conf()->rgw_ops_log_data_backlog);
+      olog->init(g_conf()->rgw_ops_log_socket_path);
     }
 
     int port = 80;

@@ -57,7 +57,7 @@ BaseMgrStandbyModule_init(BaseMgrStandbyModule *self, PyObject *args, PyObject *
 static PyObject*
 ceph_get_mgr_id(BaseMgrStandbyModule *self, PyObject *args)
 {
-  return PyString_FromString(g_conf->name.get_id().c_str());
+  return PyString_FromString(g_conf()->name.get_id().c_str());
 }
 
 static PyObject*

@@ -60,11 +60,11 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
   FakeWriteback writeback(g_ceph_context, &lock, delay_ns);
 
   ObjectCacher obc(g_ceph_context, "test", writeback, lock, NULL, NULL,
-		   g_conf->client_oc_size,
-		   g_conf->client_oc_max_objects,
-		   g_conf->client_oc_max_dirty,
-		   g_conf->client_oc_target_dirty,
-		   g_conf->client_oc_max_dirty_age,
+		   g_conf()->client_oc_size,
+		   g_conf()->client_oc_max_objects,
+		   g_conf()->client_oc_max_dirty,
+		   g_conf()->client_oc_target_dirty,
+		   g_conf()->client_oc_max_dirty_age,
 		   true);
   obc.start();
 
@@ -186,7 +186,7 @@ int correctness_test(uint64_t delay_ns)
 		   1, // max objects, just one
 		   1<<18, // max dirty, 256KB
 		   1<<17, // target dirty, 128KB
-		   g_conf->client_oc_max_dirty_age,
+		   g_conf()->client_oc_max_dirty_age,
 		   true);
   obc.start();
   std::cerr << "just start()ed ObjectCacher" << std::endl;

@@ -130,7 +130,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   lock("Monitor::lock"),
   timer(cct_, lock),
   finisher(cct_, "mon_finisher", "fin"),
-  cpu_tp(cct, "Monitor::cpu_tp", "cpu_tp", g_conf->mon_cpu_threads),
+  cpu_tp(cct, "Monitor::cpu_tp", "cpu_tp", g_conf()->mon_cpu_threads),
   has_ever_joined(false),
   logger(NULL), cluster_logger(NULL), cluster_logger_registered(false),
   monmap(map),
@@ -173,7 +173,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service(PAXOS_NUM),
   admin_hook(NULL),
   routed_request_tid(0),
-  op_tracker(cct, g_conf->get_val<bool>("mon_enable_op_tracker"), 1)
+  op_tracker(cct, g_conf().get_val<bool>("mon_enable_op_tracker"), 1)
 {
   clog = log_client.create_channel(CLOG_CHANNEL_CLUSTER);
   audit_clog = log_client.create_channel(CLOG_CHANNEL_AUDIT);
@@ -181,14 +181,14 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   update_log_clients();
 
   op_tracker.set_complaint_and_threshold(
-      g_conf->get_val<std::chrono::seconds>("mon_op_complaint_time").count(),
-      g_conf->get_val<int64_t>("mon_op_log_threshold"));
+      g_conf().get_val<std::chrono::seconds>("mon_op_complaint_time").count(),
+      g_conf().get_val<int64_t>("mon_op_log_threshold"));
   op_tracker.set_history_size_and_duration(
-      g_conf->get_val<uint64_t>("mon_op_history_size"),
-      g_conf->get_val<std::chrono::seconds>("mon_op_history_duration").count());
+      g_conf().get_val<uint64_t>("mon_op_history_size"),
+      g_conf().get_val<std::chrono::seconds>("mon_op_history_duration").count());
   op_tracker.set_history_slow_op_size_and_threshold(
-      g_conf->get_val<uint64_t>("mon_op_history_slow_op_size"),
-      g_conf->get_val<std::chrono::seconds>("mon_op_history_slow_op_threshold").count());
+      g_conf().get_val<uint64_t>("mon_op_history_slow_op_size"),
+      g_conf().get_val<std::chrono::seconds>("mon_op_history_slow_op_threshold").count());
 
   paxos = new Paxos(this, "paxos");
 
@@ -495,7 +495,7 @@ const char** Monitor::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void Monitor::handle_conf_change(const md_config_t *conf,
+void Monitor::handle_conf_change(const ConfigProxy& conf,
                                  const std::set<std::string> &changed)
 {
   sanitize_options();
@@ -560,9 +560,9 @@ int Monitor::sanitize_options()
 
   // mon_lease must be greater than mon_lease_renewal; otherwise we
   // may incur in leases expiring before they are renewed.
-  if (g_conf->mon_lease_renew_interval_factor >= 1.0) {
+  if (g_conf()->mon_lease_renew_interval_factor >= 1.0) {
     clog->error() << "mon_lease_renew_interval_factor ("
-		  << g_conf->mon_lease_renew_interval_factor
+		  << g_conf()->mon_lease_renew_interval_factor
 		  << ") must be less than 1.0";
     r = -EINVAL;
   }
@@ -572,9 +572,9 @@ int Monitor::sanitize_options()
   // with the same value, for a given small vale, could mean timing out if
   // the monitors happened to be overloaded -- or even under normal load for
   // a small enough value.
-  if (g_conf->mon_lease_ack_timeout_factor <= 1.0) {
+  if (g_conf()->mon_lease_ack_timeout_factor <= 1.0) {
     clog->error() << "mon_lease_ack_timeout_factor ("
-		  << g_conf->mon_lease_ack_timeout_factor
+		  << g_conf()->mon_lease_ack_timeout_factor
 		  << ") must be greater than 1.0";
     r = -EINVAL;
   }
@@ -666,7 +666,7 @@ int Monitor::preinit()
   if (!has_ever_joined) {
     // impose initial quorum restrictions?
     list<string> initial_members;
-    get_str_list(g_conf->mon_initial_members, initial_members);
+    get_str_list(g_conf()->mon_initial_members, initial_members);
 
     if (!initial_members.empty()) {
       dout(1) << " initial_members " << initial_members << ", filtering seed monmap" << dendl;
@@ -680,7 +680,7 @@ int Monitor::preinit()
   } else if (!monmap->contains(name)) {
     derr << "not in monmap and have been in a quorum before; "
          << "must have been removed" << dendl;
-    if (g_conf->mon_force_quorum_join) {
+    if (g_conf()->mon_force_quorum_join) {
       dout(0) << "we should have died but "
               << "'mon_force_quorum_join' is set -- allowing boot" << dendl;
     } else {
@@ -732,7 +732,7 @@ int Monitor::preinit()
       }
     }
 
-    string keyring_loc = g_conf->mon_data + "/keyring";
+    string keyring_loc = g_conf()->mon_data + "/keyring";
 
     r = keyring.load(cct, keyring_loc);
     if (r < 0) {
@@ -746,7 +746,7 @@ int Monitor::preinit()
 	keyring.encode_plaintext(bl);
 	write_default_keyring(bl);
       } else {
-	derr << "unable to load initial keyring " << g_conf->keyring << dendl;
+	derr << "unable to load initial keyring " << g_conf()->keyring << dendl;
 	lock.Unlock();
 	return r;
       }
@@ -812,7 +812,7 @@ int Monitor::preinit()
   lock.Lock();
 
   // add ourselves as a conf observer
-  g_conf->add_observer(this);
+  g_conf().add_observer(this);
 
   lock.Unlock();
   return 0;
@@ -922,7 +922,7 @@ void Monitor::shutdown()
 
   state = STATE_SHUTDOWN;
 
-  g_conf->remove_observer(this);
+  g_conf().remove_observer(this);
 
   if (admin_hook) {
     cct->get_admin_socket()->unregister_commands(admin_hook);
@@ -1024,7 +1024,7 @@ void Monitor::bootstrap()
   _reset();
 
   // sync store
-  if (g_conf->mon_compact_on_bootstrap) {
+  if (g_conf()->mon_compact_on_bootstrap) {
     dout(10) << "bootstrap -- triggering compaction" << dendl;
     store->compact();
     dout(10) << "bootstrap -- finished compaction" << dendl;
@@ -1244,7 +1244,7 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
 
     store->apply_transaction(t);
 
-    assert(g_conf->mon_sync_requester_kill_at != 1);
+    assert(g_conf()->mon_sync_requester_kill_at != 1);
 
     // clear the underlying store
     set<string> targets = get_sync_targets_names();
@@ -1256,7 +1256,7 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
     // deciding a partial or no sync is needed.
     paxos->init();
 
-    assert(g_conf->mon_sync_requester_kill_at != 2);
+    assert(g_conf()->mon_sync_requester_kill_at != 2);
   }
 
   // assume 'other' as the leader. We will update the leader once we receive
@@ -1286,7 +1286,7 @@ void Monitor::sync_reset_timeout()
   if (sync_timeout_event)
     timer.cancel_event(sync_timeout_event);
   sync_timeout_event = timer.add_event_after(
-    g_conf->mon_sync_timeout,
+    g_conf()->mon_sync_timeout,
     new C_MonContext(this, [this](int) {
 	sync_timeout();
       }));
@@ -1296,7 +1296,7 @@ void Monitor::sync_finish(version_t last_committed)
 {
   dout(10) << __func__ << " lc " << last_committed << " from " << sync_provider << dendl;
 
-  assert(g_conf->mon_sync_requester_kill_at != 7);
+  assert(g_conf()->mon_sync_requester_kill_at != 7);
 
   if (sync_full) {
     // finalize the paxos commits
@@ -1314,7 +1314,7 @@ void Monitor::sync_finish(version_t last_committed)
     store->apply_transaction(tx);
   }
 
-  assert(g_conf->mon_sync_requester_kill_at != 8);
+  assert(g_conf()->mon_sync_requester_kill_at != 8);
 
   auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->erase("mon_sync", "in_sync");
@@ -1322,11 +1322,11 @@ void Monitor::sync_finish(version_t last_committed)
   t->erase("mon_sync", "last_committed_floor");
   store->apply_transaction(t);
 
-  assert(g_conf->mon_sync_requester_kill_at != 9);
+  assert(g_conf()->mon_sync_requester_kill_at != 9);
 
   init_paxos();
 
-  assert(g_conf->mon_sync_requester_kill_at != 10);
+  assert(g_conf()->mon_sync_requester_kill_at != 10);
 
   bootstrap();
 }
@@ -1384,7 +1384,7 @@ void Monitor::handle_sync_get_cookie(MonOpRequestRef op)
     return;
   }
 
-  assert(g_conf->mon_sync_provider_kill_at != 1);
+  assert(g_conf()->mon_sync_provider_kill_at != 1);
 
   // make sure they can understand us.
   if ((required_features ^ m->get_connection()->get_features()) &
@@ -1408,7 +1408,7 @@ void Monitor::handle_sync_get_cookie(MonOpRequestRef op)
   SyncProvider& sp = sync_providers[cookie];
   sp.cookie = cookie;
   sp.entity = m->get_source_inst();
-  sp.reset_timeout(g_ceph_context, g_conf->mon_sync_timeout * 2);
+  sp.reset_timeout(g_ceph_context, g_conf()->mon_sync_timeout * 2);
 
   set<string> sync_targets;
   if (m->op == MMonSync::OP_GET_COOKIE_FULL) {
@@ -1440,10 +1440,10 @@ void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
     return;
   }
 
-  assert(g_conf->mon_sync_provider_kill_at != 2);
+  assert(g_conf()->mon_sync_provider_kill_at != 2);
 
   SyncProvider& sp = sync_providers[m->cookie];
-  sp.reset_timeout(g_ceph_context, g_conf->mon_sync_timeout * 2);
+  sp.reset_timeout(g_ceph_context, g_conf()->mon_sync_timeout * 2);
 
   if (sp.last_committed < paxos->get_first_committed() &&
       paxos->get_first_committed() > 1) {
@@ -1457,7 +1457,7 @@ void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
   MMonSync *reply = new MMonSync(MMonSync::OP_CHUNK, sp.cookie);
   auto tx(std::make_shared<MonitorDBStore::Transaction>());
 
-  int left = g_conf->mon_sync_max_payload_size;
+  int left = g_conf()->mon_sync_max_payload_size;
   while (sp.last_committed < paxos->get_version() && left > 0) {
     bufferlist bl;
     sp.last_committed++;
@@ -1487,7 +1487,7 @@ void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
 	     << " key " << sp.last_key << dendl;
     reply->op = MMonSync::OP_LAST_CHUNK;
 
-    assert(g_conf->mon_sync_provider_kill_at != 3);
+    assert(g_conf()->mon_sync_provider_kill_at != 3);
 
     // clean up our local state
     sync_providers.erase(sp.cookie);
@@ -1518,20 +1518,20 @@ void Monitor::handle_sync_cookie(MonOpRequestRef op)
   sync_reset_timeout();
   sync_get_next_chunk();
 
-  assert(g_conf->mon_sync_requester_kill_at != 3);
+  assert(g_conf()->mon_sync_requester_kill_at != 3);
 }
 
 void Monitor::sync_get_next_chunk()
 {
   dout(20) << __func__ << " cookie " << sync_cookie << " provider " << sync_provider << dendl;
-  if (g_conf->mon_inject_sync_get_chunk_delay > 0) {
-    dout(20) << __func__ << " injecting delay of " << g_conf->mon_inject_sync_get_chunk_delay << dendl;
-    usleep((long long)(g_conf->mon_inject_sync_get_chunk_delay * 1000000.0));
+  if (g_conf()->mon_inject_sync_get_chunk_delay > 0) {
+    dout(20) << __func__ << " injecting delay of " << g_conf()->mon_inject_sync_get_chunk_delay << dendl;
+    usleep((long long)(g_conf()->mon_inject_sync_get_chunk_delay * 1000000.0));
   }
   MMonSync *r = new MMonSync(MMonSync::OP_GET_CHUNK, sync_cookie);
   messenger->send_message(r, sync_provider);
 
-  assert(g_conf->mon_sync_requester_kill_at != 4);
+  assert(g_conf()->mon_sync_requester_kill_at != 4);
 }
 
 void Monitor::handle_sync_chunk(MonOpRequestRef op)
@@ -1549,7 +1549,7 @@ void Monitor::handle_sync_chunk(MonOpRequestRef op)
   }
 
   assert(state == STATE_SYNCHRONIZING);
-  assert(g_conf->mon_sync_requester_kill_at != 5);
+  assert(g_conf()->mon_sync_requester_kill_at != 5);
 
   auto tx(std::make_shared<MonitorDBStore::Transaction>());
   tx->append_from_encoded(m->chunk_bl);
@@ -1562,7 +1562,7 @@ void Monitor::handle_sync_chunk(MonOpRequestRef op)
 
   store->apply_transaction(tx);
 
-  assert(g_conf->mon_sync_requester_kill_at != 6);
+  assert(g_conf()->mon_sync_requester_kill_at != 6);
 
   if (!sync_full) {
     dout(10) << __func__ << " applying recent paxos transactions as we go" << dendl;
@@ -1631,7 +1631,7 @@ void Monitor::reset_probe_timeout()
   probe_timeout_event = new C_MonContext(this, [this](int r) {
       probe_timeout(r);
     });
-  double t = g_conf->mon_probe_timeout;
+  double t = g_conf()->mon_probe_timeout;
   if (timer.add_event_after(t, probe_timeout_event)) {
     dout(10) << "reset_probe_timeout " << probe_timeout_event
 	     << " after " << t << " seconds" << dendl;
@@ -1820,7 +1820,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
       sync_start(other, true);
       return;
     }
-    if (paxos->get_version() + g_conf->paxos_max_join_drift < m->paxos_last_version) {
+    if (paxos->get_version() + g_conf()->paxos_max_join_drift < m->paxos_last_version) {
       dout(10) << " peer paxos last version " << m->paxos_last_version
 	       << " vs my version " << paxos->get_version()
 	       << " (too far ahead)"
@@ -2366,10 +2366,10 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
     f->close_section();
   }
 
-  if (g_conf->mon_sync_provider_kill_at > 0)
-    f->dump_int("provider_kill_at", g_conf->mon_sync_provider_kill_at);
-  if (g_conf->mon_sync_requester_kill_at > 0)
-    f->dump_int("requester_kill_at", g_conf->mon_sync_requester_kill_at);
+  if (g_conf()->mon_sync_provider_kill_at > 0)
+    f->dump_int("provider_kill_at", g_conf()->mon_sync_provider_kill_at);
+  if (g_conf()->mon_sync_requester_kill_at > 0)
+    f->dump_int("requester_kill_at", g_conf()->mon_sync_requester_kill_at);
 
   f->open_object_section("monmap");
   monmap->dump(f);
@@ -2552,8 +2552,8 @@ health_status_t Monitor::get_health_status(
   const char *sep2)
 {
   health_status_t r = HEALTH_OK;
-  bool compat = g_conf->mon_health_preluminous_compat;
-  bool compat_warn = g_conf->get_val<bool>("mon_health_preluminous_compat_warning");
+  bool compat = g_conf()->mon_health_preluminous_compat;
+  bool compat_warn = g_conf().get_val<bool>("mon_health_preluminous_compat_warning");
   if (f) {
     f->open_object_section("health");
     f->open_object_section("checks");
@@ -2624,7 +2624,7 @@ void Monitor::log_health(
   const health_check_map_t& previous,
   MonitorDBStore::TransactionRef t)
 {
-  if (!g_conf->mon_health_to_clog) {
+  if (!g_conf()->mon_health_to_clog) {
     return;
   }
 
@@ -2634,7 +2634,7 @@ void Monitor::log_health(
   dout(10) << __func__ << " updated " << updated.checks.size()
 	   << " previous " << previous.checks.size()
 	   << dendl;
-  const auto min_log_period = g_conf->get_val<int64_t>(
+  const auto min_log_period = g_conf().get_val<int64_t>(
       "mon_health_log_update_period");
   for (auto& p : updated.checks) {
     auto q = previous.checks.find(p.first);
@@ -2891,10 +2891,10 @@ void Monitor::format_command_descriptions(const std::vector<MonCommand> &command
 
 bool Monitor::is_keyring_required()
 {
-  string auth_cluster_required = g_conf->auth_supported.empty() ?
-    g_conf->auth_cluster_required : g_conf->auth_supported;
-  string auth_service_required = g_conf->auth_supported.empty() ?
-    g_conf->auth_service_required : g_conf->auth_supported;
+  string auth_cluster_required = g_conf()->auth_supported.empty() ?
+    g_conf()->auth_cluster_required : g_conf()->auth_supported;
+  string auth_service_required = g_conf()->auth_supported.empty() ?
+    g_conf()->auth_service_required : g_conf()->auth_supported;
 
   return auth_service_required == "cephx" ||
     auth_cluster_required == "cephx";
@@ -3103,8 +3103,8 @@ void Monitor::handle_command(MonOpRequestRef op)
   if (mon_cmd->is_mgr()) {
     const auto& hdr = m->get_header();
     uint64_t size = hdr.front_len + hdr.middle_len + hdr.data_len;
-    uint64_t max = g_conf->get_val<uint64_t>("mon_client_bytes")
-                 * g_conf->get_val<double>("mon_mgr_proxy_client_bytes_ratio");
+    uint64_t max = g_conf().get_val<uint64_t>("mon_client_bytes")
+                 * g_conf().get_val<double>("mon_mgr_proxy_client_bytes_ratio");
     if (mgr_proxy_bytes + size > max) {
       dout(10) << __func__ << " current mgr proxy bytes " << mgr_proxy_bytes
 	       << " + " << size << " > max " << max << dendl;
@@ -3209,7 +3209,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     double duration = std::chrono::duration<double>(end-start).count();
     dout(1) << "finished manual compaction in " << duration << " seconds" << dendl;
     ostringstream oss;
-    oss << "compacted " << g_conf->get_val<std::string>("mon_keyvaluedb") << " in " << duration << " seconds";
+    oss << "compacted " << g_conf().get_val<std::string>("mon_keyvaluedb") << " in " << duration << " seconds";
     rs = oss.str();
     r = 0;
   }
@@ -3219,7 +3219,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     if (!injected_args.empty()) {
       dout(0) << "parsing injected options '" << injected_args << "'" << dendl;
       ostringstream oss;
-      r = g_conf->injectargs(str_join(injected_args, " "), &oss);
+      r = g_conf().injectargs(str_join(injected_args, " "), &oss);
       ss << "injectargs:"  << oss.str();
       rs = ss.str();
       goto out;
@@ -3265,9 +3265,9 @@ void Monitor::handle_command(MonOpRequestRef op)
     cmd_getval(cct, cmdmap, "key", key);
     std::string val;
     cmd_getval(cct, cmdmap, "value", val);
-    r = g_conf->set_val(key, val, &ss);
+    r = g_conf().set_val(key, val, &ss);
     if (r == 0) {
-      g_conf->apply_changes(nullptr);
+      g_conf().apply_changes(nullptr);
     }
     rs = ss.str();
     goto out;
@@ -4066,7 +4066,7 @@ void Monitor::_ms_dispatch(Message *m)
   assert(s);
 
   s->session_timeout = ceph_clock_now();
-  s->session_timeout += g_conf->mon_session_timeout;
+  s->session_timeout += g_conf()->mon_session_timeout;
 
   if (s->auth_handler) {
     s->entity_name = s->auth_handler->get_entity_name();
@@ -4373,7 +4373,7 @@ void Monitor::timecheck_start_round()
   if (timecheck_round % 2) {
     dout(10) << __func__ << " there's a timecheck going on" << dendl;
     utime_t curr_time = ceph_clock_now();
-    double max = g_conf->mon_timecheck_interval*3;
+    double max = g_conf()->mon_timecheck_interval*3;
     if (curr_time - timecheck_round_start < max) {
       dout(10) << __func__ << " keep current round going" << dendl;
       goto out;
@@ -4589,7 +4589,7 @@ health_status_t Monitor::timecheck_status(ostringstream &ss,
   if (timecheck_has_skew(skew_bound, &abs_skew)) {
     status = HEALTH_WARN;
     ss << "clock skew " << abs_skew << "s"
-       << " > max " << g_conf->mon_clock_drift_allowed << "s";
+       << " > max " << g_conf()->mon_clock_drift_allowed << "s";
   }
 
   return status;
@@ -4861,7 +4861,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
     ConnectionRef con = m->get_connection();
     if (!con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB))
       m->get_connection()->send_message(new MMonSubscribeAck(
-	monmap->get_fsid(), (int)g_conf->mon_subscribe_interval));
+	monmap->get_fsid(), (int)g_conf()->mon_subscribe_interval));
   }
 
 }
@@ -5344,7 +5344,7 @@ void Monitor::scrub_reset_timeout()
   dout(15) << __func__ << " reset timeout event" << dendl;
   scrub_cancel_timeout();
   scrub_timeout_event = timer.add_event_after(
-    g_conf->mon_scrub_timeout,
+    g_conf()->mon_scrub_timeout,
     new C_MonContext(this, [this](int) {
       scrub_timeout();
     }));
@@ -5353,7 +5353,7 @@ void Monitor::scrub_reset_timeout()
 /************ TICK ***************/
 void Monitor::new_tick()
 {
-  timer.add_event_after(g_conf->mon_tick_interval, new C_MonContext(this, [this](int) {
+  timer.add_event_after(g_conf()->mon_tick_interval, new C_MonContext(this, [this](int) {
 	tick();
       }));
 }
@@ -5366,7 +5366,7 @@ void Monitor::tick()
   
   // Check if we need to emit any delayed health check updated messages
   if (is_leader()) {
-    const auto min_period = g_conf->get_val<int64_t>(
+    const auto min_period = g_conf().get_val<int64_t>(
                               "mon_health_log_update_period");
     for (auto& svc : paxos_service) {
       auto health = svc->get_health_checks();
@@ -5410,7 +5410,7 @@ void Monitor::tick()
     auto p = session_map.sessions.begin();
 
     bool out_for_too_long = (!exited_quorum.is_zero() &&
-			     now > (exited_quorum + 2*g_conf->mon_lease));
+			     now > (exited_quorum + 2*g_conf()->mon_lease));
 
     while (!p.end()) {
       MonSession *s = *p;
@@ -5423,7 +5423,7 @@ void Monitor::tick()
       if (s->session_timeout < now && s->con) {
 	// check keepalive, too
 	s->session_timeout = s->con->get_last_keepalive();
-	s->session_timeout += g_conf->mon_session_timeout;
+	s->session_timeout += g_conf()->mon_session_timeout;
       }
       if (s->session_timeout < now) {
 	dout(10) << " trimming session " << s->con << " " << s->name
@@ -5467,7 +5467,7 @@ vector<DaemonHealthMetric> Monitor::get_health_metrics()
   utime_t oldest_secs;
   const utime_t now = ceph_clock_now();
   auto too_old = now;
-  too_old -= g_conf->get_val<std::chrono::seconds>("mon_op_complaint_time").count();
+  too_old -= g_conf().get_val<std::chrono::seconds>("mon_op_complaint_time").count();
   int slow = 0;
   TrackedOpRef oldest_op;
   auto count_slow_ops = [&](TrackedOp& op) {
@@ -5601,12 +5601,12 @@ int Monitor::mkfs(bufferlist& osdmapbl)
     KeyRing keyring;
     string keyring_filename;
 
-    r = ceph_resolve_file_search(g_conf->keyring, keyring_filename);
+    r = ceph_resolve_file_search(g_conf()->keyring, keyring_filename);
     if (r) {
-      derr << "unable to find a keyring file on " << g_conf->keyring
+      derr << "unable to find a keyring file on " << g_conf()->keyring
 	   << ": " << cpp_strerror(r) << dendl;
-      if (g_conf->key != "") {
-	string keyring_plaintext = "[mon.]\n\tkey = " + g_conf->key +
+      if (g_conf()->key != "") {
+	string keyring_plaintext = "[mon.]\n\tkey = " + g_conf()->key +
 	  "\n\tcaps mon = \"allow *\"\n";
 	bufferlist bl;
 	bl.append(keyring_plaintext);
@@ -5625,7 +5625,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
     } else {
       r = keyring.load(g_ceph_context, keyring_filename);
       if (r < 0) {
-	derr << "unable to load initial keyring " << g_conf->keyring << dendl;
+	derr << "unable to load initial keyring " << g_conf()->keyring << dendl;
 	return r;
       }
     }
@@ -5646,7 +5646,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 int Monitor::write_default_keyring(bufferlist& bl)
 {
   ostringstream os;
-  os << g_conf->mon_data << "/keyring";
+  os << g_conf()->mon_data << "/keyring";
 
   int err = 0;
   int fd = ::open(os.str().c_str(), O_WRONLY|O_CREAT, 0600);

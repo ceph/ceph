@@ -46,7 +46,7 @@ void PyModuleRegistry::init()
   Py_SetProgramName(const_cast<char*>(PYTHON_EXECUTABLE));
 #endif
   // Add more modules
-  if (g_conf->get_val<bool>("daemonize")) {
+  if (g_conf().get_val<bool>("daemonize")) {
     PyImport_AppendInittab("ceph_logger", PyModule::init_ceph_logger);
   }
   PyImport_AppendInittab("ceph_module", PyModule::init_ceph_module);
@@ -257,7 +257,7 @@ void PyModuleRegistry::shutdown()
 
 std::set<std::string> PyModuleRegistry::probe_modules() const
 {
-  std::string path = g_conf->get_val<std::string>("mgr_module_path");
+  std::string path = g_conf().get_val<std::string>("mgr_module_path");
 
   DIR *dir = opendir(path.c_str());
   if (!dir) {

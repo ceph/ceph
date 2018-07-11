@@ -40,7 +40,7 @@ protected:
   epoch_t epoch;
 
   QuorumService(Monitor *m) :
-    tick_period(g_conf->mon_tick_interval),
+    tick_period(g_conf()->mon_tick_interval),
     mon(m),
     epoch(0)
   {
