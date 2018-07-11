@@ -59,15 +59,39 @@
     <!-- Has to be on the same line to prevent a space between state and comma. -->
   </span>
 </ng-template>
+<!--
+<ng-template #lifeExpectancyStateGreenTooltipTpl>
+  <div [innerHtml]="'Predicted device life expectancy weeks over 6 weeks'"></div>
+</ng-template>
 
+<ng-template #lifeExpectancyStateYellowTooltipTpl>
+  <div [innerHtml]="'Predicted device life expectancy weeks during 4 - 6 weeks'"></div>
+</ng-template>
+
+<ng-template #lifeExpectancyStateRedTooltipTpl>
+  <div [innerHtml]="'Predicted device life expectancy weeks less 4 weeks'"></div>
+</ng-template>
+
+<ng-template #lifeExpectancyStateGrayTooltipTpl>
+  <div [innerHtml]="'Predicted device life expectancy none configured'"></div>
+</ng-template>
+-->
 <ng-template #statusLight
              let-value="value">
-      <svg width="20" height="20">
-        <circle *ngIf="value==='green'" cx="10" cy="10" r="8" stroke="green" stroke-width="1" fill="green" />
-        <circle *ngIf="value==='yellow'" cx="10" cy="10" r="8" stroke="yellow" stroke-width="1" fill="yellow" />
-        <circle *ngIf="value==='red'" cx="10" cy="10" r="8" stroke="red" stroke-width="1" fill="red" />
-        <circle *ngIf="value==='unknown'" cx="10" cy="10" r="8" stroke="gray" stroke-width="1" fill="gray" />
-      </svg>
+             <ng-template #lifeExpectancyStateTooltipTpl>
+              <div *ngIf="value==='green'" [innerHtml]="'Predicted device life expectancy weeks over 6 weeks'"></div>
+              <div *ngIf="value==='yellow'" [innerHtml]="'Predicted device life expectancy weeks during 4 - 6 weeks'"></div>
+              <div *ngIf="value==='red'" [innerHtml]="'Predicted device life expectancy weeks less 4 weeks'"></div>
+              <div *ngIf="value==='unknown'" [innerHtml]="'Predicted device life expectancy none configured'"></div>
+             </ng-template>
+  <span class="text-muted" [tooltip]="lifeExpectancyStateTooltipTpl" placement="left">
+    <svg width="20" height="20">
+      <circle *ngIf="value==='green'" cx="10" cy="10" r="8" stroke="green" stroke-width="1" fill="green" />
+      <circle *ngIf="value==='yellow'" cx="10" cy="10" r="8" stroke="yellow" stroke-width="1" fill="yellow" />
+      <circle *ngIf="value==='red'" cx="10" cy="10" r="8" stroke="red" stroke-width="1" fill="red" />
+      <circle *ngIf="value==='unknown'" cx="10" cy="10" r="8" stroke="gray" stroke-width="1" fill="gray" />
+    </svg>
+  </span>
 </ng-template>
 
 <ng-template #osdUsageTpl

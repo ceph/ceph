@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-
 from datetime import datetime
-
 from . import ApiController, RESTController, UpdatePermission
 from .. import mgr, logger
 from ..security import Scope

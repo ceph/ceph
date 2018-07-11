@@ -3,6 +3,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
+import { TooltipModule } from 'ngx-bootstrap/';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -29,6 +30,7 @@ import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.co
     FormsModule,
     ReactiveFormsModule,
     BsDropdownModule.forRoot(),
+    TooltipModule.forRoot(),
     ModalModule.forRoot()
   ],
   declarations: [
