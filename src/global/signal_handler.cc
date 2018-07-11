@@ -261,6 +261,8 @@ static void handle_fatal_signal(int signum)
 	(void)r;
 	::close(fd);
       }
+      snprintf(fn, sizeof(fn)-1, "%s/done", base);
+      ::creat(fn, 0444);
     }
   }
 
