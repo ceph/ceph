@@ -16,8 +16,6 @@
 #include "ceph_ver.h"
 #include "CompressionPluginLZ4.h"
 
-#ifndef BUILDING_FOR_EMBEDDED
-
 // -----------------------------------------------------------------------------
 
 const char *__ceph_plugin_version()
@@ -35,5 +33,3 @@ int __ceph_plugin_init(CephContext *cct,
 
   return instance->add(type, name, new CompressionPluginLZ4(cct));
 }
-
-#endif // !BUILDING_FOR_EMBEDDED

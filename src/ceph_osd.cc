@@ -100,13 +100,7 @@ static void usage()
   generic_server_usage();
 }
 
-#ifdef BUILDING_FOR_EMBEDDED
-void cephd_preload_embedded_plugins();
-void cephd_preload_rados_classes(OSD *osd);
-extern "C" int cephd_osd(int argc, const char **argv)
-#else
 int main(int argc, const char **argv)
-#endif
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -297,9 +291,6 @@ int main(int argc, const char **argv)
     forker.exit(-ENODEV);
   }
 
-#ifdef BUILDING_FOR_EMBEDDED
-  cephd_preload_embedded_plugins();
-#endif
 
   if (mkkey) {
     common_init_finish(g_ceph_context);
@@ -635,11 +626,9 @@ flushjournal_out:
     return -1;
   global_init_chdir(g_ceph_context);
 
-#ifndef BUILDING_FOR_EMBEDDED
   if (global_init_preload_erasure_code(g_ceph_context) < 0) {
     forker.exit(1);
   }
-#endif
 
   osd = new OSD(g_ceph_context,
                 store,
@@ -685,10 +674,6 @@ flushjournal_out:
     forker.daemonize();
   }
 
-
-#ifdef BUILDING_FOR_EMBEDDED
-  cephd_preload_rados_classes(osd);
-#endif
 
   register_async_signal_handler_oneshot(SIGINT, handle_osd_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_osd_signal);

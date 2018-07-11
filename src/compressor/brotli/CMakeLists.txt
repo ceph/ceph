@@ -35,9 +35,3 @@ target_include_directories(ceph_brotli	PRIVATE "${CMAKE_BINARY_DIR}/src/brotli/c
 List(REVERSE bortli_libs)
 target_link_libraries(ceph_brotli ${BROTLI_LIBRARIES})
 install(TARGETS ceph_brotli DESTINATION ${compressor_plugin_dir})
-
-if(WITH_EMBEDDED)
-  add_library(cephd_compressor_brotli STATIC ${brotli_sources})
-  target_include_directories(cephd_compressor_brotli PRIVATE "${CMAKE_BINARY_DIR}/src/brotli/c/include")
-  set_target_properties(cephd_compressor_brotli PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMBEDDED)
-endif()
