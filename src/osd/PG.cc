@@ -1514,6 +1514,15 @@ void PG::choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
     // now. We could use minimum_to_decode_with_cost() later if
     // necessary.
     pg_shard_t shard_i((*want)[i], shard_id_t(i));
+    // do not include strays
+    if (stray_set.find(shard_i) != stray_set.end())
+      continue;
+    // Do not include an osd that is not up, since choosing it as
+    // an async_recovery_target will move it out of the acting set.
+    // This results in it being identified as a stray during peering,
+    // because it is no longer in the up or acting set.
+    if (!is_up(shard_i))
+      continue;
     auto shard_info = all_info.find(shard_i)->second;
     // for ec pools we rollback all entries past the authoritative
     // last_update *before* activation. This is relatively inexpensive
@@ -1553,6 +1562,15 @@ void PG::choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_
   set<pair<int, pg_shard_t> > candidates_by_cost;
   for (auto osd_num : *want) {
     pg_shard_t shard_i(osd_num, shard_id_t::NO_SHARD);
+    // do not include strays
+    if (stray_set.find(shard_i) != stray_set.end())
+      continue;
+    // Do not include an osd that is not up, since choosing it as
+    // an async_recovery_target will move it out of the acting set.
+    // This results in it being identified as a stray during peering,
+    // because it is no longer in the up or acting set.
+    if (!is_up(shard_i))
+      continue;
     auto shard_info = all_info.find(shard_i)->second;
     // use the approximate magnitude of the difference in length of
     // logs as the cost of recovery
