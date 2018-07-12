@@ -1296,6 +1296,30 @@ int RGWBucketAdminOp::get_policy(RGWRados *store, RGWBucketAdminOpState& op_stat
   return 0;
 }
 
+int RGWBucketAdminOp::get_zonegroup(RGWRados *store, RGWBucketAdminOpState& op_state,
+                                 RGWFormatterFlusher& flusher)
+{
+  RGWBucket bucket;
+  int ret = bucket.init(store, op_state);
+  if (ret < 0)
+    return ret;
+
+  Formatter *formatter = flusher.get_formatter();
+  flusher.start(0);
+  formatter->open_object_section("zonegroup");
+  RGWZoneGroup zonegroup;
+  ret = store->get_zonegroup(bucket.get_bucket_info().zonegroup, zonegroup);
+  if (ret >= 0) {
+    encode_json("zonegroup", zonegroup.api_name, formatter);
+  } else  {
+    encode_json("zonegroup", "", formatter);
+  }
+  formatter->close_section();
+  flusher.flush();
+
+  return 0;
+}
+
 int RGWBucketAdminOp::dump_s3_policy(RGWRados *store, RGWBucketAdminOpState& op_state,
                   ostream& os)
 {
