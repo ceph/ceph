@@ -40,8 +40,12 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wstrict-null-sentinel -Woverloaded-virtual")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-new-ttp-matching")
-  if(NOT WITH_OSD_INSTRUMENT_FUNCTIONS AND NOT HAVE_SEASTAR)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
+  # cmake does not add '-pie' for executables even if
+  # CMAKE_POSITION_INDEPENDENT_CODE is TRUE.
+  if(EXE_LINKER_USE_PIE)
+    if (NOT WITH_OSD_INSTRUMENT_FUNCTIONS AND NOT HAVE_SEASTAR)
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
+    endif()
   endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_EXPORTS_C_FLAG}")
@@ -446,12 +450,6 @@ endif()
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common
   PRIVATE ${ceph_common_deps})
-if(WITH_STATIC_LIBSTDCXX)
-  # the apps linking against libcommon are daemons also written in C++, so we
-  # need to link them against libstdc++.
-  target_link_libraries(common
-    INTERFACE "-static-libstdc++ -static-libgcc")
-endif()
 
 add_library(ceph-common SHARED ${ceph_common_objs})
 target_link_libraries(ceph-common ${ceph_common_deps})
@@ -459,12 +457,6 @@ target_link_libraries(ceph-common ${ceph_common_deps})
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 0
   INSTALL_RPATH "")
-if(WITH_STATIC_LIBSTDCXX)
-  # link libstdc++ into ceph-common to avoid including libstdc++ in every apps,
-  # to reduce the size of the app linking against ceph-common.
-  set_target_properties(ceph-common PROPERTIES
-    LINK_FLAGS "-static-libstdc++ -static-libgcc")
-endif()
 install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
 
 if(${WITH_LTTNG})
@@ -550,10 +542,12 @@ set(ceph_osd_srcs
 add_executable(ceph-osd ${ceph_osd_srcs})
 add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global-static common
-  ${BLKID_LIBRARIES})
+  ${BLKID_LIBRARIES} ${ALLOC_LIBS})
 if(WITH_FUSE)
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
 endif()
+set_target_properties(ceph-osd PROPERTIES
+  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
 install(TARGETS ceph-osd DESTINATION bin)
 
 add_subdirectory(mds)
@@ -649,10 +643,6 @@ if(WITH_LIBCEPHFS)
   add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs})
   target_link_libraries(cephfs PRIVATE client ceph-common
     ${CRYPTO_LIBS} ${EXTRALIBS})
-  if(WITH_STATIC_LIBSTDCXX)
-    target_link_libraries(cephfs
-      INTERFACE "-static-libstdc++ -static-libgcc")
-  endif()
   if(ENABLE_SHARED)
     set_target_properties(cephfs PROPERTIES
       OUTPUT_NAME cephfs
@@ -695,7 +685,9 @@ if(WITH_FUSE)
   add_executable(ceph-fuse ${ceph_fuse_srcs})
   target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES}
     client ceph-common global-static)
-  set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
+  set_target_properties(ceph-fuse PROPERTIES
+    COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}"
+    POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
   install(TARGETS ceph-fuse DESTINATION bin)
   install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
 endif(WITH_FUSE)
