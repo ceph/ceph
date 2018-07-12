@@ -10,19 +10,25 @@ from teuthology.contextutil import MaxWhileTries
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
 from .mount import CephFSMount
+from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 
 
 class FuseMount(CephFSMount):
-    def __init__(self, client_config, test_dir, client_id, client_remote):
-        super(FuseMount, self).__init__(test_dir, client_id, client_remote)
+    def __init__(self, ctx, client_config, test_dir, client_id, client_remote):
+        super(FuseMount, self).__init__(ctx, test_dir, client_id, client_remote)
 
         self.client_config = client_config if client_config else {}
         self.fuse_daemon = None
         self._fuse_conn = None
+        self.id = None
+        self.inst = None
+        self.addr = None
 
     def mount(self, mount_path=None, mount_fs_name=None):
+        self.setupfs(name=mount_fs_name)
+
         try:
             return self._mount(mount_path, mount_fs_name)
         except RuntimeError:
@@ -152,6 +158,20 @@ class FuseMount(CephFSMount):
         else:
             self._fuse_conn = new_conns[0]
 
+        status = self.admin_socket(['status'])
+        self.id = status['id']
+        try:
+            self.inst = status['inst_str']
+            self.addr = status['addr_str']
+        except KeyError as e:
+            sessions = self.fs.rank_asok(['session', 'ls'])
+            for s in sessions:
+                if s['id'] == self.id:
+                    self.inst = s['inst']
+                    self.addr = self.inst.split()[1]
+            if self.inst is None:
+                raise RuntimeError("cannot find client session")
+
     def is_mounted(self):
         proc = self.client_remote.run(
             args=[
@@ -260,6 +280,9 @@ class FuseMount(CephFSMount):
 
         assert not self.is_mounted()
         self._fuse_conn = None
+        self.id = None
+        self.inst = None
+        self.addr = None
 
     def umount_wait(self, force=False, require_clean=False, timeout=900):
         """
@@ -410,6 +433,18 @@ print find_socket("{client_name}")
         Look up the CephFS client ID for this mount
         """
         return self.admin_socket(['mds_sessions'])['id']
+
+    def get_global_inst(self):
+        """
+        Look up the CephFS client instance for this mount
+        """
+        return self.inst
+
+    def get_global_addr(self):
+        """
+        Look up the CephFS client addr for this mount
+        """
+        return self.addr
 
     def get_client_pid(self):
         """
