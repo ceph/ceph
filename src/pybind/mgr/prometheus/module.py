@@ -680,25 +680,25 @@ class Module(MgrModule):
 
             @cherrypy.expose
             def metrics(self):
-                inst = global_instance()
+                instance = global_instance()
                 # Lock the function execution
                 try:
-                    inst.collect_lock.acquire()
-                    return self._metrics(inst)
+                    instance.collect_lock.acquire()
+                    return self._metrics(instance)
                 finally:
-                    inst.collect_lock.release()
+                    instance.collect_lock.release()
 
-            def _metrics(self, inst):
+            def _metrics(self, instance):
                 # Return cached data if available and collected before the cache times out
-                if inst.collect_cache and time.time() - inst.collect_time  < inst.collect_timeout:
-                    return inst.collect_cache
+                if instance.collect_cache and time.time() - instance.collect_time  < instance.collect_timeout:
+                    return instance.collect_cache
 
-                if inst.have_mon_connection():
-                    metrics = inst.collect()
+                if instance.have_mon_connection():
+                    metrics = instance.collect()
                     cherrypy.response.headers['Content-Type'] = 'text/plain'
                     if metrics:
-                        inst.collect_cache = self.format_metrics(metrics)
-                        return inst.collect_cache
+                        instance.collect_cache = self.format_metrics(metrics)
+                        return instance.collect_cache
                 else:
                     raise cherrypy.HTTPError(503, 'No MON connection')
 
