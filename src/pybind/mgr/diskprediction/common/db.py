@@ -411,17 +411,24 @@ class DB_API(object):
 
     def set_device_life_expectancy(self, device_id, from_date, to_date=None):
         result = CommandResult("")
-        
-        self.module.send_command(result, 'mon', '', json.dumps({
-            'prefix': 'device set-life-expectancy',
-            'devid': device_id,
-            'from': from_date,
-            'to': to_date
-        }), '')
+
+        if to_date is None:
+            self.module.send_command(result, 'mon', '', json.dumps({
+                'prefix': 'device set-life-expectancy',
+                'devid': device_id,
+                'from': from_date
+            }), '')
+        else:
+            self.module.send_command(result, 'mon', '', json.dumps({
+                'prefix': 'device set-life-expectancy',
+                'devid': device_id,
+                'from': from_date,
+                'to': to_date
+            }), '')
         ret, outb, outs = result.wait()
         if ret != 0:
             self.module.log.error(
-                "failed to reset device life expectancy, %s" % outs)
+                "failed to set device life expectancy, %s" % outs)
         return ret
 
     def reset_device_life_expectancy(self, device_id):

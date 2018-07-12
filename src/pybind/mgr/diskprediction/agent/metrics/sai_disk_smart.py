@@ -49,7 +49,7 @@ class SAI_DiskSmartAgent(MetricsAgent):
                             str('%s_%s' % (cluster_id, smart_data.fields['agenthost']))
                         # parse attributes
                         ata_smart = s_val.get('ata_smart_attributes', {})
-                        for attr in ata_smart.get('attrs', []):
+                        for attr in ata_smart.get('table', []):
                             if attr.get('raw', {}).get('string'):
                                 if str(attr.get('raw', {}).get('string', "0")).isdigit():
                                     smart_data.fields['%s_raw' % attr.get('id')] = \

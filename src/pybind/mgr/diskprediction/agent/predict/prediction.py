@@ -214,7 +214,7 @@ class Prediction_Agent(BaseAgent):
                     predicted = int(disk_info['prediction']['predicted'])
                 if disk_info.get('prediction', {}).get('near_failure'):
                     if disk_info['prediction']['near_failure'] == 'Good':
-                        life_expectancy_day = (TIME_WEEK * 6) + TIME_DAYS
+                        life_expectancy_day = None
                     elif disk_info['prediction']['near_failure'] == 'Warning':
                         life_expectancy_day = (TIME_WEEK * 6) - TIME_DAYS
                     elif disk_info['prediction']['near_failure'] == 'Bad':
@@ -234,13 +234,13 @@ class Prediction_Agent(BaseAgent):
                         dev_id = dev_info['dev_id']
                         break
 
-                if predicted and dev_id and life_expectancy_day:
+                if predicted and dev_id:
                     from_date = None
                     to_date = None
                     try:
                         from_date = datetime.datetime.fromtimestamp(predicted/(1000**3)).strftime('%Y-%m-%d')
                         if life_expectancy_day:
-                            to_date = datetime.datetime.fromtimestamp(predicted/(1000**3)+(life_expectancy_day*TIME_DAYS)).strftime('%Y-%m-%d')
+                            to_date = datetime.datetime.fromtimestamp(predicted/(1000**3)+life_expectancy_day).strftime('%Y-%m-%d')
                         obj_api.set_device_life_expectancy(dev_id, from_date, to_date)
                         self._logger.info("succeed to set device %s life expectancy from: %s, to: %s" % (dev_id, from_date, to_date))
                     except Exception as e:
