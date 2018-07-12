@@ -135,7 +135,9 @@ class Module(MgrModule):
                 "ec_profiles"
                 ]
         for obj in objects:
-            self.get(obj)
+            assert self.get(obj) is not None
+
+        assert self.get("__OBJ_DNE__") is None
 
         servers = self.list_servers()
         for server in servers:
