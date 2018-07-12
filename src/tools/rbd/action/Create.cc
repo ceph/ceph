@@ -56,7 +56,7 @@ struct thick_provision_writer {
   {
     // If error cases occur, the code is aborted, because
     // constructor cannot return error value.
-    assert(g_conf != nullptr);
+    assert(g_ceph_context != nullptr);
     bl.append_zero(block_size);
 
     librbd::image_info_t info;
