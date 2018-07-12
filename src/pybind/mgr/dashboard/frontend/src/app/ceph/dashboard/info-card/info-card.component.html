@@ -1,0 +1,21 @@
+<div [ngClass]="cardClass">
+  <div class="well">
+    <div class="media">
+      <div *ngIf="imageClass" class="media-left">
+        <i [ngClass]="imageClass"></i>
+      </div>
+      <div class="media-body">
+        <span class="media-heading" i18n>
+          <a *ngIf="link; else noLinkTitle" [routerLink]="link">{{ title }}</a>
+          <ng-template #noLinkTitle>
+            {{ title }}
+            <hr *ngIf="!imageClass" class="underline" />
+          </ng-template>
+        </span>
+        <span [ngClass]="contentClass">
+          <ng-content></ng-content>
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
