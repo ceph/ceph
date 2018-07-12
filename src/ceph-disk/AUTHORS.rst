@@ -1,0 +1,28 @@
+- Loic Dachary <ldachary@redhat.com>
+- Sage Weil <sweil@redhat.com>
+- Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+- Alfredo Deza <adeza@redhat.com>
+- Vicente Cheng <freeze.bilsted@gmail.com>
+- Dan van der Ster <daniel.vanderster@cern.ch>
+- David Disseldorp <ddiss@suse.de>
+- Owen Synge <osynge@suse.com>
+- Milan Broz <mbroz@redhat.com>
+- Gary Lowell <gary.lowell@inktank.com>
+- Andrew Bartlett <abartlet@catalyst.net.nz>
+- Dan Mick <dmick@redhat.com>
+- Alexandre Marangone <amarango@redhat.com>
+- Stuart Longland <stuartl@vrt.com.au>
+- Stephen F Taylor <steveftaylor@gmail.com>
+- Sébastien Han <shan@redhat.com>
+- Sandon Van Ness <svanness@redhat.com>
+- Mykola Golub <mgolub@mirantis.com>
+- Kefu Chai <kchai@redhat.com>
+- Josh Durgin <jdurgin@redhat.com>
+- Jonathan Davies <jonathan.davies@canonical.com>
+- John Spray <jspray@redhat.com>
+- Joe Julian <jjulian@io.com>
+- Ilja Slepnev <islepnev@gmail.com>
+- Greg Farnum <gfarnum@redhat.com>
+- git-harry <git-harry@live.co.uk>
+- Christos Stavrakakis <stavr.chris@gmail.com>
+- Blaine Gardner <blaine.gardner@hp.com>

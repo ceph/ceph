@@ -39,6 +39,7 @@ rm -rf build && ./do_cmake.sh "$*" \
 echo start building 
 date
 (cd build; gmake -j$NPROC $BUILDOPTS )
+(cd build; gmake -j$NPROC $BUILDOPTS ceph-disk)
 
 echo start testing 
 date

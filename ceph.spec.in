@@ -1032,6 +1032,7 @@ rm -rf %{buildroot}
 %{_bindir}/ceph-run
 %{_libexecdir}/systemd/system-preset/50-ceph.preset
 %{_sbindir}/ceph-create-keys
+%{_sbindir}/ceph-disk
 %dir %{_libexecdir}/ceph
 %{_libexecdir}/ceph/ceph_common.sh
 %dir %{_libdir}/rados-classes
@@ -1063,10 +1064,12 @@ rm -rf %{buildroot}
 %dir %{python_sitelib}/ceph_volume
 %{python_sitelib}/ceph_volume/*
 %{python_sitelib}/ceph_volume-*
+%{python_sitelib}/ceph_disk*
 %else
 %dir %{python3_sitelib}/ceph_volume
 %{python3_sitelib}/ceph_volume/*
 %{python3_sitelib}/ceph_volume-*
+%{python3_sitelib}/ceph_disk*
 %endif
 %{_mandir}/man8/ceph-deploy.8*
 %{_mandir}/man8/ceph-create-keys.8*
