@@ -6,6 +6,13 @@ import os
 import signal
 
 
+DP_MGR_STAT_OK = 'OK'
+DP_MGR_STAT_WARNING = 'WARNING'
+DP_MGR_STAT_FAILED = 'FAILED'
+DP_MGR_STAT_DISABLED = 'DISABLED'
+DP_MGR_STAT_ENABLED = 'ENABLED'
+
+
 class TimeoutError(Exception):
     pass
 

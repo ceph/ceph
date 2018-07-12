@@ -2,6 +2,8 @@ from __future__ import absolute_import
 
 from . import MetricsField
 
+AGENT_VERSION = '1.0.0'
+
 
 class CPU(MetricsField):
     """ CPU structure """
@@ -23,9 +25,6 @@ class CPU(MetricsField):
         self.fields['usage_system'] = None
         self.fields['usage_user'] = None
 
-    def __str__(self):
-        return super(CPU, self).__str__()
-
 
 class DiskIO(MetricsField):
     """ DiskIO structure """
@@ -45,9 +44,6 @@ class DiskIO(MetricsField):
         self.fields['io_time'] = None
         self.fields['weighted_io_time'] = None
         self.fields['iops_in_progress'] = None
-
-    def __str__(self):
-        return super(DiskIO, self).__str__()
 
 
 class MEM(MetricsField):
@@ -69,9 +65,6 @@ class MEM(MetricsField):
         self.fields['used'] = None
         self.fields['used_percent'] = None
 
-    def __str__(self):
-        return super(MEM, self).__str__()
-
 
 class NET(MetricsField):
     """ NET structure """
@@ -91,9 +84,6 @@ class NET(MetricsField):
         self.fields['packets_recv'] = None
         self.fields['packets_sent'] = None
 
-    def __str__(self):
-        return super(NET, self).__str__()
-
 
 class SAI_Host(MetricsField):
     """ SAI Host structure """
@@ -103,7 +93,6 @@ class SAI_Host(MetricsField):
         super(SAI_Host, self).__init__()
         self.tags['domain_id'] = None
         self.fields['agenthost'] = None
-        self.fields['agent_version'] = None
         self.tags['agenthost_domain_id'] = None
         self.fields['cluster_domain_id'] = None
         self.fields['name'] = None
@@ -113,6 +102,7 @@ class SAI_Host(MetricsField):
         self.fields['os_type'] = 'ceph'
         self.fields['os_name'] = None
         self.fields['os_version'] = None
+        self.fields['agent_version'] = AGENT_VERSION
 
 
 class SAI_Cluster(MetricsField):
@@ -125,7 +115,7 @@ class SAI_Cluster(MetricsField):
         self.fields['agenthost'] = None
         self.fields['agenthost_domain_id'] = None
         self.fields['name'] = None
-        self.fields['agent_version'] = None
+        self.fields['agent_version'] = AGENT_VERSION
 
 
 class SAI_Disk(MetricsField):
@@ -146,6 +136,7 @@ class SAI_Disk(MetricsField):
         self.fields['serial_number'] = None
         self.fields['size'] = None
         self.fields['vendor'] = None
+        self.fields['agent_version'] = str(AGENT_VERSION)
 
         """disk_status
         0: unknown  1: good     2: failure
@@ -157,9 +148,6 @@ class SAI_Disk(MetricsField):
         4: SSD SAS  5: SSD SATA 6: HDD SAS  7: HDD SATA
         """
         self.fields['disk_type'] = 0
-
-    def __str__(self):
-        return super(SAI_Disk, self).__str__()
 
 
 class SAI_Disk_Smart(MetricsField):
@@ -176,10 +164,27 @@ class SAI_Disk_Smart(MetricsField):
         self.tags['primary_key'] = None
         self.fields['cluster_domain_id'] = None
         self.fields['host_domain_id'] = None
-        self.fields['agent_version'] = None
+        self.fields['agent_version'] = AGENT_VERSION
 
-    def __str__(self):
-        return super(SAI_Disk_Smart, self).__str__()
+
+class SAI_Agent(MetricsField):
+    """ SAI DiskSmart structure """
+    measurement = 'sai_agent'
+
+    def __init__(self):
+        super(SAI_Agent, self).__init__()
+        self.tags['agenthost_domain_id'] = None
+        self.fields['agent_type'] = 'ceph'
+        self.fields['agent_version'] = AGENT_VERSION
+        self.fields['agenthost'] = ''
+        self.fields['cluster_domain_id'] = ''
+        self.fields['heartbeat_interval'] = ''
+        self.fields['host_ip'] = ''
+        self.fields['host_name'] = ''
+        self.fields['is_error'] = False
+        self.fields['is_ceph_error'] = False
+        self.fields['needs_warning'] = False
+        self.fields['send'] = None
 
 
 class Ceph_Cluster(MetricsField):

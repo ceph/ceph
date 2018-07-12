@@ -4,8 +4,6 @@ import time
 
 from .. import BaseAgent
 
-AGENT_VERSION = '1.0.0'
-
 
 class MetricsAgent(BaseAgent):
 
@@ -68,7 +66,7 @@ class MetricsAgent(BaseAgent):
                     if isinstance(dp_data.fields[name], str):
                         field = '%s=\"%s\"' % (name, dp_data.fields[name])
                     elif isinstance(dp_data.fields[name], bool):
-                        field = '%s=%s' % (name, dp_data.fields[name])
+                        field = '%s=%s' % (name, str(dp_data.fields[name]).lower())
                     elif (isinstance(dp_data.fields[name], int) or
                           isinstance(dp_data.fields[name], long)):
                         field = '%s=%si' % (name, dp_data.fields[name])
@@ -85,10 +83,12 @@ class MetricsAgent(BaseAgent):
                     status_code = resp.status_code
                     if status_code >= 200 and status_code < 300:
                         self._logger.debug(
-                            "%s send diskprediction api success" % measurement)
+                            "%s send diskprediction api success(ret: %s)"
+                            % (measurement, status_code))
                         status_info['success_count'] += 1
                     else:
-                        self._logger.error(resp.content)
+                        self._logger.error(
+                            "return code: %s, content: %s" % (status_code, resp.content))
                         status_info['failure_count'] += 1
                 except Exception as e:
                     status_info['failure_count'] += 1

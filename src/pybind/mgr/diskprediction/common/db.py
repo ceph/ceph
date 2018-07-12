@@ -280,6 +280,9 @@ class DB_API(object):
             return self.module.get('osd_metadata')[str(osd_id)]
         return self.module.get('osd_metadata')
 
+    def get_mgr_metadata(self, mgr_id):
+        return self.module.get_metadata('mgr', mgr_id)
+
     def get_osd_epoch(self):
         return self.module.get('osd_map').get('epoch', 0)
 
@@ -442,6 +445,12 @@ class DB_API(object):
             self.module.log.error(
                 "failed to reset device life expectancy, %s" % outs)
         return ret
+
+    def get_server(self, hostname):
+        return self.module.get_server(hostname)
+
+    def get_configuration(self, key):
+        return self.module.get_configuration(key)
 
     def get_all_information(self):
         result = dict()

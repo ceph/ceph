@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 import socket
 
-from . import MetricsAgent, AGENT_VERSION
+from . import MetricsAgent
 from ...common.db import DB_API
 from ...models.metrics.dp import SAI_Disk_Smart
 
@@ -92,7 +92,6 @@ class SAI_DiskSmartAgent(MetricsAgent):
                             smart_data.tags['disk_domain_id'] = str(dev_name)
                             smart_data.tags['disk_wwn'] = str(dev_name)
                             smart_data.fields['serial_number'] = str(dev_name)
-                        smart_data.fields['agent_version'] = AGENT_VERSION
                         smart_data.tags['primary_key'] = \
                             str('%s%s%s'
                                 % (cluster_id,

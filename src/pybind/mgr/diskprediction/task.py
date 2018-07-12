@@ -9,17 +9,13 @@ from .agent.metrics.ceph_mon import CephMon_Agent
 from .agent.metrics.ceph_osd import CephOSD_Agent
 from .agent.metrics.ceph_pool import CephPool_Agent
 from .agent.metrics.db_relay import DB_RelayAgent
+from .agent.metrics.sai_agent import SAI_AgentAgent
 from .agent.metrics.sai_cluster import SAI_CluserAgent
 from .agent.metrics.sai_disk import SAI_DiskAgent
 from .agent.metrics.sai_disk_smart import SAI_DiskSmartAgent
 from .agent.metrics.sai_host import SAI_HostAgent
 from .agent.predict.prediction import Prediction_Agent
-
-DP_MGR_STAT_OK = 'OK'
-DP_MGR_STAT_WARNING = 'WARNING'
-DP_MGR_STAT_FAILED = 'FAILED'
-DP_MGR_STAT_DISABLED = 'DISABLED'
-DP_MGR_STAT_ENABLED = 'ENABLED'
+from .common import DP_MGR_STAT_FAILED, DP_MGR_STAT_OK, DP_MGR_STAT_WARNING
 
 
 class DPTask(object):
@@ -110,7 +106,8 @@ class MetricsTask(DPTask):
     _task_name = "Metrics Task"
     _interval_key = "diskprediction_upload_metrics_interval"
     _agents = [CephCluster_Agent, CephMon_Agent, CephOSD_Agent, CephPool_Agent,
-               SAI_CluserAgent, SAI_DiskAgent, SAI_HostAgent, DB_RelayAgent]
+               SAI_CluserAgent, SAI_DiskAgent, SAI_HostAgent, DB_RelayAgent,
+               SAI_AgentAgent]
 
     def _run(self):
         self._log.debug("%s run" % self._task_name)

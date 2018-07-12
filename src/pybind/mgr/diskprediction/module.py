@@ -8,8 +8,9 @@ import json
 from mgr_module import MgrModule
 from threading import Event
 
-from .task import MetricsTask, PredictionTask, SmartTask, \
-    DP_MGR_STAT_ENABLED, DP_MGR_STAT_DISABLED
+from .common import DP_MGR_STAT_ENABLED, DP_MGR_STAT_DISABLED
+from .task import MetricsTask, PredictionTask, SmartTask
+
 
 DP_TASK = [MetricsTask, PredictionTask, SmartTask]
 

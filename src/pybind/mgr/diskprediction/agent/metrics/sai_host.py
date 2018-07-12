@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 import socket
 
-from . import MetricsAgent, AGENT_VERSION
+from . import MetricsAgent
 from ...common.db import DB_API
 from ...models.metrics.dp import SAI_Host
 
@@ -72,7 +72,6 @@ class SAI_HostAgent(MetricsAgent):
                 mds_host = mds_data.get('name')
                 if mds_host not in hosts:
                     data = SAI_Host()
-                    data.fields['agent_version'] = AGENT_VERSION
                     data.fields['agenthost'] = str(socket.gethostname())
                     data.tags['agenthost_domain_id'] = \
                         str("%s_%s" % (cluster_id, data.fields['agenthost']))

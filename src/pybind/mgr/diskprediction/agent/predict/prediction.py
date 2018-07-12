@@ -208,21 +208,26 @@ class Prediction_Agent(BaseAgent):
                 # Update osd life-expectancy
                 dev_id = ''
                 predicted = None
-                life_expectancy_day = None
+                life_expectancy_day_min = None
+                life_expectancy_day_max = None
                 devs_info = obj_api.get_osd_device_id(osd_id)
                 if disk_info.get('prediction', {}).get('predicted'):
                     predicted = int(disk_info['prediction']['predicted'])
                 if disk_info.get('prediction', {}).get('near_failure'):
                     if disk_info['prediction']['near_failure'] == 'Good':
-                        life_expectancy_day = None
+                        life_expectancy_day_min = (TIME_WEEK * 6) + TIME_DAYS
+                        life_expectancy_day_max = None
                     elif disk_info['prediction']['near_failure'] == 'Warning':
-                        life_expectancy_day = (TIME_WEEK * 6) - TIME_DAYS
+                        life_expectancy_day_min = (TIME_WEEK * 2)
+                        life_expectancy_day_max = (TIME_WEEK * 6) - TIME_DAYS
                     elif disk_info['prediction']['near_failure'] == 'Bad':
-                        life_expectancy_day = (TIME_WEEK * 2) - TIME_DAYS
+                        life_expectancy_day_min = 0
+                        life_expectancy_day_max = (TIME_WEEK * 2) - TIME_DAYS
                     else:
                         # Near failure state is unknown.
                         predicted = None
-                        life_expectancy_day = None
+                        life_expectancy_day_min = None
+                        life_expectancy_day_max = None
                 check_dev_id = ''
                 if model:
                     check_dev_id += str(model).upper()
@@ -234,17 +239,18 @@ class Prediction_Agent(BaseAgent):
                         dev_id = dev_info['dev_id']
                         break
 
-                if predicted and dev_id:
+                if predicted and dev_id and life_expectancy_day_min:
                     from_date = None
                     to_date = None
                     try:
-                        from_date = datetime.datetime.fromtimestamp(predicted/(1000**3)).strftime('%Y-%m-%d')
-                        if life_expectancy_day:
-                            to_date = datetime.datetime.fromtimestamp(predicted/(1000**3)+life_expectancy_day).strftime('%Y-%m-%d')
+                        if life_expectancy_day_min:
+                            from_date = datetime.datetime.fromtimestamp(predicted/(1000**3)+life_expectancy_day_min).strftime('%Y-%m-%d')
+                        if life_expectancy_day_max:
+                            to_date = datetime.datetime.fromtimestamp(predicted/(1000**3)+life_expectancy_day_max).strftime('%Y-%m-%d')
                         obj_api.set_device_life_expectancy(dev_id, from_date, to_date)
                         self._logger.info("succeed to set device %s life expectancy from: %s, to: %s" % (dev_id, from_date, to_date))
                     except Exception as e:
-                        self._logger.info("failed to set device %s life expectancy from: %s, to: %s, %s" % (dev_id, from_date, to_date, str(e)))
+                        self._logger.error("failed to set device %s life expectancy from: %s, to: %s, %s" % (dev_id, from_date, to_date, str(e)))
                 else:
                     if dev_id:
                         obj_api.reset_device_life_expectancy(dev_id)

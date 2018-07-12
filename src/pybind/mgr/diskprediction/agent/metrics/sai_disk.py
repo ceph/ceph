@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 import socket
 
-from . import MetricsAgent, AGENT_VERSION
+from . import MetricsAgent
 from ...common.db import DB_API
 from ...models.metrics.dp import SAI_Disk
 
@@ -134,7 +134,6 @@ class SAI_DiskAgent(MetricsAgent):
                 d_data.fields['transport_protocol'] = str('')
                 d_data.fields['vendor'] = \
                     str(s_val.get('model_family', '')).replace("\"", "'")
-                d_data.fields['agent_version'] = str(AGENT_VERSION)
                 try:
                     if isinstance(s_val.get('user_capacity'), dict):
                         user_capacity = \
