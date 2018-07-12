@@ -597,7 +597,6 @@ class Module(MgrModule):
                     ))
                     self.metrics.set(path, value, (daemon,))
 
-
         return self.metrics.all()
 
     def handle_command(self, cmd):
@@ -618,10 +617,8 @@ class Module(MgrModule):
                 return self
 
             def format_metrics(self, metrics):
-                formatted = ''
-                for m in metrics.values():
-                    formatted += m.str_expfmt()
-                return formatted + '\n'
+                _metrics = [m.str_expfmt() for m in metrics.values()]
+                return ''.join(_metrics) + '\n'
 
             @cherrypy.expose
             def index(self):
