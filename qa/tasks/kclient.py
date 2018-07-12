@@ -89,6 +89,7 @@ def task(ctx, config):
             continue
 
         kernel_mount = KernelMount(
+            ctx,
             mons,
             test_dir,
             id_,
