@@ -1228,8 +1228,7 @@ bool DaemonServer::handle_command(MCommand *m)
 		auto p = pg_map.osd_stat.find(osd);
 		if (p == pg_map.osd_stat.end()) {
 		  missing_stats.insert(osd);
-		}
-		if (p->second.num_pgs > 0) {
+		} else if (p->second.num_pgs > 0) {
 		  stored_pgs.insert(osd);
 		}
 	      }
