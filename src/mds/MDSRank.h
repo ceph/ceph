@@ -363,6 +363,7 @@ class MDSRank {
     void damaged_unlocked();
 
     utime_t get_laggy_until() const;
+    double get_dispatch_queue_max_age(utime_t now) const;
 
     void send_message_mds(Message *m, mds_rank_t mds);
     void forward_message_mds(Message *req, mds_rank_t mds);
