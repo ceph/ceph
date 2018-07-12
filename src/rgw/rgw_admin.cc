@@ -6414,6 +6414,13 @@ next:
   }
 
   if (opt_cmd == OPT_ORPHANS_FIND) {
+    if (!yes_i_really_mean_it) {
+      cerr << "accidental removal of active objects can not be reversed; "
+	   << "do you really mean it? (requires --yes-i-really-mean-it)"
+	   << std::endl;
+      return EINVAL;
+    }
+
     RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
 
     if (job_id.empty()) {
