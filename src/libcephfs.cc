@@ -1546,6 +1546,12 @@ extern "C" int ceph_ll_sync_inode(class ceph_mount_info *cmount,
   return (cmount->get_client()->ll_sync_inode(in, syncdataonly));
 }
 
+extern "C" int ceph_ll_fallocate(class ceph_mount_info *cmount, Fh *fh,
+				 int mode, int64_t offset, int64_t length)
+{
+  return cmount->get_client()->ll_fallocate(fh, mode, offset, length);
+}
+
 extern "C" off_t ceph_ll_lseek(class ceph_mount_info *cmount,
 				Fh *fh, off_t offset, int whence)
 {

@@ -13169,7 +13169,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 #endif
 
 
-int Client::ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length)
+int Client::ll_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 {
   Mutex::Locker lock(client_lock);
   ldout(cct, 3) << __func__ << " " << fh << " " << fh->inode->ino << " " << dendl;

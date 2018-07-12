@@ -1508,6 +1508,8 @@ int ceph_ll_fsync(struct ceph_mount_info *cmount, struct Fh *fh,
 		  int syncdataonly);
 int ceph_ll_sync_inode(struct ceph_mount_info *cmount, struct Inode *in,
 		  int syncdataonly);
+int ceph_ll_fallocate(struct ceph_mount_info *cmount, struct Fh *fh,
+		      int mode, int64_t offset, int64_t length);
 int ceph_ll_write(struct ceph_mount_info *cmount, struct Fh* filehandle,
 		  int64_t off, uint64_t len, const char *data);
 int64_t ceph_ll_readv(struct ceph_mount_info *cmount, struct Fh *fh,

@@ -1229,7 +1229,7 @@ public:
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_sync_inode(Inode *in, bool syncdataonly);
-  int ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length);
+  int ll_fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
   int ll_release(Fh *fh);
   int ll_getlk(Fh *fh, struct flock *fl, uint64_t owner);
   int ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
