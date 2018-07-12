@@ -585,7 +585,12 @@ class Module(MgrModule):
                         )
                     self.metrics[path].set(value, (daemon,))
 
-        return self.metrics
+        # Return formatted metrics and clear no longer used data
+        _metrics = [m.str_expfmt() for m in self.metrics.values()]
+        for k in self.metrics.keys():
+            self.metrics[k].clear()
+
+        return ''.join(_metrics) + '\n'
 
     def get_file_sd_config(self):
         servers = self.list_servers()
@@ -643,10 +648,6 @@ class Module(MgrModule):
                 cherrypy.request.path = ''
                 return self
 
-            def format_metrics(self, metrics):
-                _metrics = [m.str_expfmt() for m in metrics.values()]
-                return ''.join(_metrics) + '\n'
-
             @cherrypy.expose
             def index(self):
                 return '''<!DOCTYPE html>
@@ -674,11 +675,9 @@ class Module(MgrModule):
                     return instance.collect_cache
 
                 if instance.have_mon_connection():
-                    metrics = instance.collect()
+                    instance.collect_cache = instance.collect()
                     cherrypy.response.headers['Content-Type'] = 'text/plain'
-                    if metrics:
-                        instance.collect_cache = self.format_metrics(metrics)
-                        return instance.collect_cache
+                    return instance.collect_cache
                 else:
                     raise cherrypy.HTTPError(503, 'No MON connection')
 
