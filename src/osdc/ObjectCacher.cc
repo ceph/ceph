@@ -1849,7 +1849,7 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
   assert(trace != nullptr);
   int ret = 0;
 
-  if (max_dirty > 0) {
+  if (max_dirty > 0 && !(wr->fadvise_flags & LIBRADOS_OP_FLAG_FADVISE_FUA)) {
     if (block_writes_upfront) {
       maybe_wait_for_writeback(len, trace);
       if (onfreespace)

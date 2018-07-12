@@ -2345,6 +2345,55 @@ TEST_F(TestLibRBD, TestEmptyDiscard)
   rados_ioctx_destroy(ioctx);
 }
 
+TEST_F(TestLibRBD, TestFUA)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image_write;
+  rbd_image_t image_read;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  size_t num_aios = 256;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image_write, NULL));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image_read, NULL));
+
+  // enable writeback cache
+  rbd_flush(image_write);
+
+  char test_data[TEST_IO_SIZE + 1];
+  int i;
+
+  for (i = 0; i < TEST_IO_SIZE; ++i) {
+    test_data[i] = (char) (rand() % (126 - 33) + 33);
+  }
+  test_data[TEST_IO_SIZE] = '\0';
+  for (i = 0; i < 5; ++i)
+    ASSERT_PASSED(write_test_data, image_write, test_data,
+                  TEST_IO_SIZE * i, TEST_IO_SIZE, LIBRADOS_OP_FLAG_FADVISE_FUA);
+
+  for (i = 0; i < 5; ++i)
+    ASSERT_PASSED(read_test_data, image_read, test_data,
+                  TEST_IO_SIZE * i, TEST_IO_SIZE, 0);
+
+  for (i = 5; i < 10; ++i)
+    ASSERT_PASSED(aio_write_test_data, image_write, test_data,
+                  TEST_IO_SIZE * i, TEST_IO_SIZE, LIBRADOS_OP_FLAG_FADVISE_FUA);
+
+  for (i = 5; i < 10; ++i)
+    ASSERT_PASSED(aio_read_test_data, image_read, test_data,
+                  TEST_IO_SIZE * i, TEST_IO_SIZE, 0);
+
+  ASSERT_PASSED(validate_object_map, image_write);
+  ASSERT_PASSED(validate_object_map, image_read);
+  ASSERT_EQ(0, rbd_close(image_write));
+  ASSERT_EQ(0, rbd_close(image_read));
+  ASSERT_EQ(0, rbd_remove(ioctx, name.c_str()));
+  rados_ioctx_destroy(ioctx);
+}
 
 void simple_write_cb_pp(librbd::completion_t cb, void *arg)
 {
