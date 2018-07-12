@@ -7,7 +7,7 @@ from . import create
 from . import trigger
 from . import listing
 from . import zap
-from . import auto
+from . import batch
 
 
 class LVM(object):
@@ -22,7 +22,7 @@ class LVM(object):
 
     mapper = {
         'activate': activate.Activate,
-        'auto': auto.Auto,
+        'batch': batch.Batch,
         'prepare': prepare.Prepare,
         'create': create.Create,
         'trigger': trigger.Trigger,
