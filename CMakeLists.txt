@@ -598,13 +598,13 @@ if(WITH_SYSTEM_BOOST)
   else()
     set(Boost_USE_STATIC_LIBS ON)
   endif()
-  find_package(Boost 1.66 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+  find_package(Boost 1.67 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
 else()
   set(BOOST_J 1 CACHE STRING
     "max jobs for Boost build") # override w/-DBOOST_J=<n>
   set(Boost_USE_STATIC_LIBS ON)
   include(BuildBoost)
-  build_boost(1.66
+  build_boost(1.67
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
   include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 endif()
