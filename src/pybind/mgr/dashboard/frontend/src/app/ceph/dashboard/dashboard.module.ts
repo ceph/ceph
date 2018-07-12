@@ -9,6 +9,7 @@ import { SharedModule } from '../../shared/shared.module';
 import { DashboardComponent } from './dashboard/dashboard.component';
 import { HealthPieComponent } from './health-pie/health-pie.component';
 import { HealthComponent } from './health/health.component';
+import { InfoCardComponent } from './info-card/info-card.component';
 import { LogColorPipe } from './log-color.pipe';
 import { MdsSummaryPipe } from './mds-summary.pipe';
 import { MgrSummaryPipe } from './mgr-summary.pipe';
@@ -29,7 +30,8 @@ import { PgStatusPipe } from './pg-status.pipe';
     PgStatusPipe,
     MdsSummaryPipe,
     PgStatusStylePipe,
-    HealthPieComponent
+    HealthPieComponent,
+    InfoCardComponent
   ]
 })
 export class DashboardModule {}
