@@ -1319,6 +1319,7 @@ OPTION(rgw_cross_domain_policy, OPT_STR)
 OPTION(rgw_healthcheck_disabling_path, OPT_STR) // path that existence causes the healthcheck to respond 503
 OPTION(rgw_s3_auth_use_rados, OPT_BOOL)  // should we try to use the internal credentials for s3?
 OPTION(rgw_s3_auth_use_keystone, OPT_BOOL)  // should we try to use keystone for s3?
+OPTION(rgw_s3_auth_order, OPT_STR) // s3 authentication order to try
 OPTION(rgw_barbican_url, OPT_STR)  // url for barbican server
 
 /* OpenLDAP-style LDAP parameter strings */
