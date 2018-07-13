@@ -350,9 +350,6 @@ public:
     ceph_assert(mon_info.count(n));
     mon_info[n].public_addrs = entity_addrvec_t(a);
   }
-  void add(const string &name, const entity_addr_t &a) {
-    add(name, entity_addrvec_t(a));
-  }
   // </REMOVE ME>
 
   const entity_addrvec_t& get_addrs(const string& n) const {
