@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "common/config_fwd.h"
 #include "common/entity_name.h"
 #include "common/options.h"
 #include "log/SubsystemMap.h"
@@ -17,6 +18,9 @@ class ConfigValues {
   using changed_set_t = std::set<std::string>;
   using values_t = std::map<std::string, map<int32_t,Option::value_t>>;
   values_t values;
+  // for populating md_config_impl::legacy_values in ctor
+  template<ceph::internal::LockPolicy lock_policy>
+  friend struct ceph::internal::md_config_impl;
 
 public:
   EntityName name;
