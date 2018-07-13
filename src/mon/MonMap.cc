@@ -340,6 +340,39 @@ void MonMap::dump(Formatter *f) const
   f->close_section();
 }
 
+// an ambiguous mon addr may be legacy or may be msgr2--we aren' sure.
+// when that happens we need to try them both (unless we can
+// reasonably infer from the port number which it is).
+void MonMap::_add_ambiguous_addr(const string& name,
+				 entity_addr_t addr,
+				 int priority)
+{
+  if (addr.get_port() == 0) {
+    // no port; try both msgr2 and legacy
+    addr.set_type(entity_addr_t::TYPE_MSGR2);
+    addr.set_port(CEPH_MON_PORT_IANA);
+    if (!contains(addr)) {
+      add(name, entity_addrvec_t(addr));
+    }
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    addr.set_port(CEPH_MON_PORT_LEGACY);
+    if (!contains(addr)) {
+      add(name + "-legacy", entity_addrvec_t(addr));
+    }
+  } else if (addr.get_port() == CEPH_MON_PORT_LEGACY) {
+    // legacy port implies legacy addr
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+    if (!contains(addr)) {
+      add(name + "-legacy", entity_addrvec_t(addr));
+    }
+  } else {
+    // assume msgr2
+    addr.set_type(entity_addr_t::TYPE_MSGR2);
+    if (!contains(addr)) {
+      add(name, entity_addrvec_t(addr), priority);
+    }
+  }
+}
 
 int MonMap::init_with_ips(const std::string& ips,
 			  const std::string &prefix)
@@ -354,12 +387,9 @@ int MonMap::init_with_ips(const std::string& ips,
     char n[2];
     n[0] = 'a' + i;
     n[1] = 0;
-    if (addrs[i].get_port() == 0)
-      addrs[i].set_port(CEPH_MON_PORT_LEGACY);
     string name = prefix;
     name += n;
-    if (!contains(addrs[i]))
-      add(name, addrs[i]);
+    _add_ambiguous_addr(name, addrs[i], 0);
   }
   return 0;
 }
@@ -377,21 +407,15 @@ int MonMap::init_with_hosts(const std::string& hostlist,
   free(hosts);
   if (!success)
     return -EINVAL;
-
   if (addrs.empty())
     return -ENOENT;
-
   for (unsigned i=0; i<addrs.size(); i++) {
     char n[2];
     n[0] = 'a' + i;
     n[1] = 0;
-    if (addrs[i].get_port() == 0)
-      addrs[i].set_port(CEPH_MON_PORT_LEGACY);
     string name = prefix;
     name += n;
-    if (!contains(addrs[i]) &&
-	!contains(name))
-      add(name, addrs[i]);
+    _add_ambiguous_addr(name, addrs[i], 0);
   }
   calc_legacy_ranks();
   return 0;
@@ -429,7 +453,8 @@ void MonMap::set_initial_members(CephContext *cct,
   for (auto& p : initial_members) {
     if (!contains(p)) {
       if (p == my_name) {
-	lgeneric_dout(cct, 1) << " adding self " << p << " " << my_addr << dendl;
+	lgeneric_dout(cct, 1) << " adding self " << p << " " << my_addrs
+			      << dendl;
 	add(p, my_addrs);
       } else {
 	entity_addr_t a;
@@ -502,13 +527,13 @@ int MonMap::init_with_config_file(const ConfigProxy& conf,
         continue;
       }
     }
+
     // the make sure this mon isn't already in the map
     if (contains(addr))
       remove(get_name(addr));
     if (contains(mon_name))
       remove(mon_name);
-
-    add(mon_info_t{mon_name, addr, priority});
+    _add_ambiguous_addr(mon_name, addr, priority);
   }
   return 0;
 }
@@ -662,9 +687,8 @@ int MonMap::init_with_dns_srv(CephContext* cct,
     return -1;
   } else {
     for (const auto& record : records) {
-      add(mon_info_t{record.first,
-            record.second.addr,
-            record.second.priority});
+      _add_ambiguous_addr(record.first, record.second.addr,
+			  record.second.priority);
     }
     return 0;
   }
