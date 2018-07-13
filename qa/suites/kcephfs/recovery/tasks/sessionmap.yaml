@@ -5,7 +5,7 @@ overrides:
       global:
         ms type: simple
     log-whitelist:
-      - client session with invalid root
+      - client session with non-allowable root
 
 tasks:
   - cephfs_test_runner:
