@@ -53,6 +53,9 @@ public:
   void finish(int r) override {
     ida->save_2(r, version);
   }
+  void print(ostream& out) const override {
+    out << "table_save(" << ida->table_name << ")";
+  }
 };
 
 void MDSTable::save(MDSInternalContextBase *onfinish, version_t v)
@@ -127,6 +130,9 @@ public:
   C_IO_MT_Load(MDSTable *i, Context *o) : MDSTableIOContext(i), onfinish(o) {}
   void finish(int r) override {
     ida->load_2(r, bl, onfinish);
+  }
+  void print(ostream& out) const override {
+    out << "table_load(" << ida->table_name << ")";
   }
 };
 
