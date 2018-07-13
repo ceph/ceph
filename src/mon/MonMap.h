@@ -346,10 +346,6 @@ public:
   entity_addr_t get_addr(unsigned m) const {
     return get_addrs(m).legacy_addr();
   }
-  void set_addr(const string& n, const entity_addr_t& a) {
-    ceph_assert(mon_info.count(n));
-    mon_info[n].public_addrs = entity_addrvec_t(a);
-  }
   // </REMOVE ME>
 
   const entity_addrvec_t& get_addrs(const string& n) const {
