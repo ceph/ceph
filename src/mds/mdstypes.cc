@@ -366,24 +366,126 @@ void old_rstat_t::generate_test_instances(list<old_rstat_t*>& ls)
 }
 
 /*
+ * feature_bitset_t
+ */
+feature_bitset_t::feature_bitset_t(unsigned long value)
+{
+  if (value) {
+    for (size_t i = 0; i < sizeof(value) * 8; i += bits_per_block) {
+      _vec.push_back((block_type)(value >> i));
+    }
+  }
+}
+
+feature_bitset_t::feature_bitset_t(const vector<size_t>& array)
+{
+  if (!array.empty()) {
+    size_t n = array.back();
+    n += bits_per_block;
+    n /= bits_per_block;
+    _vec.resize(n, 0);
+
+    size_t last = 0;
+    for (auto& bit : array) {
+      if (bit > last)
+	last = bit;
+      else
+	assert(bit == last);
+      _vec[bit / bits_per_block] |= (block_type)1 << (bit % bits_per_block);
+    }
+  }
+}
+
+feature_bitset_t& feature_bitset_t::operator-=(const feature_bitset_t& other)
+{
+  for (size_t i = 0; i < _vec.size(); ++i) {
+    if (i >= other._vec.size())
+      break;
+    _vec[i] &= ~other._vec[i];
+  }
+  return *this;
+}
+
+void feature_bitset_t::encode(bufferlist& bl) const {
+  using ceph::encode;
+  using ceph::encode_nohead;
+  uint32_t len = _vec.size() * sizeof(block_type);
+  encode(len, bl);
+  encode_nohead(_vec, bl);
+}
+
+void feature_bitset_t::decode(bufferlist::const_iterator &p) {
+  using ceph::decode;
+  using ceph::decode_nohead;
+  uint32_t len;
+  decode(len, p);
+
+  _vec.clear();
+  if (len >= sizeof(block_type))
+    decode_nohead(len / sizeof(block_type), _vec, p);
+
+  if (len % sizeof(block_type)) {
+    ceph_le64 buf{};
+    p.copy(len % sizeof(block_type), (char*)&buf);
+    _vec.push_back((block_type)buf);
+  }
+}
+
+void feature_bitset_t::print(ostream& out) const
+{
+  std::ios_base::fmtflags f(out.flags());
+  for (int i = _vec.size() - 1; i >= 0; --i)
+    out << std::setfill('0') << std::setw(sizeof(block_type) * 2)
+        << std::hex << _vec[i];
+  out.flags(f);
+}
+
+/*
+ * client_metadata_t
+ */
+void client_metadata_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(2, 1, bl);
+  encode(kv_map, bl);
+  encode(features, bl);
+  ENCODE_FINISH(bl);
+}
+
+void client_metadata_t::decode(bufferlist::const_iterator& p)
+{
+  DECODE_START(2, p);
+  decode(kv_map, p);
+  if (struct_v >= 2)
+    decode(features, p);
+  DECODE_FINISH(p);
+}
+
+void client_metadata_t::dump(Formatter *f) const
+{
+  f->dump_stream("features") << features;
+  for (const auto& p : kv_map)
+    f->dump_string(p.first.c_str(), p.second);
+}
+
+/*
  * session_info_t
  */
 void session_info_t::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(6, 3, bl);
+  ENCODE_START(7, 7, bl);
   encode(inst, bl, features);
   encode(completed_requests, bl);
   encode(prealloc_inos, bl);   // hacky, see below.
   encode(used_inos, bl);
-  encode(client_metadata, bl);
   encode(completed_flushes, bl);
   encode(auth_name, bl);
+  encode(client_metadata, bl);
   ENCODE_FINISH(bl);
 }
 
 void session_info_t::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, p);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 2, 2, p);
   decode(inst, p);
   if (struct_v <= 2) {
     set<ceph_tid_t> s;
@@ -399,14 +501,17 @@ void session_info_t::decode(bufferlist::const_iterator& p)
   decode(used_inos, p);
   prealloc_inos.insert(used_inos);
   used_inos.clear();
-  if (struct_v >= 4) {
-    decode(client_metadata, p);
+  if (struct_v >= 4 && struct_v < 7) {
+    decode(client_metadata.kv_map, p);
   }
   if (struct_v >= 5) {
     decode(completed_flushes, p);
   }
   if (struct_v >= 6) {
     decode(auth_name, p);
+  }
+  if (struct_v >= 7) {
+    decode(client_metadata, p);
   }
   DECODE_FINISH(p);
 }
@@ -448,10 +553,9 @@ void session_info_t::dump(Formatter *f) const
   }
   f->close_section();
 
-  for (map<string, string>::const_iterator i = client_metadata.begin();
-      i != client_metadata.end(); ++i) {
-    f->dump_string(i->first.c_str(), i->second);
-  }
+  f->open_array_section("client_metadata");
+  client_metadata.dump(f);
+  f->close_section();
 }
 
 void session_info_t::generate_test_instances(list<session_info_t*>& ls)

@@ -84,6 +84,11 @@ private:
   int failed_reconnects;
   bool reconnect_evicting;  // true if I am waiting for evictions to complete
                             // before proceeding to reconnect_gather_finish
+  utime_t  reconnect_start;
+  set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
+
+  feature_bitset_t supported_features;
+  feature_bitset_t required_client_features;
 
   friend class MDSContinuation;
   friend class ServerContext;
@@ -107,8 +112,6 @@ public:
   void handle_osd_map();
 
   // -- sessions and recovery --
-  utime_t  reconnect_start;
-  set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
   bool waiting_for_reconnect(client_t c) const;
   void dump_reconnect_status(Formatter *f) const;
 
@@ -116,6 +119,7 @@ public:
   void _session_logged(Session *session, uint64_t state_seq, 
 		       bool open, version_t pv, interval_set<inodeno_t>& inos,version_t piv);
   version_t prepare_force_open_sessions(map<client_t,entity_inst_t> &cm,
+					map<client_t,client_metadata_t>& cmm,
 					map<client_t,pair<Session*,uint64_t> >& smap);
   void finish_force_open_sessions(const map<client_t,pair<Session*,uint64_t> >& smap,
 				  bool dec_import=true);
@@ -128,6 +132,9 @@ public:
   void journal_close_session(Session *session, int state, Context *on_safe);
   void reconnect_clients(MDSInternalContext *reconnect_done_);
   void handle_client_reconnect(class MClientReconnect *m);
+  void infer_supported_features(Session *session, client_metadata_t& client_metadata);
+  void update_required_client_features();
+
   //void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
   void reconnect_gather_finish();
   void reconnect_tick();

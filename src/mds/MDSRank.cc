@@ -1736,6 +1736,9 @@ void MDSRankDispatcher::handle_mds_map(
   if (objecter->get_client_incarnation() != incarnation)
     objecter->set_client_incarnation(incarnation);
 
+  if (oldmap->get_min_compat_client() != mdsmap->get_min_compat_client())
+    server->update_required_client_features();
+
   // for debug
   if (g_conf()->mds_dump_cache_on_map)
     mdcache->dump_cache();
@@ -2206,21 +2209,19 @@ void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f)
   // Dump sessions, decorated with recovery/replay status
   f->open_array_section("sessions");
   const ceph::unordered_map<entity_name_t, Session*> session_map = sessionmap.get_sessions();
-  for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
-       p != session_map.end();
-       ++p)  {
-    if (!p->first.is_client()) {
+  for (auto& p : session_map) {
+    if (!p.first.is_client()) {
       continue;
     }
 
-    Session *s = p->second;
+    Session *s = p.second;
 
     if (!filter.match(*s, std::bind(&Server::waiting_for_reconnect, server, std::placeholders::_1))) {
       continue;
     }
 
     f->open_object_section("session");
-    f->dump_int("id", p->first.num());
+    f->dump_int("id", p.first.num());
 
     f->dump_int("num_leases", s->leases.size());
     f->dump_int("num_caps", s->caps.size());
@@ -2228,13 +2229,10 @@ void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f)
     f->dump_string("state", s->get_state_name());
     f->dump_int("replay_requests", is_clientreplay() ? s->get_request_count() : 0);
     f->dump_unsigned("completed_requests", s->get_num_completed_requests());
-    f->dump_bool("reconnecting", server->waiting_for_reconnect(p->first.num()));
+    f->dump_bool("reconnecting", server->waiting_for_reconnect(p.first.num()));
     f->dump_stream("inst") << s->info.inst;
     f->open_object_section("client_metadata");
-    for (map<string, string>::const_iterator i = s->info.client_metadata.begin();
-         i != s->info.client_metadata.end(); ++i) {
-      f->dump_string(i->first.c_str(), i->second);
-    }
+    s->info.client_metadata.dump(f);
     f->close_section(); // client_metadata
     f->close_section(); //session
   }
@@ -2900,12 +2898,12 @@ bool MDSRank::evict_client(int64_t session_id,
   std::string tmp = ss.str();
   std::vector<std::string> cmd = {tmp};
 
-  auto kill_mds_session = [this, session_id, on_killed](){
+  auto kill_client_session = [this, session_id, wait, on_killed](){
     assert(mds_lock.is_locked_by_me());
     Session *session = sessionmap.get_session(
         entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
     if (session) {
-      if (on_killed) {
+      if (on_killed || !wait) {
         server->kill_session(session, on_killed);
       } else {
         C_SaferCond on_safe;
@@ -2927,7 +2925,7 @@ bool MDSRank::evict_client(int64_t session_id,
     }
   };
 
-  auto background_blacklist = [this, cmd](std::function<void ()> fn){
+  auto apply_blacklist = [this, cmd](std::function<void ()> fn){
     assert(mds_lock.is_locked_by_me());
 
     Context *on_blacklist_done = new FunctionContext([this, fn](int r) {
@@ -2950,17 +2948,13 @@ bool MDSRank::evict_client(int64_t session_id,
     monc->start_mon_command(cmd, {}, nullptr, nullptr, on_blacklist_done);
   };
 
-  auto blocking_blacklist = [this, cmd, background_blacklist](){
-    C_SaferCond inline_ctx;
-    background_blacklist([&inline_ctx](){inline_ctx.complete(0);});
-    mds_lock.Unlock();
-    inline_ctx.wait();
-    mds_lock.Lock();
-  };
-
   if (wait) {
     if (blacklist) {
-      blocking_blacklist();
+      C_SaferCond inline_ctx;
+      apply_blacklist([&inline_ctx](){inline_ctx.complete(0);});
+      mds_lock.Unlock();
+      inline_ctx.wait();
+      mds_lock.Lock();
     }
 
     // We dropped mds_lock, so check that session still exists
@@ -2971,12 +2965,12 @@ bool MDSRank::evict_client(int64_t session_id,
                  "for blacklist" << dendl;
       return true;
     }
-    kill_mds_session();
+    kill_client_session();
   } else {
     if (blacklist) {
-      background_blacklist(kill_mds_session);
+      apply_blacklist(kill_client_session);
     } else {
-      kill_mds_session();
+      kill_client_session();
     }
   }
 

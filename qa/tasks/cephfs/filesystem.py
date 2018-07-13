@@ -909,8 +909,8 @@ class Filesystem(MDSCluster):
 
         return self.json_asok(command, 'mds', mds_id)
 
-    def rank_asok(self, command, rank=0):
-        info = self.get_rank(rank=rank)
+    def rank_asok(self, command, rank=0, status=None):
+        info = self.get_rank(rank=rank, status=status)
         return self.json_asok(command, 'mds', info['name'])
 
     def read_cache(self, path, depth=None):

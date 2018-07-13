@@ -529,6 +529,18 @@ public:
       {
         fs->mds_map.set_session_autoclose((uint32_t)n);
       });
+    } else if (var == "min_compat_client") {
+      int vno = ceph_release_from_name(val.c_str());
+      if (vno <= 0) {
+	ss << "version " << val << " is not recognized";
+	return -EINVAL;
+      }
+      fsmap.modify_filesystem(
+	  fs->fscid,
+	  [vno](std::shared_ptr<Filesystem> fs)
+	{
+	  fs->mds_map.set_min_compat_client((uint8_t)vno);
+	});
     } else {
       ss << "unknown variable " << var;
       return -EINVAL;
