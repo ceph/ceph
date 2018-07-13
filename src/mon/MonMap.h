@@ -131,6 +131,10 @@ class MonMap {
     return (persistent_features | optional_features);
   }
 
+  void _add_ambiguous_addr(const string& name,
+			   entity_addr_t addr,
+			   int priority);
+
 public:
   void calc_legacy_ranks();
   void calc_addr_mons() {
@@ -196,8 +200,9 @@ public:
    * @param name Monitor name (i.e., 'foo' in 'mon.foo')
    * @param addr Monitor's public address
    */
-  void add(const string &name, const entity_addrvec_t &addrv) {
-    add(mon_info_t(name, addrv));
+  void add(const string &name, const entity_addrvec_t &addrv,
+	   int priority=0) {
+    add(mon_info_t(name, addrv, priority));
   }
 
   /**
