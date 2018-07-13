@@ -3635,7 +3635,7 @@ void RGWPutObj::execute()
 
     op_ret = put_data_and_throttle(filter, data, ofs, need_to_wait);
     if (op_ret < 0) {
-      if (!need_to_wait || op_ret != -EEXIST) {
+      if (op_ret != -EEXIST) {
         ldpp_dout(this, 20) << "processor->thottle_data() returned ret="
 			  << op_ret << dendl;
         goto done;
