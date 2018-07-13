@@ -662,13 +662,13 @@ void MonClient::_reopen_session(int rank)
 
 MonConnection& MonClient::_add_conn(unsigned rank, uint64_t global_id)
 {
-  auto peer = monmap.get_addr(rank);
-  auto conn = messenger->connect_to_mon(monmap.get_addrs(rank));
+  auto peer = monmap.get_addrs(rank);
+  auto conn = messenger->connect_to_mon(peer);
   MonConnection mc(cct, conn, global_id);
   auto inserted = pending_cons.insert(make_pair(peer, move(mc)));
   ldout(cct, 10) << "picked mon." << monmap.get_name(rank)
                  << " con " << conn
-                 << " addr " << conn->get_peer_addr()
+                 << " addr " << peer
                  << dendl;
   return inserted.first->second;
 }
@@ -707,19 +707,23 @@ bool MonClient::ms_handle_reset(Connection *con)
     return false;
 
   if (_hunting()) {
-    if (pending_cons.count(con->get_peer_addr())) {
-      ldout(cct, 10) << __func__ << " hunted mon " << con->get_peer_addr() << dendl;
+    if (pending_cons.count(con->get_peer_addrs())) {
+      ldout(cct, 10) << __func__ << " hunted mon " << con->get_peer_addrs()
+		     << dendl;
     } else {
-      ldout(cct, 10) << __func__ << " stray mon " << con->get_peer_addr() << dendl;
+      ldout(cct, 10) << __func__ << " stray mon " << con->get_peer_addrs()
+		     << dendl;
     }
     return true;
   } else {
     if (active_con && con == active_con->get_con()) {
-      ldout(cct, 10) << __func__ << " current mon " << con->get_peer_addr() << dendl;
+      ldout(cct, 10) << __func__ << " current mon " << con->get_peer_addrs()
+		     << dendl;
       _reopen_session();
       return false;
     } else {
-      ldout(cct, 10) << "ms_handle_reset stray mon " << con->get_peer_addr() << dendl;
+      ldout(cct, 10) << "ms_handle_reset stray mon " << con->get_peer_addrs()
+		     << dendl;
       return true;
     }
   }

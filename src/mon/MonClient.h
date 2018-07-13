@@ -152,7 +152,7 @@ private:
   Messenger *messenger;
 
   std::unique_ptr<MonConnection> active_con;
-  std::map<entity_addr_t, MonConnection> pending_cons;
+  std::map<entity_addrvec_t, MonConnection> pending_cons;
 
   EntityName entity_name;
 
@@ -219,7 +219,7 @@ private:
   void _add_conns(uint64_t global_id);
   void _send_mon_message(Message *m);
 
-  std::map<entity_addr_t, MonConnection>::iterator _find_pending_con(
+  std::map<entity_addrvec_t, MonConnection>::iterator _find_pending_con(
     const ConnectionRef& con) {
     for (auto i = pending_cons.begin(); i != pending_cons.end(); ++i) {
       if (i->second.get_con() == con) {
