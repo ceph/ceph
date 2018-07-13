@@ -5582,9 +5582,6 @@ bool PG::append_log_entries_update_missing(
   assert(entries.begin()->version > info.last_update);
 
   PGLogEntryHandler rollbacker{this, &t};
-  if (roll_forward_to) {
-    pg_log.roll_forward(&rollbacker);
-  }
   bool invalidate_stats =
     pg_log.append_new_log_entries(info.last_backfill,
 				  info.last_backfill_bitwise,
