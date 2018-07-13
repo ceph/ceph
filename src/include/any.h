@@ -15,7 +15,18 @@
 #ifndef INCLUDE_STATIC_ANY
 #define INCLUDE_STATIC_ANY
 
+#if __has_include(<any>)
 #include <any>
+namespace ceph {
+  using std::bad_any_cast;
+}
+#else
+#include <boost/any.hpp>
+namespace ceph {
+  using boost::bad_any_cast;
+}
+#endif
+
 #include <cstddef>
 #include <initializer_list>
 #include <memory>
@@ -298,7 +309,7 @@ public:
   // only stores the decayed type. I suspect this was to get around
   // the question of whether, for a std::any holding a T&,
   // std::any_cast<T> should return a copy or throw
-  // std::bad_any_cast.
+  // ceph::bad_any_cast.
   //
   // I think the appropriate response in that case would be to make a
   // copy if the type supports it and fail otherwise. Once a concrete
@@ -453,7 +464,7 @@ inline T any_cast(_any::base<U, V>& a) {
   if (p) {
     return static_cast<T>(*p);
   }
-  throw std::bad_any_cast();
+  throw ceph::bad_any_cast();
 }
 
 template<typename T, typename U, typename V>
@@ -466,7 +477,7 @@ inline T any_cast(const _any::base<U, V>& a) {
   if (p) {
     return static_cast<T>(*p);
   }
-  throw std::bad_any_cast();
+  throw ceph::bad_any_cast();
 }
 
 template<typename T, typename U, typename V>
@@ -478,7 +489,7 @@ any_cast(_any::base<U, V>&& a) {
   if (p) {
     return std::move((*p));
   }
-  throw std::bad_any_cast();
+  throw ceph::bad_any_cast();
 }
 
 template<typename T, typename U, typename V>
@@ -488,7 +499,7 @@ any_cast(_any::base<U, V>&& a) {
   if (p) {
     return static_cast<T>(*p);
   }
-  throw std::bad_any_cast();
+  throw ceph::bad_any_cast();
 }
 
 // `immobile_any`
