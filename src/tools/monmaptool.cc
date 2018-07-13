@@ -218,8 +218,6 @@ int main(int argc, const char **argv)
 	cerr << me << ": invalid ip:port '" << *i << "'" << std::endl;
 	return -1;
       }
-      if (addr.get_port() == 0)
-	addr.set_port(CEPH_MON_PORT_LEGACY);
       add[name] = addr;
       modified = true;
       i = args.erase(i);
@@ -349,16 +347,42 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
-  for (map<string,entity_addr_t>::iterator p = add.begin(); p != add.end(); ++p) {
-    if (monmap.contains(p->first)) {
-      cerr << me << ": map already contains mon." << p->first << std::endl;
+  for (auto& p : add) {
+    entity_addr_t addr = p.second;
+    entity_addrvec_t addrs;
+    if (monmap.contains(p.first)) {
+      cerr << me << ": map already contains mon." << p.first << std::endl;
       usage();
     }
-    if (monmap.contains(p->second)) {
-      cerr << me << ": map already contains " << p->second << std::endl;
+    if (addr.get_port() == 0) {
+      if (monmap.persistent_features.contains_all(
+	    ceph::features::mon::FEATURE_NAUTILUS)) {
+	addr.set_type(entity_addr_t::TYPE_MSGR2);
+	addr.set_port(CEPH_MON_PORT_IANA);
+	addrs.v.push_back(addr);
+	addr.set_type(entity_addr_t::TYPE_LEGACY);
+	addr.set_port(CEPH_MON_PORT_LEGACY);
+	addrs.v.push_back(addr);
+      } else {
+	addr.set_type(entity_addr_t::TYPE_LEGACY);
+	addr.set_port(CEPH_MON_PORT_LEGACY);
+	addrs.v.push_back(addr);
+      }
+    } else if (addr.get_port() == CEPH_MON_PORT_LEGACY) {
+      addr.set_type(entity_addr_t::TYPE_LEGACY);
+      addrs.v.push_back(addr);
+    } else {
+      if (monmap.persistent_features.contains_all(
+	    ceph::features::mon::FEATURE_NAUTILUS)) {
+	addr.set_type(entity_addr_t::TYPE_MSGR2);
+      }
+      addrs.v.push_back(addr);
+    }
+    if (monmap.contains(addrs)) {
+      cerr << me << ": map already contains " << addrs << std::endl;
       usage();
     }
-    monmap.add(p->first, p->second);
+    monmap.add(p.first, addrs);
   }
   for (auto& p : rm) {
     cout << me << ": removing " << p << std::endl;
