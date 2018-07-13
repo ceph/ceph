@@ -17,9 +17,9 @@ UMOUNT_TIMEOUT = 300
 
 
 class KernelMount(CephFSMount):
-    def __init__(self, mons, test_dir, client_id, client_remote,
+    def __init__(self, ctx, mons, test_dir, client_id, client_remote,
                  ipmi_user, ipmi_password, ipmi_domain):
-        super(KernelMount, self).__init__(test_dir, client_id, client_remote)
+        super(KernelMount, self).__init__(ctx, test_dir, client_id, client_remote)
         self.mons = mons
 
         self.mounted = False
@@ -46,6 +46,8 @@ class KernelMount(CephFSMount):
         )
 
     def mount(self, mount_path=None, mount_fs_name=None):
+        self.setupfs(name=mount_fs_name)
+
         log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
             id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
 

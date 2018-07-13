@@ -124,7 +124,7 @@ public:
     }
   }
   void decode(bufferlist::const_iterator &p);
-  void set_client_metadata(std::map<std::string, std::string> const &meta);
+  void set_client_metadata(const client_metadata_t& meta);
   const std::string& get_human_name() const {return human_name;}
 
   // Ephemeral state for tracking progress of capability recalls
@@ -554,11 +554,16 @@ public:
 	s.insert(p->second);
   }
 
-  void replay_open_sessions(map<client_t,entity_inst_t>& client_map) {
+  void replay_open_sessions(map<client_t,entity_inst_t>& client_map,
+			    map<client_t,client_metadata_t>& client_metadata_map) {
     for (map<client_t,entity_inst_t>::iterator p = client_map.begin(); 
 	 p != client_map.end(); 
 	 ++p) {
       Session *s = get_or_add_session(p->second);
+      auto q = client_metadata_map.find(p->first);
+      if (q != client_metadata_map.end())
+	s->info.client_metadata.merge(q->second);
+
       set_state(s, Session::STATE_OPEN);
       replay_dirty_session(s);
     }
