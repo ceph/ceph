@@ -336,7 +336,7 @@ int main(int argc, const char **argv)
       cout << "initial_members " << initial_members << ", filtering seed monmap" << std::endl;
       set<entity_addr_t> removed;
       monmap.set_initial_members(g_ceph_context, initial_members,
-				 string(), entity_addr_t(),
+				 string(), entity_addrvec_t(),
 				 &removed);
       cout << "removed " << removed << std::endl;
     }
