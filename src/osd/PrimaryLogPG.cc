@@ -3981,7 +3981,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   ctx->register_on_commit(
     [m, ctx, this](){
       if (ctx->op)
-	log_op_stats(ctx->op, ctx->bytes_written, ctx->bytes_read);
+	log_op_stats(*ctx->op, ctx->bytes_written, ctx->bytes_read);
 
       if (m && !ctx->sent_reply) {
 	MOSDOpReply *reply = ctx->reply;
@@ -4047,15 +4047,15 @@ void PrimaryLogPG::reply_ctx(OpContext *ctx, int r, eversion_t v, version_t uv)
   close_op_ctx(ctx);
 }
 
-void PrimaryLogPG::log_op_stats(const OpRequestRef op,
+void PrimaryLogPG::log_op_stats(const OpRequest& op,
 				const uint64_t inb,
 				const uint64_t outb)
 {
-  const MOSDOp* const m = static_cast<const MOSDOp*>(op->get_req());
+  const MOSDOp* const m = static_cast<const MOSDOp*>(op.get_req());
   const utime_t now = ceph_clock_now();
 
   const utime_t latency = now - m->get_recv_stamp();
-  const utime_t process_latency = now - op->get_dequeued_time();
+  const utime_t process_latency = now - op.get_dequeued_time();
 
   osd->logger->inc(l_osd_op);
 
@@ -4064,7 +4064,7 @@ void PrimaryLogPG::log_op_stats(const OpRequestRef op,
   osd->logger->tinc(l_osd_op_lat, latency);
   osd->logger->tinc(l_osd_op_process_lat, process_latency);
 
-  if (op->may_read() && op->may_write()) {
+  if (op.may_read() && op.may_write()) {
     osd->logger->inc(l_osd_op_rw);
     osd->logger->inc(l_osd_op_rw_inb, inb);
     osd->logger->inc(l_osd_op_rw_outb, outb);
@@ -4072,13 +4072,13 @@ void PrimaryLogPG::log_op_stats(const OpRequestRef op,
     osd->logger->hinc(l_osd_op_rw_lat_inb_hist, latency.to_nsec(), inb);
     osd->logger->hinc(l_osd_op_rw_lat_outb_hist, latency.to_nsec(), outb);
     osd->logger->tinc(l_osd_op_rw_process_lat, process_latency);
-  } else if (op->may_read()) {
+  } else if (op.may_read()) {
     osd->logger->inc(l_osd_op_r);
     osd->logger->inc(l_osd_op_r_outb, outb);
     osd->logger->tinc(l_osd_op_r_lat, latency);
     osd->logger->hinc(l_osd_op_r_lat_outb_hist, latency.to_nsec(), outb);
     osd->logger->tinc(l_osd_op_r_process_lat, process_latency);
-  } else if (op->may_write() || op->may_cache()) {
+  } else if (op.may_write() || op.may_cache()) {
     osd->logger->inc(l_osd_op_w);
     osd->logger->inc(l_osd_op_w_inb, inb);
     osd->logger->tinc(l_osd_op_w_lat, latency);
@@ -8481,7 +8481,7 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
 
   if (result >= 0) {
     if (!ctx->ignore_log_op_stats) {
-      log_op_stats(ctx->op, ctx->bytes_written, ctx->bytes_read);
+      log_op_stats(*ctx->op, ctx->bytes_written, ctx->bytes_read);
 
       publish_stats_to_osd();
     }
