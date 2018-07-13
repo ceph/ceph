@@ -360,13 +360,13 @@ int main(int argc, const char **argv)
     }
     monmap.add(p->first, p->second);
   }
-  for (list<string>::iterator p = rm.begin(); p != rm.end(); ++p) {
-    cout << me << ": removing " << *p << std::endl;
-    if (!monmap.contains(*p)) {
-      cerr << me << ": map does not contain " << *p << std::endl;
+  for (auto& p : rm) {
+    cout << me << ": removing " << p << std::endl;
+    if (!monmap.contains(p)) {
+      cerr << me << ": map does not contain " << p << std::endl;
       usage();
     }
-    monmap.remove(*p);
+    monmap.remove(p);
   }
 
   if (handle_features(features, monmap)) {
