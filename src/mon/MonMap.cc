@@ -399,20 +399,23 @@ int MonMap::init_with_hosts(const std::string& hostlist,
 
 void MonMap::set_initial_members(CephContext *cct,
 				 list<std::string>& initial_members,
-				 string my_name, const entity_addr_t& my_addr,
+				 string my_name,
+				 const entity_addrvec_t& my_addrs,
 				 set<entity_addr_t> *removed)
 {
   // remove non-initial members
   unsigned i = 0;
   while (i < size()) {
     string n = get_name(i);
-    if (std::find(initial_members.begin(), initial_members.end(), n) != initial_members.end()) {
+    if (std::find(initial_members.begin(), initial_members.end(), n)
+	!= initial_members.end()) {
       lgeneric_dout(cct, 1) << " keeping " << n << " " << get_addrs(i) << dendl;
       i++;
       continue;
     }
 
-    lgeneric_dout(cct, 1) << " removing " << get_name(i) << " " << get_addrs(i) << dendl;
+    lgeneric_dout(cct, 1) << " removing " << get_name(i) << " " << get_addrs(i)
+			  << dendl;
     if (removed) {
       for (auto& j : get_addrs(i).v) {
 	removed->insert(j);
@@ -423,11 +426,11 @@ void MonMap::set_initial_members(CephContext *cct,
   }
 
   // add missing initial members
-  for (list<string>::iterator p = initial_members.begin(); p != initial_members.end(); ++p) {
-    if (!contains(*p)) {
-      if (*p == my_name) {
-	lgeneric_dout(cct, 1) << " adding self " << *p << " " << my_addr << dendl;
-	add(*p, my_addr);
+  for (auto& p : initial_members) {
+    if (!contains(p)) {
+      if (p == my_name) {
+	lgeneric_dout(cct, 1) << " adding self " << p << " " << my_addr << dendl;
+	add(p, my_addrs);
       } else {
 	entity_addr_t a;
 	a.set_type(entity_addr_t::TYPE_LEGACY);
@@ -437,10 +440,10 @@ void MonMap::set_initial_members(CephContext *cct,
 	  if (!contains(a))
 	    break;
 	}
-	lgeneric_dout(cct, 1) << " adding " << *p << " " << a << dendl;
-	add(*p, a);
+	lgeneric_dout(cct, 1) << " adding " << p << " " << a << dendl;
+	add(p, entity_addrvec_t(a));
       }
-      ceph_assert(contains(*p));
+      ceph_assert(contains(p));
     }
   }
   calc_legacy_ranks();

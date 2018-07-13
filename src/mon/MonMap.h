@@ -412,7 +412,8 @@ public:
    */
   void set_initial_members(CephContext *cct,
 			   list<std::string>& initial_members,
-			   string my_name, const entity_addr_t& my_addr,
+			   string my_name,
+			   const entity_addrvec_t& my_addrs,
 			   set<entity_addr_t> *removed);
 
   void print(ostream& out) const;
