@@ -459,12 +459,32 @@ void Beacon::notify_health(MDSRank const *mds)
   // Detect MDS_HEALTH_SLOW_REQUEST condition
   {
     int slow = mds->get_mds_slow_req_count();
-    dout(20) << slow << " slow request found" << dendl;
     if (slow) {
+      dout(20) << slow << " slow request found" << dendl;
       std::ostringstream oss;
-      oss << slow << " slow requests are blocked > " << g_conf->mds_op_complaint_time << " sec";
+      oss << slow << " slow requests are blocked > " << g_conf->mds_op_complaint_time << " secs";
 
       MDSHealthMetric m(MDS_HEALTH_SLOW_REQUEST, HEALTH_WARN, oss.str());
+      health.metrics.push_back(m);
+    }
+  }
+
+  {
+    auto complaint_time = g_conf->osd_op_complaint_time;
+    auto now = ceph::coarse_mono_clock::now();
+    auto cutoff = now - ceph::make_timespan(complaint_time);
+
+    std::string count;
+    ceph::coarse_mono_time oldest;
+    if (MDSIOContextBase::check_ios_in_flight(cutoff, count, oldest)) {
+      dout(20) << count << " slow metadata IOs found" << dendl;
+
+      auto oldest_secs = std::chrono::duration<double>(now - oldest).count();
+      std::ostringstream oss;
+      oss << count << " slow metadata IOs are blocked > " << complaint_time
+	  << " secs, oldest blocked for " << (int64_t)oldest_secs << " secs";
+
+      MDSHealthMetric m(MDS_HEALTH_SLOW_METADATA_IO, HEALTH_WARN, oss.str());
       health.metrics.push_back(m);
     }
   }

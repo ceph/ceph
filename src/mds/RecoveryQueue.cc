@@ -41,8 +41,12 @@ public:
   uint64_t size;
   utime_t mtime;
 
-  C_MDC_Recover(RecoveryQueue *rq_, CInode *i) : rq(rq_), in(i), size(0) {
+  C_MDC_Recover(RecoveryQueue *rq_, CInode *i) :
+    MDSIOContextBase(false), rq(rq_), in(i), size(0) {
     assert(rq != NULL);
+  }
+  void print(ostream& out) const override {
+    out << "file_recover(" << in->ino() << ")";
   }
 };
 
