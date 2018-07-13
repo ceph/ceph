@@ -1818,7 +1818,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
       monmap->contains(m->name) &&
       monmap->get_addr(m->name).is_blank_ip()) {
     dout(1) << " learned initial mon " << m->name << " addr " << m->get_source_addr() << dendl;
-    monmap->set_addr(m->name, m->get_source_addr());
+    monmap->set_addrvec(m->name, m->get_source_addrs());
 
     bootstrap();
     return;
