@@ -1570,6 +1570,9 @@ public:
 	fin->complete(r);
     }
   }
+  void print(ostream& out) const override {
+    out << "dirfrag_fetch_more(" << dir->dirfrag() << ")";
+  }
 };
 
 class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
@@ -1596,6 +1599,9 @@ public:
       if (fin)
 	fin->complete(r);
     }
+  }
+  void print(ostream& out) const override {
+    out << "dirfrag_fetch(" << dir->dirfrag() << ")";
   }
 };
 
@@ -2095,6 +2101,9 @@ public:
   C_IO_Dir_Committed(CDir *d, version_t v) : CDirIOContext(d), version(v) { }
   void finish(int r) override {
     dir->_committed(r, version);
+  }
+  void print(ostream& out) const override {
+    out << "dirfrag_commit(" << dir->dirfrag() << ")";
   }
 };
 
