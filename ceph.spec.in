@@ -1448,7 +1448,7 @@ fi
     /usr/lib/systemd/systemd-sysctl %{_sysctldir}/90-ceph-osd.conf > /dev/null 2>&1 || :
 %endif
 # work around https://tracker.ceph.com/issues/24903
-chown ceph:ceph /var/lib/ceph/osd/*/block* 2>&1 > /dev/null || :
+chown -h ceph:ceph /var/lib/ceph/osd/*/block* 2>&1 > /dev/null || :
 
 %preun osd
 %if 0%{?suse_version}
