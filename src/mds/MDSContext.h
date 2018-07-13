@@ -17,6 +17,8 @@
 #define MDS_CONTEXT_H
 
 #include "include/Context.h"
+#include "include/elist.h"
+#include "common/ceph_time.h"
 
 class MDSRank;
 
@@ -70,15 +72,32 @@ protected:
   MDSRank *mds;
   Context *fin;
   MDSRank *get_mds() override;
+  void finish(int r) override;
 public:
   MDSInternalContextWrapper(MDSRank *m, Context *c) : mds(m), fin(c) {}
-  void finish(int r) override;
 };
 
 class MDSIOContextBase : public MDSContext
 {
 public:
+  MDSIOContextBase(bool track=true);
+  virtual ~MDSIOContextBase();
+  MDSIOContextBase(const MDSIOContextBase&) = delete;
+  MDSIOContextBase& operator=(const MDSIOContextBase&) = delete;
+
   void complete(int r) override;
+
+  virtual void print(ostream& out) const = 0;
+
+  static bool check_ios_in_flight(ceph::coarse_mono_time cutoff,
+				  std::string& slow_count,
+				  ceph::coarse_mono_time& oldest);
+private:
+  ceph::coarse_mono_time created_at;
+  elist<MDSIOContextBase*>::item list_item;
+
+  static elist<MDSIOContextBase*> ctx_list;
+  static ceph::spinlock ctx_list_lock;
 };
 
 /**
@@ -95,6 +114,9 @@ public:
   void complete(int r) final;
   void set_write_pos(uint64_t wp) { write_pos = wp; }
   virtual void pre_finish(int r) {}
+  void print(ostream& out) const override {
+    out << "log_event(" << write_pos << ")";
+  }
 };
 
 /**
@@ -126,6 +148,9 @@ protected:
 public:
   MDSIOContextWrapper(MDSRank *m, Context *c) : mds(m), fin(c) {}
   void finish(int r) override;
+  void print(ostream& out) const override {
+    out << "io_context_wrapper(" << fin << ")";
+  }
 };
 
 /**
@@ -166,6 +191,9 @@ public:
     }
   }
   void complete(int r) final;
+  void print(ostream& out) const override {
+    out << "io_wrapper(" << wrapped << ")";
+  }
 };
 
 

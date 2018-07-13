@@ -80,6 +80,10 @@ public:
     assert(r == 0 || r == -ENOENT);
     sm->_purge_stray_purged(dn, only_head);
   }
+  void print(ostream& out) const override {
+    CInode *in = dn->get_projected_linkage()->get_inode();
+    out << "purge_stray(" << in->ino() << ")";
+  }
 };
 
 
