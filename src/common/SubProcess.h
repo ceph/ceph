@@ -17,6 +17,10 @@
 #ifndef SUB_PROCESS_H
 #define SUB_PROCESS_H
 
+#if defined(__FreeBSD__) || defined(__APPLE__)
+#include <signal.h>
+#endif
+
 #include <sys/wait.h>
 #include <sstream>
 #include <vector>
