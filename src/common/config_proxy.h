@@ -5,6 +5,7 @@
 #include <type_traits>
 #include "common/config.h"
 #include "common/config_fwd.h"
+#include "common/config_obs.h"
 #include "common/config_obs_mgr.h"
 #include "common/Mutex.h"
 

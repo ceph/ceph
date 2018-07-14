@@ -635,6 +635,7 @@ else()
 endif()
 
 add_library(common-objs OBJECT ${libcommon_files})
+
 set(ceph_common_objs
   $<TARGET_OBJECTS:common_buffer_obj>
   $<TARGET_OBJECTS:common_texttable_obj>
