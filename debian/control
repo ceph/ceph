@@ -394,6 +394,7 @@ Package: ceph-common
 Architecture: linux-any
 Depends: librbd1 (= ${binary:Version}),
          python-cephfs (= ${binary:Version}),
+         python-ceph-argparse (= ${binary:Version}),
          python-prettytable,
          python-rados (= ${binary:Version}),
          python-rbd (= ${binary:Version}),
@@ -962,6 +963,7 @@ Architecture: linux-any
 Section: python
 Depends: libcephfs2 (= ${binary:Version}),
          python-rados (= ${binary:Version}),
+         python-ceph-argparse (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
@@ -997,6 +999,7 @@ Architecture: linux-any
 Section: python
 Depends: libcephfs2 (= ${binary:Version}),
          python3-rados (= ${binary:Version}),
+         python3-ceph-argparse (= ${binary:Version}),
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends},
@@ -1024,6 +1027,21 @@ Description: Python 3 libraries for the Ceph libcephfs library
  CephFS file system client library.
  .
  This package contains the debugging symbols for python3-cephfs.
+
+Package: python-ceph-argparse
+Architecture: linux-any
+Section: python
+Depends: ${misc:Depends},
+         ${python:Depends},
+Replaces: ceph-common (<< 14.0.0)
+Breaks: ceph-common (<< 14.0.0)
+Description: Python 2 utility libraries for Ceph CLI
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains types and routines for Python 2 used by the
+ Ceph CLI as well as the RESTful interface.
 
 Package: python3-ceph-argparse
 Architecture: linux-any
