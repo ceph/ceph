@@ -199,7 +199,7 @@ public:
     static const int STATE_DIRTYDFT =	 (1<<5);  // dirty dirfragtree
 
     //version_t  dirv;
-    fnode_t fnode;
+    CDir::fnode_const_ptr fnode;
     __u32 state;
     __u32 nfull, nremote, nnull;
 
@@ -245,7 +245,7 @@ public:
     }
 
     void print(dirfrag_t dirfrag, ostream& out) const {
-      out << "dirlump " << dirfrag << " v " << fnode.version
+      out << "dirlump " << dirfrag << " v " << fnode->version
 	  << " state " << state
 	  << " num " << nfull << "/" << nremote << "/" << nnull
 	  << std::endl;
@@ -524,31 +524,30 @@ private:
   }
   
   dirlump& add_dir(CDir *dir, bool dirty, bool complete=false) {
-    return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
+    return add_dir(dir->dirfrag(), dir->get_projected_fnode(),
 		   dirty, complete);
   }
   dirlump& add_new_dir(CDir *dir) {
-    return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
+    return add_dir(dir->dirfrag(), dir->get_projected_fnode(),
 		   true, true, true); // dirty AND complete AND new
   }
   dirlump& add_import_dir(CDir *dir) {
     // dirty=false would be okay in some cases
-    return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
+    return add_dir(dir->dirfrag(), dir->get_projected_fnode(),
 		   dir->is_dirty(), dir->is_complete(), false, true, dir->is_dirty_dft());
   }
   dirlump& add_fragmented_dir(CDir *dir, bool dirty, bool dirtydft) {
-    return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
+    return add_dir(dir->dirfrag(), dir->get_projected_fnode(),
 		   dirty, false, false, false, dirtydft);
   }
-  dirlump& add_dir(dirfrag_t df, const fnode_t *pf, version_t pv, bool dirty,
+  dirlump& add_dir(dirfrag_t df, const CDir::fnode_const_ptr& pf, bool dirty,
 		   bool complete=false, bool isnew=false,
 		   bool importing=false, bool dirty_dft=false) {
     if (lump_map.count(df) == 0)
       lump_order.push_back(df);
 
     dirlump& l = lump_map[df];
-    l.fnode = *pf;
-    l.fnode.version = pv;
+    l.fnode = pf;
     if (complete) l.mark_complete();
     if (dirty) l.mark_dirty();
     if (isnew) l.mark_new();

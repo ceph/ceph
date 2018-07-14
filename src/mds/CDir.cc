@@ -46,6 +46,8 @@
 int CDir::num_frozen_trees = 0;
 int CDir::num_freezing_trees = 0;
 
+CDir::fnode_const_ptr CDir::empty_fnode = CDir::allocate_fnode();
+
 class CDirContext : public MDSContext
 {
 protected:
@@ -136,22 +138,22 @@ ostream& operator<<(ostream& out, const CDir& dir)
   if (dir.state_test(CDir::STATE_ASSIMRSTAT)) out << "|assimrstat";
 
   // fragstat
-  out << " " << dir.fnode.fragstat;
-  if (!(dir.fnode.fragstat == dir.fnode.accounted_fragstat))
-    out << "/" << dir.fnode.accounted_fragstat;
+  out << " " << dir.get_fnode()->fragstat;
+  if (!(dir.get_fnode()->fragstat == dir.get_fnode()->accounted_fragstat))
+    out << "/" << dir.get_fnode()->accounted_fragstat;
   if (g_conf()->mds_debug_scatterstat && dir.is_projected()) {
-    const fnode_t *pf = dir.get_projected_fnode();
+    const auto& pf = dir.get_projected_fnode();
     out << "->" << pf->fragstat;
     if (!(pf->fragstat == pf->accounted_fragstat))
       out << "/" << pf->accounted_fragstat;
   }
   
   // rstat
-  out << " " << dir.fnode.rstat;
-  if (!(dir.fnode.rstat == dir.fnode.accounted_rstat))
-    out << "/" << dir.fnode.accounted_rstat;
+  out << " " << dir.get_fnode()->rstat;
+  if (!(dir.get_fnode()->rstat == dir.get_fnode()->accounted_rstat))
+    out << "/" << dir.get_fnode()->accounted_rstat;
   if (g_conf()->mds_debug_scatterstat && dir.is_projected()) {
-    const fnode_t *pf = dir.get_projected_fnode();
+    const auto& pf = dir.get_projected_fnode();
     out << "->" << pf->rstat;
     if (!(pf->rstat == pf->accounted_rstat))
       out << "/" << pf->accounted_rstat;
@@ -208,7 +210,8 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
 {
   // auth
   ceph_assert(in->is_dir());
-  if (auth) state_set(STATE_AUTH);
+  if (auth)
+    state_set(STATE_AUTH);
 }
 
 /**
@@ -248,27 +251,27 @@ bool CDir::check_rstats(bool scrub)
 
   bool good = true;
   // fragstat
-  if(!frag_info.same_sums(fnode.fragstat)) {
+  if(!frag_info.same_sums(fnode->fragstat)) {
     dout(1) << "mismatch between head items and fnode.fragstat! printing dentries" << dendl;
     dout(1) << "get_num_head_items() = " << get_num_head_items()
-             << "; fnode.fragstat.nfiles=" << fnode.fragstat.nfiles
-             << " fnode.fragstat.nsubdirs=" << fnode.fragstat.nsubdirs << dendl;
+             << "; fnode.fragstat.nfiles=" << fnode->fragstat.nfiles
+             << " fnode.fragstat.nsubdirs=" << fnode->fragstat.nsubdirs << dendl;
     good = false;
   } else {
     dout(20) << "get_num_head_items() = " << get_num_head_items()
-             << "; fnode.fragstat.nfiles=" << fnode.fragstat.nfiles
-             << " fnode.fragstat.nsubdirs=" << fnode.fragstat.nsubdirs << dendl;
+             << "; fnode.fragstat.nfiles=" << fnode->fragstat.nfiles
+             << " fnode.fragstat.nsubdirs=" << fnode->fragstat.nsubdirs << dendl;
   }
 
   // rstat
-  if (!nest_info.same_sums(fnode.rstat)) {
+  if (!nest_info.same_sums(fnode->rstat)) {
     dout(1) << "mismatch between child accounted_rstats and my rstats!" << dendl;
     dout(1) << "total of child dentrys: " << nest_info << dendl;
-    dout(1) << "my rstats:              " << fnode.rstat << dendl;
+    dout(1) << "my rstats:              " << fnode->rstat << dendl;
     good = false;
   } else {
     dout(20) << "total of child dentrys: " << nest_info << dendl;
-    dout(20) << "my rstats:              " << fnode.rstat << dendl;
+    dout(20) << "my rstats:              " << fnode->rstat << dendl;
   }
 
   if (!good) {
@@ -283,11 +286,11 @@ bool CDir::check_rstats(bool scrub)
 	}
       }
 
-      ceph_assert(frag_info.nfiles == fnode.fragstat.nfiles);
-      ceph_assert(frag_info.nsubdirs == fnode.fragstat.nsubdirs);
-      ceph_assert(nest_info.rbytes == fnode.rstat.rbytes);
-      ceph_assert(nest_info.rfiles == fnode.rstat.rfiles);
-      ceph_assert(nest_info.rsubdirs == fnode.rstat.rsubdirs);
+      ceph_assert(frag_info.nfiles == fnode->fragstat.nfiles);
+      ceph_assert(frag_info.nsubdirs == fnode->fragstat.nsubdirs);
+      ceph_assert(nest_info.rbytes == fnode->rstat.rbytes);
+      ceph_assert(nest_info.rfiles == fnode->rstat.rfiles);
+      ceph_assert(nest_info.rsubdirs == fnode->rstat.rsubdirs);
     }
   }
   dout(10) << "check_rstats complete on " << this << dendl;
@@ -858,22 +861,24 @@ void CDir::steal_dentry(CDentry *dn)
   } else if (dn->last == CEPH_NOSNAP) {
       num_head_items++;
 
+    auto _fnode = _get_fnode();
+
     if (dn->get_linkage()->is_primary()) {
       CInode *in = dn->get_linkage()->get_inode();
       const auto& pi = in->get_projected_inode();
       if (in->is_dir()) {
-	fnode.fragstat.nsubdirs++;
+	_fnode->fragstat.nsubdirs++;
 	if (in->item_pop_lru.is_on_list())
 	  pop_lru_subdirs.push_back(&in->item_pop_lru);
       } else {
-	fnode.fragstat.nfiles++;
+	_fnode->fragstat.nfiles++;
       }
-      fnode.rstat.rbytes += pi->accounted_rstat.rbytes;
-      fnode.rstat.rfiles += pi->accounted_rstat.rfiles;
-      fnode.rstat.rsubdirs += pi->accounted_rstat.rsubdirs;
-      fnode.rstat.rsnaps += pi->accounted_rstat.rsnaps;
-      if (pi->accounted_rstat.rctime > fnode.rstat.rctime)
-	fnode.rstat.rctime = pi->accounted_rstat.rctime;
+      _fnode->rstat.rbytes += pi->accounted_rstat.rbytes;
+      _fnode->rstat.rfiles += pi->accounted_rstat.rfiles;
+      _fnode->rstat.rsubdirs += pi->accounted_rstat.rsubdirs;
+      _fnode->rstat.rsnaps += pi->accounted_rstat.rsnaps;
+      if (pi->accounted_rstat.rctime > fnode->rstat.rctime)
+	_fnode->rstat.rctime = pi->accounted_rstat.rctime;
 
       if (in->is_any_caps())
 	adjust_num_inodes_with_caps(1);
@@ -883,9 +888,9 @@ void CDir::steal_dentry(CDentry *dn)
 	dirty_rstat_inodes.push_back(&in->dirty_rstat_item);
     } else if (dn->get_linkage()->is_remote()) {
       if (dn->get_linkage()->get_remote_d_type() == DT_DIR)
-	fnode.fragstat.nsubdirs++;
+	_fnode->fragstat.nsubdirs++;
       else
-	fnode.fragstat.nfiles++;
+	_fnode->fragstat.nfiles++;
     }
   } else {
     num_snap_items++;
@@ -1009,10 +1014,10 @@ void CDir::split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, b
 
   nest_info_t rstatdiff;
   frag_info_t fragstatdiff;
-  if (fnode.accounted_rstat.version == rstat_version)
-    rstatdiff.add_delta(fnode.accounted_rstat, fnode.rstat);
-  if (fnode.accounted_fragstat.version == dirstat_version)
-    fragstatdiff.add_delta(fnode.accounted_fragstat, fnode.fragstat);
+  if (fnode->accounted_rstat.version == rstat_version)
+    rstatdiff.add_delta(fnode->accounted_rstat, fnode->rstat);
+  if (fnode->accounted_fragstat.version == dirstat_version)
+    fragstatdiff.add_delta(fnode->accounted_fragstat, fnode->fragstat);
   dout(10) << " rstatdiff " << rstatdiff << " fragstatdiff " << fragstatdiff << dendl;
 
   map<string_snap_t, MDSContext::vec > dentry_waiters;
@@ -1024,7 +1029,6 @@ void CDir::split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, b
     CDir *f = new CDir(inode, fg, cache, is_auth());
     f->state_set(state & (MASK_STATE_FRAGMENT_KEPT | STATE_COMPLETE));
     f->get_replicas() = get_replicas();
-    f->set_version(get_version());
     f->pop_me = pop_me;
     f->pop_me.scale(fac);
 
@@ -1074,21 +1078,25 @@ void CDir::split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, b
   // FIXME: handle dirty old rstat
 
   // fix up new frag fragstats
-  for (int i=0; i<n; i++) {
+  for (int i = 0; i < n; i++) {
     CDir *f = subfrags[i];
-    f->fnode.rstat.version = rstat_version;
-    f->fnode.accounted_rstat = f->fnode.rstat;
-    f->fnode.fragstat.version = dirstat_version;
-    f->fnode.accounted_fragstat = f->fnode.fragstat;
-    dout(10) << " rstat " << f->fnode.rstat << " fragstat " << f->fnode.fragstat
+    auto _fnode = f->_get_fnode();
+    _fnode->version = f->projected_version = get_version();
+    _fnode->rstat.version = rstat_version;
+    _fnode->accounted_rstat = _fnode->rstat;
+    _fnode->fragstat.version = dirstat_version;
+    _fnode->accounted_fragstat = _fnode->fragstat;
+    dout(10) << " rstat " << _fnode->rstat << " fragstat " << _fnode->fragstat
 	     << " on " << *f << dendl;
-  }
 
-  // give any outstanding frag stat differential to first frag
-  dout(10) << " giving rstatdiff " << rstatdiff << " fragstatdiff" << fragstatdiff
-           << " to " << *subfrags[0] << dendl;
-  subfrags[0]->fnode.accounted_rstat.add(rstatdiff);
-  subfrags[0]->fnode.accounted_fragstat.add(fragstatdiff);
+    if (i == 0) {
+      // give any outstanding frag stat differential to first frag
+      dout(10) << " giving rstatdiff " << rstatdiff << " fragstatdiff" << fragstatdiff
+	       << " to " << *subfrags[0] << dendl;
+      _fnode->accounted_rstat.add(rstatdiff);
+      _fnode->accounted_fragstat.add(fragstatdiff);
+    }
+  }
 
   finish_old_fragment(waiters, replay);
 }
@@ -1109,6 +1117,8 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
 
   prepare_new_fragment(replay);
 
+  auto _fnode = _get_fnode();
+
   nest_info_t rstatdiff;
   frag_info_t fragstatdiff;
   bool touched_mtime, touched_chattr;
@@ -1121,10 +1131,10 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
     dout(10) << " subfrag " << dir->get_frag() << " " << *dir << dendl;
     ceph_assert(!dir->is_auth() || dir->is_complete() || replay);
 
-    if (dir->fnode.accounted_rstat.version == rstat_version)
-      rstatdiff.add_delta(dir->fnode.accounted_rstat, dir->fnode.rstat);
-    if (dir->fnode.accounted_fragstat.version == dirstat_version)
-      fragstatdiff.add_delta(dir->fnode.accounted_fragstat, dir->fnode.fragstat,
+    if (dir->get_fnode()->accounted_rstat.version == rstat_version)
+      rstatdiff.add_delta(dir->get_fnode()->accounted_rstat, dir->get_fnode()->rstat);
+    if (dir->get_fnode()->accounted_fragstat.version == dirstat_version)
+      fragstatdiff.add_delta(dir->get_fnode()->accounted_fragstat, dir->get_fnode()->fragstat,
 			     &touched_mtime, &touched_chattr);
 
     dir->prepare_old_fragment(dentry_waiters, replay);
@@ -1141,8 +1151,8 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
     }
 
     // merge version
-    if (dir->get_version() > get_version())
-      set_version(dir->get_version());
+    if (dir->get_version() > _fnode->version)
+      _fnode->version = projected_version = dir->get_version();
 
     // merge state
     state_set(dir->get_state() & MASK_STATE_FRAGMENT_KEPT);
@@ -1165,13 +1175,13 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
     mark_complete();
 
   // FIXME: merge dirty old rstat
-  fnode.rstat.version = rstat_version;
-  fnode.accounted_rstat = fnode.rstat;
-  fnode.accounted_rstat.add(rstatdiff);
+  _fnode->rstat.version = rstat_version;
+  _fnode->accounted_rstat = _fnode->rstat;
+  _fnode->accounted_rstat.add(rstatdiff);
 
-  fnode.fragstat.version = dirstat_version;
-  fnode.accounted_fragstat = fnode.fragstat;
-  fnode.accounted_fragstat.add(fragstatdiff);
+  _fnode->fragstat.version = dirstat_version;
+  _fnode->accounted_fragstat = _fnode->fragstat;
+  _fnode->accounted_fragstat.add(fragstatdiff);
 
   init_fragment_pins();
 }
@@ -1181,7 +1191,7 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
 
 void CDir::resync_accounted_fragstat()
 {
-  fnode_t *pf = get_projected_fnode();
+  auto pf = _get_projected_fnode();
   const auto& pi = inode->get_projected_inode();
 
   if (pf->accounted_fragstat.version != pi->dirstat.version) {
@@ -1196,7 +1206,7 @@ void CDir::resync_accounted_fragstat()
  */
 void CDir::resync_accounted_rstat()
 {
-  fnode_t *pf = get_projected_fnode();
+  auto pf = _get_projected_fnode();
   const auto& pi = inode->get_projected_inode();
   
   if (pf->accounted_rstat.version != pi->rstat.version) {
@@ -1369,32 +1379,36 @@ void CDir::finish_waiting(uint64_t mask, int result)
 
 // dirty/clean
 
-fnode_t *CDir::project_fnode()
+CDir::fnode_ptr CDir::project_fnode()
 {
   ceph_assert(get_version() != 0);
-  auto &p = projected_fnode.emplace_back(*get_projected_fnode());
+
+  auto pf = allocate_fnode(*get_projected_fnode());
 
   if (scrub_infop && scrub_infop->last_scrub_dirty) {
-    p.localized_scrub_stamp = scrub_infop->last_local.time;
-    p.localized_scrub_version = scrub_infop->last_local.version;
-    p.recursive_scrub_stamp = scrub_infop->last_recursive.time;
-    p.recursive_scrub_version = scrub_infop->last_recursive.version;
+    pf->localized_scrub_stamp = scrub_infop->last_local.time;
+    pf->localized_scrub_version = scrub_infop->last_local.version;
+    pf->recursive_scrub_stamp = scrub_infop->last_recursive.time;
+    pf->recursive_scrub_version = scrub_infop->last_recursive.version;
     scrub_infop->last_scrub_dirty = false;
     scrub_maybe_delete_info();
   }
 
-  dout(10) << __func__ <<  " " << &p << dendl;
-  return &p;
+  projected_fnode.emplace_back(pf);
+  dout(10) << __func__ <<  " " << pf.get() << dendl;
+  return pf;
 }
 
 void CDir::pop_and_dirty_projected_fnode(LogSegment *ls)
 {
   ceph_assert(!projected_fnode.empty());
-  auto &front = projected_fnode.front();
-  dout(15) << __func__ << " " << &front << " v" << front.version << dendl;
-  fnode = front;
-  _mark_dirty(ls);
+  auto pf = std::move(projected_fnode.front());
+  dout(15) << __func__ << " " << pf.get() << " v" << pf->version << dendl;
+
   projected_fnode.pop_front();
+
+  reset_fnode(std::move(pf));
+  _mark_dirty(ls);
 }
 
 
@@ -1407,11 +1421,16 @@ version_t CDir::pre_dirty(version_t min)
   return projected_version;
 }
 
-void CDir::mark_dirty(version_t pv, LogSegment *ls)
+void CDir::mark_dirty(LogSegment *ls, version_t pv)
 {
-  ceph_assert(get_version() < pv);
-  ceph_assert(pv <= projected_version);
-  fnode.version = pv;
+  ceph_assert(is_auth());
+
+  if (pv) {
+    ceph_assert(get_version() < pv);
+    ceph_assert(pv <= projected_version);
+    ceph_assert(!projected_fnode.empty());
+  }
+
   _mark_dirty(ls);
 }
 
@@ -1461,8 +1480,10 @@ void CDir::log_mark_dirty()
   if (is_dirty() || projected_version > get_version())
     return; // noop if it is already dirty or will be dirty
 
-  version_t pv = pre_dirty();
-  mark_dirty(pv, cache->mds->mdlog->get_current_segment());
+  auto _fnode = allocate_fnode(*get_fnode());
+  _fnode->version = pre_dirty();
+  reset_fnode(std::move(_fnode));
+  mark_dirty(cache->mds->mdlog->get_current_segment());
 }
 
 void CDir::mark_complete() {
@@ -1516,7 +1537,9 @@ void CDir::fetch(MDSContext *c, std::string_view want_dn, bool ignore_authpinnab
     dout(7) << "fetch dirfrag for unlinked directory, mark complete" << dendl;
     if (get_version() == 0) {
       ceph_assert(inode->is_auth());
-      set_version(1);
+      auto _fnode = allocate_fnode();
+      _fnode->version = 1;
+      reset_fnode(std::move(_fnode));
 
       if (state_test(STATE_REJOINUNDEF)) {
 	ceph_assert(cache->mds->is_rejoin());
@@ -1939,8 +1962,9 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   if (get_version() == 0) {
     ceph_assert(!is_projected());
     ceph_assert(!state_test(STATE_COMMITTING));
-    fnode = got_fnode;
-    projected_version = committing_version = committed_version = got_fnode.version;
+    auto _fnode = allocate_fnode(got_fnode);
+    reset_fnode(std::move(_fnode));
+    projected_version = committing_version = committed_version = get_version();
 
     if (state_test(STATE_REJOINUNDEF)) {
       ceph_assert(cache->mds->is_rejoin());
@@ -1958,13 +1982,13 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   SnapRealm *realm = inode->find_snaprealm();
   if (!realm->have_past_parents_open()) {
     dout(10) << " no snap purge, one or more past parents NOT open" << dendl;
-  } else if (fnode.snap_purged_thru < realm->get_last_destroyed()) {
+  } else if (fnode->snap_purged_thru < realm->get_last_destroyed()) {
     snaps = &realm->get_snaps();
-    dout(10) << " snap_purged_thru " << fnode.snap_purged_thru
+    dout(10) << " snap_purged_thru " << fnode->snap_purged_thru
 	     << " < " << realm->get_last_destroyed()
 	     << ", snap purge based on " << *snaps << dendl;
     if (get_num_snap_items() == 0) {
-      fnode.snap_purged_thru = realm->get_last_destroyed();
+      const_cast<snapid_t&>(fnode->snap_purged_thru) = realm->get_last_destroyed();
       force_dirty = true;
     }
   }
@@ -2073,8 +2097,11 @@ void CDir::go_bad(bool complete)
   }
 
   if (complete) {
-    if (get_version() == 0)
-      set_version(1);
+    if (get_version() == 0) {
+      auto _fnode = allocate_fnode();
+      _fnode->version = 1;
+      reset_fnode(std::move(_fnode));
+    }
     
     state_set(STATE_BADFRAG);
     mark_complete();
@@ -2150,9 +2177,9 @@ void CDir::_omap_commit(int op_prio)
   SnapRealm *realm = inode->find_snaprealm();
   if (!realm->have_past_parents_open()) {
     dout(10) << " no snap purge, one or more past parents NOT open" << dendl;
-  } else if (fnode.snap_purged_thru < realm->get_last_destroyed()) {
+  } else if (fnode->snap_purged_thru < realm->get_last_destroyed()) {
     snaps = &realm->get_snaps();
-    dout(10) << " snap_purged_thru " << fnode.snap_purged_thru
+    dout(10) << " snap_purged_thru " << fnode->snap_purged_thru
 	     << " < " << realm->get_last_destroyed()
 	     << ", snap purge based on " << *snaps << dendl;
     // fnode.snap_purged_thru = realm->get_last_destroyed();
@@ -2258,7 +2285,7 @@ void CDir::_omap_commit(int op_prio)
    * off last, we cannot get our header into an incorrect state.
    */
   bufferlist header;
-  encode(fnode, header);
+  encode(*fnode, header);
   op.omap_set_header(header);
 
   if (!to_set.empty())
@@ -2487,7 +2514,7 @@ void CDir::encode_export(bufferlist& bl)
   ENCODE_START(1, 1, bl);
   ceph_assert(!is_projected());
   encode(first, bl);
-  encode(fnode, bl);
+  encode(*fnode, bl);
   encode(dirty_old_rstat, bl);
   encode(committed_version, bl);
 
@@ -2519,9 +2546,14 @@ void CDir::decode_import(bufferlist::const_iterator& blp, LogSegment *ls)
 {
   DECODE_START(1, blp);
   decode(first, blp);
-  decode(fnode, blp);
+  {
+    auto _fnode = allocate_fnode();
+    decode(*_fnode, blp);
+    reset_fnode(std::move(_fnode));
+  }
+  update_projected_version();
+
   decode(dirty_old_rstat, blp);
-  projected_version = fnode.version;
   decode(committed_version, blp);
   committing_version = committed_version;
 
@@ -2550,11 +2582,11 @@ void CDir::decode_import(bufferlist::const_iterator& blp, LogSegment *ls)
 
   // did we import some dirty scatterlock data?
   if (dirty_old_rstat.size() ||
-      !(fnode.rstat == fnode.accounted_rstat)) {
+      !(fnode->rstat == fnode->accounted_rstat)) {
     cache->mds->locker->mark_updated_scatterlock(&inode->nestlock);
     ls->dirty_dirfrag_nest.push_back(&inode->item_dirty_dirfrag_nest);
   }
-  if (!(fnode.fragstat == fnode.accounted_fragstat)) {
+  if (!(fnode->fragstat == fnode->accounted_fragstat)) {
     cache->mds->locker->mark_updated_scatterlock(&inode->filelock);
     ls->dirty_dirfrag_dir.push_back(&inode->item_dirty_dirfrag_dir);
   }
@@ -2819,13 +2851,13 @@ void CDir::verify_fragstat()
     }
   }
 
-  if (c.nsubdirs != fnode.fragstat.nsubdirs ||
-      c.nfiles != fnode.fragstat.nfiles) {
-    dout(0) << "verify_fragstat failed " << fnode.fragstat << " on " << *this << dendl;
+  if (c.nsubdirs != fnode->fragstat.nsubdirs ||
+      c.nfiles != fnode->fragstat.nfiles) {
+    dout(0) << "verify_fragstat failed " << fnode->fragstat << " on " << *this << dendl;
     dout(0) << "               i count " << c << dendl;
     ceph_abort();
   } else {
-    dout(0) << "verify_fragstat ok " << fnode.fragstat << " on " << *this << dendl;
+    dout(0) << "verify_fragstat ok " << fnode->fragstat << " on " << *this << dendl;
   }
 }
 #endif
@@ -3287,17 +3319,17 @@ void CDir::scrub_info_create() const
 
   // break out of const-land to set up implicit initial state
   CDir *me = const_cast<CDir*>(this);
-  fnode_t *fn = me->get_projected_fnode();
+  const auto& pf = me->get_projected_fnode();
 
   std::unique_ptr<scrub_info_t> si(new scrub_info_t());
 
   si->last_recursive.version = si->recursive_start.version =
-      fn->recursive_scrub_version;
+      pf->recursive_scrub_version;
   si->last_recursive.time = si->recursive_start.time =
-      fn->recursive_scrub_stamp;
+      pf->recursive_scrub_stamp;
 
-  si->last_local.version = fn->localized_scrub_version;
-  si->last_local.time = fn->localized_scrub_stamp;
+  si->last_local.version = pf->localized_scrub_version;
+  si->last_local.time = pf->localized_scrub_stamp;
 
   me->scrub_infop.swap(si);
 }
