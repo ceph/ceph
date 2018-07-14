@@ -7,6 +7,7 @@
 #include "common/config.h"
 #include "include/str_list.h"
 #include "common/debug.h"
+#include "common/errno.h"
 #include "include/compat.h"
 
 #include "common/SubProcess.h"

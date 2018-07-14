@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <core/reactor.hh>
+#include <seastar/core/reactor.hh>
 #include <sys/eventfd.h>
 
 namespace ceph::thread {

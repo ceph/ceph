@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <core/condition-variable.hh>
+#include <seastar/core/condition-variable.hh>
 
 #include "common/ThrottleInterface.h"
 

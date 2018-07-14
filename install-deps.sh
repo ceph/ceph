@@ -23,6 +23,21 @@ export LC_ALL=C # the following is vulnerable to i18n
 
 ARCH=`uname -m`
 
+if [ -n $WITH_SEASTAR ]; then
+    with_seastar=true
+else
+    with_seastar=false
+fi
+
+function install_seastar_deps {
+    if $with_seastar; then
+        $SUDO apt-get install -y \
+              ragel libhwloc-dev libnuma-dev libpciaccess-dev \
+              libcrypto++-dev libgnutls28-dev libsctp-dev libprotobuf-dev \
+              protobuf-compiler systemtap-sdt-dev libyaml-cpp-dev
+    fi
+}
+
 function munge_ceph_spec_in {
     local OUTFILE=$1
     sed -e 's/@//g' -e 's/%bcond_with make_check/%bcond_without make_check/g' < ceph.spec.in > $OUTFILE
@@ -30,6 +45,9 @@ function munge_ceph_spec_in {
         sed -i -e 's/%bcond_with python2/%bcond_without python2/g' $OUTFILE
     else
         sed -i -e 's/%bcond_without python2/%bcond_with python2/g' $OUTFILE
+    fi
+    if $with_seastar; then
+        sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
     fi
 }
 
@@ -210,6 +228,7 @@ else
 	# work is done
 	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps --install --remove --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
+	install_seastar_deps
 	if [ -n "$backports" ] ; then rm $control; fi
         ;;
     centos|fedora|rhel|ol|virtuozzo)
