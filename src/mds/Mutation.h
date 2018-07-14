@@ -53,18 +53,80 @@ public:
   // -- my pins and locks --
   // cache pins (so things don't expire)
   set< MDSCacheObject* > pins;
-  set<CInode*> stickydirs;
+  CInode* stickydiri = nullptr;
 
   // auth pins
   map<MDSCacheObject*, mds_rank_t> remote_auth_pins;
-  set< MDSCacheObject* > auth_pins;
+  set<MDSCacheObject*> auth_pins;
   
   // held locks
-  set< SimpleLock* > rdlocks;  // always local.
-  set< SimpleLock* > wrlocks;  // always local.
-  map< SimpleLock*, mds_rank_t > remote_wrlocks;
-  set< SimpleLock* > xlocks;   // local or remote.
-  set< SimpleLock*, SimpleLock::ptr_lt > locks;  // full ordering
+  struct LockOp {
+    enum {
+      RDLOCK		= 1,
+      WRLOCK		= 2,
+      XLOCK		= 4,
+      REMOTE_WRLOCK	= 8,
+    };
+    SimpleLock* lock;
+    mutable unsigned flags;
+    mutable mds_rank_t wrlock_target;
+    operator SimpleLock*() const {
+      return lock;
+    }
+    LockOp(SimpleLock *l, unsigned f=0, mds_rank_t t=MDS_RANK_NONE) :
+      lock(l), flags(f), wrlock_target(t) {}
+    bool is_rdlock() const { return !!(flags & RDLOCK); }
+    bool is_xlock() const { return !!(flags & XLOCK); }
+    bool is_wrlock() const { return !!(flags & WRLOCK); }
+    void clear_wrlock() const { flags &= ~WRLOCK; }
+    bool is_remote_wrlock() const { return !!(flags & REMOTE_WRLOCK); }
+    void clear_remote_wrlock() const {
+      flags &= ~REMOTE_WRLOCK;
+      wrlock_target = MDS_RANK_NONE;
+    }
+  };
+
+  struct LockOpVec : public vector<LockOp> {
+    void add_rdlock(SimpleLock *lock) {
+      emplace_back(lock, LockOp::RDLOCK);
+    }
+    void erase_rdlock(SimpleLock *lock);
+    void add_xlock(SimpleLock *lock) {
+      emplace_back(lock, LockOp::XLOCK);
+    }
+    void add_wrlock(SimpleLock *lock) {
+      emplace_back(lock, LockOp::WRLOCK);
+    }
+    void add_remote_wrlock(SimpleLock *lock, mds_rank_t rank) {
+      assert(rank != MDS_RANK_NONE);
+      emplace_back(lock, LockOp::REMOTE_WRLOCK, rank);
+    }
+    void sort_and_merge();
+
+    LockOpVec() {
+      reserve(32);
+    }
+  };
+  typedef set<LockOp, SimpleLock::ptr_lt> lock_set;
+  typedef lock_set::iterator lock_iterator;
+  lock_set locks;  // full ordering
+
+  bool is_rdlocked(SimpleLock *lock) const {
+    auto it = locks.find(lock);
+    return it != locks.end() && it->is_rdlock();
+  }
+  bool is_xlocked(SimpleLock *lock) const {
+    auto it = locks.find(lock);
+    return it != locks.end() && it->is_xlock();
+  }
+  bool is_wrlocked(SimpleLock *lock) const {
+    auto it = locks.find(lock);
+    return it != locks.end() && it->is_wrlock();
+  }
+  bool is_remote_wrlocked(SimpleLock *lock) const {
+    auto it = locks.find(lock);
+    return it != locks.end() && it->is_remote_wrlock();
+  }
 
   // lock we are currently trying to acquire.  if we give up for some reason,
   // be sure to eval() this.
@@ -97,10 +159,6 @@ public:
     assert(locking == NULL);
     assert(pins.empty());
     assert(auth_pins.empty());
-    assert(xlocks.empty());
-    assert(rdlocks.empty());
-    assert(wrlocks.empty());
-    assert(remote_wrlocks.empty());
   }
 
   bool is_master() const { return slave_to_mds == MDS_RANK_NONE; }
@@ -131,6 +189,7 @@ public:
   void pin(MDSCacheObject *o);
   void unpin(MDSCacheObject *o);
   void set_stickydirs(CInode *in);
+  void put_stickydirs();
   void drop_pins();
 
   void start_locking(SimpleLock *lock, int target=-1);
