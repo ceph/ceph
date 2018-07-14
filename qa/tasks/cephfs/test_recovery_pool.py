@@ -141,10 +141,6 @@ class TestRecoveryPool(CephFSTestCase):
         self.fs.mon_manager.raw_cluster_cmd('fs', 'reset', self.fs.name,
                 '--yes-i-really-mean-it')
 
-        def get_state(mds_id):
-            info = self.mds_cluster.get_mds_info(mds_id)
-            return info['state'] if info is not None else None
-
         self.fs.table_tool([self.fs.name + ":0", "reset", "session"])
         self.fs.table_tool([self.fs.name + ":0", "reset", "snap"])
         self.fs.table_tool([self.fs.name + ":0", "reset", "inode"])
@@ -190,12 +186,11 @@ class TestRecoveryPool(CephFSTestCase):
         self.recovery_fs.mds_restart()
         self.fs.wait_for_daemons()
         self.recovery_fs.wait_for_daemons()
-        for mds_id in self.recovery_fs.mds_ids:
-            self.fs.mon_manager.raw_cluster_cmd('tell', "mds." + mds_id,
+        status = self.recovery_fs.status()
+        for rank in self.recovery_fs.get_ranks(status=status):
+            self.fs.mon_manager.raw_cluster_cmd('tell', "mds." + rank['name'],
                                                 'injectargs', '--debug-mds=20')
-            self.fs.mon_manager.raw_cluster_cmd('daemon', "mds." + mds_id,
-                                                'scrub_path', '/',
-                                                'recursive', 'repair')
+            self.fs.rank_asok(['scrub_path', '/', 'recursive', 'repair'], rank=rank['rank'], status=status)
         log.info(str(self.mds_cluster.status()))
 
         # Mount a client
