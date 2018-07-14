@@ -5046,7 +5046,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
   bool skip_data_digest = osd->store->has_builtin_csum() &&
-    g_conf->get_val<bool>("osd_skip_data_digest");
+    g_conf->osd_skip_data_digest;
 
   PGTransaction* t = ctx->op_t.get();
 
