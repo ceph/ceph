@@ -191,17 +191,12 @@ void ECTransaction::generate_transactions(
       xattr_rollback[ECUtil::get_hinfo_key()] = old_hinfo;
       
       if (op.is_none() && op.truncate && op.truncate->first == 0) {
-	assert(op.truncate->first == 0);
 	assert(op.truncate->first ==
 	       op.truncate->second);
 	assert(entry);
 	assert(obc);
 	
-	if (op.truncate->first != op.truncate->second) {
-	  op.truncate->first = op.truncate->second;
-	} else {
-	  op.truncate = boost::none;
-	}
+       op.truncate = boost::none;
 
 	op.delete_first = true;
 	op.init_type = PGTransaction::ObjectOperation::Init::Create();
