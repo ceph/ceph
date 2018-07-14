@@ -1986,7 +1986,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_skip_data_digest", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(true)
+    .set_default(false)
     .set_description("Do not store full-object checksums if the backend (bluestore) does its own checksums.  Do not ever turn this off if it has ever been turned on."),
 
     Option("osd_distrust_data_digest", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
