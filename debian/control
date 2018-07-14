@@ -891,6 +891,7 @@ Package: python-rgw
 Architecture: linux-any
 Section: python
 Depends: librgw2 (>= ${binary:Version}),
+         python-rados (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
@@ -925,6 +926,7 @@ Package: python3-rgw
 Architecture: linux-any
 Section: python
 Depends: librgw2 (>= ${binary:Version}),
+         python3-rados (= ${binary:Version}),
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends},
@@ -957,6 +959,7 @@ Package: python-cephfs
 Architecture: linux-any
 Section: python
 Depends: libcephfs2 (= ${binary:Version}),
+         python-rados (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
@@ -991,6 +994,7 @@ Package: python3-cephfs
 Architecture: linux-any
 Section: python
 Depends: libcephfs2 (= ${binary:Version}),
+         python3-rados (= ${binary:Version}),
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends},
