@@ -1,10 +1,128 @@
+v12.2.7 Luminous
+================
+
+This is the seventh bugfix release of Luminous v12.2.x long term
+stable release series. This release contains several fixes for
+regressions in the v12.2.6 and v12.2.5 releases.  We recommend that
+all users upgrade.
+
+:note: The v12.2.6 release has serious known regressions.  If you installed this release, please see the upgrade procedure below.
+
+:note: The v12.2.5 release has a potential data corruption issue with erasure coded pools.  If you ran v12.2.5 with erasure coding, please see below.
+
+Upgrading from v12.2.6
+----------------------
+
+v12.2.6 included an incomplete backport of an optimization for
+BlueStore OSDs that avoids maintaining both the per-object checksum
+and the internal BlueStore checksum.  Due to the accidental omission
+of a critical follow-on patch, v12.2.6 corrupts (fails to update) the
+stored per-object checksum value for some objects.  This can result in
+an EIO error when trying to read those objects.
+
+#. If your cluster uses FileStore only, no special action is required.
+   This problem only affects clusters with BlueStore.
+
+#. If your cluster has only BlueStore OSDs (no FileStore), then you
+   should enable the following OSD option::
+
+     osd skip data digest = true
+
+   This will avoid setting and start ignoring the full-object digests
+   whenever the primary for a PG is BlueStore.
+
+#. If you have a mix of BlueStore and FileStore OSDs, then you should
+   enable the following OSD option::
+
+     osd distrust data digest = true
+
+   This will avoid setting and start ignoring the full-object digests
+   in all cases.  This weakens the data integrity checks for
+   FileStore (although those checks were always only opportunistic).
+
+If your cluster includes BlueStore OSDs and was affected, deep scrubs
+will generate errors about mismatched CRCs for affected objects.
+Currently the repair operation does not know how to correct them
+(since all replicas do not match the expected checksum it does not
+know how to proceed).  These warnings are harmless in the sense that
+IO is not affected and the replicas are all still in sync.  The number
+of affected objects is likely to drop (possibly to zero) on their own
+over time as those objects are modified.  We expect to include a scrub
+improvement in v12.2.8 to clean up any remaining objects.
+
+Additionally, see the notes below, which apply to both v12.2.5 and v12.2.6.
+
+Upgrading from v12.2.5 or v12.2.6
+---------------------------------
+
+If you used v12.2.5 or v12.2.6 in combination with erasure coded
+pools, there is a small risk of corruption under certain workloads.
+Specifically, when:
+
+* An erasure coded pool is in use
+* The pool is busy with successful writes
+* The pool is also busy with updates that result in an error result to
+  the librados user.  RGW garbage collection is the most common
+  example of this (it sends delete operations on objects that don't
+  always exist.)
+* Some OSDs are reasonably busy.  One known example of such load is
+  FileStore splitting, although in principle any load on the cluster
+  could also trigger the behavior.
+* One or more OSDs restarts.
+
+This combination can trigger an OSD crash and possibly leave PGs in a state
+where they fail to peer.
+
+Notably, upgrading a cluster involves OSD restarts and as such may
+increase the risk of encountering this bug.  For this reason, for
+clusters with erasure coded pools, we recommend the following upgrade
+procedure to minimize risk:
+
+#. Install the v12.2.7 packages.
+#. Temporarily quiesce IO to cluster::
+
+     ceph osd pause
+
+#. Restart all OSDs and wait for all PGs to become active.
+#. Resume IO::
+
+     ceph osd unpause
+
+This will cause an availability outage for the duration of the OSD
+restarts.  If this in unacceptable, an *more risky* alternative is to
+disable RGW garbage collection (the primary known cause of these rados
+operations) for the duration of the upgrade::
+
+#. Set ``rgw_enable_gc_threads = false`` in ceph.conf
+#. Restart all radosgw daemons
+#. Upgrade and restart all OSDs
+#. Remove ``rgw_enable_gc_threads = false`` from ceph.conf
+#. Restart all radosgw daemons
+
+Upgrading from other versions
+-----------------------------
+
+If your cluster did not run v12.2.5 or v12.2.6 then none of the above
+issues apply to you and you should upgrade normally.
+
+Notable Changes
+---------------
+
+* mon/AuthMonitor: improve error message (`issue#21765 <http://tracker.ceph.com/issues/21765>`_, `pr#22963 <https://github.com/ceph/ceph/pull/22963>`_, Douglas Fuller)
+* osd/PG: do not blindly roll forward to log.head (`issue#24597 <http://tracker.ceph.com/issues/24597>`_, `pr#22976 <https://github.com/ceph/ceph/pull/22976>`_, Sage Weil)
+* osd/PrimaryLogPG: rebuild attrs from clients (`issue#24768 <http://tracker.ceph.com/issues/24768>`_, `pr#22962 <https://github.com/ceph/ceph/pull/22962>`_, Sage Weil)
+* osd: work around data digest problems in 12.2.6 (version 2) (`issue#24922 <http://tracker.ceph.com/issues/24922>`_, `pr#23055 <https://github.com/ceph/ceph/pull/23055>`_, Sage Weil)
+* rgw: objects in cache never refresh after rgw_cache_expiry_interval (`issue#24346 <http://tracker.ceph.com/issues/24346>`_, `pr#22369 <https://github.com/ceph/ceph/pull/22369>`_, Casey Bodley, Matt Benjamin)
+
+
 v12.2.6 Luminous
 ================
 
+:note: This is a broken release with serious known regressions.  Do not install it.
+
 This is the sixth bugfix release of Luminous v12.2.x long term stable release
-series. This release contains a range of bug fixes across all compoenents of
-Ceph and a few security fixes. We recommend all the users of 12.2.x series
-to update.
+series. This release contains a range of bug fixes across all components of
+Ceph and a few security fixes.
 
 Notable Changes
 ---------------
