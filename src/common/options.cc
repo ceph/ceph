@@ -1989,6 +1989,10 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description(""),
 
+    Option("osd_distrust_data_digest", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Do not trust stored data_digest (e.g. due to previous bug)"),
+
     Option("osd_op_queue", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("wpq")
     .set_enum_allowed( { "wpq", "prioritized", "mclock_opclass", "mclock_client", "debug_random" } )
