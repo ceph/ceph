@@ -141,10 +141,6 @@ class TestRecoveryPool(CephFSTestCase):
         self.fs.mon_manager.raw_cluster_cmd('fs', 'reset', self.fs.name,
                 '--yes-i-really-mean-it')
 
-        def get_state(mds_id):
-            info = self.mds_cluster.get_mds_info(mds_id)
-            return info['state'] if info is not None else None
-
         self.fs.table_tool([self.fs.name + ":0", "reset", "session"])
         self.fs.table_tool([self.fs.name + ":0", "reset", "snap"])
         self.fs.table_tool([self.fs.name + ":0", "reset", "inode"])
