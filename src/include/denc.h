@@ -27,7 +27,9 @@
 #include <array>
 #include <cstring>
 #include <map>
+#if __has_include(<optional>)
 #include <optional>
+#endif
 #include <set>
 #include <string>
 #include <type_traits>
@@ -1288,6 +1290,7 @@ struct denc_traits<boost::none_t> {
   }
 };
 
+#if __has_include(<optional>)
 //
 // std::optional<T>
 //
@@ -1391,6 +1394,8 @@ struct denc_traits<std::nullopt_t> {
     denc(false, p);
   }
 };
+
+#endif // __has_include(<optional>)
 
 // ----------------------------------------------------------------------
 // class helpers

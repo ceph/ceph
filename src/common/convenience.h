@@ -14,7 +14,9 @@
 
 #include <mutex>
 #include <memory>
+#if __has_include(<optional>)
 #include <optional>
+#endif
 #include <shared_mutex>
 #include <type_traits>
 #include <utility>
@@ -30,6 +32,7 @@
 #ifndef CEPH_COMMON_CONVENIENCE_H
 #define CEPH_COMMON_CONVENIENCE_H
 
+#if __has_include(<optional>)
 namespace ceph {
 
 // Lock Factories
@@ -147,6 +150,7 @@ inline auto with_shared_lock(Mutex&& mutex, Fun&& fun, Args&&... args)
   return std::forward<Fun>(fun)(std::forward<Args>(args)...);
 }
 }
+#endif // __has_include(<optional>)
 
 // Lock Types
 // ----------
