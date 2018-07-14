@@ -712,7 +712,7 @@ void EMetaBlob::nullbit::generate_test_instances(std::list<nullbit*>& ls)
 void EMetaBlob::dirlump::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(2, 2, bl);
-  encode(fnode, bl);
+  encode(*fnode, bl);
   encode(state, bl);
   encode(nfull, bl);
   encode(nremote, bl);
@@ -725,7 +725,11 @@ void EMetaBlob::dirlump::encode(bufferlist& bl, uint64_t features) const
 void EMetaBlob::dirlump::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl)
-  decode(fnode, bl);
+  {
+    auto _fnode = CDir::allocate_fnode();
+    decode(*_fnode, bl);
+    fnode = _fnode;
+  }
   decode(state, bl);
   decode(nfull, bl);
   decode(nremote, bl);
@@ -742,7 +746,7 @@ void EMetaBlob::dirlump::dump(Formatter *f) const
     me->_decode_bits();
   }
   f->open_object_section("fnode");
-  fnode.dump(f);
+  fnode->dump(f);
   f->close_section(); // fnode
   f->dump_string("state", state_string());
   f->dump_int("nfull", nfull);
@@ -774,7 +778,9 @@ void EMetaBlob::dirlump::dump(Formatter *f) const
 
 void EMetaBlob::dirlump::generate_test_instances(std::list<dirlump*>& ls)
 {
-  ls.push_back(new dirlump());
+  auto dl = new dirlump();
+  dl->fnode = CDir::allocate_fnode();
+  ls.push_back(dl);
 }
 
 /**
@@ -1185,8 +1191,8 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 
       dout(10) << "EMetaBlob.replay added dir " << *dir << dendl;  
     }
-    dir->set_version( lump.fnode.version );
-    dir->fnode = lump.fnode;
+    dir->reset_fnode(lump.fnode);
+    dir->update_projected_version();
 
     if (lump.is_importing()) {
       dir->state_set(CDir::STATE_AUTH);
@@ -1195,14 +1201,14 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     if (lump.is_dirty()) {
       dir->_mark_dirty(logseg);
 
-      if (!(dir->fnode.rstat == dir->fnode.accounted_rstat)) {
+      if (!(dir->get_fnode()->rstat == dir->get_fnode()->accounted_rstat)) {
 	dout(10) << "EMetaBlob.replay      dirty nestinfo on " << *dir << dendl;
 	mds->locker->mark_updated_scatterlock(&dir->inode->nestlock);
 	logseg->dirty_dirfrag_nest.push_back(&dir->inode->item_dirty_dirfrag_nest);
       } else {
 	dout(10) << "EMetaBlob.replay      clean nestinfo on " << *dir << dendl;
       }
-      if (!(dir->fnode.fragstat == dir->fnode.accounted_fragstat)) {
+      if (!(dir->get_fnode()->fragstat == dir->get_fnode()->accounted_fragstat)) {
 	dout(10) << "EMetaBlob.replay      dirty fragstat on " << *dir << dendl;
 	mds->locker->mark_updated_scatterlock(&dir->inode->filelock);
 	logseg->dirty_dirfrag_dir.push_back(&dir->inode->item_dirty_dirfrag_dir);
@@ -2858,14 +2864,18 @@ void EFragment::generate_test_instances(std::list<EFragment*>& ls)
 void dirfrag_rollback::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
-  encode(fnode, bl);
+  encode(*fnode, bl);
   ENCODE_FINISH(bl);
 }
 
 void dirfrag_rollback::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(1, bl);
-  decode(fnode, bl);
+  {
+    auto _fnode = CDir::allocate_fnode();
+    decode(*_fnode, bl);
+    fnode = _fnode;
+  }
   DECODE_FINISH(bl);
 }
 

@@ -1803,7 +1803,7 @@ void CInode::encode_lock_ifile(bufferlist& bl)
     frag_t fg = p.first;
     CDir *dir = p.second;
     if (is_auth() || dir->is_auth()) {
-      fnode_t *pf = dir->get_projected_fnode();
+      const auto& pf = dir->get_projected_fnode();
       dout(15) << fg << " " << *dir << dendl;
       dout(20) << fg << "           fragstat " << pf->fragstat << dendl;
       dout(20) << fg << " accounted_fragstat " << pf->accounted_fragstat << dendl;
@@ -1879,8 +1879,10 @@ void CInode::decode_lock_ifile(bufferlist::const_iterator& p)
       dout(10) << fg << " first " << dir->first << " -> " << fgfirst
                << " on " << *dir << dendl;
       dir->first = fgfirst;
-      dir->fnode.fragstat = fragstat;
-      dir->fnode.accounted_fragstat = accounted_fragstat;
+      auto _fnode = CDir::allocate_fnode(*dir->get_fnode());
+      _fnode->fragstat = fragstat;
+      _fnode->accounted_fragstat = accounted_fragstat;
+      dir->reset_fnode(_fnode);
       if (!(fragstat == accounted_fragstat)) {
         dout(10) << fg << " setting filelock updated flag" << dendl;
         filelock.mark_dirty();  // ok bc we're auth and caller will handle
@@ -1890,7 +1892,7 @@ void CInode::decode_lock_ifile(bufferlist::const_iterator& p)
         dout(10) << fg << " first " << dir->first << " -> " << fgfirst
                  << " on " << *dir << dendl;
         dir->first = fgfirst;
-        fnode_t *pf = dir->get_projected_fnode();
+        const auto& pf = dir->get_projected_fnode();
         finish_scatter_update(&filelock, dir,
                               _inode->dirstat.version, pf->accounted_fragstat.version);
       }
@@ -1920,7 +1922,7 @@ void CInode::encode_lock_inest(bufferlist& bl)
     frag_t fg = p.first;
     CDir *dir = p.second;
     if (is_auth() || dir->is_auth()) {
-      fnode_t *pf = dir->get_projected_fnode();
+      const auto& pf = dir->get_projected_fnode();
       dout(10) << __func__ << " " << fg << " dir " << *dir << dendl;
       dout(10) << __func__ << " " << fg << " rstat " << pf->rstat << dendl;
       dout(10) << __func__ << " " << fg << " accounted_rstat " << pf->rstat << dendl;
@@ -1983,8 +1985,10 @@ void CInode::decode_lock_inest(bufferlist::const_iterator& p)
       dout(10) << fg << " first " << dir->first << " -> " << fgfirst
                << " on " << *dir << dendl;
       dir->first = fgfirst;
-      dir->fnode.rstat = rstat;
-      dir->fnode.accounted_rstat = accounted_rstat;
+      auto _fnode = CDir::allocate_fnode(*dir->get_fnode());
+      _fnode->rstat = rstat;
+      _fnode->accounted_rstat = accounted_rstat;
+      dir->reset_fnode(_fnode);
       dir->dirty_old_rstat.swap(dirty_old_rstat);
       if (!(rstat == accounted_rstat) || !dir->dirty_old_rstat.empty()) {
         dout(10) << fg << " setting nestlock updated flag" << dendl;
@@ -1995,7 +1999,7 @@ void CInode::decode_lock_inest(bufferlist::const_iterator& p)
         dout(10) << fg << " first " << dir->first << " -> " << fgfirst
                  << " on " << *dir << dendl;
         dir->first = fgfirst;
-        fnode_t *pf = dir->get_projected_fnode();
+        const auto& pf = dir->get_projected_fnode();
         finish_scatter_update(&nestlock, dir,
                               _inode->rstat.version, pf->accounted_rstat.version);
       }
@@ -2275,7 +2279,7 @@ void CInode::start_scatter(ScatterLock *lock)
   for (const auto &p : dirfrags) {
     frag_t fg = p.first;
     CDir *dir = p.second;
-    fnode_t *pf = dir->get_projected_fnode();
+    const auto& pf = dir->get_projected_fnode();
     dout(20) << fg << " " << *dir << dendl;
 
     if (!dir->is_auth())
@@ -2330,7 +2334,7 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
       MutationRef mut(new MutationImpl());
       mut->ls = mdlog->get_current_segment();
 
-      fnode_t *pf = dir->project_fnode();
+      auto pf = dir->project_fnode();
 
       std::string_view ename;
       switch (lock->get_type()) {
@@ -2355,9 +2359,6 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
 	ceph_abort();
       }
 	
-      pf->version = dir->pre_dirty();
-      mut->add_projected_fnode(dir);
-
       EUpdate *le = new EUpdate(mdlog, ename);
       mdlog->start_entry(le);
       le->metablob.add_dir_context(dir);
@@ -2381,6 +2382,9 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
           mut->ls->dirty_dirfrag_nest.push_back(&item_dirty_dirfrag_nest);
         }
       }
+
+      pf->version = dir->pre_dirty();
+      mut->add_projected_fnode(dir);
       
       mdlog->submit_entry(le, new C_Inode_FragUpdate(this, dir, mut));
     } else {
@@ -2451,9 +2455,11 @@ void CInode::finish_scatter_gather_update(int type)
 	  dirstat_valid = false;
 	}
 
-	fnode_t *pf = dir->get_projected_fnode();
+	CDir::fnode_const_ptr pf;
 	if (update)
 	  pf = dir->project_fnode();
+	else
+	  pf = dir->get_projected_fnode();
 
 	if (pf->accounted_fragstat.version == pi->dirstat.version - 1) {
 	  dout(20) << fg << "           fragstat " << pf->fragstat << dendl;
@@ -2466,18 +2472,20 @@ void CInode::finish_scatter_gather_update(int type)
 	if (pf->fragstat.nfiles < 0 ||
 	    pf->fragstat.nsubdirs < 0) {
 	  clog->error() << "bad/negative dir size on "
-	      << dir->dirfrag() << " " << pf->fragstat;
+			<< dir->dirfrag() << " " << pf->fragstat;
 	  ceph_assert(!"bad/negative fragstat" == g_conf()->mds_verify_scatter);
-	  
+
+	  auto _pf = const_cast<fnode_t*>(pf.get());
 	  if (pf->fragstat.nfiles < 0)
-	    pf->fragstat.nfiles = 0;
+	    _pf->fragstat.nfiles = 0;
 	  if (pf->fragstat.nsubdirs < 0)
-	    pf->fragstat.nsubdirs = 0;
+	    _pf->fragstat.nsubdirs = 0;
 	}
 
 	if (update) {
-	  pf->accounted_fragstat = pf->fragstat;
-	  pf->fragstat.version = pf->accounted_fragstat.version = pi->dirstat.version;
+	  auto _pf = const_cast<fnode_t*>(pf.get());
+	  _pf->accounted_fragstat = _pf->fragstat;
+	  _pf->fragstat.version = _pf->accounted_fragstat.version = pi->dirstat.version;
 	  dout(10) << fg << " updated accounted_fragstat " << pf->fragstat << " on " << *dir << dendl;
 	}
 
@@ -2518,8 +2526,7 @@ void CInode::finish_scatter_gather_update(int type)
 	}
       }
 
-      if (pi->dirstat.nfiles < 0 || pi->dirstat.nsubdirs < 0)
-      {
+      if (pi->dirstat.nfiles < 0 || pi->dirstat.nsubdirs < 0) {
         std::string path;
         make_path_string(path);
 	clog->error() << "Inconsistent statistics detected: fragstat on inode "
@@ -2563,9 +2570,11 @@ void CInode::finish_scatter_gather_update(int type)
 	  rstat_valid = false;
 	}
 
-	fnode_t *pf = dir->get_projected_fnode();
+	CDir::fnode_const_ptr pf;
 	if (update)
 	  pf = dir->project_fnode();
+	else
+	  pf = dir->get_projected_fnode();
 
 	if (pf->accounted_rstat.version == pi->rstat.version-1) {
 	  // only pull this frag's dirty rstat inodes into the frag if
@@ -2589,9 +2598,10 @@ void CInode::finish_scatter_gather_update(int type)
 	  dout(20) << fg << " skipping STALE accounted_rstat " << pf->accounted_rstat << dendl;
 	}
 	if (update) {
-	  pf->accounted_rstat = pf->rstat;
+	  auto _pf = const_cast<fnode_t*>(pf.get());
+	  _pf->accounted_rstat = pf->rstat;
 	  dir->dirty_old_rstat.clear();
-	  pf->rstat.version = pf->accounted_rstat.version = pi->rstat.version;
+	  _pf->rstat.version = _pf->accounted_rstat.version = pi->rstat.version;
 	  dir->check_rstats();
 	  dout(10) << fg << " updated accounted_rstat " << pf->rstat << " on " << *dir << dendl;
 	}
@@ -2653,16 +2663,16 @@ void CInode::finish_scatter_gather_update_accounted(int type, MutationRef& mut, 
     if (type == CEPH_LOCK_IDFT)
       continue;  // nothing to do.
 
+    if (type == CEPH_LOCK_INEST)
+      dir->assimilate_dirty_rstat_inodes_finish(mut, metablob);
+
     dout(10) << " journaling updated frag accounted_ on " << *dir << dendl;
     ceph_assert(dir->is_projected());
-    fnode_t *pf = dir->get_projected_fnode();
+    auto pf = dir->_get_projected_fnode();
     pf->version = dir->pre_dirty();
     mut->add_projected_fnode(dir);
     metablob->add_dir(dir, true);
     mut->auth_pin(dir);
-
-    if (type == CEPH_LOCK_INEST)
-      dir->assimilate_dirty_rstat_inodes_finish(mut, metablob);
   }
 }
 
@@ -4318,10 +4328,10 @@ void CInode::encode_export(bufferlist& bl)
       CDir *dir = p.second;
       if (dir->state_test(CDir::STATE_EXPORTBOUND)) {
 	encode(p.first, bounding);
-	encode(dir->fnode.fragstat, bounding);
-	encode(dir->fnode.accounted_fragstat, bounding);
-	encode(dir->fnode.rstat, bounding);
-	encode(dir->fnode.accounted_rstat, bounding);
+	encode(dir->get_fnode()->fragstat, bounding);
+	encode(dir->get_fnode()->accounted_fragstat, bounding);
+	encode(dir->get_fnode()->rstat, bounding);
+	encode(dir->get_fnode()->accounted_rstat, bounding);
 	dout(10) << " encoded fragstat/rstat info for " << *dir << dendl;
       }
     }
@@ -4397,6 +4407,7 @@ void CInode::decode_import(bufferlist::const_iterator& p,
     // check because the dirfrag is under migration?  That implies
     // it is frozen (and in a SYNC or LOCK state).  FIXME.
 
+    auto _fnode = CDir::allocate_fnode(*dir->get_fnode());
     if (dir->is_auth() ||
         filelock.get_state() == LOCK_MIX) {
       dout(10) << " skipped fragstat info for " << *dir << dendl;
@@ -4404,8 +4415,8 @@ void CInode::decode_import(bufferlist::const_iterator& p,
       decode(f, q);
       decode(f, q);
     } else {
-      decode(dir->fnode.fragstat, q);
-      decode(dir->fnode.accounted_fragstat, q);
+      decode(_fnode->fragstat, q);
+      decode(_fnode->accounted_fragstat, q);
       dout(10) << " took fragstat info for " << *dir << dendl;
     }
     if (dir->is_auth() ||
@@ -4415,10 +4426,11 @@ void CInode::decode_import(bufferlist::const_iterator& p,
       decode(n, q);
       decode(n, q);
     } else {
-      decode(dir->fnode.rstat, q);
-      decode(dir->fnode.accounted_rstat, q);
+      decode(_fnode->rstat, q);
+      decode(_fnode->accounted_rstat, q);
       dout(10) << " took rstat info for " << *dir << dendl;
     }
+    dir->reset_fnode(_fnode);
   }
 
   _decode_locks_full(p);
@@ -4820,8 +4832,8 @@ next:
       for (const auto &p : in->dirfrags) {
 	CDir *dir = p.second;
 	ceph_assert(dir->get_version() > 0);
-	nest_info.add(dir->fnode.accounted_rstat);
-	dir_info.add(dir->fnode.accounted_fragstat);
+	nest_info.add(dir->get_fnode()->accounted_rstat);
+	dir_info.add(dir->get_fnode()->accounted_fragstat);
 	if (dir->scrub_infop->pending_scrub_error) {
 	  dir->scrub_infop->pending_scrub_error = false;
 	  if (dir->scrub_infop->header->get_repair()) {

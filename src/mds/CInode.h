@@ -78,7 +78,6 @@ public:
     return std::allocate_shared<mempool_inode>(allocator, std::forward<Args>(args)...);
   }
   static inode_ptr const_inode_cast(const inode_const_ptr& ptr) {
-  static mempool::mds_co::pool_allocator<mempool_inode> allocator;
     return std::const_pointer_cast<mempool_inode>(ptr);
   }
 
