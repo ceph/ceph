@@ -599,9 +599,6 @@ int ReplicatedBackend::be_deep_scrub(
   uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
                            CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
-  bool skip_data_digest = store->has_builtin_csum() &&
-    g_conf->osd_skip_data_digest;
-
   utime_t sleeptime;
   sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
   if (sleeptime != utime_t()) {
@@ -629,7 +626,7 @@ int ReplicatedBackend::be_deep_scrub(
       o.read_error = true;
       return 0;
     }
-    if (r > 0 && !skip_data_digest) {
+    if (r > 0) {
       pos.data_hash << bl;
     }
     pos.data_pos += r;
@@ -640,10 +637,8 @@ int ReplicatedBackend::be_deep_scrub(
     }
     // done with bytes
     pos.data_pos = -1;
-    if (!skip_data_digest) {
-      o.digest = pos.data_hash.digest();
-      o.digest_present = true;
-    }
+    o.digest = pos.data_hash.digest();
+    o.digest_present = true;
     dout(20) << __func__ << "  " << poid << " done with data, digest 0x"
 	     << std::hex << o.digest << std::dec << dendl;
   }
