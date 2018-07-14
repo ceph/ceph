@@ -262,15 +262,15 @@ void MutationImpl::add_cow_dentry(CDentry *dn)
 void MutationImpl::apply()
 {
   pop_and_dirty_projected_inodes();
-  pop_and_dirty_projected_fnodes();
   
-  for (const auto& in : dirty_cow_inodes) {
+  for (const auto& in : dirty_cow_inodes)
     in->_mark_dirty(ls);
-  }
-  for (const auto& [dentry, v] : dirty_cow_dentries) {
-    dentry->mark_dirty(v, ls);
-  }
-  
+
+  for (const auto& [dn, v] : dirty_cow_dentries)
+    dn->mark_dirty(v, ls);
+
+  pop_and_dirty_projected_fnodes();
+
   for (const auto& lock : updated_locks) {
     lock->mark_dirty();
   }

@@ -50,6 +50,15 @@ public:
   typedef mempool::mds_co::map<dentry_key_t, CDentry*> dentry_key_map;
   typedef mempool::mds_co::set<dentry_key_t> dentry_key_set;
 
+  using fnode_ptr = std::shared_ptr<fnode_t>;
+  using fnode_const_ptr = std::shared_ptr<const fnode_t>;
+
+  template <typename ...Args>
+  static fnode_ptr allocate_fnode(Args && ...args) {
+    static mempool::mds_co::pool_allocator<fnode_t> allocator;
+    return std::allocate_shared<fnode_t>(allocator, std::forward<Args>(args)...);
+  }
+
   // -- freezing --
   struct freeze_tree_state_t {
     CDir *dir; // freezing/frozen tree root
@@ -231,27 +240,42 @@ public:
     inode->num_exporting_dirs--;
   }
 
-  version_t get_version() const { return fnode.version; }
-  void set_version(version_t v) { 
+  version_t get_version() const { return fnode->version; }
+  void update_projected_version() {
     ceph_assert(projected_fnode.empty());
-    projected_version = fnode.version = v; 
+    projected_version = fnode->version;
   }
   version_t get_projected_version() const { return projected_version; }
 
-  const fnode_t *get_projected_fnode() const {
-    if (projected_fnode.empty())
-      return &fnode;
-    else
-      return &projected_fnode.back();
+  void reset_fnode(fnode_const_ptr&& ptr) {
+    fnode = std::move(ptr);
   }
 
-  fnode_t *get_projected_fnode() {
-    if (projected_fnode.empty())
-      return &fnode;
-    else
-      return &projected_fnode.back();
+  const fnode_const_ptr& get_fnode() const {
+    return fnode;
   }
-  fnode_t *project_fnode();
+
+  // only used for updating newly allocated CDir
+  fnode_t* _get_fnode() {
+    if (fnode == empty_fnode)
+      reset_fnode(allocate_fnode());
+    return const_cast<fnode_t*>(fnode.get());
+  }
+
+  const fnode_const_ptr& get_projected_fnode() const {
+    if (projected_fnode.empty())
+      return fnode;
+    else
+      return projected_fnode.back();
+  }
+
+  // fnode should have already been projected in caller's context
+  fnode_t* _get_projected_fnode() {
+    ceph_assert(!projected_fnode.empty());
+    return const_cast<fnode_t*>(projected_fnode.back().get());
+  }
+
+  fnode_ptr project_fnode();
 
   void pop_and_dirty_projected_fnode(LogSegment *ls);
   bool is_projected() const { return !projected_fnode.empty(); }
@@ -263,7 +287,7 @@ public:
       get(PIN_DIRTY);
     }
   }
-  void mark_dirty(version_t pv, LogSegment *ls);
+  void mark_dirty(LogSegment *ls, version_t pv=0);
   void mark_clean();
 
   bool is_new() { return item_new.is_on_list(); }
@@ -435,7 +459,7 @@ public:
   void _encode_base(ceph::buffer::list& bl) {
     ENCODE_START(1, 1, bl);
     encode(first, bl);
-    encode(fnode, bl);
+    encode(*fnode, bl);
     encode(dir_rep, bl);
     encode(dir_rep_by, bl);
     ENCODE_FINISH(bl);
@@ -443,7 +467,11 @@ public:
   void _decode_base(ceph::buffer::list::const_iterator& p) {
     DECODE_START(1, p);
     decode(first, p);
-    decode(fnode, p);
+    {
+      auto _fnode = allocate_fnode();
+      decode(*_fnode, p);
+      reset_fnode(std::move(_fnode));
+    }
     decode(dir_rep, p);
     decode(dir_rep_by, p);
     DECODE_FINISH(p);
@@ -604,7 +632,6 @@ public:
   CInode *inode;  // my inode
   frag_t frag;   // my frag
 
-  fnode_t fnode;
   snapid_t first = 2;
   mempool::mds_co::compact_map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
 
@@ -668,8 +695,14 @@ protected:
   void _encode_dentry(CDentry *dn, ceph::buffer::list& bl, const std::set<snapid_t> *snaps);
   void _committed(int r, version_t v);
 
+  static fnode_const_ptr empty_fnode;
+  // fnode is a pointer to constant fnode_t, the constant fnode_t can be shared
+  // by CDir and log events. To update fnode, read-copy-update should be used.
+
+  fnode_const_ptr fnode = empty_fnode;
+
   version_t projected_version = 0;
-  mempool::mds_co::list<fnode_t> projected_fnode;
+  mempool::mds_co::list<fnode_const_ptr> projected_fnode;
 
   std::unique_ptr<scrub_info_t> scrub_infop;
 

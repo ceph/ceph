@@ -407,17 +407,14 @@ class MDCache {
   void journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob, CDentry *dn,
                           snapid_t follows=CEPH_NOSNAP,
 			  CInode **pcow_inode=0, CDentry::linkage_t *dnl=0);
-  void journal_cow_inode(MutationRef& mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP,
-			  CInode **pcow_inode=0);
   void journal_dirty_inode(MutationImpl *mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
 
   void project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first,
 				   int linkunlink, SnapRealm *prealm);
   void _project_rstat_inode_to_frag(const CInode::mempool_inode* inode, snapid_t ofirst, snapid_t last,
 				    CDir *parent, int linkunlink, bool update_inode);
-  void project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
-				   snapid_t ofirst, snapid_t last, 
-				   CInode *pin, bool cow_head);
+  void project_rstat_frag_to_inode(const nest_info_t& rstat, const nest_info_t& accounted_rstat,
+				   snapid_t ofirst, snapid_t last, CInode *pin, bool cow_head);
   void broadcast_quota_to_client(CInode *in, client_t exclude_ct = -1, bool quota_change = false);
   void predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 				CInode *in, CDir *parent,
@@ -1256,6 +1253,7 @@ class MDCache {
   friend class C_MDC_FragmentPrep;
   friend class C_MDC_FragmentStore;
   friend class C_MDC_FragmentCommit;
+  friend class C_MDC_FragmentRollback;
   friend class C_IO_MDC_FragmentPurgeOld;
 
   // -- subtrees --

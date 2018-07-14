@@ -2830,15 +2830,13 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     le = eu;
   }
   mds->mdlog->start_entry(le);
-  if (update_size) {  // FIXME if/when we do max_size nested accounting
-    mdcache->predirty_journal_parents(mut, metablob, in, 0, PREDIRTY_PRIMARY);
-    // no cow, here!
-    CDentry *parent = in->get_projected_parent_dn();
-    metablob->add_primary_dentry(parent, in, true);
-  } else {
-    metablob->add_dir_context(in->get_projected_parent_dn()->get_dir());
-    mdcache->journal_dirty_inode(mut.get(), metablob, in);
-  }
+
+  mdcache->predirty_journal_parents(mut, metablob, in, 0, PREDIRTY_PRIMARY);
+  // no cow, here!
+  CDentry *parent = in->get_projected_parent_dn();
+  metablob->add_primary_dentry(parent, in, true);
+  mdcache->journal_dirty_inode(mut.get(), metablob, in);
+
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut,
       UPDATE_SHAREMAX, ref_t<MClientCaps>()));
   wrlock_force(&in->filelock, mut);  // wrlock for duration of journal

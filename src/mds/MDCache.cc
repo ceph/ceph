@@ -480,15 +480,16 @@ void MDCache::create_empty_hierarchy(MDSGather *gather)
   adjust_subtree_auth(rootdir, mds->get_nodeid());   
   rootdir->dir_rep = CDir::REP_ALL;   //NONE;
 
-  ceph_assert(rootdir->fnode.accounted_fragstat == rootdir->fnode.fragstat);
-  ceph_assert(rootdir->fnode.fragstat == root->get_inode()->dirstat);
-  ceph_assert(rootdir->fnode.accounted_rstat == rootdir->fnode.rstat);
+  ceph_assert(rootdir->get_fnode()->accounted_fragstat == rootdir->get_fnode()->fragstat);
+  ceph_assert(rootdir->get_fnode()->fragstat == root->get_inode()->dirstat);
+  ceph_assert(rootdir->get_fnode()->accounted_rstat == rootdir->get_fnode()->rstat);
   /* Do no update rootdir rstat information of the fragment, rstat upkeep magic
    * assume version 0 is stale/invalid.
    */
 
   rootdir->mark_complete();
-  rootdir->mark_dirty(rootdir->pre_dirty(), mds->mdlog->get_current_segment());
+  rootdir->_get_fnode()->version = rootdir->pre_dirty();
+  rootdir->mark_dirty(mds->mdlog->get_current_segment());
   rootdir->commit(0, gather->new_sub());
 
   root->store(gather->new_sub());
@@ -500,6 +501,8 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
   CInode *my = create_system_inode(MDS_INO_MDSDIR(mds->get_nodeid()), S_IFDIR);
 
   CDir *mydir = my->get_or_open_dirfrag(this, frag_t());
+  auto mydir_fnode = mydir->_get_fnode();
+
   adjust_subtree_auth(mydir, mds->get_nodeid());   
 
   LogSegment *ls = mds->mdlog->get_current_segment();
@@ -513,29 +516,31 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
     CDentry *sdn = mydir->add_primary_dentry(name.str(), stray);
     sdn->_mark_dirty(mds->mdlog->get_current_segment());
 
-    stray->_get_inode()->dirstat = straydir->fnode.fragstat;
+    stray->_get_inode()->dirstat = straydir->get_fnode()->fragstat;
 
-    mydir->fnode.rstat.add(stray->get_inode()->rstat);
-    mydir->fnode.fragstat.nsubdirs++;
+    mydir_fnode->rstat.add(stray->get_inode()->rstat);
+    mydir_fnode->fragstat.nsubdirs++;
     // save them
     straydir->mark_complete();
-    straydir->mark_dirty(straydir->pre_dirty(), ls);
+    straydir->_get_fnode()->version = straydir->pre_dirty();
+    straydir->mark_dirty(ls);
     straydir->commit(0, gather->new_sub());
     stray->mark_dirty_parent(ls, true);
     stray->store_backtrace(gather->new_sub());
   }
 
-  mydir->fnode.accounted_fragstat = mydir->fnode.fragstat;
-  mydir->fnode.accounted_rstat = mydir->fnode.rstat;
+  mydir_fnode->accounted_fragstat = mydir->get_fnode()->fragstat;
+  mydir_fnode->accounted_rstat = mydir->get_fnode()->rstat;
 
   auto inode = myin->_get_inode();
-  inode->dirstat = mydir->fnode.fragstat;
-  inode->rstat = mydir->fnode.rstat;
+  inode->dirstat = mydir->get_fnode()->fragstat;
+  inode->rstat = mydir->get_fnode()->rstat;
   ++inode->rstat.rsubdirs;
   inode->accounted_rstat = inode->rstat;
 
   mydir->mark_complete();
-  mydir->mark_dirty(mydir->pre_dirty(), ls);
+  mydir_fnode->version = mydir->pre_dirty();
+  mydir->mark_dirty(ls);
   mydir->commit(0, gather->new_sub());
 
   myin->store(gather->new_sub());
@@ -568,9 +573,11 @@ void MDCache::_create_system_file(CDir *dir, std::string_view name, CInode *in, 
 
     mdir = in->get_or_open_dirfrag(this, frag_t());
     mdir->mark_complete();
-    mdir->pre_dirty();
-  } else
+    mdir->_get_fnode()->version = mdir->pre_dirty();
+  } else {
     inode->rstat.rfiles = 1;
+  }
+
   inode->version = dn->pre_dirty();
   
   SnapRealm *realm = dir->get_inode()->find_snaprealm();
@@ -616,7 +623,7 @@ void MDCache::_create_system_file_finish(MutationRef& mut, CDentry *dn, version_
   if (in->is_dir()) {
     CDir *dir = in->get_dirfrag(frag_t());
     ceph_assert(dir);
-    dir->mark_dirty(1, mut->ls);
+    dir->mark_dirty(mut->ls);
     dir->mark_new(mut->ls);
   }
 
@@ -789,7 +796,8 @@ void MDCache::populate_mydir()
     LogSegment *ls = mds->mdlog->get_current_segment();
     mydir->state_clear(CDir::STATE_BADFRAG);
     mydir->mark_complete();
-    mydir->mark_dirty(mydir->pre_dirty(), ls);
+    mydir->_get_fnode()->version = mydir->pre_dirty();
+    mydir->mark_dirty(ls);
   }
 
   // open or create stray
@@ -1687,10 +1695,12 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 	snapid_t oldfirst = dn->first;
 	dn->first = dir_follows+1;
 	if (realm->has_snaps_in_range(oldfirst, dir_follows)) {
-	  CDentry *olddn = dn->dir->add_remote_dentry(dn->get_name(), in->ino(),  in->d_type(),
-						      oldfirst, dir_follows);
-	  olddn->pre_dirty();
+	  CDir *dir = dn->dir;
+	  CDentry *olddn = dir->add_remote_dentry(dn->get_name(), in->ino(), in->d_type(),
+						  oldfirst, dir_follows);
 	  dout(10) << " olddn " << *olddn << dendl;
+	  ceph_assert(dir->is_projected());
+	  olddn->set_projected_version(dir->get_projected_version());
 	  metablob->add_remote_dentry(olddn, true);
 	  mut->add_cow_dentry(olddn);
 	  // FIXME: adjust link count here?  hmm.
@@ -1752,41 +1762,36 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
     }
     
     dout(10) << "    dn " << *dn << dendl;
+    CDir *dir = dn->get_dir();
+    ceph_assert(dir->is_projected());
+
     if (in) {
       CInode *oldin = cow_inode(in, follows);
+      ceph_assert(in->is_projected());
       mut->add_cow_inode(oldin);
       if (pcow_inode)
 	*pcow_inode = oldin;
-      CDentry *olddn = dn->dir->add_primary_dentry(dn->get_name(), oldin, oldfirst, follows);
-      oldin->_get_inode()->version = olddn->pre_dirty();
+      CDentry *olddn = dir->add_primary_dentry(dn->get_name(), oldin, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
       bool need_snapflush = !oldin->client_snap_caps.empty();
       if (need_snapflush) {
 	mut->ls->open_files.push_back(&oldin->item_open_file);
 	mds->locker->mark_need_snapflush_inode(oldin);
       }
+      olddn->set_projected_version(dir->get_projected_version());
       metablob->add_primary_dentry(olddn, 0, true, false, false, need_snapflush);
       mut->add_cow_dentry(olddn);
     } else {
       ceph_assert(dnl->is_remote());
-      CDentry *olddn = dn->dir->add_remote_dentry(dn->get_name(), dnl->get_remote_ino(), dnl->get_remote_d_type(),
+      CDentry *olddn = dir->add_remote_dentry(dn->get_name(), dnl->get_remote_ino(), dnl->get_remote_d_type(),
 						  oldfirst, follows);
-      olddn->pre_dirty();
       dout(10) << " olddn " << *olddn << dendl;
+
+      olddn->set_projected_version(dir->get_projected_version());
       metablob->add_remote_dentry(olddn, true);
       mut->add_cow_dentry(olddn);
     }
   }
-}
-
-
-void MDCache::journal_cow_inode(MutationRef& mut, EMetaBlob *metablob,
-                                CInode *in, snapid_t follows,
-				CInode **pcow_inode)
-{
-  dout(10) << "journal_cow_inode follows " << follows << " on " << *in << dendl;
-  CDentry *dn = in->get_projected_parent_dn();
-  journal_cow_dentry(mut.get(), metablob, dn, follows, pcow_inode);
 }
 
 void MDCache::journal_dirty_inode(MutationImpl *mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
@@ -1913,7 +1918,7 @@ void MDCache::_project_rstat_inode_to_frag(const CInode::mempool_inode* inode, s
      */    
     nest_info_t *prstat;
     snapid_t first;
-    fnode_t *pf = parent->get_projected_fnode();
+    auto pf = parent->_get_projected_fnode();
     if (last == CEPH_NOSNAP) {
       if (g_conf()->mds_snap_rstat)
 	first = std::max(ofirst, parent->first);
@@ -2005,7 +2010,8 @@ void MDCache::_project_rstat_inode_to_frag(const CInode::mempool_inode* inode, s
   }
 }
 
-void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
+void MDCache::project_rstat_frag_to_inode(const nest_info_t& rstat,
+					  const nest_info_t& accounted_rstat,
 					  snapid_t ofirst, snapid_t last, 
 					  CInode *pin, bool cow_head)
 {
@@ -2228,7 +2234,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     mut->auth_pin(parent);
     mut->add_projected_fnode(parent);
 
-    fnode_t *pf = parent->project_fnode();
+    auto pf = parent->project_fnode();
     pf->version = parent->pre_dirty();
 
     if (do_parent_mtime || linkunlink) {
@@ -6585,12 +6591,10 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
 
   EUpdate *le = new EUpdate(mds->mdlog, "truncate finish");
   mds->mdlog->start_entry(le);
-  CDentry *dn = in->get_projected_parent_dn();
-  le->metablob.add_dir_context(dn->get_dir());
-  le->metablob.add_primary_dentry(dn, in, true);
-  le->metablob.add_truncate_finish(in->ino(), ls->seq);
 
+  predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   journal_dirty_inode(mut.get(), &le->metablob, in);
+  le->metablob.add_truncate_finish(in->ino(), ls->seq);
   mds->mdlog->submit_entry(le, new C_MDC_TruncateLogged(this, in, mut));
 
   // flush immediately if there are readers/writers waiting
@@ -11980,6 +11984,7 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
     // journal dirfragtree
     auto pi = diri->project_inode();
     pi.inode->version = diri->pre_dirty();
+    predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY);
     journal_dirty_inode(mdr.get(), &le->metablob, diri);
   } else {
     mds->locker->mark_updated_scatterlock(&diri->dirfragtreelock);
@@ -12340,6 +12345,17 @@ void MDCache::wait_for_uncommitted_fragments(MDSGather *gather)
     p.second.waiters.push_back(gather->new_sub());
 }
 
+struct C_MDC_FragmentRollback : public MDCacheLogContext {
+  MutationRef mut;
+  C_MDC_FragmentRollback(MDCache *c, MutationRef& m) :
+    MDCacheLogContext(c), mut(m) {}
+  void finish(int r) override {
+    mut->apply();
+    get_mds()->locker->drop_locks(mut.get());
+    mut->cleanup();
+  }
+};
+
 void MDCache::rollback_uncommitted_fragments()
 {
   dout(10) << "rollback_uncommitted_fragments: " << uncommitted_fragments.size() << " pending" << dendl;
@@ -12357,7 +12373,8 @@ void MDCache::rollback_uncommitted_fragments()
 
     dout(10) << " rolling back " << p->first << " refragment by " << uf.bits << " bits" << dendl;
 
-    LogSegment *ls = mds->mdlog->get_current_segment();
+    MutationRef mut(new MutationImpl());
+    mut->ls = mds->mdlog->get_current_segment();
     EFragment *le = new EFragment(mds->mdlog, EFragment::OP_ROLLBACK, p->first, uf.bits);
     mds->mdlog->start_entry(le);
     bool diri_auth = (diri->authority() != CDIR_AUTH_UNDEF);
@@ -12379,20 +12396,21 @@ void MDCache::rollback_uncommitted_fragments()
 	dirfrag_rollback rollback;
 	decode(rollback, bp);
 
-	dir->set_version(rollback.fnode.version);
 	dir->fnode = rollback.fnode;
 
-	dir->_mark_dirty(ls);
+	dir->mark_dirty(mut->ls);
 
-	if (!(dir->fnode.rstat == dir->fnode.accounted_rstat)) {
+	if (!(dir->get_fnode()->rstat == dir->get_fnode()->accounted_rstat)) {
 	  dout(10) << "    dirty nestinfo on " << *dir << dendl;
-	  mds->locker->mark_updated_scatterlock(&dir->inode->nestlock);
-	  ls->dirty_dirfrag_nest.push_back(&dir->inode->item_dirty_dirfrag_nest);
+	  mds->locker->mark_updated_scatterlock(&diri->nestlock);
+	  mut->ls->dirty_dirfrag_nest.push_back(&diri->item_dirty_dirfrag_nest);
+	  mut->add_updated_lock(&diri->nestlock);
 	}
-	if (!(dir->fnode.fragstat == dir->fnode.accounted_fragstat)) {
+	if (!(dir->get_fnode()->fragstat == dir->get_fnode()->accounted_fragstat)) {
 	  dout(10) << "    dirty fragstat on " << *dir << dendl;
-	  mds->locker->mark_updated_scatterlock(&dir->inode->filelock);
-	  ls->dirty_dirfrag_dir.push_back(&dir->inode->item_dirty_dirfrag_dir);
+	  mds->locker->mark_updated_scatterlock(&diri->filelock);
+	  mut->ls->dirty_dirfrag_dir.push_back(&diri->item_dirty_dirfrag_dir);
+	  mut->add_updated_lock(&diri->filelock);
 	}
 
 	le->add_orig_frag(dir->get_frag());
@@ -12409,12 +12427,14 @@ void MDCache::rollback_uncommitted_fragments()
 
     if (diri_auth) {
       auto pi = diri->project_inode();
+      mut->add_projected_inode(diri);
       pi.inode->version = diri->pre_dirty();
-      diri->pop_and_dirty_projected_inode(ls); // hacky
+      predirty_journal_parents(mut, &le->metablob, diri, 0, PREDIRTY_PRIMARY);
       le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), diri, true);
     } else {
       mds->locker->mark_updated_scatterlock(&diri->dirfragtreelock);
-      ls->dirty_dirfrag_dirfragtree.push_back(&diri->item_dirty_dirfrag_dirfragtree);
+      mut->ls->dirty_dirfrag_dirfragtree.push_back(&diri->item_dirty_dirfrag_dirfragtree);
+      mut->add_updated_lock(&diri->dirfragtreelock);
     }
 
     if (g_conf()->mds_debug_frag)
@@ -12424,7 +12444,7 @@ void MDCache::rollback_uncommitted_fragments()
       ceph_assert(!diri->dirfragtree.is_leaf(leaf));
     }
 
-    mds->mdlog->submit_entry(le);
+    mds->mdlog->submit_entry(le, new C_MDC_FragmentRollback(this, mut));
 
     uf.old_frags.swap(old_frags);
     _fragment_committed(p->first, MDRequestRef());
@@ -13046,7 +13066,7 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
       frag_info.nfiles++;
   }
 
-  fnode_t *pf = dir->get_projected_fnode();
+  auto pf = dir->get_projected_fnode();
   bool good_fragstat = frag_info.same_sums(pf->fragstat);
   bool good_rstat = nest_info.same_sums(pf->rstat);
   if (good_fragstat && good_rstat) {
@@ -13055,8 +13075,9 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
     return;
   }
 
-  pf = dir->project_fnode();
-  pf->version = dir->pre_dirty();
+  auto _pf = dir->project_fnode();
+  _pf->version = dir->pre_dirty();
+  pf = _pf;
   mdr->add_projected_fnode(dir);
 
   mdr->ls = mds->mdlog->get_current_segment();
@@ -13068,7 +13089,7 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
       frag_info.mtime = pf->fragstat.mtime;
     if (pf->fragstat.change_attr > frag_info.change_attr)
       frag_info.change_attr = pf->fragstat.change_attr;
-    pf->fragstat = frag_info;
+    _pf->fragstat = frag_info;
     mds->locker->mark_updated_scatterlock(&diri->filelock);
     mdr->ls->dirty_dirfrag_dir.push_back(&diri->item_dirty_dirfrag_dir);
     mdr->add_updated_lock(&diri->filelock);
@@ -13077,7 +13098,7 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
   if (!good_rstat) {
     if (pf->rstat.rctime > nest_info.rctime)
       nest_info.rctime = pf->rstat.rctime;
-    pf->rstat = nest_info;
+    _pf->rstat = nest_info;
     mds->locker->mark_updated_scatterlock(&diri->nestlock);
     mdr->ls->dirty_dirfrag_nest.push_back(&diri->item_dirty_dirfrag_nest);
     mdr->add_updated_lock(&diri->nestlock);
@@ -13175,8 +13196,8 @@ do_rdlocks:
       CDir *dir = diri->get_dirfrag(leaf);
       ceph_assert(dir);
       ceph_assert(dir->get_version() > 0);
-      dir_info.add(dir->fnode.accounted_fragstat);
-      nest_info.add(dir->fnode.accounted_rstat);
+      dir_info.add(dir->get_fnode()->accounted_fragstat);
+      nest_info.add(dir->get_fnode()->accounted_rstat);
     }
   }
 

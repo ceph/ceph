@@ -190,7 +190,7 @@ void CDentry::mark_dirty(version_t pv, LogSegment *ls)
   _mark_dirty(ls);
 
   // mark dir too
-  dir->mark_dirty(pv, ls);
+  dir->mark_dirty(ls, pv);
 }
 
 

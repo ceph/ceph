@@ -5964,8 +5964,7 @@ public:
     if (newi->is_dir()) {
       CDir *dir = newi->get_dirfrag(frag_t());
       ceph_assert(dir);
-      dir->fnode.version--;
-      dir->mark_dirty(dir->fnode.version + 1, mdr->ls);
+      dir->mark_dirty(mdr->ls);
       dir->mark_new(mdr->ls);
     }
 
@@ -6130,7 +6129,7 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   CDir *newdir = newi->get_or_open_dirfrag(mdcache, frag_t());
   newdir->state_set(CDir::STATE_CREATING);
   newdir->mark_complete();
-  newdir->fnode.version = newdir->pre_dirty();
+  newdir->_get_fnode()->version = newdir->pre_dirty();
 
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
@@ -6648,7 +6647,7 @@ void Server::handle_peer_link_prep(MDRequestRef& mdr)
   rollback.reqid = mdr->reqid;
   rollback.ino = targeti->ino();
   rollback.old_ctime = targeti->get_inode()->ctime;   // we hold versionlock xlock; no concorrent projections
-  const fnode_t *pf = targeti->get_parent_dn()->get_dir()->get_projected_fnode();
+  const auto& pf = targeti->get_parent_dn()->get_dir()->get_projected_fnode();
   rollback.old_dir_mtime = pf->fragstat.mtime;
   rollback.old_dir_rctime = pf->rstat.rctime;
   rollback.was_inc = inc;
@@ -6801,7 +6800,7 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& 
 
   // parent dir rctime
   CDir *parent = in->get_projected_parent_dn()->get_dir();
-  fnode_t *pf = parent->project_fnode();
+  auto pf = parent->project_fnode();
   mut->add_projected_fnode(parent);
   pf->version = parent->pre_dirty();
   if (pf->fragstat.mtime == pi.inode->ctime) {
@@ -7603,7 +7602,7 @@ bool Server::_dir_is_nonempty(MDRequestRef& mdr, CInode *in)
 
   auto&& ls = in->get_dirfrags();
   for (const auto& dir : ls) {
-    const fnode_t *pf = dir->get_projected_fnode();
+    const auto& pf = dir->get_projected_fnode();
     if (pf->fragstat.size()) {
       dout(10) << "dir_is_nonempty dirstat has "
 	       << pf->fragstat.size() << " items " << *dir << dendl;
@@ -8405,6 +8404,12 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       mdcache->predirty_journal_parents(mdr, metablob, oldin, straydn->get_dir(),
 					PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
     }
+  }
+
+  if (srcdnl->is_remote() && srci->is_auth()) {
+    CDir *srci_dir = srci->get_projected_parent_dir();
+    if (srci_dir != srcdn->get_dir() && srci_dir != destdn->get_dir())
+      mdcache->predirty_journal_parents(mdr, metablob, srci, srci_dir, PREDIRTY_PRIMARY);
   }
   
   // move srcdn
@@ -9213,24 +9218,24 @@ void Server::_commit_peer_rename(MDRequestRef& mdr, int r,
     mdcache->shutdown_export_stray_finish(migrated_stray);
 }
 
-void _rollback_repair_dir(MutationRef& mut, CDir *dir, rename_rollback::drec &r, utime_t ctime,
-			  bool isdir, int linkunlink, nest_info_t &rstat)
+static void _rollback_repair_dir(MutationRef& mut, CDir *dir,
+				 rename_rollback::drec &r, utime_t ctime,
+				 bool isdir, const nest_info_t &rstat)
 {
-  fnode_t *pf;
-  pf = dir->project_fnode();
+  auto pf = dir->project_fnode();
   mut->add_projected_fnode(dir);
   pf->version = dir->pre_dirty();
 
   if (isdir) {
-    pf->fragstat.nsubdirs += linkunlink;
+    pf->fragstat.nsubdirs += 1;
   } else {
-    pf->fragstat.nfiles += linkunlink;
+    pf->fragstat.nfiles += 1;
   }    
   if (r.ino) {
-    pf->rstat.rbytes += linkunlink * rstat.rbytes;
-    pf->rstat.rfiles += linkunlink * rstat.rfiles;
-    pf->rstat.rsubdirs += linkunlink * rstat.rsubdirs;
-    pf->rstat.rsnaps += linkunlink * rstat.rsnaps;
+    pf->rstat.rbytes += rstat.rbytes;
+    pf->rstat.rfiles += rstat.rfiles;
+    pf->rstat.rsubdirs += rstat.rsubdirs;
+    pf->rstat.rsnaps += rstat.rsnaps;
   }
   if (pf->fragstat.mtime == ctime) {
     pf->fragstat.mtime = r.dirfrag_old_mtime;
@@ -9366,21 +9371,31 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef
 
   map<client_t,ref_t<MClientSnap>> splits[2];
 
-  CInode::mempool_inode *pip = nullptr;
+  const CInode::mempool_inode *pip = nullptr;
   if (in) {
     bool projected;
-    if (in->get_projected_parent_dn()->authority().first == whoami) {
+    CDir *pdir = in->get_projected_parent_dir();
+    if (pdir->authority().first == whoami) {
       auto pi = in->project_inode();
-      pip = pi.inode.get();
       mut->add_projected_inode(in);
-      pip->version = in->pre_dirty();
+      pi.inode->version = in->pre_dirty();
+      if (pdir != srcdir) {
+	auto pf = pdir->project_fnode();
+	mut->add_projected_fnode(pdir);
+	pf->version = pdir->pre_dirty();
+      }
+      if (pi.inode->ctime == rollback.ctime)
+	pi.inode->ctime = rollback.orig_src.old_ctime;
       projected = true;
     } else {
-      // FIXME: pip = in->get_projected_inode();
+      if (in->get_inode()->ctime == rollback.ctime) {
+	auto _inode = CInode::allocate_inode(*in->get_inode());
+	_inode->ctime = rollback.orig_src.old_ctime;
+	in->reset_inode(_inode);
+      }
       projected = false;
     }
-    if (pip->ctime == rollback.ctime)
-      pip->ctime = rollback.orig_src.old_ctime;
+    pip = in->get_projected_inode().get();
 
     if (rollback.srci_snapbl.length() && in->snaprealm) {
       bool hadrealm;
@@ -9411,12 +9426,6 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef
     }
   }
 
-  if (srcdn && srcdn->authority().first == whoami) {
-    nest_info_t blah;
-    _rollback_repair_dir(mut, srcdir, rollback.orig_src, rollback.ctime,
-			 in ? in->is_dir() : false, 1, pip ? pip->accounted_rstat : blah);
-  }
-
   // repair dest
   if (destdn) {
     if (rollback.orig_dest.ino && target) {
@@ -9437,17 +9446,24 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef
 
   if (target) {
     bool projected;
-    CInode::mempool_inode *ti = nullptr;
-    if (target->get_projected_parent_dn()->authority().first == whoami) {
+    CInode::inode_ptr ti;
+    CDir *pdir = target->get_projected_parent_dir();
+    if (pdir->authority().first == whoami) {
       auto pi = target->project_inode();
-      ti = pi.inode.get();
       mut->add_projected_inode(target);
-      ti->version = target->pre_dirty();
+      pi.inode->version = target->pre_dirty();
+      if (pdir != srcdir) {
+	auto pf = pdir->project_fnode();
+	mut->add_projected_fnode(pdir);
+	pf->version = pdir->pre_dirty();
+      }
+      ti = pi.inode;
       projected = true;
     } else {
-      //FIXME: ti = target->get_projected_inode();
+      ti = CInode::allocate_inode(*target->get_inode());
       projected = false;
     }
+
     if (ti->ctime == rollback.ctime)
       ti->ctime = rollback.orig_dest.old_ctime;
     if (MDS_INO_IS_STRAY(rollback.orig_src.dirfrag.ino)) {
@@ -9458,6 +9474,9 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef
 	       rollback.orig_dest.remote_ino == rollback.orig_src.ino);
     } else
       ti->nlink++;
+
+    if (!projected)
+      target->reset_inode(ti);
 
     if (rollback.desti_snapbl.length() && target->snaprealm) {
       bool hadrealm;
@@ -9486,6 +9505,12 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef
 	  target->snaprealm->merge_to(realm);
       }
     }
+  }
+
+  if (srcdn && srcdn->authority().first == whoami) {
+    nest_info_t blah;
+    _rollback_repair_dir(mut, srcdir, rollback.orig_src, rollback.ctime,
+			 in && in->is_dir(), pip ? pip->accounted_rstat : blah);
   }
 
   if (srcdn)

@@ -146,23 +146,23 @@ void StrayManager::purge(CDentry *dn)
 class C_PurgeStrayLogged : public StrayManagerLogContext {
   CDentry *dn;
   version_t pdv;
-  LogSegment *ls;
+  MutationRef mut;
 public:
-  C_PurgeStrayLogged(StrayManager *sm_, CDentry *d, version_t v, LogSegment *s) : 
-    StrayManagerLogContext(sm_), dn(d), pdv(v), ls(s) { }
+  C_PurgeStrayLogged(StrayManager *sm_, CDentry *d, version_t v, MutationRef& m) :
+    StrayManagerLogContext(sm_), dn(d), pdv(v), mut(m) { }
   void finish(int r) override {
-    sm->_purge_stray_logged(dn, pdv, ls);
+    sm->_purge_stray_logged(dn, pdv, mut);
   }
 };
 
 class C_TruncateStrayLogged : public StrayManagerLogContext {
   CDentry *dn;
-  LogSegment *ls;
+  MutationRef mut;
 public:
-  C_TruncateStrayLogged(StrayManager *sm, CDentry *d, LogSegment *s) :
-    StrayManagerLogContext(sm), dn(d), ls(s) { }
+  C_TruncateStrayLogged(StrayManager *sm, CDentry *d, MutationRef& m) :
+    StrayManagerLogContext(sm), dn(d), mut(m) {}
   void finish(int r) override {
-    sm->_truncate_stray_logged(dn, ls);
+    sm->_truncate_stray_logged(dn, mut);
   }
 };
 
@@ -178,10 +178,11 @@ void StrayManager::_purge_stray_purged(
 
   if (only_head) {
     /* This was a ::truncate */
-    EUpdate *le = new EUpdate(mds->mdlog, "purge_stray truncate");
-    mds->mdlog->start_entry(le);
+    MutationRef mut(new MutationImpl());
+    mut->ls = mds->mdlog->get_current_segment();
     
     auto pi = in->project_inode();
+    mut->add_projected_inode(in);
     pi.inode->size = 0;
     pi.inode->max_size_ever = 0;
     pi.inode->client_ranges.clear();
@@ -189,12 +190,19 @@ void StrayManager::_purge_stray_purged(
     pi.inode->truncate_from = 0;
     pi.inode->version = in->pre_dirty();
 
-    le->metablob.add_dir_context(dn->dir);
-    le->metablob.add_primary_dentry(dn, in, true);
+    CDir *dir = dn->get_dir();
+    auto pf = dir->project_fnode();
+    mut->add_projected_fnode(dir);
+    pf->version = dir->pre_dirty();
 
-    mds->mdlog->submit_entry(le,
-        new C_TruncateStrayLogged(
-          this, dn, mds->mdlog->get_current_segment()));
+    EUpdate *le = new EUpdate(mds->mdlog, "purge_stray truncate");
+    mds->mdlog->start_entry(le);
+
+    le->metablob.add_dir_context(dir);
+    auto& dl = le->metablob.add_dir(dn->dir, true);
+    le->metablob.add_primary_dentry(dl, dn, in, EMetaBlob::fullbit::STATE_DIRTY);
+
+    mds->mdlog->submit_entry(le, new C_TruncateStrayLogged(this, dn, mut));
   } else {
     if (in->get_num_ref() != (int)in->is_dirty() ||
         dn->get_num_ref() !=
@@ -208,6 +216,9 @@ void StrayManager::_purge_stray_purged(
       ceph_abort_msg("rogue reference to purging inode");
     }
 
+    MutationRef mut(new MutationImpl());
+    mut->ls = mds->mdlog->get_current_segment();
+
     // kill dentry.
     version_t pdv = dn->pre_dirty();
     dn->push_projected_linkage(); // NULL
@@ -217,7 +228,8 @@ void StrayManager::_purge_stray_purged(
 
     // update dirfrag fragstat, rstat
     CDir *dir = dn->get_dir();
-    fnode_t *pf = dir->project_fnode();
+    auto pf = dir->project_fnode();
+    mut->add_projected_fnode(dir);
     pf->version = dir->pre_dirty();
     if (in->is_dir())
       pf->fragstat.nsubdirs--;
@@ -226,16 +238,15 @@ void StrayManager::_purge_stray_purged(
     pf->rstat.sub(in->get_inode()->accounted_rstat);
 
     le->metablob.add_dir_context(dn->dir);
-    EMetaBlob::dirlump& dl = le->metablob.add_dir(dn->dir, true);
+    auto& dl = le->metablob.add_dir(dn->dir, true);
     le->metablob.add_null_dentry(dl, dn, true);
     le->metablob.add_destroyed_inode(in->ino());
 
-    mds->mdlog->submit_entry(le, new C_PurgeStrayLogged(this, dn, pdv,
-          mds->mdlog->get_current_segment()));
+    mds->mdlog->submit_entry(le, new C_PurgeStrayLogged(this, dn, pdv, mut));
   }
 }
 
-void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
+void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, MutationRef& mut)
 {
   CInode *in = dn->get_linkage()->get_inode();
   CDir *dir = dn->get_dir();
@@ -250,9 +261,9 @@ void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *l
   ceph_assert(dn->get_projected_linkage()->is_null());
   dir->unlink_inode(dn, !new_dn);
   dn->pop_projected_linkage();
-  dn->mark_dirty(pdv, ls);
+  dn->mark_dirty(pdv, mut->ls);
 
-  dir->pop_and_dirty_projected_fnode(ls);
+  mut->apply();
 
   in->state_clear(CInode::STATE_ORPHAN);
   dn->state_clear(CDentry::STATE_PURGING | CDentry::STATE_PURGINGPINNED);
@@ -742,13 +753,13 @@ void StrayManager::truncate(CDentry *dn)
         this, dn, true));
 }
 
-void StrayManager::_truncate_stray_logged(CDentry *dn, LogSegment *ls)
+void StrayManager::_truncate_stray_logged(CDentry *dn, MutationRef& mut)
 {
   CInode *in = dn->get_projected_linkage()->get_inode();
 
   dout(10) << __func__ << ": " << *dn << " " << *in << dendl;
 
-  in->pop_and_dirty_projected_inode(ls);
+  mut->apply();
 
   in->state_clear(CInode::STATE_PURGING);
   dn->state_clear(CDentry::STATE_PURGING | CDentry::STATE_PURGINGPINNED);
