@@ -324,6 +324,7 @@ Requires:	python%{_python_buildid}-rados = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{_python_buildid}-rbd = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{_python_buildid}-cephfs = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{_python_buildid}-rgw = %{_epoch_prefix}%{version}-%{release}
+Requires:	python%{_python_buildid}-ceph-argparse = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
 Requires:	python%{_python_buildid}-prettytable
 Requires:	python%{_python_buildid}-requests
@@ -707,6 +708,7 @@ Group:		Development/Libraries/Python
 %endif
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python-rados = %{_epoch_prefix}%{version}-%{release}
+Requires:	python-ceph-argparse = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-ceph < %{_epoch_prefix}%{version}-%{release}
 %description -n python-cephfs
 This package contains Python 2 libraries for interacting with Cephs distributed
@@ -720,10 +722,24 @@ Group:		Development/Libraries/Python
 %endif
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
+Requires:	python%{python3_pkgversion}-ceph-argparse = %{_epoch_prefix}%{version}-%{release}
 Provides:	python3-cephfs = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-cephfs
 This package contains Python 3 libraries for interacting with Cephs distributed
 file system.
+
+%if 0%{with python2}
+%package -n python-ceph-argparse
+Summary:	Python 2 utility libraries for Ceph CLI
+%if 0%{?suse_version}
+Group:		Development/Libraries/Python
+%endif
+%description -n python-ceph-argparse
+This package contains types and routines for Python 2 used by the Ceph CLI as
+well as the RESTful interface. These have to do with querying the daemons for
+command-description information, validating user command input against those
+descriptions, and submitting the command to the appropriate daemon.
+%endif
 
 %package -n python%{python3_pkgversion}-ceph-argparse
 Summary:	Python 3 utility libraries for Ceph CLI
@@ -1198,8 +1214,6 @@ fi
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
 %{_unitdir}/rbdmap.service
-%{python_sitelib}/ceph_argparse.py*
-%{python_sitelib}/ceph_daemon.py*
 %dir %{_udevrulesdir}
 %{_udevrulesdir}/50-rbd.rules
 %attr(3770,ceph,ceph) %dir %{_localstatedir}/log/ceph/
@@ -1727,6 +1741,12 @@ fi
 %{python3_sitearch}/cephfs-*.egg-info
 %{python3_sitelib}/ceph_volume_client.py
 %{python3_sitelib}/__pycache__/ceph_volume_client.cpython*.py*
+
+%if 0%{with python2}
+%files -n python-ceph-argparse
+%{python_sitelib}/ceph_argparse.py*
+%{python_sitelib}/ceph_daemon.py*
+%endif
 
 %files -n python%{python3_pkgversion}-ceph-argparse
 %{python3_sitelib}/ceph_argparse.py

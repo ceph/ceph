@@ -42,5 +42,3 @@ usr/share/ceph/id_rsa_drop.ceph.com
 usr/share/ceph/id_rsa_drop.ceph.com.pub
 etc/ceph/rbdmap
 lib/udev/rules.d/50-rbd.rules
-usr/lib/python*/dist-packages/ceph_argparse.py*
-usr/lib/python*/dist-packages/ceph_daemon.py*
