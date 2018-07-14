@@ -204,8 +204,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   config_key_service = new ConfigKeyService(this, paxos);
 
-  mon_caps = new MonCap();
-  bool r = mon_caps->parse("allow *", NULL);
+  bool r = mon_caps.parse("allow *", NULL);
   assert(r);
 
   exited_quorum = ceph_clock_now();
@@ -233,7 +232,6 @@ Monitor::~Monitor()
   delete config_key_service;
   delete paxos;
   assert(session_map.sessions.empty());
-  delete mon_caps;
 }
 
 
@@ -4055,7 +4053,7 @@ void Monitor::_ms_dispatch(Message *m)
       // give it monitor caps; the peer type has been authenticated
       dout(5) << __func__ << " setting monitor caps on this connection" << dendl;
       if (!s->caps.is_allow_all()) // but no need to repeatedly copy
-        s->caps = *mon_caps;
+        s->caps = mon_caps;
       s->authenticated = true;
     }
   } else {
