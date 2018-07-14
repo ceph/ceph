@@ -772,8 +772,9 @@ void ManagedLock<I>::handle_shutdown_pre_release(int r) {
   using managed_lock::ReleaseRequest;
   ReleaseRequest<I>* req = ReleaseRequest<I>::create(m_ioctx, m_watcher,
       m_work_queue, m_oid, cookie,
-      new FunctionContext([this](int r) {
-        post_release_lock_handler(true, r, create_context_callback<
+      new FunctionContext([this, r](int l) {
+        int rst = r < 0 ? r : l;
+        post_release_lock_handler(true, rst, create_context_callback<
             ManagedLock<I>, &ManagedLock<I>::handle_shutdown_post_release>(this));
       }));
   req->send();
