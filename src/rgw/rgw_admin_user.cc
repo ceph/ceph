@@ -1,6 +1,7 @@
 #include "include/rgw/librgw_admin_user.h"
 #include "rgw_admin_user.h"
 #include "rgw_user.h"
+#include "common/errno.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
