@@ -1058,6 +1058,14 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
     update_snaps = true;
   }
 
+  parent->log_operation(
+    log,
+    m->updated_hit_set_history,
+    m->pg_trim_to,
+    m->pg_roll_forward_to,
+    update_snaps,
+    rm->localt);
+
   pg_missing_tracker_t pmissing = get_parent()->get_local_missing();
   if (pmissing.is_missing(soid)) {
     dout(30) << __func__ << " is_missing " << pmissing.is_missing(soid) << dendl;
@@ -1069,13 +1077,6 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   }
 
   parent->update_stats(m->pg_stats);
-  parent->log_operation(
-    log,
-    m->updated_hit_set_history,
-    m->pg_trim_to,
-    m->pg_roll_forward_to,
-    update_snaps,
-    rm->localt);
 
   rm->opt.register_on_commit(
     parent->bless_context(

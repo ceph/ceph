@@ -907,6 +907,13 @@ void ECBackend::handle_sub_write(
     }
   }
   clear_temp_objs(op.temp_removed);
+  get_parent()->log_operation(
+    op.log_entries,
+    op.updated_hit_set_history,
+    op.trim_to,
+    op.roll_forward_to,
+    !op.backfill_or_async_recovery,
+    localt);
   dout(30) << __func__ << " missing before " << get_parent()->get_log().get_missing().get_items() << dendl;
   pg_missing_tracker_t pmissing = get_parent()->get_local_missing();
   if (pmissing.is_missing(op.soid)) {
@@ -917,13 +924,6 @@ void ECBackend::handle_sub_write(
       dout(30) << " entry is_delete " << e.is_delete() << dendl;
     }
   }
-  get_parent()->log_operation(
-    op.log_entries,
-    op.updated_hit_set_history,
-    op.trim_to,
-    op.roll_forward_to,
-    !op.backfill_or_async_recovery,
-    localt);
 
   if (!get_parent()->pg_is_undersized() &&
       (unsigned)get_parent()->whoami_shard().shard >=
