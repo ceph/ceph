@@ -1,3 +1,4 @@
+#include "common/errno.h"
 #include "include/rgw/librgw_admin_user.h"
 #include "rgw_admin_user.h"
 #include "rgw_user.h"
