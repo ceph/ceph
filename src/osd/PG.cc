@@ -4500,6 +4500,9 @@ void PG::_scan_snaps(ScrubMap &smap)
 
 void PG::_repair_oinfo_oid(ScrubMap &smap)
 {
+  bool skip_data_digest = osd->store->has_builtin_csum() &&
+    cct->_conf->osd_skip_data_digest;
+
   for (map<hobject_t, ScrubMap::object>::reverse_iterator i = smap.objects.rbegin();
        i != smap.objects.rend();
        ++i) {
@@ -4517,17 +4520,24 @@ void PG::_repair_oinfo_oid(ScrubMap &smap)
     } catch(...) {
       continue;
     }
-    if (oi.soid != hoid) {
+    if (oi.soid != hoid || (skip_data_digest && oi.is_data_digest())) {
       ObjectStore::Transaction t;
       OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
+      ostringstream errormsg;
+      // Fix object info
+      if (oi.soid != hoid) {
+        errormsg << " bad oid in object info: " << oi.soid;
+        oi.soid = hoid;
+      }
+      if (skip_data_digest && oi.is_data_digest()) {
+        errormsg << " data_digest should not be set";
+        oi.clear_data_digest();
+      }
       osd->clog->error() << "osd." << osd->whoami
 			    << " found object info error on pg "
-			    << info.pgid
-			    << " oid " << hoid << " oid in object info: "
-			    << oi.soid
+			    << info.pgid << " oid " << hoid
+			    << errormsg.str()
 			    << "...repaired";
-      // Fix object info
-      oi.soid = hoid;
       bl.clear();
       encode(oi, bl, get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
 
@@ -4543,6 +4553,7 @@ void PG::_repair_oinfo_oid(ScrubMap &smap)
     }
   }
 }
+
 int PG::build_scrub_map_chunk(
   ScrubMap &map,
   ScrubMapBuilder &pos,
