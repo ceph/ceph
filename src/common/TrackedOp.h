@@ -430,7 +430,7 @@ inline void TrackedOp::put() {
 again:
   auto nref_snap = nref.load();
   if (nref_snap == 1) {
-    switch (state.load()) {
+    switch (state.load(std::memory_order_acquire)) {
     case STATE_UNTRACKED:
       _unregistered();
       delete this;
@@ -443,7 +443,7 @@ again:
       if (!tracker->is_tracking()) {
         delete this;
       } else {
-        state = TrackedOp::STATE_HISTORY;
+        state.store(TrackedOp::STATE_HISTORY, std::memory_order_release);
         tracker->record_history_op(
           TrackedOpRef(this, /* add_ref = */ false));
       }

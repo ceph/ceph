@@ -256,18 +256,14 @@ void OpTracker::register_inflight_op(TrackedOp *i,
     std::unique_lock locker(sdata.ops_in_flight_lock_sharded);
     sdata.ops_in_flight_sharded.push_back(*i);
     i->shard_index = shard_index;
-    // default state is STATE_UNTRACKED. Altough TrackedOp::state
-    // is std::atomic, we're setting it inside critical section.
-    // This means the cost of MFENCE on x86 should be relatively
-    // small as LOCKed ADD/SUB already fence the memory.
-    i->state = TrackedOp::STATE_LIVE;
+    i->state.store(TrackedOp::STATE_LIVE, std::memory_order_release);
   }
 }
 
 void OpTracker::unregister_inflight_op(TrackedOp* const i)
 {
   // caller checks;
-  assert(i->state);
+  assert(i->state.load(std::memory_order_acquire));
 
   ShardedTrackingData& sdata = sharded_in_flight_list.get_shard(i->shard_index);
   {
@@ -421,7 +417,7 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
 
 void TrackedOp::mark_event_string(const string &event, utime_t stamp)
 {
-  if (!state)
+  if (!state.load(std::memory_order_acquire))
     return;
 
   {
@@ -439,7 +435,7 @@ void TrackedOp::mark_event_string(const string &event, utime_t stamp)
 
 void TrackedOp::mark_event(const char *event, utime_t stamp)
 {
-  if (!state)
+  if (!state.load(std::memory_order_acquire))
     return;
 
   {
