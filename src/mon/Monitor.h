@@ -882,7 +882,7 @@ public:
   }
   void dispatch_op(MonOpRequestRef op);
   //mon_caps is used for un-connected messages from monitors
-  MonCap * mon_caps;
+  MonCap mon_caps;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			    int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
