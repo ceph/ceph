@@ -10,12 +10,10 @@ add_ceph_unittest(unittest_seastar_denc)
 target_link_libraries(unittest_seastar_denc ceph-common global crimson)
 
 add_executable(unittest_seastar_messenger test_messenger.cc)
-add_ceph_unittest(unittest_seastar_messenger)
 target_link_libraries(unittest_seastar_messenger ceph-common crimson)
 
 add_executable(unittest_seastar_echo
   test_alien_echo.cc)
-add_ceph_unittest(unittest_seastar_echo)
 target_link_libraries(unittest_seastar_echo ceph-common global crimson)
 
 add_executable(unittest_seastar_thread_pool

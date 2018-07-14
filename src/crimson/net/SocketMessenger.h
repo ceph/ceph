@@ -16,7 +16,7 @@
 
 #include <map>
 #include <boost/optional.hpp>
-#include <core/reactor.hh>
+#include <seastar/core/reactor.hh>
 
 #include "msg/Policy.h"
 #include "Messenger.h"

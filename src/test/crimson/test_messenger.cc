@@ -2,9 +2,9 @@
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/SocketMessenger.h"
-#include <core/app-template.hh>
-#include <core/future-util.hh>
-#include <core/reactor.hh>
+#include <seastar/core/app-template.hh>
+#include <seastar/core/future-util.hh>
+#include <seastar/core/reactor.hh>
 
 static seastar::future<> test_echo()
 {

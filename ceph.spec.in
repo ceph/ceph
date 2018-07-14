@@ -46,6 +46,7 @@
 %endif
 %endif
 %endif
+%bcond_with seastar
 %if 0%{?suse_version} >= 1500
 %bcond_with python2
 %else
@@ -174,7 +175,19 @@ BuildRequires:	python%{_python_buildid}-tox
 BuildRequires:	python%{_python_buildid}-virtualenv
 BuildRequires:	socat
 %endif
-
+%if 0%{with seastar}
+BuildRequires:  cryptopp-devel
+BuildRequires:  gnutls-devel
+BuildRequires:  hwloc-devel
+BuildRequires:  libpciaccess-devel
+BuildRequires:  lksctp-tools-devel
+BuildRequires:  numactl-devel
+BuildRequires:  protobuf-compiler
+BuildRequires:  protobuf-devel
+BuildRequires:  ragel
+BuildRequires:  systemtap-sdt-devel
+BuildRequires:  yaml-cpp-devel
+%endif
 #################################################################################
 # distro-conditional dependencies
 #################################################################################
