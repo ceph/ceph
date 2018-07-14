@@ -73,6 +73,11 @@ int execute(const po::variables_map &vm,
     return r;
   }
 
+  if (info.size == size) {
+    std::cerr << "rbd: new size is equal to original size " << std::endl;
+    return -EINVAL;
+  }
+
   if (info.size > size && !vm["allow-shrink"].as<bool>()) {
     r = -EINVAL;
   } else {
