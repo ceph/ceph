@@ -17,7 +17,8 @@
 #include "include/common_fwd.h"
 #include "include/elist.h"
 #include <list>
-#include "mds/PurgeQueue.h"
+#include "Mutation.h"
+#include "PurgeQueue.h"
 
 class MDSRank;
 class CInode;
@@ -123,13 +124,13 @@ protected:
    */
   void _purge_stray_purged(CDentry *dn, bool only_head);
 
-  void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
+  void _purge_stray_logged(CDentry *dn, version_t pdv, MutationRef& mut);
 
   /**
    * Callback: we have logged the update to an inode's metadata
    * reflecting it's newly-zeroed length.
    */
-  void _truncate_stray_logged(CDentry *dn, LogSegment *ls);
+  void _truncate_stray_logged(CDentry *dn, MutationRef &mut);
   /**
    * Call this on a dentry that has been identified as
    * eligible for purging. It will be passed on to PurgeQueue.

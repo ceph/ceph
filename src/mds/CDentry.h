@@ -237,7 +237,7 @@ public:
 
   version_t pre_dirty(version_t min=0);
   void _mark_dirty(LogSegment *ls);
-  void mark_dirty(version_t projected_dirv, LogSegment *ls);
+  void mark_dirty(version_t pv, LogSegment *ls);
   void mark_clean();
 
   void mark_new();

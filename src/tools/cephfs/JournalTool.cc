@@ -730,9 +730,9 @@ int JournalTool::recover_dentries(
       try {
         old_fnode.decode(old_fnode_iter);
         dout(4) << "frag " << frag_oid.name << " fnode old v" <<
-          old_fnode.version << " vs new v" << lump.fnode.version << dendl;
+          old_fnode.version << " vs new v" << lump.fnode->version << dendl;
         old_fnode_version = old_fnode.version;
-        write_fnode = old_fnode_version < lump.fnode.version;
+        write_fnode = old_fnode_version < lump.fnode->version;
       } catch (const buffer::error &err) {
         dout(1) << "frag " << frag_oid.name
                 << " is corrupt, overwriting" << dendl;
@@ -748,7 +748,7 @@ int JournalTool::recover_dentries(
     if ((other_pool || write_fnode) && !dry_run) {
       dout(4) << "writing fnode to omap header" << dendl;
       bufferlist fnode_bl;
-      lump.fnode.encode(fnode_bl);
+      lump.fnode->encode(fnode_bl);
       if (!other_pool || frag.ino >= MDS_INO_SYSTEM_BASE) {
 	r = output.omap_set_header(frag_oid.name, fnode_bl);
       }
@@ -830,9 +830,9 @@ int JournalTool::recover_dentries(
           // squash over it with what's in this fullbit
           dout(10) << "Existing remote inode in slot to be (maybe) written "
                << "by a full inode from the journal dn '" << fb.dn.c_str()
-               << "' with lump fnode version " << lump.fnode.version
+               << "' with lump fnode version " << lump.fnode->version
                << "vs existing fnode version " << old_fnode_version << dendl;
-          write_dentry = old_fnode_version < lump.fnode.version;
+          write_dentry = old_fnode_version < lump.fnode->version;
         } else if (dentry_type == 'I') {
           // Read out inode version to compare with backing store
           InodeStore inode;
@@ -893,15 +893,15 @@ int JournalTool::recover_dentries(
         if (dentry_type == 'L') {
           dout(10) << "Existing hardlink inode in slot to be (maybe) written "
                << "by a remote inode from the journal dn '" << rb.dn.c_str()
-               << "' with lump fnode version " << lump.fnode.version
+               << "' with lump fnode version " << lump.fnode->version
                << "vs existing fnode version " << old_fnode_version << dendl;
-          write_dentry = old_fnode_version < lump.fnode.version;
+          write_dentry = old_fnode_version < lump.fnode->version;
         } else if (dentry_type == 'I') {
           dout(10) << "Existing full inode in slot to be (maybe) written "
                << "by a remote inode from the journal dn '" << rb.dn.c_str()
-               << "' with lump fnode version " << lump.fnode.version
+               << "' with lump fnode version " << lump.fnode->version
                << "vs existing fnode version " << old_fnode_version << dendl;
-          write_dentry = old_fnode_version < lump.fnode.version;
+          write_dentry = old_fnode_version < lump.fnode->version;
         } else {
           dout(4) << "corrupt dentry in backing store, overwriting from "
             "journal" << dendl;
@@ -949,15 +949,15 @@ int JournalTool::recover_dentries(
 	if (dentry_type == 'L') {
 	  dout(10) << "Existing hardlink inode in slot to be (maybe) removed "
 	    << "by null journal dn '" << nb.dn.c_str()
-	    << "' with lump fnode version " << lump.fnode.version
+	    << "' with lump fnode version " << lump.fnode->version
 	    << "vs existing fnode version " << old_fnode_version << dendl;
-	  remove_dentry = old_fnode_version < lump.fnode.version;
+	  remove_dentry = old_fnode_version < lump.fnode->version;
 	} else if (dentry_type == 'I') {
 	  dout(10) << "Existing full inode in slot to be (maybe) removed "
 	    << "by null journal dn '" << nb.dn.c_str()
-	    << "' with lump fnode version " << lump.fnode.version
+	    << "' with lump fnode version " << lump.fnode->version
 	    << "vs existing fnode version " << old_fnode_version << dendl;
-	  remove_dentry = old_fnode_version < lump.fnode.version;
+	  remove_dentry = old_fnode_version < lump.fnode->version;
 	} else {
 	  dout(4) << "corrupt dentry in backing store, will remove" << dendl;
 	  remove_dentry = true;
