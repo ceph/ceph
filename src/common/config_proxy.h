@@ -93,35 +93,16 @@ public:
   }
   // change `values` in-place
   void finalize_reexpand_meta() {
-<<<<<<< HEAD
-    Mutex::Locker l(lock);
+    Mutex::Locker l{lock};
     config.finalize_reexpand_meta(values, *this);
   }
   void add_observer(md_config_obs_t* obs) {
-    Mutex::Locker l(lock);
+    Mutex::Locker l{lock};
     config.add_observer(obs);
   }
   void remove_observer(md_config_obs_t* obs) {
-    Mutex::Locker l(lock);
+    Mutex::Locker l{lock};
     config.remove_observer(obs);
-  }
-  void call_all_observers() {
-    Mutex::Locker l(lock);
-    config.call_all_observers(*this);
-=======
-    Mutex::Locker l{lock};
-    if (config.finalize_reexpand_meta(values, obs_mgr)) {
-      obs_mgr.apply_changes(values.changed, *this, nullptr);
-      values.changed.clear();
-    }
-  }
-  void add_observer(md_config_obs_t* obs) {
-    Mutex::Locker l{lock};
-    obs_mgr.add_observer(obs);
-  }
-  void remove_observer(md_config_obs_t* obs) {
-    Mutex::Locker l{lock};
-    obs_mgr.remove_observer(obs);
   }
   void call_all_observers() {
     Mutex::Locker l{lock};
@@ -133,8 +114,7 @@ public:
     // An alternative might be to pass a std::unique_lock to
     // handle_conf_change and have a version of get_var that can take it
     // by reference and lock as appropriate.
-    obs_mgr.call_all_observers(*this);
->>>>>>> 9a2bc3c2eb... wip
+    config.call_all_observers(*this);
   }
   void set_safe_to_start_threads() {
     config.set_safe_to_start_threads();
@@ -179,11 +159,17 @@ public:
 		   const map<std::string,std::string>& kv,
 		   md_config_t::config_callback config_cb) {
     Mutex::Locker l{lock};
-    config.set_mon_vals(cct, values, *this, kv, config_cb);
+    int ret = config.set_mon_vals(cct, values, kv, config_cb);
+    config._apply_changes(values, *this, nullptr);
+    values.changed.clear();
+    return ret;
   }
   int injectargs(const std::string &s, std::ostream *oss) {
     Mutex::Locker l{lock};
-    config.injectargs(values, *this, s, oss);
+    int ret = config.injectargs(values, s, oss);
+    config._apply_changes(values, *this, oss);
+    values.changed.clear();
+    return ret;
   }
   void parse_env(const char *env_var = "CEPH_ARGS") {
     Mutex::Locker l{lock};
