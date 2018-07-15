@@ -705,6 +705,15 @@ void cls_cxx_subop_version(cls_method_context_t hctx, string *s)
   *s = buf;
 }
 
+int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq) {
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+  if (!ctx->new_obs.exists) {
+    return -ENOENT;
+  }
+  *snap_seq = ctx->obc->ssc->snapset.seq;
+  return 0;
+}
+
 int cls_log(int level, const char *format, ...)
 {
    int size = 256;

@@ -842,5 +842,20 @@ std::ostream& operator<<(std::ostream& os,
   return os;
 }
 
+std::ostream& operator<<(std::ostream& os, const AssertSnapcSeqState& state) {
+  switch (state) {
+  case ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ:
+    os << "gt";
+    break;
+  case ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ:
+    os << "le";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(state) << ")";
+    break;
+  }
+  return os;
+}
+
 } // namespace rbd
 } // namespace cls
