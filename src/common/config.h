@@ -90,13 +90,6 @@ public:
   /// true if we are a daemon (as per CephContext::code_env)
   const bool is_daemon;
 
-  /* Maps configuration options to the observer listening for them. */
-  typedef std::multimap <std::string, md_config_obs_impl<lock_policy>*> obs_map_t;
-
-  /* Set of configuration options that have changed since the last
-   * apply_changes */
-  typedef std::set < std::string > changed_set_t;
-
   /*
    * Mapping from legacy config option names to class members
    */
@@ -357,7 +350,6 @@ private:
   string do_show_config_value;
 
   obs_map_t observers;
-  changed_set_t changed;
 
   vector<Option> subsys_options;
 

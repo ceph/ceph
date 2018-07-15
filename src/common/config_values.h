@@ -15,7 +15,6 @@
 #include "msg/msg_types.h"
 
 class ConfigValues {
-  using changed_set_t = std::set<std::string>;
   using values_t = std::map<std::string, map<int32_t,Option::value_t>>;
   values_t values;
   // for populating md_config_impl::legacy_values in ctor
@@ -28,6 +27,10 @@ public:
   string cluster;
   ceph::logging::SubsystemMap subsys;
   bool no_mon_config = false;
+  // Set of configuration options that have changed since the last
+  // apply_changes
+  using changed_set_t = std::set<std::string>;
+  changed_set_t changed;
 
 // This macro block defines C members of the md_config_t struct
 // corresponding to the definitions in legacy_config_opts.h.

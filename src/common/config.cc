@@ -1133,6 +1133,7 @@ void md_config_impl<lp>::finalize_reexpand_meta(ConfigValues& values,
     // meta expands could have modified anything.  Copy it all out again.
     update_legacy_vals(values);
     _apply_changes(values, proxy, NULL);
+    values.changed.clear();
   }
 }
 
@@ -1445,7 +1446,7 @@ void md_config_impl<lp>::_refresh(ConfigValues& values, const Option& opt)
     values.set_logging(opt.subsys, actual_val.c_str());
   } else {
     // normal option, advertise the change.
-    changed.insert(opt.name);
+    values.changed.insert(opt.name);
   }
 }
 
