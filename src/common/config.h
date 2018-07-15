@@ -25,7 +25,6 @@
 #include "common/subsys_types.h"
 #include "common/config_fwd.h"
 #include "common/config_values.h"
-#include "common/lock_mutex.h"
 
 class CephContext;
 
@@ -371,12 +370,6 @@ public:
     auto size = get_val<uint64_t>(values, "osd_pool_default_size");
     return min_size ? std::min(min_size, size) : (size - size / 2);
   }
-
-  /** A lock that protects the md_config_t internals. It is
-   * recursive, for simplicity.
-   * It is best if this lock comes first in the lock hierarchy. We will
-   * hold this lock when calling configuration observers.  */
-  LockMutex<lock_policy> lock;
 
   friend class test_md_config_t;
 };
