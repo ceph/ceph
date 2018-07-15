@@ -52,7 +52,7 @@ public:
 				       std::forward<Callback>(cb),
 				       std::forward<Args>(args)...);
   }
-  void config_options(Formatter *f) {
+  void config_options(Formatter *f) const {
     config.config_options(f);
   }
   const Option* get_schema(const std::string& key) const {
@@ -202,7 +202,7 @@ public:
   void complain_about_parse_errors(CephContext *cct) {
     return config.complain_about_parse_errors(cct);
   }
-  void do_argv_commands() {
+  void do_argv_commands() const {
     Mutex::Locker l{lock};
     config.do_argv_commands(values);
   }

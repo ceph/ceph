@@ -490,19 +490,21 @@ void md_config_impl<lp>::parse_env(ConfigValues& values,
 }
 
 template<LockPolicy lp>
-void md_config_impl<lp>::show_config(const ConfigValues& values, std::ostream& out)
+void md_config_impl<lp>::show_config(const ConfigValues& values,
+				     std::ostream& out) const
 {
   _show_config(values, &out, nullptr);
 }
 
 template<LockPolicy lp>
-void md_config_impl<lp>::show_config(const ConfigValues& values, Formatter *f)
+void md_config_impl<lp>::show_config(const ConfigValues& values,
+				     Formatter *f) const
 {
   _show_config(values, nullptr, f);
 }
 
 template<LockPolicy lp>
-void md_config_impl<lp>::config_options(Formatter *f)
+void md_config_impl<lp>::config_options(Formatter *f) const
 {
   f->open_array_section("options");
   for (const auto& i: schema) {
@@ -513,7 +515,7 @@ void md_config_impl<lp>::config_options(Formatter *f)
 
 template<LockPolicy lp>
 void md_config_impl<lp>::_show_config(const ConfigValues& values,
-				      std::ostream *out, Formatter *f)
+				      std::ostream *out, Formatter *f) const
 {
   if (out) {
     *out << "name = " << values.name << std::endl;
@@ -625,7 +627,7 @@ int md_config_impl<lp>::parse_argv(ConfigValues& values,
 }
 
 template<LockPolicy lp>
-void md_config_impl<lp>::do_argv_commands(const ConfigValues& values)
+void md_config_impl<lp>::do_argv_commands(const ConfigValues& values) const
 {
 
   if (do_show_config) {
