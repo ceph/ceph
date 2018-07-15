@@ -1050,6 +1050,11 @@ public:
 	     const UserPerm& perms);
   int utime(const char *path, struct utimbuf *buf, const UserPerm& perms);
   int lutime(const char *path, struct utimbuf *buf, const UserPerm& perms);
+  int futime(int fd, struct utimbuf *buf, const UserPerm& perms);
+  int utimes(const char *relpath, struct timeval times[2], const UserPerm& perms);
+  int lutimes(const char *relpath, struct timeval times[2], const UserPerm& perms);
+  int futimes(int fd, struct timeval times[2], const UserPerm& perms);
+  int futimens(int fd, struct timespec times[2], const UserPerm& perms);
   int flock(int fd, int operation, uint64_t owner);
   int truncate(const char *path, loff_t size, const UserPerm& perms);
 

@@ -7411,14 +7411,64 @@ int Client::lchown(const char *relpath, uid_t new_uid, gid_t new_gid,
   return _setattr(in, &attr, mask, perms);
 }
 
+static void attr_set_atime_and_mtime(struct stat *attr,
+                                     const utime_t &atime,
+                                     const utime_t &mtime)
+{
+  stat_set_atime_sec(attr, atime.tv.tv_sec);
+  stat_set_atime_nsec(attr, atime.tv.tv_nsec);
+  stat_set_mtime_sec(attr, mtime.tv.tv_sec);
+  stat_set_mtime_nsec(attr, mtime.tv.tv_nsec);
+}
+
+// for [l]utime() invoke the timeval variant as the timespec
+// variant are not yet implemented. for futime[s](), invoke
+// the timespec variant.
 int Client::utime(const char *relpath, struct utimbuf *buf,
 		  const UserPerm& perms)
+{
+  struct timeval tv[2];
+  tv[0].tv_sec  = buf->actime;
+  tv[0].tv_usec = 0;
+  tv[1].tv_sec  = buf->modtime;
+  tv[1].tv_usec = 0;
+
+  return utimes(relpath, tv, perms);
+}
+
+int Client::lutime(const char *relpath, struct utimbuf *buf,
+		   const UserPerm& perms)
+{
+  struct timeval tv[2];
+  tv[0].tv_sec  = buf->actime;
+  tv[0].tv_usec = 0;
+  tv[1].tv_sec  = buf->modtime;
+  tv[1].tv_usec = 0;
+
+  return lutimes(relpath, tv, perms);
+}
+
+int Client::futime(int fd, struct utimbuf *buf, const UserPerm& perms)
+{
+  struct timespec ts[2];
+  ts[0].tv_sec  = buf->actime;
+  ts[0].tv_nsec = 0;
+  ts[1].tv_sec  = buf->modtime;
+  ts[1].tv_nsec = 0;
+
+  return futimens(fd, ts, perms);
+}
+
+int Client::utimes(const char *relpath, struct timeval times[2],
+                   const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
-  tout(cct) << buf->modtime << std::endl;
-  tout(cct) << buf->actime << std::endl;
+  tout(cct) << "atime: " << times[0].tv_sec << "." << times[0].tv_usec
+            << std::endl;
+  tout(cct) << "mtime: " << times[1].tv_sec << "." << times[1].tv_usec
+            << std::endl;
 
   if (unmounting)
     return -ENOTCONN;
@@ -7429,37 +7479,77 @@ int Client::utime(const char *relpath, struct utimbuf *buf,
   if (r < 0)
     return r;
   struct stat attr;
-  stat_set_mtime_sec(&attr, buf->modtime);
-  stat_set_mtime_nsec(&attr, 0);
-  stat_set_atime_sec(&attr, buf->actime);
-  stat_set_atime_nsec(&attr, 0);
+  utime_t atime(times[0]);
+  utime_t mtime(times[1]);
+
+  attr_set_atime_and_mtime(&attr, atime, mtime);
   return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
 }
 
-int Client::lutime(const char *relpath, struct utimbuf *buf,
-		   const UserPerm& perms)
+int Client::lutimes(const char *relpath, struct timeval times[2],
+                    const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
-  tout(cct) << buf->modtime << std::endl;
-  tout(cct) << buf->actime << std::endl;
+  tout(cct) << "atime: " << times[0].tv_sec << "." << times[0].tv_usec
+            << std::endl;
+  tout(cct) << "mtime: " << times[1].tv_sec << "." << times[1].tv_usec
+            << std::endl;
 
   if (unmounting)
     return -ENOTCONN;
 
   filepath path(relpath);
   InodeRef in;
-  // don't follow symlinks
   int r = path_walk(path, &in, perms, false);
   if (r < 0)
     return r;
   struct stat attr;
-  stat_set_mtime_sec(&attr, buf->modtime);
-  stat_set_mtime_nsec(&attr, 0);
-  stat_set_atime_sec(&attr, buf->actime);
-  stat_set_atime_nsec(&attr, 0);
+  utime_t atime(times[0]);
+  utime_t mtime(times[1]);
+
+  attr_set_atime_and_mtime(&attr, atime, mtime);
   return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
+}
+
+int Client::futimes(int fd, struct timeval times[2], const UserPerm& perms)
+{
+  struct timespec ts[2];
+  ts[0].tv_sec  = times[0].tv_sec;
+  ts[0].tv_nsec = times[0].tv_usec * 1000;
+  ts[1].tv_sec  = times[1].tv_sec;
+  ts[1].tv_nsec = times[1].tv_usec * 1000;
+
+  return futimens(fd, ts, perms);
+}
+
+int Client::futimens(int fd, struct timespec times[2], const UserPerm& perms)
+{
+  Mutex::Locker lock(client_lock);
+  tout(cct) << __func__ << std::endl;
+  tout(cct) << fd << std::endl;
+  tout(cct) << "atime: " << times[0].tv_sec << "." << times[0].tv_nsec
+            << std::endl;
+  tout(cct) << "mtime: " << times[1].tv_sec << "." << times[1].tv_nsec
+            << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+#if defined(__linux__) && defined(O_PATH)
+  if (f->flags & O_PATH)
+    return -EBADF;
+#endif
+  struct stat attr;
+  utime_t atime(times[0]);
+  utime_t mtime(times[1]);
+
+  attr_set_atime_and_mtime(&attr, atime, mtime);
+  return _setattr(f->inode, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, perms);
 }
 
 int Client::flock(int fd, int operation, uint64_t owner)

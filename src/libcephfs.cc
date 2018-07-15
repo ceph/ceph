@@ -835,6 +835,46 @@ extern "C" int ceph_utime(struct ceph_mount_info *cmount, const char *path,
   return cmount->get_client()->utime(path, buf, cmount->default_perms);
 }
 
+extern "C" int ceph_futime(struct ceph_mount_info *cmount, int fd,
+                           struct utimbuf *buf)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->futime(fd, buf, cmount->default_perms);
+}
+
+extern "C" int ceph_utimes(struct ceph_mount_info *cmount, const char *path,
+                           struct timeval times[2])
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->utimes(path, times, cmount->default_perms);
+}
+
+extern "C" int ceph_lutimes(struct ceph_mount_info *cmount, const char *path,
+                            struct timeval times[2])
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->lutimes(path, times, cmount->default_perms);
+}
+
+extern "C" int ceph_futimes(struct ceph_mount_info *cmount, int fd,
+                            struct timeval times[2])
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->futimes(fd, times, cmount->default_perms);
+}
+
+extern "C" int ceph_futimens(struct ceph_mount_info *cmount, int fd,
+                            struct timespec times[2])
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->futimens(fd, times, cmount->default_perms);
+}
+
 extern "C" int ceph_flock(struct ceph_mount_info *cmount, int fd, int operation,
 			  uint64_t owner)
 {
