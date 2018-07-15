@@ -805,6 +805,56 @@ int ceph_lchown(struct ceph_mount_info *cmount, const char *path, int uid, int g
 int ceph_utime(struct ceph_mount_info *cmount, const char *path, struct utimbuf *buf);
 
 /**
+ * Change file/directory last access and modification times.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param fd the fd of the open file/directory to set the time values of.
+ * @param buf holding the access and modification times to set on the file.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_futime(struct ceph_mount_info *cmount, int fd, struct utimbuf *buf);
+
+/**
+ * Change file/directory last access and modification times.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param path the path to the file/directory to set the time values of.
+ * @param times holding the access and modification times to set on the file.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_utimes(struct ceph_mount_info *cmount, const char *path, struct timeval times[2]);
+
+/**
+ * Change file/directory last access and modification times, don't follow symlinks.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param path the path to the file/directory to set the time values of.
+ * @param times holding the access and modification times to set on the file.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_lutimes(struct ceph_mount_info *cmount, const char *path, struct timeval times[2]);
+
+/**
+ * Change file/directory last access and modification times.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param fd the fd of the open file/directory to set the time values of.
+ * @param times holding the access and modification times to set on the file.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_futimes(struct ceph_mount_info *cmount, int fd, struct timeval times[2]);
+
+/**
+ * Change file/directory last access and modification times.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param fd the fd of the open file/directory to set the time values of.
+ * @param times holding the access and modification times to set on the file.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_futimens(struct ceph_mount_info *cmount, int fd, struct timespec times[2]);
+
+/**
  * Apply or remove an advisory lock.
  *
  * @param cmount the ceph mount handle to use for performing the lock.
