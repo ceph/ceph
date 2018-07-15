@@ -5,6 +5,7 @@
 #include <type_traits>
 #include "common/config.h"
 #include "common/config_fwd.h"
+#include "common/config_obs_mgr.h"
 #include "common/Mutex.h"
 
 class ConfigProxy {
@@ -12,6 +13,7 @@ class ConfigProxy {
    * The current values of all settings described by the schema
    */
   ConfigValues values;
+  ObserverMgr<md_config_obs_t> obs_mgr;
   md_config_t config;
   /** A lock that protects the md_config_t internals. It is
    * recursive, for simplicity.
@@ -21,7 +23,7 @@ class ConfigProxy {
 
 public:
   explicit ConfigProxy(bool is_daemon)
-    : config{values, is_daemon},
+    : config{values, obs_mgr, is_daemon},
       lock{"ConfigProxy", true, false}
   {}
   const ConfigValues* operator->() const noexcept {
@@ -91,21 +93,24 @@ public:
     Mutex::Locker l{lock};
     return config.early_expand_meta(values, val, oss);
   }
-  // change `values` in-place
+  // for those want to reexpand special meta, e.g, $pid
   void finalize_reexpand_meta() {
-    Mutex::Locker l{lock};
-    config.finalize_reexpand_meta(values, *this);
+    Mutex::Locker l(lock);
+    if (config.finalize_reexpand_meta(values, obs_mgr)) {
+      obs_mgr.apply_changes(values.changed, *this, nullptr);
+      values.changed.clear();
+    }
   }
   void add_observer(md_config_obs_t* obs) {
-    Mutex::Locker l{lock};
-    config.add_observer(obs);
+    Mutex::Locker l(lock);
+    obs_mgr.add_observer(obs);
   }
   void remove_observer(md_config_obs_t* obs) {
-    Mutex::Locker l{lock};
-    config.remove_observer(obs);
+    Mutex::Locker l(lock);
+    obs_mgr.remove_observer(obs);
   }
   void call_all_observers() {
-    Mutex::Locker l{lock};
+    Mutex::Locker l(lock);
     // Have the scope of the lock extend to the scope of
     // handle_conf_change since that function expects to be called with
     // the lock held. (And the comment in config.h says that is the
@@ -114,7 +119,7 @@ public:
     // An alternative might be to pass a std::unique_lock to
     // handle_conf_change and have a version of get_var that can take it
     // by reference and lock as appropriate.
-    config.call_all_observers(*this);
+    obs_mgr.call_all_observers(*this);
   }
   void set_safe_to_start_threads() {
     config.set_safe_to_start_threads();
@@ -138,51 +143,58 @@ public:
     Mutex::Locker l{lock};
     return config.rm_val(values, key);
   }
+  // Expand all metavariables. Make any pending observer callbacks.
   void apply_changes(std::ostream* oss) {
     Mutex::Locker l{lock};
-    config.apply_changes(values, *this, oss);
+    // apply changes until the cluster name is assigned
+    if (!values.cluster.empty()) {
+      // meta expands could have modified anything.  Copy it all out again.
+      obs_mgr.apply_changes(values.changed, *this, oss);
+      values.changed.clear();
+    }
   }
   int set_val(const std::string& key, const std::string& s,
               std::stringstream* err_ss=nullptr) {
     Mutex::Locker l{lock};
-    return config.set_val(values, key, s);
+    return config.set_val(values, obs_mgr, key, s);
   }
   void set_val_default(const std::string& key, const std::string& val) {
     Mutex::Locker l{lock};
-    config.set_val_default(values, key, val);
+    config.set_val_default(values, obs_mgr, key, val);
   }
   void set_val_or_die(const std::string& key, const std::string& val) {
     Mutex::Locker l{lock};
-    config.set_val_or_die(values, key, val);
+    config.set_val_or_die(values, obs_mgr, key, val);
   }
   int set_mon_vals(CephContext *cct,
 		   const map<std::string,std::string>& kv,
 		   md_config_t::config_callback config_cb) {
     Mutex::Locker l{lock};
-    int ret = config.set_mon_vals(cct, values, kv, config_cb);
-    config._apply_changes(values, *this, nullptr);
+    int ret = config.set_mon_vals(cct, values, obs_mgr, kv, config_cb);
+    obs_mgr.apply_changes(values.changed, *this, nullptr);
     values.changed.clear();
     return ret;
   }
   int injectargs(const std::string &s, std::ostream *oss) {
     Mutex::Locker l{lock};
-    int ret = config.injectargs(values, s, oss);
-    config._apply_changes(values, *this, oss);
+    int ret = config.injectargs(values, obs_mgr, s, oss);
+    obs_mgr.apply_changes(values.changed, *this, oss);
     values.changed.clear();
     return ret;
   }
   void parse_env(const char *env_var = "CEPH_ARGS") {
     Mutex::Locker l{lock};
-    config.parse_env(values, env_var);
+    config.parse_env(values, obs_mgr, env_var);
   }
   int parse_argv(std::vector<const char*>& args, int level=CONF_CMDLINE) {
     Mutex::Locker l{lock};
-    return config.parse_argv(values, args, level);
+    return config.parse_argv(values, obs_mgr, args, level);
   }
   int parse_config_files(const char *conf_files,
 			 std::ostream *warnings, int flags) {
     Mutex::Locker l{lock};
-    return config.parse_config_files(values, conf_files, warnings, flags);
+    return config.parse_config_files(values, obs_mgr,
+				     conf_files, warnings, flags);
   }
   size_t num_parse_errors() const {
     return config.parse_errors.size();

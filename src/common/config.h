@@ -24,6 +24,7 @@
 #include "common/options.h"
 #include "common/subsys_types.h"
 #include "common/config_fwd.h"
+#include "common/config_tracker.h"
 #include "common/config_values.h"
 
 class CephContext;
@@ -122,47 +123,28 @@ public:
   } opt_type_t;
 
   // Create a new md_config_t structure.
-  explicit md_config_impl(ConfigValues& values, bool is_daemon=false);
+  explicit md_config_impl(ConfigValues& values,
+			  const ConfigTracker& tracker,
+			  bool is_daemon=false);
   ~md_config_impl();
 
-  // Adds a new observer to this configuration. You can do this at any time,
-  // but it will only receive notifications for the changes that happen after
-  // you attach it, obviously.
-  //
-  // Most developers will probably attach their observers after global_init,
-  // but before anyone can call injectargs.
-  //
-  // The caller is responsible for allocating observers.
-  void add_observer(md_config_obs_impl<lock_policy>* observer_);
-
-  // Remove an observer from this configuration.
-  // This doesn't delete the observer! If you allocated it with new(),
-  // you need to delete it yourself.
-  // This function will assert if you try to delete an observer that isn't
-  // there.
-  void remove_observer(md_config_obs_impl<lock_policy>* observer_);
-
   // Parse a config file
-  int parse_config_files(ConfigValues& values, const char *conf_files,
+  int parse_config_files(ConfigValues& values, const ConfigTracker& tracker,
+			 const char *conf_files,
 			 std::ostream *warnings, int flags);
 
   // Absorb config settings from the environment
-  void parse_env(ConfigValues& values, const char *env_var = "CEPH_ARGS");
+  void parse_env(ConfigValues& values, const ConfigTracker& tracker,
+		 const char *env_var = "CEPH_ARGS");
 
   // Absorb config settings from argv
-  int parse_argv(ConfigValues& values,
+  int parse_argv(ConfigValues& values, const ConfigTracker& tracker,
 		 std::vector<const char*>& args, int level=CONF_CMDLINE);
 
   // do any commands we got from argv (--show-config, --show-config-val)
   void do_argv_commands(const ConfigValues& values);
 
-  // Expand all metavariables. Make any pending observer callbacks.
-  void apply_changes(ConfigValues& values, const ConfigProxy& proxy,
-		     std::ostream *oss);
-  void _apply_changes(ConfigValues& values, const ConfigProxy& proxy,
-		      std::ostream *oss);
   bool _internal_field(const string& k);
-  void call_all_observers(const ConfigProxy& proxy);
 
   void set_safe_to_start_threads();
   void _clear_safe_to_start_threads();  // this is only used by the unit test
@@ -172,30 +154,36 @@ public:
 
   /// Set a default value
   void set_val_default(ConfigValues& values,
+		       const ConfigTracker& tracker,
 		       const std::string& key, const std::string &val);
 
   /// Set a values from mon
   int set_mon_vals(CephContext *cct,
       ConfigValues& values,
+      const ConfigTracker& tracker,
       const map<std::string,std::string>& kv,
       config_callback config_cb);
 
   // Called by the Ceph daemons to make configuration changes at runtime
   int injectargs(ConfigValues& values,
+		 const ConfigTracker& tracker,
 		 const std::string &s,
 		 std::ostream *oss);
 
   // Set a configuration value, or crash
   // Metavariables will be expanded.
-  void set_val_or_die(ConfigValues& values, const std::string &key, const std::string &val);
+  void set_val_or_die(ConfigValues& values, const ConfigTracker& tracker,
+		      const std::string &key, const std::string &val);
 
   // Set a configuration value.
   // Metavariables will be expanded.
-  int set_val(ConfigValues& values, const std::string &key, const char *val,
+  int set_val(ConfigValues& values, const ConfigTracker& tracker,
+	      const std::string &key, const char *val,
               std::stringstream *err_ss=nullptr);
-  int set_val(ConfigValues& values, const std::string &key, const string& s,
+  int set_val(ConfigValues& values, const ConfigTracker& tracker,
+	      const std::string &key, const string& s,
               std::stringstream *err_ss=nullptr) {
-    return set_val(values, key, s.c_str(), err_ss);
+    return set_val(values, tracker, key, s.c_str(), err_ss);
   }
 
   /// clear override value
@@ -293,16 +281,19 @@ private:
 			      const std::string &key, std::string &out) const;
 
   int parse_option(ConfigValues& values,
+		   const ConfigTracker& tracker,
 		   std::vector<const char*>& args,
 		   std::vector<const char*>::iterator& i,
 		   std::ostream *oss,
 		   int level);
   int parse_injectargs(ConfigValues& values,
+		       const ConfigTracker& tracker,
 		       std::vector<const char*>& args,
 		       std::ostream *oss);
 
   int _set_val(
     ConfigValues& values,
+    const ConfigTracker& tracker,
     const std::string &val,
     const Option &opt,
     int level,  // CONF_*
@@ -330,7 +321,8 @@ public:  // for global_init
 			 std::ostream *oss) const;
 
   // for those want to reexpand special meta, e.g, $pid
-  void finalize_reexpand_meta(ConfigValues& values, const ConfigProxy& proxy);
+  bool finalize_reexpand_meta(ConfigValues& values,
+			      const ConfigTracker& tracker);
 private:
 
   /// expand all metavariables in config structure.
@@ -348,8 +340,6 @@ private:
 
   bool do_show_config = false;
   string do_show_config_value;
-
-  obs_map_t observers;
 
   vector<Option> subsys_options;
 
