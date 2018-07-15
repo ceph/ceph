@@ -142,7 +142,7 @@ public:
 		 std::vector<const char*>& args, int level=CONF_CMDLINE);
 
   // do any commands we got from argv (--show-config, --show-config-val)
-  void do_argv_commands(const ConfigValues& values);
+  void do_argv_commands(const ConfigValues& values) const;
 
   bool _internal_field(const string& k);
 
@@ -229,12 +229,12 @@ public:
 		   std::string const &key, std::string &out, bool emeta) const;
 
   /// dump all config values to a stream
-  void show_config(const ConfigValues& values, std::ostream& out);
+  void show_config(const ConfigValues& values, std::ostream& out) const;
   /// dump all config values to a formatter
-  void show_config(const ConfigValues& values, Formatter *f);
+  void show_config(const ConfigValues& values, Formatter *f) const;
   
   /// dump all config settings to a formatter
-  void config_options(Formatter *f);
+  void config_options(Formatter *f) const;
 
   /// dump config diff from default, conf, mon, etc.
   void diff(const ConfigValues& values,
@@ -272,7 +272,7 @@ private:
   void _refresh(ConfigValues& values, const Option& opt);
 
   void _show_config(const ConfigValues& values,
-		    std::ostream *out, Formatter *f);
+		    std::ostream *out, Formatter *f) const;
 
   void _get_my_sections(const ConfigValues& values,
 			std::vector <std::string> &sections) const;
