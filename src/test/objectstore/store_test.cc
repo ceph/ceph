@@ -4313,7 +4313,7 @@ TEST_P(StoreTest, Synthetic) {
   doSyntheticTest(10000, 400*1024, 40*1024, 0);
 }
 
-
+#if defined(WITH_BLUESTORE)
 TEST_P(StoreTestSpecificAUSize, SyntheticMatrixSharding) {
   if (string(GetParam()) != "bluestore")
     return;
@@ -4485,6 +4485,7 @@ TEST_P(StoreTestSpecificAUSize, SyntheticMatrixPreferDeferred) {
   };
   do_matrix(m, std::bind(&StoreTest::doSyntheticTest, this, _1, _2, _3, _4));
 }
+#endif // WITH_BLUESTORE
 
 TEST_P(StoreTest, AttrSynthetic) {
   MixedGenerator gen(447);
