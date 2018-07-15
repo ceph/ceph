@@ -386,6 +386,9 @@ int ActivePyModules::start_one(PyModuleRef py_module)
 
   int r = active_module->load(this);
   if (r != 0) {
+    // the class instance wasn't created... remove it from the set of activated
+    // modules so commands and notifications aren't delivered.
+    modules.erase(py_module->get_name());
     return r;
   } else {
     dout(4) << "Starting thread for " << py_module->get_name() << dendl;
