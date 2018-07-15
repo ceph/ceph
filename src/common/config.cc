@@ -270,7 +270,6 @@ void md_config_impl<lp>::set_val_default(ConfigValues& values,
 template<LockPolicy lp>
 int md_config_impl<lp>::set_mon_vals(CephContext *cct,
     ConfigValues& values,
-    const ConfigProxy& proxy,
     const map<string,string>& kv,
     config_callback config_cb)
 {
@@ -326,7 +325,7 @@ int md_config_impl<lp>::set_mon_vals(CephContext *cct,
     values.rm_val(name, CONF_MON);
   });
   values_bl.clear();
-  _apply_changes(values, proxy, nullptr);
+  update_legacy_vals(values);
   return 0;
 }
 
@@ -771,8 +770,11 @@ void md_config_impl<lp>::apply_changes(ConfigValues& values,
   /*
    * apply changes until the cluster name is assigned
    */
-  if (values.cluster.size())
+  if (values.cluster.size()) {
+    // meta expands could have modified anything.  Copy it all out again.
+    update_legacy_vals(values);
     _apply_changes(values, proxy, oss);
+  }
 }
 
 template<LockPolicy lp>
@@ -783,9 +785,6 @@ void md_config_impl<lp>::_apply_changes(ConfigValues& values,
   /* Maps observers to the configuration options that they care about which
    * have changed. */
   typedef std::map < md_config_obs_t*, std::set <std::string> > rev_obs_map_t;
-
-  // meta expands could have modified anything.  Copy it all out again.
-  update_legacy_vals(values);
 
   // create the reverse observer mapping, mapping observers to the set of
   // changed keys that they'll get.
@@ -857,7 +856,6 @@ void md_config_impl<lp>::_clear_safe_to_start_threads()
 
 template<LockPolicy lp>
 int md_config_impl<lp>::injectargs(ConfigValues& values,
-				   const ConfigProxy& proxy,
 				   const std::string& s, std::ostream *oss)
 {
   int ret;
@@ -885,7 +883,7 @@ int md_config_impl<lp>::injectargs(ConfigValues& values,
     *oss << "\n";
     ret = -EINVAL;
   }
-  _apply_changes(values, proxy, oss);
+  update_legacy_vals(values);
   return ret;
 }
 
@@ -1131,8 +1129,11 @@ void md_config_impl<lp>::finalize_reexpand_meta(ConfigValues& values,
     set_val(values, i.first, i.second);
   }
   
-  if (may_reexpand_meta.size())
+  if (may_reexpand_meta.size()) {
+    // meta expands could have modified anything.  Copy it all out again.
+    update_legacy_vals(values);
     _apply_changes(values, proxy, NULL);
+  }
 }
 
 template<LockPolicy lp>
