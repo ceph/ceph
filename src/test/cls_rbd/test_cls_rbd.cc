@@ -2879,3 +2879,62 @@ TEST_F(TestClsRbd, migration_v1)
 
   ioctx.close();
 }
+
+TEST_F(TestClsRbd, assert_snapc_seq)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+
+  ASSERT_EQ(0,
+            assert_snapc_seq(&ioctx, oid, 0,
+                             cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ));
+  ASSERT_EQ(-ERANGE,
+            assert_snapc_seq(&ioctx, oid, 0,
+                             cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ));
+
+  ASSERT_EQ(0, ioctx.create(oid, true));
+
+  uint64_t snapc_seq = 0;
+
+  ASSERT_EQ(-ERANGE,
+            assert_snapc_seq(&ioctx, oid, snapc_seq,
+                             cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ));
+  ASSERT_EQ(0,
+            assert_snapc_seq(&ioctx, oid, snapc_seq,
+                             cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ));
+
+  std::vector<uint64_t> snaps;
+  snaps.push_back(CEPH_NOSNAP);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&snaps.back()));
+  snapc_seq = snaps[0];
+
+  ASSERT_EQ(0,
+            assert_snapc_seq(&ioctx, oid, snapc_seq,
+                             cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ));
+  ASSERT_EQ(-ERANGE,
+            assert_snapc_seq(&ioctx, oid, snapc_seq,
+                             cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ));
+
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(snaps[0], snaps));
+  bufferlist bl;
+  bl.append("foo");
+  ASSERT_EQ(0, ioctx.write(oid, bl, bl.length(), 0));
+
+  ASSERT_EQ(-ERANGE,
+            assert_snapc_seq(&ioctx, oid, snapc_seq,
+                             cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ));
+  ASSERT_EQ(0,
+            assert_snapc_seq(&ioctx, oid, snapc_seq,
+                             cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ));
+
+  ASSERT_EQ(0,
+            assert_snapc_seq(&ioctx, oid, snapc_seq + 1,
+                             cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ));
+  ASSERT_EQ(-ERANGE,
+            assert_snapc_seq(&ioctx, oid, snapc_seq + 1,
+                             cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ));
+
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_remove(snapc_seq));
+}

@@ -691,6 +691,25 @@ std::ostream& operator<<(std::ostream& os, const MigrationSpec& migration_spec);
 
 WRITE_CLASS_ENCODER(MigrationSpec);
 
+enum AssertSnapcSeqState {
+  ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ = 0,
+  ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ = 1,
+};
+
+inline void encode(const AssertSnapcSeqState &state, bufferlist& bl) {
+  using ceph::encode;
+  encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(AssertSnapcSeqState &state, bufferlist::const_iterator& it) {
+  uint8_t int_state;
+  using ceph::decode;
+  decode(int_state, it);
+  state = static_cast<AssertSnapcSeqState>(int_state);
+}
+
+std::ostream& operator<<(std::ostream& os, const AssertSnapcSeqState& state);
+
 } // namespace rbd
 } // namespace cls
 
