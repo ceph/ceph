@@ -184,13 +184,13 @@ public:
   /// Set a values from mon
   int set_mon_vals(CephContext *cct,
       ConfigValues& values,
-      const ConfigProxy& proxy,
       const map<std::string,std::string>& kv,
       config_callback config_cb);
 
   // Called by the Ceph daemons to make configuration changes at runtime
-  int injectargs(ConfigValues& values, const ConfigProxy& proxy,
-		 const std::string &s, std::ostream *oss);
+  int injectargs(ConfigValues& values,
+		 const std::string &s,
+		 std::ostream *oss);
 
   // Set a configuration value, or crash
   // Metavariables will be expanded.
