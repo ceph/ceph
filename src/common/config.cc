@@ -101,6 +101,7 @@ namespace ceph::internal {
 
 template<LockPolicy lp>
 md_config_impl<lp>::md_config_impl(ConfigValues& values,
+				   const ConfigTracker& tracker,
 				   bool is_daemon)
   : is_daemon(is_daemon)
 {
@@ -205,7 +206,7 @@ md_config_impl<lp>::md_config_impl(ConfigValues& values,
       if (val != *def_str) {
 	// if the validator normalizes the string into a different form than
 	// what was compiled in, use that.
-	set_val_default(values, opt.name, val);
+	set_val_default(values, tracker, opt.name, val);
       }
     }
   }
@@ -258,18 +259,20 @@ const Option *md_config_impl<lp>::find_option(const string& name) const
 
 template<LockPolicy lp>
 void md_config_impl<lp>::set_val_default(ConfigValues& values,
+					 const ConfigTracker& tracker,
 					 const string& name, const std::string& val)
 {
   const Option *o = find_option(name);
   assert(o);
   string err;
-  int r = _set_val(values, val, *o, CONF_DEFAULT, &err);
+  int r = _set_val(values, tracker, val, *o, CONF_DEFAULT, &err);
   assert(r >= 0);
 }
 
 template<LockPolicy lp>
 int md_config_impl<lp>::set_mon_vals(CephContext *cct,
     ConfigValues& values,
+    const ConfigTracker& tracker,
     const map<string,string>& kv,
     config_callback config_cb)
 {
@@ -297,7 +300,7 @@ int md_config_impl<lp>::set_mon_vals(CephContext *cct,
       continue;
     }
     std::string err;
-    int r = _set_val(values, i.second, *o, CONF_MON, &err);
+    int r = _set_val(values, tracker, i.second, *o, CONF_MON, &err);
     if (r < 0) {
       lderr(cct) << __func__ << " failed to set " << i.first << " = "
 		 << i.second << ": " << err << dendl;
@@ -330,32 +333,8 @@ int md_config_impl<lp>::set_mon_vals(CephContext *cct,
 }
 
 template<LockPolicy lp>
-void md_config_impl<lp>::add_observer(md_config_obs_impl<lp>* observer_)
-{
-  const char **keys = observer_->get_tracked_conf_keys();
-  for (const char ** k = keys; *k; ++k) {
-    observers.emplace(*k, observer_);
-  }
-}
-
-template<LockPolicy lp>
-void md_config_impl<lp>::remove_observer(md_config_obs_impl<lp>* observer_)
-{
-  bool found_obs = false;
-  for (auto o = observers.begin(); o != observers.end(); ) {
-    if (o->second == observer_) {
-      observers.erase(o++);
-      found_obs = true;
-    }
-    else {
-      ++o;
-    }
-  }
-  assert(found_obs);
-}
-
-template<LockPolicy lp>
 int md_config_impl<lp>::parse_config_files(ConfigValues& values,
+				    const ConfigTracker& tracker,
 				    const char *conf_files_str,
 				    std::ostream *warnings,
 				    int flags)
@@ -442,7 +421,7 @@ int md_config_impl<lp>::parse_config_files(ConfigValues& values,
     int ret = _get_val_from_conf_file(my_sections, opt.name, val);
     if (ret == 0) {
       std::string error_message;
-      int r = _set_val(values, val, opt, CONF_FILE, &error_message);
+      int r = _set_val(values, tracker, val, opt, CONF_FILE, &error_message);
       if (warnings != nullptr && (r < 0 || !error_message.empty())) {
         *warnings << "parse error setting '" << opt.name << "' to '" << val
                   << "'";
@@ -482,7 +461,9 @@ int md_config_impl<lp>::parse_config_files(ConfigValues& values,
 }
 
 template<LockPolicy lp>
-void md_config_impl<lp>::parse_env(ConfigValues& values, const char *args_var)
+void md_config_impl<lp>::parse_env(ConfigValues& values,
+				   const ConfigTracker& tracker,
+				   const char *args_var)
 {
   if (safe_to_start_threads)
     return;
@@ -490,7 +471,7 @@ void md_config_impl<lp>::parse_env(ConfigValues& values, const char *args_var)
     args_var = "CEPH_ARGS";
   }
   if (getenv("CEPH_KEYRING")) {
-    _set_val(values, getenv("CEPH_KEYRING"), *find_option("keyring"),
+    _set_val(values, tracker, getenv("CEPH_KEYRING"), *find_option("keyring"),
 	     CONF_ENV, nullptr);
   }
   if (const char *dir = getenv("CEPH_LIB")) {
@@ -498,13 +479,13 @@ void md_config_impl<lp>::parse_env(ConfigValues& values, const char *args_var)
     std::string err;
       const Option *o = find_option(name);
       assert(o);
-      _set_val(values, dir, *o, CONF_ENV, &err);
+      _set_val(values, tracker, dir, *o, CONF_ENV, &err);
     }
   }
   if (getenv(args_var)) {
     vector<const char *> env_args;
     env_to_vec(env_args, args_var);
-    parse_argv(values, env_args, CONF_ENV);
+    parse_argv(values, tracker, env_args, CONF_ENV);
   }
 }
 
@@ -557,6 +538,7 @@ void md_config_impl<lp>::_show_config(const ConfigValues& values,
 
 template<LockPolicy lp>
 int md_config_impl<lp>::parse_argv(ConfigValues& values,
+				   const ConfigTracker& tracker,
 				   std::vector<const char*>& args, int level)
 {
   if (safe_to_start_threads) {
@@ -591,26 +573,26 @@ int md_config_impl<lp>::parse_argv(ConfigValues& values,
       values.no_mon_config = false;
     }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
-      set_val_or_die(values, "daemonize", "false");
+      set_val_or_die(values, tracker, "daemonize", "false");
     }
     else if (ceph_argparse_flag(args, i, "-d", (char*)NULL)) {
-      set_val_or_die(values, "daemonize", "false");
-      set_val_or_die(values, "log_file", "");
-      set_val_or_die(values, "log_to_stderr", "true");
-      set_val_or_die(values, "err_to_stderr", "true");
-      set_val_or_die(values, "log_to_syslog", "false");
+      set_val_or_die(values, tracker, "daemonize", "false");
+      set_val_or_die(values, tracker, "log_file", "");
+      set_val_or_die(values, tracker, "log_to_stderr", "true");
+      set_val_or_die(values, tracker, "err_to_stderr", "true");
+      set_val_or_die(values, tracker, "log_to_syslog", "false");
     }
     // Some stuff that we wanted to give universal single-character options for
     // Careful: you can burn through the alphabet pretty quickly by adding
     // to this list.
     else if (ceph_argparse_witharg(args, i, &val, "--monmap", "-M", (char*)NULL)) {
-      set_val_or_die(values, "monmap", val.c_str());
+      set_val_or_die(values, tracker, "monmap", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--mon_host", "-m", (char*)NULL)) {
-      set_val_or_die(values, "mon_host", val.c_str());
+      set_val_or_die(values, tracker, "mon_host", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--bind", (char*)NULL)) {
-      set_val_or_die(values, "public_addr", val.c_str());
+      set_val_or_die(values, tracker, "public_addr", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--keyfile", "-K", (char*)NULL)) {
       bufferlist bl;
@@ -623,17 +605,17 @@ int md_config_impl<lp>::parse_argv(ConfigValues& values,
       }
       if (r >= 0) {
 	string k(bl.c_str(), bl.length());
-	set_val_or_die(values, "key", k.c_str());
+	set_val_or_die(values, tracker, "key", k.c_str());
       }
     }
     else if (ceph_argparse_witharg(args, i, &val, "--keyring", "-k", (char*)NULL)) {
-      set_val_or_die(values, "keyring", val.c_str());
+      set_val_or_die(values, tracker, "keyring", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--client_mountpoint", "-r", (char*)NULL)) {
-      set_val_or_die(values, "client_mountpoint", val.c_str());
+      set_val_or_die(values, tracker, "client_mountpoint", val.c_str());
     }
     else {
-      int r = parse_option(values, args, i, NULL, level);
+      int r = parse_option(values, tracker, args, i, NULL, level);
       if (r < 0) {
         return r;
       }
@@ -672,6 +654,7 @@ void md_config_impl<lp>::do_argv_commands(const ConfigValues& values)
 
 template<LockPolicy lp>
 int md_config_impl<lp>::parse_option(ConfigValues& values,
+				     const ConfigTracker& tracker,
 				     std::vector<const char*>& args,
 				     std::vector<const char*>::iterator& i,
 				     ostream *oss,
@@ -695,9 +678,9 @@ int md_config_impl<lp>::parse_option(ConfigValues& values,
       if (ceph_argparse_binary_flag(args, i, &res, oss, as_option.c_str(),
 				    (char*)NULL)) {
 	if (res == 0)
-	  ret = _set_val(values, "false", opt, level, &error_message);
+	  ret = _set_val(values, tracker, "false", opt, level, &error_message);
 	else if (res == 1)
-	  ret = _set_val(values, "true", opt, level, &error_message);
+	  ret = _set_val(values, tracker, "true", opt, level, &error_message);
 	else
 	  ret = res;
 	break;
@@ -705,7 +688,7 @@ int md_config_impl<lp>::parse_option(ConfigValues& values,
 	std::string no("--no-");
 	no += opt.name;
 	if (ceph_argparse_flag(args, i, no.c_str(), (char*)NULL)) {
-	  ret = _set_val(values, "false", opt, level, &error_message);
+	  ret = _set_val(values, tracker, "false", opt, level, &error_message);
 	  break;
 	}
       }
@@ -716,7 +699,7 @@ int md_config_impl<lp>::parse_option(ConfigValues& values,
 	ret = -EINVAL;
 	break;
       }
-      ret = _set_val(values, val, opt, level, &error_message);
+      ret = _set_val(values, tracker,  val, opt, level, &error_message);
       break;
     }
     ++o;
@@ -750,96 +733,17 @@ int md_config_impl<lp>::parse_option(ConfigValues& values,
 
 template<LockPolicy lp>
 int md_config_impl<lp>::parse_injectargs(ConfigValues& values,
+				  const ConfigTracker& tracker,
 				  std::vector<const char*>& args,
 				  std::ostream *oss)
 {
   int ret = 0;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
-    int r = parse_option(values, args, i, oss, CONF_OVERRIDE);
+    int r = parse_option(values, tracker, args, i, oss, CONF_OVERRIDE);
     if (r < 0)
       ret = r;
   }
   return ret;
-}
-
-template<LockPolicy lp>
-void md_config_impl<lp>::apply_changes(ConfigValues& values,
-				       const ConfigProxy& proxy,
-				       std::ostream *oss)
-{
-  /*
-   * apply changes until the cluster name is assigned
-   */
-  if (values.cluster.size()) {
-    // meta expands could have modified anything.  Copy it all out again.
-    update_legacy_vals(values);
-    _apply_changes(values, proxy, oss);
-  }
-}
-
-template<LockPolicy lp>
-void md_config_impl<lp>::_apply_changes(ConfigValues& values,
-					const ConfigProxy& proxy,
-					std::ostream *oss)
-{
-  /* Maps observers to the configuration options that they care about which
-   * have changed. */
-  typedef std::map < md_config_obs_t*, std::set <std::string> > rev_obs_map_t;
-
-  // create the reverse observer mapping, mapping observers to the set of
-  // changed keys that they'll get.
-  rev_obs_map_t robs;
-  std::set <std::string> empty_set;
-  string val;
-  for (changed_set_t::const_iterator c = changed.begin();
-       c != changed.end(); ++c) {
-    const std::string &key(*c);
-    auto [first, last] = observers.equal_range(key);
-    if ((oss) && !conf_stringify(_get_val(values, key), &val)) {
-      (*oss) << key << " = '" << val << "' ";
-      if (first == last) {
-	(*oss) << "(not observed, change may require restart) ";
-      }
-    }
-    for (auto r = first; r != last; ++r) {
-      rev_obs_map_t::value_type robs_val(r->second, empty_set);
-      pair < rev_obs_map_t::iterator, bool > robs_ret(robs.insert(robs_val));
-      std::set <std::string> &keys(robs_ret.first->second);
-      keys.insert(key);
-    }
-  }
-
-  changed.clear();
-
-  // Make any pending observer callbacks
-  for (rev_obs_map_t::const_iterator r = robs.begin(); r != robs.end(); ++r) {
-    md_config_obs_t *obs = r->first;
-    obs->handle_conf_change(proxy, r->second);
-  }
-}
-
-template<LockPolicy lp>
-void md_config_impl<lp>::call_all_observers(const ConfigProxy& proxy)
-{
-  std::map<md_config_obs_t*,std::set<std::string> > obs;
-  // Have the scope of the lock extend to the scope of
-  // handle_conf_change since that function expects to be called with
-  // the lock held. (And the comment in config.h says that is the
-  // expected behavior.)
-  //
-  // An alternative might be to pass a std::unique_lock to
-  // handle_conf_change and have a version of get_var that can take it
-  // by reference and lock as appropriate.
-  {
-    for (auto r = observers.begin(); r != observers.end(); ++r) {
-      obs[r->second].insert(r->first);
-    }
-  }
-  for (auto p = obs.begin();
-       p != obs.end();
-       ++p) {
-    p->first->handle_conf_change(proxy, p->second);
-  }
 }
 
 template<LockPolicy lp>
@@ -856,6 +760,7 @@ void md_config_impl<lp>::_clear_safe_to_start_threads()
 
 template<LockPolicy lp>
 int md_config_impl<lp>::injectargs(ConfigValues& values,
+				   const ConfigTracker& tracker,
 				   const std::string& s, std::ostream *oss)
 {
   int ret;
@@ -871,7 +776,7 @@ int md_config_impl<lp>::injectargs(ConfigValues& values,
     *p++ = 0;
     while (*p && *p == ' ') p++;
   }
-  ret = parse_injectargs(values, nargs, oss);
+  ret = parse_injectargs(values, tracker, nargs, oss);
   if (!nargs.empty()) {
     *oss << " failed to parse arguments: ";
     std::string prefix;
@@ -889,11 +794,12 @@ int md_config_impl<lp>::injectargs(ConfigValues& values,
 
 template<LockPolicy lp>
 void md_config_impl<lp>::set_val_or_die(ConfigValues& values,
+					const ConfigTracker& tracker,
 					const std::string &key,
 					const std::string &val)
 {
   std::stringstream err;
-  int ret = set_val(values, key, val, &err);
+  int ret = set_val(values, tracker, key, val, &err);
   if (ret != 0) {
     std::cerr << "set_val_or_die(" << key << "): " << err.str();
   }
@@ -902,6 +808,7 @@ void md_config_impl<lp>::set_val_or_die(ConfigValues& values,
 
 template<LockPolicy lp>
 int md_config_impl<lp>::set_val(ConfigValues& values,
+				const ConfigTracker& tracker,
 				const std::string &key, const char *val,
 				std::stringstream *err_ss)
 {
@@ -921,7 +828,7 @@ int md_config_impl<lp>::set_val(ConfigValues& values,
   if (opt_iter != schema.end()) {
     const Option &opt = opt_iter->second;
     std::string error_message;
-    int r = _set_val(values, v, opt, CONF_OVERRIDE, &error_message);
+    int r = _set_val(values, tracker, v, opt, CONF_OVERRIDE, &error_message);
     if (r >= 0) {
       if (err_ss) *err_ss << "Set " << opt.name << " to " << v;
       r = 0;
@@ -1122,18 +1029,19 @@ void md_config_impl<lp>::early_expand_meta(
 }
 
 template<LockPolicy lp>
-void md_config_impl<lp>::finalize_reexpand_meta(ConfigValues& values,
-						const ConfigProxy& proxy)
+bool md_config_t::finalize_reexpand_meta(ConfigValues& values,
+					 const ConfigTracker& tracker)
 {
-  for (auto &i : may_reexpand_meta) {
-    set_val(values, i.first, i.second);
+  for (auto& [name, value] : may_reexpand_meta) {
+    set_val(values, tracker, name, value);
   }
   
-  if (may_reexpand_meta.size()) {
+  if (!may_reexpand_meta.empty()) {
     // meta expands could have modified anything.  Copy it all out again.
     update_legacy_vals(values);
-    _apply_changes(values, proxy, NULL);
-    values.changed.clear();
+    return true;
+  } else {
+    return false;
   }
 }
 
@@ -1391,6 +1299,7 @@ int md_config_impl<lp>::_get_val_from_conf_file(
 template<LockPolicy lp>
 int md_config_impl<lp>::_set_val(
   ConfigValues& values,
+  const ConfigTracker& observers,
   const std::string &raw_val,
   const Option &opt,
   int level,
@@ -1405,7 +1314,7 @@ int md_config_impl<lp>::_set_val(
   // unsafe runtime change?
   if (!opt.can_update_at_runtime() &&
       safe_to_start_threads &&
-      observers.count(opt.name) == 0) {
+      !observers.is_tracking(opt.name)) {
     // accept value if it is not actually a change
     if (new_value != _get_val_nometa(values, opt)) {
       *error_message = string("Configuration option '") + opt.name +
