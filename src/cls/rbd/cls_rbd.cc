@@ -3735,6 +3735,46 @@ int migration_remove(cls_method_context_t hctx, bufferlist *in,
   return 0;
 }
 
+/**
+ * Ensure writer snapc state
+ *
+ * Input:
+ * @param snap id (uint64_t) snap context sequence id
+ * @param state (cls::rbd::AssertSnapcSeqState) snap context state
+ *
+ * Output:
+ * @returns -ERANGE if assertion fails
+ * @returns 0 on success, negative error code on failure
+ */
+int assert_snapc_seq(cls_method_context_t hctx, bufferlist *in,
+                     bufferlist *out)
+{
+  uint64_t snapc_seq;
+  cls::rbd::AssertSnapcSeqState state;
+  try {
+    auto it = in->cbegin();
+    decode(snapc_seq, it);
+    decode(state, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  uint64_t snapset_seq;
+  int r = cls_get_snapset_seq(hctx, &snapset_seq);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  switch (state) {
+  case cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ:
+    return (r == -ENOENT || snapc_seq > snapset_seq) ? 0 : -ERANGE;
+  case cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ:
+    return (r == -ENOENT || snapc_seq > snapset_seq) ? -ERANGE : 0;
+  default:
+    return -EOPNOTSUPP;
+  }
+}
+
 /****************************** Old format *******************************/
 
 int old_snapshots_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -6661,6 +6701,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_migration_set_state;
   cls_method_handle_t h_migration_get;
   cls_method_handle_t h_migration_remove;
+  cls_method_handle_t h_assert_snapc_seq;
   cls_method_handle_t h_old_snapshots_list;
   cls_method_handle_t h_old_snapshot_add;
   cls_method_handle_t h_old_snapshot_remove;
@@ -6838,6 +6879,10 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "migration_remove",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           migration_remove, &h_migration_remove);
+  cls_register_cxx_method(h_class, "assert_snapc_seq",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          assert_snapc_seq,
+                          &h_assert_snapc_seq);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",

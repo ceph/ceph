@@ -1667,6 +1667,23 @@ namespace librbd {
       op->exec("rbd", "migration_remove", bl);
     }
 
+    int assert_snapc_seq(librados::IoCtx *ioctx, const std::string &oid,
+                         uint64_t snapc_seq,
+                         cls::rbd::AssertSnapcSeqState state) {
+      librados::ObjectWriteOperation op;
+      assert_snapc_seq(&op, snapc_seq, state);
+      return ioctx->operate(oid, &op);
+    }
+
+    void assert_snapc_seq(librados::ObjectWriteOperation *op,
+                          uint64_t snapc_seq,
+                          cls::rbd::AssertSnapcSeqState state) {
+      bufferlist bl;
+      encode(snapc_seq, bl);
+      encode(state, bl);
+      op->exec("rbd", "assert_snapc_seq", bl);
+    }
+
     void mirror_uuid_get_start(librados::ObjectReadOperation *op) {
       bufferlist bl;
       op->exec("rbd", "mirror_uuid_get", bl);

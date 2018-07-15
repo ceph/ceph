@@ -276,6 +276,13 @@ namespace librbd {
     int migration_remove(librados::IoCtx *ioctx, const std::string &oid);
     void migration_remove(librados::ObjectWriteOperation *op);
 
+    int assert_snapc_seq(librados::IoCtx *ioctx, const std::string &oid,
+                         uint64_t snapc_seq,
+                         cls::rbd::AssertSnapcSeqState state);
+    void assert_snapc_seq(librados::ObjectWriteOperation *op,
+                          uint64_t snapc_seq,
+                         cls::rbd::AssertSnapcSeqState state);
+
     // operations on rbd_id objects
     void get_id_start(librados::ObjectReadOperation *op);
     int get_id_finish(bufferlist::const_iterator *it, std::string *id);
