@@ -220,7 +220,7 @@ public:
       // raw seconds.  this looks like a relative time.
       out << (long)sec() << "." << std::setw(6) << usec();
     } else {
-      // localtime.  this looks like an absolute time.
+      // this looks like an absolute time.
       //  aim for http://en.wikipedia.org/wiki/ISO_8601
       struct tm bdt;
       time_t tt = sec();
@@ -249,7 +249,7 @@ public:
       // raw seconds.  this looks like a relative time.
       out << (long)sec() << "." << std::setw(6) << usec();
     } else {
-      // localtime.  this looks like an absolute time.
+      // this looks like an absolute time.
       //  aim for http://en.wikipedia.org/wiki/ISO_8601
       struct tm bdt;
       time_t tt = sec();
@@ -278,7 +278,7 @@ public:
       // raw seconds.  this looks like a relative time.
       out << (long)sec() << "." << std::setw(6) << usec();
     } else {
-      // localtime.  this looks like an absolute time.
+      // this looks like an absolute time.
       //  aim for http://en.wikipedia.org/wiki/ISO_8601
       struct tm bdt;
       time_t tt = sec();
@@ -304,7 +304,7 @@ public:
       // raw seconds.  this looks like a relative time.
       out << (long)sec() << "." << std::setw(6) << usec();
     } else {
-      // localtime.  this looks like an absolute time.
+      // this looks like an absolute time.
       //  aim for http://en.wikipedia.org/wiki/ISO_8601
       struct tm bdt;
       time_t tt = sec();
