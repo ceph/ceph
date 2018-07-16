@@ -3275,6 +3275,8 @@ void PG::append_log(
 	roll_forward_to));
   }
 
+  dout(10) << __func__ << " approx pg log length =  "
+           << pg_log.get_log().approx_size() << dendl;
   pg_log.trim(trim_to, info);
 
   // update the local pg, pg log
