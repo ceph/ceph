@@ -24,7 +24,6 @@ set(common_srcs
   PrebufferedStreambuf.cc
   PriorityCache.cc
   Readahead.cc
-  RefCountedObj.cc
   SloppyCRCMap.cc
   SubProcess.cc
   Thread.cc
