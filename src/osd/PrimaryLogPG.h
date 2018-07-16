@@ -416,7 +416,8 @@ public:
     const eversion_t &trim_to,
     const eversion_t &roll_forward_to,
     bool transaction_applied,
-    ObjectStore::Transaction &t) override {
+    ObjectStore::Transaction &t,
+    bool async = false) override {
     if (hset_history) {
       info.hit_set = *hset_history;
     }
