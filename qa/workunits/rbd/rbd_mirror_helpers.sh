@@ -443,7 +443,7 @@ status()
 	for image_pool in ${POOL} ${PARENT_POOL}
 	do
 	    echo "${cluster} ${image_pool} images"
-	    rbd --cluster ${cluster} -p ${image_pool} ls
+	    rbd --cluster ${cluster} -p ${image_pool} ls -l
 	    echo
 
 	    echo "${cluster} ${image_pool} mirror pool status"
