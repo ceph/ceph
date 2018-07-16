@@ -110,6 +110,16 @@ public:
     return 0;
   }
 
+  uint32_t get_identity_type() const override {
+    abort();
+    return 0;
+  }
+
+  string get_acct_name() const override {
+    abort();
+    return 0;
+  }
+
   void to_str(std::ostream& out) const override {
     out << id;
   }
