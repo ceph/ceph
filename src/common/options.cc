@@ -4727,10 +4727,6 @@ std::vector<Option> get_global_options() {
     .set_default(4_K)
     .set_description(""),
 
-    Option("journal_max_corrupt_search", Option::TYPE_UINT, Option::LEVEL_DEV)
-    .set_default(10<<20)
-    .set_description(""),
-
     Option("journal_block_align", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_description(""),
