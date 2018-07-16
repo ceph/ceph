@@ -163,6 +163,7 @@ void PGLog::trim(
   eversion_t trim_to,
   pg_info_t &info)
 {
+  dout(10) << __func__ << " proposed trim_to = " << trim_to << dendl;
   // trim?
   if (trim_to > log.tail) {
     // We shouldn't be trimming the log past last_complete
