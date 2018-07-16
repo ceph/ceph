@@ -326,7 +326,7 @@ bool HealthMonitor::check_leader_health()
 	if (q.count(i) == 0) {
 	  ostringstream ss;
 	  ss << "mon." << mon->monmap->get_name(i) << " (rank " << i
-	     << ") addr " << mon->monmap->get_addr(i)
+	     << ") addr " << mon->monmap->get_addrs(i)
 	     << " is down (out of quorum)";
 	  d.detail.push_back(ss.str());
 	}

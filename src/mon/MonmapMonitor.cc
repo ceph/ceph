@@ -640,10 +640,10 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
      * introduced.
      */
 
-    entity_addr_t addr = pending_map.get_addr(name);
+    entity_addrvec_t addrs = pending_map.get_addrs(name);
     pending_map.remove(name);
     pending_map.last_changed = ceph_clock_now();
-    ss << "removing mon." << name << " at " << addr
+    ss << "removing mon." << name << " at " << addrs
        << ", there will be " << pending_map.size() << " monitors" ;
     propose = true;
     err = 0;
@@ -757,7 +757,7 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
   }
 
   if (pending_map.contains(join->name) &&
-      !pending_map.get_addr(join->name).is_blank_ip()) {
+      !pending_map.get_addrs(join->name).front().is_blank_ip()) {
     dout(10) << " already have " << join->name << dendl;
     return true;
   }
