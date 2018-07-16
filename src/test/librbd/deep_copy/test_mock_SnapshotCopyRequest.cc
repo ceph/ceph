@@ -138,6 +138,10 @@ public:
       .WillRepeatedly(WithArg<0>(Invoke([&mock_image_ctx](uint64_t features) {
               return (mock_image_ctx.features & features) != 0;
             })));
+    EXPECT_CALL(mock_image_ctx, test_features(_))
+      .WillRepeatedly(WithArg<0>(Invoke([&mock_image_ctx](uint64_t features) {
+              return (mock_image_ctx.features & features) != 0;
+            })));
   }
 
   void expect_start_op(librbd::MockExclusiveLock &mock_exclusive_lock) {

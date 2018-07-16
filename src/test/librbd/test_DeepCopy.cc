@@ -36,12 +36,6 @@ struct TestDeepCopy : public TestFixture {
     if (m_src_ictx != nullptr) {
       deep_copy();
       if (m_dst_ictx != nullptr) {
-        if (m_dst_ictx->test_features(RBD_FEATURE_LAYERING)) {
-          bool flags_set;
-          EXPECT_EQ(0, m_dst_ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
-                                              &flags_set));
-          EXPECT_FALSE(flags_set);
-        }
         compare();
         close_image(m_dst_ictx);
       }
@@ -90,6 +84,13 @@ struct TestDeepCopy : public TestFixture {
         dst_size = m_dst_ictx->get_image_size(m_dst_ictx->snap_id);
       }
       EXPECT_EQ(src_size, dst_size);
+
+      if (m_dst_ictx->test_features(RBD_FEATURE_LAYERING)) {
+        bool flags_set;
+        EXPECT_EQ(0, m_dst_ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
+                                            &flags_set));
+        EXPECT_FALSE(flags_set);
+      }
 
       ssize_t read_size = 1 << m_src_ictx->order;
       uint64_t offset = 0;
@@ -258,6 +259,45 @@ struct TestDeepCopy : public TestFixture {
     librbd::NoOpProgressContext no_op;
     auto new_size = m_src_ictx->size << 1;
     ASSERT_EQ(0, m_src_ictx->operations->resize(new_size, true, no_op));
+  }
+
+  void test_clone_hide_parent() {
+    uint64_t object_size = 1 << m_src_ictx->order;
+    bufferlist bl;
+    bl.append(std::string(100, '1'));
+    ASSERT_EQ(static_cast<ssize_t>(bl.length()),
+              m_src_ictx->io_work_queue->write(object_size, bl.length(),
+                                               bufferlist{bl}, 0));
+    ASSERT_EQ(0, m_src_ictx->io_work_queue->flush());
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap"));
+    ASSERT_EQ(0, snap_protect(*m_src_ictx, "snap"));
+
+    std::string clone_name = get_temp_image_name();
+    int order = m_src_ictx->order;
+    uint64_t features;
+    ASSERT_EQ(0, librbd::get_features(m_src_ictx, &features));
+    ASSERT_EQ(0, librbd::clone(m_ioctx, m_src_ictx->name.c_str(), "snap",
+                               m_ioctx, clone_name.c_str(), features, &order, 0,
+                               0));
+    close_image(m_src_ictx);
+    ASSERT_EQ(0, open_image(clone_name, &m_src_ictx));
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap1"));
+
+    ASSERT_EQ(static_cast<ssize_t>(bl.length()),
+              m_src_ictx->io_work_queue->discard(object_size, bl.length(),
+                                                 false));
+    ASSERT_EQ(0, m_src_ictx->io_work_queue->flush());
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap2"));
+
+    librbd::NoOpProgressContext no_op;
+    ASSERT_EQ(0, m_src_ictx->operations->resize(object_size, true, no_op));
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap3"));
+
+    ASSERT_EQ(0, m_src_ictx->operations->resize(2 * object_size, true, no_op));
   }
 
   void test_clone() {
@@ -436,6 +476,13 @@ TEST_F(TestDeepCopy, CloneExpand)
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   test_clone_expand();
+}
+
+TEST_F(TestDeepCopy, CloneHideParent)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  test_clone_hide_parent();
 }
 
 TEST_F(TestDeepCopy, Clone)
