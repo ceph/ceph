@@ -3277,7 +3277,12 @@ void PG::append_log(
 
   dout(10) << __func__ << " approx pg log length =  "
            << pg_log.get_log().approx_size() << dendl;
-  pg_log.trim(trim_to, info);
+  dout(10) << __func__ << " transaction_applied = "
+           << transaction_applied << dendl;
+  if (!transaction_applied)
+    dout(10) << __func__ << " " << pg_whoami
+             << " is backfill target" << dendl;
+  pg_log.trim(trim_to, info, transaction_applied);
 
   // update the local pg, pg log
   dirty_info = true;
