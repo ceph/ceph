@@ -6494,6 +6494,10 @@ static std::vector<Option> get_rbd_mirror_options() {
     .set_default(1)
     .set_min(1)
     .set_description("interval (in seconds) to throttle images for mirror daemon peer updates"),
+
+    Option("rbd_mirror_image_policy_rebalance_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("number of seconds policy should be idle before trigerring reshuffle (rebalance) of images"),
   });
 }
 

@@ -141,8 +141,7 @@ void Policy::add_instances(const InstanceIds &instance_ids,
   }
 
   GlobalImageIds shuffle_global_image_ids;
-  do_shuffle_add_instances(m_map, m_image_states.size(), instance_ids,
-                           &shuffle_global_image_ids);
+  do_shuffle_add_instances(m_map, m_image_states.size(), &shuffle_global_image_ids);
   dout(5) << "shuffling global_image_ids=[" << shuffle_global_image_ids
           << "]" << dendl;
   for (auto& global_image_id : shuffle_global_image_ids) {
@@ -259,11 +258,13 @@ bool Policy::finish_action(const std::string &global_image_id, int r) {
     assert(start_action);
   }
 
+  // image state may get purged in execute_policy_action()
+  bool pending_action = image_state.transition.action_type != ACTION_TYPE_NONE;
   if (finish_policy_action) {
     execute_policy_action(global_image_id, &image_state, *finish_policy_action);
   }
 
-  return (image_state.transition.action_type != ACTION_TYPE_NONE);
+  return pending_action;
 }
 
 void Policy::execute_policy_action(
@@ -396,9 +397,8 @@ bool Policy::set_state(ImageState* image_state, StateTransition::State state,
 
 bool Policy::is_state_scheduled(const ImageState& image_state,
                                 StateTransition::State state) const {
-  return (image_state.state == StateTransition::STATE_DISSOCIATING ||
-          (image_state.next_state &&
-           *image_state.next_state == StateTransition::STATE_DISSOCIATING));
+  return (image_state.state == state ||
+          (image_state.next_state && *image_state.next_state == state));
 }
 
 } // namespace image_map
