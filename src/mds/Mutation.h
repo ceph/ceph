@@ -223,7 +223,7 @@ struct MDRequestImpl : public MutationImpl {
   // break rarely-used fields into a separately allocated structure 
   // to save memory for most ops
   struct More {
-    int slave_error;
+    int slave_error = 0;
     set<mds_rank_t> slaves;           // mds nodes that have slave requests to me (implies client_request)
     set<mds_rank_t> waiting_on_slave; // peers i'm waiting for slavereq replies from. 
 
@@ -231,58 +231,49 @@ struct MDRequestImpl : public MutationImpl {
     set<mds_rank_t> witnessed;       // nodes who have journaled a RenamePrepare
     map<MDSCacheObject*,version_t> pvmap;
 
-    bool has_journaled_slaves;
-    bool slave_update_journaled;
-    bool slave_rolling_back;
+    bool has_journaled_slaves = false;
+    bool slave_update_journaled = false;
+    bool slave_rolling_back = false;
     
     // for rename
     set<mds_rank_t> extra_witnesses; // replica list from srcdn auth (rename)
-    mds_rank_t srcdn_auth_mds;
+    mds_rank_t srcdn_auth_mds = MDS_RANK_NONE;
     bufferlist inode_import;
-    version_t inode_import_v;
-    CInode* rename_inode;
-    bool is_freeze_authpin;
-    bool is_ambiguous_auth;
-    bool is_remote_frozen_authpin;
-    bool is_inode_exporter;
+    version_t inode_import_v = 0;
+    CInode* rename_inode = nullptr;
+    bool is_freeze_authpin = false;
+    bool is_ambiguous_auth = false;
+    bool is_remote_frozen_authpin = false;
+    bool is_inode_exporter = false;
 
     map<client_t, pair<Session*, uint64_t> > imported_session_map;
     map<CInode*, map<client_t,Capability::Export> > cap_imports;
     
     // for lock/flock
-    bool flock_was_waiting;
+    bool flock_was_waiting = false;
 
     // for snaps
-    version_t stid;
+    version_t stid = 0;
     bufferlist snapidbl;
 
-    sr_t *srci_srnode;
-    sr_t *desti_srnode;
+    sr_t *srci_srnode = nullptr;
+    sr_t *desti_srnode = nullptr;
 
     // called when slave commits or aborts
-    Context *slave_commit;
+    Context *slave_commit = nullptr;
     bufferlist rollback_bl;
 
     MDSInternalContextBase::vec waiting_for_finish;
 
     // export & fragment
-    CDir* export_dir;
+    CDir* export_dir = nullptr;
     dirfrag_t fragment_base;
 
     // for internal ops doing lookup
     filepath filepath1;
     filepath filepath2;
 
-    More() : 
-      slave_error(0),
-      has_journaled_slaves(false), slave_update_journaled(false),
-      slave_rolling_back(false),
-      srcdn_auth_mds(-1), inode_import_v(0), rename_inode(0),
-      is_freeze_authpin(false), is_ambiguous_auth(false),
-      is_remote_frozen_authpin(false), is_inode_exporter(false),
-      flock_was_waiting(false),
-      stid(0), srci_srnode(NULL), desti_srnode(NULL),
-      slave_commit(0), export_dir(NULL)  { }
+    More() {}
   } *_more;
 
 
