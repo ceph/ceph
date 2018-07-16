@@ -653,10 +653,7 @@ int JournalTool::recover_dentries(
   int r = 0;
 
   // Replay fullbits (dentry+inode)
-  for (list<dirfrag_t>::const_iterator lp = metablob.lump_order.begin();
-       lp != metablob.lump_order.end(); ++lp)
-  {
-    dirfrag_t const &frag = *lp;
+  for (const auto& frag : metablob.lump_order) {
     EMetaBlob::dirlump const &lump = metablob.lump_map.find(frag)->second;
     lump._decode_bits();
     object_t frag_oid = InodeStore::get_object_name(frag.ino, frag.frag, "");
@@ -719,12 +716,7 @@ int JournalTool::recover_dentries(
     std::set<std::string> read_keys;
 
     // Compose list of potentially-existing dentries we would like to fetch
-    list<std::shared_ptr<EMetaBlob::fullbit> > const &fb_list =
-      lump.get_dfull();
-    for (list<std::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi =
-        fb_list.begin(); fbi != fb_list.end(); ++fbi) {
-      EMetaBlob::fullbit const &fb = *(*fbi);
-
+    for (const auto& fb : lump.get_dfull()) {
       // Get a key like "foobar_head"
       std::string key;
       dentry_key_t dn_key(fb.dnlast, fb.dn.c_str());
@@ -732,12 +724,7 @@ int JournalTool::recover_dentries(
       read_keys.insert(key);
     }
 
-    list<EMetaBlob::remotebit> const &rb_list =
-      lump.get_dremote();
-    for (list<EMetaBlob::remotebit>::const_iterator rbi =
-        rb_list.begin(); rbi != rb_list.end(); ++rbi) {
-      EMetaBlob::remotebit const &rb = *rbi;
-
+    for(const auto& rb : lump.get_dremote()) {
       // Get a key like "foobar_head"
       std::string key;
       dentry_key_t dn_key(rb.dnlast, rb.dn.c_str());
@@ -745,8 +732,7 @@ int JournalTool::recover_dentries(
       read_keys.insert(key);
     }
 
-    list<EMetaBlob::nullbit> const &nb_list = lump.get_dnull();
-    for (auto& nb : nb_list) {
+    for (const auto& nb : lump.get_dnull()) {
       // Get a key like "foobar_head"
       std::string key;
       dentry_key_t dn_key(nb.dnlast, nb.dn.c_str());
@@ -768,10 +754,7 @@ int JournalTool::recover_dentries(
 
     // Compose list of dentries we will write back
     std::map<std::string, bufferlist> write_vals;
-    for (list<std::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi =
-        fb_list.begin(); fbi != fb_list.end(); ++fbi) {
-      EMetaBlob::fullbit const &fb = *(*fbi);
-
+    for (const auto& fb : lump.get_dfull()) {
       // Get a key like "foobar_head"
       std::string key;
       dentry_key_t dn_key(fb.dnlast, fb.dn.c_str());
@@ -809,9 +792,9 @@ int JournalTool::recover_dentries(
           InodeStore inode;
           inode.decode_bare(q);
           dout(4) << "decoded embedded inode version "
-            << inode.inode.version << " vs fullbit version "
-            << fb.inode.version << dendl;
-          if (inode.inode.version < fb.inode.version) {
+            << inode.inode->version << " vs fullbit version "
+            << fb.inode->version << dendl;
+          if (inode.inode->version < fb.inode->version) {
             write_dentry = true;
           }
         } else {
@@ -833,14 +816,11 @@ int JournalTool::recover_dentries(
 
         // Record for writing to RADOS
         write_vals[key] = dentry_bl;
-        consumed_inos->insert(fb.inode.ino);
+        consumed_inos->insert(fb.inode->ino);
       }
     }
 
-    for (list<EMetaBlob::remotebit>::const_iterator rbi =
-        rb_list.begin(); rbi != rb_list.end(); ++rbi) {
-      EMetaBlob::remotebit const &rb = *rbi;
-
+    for(const auto& rb : lump.get_dremote()) {
       // Get a key like "foobar_head"
       std::string key;
       dentry_key_t dn_key(rb.dnlast, rb.dn.c_str());
@@ -901,7 +881,7 @@ int JournalTool::recover_dentries(
     }
 
     std::set<std::string> null_vals;
-    for (auto& nb : nb_list) {
+    for (const auto& nb : lump.get_dnull()) {
       std::string key;
       dentry_key_t dn_key(nb.dnlast, nb.dn.c_str());
       dn_key.encode(key);
@@ -969,10 +949,8 @@ int JournalTool::recover_dentries(
    * important because clients use them to infer completeness
    * of directories
    */
-  for (list<std::shared_ptr<EMetaBlob::fullbit> >::const_iterator p =
-       metablob.roots.begin(); p != metablob.roots.end(); ++p) {
-    EMetaBlob::fullbit const &fb = *(*p);
-    inodeno_t ino = fb.inode.ino;
+  for (const auto& fb : metablob.roots) {
+    inodeno_t ino = fb.inode->ino;
     dout(4) << "updating root 0x" << std::hex << ino << std::dec << dendl;
 
     object_t root_oid = InodeStore::get_object_name(ino, frag_t(), ".inode");
@@ -996,7 +974,7 @@ int JournalTool::recover_dentries(
         dout(4) << "magic ok" << dendl;
         old_inode.decode(inode_bl_iter);
 
-        if (old_inode.inode.version < fb.inode.version) {
+        if (old_inode.inode->version < fb.inode->version) {
           write_root_ino = true;
         }
       } else {
@@ -1011,7 +989,7 @@ int JournalTool::recover_dentries(
 
     if (write_root_ino && !dry_run) {
       dout(4) << "writing root ino " << root_oid.name
-               << " version " << fb.inode.version << dendl;
+               << " version " << fb.inode->version << dendl;
 
       // Compose: root ino format is magic,InodeStore(bare=false)
       bufferlist new_root_ino_bl;
@@ -1042,8 +1020,8 @@ int JournalTool::erase_region(JournalScanner const &js, uint64_t const pos, uint
   // of an ENoOp, and our trailing start ptr.  Calculate how much padding
   // is needed inside the ENoOp to make up the difference.
   bufferlist tmp;
-  ENoOp enoop(0);
-  enoop.encode_with_header(tmp, CEPH_FEATURES_SUPPORTED_DEFAULT);
+  ENoOp enoop1(0);
+  enoop1.encode_with_header(tmp, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
   dout(4) << "erase_region " << pos << " len=" << length << dendl;
 
@@ -1057,9 +1035,9 @@ int JournalTool::erase_region(JournalScanner const &js, uint64_t const pos, uint
   }
 
   // Serialize an ENoOp with the correct amount of padding
-  enoop = ENoOp(padding);
+  ENoOp enoop2(padding);
   bufferlist entry;
-  enoop.encode_with_header(entry, CEPH_FEATURES_SUPPORTED_DEFAULT);
+  enoop2.encode_with_header(entry, CEPH_FEATURES_SUPPORTED_DEFAULT);
   JournalStream stream(JOURNAL_FORMAT_RESILIENT);
 
   // Serialize region of log stream
@@ -1123,8 +1101,8 @@ void JournalTool::encode_fullbit_as_inode(
 
   // Compose InodeStore
   InodeStore new_inode;
-  new_inode.inode = fb.inode;
-  new_inode.xattrs = fb.xattrs;
+  new_inode.reset_inode(fb.inode.get());
+  new_inode.reset_xattrs(fb.xattrs.get());
   new_inode.dirfragtree = fb.dirfragtree;
   new_inode.snap_blob = fb.snapbl;
   new_inode.symlink = fb.symlink;

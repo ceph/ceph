@@ -235,9 +235,11 @@ void inline_data_t::decode(bufferlist::const_iterator &p)
   decode(version, p);
   uint32_t inline_len;
   decode(inline_len, p);
-  if (inline_len > 0)
-    decode_nohead(inline_len, get_data(), p);
-  else
+  if (inline_len > 0) {
+    bufferlist bl;
+    decode_nohead(inline_len, bl, p);
+    set_data(bl);
+  } else
     free_data();
 }
 

@@ -39,18 +39,27 @@ void MutationImpl::unpin(MDSCacheObject *o)
 
 void MutationImpl::set_stickydirs(CInode *in)
 {
-  if (stickydirs.count(in) == 0) {
+  if (!stickydiri || stickydiri != in) {
     in->get_stickydirs();
-    stickydirs.insert(in);
+    if (stickydiri)
+      stickydiri->put_stickydirs();
+    stickydiri = in;
+  }
+}
+
+void MutationImpl::put_stickydirs()
+{
+  if (stickydiri) {
+    stickydiri->get_stickydirs();
+    stickydiri = nullptr;
+
   }
 }
 
 void MutationImpl::drop_pins()
 {
-  for (set<MDSCacheObject*>::iterator it = pins.begin();
-       it != pins.end();
-       ++it) 
-    (*it)->put(MDSCacheObject::PIN_REQUEST);
+  for (auto& o : pins)
+    o->put(MDSCacheObject::PIN_REQUEST);
   pins.clear();
 }
 
@@ -69,6 +78,50 @@ void MutationImpl::finish_locking(SimpleLock *lock)
   locking_target_mds = -1;
 }
 
+void MutationImpl::LockOpVec::erase_rdlock(SimpleLock* lock)
+{
+  for (int i = size() - 1; i >= 0; --i) {
+    auto& op = (*this)[i];
+    if (op.lock == lock && op.is_rdlock()) {
+      erase(begin() + i);
+      return;
+    }
+  }
+}
+
+void MutationImpl::LockOpVec::sort_and_merge()
+{
+  std::sort(begin(), end(), SimpleLock::ptr_lt());
+  // merge ops on the same lock
+  for (auto i = end() - 1; i > begin(); ) {
+    auto j = i;
+    while (--j >= begin()) {
+      if (i->lock != j->lock)
+	break;
+    }
+    if (i - j == 1) {
+      i = j;
+      continue;
+    }
+
+    // merge
+    ++j;
+    for (auto k = i; k > j; --k) {
+      if (k->is_remote_wrlock()) {
+	assert(!j->is_remote_wrlock());
+	j->wrlock_target = k->wrlock_target;
+      }
+      j->flags |= k->flags;
+    }
+    if (j->is_xlock()) {
+      // xlock overwrites other types
+      assert(!j->is_remote_wrlock());
+      j->flags = MutationImpl::LockOp::XLOCK;
+    }
+    erase(j + 1, i + 1);
+    i = j - 1;
+  }
+}
 
 // auth pins
 bool MutationImpl::is_auth_pinned(MDSCacheObject *object) const
@@ -93,11 +146,9 @@ void MutationImpl::auth_unpin(MDSCacheObject *object)
 
 void MutationImpl::drop_local_auth_pins()
 {
-  for (set<MDSCacheObject*>::iterator it = auth_pins.begin();
-       it != auth_pins.end();
-       ++it) {
-    assert((*it)->is_auth());
-    (*it)->auth_unpin(this);
+  for (const auto& p : auth_pins) {
+    assert(p->is_auth());
+    p->auth_unpin(this);
   }
   auth_pins.clear();
 }

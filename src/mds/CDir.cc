@@ -107,10 +107,14 @@ ostream& operator<<(ostream& out, const CDir& dir)
       out << " dir_auth=" << dir.get_dir_auth();
   }
   
-  if (dir.get_cum_auth_pins())
+  if (dir.get_cum_auth_pins()) {
     out << " ap=" << dir.get_auth_pins() 
 	<< "+" << dir.get_dir_auth_pins()
 	<< "+" << dir.get_nested_auth_pins();
+#ifdef MDS_AUTHPIN_SET
+    dir.print_authpin_set(out);
+#endif
+  }
 
   out << " state=" << dir.get_state();
   if (dir.state_test(CDir::STATE_COMPLETE)) out << "|complete";
@@ -239,7 +243,7 @@ bool CDir::check_rstats(bool scrub)
     CDentry::linkage_t *dnl = i->second->get_linkage();
     if (dnl->is_primary()) {
       CInode *in = dnl->get_inode();
-      nest_info.add(in->inode.accounted_rstat);
+      nest_info.add(in->get_inode()->accounted_rstat);
       if (in->is_dir())
 	frag_info.nsubdirs++;
       else
@@ -279,7 +283,7 @@ bool CDir::check_rstats(bool scrub)
 	CDentry *dn = i->second;
 	if (dn->get_linkage()->is_primary()) {
 	  CInode *in = dn->get_linkage()->inode;
-	  dout(1) << *dn << " rstat " << in->inode.accounted_rstat << dendl;
+	  dout(1) << *dn << " rstat " << in->get_inode()->accounted_rstat << dendl;
 	} else {
 	  dout(1) << *dn << dendl;
 	}
@@ -852,7 +856,7 @@ void CDir::steal_dentry(CDentry *dn)
 
     if (dn->get_linkage()->is_primary()) {
       CInode *in = dn->get_linkage()->get_inode();
-      auto pi = in->get_projected_inode();
+      const auto pi = in->get_projected_inode();
       if (in->is_dir()) {
 	fnode.fragstat.nsubdirs++;
 	if (in->item_pop_lru.is_on_list())
@@ -1175,7 +1179,7 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
 void CDir::resync_accounted_fragstat()
 {
   fnode_t *pf = get_projected_fnode();
-  auto pi = inode->get_projected_inode();
+  const auto pi = inode->get_projected_inode();
 
   if (pf->accounted_fragstat.version != pi->dirstat.version) {
     pf->fragstat.version = pi->dirstat.version;
@@ -1190,7 +1194,7 @@ void CDir::resync_accounted_fragstat()
 void CDir::resync_accounted_rstat()
 {
   fnode_t *pf = get_projected_fnode();
-  auto pi = inode->get_projected_inode();
+  const auto pi = inode->get_projected_inode();
   
   if (pf->accounted_rstat.version != pi->rstat.version) {
     pf->rstat.version = pi->rstat.version;
@@ -1210,7 +1214,7 @@ void CDir::assimilate_dirty_rstat_inodes()
     if (in->is_frozen())
       continue;
 
-    auto &pi = in->project_inode();
+    auto pi = in->project_inode();
     pi.inode.version = in->pre_dirty();
 
     inode->mdcache->project_rstat_inode_to_frag(in, this, 0, 0, NULL);
@@ -1796,8 +1800,8 @@ CDentry *CDir::_load_dentry(
 	  undef_inode = true;
 	} else if (committed_version == 0 &&
 		   dn->is_dirty() &&
-		   inode_data.inode.ino == in->ino() &&
-		   inode_data.inode.version == in->get_version()) {
+		   inode_data.inode->ino == in->ino() &&
+		   inode_data.inode->version == in->get_version()) {
 	  /* clean underwater item?
 	   * Underwater item is something that is dirty in our cache from
 	   * journal replay, but was previously flushed to disk before the
@@ -1820,20 +1824,20 @@ CDentry *CDir::_load_dentry(
 
     if (!dn || undef_inode) {
       // add inode
-      CInode *in = cache->get_inode(inode_data.inode.ino, last);
+      CInode *in = cache->get_inode(inode_data.inode->ino, last);
       if (!in || undef_inode) {
         if (undef_inode && in)
           in->first = first;
         else
-          in = new CInode(cache, true, first, last);
+          in = new CInode(cache, first, last, CInode::NULL_INODE);
         
-        in->inode = inode_data.inode;
+        in->reset_inode(inode_data.inode.get());
+        in->reset_xattrs(inode_data.xattrs.get());
         // symlink?
         if (in->is_symlink()) 
           in->symlink = inode_data.symlink;
         
         in->dirfragtree.swap(inode_data.dirfragtree);
-        in->xattrs.swap(inode_data.xattrs);
         in->old_inodes.swap(inode_data.old_inodes);
 	if (!in->old_inodes.empty()) {
 	  snapid_t min_first = in->old_inodes.rbegin()->first + 1;
@@ -1852,7 +1856,7 @@ CDentry *CDir::_load_dentry(
         }
         dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
 
-        if (in->inode.is_dirty_rstat())
+        if (in->get_inode()->is_dirty_rstat())
           in->mark_dirty_rstat();
 
         //in->hack_accessed = false;
@@ -1863,15 +1867,15 @@ CDentry *CDir::_load_dentry(
 	dn = add_primary_dentry(dname, in, first, last);
       } else {
         dout(0) << "_fetched  badness: got (but i already had) " << *in
-                << " mode " << in->inode.mode
-                << " mtime " << in->inode.mtime << dendl;
+                << " mode " << in->get_inode()->mode
+                << " mtime " << in->get_inode()->mtime << dendl;
         string dirpath, inopath;
         this->inode->make_path_string(dirpath);
         in->make_path_string(inopath);
-        cache->mds->clog->error() << "loaded dup inode " << inode_data.inode.ino
-          << " [" << first << "," << last << "] v" << inode_data.inode.version
+        cache->mds->clog->error() << "loaded dup inode " << inode_data.inode->ino
+          << " [" << first << "," << last << "] v" << inode_data.inode->version
           << " at " << dirpath << "/" << dname
-          << ", but inode " << in->vino() << " v" << in->inode.version
+          << ", but inode " << in->vino() << " v" << in->get_version()
 	  << " already exists at " << inopath;
         return dn;
       }
@@ -2737,8 +2741,11 @@ void CDir::auth_unpin(void *by)
   auth_pins--;
 
 #ifdef MDS_AUTHPIN_SET
-  assert(auth_pin_set.count(by));
-  auth_pin_set.erase(auth_pin_set.find(by));
+  {
+    auto it = auth_pin_set.find(by);
+    assert(it != auth_pin_set.end());
+    auth_pin_set.erase(it);
+  }
 #endif
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
