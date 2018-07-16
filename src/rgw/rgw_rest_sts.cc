@@ -35,7 +35,7 @@
 
 int RGWREST_STS::verify_permission()
 {
-  STS::STSService _sts(s->cct, store, s->user->user_id);
+  STS::STSService _sts(s->cct, store, s->user->user_id, s->auth.identity.get());
   sts = std::move(_sts);
 
   string rArn = s->info.args.get("RoleArn");
