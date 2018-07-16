@@ -64,8 +64,11 @@ def create_id(fsid, json_secrets, osd_id=None):
         '-i', '-',
         'osd', 'new', fsid
     ]
-    if osd_id is not None and not osd_id_exists(osd_id):
-        cmd.append(osd_id)
+    if osd_id is not None:
+        if osd_id_available(osd_id):
+            cmd.append(osd_id)
+        else:
+            raise RuntimeError("The osd ID {} is already in use or does not exist.".format(osd_id))
     stdout, stderr, returncode = process.call(
         cmd,
         stdin=json_secrets,
@@ -76,10 +79,10 @@ def create_id(fsid, json_secrets, osd_id=None):
     return ' '.join(stdout).strip()
 
 
-def osd_id_exists(osd_id):
+def osd_id_available(osd_id):
     """
-    Checks to see if an osd ID exists or not. Returns True
-    if it does exist, False if it doesn't.
+    Checks to see if an osd ID exists and if it's available for
+    reuse. Returns True if it is, False if it isn't.
 
     :param osd_id: The osd ID to check
     """
@@ -103,7 +106,10 @@ def osd_id_exists(osd_id):
 
     output = json.loads(''.join(stdout).strip())
     osds = output['nodes']
-    return any([str(osd['id']) == str(osd_id) for osd in osds])
+    osd = [osd for osd in osds if str(osd['id']) == str(osd_id)]
+    if osd and osd[0].get('status') == "destroyed":
+        return True
+    return False
 
 
 def mount_tmpfs(path):
