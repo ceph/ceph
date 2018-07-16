@@ -10408,7 +10408,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     ctx->at_version,
     std::move(ctx->op_t),
     pg_trim_to,
-    min_last_complete_ondisk,
+    last_update_ondisk,
     ctx->log,
     ctx->updated_hset_history,
     on_all_commit,
