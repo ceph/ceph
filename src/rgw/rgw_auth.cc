@@ -33,15 +33,18 @@ transform_old_authinfo(const req_state* const s)
     const rgw_user id;
     const int perm_mask;
     const bool is_admin;
+    const uint32_t type;
   public:
     DummyIdentityApplier(CephContext* const cct,
                          const rgw_user& auth_id,
                          const int perm_mask,
-                         const bool is_admin)
+                         const bool is_admin,
+                         const uint32_t type)
       : cct(cct),
         id(auth_id),
         perm_mask(perm_mask),
-        is_admin(is_admin) {
+        is_admin(is_admin),
+        type(type) {
     }
 
     uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
@@ -75,6 +78,14 @@ transform_old_authinfo(const req_state* const s)
       return perm_mask;
     }
 
+    uint32_t get_identity_type() const override {
+      return type;
+    }
+
+    string get_acct_name() const override {
+      return {};
+    }
+
     void to_str(std::ostream& out) const override {
       out << "RGWDummyIdentityApplier(auth_id=" << id
           << ", perm_mask=" << perm_mask
@@ -88,7 +99,8 @@ transform_old_authinfo(const req_state* const s)
                                  s->perm_mask,
   /* System user has admin permissions by default - it's supposed to pass
    * through any security check. */
-                                 s->system_request));
+                                 s->system_request,
+                                 s->user->type));
 }
 
 } /* namespace auth */
@@ -505,7 +517,6 @@ void rgw::auth::RemoteApplier::load_acct_info(RGWUserInfo& user_info) const     
   /* Succeeded if we are here (create_account() hasn't throwed). */
 }
 
-
 /* rgw::auth::LocalApplier */
 /* static declaration */
 const std::string rgw::auth::LocalApplier::NO_SUBUSER;
@@ -573,7 +584,6 @@ void rgw::auth::LocalApplier::load_acct_info(RGWUserInfo& user_info) const /* ou
    * to RADOS may be safely skipped in this case. */
   user_info = this->user_info;
 }
-
 
 rgw::auth::Engine::result_t
 rgw::auth::AnonymousEngine::authenticate(const req_state* const s) const

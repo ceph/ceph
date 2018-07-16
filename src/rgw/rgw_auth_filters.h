@@ -80,6 +80,14 @@ public:
     return get_decoratee().get_perm_mask();
   }
 
+  uint32_t get_identity_type() const override {
+    return get_decoratee().get_identity_type();
+  }
+
+  string get_acct_name() const override {
+    return get_decoratee().get_acct_name();
+  }
+
   bool is_identity(
     const boost::container::flat_set<Principal>& ids) const override {
     return get_decoratee().is_identity(ids);

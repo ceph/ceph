@@ -68,6 +68,12 @@ public:
   /* Verify whether a given identity corresponds to an identity in the
      provided set */
   virtual bool is_identity(const idset_t& ids) const = 0;
+
+  /* Identity Type: RGW/ LDAP/ Keystone */
+  virtual uint32_t get_identity_type() const = 0;
+
+  /* Name of Account */
+  virtual string get_acct_name() const = 0;
 };
 
 inline std::ostream& operator<<(std::ostream& out,
@@ -463,6 +469,8 @@ public:
   uint32_t get_perm_mask() const override { return info.perm_mask; }
   void to_str(std::ostream& out) const override;
   void load_acct_info(RGWUserInfo& user_info) const override; /* out */
+  uint32_t get_identity_type() const override { return info.acct_type; }
+  string get_acct_name() const override { return info.acct_name; }
 
   struct Factory {
     virtual ~Factory() {}
@@ -511,6 +519,8 @@ public:
   }
   void to_str(std::ostream& out) const override;
   void load_acct_info(RGWUserInfo& user_info) const override; /* out */
+  uint32_t get_identity_type() const override { return TYPE_RGW; }
+  string get_acct_name() const override { return {}; }
 
   struct Factory {
     virtual ~Factory() {}

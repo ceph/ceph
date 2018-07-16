@@ -16,6 +16,7 @@
 #include "include/types.h"
 #include "rgw_string.h"
 
+#include "rgw_b64.h"
 #include "rgw_common.h"
 #include "rgw_tools.h"
 #include "rgw_role.h"
@@ -37,8 +38,10 @@ void Credentials::dump(Formatter *f) const
 
 int Credentials::generateCredentials(CephContext* cct,
                           const uint64_t& duration,
-                          const string& policy,
-                          const string& roleId)
+                          const boost::optional<string>& policy,
+                          const boost::optional<string>& roleId,
+                          boost::optional<rgw_user> user,
+                          rgw::auth::Identity* identity)
 {
   uuid_d accessKey, secretKey;
   char accessKeyId_str[MAX_ACCESS_KEY_LEN], secretAccessKey_str[MAX_SECRET_KEY_LEN];
@@ -79,12 +82,46 @@ int Credentials::generateCredentials(CephContext* cct,
   error.clear();
   //Storing policy and roleId as part of token, so that they can be extracted
   // from the token itself for policy evaluation.
-  string encrypted_str, input_str = "acess_key_id=" + accessKeyId + "&" +
-                     "secret_access_key=" + secretAccessKey + "&" +
-                     "expiration=" + expiration + "&" + "policy=" + policy + "&"
-                     "roleId=" + roleId;
+  SessionToken token;
+  //authentication info
+  token.access_key_id = accessKeyId;
+  token.secret_access_key = secretAccessKey;
+  token.expiration = expiration;
+
+  //Authorization info
+  if (policy)
+    token.policy = *policy;
+  else
+    token.policy = {};
+
+  if (roleId)
+    token.roleId = *roleId;
+  else
+    token.roleId = {};
+
+  if (user)
+    token.user = *user;
+  else {
+    rgw_user u({}, {});
+    token.user = u;
+  }
+
+  if (identity) {
+    token.acct_name = identity->get_acct_name();
+    token.perm_mask = identity->get_perm_mask();
+    token.is_admin = identity->is_admin_of(token.user);
+    token.acct_type = identity->get_identity_type();
+  } else {
+    token.acct_name = {};
+    token.perm_mask = 0;
+    token.is_admin = 0;
+    token.acct_type = TYPE_NONE;
+  }
+
+  string encrypted_str;
   buffer::list input, enc_output;
-  input.append(input_str);
+  encode(token, input);
+
   if (ret = keyhandler->encrypt(input, enc_output, &error); ret < 0) {
     return ret;
   }
@@ -265,7 +302,10 @@ AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
   }
 
   //Generate Credentials
-  if (ret = cred.generateCredentials(cct, req.getDuration(), req.getPolicy(), roleId); ret < 0) {
+  //Role and Policy provide the authorization info, user id and applier info are not needed
+  if (ret = cred.generateCredentials(cct, req.getDuration(),
+                                      req.getPolicy(), roleId,
+                                      boost::none, nullptr); ret < 0) {
     return make_tuple(ret, user, cred, packedPolicySize);
   }
 
