@@ -423,53 +423,84 @@ int execute_purge (const po::variables_map &vm,
     }
 
     json_spirit::mArray arr = json.get_obj()["pools"].get_array();
-    
+
     double pool_percent_used = 0;
     uint64_t pool_total_bytes = 0;
-    for(uint8_t i = 0; i < arr.size(); ++i) {
-      if(arr[i].get_obj()["name"] == pool_name) {
-        json_spirit::mObject stats =  arr[i].get_obj()["stats"].get_obj();
-        pool_percent_used = stats["percent_used"].get_real();
-        if(pool_percent_used <= threshold) {
-          std::cout << "rbd: pool usage is lower than or equal to "
-                    << (threshold*100)
-                    << "%" << endl;
-          std::cout << "Nothing to do" << std::endl;
-          return 0;
-        }
-            
-        pool_total_bytes = stats["max_avail"].get_uint64() +
-                           stats["bytes_used"].get_uint64();
-        break;
-      }
-    }
-    
+
+    std::map<std::string, std::vector<const char *>> datapools;
+
     std::sort(trash_entries.begin(), trash_entries.end(),
-      [](librbd::trash_image_info_t a, librbd::trash_image_info_t b) { 
+      [](librbd::trash_image_info_t a, librbd::trash_image_info_t b) {
         return a.deferment_end_time < b.deferment_end_time;
       }
     );
 
-    uint64_t bytes_to_free = 0;
-    auto bytes_threshold = (uint64_t)(pool_total_bytes * 
-                           (pool_percent_used - threshold));
-    
-    librbd::Image curr_img;
     for (const auto& entry : trash_entries) {
-      r = utils::open_image_by_id(io_ctx, entry.id, true, &curr_img);
+      librbd::Image image;
+      std::string data_pool;
+      r = utils::open_image_by_id(io_ctx, entry.id, true, &image);
       if(r < 0) continue;
+
+      int64_t data_pool_id = image.get_data_pool_id();
+      if (data_pool_id != io_ctx.get_id()) {
+        librados::Rados rados(io_ctx);
+        librados::IoCtx data_io_ctx;
+        r = rados.ioctx_create2(data_pool_id, data_io_ctx);
+        if (r < 0) {
+          std::cerr << "rbd: error accessing data pool" << std::endl;
+          continue;
+        }
+        data_pool = data_io_ctx.get_pool_name();
+        datapools[data_pool].push_back(entry.id.c_str());
+      } else {
+        datapools[pool_name].push_back(entry.id.c_str());
+      }
+    }
+
+    uint64_t bytes_to_free = 0;
+
+    for(uint8_t i = 0; i < arr.size(); ++i) {
+      json_spirit::mObject obj = arr[i].get_obj();
+      std::string name = obj.find("name")->second.get_str();
+      auto img = datapools.find(name);
+      if(img != datapools.end()) {
+        json_spirit::mObject stats =  arr[i].get_obj()["stats"].get_obj();
+        pool_percent_used = stats["percent_used"].get_real();
+        if(pool_percent_used <= threshold) continue;
+
+        bytes_to_free = 0;
+
+        pool_total_bytes = stats["max_avail"].get_uint64() +
+                           stats["bytes_used"].get_uint64();
+          
+        auto bytes_threshold = (uint64_t)(pool_total_bytes * 
+                               (pool_percent_used - threshold));
+    
+        librbd::Image curr_img;
+        for(const auto &it : img->second){
+          r = utils::open_image_by_id(io_ctx, it, true, &curr_img);
+          if(r < 0) continue;
       
-      uint64_t img_size; curr_img.size(&img_size);
-      r = curr_img.diff_iterate2(nullptr, 0, img_size, false, true, 
-        [](uint64_t offset, size_t len, int exists, void *arg) {
-          auto *to_free = reinterpret_cast<uint64_t*>(arg);
-          if (exists) (*to_free) += len;
-          return 0;
-        }, &bytes_to_free
-      );
-      if(r < 0) continue;
-      to_be_removed.push_back(entry.id.c_str());
-      if(bytes_to_free >= bytes_threshold) break;
+          uint64_t img_size; curr_img.size(&img_size);
+          r = curr_img.diff_iterate2(nullptr, 0, img_size, false, true,
+            [](uint64_t offset, size_t len, int exists, void *arg) {
+              auto *to_free = reinterpret_cast<uint64_t*>(arg);
+              if (exists) (*to_free) += len;
+              return 0;
+            }, &bytes_to_free
+          );
+          if(r < 0) continue;
+          to_be_removed.push_back(it);
+          if(bytes_to_free >= bytes_threshold) break;
+        }
+      }
+    }
+    if (bytes_to_free == 0) {
+      std::cout << "rbd: pool usage is lower than or equal to "
+                << (threshold*100)
+                << "%" << endl;
+      std::cout << "Nothing to do" << std::endl;
+      return 0;
     }
   } else {
     struct timespec now;
