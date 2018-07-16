@@ -23,7 +23,7 @@ export LC_ALL=C # the following is vulnerable to i18n
 
 ARCH=`uname -m`
 
-if [ -n $WITH_SEASTAR ]; then
+if [ -n "$WITH_SEASTAR" ]; then
     with_seastar=true
 else
     with_seastar=false
