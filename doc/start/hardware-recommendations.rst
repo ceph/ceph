@@ -123,8 +123,6 @@ sequential write throughput when storing multiple journals for multiple OSDs.
    recommend** both reviewing the performance metrics of an SSD and testing the
    SSD in a test configuration to gauge performance. 
 
-Since SSDs have no moving mechanical parts, it makes sense to use them in the
-areas of Ceph that do not use a lot of storage space (e.g., journals).
 Relatively inexpensive SSDs may appeal to your sense of economy. Use caution.
 Acceptable IOPS are not enough when selecting an SSD for use with Ceph. There
 are a few important performance considerations for journals and SSDs:
@@ -145,7 +143,7 @@ are a few important performance considerations for journals and SSDs:
   proper partition alignment with SSDs, which can cause SSDs to transfer data 
   much more slowly. Ensure that SSD partitions are properly aligned.
 
-While SSDs are cost prohibitive for object storage, OSDs may see a significant
+If SSDs are cost prohibitive for object storage, OSDs may still see a significant
 performance improvement by storing an OSD's journal on an SSD and the OSD's
 object data on a separate hard disk drive. The ``osd journal`` configuration
 setting defaults to ``/var/lib/ceph/osd/$cluster-$id/journal``. You can mount
