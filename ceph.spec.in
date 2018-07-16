@@ -157,6 +157,7 @@ BuildRequires:  procps
 BuildRequires:	python%{_python_buildid}
 BuildRequires:	python%{_python_buildid}-devel
 BuildRequires:	snappy-devel
+BuildRequires:	sudo
 BuildRequires:	udev
 BuildRequires:	util-linux
 BuildRequires:	valgrind-devel
