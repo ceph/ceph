@@ -39,7 +39,7 @@ tasks:
       test-name: test_Mbuckets
       test_dir_version: v1
       master_client: c1.rgw.0
-      target_client: c2.rgw.1
+      target_client: c1.rgw.0
       bucket_count: 5
 - sleep:
       duration: 60
