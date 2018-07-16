@@ -704,7 +704,9 @@ public:
 
   void trim(
     eversion_t trim_to,
-    pg_info_t &info);
+    pg_info_t &info,
+    bool transaction_applied = true,
+    bool async = false);
 
   void roll_forward_to(
     eversion_t roll_forward_to,
