@@ -1816,8 +1816,9 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
   // new initial peer?
   if (monmap->get_epoch() == 0 &&
       monmap->contains(m->name) &&
-      monmap->get_addr(m->name).is_blank_ip()) {
-    dout(1) << " learned initial mon " << m->name << " addr " << m->get_source_addr() << dendl;
+      monmap->get_addrs(m->name).front().is_blank_ip()) {
+    dout(1) << " learned initial mon " << m->name
+	    << " addrs " << m->get_source_addrs() << dendl;
     monmap->set_addrvec(m->name, m->get_source_addrs());
 
     bootstrap();
@@ -1893,7 +1894,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
              << dendl;
 
     if (monmap->contains(name) &&
-        !monmap->get_addr(name).is_blank_ip()) {
+        !monmap->get_addrs(name).front().is_blank_ip()) {
       // i'm part of the cluster; just initiate a new election
       start_election();
     } else {
