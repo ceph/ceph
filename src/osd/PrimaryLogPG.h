@@ -421,7 +421,7 @@ public:
     if (hset_history) {
       info.hit_set = *hset_history;
     }
-    append_log(logv, trim_to, roll_forward_to, t, transaction_applied);
+    append_log(logv, trim_to, roll_forward_to, t, transaction_applied, async);
   }
 
   void op_applied(const eversion_t &applied_version) override;
