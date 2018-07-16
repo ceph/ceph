@@ -408,6 +408,8 @@ struct TestDeepCopy : public TestFixture {
         int order = m_src_ictx->order;
         uint64_t features;
         ASSERT_EQ(0, librbd::get_features(m_src_ictx, &features));
+        features &= ~RBD_FEATURES_IMPLICIT_ENABLE;
+
         std::cout << "clone " << m_src_ictx->name << " -> " << clone_name
                   << std::endl;
         ASSERT_EQ(0, librbd::clone(m_ioctx, m_src_ictx->name.c_str(),

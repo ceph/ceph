@@ -372,6 +372,8 @@ TEST_F(TestClsRbd, create)
                             object_prefix, 123));
   ASSERT_EQ(0, ioctx.remove(oid));
   ASSERT_EQ(-EINVAL, create_image(&ioctx, oid, size, order,
+                                  RBD_FEATURE_OPERATIONS, object_prefix, -1));
+  ASSERT_EQ(-EINVAL, create_image(&ioctx, oid, size, order,
                                   RBD_FEATURE_DATA_POOL, object_prefix, -1));
   ASSERT_EQ(-EINVAL, create_image(&ioctx, oid, size, order, 0, object_prefix,
                                   123));

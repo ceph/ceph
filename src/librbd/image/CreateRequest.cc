@@ -36,6 +36,10 @@ int validate_features(CephContext *cct, uint64_t features,
     lderr(cct) << "librbd does not support requested features." << dendl;
     return -ENOSYS;
   }
+  if ((features & RBD_FEATURES_INTERNAL) != 0) {
+    lderr(cct) << "cannot use internally controlled features" << dendl;
+    return -EINVAL;
+  }
   if ((features & RBD_FEATURE_FAST_DIFF) != 0 &&
       (features & RBD_FEATURE_OBJECT_MAP) == 0) {
     lderr(cct) << "cannot use fast diff without object map" << dendl;
