@@ -790,6 +790,7 @@ OPTION(osd_deep_scrub_stride, OPT_INT)
 OPTION(osd_deep_scrub_keys, OPT_INT)
 OPTION(osd_deep_scrub_update_digest_min_age, OPT_INT)   // objects must be this old (seconds) before we update the whole-object digest on scrub
 OPTION(osd_skip_data_digest, OPT_BOOL)
+OPTION(osd_distrust_data_digest, OPT_BOOL)
 OPTION(osd_deep_scrub_large_omap_object_key_threshold, OPT_U64)
 OPTION(osd_deep_scrub_large_omap_object_value_sum_threshold, OPT_U64)
 OPTION(osd_class_dir, OPT_STR) // where rados plugins are stored

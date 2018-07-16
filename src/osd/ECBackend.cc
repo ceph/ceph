@@ -2426,8 +2426,6 @@ int ECBackend::be_deep_scrub(
 {
   dout(10) << __func__ << " " << poid << " pos " << pos << dendl;
   int r;
-  bool skip_data_digest = store->has_builtin_csum() &&
-    g_conf->osd_skip_data_digest;
 
   uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
                            CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
@@ -2468,7 +2466,7 @@ int ECBackend::be_deep_scrub(
     o.read_error = true;
     return 0;
   }
-  if (r > 0 && !skip_data_digest) {
+  if (r > 0) {
     pos.data_hash << bl;
   }
   pos.data_pos += r;
@@ -2494,8 +2492,7 @@ int ECBackend::be_deep_scrub(
 	return 0;
       }
 
-      if (!skip_data_digest &&
-          hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) !=
+      if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) !=
 	  pos.data_hash.digest()) {
 	dout(0) << "_scan_list  " << poid << " got incorrect hash on read 0x"
 		<< std::hex << pos.data_hash.digest() << " !=  expected 0x"

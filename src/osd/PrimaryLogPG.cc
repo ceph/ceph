@@ -4532,6 +4532,9 @@ int PrimaryLogPG::do_checksum(OpContext *ctx, OSDOp& osd_op,
 			      bufferlist::iterator *bl_it)
 {
   dout(20) << __func__ << dendl;
+  bool skip_data_digest =
+    (osd->store->has_builtin_csum() && g_conf->osd_skip_data_digest) ||
+    g_conf->osd_distrust_data_digest;
 
   auto& op = osd_op.op;
   if (op.checksum.chunk_size > 0) {
@@ -4586,7 +4589,8 @@ int PrimaryLogPG::do_checksum(OpContext *ctx, OSDOp& osd_op,
     // If there is a data digest and it is possible we are reading
     // entire object, pass the digest.
     boost::optional<uint32_t> maybe_crc;
-    if (oi.is_data_digest() && op.checksum.offset == 0 &&
+    if (!skip_data_digest &&
+	oi.is_data_digest() && op.checksum.offset == 0 &&
         op.checksum.length >= oi.size) {
       maybe_crc = oi.data_digest;
     }
@@ -4734,6 +4738,9 @@ int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
 {
   dout(20) << __func__ << dendl;
   ceph_osd_op& op = osd_op.op;
+  bool skip_data_digest =
+    (osd->store->has_builtin_csum() && g_conf->osd_skip_data_digest) ||
+    g_conf->osd_distrust_data_digest;
 
   auto& oi = ctx->new_obs.oi;
   uint64_t size = oi.size;
@@ -4758,7 +4765,8 @@ int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
     // If there is a data digest and it is possible we are reading
     // entire object, pass the digest.
     boost::optional<uint32_t> maybe_crc;
-    if (oi.is_data_digest() && op.checksum.offset == 0 &&
+    if (!skip_data_digest &&
+	oi.is_data_digest() && op.checksum.offset == 0 &&
         op.checksum.length >= oi.size) {
       maybe_crc = oi.data_digest;
     }
@@ -4816,6 +4824,9 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
   __u32 seq = oi.truncate_seq;
   uint64_t size = oi.size;
   bool trimmed_read = false;
+  bool skip_data_digest =
+    (osd->store->has_builtin_csum() && g_conf->osd_skip_data_digest) ||
+    g_conf->osd_distrust_data_digest;
 
   // are we beyond truncate_size?
   if ( (seq < op.extent.truncate_seq) &&
@@ -4844,7 +4855,8 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     // If there is a data digest and it is possible we are reading
     // entire object, pass the digest.  FillInVerifyExtent will
     // will check the oi.size again.
-    if (oi.is_data_digest() && op.extent.offset == 0 &&
+    if (!skip_data_digest &&
+	oi.is_data_digest() && op.extent.offset == 0 &&
         op.extent.length >= oi.size)
       maybe_crc = oi.data_digest;
     ctx->pending_async_reads.push_back(
@@ -4874,7 +4886,8 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
 	     << " bytes from obj " << soid << dendl;
 
     // whole object?  can we verify the checksum?
-    if (op.extent.length == oi.size && oi.is_data_digest()) {
+    if (!skip_data_digest &&
+	op.extent.length == oi.size && oi.is_data_digest()) {
       uint32_t crc = osd_op.outdata.crc32c(-1);
       if (oi.data_digest != crc) {
         osd->clog->error() << info.pgid << std::hex
@@ -4899,6 +4912,9 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   auto& op = osd_op.op;
   auto& oi = ctx->new_obs.oi;
   auto& soid = oi.soid;
+  bool skip_data_digest =
+    (osd->store->has_builtin_csum() && g_conf->osd_skip_data_digest) ||
+    g_conf->osd_distrust_data_digest;
 
   if (op.extent.truncate_seq) {
     dout(0) << "sparse_read does not support truncation sequence " << dendl;
@@ -5012,7 +5028,8 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     // Maybe at first, there is no much whole objects. With continued use, more
     // and more whole object exist. So from this point, for spare-read add
     // checksum make sense.
-    if (total_read == oi.size && oi.is_data_digest()) {
+    if (!skip_data_digest &&
+	total_read == oi.size && oi.is_data_digest()) {
       uint32_t crc = data_bl.crc32c(-1);
       if (oi.data_digest != crc) {
         osd->clog->error() << info.pgid << std::hex
@@ -5045,8 +5062,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
-  bool skip_data_digest = osd->store->has_builtin_csum() &&
-    g_conf->get_val<bool>("osd_skip_data_digest");
+  bool skip_data_digest =
+    (osd->store->has_builtin_csum() && g_conf->osd_skip_data_digest) ||
+    g_conf->osd_distrust_data_digest;
 
   PGTransaction* t = ctx->op_t.get();
 
@@ -7836,6 +7854,10 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::iterator& bp,
   int result = 0;
   object_copy_cursor_t cursor;
   uint64_t out_max;
+  bool skip_data_digest =
+    (osd->store->has_builtin_csum() && g_conf->osd_skip_data_digest) ||
+    g_conf->osd_distrust_data_digest;
+
   try {
     ::decode(cursor, bp);
     ::decode(out_max, bp);
@@ -7870,7 +7892,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::iterator& bp,
   } else {
     reply_obj.snap_seq = obc->ssc->snapset.seq;
   }
-  if (oi.is_data_digest()) {
+  if (!skip_data_digest && oi.is_data_digest()) {
     reply_obj.flags |= object_copy_data_t::FLAG_DATA_DIGEST;
     reply_obj.data_digest = oi.data_digest;
   }
