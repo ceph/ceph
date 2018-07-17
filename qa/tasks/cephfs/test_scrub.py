@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 ValidationError = namedtuple("ValidationError", ["exception", "backtrace"])
 
 
-class Workload(object):
+class Workload(CephFSTestCase):
     def __init__(self, filesystem, mount):
         self._mount = mount
         self._filesystem = filesystem
@@ -25,15 +25,6 @@ class Workload(object):
         # let us see which check failed without having to decorate each check with
         # a string
         self._errors = []
-
-    def assert_equal(self, a, b):
-        try:
-            if a != b:
-                raise AssertionError("{0} != {1}".format(a, b))
-        except AssertionError as e:
-            self._errors.append(
-                ValidationError(e, traceback.format_exc(3))
-            )
 
     def write(self):
         """
@@ -78,7 +69,7 @@ class BacktraceWorkload(Workload):
         self._filesystem.mds_asok(["flush", "journal"])
         bt = self._filesystem.read_backtrace(st['st_ino'])
         parent = bt['ancestors'][0]['dname']
-        self.assert_equal(parent, "sixmegs")
+        self.assertEqual(parent, 'sixmegs')
         return self._errors
 
     def damage(self):
@@ -113,7 +104,7 @@ class DupInodeWorkload(Workload):
 
     def validate(self):
         self._filesystem.mds_asok(["scrub_path", "/", "recursive", "repair"])
-        self.assert_equal(self._filesystem.are_daemons_healthy(), True)
+        self.assertTrue(self._filesystem.are_daemons_healthy())
         return self._errors
 
 
