@@ -29,15 +29,20 @@ def main(args):
 
     try:
         results(args['--archive-dir'], args['--name'], args['--email'],
-                int(args['--timeout']), args['--dry-run'])
+                int(args['--timeout']), args['--dry-run'],
+                args['--subset'], args['--seed'])
     except Exception:
         log.exception('error generating results')
         raise
 
 
-def results(archive_dir, name, email, timeout, dry_run):
+def results(archive_dir, name, email, timeout, dry_run, subset, seed):
     starttime = time.time()
 
+    if subset:
+        log.info('subset: %r', subset)
+    if seed:
+        log.info('seed: %r', seed)
     if timeout:
         log.info('Waiting up to %d seconds for tests to finish...', timeout)
 

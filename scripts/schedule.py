@@ -34,6 +34,10 @@ optional arguments:
   --timeout <timeout>                  How many seconds to wait for jobs to
                                        finish before emailing results. Only
                                        applies to the last job in a suite.
+  --seed <seed>                        The random seed for rerunning the suite.
+                                       Only applies to the last job in a suite.
+  --subset <subset>                    The subset option passed to teuthology-suite.
+                                       Only applies to the last job in a suite.
   --dry-run                            Instead of scheduling, just output the
                                        job config.
 

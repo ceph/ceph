@@ -193,19 +193,23 @@ def run_job(job_config, teuth_bin_path, archive_dir, verbose):
     if job_config.get('last_in_suite'):
         if teuth_config.results_server:
             report.try_delete_jobs(job_config['name'], job_config['job_id'])
-        log.info('Generating results email for %s', job_config['name'])
+        log.info('Generating results for %s', job_config['name'])
         args = [
             os.path.join(teuth_bin_path, 'teuthology-results'),
             '--timeout',
             str(job_config.get('results_timeout',
                                teuth_config.results_timeout)),
-            '--email',
-            job_config['email'],
             '--archive-dir',
             os.path.join(archive_dir, safe_archive),
             '--name',
             job_config['name'],
+            '--seed',
+            job_config['seed'],
         ]
+        if job_config.get('email'):
+            args.extend(['--email', job_config['email']])
+        if job_config.get('subset'):
+            args.extend(['--subset', job_config['subset']])
         # Execute teuthology-results, passing 'preexec_fn=os.setpgrp' to
         # make sure that it will continue to run if this worker process
         # dies (e.g. because of a restart)
