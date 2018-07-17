@@ -10669,6 +10669,8 @@ void PrimaryLogPG::_applied_recovered_object_replica()
 void PrimaryLogPG::recover_got(hobject_t oid, eversion_t v)
 {
   dout(10) << "got missing " << oid << " v " << v << dendl;
+  dout(10) << __func__ << " complete_to "
+           << pg_log.get_log().complete_to->version << dendl;
   pg_log.recover_got(oid, v, info);
   if (pg_log.get_log().complete_to != pg_log.get_log().log.end()) {
     dout(10) << "last_complete now " << info.last_complete
