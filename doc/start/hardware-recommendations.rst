@@ -13,7 +13,7 @@ of daemon. We recommend using other hosts for processes that utilize your
 data cluster (e.g., OpenStack, CloudStack, etc).
 
 
-.. tip:: Check out the Ceph blog too.
+.. tip:: Check out the `Ceph blog`_ too.
 
 
 CPU
@@ -164,7 +164,7 @@ Disk controllers also have a significant impact on write throughput. Carefully,
 consider your selection of disk controllers to ensure that they do not create
 a performance bottleneck.
 
-.. tip:: The Ceph blog is often an excellent source of information on Ceph
+.. tip:: The `Ceph blog`_ is often an excellent source of information on Ceph
    performance issues. See `Ceph Write Throughput 1`_ and `Ceph Write 
    Throughput 2`_ for additional details.
 
@@ -338,7 +338,7 @@ configurations for Ceph OSDs, and a lighter configuration for monitors.
 
 
 
-
+.. _Ceph blog: https://ceph.com/community/blog/
 .. _Ceph Write Throughput 1: http://ceph.com/community/ceph-performance-part-1-disk-controller-write-throughput/
 .. _Ceph Write Throughput 2: http://ceph.com/community/ceph-performance-part-2-write-throughput-without-ssd-journals/
 .. _Mapping Pools to Different Types of OSDs: ../../rados/operations/crush-map#placing-different-pools-on-different-osds
