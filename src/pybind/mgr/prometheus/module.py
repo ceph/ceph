@@ -631,6 +631,8 @@ class Module(MgrModule):
                     return instance.collect_cache
 
                 if instance.have_mon_connection():
+                    instance.collect_cache = None
+                    instance.collect_time = time.time()
                     instance.collect_cache = instance.collect()
                     cherrypy.response.headers['Content-Type'] = 'text/plain'
                     return instance.collect_cache
