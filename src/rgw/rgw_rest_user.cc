@@ -212,7 +212,7 @@ void RGWOp_User_Modify::execute()
   bool gen_key;
   bool suspended;
   bool system;
-
+  bool email_set;
   bool quota_set;
   int32_t max_buckets;
 
@@ -222,7 +222,7 @@ void RGWOp_User_Modify::execute()
   rgw_user uid(uid_str);
 
   RESTArgs::get_string(s, "display-name", display_name, &display_name);
-  RESTArgs::get_string(s, "email", email, &email);
+  RESTArgs::get_string(s, "email", email, &email, &email_set);
   RESTArgs::get_string(s, "access-key", access_key, &access_key);
   RESTArgs::get_string(s, "secret-key", secret_key, &secret_key);
   RESTArgs::get_string(s, "user-caps", caps, &caps);
@@ -241,7 +241,10 @@ void RGWOp_User_Modify::execute()
 
   op_state.set_user_id(uid);
   op_state.set_display_name(display_name);
-  op_state.set_user_email(email);
+
+  if (email_set)
+    op_state.set_user_email(email);
+
   op_state.set_caps(caps);
   op_state.set_access_key(access_key);
   op_state.set_secret_key(secret_key);
