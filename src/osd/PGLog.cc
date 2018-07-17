@@ -50,15 +50,8 @@ void PGLog::IndexedLog::trim(
   set<string>* trimmed_dups,
   eversion_t *write_from_dups)
 {
-  if (complete_to != log.end() &&
-      complete_to->version <= s) {
-    generic_dout(0) << " bad trim to " << s << " when complete_to is "
-		    << complete_to->version
-		    << " on " << *this << dendl;
-  }
-
   assert(s <= can_rollback_to);
-  generic_dout(0) << " complete_to " << complete_to->version << dendl;
+  generic_dout(20) << " complete_to " << complete_to->version << dendl;
 
   auto earliest_dup_version =
     log.rbegin()->version.version < cct->_conf->osd_pg_log_dups_tracked
