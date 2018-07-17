@@ -21,7 +21,6 @@ class CephCluster_Agent(MetricsAgent):
         c_data.tags['agenthost_domain_id'] = \
             "%s_%s" % (cluster_id, c_data.fields['agenthost'])
         c_data.fields['osd_epoch'] = obj_api.get_osd_epoch()
-        c_data.fields['num_osd'] = obj_api.get_max_osd()
         c_data.fields['num_mon'] = len(obj_api.get_mons())
         c_data.fields['num_mon_quorum'] = \
             len(obj_api.get_mon_status().get('quorum', []))
@@ -34,6 +33,10 @@ class CephCluster_Agent(MetricsAgent):
                 num_osd_up = num_osd_up + 1
             if osd_data.get('in'):
                 num_osd_in = num_osd_in + 1
+        if osds:
+            c_data.fields['num_osd'] = len(osds)
+        else:
+            c_data.fields['num_osd'] = 0
         c_data.fields['num_osd_up'] = num_osd_up
         c_data.fields['num_osd_in'] = num_osd_in
         c_data.fields['num_pool'] = len(obj_api.get_osd_pools())

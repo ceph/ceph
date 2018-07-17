@@ -99,10 +99,10 @@ class SAI_Host(MetricsField):
         self.fields['host_ip'] = None
         self.fields['host_ipv6'] = None
         self.fields['host_uuid'] = None
-        self.fields['os_type'] = 'ceph'
+        self.fields['os_type'] = str('ceph')
         self.fields['os_name'] = None
         self.fields['os_version'] = None
-        self.fields['agent_version'] = AGENT_VERSION
+        self.fields['agent_version'] = str(AGENT_VERSION)
 
 
 class SAI_Cluster(MetricsField):
@@ -115,7 +115,7 @@ class SAI_Cluster(MetricsField):
         self.fields['agenthost'] = None
         self.fields['agenthost_domain_id'] = None
         self.fields['name'] = None
-        self.fields['agent_version'] = AGENT_VERSION
+        self.fields['agent_version'] = str(AGENT_VERSION)
 
 
 class SAI_Disk(MetricsField):
@@ -164,7 +164,7 @@ class SAI_Disk_Smart(MetricsField):
         self.tags['primary_key'] = None
         self.fields['cluster_domain_id'] = None
         self.fields['host_domain_id'] = None
-        self.fields['agent_version'] = AGENT_VERSION
+        self.fields['agent_version'] = str(AGENT_VERSION)
 
 
 class SAI_Agent(MetricsField):
@@ -174,8 +174,8 @@ class SAI_Agent(MetricsField):
     def __init__(self):
         super(SAI_Agent, self).__init__()
         self.tags['agenthost_domain_id'] = None
-        self.fields['agent_type'] = 'ceph'
-        self.fields['agent_version'] = AGENT_VERSION
+        self.fields['agent_type'] = str('ceph')
+        self.fields['agent_version'] = str(AGENT_VERSION)
         self.fields['agenthost'] = ''
         self.fields['cluster_domain_id'] = ''
         self.fields['heartbeat_interval'] = ''
