@@ -109,6 +109,16 @@ public:
                           const MDSMap &mds_map);
 
 protected:
+  struct export_base_t {
+    dirfrag_t dirfrag;
+    mds_rank_t dest;
+    unsigned pending_children;
+    uint64_t export_queue_gen;
+    bool restart = false;
+    export_base_t(dirfrag_t df, mds_rank_t d, unsigned c, uint64_t g) :
+      dirfrag(df), dest(d), pending_children(c), export_queue_gen(g) {}
+  };
+
   // export fun
   struct export_state_t {
     int state = 0;
@@ -124,6 +134,8 @@ protected:
     int last_cum_auth_pins = 0;
     int num_remote_waiters = 0; // number of remote authpin waiters
     export_state_t() {}
+
+    std::shared_ptr<export_base_t> parent;
   };
   map<CDir*, export_state_t>  export_state;
   typedef map<CDir*, export_state_t>::iterator export_state_iterator;
@@ -132,6 +144,7 @@ protected:
   unsigned num_locking_exports = 0; // exports in locking state (approx_size == 0)
 
   list<pair<dirfrag_t,mds_rank_t> >  export_queue;
+  uint64_t export_queue_gen = 1;
 
   // import fun
   struct import_state_t {
@@ -297,9 +310,12 @@ public:
   void maybe_do_queued_export();
   void clear_export_queue() {
     export_queue.clear();
+    export_queue_gen++;
   }
   
-  void maybe_split_export(CDir* dir, vector<pair<CDir*, size_t> >& results);
+  void maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
+			  vector<pair<CDir*, size_t> >& results);
+  void child_export_finish(std::shared_ptr<export_base_t>& parent, bool success);
   void get_export_lock_set(CDir *dir, set<SimpleLock*>& locks);
   void get_export_client_set(CDir *dir, set<client_t> &client_set);
   void get_export_client_set(CInode *in, set<client_t> &client_set);
