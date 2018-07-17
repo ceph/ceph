@@ -862,7 +862,7 @@ void CDir::steal_dentry(CDentry *dn)
       fnode.rstat.rbytes += pi->accounted_rstat.rbytes;
       fnode.rstat.rfiles += pi->accounted_rstat.rfiles;
       fnode.rstat.rsubdirs += pi->accounted_rstat.rsubdirs;
-      fnode.rstat.rsnaprealms += pi->accounted_rstat.rsnaprealms;
+      fnode.rstat.rsnaps += pi->accounted_rstat.rsnaps;
       if (pi->accounted_rstat.rctime > fnode.rstat.rctime)
 	fnode.rstat.rctime = pi->accounted_rstat.rctime;
 

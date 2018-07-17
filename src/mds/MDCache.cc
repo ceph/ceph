@@ -12605,7 +12605,9 @@ do_rdlocks:
 
   frag_info_t dir_info;
   nest_info_t nest_info;
-  nest_info.rsubdirs++; // it gets one to account for self
+  nest_info.rsubdirs = 1; // it gets one to account for self
+  if (const sr_t *srnode = diri->get_projected_srnode(); srnode)
+    nest_info.rsnaps = srnode->snaps.size();
 
   diri->dirfragtree.get_leaves(frags);
   for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {

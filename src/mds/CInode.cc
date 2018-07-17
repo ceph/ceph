@@ -2241,13 +2241,17 @@ void CInode::finish_scatter_gather_update(int type)
 
   case CEPH_LOCK_INEST:
     {
-      fragtree_t tmpdft = dirfragtree;
-      nest_info_t rstat;
-      rstat.rsubdirs = 1;
-      bool rstat_valid = true;
-
       // adjust summation
       assert(is_auth());
+
+      fragtree_t tmpdft = dirfragtree;
+      nest_info_t rstat;
+      bool rstat_valid = true;
+
+      rstat.rsubdirs = 1;
+      if (const sr_t *srnode = get_projected_srnode(); srnode)
+	rstat.rsnaps = srnode->snaps.size();
+
       mempool_inode *pi = get_projected_inode();
       dout(20) << "  orig rstat " << pi->rstat << dendl;
       pi->rstat.version++;
@@ -4286,6 +4290,9 @@ next:
 	}
       }
       nest_info.rsubdirs++; // it gets one to account for self
+      if (const sr_t *srnode = in->get_projected_srnode(); srnode)
+	nest_info.rsnaps += srnode->snaps.size();
+
       // ...and that their sum matches our inode settings
       if (!dir_info.same_sums(in->inode.dirstat) ||
 	  !nest_info.same_sums(in->inode.rstat)) {

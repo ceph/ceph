@@ -1436,13 +1436,33 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	 it += 2) {
       const string &path = *it;
       const string &cap = *(it+1);
-      if (cap != "r" && cap != "rw" && cap != "rwp") {
-	ss << "Only 'r', 'rw', and 'rwp' permissions are allowed for filesystems.";
+
+      if (cap != "r" && cap.compare(0, 2, "rw")) {
+	ss << "Permission flags must start with 'r' or 'rw'.";
 	err = -EINVAL;
 	goto done;
       }
-      if (cap.find('w') != string::npos) {
+      if (cap.compare(0, 2, "rw") == 0)
 	osd_cap_wanted = "rw";
+
+      char last='\0';
+      for (size_t i = 2; i < cap.size(); ++i) {
+	char c = cap.at(i);
+	if (last >= c) {
+	  ss << "Permission flags (except 'rw') must be specified in alphabetical order.";
+	  err = -EINVAL;
+	  goto done;
+	}
+	switch (c) {
+	case 'p':
+	  break;
+	case 's':
+	  break;
+	default:
+	  ss << "Unknown permission flag '" << c << "'.";
+	  err = -EINVAL;
+	  goto done;
+	}
       }
 
       mds_cap_string += mds_cap_string.empty() ? "" : ", ";

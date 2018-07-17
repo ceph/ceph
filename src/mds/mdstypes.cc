@@ -86,7 +86,7 @@ void nest_info_t::encode(bufferlist &bl) const
     int64_t ranchors = 0;
     encode(ranchors, bl);
   }
-  encode(rsnaprealms, bl);
+  encode(rsnaps, bl);
   encode(rctime, bl);
   ENCODE_FINISH(bl);
 }
@@ -102,7 +102,7 @@ void nest_info_t::decode(bufferlist::iterator &bl)
     int64_t ranchors;
     decode(ranchors, bl);
   }
-  decode(rsnaprealms, bl);
+  decode(rsnaps, bl);
   decode(rctime, bl);
   DECODE_FINISH(bl);
 }
@@ -113,7 +113,7 @@ void nest_info_t::dump(Formatter *f) const
   f->dump_unsigned("rbytes", rbytes);
   f->dump_unsigned("rfiles", rfiles);
   f->dump_unsigned("rsubdirs", rsubdirs);
-  f->dump_unsigned("rsnaprealms", rsnaprealms);
+  f->dump_unsigned("rsnaps", rsnaps);
   f->dump_stream("rctime") << rctime;
 }
 
@@ -125,7 +125,7 @@ void nest_info_t::generate_test_instances(list<nest_info_t*>& ls)
   ls.back()->rbytes = 2;
   ls.back()->rfiles = 3;
   ls.back()->rsubdirs = 4;
-  ls.back()->rsnaprealms = 6;
+  ls.back()->rsnaps = 6;
   ls.back()->rctime = utime_t(7, 8);
 }
 
@@ -138,8 +138,8 @@ ostream& operator<<(ostream &out, const nest_info_t &n)
     out << " rc" << n.rctime;
   if (n.rbytes)
     out << " b" << n.rbytes;
-  if (n.rsnaprealms)
-    out << " sr" << n.rsnaprealms;
+  if (n.rsnaps)
+    out << " rs" << n.rsnaps;
   if (n.rfiles || n.rsubdirs)
     out << " " << n.rsize() << "=" << n.rfiles << "+" << n.rsubdirs;
   out << ")";    

@@ -8445,7 +8445,7 @@ void _rollback_repair_dir(MutationRef& mut, CDir *dir, rename_rollback::drec &r,
     pf->rstat.rbytes += linkunlink * rstat.rbytes;
     pf->rstat.rfiles += linkunlink * rstat.rfiles;
     pf->rstat.rsubdirs += linkunlink * rstat.rsubdirs;
-    pf->rstat.rsnaprealms += linkunlink * rstat.rsnaprealms;
+    pf->rstat.rsnaps += linkunlink * rstat.rsnaps;
   }
   if (pf->fragstat.mtime == ctime) {
     pf->fragstat.mtime = r.dirfrag_old_mtime;
@@ -9116,7 +9116,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, diri, MAY_WRITE))
+  if (!check_access(mdr, diri, MAY_WRITE|MAY_SNAPSHOT))
     return;
 
   // make sure name is unique
@@ -9158,6 +9158,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
 
   auto &pi = diri->project_inode(false, true);
   pi.inode.ctime = pi.inode.rstat.rctime = info.stamp;
+  pi.inode.rstat.rsnaps++;
   pi.inode.version = diri->pre_dirty();
 
   // project the snaprealm
@@ -9273,7 +9274,7 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, diri, MAY_WRITE))
+  if (!check_access(mdr, diri, MAY_WRITE|MAY_SNAPSHOT))
     return;
 
   // prepare
@@ -9295,6 +9296,7 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   auto &pi = diri->project_inode(false, true);
   pi.inode.version = diri->pre_dirty();
   pi.inode.ctime = pi.inode.rstat.rctime = mdr->get_op_stamp();
+  pi.inode.rstat.rsnaps--;
   
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "rmsnap");
@@ -9420,7 +9422,7 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, diri, MAY_WRITE))
+  if (!check_access(mdr, diri, MAY_WRITE|MAY_SNAPSHOT))
     return;
 
     // prepare

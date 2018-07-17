@@ -1,230 +1,34 @@
-13.0.1
-------
+>=13.2.0
+========
 
-* *RGW, MON*:
-    Commands variously marked as "del", "delete", "remove" etc. should now all be
-    normalized as "rm". Commands already supporting alternatives to "rm" remain
-    backward-compatible.
-
-* *CephFS*:
-
-  * Upgrading an MDS cluster to 12.2.3+ will result in all active MDS
-    exiting due to feature incompatibilities once an upgraded MDS comes online
-    (even as standby). Operators may ignore the error messages and continue
-    upgrading/restarting or follow this upgrade sequence:
-
-   Reduce the number of ranks to 1 (`ceph fs set <fs_name> max_mds 1`), wait
-   for all other MDS to deactivate, leaving the one active MDS, upgrade the
-   single active MDS, then upgrade/start standbys. Finally, restore the
-   previous max_mds.
-
-    See also: https://tracker.ceph.com/issues/23172
-
-  * Several "ceph mds" commands have been obsoleted and replaced
-    by equivalent "ceph fs" commands:
-      - mds dump -> fs dump
-      - mds getmap -> fs dump
-      - mds stop -> mds deactivate
-      - mds set_max_mds -> fs set max_mds
-      - mds set -> fs set
-      - mds cluster_down -> fs set joinable false
-      - mds cluster_up -> fs set joinable true
-      - mds add_data_pool -> fs add_data_pool
-      - mds remove_data_pool -> fs rm_data_pool
-      - mds rm_data_pool -> fs rm_data_pool
-
-  * As the multiple MDS feature is now standard, it is now enabled by
-    default. ceph fs set allow_multimds is now deprecated and will be
-    removed in a future release.
-
-  * As the directory fragmentation feature is now standard, it is now
-    enabled by default. ceph fs set allow_dirfrags is now deprecated and
-    will be removed in a future release.
-
-  * MDS daemons now activate and deactivate based on the value of
-    max_mds. Accordingly, ceph mds deactivate has been deprecated as it
-    is now redundant.
-
-  * Taking a CephFS cluster down is now done by setting the down flag which
-    deactivates all MDS. For example: `ceph fs set cephfs down true`.
-
-  * Preventing standbys from joining as new actives (formerly the now
-    deprecated cluster_down flag) on a file system is now accomplished by
-    setting the joinable flag.  This is useful mostly for testing so that a
-    file system may be quickly brought down and deleted.
-
-  * New CephFS file system attributes session_timeout and session_autoclose
-    are configurable via `ceph fs set`. The MDS config options
-    mds_session_timeout, mds_session_autoclose, and mds_max_file_size are now
-    obsolete.
-
-  * Each mds rank now maintains a table that tracks open files and their
-    ancestor directories. Recovering MDS can quickly get open files' pathes,
-    significantly reducing the time of loading inodes for open files. MDS
-    creates the table automatically if it does not exist.
-
-  * CephFS snapshot is now stable and enabled by default on new filesystems.
-    To enable snapshot on existing filesystems, use command:
-      - ceph fs set <fs_name> allow_new_snaps
-
-    The on-disk format of snapshot metadata has changed. The old format
-    metadata can not be properly handled in multiple active MDS configuration.
-    To guarantee all snapshot metadata on existing filesystems get updated,
-    perform the sequence of upgrading the MDS cluster strictly.
-
-    See http://docs.ceph.com/docs/master/cephfs/upgrading/
-
-    For filesystems that have ever enabled snapshot, the multiple-active MDS
-    feature is disabled by the new version MON. This will cause the "restore
-    previous max_mds" step in above URL to fail. To re-enable the feature,
-    either delete all old snapshots or scrub the whole filesystem:
-
-      - ceph daemon <mds of rank 0> scrub_path / force recursive repair
-      - ceph daemon <mds of rank 0> scrub_path '~mdsdir' force recursive repair
-
-* *RBD*
-
-  * The RBD C API's rbd_discard method now enforces a maximum length of
-    2GB to match the C++ API's Image::discard method. This restriction
-    prevents overflow of the result code.
-
-  * The rbd CLI's "lock list" JSON and XML output has changed.
-
-  * The rbd CLI's "showmapped" JSON and XML output has changed.
-
-  * RBD now optionally supports simplified image clone semantics where
-    non-protected snapshots can be cloned; and snapshots with linked clones
-    can be removed and the space automatically reclaimed once all remaining
-    linked clones are detached. This feature is enabled by default if
-    the OSD "require-min-compat-client" flag is set to mimic or later; or can be
-    overridden via the "rbd_default_clone_format" configuration option.
-
-* The sample ``crush-location-hook`` script has been removed.  Its output is
-  equivalent to the built-in default behavior, so it has been replaced with an
-  example in the CRUSH documentation.
-
-* The "rcceph" script (systemd/ceph in the source code tree, shipped as
-  /usr/sbin/rcceph in the ceph-base package for CentOS and SUSE) has been
-  dropped. This script was used to perform admin operations (start, stop,
-  restart, etc.) on all OSD and/or MON daemons running on a given machine.
-  This functionality is provided by the systemd target units (ceph-osd.target,
-  ceph-mon.target, etc.).
-
-* The python-ceph-compat package is declared deprecated, and will be dropped
-  when all supported distros have completed the move to Python 3. It has
-  already been dropped from those supported distros where Python 3 is standard
-  and Python 2 is optional (currently only SUSE).
-
-* The -f option of the rados tool now means "--format" instead of "--force",
-  for consistency with the ceph tool.
-
-
->= 13.0.2
----------
-
-The ceph-rest-api command-line tool (obsoleted by the MGR "restful" module and
-deprecated since v12.2.5) has been dropped.
-
-There is a MGR module called "restful" which provides similar functionality
-via a "pass through" method. See http://docs.ceph.com/docs/master/mgr/restful
-for details.
-
-
-13.0.2
-------
-
-* The format of the 'config diff' output via the admin socket has changed.  It
-  now reflects the source of each config option (e.g., default, config file,
-  command line) as well as the final (active) value.
-
-* The `pg force-recovery` command will not work for erasure-coded
-  PGs when a Luminous monitor is running along with a Mimic OSD.
-  Please use the recommended upgrade order of monitors before OSDs to
-  avoid this issue.
-
-* It is no longer possible to adjust ``pg_num`` on a pool that is
-  still being created.
-
-13.0.3
-------
-
-* The ``osd_mon_report_interval_min`` option has been renamed to
-  ``osd_mon_report_interval``, and the ``osd_mon_report_interval_max``
-  (unused) has been eliminated.  If this value has been customized on
-  your cluster then your configuration should be adjusted in order to
-  avoid reverting to the default value.
-
-* *rados list-inconsistent-obj format changes:*
-
-  * Various error strings have been improved.  For example, the "oi" or "oi_attr"
-    in errors which stands for object info is now "info" (e.g. oi_attr_missing is
-    now info_missing).
-
-  * The object's "selected_object_info" is now in json format instead of string.
-
-  * The attribute errors (attr_value_mismatch, attr_name_mismatch) only apply to user
-    attributes.  Only user attributes are output and have the internal leading underscore
-    stripped.
-
-  * If there are hash information errors (hinfo_missing, hinfo_corrupted,
-    hinfo_inconsistency) then "hashinfo" is added with the json format of the
-    information.  If the information is corrupt then "hashinfo" is a string
-    containing the value.
-
-  * If there are snapset errors (snapset_missing, snapset_corrupted,
-    snapset_inconsistency) then "snapset" is added with the json format of the
-    information.  If the information is corrupt then "snapset" is a string containing
-    the value.
-
-  * If there are object information errors (info_missing, info_corrupted,
-    obj_size_info_mismatch, object_info_inconsistency) then "object_info" is added
-    with the json format of the information instead of a string.  If the information
-    is corrupt then "object_info" is a string containing the value.
-
-* *rados list-inconsistent-snapset format changes:*
-
-  * Various error strings have been improved.  For example, the "ss_attr" in
-    errors which stands for snapset info is now "snapset" (e.g. ss_attr_missing is
-    now snapset_missing).  The error snapset_mismatch has been renamed to snapset_error
-    to better reflect what it means.
-
-  * The head snapset information is output in json format as "snapset."  This means that
-    even when there are no head errors, the head object will be output when any shard
-    has an error.  This head object is there to show the snapset that was used in
-    determining errors.
-
-
-* The config-key interface can store arbitrary binary blobs but JSON
-  can only express printable strings.  If binary blobs are present,
-  the 'ceph config-key dump' command will show them as something like
-  ``<<< binary blob of length N >>>``.
-
-* The Ceph LZ4 compression plugin is now enabled by default, and introduces
-  a new build dependency.
-
-* Monitors will now prune on-disk full maps if the number of maps grows above
-  a certain number (mon_osdmap_full_prune_min, default: 10000), thus
-  preventing unbounded growth of the monitor data store. This feature is
-  enabled by default, and can be disabled by setting
-  `mon_osdmap_full_prune_enabled` to false.
-
-* Bootstrap auth keys will now be generated automatically on a fresh
-  deployment; these keys will also be generated, if missing, during upgrade.
-
-* The (read-only) Ceph manager dashboard introduced in Ceph Luminous has been
-  replaced with a new implementation, providing a drop-in replacement offering
-  a number of additional management features. To access the new dashboard, you
-  first need to define a username and password. See the documentation for a
-  feature overview and installation instructions:
-  http://docs.ceph.com/docs/master/mgr/dashboard/
-
-* The 'osd force-create-pg' command now requires a force option to
-  proceed because the command is dangerous: it declares that data loss
-  is permanent and instructs the cluster to proceed with an empty PG
-  in its place, without making any further efforts to find the missing
-  data.
+(some or all of the notes in this section seem to have been omitted
+from the 13.2.0 release notes (?), so include them in 13.2.1 release
+notes (?))
 
 * The Telegraf module for the Manager allows for sending statistics to
   an Telegraf Agent over TCP, UDP or a UNIX Socket. Telegraf can then
   send the statistics to databases like InfluxDB, ElasticSearch, Graphite
   and many more.
+
+* The graylog fields naming the originator of a log event have
+  changed: the string-form name is now included (e.g., ``"name":
+  "mgr.foo"``), and the rank-form name is now in a nested section
+  (e.g., ``"rank": {"type": "mgr", "num": 43243}``).
+
+* If the cluster log is directed at syslog, the entries are now
+  prefixed by both the string-form name and the rank-form name (e.g.,
+  ``mgr.x mgr.12345 ...`` instead of just ``mgr.12345 ...``).
+
+* The JSON output of the ``osd find`` command has replaced the ``ip``
+  field with an ``addrs`` section to reflect that OSDs may bind to
+  multiple addresses.
+
+13.2.1
+======
+
+* CephFS clients without the 's' flag in their authentication capability
+  string will no longer be able to create/delete snapshots. To allow
+  ``client.foo`` to create/delete snapshots in the ``bar`` directory of
+  filesystem ``cephfs_a``, use command:
+
+    - ``ceph auth caps client.foo mon 'allow r' osd 'allow rw tag cephfs data=cephfs_a' mds 'allow rw, allow rws path=/bar'``
