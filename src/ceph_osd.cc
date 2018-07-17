@@ -195,6 +195,7 @@ int main(int argc, const char **argv)
       return r;
     }
     if (forker.is_parent()) {
+      g_ceph_context->_log->start();
       if (forker.parent_wait(err) != 0) {
         return -ENXIO;
       }
