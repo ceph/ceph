@@ -400,6 +400,7 @@ void Migrator::export_cancel_finish(export_state_iterator& it)
 {
   CDir *dir = it->first;
   bool unpin = (it->second.state == EXPORT_CANCELLING);
+  auto parent = std::move(it->second.parent);
 
   total_exporting_size -= it->second.approx_size;
   export_state.erase(it);
@@ -413,6 +414,9 @@ void Migrator::export_cancel_finish(export_state_iterator& it)
   }
   // send pending import_maps?  (these need to go out when all exports have finished.)
   cache->maybe_send_pending_resolves();
+
+  if (parent)
+    child_export_finish(parent, false);
 }
 
 // ==========================================================
@@ -886,7 +890,8 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
  * check if directory is too large to be export in whole. If it is,
  * choose some subdirs, whose total size is suitable.
  */
-void Migrator::maybe_split_export(CDir* dir, vector<pair<CDir*, size_t> >& results)
+void Migrator::maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
+				  vector<pair<CDir*, size_t> >& results)
 {
   static const unsigned frag_size = 800;
   static const unsigned inode_size = 1000;
@@ -911,7 +916,6 @@ void Migrator::maybe_split_export(CDir* dir, vector<pair<CDir*, size_t> >& resul
   vector<LevelData> stack;
   stack.emplace_back(dir);
 
-  uint64_t max_size = max_export_size;
   size_t found_size = 0;
   size_t skipped_size = 0;
 
@@ -1015,7 +1019,7 @@ void Migrator::maybe_split_export(CDir* dir, vector<pair<CDir*, size_t> >& resul
   for (auto& p : stack)
     results.insert(results.end(), p.subdirs.begin(), p.subdirs.end());
 
-  if (results.empty())
+  if (results.empty() && (!skipped_size || !null_okay))
     results.emplace_back(dir, found_size + skipped_size);
 }
 
@@ -1104,8 +1108,10 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
 
   assert(g_conf->mds_kill_export_at != 1);
 
+  auto parent = it->second.parent;
+
   vector<pair<CDir*, size_t> > results;
-  maybe_split_export(dir, results);
+  maybe_split_export(dir, max_export_size, (bool)parent, results);
 
   if (results.size() == 1 && results.front().first == dir) {
     num_locking_exports--;
@@ -1129,7 +1135,21 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
     return;
   }
 
-  dout(7) << "subtree is too large, splitting it into: " <<  dendl;
+  if (parent) {
+    parent->pending_children += results.size();
+  } else {
+    parent = std::make_shared<export_base_t>(dir->dirfrag(), dest,
+					     results.size(), export_queue_gen);
+  }
+
+  if (results.empty()) {
+    dout(7) << "subtree's children all are under exporting, retry rest parts of parent export "
+	    << parent->dirfrag << dendl;
+    parent->restart = true;
+  } else {
+    dout(7) << "subtree is too large, splitting it into: " <<  dendl;
+  }
+
   for (auto& p : results) {
     CDir *sub = p.first;
     assert(sub != dir);
@@ -1148,11 +1168,28 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
     stat.peer = dest;
     stat.tid = _mdr->reqid.tid;
     stat.mut = _mdr;
+    stat.parent = parent;
     mds->mdcache->dispatch_request(_mdr);
   }
 
   // cancel the original one
   export_try_cancel(dir);
+}
+
+void Migrator::child_export_finish(std::shared_ptr<export_base_t>& parent, bool success)
+{
+  if (success)
+    parent->restart = true;
+  if (--parent->pending_children == 0) {
+    if (parent->restart &&
+	parent->export_queue_gen == export_queue_gen) {
+      CDir *origin = mds->mdcache->get_dirfrag(parent->dirfrag);
+      if (origin && origin->is_auth()) {
+	dout(7) << "child_export_finish requeue " << *origin << dendl;
+	export_queue.emplace_front(origin->dirfrag(), parent->dest);
+      }
+    }
+  }
 }
 
 /*
@@ -2192,7 +2229,8 @@ void Migrator::export_finish(CDir *dir)
   if (!finished.empty())
     mds->queue_waiters(finished);
 
-  MutationRef mut = it->second.mut;
+  MutationRef mut = std::move(it->second.mut);
+  auto parent = std::move(it->second.parent);
   // remove from exporting list, clean up state
   total_exporting_size -= it->second.approx_size;
   export_state.erase(it);
@@ -2213,7 +2251,10 @@ void Migrator::export_finish(CDir *dir)
     mds->locker->drop_locks(mut.get());
     mut->cleanup();
   }
-  
+
+  if (parent)
+    child_export_finish(parent, true);
+
   maybe_do_queued_export();
 }
 
