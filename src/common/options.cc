@@ -6349,7 +6349,12 @@ std::vector<Option> get_rgw_options() {
     Option("rgw_sts_entry", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("sts")
     .set_description("STS URL prefix")
-    .set_long_description("URL path prefix for internal STS requests.")
+    .set_long_description("URL path prefix for internal STS requests."),
+
+    Option("rgw_sts_key", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("sts")
+    .set_description("STS Key")
+    .set_long_description("Key used for encrypting/ decrypting session token.")
 
   });
 }
