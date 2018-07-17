@@ -192,7 +192,7 @@ public:
 
   void expect_snap_remove(MockTestImageCtx &mock_image_ctx,
                           const std::string &snap_name, int r) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_remove(_, StrEq(snap_name), _))
+    EXPECT_CALL(*mock_image_ctx.operations, snap_remove(_, StrEq(snap_name), _))
       .WillOnce(WithArg<2>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
   }
 
