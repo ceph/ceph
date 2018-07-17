@@ -390,7 +390,7 @@ def safe_kill(pid):
 
 class LocalFuseMount(FuseMount):
     def __init__(self, test_dir, client_id):
-        super(LocalFuseMount, self).__init__(None, test_dir, client_id, LocalRemote())
+        super(LocalFuseMount, self).__init__(None, None, test_dir, client_id, LocalRemote())
 
     @property
     def config_path(self):
