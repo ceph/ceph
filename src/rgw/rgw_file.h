@@ -2265,6 +2265,9 @@ public:
 			     << " target = " << path << ""
 			     << dendl;
       matched = true;
+      /* match-dir case (trailing '/') */
+      if (name == prefix + "/")
+	exact_matched = true;
       is_dir = true;
       break;
     }
