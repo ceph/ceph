@@ -313,7 +313,6 @@ same drive as your OSDs. Additionally, if you run monitors on the same host as
 the OSDs, you may incur performance issues related to:
 
 - Running an older kernel (pre-3.0)
-- Running Argonaut with an old ``glibc``
 - Running a kernel with no syncfs(2) syscall.
 
 In these cases, multiple OSDs running on the same host can drag each other down
