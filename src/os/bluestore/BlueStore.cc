@@ -4100,9 +4100,12 @@ void BlueStore::_init_logger()
 		 "fl_l", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_time_avg(l_bluestore_kv_commit_lat, "kv_commit_lat",
 		 "Average kv_thread commit latency");
-  b.add_time_avg(l_bluestore_kv_lat, "kv_lat",
-		 "Average kv_thread sync latency",
-		 "k_l", PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time_avg(l_bluestore_kv_sync_lat, "kv_sync_lat",
+		 "Average kv_sync thread latency",
+		 "ks_l", PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time_avg(l_bluestore_kv_final_lat, "kv_final_lat",
+		 "Average kv_finalize thread latency",
+		 "kf_l", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_time_avg(l_bluestore_state_prepare_lat, "state_prepare_lat",
     "Average prepare state latency");
   b.add_time_avg(l_bluestore_state_aio_wait_lat, "state_aio_wait_lat",
@@ -9228,7 +9231,7 @@ void BlueStore::_kv_sync_thread()
 	  << dendl;
 	logger->tinc(l_bluestore_kv_flush_lat, dur_flush);
 	logger->tinc(l_bluestore_kv_commit_lat, dur_kv);
-	logger->tinc(l_bluestore_kv_lat, dur);
+	logger->tinc(l_bluestore_kv_sync_lat, dur);
       }
 
       if (bluefs) {
@@ -9279,6 +9282,8 @@ void BlueStore::_kv_finalize_thread()
       dout(20) << __func__ << " kv_committed " << kv_committed << dendl;
       dout(20) << __func__ << " deferred_stable " << deferred_stable << dendl;
 
+      auto start = mono_clock::now();
+
       while (!kv_committed.empty()) {
 	TransContext *txc = kv_committed.front();
 	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
@@ -9309,6 +9314,8 @@ void BlueStore::_kv_finalize_thread()
 
       logger->set(l_bluestore_fragmentation,
 	  (uint64_t)(alloc->get_fragmentation(min_alloc_size) * 1000));
+
+      logger->tinc(l_bluestore_kv_final_lat, mono_clock::now() - start);
 
       l.lock();
     }
