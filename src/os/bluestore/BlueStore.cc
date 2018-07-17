@@ -4834,14 +4834,11 @@ int BlueStore::_open_bluefs(bool create)
 	  bluefs->get_block_device_size(BlueFS::BDEV_WAL) -
 	  BDEV_LABEL_BLOCK_SIZE);
     }
-    kv_options["separate_wal_dir"] = "1";
     bluefs_single_shared_device = false;
   } else {
-    r = -errno;
-    if (::lstat(bfn.c_str(), &st) == -1) {
-      kv_options.erase("separate_wal_dir");
-      r = 0;
-    } else {
+    r = 0;
+    if (::lstat(bfn.c_str(), &st) != -1) {
+      r = -errno;
       derr << __func__ << " " << bfn << " symlink exists but target unusable: "
            << cpp_strerror(r) << dendl;
       goto free_bluefs;
@@ -4917,6 +4914,8 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   dout(10) << __func__ << " do_bluefs = " << do_bluefs << dendl;
 
   map<string,string> kv_options;
+  // force separate wal dir for all new deployments.
+  kv_options["separate_wal_dir"] = 1;
   rocksdb::Env *env = NULL;
   if (do_bluefs) {
     dout(10) << __func__ << " initializing bluefs" << dendl;
@@ -4961,24 +4960,30 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
 
     if (create) {
       env->CreateDir(fn);
-      if (kv_options.count("separate_wal_dir"))
-	env->CreateDir(fn + ".wal");
-      if (kv_options.count("rocksdb_db_paths"))
-	env->CreateDir(fn + ".slow");
+      env->CreateDir(fn + ".wal");
+      env->CreateDir(fn + ".slow");
+    } else {
+      std::vector<std::string> res;
+      // check for dir presence
+      auto r = env->GetChildren(fn+".wal", &res);
+      if (r == rocksdb::Status::NotFound()) {
+	kv_options.erase("separate_wal_dir");
+      }
     }
-  } else if (create) {
-    int r = ::mkdir(fn.c_str(), 0755);
-    if (r < 0)
-      r = -errno;
-    if (r < 0 && r != -EEXIST) {
-      derr << __func__ << " failed to create " << fn << ": " << cpp_strerror(r)
-	   << dendl;
-      return r;
-    }
+  } else {
+    string walfn = path + "/db.wal";
 
-    // wal_dir, too!
-    if (kv_options.count("separate_wal_dir")) {
-      string walfn = path + "/db.wal";
+    if (create) {
+      int r = ::mkdir(fn.c_str(), 0755);
+      if (r < 0)
+	r = -errno;
+      if (r < 0 && r != -EEXIST) {
+	derr << __func__ << " failed to create " << fn << ": " << cpp_strerror(r)
+	     << dendl;
+	return r;
+      }
+
+      // wal_dir, too!
       r = ::mkdir(walfn.c_str(), 0755);
       if (r < 0)
 	r = -errno;
@@ -4987,6 +4992,12 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
 	  << ": " << cpp_strerror(r)
 	  << dendl;
 	return r;
+      }
+    } else {
+      struct stat st;
+      r = ::stat(walfn.c_str(), &st);
+      if (r < 0 && errno == ENOENT) {
+	kv_options.erase("separate_wal_dir");
       }
     }
   }
