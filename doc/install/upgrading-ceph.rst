@@ -2,10 +2,9 @@
  Upgrading Ceph
 ================
 
-Each release of Ceph may have additional steps. Refer to the release-specific
-sections in this document and the `release notes`_ document to identify
-release-specific procedures for your cluster before using the upgrade
-procedures.
+Each release of Ceph may have additional steps. Refer to the `release notes
+document of your release`_ to identify release-specific procedures for your
+cluster before using the upgrade procedures.
 
 
 Summary
@@ -28,14 +27,15 @@ they are all on the same release. We also recommend that you upgrade all the
 daemons in your cluster before you try to exercise new functionality in a
 release.
 
-The `Upgrade Procedures`_ are relatively simple, but please look at 
-distribution-specific sections before upgrading. The basic process involves 
+The `Upgrade Procedures`_ are relatively simple, but do look at the `release
+notes document of your release`_ before upgrading. The basic process involves
 three steps: 
 
 #. Use ``ceph-deploy`` on your admin node to upgrade the packages for 
    multiple hosts (using the ``ceph-deploy install`` command), or login to each 
-   host and upgrade the Ceph package `manually`_. For example, when 
-   `Upgrading Monitors`_, the ``ceph-deploy`` syntax might look like this::
+   host and upgrade the Ceph package `using your distro's package manager`_.
+   For example, when `Upgrading Monitors`_, the ``ceph-deploy`` syntax might
+   look like this::
    
 	ceph-deploy install --release {release-name} ceph-node1[ ceph-node2]
 	ceph-deploy install --release firefly mon1 mon2 mon3
@@ -74,7 +74,8 @@ Upgrade Procedures
 The following sections describe the upgrade process. 
 
 .. important:: Each release of Ceph may have some additional steps. Refer to
-   release-specific sections for details **BEFORE** you begin upgrading daemons.
+   the `release notes document of your release`_ for details **BEFORE** you
+   begin upgrading daemons.
 
 
 Upgrading Monitors
@@ -92,7 +93,7 @@ To upgrade monitors, perform the following steps:
 
    You may also use the package manager for your Linux distribution on 
    each individual node. To upgrade packages manually on each Debian/Ubuntu 
-   host, perform the following steps . :: 
+   host, perform the following steps::
 
 	ssh {mon-host}
 	sudo apt-get update && sudo apt-get install ceph
@@ -114,7 +115,7 @@ To upgrade monitors, perform the following steps:
    For CentOS/Red Hat distributions deployed with ``ceph-deploy``, 
    the monitor ID is usually ``mon.{hostname}``.
    
-#. Ensure each monitor has rejoined the quorum. ::
+#. Ensure each monitor has rejoined the quorum::
 
 	ceph mon stat
 
@@ -135,8 +136,8 @@ To upgrade a Ceph OSD Daemon, perform the following steps:
 	ceph-deploy install --release hammer osd1 osd2 osd3
 
    You may also use the package manager on each node to upgrade packages 
-   manually. For Debian/Ubuntu hosts, perform the following steps on each
-   host. :: 
+   `using your distro's package manager`_. For Debian/Ubuntu hosts, perform the
+   following steps on each host::
 
 	ssh {osd-host}
 	sudo apt-get update && sudo apt-get install ceph
@@ -181,7 +182,7 @@ To upgrade a Ceph Metadata Server, perform the following steps:
 	ceph-deploy install --release hammer mds1
 
    To upgrade packages manually, perform the following steps on each
-   Debian/Ubuntu host. :: 
+   Debian/Ubuntu host::
 
 	ssh {mon-host}
 	sudo apt-get update && sudo apt-get install ceph-mds
@@ -228,7 +229,7 @@ If you do not have the latest version, you may need to uninstall, auto remove
 dependencies and reinstall.
 
 
-.. _manually: ../install-storage-cluster/
+.. _using your distro's package manager: ../install-storage-cluster/
 .. _Operating a Cluster: ../../rados/operations/operating
 .. _Monitoring a Cluster: ../../rados/operations/monitoring
-.. _release notes: ../../release-notes
+.. _release notes document of your release: ../../releases
