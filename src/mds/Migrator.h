@@ -102,9 +102,7 @@ public:
   }
 
   // -- cons --
-  Migrator(MDSRank *m, MDCache *c) : mds(m), cache(c) {
-    inject_session_race = g_conf->get_val<bool>("mds_inject_migrator_session_race");
-  }
+  Migrator(MDSRank *m, MDCache *c);
 
   void handle_conf_change(const struct md_config_t *conf,
                           const std::set <std::string> &changed,
@@ -113,22 +111,25 @@ public:
 protected:
   // export fun
   struct export_state_t {
-    int state;
-    mds_rank_t peer;
-    uint64_t tid;
+    int state = 0;
+    mds_rank_t peer = MDS_RANK_NONE;
+    uint64_t tid = 0;
     set<mds_rank_t> warning_ack_waiting;
     set<mds_rank_t> notify_ack_waiting;
     map<inodeno_t,map<client_t,Capability::Import> > peer_imported;
     MutationRef mut;
+    size_t approx_size = 0;
     // for freeze tree deadlock detection
     utime_t last_cum_auth_pins_change;
-    int last_cum_auth_pins;
-    int num_remote_waiters; // number of remote authpin waiters
-    export_state_t() : state(0), peer(0), tid(0), mut(),
-		       last_cum_auth_pins(0), num_remote_waiters(0) {}
+    int last_cum_auth_pins = 0;
+    int num_remote_waiters = 0; // number of remote authpin waiters
+    export_state_t() {}
   };
-
   map<CDir*, export_state_t>  export_state;
+  typedef map<CDir*, export_state_t>::iterator export_state_iterator;
+
+  uint64_t total_exporting_size = 0;
+  unsigned num_locking_exports = 0; // exports in locking state (approx_size == 0)
 
   list<pair<dirfrag_t,mds_rank_t> >  export_queue;
 
@@ -155,7 +156,7 @@ protected:
   void export_go(CDir *dir);
   void export_go_synced(CDir *dir, uint64_t tid);
   void export_try_cancel(CDir *dir, bool notify_peer=true);
-  void export_cancel_finish(CDir *dir);
+  void export_cancel_finish(export_state_iterator& it);
   void export_reverse(CDir *dir, export_state_t& stat);
   void export_notify_abort(CDir *dir, export_state_t& stat, set<CDir*>& bounds);
   void handle_export_ack(MExportDirAck *m);
@@ -351,6 +352,7 @@ public:
 private:
   MDSRank *mds;
   MDCache *cache;
+  uint64_t max_export_size = 0;
   bool inject_session_race = false;
 };
 
