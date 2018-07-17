@@ -1546,3 +1546,4 @@ OPTION(rgw_cors_rules_max_num, OPT_INT) // According to AWS S3(http://docs.aws.a
 OPTION(rgw_delete_multi_obj_max_num, OPT_INT) // According to AWS S3(https://docs.aws.amazon.com/AmazonS3/latest/dev/DeletingObjects.html), Amazon S3 also provides the Multi-Object Delete API that you can use to delete up to 1000 objects in a single HTTP request.
 OPTION(rgw_website_routing_rules_max_num, OPT_INT) // According to AWS S3, An website routing config can have up to 50 rules.
 OPTION(rgw_sts_entry, OPT_STR)
+OPTION(rgw_sts_key, OPT_STR)
