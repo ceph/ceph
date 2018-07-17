@@ -1912,8 +1912,12 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
     string cur_change_key;
     encode_obj_index_key(cur_change.key, &cur_change_key);
     int ret = cls_cxx_map_get_val(hctx, cur_change_key, &cur_disk_bl);
-    if (ret < 0)
+    if (ret < 0 && ret != -ENOENT)
       return -EINVAL;
+
+    if (ret == -ENOENT) {
+      continue;
+    }
 
     if (cur_disk_bl.length()) {
       auto cur_disk_iter = cur_disk_bl.cbegin();
@@ -1922,6 +1926,13 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
       } catch (buffer::error& error) {
         CLS_LOG(1, "ERROR: rgw_dir_suggest_changes(): failed to decode cur_disk\n");
         return -EINVAL;
+      }
+
+      if (cur_disk.pending_map.size() == 0) {
+        /* if none stale pending_map left, should do nothing.
+         * this can avoid list op get inconsistent state when raced with another op
+         */
+        continue;
       }
 
       real_time cur_time = real_clock::now();
