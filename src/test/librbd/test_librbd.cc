@@ -2355,7 +2355,6 @@ TEST_F(TestLibRBD, TestFUA)
   int order = 0;
   std::string name = get_temp_image_name();
   uint64_t size = 2 << 20;
-  size_t num_aios = 256;
 
   ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image_write, NULL));
