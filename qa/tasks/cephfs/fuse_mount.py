@@ -158,6 +158,9 @@ class FuseMount(CephFSMount):
         else:
             self._fuse_conn = new_conns[0]
 
+        self.gather_mount_info()
+
+    def gather_mount_info(self):
         status = self.admin_socket(['status'])
         self.id = status['id']
         try:
