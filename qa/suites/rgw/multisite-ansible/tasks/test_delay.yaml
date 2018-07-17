@@ -1,0 +1,48 @@
+tasks:
+- ssh-keys: null
+- ceph-ansible:
+    vars:
+      cluster: c1
+- ceph-ansible:
+    vars:
+      cluster: c2
+- new-rgw-multisite:
+   realm:
+     name: test-realm
+     is_default: true
+   zonegroups:
+     - name: test-zg
+       is_master: true
+       is_default: true
+       zones:
+         - name: test-zone
+           is_master: true
+           is_default: true
+           endpoints: [c1.rgw.0]
+         - name: test-zone2
+           is_default: true
+           endpoints: [c2.rgw.1]
+- netem:
+    clients: [c1.rgw.0]
+    dst_client: c2.rgw.1
+    delay: 30ms
+- multisite-test.userexec:
+      master_client: c1.rgw.0
+      test_dir_version: v1
+      master_config:
+        cluster_name: c1
+        user_count: 3
+      target_client: c2.rgw.1
+- sleep:
+      duration: 60
+- multisite-test:
+      test-name: test_Mbuckets
+      test_dir_version: v1
+      master_client: c1.rgw.0
+      target_client: c2.rgw.1
+      bucket_count: 5
+- sleep:
+      duration: 60
+- multisite-test.pull-io-info:
+- verify-io:
+      verification_script: read_io_info
