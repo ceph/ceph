@@ -5065,6 +5065,12 @@ std::vector<Option> get_rgw_options() {
     .set_default("")
     .set_description(""),
 
+    Option("rgw_ignore_get_invalid_range", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Treat invalid (e.g., negative) range request as full")
+    .set_long_description("Treat invalid (e.g., negative) range request "
+			  "as request for the full object (AWS compatibility)"),
+
     Option("rgw_swift_url", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("Swift-auth storage URL")
