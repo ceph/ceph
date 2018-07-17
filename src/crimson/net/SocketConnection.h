@@ -70,7 +70,7 @@ class SocketConnection : public Connection {
   seastar::future<> handle_keepalive2_ack();
 
   bool require_auth_feature() const;
-  int get_peer_type() const {
+  int get_peer_type() const override {
     return h.connect.host_type;
   }
   uint32_t get_proto_version(entity_type_t peer_type, bool connec) const;

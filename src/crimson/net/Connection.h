@@ -24,7 +24,8 @@ namespace ceph::net {
 
 using seq_num_t = uint64_t;
 
-class Connection : public boost::intrusive_ref_counter<Connection> {
+class Connection : public boost::intrusive_ref_counter<Connection,
+						       boost::thread_unsafe_counter> {
  protected:
   Messenger *const messenger;
   entity_addr_t my_addr;
@@ -40,6 +41,7 @@ class Connection : public boost::intrusive_ref_counter<Connection> {
 
   const entity_addr_t& get_my_addr() const { return my_addr; }
   const entity_addr_t& get_peer_addr() const { return peer_addr; }
+  virtual int get_peer_type() const = 0;
 
   /// true if the handshake has completed and no errors have been encountered
   virtual bool is_connected() = 0;
