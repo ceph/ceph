@@ -640,6 +640,7 @@ class Module(MgrModule):
             def _metrics(self, instance):
                 # Return cached data if available and collected before the cache times out
                 if instance.collect_cache and time.time() - instance.collect_time  < instance.collect_timeout:
+                    cherrypy.response.headers['Content-Type'] = 'text/plain'
                     return instance.collect_cache
 
                 if instance.have_mon_connection():
