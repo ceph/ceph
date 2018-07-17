@@ -262,6 +262,7 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
   switch (state) {
   case EXPORT_LOCKING:
     dout(10) << "export state=locking : dropping locks and removing auth_pin" << dendl;
+    num_locking_exports--;
     it->second.state = EXPORT_CANCELLED;
     dir->auth_unpin(this);
     break;
@@ -351,10 +352,7 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     mut.swap(it->second.mut);
 
     if (it->second.state == EXPORT_CANCELLED) {
-      export_state.erase(it);
-      dir->clear_exporting();
-      // send pending import_maps?
-      cache->maybe_send_pending_resolves();
+      export_cancel_finish(it);
     }
 
     // drop locks
@@ -373,13 +371,21 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
   }
 }
 
-void Migrator::export_cancel_finish(CDir *dir)
+void Migrator::export_cancel_finish(export_state_iterator& it)
 {
+  CDir *dir = it->first;
+  bool unpin = (it->second.state == EXPORT_CANCELLING);
+
+  total_exporting_size -= it->second.approx_size;
+  export_state.erase(it);
+
   assert(dir->state_test(CDir::STATE_EXPORTING));
   dir->clear_exporting();
 
-  // pinned by Migrator::export_notify_abort()
-  dir->auth_unpin(this);
+  if (unpin) {
+    // pinned by Migrator::export_notify_abort()
+    dir->auth_unpin(this);
+  }
   // send pending import_maps?  (these need to go out when all exports have finished.)
   cache->maybe_send_pending_resolves();
 }
@@ -453,8 +459,7 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
 	    export_finish(dir);
 	} else if (p->second.state == EXPORT_CANCELLING) {
 	  if (p->second.notify_ack_waiting.empty()) {
-	    export_state.erase(p);
-	    export_cancel_finish(dir);
+	    export_cancel_finish(p);
 	  }
 	}
       }
@@ -681,8 +686,14 @@ void Migrator::maybe_do_queued_export()
   if (running)
     return;
   running = true;
+
+  uint64_t max_total_size = max_export_size * 2;
+
   while (!export_queue.empty() &&
-	 export_state.size() <= 4) {
+	 max_total_size > total_exporting_size &&
+	 max_total_size - total_exporting_size >=
+	 max_export_size * (num_locking_exports + 1)) {
+
     dirfrag_t df = export_queue.front().first;
     mds_rank_t dest = export_queue.front().second;
     export_queue.pop_front();
@@ -695,6 +706,7 @@ void Migrator::maybe_do_queued_export()
 
     export_dir(dir, dest);
   }
+
   running = false;
 }
 
@@ -836,6 +848,7 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
 
   assert(export_state.count(dir) == 0);
   export_state_t& stat = export_state[dir];
+  num_locking_exports++;
   stat.state = EXPORT_LOCKING;
   stat.peer = dest;
   stat.tid = mdr->reqid.tid;
@@ -873,7 +886,7 @@ void Migrator::maybe_split_export(CDir* dir, vector<pair<CDir*, size_t> >& resul
   vector<LevelData> stack;
   stack.emplace_back(dir);
 
-  uint64_t max_size = g_conf().get_val<Option::size_t>("mds_max_export_size");
+  uint64_t max_size = max_export_size;
   size_t found_size = 0;
   size_t skipped_size = 0;
 
@@ -1070,6 +1083,7 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
   maybe_split_export(dir, results);
 
   if (results.size() == 1 && results.front().first == dir) {
+    num_locking_exports--;
     it->second.state = EXPORT_DISCOVERING;
     // send ExportDirDiscover (ask target)
     filepath path;
@@ -1080,6 +1094,8 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
     assert(g_conf()->mds_kill_export_at != 2);
 
     it->second.last_cum_auth_pins_change = ceph_clock_now();
+    it->second.approx_size = results.front().second;
+    total_exporting_size += it->second.approx_size;
 
     // start the freeze, but hold it up with an auth_pin.
     dir->freeze_tree();
@@ -1101,8 +1117,8 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
     _mdr->more()->export_dir = sub;
 
     assert(export_state.count(sub) == 0);
-    export_state_t& stat = export_state[sub];
-
+    auto& stat = export_state[sub];
+    num_locking_exports++;
     stat.state = EXPORT_LOCKING;
     stat.peer = dest;
     stat.tid = _mdr->reqid.tid;
@@ -1213,15 +1229,7 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
       !diri->nestlock.can_wrlock(-1)) {
     dout(7) << "export_dir couldn't acquire all needed locks, failing. "
 	    << *dir << dendl;
-    // .. unwind ..
-    dir->unfreeze_tree();
-    cache->try_subtree_merge(dir);
-
-    mds->send_message_mds(MExportDirCancel::factory::build(dir->dirfrag(), it->second.tid), it->second.peer);
-    export_state.erase(it);
-
-    dir->clear_exporting();
-    cache->maybe_send_pending_resolves();
+    export_try_cancel(dir);
     return;
   }
 
@@ -2053,8 +2061,7 @@ void Migrator::handle_export_notify_ack(const MExportDirNotifyAck::const_ref &m)
       dout(7) << "handle_export_notify_ack from " << m->get_source()
 	      << ": cancelling export, processing notify on " << *dir << dendl;
       if (stat.notify_ack_waiting.empty()) {
-	export_state.erase(export_state_entry);
-	export_cancel_finish(dir);
+	export_cancel_finish(export_state_entry);
       }
     }
   }
@@ -2141,7 +2148,10 @@ void Migrator::export_finish(CDir *dir)
 
   MutationRef mut = it->second.mut;
   // remove from exporting list, clean up state
+  total_exporting_size -= it->second.approx_size;
   export_state.erase(it);
+
+  assert(dir->state_test(CDir::STATE_EXPORTING));
   dir->clear_exporting();
 
   cache->show_subtrees();
@@ -3532,10 +3542,17 @@ void Migrator::logged_import_caps(CInode *in,
   in->auth_unpin(this);
 }
 
+Migrator::Migrator(MDSRank *m, MDCache *c) : mds(m), cache(c) {
+  max_export_size = g_conf().get_val<Option::size_t>("mds_max_export_size");
+  inject_session_race = g_conf().get_val<bool>("mds_inject_migrator_session_race");
+}
+
 void Migrator::handle_conf_change(const ConfigProxy& conf,
                                   const std::set <std::string> &changed,
                                   const MDSMap &mds_map)
 {
+  if (changed.count("mds_max_export_size"))
+    max_export_size = g_conf().get_val<Option::size_t>("mds_max_export_size");
   if (changed.count("mds_inject_migrator_session_race")) {
     inject_session_race = conf.get_val<bool>("mds_inject_migrator_session_race");
     dout(0) << "mds_inject_migrator_session_race is " << inject_session_race << dendl;
