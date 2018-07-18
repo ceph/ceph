@@ -3,6 +3,7 @@ import datetime
 import errno
 import json
 import six
+from collections import defaultdict
 
 
 DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
@@ -146,6 +147,31 @@ class Module(MgrModule):
             retlines.append(binstr(bindict))
         return 0, '\n'.join(retlines), ''
 
+    def do_json_report(self, cmd, inbuf):
+        """
+        Return a machine readable summary of recent crashes.
+        """
+        try:
+            hours = int(cmd['hours'])
+        except ValueError:
+            return errno.EINVAL, '', '<hours> argument must be integer'
+
+        report = defaultdict(lambda: 0)
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=hours)
+        for _, meta in self.timestamp_filter(lambda ts: ts >= cutoff):
+            try:
+                etype = meta["entity_name"]
+                etype, _ = etype.split(".")
+                etype = "unknown" if not etype else etype
+            except KeyError:
+                etype = "unknown"
+            except (ValueError, AttributeError):
+                etype = str(etype)
+                pass
+            report[etype] += 1
+
+        return 0, '', json.dumps(report)
+
     def do_self_test(self, cmd, inbuf):
         # test time conversion
         timestr = '2018-06-22 20:35:38.058818Z'
@@ -197,5 +223,11 @@ class Module(MgrModule):
             'desc': 'Summarize recorded crashes',
             'perm': 'r',
             'handler': do_stat,
+        },
+        {
+            'cmd': 'crash json_report name=hours,type=CephString',
+            'desc': 'Crashes in the last <hours> hours',
+            'perm': 'r',
+            'handler': do_json_report,
         },
     ]
