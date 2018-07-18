@@ -97,12 +97,9 @@ static int conf_stringify(const Option::value_t& v, string *out)
   return 0;
 }
 
-namespace ceph::internal {
-
-template<LockPolicy lp>
-md_config_impl<lp>::md_config_impl(ConfigValues& values,
-				   const ConfigTracker& tracker,
-				   bool is_daemon)
+md_config_t::md_config_t(ConfigValues& values,
+			 const ConfigTracker& tracker,
+			 bool is_daemon)
   : is_daemon(is_daemon)
 {
   // Load the compile-time list of Option into
@@ -215,8 +212,7 @@ md_config_impl<lp>::md_config_impl(ConfigValues& values,
   update_legacy_vals(values);
 }
 
-template<LockPolicy lp>
-md_config_impl<lp>::~md_config_impl()
+md_config_t::~md_config_t()
 {
 }
 
@@ -224,8 +220,7 @@ md_config_impl<lp>::~md_config_impl()
  * Sanity check schema.  Assert out on failures, to ensure any bad changes
  * cannot possibly pass any testing and make it into a release.
  */
-template<LockPolicy lp>
-void md_config_impl<lp>::validate_schema()
+void md_config_t::validate_schema()
 {
   for (const auto &i : schema) {
     const auto &opt = i.second;
@@ -247,8 +242,7 @@ void md_config_impl<lp>::validate_schema()
   }
 }
 
-template<LockPolicy lp>
-const Option *md_config_impl<lp>::find_option(const string& name) const
+const Option *md_config_t::find_option(const string& name) const
 {
   auto p = schema.find(name);
   if (p != schema.end()) {
@@ -257,10 +251,9 @@ const Option *md_config_impl<lp>::find_option(const string& name) const
   return nullptr;
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::set_val_default(ConfigValues& values,
-					 const ConfigTracker& tracker,
-					 const string& name, const std::string& val)
+void md_config_t::set_val_default(ConfigValues& values,
+				  const ConfigTracker& tracker,
+				  const string& name, const std::string& val)
 {
   const Option *o = find_option(name);
   assert(o);
@@ -269,8 +262,7 @@ void md_config_impl<lp>::set_val_default(ConfigValues& values,
   assert(r >= 0);
 }
 
-template<LockPolicy lp>
-int md_config_impl<lp>::set_mon_vals(CephContext *cct,
+int md_config_t::set_mon_vals(CephContext *cct,
     ConfigValues& values,
     const ConfigTracker& tracker,
     const map<string,string>& kv,
@@ -332,8 +324,7 @@ int md_config_impl<lp>::set_mon_vals(CephContext *cct,
   return 0;
 }
 
-template<LockPolicy lp>
-int md_config_impl<lp>::parse_config_files(ConfigValues& values,
+int md_config_t::parse_config_files(ConfigValues& values,
 				    const ConfigTracker& tracker,
 				    const char *conf_files_str,
 				    std::ostream *warnings,
@@ -460,10 +451,9 @@ int md_config_impl<lp>::parse_config_files(ConfigValues& values,
   return 0;
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::parse_env(ConfigValues& values,
-				   const ConfigTracker& tracker,
-				   const char *args_var)
+void md_config_t::parse_env(ConfigValues& values,
+			    const ConfigTracker& tracker,
+			    const char *args_var)
 {
   if (safe_to_start_threads)
     return;
@@ -489,22 +479,19 @@ void md_config_impl<lp>::parse_env(ConfigValues& values,
   }
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::show_config(const ConfigValues& values,
-				     std::ostream& out) const
+void md_config_t::show_config(const ConfigValues& values,
+			      std::ostream& out) const
 {
   _show_config(values, &out, nullptr);
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::show_config(const ConfigValues& values,
-				     Formatter *f) const
+void md_config_t::show_config(const ConfigValues& values,
+			      Formatter *f) const
 {
   _show_config(values, nullptr, f);
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::config_options(Formatter *f) const
+void md_config_t::config_options(Formatter *f) const
 {
   f->open_array_section("options");
   for (const auto& i: schema) {
@@ -513,9 +500,8 @@ void md_config_impl<lp>::config_options(Formatter *f) const
   f->close_section();
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::_show_config(const ConfigValues& values,
-				      std::ostream *out, Formatter *f) const
+void md_config_t::_show_config(const ConfigValues& values,
+			       std::ostream *out, Formatter *f) const
 {
   if (out) {
     *out << "name = " << values.name << std::endl;
@@ -538,10 +524,9 @@ void md_config_impl<lp>::_show_config(const ConfigValues& values,
   }
 }
 
-template<LockPolicy lp>
-int md_config_impl<lp>::parse_argv(ConfigValues& values,
-				   const ConfigTracker& tracker,
-				   std::vector<const char*>& args, int level)
+int md_config_t::parse_argv(ConfigValues& values,
+			    const ConfigTracker& tracker,
+			    std::vector<const char*>& args, int level)
 {
   if (safe_to_start_threads) {
     return -ENOSYS;
@@ -626,8 +611,7 @@ int md_config_impl<lp>::parse_argv(ConfigValues& values,
   return 0;
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::do_argv_commands(const ConfigValues& values) const
+void md_config_t::do_argv_commands(const ConfigValues& values) const
 {
 
   if (do_show_config) {
@@ -654,13 +638,12 @@ void md_config_impl<lp>::do_argv_commands(const ConfigValues& values) const
   }
 }
 
-template<LockPolicy lp>
-int md_config_impl<lp>::parse_option(ConfigValues& values,
-				     const ConfigTracker& tracker,
-				     std::vector<const char*>& args,
-				     std::vector<const char*>::iterator& i,
-				     ostream *oss,
-				     int level)
+int md_config_t::parse_option(ConfigValues& values,
+			      const ConfigTracker& tracker,
+			      std::vector<const char*>& args,
+			      std::vector<const char*>::iterator& i,
+			      ostream *oss,
+			      int level)
 {
   int ret = 0;
   size_t o = 0;
@@ -733,8 +716,7 @@ int md_config_impl<lp>::parse_option(ConfigValues& values,
   return ret >= 0 ? 0 : ret;
 }
 
-template<LockPolicy lp>
-int md_config_impl<lp>::parse_injectargs(ConfigValues& values,
+int md_config_t::parse_injectargs(ConfigValues& values,
 				  const ConfigTracker& tracker,
 				  std::vector<const char*>& args,
 				  std::ostream *oss)
@@ -748,22 +730,19 @@ int md_config_impl<lp>::parse_injectargs(ConfigValues& values,
   return ret;
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::set_safe_to_start_threads()
+void md_config_t::set_safe_to_start_threads()
 {
   safe_to_start_threads = true;
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::_clear_safe_to_start_threads()
+void md_config_t::_clear_safe_to_start_threads()
 {
   safe_to_start_threads = false;
 }
 
-template<LockPolicy lp>
-int md_config_impl<lp>::injectargs(ConfigValues& values,
-				   const ConfigTracker& tracker,
-				   const std::string& s, std::ostream *oss)
+int md_config_t::injectargs(ConfigValues& values,
+			    const ConfigTracker& tracker,
+			    const std::string& s, std::ostream *oss)
 {
   int ret;
   char b[s.length()+1];
@@ -794,11 +773,10 @@ int md_config_impl<lp>::injectargs(ConfigValues& values,
   return ret;
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::set_val_or_die(ConfigValues& values,
-					const ConfigTracker& tracker,
-					const std::string &key,
-					const std::string &val)
+void md_config_t::set_val_or_die(ConfigValues& values,
+				 const ConfigTracker& tracker,
+				 const std::string &key,
+				 const std::string &val)
 {
   std::stringstream err;
   int ret = set_val(values, tracker, key, val, &err);
@@ -808,11 +786,10 @@ void md_config_impl<lp>::set_val_or_die(ConfigValues& values,
   assert(ret == 0);
 }
 
-template<LockPolicy lp>
-int md_config_impl<lp>::set_val(ConfigValues& values,
-				const ConfigTracker& tracker,
-				const std::string &key, const char *val,
-				std::stringstream *err_ss)
+int md_config_t::set_val(ConfigValues& values,
+			 const ConfigTracker& tracker,
+			 const std::string &key, const char *val,
+			 std::stringstream *err_ss)
 {
   if (key.empty()) {
     if (err_ss) *err_ss << "No key specified";
@@ -844,14 +821,12 @@ int md_config_impl<lp>::set_val(ConfigValues& values,
   return -ENOENT;
 }
 
-template<LockPolicy lp>
-int md_config_impl<lp>::rm_val(ConfigValues& values, const std::string& key)
+int md_config_t::rm_val(ConfigValues& values, const std::string& key)
 {
   return _rm_val(values, key, CONF_OVERRIDE);
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::get_defaults_bl(const ConfigValues& values,
+void md_config_t::get_defaults_bl(const ConfigValues& values,
 					 bufferlist *bl)
 {
   if (defaults_bl.length() == 0) {
@@ -875,8 +850,7 @@ void md_config_impl<lp>::get_defaults_bl(const ConfigValues& values,
   *bl = defaults_bl;
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::get_config_bl(
+void md_config_t::get_config_bl(
   const ConfigValues& values,
   uint64_t have_version,
   bufferlist *bl,
@@ -930,16 +904,14 @@ void md_config_impl<lp>::get_config_bl(
   }
 }
 
-template<LockPolicy lp>
-int md_config_impl<lp>::get_val(const ConfigValues& values,
-				const std::string &key, char **buf, int len) const
+int md_config_t::get_val(const ConfigValues& values,
+			 const std::string &key, char **buf, int len) const
 {
   string k(ConfFile::normalize_key_name(key));
   return _get_val_cstr(values, k, buf, len);
 }
 
-template<LockPolicy lp>
-int md_config_impl<lp>::get_val(
+int md_config_t::get_val(
   const ConfigValues& values,
   const std::string &key,
   std::string *val) const
@@ -947,8 +919,7 @@ int md_config_impl<lp>::get_val(
   return conf_stringify(get_val_generic(values, key), val);
 }
 
-template<LockPolicy lp>
-Option::value_t md_config_impl<lp>::get_val_generic(
+Option::value_t md_config_t::get_val_generic(
   const ConfigValues& values,
   const std::string &key) const
 {
@@ -956,8 +927,7 @@ Option::value_t md_config_impl<lp>::get_val_generic(
   return _get_val(values, k);
 }
 
-template<LockPolicy lp>
-Option::value_t md_config_impl<lp>::_get_val(
+Option::value_t md_config_t::_get_val(
   const ConfigValues& values,
   const std::string &key,
   expand_stack_t *stack,
@@ -979,8 +949,7 @@ Option::value_t md_config_impl<lp>::_get_val(
   return _get_val(values, *o, stack, err);
 }
 
-template<LockPolicy lp>
-Option::value_t md_config_impl<lp>::_get_val(
+Option::value_t md_config_t::_get_val(
   const ConfigValues& values,
   const Option& o,
   expand_stack_t *stack,
@@ -995,9 +964,8 @@ Option::value_t md_config_impl<lp>::_get_val(
 		      &o, stack, err);
 }
 
-template<LockPolicy lp>
-Option::value_t md_config_impl<lp>::_get_val_nometa(const ConfigValues& values,
-						    const Option& o) const
+Option::value_t md_config_t::_get_val_nometa(const ConfigValues& values,
+					     const Option& o) const
 {
   if (auto [value, found] = values.get_value(o.name, -1); found) {
     return value;
@@ -1006,8 +974,7 @@ Option::value_t md_config_impl<lp>::_get_val_nometa(const ConfigValues& values,
   }
 }
 
-template<LockPolicy lp>
-const Option::value_t& md_config_impl<lp>::_get_val_default(const Option& o) const
+const Option::value_t& md_config_t::_get_val_default(const Option& o) const
 {
   bool has_daemon_default = !boost::get<boost::blank>(&o.daemon_value);
   if (is_daemon && has_daemon_default) {
@@ -1017,8 +984,7 @@ const Option::value_t& md_config_impl<lp>::_get_val_default(const Option& o) con
   }
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::early_expand_meta(
+void md_config_t::early_expand_meta(
   const ConfigValues& values,
   std::string &val,
   std::ostream *err) const
@@ -1030,7 +996,6 @@ void md_config_impl<lp>::early_expand_meta(
   conf_stringify(v, &val);
 }
 
-template<LockPolicy lp>
 bool md_config_t::finalize_reexpand_meta(ConfigValues& values,
 					 const ConfigTracker& tracker)
 {
@@ -1047,8 +1012,7 @@ bool md_config_t::finalize_reexpand_meta(ConfigValues& values,
   }
 }
 
-template<LockPolicy lp>
-Option::value_t md_config_impl<lp>::_expand_meta(
+Option::value_t md_config_t::_expand_meta(
   const ConfigValues& values,
   const Option::value_t& in,
   const Option *o,
@@ -1182,8 +1146,7 @@ Option::value_t md_config_impl<lp>::_expand_meta(
   return Option::value_t(out);
 }
 
-template<LockPolicy lp>
-int md_config_impl<lp>::_get_val_cstr(
+int md_config_t::_get_val_cstr(
   const ConfigValues& values,
   const std::string &key, char **buf, int len) const
 {
@@ -1210,8 +1173,7 @@ int md_config_impl<lp>::_get_val_cstr(
   return -ENOENT;
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::get_all_keys(std::vector<std::string> *keys) const {
+void md_config_t::get_all_keys(std::vector<std::string> *keys) const {
   const std::string negative_flag_prefix("no_");
 
   keys->clear();
@@ -1230,16 +1192,14 @@ void md_config_impl<lp>::get_all_keys(std::vector<std::string> *keys) const {
  * looking. The lowest priority section is the one we look in only if all
  * others had nothing.  This should always be the global section.
  */
-template<LockPolicy lp>
-void md_config_impl<lp>::get_my_sections(const ConfigValues& values,
-					 std::vector <std::string> &sections) const
+void md_config_t::get_my_sections(const ConfigValues& values,
+				  std::vector <std::string> &sections) const
 {
   _get_my_sections(values, sections);
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::_get_my_sections(const ConfigValues& values,
-					  std::vector <std::string> &sections) const
+void md_config_t::_get_my_sections(const ConfigValues& values,
+				   std::vector <std::string> &sections) const
 {
   sections.push_back(values.name.to_str());
 
@@ -1249,8 +1209,7 @@ void md_config_impl<lp>::_get_my_sections(const ConfigValues& values,
 }
 
 // Return a list of all sections
-template<LockPolicy lp>
-int md_config_impl<lp>::get_all_sections(std::vector <std::string> &sections) const
+int md_config_t::get_all_sections(std::vector <std::string> &sections) const
 {
   for (ConfFile::const_section_iter_t s = cf.sections_begin();
        s != cf.sections_end(); ++s) {
@@ -1259,8 +1218,7 @@ int md_config_impl<lp>::get_all_sections(std::vector <std::string> &sections) co
   return 0;
 }
 
-template<LockPolicy lp>
-int md_config_impl<lp>::get_val_from_conf_file(
+int md_config_t::get_val_from_conf_file(
   const ConfigValues& values,
   const std::vector <std::string> &sections,
   const std::string &key,
@@ -1279,8 +1237,7 @@ int md_config_impl<lp>::get_val_from_conf_file(
   return 0;
 }
 
-template<LockPolicy lp>
-int md_config_impl<lp>::_get_val_from_conf_file(
+int md_config_t::_get_val_from_conf_file(
   const std::vector <std::string> &sections,
   const std::string &key,
   std::string &out) const
@@ -1298,8 +1255,7 @@ int md_config_impl<lp>::_get_val_from_conf_file(
   return -ENOENT;
 }
 
-template<LockPolicy lp>
-int md_config_impl<lp>::_set_val(
+int md_config_t::_set_val(
   ConfigValues& values,
   const ConfigTracker& observers,
   const std::string &raw_val,
@@ -1342,8 +1298,7 @@ int md_config_impl<lp>::_set_val(
   }
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::_refresh(ConfigValues& values, const Option& opt)
+void md_config_t::_refresh(ConfigValues& values, const Option& opt)
 {
   // Apply the value to its legacy field, if it has one
   auto legacy_ptr_iter = legacy_values.find(std::string(opt.name));
@@ -1361,10 +1316,9 @@ void md_config_impl<lp>::_refresh(ConfigValues& values, const Option& opt)
   }
 }
 
-template<LockPolicy lp>
-int md_config_impl<lp>::_rm_val(ConfigValues& values,
-				const std::string& key,
-				int level)
+int md_config_t::_rm_val(ConfigValues& values,
+			 const std::string& key,
+			 int level)
 {
   if (schema.count(key) == 0) {
     return -EINVAL;
@@ -1432,8 +1386,7 @@ class assign_visitor : public boost::static_visitor<>
 };
 } // anonymous namespace
 
-template<LockPolicy lp>
-void md_config_impl<lp>::update_legacy_vals(ConfigValues& values)
+void md_config_t::update_legacy_vals(ConfigValues& values)
 {
   for (const auto &i : legacy_values) {
     const auto &name = i.first;
@@ -1443,10 +1396,9 @@ void md_config_impl<lp>::update_legacy_vals(ConfigValues& values)
   }
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::update_legacy_val(ConfigValues& values,
+void md_config_t::update_legacy_val(ConfigValues& values,
 				    const Option &opt,
-                                    md_config_impl::member_ptr_t member_ptr)
+                                    md_config_t::member_ptr_t member_ptr)
 {
   Option::value_t v = _get_val(values, opt);
   boost::apply_visitor(assign_visitor(&values, v), member_ptr);
@@ -1467,8 +1419,7 @@ static void dump(Formatter *f, int level, Option::value_t in)
   }
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::diff(
+void md_config_t::diff(
   const ConfigValues& values,
   Formatter *f,
   string name) const
@@ -1490,13 +1441,7 @@ void md_config_impl<lp>::diff(
   });
 }
 
-template<LockPolicy lp>
-void md_config_impl<lp>::complain_about_parse_errors(CephContext *cct)
+void md_config_t::complain_about_parse_errors(CephContext *cct)
 {
   ::complain_about_parse_errors(cct, &parse_errors);
 }
-
-// explicit instantiate the only md_config_impl type we need
-template class md_config_impl<internal::LockPolicy::MUTEX>;
-
-} // namespace ceph::internal
