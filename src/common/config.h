@@ -41,8 +41,6 @@ enum {
 
 extern const char *ceph_conf_level_name(int level);
 
-namespace ceph::internal {
-
 /** This class represents the current Ceph configuration.
  *
  * For Ceph daemons, this is the daemon configuration.  Log levels, caching
@@ -72,8 +70,7 @@ namespace ceph::internal {
  * FIXME: really we shouldn't allow changing integer or floating point values
  * while another thread is reading them, either.
  */
-template<LockPolicy lock_policy>
-struct md_config_impl {
+struct md_config_t {
 public:
   typedef boost::variant<int64_t ConfigValues::*,
                          uint64_t ConfigValues::*,
@@ -123,10 +120,10 @@ public:
   } opt_type_t;
 
   // Create a new md_config_t structure.
-  explicit md_config_impl(ConfigValues& values,
-			  const ConfigTracker& tracker,
-			  bool is_daemon=false);
-  ~md_config_impl();
+  explicit md_config_t(ConfigValues& values,
+		       const ConfigTracker& tracker,
+		       bool is_daemon=false);
+  ~md_config_t();
 
   // Parse a config file
   int parse_config_files(ConfigValues& values, const ConfigTracker& tracker,
@@ -356,14 +353,11 @@ public:
   friend class test_md_config_t;
 };
 
-template<LockPolicy lp>
 template<typename T>
-const T md_config_impl<lp>::get_val(const ConfigValues& values,
-				    const std::string &key) const {
+const T md_config_t::get_val(const ConfigValues& values,
+			     const std::string &key) const {
   return boost::get<T>(this->get_val_generic(values, key));
 }
-
-} // namespace ceph::internal
 
 inline std::ostream& operator<<(std::ostream& o, const boost::blank& ) {
       return o << "INVALID_CONFIG_VALUE";

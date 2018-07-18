@@ -3,6 +3,7 @@
 #pragma once
 
 #include "lock_policy.h"
+#include "lock_mutex.h"
 #include "Cond.h"
 
 class SharedLRUTest;

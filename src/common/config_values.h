@@ -18,8 +18,7 @@ class ConfigValues {
   using values_t = std::map<std::string, map<int32_t,Option::value_t>>;
   values_t values;
   // for populating md_config_impl::legacy_values in ctor
-  template<ceph::internal::LockPolicy lock_policy>
-  friend struct ceph::internal::md_config_impl;
+  friend struct md_config_t;
 
 public:
   EntityName name;
