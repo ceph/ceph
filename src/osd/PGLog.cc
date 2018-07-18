@@ -50,15 +50,8 @@ void PGLog::IndexedLog::trim(
   set<string>* trimmed_dups,
   eversion_t *write_from_dups)
 {
-  if (complete_to != log.end() &&
-      complete_to->version <= s) {
-    generic_derr << " bad trim to " << s << " when complete_to is "
-		 << complete_to->version
-		 << " on " << *this << dendl;
-    assert(0 == "out of order trim");
-  }
-
   assert(s <= can_rollback_to);
+  generic_dout(20) << " complete_to " << complete_to->version << dendl;
 
   auto earliest_dup_version =
     log.rbegin()->version.version < cct->_conf->osd_pg_log_dups_tracked
@@ -92,12 +85,23 @@ void PGLog::IndexedLog::trim(
       }
     }
 
+    bool reset_complete_to = false;
+    // we are trimming past complete_to, so reset complete_to
+    if (e.version >= complete_to->version)
+      reset_complete_to = true;
     if (rollback_info_trimmed_to_riter == log.rend() ||
 	e.version == rollback_info_trimmed_to_riter->version) {
       log.pop_front();
       rollback_info_trimmed_to_riter = log.rend();
     } else {
       log.pop_front();
+    }
+
+    // reset complete_to to the beginning of the log
+    if (reset_complete_to) {
+      generic_dout(0) << " moving complete_to " << " to "
+                      << log.begin()->version << dendl;
+      complete_to = log.begin();
     }
   }
 
@@ -161,16 +165,23 @@ void PGLog::clear_info_log(
 
 void PGLog::trim(
   eversion_t trim_to,
-  pg_info_t &info)
+  pg_info_t &info,
+  bool transaction_applied,
+  bool async)
 {
+  dout(10) << __func__ << " proposed trim_to = " << trim_to << dendl;
   // trim?
   if (trim_to > log.tail) {
-    // We shouldn't be trimming the log past last_complete
-    assert(trim_to <= info.last_complete);
+    dout(10) << __func__ << " missing = " << missing.num_missing() << dendl;
+    // Don't assert for async_recovery_targets or backfill_targets
+    // or whenever there are missing items
+    if (transaction_applied && !async && (missing.num_missing() == 0))
+      assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;
     log.trim(cct, trim_to, &trimmed, &trimmed_dups, &write_from_dups);
     info.log_tail = log.tail;
+    dout(10) << " after trim complete_to " << log.complete_to->version << dendl;
   }
 }
 
