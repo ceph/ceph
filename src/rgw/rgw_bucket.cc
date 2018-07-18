@@ -821,20 +821,19 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   rgw_bucket bucket = op_state.get_bucket();
 
   const rgw_pool& root_pool = store->get_zone_params().domain_root;
-  rgw_raw_obj obj(root_pool, bucket.name);
+  std::string bucket_entry;
+  rgw_make_bucket_entry_name(tenant, bucket_name, bucket_entry);
+  rgw_raw_obj obj(root_pool, bucket_entry);
   RGWObjVersionTracker objv_tracker;
 
   map<string, bufferlist> attrs;
   RGWBucketInfo bucket_info;
 
-  string key = bucket.name + ":" + bucket_id;
   RGWObjectCtx obj_ctx(store);
-  int r = store->get_bucket_instance_info(obj_ctx, key, bucket_info, NULL, &attrs);
+  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, &attrs);
   if (r < 0) {
     return r;
   }
-
-  rgw_user user_id = op_state.get_user_id();
 
   map<string, bufferlist>::iterator aiter = attrs.find(RGW_ATTR_ACL);
   if (aiter != attrs.end()) {
@@ -883,8 +882,8 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     aclbl.clear();
     policy_instance.encode(aclbl);
 
-    string oid_bucket_instance = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
-    rgw_raw_obj obj_bucket_instance(root_pool, oid_bucket_instance);
+    rgw_raw_obj obj_bucket_instance;
+    store->get_bucket_instance_obj(bucket, obj_bucket_instance);
     r = store->system_obj_set_attr(NULL, obj_bucket_instance, RGW_ATTR_ACL, aclbl, &objv_tracker);
     if (r < 0) {
       return r;
