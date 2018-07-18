@@ -4369,17 +4369,16 @@ rgw::auth::s3::STSEngine::authenticate(
       return result_t::deny(-EPERM);
     }
   }
-  if (token.acct_type == TYPE_RGW) {
-    string subuser;
-    auto apl = local_apl_factory->create_apl_local(cct, s, user_info, subuser, role_policies);
-    return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
-  } else if (token.acct_type == TYPE_KEYSTONE || token.acct_type == TYPE_LDAP) {
+
+  if (token.acct_type == TYPE_KEYSTONE || token.acct_type == TYPE_LDAP) {
     auto apl = remote_apl_factory->create_apl_remote(cct, s, get_acl_strategy(),
                                             get_creds_info(token));
     return result_t::grant(std::move(apl), completer_factory(boost::none));
+  } else {
+    string subuser;
+    auto apl = local_apl_factory->create_apl_local(cct, s, user_info, subuser, role_policies);
+    return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   }
-
-  return result_t::deny(-EPERM);
 }
 
 bool rgw::auth::s3::S3AnonymousEngine::is_applicable(
