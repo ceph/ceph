@@ -108,6 +108,30 @@ public:
                                           &mock_image_ctx));
   }
 
+  void expect_get_flags(MockOperationImageCtx &mock_image_ctx,
+                        uint64_t snap_id, int r) {
+    EXPECT_CALL(mock_image_ctx, get_flags(snap_id, _))
+                  .WillOnce(Return(r));
+  }
+
+  void expect_object_may_exist(MockOperationImageCtx &mock_image_ctx,
+                               uint64_t object_no, bool exists) {
+    if (mock_image_ctx.object_map != nullptr) {
+      EXPECT_CALL(*mock_image_ctx.object_map, object_may_exist(object_no))
+                    .WillOnce(Return(exists));
+    }
+  }
+
+  void expect_get_snap_object_map(MockOperationImageCtx &mock_image_ctx,
+                                  MockObjectMap *mock_object_map, uint64_t snap_id) {
+    if (mock_image_ctx.object_map != nullptr) {
+      EXPECT_CALL(mock_image_ctx, create_object_map(snap_id))
+                    .WillOnce(Return(mock_object_map));
+      EXPECT_CALL(*mock_object_map, open(_))
+                    .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
+    }
+  }
+
   void expect_rollback_object_map(MockOperationImageCtx &mock_image_ctx,
                                   MockObjectMap &mock_object_map) {
     if (mock_image_ctx.object_map != nullptr) {
@@ -136,6 +160,7 @@ public:
 
   void expect_rollback(MockOperationImageCtx &mock_image_ctx, int r) {
     expect_get_current_size(mock_image_ctx, 1);
+    expect_object_may_exist(mock_image_ctx, 0, true);
     expect_get_object_name(mock_image_ctx, 0);
     expect_rollback_snap_id(mock_image_ctx, "object-name-0", r);
   }
@@ -190,6 +215,7 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, Success) {
   MockExclusiveLock mock_exclusive_lock;
   MockJournal mock_journal;
   MockObjectMap *mock_object_map = new MockObjectMap();
+  MockObjectMap *mock_snap_object_map = new MockObjectMap();
   initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
                       *mock_object_map);
   expect_op_work_queue(mock_image_ctx);
@@ -199,6 +225,8 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, Success) {
   expect_append_op_event(mock_image_ctx, false, 0);
   expect_block_writes(mock_image_ctx, 0);
   expect_resize(mock_image_ctx, mock_resize_request, 0);
+  expect_get_flags(mock_image_ctx, 123, 0);
+  expect_get_snap_object_map(mock_image_ctx, mock_snap_object_map, 123);
   expect_rollback_object_map(mock_image_ctx, *mock_object_map);
   expect_rollback(mock_image_ctx, 0);
   expect_refresh_object_map(mock_image_ctx, *mock_object_map);
@@ -236,6 +264,7 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, SkipResize) {
   MockExclusiveLock mock_exclusive_lock;
   MockJournal mock_journal;
   MockObjectMap *mock_object_map = new MockObjectMap();
+  MockObjectMap *mock_snap_object_map = new MockObjectMap();
   initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
                       *mock_object_map);
   expect_op_work_queue(mock_image_ctx);
@@ -244,6 +273,8 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, SkipResize) {
   expect_append_op_event(mock_image_ctx, false, 0);
   expect_block_writes(mock_image_ctx, 0);
   expect_get_image_size(mock_image_ctx, 345);
+  expect_get_flags(mock_image_ctx, 123, 0);
+  expect_get_snap_object_map(mock_image_ctx, mock_snap_object_map, 123);
   expect_rollback_object_map(mock_image_ctx, *mock_object_map);
   expect_rollback(mock_image_ctx, 0);
   expect_refresh_object_map(mock_image_ctx, *mock_object_map);
@@ -283,6 +314,7 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, RollbackObjectsError) {
   MockExclusiveLock mock_exclusive_lock;
   MockJournal mock_journal;
   MockObjectMap mock_object_map;
+  MockObjectMap *mock_snap_object_map = new MockObjectMap();
   initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
                       mock_object_map);
   expect_op_work_queue(mock_image_ctx);
@@ -292,6 +324,8 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, RollbackObjectsError) {
   expect_append_op_event(mock_image_ctx, false, 0);
   expect_block_writes(mock_image_ctx, 0);
   expect_resize(mock_image_ctx, mock_resize_request, 0);
+  expect_get_flags(mock_image_ctx, 123, 0);
+  expect_get_snap_object_map(mock_image_ctx, mock_snap_object_map, 123);
   expect_rollback_object_map(mock_image_ctx, mock_object_map);
   expect_rollback(mock_image_ctx, -EINVAL);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
@@ -308,6 +342,7 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, InvalidateCacheError) {
   MockExclusiveLock mock_exclusive_lock;
   MockJournal mock_journal;
   MockObjectMap *mock_object_map = new MockObjectMap();
+  MockObjectMap *mock_snap_object_map = new MockObjectMap();
   initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
                       *mock_object_map);
   expect_op_work_queue(mock_image_ctx);
@@ -317,6 +352,8 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, InvalidateCacheError) {
   expect_append_op_event(mock_image_ctx, false, 0);
   expect_block_writes(mock_image_ctx, 0);
   expect_resize(mock_image_ctx, mock_resize_request, 0);
+  expect_get_flags(mock_image_ctx, 123, 0);
+  expect_get_snap_object_map(mock_image_ctx, mock_snap_object_map, 123);
   expect_rollback_object_map(mock_image_ctx, *mock_object_map);
   expect_rollback(mock_image_ctx, 0);
   expect_refresh_object_map(mock_image_ctx, *mock_object_map);
