@@ -553,13 +553,13 @@ public:
     ldout(sync_env->cct, 5) << conf->id << ": init" << dendl;
     return new RGWElasticInitConfigCBCR(sync_env, conf);
   }
-  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
-    ldout(sync_env->cct, 10) << conf->id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
+  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override {
+    ldout(sync_env->cct, 10) << conf->id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
     if (!conf->should_handle_operation(bucket_info)) {
       ldout(sync_env->cct, 10) << conf->id << ": skipping operation (bucket not approved)" << dendl;
       return nullptr;
     }
-    return new RGWElasticHandleRemoteObjCR(sync_env, bucket_info, key, conf, versioned_epoch);
+    return new RGWElasticHandleRemoteObjCR(sync_env, bucket_info, key, conf, versioned_epoch.value_or(0));
   }
   RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
     /* versioned and versioned epoch params are useless in the elasticsearch backend case */
