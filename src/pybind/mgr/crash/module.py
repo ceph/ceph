@@ -37,6 +37,21 @@ class Module(MgrModule):
         timestr = timestr.rstrip('Z')
         return datetime.datetime.strptime(timestr, DATEFMT)
 
+    def timestamp_filter(self, f):
+        """
+        Filter crash reports by timestamp.
+
+        :param f: f(time) return true to keep crash report
+        :returns: crash reports for which f(time) returns true
+        """
+        def inner((_, meta)):
+            meta = json.loads(meta)
+            time = self.time_from_string(meta["timestamp"])
+            return f(time)
+        matches = filter(inner, six.iteritems(
+            self.get_store_prefix("crash/")))
+        return map(lambda (k, m): (k, json.loads(m)), matches)
+
     # command handlers
 
     def do_info(self, cmd, inbuf):
@@ -81,13 +96,10 @@ class Module(MgrModule):
         except ValueError:
             return errno.EINVAL, '', 'keep argument must be integer'
 
-        keeptime = datetime.timedelta(days=keep)
+        cutoff = now - datetime.timedelta(days=keep)
 
-        for key, meta in six.iteritems(self.get_store_prefix('crash/')):
-            meta = json.loads(meta)
-            stamp = self.time_from_string(meta['timestamp'])
-            if stamp <= now - keeptime:
-                self.set_store(key, None)
+        for key, _ in self.timestamp_filter(lambda ts: ts <= cutoff):
+            self.set_store(key, None)
 
         return 0, '', ''
 
