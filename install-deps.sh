@@ -31,7 +31,7 @@ fi
 
 function install_seastar_deps {
     if $with_seastar; then
-        $SUDO apt-get install -y \
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y \
               ragel libhwloc-dev libnuma-dev libpciaccess-dev \
               libcrypto++-dev libgnutls28-dev libsctp-dev libprotobuf-dev \
               protobuf-compiler systemtap-sdt-dev libyaml-cpp-dev
