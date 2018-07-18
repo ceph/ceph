@@ -49,8 +49,15 @@ def pretty_report(report):
                         value=value
                     )
                 )
-            output.append(
-                device_metadata_item_template.format(tag_name='devices', value=','.join(device['devices'])))
+            if not device.get('devices'):
+                continue
+            else:
+                output.append(
+                    device_metadata_item_template.format(
+                        tag_name='devices',
+                        value=','.join(device['devices'])
+                    )
+                )
 
     print(''.join(output))
 
