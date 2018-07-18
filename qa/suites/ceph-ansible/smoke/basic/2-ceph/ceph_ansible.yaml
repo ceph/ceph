@@ -2,6 +2,7 @@ meta:
 - desc: "Build the ceph cluster using ceph-ansible"
 
 overrides:
+   ansible-version: "2.5"
    ceph_ansible:
      vars:
         ceph_conf_overrides:
