@@ -451,6 +451,34 @@ CPE_NAME="cpe:/o:suse:sles:12:sp3"
                          os_release_sles_12_3, 'ID'))
         self.assertEqual('12.3', ceph_detect_init._extract_from_os_release(
                          os_release_sles_12_3, 'VERSION_ID'))
+        os_release_sled_15 = """
+NAME="SLED"
+VERSION="15"
+VERSION_ID="15"
+PRETTY_NAME="SUSE Linux Enterprise Desktop 15"
+ID="sled"
+ID_LIKE="suse"
+ANSI_COLOR="0;32"
+CPE_NAME="cpe:/o:suse:sled:15"
+"""
+        self.assertEqual('sled', ceph_detect_init._extract_from_os_release(
+                         os_release_sled_15, 'ID'))
+        self.assertEqual('15', ceph_detect_init._extract_from_os_release(
+                         os_release_sled_15, 'VERSION_ID'))
+        os_release_sles_15 = """
+NAME="SLES"
+VERSION="15"
+VERSION_ID="15"
+PRETTY_NAME="SUSE Linux Enterprise Server 15"
+ID="sles"
+ID_LIKE="suse"
+ANSI_COLOR="0;32"
+CPE_NAME="cpe:/o:suse:sles:15"
+"""
+        self.assertEqual('sles', ceph_detect_init._extract_from_os_release(
+                         os_release_sles_15, 'ID'))
+        self.assertEqual('15', ceph_detect_init._extract_from_os_release(
+                         os_release_sles_15, 'VERSION_ID'))
         os_release_opensuse_tumbleweed_old_style = """
 NAME="openSUSE Tumbleweed"
 # VERSION="20170502"
