@@ -76,9 +76,9 @@ file(
   frontend/src/*/*/*/*/*/*.html)
 
 if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-  set(npm_command npm run build -- --prod)
+  set(npm_command npm run build -- --prod --progress=false)
 else()
-  set(npm_command npm run build)
+  set(npm_command npm run build -- --progress=false)
 endif()
 
 add_npm_command(
