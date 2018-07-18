@@ -32,7 +32,6 @@
 #ifndef CEPH_COMMON_CONVENIENCE_H
 #define CEPH_COMMON_CONVENIENCE_H
 
-#if __has_include(<optional>)
 namespace ceph {
 
 // Lock Factories
@@ -150,7 +149,6 @@ inline auto with_shared_lock(Mutex&& mutex, Fun&& fun, Args&&... args)
   return std::forward<Fun>(fun)(std::forward<Args>(args)...);
 }
 }
-#endif // __has_include(<optional>)
 
 // Lock Types
 // ----------
@@ -205,7 +203,7 @@ auto maybe_do_or(const boost::optional<T>& t, F&& f, U&& u) ->
     return std::forward<U>(u);
 }
 
-
+#if __has_include(<optional>)
 // Same thing but for std::optional
 
 template<typename T, typename F>
@@ -233,6 +231,8 @@ auto maybe_do_or(const std::optional<T>& t, F&& f, U&& u) ->
   else
     return std::forward<U>(u);
 }
+#endif // __has_include(<optional>)
+
 
 namespace _convenience {
 template<typename... Ts, typename F,  std::size_t... Is>
