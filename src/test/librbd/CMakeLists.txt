@@ -139,6 +139,7 @@ add_executable(ceph_test_librbd_api
 target_link_libraries(ceph_test_librbd_api
   librbd
   librados
+  ceph-common
   ${UNITTEST_LIBS})
 set_target_properties(ceph_test_librbd_api PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})

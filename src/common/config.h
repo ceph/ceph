@@ -21,6 +21,7 @@
 #include "common/entity_name.h"
 #include "common/code_environment.h"
 #include "common/Mutex.h"
+#include "common/CondVar.h"
 #include "log/SubsystemMap.h"
 #include "common/config_obs.h"
 #include "common/options.h"
@@ -70,6 +71,64 @@ extern const char *ceph_conf_level_name(int level);
  * while another thread is reading them, either.
  */
 struct md_config_t {
+private:
+  class CallGate {
+  private:
+    uint32_t call_count = 0;
+    Mutex lock;
+    Cond cond;
+  public:
+    CallGate()
+      : lock("call::gate::lock", false, true) {
+    }
+
+    void enter() {
+      Mutex::Locker locker(lock);
+      ++call_count;
+    }
+
+    void leave() {
+      Mutex::Locker locker(lock);
+      assert(call_count > 0);
+      if (--call_count == 0) {
+        cond.Signal();
+      }
+    }
+
+    void close() {
+      Mutex::Locker locker(lock);
+      while (call_count != 0) {
+        cond.Wait(lock);
+      }
+    }
+  };
+
+  void call_gate_enter(md_config_obs_t *obs) {
+    auto p = obs_call_gate.find(obs);
+    assert(p != obs_call_gate.end());
+    p->second->enter();
+  }
+  void call_gate_leave(md_config_obs_t *obs) {
+    auto p = obs_call_gate.find(obs);
+    assert(p != obs_call_gate.end());
+    p->second->leave();
+  }
+  void call_gate_close(md_config_obs_t *obs) {
+    auto p = obs_call_gate.find(obs);
+    assert(p != obs_call_gate.end());
+    p->second->close();
+  }
+
+  typedef std::unique_ptr<CallGate> CallGateRef;
+  std::map<md_config_obs_t*, CallGateRef> obs_call_gate;
+
+  typedef std::map<md_config_obs_t*, std::set<std::string>> rev_obs_map_t;
+  typedef std::function<void(md_config_obs_t*, const std::string&)> config_gather_cb;
+
+  void call_observers(rev_obs_map_t &rev_obs);
+  void map_observer_changes(md_config_obs_t *obs, const std::string &key,
+                            rev_obs_map_t *rev_obs);
+
 public:
   typedef boost::variant<int64_t md_config_t::*,
                          uint64_t md_config_t::*,
@@ -162,7 +221,7 @@ public:
 
   // Expand all metavariables. Make any pending observer callbacks.
   void apply_changes(std::ostream *oss);
-  void _apply_changes(std::ostream *oss);
+  void for_each_change(std::ostream *oss, config_gather_cb callback);
   bool _internal_field(const string& k);
   void call_all_observers();
 
