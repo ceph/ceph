@@ -92,7 +92,7 @@ def _normalized_distro_name(distro):
         return 'redhat'
     elif distro.startswith(('scientific', 'scientific linux')):
         return 'scientific'
-    elif distro.startswith(('suse', 'opensuse', 'sles')):
+    elif distro.startswith(('suse', 'opensuse', 'sles', 'sled')):
         return 'suse'
     elif distro.startswith('centos'):
         return 'centos'
