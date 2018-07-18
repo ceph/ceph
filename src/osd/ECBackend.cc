@@ -908,8 +908,11 @@ void ECBackend::handle_sub_write(
   }
   clear_temp_objs(op.temp_removed);
   dout(30) << __func__ << " missing before " << get_parent()->get_log().get_missing().get_items() << dendl;
+  // flag set to true during async recovery
+  bool async = false;
   pg_missing_tracker_t pmissing = get_parent()->get_local_missing();
   if (pmissing.is_missing(op.soid)) {
+    async = true;
     dout(30) << __func__ << " is_missing " << pmissing.is_missing(op.soid) << dendl;
     for (auto &&e: op.log_entries) {
       dout(30) << " add_next_event entry " << e << dendl;
@@ -923,7 +926,8 @@ void ECBackend::handle_sub_write(
     op.trim_to,
     op.roll_forward_to,
     !op.backfill_or_async_recovery,
-    localt);
+    localt,
+    async);
 
   if (!get_parent()->pg_is_undersized() &&
       (unsigned)get_parent()->whoami_shard().shard >=
