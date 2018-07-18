@@ -2567,7 +2567,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   }
 
   op_ret.is_truncated = (count >= max) || more;
-  while (count >= max) {
+  while (count > max) {
     op_ret.entries.pop_back();
     count--;
   }
