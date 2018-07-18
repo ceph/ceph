@@ -2316,9 +2316,9 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
-    Option("osd_skip_data_digest", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
-    .set_description(""),
+    Option("osd_skip_data_digest", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Do not store full-object checksums if the backend (bluestore) does its own checksums.  Only usable with all BlueStore OSDs."),
 
     Option("osd_op_queue", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("wpq")
