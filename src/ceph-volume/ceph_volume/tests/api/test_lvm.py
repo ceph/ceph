@@ -373,7 +373,7 @@ class TestVolumeGroupFree(object):
         vg = api.VolumeGroup(vg_name='nosize', vg_free=' g')
         with pytest.raises(RuntimeError) as error:
             vg.free
-        assert "Unable to convert vg size to integer: ' g'" in str(error)
+        assert "Unable to convert to integer: ' '" in str(error.value)
 
     def test_integer_gets_produced(self):
         vg = api.VolumeGroup(vg_name='nosize', vg_free='100g')
@@ -392,85 +392,103 @@ class TestCreateLVs(object):
 
     def test_creates_correct_lv_number_from_parts(self, monkeypatch):
         monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: (a, kw))
-        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
+        vg = api.VolumeGroup(
+            vg_name='ceph', vg_free='1024g',
+            vg_size='99999999g', vg_free_count='999'
+        )
         lvs = api.create_lvs(vg, parts=4)
         assert len(lvs) == 4
 
     def test_suffixes_the_size_arg(self, monkeypatch):
         monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: (a, kw))
-        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
+        vg = api.VolumeGroup(
+            vg_name='ceph', vg_free='1024g',
+            vg_size='99999999g', vg_free_count='999'
+        )
         lvs = api.create_lvs(vg, parts=4)
-        assert lvs[0][1]['size'] == '256g'
+        assert lvs[0][1]['extents'] == 249
 
     def test_only_uses_free_size(self, monkeypatch):
         monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: (a, kw))
-        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g', vg_size='99999999g')
+        vg = api.VolumeGroup(
+            vg_name='ceph', vg_free='1024g',
+            vg_size='99999999g', vg_free_count='1000'
+        )
         lvs = api.create_lvs(vg, parts=4)
-        assert lvs[0][1]['size'] == '256g'
+        assert lvs[0][1]['extents'] == 250
 
     def test_null_tags_are_set_by_default(self, monkeypatch):
         monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: (a, kw))
-        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g', vg_size='99999999g')
+        vg = api.VolumeGroup(
+            vg_name='ceph', vg_free='1024g',
+            vg_size='99999999g', vg_free_count='999'
+        )
         kwargs = api.create_lvs(vg, parts=4)[0][1]
         assert list(kwargs['tags'].values()) == ['null', 'null', 'null', 'null']
 
     def test_fallback_to_one_part(self, monkeypatch):
         monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: (a, kw))
-        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g', vg_size='99999999g')
+        vg = api.VolumeGroup(
+            vg_name='ceph', vg_free='1024g',
+            vg_size='99999999g', vg_free_count='999'
+        )
         lvs = api.create_lvs(vg)
         assert len(lvs) == 1
 
 
 class TestVolumeGroupSizing(object):
 
+    def setup(self):
+        self.vg = api.VolumeGroup(
+            vg_name='ceph', vg_free='1024g',
+            vg_free_count='261129'
+        )
+
     def test_parts_and_size_errors(self):
-        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
         with pytest.raises(ValueError) as error:
-            vg.sizing(parts=4, size=10)
+            self.vg.sizing(parts=4, size=10)
         assert "Cannot process sizing" in str(error)
 
     def test_zero_parts_produces_100_percent(self):
-        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
-        result = vg.sizing(parts=0)
+        result = self.vg.sizing(parts=0)
         assert result['percentages'] == 100
 
     def test_two_parts_produces_50_percent(self):
-        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
-        result = vg.sizing(parts=2)
+        result = self.vg.sizing(parts=2)
         assert result['percentages'] == 50
 
     def test_two_parts_produces_half_size(self):
-        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
-        result = vg.sizing(parts=2)
+        result = self.vg.sizing(parts=2)
         assert result['sizes'] == 512
 
     def test_half_size_produces_round_sizes(self):
-        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
-        result = vg.sizing(size=512)
+        result = self.vg.sizing(size=512)
         assert result['sizes'] == 512
         assert result['percentages'] == 50
         assert result['parts'] == 2
 
     def test_bit_more_than_half_size_allocates_full_size(self):
-        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
         # 513 can't allocate more than 1, so it just fallsback to using the
         # whole device
-        result = vg.sizing(size=513)
+        result = self.vg.sizing(size=513)
         assert result['sizes'] == 1024
         assert result['percentages'] == 100
         assert result['parts'] == 1
 
+    def test_extents_are_halfed_rounded_down(self):
+        result = self.vg.sizing(size=512)
+        # the real extents would've given 130564.5
+        assert result['extents'] == 130564
+
     def test_bit_less_size_rounds_down(self):
-        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
-        result = vg.sizing(size=129)
+        result = self.vg.sizing(size=129)
         assert result['sizes'] == 146
         assert result['percentages'] == 14
         assert result['parts'] == 7
 
     def test_unable_to_allocate_past_free_size(self):
-        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
         with pytest.raises(exceptions.SizeAllocationError):
-            vg.sizing(size=2048)
+            self.vg.sizing(size=2048)
 
 
 class TestGetLVFromArgument(object):
