@@ -36,6 +36,9 @@ enum {
   l_bluefs_bytes_written_wal,
   l_bluefs_bytes_written_sst,
   l_bluefs_bytes_written_slow,
+  l_bluefs_max_bytes_wal,
+  l_bluefs_max_bytes_db,
+  l_bluefs_max_bytes_slow,
   l_bluefs_last,
 };
 
@@ -224,6 +227,13 @@ private:
   ceph::mutex lock = ceph::make_mutex("BlueFS::lock");
 
   PerfCounters *logger = nullptr;
+
+  uint64_t max_bytes[MAX_BDEV] = {0};
+  uint64_t max_bytes_pcounters[MAX_BDEV] = {
+    l_bluefs_max_bytes_wal,
+    l_bluefs_max_bytes_db,
+    l_bluefs_max_bytes_slow,
+  };
 
   // cache
   mempool::bluefs::map<string, DirRef> dir_map;              ///< dirname -> Dir
