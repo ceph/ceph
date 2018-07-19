@@ -956,9 +956,10 @@ public:
                             const req_state* const s,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
-                            const boost::optional<vector<std::string> >& role_policies) const override {
+                            const boost::optional<vector<std::string> >& role_policies,
+                            const boost::optional<uint32_t>& perm_mask) const override {
       return aplptr_t(
-        new rgw::auth::LocalApplier(cct, user_info, subuser, role_policies));
+        new rgw::auth::LocalApplier(cct, user_info, subuser, role_policies, perm_mask));
   }
 };
 

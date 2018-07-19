@@ -455,6 +455,7 @@ protected:
   const RGWUserInfo user_info;
   const std::string subuser;
   vector<std::string> role_policies;
+  uint32_t perm_mask;
 
   uint32_t get_perm_mask(const std::string& subuser_name,
                          const RGWUserInfo &uinfo) const;
@@ -465,11 +466,17 @@ public:
   LocalApplier(CephContext* const cct,
                const RGWUserInfo& user_info,
                std::string subuser,
-               const boost::optional<vector<std::string> >& role_policies)
+               const boost::optional<vector<std::string> >& role_policies,
+               const boost::optional<uint32_t>& perm_mask)
     : user_info(user_info),
-      subuser(std::move(subuser)){
+      subuser(std::move(subuser)) {
     if (role_policies) {
       this->role_policies = role_policies.get();
+    }
+    if (perm_mask) {
+      this->perm_mask = perm_mask.get();
+    } else {
+      this->perm_mask = RGW_PERM_INVALID;
     }
   }
 
@@ -479,7 +486,11 @@ public:
   bool is_owner_of(const rgw_user& uid) const override;
   bool is_identity(const idset_t& ids) const override;
   uint32_t get_perm_mask() const override {
-    return get_perm_mask(subuser, user_info);
+    if (this->perm_mask == RGW_PERM_INVALID) {
+      return get_perm_mask(subuser, user_info);
+    } else {
+      return this->perm_mask;
+    }
   }
   void to_str(std::ostream& out) const override;
   void load_acct_info(RGWUserInfo& user_info) const override; /* out */
@@ -493,7 +504,8 @@ public:
                                       const req_state* s,
                                       const RGWUserInfo& user_info,
                                       const std::string& subuser,
-                                      const boost::optional<vector<std::string> >& role_policies) const = 0;
+                                      const boost::optional<vector<std::string> >& role_policies,
+                                      const boost::optional<uint32_t>& perm_mask) const = 0;
     };
 };
 

@@ -556,7 +556,7 @@ rgw::auth::AnonymousEngine::authenticate(const req_state* const s) const
     auto apl = \
       apl_factory->create_apl_local(cct, s, user_info,
                                     rgw::auth::LocalApplier::NO_SUBUSER,
-                                    boost::none);
+                                    boost::none, boost::none);
     return result_t::grant(std::move(apl));
   }
 }
