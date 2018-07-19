@@ -40,6 +40,8 @@ enum perfcounter_type_d : uint8_t
   PERFCOUNTER_LONGRUNAVG = 0x4, // paired counter + sum (time)
   PERFCOUNTER_COUNTER = 0x8,    // counter (vs gauge)
   PERFCOUNTER_HISTOGRAM = 0x10, // histogram (vector) of values
+
+  PERFCOUNTER_SETABLE = 0x20,
 };
 
 enum unit_t : uint8_t
@@ -395,4 +397,177 @@ public:
 
 using PerfCountersRef = std::unique_ptr<PerfCounters, PerfCountersDeleter>;
 
+namespace ceph {
+
+static constexpr auto PERFCOUNTER_U64_CTR = \
+  static_cast<enum perfcounter_type_d>(PERFCOUNTER_U64 | PERFCOUNTER_COUNTER);
+static constexpr auto PERFCOUNTER_U64_SETABLE = \
+  static_cast<enum perfcounter_type_d>(PERFCOUNTER_U64 | PERFCOUNTER_SETABLE);
+
+#define PERF_COUNTERS_ADD_U64_COUNTER(id, name, desc)	\
+  static constexpr perf_counter_meta_t id {		\
+    PERFCOUNTER_U64_CTR, name, desc			\
+  }
+#define PERF_COUNTERS_ADD_U64_SETABLE(id, name, desc, ...)	\
+  static constexpr perf_counter_meta_t id {			\
+    PERFCOUNTER_U64_SETABLE, name, desc, __VA_ARGS__		\
+  }
+
+struct perf_counter_meta_t {
+  enum perfcounter_type_d type { PERFCOUNTER_NONE };
+  const char* name { nullptr };
+  const char* description { nullptr };
+  const char* nick { nullptr };
+  uint8_t prio { 0 };
+  enum unit_t unit { UNIT_NONE };
+};
+
+static constexpr std::size_t CACHE_LINE_SIZE_ { 64 };
+static constexpr std::size_t EXPECTED_THREAD_NUM { 32 };
+
+template <const perf_counter_meta_t&... P>
+class perf_counters_t {
+  union perf_counter_any_data_t {
+    std::uint64_t val;
+    // other types
+  };
+
+  union perf_counter_atomic_any_data_t {
+    std::atomic_uint64_t val;
+  };
+
+  struct alignas(CACHE_LINE_SIZE_) thread_group_t
+    : std::array<perf_counter_any_data_t, sizeof...(P)> {
+  };
+
+  struct alignas(CACHE_LINE_SIZE_) atomic_group_t
+    : std::array<perf_counter_atomic_any_data_t, sizeof...(P)> {
+  };
+
+  const std::string name;
+  std::array<thread_group_t, EXPECTED_THREAD_NUM> threaded_perf_counters;
+  atomic_group_t atomic_perf_counters;
+
+  perf_counter_any_data_t* _get_threaded_counters(const std::size_t idx) {
+    static std::atomic_size_t last_allocated_selector{ 0 };
+    static constexpr std::size_t FIRST_SEEN_THREAD{
+      std::tuple_size<decltype(threaded_perf_counters)>::value
+    };
+    thread_local std::size_t thread_selector{ FIRST_SEEN_THREAD };
+
+    if (likely(thread_selector < threaded_perf_counters.size())) {
+      return &threaded_perf_counters[thread_selector][idx];
+    } else if (likely(thread_selector == last_allocated_selector)) {
+      // Well, it looks we're ran out of per-thread slots.
+      return nullptr;
+    } else {
+      // The rare case
+      thread_selector = last_allocated_selector.fetch_add(1);
+      assert(thread_selector < threaded_perf_counters.size());
+      return &threaded_perf_counters[thread_selector][idx];
+    }
+  }
+
+  // Args-pack helpers. Many of them are here only because the constexpr
+  // -capable variant of <algorithm> isn't available in C++17. Sorry.
+  template<const perf_counter_meta_t& to_count,
+	   const perf_counter_meta_t& H,
+	   const perf_counter_meta_t&... T>
+  static constexpr std::size_t count() {
+    constexpr std::size_t curval = &to_count == &H ? 1 : 0;
+    if constexpr (sizeof...(T)) {
+      return curval + count<to_count, T...>();
+    } else {
+      return curval;
+    }
+  }
+
+  template<const perf_counter_meta_t& to_find,
+	   const perf_counter_meta_t& H,
+	   const perf_counter_meta_t&... T>
+  static constexpr std::size_t index_of() {
+    if constexpr (&to_find == &H) {
+      return sizeof...(P) - sizeof...(T) - 1 /* for H */;
+    } else {
+      return index_of<to_find, T...>();
+    }
+  }
+
+public:
+  perf_counters_t(std::string name)
+    : name(std::move(name))
+  {
+    // iterate over all thread slots
+    for (auto& perf_counters : threaded_perf_counters) {
+      memset(&perf_counters, 0, sizeof(perf_counters));
+    }
+
+    memset(&atomic_perf_counters, 0, sizeof(atomic_perf_counters));
+  }
+
+  template<const perf_counter_meta_t& pcid>
+  void inc(const std::size_t count = 1) {
+    static_assert(perf_counters_t::count<pcid, P...>() == 1);
+    static_assert(pcid.type & PERFCOUNTER_U64);
+    static_assert(0 == (pcid.type & PERFCOUNTER_SETABLE));
+
+    constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
+    perf_counter_any_data_t* const threaded_counters = \
+      _get_threaded_counters(idx);
+    if (likely(threaded_counters != nullptr)) {
+      threaded_counters->val += count;
+    } else {
+      atomic_perf_counters[idx].val += count;
+    }
+  }
+
+  template<const perf_counter_meta_t& pcid>
+  void set(const std::uint64_t amount) {
+    static_assert(perf_counters_t::count<pcid, P...>() == 1);
+    static_assert(pcid.type & PERFCOUNTER_SETABLE);
+
+    constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
+    // Well, all callers touch the same cache-line, so ping-pong must be
+    // expected. Thankfully to the relaxed memory ordering we don't emit
+    // MFENCE on x86, so CPU will get a chance to hide the latency. This
+    // doesn't mean it won't pop up -- any locked instruction can expose
+    // it back. I'm particularly afraid about calling ::set() under lock
+    // by Throttle as the futex manipulation is quite close.
+
+    // Another issue is that ::set() doesn't play with inc() nor dec() at
+    // all. This could be fight with extra complexity (e.g. invalidation
+    // bits) but the simplest (dumb!) solution has been chosen as we can
+    // 1) replace the call with the value-taking ::reset() on cold paths
+    // while 2) moving to set-only counters on hot paths with validation
+    // at compile-time.
+    atomic_perf_counters[idx].val.store(amount, std::memory_order_relaxed);
+  }
+
+  template<const perf_counter_meta_t& pcid>
+  void set_slow(const std::uint64_t amount) {
+    static_assert(perf_counters_t::count<pcid, P...>() == 1);
+    static_assert(pcid.type & PERFCOUNTER_U64);
+
+    constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
+    atomic_perf_counters[idx].val_with_counter.val -= \
+      get_u64(pcid) - amount;
+    atomic_perf_counters[idx].val_with_counter.cnt -= \
+      get_avgcount(pcid) - amount;
+  }
+
+  template<const perf_counter_meta_t& pcid>
+  std::size_t get() const {
+    static_assert(perf_counters_t::count<pcid, P...>() == 1);
+    static_assert(pcid.type & PERFCOUNTER_U64);
+
+    constexpr std::size_t idx{ index_of<pcid, P...>() };
+    std::size_t aggregate{ atomic_perf_counters[idx].val };
+    for (const auto& threaded_counters : threaded_perf_counters) {
+      aggregate += threaded_counters[idx].val;
+    }
+    return aggregate;
+  }
+};
+
+} // namespace ceph
 #endif
