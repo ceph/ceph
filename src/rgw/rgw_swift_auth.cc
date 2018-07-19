@@ -419,7 +419,7 @@ ExternalTokenEngine::authenticate(const std::string& token,
 
   auto apl = apl_factory->create_apl_local(cct, s, tmp_uinfo,
                                            extract_swift_subuser(swift_user),
-                                           boost::none);
+                                           boost::none, boost::none);
   return result_t::grant(std::move(apl));
 }
 
@@ -569,7 +569,7 @@ SignedTokenEngine::authenticate(const std::string& token,
 
   auto apl = apl_factory->create_apl_local(cct, s, user_info,
                                            extract_swift_subuser(swift_user),
-                                           boost::none);
+                                           boost::none, boost::none);
   return result_t::grant(std::move(apl));
 }
 

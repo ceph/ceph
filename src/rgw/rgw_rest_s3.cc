@@ -4341,7 +4341,7 @@ rgw::auth::s3::LocalEngine::authenticate(
     return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
   }
 
-  auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser, boost::none);
+  auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser, boost::none, boost::none);
   return result_t::grant(std::move(apl), completer_factory(k.key));
 }
 
@@ -4480,7 +4480,7 @@ rgw::auth::s3::STSEngine::authenticate(
     return result_t::grant(std::move(apl), completer_factory(boost::none));
   } else {
     string subuser;
-    auto apl = local_apl_factory->create_apl_local(cct, s, user_info, subuser, role_policies);
+    auto apl = local_apl_factory->create_apl_local(cct, s, user_info, subuser, role_policies, token.perm_mask);
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   }
 }
