@@ -1276,6 +1276,8 @@ struct OSDShard {
   /// priority queue
   std::unique_ptr<OpQueue<OpQueueItem, uint64_t>> pqueue;
 
+  bool throttled = false;
+
   bool stop_waiting = false;
 
   ContextQueue context_queue;
@@ -1352,6 +1354,16 @@ struct OSDShard {
     } else if (opqueue == io_queue::mclock_client) {
       pqueue = std::make_unique<ceph::mClockClientQueue>(cct);
     }
+  }
+
+  // caller should hold shard_lock
+  void set_throttled(bool t) {
+    throttled = t;
+  }
+
+  // caller should hold shard_lock
+  bool is_throttled() const {
+    return throttled;
   }
 };
 
@@ -1868,13 +1880,11 @@ protected:
 	  need_sig = true;
 
 	suspended = sus;
-#if 0
 	for(uint32_t i = 0; i < osd->num_shards; i++) {
 	  OSDShard* sdata = osd->shards[i];
 	  assert (NULL != sdata); 
-	  sdata->pqueue->set_suspend(sus);
+	  sdata->set_throttled(sus);
         }
-#endif
       }
 
       if (need_sig)
