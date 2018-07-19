@@ -9936,7 +9936,7 @@ void OSDShard::consume_map(
     sdata_cond.SignalOne();
     sdata_wait_lock.Unlock();
   }
-}
+} // consume_map
 
 void OSDShard::_wake_pg_slot(
   spg_t pgid,
@@ -10332,7 +10332,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 				 suicide_interval);
 
   // take next item
-  auto qi = std::move(slot->to_process.front());
+  OpQueueItem qi = std::move(slot->to_process.front());
   slot->to_process.pop_front();
   dout(20) << __func__ << " " << qi << " pg " << pg << dendl;
   set<pair<spg_t,epoch_t>> new_children;
