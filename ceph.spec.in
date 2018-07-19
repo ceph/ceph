@@ -157,6 +157,7 @@ BuildRequires:  procps
 BuildRequires:	python%{_python_buildid}
 BuildRequires:	python%{_python_buildid}-devel
 BuildRequires:	snappy-devel
+BuildRequires:	sudo
 BuildRequires:	udev
 BuildRequires:	util-linux
 BuildRequires:	valgrind-devel
@@ -176,13 +177,10 @@ BuildRequires:	python%{_python_buildid}-virtualenv
 BuildRequires:	socat
 %endif
 %if 0%{with seastar}
-BuildRequires:  cryptopp-devel
 BuildRequires:  gnutls-devel
 BuildRequires:  hwloc-devel
 BuildRequires:  libpciaccess-devel
 BuildRequires:  lksctp-tools-devel
-BuildRequires:  numactl-devel
-BuildRequires:  protobuf-compiler
 BuildRequires:  protobuf-devel
 BuildRequires:  ragel
 BuildRequires:  systemtap-sdt-devel
@@ -281,6 +279,17 @@ BuildRequires:	expat-devel
 #hardened-cc1
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:  redhat-rpm-config
+%endif
+%if 0%{with seastar}
+%if 0%{?fedora} || 0%{?rhel}
+BuildRequires:  cryptopp-devel
+BuildRequires:  numactl-devel
+BuildRequires:  protobuf-compiler
+%endif
+%if 0%{?suse_version}
+BuildRequires:  libcryptopp-devel
+BuildRequires:  libnuma-devel
+%endif
 %endif
 
 %description

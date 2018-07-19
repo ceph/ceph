@@ -2385,9 +2385,9 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
-    Option("osd_skip_data_digest", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
-    .set_description(""),
+    Option("osd_skip_data_digest", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Do not store full-object checksums if the backend (bluestore) does its own checksums.  Only usable with all BlueStore OSDs."),
 
     Option("osd_op_queue", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("wpq")
@@ -6679,7 +6679,7 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_beacon_grace", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(15)
-    .set_description("tolerance in seconds for missed beacons from monitors"),
+    .set_description("tolerance in seconds for missed MDS beacons to monitors"),
 
     Option("mds_enforce_unique_name", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)

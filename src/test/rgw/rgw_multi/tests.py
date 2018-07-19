@@ -694,6 +694,18 @@ def test_versioned_object_incremental_sync():
     for _, bucket in zone_bucket:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
+    for _, bucket in zone_bucket:
+        # overwrite the acls to test that metadata-only entries are applied
+        for zone_conn in zonegroup_conns.rw_zones:
+            obj = 'obj-' + zone_conn.name
+            k = new_key(zone_conn, bucket.name, obj)
+            v = get_latest_object_version(k)
+            v.make_public()
+
+    for _, bucket in zone_bucket:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+
 def test_bucket_versioning():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
     for _, bucket in zone_bucket:
