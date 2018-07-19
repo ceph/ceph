@@ -563,6 +563,10 @@ $DAEMONOPTS
         bluestore block create = true
 $BLUESTORE_OPTS
 
+	; **************** eric additions ****************
+	osd op num shards = 2
+	osd op num threads per shard = 2
+
         ; kstore
         kstore fsck on mount = true
         osd objectstore = $objectstore
@@ -946,7 +950,7 @@ debug_mon = 20
 
 [osd]
 debug_ms = 1
-debug_osd = 25
+debug_osd = 30
 debug_objecter = 20
 debug_monc = 20
 debug_mgrc = 20
@@ -978,6 +982,9 @@ fi
 if [ $CEPH_NUM_OSD -gt 0 ]; then
     start_osd
 fi
+
+echo "OSDs started; press enter to continue"
+read garbage
 
 # mds
 if [ "$smallmds" -eq 1 ]; then
