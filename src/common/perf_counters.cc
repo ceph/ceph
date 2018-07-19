@@ -189,9 +189,10 @@ void PerfCounters::dec(int idx, uint64_t amt)
   assert(idx > m_lower_bound);
   assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  assert(!(data.type & PERFCOUNTER_LONGRUNAVG));
   if (!(data.type & PERFCOUNTER_U64))
     return;
+  if (unlikely(data.type & PERFCOUNTER_LONGRUNAVG))
+    ceph_abort();
   data.u64 -= amt;
 }
 
