@@ -3,6 +3,7 @@ import datetime
 import errno
 import json
 import six
+from collections import defaultdict
 
 
 DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
@@ -36,6 +37,21 @@ class Module(MgrModule):
         # drop the 'Z' timezone indication, it's always UTC
         timestr = timestr.rstrip('Z')
         return datetime.datetime.strptime(timestr, DATEFMT)
+
+    def timestamp_filter(self, f):
+        """
+        Filter crash reports by timestamp.
+
+        :param f: f(time) return true to keep crash report
+        :returns: crash reports for which f(time) returns true
+        """
+        def inner((_, meta)):
+            meta = json.loads(meta)
+            time = self.time_from_string(meta["timestamp"])
+            return f(time)
+        matches = filter(inner, six.iteritems(
+            self.get_store_prefix("crash/")))
+        return map(lambda (k, m): (k, json.loads(m)), matches)
 
     # command handlers
 
@@ -81,13 +97,10 @@ class Module(MgrModule):
         except ValueError:
             return errno.EINVAL, '', 'keep argument must be integer'
 
-        keeptime = datetime.timedelta(days=keep)
+        cutoff = now - datetime.timedelta(days=keep)
 
-        for key, meta in six.iteritems(self.get_store_prefix('crash/')):
-            meta = json.loads(meta)
-            stamp = self.time_from_string(meta['timestamp'])
-            if stamp <= now - keeptime:
-                self.set_store(key, None)
+        for key, _ in self.timestamp_filter(lambda ts: ts <= cutoff):
+            self.set_store(key, None)
 
         return 0, '', ''
 
@@ -133,6 +146,31 @@ class Module(MgrModule):
         for bindict in bins:
             retlines.append(binstr(bindict))
         return 0, '\n'.join(retlines), ''
+
+    def do_json_report(self, cmd, inbuf):
+        """
+        Return a machine readable summary of recent crashes.
+        """
+        try:
+            hours = int(cmd['hours'])
+        except ValueError:
+            return errno.EINVAL, '', '<hours> argument must be integer'
+
+        report = defaultdict(lambda: 0)
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=hours)
+        for _, meta in self.timestamp_filter(lambda ts: ts >= cutoff):
+            try:
+                etype = meta["entity_name"]
+                etype, _ = etype.split(".")
+                etype = "unknown" if not etype else etype
+            except KeyError:
+                etype = "unknown"
+            except (ValueError, AttributeError):
+                etype = str(etype)
+                pass
+            report[etype] += 1
+
+        return 0, '', json.dumps(report)
 
     def do_self_test(self, cmd, inbuf):
         # test time conversion
@@ -185,5 +223,11 @@ class Module(MgrModule):
             'desc': 'Summarize recorded crashes',
             'perm': 'r',
             'handler': do_stat,
+        },
+        {
+            'cmd': 'crash json_report name=hours,type=CephString',
+            'desc': 'Crashes in the last <hours> hours',
+            'perm': 'r',
+            'handler': do_json_report,
         },
     ]
