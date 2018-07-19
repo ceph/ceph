@@ -573,7 +573,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      const ScrubMap::object &candidate,
      shard_info_wrapper& shard_error,
      inconsistent_obj_wrapper &result,
-     ostream &errorstream, bool digest_match);
+     ostream &errorstream);
    map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
      const map<pg_shard_t,ScrubMap*> &maps,

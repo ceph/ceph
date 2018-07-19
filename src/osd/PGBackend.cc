@@ -626,7 +626,7 @@ int PGBackend::be_compare_scrub_objects(
   const ScrubMap::object &candidate,
   shard_info_wrapper &shard_result,
   inconsistent_obj_wrapper &obj_result,
-  ostream &errorstream, bool digest_match)
+  ostream &errorstream)
 {
   int error = OK;
   if (candidate.stat_error) {
@@ -1008,7 +1008,7 @@ void PGBackend::be_compare_scrubmaps(
 				   j->second->objects[*k],
 				   shard_map[j->first],
 				   object_error,
-				   ss, digest_match);
+				   ss);
 	assert((shard_map[j->first].errors != 0) == (((previous|found) & SHARD_ERROR) != 0));
 	assert((object_error.errors != 0) == (((previous|found) & OBJ_ERROR) != 0));
 
