@@ -61,6 +61,7 @@ ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
   ldout(m_cct, 20) << "dst_oid=" << m_dst_oid << dendl;
 
   compute_src_object_extents();
+  compute_dst_object_may_exist();
 }
 
 template <typename I>
@@ -294,6 +295,7 @@ void ObjectCopyRequest<I>::handle_read_from_parent(int r) {
 template <typename I>
 void ObjectCopyRequest<I>::send_write_object() {
   assert(!m_write_ops.empty());
+  auto& copy_ops = m_write_ops.begin()->second;
 
   // retrieve the destination snap context for the op
   SnapIds dst_snap_ids;
@@ -302,6 +304,15 @@ void ObjectCopyRequest<I>::send_write_object() {
   if (src_snap_seq != 0) {
     auto snap_map_it = m_snap_map.find(src_snap_seq);
     assert(snap_map_it != m_snap_map.end());
+
+    auto dst_snap_id = snap_map_it->second.front();
+    auto dst_may_exist_it = m_dst_object_may_exist.find(dst_snap_id);
+    assert(dst_may_exist_it != m_dst_object_may_exist.end());
+    if (!dst_may_exist_it->second && !copy_ops.empty()) {
+      // if the object cannot exist, the only valid op is to remove it
+      assert(copy_ops.size() == 1U);
+      assert(copy_ops.begin()->type == COPY_OP_TYPE_REMOVE);
+    }
 
     // write snapshot context should be before actual snapshot
     if (snap_map_it != m_snap_map.begin()) {
@@ -318,7 +329,7 @@ void ObjectCopyRequest<I>::send_write_object() {
   librados::ObjectWriteOperation op;
   uint64_t buffer_offset;
 
-  for (auto &copy_op : m_write_ops.begin()->second) {
+  for (auto &copy_op : copy_ops) {
     switch (copy_op.type) {
     case COPY_OP_TYPE_WRITE:
       buffer_offset = 0;
@@ -822,12 +833,22 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     auto src_snap_seq = it.first;
     auto &zero_interval = it.second;
 
+    auto snap_map_it = m_snap_map.find(src_snap_seq);
+    assert(snap_map_it != m_snap_map.end());
+    auto dst_snap_seq = snap_map_it->second.front();
+
+    auto dst_may_exist_it = m_dst_object_may_exist.find(dst_snap_seq);
+    assert(dst_may_exist_it != m_dst_object_may_exist.end());
+    if (!dst_may_exist_it->second && prev_end_size > 0) {
+      ldout(m_cct, 5) << "object DNE for snap_id: " << dst_snap_seq << dendl;
+      m_write_ops[src_snap_seq].emplace_back(COPY_OP_TYPE_REMOVE, 0, 0, 0);
+      prev_end_size = 0;
+      continue;
+    }
+
     if (hide_parent) {
       RWLock::RLocker snap_locker(m_dst_image_ctx->snap_lock);
       RWLock::RLocker parent_locker(m_dst_image_ctx->parent_lock);
-      auto snap_map_it = m_snap_map.find(src_snap_seq);
-      assert(snap_map_it != m_snap_map.end());
-      auto dst_snap_seq = snap_map_it->second.front();
       uint64_t parent_overlap = 0;
       int r = m_dst_image_ctx->get_parent_overlap(dst_snap_seq, &parent_overlap);
       if (r < 0) {
@@ -918,6 +939,19 @@ void ObjectCopyRequest<I>::finish(int r) {
   delete this;
 
   on_finish->complete(r);
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::compute_dst_object_may_exist() {
+  RWLock::RLocker snap_locker(m_dst_image_ctx->snap_lock);
+
+  auto snap_ids = m_dst_image_ctx->snaps;
+  snap_ids.push_back(CEPH_NOSNAP);
+
+  for (auto snap_id : snap_ids) {
+    m_dst_object_may_exist[snap_id] =
+      (m_dst_object_number < m_dst_image_ctx->get_object_count(snap_id));
+  }
 }
 
 } // namespace deep_copy
