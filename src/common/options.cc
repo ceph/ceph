@@ -6423,6 +6423,11 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_inject_migrator_session_race", Option::TYPE_BOOL, Option::LEVEL_DEV)
      .set_default(false),
+
+    Option("mds_inject_migrator_message_loss", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description(""),
+
   });
 }
 

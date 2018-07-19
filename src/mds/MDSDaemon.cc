@@ -363,6 +363,7 @@ const char** MDSDaemon::get_tracked_conf_keys() const
     "mds_max_purge_ops_per_pg",
     "mds_max_purge_files",
     "mds_inject_migrator_session_race",
+    "mds_inject_migrator_message_loss",
     "clog_to_graylog",
     "clog_to_graylog_host",
     "clog_to_graylog_port",

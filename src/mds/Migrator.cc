@@ -110,6 +110,14 @@ public:
 /* This function DOES put the passed message before returning*/
 void Migrator::dispatch(Message *m)
 {
+  if (unlikely(inject_message_loss)) {
+    if (inject_message_loss == m->get_type() - MDS_PORT_MIGRATOR) {
+      dout(0) << "inject message loss " << *m << dendl;
+      m->put();
+      return;
+    }
+  }
+
   switch (m->get_type()) {
     // import
   case MSG_MDS_EXPORTDIRDISCOVER:
@@ -3402,5 +3410,10 @@ void Migrator::handle_conf_change(const struct md_config_t *conf,
   if (changed.count("mds_inject_migrator_session_race")) {
     inject_session_race = conf->get_val<bool>("mds_inject_migrator_session_race");
     dout(0) << "mds_inject_migrator_session_race is " << inject_session_race << dendl;
+  }
+
+  if (changed.count("mds_inject_migrator_message_loss")) {
+    inject_message_loss = g_conf->get_val<int64_t>("mds_inject_migrator_message_loss");
+    dout(0) << "mds_inject_migrator_message_loss is " << inject_message_loss << dendl;
   }
 }

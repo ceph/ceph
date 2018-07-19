@@ -104,6 +104,7 @@ public:
   // -- cons --
   Migrator(MDSRank *m, MDCache *c) : mds(m), cache(c) {
     inject_session_race = g_conf->get_val<bool>("mds_inject_migrator_session_race");
+    inject_message_loss = g_conf->get_val<int64_t>("mds_inject_migrator_message_loss");
   }
 
   void handle_conf_change(const struct md_config_t *conf,
@@ -352,6 +353,7 @@ private:
   MDSRank *mds;
   MDCache *cache;
   bool inject_session_race = false;
+  int inject_message_loss = 0;
 };
 
 #endif

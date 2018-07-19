@@ -268,6 +268,12 @@ class MDSCluster(CephCluster):
 
         self._one_or_all(mds_id, _fail_restart)
 
+    def mds_signal(self, mds_id, sig, silent=False):
+        """
+        signal a MDS daemon
+        """
+        self.mds_daemons[mds_id].signal(sig, silent);
+
     def newfs(self, name='cephfs', create=True):
         return Filesystem(self._ctx, name=name, create=create)
 
