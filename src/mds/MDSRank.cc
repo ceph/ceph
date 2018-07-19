@@ -2294,7 +2294,7 @@ void MDSRank::command_flush_journal(Formatter *f)
   assert(f != NULL);
 
   std::stringstream ss;
-  const int r = _command_flush_journal(&ss);
+  const int r = _command_flush_journal(ss);
   f->open_object_section("result");
   f->dump_string("message", ss.str());
   f->dump_int("return_code", r);
@@ -2308,10 +2308,8 @@ void MDSRank::command_flush_journal(Formatter *f)
  * Optionally populate with a human readable string describing the
  * reason for any unexpected return status.
  */
-int MDSRank::_command_flush_journal(std::stringstream *ss)
+int MDSRank::_command_flush_journal(std::ostream& ss)
 {
-  assert(ss != NULL);
-
   Mutex::Locker l(mds_lock);
 
   if (mdcache->is_readonly()) {
@@ -2339,7 +2337,7 @@ int MDSRank::_command_flush_journal(std::stringstream *ss)
     r = mdlog_flushed.wait();
     mds_lock.Lock();
     if (r != 0) {
-      *ss << "Error " << r << " (" << cpp_strerror(r) << ") while flushing journal";
+      ss << "Error " << r << " (" << cpp_strerror(r) << ") while flushing journal";
       return r;
     }
   }
@@ -2356,7 +2354,7 @@ int MDSRank::_command_flush_journal(std::stringstream *ss)
     r = mdlog_cleared.wait();
     mds_lock.Lock();
     if (r != 0) {
-      *ss << "Error " << r << " (" << cpp_strerror(r) << ") while flushing journal";
+      ss << "Error " << r << " (" << cpp_strerror(r) << ") while flushing journal";
       return r;
     }
   }
@@ -2365,7 +2363,7 @@ int MDSRank::_command_flush_journal(std::stringstream *ss)
   dout(5) << __func__ << ": beginning segment expiry" << dendl;
   r = mdlog->trim_all();
   if (r != 0) {
-    *ss << "Error " << r << " (" << cpp_strerror(r) << ") while trimming log";
+    ss << "Error " << r << " (" << cpp_strerror(r) << ") while trimming log";
     return r;
   }
 
@@ -2411,7 +2409,7 @@ int MDSRank::_command_flush_journal(std::stringstream *ss)
   r = wrote_head.wait();
   mds_lock.Lock();
   if (r != 0) {
-      *ss << "Error " << r << " (" << cpp_strerror(r) << ") while writing header";
+      ss << "Error " << r << " (" << cpp_strerror(r) << ") while writing header";
       return r;
   }
 
@@ -2869,7 +2867,7 @@ void MDSRankDispatcher::handle_osd_map()
 }
 
 bool MDSRank::evict_client(int64_t session_id,
-    bool wait, bool blacklist, std::stringstream& err_ss,
+    bool wait, bool blacklist, std::ostream& err_ss,
     Context *on_killed)
 {
   assert(mds_lock.is_locked_by_me());
