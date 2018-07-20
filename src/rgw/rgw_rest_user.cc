@@ -30,16 +30,17 @@ void RGWOp_User_Info::execute()
 {
   RGWUserAdminOpState op_state;
 
-  std::string uid_str;
+  std::string uid_str, access_key_str;
   bool fetch_stats;
   bool sync_stats;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+  RESTArgs::get_string(s, "access-key", access_key_str, &access_key_str);
 
   // if uid was not supplied in rest argument, error out now, otherwise we'll
   // end up initializing anonymous user, for which keys.init will eventually
   // return -EACESS
-  if (uid_str.empty()){
+  if (uid_str.empty() && access_key_str.empty()){
     http_ret=-EINVAL;
     return;
   }
@@ -51,6 +52,7 @@ void RGWOp_User_Info::execute()
   RESTArgs::get_bool(s, "sync", false, &sync_stats);
 
   op_state.set_user_id(uid);
+  op_state.set_access_key(access_key_str);
   op_state.set_fetch_stats(fetch_stats);
   op_state.set_sync_stats(sync_stats);
 
