@@ -90,6 +90,9 @@ public:
   bool only_data_digest_mismatch_info() const {
     return errors == err_t::DATA_DIGEST_MISMATCH_INFO;
   }
+  void clear_data_digest_mismatch_info() {
+    errors &= ~err_t::DATA_DIGEST_MISMATCH_INFO;
+  }
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bp);
 };
