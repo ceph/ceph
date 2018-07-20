@@ -334,7 +334,9 @@ GetSessionTokenResponse STSService::getSessionToken(GetSessionTokenRequest& req)
   if (ret = cred.generateCredentials(cct,
                                       req.getDuration(),
                                       boost::none,
-                                      boost::none); ret < 0) {
+                                      boost::none,
+                                      user_id,
+                                      identity); ret < 0) {
     return make_tuple(ret, cred);
   }
 

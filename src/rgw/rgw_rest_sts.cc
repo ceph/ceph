@@ -100,7 +100,7 @@ void RGWSTSGetSessionToken::execute()
     return;
   }
 
-  STS::STSService sts(s->cct, store, s->user->user_id);
+  STS::STSService sts(s->cct, store, s->user->user_id, s->auth.identity.get());
 
   STS::GetSessionTokenRequest req(duration, serialNumber, tokenCode);
   const auto& [ret, creds] = sts.getSessionToken(req);
