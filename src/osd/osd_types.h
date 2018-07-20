@@ -4965,6 +4965,7 @@ struct ScrubMap {
   eversion_t valid_through;
   eversion_t incr_since;
   bool has_large_omap_object_errors:1;
+  boost::optional<bool> has_builtin_csum;
 
   void merge_incr(const ScrubMap &l);
   void clear_from(const hobject_t& start) {
