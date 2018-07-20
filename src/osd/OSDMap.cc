@@ -1128,7 +1128,9 @@ void OSDMap::Incremental::dump(Formatter *f) const
   }
   f->close_section();
 
+  f->open_object_section("erasure_code_profiles");
   OSDMap::dump_erasure_code_profiles(new_erasure_code_profiles, f);
+  f->close_section();
   f->open_array_section("old_erasure_code_profiles");
   for (const auto &erasure_code_profile : old_erasure_code_profiles) {
     f->dump_string("old", erasure_code_profile.c_str());
@@ -3116,7 +3118,6 @@ void OSDMap::dump_erasure_code_profiles(
   const mempool::osdmap::map<string,map<string,string>>& profiles,
   Formatter *f)
 {
-  f->open_object_section("erasure_code_profiles");
   for (const auto &profile : profiles) {
     f->open_object_section(profile.first.c_str());
     for (const auto &profm : profile.second) {
@@ -3124,7 +3125,6 @@ void OSDMap::dump_erasure_code_profiles(
     }
     f->close_section();
   }
-  f->close_section();
 }
 
 void OSDMap::dump(Formatter *f) const
@@ -3256,7 +3256,9 @@ void OSDMap::dump(Formatter *f) const
   }
   f->close_section();
 
+  f->open_object_section("erasure_code_profiles");
   dump_erasure_code_profiles(erasure_code_profiles, f);
+  f->close_section();
 
   f->open_array_section("removed_snaps_queue");
   for (auto& p : removed_snaps_queue) {
