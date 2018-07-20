@@ -130,6 +130,8 @@ fi
 rgw_frontend="civetweb"
 rgw_compression=""
 lockdep=${LOCKDEP:-1}
+spdk_enabled=0 #disable SPDK by default
+pci_id=""
 
 with_mgr_dashboard=true
 if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]]; then
@@ -181,6 +183,7 @@ usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
 usage=$usage"\t--nolockdep disable lockdep\n"
 usage=$usage"\t--multimds <count> allow multimds with maximum active count\n"
 usage=$usage"\t--without-dashboard: do not run using mgr dashboard\n"
+usage=$usage"\t--bluestore-spdk <vendor>:<device>: enable SPDK and specify the PCI-ID of the NVME device\n"
 
 usage_exit() {
 	printf "$usage"
@@ -333,6 +336,12 @@ case $1 in
     --without-dashboard)
         with_mgr_dashboard=false
         ;;
+    --bluestore-spdk )
+        [ -z "$2" ] && usage_exit
+        pci_id="$2"
+        spdk_enabled=1
+        shift
+        ;;
     * )
 	    usage_exit
 esac
@@ -425,6 +434,10 @@ wconf() {
 	fi
 }
 
+get_nvme_serial_number() {
+    sudo lspci -vvv -d $pci_id | grep 'Device Serial Number' | awk '{print $NF}' | sed 's/-//g'
+}
+
 prepare_conf() {
     local DAEMONOPTS="
         log file = $CEPH_OUT_DIR/\$name.log
@@ -480,6 +493,29 @@ EOF
 		COSDSHORT="        osd max object name len = 460
         osd max object namespace len = 64"
 	fi
+        if [ "$objectstore" == "bluestore" ]; then
+            if [ "$spdk_enabled" -eq 1 ]; then
+                if [ "$(get_nvme_serial_number)" == "" ]; then
+                    echo "Not find the specified NVME device, please check."
+                    exit
+                fi
+                BLUESTORE_OPTS="        bluestore_block_db_path = \"\"
+        bluestore_block_db_size = 0
+        bluestore_block_db_create = false
+        bluestore_block_wal_path = \"\"
+        bluestore_block_wal_size = 0
+        bluestore_block_wal_create = false
+        bluestore_spdk_mem = 2048
+        bluestore_block_path = spdk:$(get_nvme_serial_number)"
+            else
+                BLUESTORE_OPTS="        bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
+        bluestore block db size = 67108864
+        bluestore block db create = true
+        bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
+        bluestore block wal size = 1048576000
+        bluestore block wal create = true"
+            fi
+        fi
 	wconf <<EOF
 [client]
         keyring = $keyring_fn
@@ -523,12 +559,7 @@ $DAEMONOPTS
         filestore wbthrottle btrfs inodes hard limit = 30
         bluestore fsck on mount = true
         bluestore block create = true
-	bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
-        bluestore block db size = 67108864
-        bluestore block db create = true
-	bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
-        bluestore block wal size = 1048576000
-        bluestore block wal create = true
+$BLUESTORE_OPTS
 
         ; kstore
         kstore fsck on mount = true
