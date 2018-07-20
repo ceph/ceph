@@ -168,14 +168,16 @@ def task(ctx, config):
     logging.error(err)
     assert not err
 
-    (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-    remote_host = remote.name.split('@')[1]
+    assert hasattr(ctx, 'rgw'), 'radosgw-admin-rest must run after the rgw task'
+    endpoint = ctx.rgw.role_endpoints.get(client)
+    assert endpoint, 'no rgw endpoint for {}'.format(client)
+
     admin_conn = boto.s3.connection.S3Connection(
         aws_access_key_id=admin_access_key,
         aws_secret_access_key=admin_secret_key,
-        is_secure=False,
-        port=7280,
-        host=remote_host,
+        is_secure=True if endpoint.cert else False,
+        port=endpoint.port,
+        host=endpoint.hostname,
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
 
@@ -339,9 +341,9 @@ def task(ctx, config):
     connection = boto.s3.connection.S3Connection(
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
-        is_secure=False,
-        port=7280,
-        host=remote_host,
+        is_secure=True if endpoint.cert else False,
+        port=endpoint.port,
+        host=endpoint.hostname,
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
 
