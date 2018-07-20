@@ -983,8 +983,8 @@ if [ $CEPH_NUM_OSD -gt 0 ]; then
     start_osd
 fi
 
-echo "OSDs started; press enter to continue"
-read garbage
+# echo "OSDs started; press enter to continue"
+# read garbage
 
 # mds
 if [ "$smallmds" -eq 1 ]; then
