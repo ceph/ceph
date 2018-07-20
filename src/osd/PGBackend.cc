@@ -742,9 +742,12 @@ int PGBackend::be_compare_scrub_objects(
   return error;
 }
 
-static int dcount(const object_info_t &oi)
+static int dcount(const object_info_t &oi, bool prioritize)
 {
   int count = 0;
+  // Prioritize bluestore objects when osd_distrust_data_digest is set
+  if (prioritize)
+    count += 1000;
   if (oi.is_data_digest())
     count++;
   if (oi.is_omap_digest())
@@ -762,6 +765,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   bool &digest_match)
 {
   eversion_t auth_version;
+  bool auth_prio = false;
   bufferlist first_oi_bl, first_ss_bl, first_hk_bl;
 
   // Create list of shards with primary first so it will be auth copy all
@@ -779,6 +783,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   map<pg_shard_t, ScrubMap *>::const_iterator auth = maps.end();
   digest_match = true;
   for (auto &l : shards) {
+    bool oi_prio = false;
     map<pg_shard_t, ScrubMap *>::const_iterator j = maps.find(l);
     map<hobject_t, ScrubMap::object>::iterator i =
       j->second->objects.find(obj);
@@ -916,11 +921,21 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     if (shard_info.errors)
       goto out;
 
+    // XXX: Do I want replicated only?
+    if (parent->get_pool().is_replicated() && cct->_conf->osd_distrust_data_digest) {
+      // This is a boost::optional<bool> so see if option set AND it has the value true
+      // We give priority to a replica where the ObjectStore like BlueStore has builtin checksum
+      if (j->second->has_builtin_csum && j->second->has_builtin_csum == true) {
+        oi_prio =true;
+      }
+    }
+
     if (auth_version == eversion_t() || oi.version > auth_version ||
-        (oi.version == auth_version && dcount(oi) > dcount(*auth_oi))) {
+        (oi.version == auth_version && dcount(oi, oi_prio) > dcount(*auth_oi, auth_prio))) {
       auth = j;
       *auth_oi = oi;
       auth_version = oi.version;
+      auth_prio = oi_prio;
     }
 
 out:
