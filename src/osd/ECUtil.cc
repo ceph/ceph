@@ -38,7 +38,6 @@ int ECUtil::decode(
     bufferlist bl;
     int r = ec_impl->decode_concat(chunks, &bl);
     assert(r == 0);
-    assert(bl.length() == sinfo.get_stripe_width());
     out->claim_append(bl);
   }
   return 0;

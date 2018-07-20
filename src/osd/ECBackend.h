@@ -141,6 +141,19 @@ public:
     > &reads,
     bool fast_read,
     GenContextURef<map<hobject_t,pair<int, extent_map> > &&> &&func);
+  /*
+   * Only true if read data shards and all the data shards are available.
+   */
+  bool is_partial_read_avail(
+    const hobject_t &hoid,
+    const set<int> &want,
+    bool for_recovery);
+
+  /*
+   * true if only read one segment and in one stripe.
+   */
+  bool should_partial_read(
+    std::list<boost::tuple<uint64_t, uint64_t, uint32_t>> to_read);
 
   friend struct CallClientContexts;
   struct ClientAsyncReadStatus {
@@ -354,13 +367,15 @@ public:
     const map<pg_shard_t, vector<pair<int, int>>> need;
     const bool want_attrs;
     GenContext<pair<RecoveryMessages *, read_result_t& > &> *cb;
+    bool partial_read;
     read_request_t(
       const list<boost::tuple<uint64_t, uint64_t, uint32_t> > &to_read,
       const map<pg_shard_t, vector<pair<int, int>>> &need,
       bool want_attrs,
-      GenContext<pair<RecoveryMessages *, read_result_t& > &> *cb)
+      GenContext<pair<RecoveryMessages *, read_result_t& > &> *cb,
+      bool partial_read=false)
       : to_read(to_read), need(need), want_attrs(want_attrs),
-	cb(cb) {}
+	cb(cb), partial_read(partial_read) {}
   };
   friend ostream &operator<<(ostream &lhs, const read_request_t &rhs);
 
@@ -414,6 +429,23 @@ public:
     ReadOp() = delete;
     ReadOp(const ReadOp &) = default;
     ReadOp(ReadOp &&) = default;
+    void refresh_complete(const hobject_t &hoid) {
+      list<
+        boost::tuple<
+	  uint64_t, uint64_t, map<pg_shard_t, bufferlist> > > new_returned;
+      auto &returned = complete[hoid].returned;
+      auto &hpair = to_read.find(hoid)->second.to_read;
+      auto i = hpair.begin();
+      auto j = returned.begin();
+      for(; i != hpair.end(); ++i, ++j) {
+        new_returned.push_back(
+	    boost::make_tuple(
+	      i->get<0>(),
+	      i->get<1>(),
+	      j->get<2>()));
+      }
+      complete[hoid].returned = new_returned;
+    }
   };
   friend struct FinishReadOp;
   void filter_read_op(
@@ -646,6 +678,11 @@ public:
     bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
     map<pg_shard_t, vector<pair<int, int>>> *to_read   ///< [out] shards, corresponding subchunks to read
     ); ///< @return error code, 0 on success
+
+  void get_min_want_to_read_shards(
+    pair<uint64_t, uint64_t> off_len,    ///< [in]
+    set<int> *want_to_read               ///< [out]
+    );
 
   int get_remaining_shards(
     const hobject_t &hoid,

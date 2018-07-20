@@ -1580,6 +1580,29 @@ int ECBackend::get_min_avail_to_read_shards(
   return 0;
 }
 
+void ECBackend::get_min_want_to_read_shards(
+  pair<uint64_t, uint64_t> off_len,
+  set<int> *want_to_read) {
+  uint64_t off = off_len.first;
+  uint64_t len = off_len.second;
+  uint64_t chunk_size = sinfo.get_chunk_size();
+  int data_chunk_count = sinfo.get_stripe_width() / sinfo.get_chunk_size();
+  const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
+
+  int total_chunks = (chunk_size - 1 + len) / chunk_size;
+  int first_chunk = (off / chunk_size) % data_chunk_count;
+
+  if (total_chunks > data_chunk_count) {
+    total_chunks = data_chunk_count;
+  }
+
+  for(int i = 0; i < total_chunks; i++) {
+    int j = (first_chunk + i) % data_chunk_count;
+    int chunk = (int)chunk_mapping.size()  > j ? chunk_mapping[j] : j;
+    want_to_read->insert(chunk);
+  }
+}
+
 int ECBackend::get_remaining_shards(
   const hobject_t &hoid,
   const set<int> &avail,
@@ -2125,8 +2148,7 @@ void ECBackend::objects_read_async(
        i != to_read.end();
        ++i) {
     pair<uint64_t, uint64_t> tmp =
-      sinfo.offset_len_to_stripe_bounds(
-	make_pair(i->first.get<0>(), i->first.get<1>()));
+	make_pair(i->first.get<0>(), i->first.get<1>());
 
     es.union_insert(tmp.first, tmp.second);
     flags |= i->first.get<2>();
@@ -2245,6 +2267,12 @@ struct CallClientContexts :
       pair<uint64_t, uint64_t> adjusted =
 	ec->sinfo.offset_len_to_stripe_bounds(
 	  make_pair(read.get<0>(), read.get<1>()));
+      if (adjusted.first != read.get<0>() ||
+        adjusted.second != read.get<1>()) {
+        adjusted =
+      ec->sinfo.offset_len_to_chunk_bounds(
+        make_pair(read.get<0>(), read.get<1>()));
+      }
       assert(res.returned.front().get<0>() == adjusted.first &&
 	     res.returned.front().get<1>() == adjusted.second);
       map<int, bufferlist> to_decode;
@@ -2295,11 +2323,51 @@ void ECBackend::objects_read_and_reconstruct(
   }
 
   map<hobject_t, set<int>> obj_want_to_read;
-  set<int> want_to_read;
-  get_want_to_read_shards(&want_to_read);
     
   map<hobject_t, read_request_t> for_read_op;
   for (auto &&to_read: reads) {
+    set<int> want_to_read;
+    get_want_to_read_shards(&want_to_read);
+    list<boost::tuple<uint64_t, uint64_t, uint32_t>> align_offsets;
+
+    bool partial_read_avil = !fast_read && is_partial_read_avail(
+      to_read.first,
+      want_to_read,
+      false);
+    bool partial_read = partial_read_avil &&
+        should_partial_read(to_read.second);
+
+    uint32_t flags = 0;
+    extent_set es;
+    for(auto i = to_read.second.begin(); i != to_read.second.end(); ++i) {
+      pair<uint64_t, uint64_t> tmp;
+      if (partial_read) {
+        // align to chunk
+        tmp =
+          sinfo.offset_len_to_chunk_bounds(
+            make_pair(i->get<0>(), i->get<1>()));
+    set<int> tmp_want_read;
+    get_min_want_to_read_shards(tmp, &tmp_want_read);
+    want_to_read = tmp_want_read;
+      } else {
+        tmp =
+      sinfo.offset_len_to_stripe_bounds(
+        make_pair(i->get<0>(), i->get<1>()));
+      }
+      extent_set esnew;
+      esnew.insert(tmp.first, tmp.second);
+      es.union_of(esnew);
+      flags |= i->get<2>();
+    }
+    if (!es.empty()) {
+      for (auto j = es.begin(); j != es.end(); ++j) {
+        align_offsets.push_back(
+        boost::make_tuple(
+          j.get_start(),
+          j.get_len(),
+          flags));
+      }
+    }
     map<pg_shard_t, vector<pair<int, int>>> shards;
     int r = get_min_avail_to_read_shards(
       to_read.first,
@@ -2313,15 +2381,16 @@ void ECBackend::objects_read_and_reconstruct(
       to_read.first,
       this,
       &(in_progress_client_reads.back()),
-      to_read.second);
+      align_offsets);
     for_read_op.insert(
       make_pair(
 	to_read.first,
 	read_request_t(
-	  to_read.second,
+	  align_offsets,
 	  shards,
 	  false,
-	  c)));
+	  c,
+          partial_read)));
     obj_want_to_read.insert(make_pair(to_read.first, want_to_read));
   }
 
@@ -2334,6 +2403,37 @@ void ECBackend::objects_read_and_reconstruct(
   return;
 }
 
+bool ECBackend::is_partial_read_avail(
+  const hobject_t &hoid,
+  const set<int> &want,
+  bool for_recovery)
+{
+    set<int> have;
+    map<shard_id_t, pg_shard_t> shards;
+    set<pg_shard_t> error_shards;
+    set<int> data_shards;
+
+    get_want_to_read_shards(&data_shards);
+
+    get_all_avail_shards(hoid, error_shards, have, shards, for_recovery);
+
+    return includes(data_shards.begin(), data_shards.end(), want.begin(), want.end())
+        && includes(have.begin(), have.end(), want.begin(), want.end());
+}
+
+bool ECBackend::should_partial_read(
+    std::list<boost::tuple<uint64_t, uint64_t, uint32_t>> to_read) {
+  if (to_read.size() != 1) {
+    return false;
+  }
+  pair<uint64_t, uint64_t> off_len = sinfo.offset_len_to_stripe_bounds(
+    make_pair(to_read.front().get<0>(), to_read.front().get<1>()));
+  if (sinfo.get_stripe_width() == off_len.second) {
+    return true;
+  } else {
+    return false;
+  }
+}
 
 int ECBackend::send_all_remaining_reads(
   const hobject_t &hoid,
@@ -2354,13 +2454,31 @@ int ECBackend::send_all_remaining_reads(
     rop.to_read.find(hoid)->second.to_read;
   GenContext<pair<RecoveryMessages *, read_result_t& > &> *c =
     rop.to_read.find(hoid)->second.cb;
-
+  bool partial_read = rop.to_read.find(hoid)->second.partial_read;
   // (Note cuixf) If we need to read attrs and we read failed, try to read again.
   bool want_attrs =
     rop.to_read.find(hoid)->second.want_attrs &&
     (!rop.complete[hoid].attrs || rop.complete[hoid].attrs->empty());
   if (want_attrs) {
     dout(10) << __func__ << " want attrs again" << dendl;
+  }
+
+  // if the read is partial read, we need to realign the offset and len, to make
+  // it a normal read.
+  if (partial_read) {
+    list<boost::tuple<uint64_t, uint64_t, uint32_t>> align_offsets;
+    for(auto i = offsets.begin(); i != offsets.end();
+      ++i) {
+      pair<uint64_t, uint64_t> tmp =
+        sinfo.offset_len_to_stripe_bounds(
+          make_pair(i->get<0>(), i->get<1>()));
+      align_offsets.push_back(
+        boost::make_tuple(
+          tmp.first,
+          tmp.second,
+          i->get<2>()));
+    }
+    offsets = align_offsets;
   }
 
   rop.to_read.erase(hoid);
@@ -2371,6 +2489,9 @@ int ECBackend::send_all_remaining_reads(
 	shards,
 	want_attrs,
 	c)));
+  if (partial_read) {
+    rop.refresh_complete(hoid);
+  }
   do_read_op(rop);
   return 0;
 }

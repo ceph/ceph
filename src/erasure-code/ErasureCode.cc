@@ -333,15 +333,34 @@ int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
 			       bufferlist *decoded)
 {
   set<int> want_to_read;
+  set<int> decode_chunks;
+  bool need_decode = false;
 
   for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
     want_to_read.insert(chunk_index(i));
+  }
+
+  if (chunks.size() < get_data_chunk_count()) {
+    // for partial_read
+    for(map<int, bufferlist>::const_iterator i = chunks.begin();
+       i != chunks.end();
+       ++i) {
+      if (want_to_read.find(i->first) == want_to_read.end()) {
+        need_decode = true;
+        break;
+      }
+      decode_chunks.insert(i->first);
+    }
+    if (!need_decode) {
+      want_to_read.swap(decode_chunks);
+    }
   }
   map<int, bufferlist> decoded_map;
   int r = _decode(want_to_read, chunks, &decoded_map);
   if (r == 0) {
     for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
-      decoded->claim_append(decoded_map[chunk_index(i)]);
+      if (decoded_map.find(chunk_index(i)) != decoded_map.end())
+        decoded->claim_append(decoded_map[chunk_index(i)]);
     }
   }
   return r;
