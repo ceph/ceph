@@ -608,42 +608,42 @@ public:
   /**
    * Vector holding the Services serviced by this Monitor.
    */
-  vector<PaxosService*> paxos_service;
+  vector<std::unique_ptr<PaxosService>> paxos_service;
 
   class MDSMonitor *mdsmon() {
-    return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP];
+    return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP].get();
   }
 
   class MonmapMonitor *monmon() {
-    return (class MonmapMonitor *)paxos_service[PAXOS_MONMAP];
+    return (class MonmapMonitor *)paxos_service[PAXOS_MONMAP].get();
   }
 
   class OSDMonitor *osdmon() {
-    return (class OSDMonitor *)paxos_service[PAXOS_OSDMAP];
+    return (class OSDMonitor *)paxos_service[PAXOS_OSDMAP].get();
   }
 
   class AuthMonitor *authmon() {
-    return (class AuthMonitor *)paxos_service[PAXOS_AUTH];
+    return (class AuthMonitor *)paxos_service[PAXOS_AUTH].get();
   }
 
   class LogMonitor *logmon() {
-    return (class LogMonitor*) paxos_service[PAXOS_LOG];
+    return (class LogMonitor*) paxos_service[PAXOS_LOG].get();
   }
 
   class MgrMonitor *mgrmon() {
-    return (class MgrMonitor*) paxos_service[PAXOS_MGR];
+    return (class MgrMonitor*) paxos_service[PAXOS_MGR].get();
   }
 
   class MgrStatMonitor *mgrstatmon() {
-    return (class MgrStatMonitor*) paxos_service[PAXOS_MGRSTAT];
+    return (class MgrStatMonitor*) paxos_service[PAXOS_MGRSTAT].get();
   }
 
   class HealthMonitor *healthmon() {
-    return (class HealthMonitor*) paxos_service[PAXOS_HEALTH];
+    return (class HealthMonitor*) paxos_service[PAXOS_HEALTH].get();
   }
 
   class ConfigMonitor *configmon() {
-    return (class ConfigMonitor*) paxos_service[PAXOS_CONFIG];
+    return (class ConfigMonitor*) paxos_service[PAXOS_CONFIG].get();
   }
 
   friend class Paxos;

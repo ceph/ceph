@@ -192,15 +192,15 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   paxos = new Paxos(this, "paxos");
 
-  paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, paxos, "mdsmap");
-  paxos_service[PAXOS_MONMAP] = new MonmapMonitor(this, paxos, "monmap");
-  paxos_service[PAXOS_OSDMAP] = new OSDMonitor(cct, this, paxos, "osdmap");
-  paxos_service[PAXOS_LOG] = new LogMonitor(this, paxos, "logm");
-  paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
-  paxos_service[PAXOS_MGR] = new MgrMonitor(this, paxos, "mgr");
-  paxos_service[PAXOS_MGRSTAT] = new MgrStatMonitor(this, paxos, "mgrstat");
-  paxos_service[PAXOS_HEALTH] = new HealthMonitor(this, paxos, "health");
-  paxos_service[PAXOS_CONFIG] = new ConfigMonitor(this, paxos, "config");
+  paxos_service[PAXOS_MDSMAP].reset(new MDSMonitor(this, paxos, "mdsmap"));
+  paxos_service[PAXOS_MONMAP].reset(new MonmapMonitor(this, paxos, "monmap"));
+  paxos_service[PAXOS_OSDMAP].reset(new OSDMonitor(cct, this, paxos, "osdmap"));
+  paxos_service[PAXOS_LOG].reset(new LogMonitor(this, paxos, "logm"));
+  paxos_service[PAXOS_AUTH].reset(new AuthMonitor(this, paxos, "auth"));
+  paxos_service[PAXOS_MGR].reset(new MgrMonitor(this, paxos, "mgr"));
+  paxos_service[PAXOS_MGRSTAT].reset(new MgrStatMonitor(this, paxos, "mgrstat"));
+  paxos_service[PAXOS_HEALTH].reset(new HealthMonitor(this, paxos, "health"));
+  paxos_service[PAXOS_CONFIG].reset(new ConfigMonitor(this, paxos, "config"));
 
   config_key_service = new ConfigKeyService(this, paxos);
 
@@ -227,8 +227,7 @@ Monitor::~Monitor()
 {
   op_tracker.on_shutdown();
 
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
-    delete *p;
+  paxos_service.clear();
   delete config_key_service;
   delete paxos;
   assert(session_map.sessions.empty());
@@ -848,8 +847,8 @@ void Monitor::init_paxos()
   paxos->init();
 
   // init services
-  for (int i = 0; i < PAXOS_NUM; ++i) {
-    paxos_service[i]->init();
+  for (auto& svc : paxos_service) {
+    svc->init();
   }
 
   refresh_from_paxos(NULL);
@@ -873,11 +872,11 @@ void Monitor::refresh_from_paxos(bool *need_bootstrap)
     dout(10) << __func__ << " no cluster_fingerprint" << dendl;
   }
 
-  for (int i = 0; i < PAXOS_NUM; ++i) {
-    paxos_service[i]->refresh(need_bootstrap);
+  for (auto& svc : paxos_service) {
+    svc->refresh(need_bootstrap);
   }
-  for (int i = 0; i < PAXOS_NUM; ++i) {
-    paxos_service[i]->post_refresh();
+  for (auto& svc : paxos_service) {
+    svc->post_refresh();
   }
   load_metadata();
 }
@@ -939,8 +938,9 @@ void Monitor::shutdown()
 
   // clean up
   paxos->shutdown();
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
-    (*p)->shutdown();
+  for (auto& svc : paxos_service) {
+    svc->shutdown();
+  }
 
   finish_contexts(g_ceph_context, waitfor_quorum, -ECANCELED);
   finish_contexts(g_ceph_context, maybe_wait_for_quorum, -ECANCELED);
@@ -1118,8 +1118,9 @@ void Monitor::_reset()
 
   paxos->restart();
 
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
-    (*p)->restart();
+  for (auto& svc : paxos_service) {
+    svc->restart();
+  }
 }
 
 
@@ -1130,8 +1131,9 @@ set<string> Monitor::get_sync_targets_names()
 {
   set<string> targets;
   targets.insert(paxos->get_name());
-  for (int i = 0; i < PAXOS_NUM; ++i)
-    paxos_service[i]->get_store_prefixes(targets);
+  for (auto& svc : paxos_service) {
+    svc->get_store_prefixes(targets);
+  }
   ConfigKeyService *config_key_service_ptr = dynamic_cast<ConfigKeyService*>(config_key_service);
   assert(config_key_service_ptr);
   config_key_service_ptr->get_store_prefixes(targets);
@@ -1951,11 +1953,11 @@ void Monitor::_finish_svc_election()
 {
   assert(state == STATE_LEADER || state == STATE_PEON);
 
-  for (auto p : paxos_service) {
+  for (auto& svc : paxos_service) {
     // we already called election_finished() on monmon(); avoid callig twice
-    if (state == STATE_LEADER && p == monmon())
+    if (state == STATE_LEADER && svc.get() == monmon())
       continue;
-    p->election_finished();
+    svc->election_finished();
   }
 }
 
@@ -2972,7 +2974,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     Formatter *f = Formatter::create("json");
 
     std::vector<MonCommand> commands = static_cast<MgrMonitor*>(
-        paxos_service[PAXOS_MGR])->get_command_descs();
+        paxos_service[PAXOS_MGR].get())->get_command_descs();
 
     for (auto& c : leader_mon_commands) {
       commands.push_back(c);
@@ -5397,9 +5399,9 @@ void Monitor::tick()
   }
 
 
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p) {
-    (*p)->tick();
-    (*p)->maybe_trim();
+  for (auto& svc : paxos_service) {
+    svc->tick();
+    svc->maybe_trim();
   }
   
   // trim sessions
