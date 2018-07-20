@@ -196,8 +196,11 @@ def call(command, **kw):
         close_fds=True,
         **kw
     )
+
     if stdin:
-        stdout_stream, stderr_stream = process.communicate(stdin)
+        stdout_stream, stderr_stream = process.communicate(
+            stdin.encode(encoding='utf-8', errors='ignore')
+        )
     else:
         stdout_stream = process.stdout.read()
         stderr_stream = process.stderr.read()
