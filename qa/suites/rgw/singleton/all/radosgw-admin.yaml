@@ -18,3 +18,4 @@ tasks:
 - rgw:
     client.0:
 - radosgw-admin:
+- radosgw-admin-rest:
