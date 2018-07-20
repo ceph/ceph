@@ -20,48 +20,9 @@ import time
 
 from boto.connection import AWSAuthConnection
 from teuthology import misc as teuthology
-from util.rgw import get_user_summary, get_user_successful_ops
+from util.rgw import get_user_summary, get_user_successful_ops, rgwadmin
 
 log = logging.getLogger(__name__)
-
-def rgwadmin(ctx, client, cmd):
-    """
-    Perform rgw admin command
-
-    :param client: client
-    :param cmd: command to execute.
-    :return: command exit status, json result.
-    """
-    log.info('radosgw-admin: %s' % cmd)
-    testdir = teuthology.get_testdir(ctx)
-    pre = [
-        'adjust-ulimits',
-        'ceph-coverage',
-        '{tdir}/archive/coverage'.format(tdir=testdir),
-        'radosgw-admin',
-        '--log-to-stderr',
-        '--format', 'json',
-        ]
-    pre.extend(cmd)
-    (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-    proc = remote.run(
-        args=pre,
-        check_status=False,
-        stdout=StringIO(),
-        stderr=StringIO(),
-        )
-    r = proc.exitstatus
-    out = proc.stdout.getvalue()
-    j = None
-    if not r and out != '':
-        try:
-            j = json.loads(out)
-            log.info(' json result: %s' % j)
-        except ValueError:
-            j = out
-            log.info(' raw result: %s' % j)
-    return (r, j)
-
 
 def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
     """
