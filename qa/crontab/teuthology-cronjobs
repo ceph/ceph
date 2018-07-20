@@ -154,7 +154,8 @@ CEPH_QA_EMAIL="ceph-qa@ceph.com"
 #30 05 * * 1,3,5 CEPH_BRANCH=mimic; MACHINE_NAME=smithi;/home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s hadoop -e $CEPH_QA_EMAIL
 #35 05 * * 1,3,5 CEPH_BRANCH=mimic; MACHINE_NAME=smithi;/home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s samba -e $CEPH_QA_EMAIL
 55 05 * * 1,3,5  CEPH_BRANCH=mimic; MACHINE_NAME=mira; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-deploy -k distro -e $CEPH_QA_EMAIL
-10 05 * * 1,3,5  CEPH_BRANCH=mimic; MACHINE_NAME=ovh;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-disk -k distro -e $CEPH_QA_EMAIL
+#when we run ceph-disk on ovh we have to use overrides from /home/teuthology/rhel_only_on_ovh.yaml 
+10 05 * * 1,3,5  CEPH_BRANCH=mimic; MACHINE_NAME=ovh;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-disk -k distro -e $CEPH_QA_EMAIL /home/teuthology/rhel_only_on_ovh.yaml
 15 05 * * 1,3,5  CEPH_BRANCH=mimic; MACHINE_NAME=ovh;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-ansible -k distro -e $CEPH_QA_EMAIL
 07 05 * * 6      CEPH_BRANCH=mimic; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s powercycle -k distro -e $CEPH_QA_EMAIL
 
