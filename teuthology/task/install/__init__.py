@@ -471,6 +471,9 @@ def task(ctx, config):
         extra_packages:
            deb: ['librados-dev', 'libradosstriper-dev']
            rpm: ['librados-devel', 'libradosstriper-devel']
+        extra_system_packages:
+           deb: ['libboost-system-dev']
+           rpm: ['boost-devel']
     - install:
         rhbuild: 1.3.0
         playbook: downstream_setup.yml
