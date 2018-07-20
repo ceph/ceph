@@ -136,7 +136,7 @@ class OSDMap(ceph_module.BasePyOSDMap):
         return self._map_pool_pgs_up(poolid)
 
     def pg_to_up_acting_osds(self, pool_id, ps):
-        return self._pg_to_up_acting_osds(self._handle, pool_id, ps)
+        return self._pg_to_up_acting_osds(pool_id, ps)
 
 
 class OSDMapIncremental(ceph_module.BasePyOSDMapIncremental):
