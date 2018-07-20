@@ -7346,6 +7346,11 @@ std::vector<Option> get_mds_client_options() {
     .set_default(30)
     .set_description(""),
 
+    /* TEMPORARY FOR DEBUGGING */
+    Option("osd_throttle", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(1)
+    .set_description("DEBUGGING ONLY; 1=CLASSIC, 2=OUTSTANDING"),
+
     Option("client_caps_release_delay", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(5)
     .set_description(""),

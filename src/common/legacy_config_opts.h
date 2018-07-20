@@ -911,6 +911,9 @@ OPTION(osdc_blkin_trace_all, OPT_BOOL) // create a blkin trace for all objecter 
 
 OPTION(osd_discard_disconnected_ops, OPT_BOOL)
 
+// TEMPORARY DEBUG
+OPTION(osd_throttle, OPT_INT)
+
 OPTION(memstore_device_bytes, OPT_U64)
 OPTION(memstore_page_set, OPT_BOOL)
 OPTION(memstore_page_size, OPT_U64)

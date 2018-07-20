@@ -566,6 +566,7 @@ $BLUESTORE_OPTS
 	; **************** eric additions ****************
 	osd op num shards = 2
 	osd op num threads per shard = 2
+        osd throttle = 1
 
         ; kstore
         kstore fsck on mount = true
