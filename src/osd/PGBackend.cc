@@ -1019,7 +1019,8 @@ void PGBackend::be_compare_scrubmaps(
 	// If all replicas match, but they don't match object_info we can
 	// repair it by using missing_digest mechanism
 	if (repair && parent->get_pool().is_replicated() && j == auth && shard_map.size() > 1
-	    && digest_match && shard_map[j->first].only_data_digest_mismatch_info()) {
+	    && digest_match && shard_map[j->first].only_data_digest_mismatch_info()
+	    && auth_object.digest_present) {
 	  // Set in missing_digests
 	  fix_digest = true;
 	  // Clear single shard error
@@ -1087,11 +1088,9 @@ void PGBackend::be_compare_scrubmaps(
       inconsistent[*k] = cur_inconsistent;
     }
 
-    // Special handling of this particular type of inconsistency
-    // This can over-ride a data_digest or set an omap_digest
-    // when all replicas match but the object info is wrong.
-    if (fix_digest && auth_object.digest_present) {
+    if (fix_digest) {
       boost::optional<uint32_t> data_digest, omap_digest;
+      assert(auth_object.digest_present);
       data_digest = auth_object.digest;
       if (auth_object.omap_digest_present) {
         omap_digest = auth_object.omap_digest;
