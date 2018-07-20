@@ -131,10 +131,13 @@ class Module(MgrModule):
                 "osd_stats",
                 "health",
                 "mon_status",
-                "mgr_map"
+                "mgr_map",
+                "ec_profiles"
                 ]
         for obj in objects:
-            self.get(obj)
+            assert self.get(obj) is not None
+
+        assert self.get("__OBJ_DNE__") is None
 
         servers = self.list_servers()
         for server in servers:
