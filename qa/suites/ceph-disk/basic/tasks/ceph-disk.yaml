@@ -1,3 +1,6 @@
+overrides:
+  ansible.cephlab:
+    skip_tags: entitlements,packages,repos
 roles:
 - - mon.a
   - mgr.x
