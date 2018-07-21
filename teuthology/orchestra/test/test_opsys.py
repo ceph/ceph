@@ -17,6 +17,24 @@ class TestOS(object):
         BUG_REPORT_URL="https://bugs.centos.org/"
     """)
 
+    str_centos_7_os_release_newer = dedent("""
+        NAME="CentOS Linux"
+        VERSION="7 (Core)"
+        ID="centos"
+        ID_LIKE="rhel fedora"
+        VERSION_ID="7"
+        PRETTY_NAME="CentOS Linux 7 (Core)"
+        ANSI_COLOR="0;31"
+        CPE_NAME="cpe:/o:centos:centos:7"
+        HOME_URL="https://www.centos.org/"
+        BUG_REPORT_URL="https://bugs.centos.org/"
+
+        CENTOS_MANTISBT_PROJECT="CentOS-7"
+        CENTOS_MANTISBT_PROJECT_VERSION="7"
+        REDHAT_SUPPORT_PRODUCT="centos"
+        REDHAT_SUPPORT_PRODUCT_VERSION="7"
+    """)
+
     str_debian_7_lsb_release = dedent("""
         Distributor ID: Debian
         Description:    Debian GNU/Linux 7.1 (wheezy)
@@ -36,6 +54,28 @@ class TestOS(object):
         BUG_REPORT_URL="http://bugs.debian.org/"
     """)
 
+    str_debian_8_os_release = dedent("""
+        PRETTY_NAME="Debian GNU/Linux 8 (jessie)"
+        NAME="Debian GNU/Linux"
+        VERSION_ID="8"
+        VERSION="8 (jessie)"
+        ID=debian
+        HOME_URL="http://www.debian.org/"
+        SUPPORT_URL="http://www.debian.org/support/"
+        BUG_REPORT_URL="https://bugs.debian.org/"
+    """)
+
+    str_debian_9_os_release = dedent("""
+        PRETTY_NAME="Debian GNU/Linux 9 (stretch)"
+        NAME="Debian GNU/Linux"
+        VERSION_ID="9"
+        VERSION="9 (stretch)"
+        ID=debian
+        HOME_URL="https://www.debian.org/"
+        SUPPORT_URL="https://www.debian.org/support"
+        BUG_REPORT_URL="https://bugs.debian.org/"
+    """)
+
     str_ubuntu_12_04_lsb_release = dedent("""
         Distributor ID: Ubuntu
         Description:    Ubuntu 12.04.4 LTS
@@ -50,6 +90,46 @@ class TestOS(object):
         ID_LIKE=debian
         PRETTY_NAME="Ubuntu precise (12.04.4 LTS)"
         VERSION_ID="12.04"
+    """)
+
+    str_ubuntu_14_04_os_release = dedent("""
+        NAME="Ubuntu"
+        VERSION="14.04.4 LTS, Trusty Tahr"
+        ID=ubuntu
+        ID_LIKE=debian
+        PRETTY_NAME="Ubuntu 14.04.4 LTS"
+        VERSION_ID="14.04"
+        HOME_URL="http://www.ubuntu.com/"
+        SUPPORT_URL="http://help.ubuntu.com/"
+        BUG_REPORT_URL="http://bugs.launchpad.net/ubuntu/"
+    """)
+
+    str_ubuntu_16_04_os_release = dedent("""
+        NAME="Ubuntu"
+        VERSION="16.04 LTS (Xenial Xerus)"
+        ID=ubuntu
+        ID_LIKE=debian
+        PRETTY_NAME="Ubuntu 16.04 LTS"
+        VERSION_ID="16.04"
+        HOME_URL="http://www.ubuntu.com/"
+        SUPPORT_URL="http://help.ubuntu.com/"
+        BUG_REPORT_URL="http://bugs.launchpad.net/ubuntu/"
+        UBUNTU_CODENAME=xenial
+    """)
+
+    str_ubuntu_18_04_os_release = dedent("""
+        NAME="Ubuntu"
+        VERSION="18.04 LTS (Bionic Beaver)"
+        ID=ubuntu
+        ID_LIKE=debian
+        PRETTY_NAME="Ubuntu 18.04 LTS"
+        VERSION_ID="18.04"
+        HOME_URL="https://www.ubuntu.com/"
+        SUPPORT_URL="https://help.ubuntu.com/"
+        BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
+        PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
+        VERSION_CODENAME=bionic
+        UBUNTU_CODENAME=bionic
     """)
 
     str_rhel_6_4_lsb_release = dedent("""
@@ -86,8 +166,71 @@ class TestOS(object):
         REDHAT_SUPPORT_PRODUCT_VERSION=7.0
     """)
 
+    str_fedora_26_os_release = dedent("""
+        NAME=Fedora
+        VERSION="26 (Twenty Six)"
+        ID=fedora
+        VERSION_ID=26
+        PRETTY_NAME="Fedora 26 (Twenty Six)"
+        ANSI_COLOR="0;34"
+        CPE_NAME="cpe:/o:fedoraproject:fedora:26"
+        HOME_URL="https://fedoraproject.org/"
+        BUG_REPORT_URL="https://bugzilla.redhat.com/"
+        REDHAT_BUGZILLA_PRODUCT="Fedora"
+        REDHAT_BUGZILLA_PRODUCT_VERSION=26
+        REDHAT_SUPPORT_PRODUCT="Fedora"
+        REDHAT_SUPPORT_PRODUCT_VERSION=26
+        PRIVACY_POLICY_URL=https://fedoraproject.org/wiki/Legal:PrivacyPolicy
+    """)
+
+    str_opensuse_42_2_os_release = dedent("""
+        NAME="openSUSE Leap"
+        VERSION="42.2"
+        ID=opensuse
+        ID_LIKE="suse"
+        VERSION_ID="42.2"
+        PRETTY_NAME="openSUSE Leap 42.2"
+        ANSI_COLOR="0;32"
+        CPE_NAME="cpe:/o:opensuse:leap:42.2"
+        BUG_REPORT_URL="https://bugs.opensuse.org"
+        HOME_URL="https://www.opensuse.org/"
+    """)
+
+    str_opensuse_42_3_os_release = dedent("""
+        NAME="openSUSE Leap"
+        VERSION="42.3"
+        ID=opensuse
+        ID_LIKE="suse"
+        VERSION_ID="42.3"
+        PRETTY_NAME="openSUSE Leap 42.3"
+        ANSI_COLOR="0;32"
+        CPE_NAME="cpe:/o:opensuse:leap:42.3"
+        BUG_REPORT_URL="https://bugs.opensuse.org"
+        HOME_URL="https://www.opensuse.org/"
+    """)
+
+    str_opensuse_15_0_os_release = dedent("""
+        NAME="openSUSE Leap"
+        VERSION="15.0"
+        ID="opensuse-leap"
+        ID_LIKE="suse opensuse"
+        VERSION_ID="15.0"
+        PRETTY_NAME="openSUSE Leap 15.0"
+        ANSI_COLOR="0;32"
+        CPE_NAME="cpe:/o:opensuse:leap:15.0"
+        BUG_REPORT_URL="https://bugs.opensuse.org"
+        HOME_URL="https://www.opensuse.org/"
+    """)
+
     def test_centos_7_os_release(self):
         os = OS.from_os_release(self.str_centos_7_os_release)
+        assert os.name == 'centos'
+        assert os.version == '7'
+        assert os.codename == 'core'
+        assert os.package_type == 'rpm'
+
+    def test_centos_7_os_release_newer(self):
+        os = OS.from_os_release(self.str_centos_7_os_release_newer)
         assert os.name == 'centos'
         assert os.version == '7'
         assert os.codename == 'core'
@@ -107,6 +250,20 @@ class TestOS(object):
         assert os.codename == 'wheezy'
         assert os.package_type == 'deb'
 
+    def test_debian_8_os_release(self):
+        os = OS.from_os_release(self.str_debian_8_os_release)
+        assert os.name == 'debian'
+        assert os.version == '8'
+        assert os.codename == 'jessie'
+        assert os.package_type == 'deb'
+
+    def test_debian_9_os_release(self):
+        os = OS.from_os_release(self.str_debian_9_os_release)
+        assert os.name == 'debian'
+        assert os.version == '9'
+        assert os.codename == 'stretch'
+        assert os.package_type == 'deb'
+
     def test_ubuntu_12_04_lsb_release(self):
         os = OS.from_lsb_release(self.str_ubuntu_12_04_lsb_release)
         assert os.name == 'ubuntu'
@@ -119,6 +276,27 @@ class TestOS(object):
         assert os.name == 'ubuntu'
         assert os.version == '12.04'
         assert os.codename == 'precise'
+        assert os.package_type == 'deb'
+
+    def test_ubuntu_14_04_os_release(self):
+        os = OS.from_os_release(self.str_ubuntu_14_04_os_release)
+        assert os.name == 'ubuntu'
+        assert os.version == '14.04'
+        assert os.codename == 'trusty'
+        assert os.package_type == 'deb'
+
+    def test_ubuntu_16_04_os_release(self):
+        os = OS.from_os_release(self.str_ubuntu_16_04_os_release)
+        assert os.name == 'ubuntu'
+        assert os.version == '16.04'
+        assert os.codename == 'xenial'
+        assert os.package_type == 'deb'
+
+    def test_ubuntu_18_04_os_release(self):
+        os = OS.from_os_release(self.str_ubuntu_18_04_os_release)
+        assert os.name == 'ubuntu'
+        assert os.version == '18.04'
+        assert os.codename == 'bionic'
         assert os.package_type == 'deb'
 
     def test_rhel_6_4_lsb_release(self):
@@ -140,6 +318,34 @@ class TestOS(object):
         assert os.name == 'rhel'
         assert os.version == '7.0'
         assert os.codename == 'maipo'
+        assert os.package_type == 'rpm'
+
+    def test_fedora_26_os_release(self):
+        os = OS.from_os_release(self.str_fedora_26_os_release)
+        assert os.name == 'fedora'
+        assert os.version == '26'
+        assert os.codename == '26'
+        assert os.package_type == 'rpm'
+
+    def test_opensuse_42_2_os_release(self):
+        os = OS.from_os_release(self.str_opensuse_42_2_os_release)
+        assert os.name == 'opensuse'
+        assert os.version == '42.2'
+        assert os.codename == 'leap'
+        assert os.package_type == 'rpm'
+
+    def test_opensuse_42_3_os_release(self):
+        os = OS.from_os_release(self.str_opensuse_42_3_os_release)
+        assert os.name == 'opensuse'
+        assert os.version == '42.3'
+        assert os.codename == 'leap'
+        assert os.package_type == 'rpm'
+
+    def test_opensuse_15_0_os_release(self):
+        os = OS.from_os_release(self.str_opensuse_15_0_os_release)
+        assert os.name == 'opensuse'
+        assert os.version == '15.0'
+        assert os.codename == 'leap'
         assert os.package_type == 'rpm'
 
     def test_version_codename_success(self):
