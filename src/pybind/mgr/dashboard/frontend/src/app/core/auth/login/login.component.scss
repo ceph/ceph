@@ -4,8 +4,8 @@
   height: 100%;
 
   .row {
-    color: #ececec;
-    background-color: #474544;
+    color: $color-login-row-text;
+    background-color: $color-login-row-bg;
   }
 
   h1 {
@@ -15,17 +15,17 @@
 
   .btn-password,
   .form-control {
-    color: #ececec;
-    background-color: #555555;
+    color: $color-password-toggle-text;
+    background-color: $color-password-toggle-bg;
   }
 
   .btn-password:focus {
-    outline-color: #66afe9;
+    outline-color: $color-password-toggle-focus;
   }
 
   .checkbox-primary input[type="checkbox"]:checked + label::before,
   .checkbox-primary input[type="radio"]:checked + label::before {
-    background-color: $oa-color-blue;
-    border-color: $oa-color-blue;
+    background-color: $color-login-checkbox-bg;
+    border-color: $color-login-checkbox-border;
   }
 }

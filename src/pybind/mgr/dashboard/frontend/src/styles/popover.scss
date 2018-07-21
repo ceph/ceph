@@ -1,3 +1,5 @@
+@import '../defaults';
+
 ::ng-deep .popover-content {
   padding: 0px 0px;
   height: auto;
@@ -11,14 +13,14 @@
 
 .separator {
   padding: 5px 12px;
-  color: #90949c;
-  background-color: #f6f7f9;
+  color: $color-popover-seperator-text;
+  background-color: $color-popover-seperator-bg;
   font-size: 12px;
 }
 
 .message {
   padding: 10px 16px;
-  color: #474544;
+  color: $color-popover-message-text;
   font-size: 12px;
 }
 
@@ -26,7 +28,7 @@ table {
   width: 252px;
   margin: 5px 12px 5px 5px;
   font-size: 12px;
-  color: #474544;
+  color: $color-popover-table-text;
 }
 
 .icon-col {
@@ -35,7 +37,7 @@ table {
 }
 
 .date {
-  color: #777777;
+  color: $color-popover-date;
 }
 
 hr {
