@@ -422,7 +422,7 @@ HOME_URL="https://www.opensuse.org/"
         self.assertEqual('42.3', ceph_detect_init._extract_from_os_release(
                          os_release_opensuse_42_3, 'VERSION_ID'))
         os_release_opensuse_15_0 = """
-ME="openSUSE Leap"
+NAME="openSUSE Leap"
 VERSION="15.0"
 ID="opensuse-leap"
 ID_LIKE="suse opensuse"
