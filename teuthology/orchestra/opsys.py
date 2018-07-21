@@ -39,9 +39,13 @@ DISTRO_CODENAME_MAP = {
         "20": "heisenbug",
     },
     "opensuse": {
-        "15.0": "leap",
         "42.2": "leap",
         "42.3": "leap",
+    },
+    "opensuse-leap": {
+        "42.2": "leap",
+        "42.3": "leap",
+        "15.0": "leap",
     },
 }
 
@@ -67,7 +71,7 @@ class OS(object):
     __slots__ = ['name', 'version', 'codename', 'package_type']
 
     _deb_distros = ('debian', 'ubuntu')
-    _rpm_distros = ('fedora', 'rhel', 'centos', 'opensuse')
+    _rpm_distros = ('fedora', 'rhel', 'centos', 'opensuse', 'opensuse-leap')
 
     def __init__(self, name=None, version=None, codename=None):
         self.name = name

@@ -343,7 +343,7 @@ class TestOS(object):
 
     def test_opensuse_15_0_os_release(self):
         os = OS.from_os_release(self.str_opensuse_15_0_os_release)
-        assert os.name == 'opensuse'
+        assert os.name == 'opensuse-leap'
         assert os.version == '15.0'
         assert os.codename == 'leap'
         assert os.package_type == 'rpm'
