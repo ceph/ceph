@@ -433,7 +433,7 @@ class MDSRank {
     }
 
     bool evict_client(int64_t session_id, bool wait, bool blacklist,
-                      std::stringstream& ss, Context *on_killed=nullptr);
+                      std::ostream& ss, Context *on_killed=nullptr);
 
     void mark_base_recursively_scrubbed(inodeno_t ino);
 
@@ -458,7 +458,7 @@ class MDSRank {
         std::ostream &ss,
         Formatter *f);
     int _command_export_dir(std::string_view path, mds_rank_t dest);
-    int _command_flush_journal(std::stringstream *ss);
+    int _command_flush_journal(std::ostream& ss);
     CDir *_command_dirfrag_get(
         const cmdmap_t &cmdmap,
         std::ostream &ss);
