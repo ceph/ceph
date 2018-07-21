@@ -974,6 +974,7 @@ def cluster(ctx, config):
                     if match is not None:
                         log.warning('Found errors (ERR|WRN|SEC) in cluster log')
                         log.info(match)
+                        # disable check for some runs - Vasu
                         # ctx.summary['failure_reason'] = \
                         #    '"{match}" in cluster log'.format(
                         #        match=match.rstrip('\n'),
