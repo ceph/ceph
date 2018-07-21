@@ -4,7 +4,7 @@
   margin-bottom: 25px;
   .separator {
     height: 30px;
-    border-left: 1px solid rgba(0,0,0,.09);
+    border-left: 1px solid $color-table-seperator-border;
     padding-left: 5px;
     margin-left: 5px;
     display: inline-block;
@@ -17,7 +17,7 @@
     height: 30px;
     line-height: 28px;
     position: relative;
-    border-left: 1px solid rgba(0,0,0,.09);
+    border-left: 1px solid $color-table-seperator-border;
     cursor: pointer;
     padding: 0 8px;
     text-align: center;
@@ -33,7 +33,7 @@
         padding-right: 20px;
         cursor: pointer;
         &:hover {
-          background-color: #f5f5f5;
+          background-color: $color-table-dropdown-bg;
         }
         & > input {
           cursor: pointer;
@@ -50,8 +50,8 @@
   }
 }
 .dataTables_header {
-  background-color: #f6f6f6;
-  border: 1px solid #d1d1d1;
+  background-color: $color-table-header-bg;
+  border: 1px solid $color-table-header-border;
   border-bottom: none;
   padding: 5px;
   position: relative;
@@ -63,10 +63,10 @@
   }
   .input-group {
     float: right;
-    border-left: 1px solid rgba(0,0,0,.09);
+    border-left: 1px solid $color-table-input-border;
     padding-left: 8px;
     width: 40%;
-    max-width: 350px;
+    max-width: 250px;
     .form-control {
       height: 30px;
     }
@@ -85,7 +85,7 @@
 }
 
 ::ng-deep .oadatatable {
-  border: $border-color;
+  border:1px solid $color-table-header-border;
   margin-bottom: 0;
   max-width: none !important;
   .progress-linear {
@@ -96,14 +96,14 @@
     padding: 0;
     margin: 0;
     .container {
-      background-color: $oa-color-light-blue;
+      background-color: $color-table-active-row;
       .bar {
         left: 0;
         height: 100%;
         width: 100%;
         position: absolute;
         overflow: hidden;
-        background-color: $oa-color-light-blue;
+        background-color: $color-table-active-row;
       }
       .bar:before{
         display: block;
@@ -112,21 +112,21 @@
         left: -200px;
         width: 200px;
         height: 100%;
-        background-color: $oa-color-blue;
+        background-color: $color-table-progress-bar-active;
         animation: progress-loading 3s linear infinite;
       }
     }
   }
   .datatable-header {
     background-clip: padding-box;
-    background-color: #f9f9f9;
-    background-image: -webkit-linear-gradient(top,#fafafa 0,#ededed 100%);
-    background-image: -o-linear-gradient(top,#fafafa 0,#ededed 100%);
-    background-image: linear-gradient(to bottom,#fafafa 0,#ededed 100%);
+    background-color: $color-table-datatable-header;
+    background-image: -webkit-linear-gradient(top,$color-table-gradient-1 0,$color-table-gradient-2 100%);
+    background-image: -o-linear-gradient(top,$color-table-gradient-1 0,$color-table-gradient-2 100%);
+    background-image: linear-gradient(to bottom,$color-table-gradient-1 0,$color-table-gradient-2 100%);
     background-repeat: repeat-x;
     filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#fffafafa', endColorstr='#ffededed', GradientType=0);
     .sort-asc, .sort-desc {
-      color: $oa-color-blue;
+      color: $color-table-sort;
     }
     .datatable-header-cell{
       @include table-cell;
@@ -164,7 +164,7 @@
   }
   .datatable-body {
     .empty-row {
-      background-color: $warning-background-color;
+      background-color: $color-table-empty-row;
       text-align: center;
       font-weight: bold;
       font-style: italic;
@@ -173,19 +173,19 @@
     }
     .datatable-body-row {
       &.clickable:hover .datatable-row-group {
-        background-color: #eee;
+        background-color: $color-table-hover-row ;
         transition-property: background;
         transition-duration: .3s;
         transition-timing-function: linear;
       }
       &.datatable-row-even {
-        background-color: #ffffff;
+        background-color: $color-table-even-row-bg;
       }
       &.datatable-row-odd {
-        background-color: #f6f6f6;
+        background-color: $color-table-odd-row-bg;
       }
       &.active, &.active:hover {
-        background-color: $bg-color-light-blue;
+        background-color: $color-table-active-row-hover;
       }
       .datatable-body-cell{
         @include table-cell;
@@ -220,10 +220,10 @@
           border: none;
         }
         a:hover {
-          background-color: $oa-color-light-blue;
+          background-color: $color-table-active-row;
         }
         &.active > a {
-          background-color: $bg-color-light-blue;
+          background-color: $color-table-active-row-hover;
         }
       }
     }

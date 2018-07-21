@@ -61,29 +61,6 @@ export class HealthComponent implements OnInit, OnDestroy {
   }
 
   preparePoolUsage(chart, data) {
-    const colors = [
-      '#3366CC',
-      '#109618',
-      '#990099',
-      '#3B3EAC',
-      '#0099C6',
-      '#DD4477',
-      '#66AA00',
-      '#B82E2E',
-      '#316395',
-      '#994499',
-      '#22AA99',
-      '#AAAA11',
-      '#6633CC',
-      '#E67300',
-      '#8B0707',
-      '#329262',
-      '#5574A6',
-      '#FF9900',
-      '#DC3912',
-      '#3B3EAC'
-    ];
-
     const poolLabels = [];
     const poolData = [];
 
@@ -93,7 +70,6 @@ export class HealthComponent implements OnInit, OnDestroy {
     });
 
     chart.dataset[0].data = poolData;
-    chart.colors = [{ backgroundColor: colors }];
     chart.labels = poolLabels;
   }
 }
