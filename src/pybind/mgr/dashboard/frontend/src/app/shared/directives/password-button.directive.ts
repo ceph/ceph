@@ -9,10 +9,10 @@ export class PasswordButtonDirective implements OnInit {
   // tslint:disable-next-line:no-input-rename
   @Input('cdPasswordButton') private cdPasswordButton: string;
 
-  constructor(private elementRef: ElementRef,
-              private renderer: Renderer2) {}
+  constructor(private elementRef: ElementRef, private renderer: Renderer2) {}
 
   ngOnInit() {
+    this.renderer.setAttribute(this.elementRef.nativeElement, 'tabindex', '-1');
     this.iElement = this.renderer.createElement('i');
     this.renderer.addClass(this.iElement, 'icon-prepend');
     this.renderer.addClass(this.iElement, 'fa');
@@ -26,7 +26,7 @@ export class PasswordButtonDirective implements OnInit {
 
   private update() {
     const inputElement = this.getInputElement();
-    if (inputElement && (inputElement.type === 'text')) {
+    if (inputElement && inputElement.type === 'text') {
       this.renderer.removeClass(this.iElement, 'fa-eye');
       this.renderer.addClass(this.iElement, 'fa-eye-slash');
     } else {
@@ -39,7 +39,7 @@ export class PasswordButtonDirective implements OnInit {
   onClick() {
     const inputElement = this.getInputElement();
     // Modify the type of the input field.
-    inputElement.type = (inputElement.type === 'password') ? 'text' : 'password';
+    inputElement.type = inputElement.type === 'password' ? 'text' : 'password';
     // Update the button icon/tooltip.
     this.update();
   }
