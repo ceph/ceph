@@ -101,8 +101,8 @@ map is ``active + clean``.
 *snaptrim*
   Trimming snaps.
 
-*snaptrim_Wait*
+*snaptrim_wait*
   Queued to trim snaps.
 
-*snaptrim_Error*
+*snaptrim_error*
   Error stopped trimming snaps.
