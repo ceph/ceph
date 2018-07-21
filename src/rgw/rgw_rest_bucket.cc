@@ -76,6 +76,33 @@ void RGWOp_Get_Policy::execute()
   http_ret = RGWBucketAdminOp::get_policy(store, op_state, flusher);
 }
 
+class RGWOp_Get_Zonegroup : public RGWRESTOp {
+
+public:
+  RGWOp_Get_Zonegroup() {}
+
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("buckets", RGW_CAP_READ);
+  }
+
+  void execute() override;
+
+  const char* name() const override { return "get_zonegroup"; }
+};
+
+void RGWOp_Get_Zonegroup::execute()
+{
+  RGWBucketAdminOpState op_state;
+
+  std::string bucket;
+
+  RESTArgs::get_string(s, "bucket", bucket, &bucket);
+
+  op_state.set_bucket_name(bucket);
+
+  http_ret = RGWBucketAdminOp::get_zonegroup(store, op_state, flusher);
+}
+
 class RGWOp_Check_Bucket_Index : public RGWRESTOp {
 
 public:
@@ -322,6 +349,9 @@ RGWOp *RGWHandler_Bucket::op_get()
 
   if (s->info.args.sub_resource_exists("index"))
     return new RGWOp_Check_Bucket_Index;
+
+  if (s->info.args.sub_resource_exists("zonegroup"))
+    return new RGWOp_Get_Zonegroup;
 
   return new RGWOp_Bucket_Info;
 }
