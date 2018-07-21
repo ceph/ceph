@@ -2737,7 +2737,16 @@ void Locker::handle_client_caps(MClientCaps *m)
       mdcache->wait_replay_cap_reconnect(m->get_ino(), new C_MDS_RetryMessage(mds, m));
       return;
     }
-    dout(1) << "handle_client_caps on unknown ino " << m->get_ino() << ", dropping" << dendl;
+
+    /*
+     * "handle_client_caps on unknown ino xxx” is normal after migrating a subtree
+     * Sequence of events that cause this are:
+     *   - client sends caps message to mds.a
+     *   - mds finishes subtree migration, send cap export to client
+     *   - mds trim its cache
+     *   - mds receives cap messages from client
+     */
+    dout(7) << "handle_client_caps on unknown ino " << m->get_ino() << ", dropping" << dendl;
     m->put();
     return;
   }
