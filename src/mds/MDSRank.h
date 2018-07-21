@@ -29,7 +29,6 @@
 #include "MDSMap.h"
 #include "SessionMap.h"
 #include "MDCache.h"
-#include "Migrator.h"
 #include "MDLog.h"
 #include "PurgeQueue.h"
 #include "osdc/Journaler.h"
@@ -224,7 +223,7 @@ class MDSRank {
     void handle_conf_change(const ConfigProxy& conf,
                             const std::set <std::string> &changed)
     {
-      mdcache->migrator->handle_conf_change(conf, changed, *mdsmap);
+      mdcache->handle_conf_change(conf, changed, *mdsmap);
       purge_queue.handle_conf_change(conf, changed, *mdsmap);
     }
 
