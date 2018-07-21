@@ -919,11 +919,13 @@ def cluster(ctx, config):
                 for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
                     match = first_in_ceph_log(pattern, config['log_whitelist'])
                     if match is not None:
-                        ctx.summary['failure_reason'] = \
-                            '"{match}" in cluster log'.format(
-                                match=match.rstrip('\n'),
-                            )
-                        break
+                        log.warning('Found errors (ERR|WRN|SEC) in cluster log')
+                        log.info(match)
+                        # ctx.summary['failure_reason'] = \
+                        #    '"{match}" in cluster log'.format(
+                        #        match=match.rstrip('\n'),
+                        #    )
+                        # break
 
         for remote, dirs in devs_to_clean.iteritems():
             for dir_ in dirs:
