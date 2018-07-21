@@ -31,6 +31,9 @@ struct DummyAuthAuthorizer : public AuthAuthorizer {
   bool verify_reply(bufferlist::const_iterator&) override {
     return true;
   }
+  bool add_challenge(CephContext*, bufferlist&) override {
+    return true;
+  }
 };
 
 struct Server {
@@ -133,7 +136,8 @@ struct Server {
     bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                               bufferlist& authorizer,
                               bufferlist& authorizer_reply,
-                              bool& isvalid, CryptoKey& session_key) override {
+                              bool& isvalid, CryptoKey& session_key,
+                              std::unique_ptr<AuthAuthorizerChallenge>*) override {
       isvalid = true;
       return true;
     }
@@ -195,7 +199,8 @@ struct Client {
     bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                               bufferlist& authorizer,
                               bufferlist& authorizer_reply,
-                              bool& isvalid, CryptoKey& session_key) override {
+                              bool& isvalid, CryptoKey& session_key,
+                              std::unique_ptr<AuthAuthorizerChallenge>*) override {
       isvalid = true;
       return true;
     }
