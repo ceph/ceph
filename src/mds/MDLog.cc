@@ -111,7 +111,11 @@ class C_MDL_WriteError : public MDSIOContextBase {
   }
 
   public:
-  explicit C_MDL_WriteError(MDLog *m) : mdlog(m) {}
+  explicit C_MDL_WriteError(MDLog *m) :
+    MDSIOContextBase(false), mdlog(m) {}
+  void print(ostream& out) const override {
+    out << "mdlog_write_error";
+  }
 };
 
 

@@ -152,7 +152,8 @@ protected:
     return mdcache->mds;
   }
 public:
-  explicit MDCacheIOContext(MDCache *mdc_) : mdcache(mdc_) {}
+  explicit MDCacheIOContext(MDCache *mdc_, bool track=true) :
+    MDSIOContextBase(track), mdcache(mdc_) {}
 };
 
 class MDCacheLogContext : public virtual MDSLogContextBase {
@@ -6442,10 +6443,14 @@ struct C_IO_MDC_TruncateFinish : public MDCacheIOContext {
   CInode *in;
   LogSegment *ls;
   C_IO_MDC_TruncateFinish(MDCache *c, CInode *i, LogSegment *l) :
-    MDCacheIOContext(c), in(i), ls(l) {}
+    MDCacheIOContext(c, false), in(i), ls(l) {
+  }
   void finish(int r) override {
     assert(r == 0 || r == -ENOENT);
     mdcache->truncate_inode_finish(in, ls);
+  }
+  void print(ostream& out) const override {
+    out << "file_truncate(" << in->ino() << ")";
   }
 };
 
@@ -8515,6 +8520,9 @@ class C_IO_MDC_OpenInoBacktraceFetched : public MDCacheIOContext {
     MDCacheIOContext(c), ino(i) {}
   void finish(int r) override {
     mdcache->_open_ino_backtrace_fetched(ino, bl, r);
+  }
+  void print(ostream& out) const override {
+    out << "openino_backtrace_fetch" << ino << ")";
   }
 };
 
@@ -11439,6 +11447,9 @@ public:
   void finish(int r) override {
     assert(r == 0 || r == -ENOENT);
     mdcache->_fragment_finish(basedirfrag, resultfrags);
+  }
+  void print(ostream& out) const override {
+    out << "dirfrags_commit(" << basedirfrag << ")";
   }
 };
 

@@ -216,6 +216,9 @@ public:
   void finish(int r) {
     oft->_commit_finish(r, log_seq, fin);
   }
+  void print(ostream& out) const override {
+    out << "openfiles_save";
+  }
 };
 
 void OpenFileTable::_commit_finish(int r, uint64_t log_seq, MDSInternalContextBase *fin)
@@ -250,6 +253,9 @@ public:
   }
   void finish(int r) {
     oft->_journal_finish(r, log_seq, fin, ops_map);
+  }
+  void print(ostream& out) const override {
+    out << "openfiles_journal";
   }
 };
 
@@ -646,8 +652,11 @@ public:
 
   C_IO_OFT_Load(OpenFileTable *t, unsigned i, bool f) :
     oft(t), index(i), first(f) {}
-  void finish(int r) {
+  void finish(int r) override {
     oft->_load_finish(r, header_r, values_r, index, first, more, header_bl, values);
+  }
+  void print(ostream& out) const override {
+    out << "openfiles_load";
   }
 };
 
@@ -657,8 +666,11 @@ protected:
   MDSRank *get_mds() override { return oft->mds; }
 public:
   C_IO_OFT_Recover(OpenFileTable *t) : oft(t) {}
-  void finish(int r) {
+  void finish(int r) override {
     oft->_recover_finish(r);
+  }
+  void print(ostream& out) const override {
+    out << "openfiles_recover";
   }
 };
 
