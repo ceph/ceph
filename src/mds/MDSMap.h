@@ -36,29 +36,6 @@
 #include "common/Formatter.h"
 #include "mds/mdstypes.h"
 
-/*
-
- boot  --> standby, creating, or starting.
-
-
- dne  ---->   creating  ----->   active*
- ^ ^___________/                /  ^ ^
- |                             /  /  |
- destroying                   /  /   |
-   ^                         /  /    |
-   |                        /  /     |
- stopped <---- stopping* <-/  /      |
-      \                      /       |
-        ----- starting* ----/        |
-                                     |
- failed                              |
-    \                                |
-     \--> replay*  --> reconnect* --> rejoin*
-
-     * = can fail
-
-*/
-
 class CephContext;
 class health_check_map_t;
 
@@ -78,7 +55,11 @@ class health_check_map_t;
 class MDSMap {
 public:
   /* These states are the union of the set of possible states of an MDS daemon,
-   * and the set of possible states of an MDS rank */
+   * and the set of possible states of an MDS rank. See
+   * doc/cephfs/mds-states.rst for state descriptions,
+   * doc/cephfs/mds-state-diagram.svg for a visual state diagram, and
+   * doc/cephfs/mds-state-diagram.dot to update mds-state-diagram.svg.
+   */
   typedef enum {
     // States of an MDS daemon not currently holding a rank
     // ====================================================
