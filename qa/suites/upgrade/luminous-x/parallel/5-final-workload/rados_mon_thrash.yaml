@@ -5,6 +5,7 @@ overrides:
   ceph:
     log-whitelist:
       - reached quota
+      - \(REQUEST_SLOW\)
 tasks:
   - mon_thrash:
       revive_delay: 20
