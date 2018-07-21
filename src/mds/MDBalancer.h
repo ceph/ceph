@@ -26,6 +26,7 @@ using std::map;
 #include "common/Clock.h"
 #include "common/Cond.h"
 
+class MDSMap;
 class MDSRank;
 class Message;
 class MHeartbeat;
@@ -40,8 +41,11 @@ public:
   using time = ceph::coarse_mono_time;
   friend class C_Bal_SendHeartbeat;
 
-  MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc) : 
-    mds(m), messenger(msgr), mon_client(monc) { }
+  MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc);
+
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set <std::string> &changed,
+                          const MDSMap &mds_map);
 
   int proc_message(Message *m);
 
@@ -75,6 +79,9 @@ public:
   int dump_loads(Formatter *f);
 
 private:
+  bool bal_fragment_dirs;
+  int64_t bal_fragment_interval;
+
   typedef struct {
     std::map<mds_rank_t, double> targets;
     std::map<mds_rank_t, double> imported;

@@ -18,6 +18,7 @@
 #include "MDCache.h"
 #include "Locker.h"
 #include "MDBalancer.h"
+#include "Migrator.h"
 #include "CInode.h"
 #include "CDir.h"
 #include "CDentry.h"
