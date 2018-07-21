@@ -1083,6 +1083,10 @@ void MDSDaemon::respawn()
 {
   dout(1) << "respawn!" << dendl;
 
+  /* Dump recent in case the MDS was stuck doing something which caused it to
+   * be removed from the MDSMap leading to respawn. */
+  g_ceph_context->_log->dump_recent();
+
   char *new_argv[orig_argc+1];
   dout(1) << " e: '" << orig_argv[0] << "'" << dendl;
   for (int i=0; i<orig_argc; i++) {
