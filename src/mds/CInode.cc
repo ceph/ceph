@@ -1081,6 +1081,9 @@ struct C_IO_Inode_Stored : public CInodeIOContext {
   void finish(int r) override {
     in->_stored(r, version, fin);
   }
+  void print(ostream& out) const override {
+    out << "inode_store(" << in->ino() << ")";
+  }
 };
 
 object_t InodeStoreBase::get_object_name(inodeno_t ino, frag_t fg, const char *suffix)
@@ -1173,6 +1176,9 @@ struct C_IO_Inode_Fetched : public CInodeIOContext {
     // Ignore 'r', because we fetch from two places, so r is usually ENOENT
     in->_fetched(bl, bl2, fin);
   }
+  void print(ostream& out) const override {
+    out << "inode_fetch(" << in->ino() << ")";
+  }
 };
 
 void CInode::fetch(MDSInternalContextBase *fin)
@@ -1261,6 +1267,9 @@ struct C_IO_Inode_StoredBacktrace : public CInodeIOContext {
   C_IO_Inode_StoredBacktrace(CInode *i, version_t v, Context *f) : CInodeIOContext(i), version(v), fin(f) {}
   void finish(int r) override {
     in->_stored_backtrace(r, version, fin);
+  }
+  void print(ostream& out) const override {
+    out << "backtrace_store(" << in->ino() << ")";
   }
 };
 
