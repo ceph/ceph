@@ -3,8 +3,13 @@ import re
 DISTRO_CODENAME_MAP = {
     "ubuntu": {
         "18.04": "bionic",
+        "17.10": "artful",
+        "17.04": "zesty",
+        "16.10": "yakkety",
         "16.04": "xenial",
+        "15.10": "wily",
         "15.04": "vivid",
+        "14.10": "utopic",
         "14.04": "trusty",
         "13.10": "saucy",
         "12.04": "precise",
@@ -12,6 +17,7 @@ DISTRO_CODENAME_MAP = {
     "debian": {
         "7": "wheezy",
         "8": "jessie",
+        "9": "stretch",
     },
     "rhel": {
         "7": "maipo",
@@ -22,12 +28,20 @@ DISTRO_CODENAME_MAP = {
         "6": "core",
     },
     "fedora": {
+        "28": "28",
+        "27": "27",
+        "26": "26",
         "25": "25",
         "24": "24",
         "23": "23",
         "22": "22",
         "21": "21",
         "20": "heisenbug",
+    },
+    "opensuse": {
+        "15.0": "leap",
+        "42.2": "leap",
+        "42.3": "leap",
     },
 }
 
