@@ -352,13 +352,15 @@ void ObjectReadRequest<I>::copyup() {
 
     image_ctx->copyup_list[this->m_object_no] = new_req;
     image_ctx->copyup_list_lock.Unlock();
+    image_ctx->parent_lock.put_read();
+    image_ctx->snap_lock.put_read();
     new_req->send();
   } else {
     image_ctx->copyup_list_lock.Unlock();
+    image_ctx->parent_lock.put_read();
+    image_ctx->snap_lock.put_read();
   }
 
-  image_ctx->parent_lock.put_read();
-  image_ctx->snap_lock.put_read();
   image_ctx->owner_lock.put_read();
   this->finish(0);
 }
