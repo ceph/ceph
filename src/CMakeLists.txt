@@ -667,7 +667,6 @@ endif()
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/common/version.cc
-  ${CMAKE_SOURCE_DIR}/src/test/encoding/ceph_dencoder.cc
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 
 if(HAVE_ARMV8_CRC)
@@ -789,61 +788,6 @@ endif()
 
 add_subdirectory(pybind)
 add_subdirectory(ceph-volume)
-
-## dencoder
-if(HAS_VTA)
-  set_source_files_properties(test/encoding/ceph_dencoder.cc
-    PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
-endif()
-
-set(dencoder_srcs
-  test/encoding/ceph_dencoder.cc
-  $<TARGET_OBJECTS:common_texttable_obj>
-  )
-if(${WITH_RADOSGW})
-  list(APPEND dencoder_srcs
-    rgw/rgw_dencoder.cc
-  )
-  set(DENCODER_EXTRALIBS
-    rgw_a
-    cls_rgw_client
-  )
-endif(${WITH_RADOSGW})
-if(WITH_RBD)
-  set(DENCODER_EXTRALIBS
-    ${DENCODER_EXTRALIBS}
-    cls_rbd_client
-    rbd_mirror_types
-    rbd_types
-    rbd_replay_types)
-  if(WITH_KRBD)
-    set(DENCODER_EXTRALIBS
-      ${DENCODER_EXTRALIBS}
-      krbd)
-  endif()
-endif(WITH_RBD)
-
-add_executable(ceph-dencoder ${dencoder_srcs})
-target_link_libraries(ceph-dencoder
-  global
-  os
-  osd
-  mds
-  mon
-  journal
-  ${DENCODER_EXTRALIBS}
-  cls_lock_client
-  cls_refcount_client
-  cls_log_client
-  cls_statelog_client
-  cls_version_client
-  cls_user_client
-  cls_journal_client
-  cls_timeindex_client
-  ${EXTRALIBS}
-  ${CMAKE_DL_LIBS}
-  )
-install(TARGETS ceph-dencoder DESTINATION bin)
 
 # Monitor
 add_subdirectory(mon)
