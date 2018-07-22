@@ -180,7 +180,7 @@ int thick_write(const std::string &image_name,librados::IoCtx &io_ctx,
 
   // To prevent writesame from discarding data, thick_write sets
   // the rbd_discard_on_zeroed_write_same option to false.
-  assert(g_conf != nullptr);
+  assert(g_ceph_context != nullptr);
   r = g_conf().set_val("rbd_discard_on_zeroed_write_same", "false");
   assert(r == 0);
   r = utils::open_image(io_ctx, image_name, false, &image);
