@@ -19,10 +19,16 @@ set(components
 foreach(c ${components})
   find_library(DPDK_rte_${c}_LIBRARY rte_${c}
     HINTS $ENV{DPDK_DIR}/lib)
-endforeach()
-
-foreach(c ${components})
   list(APPEND check_LIBRARIES "${DPDK_rte_${c}_LIBRARY}")
+  if(DPDK_rte_${c}_LIBRARY)
+    add_library(dpdk::${c} UNKNOWN IMPORTED)
+    set_target_properties(dpdk::${c} PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${DPDK_INCLUDE_DIR}"
+      IMPORTED_LOCATION "${DPDK_rte_${c}_LIBRARY}")
+    target_compile_options(dpdk::${c} INTERFACE
+      "-march=native")
+    list(APPEND DPDK_LIBRARIES dpdk::${c})
+  endif()
 endforeach()
 
 mark_as_advanced(DPDK_INCLUDE_DIR ${check_LIBRARIES})
