@@ -29,7 +29,7 @@
 #include "common/shared_cache.hpp"
 #include "ReplicatedBackend.h"
 #include "PGTransaction.h"
-#include "cls/refcount/cls_refcount_ops.h"
+#include "cls/cas/cls_cas_ops.h"
 
 class CopyFromCallback;
 class PromoteCallback;
