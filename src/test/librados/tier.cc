@@ -14,7 +14,7 @@
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
 #include "json_spirit/json_spirit.h"
-#include "cls/refcount/cls_refcount_ops.h"
+#include "cls/cas/cls_cas_ops.h"
 
 #include "osd/HitSet.h"
 

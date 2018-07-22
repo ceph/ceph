@@ -1,66 +1,61 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_CLS_REFCOUNT_OPS_H
-#define CEPH_CLS_REFCOUNT_OPS_H
+#ifndef CEPH_CLS_CAS_OPS_H
+#define CEPH_CLS_CAS_OPS_H
 
 #include "include/types.h"
 #include "common/hobject.h"
 
-struct cls_refcount_get_op {
-  string tag;
-  bool implicit_ref;
+#define CHUNK_REFCOUNT_ATTR "chunk_refcount"
 
-  cls_refcount_get_op() : implicit_ref(false) {}
+struct cls_chunk_refcount_get_op {
+  hobject_t source;
+
+  cls_chunk_refcount_get_op() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(tag, bl);
-    encode(implicit_ref, bl);
+    encode(source, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(tag, bl);
-    decode(implicit_ref, bl);
+    decode(source, bl);
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(list<cls_refcount_get_op*>& ls);
+  static void generate_test_instances(list<cls_chunk_refcount_get_op*>& ls);
 };
-WRITE_CLASS_ENCODER(cls_refcount_get_op)
+WRITE_CLASS_ENCODER(cls_chunk_refcount_get_op)
 
-struct cls_refcount_put_op {
-  string tag;
-  bool implicit_ref; // assume wildcard reference for
-                          // objects without a set ref
+struct cls_chunk_refcount_put_op {
+  hobject_t source;
 
-  cls_refcount_put_op() : implicit_ref(false) {}
+  cls_chunk_refcount_put_op() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(tag, bl);
-    encode(implicit_ref, bl);
+    encode(source, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(tag, bl);
-    decode(implicit_ref, bl);
+    decode(source, bl);
     DECODE_FINISH(bl);
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(list<cls_refcount_put_op*>& ls);
+  static void generate_test_instances(list<cls_chunk_refcount_put_op*>& ls);
 };
-WRITE_CLASS_ENCODER(cls_refcount_put_op)
+WRITE_CLASS_ENCODER(cls_chunk_refcount_put_op)
 
-struct cls_refcount_set_op {
-  list<string> refs;
+struct cls_chunk_refcount_set_op {
+  set<hobject_t> refs;
 
-  cls_refcount_set_op() {}
+  cls_chunk_refcount_set_op() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -75,37 +70,14 @@ struct cls_refcount_set_op {
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(list<cls_refcount_set_op*>& ls);
+  static void generate_test_instances(list<cls_chunk_refcount_set_op*>& ls);
 };
-WRITE_CLASS_ENCODER(cls_refcount_set_op)
+WRITE_CLASS_ENCODER(cls_chunk_refcount_set_op)
 
-struct cls_refcount_read_op {
-  bool implicit_ref; // assume wildcard reference for
-                          // objects without a set ref
+struct cls_chunk_refcount_read_ret {
+  set<hobject_t> refs;
 
-  cls_refcount_read_op() : implicit_ref(false) {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(implicit_ref, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(implicit_ref, bl);
-    DECODE_FINISH(bl);
-  }
-
-  void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(list<cls_refcount_read_op*>& ls);
-};
-WRITE_CLASS_ENCODER(cls_refcount_read_op)
-
-struct cls_refcount_read_ret {
-  list<string> refs;
-
-  cls_refcount_read_ret() {}
+  cls_chunk_refcount_read_ret() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -120,9 +92,28 @@ struct cls_refcount_read_ret {
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(list<cls_refcount_read_ret*>& ls);
+  static void generate_test_instances(list<cls_chunk_refcount_read_ret*>& ls);
 };
-WRITE_CLASS_ENCODER(cls_refcount_read_ret)
+WRITE_CLASS_ENCODER(cls_chunk_refcount_read_ret)
+
+struct chunk_obj_refcount {
+  set<hobject_t> refs;
+
+  chunk_obj_refcount() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(refs, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(refs, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(chunk_obj_refcount)
 
 struct obj_refcount {
   map<string, bool> refs;

@@ -731,3 +731,29 @@ int cls_log(int level, const char *format, ...)
      size *= 2;
    }
 }
+
+int cls_cxx_chunk_write_and_set(cls_method_context_t hctx, int ofs, int len,
+                   bufferlist *write_inbl, uint32_t op_flags, bufferlist *set_inbl,
+		   int set_len)
+{
+  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
+  char cname[] = "refcount";
+  char method[] = "chunk_set";
+
+  vector<OSDOp> ops(2);
+  ops[0].op.op = CEPH_OSD_OP_WRITE;
+  ops[0].op.extent.offset = ofs;
+  ops[0].op.extent.length = len;
+  ops[0].op.flags = op_flags;
+  ops[0].indata = *write_inbl;
+
+  ops[1].op.op = CEPH_OSD_OP_CALL;
+  ops[1].op.cls.class_len = strlen(cname);
+  ops[1].op.cls.method_len = strlen(method);
+  ops[1].op.cls.indata_len = set_len;
+  ops[1].indata.append(cname, ops[1].op.cls.class_len);
+  ops[1].indata.append(method, ops[1].op.cls.method_len);
+  ops[1].indata.append(*set_inbl);
+
+  return (*pctx)->pg->do_osd_ops(*pctx, ops);
+}

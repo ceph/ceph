@@ -2609,11 +2609,42 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
     if (!chunk_data.length()) {
       return -ENODATA;
     }
-    tgt_length = chunk_data.length();
-    obj_op.add_data(CEPH_OSD_OP_WRITE, tgt_offset, tgt_length, chunk_data);
 
+    tgt_length = chunk_data.length();
+    pg_pool_t::fingerprint_t fp_t = pool.info.get_fingerprint_type();
+    if (iter->second.has_reference() &&
+	fp_t != pg_pool_t::TYPE_FINGERPRINT_NONE) {
+      switch (fp_t) {
+	case pg_pool_t::TYPE_FINGERPRINT_SHA1:
+	  {
+	    boost::optional<sha1_digest_info_t> fp_t = chunk_data.sha1();
+	    object_t fp_oid;
+	    bufferlist in;
+	    if (fp_t != boost::none) {
+	      fp_oid = fp_t.get().to_str();
+	    }
+	    tgt_soid.oid = fp_oid;
+	    iter->second.oid = tgt_soid;
+	    // add data op
+	    ceph_osd_op osd_op;
+	    osd_op.extent.offset = 0;
+	    osd_op.extent.length = chunk_data.length();
+	    encode(osd_op, in);
+	    encode(soid, in);
+	    in.append(chunk_data);
+	    obj_op.call("cas", "cas_write_or_get", in);
+	    break;
+	  }
+	default:
+	  assert(0 == "unrecognized fingerprint type");
+	  break;
+      }
+    } else {
+      obj_op.add_data(CEPH_OSD_OP_WRITE, tgt_offset, tgt_length, chunk_data);
+    }
     unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
 		     CEPH_OSD_FLAG_RWORDERED ;
+
     C_ManifestFlush *fin = new C_ManifestFlush(this, soid, get_last_peering_reset());
     fin->offset = iter->first;
     fin->last_offset = last_offset;
@@ -3450,12 +3481,12 @@ void PrimaryLogPG::refcount_manifest(ObjectContextRef obc, object_locator_t oloc
     cls_chunk_refcount_get_op call;
     call.source = obc->obs.oi.soid;
     ::encode(call, in);                             
-    obj_op.call("refcount", "chunk_get", in);         
+    obj_op.call("cas", "chunk_get", in);         
   } else {                    
     cls_chunk_refcount_put_op call;                
     call.source = obc->obs.oi.soid;
     ::encode(call, in);          
-    obj_op.call("refcount", "chunk_put", in);         
+    obj_op.call("cas", "chunk_put", in);         
   }                                                     
   
   unsigned n = info.pgid.hash_to_shard(osd->m_objecter_finishers);
