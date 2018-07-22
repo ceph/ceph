@@ -183,7 +183,7 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
 template <typename Protocol>
 DPDKServerSocketImpl<Protocol>::DPDKServerSocketImpl(
   Protocol& proto, uint16_t port, const SocketOptions &opt, int type)
-  : ServerSocketImpl<Protocol>(type), _listener(proto.listen(port)) {}
+  : ServerSocketImpl(type), _listener(proto.listen(port)) {}
 
 template <typename Protocol>
 int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s, const SocketOptions &options, entity_addr_t *out, Worker *w) {
