@@ -266,12 +266,14 @@ void usage()
   cout << "   --read-only               set zone as read-only (when adding to zonegroup)\n";
   cout << "   --redirect-zone           specify zone id to redirect when response is 404 (not found)\n";
   cout << "   --placement-id            placement id for zonegroup placement commands\n";
+  cout << "   --placement-type          placement type for zonegroup placement commands\n";
   cout << "   --tags=<list>             list of tags for zonegroup placement add and modify commands\n";
   cout << "   --tags-add=<list>         list of tags to add for zonegroup placement modify command\n";
   cout << "   --tags-rm=<list>          list of tags to remove for zonegroup placement modify command\n";
   cout << "   --endpoints=<list>        zone endpoints\n";
   cout << "   --index-pool=<pool>       placement target index pool\n";
   cout << "   --data-pool=<pool>        placement target data pool\n";
+  cout << "   --tail-data-pool=<pool>   placement target tail data pool\n";
   cout << "   --data-extra-pool=<pool>  placement target data extra (non-ec) pool\n";
   cout << "   --placement-index-type=<type>\n";
   cout << "                             placement target index type (normal, indexless, or #id)\n";
@@ -2702,6 +2704,7 @@ int main(int argc, const char **argv)
   string quota_scope;
   string object_version;
   string placement_id;
+  string placement_type;
   list<string> tags;
   list<string> tags_add;
   list<string> tags_rm;
@@ -2750,6 +2753,7 @@ int main(int argc, const char **argv)
 
   boost::optional<string> index_pool;
   boost::optional<string> data_pool;
+  boost::optional<string> tail_data_pool;
   boost::optional<string> data_extra_pool;
   RGWBucketIndexType placement_index_type = RGWBIType_Normal;
   bool index_type_specified = false;
@@ -3014,6 +3018,8 @@ int main(int argc, const char **argv)
       zonegroup_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-id", (char*)NULL)) {
       placement_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--placement-type", (char*)NULL)) {
+      placement_type = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tags", (char*)NULL)) {
       get_str_list(val, tags);
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-add", (char*)NULL)) {
@@ -3048,6 +3054,8 @@ int main(int argc, const char **argv)
       index_pool = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--data-pool", (char*)NULL)) {
       data_pool = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--tail-data-pool", (char*)NULL)) {
+      tail_data_pool = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--data-extra-pool", (char*)NULL)) {
       data_extra_pool = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-index-type", (char*)NULL)) {
@@ -4185,8 +4193,13 @@ int main(int argc, const char **argv)
 	}
 
         if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_ADD) {
+          if (placement_type.empty()) {
+            cerr << "ERROR: --placement-type not specified" << std::endl;
+            return EINVAL;
+          }
           RGWZoneGroupPlacementTarget target;
           target.name = placement_id;
+          target.type = placement_type;
           for (auto& t : tags) {
             target.tags.insert(t);
           }
@@ -4200,6 +4213,8 @@ int main(int argc, const char **argv)
             }
           }
           target.name = placement_id;
+          if (!placement_type.empty())
+            target.type = placement_type;
           for (auto& t : tags_rm) {
             target.tags.erase(t);
           }
@@ -4657,6 +4672,11 @@ int main(int argc, const char **argv)
 
           info.index_pool = *index_pool;
           info.data_pool = *data_pool;
+          if (tail_data_pool) {
+            info.tail_data_pool = *tail_data_pool;
+          } else {
+            info.tail_data_pool = *data_pool;
+          }
           if (data_extra_pool) {
             info.data_extra_pool = *data_extra_pool;
           }
@@ -4686,6 +4706,9 @@ int main(int argc, const char **argv)
           }
           if (data_pool && !data_pool->empty()) {
             info.data_pool = *data_pool;
+          }
+          if (tail_data_pool && !tail_data_pool->empty()) {
+            info.tail_data_pool = *tail_data_pool;
           }
           if (data_extra_pool) {
             info.data_extra_pool = *data_extra_pool;

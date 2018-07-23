@@ -2352,10 +2352,11 @@ public:
                                        bool *is_multipart) override {
     struct req_state* s = get_state();
     uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
+    const std::string& pid = s->placement_id.empty() ? s->bucket_info.placement_rule : s->placement_id;
     RGWPutObjProcessor_Atomic *processor =
       new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket,
 				    s->object.name, part_size, s->req_id,
-				    s->bucket_info.versioning_enabled());
+				    s->bucket_info.versioning_enabled(), pid);
     processor->set_olh_epoch(olh_epoch);
     processor->set_version_id(version_id);
     return processor;

@@ -107,6 +107,7 @@ using ceph::crypto::MD5;
 /* IAM Policy */
 #define RGW_ATTR_IAM_POLICY	RGW_ATTR_PREFIX "iam-policy"
 
+#define RGW_ATTR_PLACEMENT_TYPE    RGW_ATTR_PREFIX "placement-type"
 
 /* RGW File Attributes */
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
@@ -217,6 +218,7 @@ using ceph::crypto::MD5;
 #define ERR_MALFORMED_ACL_ERROR  2212
 #define ERR_ZONEGROUP_DEFAULT_PLACEMENT_MISCONFIGURATION 2213
 #define ERR_INVALID_ENCRYPTION_ALGORITHM                 2214
+#define ERR_INVALID_STORAGE_CLASS 2215
 
 #define ERR_BUSY_RESHARDING      2300
 
@@ -1823,6 +1825,7 @@ struct req_state : DoutPrefixProvider {
   bool has_bad_meta{false};
 
   RGWUserInfo *user;
+  std::string placement_id;
 
   struct {
     /* TODO(rzarzynski): switch out to the static_ptr for both members. */

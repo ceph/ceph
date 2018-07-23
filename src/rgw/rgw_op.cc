@@ -3207,11 +3207,35 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
   rgw_obj target_obj;
   target_obj.init(bucket, oid);
 
+  map<string, bufferlist> xattrs;
+  map<string, bufferlist>::iterator iter;
+  rgw_obj obj;
+  obj.init_ns(s->bucket, mp.get_meta(), mp_ns);
+  obj.set_in_extra_data(true);
+  int res = get_obj_attrs(store, s, obj, xattrs);
+  if (res == 0) {
+    map<string, bufferlist>::iterator placement_type_iter = xattrs.find(RGW_ATTR_PLACEMENT_TYPE);
+    if (placement_type_iter != xattrs.end()) {
+      bufferlist &bl = placement_type_iter->second;
+      placement_type = bl.to_str();
+      if (!placement_type.empty()) {
+        const auto &zonegroup = store->get_zonegroup();
+        for (const auto &target : zonegroup.placement_targets) {
+          if (strcmp(target.second.type.c_str(), bl.to_str().c_str()) == 0) {
+            placement_id = target.second.name;
+            s->placement_id = placement_id;
+            break;
+          }
+        }
+      }
+    }
+  }
+
   manifest.set_prefix(upload_prefix);
 
   manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, num);
 
-  int r = manifest_gen.create_begin(store->ctx(), &manifest, s->bucket_info.placement_rule, bucket, target_obj);
+  int r = manifest_gen.create_begin(store->ctx(), &manifest, placement_id, bucket, target_obj);
   if (r < 0) {
     return r;
   }
@@ -3234,11 +3258,19 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
                                               map<string, bufferlist>& attrs,
                                               real_time delete_at,
                                               const char *if_match,
-                                              const char *if_nomatch, const string *user_data, rgw_zone_set *zones_trace)
+                                              const char *if_nomatch, const string *user_data, const std::string *placement_type, rgw_zone_set *zones_trace)
 {
   complete_writing_data();
+  RGWBucketInfo op_target_bucket_info = s->bucket_info;
+  const auto& zonegroup = store->get_zonegroup();
+  for (const auto& target : zonegroup.placement_targets) {
+    if (strcmp(target.second.type.c_str(), placement_type->c_str()) == 0) {
+      op_target_bucket_info.placement_rule = target.second.name;
+      break;
+    }
+  }
 
-  RGWRados::Object op_target(store, s->bucket_info, obj_ctx, head_obj);
+  RGWRados::Object op_target(store, op_target_bucket_info, obj_ctx, head_obj);
   op_target.set_versioning_disabled(true);
   RGWRados::Object::Write head_obj_op(&op_target);
 
@@ -3246,6 +3278,7 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
   head_obj_op.meta.mtime = mtime;
   head_obj_op.meta.owner = s->owner.get_id();
   head_obj_op.meta.delete_at = delete_at;
+  head_obj_op.meta.placement_type = placement_type;
   head_obj_op.meta.zones_trace = zones_trace;
   head_obj_op.meta.modify_tail = true;
 
@@ -3295,7 +3328,7 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
 
   rgw_raw_obj raw_meta_obj;
 
-  store->obj_to_raw(s->bucket_info.placement_rule, meta_obj, &raw_meta_obj);
+  store->obj_to_raw(op_target_bucket_info.placement_rule , meta_obj, &raw_meta_obj);
   const bool must_exist = true;// detect races with abort
   r = store->omap_set(raw_meta_obj, p, bl, must_exist);
   return r;
@@ -3305,20 +3338,16 @@ RGWPutObjProcessor *RGWPutObj::select_processor(RGWObjectCtx& obj_ctx, bool *is_
 {
   RGWPutObjProcessor *processor;
 
-  bool multipart = s->info.args.exists("uploadId");
-
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
 
-  if (!multipart) {
-    processor = new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
+  const std::string& pid = s->placement_id.empty() ? s->bucket_info.placement_rule : s->placement_id;
+
+  if (!(*is_multipart)) {
+    processor = new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled(), pid);
     (static_cast<RGWPutObjProcessor_Atomic *>(processor))->set_olh_epoch(olh_epoch);
     (static_cast<RGWPutObjProcessor_Atomic *>(processor))->set_version_id(version_id);
   } else {
-    processor = new RGWPutObjProcessor_Multipart(obj_ctx, s->bucket_info, part_size, s);
-  }
-
-  if (is_multipart) {
-    *is_multipart = multipart;
+    processor = new RGWPutObjProcessor_Multipart(obj_ctx, s->bucket_info, part_size, s, pid);
   }
 
   return processor;
@@ -3462,7 +3491,7 @@ void RGWPutObj::execute()
   MD5 hash;
   bufferlist bl, aclbl, bs;
   int len;
-  bool multipart;
+  bool multipart = s->info.args.exists("uploadId");
   
   off_t fst;
   off_t lst;
@@ -3525,6 +3554,13 @@ void RGWPutObj::execute()
   if (supplied_etag) {
     strncpy(supplied_md5, supplied_etag, sizeof(supplied_md5) - 1);
     supplied_md5[sizeof(supplied_md5) - 1] = '\0';
+  }
+
+  /* Store the placement type */
+  if (!placement_type.empty()) {
+    bufferlist tmp;
+    encode(placement_type, tmp);
+    emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
   }
 
   processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
@@ -3793,9 +3829,23 @@ void RGWPutObj::execute()
   }
 
   tracepoint(rgw_op, processor_complete_enter, s->req_id.c_str());
-  op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
-                               (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
-                               (user_data.empty() ? nullptr : &user_data));
+  if (! multipart) {
+    op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
+                                 (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
+                                 (user_data.empty() ? nullptr : &user_data),
+                                 (placement_type.empty() ? nullptr : &placement_type));
+  } else {
+    if (!processor->get_placement_type().empty()) {
+      bufferlist tmp;
+      encode(processor->get_placement_type(), tmp);
+      emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
+    }
+    op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
+                                 (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
+                                 (user_data.empty() ? nullptr : &user_data),
+                                 (processor->get_placement_type().empty() ? nullptr : &(processor->get_placement_type())));
+  }
+
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
 
   // only atomic upload will upate version_id here
@@ -3902,6 +3952,7 @@ void RGWPostObj::execute()
       buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
       ldpp_dout(this, 15) << "supplied_md5=" << supplied_md5 << dendl;
     }
+    const std::string& pid = s->placement_id.empty() ? s->bucket_info.placement_rule : s->placement_id;
 
     RGWPutObjProcessor_Atomic processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
                                         s->bucket_info,
@@ -3910,7 +3961,7 @@ void RGWPostObj::execute()
                                         /* part size */
                                         s->cct->_conf->rgw_obj_stripe_size,
                                         s->req_id,
-                                        s->bucket_info.versioning_enabled());
+                                        s->bucket_info.versioning_enabled(), pid);
     /* No filters by default. */
     filter = &processor;
 
@@ -4001,6 +4052,12 @@ void RGWPostObj::execute()
 
     bl.append(etag.c_str(), etag.size());
     emplace_attr(RGW_ATTR_ETAG, std::move(bl));
+
+    if (!placement_type.empty()) {
+      bufferlist tmp;
+      encode(placement_type, tmp);
+      emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
+    }
 
     policy.encode(aclbl);
     emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
@@ -4739,6 +4796,19 @@ void RGWCopyObj::execute()
     return;
   }
 
+  if(!s->placement_id.empty()) {
+    attrs_mod = RGWRados::ATTRSMOD_MERGE;
+  }
+
+  /* Store the placement type */
+  if (!placement_type.empty()) {
+    attrs.erase(RGW_ATTR_PLACEMENT_TYPE);
+    bufferlist tmp;
+    tmp.append(placement_type.c_str());
+    tmp.append('\0');
+    emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
+  }
+
   op_ret = store->copy_obj(obj_ctx,
 			   s->user->user_id,
 			   client_id,
@@ -5407,6 +5477,12 @@ void RGWInitMultipart::execute()
     return;
   }
 
+  if (!placement_type.empty()) {
+    bufferlist tmp;
+    tmp.append(placement_type);
+    attrs[RGW_ATTR_PLACEMENT_TYPE] = tmp;
+  }
+
   do {
     char buf[33];
     gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
@@ -5751,6 +5827,13 @@ void RGWCompleteMultipart::execute()
   obj_op.meta.owner = s->owner.get_id();
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.modify_tail = true;
+  map<string, bufferlist>::iterator placement_type_iter = attrs.find(RGW_ATTR_PLACEMENT_TYPE);
+  std::string placement_type;
+  if (placement_type_iter != attrs.end()) {
+    bufferlist& bl = placement_type_iter->second;
+    placement_type = bl.to_str();
+    obj_op.meta.placement_type = &placement_type;
+  }
   obj_op.meta.completeMultipart = true;
   obj_op.meta.olh_epoch = olh_epoch;
   op_ret = obj_op.write_meta(ofs, accounted_size, attrs);
@@ -5874,6 +5957,11 @@ void RGWListMultipart::execute()
   if (op_ret < 0)
     return;
 
+  map<string, bufferlist>::iterator placement_type_iter = xattrs.find(RGW_ATTR_PLACEMENT_TYPE);
+  if (placement_type_iter != xattrs.end()) {
+    bufferlist &bl = placement_type_iter->second;
+    placement_type = bl.to_str();
+  }
   op_ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts,
 				marker, parts, NULL, &truncated);
 }
@@ -6591,6 +6679,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   if (op_ret < 0) {
     return op_ret;
   }
+  const std::string& pid = s->placement_id.empty() ? s->bucket_info.placement_rule : s->placement_id;
 
   RGWPutObjProcessor_Atomic processor(obj_ctx,
                                       binfo,
@@ -6599,7 +6688,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
                                       /* part size */
                                       s->cct->_conf->rgw_obj_stripe_size,
                                       s->req_id,
-                                      binfo.versioning_enabled());
+                                      binfo.versioning_enabled(), pid);
 
   /* No filters by default. */
   filter = &processor;

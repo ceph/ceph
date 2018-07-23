@@ -954,6 +954,7 @@ void RGWZonePlacementInfo::dump(Formatter *f) const
 {
   encode_json("index_pool", index_pool, f);
   encode_json("data_pool", data_pool, f);
+  encode_json("tail_data_pool", tail_data_pool, f);
   encode_json("data_extra_pool", data_extra_pool, f);
   encode_json("index_type", (uint32_t)index_type, f);
   encode_json("compression", compression_type, f);
@@ -963,6 +964,7 @@ void RGWZonePlacementInfo::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("index_pool", index_pool, obj);
   JSONDecoder::decode_json("data_pool", data_pool, obj);
+  JSONDecoder::decode_json("tail_data_pool", tail_data_pool, obj);
   JSONDecoder::decode_json("data_extra_pool", data_extra_pool, obj);
   uint32_t it;
   JSONDecoder::decode_json("index_type", it, obj);
@@ -1031,12 +1033,14 @@ void RGWZoneGroupPlacementTarget::dump(Formatter *f) const
 {
   encode_json("name", name, f);
   encode_json("tags", tags, f);
+  encode_json("type", type, f);
 }
 
 void RGWZoneGroupPlacementTarget::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("tags", tags, obj);
+  JSONDecoder::decode_json("type", type, obj);
 }
 
 void RGWZoneGroup::dump(Formatter *f) const

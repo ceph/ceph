@@ -95,6 +95,7 @@ static string *notify_oids = NULL;
 static string shadow_ns = "shadow";
 static string dir_oid_prefix = ".dir.";
 static string default_storage_pool_suffix = "rgw.buckets.data";
+static std::string default_tail_storage_pool_suffix = "rgw.buckets.tail";
 static string default_bucket_index_pool_suffix = "rgw.buckets.index";
 static string default_storage_extra_pool_suffix = "rgw.buckets.non-ec";
 static string avail_pools = ".pools.avail";
@@ -130,16 +131,19 @@ static string RGW_DEFAULT_PERIOD_ROOT_POOL = "rgw.root";
 
 
 static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
-                                  const string& placement_id, const rgw_obj& obj, rgw_pool *pool)
+                                  const string& placement_id, const rgw_obj& obj, rgw_pool *pool, bool using_tail_data_pool = false)
 {
-  if (!zone_params.get_head_data_pool(placement_id, obj, pool)) {
+  if (!zone_params.get_head_data_pool(placement_id, obj, pool, using_tail_data_pool)) {
     RGWZonePlacementInfo placement;
     if (!zone_params.get_placement(zonegroup.default_placement, &placement)) {
       return false;
     }
 
     if (!obj.in_extra_data) {
-      *pool = placement.data_pool;
+      if (using_tail_data_pool)
+        *pool = placement.tail_data_pool;
+      else
+        *pool = placement.data_pool;
     } else {
       *pool = placement.get_data_extra_pool();
     }
@@ -170,7 +174,7 @@ rgw_raw_obj rgw_obj_select::get_raw_obj(RGWRados *store) const
 {
   if (!is_raw) {
     rgw_raw_obj r;
-    store->obj_to_raw(placement_rule, obj, &r);
+    store->obj_to_raw(placement_rule, obj, &r, using_tail_data_pool);
     return r;
   }
   return raw_obj;
@@ -271,6 +275,7 @@ int RGWZoneGroup::create_default(bool old_format)
 
   RGWZoneGroupPlacementTarget placement_target;
   placement_target.name = "default-placement";
+  placement_target.type = "STANDARD";
   placement_targets[placement_target.name] = placement_target;
   default_placement = "default-placement";
 
@@ -1712,6 +1717,7 @@ int get_zones_pool_set(CephContext* cct,
       for(auto& iter : zone.placement_pools) {
 	pool_names.insert(iter.second.index_pool);
 	pool_names.insert(iter.second.data_pool);
+	pool_names.insert(iter.second.tail_data_pool);
 	pool_names.insert(iter.second.data_extra_pool);
       }
     }
@@ -1805,6 +1811,7 @@ int RGWZoneParams::create(bool exclusive)
     RGWZonePlacementInfo default_placement;
     default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
     default_placement.data_pool =  name + "." + default_storage_pool_suffix;
+    default_placement.tail_data_pool = name + "." + default_tail_storage_pool_suffix;
     default_placement.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
     placement_pools["default-placement"] = default_placement;
   }
@@ -2473,9 +2480,10 @@ int RGWPutObjProcessor::complete(size_t accounted_size, const string& etag,
                                  real_time *mtime, real_time set_mtime,
                                  map<string, bufferlist>& attrs, real_time delete_at,
                                  const char *if_match, const char *if_nomatch, const string *user_data,
+                                 const string *placement_type,
                                  rgw_zone_set *zones_trace)
 {
-  int r = do_complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at, if_match, if_nomatch, user_data, zones_trace);
+  int r = do_complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at, if_match, if_nomatch, user_data, placement_type, zones_trace);
   if (r < 0)
     return r;
 
@@ -2736,7 +2744,7 @@ int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, string *oid_rand)
 
   manifest.set_trivial_rule(max_chunk_size, store->ctx()->_conf->rgw_obj_stripe_size);
 
-  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket_info.placement_rule, head_obj.bucket, head_obj);
+  r = manifest_gen.create_begin(store->ctx(), &manifest, placement_id, head_obj.bucket, head_obj);
   if (r < 0) {
     return r;
   }
@@ -2826,6 +2834,7 @@ int RGWPutObjProcessor_Atomic::do_complete(size_t accounted_size, const string& 
                                            real_time delete_at,
                                            const char *if_match,
                                            const char *if_nomatch, const string *user_data,
+                                           const string *placement_type,
                                            rgw_zone_set *zones_trace) {
   int r = complete_writing_data();
   if (r < 0)
@@ -2852,6 +2861,7 @@ int RGWPutObjProcessor_Atomic::do_complete(size_t accounted_size, const string& 
   obj_op.meta.olh_epoch = olh_epoch;
   obj_op.meta.delete_at = delete_at;
   obj_op.meta.user_data = user_data;
+  obj_op.meta.placement_type = placement_type;
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
 
@@ -6343,16 +6353,16 @@ read_omap:
   return 0;
 }
 
-bool RGWRados::get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool)
+bool RGWRados::get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool, bool using_tail_data_pool)
 {
-  return rgw_get_obj_data_pool(zonegroup, zone_params, placement_rule, obj, pool);
+  return rgw_get_obj_data_pool(zonegroup, zone_params, placement_rule, obj, pool, using_tail_data_pool);
 }
 
-bool RGWRados::obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj)
+bool RGWRados::obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj, bool using_tail_data_pool)
 {
   get_obj_bucket_and_oid_loc(obj, raw_obj->oid, raw_obj->loc);
 
-  return get_obj_data_pool(placement_rule, obj, &raw_obj->pool);
+  return get_obj_data_pool(placement_rule, obj, &raw_obj->pool, using_tail_data_pool);
 }
 
 int RGWRados::update_placement_map()
@@ -6521,14 +6531,39 @@ int RGWRados::get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj
   return 0;
 }
 
+int RGWRados::get_obj_tail_ioctx(const std::string& placement_rule, const rgw_obj& obj, librados::IoCtx *ioctx) {
+  string oid, key;
+  get_obj_bucket_and_oid_loc(obj, oid, key);
+  rgw_pool pool;
+  if (!get_obj_data_pool(placement_rule, obj, &pool, true)) {
+    ldout(cct, 0) << "ERROR: cannot get data pool for obj=" << obj << ", probably misconfiguration" << dendl;
+    return -EIO;
+  }
+  int r = open_pool_ctx(pool, *ioctx);
+  if (r < 0) {
+    return r;
+  }
+
+  ioctx->locator_set_key(key);
+
+  return 0;
+}
 int RGWRados::get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref)
 {
   get_obj_bucket_and_oid_loc(obj, ref->oid, ref->key);
 
   rgw_pool pool;
-  if (!get_obj_data_pool(bucket_info.placement_rule, obj, &pool)) {
-    ldout(cct, 0) << "ERROR: cannot get data pool for obj=" << obj << ", probably misconfiguration" << dendl;
-    return -EIO;
+
+  if (obj.key.ns.compare("multipart") == 0 && !obj.in_extra_data) {
+    if (!get_obj_data_pool(bucket_info.placement_rule, obj, &pool, true)) {
+      ldout(cct, 0) << "ERROR: cannot get data pool for obj=" << obj << ", probably misconfiguration" << dendl;
+      return -EIO;
+    }
+  } else {
+    if (!get_obj_data_pool(bucket_info.placement_rule, obj, &pool)) {
+      ldout(cct, 0) << "ERROR: cannot get data pool for obj=" << obj << ", probably misconfiguration" << dendl;
+      return -EIO;
+    }
   }
 
   int r = open_pool_ctx(pool, ref->ioctx);
@@ -7276,7 +7311,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   tracepoint(rgw_rados, complete_enter, req_id.c_str());
   r = index_op->complete(poolid, epoch, size, accounted_size,
                         meta.set_mtime, etag, content_type, &acl_bl,
-                        meta.category, meta.remove_objs, meta.user_data);
+                        meta.category, meta.remove_objs, meta.user_data, meta.placement_type);
   tracepoint(rgw_rados, complete_exit, req_id.c_str());
   if (r < 0)
     goto done_cancel;
@@ -7723,7 +7758,7 @@ public:
 
   int complete(const string& etag, real_time *mtime, real_time set_mtime,
                map<string, bufferlist>& attrs, real_time delete_at, rgw_zone_set *zones_trace) {
-    return processor->complete(data_len, etag, mtime, set_mtime, attrs, delete_at, NULL, NULL, NULL, zones_trace);
+    return processor->complete(data_len, etag, mtime, set_mtime, attrs, delete_at, NULL, NULL, NULL, NULL, zones_trace);
   }
 
   bool is_canceled() {
@@ -8040,7 +8075,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   RGWPutObjProcessor_Atomic processor(obj_ctx,
                                       dest_bucket_info, dest_obj.bucket, dest_obj.key.name,
-                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
+                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled(), dest_bucket_info.placement_rule);
   if (version_id && *version_id != "null") {
     processor.set_version_id(*version_id);
   }
@@ -8448,8 +8483,19 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     return -EIO;
   }
 
+  assert(src_pool == dest_pool);
+  rgw_pool src_tail_pool;
+  rgw_pool dest_tail_pool;
+  if (!get_obj_data_pool(astate->manifest.get_tail_placement().placement_rule, src_obj, &src_tail_pool, true)) {
+    ldout(cct, 0) << "ERROR: failed to locate tail data pool for " << src_obj << dendl;
+    return -EIO;
+  }
+  if (!get_obj_data_pool(obj_ctx.s->placement_id, dest_obj, &dest_tail_pool, true)) {
+    ldout(cct, 0) << "ERROR: failed to locate tail data pool for " << dest_obj << dendl;
+    return -EIO;
+  }
 
-  bool copy_data = !astate->has_manifest || (src_pool != dest_pool);
+  bool copy_data = !astate->has_manifest || (src_tail_pool != dest_tail_pool);
   bool copy_first = false;
   if (astate->has_manifest) {
     if (!astate->manifest.has_tail()) {
@@ -8475,6 +8521,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
+    attrs.erase(RGW_ATTR_ID_TAG);
+    attrs.erase(RGW_ATTR_TAIL_TAG);
     return copy_obj_data(obj_ctx, dest_bucket_info, read_op, obj_size - 1, dest_obj,
                          mtime, real_time(), attrs, olh_epoch, delete_at,
                          version_id, petag);
@@ -8614,7 +8662,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   RGWPutObjProcessor_Atomic processor(obj_ctx,
                                       dest_bucket_info, dest_obj.bucket, dest_obj.key.name,
-                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
+                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled(), obj_ctx.s->placement_id);
   if (version_id) {
     processor.set_version_id(*version_id);
   }
@@ -8673,6 +8721,12 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     }
     // pass original size if compressed
     accounted_size = compressed ? cs_info.orig_size : ofs;
+  }
+  iter = attrs.find(RGW_ATTR_PLACEMENT_TYPE);
+  if (iter != attrs.end()) {
+    bufferlist &bl = iter->second;
+    std::string placement_type = bl.to_str();
+    return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at, NULL, NULL, NULL, &placement_type, NULL);
   }
 
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at);
@@ -10202,6 +10256,10 @@ int RGWRados::Object::Read::prepare()
   if (r < 0) {
     return r;
   }
+  r = store->get_obj_tail_ioctx(astate->manifest.get_tail_placement().placement_rule, state.obj, &state.tail_io_ctx);
+  if (r < 0) {
+    return r;
+  }
   if (params.attrs) {
     *params.attrs = astate->attrset;
     if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
@@ -10416,7 +10474,7 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
                                             const string& content_type,
                                             bufferlist *acl_bl,
                                             RGWObjCategory category,
-                                            list<rgw_obj_index_key> *remove_objs, const string *user_data)
+                                            list<rgw_obj_index_key> *remove_objs, const string *user_data, const std::string *placement_type)
 {
   if (blind) {
     return 0;
@@ -10438,6 +10496,9 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
   ent.meta.etag = etag;
   if (user_data)
     ent.meta.user_data = *user_data;
+
+  if (placement_type)
+    ent.meta.placement_type = *placement_type;
 
   ACLOwner owner;
   if (acl_bl && acl_bl->length()) {
@@ -10600,7 +10661,10 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
   ldout(cct, 20) << "rados->read obj-ofs=" << ofs << " read_ofs=" << read_ofs << " read_len=" << read_len << dendl;
   op.read(read_ofs, read_len, pbl, NULL);
 
-  r = state.io_ctx.operate(read_obj.oid, &op, NULL);
+  if(reading_from_head)
+    r = state.io_ctx.operate(read_obj.oid, &op, NULL);
+  else
+    r = state.tail_io_ctx.operate(read_obj.oid, &op, NULL);
   ldout(cct, 20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
 
   if (r < 0) {
@@ -10720,6 +10784,7 @@ struct get_obj_data : public RefCountedObject {
   RGWRados *rados;
   RGWObjectCtx *ctx;
   IoCtx io_ctx;
+  IoCtx tail_io_ctx;
   map<off_t, get_obj_io> io_map;
   map<off_t, librados::AioCompletion *> completion_map;
   uint64_t total_read;
@@ -11027,8 +11092,12 @@ int RGWRados::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
 
   ldout(cct, 20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
   op.read(read_ofs, len, pbl, NULL);
+  librados::IoCtx io_ctx;
+  if (is_head_obj)
+    io_ctx = d->io_ctx;
+  else
+    io_ctx = d->tail_io_ctx;
 
-  librados::IoCtx io_ctx(d->io_ctx);
   io_ctx.locator_set_key(read_obj.loc);
 
   r = io_ctx.aio_operate(read_obj.oid, c, &op, NULL);
@@ -11059,11 +11128,20 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb)
 
   struct get_obj_data *data = new get_obj_data(cct);
   bool done = false;
+  rgw_pool tail_pool;
 
   RGWObjectCtx& obj_ctx = source->get_ctx();
+  RGWObjState *astate = NULL;
+  store->get_obj_state(&obj_ctx, source->get_bucket_info(), state.obj, &astate, false);
 
   data->rados = store;
   data->io_ctx.dup(state.io_ctx);
+  if (astate && astate->has_manifest)
+    store->get_obj_data_pool(astate->manifest.get_tail_placement().placement_rule, state.obj, &tail_pool, true);
+  else
+    store->get_obj_data_pool(source->get_bucket_info().placement_rule, state.obj, &tail_pool, true);
+
+  store->open_pool_ctx(tail_pool, data->tail_io_ctx);
   data->client_cb = cb;
 
   int r = store->iterate_obj(obj_ctx, source->get_bucket_info(), state.obj, ofs, end, cct->_conf->rgw_get_obj_max_req_size, _get_obj_iterate_cb, (void *)data);
@@ -11131,6 +11209,9 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
       off_t next_stripe_ofs = stripe_ofs + iter.get_stripe_size();
 
       while (ofs < next_stripe_ofs && ofs <= end) {
+        if (astate->manifest.using_tail_data_pool &&
+           (iter.get_ofs() > astate->manifest.get_head_size()))
+          iter.set_using_tail_data_pool(true);
         read_obj = iter.get_location().get_raw_obj(this);
         uint64_t read_len = std::min(len, iter.get_stripe_size() - (ofs - stripe_ofs));
         read_ofs = iter.location_ofs() + (ofs - stripe_ofs);

@@ -146,6 +146,7 @@ class rgw_obj_select {
   bool is_raw;
 
 public:
+  bool using_tail_data_pool;
   rgw_obj_select() : is_raw(false) {}
   explicit rgw_obj_select(const rgw_obj& _obj) : obj(_obj), is_raw(false) {}
   explicit rgw_obj_select(const rgw_raw_obj& _raw_obj) : raw_obj(_raw_obj), is_raw(true) {}
@@ -424,13 +425,14 @@ protected:
     end_iter.seek(obj_size);
   }
 public:
-
-  RGWObjManifest() : explicit_objs(false), obj_size(0), head_size(0), max_head_size(0),
+  bool using_tail_data_pool;
+  RGWObjManifest() : explicit_objs(false), obj_size(0), head_size(0), max_head_size(0), using_tail_data_pool(false),
                      begin_iter(this), end_iter(this) {}
   RGWObjManifest(const RGWObjManifest& rhs) {
     *this = rhs;
   }
   RGWObjManifest& operator=(const RGWObjManifest& rhs) {
+    using_tail_data_pool = rhs.using_tail_data_pool;
     explicit_objs = rhs.explicit_objs;
     objs = rhs.objs;
     obj_size = rhs.obj_size;
@@ -478,7 +480,7 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 6, bl);
+    ENCODE_START(8, 6, bl);
     encode(obj_size, bl);
     encode(objs, bl);
     encode(explicit_objs, bl);
@@ -499,11 +501,12 @@ public:
     }
     encode(head_placement_rule, bl);
     encode(tail_placement.placement_rule, bl);
+    encode(using_tail_data_pool, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(7, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(8, 2, 2, bl);
     decode(obj_size, bl);
     decode(objs, bl);
     if (struct_v >= 3) {
@@ -569,6 +572,9 @@ public:
     if (struct_v >= 7) {
       decode(head_placement_rule, bl);
       decode(tail_placement.placement_rule, bl);
+    }
+    if (struct_v >= 8) {
+      decode(using_tail_data_pool, bl);
     }
 
     update_iterators();
@@ -775,6 +781,9 @@ public:
     }
 
     void update_location();
+    void set_using_tail_data_pool(bool using_tail_data_pool) {
+      location.using_tail_data_pool = using_tail_data_pool;
+    };
 
     friend class RGWObjManifest;
     void dump(Formatter *f) const;
@@ -1111,21 +1120,23 @@ struct RGWZonePlacementInfo {
   rgw_pool data_extra_pool; /* if not set we should use data_pool */
   RGWBucketIndexType index_type;
   std::string compression_type;
+  rgw_pool tail_data_pool;
 
   RGWZonePlacementInfo() : index_type(RGWBIType_Normal) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 1, bl);
+    ENCODE_START(7, 1, bl);
     encode(index_pool.to_str(), bl);
     encode(data_pool.to_str(), bl);
     encode(data_extra_pool.to_str(), bl);
     encode((uint32_t)index_type, bl);
     encode(compression_type, bl);
+    encode(tail_data_pool.to_str(), bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(6, bl);
+    DECODE_START(7, bl);
     string index_pool_str;
     string data_pool_str;
     decode(index_pool_str, bl);
@@ -1144,6 +1155,11 @@ struct RGWZonePlacementInfo {
     }
     if (struct_v >= 6) {
       decode(compression_type, bl);
+    }
+    if (struct_v >= 7) {
+      string tail_data_pool_str;
+      decode(tail_data_pool_str, bl);
+      tail_data_pool = rgw_pool(tail_data_pool_str);
     }
     DECODE_FINISH(bl);
   }
@@ -1310,7 +1326,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   /*
    * return data pool of the head object
    */
-  bool get_head_data_pool(const string& placement_id, const rgw_obj& obj, rgw_pool *pool) const {
+  bool get_head_data_pool(const string& placement_id, const rgw_obj& obj, rgw_pool *pool, bool using_tail_data_pool = false) const {
     const rgw_data_placement_target& explicit_placement = obj.bucket.explicit_placement;
     if (!explicit_placement.data_pool.empty()) {
       if (!obj.in_extra_data) {
@@ -1328,7 +1344,10 @@ struct RGWZoneParams : RGWSystemMetaObj {
       return false;
     }
     if (!obj.in_extra_data) {
-      *pool = iter->second.data_pool;
+      if (using_tail_data_pool)
+        *pool = iter->second.tail_data_pool;
+      else
+        *pool = iter->second.data_pool;
     } else {
       *pool = iter->second.get_data_extra_pool();
     }
@@ -1444,6 +1463,7 @@ WRITE_CLASS_ENCODER(RGWDefaultZoneGroupInfo)
 struct RGWZoneGroupPlacementTarget {
   string name;
   set<string> tags;
+  string type;
 
   bool user_permitted(list<string>& user_tags) const {
     if (tags.empty()) {
@@ -1458,16 +1478,20 @@ struct RGWZoneGroupPlacementTarget {
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(name, bl);
     encode(tags, bl);
+    encode(type, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(name, bl);
     decode(tags, bl);
+    if (struct_v >= 2) {
+      decode(type, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -2330,6 +2354,7 @@ class RGWRados : public AdminSocketHook
   uint32_t bucket_index_max_shards;
 
   int get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx);
+  int get_obj_tail_ioctx(const std::string& placement_rule, const rgw_obj& obj, librados::IoCtx *ioctx);
   int get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref);
   int get_system_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref);
   uint64_t max_bucket_id;
@@ -2655,8 +2680,8 @@ public:
   int select_bucket_location_by_rule(const string& location_rule, RGWZonePlacementInfo *rule_info);
   void create_bucket_id(string *bucket_id);
 
-  bool get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool);
-  bool obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj);
+  bool get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool, bool using_tail_data_pool = false);
+  bool obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj, bool using_tail_data_pool = false);
 
   int create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
@@ -2804,6 +2829,7 @@ public:
 
       struct GetObjState {
         librados::IoCtx io_ctx;
+        librados::IoCtx tail_io_ctx;
         rgw_obj obj;
         rgw_raw_obj head_obj;
       } state;
@@ -2859,13 +2885,14 @@ public:
         ceph::real_time delete_at;
         bool canceled;
         const string *user_data;
+        const std::string *placement_type;
         rgw_zone_set *zones_trace;
         bool modify_tail;
         bool completeMultipart;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
-                 if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), zones_trace(nullptr),
+                 if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), placement_type(nullptr), zones_trace(nullptr),
                  modify_tail(false),  completeMultipart(false) {}
       } meta;
 
@@ -3024,7 +3051,7 @@ public:
                    uint64_t accounted_size, ceph::real_time& ut,
                    const string& etag, const string& content_type,
                    bufferlist *acl_bl, RGWObjCategory category,
-		   list<rgw_obj_index_key> *remove_objs, const string *user_data = nullptr);
+		   list<rgw_obj_index_key> *remove_objs, const string *user_data = nullptr, const std::string *placement_type = nullptr);
       int complete_del(int64_t poolid, uint64_t epoch,
                        ceph::real_time& removed_mtime, /* mtime of removed object */
                        list<rgw_obj_index_key> *remove_objs);
@@ -3970,10 +3997,11 @@ protected:
   virtual int do_complete(size_t accounted_size, const string& etag,
                           ceph::real_time *mtime, ceph::real_time set_mtime,
                           map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                          const char *if_match, const char *if_nomatch, const string *user_data,
+                          const char *if_match, const char *if_nomatch, const string *user_data, const string *placement_type,
                           rgw_zone_set* zones_trace = nullptr) = 0;
 
 public:
+  virtual const string& get_placement_type() = 0;
   RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), 
                                                                    obj_ctx(_obj_ctx), 
                                                                    is_complete(false), 
@@ -3988,7 +4016,7 @@ public:
   int complete(size_t accounted_size, const string& etag, 
                ceph::real_time *mtime, ceph::real_time set_mtime,
                map<string, bufferlist>& attrs, ceph::real_time delete_at,
-               const char *if_match = NULL, const char *if_nomatch = NULL, const string *user_data = nullptr,
+               const char *if_match = NULL, const char *if_nomatch = NULL, const string *user_data = nullptr, const string *placement_type = nullptr,
                rgw_zone_set *zones_trace = nullptr);
 
   CephContext *ctx();
@@ -4059,6 +4087,9 @@ protected:
 
   string unique_tag;
 
+  std::string placement_id;
+  std::string placement_type;
+
   rgw_raw_obj cur_obj;
   RGWObjManifest manifest;
   RGWObjManifest::generator manifest_gen;
@@ -4067,7 +4098,7 @@ protected:
   int do_complete(size_t accounted_size, const string& etag,
                   ceph::real_time *mtime, ceph::real_time set_mtime,
                   map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                  const char *if_match, const char *if_nomatch, const string *user_data, rgw_zone_set *zones_trace) override;
+                  const char *if_match, const char *if_nomatch, const string *user_data, const string *placement_type, rgw_zone_set *zones_trace) override;
 
   int prepare_next_part(off_t ofs);
   int complete_parts();
@@ -4078,7 +4109,7 @@ protected:
 public:
   ~RGWPutObjProcessor_Atomic() override {}
   RGWPutObjProcessor_Atomic(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info,
-                            rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t, bool versioned) :
+                            rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t, bool versioned, const std::string& _placement_id) :
                                 RGWPutObjProcessor_Aio(obj_ctx, bucket_info),
                                 part_size(_p),
                                 cur_part_ofs(0),
@@ -4087,6 +4118,7 @@ public:
                                 data_ofs(0),
                                 max_chunk_size(0),
                                 versioned_object(versioned),
+                                placement_id(_placement_id),
                                 bucket(_b),
                                 obj_str(_o),
                                 unique_tag(_t) {}
@@ -4100,6 +4132,10 @@ public:
 
   void set_version_id(const string& vid) {
     version_id = vid;
+  }
+
+  const string& get_placement_type() override {
+    return placement_type;
   }
 
   const string& get_version_id() const {
@@ -4185,12 +4221,12 @@ protected:
   int do_complete(size_t accounted_size, const string& etag,
                   ceph::real_time *mtime, ceph::real_time set_mtime,
                   map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                  const char *if_match, const char *if_nomatch, const string *user_data,
+                  const char *if_match, const char *if_nomatch, const string *user_data, const string *placement_type,
                   rgw_zone_set *zones_trace) override;
 public:
   bool immutable_head() override { return true; }
-  RGWPutObjProcessor_Multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, uint64_t _p, req_state *_s) :
-                   RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
+  RGWPutObjProcessor_Multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, uint64_t _p, req_state *_s, const std::string& _placement_id) :
+                   RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false, _placement_id), s(_s) {}
   void get_mp(RGWMPObj** _mp);
 }; /* RGWPutObjProcessor_Multipart */
 
