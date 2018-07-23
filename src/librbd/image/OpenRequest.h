@@ -42,7 +42,7 @@ private:
    *                v                               |
    *            V2_GET_ID|NAME                      |
    *                |                               |
-   *                v                               |
+   *                v (skip if have name)           |
    *            V2_GET_NAME_FROM_TRASH              |
    *                |                               |
    *                v                               |
