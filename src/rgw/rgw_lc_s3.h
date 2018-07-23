@@ -183,6 +183,64 @@ public:
   }
 };
 
+class LCStorageClass_S3 : public XMLObj
+{
+public:
+  LCStorageClass_S3() {}
+  ~LCStorageClass_S3() override {}
+  string& to_str() { return data; }
+};
+
+class LCTransition_S3 : public LCTransition, public XMLObj
+{
+public:
+  LCTransition_S3() {}
+  ~LCTransition_S3() {}
+
+  bool xml_end(const char *el) override;
+  void to_xml(ostream& out) {
+    out << "<Transition>";
+    if (!days.empty()) {
+      out << "<Days>" << days << "</Days>";
+    } else {
+      out << "<Date>" << date << "</Date>";
+    }
+    out << "<StorageClass>" << storage_class << "</StorageClass>" << "</Transition>";
+  }
+
+  void dump_xml(Formatter *f) const {
+    f->open_object_section("Transition");
+    if (!days.empty()) {
+      encode_xml("Days", days, f);
+    } else {
+      encode_xml("Date", date, f);
+    }
+    encode_xml("StorageClass", storage_class, f);
+    f->close_section();
+  }
+};
+
+class LCNoncurTransition_S3 : public LCTransition, public XMLObj
+{
+public:
+  LCNoncurTransition_S3() {}
+  ~LCNoncurTransition_S3() {}
+
+  bool xml_end(const char *el) override;
+  void to_xml(ostream& out) {
+    out << "<NoncurrentVersionTransition>" << "<NoncurrentDays>" << days << "</NoncurrentDays>"
+        << "<StorageClass>" << storage_class << "</StorageClass>" << "</NoncurrentVersionTransition>";
+  }
+
+  void dump_xml(Formatter *f) const {
+    f->open_object_section("NoncurrentVersionTransition");
+    encode_xml("NoncurrentDays", days, f);
+    encode_xml("StorageClass", storage_class, f);
+    f->close_section();
+  }
+};
+
+
 class LCRule_S3 : public LCRule, public XMLObj
 {
 private:
@@ -218,7 +276,18 @@ public:
       const LCMPExpiration_S3& mp_expir = static_cast<const LCMPExpiration_S3&>(mp_expiration);
       mp_expir.dump_xml(f);
     }
-
+    if (!transitions.empty()) {
+      for (auto &elem : transitions) {
+        const LCTransition_S3& tran = static_cast<const LCTransition_S3&>(elem.second);
+        tran.dump_xml(f);
+      }
+    }
+    if (!noncur_transitions.empty()) {
+      for (auto &elem : noncur_transitions) {
+        const LCNoncurTransition_S3& noncur_tran = static_cast<const LCNoncurTransition_S3&>(elem.second);
+        noncur_tran.dump_xml(f);
+      }
+    }
     f->close_section(); // Rule
   }
 
@@ -258,5 +327,5 @@ public:
   void dump_xml(Formatter *f) const;
 };
 
-
+bool check_date(const string& _date);
 #endif

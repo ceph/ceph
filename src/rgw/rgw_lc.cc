@@ -34,12 +34,33 @@ bool LCRule::valid()
   if (id.length() > MAX_ID_LEN) {
     return false;
   }
-  else if(expiration.empty() && noncur_expiration.empty() && mp_expiration.empty() && !dm_expiration) {
+  else if(expiration.empty() && noncur_expiration.empty() && mp_expiration.empty() && !dm_expiration &&
+          transitions.empty() && noncur_transitions.empty()) {
     return false;
   }
   else if (!expiration.valid() || !noncur_expiration.valid() || !mp_expiration.valid()) {
     return false;
   }
+  if (!transitions.empty()) {
+    bool using_days = expiration.has_days();
+    bool using_date = expiration.has_date();
+    for (const auto& elem : transitions) {
+      if (!elem.second.valid()) {
+        return false;
+      }
+      using_days = using_days || elem.second.has_days();
+      using_date = using_date || elem.second.has_date();
+      if (using_days && using_date) {
+        return false;
+      }
+    }
+  }
+  for (const auto& elem : noncur_transitions) {
+    if (!elem.second.valid()) {
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -69,7 +90,23 @@ bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
     op.mp_expiration = rule->get_mp_expiration().get_days();
   }
   op.dm_expiration = rule->get_dm_expiration();
-
+  for (const auto &elem : rule->get_transitions()) {
+    transition_action action;
+    if (elem.second.has_days()) {
+      action.days = elem.second.get_days();
+    } else {
+      action.date = ceph::from_iso_8601(elem.second.get_date());
+    }
+    action.storage_class = elem.first;
+    op.transitions.emplace(action.storage_class, std::move(action));
+  }
+  for (const auto &elem : rule->get_noncur_transitions()) {
+    transition_action action;
+    action.days = elem.second.get_days();
+    action.date = ceph::from_iso_8601(elem.second.get_date());
+    action.storage_class = elem.first;
+    op.noncur_transitions.emplace(action.storage_class, std::move(action));
+  }
   std::string prefix;
   if (rule->get_filter().has_prefix()){
     prefix = rule->get_filter().get_prefix();
@@ -110,9 +147,20 @@ bool RGWLifecycleConfiguration::has_same_action(const lc_op& first, const lc_op&
     return true;
   } else if (first.mp_expiration > 0 && second.mp_expiration > 0) {
     return true;
-  } else {
-    return false;
+  } else if (!first.transitions.empty() && !second.transitions.empty()) {
+    for (auto &elem : first.transitions) {
+      if (second.transitions.find(elem.first) != second.transitions.end()) {
+        return true;
+      }
+    }
+  } else if (!first.noncur_transitions.empty() && !second.noncur_transitions.empty()) {
+    for (auto &elem : first.noncur_transitions) {
+      if (second.noncur_transitions.find(elem.first) != second.noncur_transitions.end()) {
+        return true;
+      }
+    }
   }
+  return false;
 }
 
 //Rules are conflicted: if one rule's prefix starts with other rule's prefix, and these two rules
