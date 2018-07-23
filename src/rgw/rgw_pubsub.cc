@@ -5,51 +5,14 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-void encode_json(const char *name, const RGWPubSubEventType& val, Formatter *f)
-{
-  switch (val) {
-    case EVENT_UNKNOWN:
-      encode_json(name, "EVENT_UNKNOWN", f);
-      break;
-    case OBJECT_CREATE:
-      encode_json(name, "OBJECT_CREATE", f);
-      break;
-    case OBJECT_DELETE:
-      encode_json(name, "OBJECT_DELETE", f);
-      break;
-    case DELETE_MARKER_CREATE:
-      encode_json(name, "DELETE_MARKER_CREATE", f);
-      break;
-  };
-}
-
 
 void rgw_pubsub_event::dump(Formatter *f) const
 {
   encode_json("id", id, f);
-  {
-    Formatter::ObjectSection s(*f, "bucket");
-    encode_json("name", bucket.name, f);
-    encode_json("id", bucket.bucket_id, f);
-  }
-  {
-    Formatter::ObjectSection s(*f, "object");
-    encode_json("name", key.name, f);
-    encode_json("version-id", key.instance, f);
-  }
-
-  utime_t mt(mtime);
-  encode_json("mtime", mt, f);
   encode_json("event", event, f);
   utime_t ut(timestamp);
   encode_json("timestamp", ut, f);
-
-  {
-    Formatter::ObjectSection s(*f, "attrs");
-    for (auto& attr : attrs) {
-      encode_json(attr.first.c_str(), attr.second.c_str(), f);
-    }
-  }
+  encode_json("info", info, f);
 }
 
 void rgw_pubsub_topic::dump(Formatter *f) const
