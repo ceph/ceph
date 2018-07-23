@@ -1030,7 +1030,11 @@ int NVMEDevice::write(uint64_t off, bufferlist &bl, bool buffered)
   // FIXME: there is presumably a more efficient way to do this...
   IOContext ioc(cct, NULL);
   aio_write(off, bl, &ioc, buffered);
-  ioc.aio_wait();
+  /* if not buffer the data, should submit the request */
+  if(!buffered) {
+    aio_submit(&ioc);
+    ioc.aio_wait();
+  }
   return 0;
 }
 
