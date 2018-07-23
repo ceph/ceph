@@ -1177,6 +1177,8 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   RemoteDatalogStatus remote_trimmed;
   Mutex inc_lock;
   Cond inc_cond;
+  /* how many times have we received out-band data beforce processing it */
+  std::atomic<uint64_t> ob_counter;
 
   boost::asio::coroutine incremental_cr;
   boost::asio::coroutine full_cr;
@@ -1233,6 +1235,7 @@ public:
     set_description() << "data sync shard source_zone=" << sync_env->source_zone << " shard_id=" << shard_id;
     status_oid = RGWDataSyncStatusManager::shard_obj_name(sync_env->source_zone, shard_id);
     error_oid = status_oid + ".retry";
+    ob_counter = 0;
 
     logger.init(sync_env, "DataShard", status_oid);
   }
@@ -1248,6 +1251,7 @@ public:
   }
 
   void append_modified_shards(set<string>& keys) {
+    ob_counter++;
     Mutex::Locker l(inc_lock);
     modified_shards.insert(keys.begin(), keys.end());
   }
@@ -1511,8 +1515,14 @@ public:
 	tn->log(20, SSTR("shard_id=" << shard_id << " datalog_marker=" << datalog_marker << " sync_marker.marker=" << sync_marker.marker));
 	if (datalog_marker == sync_marker.marker || remote_trimmed == RemoteTrimmed) {
           tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
+    if(ob_counter > 0) {
+      /* do not add timer event this way*/
+      ob_counter--;
+      yield io_block(0);
+    } else {
 #define INCREMENTAL_INTERVAL 20
-	  yield wait(utime_t(INCREMENTAL_INTERVAL, 0));
+      yield wait(utime_t(INCREMENTAL_INTERVAL, 0));
+    }
 	}
       } while (true);
     }
@@ -1702,7 +1712,7 @@ public:
       return;
     }
     iter->second->append_modified_shards(keys);
-    iter->second->wakeup();
+    iter->second->wakeup2();
   }
 };
 

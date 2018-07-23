@@ -321,6 +321,17 @@ void RGWCoroutinesStack::wakeup()
   completion_mgr->wakeup((void *)this);
 }
 
+/*
+ * wakeup2() only adds stack to completion queue, without removing it from waiters queue.
+ * Otherwise the event in timer queue will not wakeup coresponding stack.
+ */
+void RGWCoroutinesStack::wakeup2()
+{
+  RGWCompletionManager *completion_mgr = env->manager->get_completion_mgr();
+  //rgw_io_id{-1, -1} means can_io_unblock() always returns true
+  completion_mgr->complete(nullptr, rgw_io_id{-1, -1}, (void *)this);
+}
+
 void RGWCoroutinesStack::io_complete(const rgw_io_id& io_id)
 {
   RGWCompletionManager *completion_mgr = env->manager->get_completion_mgr();
@@ -947,6 +958,11 @@ bool RGWCoroutine::drain_children(int num_cr_left, RGWCoroutinesStack *skip_stac
 void RGWCoroutine::wakeup()
 {
   stack->wakeup();
+}
+
+void RGWCoroutine::wakeup2()
+{
+  stack->wakeup2();
 }
 
 RGWCoroutinesEnv *RGWCoroutine::get_env() const

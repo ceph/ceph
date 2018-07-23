@@ -276,6 +276,7 @@ public:
   int wait(const utime_t& interval);
   bool drain_children(int num_cr_left, RGWCoroutinesStack *skip_stack = NULL); /* returns true if needed to be called again */
   void wakeup();
+  void wakeup2(); /* this is used for out-band data wakeup */
   void set_sleeping(bool flag); /* put in sleep, or wakeup from sleep */
 
   size_t num_spawned() {
@@ -469,6 +470,7 @@ public:
 
   int wait(const utime_t& interval);
   void wakeup();
+  void wakeup2();
   void io_complete() {
     io_complete(rgw_io_id{});
   }
