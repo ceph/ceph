@@ -7,6 +7,7 @@ import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -44,15 +45,13 @@ export class RgwBucketListComponent {
     ];
   }
 
-  getBucketList() {
+  getBucketList(context: CdTableFetchDataContext) {
     this.rgwBucketService.list().subscribe(
       (resp: object[]) => {
         this.buckets = resp;
       },
       () => {
-        // Force datatable to hide the loading indicator in
-        // case of an error.
-        this.buckets = [];
+        context.error();
       }
     );
   }

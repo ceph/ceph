@@ -13,7 +13,7 @@
           columnMode="flex"
           selectionType="single"
           (updateSelection)="updateSelection($event)"
-          (fetchData)="getDaemonList()">
+          (fetchData)="getDaemonList($event)">
   <cd-rgw-daemon-details cdTableDetail
                          [selection]="selection">
   </cd-rgw-daemon-details>
