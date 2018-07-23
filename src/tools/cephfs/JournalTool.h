@@ -38,6 +38,9 @@ class JournalTool : public MDSUtility
     // various main_ functions.
     mds_rank_t rank;
 
+    // when set, generate per rank dump file path
+    bool all_ranks = false;
+
     // Entry points
     int main_journal(std::vector<const char*> &argv);
     int main_header(std::vector<const char*> &argv);
@@ -77,6 +80,9 @@ class JournalTool : public MDSUtility
         const bool bare,
         bufferlist *out_bl);
     int consume_inos(const std::set<inodeno_t> &inos);
+
+    // generate output file path for dump/export
+    std::string gen_dump_file_path(const std::string &prefix);
 
   public:
     void usage();

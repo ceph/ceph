@@ -169,6 +169,14 @@ int JournalTool::main(std::vector<const char*> &argv)
 }
 
 
+std::string JournalTool::gen_dump_file_path(const std::string &prefix) {
+  if (!all_ranks) {
+    return prefix;
+  }
+
+  return prefix + "." + std::to_string(rank);
+}
+
 /**
  * Handle arguments for 'journal' mode
  *
@@ -376,6 +384,8 @@ int JournalTool::main_event(std::vector<const char*> &argv)
     }
   }
 
+  const std::string dump_path = gen_dump_file_path(output_path);
+
   // Execute command
   // ===============
   JournalScanner js(input, rank, filter);
@@ -493,7 +503,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
 
   // Generate output
   // ===============
-  EventOutput output(js, output_path);
+  EventOutput output(js, dump_path);
   int output_result = 0;
   if (output_style == "binary") {
       output_result = output.binary();
@@ -580,7 +590,8 @@ int JournalTool::journal_export(std::string const &path, bool import, bool force
     if (import) {
       r = dumper.undump(path.c_str(), force);
     } else {
-      r = dumper.dump(path.c_str());
+      const std::string ex_path = gen_dump_file_path(path);
+      r = dumper.dump(ex_path.c_str());
     }
   }
 
