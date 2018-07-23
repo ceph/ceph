@@ -405,6 +405,10 @@ public:
     using compact_map = compact_map<k, v, cmp,                          \
 			 pool_allocator<std::pair<const k,v>>>;         \
                                                                         \
+    template<typename k,typename v, typename cmp = std::less<k> >       \
+    using compact_multimap = compact_multimap<k, v, cmp,                \
+			 pool_allocator<std::pair<const k,v>>>;         \
+                                                                        \
     template<typename k, typename cmp = std::less<k> >                  \
     using compact_set = compact_set<k, cmp, pool_allocator<k>>;         \
                                                                         \
