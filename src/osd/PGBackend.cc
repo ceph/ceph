@@ -758,7 +758,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   const map<pg_shard_t,ScrubMap*> &maps,
   object_info_t *auth_oi,
   map<pg_shard_t, shard_info_wrapper> &shard_map,
-  inconsistent_obj_wrapper &object_error)
+  inconsistent_obj_wrapper &object_error,
+  bool &digest_match)
 {
   eversion_t auth_version;
   bufferlist first_oi_bl, first_ss_bl, first_hk_bl;
@@ -776,6 +777,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   shards.push_front(get_parent()->whoami_shard());
 
   map<pg_shard_t, ScrubMap *>::const_iterator auth = maps.end();
+  digest_match = true;
   for (auto &l : shards) {
     map<pg_shard_t, ScrubMap *>::const_iterator j = maps.find(l);
     map<hobject_t, ScrubMap::object>::iterator i =
@@ -898,6 +900,17 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       error_string += " obj_size_info_mismatch";
     }
 
+    // digest_match will only be true if computed digests are the same
+    if (auth_version != eversion_t()
+        && auth->second->objects[obj].digest_present
+        && i->second.digest_present
+        && auth->second->objects[obj].digest != i->second.digest) {
+      digest_match = false;
+      dout(10) << __func__ << " digest_match = false, " << obj << " data_digest 0x" << std::hex << i->second.digest
+		    << " != data_digest 0x" << auth->second->objects[obj].digest << std::dec
+		    << dendl;
+    }
+
     // Don't use this particular shard due to previous errors
     // XXX: For now we can't pick one shard for repair and another's object info or snapset
     if (shard_info.errors)
@@ -953,8 +966,10 @@ void PGBackend::be_compare_scrubmaps(
 
     inconsistent_obj_wrapper object_error{*k};
 
+    bool digest_match;
     map<pg_shard_t, ScrubMap *>::const_iterator auth =
-      be_select_auth_object(*k, maps, &auth_oi, shard_map, object_error);
+      be_select_auth_object(*k, maps, &auth_oi, shard_map, object_error,
+                            digest_match);
 
     list<pg_shard_t> auth_list;
     set<pg_shard_t> object_errors;
@@ -975,6 +990,7 @@ void PGBackend::be_compare_scrubmaps(
     ScrubMap::object& auth_object = auth->second->objects[*k];
     set<pg_shard_t> cur_missing;
     set<pg_shard_t> cur_inconsistent;
+    bool fix_digest = false;
 
     for (auto  j = maps.cbegin(); j != maps.cend(); ++j) {
       if (j == auth)
@@ -990,6 +1006,22 @@ void PGBackend::be_compare_scrubmaps(
 				   shard_map[j->first],
 				   object_error,
 				   ss);
+
+	dout(20) << __func__ << (repair ? " repair " : " ") << (parent->get_pool().is_replicated() ? "replicated " : "")
+	 << (j == auth ? "auth" : "") << "shards " << shard_map.size() << (digest_match ? " digest_match " : " ")
+	 << (shard_map[j->first].only_data_digest_mismatch_info() ? "'info mismatch info'" : "")
+	 << dendl;
+	// If all replicas match, but they don't match object_info we can
+	// repair it by using missing_digest mechanism
+	if (repair && parent->get_pool().is_replicated() && j == auth && shard_map.size() > 1
+	    && digest_match && shard_map[j->first].only_data_digest_mismatch_info()
+	    && auth_object.digest_present) {
+	  // Set in missing_digests
+	  fix_digest = true;
+	  // Clear the error
+	  shard_map[j->first].clear_data_digest_mismatch_info();
+	  errorstream << pgid << " : soid " << *k << " repairing object info data_digest" << "\n";
+	}
 	// Some errors might have already been set in be_select_auth_object()
 	if (shard_map[j->first].errors != 0) {
 	  cur_inconsistent.insert(j->first);
@@ -1051,9 +1083,19 @@ void PGBackend::be_compare_scrubmaps(
     if (!cur_inconsistent.empty()) {
       inconsistent[*k] = cur_inconsistent;
     }
+
+    if (fix_digest) {
+      boost::optional<uint32_t> data_digest, omap_digest;
+      assert(auth_object.digest_present);
+      data_digest = auth_object.digest;
+      if (auth_object.omap_digest_present) {
+        omap_digest = auth_object.omap_digest;
+      }
+      missing_digest[*k] = make_pair(data_digest, omap_digest);
+    }
     if (!cur_inconsistent.empty() || !cur_missing.empty()) {
       authoritative[*k] = auth_list;
-    } else if (parent->get_pool().is_replicated()) {
+    } else if (!fix_digest && parent->get_pool().is_replicated()) {
       enum {
 	NO = 0,
 	MAYBE = 1,
