@@ -5,48 +5,30 @@
 #include "rgw_tools.h"
 
 
-enum RGWPubSubEventType {
-  EVENT_UNKNOWN        = 0,
-  OBJECT_CREATE        = 1,
-  OBJECT_DELETE        = 2,
-  DELETE_MARKER_CREATE = 3,
-};
-
 struct rgw_pubsub_event {
   string id;
-  rgw_bucket bucket;
-  rgw_obj_key key;
-  ceph::real_time mtime;
-
-  RGWPubSubEventType event;
+  string event;
+  string source;
   ceph::real_time timestamp;
-
-  std::vector<std::pair<std::string, std::string> > attrs;
+  JSONFormattable info;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(id, bl);
-    encode(bucket, bl);
-    encode(key, bl);
-    encode(mtime, bl);
-    uint32_t e = (uint32_t)event;
-    encode(e, bl);
+    encode(event, bl);
+    encode(source, bl);
     encode(timestamp, bl);
-    encode(attrs, bl);
+    encode(info, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(id, bl);
-    decode(bucket, bl);
-    decode(key, bl);
-    decode(mtime, bl);
-    uint32_t e;
-    decode(e, bl);
-    event = (RGWPubSubEventType)e;
+    decode(event, bl);
+    decode(source, bl);
     decode(timestamp, bl);
-    decode(attrs, bl);
+    decode(info, bl);
     DECODE_FINISH(bl);
   }
 
