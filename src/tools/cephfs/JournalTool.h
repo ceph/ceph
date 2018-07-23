@@ -87,6 +87,11 @@ class JournalTool : public MDSUtility
 
     // generate output file path for dump/export
     std::string gen_dump_file_path(const std::string &prefix);
+
+    // check if an operation (mode, command) is safe to be
+    // executed on all ranks.
+    bool can_execute_for_all_ranks(const std::string &mode,
+                                   const std::string &command);
   public:
     static void usage();
     JournalTool() :
