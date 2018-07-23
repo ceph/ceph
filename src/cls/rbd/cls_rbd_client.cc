@@ -549,14 +549,30 @@ namespace librbd {
       return get_children_finish(&it, &children);
     }
 
+    void snapshot_info_get_start(librados::ObjectReadOperation *op,
+                                 snapid_t snap_id)
+    {
+      bufferlist bl;
+      encode(snap_id, bl);
+      op->exec("rbd", "snapshot_get", bl);
+    }
+
+    int snapshot_info_get_finish(bufferlist::const_iterator* it,
+                                 cls::rbd::SnapshotInfo* snap_info)
+    {
+      try {
+        decode(*snap_info, *it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
     void snapshot_get_start(librados::ObjectReadOperation *op,
                             const std::vector<snapid_t> &ids)
     {
       for (auto snap_id : ids) {
-        bufferlist bl;
-        encode(snap_id, bl);
-        op->exec("rbd", "snapshot_get", bl);
-
+        snapshot_info_get_start(op, snap_id);
         get_parent_start(op, snap_id);
         get_protection_status_start(op, snap_id);
       }
@@ -573,11 +589,15 @@ namespace librbd {
       protection_statuses->resize(ids.size());
       try {
 	for (size_t i = 0; i < snaps->size(); ++i) {
-          decode((*snaps)[i], *it);
+          // snapshot_get
+          int r = snapshot_info_get_finish(it, &(*snaps)[i]);
+          if (r < 0) {
+            return r;
+          }
 
-	  // get_parent
-	  int r = get_parent_finish(it, &(*parents)[i].spec,
-                                    &(*parents)[i].overlap);
+          // get_parent
+          r = get_parent_finish(it, &(*parents)[i].spec,
+                                &(*parents)[i].overlap);
           if (r < 0) {
             return r;
           }
