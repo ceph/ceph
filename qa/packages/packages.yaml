@@ -32,6 +32,8 @@ ceph:
   - rbd-fuse-dbg
   - rbd-mirror-dbg
   - rbd-nbd-dbg
+  - python3-cephfs
+  - python3-rados
   rpm:
   - ceph-radosgw
   - ceph-test
@@ -47,3 +49,5 @@ ceph:
   - python-ceph
   - rbd-fuse
   - ceph-debuginfo
+  - python34-cephfs
+  - python34-rados
