@@ -7,6 +7,9 @@
 
 #include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
+#include <boost/lexical_cast.hpp>
+
+#include "json_spirit/json_spirit_writer_template.h"
 
 using namespace json_spirit;
 
@@ -15,6 +18,15 @@ using namespace json_spirit;
 
 static JSONFormattable default_formattable;
 
+
+void encode_json(const char *name, const JSONObj::data_val& v, Formatter *f)
+{
+  if (v.quoted) {
+    encode_json(name, v.str, f);
+  } else {
+    f->dump_format_unquoted(name, "%s", v.str.c_str());
+  }
+}
 
 JSONObjIter::JSONObjIter()
 {
@@ -43,7 +55,7 @@ JSONObj *JSONObjIter::operator*()
 
 // does not work, FIXME
 ostream& operator<<(ostream &out, const JSONObj &obj) {
-   out << obj.name << ": " << obj.data_string;
+   out << obj.name << ": " << obj.val;
    return out;
 }
 
@@ -62,9 +74,9 @@ void JSONObj::add_child(string el, JSONObj *obj)
   children.insert(pair<string, JSONObj *>(el, obj));
 }
 
-bool JSONObj::get_attr(string name, string& attr)
+bool JSONObj::get_attr(string name, data_val& attr)
 {
-  map<string, string>::iterator iter = attr_map.find(name);
+  auto iter = attr_map.find(name);
   if (iter == attr_map.end())
     return false;
   attr = iter->second;
@@ -109,13 +121,13 @@ JSONObj *JSONObj::find_obj(const string& name)
   return *iter;
 }
 
-bool JSONObj::get_data(const string& key, string *dest)
+bool JSONObj::get_data(const string& key, data_val *dest)
 {
   JSONObj *obj = find_obj(key);
   if (!obj)
     return false;
 
-  *dest = obj->get_data();
+  *dest = obj->get_data_val();
 
   return true;
 }
@@ -158,11 +170,15 @@ void JSONObj::init(JSONObj *p, Value v, string n)
   data = v;
 
   handle_value(v);
-  if (v.type() == str_type)
-    data_string =  v.get_str();
-  else
-    data_string =  write(v, raw_utf8);
-  attr_map.insert(pair<string,string>(name, data_string));
+  if (v.type() != obj_type &&
+      v.type() != array_type) {
+    if (v.type() == str_type) {
+      val.set(v.get_str(), true);
+    } else {
+      val.set(json_spirit::write_string(v), false);
+    }
+  }
+  attr_map.insert(pair<string,data_val>(name, val));
 }
 
 JSONObj *JSONObj::get_parent()
@@ -230,10 +246,11 @@ bool JSONParser::parse(const char *buf_, int len)
     handle_value(data);
     if (data.type() != obj_type &&
         data.type() != array_type) {
-      if (data.type() == str_type)
-        data_string =  data.get_str();
-      else
-        data_string =  write(data, raw_utf8);
+      if (data.type() == str_type) {
+        val.set(data.get_str(), true);
+      } else {
+        val.set(json_spirit::write_string(data), false);
+      }
     }
   } else {
     set_failure();
@@ -590,14 +607,14 @@ bool JSONFormattable::find(const string& name, string *val) const
 }
 
 int JSONFormattable::val_int() const {
-  return atoi(str.c_str());
+  return atoi(value.str.c_str());
 }
 
 bool JSONFormattable::val_bool() const {
-  return (boost::iequals(str, "true") ||
-          boost::iequals(str, "on") ||
-          boost::iequals(str, "yes") ||
-          boost::iequals(str, "1"));
+  return (boost::iequals(value.str, "true") ||
+          boost::iequals(value.str, "on") ||
+          boost::iequals(value.str, "yes") ||
+          boost::iequals(value.str, "1"));
 }
 
 string JSONFormattable::def(const string& def_val) const {
@@ -685,6 +702,16 @@ static int parse_entity(const string& s, vector<field_entity> *result)
   return 0;
 }
 
+static bool is_numeric(const string& val)
+{
+  try {
+    boost::lexical_cast<double>(val);
+  } catch (const boost::bad_lexical_cast& e) {
+    return false;
+  }
+  return true;
+}
+
 int JSONFormattable::set(const string& name, const string& val)
 {
   boost::escaped_list_separator<char> els('\\', '.', '"');
@@ -740,8 +767,8 @@ int JSONFormattable::set(const string& name, const string& val)
   if (is_valid_json) {
     f->decode_json(&jp);
   } else {
-    f->type = FMT_STRING;
-    f->str = val;
+    f->type = FMT_VALUE;
+    f->value.set(val, !is_numeric(val));
   }
 
   return 0;
@@ -764,7 +791,7 @@ int JSONFormattable::erase(const string& name)
     }
     for (const auto& vi : v) {
       if (f->type == FMT_NONE ||
-          f->type == FMT_STRING) {
+          f->type == FMT_VALUE) {
         if (vi.is_obj) {
           f->type = FMT_OBJ;
         } else {
@@ -831,17 +858,22 @@ void JSONFormattable::derive_from(const JSONFormattable& parent)
 
 void encode_json(const char *name, const JSONFormattable& v, Formatter *f)
 {
-  switch (v.type) {
-    case JSONFormattable::FMT_STRING:
-      encode_json(name, v.str, f);
+  v.encode_json(name, f);
+}
+
+void JSONFormattable::encode_json(const char *name, Formatter *f) const
+{
+  switch (type) {
+    case JSONFormattable::FMT_VALUE:
+      ::encode_json(name, value, f);
       break;
     case JSONFormattable::FMT_ARRAY:
-      encode_json(name, v.arr, f);
+      ::encode_json(name, arr, f);
       break;
     case JSONFormattable::FMT_OBJ:
       f->open_object_section(name);
-      for (auto iter : v.obj) {
-        encode_json(iter.first.c_str(), iter.second, f);
+      for (auto iter : obj) {
+        ::encode_json(iter.first.c_str(), iter.second, f);
       }
       f->close_section();
       break;

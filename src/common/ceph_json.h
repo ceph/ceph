@@ -43,12 +43,23 @@ public:
 class JSONObj
 {
   JSONObj *parent;
+public:
+  struct data_val {
+    string str;
+    bool quoted{false};
+
+    void set(std::string_view s, bool q) {
+      str = s;
+      quoted = q;
+    }
+  };
 protected:
   string name; // corresponds to obj_type in XMLObj
   Value data;
-  string data_string;
+  struct data_val val;
+  bool data_quoted{false};
   multimap<string, JSONObj *> children;
-  map<string, string> attr_map;
+  map<string, data_val> attr_map;
   void handle_value(Value v);
 
 public:
@@ -60,11 +71,12 @@ public:
   void init(JSONObj *p, Value v, string n);
 
   string& get_name() { return name; }
-  string& get_data() { return data_string; }
-  bool get_data(const string& key, string *dest);
+  data_val& get_data_val() { return val; }
+  const string& get_data() { return val.str; }
+  bool get_data(const string& key, data_val *dest);
   JSONObj *get_parent();
   void add_child(string el, JSONObj *child);
-  bool get_attr(string name, string& attr);
+  bool get_attr(string name, data_val& attr);
   JSONObjIter find(const string& name);
   JSONObjIter find_first();
   JSONObjIter find_first(const string& name);
@@ -77,6 +89,12 @@ public:
   bool is_object();
   vector<string> get_array_elements();
 };
+
+static inline ostream& operator<<(ostream &out, const JSONObj::data_val& dv) {
+  const char *q = (dv.quoted ? "\"" : "");
+   out << q << dv.str << q;
+   return out;
+}
 
 class JSONParser : public JSONObj
 {
@@ -97,6 +115,7 @@ public:
   void set_failure() { success = false; }
 };
 
+void encode_json(const char *name, const JSONObj::data_val& v, Formatter *f);
 
 class JSONDecoder {
 public:
@@ -134,6 +153,11 @@ void decode_json_obj(T& val, JSONObj *obj)
 static inline void decode_json_obj(string& val, JSONObj *obj)
 {
   val = obj->get_data();
+}
+
+static inline void decode_json_obj(JSONObj::data_val& val, JSONObj *obj)
+{
+  val = obj->get_data_val();
 }
 
 void decode_json_obj(unsigned long long& val, JSONObj *obj);
@@ -467,56 +491,117 @@ void encode_json_map(const char *name, const char *index_name, const char *value
   encode_json_map<K, V>(name, index_name, NULL, value_name, NULL, NULL, m, f);
 }
 
-struct JSONFormattable {
+class JSONFormattable : public ceph::JSONFormatter {
+  JSONObj::data_val value;
+  vector<JSONFormattable> arr;
+  map<std::string, JSONFormattable> obj;
+
+  vector<JSONFormattable *> enc_stack;
+  JSONFormattable *cur_enc;
+
+protected:
+  bool handle_value(const char *name, std::string_view s, bool quoted) override {
+    JSONFormattable *new_val;
+    if (cur_enc->is_array()) {
+      cur_enc->arr.push_back(JSONFormattable());
+      new_val = &cur_enc->arr.back();
+    } else {
+      new_val  = &cur_enc->obj[name];
+    }
+    new_val->set_type(JSONFormattable::FMT_VALUE);
+    new_val->value.set(s, quoted);
+
+    return false;
+  }
+  bool handle_open_section(const char *name, const char *ns, bool section_is_array) override {
+    if (cur_enc->is_array()) {
+      cur_enc->arr.push_back(JSONFormattable());
+      cur_enc = &cur_enc->arr.back();
+    } else {
+      cur_enc = &obj[name];
+    }
+    enc_stack.push_back(cur_enc);
+
+    if (section_is_array) {
+      cur_enc->set_type(JSONFormattable::FMT_ARRAY);
+    } else {
+      cur_enc->set_type(JSONFormattable::FMT_OBJ);
+    }
+
+    return false; /* continue processing */
+  }
+  bool handle_close_section() override {
+    if (enc_stack.size() <= 1) {
+      return false;
+    }
+
+    enc_stack.pop_back();
+    cur_enc = enc_stack.back();
+    return false; /* continue processing */
+  }
+
+public:
+  JSONFormattable(bool p = false) : JSONFormatter(p) {
+    cur_enc = this;
+    enc_stack.push_back(cur_enc);
+  }
+
   enum Type {
     FMT_NONE,
-    FMT_STRING,
+    FMT_VALUE,
     FMT_ARRAY,
     FMT_OBJ,
   } type{FMT_NONE};
 
-  string str;
-  vector<JSONFormattable> arr;
-  map<std::string, JSONFormattable> obj;
+  void set_type(Type t) {
+    type = t;
+  }
+
   void decode_json(JSONObj *jo) {
     if (jo->is_array()) {
-      type = JSONFormattable::FMT_ARRAY;
+      set_type(JSONFormattable::FMT_ARRAY);
       decode_json_obj(arr, jo);
     } else if (jo->is_object()) {
-      type = JSONFormattable::FMT_OBJ;
+      set_type(JSONFormattable::FMT_OBJ);
       auto iter = jo->find_first();
       for (;!iter.end(); ++iter) {
         JSONObj *field = *iter;
         decode_json_obj(obj[field->get_name()], field);
       }
     } else {
-      type = JSONFormattable::FMT_STRING;
-      decode_json_obj(str, jo);
+      set_type(JSONFormattable::FMT_VALUE);
+      decode_json_obj(value, jo);
     }
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode((uint8_t)type, bl);
-    encode(str, bl);
+    encode(value.str, bl);
     encode(arr, bl);
     encode(obj, bl);
+    encode(value.quoted, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     uint8_t t;
     decode(t, bl);
     type = (Type)t;
-    decode(str, bl);
+    decode(value.str, bl);
     decode(arr, bl);
     decode(obj, bl);
+    if (struct_v >= 2) {
+      decode(value.quoted, bl);
+    } else {
+      value.quoted = true;
+    }
     DECODE_FINISH(bl);
   }
 
   const std::string& val() const {
-    return str;
+    return value.str;
   }
 
   int val_int() const;
@@ -533,7 +618,7 @@ struct JSONFormattable {
   JSONFormattable& operator[](size_t index);
 
   operator std::string() const {
-    return str;
+    return value.str;
   }
 
   explicit operator int() const {
@@ -557,12 +642,6 @@ struct JSONFormattable {
   string operator ()(const char *def_val) const {
     return def(string(def_val));
   }
-
-#if 0
-  string operator ()(const string& def_val) const {
-    return def(def_val);
-  }
-#endif
 
   int operator()(int def_val) const {
     return def(def_val);
@@ -590,6 +669,12 @@ struct JSONFormattable {
   int erase(const string& name);
 
   void derive_from(const JSONFormattable& jf);
+
+  void encode_json(const char *name, Formatter *f) const;
+
+  bool is_array() const {
+    return (type == FMT_ARRAY);
+  }
 };
 WRITE_CLASS_ENCODER(JSONFormattable)
 

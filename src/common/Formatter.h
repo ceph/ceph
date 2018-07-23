@@ -110,6 +110,18 @@ namespace ceph {
     }
   };
 
+  class copyable_sstream : public std::stringstream {
+  public:
+    copyable_sstream() {}
+    copyable_sstream(const copyable_sstream& rhs) {
+      str(rhs.str());
+    }
+    copyable_sstream& operator=(const copyable_sstream& rhs) {
+      str(rhs.str());
+      return *this;
+    }
+  };
+
   class JSONFormatter : public Formatter {
   public:
     explicit JSONFormatter(bool p = false);
@@ -135,6 +147,19 @@ namespace ceph {
     int get_len() const override;
     void write_raw_data(const char *data) override;
 
+  protected:
+    virtual bool handle_value(const char *name, std::string_view s, bool quoted) {
+      return false; /* is handling done? */
+    }
+
+    virtual bool handle_open_section(const char *name, const char *ns, bool is_array) {
+      return false; /* is handling done? */
+    }
+
+    virtual bool handle_close_section() {
+      return false; /* is handling done? */
+    }
+
   private:
 
     struct json_formatter_stack_entry_d {
@@ -144,17 +169,26 @@ namespace ceph {
     };
 
     bool m_pretty;
-    void open_section(const char *name, bool is_array);
+    void open_section(const char *name, const char *ns, bool is_array);
     void print_quoted_string(std::string_view s);
     void print_name(const char *name);
     void print_comma(json_formatter_stack_entry_d& entry);
     void finish_pending_string();
 
-    std::stringstream m_ss, m_pending_string;
+    template <class T>
+    void add_value(const char *name, T val);
+    void add_value(const char *name, std::string_view val, bool quoted);
+
+    copyable_sstream m_ss;
+    copyable_sstream m_pending_string;
+    std::string m_pending_name;
     std::list<json_formatter_stack_entry_d> m_stack;
     bool m_is_pending_string;
     bool m_line_break_enabled = false;
   };
+
+  template <class T>
+  void add_value(const char *name, T val);
 
   class XMLFormatter : public Formatter {
   public:
@@ -253,7 +287,6 @@ namespace ceph {
     std::vector<size_t> m_column_size;
     std::vector< std::string > m_column_name;
   };
-
 
 }
 #endif
