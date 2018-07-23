@@ -26,6 +26,9 @@ static void get_jf(const string& s, JSONFormattable *f)
 {
   JSONParser p;
   bool result = p.parse(s.c_str(), s.size());
+  if (!result) {
+    cout << "Failed to parse: '" << s << "'" << std::endl;
+  }
   ASSERT_EQ(true, result);
   try {
     decode_json_obj(*f, &p);
