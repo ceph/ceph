@@ -179,6 +179,7 @@ void RGWOp_User_Modify::execute()
   std::string secret_key;
   std::string key_type_str;
   std::string caps;
+  std::string op_mask_str;
 
   bool gen_key;
   bool suspended;
@@ -203,6 +204,7 @@ void RGWOp_User_Modify::execute()
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
 
   RESTArgs::get_bool(s, "system", false, &system);
+  RESTArgs::get_string(s, "op-mask", op_mask_str, &op_mask_str);
 
   if (!s->user->system && system) {
     ldout(s->cct, 0) << "cannot set system flag by non-system user" << dendl;
@@ -234,6 +236,16 @@ void RGWOp_User_Modify::execute()
       key_type = KEY_TYPE_S3;
 
     op_state.set_key_type(key_type);
+  }
+
+  if (!op_mask_str.empty()) {
+    uint32_t op_mask;
+    if (rgw_parse_op_type_list(op_mask_str, &op_mask) < 0) {
+        ldout(s->cct, 0) << "failed to parse op_mask" << dendl;
+        http_ret = -EINVAL;
+        return;
+    }   
+    op_state.set_op_mask(op_mask);
   }
 
   if (s->info.args.exists("suspended"))
