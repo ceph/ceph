@@ -6,6 +6,7 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
 import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
+import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -27,6 +28,7 @@ import { RbdModel } from './rbd-model';
   styleUrls: ['./rbd-list.component.scss']
 })
 export class RbdListComponent implements OnInit, OnDestroy {
+  @ViewChild(TableComponent) table: TableComponent;
   @ViewChild('usageTpl') usageTpl: TemplateRef<any>;
   @ViewChild('parentTpl') parentTpl: TemplateRef<any>;
   @ViewChild('nameTpl') nameTpl: TemplateRef<any>;
@@ -119,6 +121,10 @@ export class RbdListComponent implements OnInit, OnDestroy {
       this.summaryDataSubscription = this.summaryService.summaryData$.subscribe((data: any) => {
         this.loadImages(data.executing_tasks);
       });
+    },
+    () => {
+      this.table.reset(); // Disable loading indicator.
+      this.viewCacheStatusList = [{ status: ViewCacheStatus.ValueException }];
     });
   }
 
@@ -166,6 +172,7 @@ export class RbdListComponent implements OnInit, OnDestroy {
         this.executingTasks = executingTasks;
       },
       () => {
+        this.table.reset(); // Disable loading indicator.
         this.viewCacheStatusList = [{ status: ViewCacheStatus.ValueException }];
       }
     );

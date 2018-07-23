@@ -1,3 +1,7 @@
+<cd-error-panel i18n
+                *ngIf="loadingError">
+  Failed to load data.
+</cd-error-panel>
 <div class="dataTables_wrapper">
   <div class="dataTables_header clearfix"
        *ngIf="toolHeader">

@@ -12,7 +12,8 @@
                [status]="viewCacheStatus.status"
                [statusFor]="viewCacheStatus.statusFor"></cd-view-cache>
 
-<cd-table [data]="images"
+<cd-table #table
+          [data]="images"
           columnMode="flex"
           [columns]="columns"
           identifier="id"
