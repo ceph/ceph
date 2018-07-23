@@ -294,7 +294,7 @@ class Module(MgrModule, SSLCherryPyConfig):
         mapper, parent_urls = generate_routes(self.url_prefix)
 
         config = {
-            '{}/'.format(self.url_prefix): {
+            self.url_prefix or '/': {
                 'tools.staticdir.on': True,
                 'tools.staticdir.dir': self.get_frontend_path(),
                 'tools.staticdir.index': 'index.html'
