@@ -6,6 +6,7 @@ import logging
 import os
 import random
 import time
+from distutils.util import strtobool
 
 import teuthology
 from ..config import config, YamlConfig
@@ -56,6 +57,8 @@ def process_args(args):
             value = expand_short_repo_name(
                 value,
                 config.get_ceph_qa_suite_git_url())
+        elif key in ('validate_sha1'):
+            value = strtobool(value)
         conf[key] = value
     return conf
 

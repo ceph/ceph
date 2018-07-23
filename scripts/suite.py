@@ -71,6 +71,9 @@ Standard arguments:
                               <suite_branch> to be ignored for scheduling
                               purposes, but it will still be used for test
                               running.
+  --validate-sha1 <bool>
+                              Validate that git SHA1s passed to -S exist.
+                              [default: true]
 
 Scheduler arguments:
   --owner <owner>             Job owner
