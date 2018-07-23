@@ -106,3 +106,7 @@ map is ``active + clean``.
 
 *snaptrim_error*
   Error stopped trimming snaps.
+
+*unknown*
+  The ceph-mgr hasn't yet received any information about the PG's state from an
+  OSD since mgr started up.
