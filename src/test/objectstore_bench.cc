@@ -273,9 +273,21 @@ int main(int argc, const char *argv[])
 
   // create the objects
   std::vector<ghobject_t> oids;
+  std::vector<coll_t> pgs;
   if (cfg.multi_object) {
     oids.reserve(cfg.threads);
+	pgs.reserve(cfg.threads);  
     for (int i = 0; i < cfg.threads; i++) {
+	  spg_t pg(pg_t(1, i), shard_id_t::NO_SHARD);
+	  coll_t cid(pg);
+	 
+	  ObjectStore::Sequencer osr(__func__);
+	  ObjectStore::CollectionHandle ch = os->create_new_collection(cid);
+	  ObjectStore::Transaction t;
+	  t.create_collection(cid, 0);
+	  os->queue_transaction(ch, std::move(t));
+	  pgs.emplace_back(cid);
+	  
       std::stringstream oss;
       oss << "osbench-thread-" << i;
       oids.emplace_back(hobject_t(sobject_t(oss.str(), CEPH_NOSNAP)));
@@ -302,8 +314,9 @@ int main(int argc, const char *argv[])
   auto t1 = high_resolution_clock::now();
   for (int i = 0; i < cfg.threads; i++) {
     const auto &oid = cfg.multi_object ? oids[i] : oids[0];
+	const auto &current_cid = cfg.multi_object ? pgs[i] : cid;
     workers.emplace_back(osbench_worker, os.get(), std::ref(cfg),
-                         cid, oid, i * cfg.size / cfg.threads);
+                         current_cid, oid, i * cfg.size / cfg.threads);
   }
   for (auto &worker : workers)
     worker.join();
@@ -320,10 +333,23 @@ int main(int argc, const char *argv[])
 
   // remove the objects
   ObjectStore::Transaction t;
-  for (const auto &oid : oids)
-    t.remove(cid, oid);
-  os->queue_transaction(ch, std::move(t));
-
+  if(cfg.multi_object) {
+    ObjectStore::Sequencer osr(__func__);
+    for (int i = 0; i< cfg.threads; i++) {
+      const auto &oid = oids[i];
+	  const auto &cid = pgs[i];
+	  t.remove(cid, oid);
+    }
+	os->apply_transaction(&osr, std::move(t));
+	for (const auto &cid : pgs) {
+	  t.remove_collection(cid);
+	}
+	os->apply_transaction(&osr, std::move(t));
+  } else {
+    for (const auto &oid : oids)
+      t.remove(cid, oid);
+    os->queue_transaction(ch, std::move(t));
+  }
   os->umount();
   return 0;
 }
