@@ -163,13 +163,14 @@ int JournalTool::main(std::vector<const char*> &argv)
   // event mode is only specific for mdlog
   for (auto role : role_selector.get_roles()) {
     rank = role.rank;
+    std::vector<const char *> rank_argv(argv);
     dout(4) << "Executing for rank " << rank << dendl;
     if (mode == std::string("journal")) {
-      r = main_journal(argv);
+      r = main_journal(rank_argv);
     } else if (mode == std::string("header")) {
-      r = main_header(argv);
+      r = main_header(rank_argv);
     } else if (mode == std::string("event")) {
-      r = main_event(argv);
+      r = main_event(rank_argv);
     } else {
       cerr << "Bad command '" << mode << "'" << std::endl;
       return -EINVAL;
