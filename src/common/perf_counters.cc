@@ -30,7 +30,7 @@ PerfCountersCollection::~PerfCountersCollection()
   clear();
 }
 
-void PerfCountersCollection::add(class PerfCounters *l)
+void PerfCountersCollection::add(class PerfCountersCollectionable* l)
 {
   std::lock_guard<Mutex> lck(m_lock);
 
@@ -45,27 +45,23 @@ void PerfCountersCollection::add(class PerfCounters *l)
 
   m_loggers.insert(l);
 
-  for (unsigned int i = 0; i < l->m_data.size(); ++i) {
-    PerfCounters::perf_counter_data_any_d &data = l->m_data[i];
-
+  for (auto& pc_meta : *l) {
     std::string path = l->get_name();
     path += ".";
-    path += data.name;
+    path += pc_meta.name;
 
-    by_path[path] = {&data, l};
+    by_path[std::move(path)] = {&pc_meta, l};
   }
 }
 
-void PerfCountersCollection::remove(class PerfCounters *l)
+void PerfCountersCollection::remove(class PerfCountersCollectionable* l)
 {
   std::lock_guard<Mutex> lck(m_lock);
 
-  for (unsigned int i = 0; i < l->m_data.size(); ++i) {
-    PerfCounters::perf_counter_data_any_d &data = l->m_data[i];
-
+  for (auto& pc_meta : *l) {
     std::string path = l->get_name();
     path += ".";
-    path += data.name;
+    path += pc_meta.name;
 
     by_path.erase(path);
   }

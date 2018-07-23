@@ -261,8 +261,8 @@ void MgrClient::_send_report()
   {
     // Helper for checking whether a counter should be included
     auto include_counter = [this](
-        const PerfCounters::perf_counter_data_any_d &ctr,
-        const PerfCounters &perf_counters)
+        const ceph::perf_counter_meta_t &ctr,
+        const PerfCountersCollectionable& perf_counters)
     {
       return perf_counters.get_adjusted_priority(ctr.prio) >= (int)stats_threshold;
     };
@@ -316,10 +316,13 @@ void MgrClient::_send_report()
 	session->declared.insert(path);
       }
 
-      encode(static_cast<uint64_t>(data.u64), report->packed);
+      encode(static_cast<uint64_t>(perf_counters.get_u64(data)),
+	     report->packed);
       if (data.type & PERFCOUNTER_LONGRUNAVG) {
-        encode(static_cast<uint64_t>(data.avgcount), report->packed);
-        encode(static_cast<uint64_t>(data.avgcount2), report->packed);
+        encode(static_cast<uint64_t>(perf_counters.get_avgcount(data)),
+	       report->packed);
+        encode(static_cast<uint64_t>(perf_counters.get_avgcount2(data)),
+	       report->packed);
       }
     }
     ENCODE_FINISH(report->packed);

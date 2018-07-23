@@ -50,6 +50,112 @@ enum unit_t : uint8_t
   UNIT_NONE
 };
 
+struct perf_counter_meta_t {
+  enum perfcounter_type_d type { PERFCOUNTER_NONE };
+  const char* name { nullptr };
+  const char* description { nullptr };
+  const char* nick { nullptr };
+  uint8_t prio { 0 };
+  enum unit_t unit { UNIT_NONE };
+
+  bool operator==(const perf_counter_meta_t& rhs) const {
+    if (type != rhs.type)
+      return false;
+    if (name != rhs.name)
+      return false;
+    if (description != rhs.description)
+      return false;
+    if (nick != rhs.nick)
+      return false;
+    if (prio != rhs.prio)
+      return false;
+    if (unit != rhs.unit)
+      return false;
+    return true;
+  }
+};
+
+template <class T>
+class configurable_advance_iterator {
+public:
+  using value_type = T;
+  using reference = std::add_lvalue_reference_t<T>;
+  using pointer = std::add_pointer_t<T>;
+  using difference_type = std::ptrdiff_t;
+  using iterator_category = std::forward_iterator_tag;
+
+  reference operator*() {
+    return *reinterpret_cast<pointer>(curr);
+  }
+  pointer operator->() {
+    return reinterpret_cast<pointer>(curr);
+  }
+
+  configurable_advance_iterator& operator++() {
+    curr += advance;
+    return *this;
+  }
+  configurable_advance_iterator operator++(int) {
+    const auto temp(*this);
+    ++*this;
+    return temp;
+  }
+
+  bool operator==(const configurable_advance_iterator& rhs) const {
+    return curr == rhs.curr;
+  }
+  bool operator!=(const configurable_advance_iterator& rhs) const {
+    return !(*this==rhs);
+  }
+
+  template <class U>
+  configurable_advance_iterator(U const *p)
+    : curr(reinterpret_cast<std::uintptr_t>(p)),
+      advance(sizeof(U)) {
+    static_assert(std::is_base_of_v<T, U>);
+  }
+private:
+  std::uintptr_t curr;
+  const std::size_t advance;
+};
+
+class PerfCountersCollectionable {
+public:
+  typedef configurable_advance_iterator<perf_counter_meta_t> iterator;
+
+  virtual ~PerfCountersCollectionable() = default;
+
+  virtual const iterator begin() const = 0;
+  virtual const iterator end() const = 0;
+  virtual std::uint64_t get_u64(const perf_counter_meta_t& meta) const = 0;
+  virtual std::uint64_t get_avgcount(const perf_counter_meta_t& meta) const = 0;
+  virtual std::uint64_t get_avgcount2(const perf_counter_meta_t& meta) const = 0;
+
+  virtual void dump_formatted(
+    ceph::Formatter* f,
+    bool schema,
+    const std::string &counter = "") = 0;
+  virtual void dump_formatted_histograms(
+    ceph::Formatter* f,
+    bool schema,
+    const std::string &counter = "") = 0;
+  virtual void dump_formatted_generic(
+    ceph::Formatter* f,
+    bool schema,
+    bool histograms,
+    const std::string &counter = "") = 0;
+
+  virtual void reset() = 0;
+
+  virtual const std::string& get_name() const = 0;
+  virtual void set_name(std::string s) = 0;
+
+  /// adjust priority values by some value
+  virtual void set_prio_adjust(int p) = 0;
+
+  virtual int get_adjusted_priority(int p) const = 0;
+};
+
 /* Class for constructing a PerfCounters object.
  *
  * This class performs some validation that the parameters we have supplied are
@@ -149,40 +255,25 @@ private:
  * the "avgcount" member when read off. avgcount is incremented when you call
  * tinc. Calling tset on an average is an error and will assert out.
  */
-class PerfCounters
+class PerfCounters : public PerfCountersCollectionable
 {
 public:
   /** Represents a PerfCounters data element. */
-  struct perf_counter_data_any_d {
-    perf_counter_data_any_d()
-      : name(NULL),
-        description(NULL),
-        nick(NULL),
-	 type(PERFCOUNTER_NONE),
-	 unit(UNIT_NONE)
-    {}
-    perf_counter_data_any_d(const perf_counter_data_any_d& other)
-      : name(other.name),
-        description(other.description),
-        nick(other.nick),
-	 type(other.type),
-	 unit(other.unit),
-	 u64(other.u64.load()) {
-      pair<uint64_t,uint64_t> a = other.read_avg();
+  struct perf_counter_data_any_d : ::perf_counter_meta_t {
+    perf_counter_data_any_d() = default;
+    perf_counter_data_any_d(const perf_counter_data_any_d& o)
+      : perf_counter_meta_t { o.type, o.name, o.description, o.nick, o.prio, o.unit },
+	u64(o.u64.load())
+    {
+      const std::pair<std::uint64_t, std::uint64_t> a = o.read_avg();
       u64 = a.first;
       avgcount = a.second;
       avgcount2 = a.second;
-      if (other.histogram) {
-        histogram.reset(new PerfHistogram<>(*other.histogram));
+      if (o.histogram) {
+        histogram.reset(new PerfHistogram<>(*o.histogram));
       }
     }
 
-    const char *name;
-    const char *description;
-    const char *nick;
-    uint8_t prio = 0;
-    enum perfcounter_type_d type;
-    enum unit_t unit;
     std::atomic<uint64_t> u64 = { 0 };
     std::atomic<uint64_t> avgcount = { 0 };
     std::atomic<uint64_t> avgcount2 = { 0 };
@@ -243,28 +334,59 @@ public:
 
   void hinc(int idx, int64_t x, int64_t y);
 
-  void reset();
+  const iterator begin() const override final {
+    return { &m_data.front() };
+  }
+  const iterator end() const override final {
+    return { &m_data.back() + 1 };
+  }
+  std::uint64_t get_u64(const perf_counter_meta_t& meta) const override final {
+    const auto iter = std::find_if(std::begin(m_data), std::end(m_data),
+      [&meta](const auto& v) {
+	return std::addressof(v) == std::addressof(meta);
+      });
+    assert(iter != std::end(m_data));
+    return iter->u64;
+  }
+  std::uint64_t get_avgcount(const perf_counter_meta_t& meta) const override final {
+    const auto iter = std::find_if(std::begin(m_data), std::end(m_data),
+      [&meta](const auto& v) {
+	return std::addressof(v) == std::addressof(meta);
+      });
+    assert(iter != std::end(m_data));
+    return iter->avgcount;
+  }
+  std::uint64_t get_avgcount2(const perf_counter_meta_t& meta) const override final {
+    const auto iter = std::find_if(std::begin(m_data), std::end(m_data),
+      [&meta](const auto& v) {
+	return std::addressof(v) == std::addressof(meta);
+      });
+    assert(iter != std::end(m_data));
+    return iter->avgcount2;
+  }
+
+  void reset() override;
   void dump_formatted(ceph::Formatter *f, bool schema,
-                      const std::string &counter = "") {
+                      const std::string &counter = "") override {
     dump_formatted_generic(f, schema, false, counter);
   }
   void dump_formatted_histograms(ceph::Formatter *f, bool schema,
-                                 const std::string &counter = "") {
+                                 const std::string &counter = "") override {
     dump_formatted_generic(f, schema, true, counter);
   }
   pair<uint64_t, uint64_t> get_tavg_ns(int idx) const;
 
-  const std::string& get_name() const;
-  void set_name(std::string s) {
+  const std::string& get_name() const override;
+  void set_name(std::string s) override {
     m_name = s;
   }
 
   /// adjust priority values by some value
-  void set_prio_adjust(int p) {
+  void set_prio_adjust(int p) override {
     prio_adjust = p;
   }
 
-  int get_adjusted_priority(int p) const {
+  int get_adjusted_priority(int p) const override {
     return std::max(std::min(p + prio_adjust,
                              (int)PerfCountersBuilder::PRIO_CRITICAL),
                     0);
@@ -276,7 +398,7 @@ private:
   PerfCounters(const PerfCounters &rhs);
   PerfCounters& operator=(const PerfCounters &rhs);
   void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
-                              const std::string &counter = "");
+                              const std::string &counter = "") override;
 
   typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
 
@@ -299,12 +421,16 @@ private:
 
 class SortPerfCountersByName {
 public:
-  bool operator()(const PerfCounters* lhs, const PerfCounters* rhs) const {
+  bool operator()(
+    const PerfCountersCollectionable* const lhs,
+    const PerfCountersCollectionable* const rhs) const
+  {
     return (lhs->get_name() < rhs->get_name());
   }
 };
 
-typedef std::set <PerfCounters*, SortPerfCountersByName> perf_counters_set_t;
+using perf_counters_set_t = \
+  std::set<PerfCountersCollectionable*, SortPerfCountersByName>;
 
 /*
  * PerfCountersCollection manages PerfCounters objects for a Ceph process.
@@ -314,8 +440,8 @@ class PerfCountersCollection
 public:
   PerfCountersCollection(CephContext *cct);
   ~PerfCountersCollection();
-  void add(class PerfCounters *l);
-  void remove(class PerfCounters *l);
+  void add(class PerfCountersCollectionable *l);
+  void remove(class PerfCountersCollectionable *l);
   void clear();
   bool reset(const std::string &name);
 
@@ -337,8 +463,8 @@ public:
   class PerfCounterRef
   {
     public:
-    PerfCounters::perf_counter_data_any_d *data;
-    PerfCounters *perf_counters;
+    ::perf_counter_meta_t* data;
+    PerfCountersCollectionable* perf_counters;
   };
   typedef std::map<std::string,
           PerfCounterRef> CounterMap;
@@ -388,7 +514,7 @@ class PerfCountersDeleter {
 public:
   PerfCountersDeleter() noexcept : cct(nullptr) {}
   PerfCountersDeleter(CephContext* cct) noexcept : cct(cct) {}
-  void operator()(PerfCounters* p) noexcept {
+  void operator()(PerfCountersCollectionable* const p) noexcept {
     if (cct)
       cct->get_perfcounters_collection()->remove(p);
     delete p;
@@ -398,6 +524,8 @@ public:
 using PerfCountersRef = std::unique_ptr<PerfCounters, PerfCountersDeleter>;
 
 namespace ceph {
+
+using perf_counter_meta_t = ::perf_counter_meta_t;
 
 static constexpr auto PERFCOUNTER_U64_CTR = \
   static_cast<enum perfcounter_type_d>(PERFCOUNTER_U64 | PERFCOUNTER_COUNTER);
@@ -412,15 +540,6 @@ static constexpr auto PERFCOUNTER_U64_SETABLE = \
   static constexpr perf_counter_meta_t id {			\
     PERFCOUNTER_U64_SETABLE, name, desc, __VA_ARGS__		\
   }
-
-struct perf_counter_meta_t {
-  enum perfcounter_type_d type { PERFCOUNTER_NONE };
-  const char* name { nullptr };
-  const char* description { nullptr };
-  const char* nick { nullptr };
-  uint8_t prio { 0 };
-  enum unit_t unit { UNIT_NONE };
-};
 
 static constexpr std::size_t CACHE_LINE_SIZE_ { 64 };
 static constexpr std::size_t EXPECTED_THREAD_NUM { 32 };
