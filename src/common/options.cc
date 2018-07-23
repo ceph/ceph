@@ -4504,6 +4504,11 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_CREATE)
     .set_description("Maximum size of a single allocation (0 for no max)"),
 
+    Option("bluestore_tiny_write_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(4096)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Appends smaller than this size will be stored at DB only without wasting disk space. This can be beneficial when using multiple tiny objects for which block store allocation granularity causes great overhead."),
+
     Option("bluestore_prefer_deferred_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_flag(Option::FLAG_RUNTIME)

@@ -1322,6 +1322,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
   // just a big number to disble gc
   SetVal(g_conf(), "bluestore_gc_enable_total_threshold", "100000");
   SetVal(g_conf(), "bluestore_fsck_on_umount", "true");
+  SetVal(g_conf(), "bluestore_tiny_write_size", "0");
   g_conf().apply_changes(nullptr);
   int r;
 
@@ -1839,6 +1840,378 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     ASSERT_EQ( 0u, statfs_pool.data_compressed_original);
     ASSERT_EQ( 0u, statfs_pool.data_compressed);
     ASSERT_EQ( 0u, statfs_pool.data_compressed_allocated);
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, BluestoreSmallWriteMergeTest) {
+  if(string(GetParam()) != "bluestore")
+    return;
+  StartDeferred(65536);
+  SetVal(g_conf(), "bluestore_compression_mode", "force");
+  // just a big number to disble gc
+  SetVal(g_conf(), "bluestore_gc_enable_total_threshold", "100000");
+  SetVal(g_conf(), "bluestore_tiny_write_size", "4096");
+  g_conf().apply_changes(nullptr);
+  int r;
+
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    auto ch = store->open_collection(cid);
+    ASSERT_FALSE(ch);
+  }
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t1, t2, t3;
+    bufferlist bl1, bl2;
+    string s1(5 * 1024, 'a');
+    string s2(1 * 1024, 'b');
+    bl1.append(s1);
+    bl2.append(s2);
+
+    t2.write(cid, hoid, 7 * 1024, bl2.length(), bl2);
+    cerr << "Append 1K bytes" << std::endl;
+    r = queue_transaction(store, ch, std::move(t2));
+    ASSERT_EQ(r, 0);
+
+    t3.write(cid, hoid, 8 * 1024, bl1.length(), bl1);
+    cerr << "Append 5K bytes" << std::endl;
+    r = queue_transaction(store, ch, std::move(t3));
+    ASSERT_EQ(r, 0);
+
+    t1.write(cid, hoid, 0, bl1.length(), bl1);
+    cerr << "Write 5K bytes prior to previous writes" << std::endl;
+    r = queue_transaction(store, ch, std::move(t1));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(11 * 1024, statfs.data_stored);
+    ASSERT_EQ(0x10000, statfs.allocated);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    cerr << "Cleaning intermediate" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t1, t2, t3;
+    bufferlist bl1, bl2;
+    string s1(5 * 1024, 'a');
+    string s2(1 * 1024, 'b');
+    bl1.append(s1);
+    bl2.append(s2);
+
+    t2.write(cid, hoid, 7 * 1024, bl2.length(), bl2);
+    cerr << "Append 1K bytes" << std::endl;
+    r = queue_transaction(store, ch, std::move(t2));
+    ASSERT_EQ(r, 0);
+
+    t1.write(cid, hoid, 0, bl1.length(), bl1);
+    cerr << "Write 5K bytes prior to previous write(s)" << std::endl;
+    r = queue_transaction(store, ch, std::move(t1));
+    ASSERT_EQ(r, 0);
+
+    t3.write(cid, hoid, 8 * 1024, bl1.length(), bl1);
+    cerr << "Append 5K bytes" << std::endl;
+    r = queue_transaction(store, ch, std::move(t3));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(11 * 1024, statfs.data_stored);
+    ASSERT_EQ(0x10000, statfs.allocated);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    struct store_statfs_t statfs;
+    r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ( 0u, statfs.allocated);
+    ASSERT_EQ( 0u, statfs.data_stored);
+    ASSERT_EQ( 0u, statfs.data_compressed_original);
+    ASSERT_EQ( 0u, statfs.data_compressed);
+    ASSERT_EQ( 0u, statfs.data_compressed_allocated);
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTinyWriteTest) {
+  if(string(GetParam()) != "bluestore")
+    return;
+  SetVal(g_conf(), "bluestore_max_blob_size", "524288");
+  StartDeferred(65536);
+  SetVal(g_conf(), "bluestore_compression_mode", "force");
+  // just a big number to disble gc
+  SetVal(g_conf(), "bluestore_gc_enable_total_threshold", "100000");
+  SetVal(g_conf(), "bluestore_tiny_write_size", "4096");
+  g_conf().apply_changes(nullptr);
+  int r;
+
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t hoid2 = hoid;
+  hoid2.hobj.snap = 1;
+  {
+    auto ch = store->open_collection(cid);
+    ASSERT_FALSE(ch);
+  }
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bool exists = store->exists(ch, hoid);
+    ASSERT_TRUE(!exists);
+
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    cerr << "Creating object " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    exists = store->exists(ch, hoid);
+    ASSERT_EQ(true, exists);
+  }
+  {
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ( 0u, statfs.allocated);
+    ASSERT_EQ( 0u, statfs.data_stored);
+    ASSERT_EQ(g_conf()->bluestore_block_size, statfs.total);
+    ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf()->bluestore_block_size);
+    //force fsck
+    ch.reset();
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+    ch = store->open_collection(cid);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append("abcde");
+    t.write(cid, hoid, 0, 5, bl);
+    cerr << "Append 5 bytes" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(5, statfs.data_stored);
+    ASSERT_EQ(0, statfs.allocated);
+    ASSERT_EQ(0, statfs.data_compressed);
+    ASSERT_EQ(0, statfs.data_compressed_original);
+    ASSERT_EQ(0, statfs.data_compressed_allocated);
+    //force fsck
+    ch.reset();
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+    ch = store->open_collection(cid);
+  }
+  {
+    ObjectStore::Transaction t;
+    std::string s(0x30000, 'a');
+    bufferlist bl;
+    bl.append(s);
+    t.write(cid, hoid, 0x10000, bl.length(), bl);
+    cerr << "Append 0x30000 compressible bytes" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(0x30005, statfs.data_stored);
+    ASSERT_EQ(0x20000, statfs.allocated);
+    ASSERT_LE(statfs.data_compressed, 0x10000);
+    ASSERT_EQ(0x20000, statfs.data_compressed_original);
+    ASSERT_EQ(statfs.data_compressed_allocated, 0x10000);
+    //force fsck
+    ch.reset();
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+    ch = store->open_collection(cid);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.zero(cid, hoid, 1, 3);
+    t.zero(cid, hoid, 0x20000, 9);
+    cerr << "Punch hole at 1~3, 0x20000~9" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(0x30005 - 3 - 9, statfs.data_stored);
+    ASSERT_EQ(0x20000, statfs.allocated);
+    ASSERT_LE(statfs.data_compressed, 0x10000);
+    ASSERT_EQ(0x20000 - 9, statfs.data_compressed_original);
+    ASSERT_EQ(statfs.data_compressed_allocated, 0x10000);
+    //force fsck
+    ch.reset();
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+    ch = store->open_collection(cid);
+  }
+  {
+    ObjectStore::Transaction t;
+    std::string s(0x1000, 'b');
+    bufferlist bl;
+    bl.append(s);
+    t.write(cid, hoid, 1, bl.length(), bl);
+    t.write(cid, hoid, 0x10001, bl.length(), bl);
+    cerr << "Overwrite first and second(compressible) extents" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(0x30001 - 9 + 0x1000, statfs.data_stored);
+    ASSERT_EQ(0x40000, statfs.allocated);
+    ASSERT_LE(statfs.data_compressed, 0x10000);
+    ASSERT_EQ(0x20000 - 9 - 0x1000, statfs.data_compressed_original);
+    ASSERT_EQ(statfs.data_compressed_allocated, 0x10000);
+    //force fsck
+    ch.reset();
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+    ch = store->open_collection(cid);
+  }
+  {
+    ObjectStore::Transaction t;
+    std::string s(0x10000, 'c');
+    bufferlist bl;
+    bl.append(s);
+    t.write(cid, hoid, 0x10000, bl.length(), bl);
+    t.write(cid, hoid, 0x20000, bl.length(), bl);
+    t.write(cid, hoid, 0x30000, bl.length(), bl);
+    cerr << "Overwrite compressed extent with 3 uncompressible ones" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(0x30000 + 0x1001, statfs.data_stored);
+    ASSERT_EQ(0x40000, statfs.allocated);
+    ASSERT_LE(statfs.data_compressed, 0);
+    ASSERT_EQ(0, statfs.data_compressed_original);
+    ASSERT_EQ(0, statfs.data_compressed_allocated);
+    //force fsck
+    ch.reset();
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+    ch = store->open_collection(cid);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.zero(cid, hoid, 0, 0x40000);
+    cerr << "Zero object" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(0u, statfs.allocated);
+    ASSERT_EQ(0u, statfs.data_stored);
+    ASSERT_EQ(0u, statfs.data_compressed_original);
+    ASSERT_EQ(0u, statfs.data_compressed);
+    ASSERT_EQ(0u, statfs.data_compressed_allocated);
+    //force fsck
+    ch.reset();
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+    ch = store->open_collection(cid);
+  }
+  {
+    ObjectStore::Transaction t;
+    std::string s(0x10000, 'c');
+    bufferlist bl;
+    bl.append(s);
+    bl.append(s);
+    bl.append(s);
+    bl.append(s.substr(0, 0x10000-2));
+    t.write(cid, hoid, 0, bl.length(), bl);
+    cerr << "Yet another compressible write" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    struct store_statfs_t statfs;
+    r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(0x40000 - 2, statfs.data_stored);
+    ASSERT_EQ(0x30000, statfs.allocated);
+    ASSERT_LE(statfs.data_compressed, 0x10000);
+    ASSERT_EQ(0x20000, statfs.data_compressed_original);
+    ASSERT_EQ(0x10000, statfs.data_compressed_allocated);
+    //force fsck
+    ch.reset();
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+    ch = store->open_collection(cid);
+  }
+  {
+    struct store_statfs_t statfs;
+    r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+
+    ObjectStore::Transaction t;
+    t.clone(cid, hoid, hoid2);
+    cerr << "Clone compressed objecte" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    struct store_statfs_t statfs2;
+    r = store->statfs(&statfs2);
+    ASSERT_EQ(r, 0);
+    ASSERT_GT(statfs2.data_stored, statfs.data_stored);
+    ASSERT_EQ(statfs2.allocated, statfs.allocated);
+    ASSERT_GT(statfs2.data_compressed, statfs.data_compressed);
+    ASSERT_GT(statfs2.data_compressed_original, statfs.data_compressed_original);
+    ASSERT_EQ(statfs2.data_compressed_allocated, statfs.data_compressed_allocated);
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    struct store_statfs_t statfs;
+    r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ( 0u, statfs.allocated);
+    ASSERT_EQ( 0u, statfs.data_stored);
+    ASSERT_EQ( 0u, statfs.data_compressed_original);
+    ASSERT_EQ( 0u, statfs.data_compressed);
+    ASSERT_EQ( 0u, statfs.data_compressed_allocated);
   }
 }
 
@@ -6267,7 +6640,6 @@ void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
 TEST_P(StoreTestSpecificAUSize, Many4KWritesTest) {
   if (string(GetParam()) != "bluestore")
     return;
-
   StartDeferred(0x10000);
 
   const unsigned max_object = 4*1024*1024;
@@ -7318,6 +7690,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
     stringify(2 * offs_base).c_str());
   SetVal(g_conf(), "bluestore_extent_map_shard_max_size", "12000");
   SetVal(g_conf(), "bluestore_no_per_pool_stats_tolerance", "enforce");
+  SetVal(g_conf(), "bluestore_tiny_write_size", "0");
 
   StartDeferred(0x10000);
 
