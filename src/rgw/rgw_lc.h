@@ -38,6 +38,13 @@ typedef enum {
   lc_complete,
 }LC_BUCKET_STATUS;
 
+typedef enum {
+  standard_ia = 0,
+  onezone_ia,
+  glacier,
+  undefined,
+} STORAGE_CLASS;
+
 class LCExpiration
 {
 protected:
@@ -92,7 +99,80 @@ public:
     return true;
   }
 };
-WRITE_CLASS_ENCODER(LCExpiration)
+WRITE_CLASS_ENCODER(LCExpiration);
+
+class LCTransition
+{
+protected:
+  string days;
+  string date;
+  string storage_class;
+
+public:
+  int get_days() const {
+    return atoi(days.c_str());
+  }
+
+  string get_date() const {
+    return date;
+  }
+
+  string get_storage_class_str() const {
+    return storage_class;
+  }
+
+  STORAGE_CLASS get_storage_class() const {
+    if (storage_class.compare("STANDARD_IA") == 0) {
+      return standard_ia;
+    } else if (storage_class.compare("ONEZONE_IA") == 0) {
+      return onezone_ia;
+    } else if (storage_class.compare("GLACIER") == 0) {
+      return glacier;
+    } else {
+      return undefined;
+    }
+  }
+
+  bool has_days() const {
+    return !days.empty();
+  }
+
+  bool has_date() const {
+    return !date.empty();
+  }
+
+  bool empty() const {
+    return days.empty() && date.empty();
+  }
+
+  bool valid() const {
+    if (!days.empty() && !date.empty()) {
+      return false;
+    } else if (!days.empty() && get_days() <=0) {
+      return false;
+    }
+    //We've checked date in xml parsing
+    return true;
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(days, bl);
+    encode(date, bl);
+    encode(storage_class, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(days, bl);
+    decode(date, bl);
+    decode(storage_class, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(LCTransition);
 
 class LCFilter
 {
@@ -162,6 +242,8 @@ protected:
   LCExpiration noncur_expiration;
   LCExpiration mp_expiration;
   LCFilter filter;
+  map<int, LCTransition> transitions;
+  map<int, LCTransition> noncur_transitions;
   bool dm_expiration = false;
 
 public:
@@ -210,6 +292,14 @@ public:
     return dm_expiration;
   }
 
+  map<int, LCTransition>& get_transitions() {
+    return transitions;
+  }
+
+  map<int, LCTransition>& get_noncur_transitions() {
+    return noncur_transitions;
+  }
+
   void set_id(const string& _id) {
     id = _id;
   }
@@ -238,10 +328,20 @@ public:
     dm_expiration = _dm_expiration;
   }
 
+  bool add_transition(LCTransition* _transition) {
+    auto ret = transitions.emplace(_transition->get_storage_class(), *_transition);
+    return ret.second;
+  }
+
+  bool add_noncur_transition(LCTransition* _noncur_transition) {
+    auto ret = noncur_transitions.emplace(_noncur_transition->get_storage_class(), *_noncur_transition);
+    return ret.second;
+  }
+
   bool valid();
   
   void encode(bufferlist& bl) const {
-     ENCODE_START(5, 1, bl);
+     ENCODE_START(6, 1, bl);
      encode(id, bl);
      encode(prefix, bl);
      encode(status, bl);
@@ -250,10 +350,12 @@ public:
      encode(mp_expiration, bl);
      encode(dm_expiration, bl);
      encode(filter, bl);
+     encode(transitions, bl);
+     encode(noncur_transitions, bl);
      ENCODE_FINISH(bl);
    }
    void decode(bufferlist::const_iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN(5, 1, 1, bl);
+     DECODE_START_LEGACY_COMPAT_LEN(6, 1, 1, bl);
      decode(id, bl);
      decode(prefix, bl);
      decode(status, bl);
@@ -270,6 +372,10 @@ public:
      if (struct_v >= 5) {
        decode(filter, bl);
      }
+     if (struct_v >= 6) {
+       decode(transitions, bl);
+       decode(noncur_transitions, bl);
+     }
      DECODE_FINISH(bl);
    }
   void dump(Formatter *f) const;
@@ -277,6 +383,14 @@ public:
   void init_simple_days_rule(std::string_view _id, std::string_view _prefix, int num_days);
 };
 WRITE_CLASS_ENCODER(LCRule)
+
+struct transition_action
+{
+  int days;
+  boost::optional<ceph::real_time> date;
+  int storage_class;
+  transition_action() : days(0), storage_class(standard_ia) {}
+};
 
 struct lc_op
 {
@@ -287,6 +401,8 @@ struct lc_op
   int mp_expiration{0};
   boost::optional<ceph::real_time> expiration_date;
   boost::optional<RGWObjTags> obj_tags;
+  map<int, transition_action> transitions;
+  map<int, transition_action> noncur_transitions;
   
   void dump(Formatter *f) const;
 };
