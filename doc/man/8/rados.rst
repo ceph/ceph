@@ -9,9 +9,7 @@
 Synopsis
 ========
 
-| **rados** [ -m *monaddr* ] [ mkpool | rmpool *foo* ] [ -p | --pool
-  *pool* ] [ -s | --snap *snap* ] [ -i *infile* ] [ -o *outfile* ]
-  *command* ...
+| **rados** [ *options* ] [ *command* ]
 
 
 Description
@@ -88,6 +86,7 @@ Global commands
 
 :command:`list-inconsistent-snapset` *pgid*
   List inconsistent snapsets in given PG.
+
 
 Pool specific commands
 ======================
@@ -184,6 +183,13 @@ Pool specific commands
 
 :command:`setomapheader` *name* *value*
   Set the value of the object map header of object name.
+
+:command:`export` *filename*
+  Serialize pool contents to a file or standard output.\n"
+
+:command:`import` [--dry-run] [--no-overwrite] < filename | - >
+  Load pool contents from a file or standard input
+
 
 Examples
 ========
