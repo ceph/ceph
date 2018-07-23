@@ -31,12 +31,7 @@ bool LCExpiration_S3::xml_end(const char * el) {
   } else {
     date = lc_date->get_data();
     //We need return xml error according to S3
-    boost::optional<ceph::real_time> expiration_date = ceph::from_iso_8601(date);
-    if (boost::none == expiration_date) {
-      return false;
-    }
-    struct timespec expiration_time = ceph::real_clock::to_timespec(*expiration_date);
-    if (expiration_time.tv_sec % (24*60*60) || expiration_time.tv_nsec) {
+    if (!check_date(date)) {
       return false;
     }
   }
@@ -107,6 +102,51 @@ bool LCFilter_S3::xml_end(const char* el) {
   return !(single_cond && num_conditions > 1);
 }
 
+bool LCTransition_S3::xml_end(const char* el) {
+  LCDays_S3 *lc_days = static_cast<LCDays_S3 *>(find_first("Days"));
+  LCDate_S3 *lc_date = static_cast<LCDate_S3 *>(find_first("Date"));
+  if ((lc_days && lc_date) || (!lc_days && !lc_date)) {
+    return false;
+  }
+  if (lc_days) {
+    days = lc_days->get_data();
+  } else {
+    date = lc_date->get_data();
+    //We need return xml error according to S3
+    if (!check_date(date)) {
+      return false;
+    }
+  }
+  LCStorageClass_S3 *lc_storage_class = static_cast<LCStorageClass_S3 *>(find_first("StorageClass"));
+  if (!lc_storage_class) {
+    return false;
+  }
+  storage_class = lc_storage_class->get_data();
+  if (storage_class.compare("STANDARD_IA") != 0 && storage_class.compare("ONEZONE_IA") != 0 &&
+      storage_class.compare("GLACIER") != 0) {
+    return false;
+  }
+  return true;
+}
+
+bool LCNoncurTransition_S3::xml_end(const char* el) {
+  LCDays_S3 *lc_noncur_days = static_cast<LCDays_S3 *>(find_first("NoncurrentDays"));
+  if (!lc_noncur_days) {
+    return false;
+  }
+  days = lc_noncur_days->get_data();
+  LCStorageClass_S3 *lc_storage_class = static_cast<LCStorageClass_S3 *>(find_first("StorageClass"));
+  if (!lc_storage_class) {
+    return false;
+  }
+  storage_class = lc_storage_class->get_data();
+  if (storage_class.compare("STANDARD_IA") != 0 && storage_class.compare("ONEZONE_IA") != 0 &&
+      storage_class.compare("GLACIER") != 0) {
+    return false;
+  }
+  return true;
+}
+
 
 bool LCRule_S3::xml_end(const char *el) {
   LCID_S3 *lc_id;
@@ -116,6 +156,8 @@ bool LCRule_S3::xml_end(const char *el) {
   LCNoncurExpiration_S3 *lc_noncur_expiration;
   LCMPExpiration_S3 *lc_mp_expiration;
   LCFilter_S3 *lc_filter;
+  LCTransition_S3 *lc_transition;
+  LCNoncurTransition_S3 *lc_noncur_transition;
   id.clear();
   prefix.clear();
   status.clear();
@@ -165,7 +207,13 @@ bool LCRule_S3::xml_end(const char *el) {
   lc_expiration = static_cast<LCExpiration_S3 *>(find_first("Expiration"));
   lc_noncur_expiration = static_cast<LCNoncurExpiration_S3 *>(find_first("NoncurrentVersionExpiration"));
   lc_mp_expiration = static_cast<LCMPExpiration_S3 *>(find_first("AbortIncompleteMultipartUpload"));
-  if (!lc_expiration && !lc_noncur_expiration && !lc_mp_expiration) {
+
+  XMLObjIter iter = find("Transition");
+  lc_transition = static_cast<LCTransition_S3 *>(iter.get_next());
+  XMLObjIter noncur_iter = find("NoncurrentVersionTransition");
+  lc_noncur_transition = static_cast<LCNoncurTransition_S3 *>(noncur_iter.get_next());
+
+  if (!lc_expiration && !lc_noncur_expiration && !lc_mp_expiration && !lc_transition && !lc_noncur_transition) {
     return false;
   } else {
     if (lc_expiration) {
@@ -183,8 +231,19 @@ bool LCRule_S3::xml_end(const char *el) {
     if (lc_mp_expiration) {
       mp_expiration = *lc_mp_expiration;
     }
+    while (lc_transition) {
+      if (!add_transition(lc_transition)) {
+        return false;
+      }
+      lc_transition = static_cast<LCTransition_S3 *>(iter.get_next());
+    }
+    while (lc_noncur_transition) {
+      if (!add_noncur_transition(lc_noncur_transition)) {
+        return false;
+      }
+      lc_noncur_transition = static_cast<LCNoncurTransition_S3 *>(noncur_iter.get_next());
+    }
   }
-
   return true;
 }
 
@@ -209,6 +268,18 @@ void LCRule_S3::to_xml(ostream& out) {
   if (!mp_expiration.empty()) {
     LCMPExpiration_S3& mp_expir = static_cast<LCMPExpiration_S3&>(mp_expiration);
     mp_expir.to_xml(out);
+  }
+  if (!transitions.empty()) {
+    for (auto &elem : transitions) {
+      LCTransition_S3& tran = static_cast<LCTransition_S3&>(elem.second);
+      tran.to_xml(out);
+    }
+  }
+  if (!noncur_transitions.empty()) {
+    for (auto &elem : noncur_transitions) {
+      LCNoncurTransition_S3& noncur_tran = static_cast<LCNoncurTransition_S3&>(elem.second);
+      noncur_tran.to_xml(out);
+    }
   }
   out << "</Rule>";
 }
@@ -274,6 +345,25 @@ XMLObj *RGWLCXMLParser_S3::alloc_obj(const char *el)
     obj = new LCMPExpiration_S3();
   } else if (strcmp(el, "DaysAfterInitiation") == 0) {
     obj = new LCDays_S3();
+  } else if (strcmp(el, "StorageClass") == 0) {
+    obj = new LCStorageClass_S3();
+  } else if (strcmp(el, "Transition") == 0) {
+    obj = new LCTransition_S3();
+  } else if (strcmp(el, "NoncurrentVersionTransition") == 0) {
+    obj = new LCNoncurTransition_S3();
   }
   return obj;
+}
+
+bool check_date(const string& _date)
+{
+  boost::optional<ceph::real_time> date = ceph::from_iso_8601(_date);
+  if (boost::none == date) {
+    return false;
+  }
+  struct timespec time = ceph::real_clock::to_timespec(*date);
+  if (time.tv_sec % (24*60*60) || time.tv_nsec) {
+    return false;
+  }
+  return true;
 }
