@@ -377,7 +377,7 @@ A rule takes the following form::
 		min_size <min-size>
 		max_size <max-size>
 		step take <bucket-name> [class <device-class>]
-		step [choose|chooseleaf] [firstn|indep] <N> <bucket-type>
+		step [choose|chooseleaf] [firstn|indep] <N> type <bucket-type>
 		step emit
 	}
 
