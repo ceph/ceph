@@ -318,6 +318,7 @@ void usage()
   cout << "   --infile=<file>           specify a file to read in when setting data\n";
   cout << "   --categories=<list>       comma separated list of categories, used in usage show\n";
   cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\")\n";
+  cout << "   --op-mask=<op-mask>       permission of user's operations (e.g., \"read, write, delete, *\")\n";
   cout << "   --yes-i-really-mean-it    required for certain operations\n";
   cout << "   --warnings-only           when specified with bucket limit check, list\n";
   cout << "                             only buckets nearing or over the current max\n";
