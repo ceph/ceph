@@ -5082,8 +5082,9 @@ int PrimaryLogPG::do_checksum(OpContext *ctx, OSDOp& osd_op,
 			      bufferlist::iterator *bl_it)
 {
   dout(20) << __func__ << dendl;
-  bool skip_data_digest = osd->store->has_builtin_csum() &&
-    osd->osd_skip_data_digest;
+  bool skip_data_digest =
+    (osd->store->has_builtin_csum() && osd->osd_skip_data_digest) ||
+    g_conf->osd_distrust_data_digest;
 
   auto& op = osd_op.op;
   if (op.checksum.chunk_size > 0) {
@@ -5300,8 +5301,9 @@ int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
 {
   dout(20) << __func__ << dendl;
   ceph_osd_op& op = osd_op.op;
-  bool skip_data_digest = osd->store->has_builtin_csum() &&
-    osd->osd_skip_data_digest;
+  bool skip_data_digest =
+    (osd->store->has_builtin_csum() && osd->osd_skip_data_digest) ||
+    g_conf->osd_distrust_data_digest;
 
   auto& oi = ctx->new_obs.oi;
   uint64_t size = oi.size;
@@ -5385,8 +5387,9 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
   __u32 seq = oi.truncate_seq;
   uint64_t size = oi.size;
   bool trimmed_read = false;
-  bool skip_data_digest = osd->store->has_builtin_csum() &&
-    osd->osd_skip_data_digest;
+  bool skip_data_digest =
+    (osd->store->has_builtin_csum() && osd->osd_skip_data_digest) ||
+    g_conf->osd_distrust_data_digest;
 
   // are we beyond truncate_size?
   if ( (seq < op.extent.truncate_seq) &&
@@ -5472,8 +5475,9 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   auto& op = osd_op.op;
   auto& oi = ctx->new_obs.oi;
   auto& soid = oi.soid;
-  bool skip_data_digest = osd->store->has_builtin_csum() &&
-    osd->osd_skip_data_digest;
+  bool skip_data_digest =
+    (osd->store->has_builtin_csum() && osd->osd_skip_data_digest) ||
+    g_conf->osd_distrust_data_digest;
 
   if (op.extent.truncate_seq) {
     dout(0) << "sparse_read does not support truncation sequence " << dendl;
@@ -5618,8 +5622,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
-  const bool skip_data_digest = osd->store->has_builtin_csum() &&
-    osd->osd_skip_data_digest;
+  const bool skip_data_digest =
+    (osd->store->has_builtin_csum() && osd->osd_skip_data_digest) ||
+    g_conf->osd_distrust_data_digest;
 
   PGTransaction* t = ctx->op_t.get();
 
@@ -8529,8 +8534,9 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::iterator& bp,
   int result = 0;
   object_copy_cursor_t cursor;
   uint64_t out_max;
-  bool skip_data_digest = osd->store->has_builtin_csum() &&
-    osd->osd_skip_data_digest;
+  bool skip_data_digest =
+    (osd->store->has_builtin_csum() && osd->osd_skip_data_digest) ||
+    g_conf->osd_distrust_data_digest;
 
   try {
     decode(cursor, bp);
