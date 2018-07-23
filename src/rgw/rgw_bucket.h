@@ -296,9 +296,7 @@ public:
                          RGWFormatterFlusher& flusher,
                          std::string *err_msg = NULL);
 
-  int check_index(RGWBucketAdminOpState& op_state,
-          map<RGWObjCategory, RGWStorageStats>& existing_stats,
-          map<RGWObjCategory, RGWStorageStats>& calculated_stats,
+  int check_index(RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher,
           std::string *err_msg = NULL);
 
   int remove(RGWBucketAdminOpState& op_state, bool bypass_gc = false, bool keep_index_consistent = true, std::string *err_msg = NULL);

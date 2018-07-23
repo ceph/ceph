@@ -1168,26 +1168,26 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
 
 
 int RGWBucket::check_index(RGWBucketAdminOpState& op_state,
-        map<RGWObjCategory, RGWStorageStats>& existing_stats,
-        map<RGWObjCategory, RGWStorageStats>& calculated_stats,
-        std::string *err_msg)
+			   RGWFormatterFlusher& flusher,
+			   std::string *err_msg)
 {
   bool fix_index = op_state.will_fix_index();
-
-  int r = store->bucket_check_index(bucket_info, &existing_stats, &calculated_stats);
-  if (r < 0) {
-    set_err_msg(err_msg, "failed to check index error=" + cpp_strerror(-r));
-    return r;
-  }
-
   if (fix_index) {
-    r = store->bucket_rebuild_index(bucket_info);
+    int r = store->bucket_rebuild_index(bucket_info);
     if (r < 0) {
       set_err_msg(err_msg, "failed to rebuild index err=" + cpp_strerror(-r));
       return r;
     }
+  } else {
+    map<RGWObjCategory, RGWStorageStats> existing_stats;
+    map<RGWObjCategory, RGWStorageStats> calculated_stats;
+    int r = store->bucket_check_index(bucket_info, &existing_stats, &calculated_stats);
+    if (r < 0) {
+      set_err_msg(err_msg, "failed to check index error=" + cpp_strerror(-r));
+      return r;
+    }
+    dump_index_check(existing_stats, calculated_stats, flusher.get_formatter());
   }
-
   return 0;
 }
 
@@ -1336,9 +1336,6 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
                   RGWFormatterFlusher& flusher)
 {
   int ret;
-  map<RGWObjCategory, RGWStorageStats> existing_stats;
-  map<RGWObjCategory, RGWStorageStats> calculated_stats;
-
 
   RGWBucket bucket;
 
@@ -1346,7 +1343,6 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
   if (ret < 0)
     return ret;
 
-  Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 
   ret = bucket.check_bad_index_multipart(op_state, flusher);
@@ -1357,11 +1353,10 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
   if (ret < 0)
     return ret;
 
-  ret = bucket.check_index(op_state, existing_stats, calculated_stats);
+  ret = bucket.check_index(op_state, flusher);
   if (ret < 0)
     return ret;
 
-  dump_index_check(existing_stats, calculated_stats, formatter);
   flusher.flush();
 
   return 0;
