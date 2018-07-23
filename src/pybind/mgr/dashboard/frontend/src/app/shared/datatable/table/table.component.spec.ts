@@ -5,6 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 
 import { ComponentsModule } from '../../components/components.module';
+import { CdTableFetchDataContext } from '../../models/cd-table-fetch-data-context';
 import { configureTestBed } from '../../unit-test-helper';
 import { TableComponent } from './table.component';
 
@@ -239,6 +240,51 @@ describe('TableComponent', () => {
       expect(component.userConfig.sorts[0].prop).toBe('b');
       expect(component.tableColumns.length).toBe(4);
       equalStorageConfig();
+    });
+
+    afterEach(() => {
+      clearLocalStorage();
+    });
+  });
+
+  describe('reload data', () => {
+    beforeEach(() => {
+      component.ngOnInit();
+      component.data = [];
+      component.updating = false;
+    });
+
+    it('should call fetchData callback function', () => {
+      component.fetchData.subscribe((context) => {
+        expect(context instanceof CdTableFetchDataContext).toBeTruthy();
+      });
+      component.reloadData();
+    });
+
+    it('should call error function', () => {
+      component.data = createFakeData(5);
+      component.fetchData.subscribe((context) => {
+        context.error();
+        expect(component.loadingError).toBeTruthy();
+        expect(component.data.length).toBe(0);
+        expect(component.loadingIndicator).toBeFalsy();
+        expect(component.updating).toBeFalsy();
+      });
+      component.reloadData();
+    });
+
+    it('should call error function with custom config', () => {
+      component.data = createFakeData(10);
+      component.fetchData.subscribe((context) => {
+        context.errorConfig.resetData = false;
+        context.errorConfig.displayError = false;
+        context.error();
+        expect(component.loadingError).toBeFalsy();
+        expect(component.data.length).toBe(10);
+        expect(component.loadingIndicator).toBeFalsy();
+        expect(component.updating).toBeFalsy();
+      });
+      component.reloadData();
     });
 
     afterEach(() => {

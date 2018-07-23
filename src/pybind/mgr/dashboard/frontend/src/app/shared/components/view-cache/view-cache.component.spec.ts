@@ -3,6 +3,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AlertModule } from 'ngx-bootstrap';
 
 import { configureTestBed } from '../../unit-test-helper';
+import { ErrorPanelComponent } from '../error-panel/error-panel.component';
+import { InfoPanelComponent } from '../info-panel/info-panel.component';
+import { WarningPanelComponent } from '../warning-panel/warning-panel.component';
 import { ViewCacheComponent } from './view-cache.component';
 
 describe('ViewCacheComponent', () => {
@@ -10,7 +13,12 @@ describe('ViewCacheComponent', () => {
   let fixture: ComponentFixture<ViewCacheComponent>;
 
   configureTestBed({
-    declarations: [ViewCacheComponent],
+    declarations: [
+      ErrorPanelComponent,
+      InfoPanelComponent,
+      ViewCacheComponent,
+      WarningPanelComponent
+    ],
     imports: [AlertModule.forRoot()]
   });
 

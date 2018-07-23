@@ -6,7 +6,7 @@
   </ol>
 </nav>
 <cd-table [data]="data | filter:filters"
-          (fetchData)="getConfigurationList()"
+          (fetchData)="getConfigurationList($event)"
           [columns]="columns"
           selectionType="single"
           (updateSelection)="updateSelection($event)">

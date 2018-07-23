@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 
 import { PoolService } from '../../../shared/api/pool.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 
 @Component({
@@ -14,9 +15,7 @@ export class PoolListComponent {
   columns: CdTableColumn[];
   selection = new CdTableSelection();
 
-  constructor(
-    private poolService: PoolService,
-  ) {
+  constructor(private poolService: PoolService) {
     this.columns = [
       {
         prop: 'pool_name',
@@ -68,10 +67,14 @@ export class PoolListComponent {
     this.selection = selection;
   }
 
-  getPoolList() {
-    this.poolService.getList().subscribe((pools: any[]) => {
-      this.pools = pools;
-    });
+  getPoolList(context: CdTableFetchDataContext) {
+    this.poolService.getList().subscribe(
+      (pools: any[]) => {
+        this.pools = pools;
+      },
+      () => {
+        context.error();
+      }
+    );
   }
-
 }

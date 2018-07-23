@@ -8,7 +8,7 @@
 <cd-table [data]="filesystems"
           columnMode="flex"
           [columns]="columns"
-          (fetchData)="loadFilesystems()"
+          (fetchData)="loadFilesystems($event)"
           identifier="id"
           forceIdentifier="true"
           selectionType="single"

@@ -17,6 +17,7 @@ import { SparklineComponent } from './sparkline/sparkline.component';
 import { SubmitButtonComponent } from './submit-button/submit-button.component';
 import { UsageBarComponent } from './usage-bar/usage-bar.component';
 import { ViewCacheComponent } from './view-cache/view-cache.component';
+import { WarningPanelComponent } from './warning-panel/warning-panel.component';
 
 @NgModule({
   imports: [
@@ -42,7 +43,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     InfoPanelComponent,
     ModalComponent,
     DeletionModalComponent,
-    ConfirmationModalComponent
+    ConfirmationModalComponent,
+    WarningPanelComponent
   ],
   providers: [],
   exports: [
@@ -54,7 +56,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     LoadingPanelComponent,
     InfoPanelComponent,
     UsageBarComponent,
-    ModalComponent
+    ModalComponent,
+    WarningPanelComponent
   ],
   entryComponents: [ModalComponent, DeletionModalComponent, ConfirmationModalComponent]
 })

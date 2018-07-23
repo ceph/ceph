@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 
 import { RgwDaemonService } from '../../../shared/api/rgw-daemon.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
 
@@ -39,15 +40,13 @@ export class RgwDaemonListComponent {
     ];
   }
 
-  getDaemonList() {
+  getDaemonList(context: CdTableFetchDataContext) {
     this.rgwDaemonService.list().subscribe(
       (resp: object[]) => {
         this.daemons = resp;
       },
       () => {
-        // Force datatable to hide the loading indicator in
-        // case of an error.
-        this.daemons = [];
+        context.error();
       }
     );
   }
