@@ -90,8 +90,8 @@ function setup_downstream() {
 		        ;;
 	        esac
 	        ln -s "$upstream/.git/$x" "$downstream/.git/$x"
-                cp "$upstream/.git/HEAD" "$downstream/.git/HEAD"
             done
+            cp "$upstream/.git/HEAD" "$downstream/.git/HEAD"
         fi
         cd $downstream
         git reset --hard $ref || return 1
