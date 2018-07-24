@@ -1,0 +1,5 @@
+overrides:
+  deepsea:
+    exec:
+    - suites/basic/health-ok.sh --cli --min-nodes=3 --client-nodes=0
+    - suites/basic/stage-5.sh --cli

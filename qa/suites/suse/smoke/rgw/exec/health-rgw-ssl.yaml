@@ -1,4 +1,0 @@
-overrides:
-  deepsea:
-    exec:
-    - suites/basic/health-rgw.sh --ssl

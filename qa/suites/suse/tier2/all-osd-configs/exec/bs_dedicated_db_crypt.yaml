@@ -1,0 +1,4 @@
+overrides:
+  deepsea:
+    exec:
+    - suites/basic/health-ok.sh --cli --profile=bs_dedicated_db_crypt
