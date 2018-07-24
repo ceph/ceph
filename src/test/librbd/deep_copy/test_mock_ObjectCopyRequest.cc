@@ -147,6 +147,13 @@ public:
     mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
   }
 
+  void expect_get_object_count(librbd::MockImageCtx& mock_image_ctx) {
+    EXPECT_CALL(mock_image_ctx, get_object_count(_))
+      .WillRepeatedly(Invoke([&mock_image_ctx](librados::snap_t snap_id) {
+          return mock_image_ctx.image_ctx->get_object_count(snap_id);
+        }));
+  }
+
   void expect_test_features(librbd::MockImageCtx &mock_image_ctx) {
     EXPECT_CALL(mock_image_ctx, test_features(_))
       .WillRepeatedly(WithArg<0>(Invoke([&mock_image_ctx](uint64_t features) {
@@ -198,6 +205,7 @@ public:
       librbd::MockTestImageCtx &mock_src_image_ctx,
       librbd::MockTestImageCtx &mock_dst_image_ctx, Context *on_finish) {
     expect_get_object_name(mock_dst_image_ctx);
+    expect_get_object_count(mock_dst_image_ctx);
     return new MockObjectCopyRequest(&mock_src_image_ctx, nullptr,
                                      &mock_dst_image_ctx, m_snap_map, 0, false,
                                      on_finish);
