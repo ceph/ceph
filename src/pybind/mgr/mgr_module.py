@@ -314,6 +314,14 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Called by the ceph-mgr service to notify the Python plugin
         that new state is available.
+
+        :param notify_type: string indicating what kind of notification,
+                            such as osd_map, mon_map, fs_map, mon_status,
+                            health, pg_summary, command, service_map
+        :param notify_id:  string (may be empty) that optionally specifies
+                            which entity is being notified about.  With
+                            "command" notifications this is set to the tag
+                            ``from send_command``.
         """
         pass
 
@@ -485,10 +493,14 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Fetch the daemon metadata for a particular service.
 
+        ceph-mgr fetches metadata asynchronously, so are windows of time during
+        addition/removal of services where the metadata is not available to
+        modules.  ``None`` is returned if no metadata is available.
+
         :param str svc_type: service type (e.g., 'mds', 'osd', 'mon')
         :param str svc_id: service id. convert OSD integer IDs to strings when
             calling this
-        :rtype: dict
+        :rtype: dict, or None if no metadata found
         """
         return self._ceph_get_metadata(svc_type, svc_id)
 
@@ -496,9 +508,12 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Fetch the latest status for a particular service daemon.
 
+        This method may return ``None`` if no status information is
+        available, for example because the daemon hasn't fully started yet.
+
         :param svc_type: string (e.g., 'rgw')
         :param svc_id: string
-        :return: dict
+        :return: dict, or None if the service is not found
         """
         return self._ceph_get_daemon_status(svc_type, svc_id)
 
@@ -527,10 +542,10 @@ class MgrModule(ceph_module.BaseMgrModule):
 
     def set_health_checks(self, checks):
         """
-        Set module's health checks
-
         Set the module's current map of health checks.  Argument is a
         dict of check names to info, in this form:
+
+        ::
 
            {
              'CHECK_FOO': {
@@ -570,7 +585,8 @@ class MgrModule(ceph_module.BaseMgrModule):
 
     def get_mgr_id(self):
         """
-        Retrieve the mgr id.
+        Retrieve the name of the manager daemon where this plugin
+        is currently being executed (i.e. the active manager).
 
         :return: str
         """
