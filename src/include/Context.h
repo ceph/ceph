@@ -196,11 +196,11 @@ struct C_Lock : public Context {
  * ContextType must be an ancestor class of ContextInstanceType, or the same class.
  * ContextInstanceType must be default-constructable.
  */
-template <class ContextType, class ContextInstanceType>
+template <class ContextType, class ContextInstanceType, class Container = std::list<ContextType *>>
 class C_ContextsBase : public ContextInstanceType {
 public:
   CephContext *cct;
-  std::list<ContextType*> contexts;
+  Container contexts;
 
   C_ContextsBase(CephContext *cct_)
     : cct(cct_)
@@ -214,23 +214,14 @@ public:
   void add(ContextType* c) {
     contexts.push_back(c);
   }
-  void take(std::list<ContextType*>& ls) {
-    contexts.splice(contexts.end(), ls);
-  }
-  bool sync_complete(int r) override {
-    auto p = contexts.begin();
-    while (p != contexts.end()) {
-      if ((*p)->sync_complete(r)) {
-	p = contexts.erase(p);
-      } else {
-	++p;
-      }
+  void take(Container& ls) {
+    Container c;
+    c.swap(ls);
+    if constexpr (std::is_same_v<Container, std::list<ContextType *>>) {
+      contexts.splice(contexts.end(), c);
+    } else {
+      contexts.insert(contexts.end(), c.begin(), c.end());
     }
-    if (contexts.empty()) {
-      delete this;
-      return true;
-    }
-    return false;
   }
   void complete(int r) override {
     // Neuter any ContextInstanceType custom complete(), because although
@@ -242,7 +233,8 @@ public:
   }
   bool empty() { return contexts.empty(); }
 
-  static ContextType *list_to_context(list<ContextType *> &cs) {
+  template<class C>
+  static ContextType *list_to_context(C& cs) {
     if (cs.size() == 0) {
       return 0;
     } else if (cs.size() == 1) {
