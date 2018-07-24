@@ -218,14 +218,34 @@ boost::optional<ARN> ARN::parse(const string& s, bool wildcards) {
     std::regex_constants::optimize);
 
   smatch match;
+  std::string str(s);
+  boost::replace_all(str, "${aws:CurrentTime}", "${aws_CurrentTime}");
+  boost::replace_all(str, "${aws:EpochTime}", "${aws_EpochTime}");
+  boost::replace_all(str, "${aws:TokenIssueTime }", "${aws_TokenIssueTime}");
+  boost::replace_all(str, "${aws:principaltype}", "${aws_principaltype}");
+  boost::replace_all(str, "${aws:SecureTransport}", "${aws_SecureTransport}");
+  boost::replace_all(str, "${aws:SourceIp}", "${aws_SourceIp}");
+  boost::replace_all(str, "${aws:UserAgent}", "${aws_UserAgent}");
+  boost::replace_all(str, "${aws:userid}", "${aws_userid}");
+  boost::replace_all(str, "${aws:username}", "${aws_username}");
 
-  if ((s == "*") && wildcards) {
+  if ((str == "*") && wildcards) {
     return ARN(Partition::wildcard, Service::wildcard, "*", "*", "*");
-  } else if (regex_match(s, match, wildcards ? rx_wild : rx_no_wild) &&
+  } else if (regex_match(str, match, wildcards ? rx_wild : rx_no_wild) &&
 	     match.size() == 6) {
     if (auto p = to_partition(match[1], wildcards)) {
       if (auto s = to_service(match[2], wildcards)) {
-	return ARN(*p, *s, match[3], match[4], match[5]);
+        std::string resource = std::string(match[5].str());
+        boost::replace_all(resource, "${aws_CurrentTime}", "${aws:CurrentTime}");
+        boost::replace_all(resource, "${aws_EpochTime}", "${aws:EpochTime}");
+        boost::replace_all(resource, "${aws_TokenIssueTime }", "${aws:TokenIssueTime}");
+        boost::replace_all(resource, "${aws_principaltype}", "${aws:principaltype}");
+        boost::replace_all(resource, "${aws_SecureTransport}", "${aws:SecureTransport}");
+        boost::replace_all(resource, "${aws_SourceIp}", "${aws:SourceIp}");
+        boost::replace_all(resource, "${aws_UserAgent}", "${aws:UserAgent}");
+        boost::replace_all(resource, "${aws_userid}", "${aws:userid}");
+        boost::replace_all(resource, "${aws_username}", "${aws:username}");
+        return ARN(*p, *s, match[3], match[4], resource);
       }
     }
   }
@@ -1544,7 +1564,17 @@ Effect Policy::eval(const Environment& e,
 		    std::uint64_t action, const ARN& resource) const {
   auto allowed = false;
   for (auto& s : statements) {
-    auto g = s.eval(e, ida, action, resource);
+    rgw::IAM::Statement statement = s;
+    if (this->version == Version::v2012_10_17) {
+      for (auto it= e.begin();  it != e.end(); it++){
+        for (ARN& r: statement.resource) {
+          std::stringstream policies_variable;
+          policies_variable  << "${" << it->first << "}";
+          boost::replace_all(r.resource, policies_variable.str(), it->second);
+        }
+      }
+    }
+    auto g = this->version == Version::v2012_10_17 ? statement.eval(e, ida, action, resource) : s.eval(e, ida, action, resource);
     if (g == Effect::Deny) {
       return g;
     } else if (g == Effect::Allow) {
