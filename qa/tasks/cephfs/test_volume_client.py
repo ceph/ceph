@@ -14,6 +14,7 @@ class TestVolumeClient(CephFSTestCase):
     # One for looking at the global filesystem, one for being
     # the VolumeClient, two for mounting the created shares
     CLIENTS_REQUIRED = 4
+    py_version = 'python'
 
     def _volume_client_python(self, client, script, vol_prefix=None, ns_prefix=None):
         # Can't dedent this *and* the script we pass in, because they might have different
@@ -32,7 +33,9 @@ vc = CephFSVolumeClient("manila", "{conf_path}", "ceph", {vol_prefix}, {ns_prefi
 vc.connect()
 {payload}
 vc.disconnect()
-        """.format(payload=script, conf_path=client.config_path, vol_prefix=vol_prefix, ns_prefix=ns_prefix))
+        """.format(payload=script, conf_path=client.config_path,
+                   vol_prefix=vol_prefix, ns_prefix=ns_prefix),
+        self.py_version)
 
     def _sudo_write_file(self, remote, path, data):
         """
