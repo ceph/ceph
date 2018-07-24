@@ -74,7 +74,7 @@ class Run(object):
                 user, str(timestamp), self.args.suite, self.args.ceph_branch,
                 self.args.kernel_branch or '-', self.args.kernel_flavor, worker
             ]
-        )
+        ).replace('/', ':')
 
     def create_initial_config(self):
         """
