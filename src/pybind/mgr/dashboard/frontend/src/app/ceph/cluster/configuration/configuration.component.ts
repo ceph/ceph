@@ -2,6 +2,7 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 
 @Component({
@@ -114,10 +115,15 @@ export class ConfigurationComponent implements OnInit {
     this.selection = selection;
   }
 
-  getConfigurationList() {
-    this.configurationService.getConfigData().subscribe((data: any) => {
-      this.data = data;
-    });
+  getConfigurationList(context: CdTableFetchDataContext) {
+    this.configurationService.getConfigData().subscribe(
+      (data: any) => {
+        this.data = data;
+      },
+      () => {
+        context.error();
+      }
+    );
   }
 
   updateFilter() {

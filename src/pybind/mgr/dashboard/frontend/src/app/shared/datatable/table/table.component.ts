@@ -23,6 +23,7 @@ import { Observable, timer as observableTimer } from 'rxjs';
 
 import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';
+import { CdTableFetchDataContext } from '../../models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../models/cd-table-selection';
 import { CdUserConfig } from '../../models/cd-user-config';
 
@@ -111,6 +112,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   search = '';
   rows = [];
   loadingIndicator = true;
+  loadingError = false;
   paginationClasses = {
     pagerLeftArrow: 'i fa fa-angle-double-left',
     pagerRightArrow: 'i fa fa-angle-double-right',
@@ -301,7 +303,19 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
   reloadData() {
     if (!this.updating) {
-      this.fetchData.emit();
+      this.loadingError = false;
+      const context = new CdTableFetchDataContext(() => {
+        // Do we have to display the error panel?
+        this.loadingError = context.errorConfig.displayError;
+        // Force data table to show no data?
+        if (context.errorConfig.resetData) {
+          this.data = [];
+        }
+        // Stop the loading indicator and reset the data table
+        // to the correct state.
+        this.useData();
+      });
+      this.fetchData.emit(context);
       this.updating = true;
     }
   }
@@ -329,11 +343,20 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (this.search.length > 0) {
       this.updateFilter(true);
     }
-    this.loadingIndicator = false;
-    this.updating = false;
+    this.reset();
     if (this.updateSelectionOnRefresh) {
       this.updateSelected();
     }
+  }
+
+  /**
+   * Reset the data table to correct state. This includes:
+   * - Disable loading indicator
+   * - Reset 'Updating' flag
+   */
+  reset() {
+    this.loadingIndicator = false;
+    this.updating = false;
   }
 
   /**

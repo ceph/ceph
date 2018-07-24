@@ -10,7 +10,7 @@
 <cd-table [data]="hosts"
           [columns]="columns"
           columnMode="flex"
-          (fetchData)="getHosts()">
+          (fetchData)="getHosts($event)">
   <ng-template #servicesTpl let-value="value">
     <span *ngFor="let service of value; last as isLast">
       <a [routerLink]="[service.cdLink]"

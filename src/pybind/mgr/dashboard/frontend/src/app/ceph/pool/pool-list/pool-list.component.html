@@ -4,7 +4,7 @@
   </ol>
 </nav>
 <cd-table [data]="pools"
-          (fetchData)="getPoolList()"
+          (fetchData)="getPoolList($event)"
           [columns]="columns"
           selectionType="single"
           (updateSelection)="updateSelection($event)">
