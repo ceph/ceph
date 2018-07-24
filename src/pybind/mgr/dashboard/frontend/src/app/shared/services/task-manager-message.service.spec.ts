@@ -44,7 +44,7 @@ describe('TaskManagerMessageService', () => {
       image_name: 'someImage'
     };
     const message = service.getRunningMessage(finishedTask);
-    expect(message).toBe('Creating RBD \'somePool/someImage\'');
+    expect(message).toBe(`Creating RBD 'somePool/someImage'`);
   });
 
   it('should getErrorMessage', () => {

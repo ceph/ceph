@@ -7,13 +7,14 @@ import { ApiModule } from './api.module';
   providedIn: ApiModule
 })
 export class HostService {
-
-  constructor(private http: HttpClient) {
-  }
+  constructor(private http: HttpClient) {}
 
   list() {
-    return this.http.get('api/host').toPromise().then((resp: any) => {
-      return resp;
-    });
+    return this.http
+      .get('api/host')
+      .toPromise()
+      .then((resp: any) => {
+        return resp;
+      });
   }
 }

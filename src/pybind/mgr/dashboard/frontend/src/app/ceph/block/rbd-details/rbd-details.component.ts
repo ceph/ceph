@@ -8,11 +8,10 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
   styleUrls: ['./rbd-details.component.scss']
 })
 export class RbdDetailsComponent implements OnChanges {
-
   @Input() selection: CdTableSelection;
   selectedItem: any;
 
-  constructor() { }
+  constructor() {}
 
   ngOnChanges() {
     if (this.selection.hasSelection) {

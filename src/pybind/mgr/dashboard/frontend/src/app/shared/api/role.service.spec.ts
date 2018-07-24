@@ -31,5 +31,4 @@ describe('RoleService', () => {
     const req = httpTesting.expectOne('api/role');
     expect(req.request.method).toBe('GET');
   });
-
 });

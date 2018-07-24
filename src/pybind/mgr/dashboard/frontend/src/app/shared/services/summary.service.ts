@@ -48,7 +48,7 @@ export class SummaryService {
    * @returns {object}
    * @memberof SummaryService
    */
-  getCurrentSummary () {
+  getCurrentSummary() {
     return this.summaryDataSource.getValue();
   }
 

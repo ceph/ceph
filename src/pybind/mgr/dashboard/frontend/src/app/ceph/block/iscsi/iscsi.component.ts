@@ -13,17 +13,18 @@ import { RelativeDatePipe } from '../../../shared/pipes/relative-date.pipe';
   styleUrls: ['./iscsi.component.scss']
 })
 export class IscsiComponent {
-
   daemons = [];
   daemonsColumns: any;
   images = [];
   imagesColumns: any;
 
-  constructor(private tcmuIscsiService: TcmuIscsiService,
-              cephShortVersionPipe: CephShortVersionPipe,
-              dimlessPipe: DimlessPipe,
-              relativeDatePipe: RelativeDatePipe,
-              listPipe: ListPipe) {
+  constructor(
+    private tcmuIscsiService: TcmuIscsiService,
+    cephShortVersionPipe: CephShortVersionPipe,
+    dimlessPipe: DimlessPipe,
+    relativeDatePipe: RelativeDatePipe,
+    listPipe: ListPipe
+  ) {
     this.daemonsColumns = [
       {
         name: 'Hostname',
@@ -31,7 +32,7 @@ export class IscsiComponent {
       },
       {
         name: '# Active/Optimized',
-        prop: 'optimized_paths',
+        prop: 'optimized_paths'
       },
       {
         name: '# Active/Non-Optimized',
@@ -88,9 +89,8 @@ export class IscsiComponent {
         name: 'A/O Since',
         prop: 'optimized_since',
         pipe: relativeDatePipe
-      },
+      }
     ];
-
   }
 
   refresh() {
@@ -98,11 +98,10 @@ export class IscsiComponent {
       this.daemons = resp.daemons;
       this.images = resp.images;
       this.images.map((image) => {
-        image.stats_history.rd_bytes = image.stats_history.rd_bytes.map(i => i[1]);
-        image.stats_history.wr_bytes = image.stats_history.wr_bytes.map(i => i[1]);
+        image.stats_history.rd_bytes = image.stats_history.rd_bytes.map((i) => i[1]);
+        image.stats_history.wr_bytes = image.stats_history.wr_bytes.map((i) => i[1]);
         return image;
       });
     });
   }
-
 }

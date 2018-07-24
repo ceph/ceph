@@ -9,7 +9,6 @@ import { CellTemplate } from '../../../shared/enum/cell-template.enum';
   styleUrls: ['./monitor.component.scss']
 })
 export class MonitorComponent {
-
   mon_status: any;
   inQuorum: any;
   notInQuorum: any;
@@ -48,15 +47,15 @@ export class MonitorComponent {
   refresh() {
     this.monitorService.getMonitor().subscribe((data: any) => {
       data.in_quorum.map((row) => {
-        row.cdOpenSessions = row.stats.num_sessions.map(i => i[1]);
+        row.cdOpenSessions = row.stats.num_sessions.map((i) => i[1]);
         row.cdLink = '/perf_counters/mon/' + row.name;
-        row.cdParams = {fromLink: '/monitor'};
+        row.cdParams = { fromLink: '/monitor' };
         return row;
       });
 
       data.out_quorum.map((row) => {
         row.cdLink = '/perf_counters/mon/' + row.name;
-        row.cdParams = {fromLink: '/monitor'};
+        row.cdParams = { fromLink: '/monitor' };
         return row;
       });
 

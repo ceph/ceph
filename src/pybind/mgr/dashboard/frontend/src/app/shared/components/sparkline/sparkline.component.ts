@@ -76,7 +76,7 @@ export class SparklineComponent implements OnInit, OnChanges {
 
   ngOnInit() {
     const getStyleTop = (tooltip, positionY) => {
-      return (tooltip.caretY - tooltip.height - tooltip.yPadding - 5) + 'px';
+      return tooltip.caretY - tooltip.height - tooltip.yPadding - 5 + 'px';
     };
 
     const getStyleLeft = (tooltip, positionX) => {
@@ -95,7 +95,7 @@ export class SparklineComponent implements OnInit, OnChanges {
       borderColor: this.colors[0].pointBorderColor
     };
 
-    this.options.tooltips.custom = tooltip => {
+    this.options.tooltips.custom = (tooltip) => {
       chartTooltip.customTooltips(tooltip);
     };
   }
