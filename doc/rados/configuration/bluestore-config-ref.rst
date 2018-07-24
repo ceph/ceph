@@ -57,6 +57,8 @@ Although there are multiple ways to deploy a Bluestore OSD (unlike Filestore
 which had 1) here are two common use cases that should help clarify the
 initial deployment strategy:
 
+.. _bluestore-single-type-device-config:
+
 **block (data) only**
 ^^^^^^^^^^^^^^^^^^^^^
 If all the devices are the same type, for example all are spinning drives, and
@@ -72,6 +74,7 @@ of the device), then the :ref:`ceph-volume-lvm` call for an lv named
 
     ceph-volume lvm create --bluestore --data ceph-vg/block-lv
 
+.. _bluestore-mixed-device-config:
 
 **block and block.db**
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -117,6 +120,20 @@ These operations should end up creating 4 OSDs, with ``block`` on the slower
 spinning drives and a 50GB logical volume for each coming from the solid state
 drive.
 
+Sizing
+======
+When using a :ref:`mixed spinning and solid drive setup
+<bluestore-mixed-device-config>` it is important to make a large-enough
+``block.db`` logical volume for Bluestore. Generally, ``block.db`` should have
+*as large as possible* logical volumes.
+
+It is recommended that the ``block.db`` size isn't smaller than 4% of
+``block``. For example, if the ``block`` size is 1TB, then ``block.db``
+shouldn't be less than 40GB.
+
+If *not* using a mix of fast and slow devices, it isn't required to create
+separate logical volumes for ``block.db`` (or ``block.wal``). Bluestore will
+automatically manage these within the space of ``block``.
 
 Cache size
 ==========
