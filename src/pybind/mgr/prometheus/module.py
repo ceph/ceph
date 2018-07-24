@@ -146,11 +146,6 @@ class Metric(object):
 class Module(MgrModule):
     COMMANDS = [
         {
-            "cmd": "prometheus self-test",
-            "desc": "Run a self test on the prometheus module",
-            "perm": "rw"
-        },
-        {
             "cmd": "prometheus file_sd_config",
             "desc": "Return file_sd compatible prometheus config for mgr cluster",
             "perm": "r"
@@ -596,12 +591,12 @@ class Module(MgrModule):
         ]
         return 0, json.dumps(ret), ""
 
+    def self_test(self):
+        self.collect()
+        self.get_file_sd_config()
+
     def handle_command(self, inbuf, cmd):
-        if cmd['prefix'] == 'prometheus self-test':
-            self.collect()
-            self.get_file_sd_config()
-            return 0, '', 'Self-test OK'
-        elif cmd['prefix'] == 'prometheus file_sd_config':
+        if cmd['prefix'] == 'prometheus file_sd_config':
             return self.get_file_sd_config()
         else:
             return (-errno.EINVAL, '',

@@ -60,6 +60,16 @@ class Module(MgrModule):
                 "desc": "Peek at a configuration value (localized variant)",
                 "perm": "rw"
             },
+            {
+                "cmd": "mgr self-test remote",
+                "desc": "Test inter-module calls",
+                "perm": "r"
+            },
+            {
+                "cmd": "mgr self-test module name=module,type=CephString",
+                "desc": "Run another module's self_test() method",
+                "perm": "r"
+            },
             ]
 
     def __init__(self, *args, **kwargs):
@@ -93,6 +103,16 @@ class Module(MgrModule):
             return 0, str(self.get_config(command['key'])), ''
         elif command['prefix'] == 'mgr self-test config get_localized':
             return 0, str(self.get_localized_config(command['key'])), ''
+        elif command['prefix'] == 'mgr self-test remote':
+            self._test_remote_calls()
+            return 0, '', 'Successfully called'
+        elif command['prefix'] == 'mgr self-test module':
+            try:
+                r = self.remote(command['module'], "self_test")
+            except RuntimeError as e:
+                return -1, '', "Test failed: {0}".format(e.message)
+            else:
+                return 0, str(r), "Self-test OK"
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
@@ -206,6 +226,39 @@ class Module(MgrModule):
         #inc.set_crush_compat_weight_set_weights
 
         self.log.info("Finished self-test procedure.")
+
+    def _test_remote_calls(self):
+        # Test making valid call
+        self.remote("influx", "handle_command", "", {"prefix": "influx self-test"})
+
+        # Test calling module that exists but isn't enabled
+        mgr_map = self.get("mgr_map")
+        all_modules = [m['name'] for m in mgr_map['available_modules']]
+        disabled_modules = set(all_modules) - set(mgr_map['modules'])
+        disabled_module = list(disabled_modules)[0]
+        try:
+            self.remote(disabled_module, "handle_command", {"prefix": "influx self-test"})
+        except ImportError:
+            pass
+        else:
+            raise RuntimeError("ImportError not raised for disabled module")
+
+        # Test calling module that doesn't exist
+        try:
+            self.remote("idontexist", "handle_command", {"prefix": "influx self-test"})
+        except ImportError:
+            pass
+        else:
+            raise RuntimeError("ImportError not raised for nonexistent module")
+
+        # Test calling method that doesn't exist
+        try:
+            self.remote("influx", "idontexist", {"prefix": "influx self-test"})
+        except NameError:
+            pass
+        else:
+            raise RuntimeError("KeyError not raised")
+
 
     def shutdown(self):
         self._workload = self.SHUTDOWN
