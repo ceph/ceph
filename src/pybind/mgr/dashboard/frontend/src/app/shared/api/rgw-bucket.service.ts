@@ -13,7 +13,7 @@ import { ApiModule } from './api.module';
   providedIn: ApiModule
 })
 export class RgwBucketService {
-  private url = '/api/rgw/bucket';
+  private url = 'api/rgw/bucket';
 
   constructor(private http: HttpClient) {}
 
