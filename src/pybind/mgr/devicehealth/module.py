@@ -1,4 +1,3 @@
-
 """
 Device health monitoring
 """
@@ -17,7 +16,7 @@ TIME_FORMAT = '%Y%m%d-%H%M%S'
 DEFAULTS = {
     'enable_monitoring': str(True),
     'scrape_frequency': str(86400),
-    'retention_period': str(86400*14),
+    'retention_period': str(86400 * 14),
     'pool_name': 'device_health_metrics',
     'mark_out_threshold': str(86400*14),
     'warn_threshold': str(86400*14*2),
@@ -33,15 +32,16 @@ HEALTH_MESSAGES = {
     DEVICE_HEALTH_TOOMANY: 'Too many daemons are expected to fail soon',
 }
 
+
 class Module(MgrModule):
     OPTIONS = [
-        { 'name': 'enable_monitoring' },
-        { 'name': 'scrape_frequency' },
-        { 'name': 'pool_name' },
-        { 'name': 'retention_period' },
-        { 'name': 'mark_out_threshold' },
-        { 'name': 'warn_threshold' },
-        { 'name': 'self_heal' },
+        {'name': 'enable_monitoring'},
+        {'name': 'scrape_frequency'},
+        {'name': 'pool_name'},
+        {'name': 'retention_period'},
+        {'name': 'mark_out_threshold'},
+        {'name': 'warn_threshold'},
+        {'name': 'self_heal'},
     ]
 
     COMMANDS = [
@@ -54,16 +54,20 @@ class Module(MgrModule):
         {
             "cmd": "device scrape-daemon-health-metrics "
                    "name=who,type=CephString",
-            "desc": "Scrape and store device health metrics for a given daemon",
+            "desc": "Scrape and store device health metrics "
+                    "for a given daemon",
             "perm": "r"
         },
         {
-            "cmd": "device scrape-health-metrics name=devid,type=CephString,req=False",
+            "cmd": "device scrape-health-metrics "
+                   "name=devid,type=CephString,req=False",
             "desc": "Scrape and store health metrics",
             "perm": "r"
         },
         {
-            "cmd": "device show-health-metrics name=devid,type=CephString name=sample,type=CephString,req=False",
+            "cmd": "device show-health-metrics "
+                   "name=devid,type=CephString "
+                   "name=sample,type=CephString,req=False",
             "desc": "Show stored device metrics for the device",
             "perm": "r"
         },
@@ -85,13 +89,13 @@ class Module(MgrModule):
         self.run = True
         self.event = Event()
 
-    def handle_command(self, inbuf, cmd):
+    def handle_command(self, _, cmd):
         self.log.error("handle_command")
 
         if cmd['prefix'] == 'device query-daemon-health-metrics':
             who = cmd.get('who', '')
             if who[0:4] != 'osd.':
-                return (-errno.EINVAL, '', 'not a valid <osd.NNN> id')
+                return -errno.EINVAL, '', 'not a valid <osd.NNN> id'
             osd_id = who[4:]
             result = CommandResult('')
             self.send_command(result, 'osd', osd_id, json.dumps({
@@ -99,17 +103,17 @@ class Module(MgrModule):
                 'format': 'json',
             }), '')
             r, outb, outs = result.wait()
-            return (r, outb, outs)
+            return r, outb, outs
         elif cmd['prefix'] == 'device scrape-daemon-health-metrics':
             who = cmd.get('who', '')
             if who[0:4] != 'osd.':
-                return (-errno.EINVAL, '', 'not a valid <osd.NNN> id')
-            id = int(who[4:])
-            return self.scrape_osd(id)
+                return -errno.EINVAL, '', 'not a valid <osd.NNN> id'
+            osd_id = int(who[4:])
+            return self.scrape_osd(osd_id)
         elif cmd['prefix'] == 'device scrape-health-metrics':
             if 'devid' in cmd:
                 return self.scrape_device(cmd['devid'])
-            return self.scrape_all();
+            return self.scrape_all()
         elif cmd['prefix'] == 'device show-health-metrics':
             return self.show_device_metrics(cmd['devid'], cmd.get('sample'))
         elif cmd['prefix'] == 'device check-health':
@@ -136,7 +140,8 @@ class Module(MgrModule):
             assert before != after
 
     def refresh_config(self):
-        self.enable_monitoring = self.get_config('enable_monitoring', '') is not '' or 'false'
+        self.enable_monitoring = self.get_config('enable_monitoring',
+                                                 '') is not '' or 'false'
         for opt, value in iteritems(DEFAULTS):
             setattr(self, opt, self.get_config(opt) or value)
 
@@ -201,7 +206,7 @@ class Module(MgrModule):
             assert r == 0
 
         ioctx = self.rados.open_ioctx(self.pool_name)
-        return (ioctx)
+        return ioctx
 
     def scrape_osd(self, osd_id):
         ioctx = self.open_connection()
@@ -237,12 +242,13 @@ class Module(MgrModule):
     def scrape_device(self, devid):
         r = self.get("device " + devid)
         if not r or 'device' not in r.keys():
-            return (-errno.ENOENT, '', 'device ' + devid + ' not found')
+            return -errno.ENOENT, '', 'device ' + devid + ' not found'
         daemons = r['device'].get('daemons', [])
         osds = [int(r[4:]) for r in daemons if r.startswith('osd.')]
         if not osds:
             return (-errno.EAGAIN, '',
-                    'device ' + devid + ' not claimed by any active OSD daemons')
+                    'device ' + devid + ' not claimed by any active '
+                                        'OSD daemons')
         osd_id = osds[0]
         ioctx = self.open_connection()
         raw_smart_data = self.do_scrape_osd(osd_id, ioctx, devid=devid)
@@ -279,7 +285,7 @@ class Module(MgrModule):
         erase = []
         try:
             with rados.ReadOpCtx() as op:
-                iter, ret = ioctx.get_omap_keys(op, "", 500) # fixme
+                iter, ret = ioctx.get_omap_keys(op, "", 500)  # fixme
                 assert ret == 0
                 ioctx.operate_read_op(op, devid)
                 for key, _ in list(iter):
@@ -301,16 +307,16 @@ class Module(MgrModule):
         # verify device exists
         r = self.get("device " + devid)
         if not r or 'device' not in r.keys():
-            return (-errno.ENOENT, '', 'device ' + devid + ' not found')
+            return -errno.ENOENT, '', 'device ' + devid + ' not found'
         # fetch metrics
         ioctx = self.open_connection()
         res = {}
         with rados.ReadOpCtx() as op:
-            iter, ret = ioctx.get_omap_vals(op, "", sample or '', 500) # fixme
+            omap_iter, ret = ioctx.get_omap_vals(op, "", sample or '', 500)  # fixme
             assert ret == 0
             try:
                 ioctx.operate_read_op(op, devid)
-                for key, value in list(iter):
+                for key, value in list(omap_iter):
                     if sample and key != sample:
                         break
                     try:
@@ -465,7 +471,6 @@ class Module(MgrModule):
             r, outb, outs = result.wait()
             if r != 0:
                 self.log.warn('Could not set osd.%s primary-affinity, r: [%s], outs: [%s]' % (osd_id, r, outb, outs))
-
 
     def extract_smart_features(self, raw):
         # FIXME: extract and normalize raw smartctl --json output and
