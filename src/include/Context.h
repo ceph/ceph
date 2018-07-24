@@ -149,42 +149,18 @@ GenContextURef<T> make_gen_lambda_context(F &&f) {
 /*
  * finish and destroy a list of Contexts
  */
-template<class A>
-inline void finish_contexts(CephContext *cct, std::list<A*>& finished, 
-                            int result = 0)
+template<class C>
+inline void finish_contexts(CephContext *cct, C& finished, int result = 0)
 {
   if (finished.empty())
     return;
 
-  list<A*> ls;
-  ls.swap(finished); // swap out of place to avoid weird loops
-
-  if (cct)
-    mydout(cct, 10) << ls.size() << " contexts to finish with " << result << dendl;
-  typename std::list<A*>::iterator it;
-  for (it = ls.begin(); it != ls.end(); it++) {
-    A *c = *it;
-    if (cct)
-      mydout(cct,10) << "---- " << c << dendl;
-    c->complete(result);
-  }
-}
-
-inline void finish_contexts(CephContext *cct, std::vector<Context*>& finished, 
-                            int result = 0)
-{
-  if (finished.empty())
-    return;
-
-  vector<Context*> ls;
+  C ls;
   ls.swap(finished); // swap out of place to avoid weird loops
 
   if (cct)
     mydout(cct,10) << ls.size() << " contexts to finish with " << result << dendl;
-  for (std::vector<Context*>::iterator it = ls.begin(); 
-       it != ls.end(); 
-       it++) {
-    Context *c = *it;
+  for (Context* c : ls) {
     if (cct)
       mydout(cct,10) << "---- " << c << dendl;
     c->complete(result);
