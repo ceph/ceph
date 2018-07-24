@@ -9,7 +9,7 @@ import { Observable } from 'rxjs/Observable';
 @Injectable()
 export class RgwUserService {
 
-  private url = '/api/rgw/proxy/user';
+  private url = 'api/rgw/proxy/user';
 
   constructor(private http: HttpClient) { }
 
@@ -35,7 +35,7 @@ export class RgwUserService {
    * @return {Observable<string[]>}
    */
   enumerate() {
-    return this.http.get('/api/rgw/proxy/metadata/user');
+    return this.http.get('api/rgw/proxy/metadata/user');
   }
 
   get(uid: string) {
