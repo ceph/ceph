@@ -77,6 +77,15 @@ namespace crimson {
       Reject,
     };
 
+    // when AtLimit::Reject is used, only start rejecting requests once their
+    // limit is above this threshold. requests under this threshold are
+    // enqueued and processed like AtLimit::Wait
+    using RejectThreshold = Time;
+
+    // the AtLimit constructor parameter can either accept AtLimit or a value
+    // for RejectThreshold (which implies AtLimit::Reject)
+    using AtLimitParam = boost::variant<AtLimit, RejectThreshold>;
+
     struct ClientInfo {
       double reservation;  // minimum
       double weight;       // proportional
@@ -757,6 +766,8 @@ namespace crimson {
 		      B> ready_heap;
 
       AtLimit          at_limit;
+      RejectThreshold  reject_threshold = 0;
+
       double           anticipation_timeout;
 
       std::atomic_bool finishing;
@@ -778,6 +789,13 @@ namespace crimson {
 
       std::unique_ptr<RunEvery> cleaning_job;
 
+      // helper function to return the value of a variant if it matches the
+      // given type T, or a default value of T otherwise
+      template <typename T, typename Variant>
+      static T get_or_default(const Variant& param, T default_value) {
+	const T *p = boost::get<T>(&param);
+	return p ? *p : default_value;
+      }
 
       // COMMON constructor that others feed into; we can accept three
       // different variations of durations
@@ -786,10 +804,11 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _idle_age,
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
-			AtLimit _at_limit,
+			AtLimitParam at_limit_param,
 			double _anticipation_timeout) :
 	client_info_f(_client_info_f),
-	at_limit(_at_limit),
+	at_limit(get_or_default<AtLimit>(at_limit_param, AtLimit::Reject)),
+	reject_threshold(get_or_default<RejectThreshold>(at_limit_param, 0)),
 	anticipation_timeout(_anticipation_timeout),
 	finishing(false),
 	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
@@ -931,7 +950,8 @@ namespace crimson {
 
 	RequestTag tag = initial_tag(TagCalc{}, client, req_params, time, cost);
 
-	if (at_limit == AtLimit::Reject && tag.limit > time) {
+	if (at_limit == AtLimit::Reject &&
+            tag.limit > time + reject_threshold) {
 	  // if the client is over its limit, reject it here
 	  return EAGAIN;
 	}
@@ -1238,11 +1258,11 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _idle_age,
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
-			AtLimit _at_limit = AtLimit::Wait,
+			AtLimitParam at_limit_param = AtLimit::Wait,
 			double _anticipation_timeout = 0.0) :
 	super(_client_info_f,
 	      _idle_age, _erase_age, _check_time,
-	      _at_limit, _anticipation_timeout)
+	      at_limit_param, _anticipation_timeout)
       {
 	// empty
       }
@@ -1250,13 +1270,13 @@ namespace crimson {
 
       // pull convenience constructor
       PullPriorityQueue(typename super::ClientInfoFunc _client_info_f,
-			AtLimit _at_limit = AtLimit::Wait,
+			AtLimitParam at_limit_param = AtLimit::Wait,
 			double _anticipation_timeout = 0.0) :
 	PullPriorityQueue(_client_info_f,
 			  std::chrono::minutes(10),
 			  std::chrono::minutes(15),
 			  std::chrono::minutes(6),
-			  _at_limit,
+			  at_limit_param,
 			  _anticipation_timeout)
       {
 	// empty
@@ -1470,11 +1490,11 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _idle_age,
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
-			AtLimit _at_limit = AtLimit::Wait,
+			AtLimitParam at_limit_param = AtLimit::Wait,
 			double anticipation_timeout = 0.0) :
 	super(_client_info_f,
 	      _idle_age, _erase_age, _check_time,
-	      _at_limit, anticipation_timeout)
+	      at_limit_param, anticipation_timeout)
       {
 	can_handle_f = _can_handle_f;
 	handle_f = _handle_f;
@@ -1486,7 +1506,7 @@ namespace crimson {
       PushPriorityQueue(typename super::ClientInfoFunc _client_info_f,
 			CanHandleRequestFunc _can_handle_f,
 			HandleRequestFunc _handle_f,
-			AtLimit _at_limit = AtLimit::Wait,
+			AtLimitParam at_limit_param = AtLimit::Wait,
 			double _anticipation_timeout = 0.0) :
 	PushPriorityQueue(_client_info_f,
 			  _can_handle_f,
@@ -1494,7 +1514,7 @@ namespace crimson {
 			  std::chrono::minutes(10),
 			  std::chrono::minutes(15),
 			  std::chrono::minutes(6),
-			  _at_limit,
+			  at_limit_param,
 			  _anticipation_timeout)
       {
 	// empty

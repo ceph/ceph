@@ -1111,5 +1111,30 @@ namespace crimson {
         EXPECT_NE(nullptr, r2); // add_request does not take r2 on failure
       }
     }
+
+
+    TEST(dmclock_server_pull, pull_reject_threshold) {
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId, Request, false>;
+
+      ClientId client1 = 52;
+
+      dmc::ClientInfo info(0.0, 1.0, 1.0);
+
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info;
+      };
+
+      // allow up to 3 seconds worth of limit before rejecting
+      Queue pq(client_info_f, RejectThreshold{3.0});
+
+      EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{1})); // at limit=1
+      EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{1})); // 1 over
+      EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{1})); // 2 over
+      EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{1})); // 3 over
+      EXPECT_EQ(EAGAIN, pq.add_request_time({}, client1, {}, Time{1})); // reject
+      EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{3})); // 3 over
+    }
+
   } // namespace dmclock
 } // namespace crimson
