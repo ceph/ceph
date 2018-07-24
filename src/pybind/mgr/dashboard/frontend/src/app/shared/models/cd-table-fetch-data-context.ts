@@ -1,6 +1,6 @@
 export class CdTableFetchDataContext {
   errorConfig = {
-    resetData: true,   // Force data table to show no data
+    resetData: true, // Force data table to show no data
     displayError: true // Show an error panel above the data table
   };
 

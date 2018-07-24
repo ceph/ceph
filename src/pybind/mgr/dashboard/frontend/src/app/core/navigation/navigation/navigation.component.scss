@@ -14,7 +14,8 @@
     float: none;
   }
 
-  .navbar-brand,.navbar-brand:hover{
+  .navbar-brand,
+  .navbar-brand:hover {
     color: $color-navbar-brand;
     height: auto;
     margin: 15px 0 15px 20px;
@@ -23,7 +24,7 @@
     align-self: flex-start;
   }
 
-  .navbar-brand>img {
+  .navbar-brand > img {
     height: 25px;
   }
 

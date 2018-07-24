@@ -33,8 +33,8 @@ describe('FormsHelperService', () => {
     });
 
     it('should throw an error if element could be found', () => {
-      expect(() => form.get('d')).toThrowError('Control \'d\' could not be found!');
-      expect(() => form.get('sth')).toThrowError('Control \'sth\' could not be found!');
+      expect(() => form.get('d')).toThrowError(`Control 'd' could not be found!`);
+      expect(() => form.get('sth')).toThrowError(`Control 'sth' could not be found!`);
     });
   });
 
@@ -83,8 +83,8 @@ describe('FormsHelperService', () => {
     });
 
     it('should nested throw an error if control could not be found', () => {
-      expect(() => form.get('d')).toThrowError('Control \'d\' could not be found!');
-      expect(() => form.getValue('sth')).toThrowError('Control \'sth\' could not be found!');
+      expect(() => form.get('d')).toThrowError(`Control 'd' could not be found!`);
+      expect(() => form.getValue('sth')).toThrowError(`Control 'sth' could not be found!`);
     });
   });
 

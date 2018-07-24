@@ -6,9 +6,7 @@ import { Component, Input } from '@angular/core';
   styleUrls: ['./helper.component.scss']
 })
 export class HelperComponent {
-
   @Input() html: any;
 
-  constructor() { }
-
+  constructor() {}
 }

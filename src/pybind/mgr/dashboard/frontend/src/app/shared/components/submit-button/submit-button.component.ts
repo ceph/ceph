@@ -40,7 +40,7 @@ export class SubmitButtonComponent implements OnInit {
       if (_.has(this.form.errors, 'cdSubmitButton')) {
         this.loading = false;
         _.unset(this.form.errors, 'cdSubmitButton');
-         // Handle Reactive forms.
+        // Handle Reactive forms.
         if (this.form instanceof AbstractControl) {
           (<AbstractControl>this.form).updateValueAndValidity();
         }
@@ -66,9 +66,7 @@ export class SubmitButtonComponent implements OnInit {
   }
 
   focusButton() {
-    this.elRef.nativeElement.offsetParent.querySelector(
-      `button[type="${this.type}"]`
-    ).focus();
+    this.elRef.nativeElement.offsetParent.querySelector(`button[type="${this.type}"]`).focus();
   }
 
   focusInvalid() {

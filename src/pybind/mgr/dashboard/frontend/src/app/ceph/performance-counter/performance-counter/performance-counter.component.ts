@@ -7,7 +7,6 @@ import { ActivatedRoute } from '@angular/router';
   styleUrls: ['./performance-counter.component.scss']
 })
 export class PerformanceCounterComponent {
-
   static defaultFromLink = '/hosts';
 
   serviceId: string;
@@ -15,17 +14,12 @@ export class PerformanceCounterComponent {
   fromLink: string;
 
   constructor(private route: ActivatedRoute) {
-    this.route.queryParams.subscribe(
-      (params: { fromLink: string }) => {
-        this.fromLink = params.fromLink || PerformanceCounterComponent.defaultFromLink;
-      }
-    );
-    this.route.params.subscribe(
-      (params: { type: string; id: string }) => {
-        this.serviceId = params.id;
-        this.serviceType = params.type;
-      }
-    );
+    this.route.queryParams.subscribe((params: { fromLink: string }) => {
+      this.fromLink = params.fromLink || PerformanceCounterComponent.defaultFromLink;
+    });
+    this.route.params.subscribe((params: { type: string; id: string }) => {
+      this.serviceId = params.id;
+      this.serviceType = params.type;
+    });
   }
-
 }

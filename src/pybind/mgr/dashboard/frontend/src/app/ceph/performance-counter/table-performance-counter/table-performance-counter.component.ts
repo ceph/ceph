@@ -1,8 +1,6 @@
 import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import {
-  PerformanceCounterService
-} from '../../../shared/api/performance-counter.service';
+import { PerformanceCounterService } from '../../../shared/api/performance-counter.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 
 /**
@@ -14,7 +12,6 @@ import { CdTableColumn } from '../../../shared/models/cd-table-column';
   styleUrls: ['./table-performance-counter.component.scss']
 })
 export class TablePerformanceCounterComponent implements OnInit {
-
   columns: Array<CdTableColumn> = [];
   counters: Array<object> = [];
 
@@ -30,7 +27,7 @@ export class TablePerformanceCounterComponent implements OnInit {
    */
   @Input() serviceId: string;
 
-  constructor(private performanceCounterService: PerformanceCounterService) { }
+  constructor(private performanceCounterService: PerformanceCounterService) {}
 
   ngOnInit() {
     this.columns = [
@@ -53,7 +50,8 @@ export class TablePerformanceCounterComponent implements OnInit {
   }
 
   getCounters() {
-    this.performanceCounterService.get(this.serviceType, this.serviceId)
+    this.performanceCounterService
+      .get(this.serviceType, this.serviceId)
       .subscribe((resp: object[]) => {
         this.counters = resp;
       });

@@ -5,16 +5,16 @@ import { Pipe, PipeTransform } from '@angular/core';
   name: 'cdDate'
 })
 export class CdDatePipe implements PipeTransform {
-
-  constructor(private datePipe: DatePipe) {
-  }
+  constructor(private datePipe: DatePipe) {}
 
   transform(value: any, args?: any): any {
     if (value === null || value === '') {
       return '';
     }
-    return this.datePipe.transform(value, 'shortDate') + ' ' +
-      this.datePipe.transform(value, 'mediumTime');
+    return (
+      this.datePipe.transform(value, 'shortDate') +
+      ' ' +
+      this.datePipe.transform(value, 'mediumTime')
+    );
   }
-
 }

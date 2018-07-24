@@ -21,14 +21,7 @@ import { TableComponent } from './table/table.component';
     ComponentsModule,
     RouterModule
   ],
-  declarations: [
-    TableComponent,
-    TableKeyValueComponent
-  ],
-  exports: [
-    TableComponent,
-    NgxDatatableModule,
-    TableKeyValueComponent
-  ]
+  declarations: [TableComponent, TableKeyValueComponent],
+  exports: [TableComponent, NgxDatatableModule, TableKeyValueComponent]
 })
-export class DataTableModule { }
+export class DataTableModule {}

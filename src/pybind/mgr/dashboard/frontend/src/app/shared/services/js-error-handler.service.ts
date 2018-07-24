@@ -3,8 +3,7 @@ import { LoggingService } from '../api/logging.service';
 
 @Injectable()
 export class JsErrorHandler implements ErrorHandler {
-
-  constructor(private injector: Injector) { }
+  constructor(private injector: Injector) {}
 
   handleError(error) {
     const loggingService = this.injector.get(LoggingService);
@@ -14,5 +13,4 @@ export class JsErrorHandler implements ErrorHandler {
     loggingService.jsError(url, message, stack).subscribe();
     throw error;
   }
-
 }
