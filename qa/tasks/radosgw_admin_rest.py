@@ -425,7 +425,12 @@ def task(ctx, config):
     key.delete()
 
     # link the bucket to another user
-    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'link'], {'uid' : user2, 'bucket' : bucket_name})
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['bucket', 'link'],
+            {'uid' : user2,
+             'bucket' : bucket_name,
+             'bucket-id' : bucket_id,
+            })
 
     assert ret == 200
 
@@ -440,7 +445,12 @@ def task(ctx, config):
     assert denied
 
     # relink the bucket to the first user and delete the second user
-    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'link'], {'uid' : user1, 'bucket' : bucket_name})
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['bucket', 'link'],
+            {'uid' : user1,
+             'bucket' : bucket_name,
+             'bucket-id' : bucket_id,
+            })
     assert ret == 200
 
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'rm'], {'uid' : user2})
