@@ -521,7 +521,7 @@ void Server::flush_client_sessions(set<client_t>& client_set, MDSGatherBuilder& 
 
 void Server::finish_flush_session(Session *session, version_t seq)
 {
-  list<MDSInternalContextBase*> finished;
+  MDSInternalContextBase::vec finished;
   session->finish_flush(seq, finished);
   mds->queue_waiters(finished);
 }
@@ -4213,7 +4213,7 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
   dout(10) << " state prior to lock change: " << *lock_state << dendl;
   if (CEPH_LOCK_UNLOCK == set_lock.type) {
     list<ceph_filelock> activated_locks;
-    list<MDSInternalContextBase*> waiters;
+    MDSInternalContextBase::vec waiters;
     if (lock_state->is_waiting(set_lock)) {
       dout(10) << " unlock removing waiting lock " << set_lock << dendl;
       lock_state->remove_waiting(set_lock);
@@ -8467,7 +8467,7 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
 
   CDentry::linkage_t *destdnl = destdn->get_linkage();
 
-  list<MDSInternalContextBase*> finished;
+  MDSInternalContextBase::vec finished;
   if (r == 0) {
     // unfreeze+singleauth inode
     //  hmm, do i really need to delay this?
@@ -8978,7 +8978,7 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
   }
 
   if (mdr) {
-    list<MDSInternalContextBase*> finished;
+    MDSInternalContextBase::vec finished;
     if (mdr->more()->is_ambiguous_auth) {
       if (srcdn->is_auth())
 	mdr->more()->rename_inode->unfreeze_inode(finished);

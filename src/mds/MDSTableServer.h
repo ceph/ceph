@@ -16,6 +16,7 @@
 #define CEPH_MDSTABLESERVER_H
 
 #include "MDSTable.h"
+#include "MDSContext.h"
 
 class MMDSTableRequest;
 
