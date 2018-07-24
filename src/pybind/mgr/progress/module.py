@@ -143,7 +143,6 @@ class PgRecoveryEvent(Event):
             self._original_bytes_recovered = {}
             for pg in self._pgs:
                 pg_str = str(pg)
-                log.debug(json.dumps(pg_to_state[pg_str], indent=2))
                 self._original_bytes_recovered[pg] = \
                     pg_to_state[pg_str]['stat_sum']['num_bytes_recovered']
 
@@ -260,17 +259,49 @@ class Module(MgrModule):
 
     def _osd_out(self, old_map, old_dump, new_map, osd_id):
         affected_pgs = []
+        unmoved_pgs = []
         for pool in old_dump['pools']:
             pool_id = pool['pool']
             for ps in range(0, pool['pg_num']):
+                up_acting = old_map.pg_to_up_acting_osds(pool['pool'], ps)
+
+                # Was this OSD affected by the OSD going out?
+                old_osds = set(up_acting['up']) | set(up_acting['acting'])
+                was_on_out_osd = osd_id in old_osds
+                if not was_on_out_osd:
+                    continue
+
                 self.log.debug("pool_id, ps = {0}, {1}".format(
                     pool_id, ps
                 ))
-                up_acting = old_map.pg_to_up_acting_osds(pool['pool'], ps)
+
                 self.log.debug(
                     "up_acting: {0}".format(json.dumps(up_acting, indent=2)))
-                if osd_id in up_acting['up'] or osd_id in up_acting['acting']:
+
+                new_up_acting = new_map.pg_to_up_acting_osds(pool['pool'], ps)
+                new_osds = set(new_up_acting['up']) | set(new_up_acting['acting'])
+
+                # Has this OSD been assigned a new location?
+                # (it might not be if there is no suitable place to move
+                #  after an OSD failure)
+                is_relocated = len(new_osds - old_osds) > 0
+
+                self.log.debug(
+                    "new_up_acting: {0}".format(json.dumps(new_up_acting,
+                                                           indent=2)))
+
+                if was_on_out_osd and is_relocated:
+                    # This PG is now in motion, track its progress
                     affected_pgs.append(PgId(pool_id, ps))
+                elif not is_relocated:
+                    # This PG didn't get a new location, we'll log it
+                    unmoved_pgs.append(PgId(pool_id, ps))
+
+        # In the case that we ignored some PGs, log the reason why (we may
+        # not end up creating a progress event)
+        if len(unmoved_pgs):
+            self.log.warn("{0} PGs were on osd.{1}, but didn't get new locations".format(
+                len(unmoved_pgs), osd_id))
 
         self.log.warn("{0} PGs affected by osd.{1} going out".format(
             len(affected_pgs), osd_id))
