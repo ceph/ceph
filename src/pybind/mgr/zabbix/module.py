@@ -97,11 +97,6 @@ class Module(MgrModule):
             "desc": "Force sending data to Zabbix",
             "perm": "rw"
         },
-        {
-            "cmd": "zabbix self-test",
-            "desc": "Run a self-test on the Zabbix module",
-            "perm": "r"
-        }
     ]
 
     def __init__(self, *args, **kwargs):
@@ -320,9 +315,6 @@ class Module(MgrModule):
                 return 0, 'Sending data to Zabbix', ''
 
             return 1, 'Failed to send data to Zabbix', ''
-        elif command['prefix'] == 'zabbix self-test':
-            self.self_test()
-            return 0, 'Self-test succeeded', ''
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))

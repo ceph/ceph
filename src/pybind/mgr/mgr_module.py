@@ -687,7 +687,13 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Run a self-test on the module. Override this function and implement
         a best as possible self-test for (automated) testing of the module
-        :return: bool
+
+        Indicate any failures by raising an exception.  This does not have
+        to be pretty, it's mainly for picking up regressions during
+        development, rather than use in the field.
+
+        :return: None, or an advisory string for developer interest, such
+                 as a json dump of some state.
         """
         pass
 
@@ -829,3 +835,19 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
 
         return True, ""
+
+    def remote(self, module_name, method_name, *args, **kwargs):
+        """
+        Invoke a method on another module.  All arguments, and the return
+        value from the other module must be serializable.
+
+        :param module_name: Name of other module.  If module isn't loaded,
+                            an ImportError exception is raised.
+        :param method_name: Method name.  If it does not exist, a NameError
+                            exception is raised.
+        :param args: Argument tuple
+        :param kwargs: Keyword argument dict
+        :return:
+        """
+        return self._ceph_dispatch_remote(module_name, method_name,
+                                          args, kwargs)

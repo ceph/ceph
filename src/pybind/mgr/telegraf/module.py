@@ -34,11 +34,6 @@ class Module(MgrModule):
             "desc": "Force sending data to Telegraf",
             "perm": "rw"
         },
-        {
-            "cmd": "telegraf self-test",
-            "desc": "debug the module",
-            "perm": "rw"
-        },
     ]
 
     OPTIONS = [
@@ -275,9 +270,6 @@ class Module(MgrModule):
         elif cmd['prefix'] == 'telegraf send':
             self.send_to_telegraf()
             return 0, 'Sending data to Telegraf', ''
-        if cmd['prefix'] == 'telegraf self-test':
-            self.self_test()
-            return 0, '', 'Self-test OK'
 
         return (-errno.EINVAL, '',
                 "Command not found '{0}'".format(cmd['prefix']))

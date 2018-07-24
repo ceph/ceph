@@ -100,6 +100,61 @@ void ActivePyModule::notify_clog(const LogEntry &log_entry)
   }
 }
 
+bool ActivePyModule::method_exists(const std::string &method) const
+{
+  Gil gil(py_module->pMyThreadState, true);
+
+  auto boundMethod = PyObject_GetAttrString(pClassInstance, method.c_str());
+  if (boundMethod == nullptr) {
+    return false;
+  } else {
+    Py_DECREF(boundMethod);
+    return true;
+  }
+}
+
+PyObject *ActivePyModule::dispatch_remote(
+    const std::string &method,
+    PyObject *args,
+    PyObject *kwargs,
+    std::string *err)
+{
+  assert(err != nullptr);
+
+  // Rather than serializing arguments, pass the CPython objects.
+  // Works because we happen to know that the subinterpreter
+  // implementation shares a GIL, allocator, deallocator and GC state, so
+  // it's okay to pass the objects between subinterpreters.
+  // But in future this might involve serialization to support a CSP-aware
+  // future Python interpreter a la PEP554
+
+  Gil gil(py_module->pMyThreadState, true);
+
+  // Fire the receiving method
+  auto boundMethod = PyObject_GetAttrString(pClassInstance, method.c_str());
+
+  // Caller should have done method_exists check first!
+  assert(boundMethod != nullptr);
+
+  dout(20) << "Calling " << py_module->get_name()
+           << "." << method << "..." << dendl;
+
+  auto remoteResult = PyObject_Call(boundMethod,
+      args, kwargs);
+  Py_DECREF(boundMethod);
+
+  if (remoteResult == nullptr) {
+    // Because the caller is in a different context, we can't let this
+    // exception bubble up, need to re-raise it from the caller's
+    // context later.
+    *err = handle_pyerror();
+  } else {
+    dout(20) << "Success calling '" << method << "'" << dendl;
+  }
+
+  return remoteResult;
+}
+
 
 
 int ActivePyModule::handle_command(

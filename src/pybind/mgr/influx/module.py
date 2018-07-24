@@ -72,12 +72,7 @@ class Module(MgrModule):
             "cmd": "influx send",
             "desc": "Force sending data to Influx",
             "perm": "rw"
-        },
-        {
-            "cmd": "influx self-test",
-            "desc": "debug the module",
-            "perm": "rw"
-        },
+        }
     ]
 
     def __init__(self, *args, **kwargs):
@@ -327,6 +322,18 @@ class Module(MgrModule):
         self.run = False
         self.event.set()
 
+    def self_test(self):
+        daemon_stats = self.get_daemon_stats()
+        assert len(daemon_stats)
+        df_stats, pools = self.get_df_stats()
+
+        result = {
+            'daemon_stats': daemon_stats,
+            'df_stats': df_stats
+        }
+
+        return json.dumps(result, indent=2)
+
     def handle_command(self, inbuf, cmd):
         if cmd['prefix'] == 'influx config-show':
             return 0, json.dumps(self.config), ''
@@ -343,17 +350,6 @@ class Module(MgrModule):
         elif cmd['prefix'] == 'influx send':
             self.send_to_influx()
             return 0, 'Sending data to Influx', ''
-        if cmd['prefix'] == 'influx self-test':
-            daemon_stats = self.get_daemon_stats()
-            assert len(daemon_stats)
-            df_stats, pools = self.get_df_stats()
-
-            result = {
-                'daemon_stats': daemon_stats,
-                'df_stats': df_stats
-            }
-
-            return 0, json.dumps(result, indent=2), 'Self-test OK'
 
         return (-errno.EINVAL, '',
                 "Command not found '{0}'".format(cmd['prefix']))
