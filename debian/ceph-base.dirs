@@ -5,3 +5,4 @@ var/lib/ceph/bootstrap-rgw
 var/lib/ceph/bootstrap-rbd
 var/lib/ceph/tmp
 var/lib/ceph/crash
+var/lib/ceph/crash/posted
