@@ -46,6 +46,7 @@ enum {
   l_mdssm_session_stale,
   l_mdssm_total_load,
   l_mdssm_avg_load,
+  l_mdssm_avg_session_uptime,
   l_mdssm_last,
 };
 
@@ -111,6 +112,12 @@ private:
 
   // request load average for this session
   DecayCounter load_avg;
+
+  // session start time -- used to track average session time
+  // note that this is initialized in the constructor rather
+  // than at the time of adding a session to the sessionmap
+  // as journal replay of sessionmap will not call add_session().
+  time birth_time;
 
 public:
 
@@ -222,6 +229,10 @@ public:
   }
   void hit_session() {
     load_avg.adjust();
+  }
+
+  time get_birth_time() const {
+    return birth_time;
   }
 
   // -- caps --
@@ -348,8 +359,8 @@ public:
 
   Session(Connection *con) :
     state(STATE_CLOSED), state_seq(0), importing_count(0),
-    recall_count(0), recall_release_count(0),
-    auth_caps(g_ceph_context),
+    birth_time(clock::now()), recall_count(0),
+    recall_release_count(0), auth_caps(g_ceph_context),
     connection(NULL), item_session_list(this),
     requests(0),  // member_offset passed to front() manually
     cap_push_seq(0),
@@ -497,6 +508,7 @@ public:
   map<int,xlist<Session*>* > by_state;
   uint64_t set_state(Session *session, int state);
   map<version_t, MDSInternalContextBase::vec > commit_waiters;
+  void update_average_session_age();
 
   explicit SessionMap(MDSRank *m) : mds(m),
 		       projected(0), committing(0), committed(0),
@@ -717,8 +729,30 @@ public:
                      MDSGatherBuilder *gather_bld);
 
 private:
+  time avg_birth_time = clock::zero();
+
   uint64_t get_session_count_in_state(int state) {
     return !is_any_state(state) ? 0 : by_state[state]->size();
+  }
+
+  void update_average_birth_time(const Session &s, bool added=true) {
+    uint32_t sessions = session_map.size();
+    time birth_time = s.get_birth_time();
+
+    if (sessions == 1) {
+      avg_birth_time = added ? birth_time : clock::zero();
+      return;
+    }
+
+    if (added) {
+      avg_birth_time = clock::time_point(
+        ((avg_birth_time - clock::zero()) / sessions) * (sessions - 1) +
+        (birth_time - clock::zero()) / sessions);
+    } else {
+      avg_birth_time = clock::time_point(
+        ((avg_birth_time - clock::zero()) / (sessions - 1)) * sessions -
+        (birth_time - clock::zero()) / (sessions - 1));
+    }
   }
 
 public:
