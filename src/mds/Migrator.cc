@@ -1528,7 +1528,7 @@ void Migrator::finish_export_inode_caps(CInode *in, mds_rank_t peer,
 
 void Migrator::finish_export_inode(CInode *in, mds_rank_t peer,
 				   map<client_t,Capability::Import>& peer_imported,
-				   list<MDSInternalContextBase*>& finished)
+				   MDSInternalContextBase::vec& finished)
 {
   dout(12) << "finish_export_inode " << *in << dendl;
 
@@ -1665,7 +1665,7 @@ uint64_t Migrator::encode_export_dir(bufferlist& exportbl,
 
 void Migrator::finish_export_dir(CDir *dir, mds_rank_t peer,
 				 map<inodeno_t,map<client_t,Capability::Import> >& peer_imported,
-				 list<MDSInternalContextBase*>& finished, int *num_dentries)
+				 MDSInternalContextBase::vec& finished, int *num_dentries)
 {
   dout(10) << "finish_export_dir " << *dir << dendl;
 
@@ -2019,7 +2019,7 @@ void Migrator::export_finish(CDir *dir)
   
   // finish export (adjust local cache state)
   int num_dentries = 0;
-  list<MDSInternalContextBase*> finished;
+  MDSInternalContextBase::vec finished;
   finish_export_dir(dir, it->second.peer,
 		    it->second.peer_imported, finished, &num_dentries);
 
@@ -2241,7 +2241,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 
   CDir *dir;
   CInode *diri;
-  list<MDSInternalContextBase*> finished;
+  MDSInternalContextBase::vec finished;
 
   // assimilate root dir.
   map<dirfrag_t,import_state_t>::iterator it = import_state.find(m->get_dirfrag());
@@ -2620,7 +2620,7 @@ void Migrator::import_reverse(CDir *dir)
 
   cache->adjust_subtree_auth(dir, stat.peer);
 
-  C_ContextsBase<MDSInternalContextBase, MDSInternalContextGather> *fin = new C_ContextsBase<MDSInternalContextBase, MDSInternalContextGather>(g_ceph_context);
+  auto fin = new C_ContextsBase<MDSInternalContextBase, MDSInternalContextGather, MDSInternalContextBase::vec>(g_ceph_context);
   if (!dir->get_inode()->is_auth() &&
       !dir->get_inode()->has_subtree_root_dirfrag(mds->get_nodeid())) {
     dir->get_inode()->clear_scatter_dirty();
@@ -3152,10 +3152,10 @@ int Migrator::decode_import_dir(bufferlist::const_iterator& blp,
   // take all waiters on this dir
   // NOTE: a pass of imported data is guaranteed to get all of my waiters because
   // a replica's presense in my cache implies/forces it's presense in authority's.
-  list<MDSInternalContextBase*> waiters;
+  MDSInternalContextBase::vec waiters;
   
   dir->take_waiting(CDir::WAIT_ANY_MASK, waiters);
-  for (list<MDSInternalContextBase*>::iterator it = waiters.begin();
+  for (MDSInternalContextBase::vec::iterator it = waiters.begin();
        it != waiters.end();
        ++it) 
     import_root->add_waiter(CDir::WAIT_UNFREEZE, *it);  // UNFREEZE will get kicked both on success or failure

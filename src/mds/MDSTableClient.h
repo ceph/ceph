@@ -50,7 +50,7 @@ protected:
 
   // pending commits
   map<version_t, LogSegment*> pending_commit;
-  map<version_t, list<MDSInternalContextBase*> > ack_waiters;
+  map<version_t, MDSInternalContextBase::vec > ack_waiters;
 
   void handle_reply(class MMDSTableQuery *m);  
   void _logged_ack(version_t tid);

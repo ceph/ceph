@@ -19,6 +19,8 @@
 
 #include "include/types.h"
 
+#include "MDSContext.h"
+
 #include <map>
 #include <list>
 #include <set>
@@ -312,7 +314,7 @@ public:
 				map<client_t,client_metadata_t>& exported_client_metadata_map);
   void finish_export_inode(CInode *in, mds_rank_t target,
 			   map<client_t,Capability::Import>& peer_imported,
-			   list<MDSInternalContextBase*>& finished);
+			   MDSInternalContextBase::vec& finished);
   void finish_export_inode_caps(CInode *in, mds_rank_t target,
 			        map<client_t,Capability::Import>& peer_imported);
 
@@ -323,7 +325,7 @@ public:
 			map<client_t,client_metadata_t>& exported_client_metadata_map);
   void finish_export_dir(CDir *dir, mds_rank_t target,
 			 map<inodeno_t,map<client_t,Capability::Import> >& peer_imported,
-			 list<MDSInternalContextBase*>& finished, int *num_dentries);
+			 MDSInternalContextBase::vec& finished, int *num_dentries);
 
   void clear_export_proxy_pins(CDir *dir);
 

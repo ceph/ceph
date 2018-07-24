@@ -19,6 +19,7 @@
 
 #include "MDSRank.h"
 #include "Mutation.h"
+#include "MDSContext.h"
 
 class OSDMap;
 class PerfCounters;

@@ -12,6 +12,7 @@
 #include "include/xlist.h"
 
 #include "mdstypes.h"
+#include "MDSContext.h"
 
 #define MDS_REF_SET      // define me for improved debug output, sanity checking
 //#define MDS_AUTHPIN_SET  // define me for debugging auth pin leaks
@@ -332,7 +333,7 @@ protected:
 //			       << dendl;
     
   }
-  virtual void take_waiting(uint64_t mask, std::list<MDSInternalContextBase*>& ls) {
+  virtual void take_waiting(uint64_t mask, MDSInternalContextBase::vec& ls) {
     if (waiting.empty()) return;
 
     // process ordered waiters in the same order that they were added.

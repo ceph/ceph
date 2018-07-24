@@ -816,7 +816,7 @@ void Locker::drop_rdlocks_for_early_reply(MutationImpl *mut)
 
 // generics
 
-void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<MDSInternalContextBase*> *pfinishers)
+void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, MDSInternalContextBase::vec *pfinishers)
 {
   dout(10) << "eval_gather " << *lock << " on " << *lock->get_parent() << dendl;
   assert(!lock->is_stable());
@@ -1040,7 +1040,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<M
 bool Locker::eval(CInode *in, int mask, bool caps_imported)
 {
   bool need_issue = caps_imported;
-  list<MDSInternalContextBase*> finishers;
+  MDSInternalContextBase::vec finishers;
   
   dout(10) << "eval " << mask << " " << *in << dendl;
 
@@ -1203,7 +1203,7 @@ void Locker::try_eval(SimpleLock *lock, bool *pneed_issue)
 void Locker::eval_cap_gather(CInode *in, set<CInode*> *issue_set)
 {
   bool need_issue = false;
-  list<MDSInternalContextBase*> finishers;
+  MDSInternalContextBase::vec finishers;
 
   // kick locks now
   if (!in->filelock.is_stable())
@@ -1228,7 +1228,7 @@ void Locker::eval_cap_gather(CInode *in, set<CInode*> *issue_set)
 void Locker::eval_scatter_gathers(CInode *in)
 {
   bool need_issue = false;
-  list<MDSInternalContextBase*> finishers;
+  MDSInternalContextBase::vec finishers;
 
   dout(10) << "eval_scatter_gathers " << *in << dendl;
 
