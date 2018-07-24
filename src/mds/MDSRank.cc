@@ -303,6 +303,9 @@ void MDSRankDispatcher::tick()
   // make sure mds log flushes, trims periodically
   mdlog->flush();
 
+  // update average session uptime
+  sessionmap.update_average_session_age();
+
   if (is_active() || is_stopping()) {
     mdcache->trim();
     mdcache->trim_client_leases();
