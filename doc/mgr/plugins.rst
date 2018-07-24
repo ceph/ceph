@@ -71,6 +71,13 @@ EPERM, or 0 for no error), ``stdout`` is a string containing any
 non-error output, and ``stderr`` is a string containing any progress or
 error explanation output.  Either or both of the two strings may be empty.
 
+Implement the ``handle_command`` function to respond to the commands
+when they are sent:
+
+
+.. py:currentmodule:: mgr_module
+.. automethod:: MgrModule.handle_command
+
 Configuration options
 ---------------------
 
@@ -125,7 +132,6 @@ Hints for using config options:
 * To delete a config value (i.e. revert to default), just pass ``None`` to
   set_config.
 
-.. py:currentmodule:: mgr_module
 .. automethod:: MgrModule.get_config
 .. automethod:: MgrModule.set_config
 .. automethod:: MgrModule.get_localized_config
@@ -187,7 +193,23 @@ function. This will result in a circular locking exception.
 .. automethod:: MgrModule.get_server
 .. automethod:: MgrModule.list_servers
 .. automethod:: MgrModule.get_metadata
+.. automethod:: MgrModule.get_daemon_status
+.. automethod:: MgrModule.get_perf_schema
 .. automethod:: MgrModule.get_counter
+.. automethod:: MgrModule.get_mgr_id
+
+Exposing health checks
+----------------------
+
+Modules can raise first class Ceph health checks, which will be reported
+in the output of ``ceph status`` and in other places that report on the
+cluster's health.
+
+If you use ``set_health_checks`` to report a problem, be sure to call
+it again with an empty dict to clear your health check when the problem
+goes away.
+
+.. automethod:: MgrModule.set_health_checks
 
 What if the mons are down?
 --------------------------
@@ -227,6 +249,40 @@ to the cluster.
 
 .. automethod:: MgrModule.send_command
 
+Receiving notifications
+-----------------------
+
+The manager daemon calls the ``notify`` function on all active modules
+when certain important pieces of cluster state are updated, such as the
+cluster maps.
+
+The actual data is not passed into this function, rather it is a cue for
+the module to go and read the relevant structure if it is interested.  Most
+modules ignore most types of notification: to ignore a notification
+simply return from this function without doing anything.
+
+.. automethod:: MgrModule.notify
+
+Accessing RADOS or CephFS
+-------------------------
+
+If you want to use the librados python API to access data stored in
+the Ceph cluster, you can access the ``rados`` attribute of your
+``MgrModule`` instance.  This is an instance of ``rados.Rados`` which
+has been constructed for you using the existing Ceph context (an internal
+detail of the C++ Ceph code) of the mgr daemon.
+
+Always use this specially constructed librados instance instead of
+constructing one by hand.
+
+Similarly, if you are using libcephfs to access the filesystem, then
+use the libcephfs ``create_with_rados`` to construct it from the
+``MgrModule.rados`` librados instance, and thereby inherit the correct context.
+
+Remember that your module may be running while other parts of the cluster
+are down: do not assume that librados or libcephfs calls will return
+promptly -- consider whether to use timeouts or to block if the rest of
+the cluster is not fully available.
 
 Implementing standby mode
 -------------------------
