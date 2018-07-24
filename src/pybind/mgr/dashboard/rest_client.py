@@ -13,17 +13,30 @@
 """
 from __future__ import absolute_import
 
+from .settings import Settings
 from .tools import build_url
 import inspect
 import re
 import requests
-from requests.exceptions import ConnectionError, InvalidURL
+from requests.exceptions import ConnectionError, InvalidURL, Timeout
 from . import logger
 
 try:
     from requests.packages.urllib3.exceptions import SSLError
 except ImportError:
     from urllib3.exceptions import SSLError
+
+
+class TimeoutRequestsSession(requests.Session):
+    """
+    Set timeout argument for all requests if this is not already done.
+    """
+    def request(self, *args, **kwargs):
+        if ((args[8] if len(args) > 8 else None) is None) \
+                and kwargs.get('timeout') is None:
+            if Settings.REST_REQUESTS_TIMEOUT > 0:
+                kwargs['timeout'] = Settings.REST_REQUESTS_TIMEOUT
+        return super(TimeoutRequestsSession, self).request(*args, **kwargs)
 
 
 class RequestException(Exception):
@@ -315,7 +328,7 @@ class RestClient(object):
         logger.debug("REST service base URL: %s", self.base_url)
         self.headers = {'Accept': 'application/json'}
         self.auth = auth
-        self.session = requests.Session()
+        self.session = TimeoutRequestsSession()
 
     def _login(self, request=None):
         pass
@@ -465,6 +478,12 @@ class RestClient(object):
             logger.exception("%s REST API failed %s: %s", self.client_name,
                              method.upper(), str(ex))
             raise RequestException(str(ex))
+        except Timeout as ex:
+            msg = "{} REST API {} timed out after {} seconds (url={}).".format(
+                self.client_name, ex.request.method, Settings.REST_REQUESTS_TIMEOUT,
+                ex.request.url)
+            logger.exception(msg)
+            raise RequestException(msg)
 
     @staticmethod
     def api(path, **api_kwargs):

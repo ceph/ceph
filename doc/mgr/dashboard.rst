@@ -188,7 +188,7 @@ commands::
 
 
 Enabling the Object Gateway management frontend
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To use the Object Gateway management functionality of the dashboard, you will
 need to provide the login credentials of a user with the ``system`` flag
@@ -229,6 +229,13 @@ exist and you may find yourself in the situation that you have to use them::
   $ ceph dashboard set-rgw-api-scheme <scheme>  # http or https
   $ ceph dashboard set-rgw-api-admin-resource <admin_resource>
   $ ceph dashboard set-rgw-api-user-id <user_id>
+
+If the Object Gateway takes too long to process requests and the dashboard runs
+into timeouts, then you can set the timeout value to your needs::
+
+  $ ceph dashboard set-rest-requests-timeout <seconds>
+
+The default value is 45 seconds.
 
 Enabling the Embedding of Grafana Dashboards
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
