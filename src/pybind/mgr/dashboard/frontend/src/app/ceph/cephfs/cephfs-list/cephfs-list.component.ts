@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 
 @Component({
@@ -36,10 +37,15 @@ export class CephfsListComponent implements OnInit {
     ];
   }
 
-  loadFilesystems() {
-    this.cephfsService.list().subscribe((resp: any[]) => {
-      this.filesystems = resp;
-    });
+  loadFilesystems(context: CdTableFetchDataContext) {
+    this.cephfsService.list().subscribe(
+      (resp: any[]) => {
+        this.filesystems = resp;
+      },
+      () => {
+        context.error();
+      }
+    );
   }
 
   updateSelection(selection: CdTableSelection) {
