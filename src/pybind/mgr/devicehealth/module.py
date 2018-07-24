@@ -210,7 +210,7 @@ class Module(MgrModule):
 
     def scrape_osd(self, osd_id):
         ioctx = self.open_connection()
-        raw_smart_data = self.do_scrape_osd(osd_id, ioctx)
+        raw_smart_data = self.do_scrape_osd(osd_id)
         if raw_smart_data:
             for device, raw_data in raw_smart_data.items():
                 data = self.extract_smart_features(raw_data)
@@ -225,7 +225,7 @@ class Module(MgrModule):
         did_device = {}
         for osd in osdmap['osds']:
             osd_id = osd['osd']
-            raw_smart_data = self.do_scrape_osd(osd_id, ioctx)
+            raw_smart_data = self.do_scrape_osd(osd_id)
             if not raw_smart_data:
                 continue
             for device, raw_data in raw_smart_data.items():
@@ -251,7 +251,7 @@ class Module(MgrModule):
                                         'OSD daemons')
         osd_id = osds[0]
         ioctx = self.open_connection()
-        raw_smart_data = self.do_scrape_osd(osd_id, ioctx, devid=devid)
+        raw_smart_data = self.do_scrape_osd(osd_id, devid=devid)
         if raw_smart_data:
             for device, raw_data in raw_smart_data.items():
                 data = self.extract_smart_features(raw_data)
@@ -259,7 +259,10 @@ class Module(MgrModule):
         ioctx.close()
         return 0, "", ""
 
-    def do_scrape_osd(self, osd_id, ioctx, devid=''):
+    def do_scrape_osd(self, osd_id, devid=''):
+        """
+        :return: a dict, or None if the scrape failed.
+        """
         self.log.debug('do_scrape_osd osd.%d' % osd_id)
 
         # scrape from osd
@@ -273,8 +276,10 @@ class Module(MgrModule):
 
         try:
             return json.loads(outb)
-        except:
-            self.log.debug('Fail to parse JSON result from "%s"' % outb)
+        except (IndexError, ValueError):
+            self.log.error(
+                "Fail to parse JSON result from OSD {0} ({1})".format(
+                    osd_id, outb))
 
     def put_device_metrics(self, ioctx, devid, data):
         old_key = datetime.now() - timedelta(
@@ -285,15 +290,22 @@ class Module(MgrModule):
         erase = []
         try:
             with rados.ReadOpCtx() as op:
-                iter, ret = ioctx.get_omap_keys(op, "", 500)  # fixme
+                omap_iter, ret = ioctx.get_omap_keys(op, "", 500)  # fixme
                 assert ret == 0
                 ioctx.operate_read_op(op, devid)
-                for key, _ in list(iter):
+                for key, _ in list(omap_iter):
                     if key >= prune:
                         break
                     erase.append(key)
-        except:
+        except rados.ObjectNotFound:
+            # The object doesn't already exist, no problem.
             pass
+        except rados.Error as e:
+            # Do not proceed with writes if something unexpected
+            # went wrong with the reads.
+            log.exception("Error reading OMAP: {0}".format(e))
+            return
+
         key = datetime.now().strftime(TIME_FORMAT)
         self.log.debug('put_device_metrics device %s key %s = %s, erase %s' %
                        (devid, key, data, erase))
@@ -321,13 +333,18 @@ class Module(MgrModule):
                         break
                     try:
                         v = json.loads(value)
-                    except:
+                    except (ValueError, IndexError):
                         self.log.debug('unable to parse value for %s: "%s"' %
                                        (key, value))
                         pass
-                    res[key] = v
-            except:
+                    else:
+                        res[key] = v
+            except rados.ObjectNotFound:
                 pass
+            except rados.Error as e:
+                log.exception("RADOS error reading omap: {0}".format(e))
+                raise
+
         return 0, json.dumps(res, indent=4), ''
 
     def check_health(self):
