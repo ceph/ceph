@@ -679,8 +679,6 @@ OPTION(osd_recovery_sleep_hdd, OPT_FLOAT)
 OPTION(osd_recovery_sleep_ssd, OPT_FLOAT)
 OPTION(osd_snap_trim_sleep, OPT_DOUBLE)
 OPTION(osd_scrub_invalid_stats, OPT_BOOL)
-OPTION(osd_remove_thread_timeout, OPT_INT)
-OPTION(osd_remove_thread_suicide_timeout, OPT_INT)
 OPTION(osd_command_thread_timeout, OPT_INT)
 OPTION(osd_command_thread_suicide_timeout, OPT_INT)
 OPTION(osd_heartbeat_interval, OPT_INT)       // (seconds) how often we ping peers

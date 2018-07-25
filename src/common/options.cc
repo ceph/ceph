@@ -2912,14 +2912,6 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description(""),
 
-    Option("osd_remove_thread_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(1_hr)
-    .set_description(""),
-
-    Option("osd_remove_thread_suicide_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(10_hr)
-    .set_description(""),
-
     Option("osd_command_thread_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10_min)
     .set_description(""),
