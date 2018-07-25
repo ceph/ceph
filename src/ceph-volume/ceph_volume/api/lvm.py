@@ -905,7 +905,7 @@ class PVolumes(list):
         )
         if not pvs:
             return None
-        if len(pvs) > 1:
+        if len(pvs) > 1 and pv_tags:
             raise MultiplePVsError(pv_name)
         return pvs[0]
 
