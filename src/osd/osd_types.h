@@ -2672,7 +2672,6 @@ public:
     virtual void decode(bufferlist::const_iterator &bl) = 0;
     virtual void dump(Formatter *f) const = 0;
     virtual void iterate_mayberw_back_to(
-      bool ec_pool,
       epoch_t les,
       std::function<void(epoch_t, const set<pg_shard_t> &)> &&f) const = 0;
 
@@ -2787,11 +2786,10 @@ public:
 
   template <typename F>
   void iterate_mayberw_back_to(
-    bool ec_pool,
     epoch_t les,
     F &&f) const {
     assert(past_intervals);
-    past_intervals->iterate_mayberw_back_to(ec_pool, les, std::forward<F>(f));
+    past_intervals->iterate_mayberw_back_to(les, std::forward<F>(f));
   }
   void clear() {
     assert(past_intervals);
@@ -3006,7 +3004,6 @@ PastIntervals::PriorSet::PriorSet(
   }
 
   past_intervals.iterate_mayberw_back_to(
-    ec_pool,
     last_epoch_started,
     [&](epoch_t start, const set<pg_shard_t> &acting) {
       ldpp_dout(dpp, 10) << "build_prior maybe_rw interval:" << start
