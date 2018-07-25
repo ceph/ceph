@@ -24,8 +24,8 @@
 #include "common/options.h"
 #include "common/subsys_types.h"
 #include "common/config_fwd.h"
+#include "common/config_tracker.h"
 #include "common/config_values.h"
-#include "common/lock_mutex.h"
 
 class CephContext;
 
@@ -40,8 +40,6 @@ enum {
 };
 
 extern const char *ceph_conf_level_name(int level);
-
-namespace ceph::internal {
 
 /** This class represents the current Ceph configuration.
  *
@@ -72,8 +70,7 @@ namespace ceph::internal {
  * FIXME: really we shouldn't allow changing integer or floating point values
  * while another thread is reading them, either.
  */
-template<LockPolicy lock_policy>
-struct md_config_impl {
+struct md_config_t {
 public:
   typedef boost::variant<int64_t ConfigValues::*,
                          uint64_t ConfigValues::*,
@@ -90,13 +87,6 @@ public:
 
   /// true if we are a daemon (as per CephContext::code_env)
   const bool is_daemon;
-
-  /* Maps configuration options to the observer listening for them. */
-  typedef std::multimap <std::string, md_config_obs_impl<lock_policy>*> obs_map_t;
-
-  /* Set of configuration options that have changed since the last
-   * apply_changes */
-  typedef std::set < std::string > changed_set_t;
 
   /*
    * Mapping from legacy config option names to class members
@@ -130,47 +120,28 @@ public:
   } opt_type_t;
 
   // Create a new md_config_t structure.
-  explicit md_config_impl(ConfigValues& values, bool is_daemon=false);
-  ~md_config_impl();
-
-  // Adds a new observer to this configuration. You can do this at any time,
-  // but it will only receive notifications for the changes that happen after
-  // you attach it, obviously.
-  //
-  // Most developers will probably attach their observers after global_init,
-  // but before anyone can call injectargs.
-  //
-  // The caller is responsible for allocating observers.
-  void add_observer(md_config_obs_impl<lock_policy>* observer_);
-
-  // Remove an observer from this configuration.
-  // This doesn't delete the observer! If you allocated it with new(),
-  // you need to delete it yourself.
-  // This function will assert if you try to delete an observer that isn't
-  // there.
-  void remove_observer(md_config_obs_impl<lock_policy>* observer_);
+  explicit md_config_t(ConfigValues& values,
+		       const ConfigTracker& tracker,
+		       bool is_daemon=false);
+  ~md_config_t();
 
   // Parse a config file
-  int parse_config_files(ConfigValues& values, const char *conf_files,
+  int parse_config_files(ConfigValues& values, const ConfigTracker& tracker,
+			 const char *conf_files,
 			 std::ostream *warnings, int flags);
 
   // Absorb config settings from the environment
-  void parse_env(ConfigValues& values, const char *env_var = "CEPH_ARGS");
+  void parse_env(ConfigValues& values, const ConfigTracker& tracker,
+		 const char *env_var = "CEPH_ARGS");
 
   // Absorb config settings from argv
-  int parse_argv(ConfigValues& values,
+  int parse_argv(ConfigValues& values, const ConfigTracker& tracker,
 		 std::vector<const char*>& args, int level=CONF_CMDLINE);
 
   // do any commands we got from argv (--show-config, --show-config-val)
-  void do_argv_commands(const ConfigValues& values);
+  void do_argv_commands(const ConfigValues& values) const;
 
-  // Expand all metavariables. Make any pending observer callbacks.
-  void apply_changes(ConfigValues& values, const ConfigProxy& proxy,
-		     std::ostream *oss);
-  void _apply_changes(ConfigValues& values, const ConfigProxy& proxy,
-		      std::ostream *oss);
   bool _internal_field(const string& k);
-  void call_all_observers(const ConfigProxy& proxy);
 
   void set_safe_to_start_threads();
   void _clear_safe_to_start_threads();  // this is only used by the unit test
@@ -180,30 +151,36 @@ public:
 
   /// Set a default value
   void set_val_default(ConfigValues& values,
+		       const ConfigTracker& tracker,
 		       const std::string& key, const std::string &val);
 
   /// Set a values from mon
   int set_mon_vals(CephContext *cct,
       ConfigValues& values,
-      const ConfigProxy& proxy,
+      const ConfigTracker& tracker,
       const map<std::string,std::string>& kv,
       config_callback config_cb);
 
   // Called by the Ceph daemons to make configuration changes at runtime
-  int injectargs(ConfigValues& values, const ConfigProxy& proxy,
-		 const std::string &s, std::ostream *oss);
+  int injectargs(ConfigValues& values,
+		 const ConfigTracker& tracker,
+		 const std::string &s,
+		 std::ostream *oss);
 
   // Set a configuration value, or crash
   // Metavariables will be expanded.
-  void set_val_or_die(ConfigValues& values, const std::string &key, const std::string &val);
+  void set_val_or_die(ConfigValues& values, const ConfigTracker& tracker,
+		      const std::string &key, const std::string &val);
 
   // Set a configuration value.
   // Metavariables will be expanded.
-  int set_val(ConfigValues& values, const std::string &key, const char *val,
+  int set_val(ConfigValues& values, const ConfigTracker& tracker,
+	      const std::string &key, const char *val,
               std::stringstream *err_ss=nullptr);
-  int set_val(ConfigValues& values, const std::string &key, const string& s,
+  int set_val(ConfigValues& values, const ConfigTracker& tracker,
+	      const std::string &key, const string& s,
               std::stringstream *err_ss=nullptr) {
-    return set_val(values, key, s.c_str(), err_ss);
+    return set_val(values, tracker, key, s.c_str(), err_ss);
   }
 
   /// clear override value
@@ -249,12 +226,12 @@ public:
 		   std::string const &key, std::string &out, bool emeta) const;
 
   /// dump all config values to a stream
-  void show_config(const ConfigValues& values, std::ostream& out);
+  void show_config(const ConfigValues& values, std::ostream& out) const;
   /// dump all config values to a formatter
-  void show_config(const ConfigValues& values, Formatter *f);
+  void show_config(const ConfigValues& values, Formatter *f) const;
   
   /// dump all config settings to a formatter
-  void config_options(Formatter *f);
+  void config_options(Formatter *f) const;
 
   /// dump config diff from default, conf, mon, etc.
   void diff(const ConfigValues& values,
@@ -292,7 +269,7 @@ private:
   void _refresh(ConfigValues& values, const Option& opt);
 
   void _show_config(const ConfigValues& values,
-		    std::ostream *out, Formatter *f);
+		    std::ostream *out, Formatter *f) const;
 
   void _get_my_sections(const ConfigValues& values,
 			std::vector <std::string> &sections) const;
@@ -301,16 +278,19 @@ private:
 			      const std::string &key, std::string &out) const;
 
   int parse_option(ConfigValues& values,
+		   const ConfigTracker& tracker,
 		   std::vector<const char*>& args,
 		   std::vector<const char*>::iterator& i,
 		   std::ostream *oss,
 		   int level);
   int parse_injectargs(ConfigValues& values,
+		       const ConfigTracker& tracker,
 		       std::vector<const char*>& args,
 		       std::ostream *oss);
 
   int _set_val(
     ConfigValues& values,
+    const ConfigTracker& tracker,
     const std::string &val,
     const Option &opt,
     int level,  // CONF_*
@@ -338,7 +318,8 @@ public:  // for global_init
 			 std::ostream *oss) const;
 
   // for those want to reexpand special meta, e.g, $pid
-  void finalize_reexpand_meta(ConfigValues& values, const ConfigProxy& proxy);
+  bool finalize_reexpand_meta(ConfigValues& values,
+			      const ConfigTracker& tracker);
 private:
 
   /// expand all metavariables in config structure.
@@ -357,9 +338,6 @@ private:
   bool do_show_config = false;
   string do_show_config_value;
 
-  obs_map_t observers;
-  changed_set_t changed;
-
   vector<Option> subsys_options;
 
 public:
@@ -372,23 +350,14 @@ public:
     return min_size ? std::min(min_size, size) : (size - size / 2);
   }
 
-  /** A lock that protects the md_config_t internals. It is
-   * recursive, for simplicity.
-   * It is best if this lock comes first in the lock hierarchy. We will
-   * hold this lock when calling configuration observers.  */
-  LockMutex<lock_policy> lock;
-
   friend class test_md_config_t;
 };
 
-template<LockPolicy lp>
 template<typename T>
-const T md_config_impl<lp>::get_val(const ConfigValues& values,
-				    const std::string &key) const {
+const T md_config_t::get_val(const ConfigValues& values,
+			     const std::string &key) const {
   return boost::get<T>(this->get_val_generic(values, key));
 }
-
-} // namespace ceph::internal
 
 inline std::ostream& operator<<(std::ostream& o, const boost::blank& ) {
       return o << "INVALID_CONFIG_VALUE";

@@ -177,7 +177,10 @@ BuildRequires:	python%{_python_buildid}-virtualenv
 BuildRequires:	socat
 %endif
 %if 0%{with seastar}
+BuildRequires:  c-ares-devel
+BuildRequires:  cryptopp-devel
 BuildRequires:  gnutls-devel
+BuildRequires:  fmt-devel
 BuildRequires:  hwloc-devel
 BuildRequires:  libpciaccess-devel
 BuildRequires:  lksctp-tools-devel

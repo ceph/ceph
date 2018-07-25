@@ -384,7 +384,20 @@ include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include")
 
 if(WITH_SEASTAR)
-  set(SEASTAR_ENABLE_TESTS OFF CACHE BOOL "disable seastar testing")
+  find_package(fmt QUIET CONFIG)
+  if(NOT fmt_FOUND)
+    add_subdirectory(fmt)
+  endif()
+  find_package(c-ares 1.13.0 QUIET MODULE)
+  if(NOT c-ares_FOUND)
+    include(Buildc-ares)
+    build_c_ares()
+  endif()
+  macro(find_package name)
+    if(NOT TARGET ${name})
+      _find_package(${ARGV})
+    endif()
+  endmacro ()
   add_subdirectory(seastar)
   add_subdirectory(crimson)
 endif()
@@ -627,6 +640,7 @@ else()
 endif()
 
 add_library(common-objs OBJECT ${libcommon_files})
+
 set(ceph_common_objs
   $<TARGET_OBJECTS:common_buffer_obj>
   $<TARGET_OBJECTS:common_texttable_obj>
