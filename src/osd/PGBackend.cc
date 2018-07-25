@@ -1023,12 +1023,20 @@ void PGBackend::be_compare_scrubmaps(
 				   ss);
 
 	dout(20) << __func__ << (repair ? " repair " : " ") << (parent->get_pool().is_replicated() ? "replicated " : "")
-	 << (j == auth ? "auth" : "") << "shards " << shard_map.size() << (digest_match ? " digest_match " : " ")
-	 << (shard_map[j->first].only_data_digest_mismatch_info() ? "'info mismatch info'" : "")
-	 << dendl;
+	  << (j == auth ? "auth " : "") << "shards " << shard_map.size() << (digest_match ? " digest_match " : " ")
+	  << (shard_map[j->first].has_data_digest_mismatch_info() ? "info_mismatch " : "")
+	  << (shard_map[j->first].only_data_digest_mismatch_info() ? "only" : "")
+	  << dendl;
+
+        if (cct->_conf->osd_distrust_data_digest) {
+	  if (digest_match && parent->get_pool().is_replicated()
+              && shard_map[j->first].has_data_digest_mismatch_info()) {
+	    fix_digest = true;
+	  }
+	  shard_map[j->first].clear_data_digest_mismatch_info();
 	// If all replicas match, but they don't match object_info we can
 	// repair it by using missing_digest mechanism
-	if (repair && parent->get_pool().is_replicated() && j == auth && shard_map.size() > 1
+	} else if (repair && parent->get_pool().is_replicated() && j == auth && shard_map.size() > 1
 	    && digest_match && shard_map[j->first].only_data_digest_mismatch_info()
 	    && auth_object.digest_present) {
 	  // Set in missing_digests
@@ -1108,6 +1116,9 @@ void PGBackend::be_compare_scrubmaps(
       }
       missing_digest[*k] = make_pair(data_digest, omap_digest);
     }
+    // Special handling of this particular type of inconsistency
+    // This can over-ride a data_digest or set an omap_digest
+    // when all replicas match but the object info is wrong.
     if (!cur_inconsistent.empty() || !cur_missing.empty()) {
       authoritative[*k] = auth_list;
     } else if (!fix_digest && parent->get_pool().is_replicated()) {
@@ -1129,7 +1140,8 @@ void PGBackend::be_compare_scrubmaps(
       // recorded digest != actual digest?
       if (auth_oi.is_data_digest() && auth_object.digest_present &&
 	  auth_oi.data_digest != auth_object.digest) {
-        assert(shard_map[auth->first].has_data_digest_mismatch_info());
+	assert(cct->_conf->osd_distrust_data_digest
+	       || shard_map[auth->first].has_data_digest_mismatch_info());
 	errorstream << pgid << " recorded data digest 0x"
 		    << std::hex << auth_oi.data_digest << " != on disk 0x"
 		    << auth_object.digest << std::dec << " on " << auth_oi.soid
