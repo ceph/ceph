@@ -7832,7 +7832,43 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
     ASSERT_EQ(bstore->fsck(false), 3);
     ASSERT_LE(bstore->repair(false), 0);
     ASSERT_EQ(bstore->fsck(false), 0);
+    SetVal(g_conf(), "bluestore_debug_inject_bug21040", "false");
+    g_ceph_context->_conf.apply_changes(nullptr);
   }
+  // simulate kv blob failures
+  cerr << "kv blob failures" << std::endl;
+  bstore->mount();
+  SetVal(g_conf(), "bluestore_tiny_write_size", "4096");
+  g_ceph_context->_conf.apply_changes(nullptr);
+  {
+    auto ch = store->open_collection(cid);
+    ghobject_t hoid_tiny = make_object("Object TinyWrite", pool);
+    bufferlist bl;
+    bl.append("1234512345");
+    bufferlist bl_short;
+    bl_short.append("12345");
+    int r;
+    {
+      ObjectStore::Transaction t;
+      t.write(cid, hoid_tiny, 0, bl.length(), bl);
+      t.write(cid, hoid_tiny, 1000, bl.length(), bl);
+      t.write(cid, hoid_tiny, 2000, bl.length(), bl);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    bstore->umount();
+
+    ASSERT_EQ(bstore->fsck(false), 0);
+    ASSERT_EQ(bstore->repair(false), 0);
+    bstore->mount();
+    bstore->inject_broken_kv_blob(hoid_tiny, 0, bufferlist());
+    bstore->inject_broken_kv_blob(hoid_tiny, 1000, bl_short);
+    bstore->inject_broken_kv_blob(hoid_tiny, 1500, bl);
+  }
+  bstore->umount();
+  ASSERT_EQ(bstore->fsck(false), 3);
+  ASSERT_LE(bstore->repair(false), 3);
+  ASSERT_EQ(bstore->fsck(false), 0);
 
   // enable per-pool stats collection hence causing fsck to fail
   cerr << "per-pool statfs" << std::endl;

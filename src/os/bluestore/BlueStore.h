@@ -2647,6 +2647,9 @@ public:
   /// methods to inject various errors fsck can repair
   void inject_broken_shared_blob_key(const string& key,
 			 const bufferlist& bl);
+  void inject_broken_kv_blob(ghobject_t oid,
+                         uint32_t offset,
+			 const bufferlist& bl);
   void inject_leaked(uint64_t len);
   void inject_false_free(coll_t cid, ghobject_t oid);
   void inject_statfs(const string& key, const store_statfs_t& new_statfs);
@@ -3202,6 +3205,9 @@ public:
   };
 public:
   void fix_per_pool_omap(KeyValueDB *db);
+
+  bool set_key(KeyValueDB *db, const string& prefix, const string& key,
+               const bufferlist& val);
   bool remove_key(KeyValueDB *db, const string& prefix, const string& key);
   bool fix_shared_blob(KeyValueDB *db,
 		         uint64_t sbid,
@@ -3248,7 +3254,7 @@ private:
   KeyValueDB::Transaction fix_per_pool_omap_txn;
   KeyValueDB::Transaction fix_fm_leaked_txn;
   KeyValueDB::Transaction fix_fm_false_free_txn;
-  KeyValueDB::Transaction remove_key_txn;
+  KeyValueDB::Transaction fix_key_txn;
   KeyValueDB::Transaction fix_statfs_txn;
   KeyValueDB::Transaction fix_shared_blob_txn;
 

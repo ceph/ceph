@@ -7305,6 +7305,9 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  derr << "fsck error: bad blob @kv key "
 	       << pretty_binary_string(it->key()) << dendl;
 	  ++errors;
+	  if (repair) {
+	    repairer.remove_key(db, PREFIX_OBJ, it->key());
+	  }
 	  continue;
 	}
 	ghobject_t oid;
@@ -7313,6 +7316,9 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  derr << "fsck error: bad blob @kv key, undecodable oid "
 	       << pretty_binary_string(it->key()) << dendl;
 	  ++errors;
+	  if (repair) {
+	    repairer.remove_key(db, PREFIX_OBJ, it->key());
+	  }
 	  continue;
 	}
 
@@ -7321,6 +7327,9 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  derr << "fsck error: stray blob @kv record for " << expecting_oid
 	       << " offset = " << offset << dendl;
 	  ++errors;
+	  if (repair) {
+	    repairer.remove_key(db, PREFIX_OBJ, it->key());
+	  }
 	  continue;
 	}
         if (eob_it->second > it->value().length()) {
@@ -7329,6 +7338,13 @@ int BlueStore::_fsck(bool deep, bool repair)
 	       << ", required " << eob_it->second << " > available "
 	       << it->value().length() << dendl;
 	  ++errors;
+	  if (repair) {
+	    string s(eob_it->second - it->value().length(), '\0');
+	    bufferlist bl;
+	    bl.append(it->value());
+	    bl.append(s);
+	    repairer.set_key(db, PREFIX_OBJ, it->key(), bl);
+	  }
 	}
 	expecting_kv_blobs.erase(eob_it);
 	continue;
@@ -7343,11 +7359,24 @@ int BlueStore::_fsck(bool deep, bool repair)
 	expecting_shards.clear();
       }
       if (!expecting_kv_blobs.empty()) {
+        string s;
+        string onode_key;
+	if (repair) {
+	  get_object_key(cct, expecting_oid, &onode_key);
+	}
 	for (auto &b : expecting_kv_blobs) {
 	  derr << "fsck error: missing blob @kv for " << expecting_oid
 	       << " offset " << b.first << dendl;
+	  if (repair) {
+	    string key;
+	    s.resize(b.second, '\0');
+	    bufferlist bl;
+	    bl.append(s);
+	    get_kv_blob_key(onode_key, b.first, &key);
+	    repairer.set_key(db, PREFIX_OBJ, key, bl);
+	  }
+	  ++errors;
 	}
-	++errors;
 	expecting_kv_blobs.clear();
       }
 
@@ -8221,6 +8250,25 @@ void BlueStore::inject_broken_shared_blob_key(const string& key,
   txn->set(PREFIX_SHARED_BLOB, key, bl);
   db->submit_transaction_sync(txn);
 };
+
+void BlueStore::inject_broken_kv_blob(ghobject_t oid,
+					   uint32_t offset,
+					   const bufferlist& bl)
+{
+  string onode_key;
+  string key;
+  get_object_key(cct, oid, &onode_key);
+  get_kv_blob_key(onode_key, offset, &key);
+
+  KeyValueDB::Transaction txn;
+  txn = db->get_transaction();
+  if (bl.length()) {
+    txn->set(PREFIX_OBJ, key, bl);
+  } else {
+    txn->rmkey(PREFIX_OBJ, key);
+  }
+  db->submit_transaction_sync(txn);
+}
 
 void BlueStore::inject_leaked(uint64_t len)
 {
@@ -14825,15 +14873,29 @@ size_t BlueStoreRepairer::StoreSpaceTracker::filter_out(
   return collections_bfs.size();
 }
 
+bool BlueStoreRepairer::set_key(KeyValueDB *db,
+				const string& prefix,
+				const string& key,
+				const bufferlist& val)
+{
+  if (!fix_key_txn) {
+    fix_key_txn = db->get_transaction();
+  }
+  ++to_repair_cnt;
+  fix_key_txn->set(prefix, key, val);
+
+  return true;
+}
+
 bool BlueStoreRepairer::remove_key(KeyValueDB *db,
 				   const string& prefix,
 				   const string& key)
 {
-  if (!remove_key_txn) {
-    remove_key_txn = db->get_transaction();
+  if (!fix_key_txn) {
+    fix_key_txn = db->get_transaction();
   }
   ++to_repair_cnt;
-  remove_key_txn->rmkey(prefix, key);
+  fix_key_txn->rmkey(prefix, key);
 
   return true;
 }
@@ -14949,9 +15011,9 @@ unsigned BlueStoreRepairer::apply(KeyValueDB* db)
     db->submit_transaction_sync(fix_fm_false_free_txn);
     fix_fm_false_free_txn = nullptr;
   }
-  if (remove_key_txn) {
-    db->submit_transaction_sync(remove_key_txn);
-    remove_key_txn = nullptr;
+  if (fix_key_txn) {
+    db->submit_transaction_sync(fix_key_txn);
+    fix_key_txn = nullptr;
   }
   if (fix_misreferences_txn) {
     db->submit_transaction_sync(fix_misreferences_txn);
