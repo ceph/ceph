@@ -2403,12 +2403,12 @@ uint64_t OSDMap::get_encoding_features() const
   }
   if (require_osd_release < CEPH_RELEASE_KRAKEN) {
     f &= ~(CEPH_FEATURE_SERVER_KRAKEN |
-	   CEPH_FEATURE_MSG_ADDR2 |
-	   CEPH_FEATURE_CRUSH_TUNABLES5);
+	   CEPH_FEATURE_MSG_ADDR2);
   }
   if (require_osd_release < CEPH_RELEASE_JEWEL) {
     f &= ~(CEPH_FEATURE_SERVER_JEWEL |
-	   CEPH_FEATURE_NEW_OSDOP_ENCODING);
+	   CEPH_FEATURE_NEW_OSDOP_ENCODING |
+	   CEPH_FEATURE_CRUSH_TUNABLES5);
   }
   return f;
 }
