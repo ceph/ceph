@@ -321,6 +321,15 @@ class DashboardTestCase(MgrTestCase):
         else:
             self.assertEqual(self._resp.status_code, status)
 
+    def assertError(self, code=None, component=None, detail=None):
+        body = self._resp.json()
+        if code:
+            self.assertEqual(body['code'], code)
+        if component:
+            self.assertEqual(body['component'], component)
+        if detail:
+            self.assertEqual(body['detail'], detail)
+
     @classmethod
     def _ceph_cmd(cls, cmd):
         res = cls.mgr_cluster.mon_manager.raw_cluster_cmd(*cmd)

@@ -1,0 +1,197 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">Administration</li>
+    <li class="breadcrumb-item">
+      <a routerLink="/users">Users</a></li>
+    <li class="breadcrumb-item active"
+        i18n>{mode, select, editing {Edit} other {Add}}</li>
+  </ol>
+</nav>
+
+<div class="col-sm-12 col-lg-6">
+  <form name="userForm"
+        class="form-horizontal"
+        #formDir="ngForm"
+        [formGroup]="userForm"
+        novalidate>
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 class="panel-title">
+          <span i18n>{mode, select, editing {Edit} other {Add}}</span> User
+        </h3>
+      </div>
+      <div class="panel-body">
+
+        <!-- Username -->
+        <div class="form-group"
+             [ngClass]="{'has-error': userForm.showError('username', formDir)}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="name">Username
+            <span class="required"
+                  *ngIf="mode !== userFormMode.editing"></span>
+          </label>
+          <div class="col-sm-9">
+            <input class="form-control"
+                   type="text"
+                   placeholder="Username..."
+                   id="username"
+                   name="username"
+                   formControlName="username"
+                   autofocus>
+            <span i18n
+                  class="help-block"
+                  *ngIf="userForm.showError('username', formDir, 'required')">
+              This field is required.
+            </span>
+          </div>
+        </div>
+
+        <!-- Password -->
+        <div class="form-group"
+             [ngClass]="{'has-error': userForm.showError('password', formDir)}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="name">Password
+            <span class="required"
+                  *ngIf="mode !== userFormMode.editing"></span>
+          </label>
+          <div class="col-sm-9">
+            <div class="input-group">
+                <input class="form-control"
+                       type="password"
+                       placeholder="Password..."
+                       id="password"
+                       name="password"
+                       formControlName="password">
+                <span class="input-group-btn">
+                  <button type="button"
+                          class="btn btn-default"
+                          cdPasswordButton="password">
+                  </button>
+                </span>
+              </div>
+            <span i18n
+                  class="help-block"
+                  *ngIf="userForm.showError('password', formDir, 'required')">
+              This field is required.
+            </span>
+          </div>
+        </div>
+
+        <!-- Confirm password -->
+        <div class="form-group"
+             [ngClass]="{'has-error': userForm.showError('confirmpassword', formDir)}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="name">Confirm password
+            <span class="required"
+                  *ngIf="mode !== userFormMode.editing"></span>
+          </label>
+          <div class="col-sm-9">
+            <div class="input-group">
+                <input class="form-control"
+                       type="password"
+                       placeholder="Confirm password..."
+                       id="confirmpassword"
+                       name="confirmpassword"
+                       formControlName="confirmpassword">
+                <span class="input-group-btn">
+                  <button type="button"
+                          class="btn btn-default"
+                          cdPasswordButton="confirmpassword">
+                  </button>
+                </span>
+              </div>
+            <span i18n
+                  class="help-block"
+                  *ngIf="userForm.showError('confirmpassword', formDir, 'required')">
+              This field is required.
+            </span>
+            <span i18n
+                  class="help-block"
+                  *ngIf="userForm.showError('confirmpassword', formDir, 'match')">
+              Password confirmation doesn't match the password.
+            </span>
+          </div>
+        </div>
+
+        <!-- Name -->
+        <div class="form-group">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="name">Full name
+          </label>
+          <div class="col-sm-9">
+            <input class="form-control"
+                   type="text"
+                   placeholder="Full name..."
+                   id="name"
+                   name="name"
+                   formControlName="name">
+          </div>
+        </div>
+
+        <!-- Email -->
+        <div class="form-group"
+             [ngClass]="{'has-error': userForm.showError('email', formDir)}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="email">Email
+          </label>
+          <div class="col-sm-9">
+            <input class="form-control"
+                   type="email"
+                   placeholder="Email..."
+                   id="email"
+                   name="email"
+                   formControlName="email">
+
+            <span i18n
+                  class="help-block"
+                  *ngIf="userForm.showError('email', formDir, 'email')">
+              Invalid email.
+            </span>
+          </div>
+        </div>
+
+        <!-- Roles -->
+        <label class="col-sm-3 control-label"
+               i18n>Roles
+        </label>
+        <div class="col-sm-9">
+          <span class="form-control no-border full-height">
+            <cd-select-badges
+                [data]="userForm.controls.roles.value"
+                [options]="allRoles"
+                emptyMessage="There are no roles."></cd-select-badges>
+          </span>
+        </div>
+
+      </div>
+      <div class="panel-footer">
+        <div class="button-group text-right">
+          <cd-submit-button [form]="formDir"
+                            type="button"
+                            (submitAction)="submit()">
+            <span i18n>{mode, select, editing {Update} other {Create}}</span> User
+          </cd-submit-button>
+          <button i18n
+                  type="button"
+                  class="btn btn-sm btn-default"
+                  routerLink="/users">
+            Back
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+<ng-template #removeSelfUserReadUpdatePermissionTpl>
+  <p><strong>You are about to remove "user read / update" permissions from your own user.</strong></p>
+  <br>
+  <p>If you continue, you will no longer be able to add or remove roles from any user.</p>
+
+  Are you sure you want to continue?
+</ng-template>
