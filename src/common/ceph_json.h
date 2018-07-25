@@ -500,45 +500,9 @@ class JSONFormattable : public ceph::JSONFormatter {
   JSONFormattable *cur_enc;
 
 protected:
-  bool handle_value(const char *name, std::string_view s, bool quoted) override {
-    JSONFormattable *new_val;
-    if (cur_enc->is_array()) {
-      cur_enc->arr.push_back(JSONFormattable());
-      new_val = &cur_enc->arr.back();
-    } else {
-      new_val  = &cur_enc->obj[name];
-    }
-    new_val->set_type(JSONFormattable::FMT_VALUE);
-    new_val->value.set(s, quoted);
-
-    return false;
-  }
-  bool handle_open_section(const char *name, const char *ns, bool section_is_array) override {
-    if (cur_enc->is_array()) {
-      cur_enc->arr.push_back(JSONFormattable());
-      cur_enc = &cur_enc->arr.back();
-    } else {
-      cur_enc = &obj[name];
-    }
-    enc_stack.push_back(cur_enc);
-
-    if (section_is_array) {
-      cur_enc->set_type(JSONFormattable::FMT_ARRAY);
-    } else {
-      cur_enc->set_type(JSONFormattable::FMT_OBJ);
-    }
-
-    return false; /* continue processing */
-  }
-  bool handle_close_section() override {
-    if (enc_stack.size() <= 1) {
-      return false;
-    }
-
-    enc_stack.pop_back();
-    cur_enc = enc_stack.back();
-    return false; /* continue processing */
-  }
+  bool handle_value(const char *name, std::string_view s, bool quoted) override;
+  bool handle_open_section(const char *name, const char *ns, bool section_is_array) override;
+  bool handle_close_section() override;
 
 public:
   JSONFormattable(bool p = false) : JSONFormatter(p) {
@@ -605,6 +569,8 @@ public:
   }
 
   int val_int() const;
+  long val_long() const;
+  long long val_long_long() const;
   bool val_bool() const;
 
   const vector<JSONFormattable>& array() const {
@@ -623,6 +589,14 @@ public:
 
   explicit operator int() const {
     return val_int();
+  }
+
+  explicit operator long() const {
+    return val_long();
+  }
+
+  explicit operator long long() const {
+    return val_long_long();
   }
 
   explicit operator bool() const {
