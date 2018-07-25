@@ -355,7 +355,7 @@ XMLObj *RGWLCXMLParser_S3::alloc_obj(const char *el)
   return obj;
 }
 
-bool check_date(const string& _date)
+static bool check_date(const string& _date)
 {
   boost::optional<ceph::real_time> date = ceph::from_iso_8601(_date);
   if (boost::none == date) {

@@ -98,14 +98,14 @@ bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
       action.date = ceph::from_iso_8601(elem.second.get_date());
     }
     action.storage_class = elem.first;
-    op.transitions.emplace(action.storage_class, std::move(action));
+    op.transitions.emplace(elem.first, std::move(action));
   }
   for (const auto &elem : rule->get_noncur_transitions()) {
     transition_action action;
     action.days = elem.second.get_days();
     action.date = ceph::from_iso_8601(elem.second.get_date());
     action.storage_class = elem.first;
-    op.noncur_transitions.emplace(action.storage_class, std::move(action));
+    op.noncur_transitions.emplace(elem.first, std::move(action));
   }
   std::string prefix;
   if (rule->get_filter().has_prefix()){
