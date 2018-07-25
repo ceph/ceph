@@ -213,13 +213,18 @@ TEST(formatable, erase) {
   ASSERT_EQ((int)f["obj"]["b"], 20);
 }
 
-static void dumpf(const JSONFormattable& f)
+template <class T>
+static void dumpt(const T& t, const char *n)
 {
   JSONFormatter formatter;
   formatter.open_object_section("bla");
-  ::encode_json("f", f, &formatter);
+  ::encode_json(n, t, &formatter);
   formatter.close_section();
   formatter.flush(cout);
+}
+
+static void dumpf(const JSONFormattable& f) {
+  dumpt(f, "f");
 }
 
 TEST(formatable, set_array) {
@@ -288,5 +293,149 @@ TEST(formatable, erase_array) {
   if (0) { /* for debugging when needed */
     dumpf(f);
   }
+}
+
+void formatter_convert(JSONFormatter& formatter, JSONFormattable *dest)
+{
+  stringstream ss;
+  formatter.flush(ss);
+  get_jf(ss.str(), dest);
+}
+
+TEST(formatable, encode_simple) {
+  JSONFormattable f;
+
+  encode_json("foo", "bar", &f);
+
+  ASSERT_EQ((string)f["foo"], "bar");
+
+
+  JSONFormatter formatter;
+  {
+    Formatter::ObjectSection s(formatter, "os");
+    encode_json("f", f, &formatter);
+  }
+
+  JSONFormattable jf2;
+  formatter_convert(formatter, &jf2);
+
+  ASSERT_EQ((string)jf2["f"]["foo"], "bar");
+}
+
+
+struct struct1 {
+  long i;
+  string s;
+  bool b;
+
+  struct1() {
+    void *p = (void *)this;
+    i = (long)p;
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%p", p);
+    s = buf;
+    b = (bool)(i % 2);
+  }
+
+  void dump(Formatter *f) const {
+    encode_json("i", i, f);
+    encode_json("s", s, f);
+    encode_json("b", b, f);
+  }
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("i", i, obj);
+    JSONDecoder::decode_json("s", s, obj);
+    JSONDecoder::decode_json("b", b, obj);
+  }
+
+  bool compare(const JSONFormattable& jf) const {
+    bool ret = (s == (string)jf["s"] &&
+            i == (long)jf["i"] &&
+            b == (bool)jf["b"]);
+
+    if (!ret) {
+      cout << "failed comparison: s=" << s << " jf[s]=" << (string)jf["s"] << 
+        " i=" << i << " jf[i]=" << (long)jf["i"] << " b=" << b << " jf[b]=" << (bool)jf["b"] << std::endl;
+      dumpf(jf);
+    }
+
+    return ret;
+  }
+};
+
+
+struct struct2 {
+  struct1 s1;
+  vector<struct1> v;
+
+  struct2() {
+    void *p = (void *)this;
+    long i = (long)p;
+    v.resize((i >> 16) % 16 + 1);
+  }
+
+  void dump(Formatter *f) const {
+    encode_json("s1", s1, f);
+    encode_json("v", v, f);
+  }
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("s1", s1, obj);
+    JSONDecoder::decode_json("v", v, obj);
+  }
+
+  bool compare(const JSONFormattable& jf) const {
+    if (!s1.compare(jf["s1"])) {
+      cout << "s1.compare(jf[s1] failed" << std::endl;
+      return false;
+    }
+
+    if (v.size() != jf["v"].array().size()) {
+      cout << "v.size()=" << v.size() << " jf[v].array().size()=" << jf["v"].array().size() << std::endl;
+      return false;
+    }
+
+    auto viter = v.begin();
+    auto jiter = jf["v"].array().begin();
+
+    for (; viter != v.end(); ++viter, ++jiter) {
+      if (!viter->compare(*jiter)) {
+        return false;
+      }
+    }
+    return true;
+  }
+};
+
+
+TEST(formatable, encode_struct) {
+  JSONFormattable f;
+
+  struct2 s2;
+
+  {
+    Formatter::ObjectSection s(f, "section");
+    encode_json("foo", "bar", &f);
+    encode_json("s2", s2, &f);
+  }
+
+  dumpt(s2, "s2");
+  cout << std::endl;
+  cout << std::endl;
+
+  ASSERT_EQ((string)f["foo"], "bar");
+  ASSERT_TRUE(s2.compare(f["s2"]));
+
+
+  JSONFormatter formatter;
+  encode_json("f", f, &formatter);
+
+  JSONFormattable jf2;
+
+  formatter_convert(formatter, &jf2);
+
+  ASSERT_EQ((string)jf2["foo"], "bar");
+  ASSERT_TRUE(s2.compare(jf2["s2"]));
 }
 
