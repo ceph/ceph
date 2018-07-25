@@ -1,0 +1,25 @@
+@import '../../../../defaults';
+
+.select-menu-edit {
+  margin-left: -20px
+}
+.select-menu-item {
+  display: block;
+  cursor: pointer;
+  border-bottom: 1px solid $color-transparent;
+  font-size: 12px;
+  &:hover {
+    background-color: $color-off-white;
+  }
+}
+.select-menu-item-icon {
+  float: left;
+  padding: 8px 8px 8px 8px;
+  width: 30px;
+}
+.select-menu-item-content {
+  padding: 8px 8px 8px 8px;
+}
+.badge-remove {
+  color: $color-solid-white;
+}

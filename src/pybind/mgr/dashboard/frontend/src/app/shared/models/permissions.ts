@@ -25,6 +25,7 @@ export class Permissions {
   cephfs: Permission;
   manager: Permission;
   log: Permission;
+  user: Permission;
 
   constructor(serverPermissions: any) {
     this.hosts = new Permission(serverPermissions['hosts']);
@@ -39,5 +40,6 @@ export class Permissions {
     this.cephfs = new Permission(serverPermissions['cephfs']);
     this.manager = new Permission(serverPermissions['manager']);
     this.log = new Permission(serverPermissions['log']);
+    this.user = new Permission(serverPermissions['user']);
   }
 }
