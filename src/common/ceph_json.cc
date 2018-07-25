@@ -610,6 +610,14 @@ int JSONFormattable::val_int() const {
   return atoi(value.str.c_str());
 }
 
+long JSONFormattable::val_long() const {
+  return atol(value.str.c_str());
+}
+
+long long JSONFormattable::val_long_long() const {
+  return atoll(value.str.c_str());
+}
+
 bool JSONFormattable::val_bool() const {
   return (boost::iequals(value.str, "true") ||
           boost::iequals(value.str, "on") ||
@@ -880,5 +888,50 @@ void JSONFormattable::encode_json(const char *name, Formatter *f) const
     case JSONFormattable::FMT_NONE:
       break;
   }
+}
+
+bool JSONFormattable::handle_value(const char *name, std::string_view s, bool quoted) {
+  JSONFormattable *new_val;
+  if (cur_enc->is_array()) {
+    cur_enc->arr.push_back(JSONFormattable());
+    new_val = &cur_enc->arr.back();
+  } else {
+    cur_enc->set_type(JSONFormattable::FMT_OBJ);
+    new_val  = &cur_enc->obj[name];
+  }
+  new_val->set_type(JSONFormattable::FMT_VALUE);
+  new_val->value.set(s, quoted);
+
+  return false;
+}
+bool JSONFormattable::handle_open_section(const char *name, const char *ns, bool section_is_array) {
+  if (cur_enc->is_array()) {
+    cur_enc->arr.push_back(JSONFormattable());
+    cur_enc = &cur_enc->arr.back();
+  } else if (enc_stack.size() > 1) {
+      /* only open a new section if already nested,
+       * otherwise root is the container
+       */
+      cur_enc = &cur_enc->obj[name];
+  }
+  enc_stack.push_back(cur_enc);
+
+  if (section_is_array) {
+    cur_enc->set_type(JSONFormattable::FMT_ARRAY);
+  } else {
+    cur_enc->set_type(JSONFormattable::FMT_OBJ);
+  }
+
+  return false; /* continue processing */
+}
+
+bool JSONFormattable::handle_close_section() {
+  if (enc_stack.size() <= 1) {
+    return false;
+  }
+
+  enc_stack.pop_back();
+  cur_enc = enc_stack.back();
+  return false; /* continue processing */
 }
 
