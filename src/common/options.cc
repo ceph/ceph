@@ -5121,6 +5121,12 @@ std::vector<Option> get_rgw_options() {
         "Try to handle requests with abiguous multiple content length headers "
         "(Content-Length, Http-Content-Length)."),
 
+    Option("rgw_relaxed_region_enforcement", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Disable region constraint enforcement")
+    .set_long_description(
+        "Enable requests such as bucket creation to succeed irrespective of region restrictions (Jewel compat)."),
+
     Option("rgw_lifecycle_work_time", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("00:00-06:00")
     .set_description("Lifecycle allowed work time")
@@ -5362,6 +5368,22 @@ std::vector<Option> get_rgw_options() {
     .set_default("")
     .set_description("LDAP search filter."),
 
+    Option("rgw_opa_url", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("URL to OPA server."),
+
+    Option("rgw_opa_token", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("The Bearer token OPA uses to authenticate client requests."),
+
+    Option("rgw_opa_verify_ssl", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Should RGW verify the OPA server SSL certificate."),
+
+    Option("rgw_use_opa_authz", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Should OPA be used to authorize client requests."),
+
     Option("rgw_admin_entry", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("admin")
     .set_description("Path prefix to be used for accessing RGW RESTful admin API."),
@@ -5412,7 +5434,7 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_thread_pool_size", Option::TYPE_INT, Option::LEVEL_BASIC)
-    .set_default(100)
+    .set_default(512)
     .set_description("RGW requests handling thread pool size.")
     .set_long_description(
         "This parameter determines the number of concurrent requests RGW can process "
@@ -6262,7 +6284,6 @@ std::vector<Option> get_rgw_options() {
 			  "of RGW instances under heavy use. If you would like "
 			  "to turn off cache expiry, set this value to zero."),
 
-
     Option("rgw_inject_notify_timeout_probability", Option::TYPE_FLOAT,
 	   Option::LEVEL_DEV)
     .set_default(0)
@@ -6278,6 +6299,19 @@ std::vector<Option> get_rgw_options() {
 			  "do not set it in a production cluster, as it "
 			  "actively causes failures. Set this to a floating "
 			  "point value between 0 and 1."),
+    Option("rgw_max_notify_retries", Option::TYPE_UINT,
+	   Option::LEVEL_ADVANCED)
+    .set_default(3)
+    .add_tag("error recovery")
+    .add_service("rgw")
+    .set_description("Number of attempts to notify peers before giving up.")
+    .set_long_description("The number of times we will attempt to update "
+			  "a peer's cache in the event of error before giving "
+			  "up. This is unlikely to be an issue unless your "
+			  "cluster is very heavily loaded. Beware that "
+			  "increasing this value may cause some operations to "
+			  "take longer in exceptional cases and thus may, "
+			  "rarely, cause clients to time out."),
   });
 }
 

@@ -3,7 +3,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import * as _ from 'lodash';
 import { Subject } from 'rxjs';
 
-import { configureTestBed } from '../unit-test-helper';
+import { configureTestBed } from '../../../testing/unit-test-helper';
 import { SummaryService } from './summary.service';
 import { TaskManagerService } from './task-manager.service';
 
@@ -27,9 +27,12 @@ describe('TaskManagerService', () => {
     filesystems: [{ id: 1, name: 'cephfs_a' }]
   };
 
-  configureTestBed({
-    providers: [TaskManagerService, { provide: SummaryService, useValue: fakeService }]
-  }, true);
+  configureTestBed(
+    {
+      providers: [TaskManagerService, { provide: SummaryService, useValue: fakeService }]
+    },
+    true
+  );
 
   beforeEach(() => {
     taskManagerService = TestBed.get(TaskManagerService);

@@ -6,6 +6,7 @@ import { ToastModule } from 'ng2-toastr';
 import { BsModalRef, ModalModule } from 'ngx-bootstrap';
 import { throwError as observableThrowError } from 'rxjs';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ApiModule } from '../../../shared/api/api.module';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
@@ -15,7 +16,6 @@ import { PipesModule } from '../../../shared/pipes/pipes.module';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { ServicesModule } from '../../../shared/services/services.module';
-import { configureTestBed } from '../../../shared/unit-test-helper';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list.component';
 
 describe('RbdSnapshotListComponent', () => {

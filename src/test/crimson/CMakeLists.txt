@@ -20,3 +20,7 @@ add_executable(unittest_seastar_thread_pool
   test_thread_pool.cc)
 add_ceph_unittest(unittest_seastar_thread_pool)
 target_link_libraries(unittest_seastar_thread_pool crimson)
+
+add_executable(unittest_seastar_config
+  test_config.cc)
+target_link_libraries(unittest_seastar_config crimson)

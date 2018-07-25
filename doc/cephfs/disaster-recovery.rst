@@ -1,3 +1,4 @@
+.. _cephfs-disaster-recovery:
 
 Disaster recovery
 =================
