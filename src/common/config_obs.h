@@ -28,7 +28,7 @@ namespace ceph::internal {
  * Subscribe for configuration changes by calling the md_config_t::add_observer() method
  * and unsubscribe using md_config_t::remove_observer().
  */
-template<LockPolicy lp>
+template<class ConfigProxy>
 class md_config_obs_impl {
 public:
   virtual ~md_config_obs_impl() {}
