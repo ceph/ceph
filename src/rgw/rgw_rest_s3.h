@@ -846,7 +846,6 @@ public:
   static void shutdown();
 };
 
-
 class LocalEngine : public AWSEngine {
   RGWRados* const store;
   const rgw::auth::LocalApplier::Factory* const apl_factory;
