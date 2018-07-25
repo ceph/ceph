@@ -200,6 +200,7 @@ int main(int argc, const char **argv)
   vector<const char *> def_args;
   def_args.push_back("--debug-rgw=1/5");
   def_args.push_back("--keyring=$rgw_data/keyring");
+  def_args.push_back("--objecter_inflight_ops=24576");
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
