@@ -12,6 +12,7 @@
 #include "rgw_process.h"
 #include "rgw_loadgen.h"
 #include "rgw_client_io.h"
+#include "rgw_opa.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -77,6 +78,14 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   ret = op->verify_op_mask();
   if (ret < 0) {
     return ret;
+  }
+
+  /* Check if OPA is used to authorize requests */
+  if (s->cct->_conf->rgw_use_opa_authz) {
+    ret = rgw_opa_authorize(op, s);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   ldpp_dout(op, 2) << "verifying op permissions" << dendl;
