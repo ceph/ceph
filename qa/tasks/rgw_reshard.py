@@ -136,11 +136,21 @@ def task(ctx, config):
 
     ##
     user = 'testid'
+    display_name = 'M. Tester'
+    email = 'tester@ceph.com'
     access_key='0555b35654ad1656d804'
     secret_key='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
     bucket_name1='myfoo'
     bucket_name2='mybar'
     ver_bucket_name ='myver'
+
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'create',
+            '--uid', user,
+            '--display-name', display_name,
+            '--access-key', access_key,
+            '--secret',  secret_key,
+    ])
 
     # connect to rgw
     connection = boto.s3.connection.S3Connection(
