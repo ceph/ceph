@@ -330,5 +330,4 @@ public:
   void dump_xml(Formatter *f) const;
 };
 
-bool check_date(const string& _date);
 #endif
