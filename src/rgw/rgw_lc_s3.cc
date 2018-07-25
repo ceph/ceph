@@ -11,6 +11,18 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+static bool check_date(const string& _date)
+{
+  boost::optional<ceph::real_time> date = ceph::from_iso_8601(_date);
+  if (boost::none == date) {
+    return false;
+  }
+  struct timespec time = ceph::real_clock::to_timespec(*date);
+  if (time.tv_sec % (24*60*60) || time.tv_nsec) {
+    return false;
+  }
+  return true;
+}
 
 bool LCExpiration_S3::xml_end(const char * el) {
   LCDays_S3 *lc_days = static_cast<LCDays_S3 *>(find_first("Days"));
@@ -355,15 +367,4 @@ XMLObj *RGWLCXMLParser_S3::alloc_obj(const char *el)
   return obj;
 }
 
-static bool check_date(const string& _date)
-{
-  boost::optional<ceph::real_time> date = ceph::from_iso_8601(_date);
-  if (boost::none == date) {
-    return false;
-  }
-  struct timespec time = ceph::real_clock::to_timespec(*date);
-  if (time.tv_sec % (24*60*60) || time.tv_nsec) {
-    return false;
-  }
-  return true;
-}
+
