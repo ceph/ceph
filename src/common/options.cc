@@ -4509,6 +4509,16 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Appends smaller than this size will be stored at DB only without wasting disk space. This can be beneficial when using multiple tiny objects for which block store allocation granularity causes great overhead."),
 
+    Option("bluestore_tiny_write_size_hdd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(4096)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Default bluestore_tiny_write_size for rotational media"),
+
+    Option("bluestore_tiny_write_size_ssd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(2048)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Default bluestore_tiny_write_size for non-rotational (solid state) media"),
+
     Option("bluestore_prefer_deferred_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_flag(Option::FLAG_RUNTIME)

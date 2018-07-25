@@ -1870,6 +1870,9 @@ private:
   ///< size threshold for forced deferred writes
   std::atomic<uint64_t> prefer_deferred_size = {0};
 
+  ///< size threshold for tiny writes landing to DB
+  std::atomic<uint64_t> tiny_write_size = {0};
+
   ///< approx cost per io, in bytes
   std::atomic<uint64_t> throttle_cost_per_io = {0};
 

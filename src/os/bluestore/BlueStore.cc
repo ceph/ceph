@@ -4067,6 +4067,9 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_compression_max_blob_size_hdd",
     "bluestore_compression_required_ratio",
     "bluestore_max_alloc_size",
+    "bluestore_tiny_write_size",
+    "bluestore_tiny_write_size_hdd",
+    "bluestore_tiny_write_size_ssd",
     "bluestore_prefer_deferred_size",
     "bluestore_prefer_deferred_size_hdd",
     "bluestore_prefer_deferred_size_ssd",
@@ -4126,7 +4129,10 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
       _set_blob_size();
     }
   }
-  if (changed.count("bluestore_prefer_deferred_size") ||
+  if (changed.count("bluestore_tiny_write_size") ||
+      changed.count("bluestore_tiny_write_size_hdd") ||
+      changed.count("bluestore_tiny_write_size_ssd") ||
+      changed.count("bluestore_prefer_deferred_size") ||
       changed.count("bluestore_prefer_deferred_size_hdd") ||
       changed.count("bluestore_prefer_deferred_size_ssd") ||
       changed.count("bluestore_max_alloc_size") ||
@@ -4680,6 +4686,17 @@ void BlueStore::_set_alloc_sizes(void)
 {
   max_alloc_size = cct->_conf->bluestore_max_alloc_size;
 
+  if (cct->_conf->bluestore_tiny_write_size) {
+    tiny_write_size = cct->_conf->bluestore_tiny_write_size;
+  } else {
+    ceph_assert(bdev);
+    if (bdev->is_rotational()) {
+      tiny_write_size = cct->_conf->bluestore_tiny_write_size_hdd;
+    } else {
+      tiny_write_size = cct->_conf->bluestore_tiny_write_size_ssd;
+    }
+  }
+
   if (cct->_conf->bluestore_prefer_deferred_size) {
     prefer_deferred_size = cct->_conf->bluestore_prefer_deferred_size;
   } else {
@@ -4705,6 +4722,7 @@ void BlueStore::_set_alloc_sizes(void)
   dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
 	   << std::dec << " order " << (int)min_alloc_size_order
 	   << " max_alloc_size 0x" << std::hex << max_alloc_size
+	   << " tiny_write_size 0x" << tiny_write_size
 	   << " prefer_deferred_size 0x" << prefer_deferred_size
 	   << std::dec
 	   << " deferred_batch_ops " << deferred_batch_ops
@@ -12497,7 +12515,7 @@ void BlueStore::_do_write_small(
   BlobRef b = c->new_blob();
   // small appends might land to DB
   if (offset < o->onode.size ||
-      length >= g_conf()->bluestore_tiny_write_size) {
+      length >= tiny_write_size) {
     uint64_t b_off = p2phase<uint64_t>(offset, alloc_len);
     uint64_t b_off0 = b_off;
     _pad_zeros(&bl, &b_off0, block_size);

@@ -1323,6 +1323,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
   SetVal(g_conf(), "bluestore_gc_enable_total_threshold", "100000");
   SetVal(g_conf(), "bluestore_fsck_on_umount", "true");
   SetVal(g_conf(), "bluestore_tiny_write_size", "0");
+  SetVal(g_conf(), "bluestore_tiny_write_size_hdd", "0");
+  SetVal(g_conf(), "bluestore_tiny_write_size_ssd", "0");
   g_conf().apply_changes(nullptr);
   int r;
 
@@ -7691,6 +7693,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   SetVal(g_conf(), "bluestore_extent_map_shard_max_size", "12000");
   SetVal(g_conf(), "bluestore_no_per_pool_stats_tolerance", "enforce");
   SetVal(g_conf(), "bluestore_tiny_write_size", "0");
+  SetVal(g_conf(), "bluestore_tiny_write_size_hdd", "0");
+  SetVal(g_conf(), "bluestore_tiny_write_size_ssd", "0");
 
   StartDeferred(0x10000);
 
