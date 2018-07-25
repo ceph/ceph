@@ -26,4 +26,4 @@ set(lib_mon_srcs
 add_library(mon STATIC
   ${lib_mon_srcs}
   $<TARGET_OBJECTS:kv_objs>)
-target_link_libraries(mon heap_profiler ${ALLOC_LIBS})
+target_link_libraries(mon heap_profiler)
