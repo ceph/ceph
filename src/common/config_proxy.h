@@ -9,6 +9,9 @@
 #include "common/config_obs_mgr.h"
 #include "common/Mutex.h"
 
+// @c ConfigProxy is a facade of multiple config related classes. it exposes
+// the legacy settings with arrow operator, and the new-style config with its
+// member methods.
 class ConfigProxy {
   /**
    * The current values of all settings described by the schema
