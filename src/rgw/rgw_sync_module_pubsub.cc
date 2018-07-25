@@ -351,8 +351,17 @@ struct objstore_event {
   }
 
   void dump(Formatter *f) const {
-    encode_json("bucket", bucket, f);
-    encode_json("key", key, f);
+    {
+      Formatter::ObjectSection s(*f, "bucket");
+      encode_json("name", bucket.name, f);
+      encode_json("tenant", bucket.tenant, f);
+      encode_json("bucket_id", bucket.bucket_id, f);
+    }
+    {
+      Formatter::ObjectSection s(*f, "key");
+      encode_json("name", key.name, f);
+      encode_json("instance", key.instance, f);
+    }
     utime_t mt(mtime);
     encode_json("mtime", mt, f);
     Formatter::ObjectSection s(*f, "attrs");
