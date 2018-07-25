@@ -35,13 +35,6 @@ typedef enum {
   lc_complete,
 }LC_BUCKET_STATUS;
 
-typedef enum {
-  standard_ia = 0,
-  onezone_ia,
-  glacier,
-  undefined,
-} STORAGE_CLASS;
-
 class LCExpiration
 {
 protected:
@@ -114,20 +107,8 @@ public:
     return date;
   }
 
-  string get_storage_class_str() const {
+  string get_storage_class() const {
     return storage_class;
-  }
-
-  STORAGE_CLASS get_storage_class() const {
-    if (storage_class.compare("STANDARD_IA") == 0) {
-      return standard_ia;
-    } else if (storage_class.compare("ONEZONE_IA") == 0) {
-      return onezone_ia;
-    } else if (storage_class.compare("GLACIER") == 0) {
-      return glacier;
-    } else {
-      return undefined;
-    }
   }
 
   bool has_days() const {
@@ -239,8 +220,8 @@ protected:
   LCExpiration noncur_expiration;
   LCExpiration mp_expiration;
   LCFilter filter;
-  map<int, LCTransition> transitions;
-  map<int, LCTransition> noncur_transitions;
+  map<string, LCTransition> transitions;
+  map<string, LCTransition> noncur_transitions;
   bool dm_expiration = false;
 
 public:
@@ -281,11 +262,11 @@ public:
     return dm_expiration;
   }
 
-  map<int, LCTransition>& get_transitions() {
+  map<string, LCTransition>& get_transitions() {
     return transitions;
   }
 
-  map<int, LCTransition>& get_noncur_transitions() {
+  map<string, LCTransition>& get_noncur_transitions() {
     return noncur_transitions;
   }
 
@@ -376,8 +357,8 @@ struct transition_action
 {
   int days;
   boost::optional<ceph::real_time> date;
-  int storage_class;
-  transition_action() : days(0), storage_class(standard_ia) {}
+  string storage_class;
+  transition_action() : days(0) {}
 };
 
 struct lc_op
@@ -389,8 +370,8 @@ struct lc_op
   int mp_expiration;
   boost::optional<ceph::real_time> expiration_date;
   boost::optional<RGWObjTags> obj_tags;
-  map<int, transition_action> transitions;
-  map<int, transition_action> noncur_transitions;
+  map<string, transition_action> transitions;
+  map<string, transition_action> noncur_transitions;
   lc_op() : status(false), dm_expiration(false), expiration(0), noncur_expiration(0), mp_expiration(0) {}
   
   void dump(Formatter *f) const;
