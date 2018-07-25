@@ -908,7 +908,7 @@ public:
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
     relaxed_region_enforcement =
-	s->cct->_conf->get_val<bool>("rgw_relaxed_region_enforcement");
+	s->cct->_conf.get_val<bool>("rgw_relaxed_region_enforcement");
   }
   virtual int get_params() { return 0; }
   void send_response() override = 0;
