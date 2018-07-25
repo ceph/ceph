@@ -563,7 +563,9 @@ class perf_counters_t {
     : std::array<perf_counter_atomic_any_data_t, sizeof...(P)> {
   };
 
-  const std::string name;
+  std::string name;
+  int prio_adjust = 0;
+
   std::array<thread_group_t, EXPECTED_THREAD_NUM> threaded_perf_counters;
   atomic_group_t atomic_perf_counters;
 
@@ -685,6 +687,102 @@ public:
       aggregate += threaded_counters[idx].val;
     }
     return aggregate;
+  }
+
+  // helper structures, not for hot paths
+  static constexpr std::array<perf_counter_meta_t,
+			      sizeof...(P)> m_meta {
+    P...
+  };
+
+  // virtuals begins here
+  const iterator begin() const override final {
+    return { &m_meta.front() };
+  }
+  const iterator end() const override final {
+    return { &m_meta.back() + 1 };
+  }
+
+  std::uint64_t get_u64(const perf_counter_meta_t& meta) const override final {
+    const auto iter = std::find_if(std::begin(m_meta), std::end(m_meta),
+      [&meta](const auto& v) {
+	return v == meta;
+      });
+    assert(iter != std::end(m_meta));
+
+    const std::size_t idx = std::distance(std::begin(m_meta), iter);
+    std::size_t aggregate = atomic_perf_counters[idx].val;
+    for (const auto& threaded_counters : threaded_perf_counters) {
+      aggregate += threaded_counters[idx].val;
+    }
+    return aggregate;
+  }
+  std::uint64_t get_avgcount(const perf_counter_meta_t& meta) const override final {
+    const auto iter = std::find_if(std::begin(m_meta), std::end(m_meta),
+      [&meta](const auto& v) {
+	return v == meta;
+      });
+    assert(iter != std::end(m_meta));
+
+    const std::size_t idx = std::distance(std::begin(m_meta), iter);
+    std::size_t aggregate = atomic_perf_counters[idx].val_with_counter.cnt;
+    for (const auto& threaded_counters : threaded_perf_counters) {
+      aggregate += threaded_counters[idx].val_with_counter.load().cnt;
+    }
+    return aggregate;
+  }
+  std::uint64_t get_avgcount2(const perf_counter_meta_t& meta) const override final {
+    return get_avgcount(meta);
+  }
+
+#if 0
+  value_t get(const perf_counter_meta_t& id) const override;
+  value_t get(const std::string& name) const override;
+#endif
+
+  void reset() override {
+    assert(std::size(m_meta) == std::size(atomic_perf_counters));
+    assert(std::size(m_meta) == std::size(threaded_perf_counters[0]));
+
+    for (std::size_t idx = 0; idx < std::size(m_meta); idx++) {
+      const perf_counter_meta_t& meta = m_meta[idx];
+
+      if (meta.type != PERFCOUNTER_U64) {
+	atomic_perf_counters[idx].val_with_counter.val -= get_u64(meta);
+	atomic_perf_counters[idx].val_with_counter.cnt -= get_avgcount(meta);
+      }
+    }
+  }
+
+  const std::string& get_name() const override {
+    return name;
+  }
+  void set_name(std::string s) override {
+    name = std::move(s);
+  }
+
+  /// adjust priority values by some value
+  void set_prio_adjust(int p) override {
+    prio_adjust = p;
+  }
+
+  int get_adjusted_priority(int p) const override {
+    return std::max(0,
+      std::min(p + prio_adjust, (int)PerfCountersBuilder::PRIO_CRITICAL));
+  }
+
+  void dump_formatted(ceph::Formatter *f, bool schema,
+                      const std::string &counter = "") override {
+    dump_formatted_generic(f, schema, false, counter);
+  }
+  void dump_formatted_histograms(ceph::Formatter *f, bool schema,
+                                 const std::string &counter = "") override {
+    dump_formatted_generic(f, schema, true, counter);
+  }
+
+private:
+  void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
+                              const std::string &counter = "") override {
   }
 };
 
