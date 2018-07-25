@@ -884,6 +884,7 @@ protected:
   RGWBucketInfo info;
   obj_version ep_objv;
   bool has_cors;
+  bool relaxed_region_enforcement;
   RGWCORSConfiguration cors_config;
   boost::optional<std::string> swift_ver_location;
   map<string, buffer::list> attrs;
@@ -894,7 +895,7 @@ protected:
   virtual bool need_metadata_upload() const { return false; }
 
 public:
-  RGWCreateBucket() : has_cors(false) {}
+  RGWCreateBucket() : has_cors(false), relaxed_region_enforcement(false) {}
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
@@ -906,6 +907,8 @@ public:
   void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
+    relaxed_region_enforcement =
+	s->cct->_conf->get_val<bool>("rgw_relaxed_region_enforcement");
   }
   virtual int get_params() { return 0; }
   void send_response() override = 0;
