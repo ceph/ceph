@@ -52,7 +52,10 @@ def log_descriptors(reads, process, terminal_logging):
     for descriptor in reads:
         descriptor_name = descriptor_names[descriptor]
         try:
-            log_output(descriptor_name, read(descriptor, 1024), terminal_logging, True)
+            message = read(descriptor, 1024)
+            if not isinstance(message, str):
+                message = message.decode('utf-8')
+            log_output(descriptor_name, message, terminal_logging, True)
         except (IOError, OSError):
             # nothing else to log
             pass
