@@ -365,3 +365,7 @@ int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
   }
   return r;
 }
+
+bool ErasureCode::is_systematic() {
+  return true;
+}

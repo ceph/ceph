@@ -2413,6 +2413,10 @@ bool ECBackend::is_partial_read_avail(
     set<pg_shard_t> error_shards;
     set<int> data_shards;
 
+    if (!ec_impl->is_systematic()) {
+      return false;
+    }
+
     get_want_to_read_shards(&data_shards);
 
     get_all_avail_shards(hoid, error_shards, have, shards, for_recovery);

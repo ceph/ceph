@@ -120,6 +120,8 @@ namespace ceph {
     int decode_concat(const std::map<int, bufferlist> &chunks,
 			      bufferlist *decoded) override;
 
+    virtual bool is_systematic();
+
   protected:
     int parse(const ErasureCodeProfile &profile,
 	      std::ostream *ss);
