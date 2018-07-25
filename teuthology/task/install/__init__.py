@@ -339,11 +339,6 @@ def upgrade_remote_to_config(ctx, config):
 
     return result
 
-def _upgrade_is_noop(installed_version, upgrade_version):
-    assert installed_version, "installed_version is empty"
-    assert upgrade_version, "upgrade_version is empty"
-    return LooseVersion(installed_version) == LooseVersion(upgrade_version)
-
 def _upgrade_is_downgrade(installed_version, upgrade_version):
     assert installed_version, "installed_version is empty"
     assert upgrade_version, "upgrade_version is empty"
@@ -377,11 +372,6 @@ def upgrade_common(ctx, config, deploy_style):
             i=installed_version,
             u=upgrade_version
         ))
-	if _upgrade_is_noop(installed_version, upgrade_version):
-            raise RuntimeError(
-                "Upgrade to the same version as is already installed is a "
-                " NOOP. Hint: check the test yaml."
-            )
 	if _upgrade_is_downgrade(installed_version, upgrade_version):
             raise RuntimeError(
                 "An attempt to upgrade from a higher version to a lower one "
