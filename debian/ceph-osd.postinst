@@ -25,8 +25,6 @@ case "$1" in
     configure)
 	[ -x /etc/init.d/procps ] && invoke-rc.d procps restart || :
 	[ -x /sbin/start ] && start ceph-osd-all || :
-	# work around https://tracker.ceph.com/issues/24903
-	chown ceph:ceph /var/lib/ceph/osd/*/block* 2>&1 > /dev/null || :
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
 	:
