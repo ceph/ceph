@@ -14,6 +14,9 @@
 #include "log/SubsystemMap.h"
 #include "msg/msg_types.h"
 
+// @c ConfigValues keeps track of mappings from the config names to their values,
+// debug logging settings, and some other "unnamed" settings, like entity name of
+// the daemon.
 class ConfigValues {
   using values_t = std::map<std::string, map<int32_t,Option::value_t>>;
   values_t values;
