@@ -1,11 +1,132 @@
-$warning-background-color: #fff3cd;
-$oa-color-blue: #288cea;
-$oa-color-light-blue: #afd9ee;
-$bg-color-light-blue: #d9edf7;
-$border-color: 1px solid #d1d1d1;
+/*The file suppose to contain all variables, mixins and extends*/
+
+$color-solid-red: #ff0000;
+$color-pink: #a94442;
+$color-light-red: #f2dede;
+
+$color-orange: #ff6600;
+
+$color-bright-yellow: #ffc200;
+$color-light-yellow: #fff3cd;
+
+$color-bright-green: #00bb00;
+$color-green: #71843f;
+
+$color-darker-blue: #2172bf;
+$color-dark-blue: #2582D9;
+$color-blue: #288cea;
+$color-light-blue: #d9edf7;
+$color-sky-blue: #afd9ee;
+
+$color-black: #000;
+$color-transparent-black: rgba(0, 0, 0, 0.7);
+$color-solid-gray: #555555;
+$color-dark-gray: #474544;
+$color-gray: #505050;
+$color-mild-gray: #777777;
+$color-blue-gray: #90949c;
+$color-grad-gray: #ededed;
+$color-light-gray: #d1d1d1;
+$color-white-gray: #eee;
+$color-off-white: #f5f5f5;
+$color-solid-white: #ffffff;
+$color-transparent: rgba(0,0,0,.09);
+
+$color-app-bg: $color-solid-white;
+$color-bg-darken: $color-dark-gray;
+$color-links: $color-blue;
+$color-links-focus: $color-dark-gray;
+$color-breadcrumb: $color-dark-gray;
+$color-button-text: $color-white-gray;
+$color-button: $color-blue;
+$color-button-hover: $color-dark-blue;
+$color-button-border: $color-darker-blue;
+$color-button-badge: $color-white-gray;
+$color-button-caret: $color-white-gray;
+$color-dropdown-menu: $color-dark-gray;
+$color-dropdown-active-text: $color-white-gray;
+$color-dropdown-active-bg: $color-blue;
+$color-caret-text: $color-blue;
+$color-progress-bar-info-bg: $color-blue;
+$color-progress-bar-freespace-bg: $color-light-gray;
+$color-oaprogress-text: $color-black;
+$color-tags-border: $color-light-gray;
+$color-tags-box-shadow: $color-transparent;
+$color-error-btn-bg: $color-light-red;
+$color-error-btn-border: $color-pink;
+$color-noscript-text: $color-mild-gray;
+$color-required-text: $color-pink;
+
+/*Login*/
+$color-login-row-text: $color-solid-white;
+$color-login-row-bg: $color-dark-gray;
+$color-password-toggle-text: $color-solid-white;
+$color-password-toggle-bg: $color-solid-gray;
+$color-password-toggle-focus: $color-blue;
+$color-login-checkbox-bg: $color-blue;
+$color-login-checkbox-border: $color-blue;
+$color-login-active-row-bg: $color-light-yellow;
+$color-login-active-row-text: $color-black;
+
+/*Navigation*/
+$color-navbar-bg: $color-dark-gray;
+$color-navbar-brand: $color-white-gray;
+$color-nav-top-bar: $color-blue;
+$color-nav-bottom-bar: $color-blue;
+$color-nav-toggle-bar: $color-white-gray;
+$color-nav-toggle-shadow: $color-solid-white;
+$color-nav-collapse-border: $color-white-gray;
+$color-nav-open-bg: $color-gray;
+$color-nav-links: $color-white-gray;
+$color-nav-links-hover: $color-gray;
+$color-nav-active-link-bg: $color-blue;
+$color-nav-border-top-collapse: $color-white-gray;
+
+/*Helper*/
+$color-helper-bg: $color-blue;
+
+/*Table*/
+$color-table-seperator-border: $color-transparent;
+$color-table-input-border: $color-transparent;
+$color-table-dropdown-bg: $color-off-white;
+$color-table-header-bg: $color-off-white;
+$color-table-header-border: $color-light-gray;
+$color-table-active-row: $color-sky-blue;
+$color-table-active-row-hover: $color-light-blue;
+$color-table-progress-bar-bg: $color-sky-blue;
+$color-table-progress-bar-active: $color-blue;
+$color-table-gradient-1: $color-off-white;
+$color-table-gradient-2: $color-grad-gray;
+$color-table-sort: $color-blue;
+$color-table-empty-row: $color-light-yellow;
+$color-table-hover-row: $color-white-gray;
+$color-table-even-row-bg: $color-solid-white;
+$color-table-odd-row-bg: $color-off-white;
+$color-table-datatable-header: $color-off-white;
+
+/*Chart tooltip*/
+$color-chart-tooltip-bg: $color-transparent-black;
+$color-chat-tooltip-text: $color-solid-white;
+$color-chart-tooltip-border: $color-black;
+
+/*Popover*/
+$color-popover-seperator-text: $color-blue-gray;
+$color-popover-seperator-bg: $color-white-gray;
+$color-popover-message-text: $color-dark-gray;
+$color-popover-table-text: $color-dark-gray;
+$color-popover-date: $color-solid-gray;
+
+/*RGW user form*/
+$color-rgw-icon: $color-blue-gray;
+
 @mixin table-cell {
   padding: 5px;
   border: none;
-  border-left: $border-color;
-  border-bottom: $border-color;
+  border-left: 1px solid $color-light-gray;
+  border-bottom: 1px solid $color-light-gray;
+}
+
+@mixin hf {
+  border-bottom: 1px solid $color-light-gray;
+  background-color: $color-off-white;
 }
