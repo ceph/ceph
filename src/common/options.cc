@@ -3033,10 +3033,6 @@ std::vector<Option> get_global_options() {
     .set_default(10)
     .set_description(""),
 
-    Option("osd_recovery_forget_lost_objects", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
-
     Option("osd_max_scrubs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1)
     .set_description("Maximum concurrent scrubs on a single OSD"),
