@@ -75,3 +75,9 @@ class TestFunctionalCall(object):
 
     def test_unicode_encoding(self):
         process.call(['echo', u'\xd0'])
+
+
+class TestFunctionalRun(object):
+
+    def test_log_descriptors(self):
+        process.run(['ls', '-l'])
