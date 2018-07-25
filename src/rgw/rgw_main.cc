@@ -176,7 +176,8 @@ int main(int argc, const char **argv)
   /* alternative default for module */
   map<string,string> defaults = {
     { "debug_rgw", "1/5" },
-    { "keyring", "$rgw_data/keyring" }
+    { "keyring", "$rgw_data/keyring" },
+    { "objecter_inflight_ops", "24576" }
   };
 
   vector<const char*> args;
