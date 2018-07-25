@@ -572,6 +572,10 @@ endif(WITH_RBD)
 if(WITH_RADOSGW)
   add_dependencies(tests radosgw radosgw-admin)
 endif(WITH_RADOSGW)
+#add dependency from fio just to ensure the plugin build isn't failing
+if(WITH_FIO OR WITH_SYSTEM_FIO)
+  add_dependencies(tests fio_ceph_objectstore)
+endif()
 
 if(WITH_RBD)
   add_ceph_test(run-rbd-unit-tests.sh ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh)

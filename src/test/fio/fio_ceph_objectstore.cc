@@ -363,7 +363,7 @@ Engine::Engine(thread_data* td)
 
   // create shared collections up to osd_pool_default_pg_num
   if (o->single_pool_mode) {
-    uint64_t count = g_conf()->get_val<uint64_t>("osd_pool_default_pg_num");
+    uint64_t count = g_conf().get_val<uint64_t>("osd_pool_default_pg_num");
     if (count > td->o.nr_files)
       count = td->o.nr_files;
     init_collections(os, Collection::MIN_POOL_ID, collections, count);
@@ -417,7 +417,7 @@ Job::Job(Engine* engine, const thread_data* td)
   std::vector<Collection>* colls;
   // create private collections up to osd_pool_default_pg_num
   if (!o->single_pool_mode) {
-    uint64_t count = g_conf()->get_val<uint64_t>("osd_pool_default_pg_num");
+    uint64_t count = g_conf().get_val<uint64_t>("osd_pool_default_pg_num");
     if (count > td->o.nr_files)
       count = td->o.nr_files;
     // use the fio thread_number for our unique pool id
