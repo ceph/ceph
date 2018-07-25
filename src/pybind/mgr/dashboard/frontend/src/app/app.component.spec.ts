@@ -4,9 +4,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
 
+import { configureTestBed } from '../testing/unit-test-helper';
 import { AppComponent } from './app.component';
 import { AuthStorageService } from './shared/services/auth-storage.service';
-import { configureTestBed } from './shared/unit-test-helper';
 
 describe('AppComponent', () => {
   let component: AppComponent;

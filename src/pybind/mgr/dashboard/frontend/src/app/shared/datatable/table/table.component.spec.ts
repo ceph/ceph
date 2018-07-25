@@ -4,9 +4,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../components/components.module';
 import { CdTableFetchDataContext } from '../../models/cd-table-fetch-data-context';
-import { configureTestBed } from '../../unit-test-helper';
 import { TableComponent } from './table.component';
 
 describe('TableComponent', () => {
@@ -19,7 +19,7 @@ describe('TableComponent', () => {
       data.push({
         a: i,
         b: i * i,
-        c: [-(i % 10), 'score' + (i % 16 + 6)],
+        c: [-(i % 10), 'score' + ((i % 16) + 6)],
         d: !(i % 2)
       });
     }
