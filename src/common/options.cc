@@ -5121,6 +5121,12 @@ std::vector<Option> get_rgw_options() {
         "Try to handle requests with abiguous multiple content length headers "
         "(Content-Length, Http-Content-Length)."),
 
+    Option("rgw_relaxed_region_enforcement", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Disable region constraint enforcement")
+    .set_long_description(
+        "Enable requests such as bucket creation to succeed irrespective of region restrictions (Jewel compat)."),
+
     Option("rgw_lifecycle_work_time", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("00:00-06:00")
     .set_description("Lifecycle allowed work time")
