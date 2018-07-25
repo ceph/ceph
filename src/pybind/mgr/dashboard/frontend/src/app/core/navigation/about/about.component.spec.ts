@@ -5,9 +5,9 @@ import { BsModalRef } from 'ngx-bootstrap';
 import 'rxjs/add/observable/of';
 import { Observable } from 'rxjs/Observable';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { SharedModule } from '../../../shared/shared.module';
-import { configureTestBed } from '../../../shared/unit-test-helper';
 import { AboutComponent } from './about.component';
 
 class SummaryServiceMock {

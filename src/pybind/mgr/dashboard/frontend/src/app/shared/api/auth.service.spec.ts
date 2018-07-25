@@ -3,7 +3,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import { AuthStorageService } from '../services/auth-storage.service';
 
-import { configureTestBed } from '../unit-test-helper';
+import { configureTestBed } from '../../../testing/unit-test-helper';
 import { AuthService } from './auth.service';
 
 describe('AuthService', () => {

@@ -3,7 +3,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed } from '../unit-test-helper';
+import { configureTestBed } from '../../../testing/unit-test-helper';
 import { AuthStorageService } from './auth-storage.service';
 import { SummaryService } from './summary.service';
 

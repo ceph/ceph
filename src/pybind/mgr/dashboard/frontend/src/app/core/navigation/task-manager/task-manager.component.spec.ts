@@ -3,10 +3,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { PopoverModule } from 'ngx-bootstrap';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { SharedModule } from '../../../shared/shared.module';
-import { configureTestBed } from '../../../shared/unit-test-helper';
 import { TaskManagerComponent } from './task-manager.component';
 
 describe('TaskManagerComponent', () => {
@@ -53,17 +53,17 @@ describe('TaskManagerComponent', () => {
   it('should get executing message for task', () => {
     component._handleTasks(tasks.executing, []);
     expect(component.executingTasks.length).toBe(1);
-    expect(component.executingTasks[0].description).toBe('Deleting RBD \'somePool/someImage\'');
+    expect(component.executingTasks[0].description).toBe(`Deleting RBD 'somePool/someImage'`);
   });
 
   it('should get finished message for task', () => {
     component._handleTasks([], tasks.finished);
     expect(component.finishedTasks.length).toBe(2);
-    expect(component.finishedTasks[0].description).toBe('Copy RBD \'somePool/someImage\'');
+    expect(component.finishedTasks[0].description).toBe(`Copy RBD 'somePool/someImage'`);
     expect(component.finishedTasks[0].errorMessage).toBe(undefined);
-    expect(component.finishedTasks[1].description).toBe('Clone RBD \'somePool/someImage\'');
+    expect(component.finishedTasks[1].description).toBe(`Clone RBD 'somePool/someImage'`);
     expect(component.finishedTasks[1].errorMessage).toBe(
-      'Name \'somePool/someImage\' is already in use.'
+      `Name 'somePool/someImage' is already in use.`
     );
   });
 

@@ -4,9 +4,9 @@ import { ReactiveFormsModule } from '@angular/forms';
 
 import { BsModalRef } from 'ngx-bootstrap';
 
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
-import { configureTestBed } from '../../../../shared/unit-test-helper';
 import { OsdScrubModalComponent } from './osd-scrub-modal.component';
 
 describe('OsdScrubModalComponent', () => {

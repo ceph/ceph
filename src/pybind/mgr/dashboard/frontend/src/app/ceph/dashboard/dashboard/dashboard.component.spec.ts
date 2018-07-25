@@ -1,7 +1,7 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../shared/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { DashboardComponent } from './dashboard.component';
 
 describe('DashboardComponent', () => {
