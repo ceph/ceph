@@ -210,12 +210,6 @@ if(LINUX OR APPLE)
   list(APPEND EXTRALIBS ${LIB_RESOLV})
 endif()
 
-option(WITH_PROFILER "build extra profiler binaries" OFF)
-if(WITH_PROFILER)
-  find_package(gperftools REQUIRED)
-  list(APPEND EXTRALIBS profiler)
-endif(WITH_PROFILER)
-
 if(${ENABLE_COVERAGE})
   find_program(HAVE_GCOV gcov)
   if(NOT HAVE_GCOV)
@@ -618,14 +612,6 @@ set(common_mountcephfs_files
   common/addr_parsing.c)
 add_library(common_mountcephfs_objs OBJECT
   ${common_mountcephfs_files})
-
-if(WITH_PROFILER)
-  list(APPEND libcommon_files
-    perfglue/cpu_profiler.cc)
-else()
-  list(APPEND libcommon_files
-    perfglue/disabled_stubs.cc)
-endif()
 
 add_library(common-objs OBJECT ${libcommon_files})
 
