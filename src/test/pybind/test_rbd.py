@@ -1383,11 +1383,13 @@ class TestClone(object):
         rados.conf_set("rbd_default_clone_format", "auto")
 
         self.image.remove_snap('snap2')
-        self.rbd.remove(ioctx, clone_name)
 
         snaps = [s for s in self.image.list_snaps() if s['name'] != 'snap1']
         eq([RBD_SNAP_NAMESPACE_TYPE_TRASH], [s['namespace'] for s in snaps])
         eq([{'original_name' : 'snap2'}], [s['trash'] for s in snaps])
+
+        self.rbd.remove(ioctx, clone_name)
+        eq([], [s for s in self.image.list_snaps() if s['name'] != 'snap1'])
 
 class TestExclusiveLock(object):
 
