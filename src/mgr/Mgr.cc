@@ -286,7 +286,7 @@ void Mgr::init()
   // assume finisher already initialized in background_init
   dout(4) << "starting python modules..." << dendl;
   py_module_registry->active_start(daemon_state, cluster_state,
-      kv_store, *monc, clog, *objecter, *client, finisher);
+      kv_store, *monc, clog, *objecter, *client, finisher, server);
 
   dout(4) << "Complete." << dendl;
   initializing = false;
@@ -648,12 +648,6 @@ void Mgr::handle_mgr_digest(MMgrDigest* m)
     digest_received = true;
     digest_cond.Signal();
   }
-}
-
-void Mgr::tick()
-{
-  dout(10) << dendl;
-  server.send_report();
 }
 
 std::map<std::string, std::string> Mgr::get_services() const

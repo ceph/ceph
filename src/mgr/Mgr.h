@@ -90,8 +90,6 @@ public:
 
   bool ms_dispatch(Message *m);
 
-  void tick();
-
   void background_init(Context *completion);
   void shutdown();
 
