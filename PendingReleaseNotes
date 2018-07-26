@@ -111,3 +111,13 @@
     has an error.  This head object is there to show the snapset that was used in
     determining errors.
 
+
+12.2.8+
+-------
+
+- *Auth*:
+
+  * In earlier Luminous releases, keyring caps were not checked for validity,
+    so the caps string could be anything. As of 12.2.8, caps strings are
+    validated and providing a keyring with an invalid caps string to, e.g.,
+    "ceph auth add" will result in an error.  

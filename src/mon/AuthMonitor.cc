@@ -32,6 +32,9 @@
 #include "include/stringify.h"
 #include "include/assert.h"
 
+#include "mds/MDSAuthCaps.h"
+#include "osd/OSDCap.h"
+
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, get_last_committed())
@@ -1026,6 +1029,37 @@ int AuthMonitor::do_osd_new(
   return 0;
 }
 
+bool AuthMonitor::valid_caps(const vector<string>& caps, ostream *out)
+{
+  for (vector<string>::const_iterator p = caps.begin();
+       p != caps.end(); p += 2) {
+    if ((p+1) == caps.end()) {
+      *out << "cap '" << *p << "' has no value";
+      return false;
+    }
+    if (*p == "mon" || *p == "mgr") {
+      MonCap tmp;
+      if (!tmp.parse(*(p+1), out)) {
+	return false;
+      }
+    } else if (*p == "osd") {
+      OSDCap ocap;
+      if (!ocap.parse(*(p+1), out)) {
+	return false;
+      }
+    } else if (*p == "mds") {
+      MDSAuthCaps mdscap;
+      if (!mdscap.parse(g_ceph_context, *(p+1), out)) {
+	return false;
+      }
+    } else {
+      *out << "unknown cap type '" << *p << "'";
+      return false;
+    }
+  }
+  return true;
+}
+
 bool AuthMonitor::prepare_command(MonOpRequestRef op)
 {
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
@@ -1127,6 +1161,11 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       }
     }
 
+    if (!valid_caps(caps_vec, &ss)) {
+      err = -EINVAL;
+      goto done;
+    }
+
     // are we about to have it?
     if (entity_is_pending(entity)) {
       wait_for_finished_proposal(op,
@@ -1195,7 +1234,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 						   get_last_committed() + 1));
     return true;
   } else if ((prefix == "auth get-or-create-key" ||
-	     prefix == "auth get-or-create") &&
+	      prefix == "auth get-or-create") &&
 	     !entity_name.empty()) {
     // auth get-or-create <name> [mon osdcapa osd osdcapb ...]
 
@@ -1301,6 +1340,11 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     cmd_getval(g_ceph_context, cmdmap, "filesystem", filesystem);
     string mds_cap_string, osd_cap_string;
     string osd_cap_wanted = "r";
+
+    if (!valid_caps(caps_vec, &ss)) {
+      err = -EINVAL;
+      goto done;
+    }
 
     for (auto it = caps_vec.begin();
 	 it != caps_vec.end() && (it + 1) != caps_vec.end();
