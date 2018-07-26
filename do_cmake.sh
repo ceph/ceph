@@ -18,7 +18,7 @@ if type cmake3 > /dev/null 2>&1 ; then
 else
     CMAKE=cmake
 fi
-${CMAKE} -DBOOST_J=$NPROC $ARGS "$@" ..
+${CMAKE} -DBOOST_J=$NPROC $ARGS "$@" .. || exit 1
 
 # minimal config to find plugins
 cat <<EOF > ceph.conf
