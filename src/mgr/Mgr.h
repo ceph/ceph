@@ -22,7 +22,6 @@
 #include "msg/Messenger.h"
 #include "auth/Auth.h"
 #include "common/Finisher.h"
-#include "common/Timer.h"
 #include "mon/MgrMap.h"
 
 #include "DaemonServer.h"
@@ -46,7 +45,6 @@ protected:
   Messenger *client_messenger;
 
   mutable Mutex lock;
-  SafeTimer timer;
   Finisher finisher;
 
   // Track receipt of initial data during startup
