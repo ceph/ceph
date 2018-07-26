@@ -104,8 +104,12 @@ def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
     result = handler(url, params=params, headers=request.headers)
 
     if raw:
-        log.info(' text result: %s' % result.txt)
-        return result.status_code, result.txt
+        log.info(' text result: %s' % result.text)
+        return result.status_code, result.text
+    elif len(result.content) == 0:
+        # many admin requests return no body, so json() throws a JSONDecodeError
+        log.info(' empty result')
+        return result.status_code, None
     else:
         log.info(' json result: %s' % result.json())
         return result.status_code, result.json()
