@@ -67,8 +67,13 @@ public:
     std::stringstream *ss);
 
 
-  void set_health_checks(health_check_map_t&& c) {
+  bool set_health_checks(health_check_map_t&& c) {
+    // when health checks change a report is immediately sent to the monitors.
+    // currently modules have static health check details, but this equality
+    // test could be made smarter if too much noise shows up in the future.
+    bool changed = health_checks != c;
     health_checks = std::move(c);
+    return changed;
   }
   void get_health_checks(health_check_map_t *checks);
 
