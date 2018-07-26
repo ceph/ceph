@@ -5,10 +5,10 @@ import { ToastModule } from 'ng2-toastr';
 import { Observable } from 'rxjs/Observable';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
-import { ExecutingTask } from '../models/executing-task';
 import { FinishedTask } from '../models/finished-task';
 import { SharedModule } from '../shared.module';
 import { NotificationService } from './notification.service';
+import { SummaryService } from './summary.service';
 import { TaskManagerService } from './task-manager.service';
 import { TaskWrapperService } from './task-wrapper.service';
 
@@ -30,8 +30,8 @@ describe('TaskWrapperService', () => {
 
   describe('wrapTaskAroundCall', () => {
     let notify: NotificationService;
-    let tasks: ExecutingTask[];
     let passed: boolean;
+    let summaryService: SummaryService;
 
     const fakeCall = (status?) =>
       new Observable((observer) => {
@@ -45,31 +45,31 @@ describe('TaskWrapperService', () => {
     const callWrapTaskAroundCall = (status, name) => {
       return service.wrapTaskAroundCall({
         task: new FinishedTask(name, { sth: 'else' }),
-        call: fakeCall(status),
-        tasks: tasks
+        call: fakeCall(status)
       });
     };
 
     beforeEach(() => {
       passed = false;
-      tasks = [];
       notify = TestBed.get(NotificationService);
+      summaryService = TestBed.get(SummaryService);
       spyOn(notify, 'show');
       spyOn(service, '_handleExecutingTasks').and.callThrough();
+      spyOn(summaryService, 'addRunningTask').and.callThrough();
     });
 
     it('should simulate a synchronous task', () => {
       callWrapTaskAroundCall(200, 'sync').subscribe(null, null, () => (passed = true));
       expect(service._handleExecutingTasks).not.toHaveBeenCalled();
       expect(passed).toBeTruthy();
-      expect(tasks.length).toBe(0);
+      expect(summaryService.addRunningTask).not.toHaveBeenCalled();
     });
 
     it('should simulate a asynchronous task', () => {
       callWrapTaskAroundCall(202, 'async').subscribe(null, null, () => (passed = true));
       expect(service._handleExecutingTasks).toHaveBeenCalled();
       expect(passed).toBeTruthy();
-      expect(tasks.length).toBe(1);
+      expect(summaryService.addRunningTask).toHaveBeenCalledTimes(1);
     });
 
     it('should call notifyTask if asynchronous task would have been finished', () => {
@@ -86,7 +86,7 @@ describe('TaskWrapperService', () => {
       callWrapTaskAroundCall(null, 'async').subscribe(null, () => (passed = true), null);
       expect(service._handleExecutingTasks).not.toHaveBeenCalled();
       expect(passed).toBeTruthy();
-      expect(tasks.length).toBe(0);
+      expect(summaryService.addRunningTask).not.toHaveBeenCalled();
     });
   });
 });

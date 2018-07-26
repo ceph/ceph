@@ -1,41 +1,50 @@
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import * as _ from 'lodash';
-import { Subject } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
 import { SummaryService } from './summary.service';
 import { TaskManagerService } from './task-manager.service';
 
+const summary = {
+  executing_tasks: [],
+  health_status: 'HEALTH_OK',
+  mgr_id: 'x',
+  rbd_mirroring: { errors: 0, warnings: 0 },
+  rbd_pools: [],
+  have_mon_connection: true,
+  finished_tasks: [{ name: 'foo', metadata: {} }],
+  filesystems: [{ id: 1, name: 'cephfs_a' }]
+};
+
+export class SummaryServiceMock {
+  summaryDataSource = new BehaviorSubject(summary);
+  summaryData$ = this.summaryDataSource.asObservable();
+
+  refresh() {
+    this.summaryDataSource.next(summary);
+  }
+  subscribe(call) {
+    return this.summaryData$.subscribe(call);
+  }
+}
+
 describe('TaskManagerService', () => {
   let taskManagerService: TaskManagerService;
+  let summaryService: any;
   let called: boolean;
-
-  const summaryDataSource = new Subject();
-  const fakeService = {
-    summaryData$: summaryDataSource.asObservable()
-  };
-
-  const summary = {
-    executing_tasks: [],
-    health_status: 'HEALTH_OK',
-    mgr_id: 'x',
-    rbd_mirroring: { errors: 0, warnings: 0 },
-    rbd_pools: [],
-    have_mon_connection: true,
-    finished_tasks: [{ name: 'foo', metadata: {} }],
-    filesystems: [{ id: 1, name: 'cephfs_a' }]
-  };
 
   configureTestBed(
     {
-      providers: [TaskManagerService, { provide: SummaryService, useValue: fakeService }]
+      providers: [TaskManagerService, { provide: SummaryService, useClass: SummaryServiceMock }]
     },
     true
   );
 
   beforeEach(() => {
     taskManagerService = TestBed.get(TaskManagerService);
+    summaryService = TestBed.get(SummaryService);
     called = false;
     taskManagerService.subscribe('foo', {}, () => (called = true));
   });
@@ -48,7 +57,7 @@ describe('TaskManagerService', () => {
     'should subscribe and be notified when task is finished',
     fakeAsync(() => {
       expect(taskManagerService.subscriptions.length).toBe(1);
-      summaryDataSource.next(summary);
+      summaryService.refresh();
       tick();
       expect(called).toEqual(true);
       expect(taskManagerService.subscriptions).toEqual([]);
@@ -63,7 +72,7 @@ describe('TaskManagerService', () => {
         executing_tasks: [{ name: 'foo', metadata: {} }],
         finished_tasks: []
       });
-      summaryDataSource.next(summary);
+      summaryService.refresh();
       tick();
       expect(taskManagerService.subscriptions).toEqual(original_subscriptions);
     })

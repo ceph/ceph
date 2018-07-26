@@ -8,6 +8,7 @@ import { ExecutingTask } from '../models/executing-task';
 import { FinishedTask } from '../models/finished-task';
 import { NotificationService } from './notification.service';
 import { ServicesModule } from './services.module';
+import { SummaryService } from './summary.service';
 import { TaskManagerMessageService } from './task-manager-message.service';
 import { TaskManagerService } from './task-manager.service';
 
@@ -17,25 +18,19 @@ import { TaskManagerService } from './task-manager.service';
 export class TaskWrapperService {
   constructor(
     private notificationService: NotificationService,
+    private summaryService: SummaryService,
     private taskManagerMessageService: TaskManagerMessageService,
     private taskManagerService: TaskManagerService
   ) {}
 
-  wrapTaskAroundCall({
-    task,
-    call,
-    tasks
-  }: {
-    task: FinishedTask;
-    call: Observable<any>;
-    tasks?: ExecutingTask[];
-  }) {
+  wrapTaskAroundCall({ task, call }: { task: FinishedTask; call: Observable<any> }) {
     return new Observable((observer: Subscriber<any>) => {
       call.subscribe(
         (resp) => {
           if (resp.status === 202) {
-            this._handleExecutingTasks(task, tasks);
+            this._handleExecutingTasks(task);
           } else {
+            this.summaryService.refresh();
             task.success = true;
             this.notificationService.notifyTask(task);
           }
@@ -53,16 +48,16 @@ export class TaskWrapperService {
     });
   }
 
-  _handleExecutingTasks(task: FinishedTask, tasks?: ExecutingTask[]) {
+  _handleExecutingTasks(task: FinishedTask) {
     this.notificationService.show(
       NotificationType.info,
       this.taskManagerMessageService.getRunningMessage(task),
       this.taskManagerMessageService.getDescription(task)
     );
+
     const executingTask = new ExecutingTask(task.name, task.metadata);
-    if (tasks) {
-      tasks.push(executingTask);
-    }
+    this.summaryService.addRunningTask(executingTask);
+
     this.taskManagerService.subscribe(
       executingTask.name,
       executingTask.metadata,
