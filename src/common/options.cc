@@ -6593,6 +6593,10 @@ static std::vector<Option> get_rbd_options() {
     .set_default(0)
     .set_description("maximum age (in seconds) for pending commits"),
 
+    Option("rbd_journal_object_max_in_flight_appends", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("maximum number of in-flight appends per journal object"),
+
     Option("rbd_journal_pool", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("pool for journal objects"),
