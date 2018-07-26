@@ -34,7 +34,8 @@ namespace {
 
 class LockdepObs : public md_config_obs_t {
 public:
-  explicit LockdepObs(CephContext *cct) : m_cct(cct), m_registered(false) {
+  explicit LockdepObs(CephContext *cct)
+    : m_cct(cct), m_registered(false), lock("lock_dep_obs", false, true) {
   }
   ~LockdepObs() override {
     if (m_registered) {
@@ -49,6 +50,7 @@ public:
 
   void handle_conf_change(const md_config_t *conf,
                           const std::set <std::string> &changed) override {
+    Mutex::Locker locker(lock);
     if (conf->lockdep && !m_registered) {
       lockdep_register_ceph_context(m_cct);
       m_registered = true;
@@ -60,14 +62,17 @@ public:
 private:
   CephContext *m_cct;
   bool m_registered;
+  Mutex lock;
 };
 
 class MempoolObs : public md_config_obs_t,
 		  public AdminSocketHook {
   CephContext *cct;
+  Mutex lock;
 
 public:
-  explicit MempoolObs(CephContext *cct) : cct(cct) {
+  explicit MempoolObs(CephContext *cct)
+    : cct(cct), lock("mem_pool_obs", false, true) {
     cct->_conf->add_observer(this);
     int r = cct->get_admin_socket()->register_command(
       "dump_mempools",
@@ -92,6 +97,7 @@ public:
 
   void handle_conf_change(const md_config_t *conf,
                           const std::set <std::string> &changed) override {
+    Mutex::Locker locker(lock);
     if (changed.count("mempool_debug")) {
       mempool::set_debug_mode(cct->_conf->mempool_debug);
     }
@@ -184,9 +190,12 @@ private:
  */
 class LogObs : public md_config_obs_t {
   ceph::logging::Log *log;
+  Mutex lock;
 
 public:
-  explicit LogObs(ceph::logging::Log *l) : log(l) {}
+  explicit LogObs(ceph::logging::Log *l)
+    : log(l), lock("log_obs", false, true) {
+  }
 
   const char** get_tracked_conf_keys() const override {
     static const char *KEYS[] = {
@@ -211,6 +220,7 @@ public:
 
   void handle_conf_change(const md_config_t *conf,
                           const std::set <std::string> &changed) override {
+    Mutex::Locker locker(lock);
     // stderr
     if (changed.count("log_to_stderr") || changed.count("err_to_stderr")) {
       int l = conf->log_to_stderr ? 99 : (conf->err_to_stderr ? -1 : -2);
