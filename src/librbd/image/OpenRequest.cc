@@ -489,7 +489,11 @@ Context *OpenRequest<I>::handle_register_watch(int *result) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  if (*result < 0) {
+  if (*result == -EPERM) {
+    ldout(cct, 5) << "user does not have write permission" << dendl;
+    send_close_image(*result);
+    return nullptr;
+  } else if (*result < 0) {
     lderr(cct) << "failed to register watch: " << cpp_strerror(*result)
                << dendl;
     send_close_image(*result);

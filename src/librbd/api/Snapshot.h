@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_API_SNAPSHOT_H
 
 #include "include/rbd/librbd.hpp"
+#include <string>
 
 namespace librbd {
 
@@ -18,8 +19,13 @@ struct Snapshot {
   static int get_group_namespace(ImageCtxT *ictx, uint64_t snap_id,
                                  snap_group_namespace_t *group_snap);
 
+  static int get_trash_namespace(ImageCtxT *ictx, uint64_t snap_id,
+                                 std::string *original_name);
+
   static int get_namespace_type(ImageCtxT *ictx, uint64_t snap_id,
 			        snap_namespace_type_t *namespace_type);
+
+  static int remove(ImageCtxT *ictx, uint64_t snap_id);
 
 };
 
