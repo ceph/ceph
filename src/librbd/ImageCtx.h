@@ -196,6 +196,7 @@ namespace librbd {
     int journal_object_flush_interval;
     uint64_t journal_object_flush_bytes;
     double journal_object_flush_age;
+    uint64_t journal_object_max_in_flight_appends;
     std::string journal_pool;
     uint32_t journal_max_payload_bytes;
     int journal_max_concurrent_object_sets;

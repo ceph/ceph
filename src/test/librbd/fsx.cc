@@ -432,7 +432,7 @@ int replay_journal(rados_ioctx_t ioctx, const char *image_name,
                 return r;
         }
 
-        replay_journaler.start_append(0, 0, 0);
+        replay_journaler.start_append(0, 0, 0, 0);
 
         C_SaferCond replay_ctx;
         ReplayHandler replay_handler(&journaler, &replay_journaler,

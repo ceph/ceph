@@ -1168,7 +1168,8 @@ void Journal<I>::start_append() {
   ceph_assert(m_lock.is_locked());
   m_journaler->start_append(m_image_ctx.journal_object_flush_interval,
 			    m_image_ctx.journal_object_flush_bytes,
-			    m_image_ctx.journal_object_flush_age);
+			    m_image_ctx.journal_object_flush_age,
+                            m_image_ctx.journal_object_max_in_flight_appends);
   transition_state(STATE_READY, 0);
 }
 
