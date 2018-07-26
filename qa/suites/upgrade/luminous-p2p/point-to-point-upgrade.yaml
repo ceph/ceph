@@ -7,6 +7,8 @@ meta:
    run workload and upgrade-sequence in parallel
    install ceph/luminous v12.2.5 point version
    run workload and upgrade-sequence in parallel
+   install ceph/luminous v12.2.7 point version
+   run workload and upgrade-sequence in parallel
    install ceph/luminous latest version
    run workload and upgrade-sequence in parallel
 overrides:
@@ -28,6 +30,7 @@ overrides:
     - PG_AVAILABILITY
     - PG_DEGRADED
     - application not enabled
+    - overall HEALTH_
     fs: xfs
     conf:
       mon:
@@ -87,13 +90,28 @@ tasks:
    - workload_luminous
    - upgrade-sequence_luminous
 - print: "**** done parallel luminous v12.2.5"
-####  upgrade to latest luminous
+
+####  upgrade to v12.2.7
 - install.upgrade:
     #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
     mon.a:
-      branch: luminous
+      tag: v12.2.7
     mon.b:
-      branch: luminous
+      tag: v12.2.7
+    # Note that client.a IS NOT upgraded at this point
+- parallel:
+   - workload_luminous
+   - upgrade-sequence_luminous
+- print: "**** done parallel luminous v12.2.7"
+
+####  upgrade to latest luminous
+- install.upgrade:
+    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+    # need NOT to use "branch: xxx" to avoid packadges problems
+    mon.a:
+      #branch: luminous
+    mon.b:
+      #branch: luminous
     # Note that client.a IS NOT upgraded at this point
 - parallel:
    - workload_luminous
