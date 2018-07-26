@@ -119,6 +119,7 @@ enum {
   l_bluestore_extent_compress,
   l_bluestore_gc_merged,
   l_bluestore_read_eio,
+  l_bluestore_reads_with_retries,
   l_bluestore_fragmentation,
   l_bluestore_last
 };
@@ -2238,7 +2239,8 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags = 0);
+    uint32_t op_flags = 0,
+    uint64_t retry_count = 0);
 
 private:
   int _fiemap(CollectionHandle &c_, const ghobject_t& oid,
