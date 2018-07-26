@@ -51,6 +51,7 @@ fi
 set -e
 
 cat $TOPDIR/src/osd/PG.h $TOPDIR/src/osd/PG.cc | $TOPDIR/doc/scripts/gen_state_diagram.py > $TOPDIR/doc/dev/peering_graph.generated.dot
+dot -Tsvg $TOPDIR/doc/dev/peering_graph.generated.dot -o $TOPDIR/doc/dev/peering_graph.generated.svg -Gratio=fill
 
 cd build-doc
 
