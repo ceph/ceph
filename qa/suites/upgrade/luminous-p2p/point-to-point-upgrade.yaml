@@ -107,11 +107,8 @@ tasks:
 ####  upgrade to latest luminous
 - install.upgrade:
     #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
-    # need NOT to use "branch: xxx" to avoid packadges problems
     mon.a:
-      #branch: luminous
     mon.b:
-      #branch: luminous
     # Note that client.a IS NOT upgraded at this point
 - parallel:
    - workload_luminous
