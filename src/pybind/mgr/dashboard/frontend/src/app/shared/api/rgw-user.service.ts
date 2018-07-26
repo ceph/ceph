@@ -13,7 +13,7 @@ import { ApiModule } from './api.module';
   providedIn: ApiModule
 })
 export class RgwUserService {
-  private url = '/api/rgw/user';
+  private url = 'api/rgw/user';
 
   constructor(private http: HttpClient) {}
 
