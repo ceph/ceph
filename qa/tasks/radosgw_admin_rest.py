@@ -591,18 +591,14 @@ def task(ctx, config):
 
     (ret, out) = rgwadmin_rest(admin_conn, ['policy', 'show'], {'bucket' : bucket.name, 'object' : key.key})
     assert ret == 200
-
-    acl = key.get_xml_acl()
-    assert acl == out.strip('\n')
+    assert len(out['acl']['grant_map']) == 1
 
     # add another grantee by making the object public read
     key.set_acl('public-read')
 
     (ret, out) = rgwadmin_rest(admin_conn, ['policy', 'show'], {'bucket' : bucket.name, 'object' : key.key})
     assert ret == 200
-
-    acl = key.get_xml_acl()
-    assert acl == out.strip('\n')
+    assert len(out['acl']['grant_map']) == 2
 
     # TESTCASE 'rm-bucket', 'bucket', 'rm', 'bucket with objects', 'succeeds'
     bucket = connection.create_bucket(bucket_name)
