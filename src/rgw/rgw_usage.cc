@@ -22,6 +22,8 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
     formatter->dump_string("category", uiter->first);
     formatter->dump_int("bytes_sent", usage.bytes_sent);
     formatter->dump_int("bytes_received", usage.bytes_received);
+    formatter->dump_int("bytes_sent_ia", usage.bytes_sent_ia);
+    formatter->dump_int("bytes_received_ia", usage.bytes_received_ia);
     formatter->dump_int("ops", usage.ops);
     formatter->dump_int("successful_ops", usage.successful_ops);
     formatter->close_section(); // entry
@@ -122,6 +124,8 @@ int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
       formatter->open_object_section("total");
       formatter->dump_int("bytes_sent", total_usage.bytes_sent);
       formatter->dump_int("bytes_received", total_usage.bytes_received);
+      formatter->dump_int("bytes_sent_ia", total_usage.bytes_sent_ia);
+      formatter->dump_int("bytes_received_ia", total_usage.bytes_received_ia);
       formatter->dump_int("ops", total_usage.ops);
       formatter->dump_int("successful_ops", total_usage.successful_ops);
       formatter->close_section(); // total

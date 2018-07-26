@@ -582,19 +582,21 @@ struct rgw_bucket_category_stats {
   uint64_t total_size_rounded;
   uint64_t num_entries;
   uint64_t actual_size{0}; //< account for compression, encryption
+  uint64_t total_size_storage_class_ia{0}; // STorage Class IA
 
   rgw_bucket_category_stats() : total_size(0), total_size_rounded(0), num_entries(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(3, 2, bl);
+    ENCODE_START(4, 2, bl);
     encode(total_size, bl);
     encode(total_size_rounded, bl);
     encode(num_entries, bl);
     encode(actual_size, bl);
+    encode(total_size_storage_class_ia, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
     decode(total_size, bl);
     decode(total_size_rounded, bl);
     decode(num_entries, bl);
@@ -602,6 +604,11 @@ struct rgw_bucket_category_stats {
       decode(actual_size, bl);
     } else {
       actual_size = total_size;
+    }
+    if (struct_v >= 4) {
+      decode(total_size_storage_class_ia, bl);
+    } else {
+      total_size_storage_class_ia = total_size;
     }
     DECODE_FINISH(bl);
   }
@@ -749,25 +756,38 @@ struct rgw_usage_data {
   uint64_t bytes_received;
   uint64_t ops;
   uint64_t successful_ops;
+  uint64_t bytes_sent_ia;
+  uint64_t bytes_received_ia;
 
-  rgw_usage_data() : bytes_sent(0), bytes_received(0), ops(0), successful_ops(0) {}
-  rgw_usage_data(uint64_t sent, uint64_t received) : bytes_sent(sent), bytes_received(received), ops(0), successful_ops(0) {}
+  rgw_usage_data() : bytes_sent(0), bytes_received(0), ops(0), successful_ops(0), bytes_sent_ia(0),
+                     bytes_received_ia(0) {}
+  rgw_usage_data(uint64_t sent, uint64_t received) : bytes_sent(sent), bytes_received(received), ops(0),
+                                                     successful_ops(0), bytes_sent_ia(0), bytes_received_ia(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(bytes_sent, bl);
     encode(bytes_received, bl);
     encode(ops, bl);
     encode(successful_ops, bl);
+    encode(bytes_sent_ia, bl);
+    encode(bytes_received_ia, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(bytes_sent, bl);
     decode(bytes_received, bl);
     decode(ops, bl);
     decode(successful_ops, bl);
+    if (struct_v >= 2) {
+      decode(bytes_sent_ia, bl);
+      decode(bytes_received_ia, bl);
+    } else {
+      bytes_sent_ia = bytes_sent;
+      bytes_received_ia = bytes_received;
+    }
     DECODE_FINISH(bl);
   }
 
@@ -776,6 +796,8 @@ struct rgw_usage_data {
     bytes_received += usage.bytes_received;
     ops += usage.ops;
     successful_ops += usage.successful_ops;
+    bytes_sent_ia += usage.bytes_sent_ia;
+    bytes_received_ia += usage.bytes_received_ia;
   }
 };
 WRITE_CLASS_ENCODER(rgw_usage_data)
@@ -794,7 +816,7 @@ struct rgw_usage_log_entry {
   rgw_usage_log_entry(string& o, string& p, string& b) : owner(o), payer(p), bucket(b), epoch(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(owner.to_str(), bl);
     encode(bucket, bl);
     encode(epoch, bl);
@@ -804,12 +826,14 @@ struct rgw_usage_log_entry {
     encode(total_usage.successful_ops, bl);
     encode(usage_map, bl);
     encode(payer.to_str(), bl);
+    encode(total_usage.bytes_sent_ia, bl);
+    encode(total_usage.bytes_received_ia, bl);
     ENCODE_FINISH(bl);
   }
 
 
    void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     string s;
     decode(s, bl);
     owner.from_str(s);
@@ -828,6 +852,13 @@ struct rgw_usage_log_entry {
       string p;
       decode(p, bl);
       payer.from_str(p);
+    }
+    if (struct_v >= 4) {
+      decode(total_usage.bytes_sent_ia, bl);
+      decode(total_usage.bytes_received_ia, bl);
+    } else {
+      total_usage.bytes_sent_ia = total_usage.bytes_sent;
+      total_usage.bytes_received_ia = total_usage.bytes_received;
     }
     DECODE_FINISH(bl);
   }

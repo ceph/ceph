@@ -235,7 +235,7 @@ struct RGWCompressionInfo {
 WRITE_CLASS_ENCODER(RGWCompressionInfo)
 
 int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need_decompress, RGWCompressionInfo& cs_info);
-
+int rgw_placement_id_from_attrset(map<string, bufferlist>& attrs, RGWRados *store, req_state *s);
 struct RGWOLHInfo {
   rgw_obj target;
   bool removed;

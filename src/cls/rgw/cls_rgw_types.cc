@@ -497,6 +497,7 @@ void rgw_bucket_category_stats::dump(Formatter *f) const
   f->dump_unsigned("total_size_rounded", total_size_rounded);
   f->dump_unsigned("num_entries", num_entries);
   f->dump_unsigned("actual_size", actual_size);
+  f->dump_unsigned("total_size_ia", total_size_storage_class_ia);
 }
 
 void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>& o)

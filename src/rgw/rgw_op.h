@@ -1022,7 +1022,7 @@ protected:
   string user_data;
 
   boost::optional<ceph::real_time> delete_at;
-  std::string placement_type;
+  string placement_type;
 
 public:
   RGWPutObj() : ofs(0),
@@ -1110,7 +1110,7 @@ protected:
   RGWAccessControlPolicy policy;
   map<string, bufferlist> attrs;
   boost::optional<ceph::real_time> delete_at;
-  std::string placement_type;
+  string placement_type;
 
   /* Must be called after get_data() or the result is undefined. */
   virtual std::string get_current_filename() const = 0;
@@ -1323,7 +1323,7 @@ protected:
   uint64_t olh_epoch;
 
   boost::optional<ceph::real_time> delete_at;
-  std::string placement_type;
+  string placement_type;
   bool copy_if_newer;
 
   int init_common();
@@ -1602,7 +1602,7 @@ class RGWInitMultipart : public RGWOp {
 protected:
   string upload_id;
   RGWAccessControlPolicy policy;
-  std::string placement_type;
+  string placement_type;
 
 public:
   RGWInitMultipart() {}
@@ -1630,6 +1630,7 @@ protected:
   string version_id;
   char *data;
   int len;
+  string placement_type;
 
   struct MPSerializer {
     librados::IoCtx ioctx;
@@ -1695,7 +1696,7 @@ protected:
   int marker;
   RGWAccessControlPolicy policy;
   bool truncated;
-  std::string placement_type;
+  string placement_type;
 
 public:
   RGWListMultipart() {

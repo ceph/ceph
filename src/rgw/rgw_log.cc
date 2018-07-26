@@ -180,7 +180,7 @@ void rgw_log_usage_finalize()
   usage_logger = NULL;
 }
 
-static void log_usage(struct req_state *s, const string& op_name)
+static void log_usage(RGWRados *store, struct req_state *s, const string& op_name)
 {
   if (s->system_request) /* don't log system user operations */
     return;
@@ -216,6 +216,21 @@ static void log_usage(struct req_state *s, const string& op_name)
   uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
 
   rgw_usage_data data(bytes_sent, bytes_received);
+  string storage_class;
+  const auto &zonegroup = store->get_zonegroup();
+  for (const auto &target : zonegroup.placement_targets) {
+    if (target.second.name.compare(s->placement_id) == 0) {
+      storage_class = target.second.type;
+      break;
+    }
+  }
+  if(storage_class.compare("STANDARD_IA") == 0) {
+    data.bytes_sent_ia = bytes_sent;
+    data.bytes_received_ia = bytes_received;
+  } else {
+    data.bytes_sent_ia = 0;
+    data.bytes_received_ia = 0;
+  }
 
   data.ops = 1;
   if (!s->is_err())
@@ -317,7 +332,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   string bucket_id;
 
   if (s->enable_usage_log)
-    log_usage(s, op_name);
+    log_usage(store, s, op_name);
 
   if (!s->enable_ops_log)
     return 0;

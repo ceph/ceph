@@ -1800,6 +1800,12 @@ void RGWGetObj::execute()
   }
   /* end gettorrent */
 
+  op_ret = rgw_placement_id_from_attrset(attrs, store, s);
+  if (op_ret < 0) {
+    ldpp_dout(s, 0) << "ERROR: failed to get storage class info" << dendl;
+    goto done_err;
+  }
+
   op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
   if (op_ret < 0) {
     ldpp_dout(s, 0) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
@@ -3556,10 +3562,10 @@ void RGWPutObj::execute()
     supplied_md5[sizeof(supplied_md5) - 1] = '\0';
   }
 
-  /* Store the placement type */
   if (!placement_type.empty()) {
-    bufferlist tmp;
-    encode(placement_type, tmp);
+    buffer::list tmp;
+    tmp.append(placement_type.c_str());
+    tmp.append('\0');
     emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
   }
 
@@ -3836,8 +3842,9 @@ void RGWPutObj::execute()
                                  (placement_type.empty() ? nullptr : &placement_type));
   } else {
     if (!processor->get_placement_type().empty()) {
-      bufferlist tmp;
-      encode(processor->get_placement_type(), tmp);
+      buffer::list tmp;
+      tmp.append(processor->get_placement_type().c_str());
+      tmp.append('\0');
       emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
     }
     op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
@@ -4054,8 +4061,9 @@ void RGWPostObj::execute()
     emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
     if (!placement_type.empty()) {
-      bufferlist tmp;
-      encode(placement_type, tmp);
+      buffer::list tmp;
+      tmp.append(placement_type.c_str());
+      tmp.append('\0');
       emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
     }
 
@@ -4803,7 +4811,7 @@ void RGWCopyObj::execute()
   /* Store the placement type */
   if (!placement_type.empty()) {
     attrs.erase(RGW_ATTR_PLACEMENT_TYPE);
-    bufferlist tmp;
+    buffer::list tmp;
     tmp.append(placement_type.c_str());
     tmp.append('\0');
     emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
@@ -5478,8 +5486,9 @@ void RGWInitMultipart::execute()
   }
 
   if (!placement_type.empty()) {
-    bufferlist tmp;
-    tmp.append(placement_type);
+    buffer::list tmp;
+    tmp.append(placement_type.c_str());
+    tmp.append('\0');
     attrs[RGW_ATTR_PLACEMENT_TYPE] = tmp;
   }
 
@@ -5833,6 +5842,44 @@ void RGWCompleteMultipart::execute()
     bufferlist& bl = placement_type_iter->second;
     placement_type = bl.to_str();
     obj_op.meta.placement_type = &placement_type;
+    if (!placement_type.empty()) {
+      std::string placement_id;
+      bool is_exist = false;
+      const auto& zonegroup = store->get_zonegroup();
+      for (const auto& target : zonegroup.placement_targets) {
+        if (target.second.type == placement_type) {
+          placement_id = target.second.name;
+          is_exist = true;
+          break;
+        }
+      }
+      if (!is_exist) {
+        ldout(s->cct, 0) << "placement type (" << placement_type << ")"
+                         << " doesn't exist in the placement targets of zonegroup"
+                         << " (" << store->get_zonegroup().api_name << ")" << dendl;
+        op_ret = -ERR_INVALID_STORAGE_CLASS;
+        s->err.message = "The x-amz-storage-class " + placement_type +
+                         " does not exist";
+        return;
+      }
+
+      auto& zone_params = store->get_zone_params();
+      bool is_valid = (!placement_id.empty() &&
+                       (zone_params.placement_pools[placement_id].index_pool ==
+                        zone_params.placement_pools[s->bucket_info.placement_rule].index_pool) &&
+                       (zone_params.placement_pools[placement_id].data_pool ==
+                        zone_params.placement_pools[s->bucket_info.placement_rule].data_pool));
+      if (is_valid) {
+        s->placement_id = placement_id;
+      } else {
+        op_ret = -ERR_INVALID_STORAGE_CLASS;
+        s->err.message = "The x-amz-storage-class (" + placement_type +
+                         ") must use the same index_pool and data_pool" +
+                         " with bucket default placement (" +
+                         s->bucket_info.placement_rule + ")";
+        return;
+      }
+    }
   }
   obj_op.meta.completeMultipart = true;
   obj_op.meta.olh_epoch = olh_epoch;

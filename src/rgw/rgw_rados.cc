@@ -8725,7 +8725,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   iter = attrs.find(RGW_ATTR_PLACEMENT_TYPE);
   if (iter != attrs.end()) {
     bufferlist &bl = iter->second;
-    std::string placement_type = bl.to_str();
+    string placement_type = bl.to_str();
     return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at, NULL, NULL, NULL, &placement_type, NULL);
   }
 
@@ -9082,6 +9082,7 @@ static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
     s.size += header_stats.total_size;
     s.size_rounded += header_stats.total_size_rounded;
     s.size_utilized += header_stats.actual_size;
+    s.size_ia += header_stats.total_size_storage_class_ia;
     s.num_objects += header_stats.num_entries;
   }
 }
@@ -14630,6 +14631,23 @@ int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need
     need_decompress = false;
     return 0;
   }
+}
+
+int rgw_placement_id_from_attrset(map<string, bufferlist>& attrs, RGWRados *store, req_state *s) {
+  map<string, bufferlist>::iterator value = attrs.find(RGW_ATTR_PLACEMENT_TYPE);
+  if (value != attrs.end()) {
+    bufferlist &bl = value->second;
+    if (!bl.to_str().empty()) {
+      const auto &zonegroup = store->get_zonegroup();
+      for (const auto &target : zonegroup.placement_targets) {
+        if (strcmp(target.second.type.c_str(), bl.to_str().c_str()) == 0) {
+          s->placement_id = target.second.name;
+          return 0;
+        }
+      }
+    }
+  }
+  return -EIO;
 }
 
 bool RGWRados::call(std::string_view command, const cmdmap_t& cmdmap,

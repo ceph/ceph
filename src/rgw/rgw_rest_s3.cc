@@ -518,6 +518,8 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
     formatter->dump_string("Category", uiter->first);
     formatter->dump_int("BytesSent", usage.bytes_sent);
     formatter->dump_int("BytesReceived", usage.bytes_received);
+    formatter->dump_int("BytesSent_IA", usage.bytes_sent_ia);
+    formatter->dump_int("BytesReceived_IA", usage.bytes_received_ia);
     formatter->dump_int("Ops", usage.ops);
     formatter->dump_int("SuccessfulOps", usage.successful_ops);
     formatter->close_section(); // Entry
@@ -603,6 +605,8 @@ void RGWGetUsage_ObjStore_S3::send_response()
        formatter->open_object_section("Total");
        formatter->dump_int("BytesSent", total_usage.bytes_sent);
        formatter->dump_int("BytesReceived", total_usage.bytes_received);
+       formatter->dump_int("BytesSent_IA", total_usage.bytes_sent_ia);
+       formatter->dump_int("BytesReceived_IA", total_usage.bytes_received_ia);
        formatter->dump_int("Ops", total_usage.ops);
        formatter->dump_int("SuccessfulOps", total_usage.successful_ops);
        formatter->close_section(); // total
@@ -1286,9 +1290,9 @@ int RGWPutObj_ObjStore_S3::get_params()
 
   policy = s3policy;
 
-  placement_type = s->info.env->get("HTTP_X_AMZ_STORAGE_CLASS", "");
+  placement_type = s->info.env->get("HTTP_X_AMZ_STORAGE_CLASS", "STANDARD");
   if (!placement_type.empty()) {
-    std::string placement_id;
+    string placement_id;
     bool is_exist = false;
     const auto& zonegroup = store->get_zonegroup();
     for (const auto& target : zonegroup.placement_targets) {
@@ -1668,10 +1672,9 @@ int RGWPostObj_ObjStore_S3::get_params()
     string part_str(part.data.c_str(), part.data.length());
     env.add_var(part.name, part_str);
     if (stringcasecmp(part.name, "x-amz-storage-class") == 0) {
-      //  placement_type = s->info.env->get("HTTP_X_AMZ_STORAGE_CLASS", "");
       placement_type = part_str;
       if (!placement_type.empty()) {
-        std::string placement_id;
+        string placement_id;
         bool is_exist = false;
         const auto& zonegroup = store->get_zonegroup();
         for (const auto& target : zonegroup.placement_targets) {
@@ -2244,9 +2247,9 @@ int RGWCopyObj_ObjStore_S3::get_params()
     ldout(s->cct, 0) << s->err.message << dendl;
     return -ERR_INVALID_REQUEST;
   }
-  placement_type = s->info.env->get("HTTP_X_AMZ_STORAGE_CLASS", "");
+  placement_type = s->info.env->get("HTTP_X_AMZ_STORAGE_CLASS", "STANDARD");
   if (!placement_type.empty()) {
-    std::string placement_id;
+    string placement_id;
     bool is_exist = false;
     const auto& zonegroup = store->get_zonegroup();
     for (const auto& target : zonegroup.placement_targets) {
@@ -2648,9 +2651,9 @@ int RGWInitMultipart_ObjStore_S3::get_params()
     return op_ret;
 
   policy = s3policy;
-  placement_type = s->info.env->get("HTTP_X_AMZ_STORAGE_CLASS", "");
+  placement_type = s->info.env->get("HTTP_X_AMZ_STORAGE_CLASS", "STANDARD");
   if (!placement_type.empty()) {
-    std::string placement_id;
+    string placement_id;
     bool is_exist = false;
     const auto& zonegroup = store->get_zonegroup();
     for (const auto& target : zonegroup.placement_targets) {
