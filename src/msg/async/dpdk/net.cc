@@ -64,7 +64,7 @@ interface::interface(CephContext *cct, std::shared_ptr<DPDKDevice> dev, EventCen
         eh->src_mac = _hw_address;
         eh->eth_proto = uint16_t(l3pv.proto_num);
         *eh = eh->hton();
-        ldout(cct, 10) << "=== tx === proto " << std::hex << uint16_t(l3pv.proto_num)
+        ldout(this->cct, 10) << "=== tx === proto " << std::hex << uint16_t(l3pv.proto_num)
                        << " " << _hw_address << " -> " << l3pv.to
                        << " length " << std::dec << l3pv.p.len() << dendl;
         p = std::move(l3pv.p);
