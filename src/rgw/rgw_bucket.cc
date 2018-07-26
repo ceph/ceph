@@ -1352,10 +1352,12 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
     return ret;
   }
 
-  ret = bucket.check_object_index(op_state, flusher, &err_msg);
-  if (ret < 0)  {
-    ldout(store->ctx(), 0) << err_msg << dendl;
-    return ret;
+  if (op_state.will_fix_index()) {
+    ret = bucket.check_object_index(op_state, flusher, &err_msg);
+    if (ret < 0)  {
+      ldout(store->ctx(), 0) << err_msg << dendl;
+      return ret;
+    }
   }
 
   ret = bucket.check_index(op_state, flusher, &err_msg);
