@@ -7,6 +7,8 @@
 #include "common/WorkQueue.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
+#include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include <string>
 
@@ -20,6 +22,11 @@ namespace image {
 
 using util::create_context_callback;
 using util::create_rados_callback;
+
+template <typename I>
+DetachChildRequest<I>::~DetachChildRequest() {
+  assert(m_parent_image_ctx == nullptr);
+}
 
 template <typename I>
 void DetachChildRequest<I>::send() {
@@ -65,11 +72,12 @@ void DetachChildRequest<I>::clone_v2_child_detach() {
   // TODO support clone v2 parent namespaces
   m_parent_io_ctx.set_namespace(m_image_ctx.md_ctx.get_namespace());
 
+  m_parent_header_name = util::header_name(m_parent_spec.image_id);
+
   auto aio_comp = create_rados_callback<
     DetachChildRequest<I>,
     &DetachChildRequest<I>::handle_clone_v2_child_detach>(this);
-  r = m_parent_io_ctx.aio_operate(util::header_name(m_parent_spec.image_id),
-                                  aio_comp, &op);
+  r = m_parent_io_ctx.aio_operate(m_parent_header_name, aio_comp, &op);
   assert(r == 0);
   aio_comp->release();
 }
@@ -79,15 +87,149 @@ void DetachChildRequest<I>::handle_clone_v2_child_detach(int r) {
   auto cct = m_image_ctx.cct;
   ldout(cct, 5) << "r=" << r << dendl;
 
-  if (r == -ENOENT) {
-    r = 0;
-  } else if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(cct) << "error detaching child from parent: " << cpp_strerror(r)
                << dendl;
     finish(r);
     return;
   }
 
+  clone_v2_get_snapshot();
+}
+
+template <typename I>
+void DetachChildRequest<I>::clone_v2_get_snapshot() {
+  auto cct = m_image_ctx.cct;
+  ldout(cct, 5) << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::snapshot_info_get_start(&op, m_parent_spec.snap_id);
+
+  m_out_bl.clear();
+  auto aio_comp = create_rados_callback<
+    DetachChildRequest<I>,
+    &DetachChildRequest<I>::handle_clone_v2_get_snapshot>(this);
+  int r = m_parent_io_ctx.aio_operate(m_parent_header_name, aio_comp, &op,
+                                      &m_out_bl);
+  assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void DetachChildRequest<I>::handle_clone_v2_get_snapshot(int r) {
+  auto cct = m_image_ctx.cct;
+  ldout(cct, 5) << "r=" << r << dendl;
+
+  bool remove_snapshot = false;
+  if (r == 0) {
+    cls::rbd::SnapshotInfo snap_info;
+    auto it = m_out_bl.cbegin();
+    r = cls_client::snapshot_info_get_finish(&it, &snap_info);
+    if (r == 0) {
+      m_parent_snap_namespace = snap_info.snapshot_namespace;
+      m_parent_snap_name = snap_info.name;
+
+      if (cls::rbd::get_snap_namespace_type(m_parent_snap_namespace) ==
+            cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH &&
+          snap_info.child_count == 0) {
+        // snapshot is in trash w/ zero children, so remove it
+        remove_snapshot = true;
+      }
+    }
+  }
+
+  if (r < 0) {
+    ldout(cct, 5) << "failed to retrieve snapshot: " << cpp_strerror(r)
+                  << dendl;
+  }
+
+  if (!remove_snapshot) {
+    finish(0);
+    return;
+  }
+
+  clone_v2_open_parent();
+}
+
+template<typename I>
+void DetachChildRequest<I>::clone_v2_open_parent() {
+  auto cct = m_image_ctx.cct;
+  ldout(cct, 5) << dendl;
+
+  m_parent_image_ctx = I::create("", m_parent_spec.image_id, nullptr,
+                                 m_parent_io_ctx, false);
+
+  auto ctx = create_context_callback<
+    DetachChildRequest<I>,
+    &DetachChildRequest<I>::handle_clone_v2_open_parent>(this);
+  m_parent_image_ctx->state->open(true, ctx);
+}
+
+template<typename I>
+void DetachChildRequest<I>::handle_clone_v2_open_parent(int r) {
+  auto cct = m_image_ctx.cct;
+  ldout(cct, 5) << "r=" << r << dendl;
+
+  if (r < 0) {
+    ldout(cct, 5) << "failed to open parent for read/write: "
+                  << cpp_strerror(r) << dendl;
+    m_parent_image_ctx->destroy();
+    m_parent_image_ctx = nullptr;
+    finish(0);
+    return;
+  }
+
+  clone_v2_remove_snapshot();
+}
+
+template<typename I>
+void DetachChildRequest<I>::clone_v2_remove_snapshot() {
+  auto cct = m_image_ctx.cct;
+  ldout(cct, 5) << dendl;
+
+  auto ctx = create_context_callback<
+    DetachChildRequest<I>,
+    &DetachChildRequest<I>::handle_clone_v2_remove_snapshot>(this);
+  m_parent_image_ctx->operations->snap_remove(m_parent_snap_namespace,
+                                              m_parent_snap_name, ctx);
+}
+
+template<typename I>
+void DetachChildRequest<I>::handle_clone_v2_remove_snapshot(int r) {
+  auto cct = m_image_ctx.cct;
+  ldout(cct, 5) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    ldout(cct, 5) << "failed to remove trashed clone snapshot: "
+                  << cpp_strerror(r) << dendl;
+  }
+
+  clone_v2_close_parent();
+}
+
+template<typename I>
+void DetachChildRequest<I>::clone_v2_close_parent() {
+  auto cct = m_image_ctx.cct;
+  ldout(cct, 5) << dendl;
+
+  auto ctx = create_context_callback<
+    DetachChildRequest<I>,
+    &DetachChildRequest<I>::handle_clone_v2_close_parent>(this);
+  m_parent_image_ctx->state->close(ctx);
+}
+
+template<typename I>
+void DetachChildRequest<I>::handle_clone_v2_close_parent(int r) {
+  auto cct = m_image_ctx.cct;
+  ldout(cct, 5) << "r=" << r << dendl;
+
+  if (r < 0) {
+    ldout(cct, 5) << "failed to close parent image:" << cpp_strerror(r)
+                  << dendl;
+  }
+
+  m_parent_image_ctx->destroy();
+  m_parent_image_ctx = nullptr;
   finish(0);
 }
 
