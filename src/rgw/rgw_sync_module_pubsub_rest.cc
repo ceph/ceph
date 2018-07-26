@@ -311,7 +311,11 @@ public:
       return -EINVAL;
     }
 
+    auto psmodule = static_cast<RGWPSSyncModuleInstance *>(store->get_sync_module().get());
+    auto conf = psmodule->get_effective_conf();
+
     dest.push_endpoint = s->info.args.get("push-endpoint");
+    dest.bucket_name = string(conf["data_bucket_prefix"]) + s->owner.get_id().to_str() + "-" + topic_name;
 
     return 0;
   }
