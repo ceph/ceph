@@ -228,16 +228,15 @@ protected:
   stringstream error_stream;
 
   int set_state(int s, int ret = 0) {
+    retcode = ret;
     state = s;
     return ret;
   }
   int set_cr_error(int ret) {
-    state = RGWCoroutine_Error;
-    return ret;
+    return set_state(RGWCoroutine_Error, ret);
   }
   int set_cr_done() {
-    state = RGWCoroutine_Done;
-    return 0;
+    return set_state(RGWCoroutine_Done, 0);
   }
   void set_io_blocked(bool flag);
 
