@@ -301,25 +301,13 @@ endif(HAVE_XIO)
 if(ALLOCATOR STREQUAL "tcmalloc")
   set(ALLOC_LIBS gperftools::tcmalloc)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
-  set(TCMALLOC_srcs perfglue/heap_profiler.cc)
 elseif(ALLOCATOR STREQUAL "tcmalloc_minimal")
   set(ALLOC_LIBS gperftools::tcmalloc_minimal)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
-  set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
 elseif(ALLOCATOR STREQUAL "jemalloc")
   set(ALLOC_LIBS JeMalloc::JeMalloc)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
-  set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-elseif(ALLOCATOR STREQUAL "libc")
-  set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-else()
-  set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-  message(FATAL_ERROR "Unsupported allocator selected: ${ALLOCATOR}")
 endif()
-
-# tcmalloc heap profiler
-set(heap_profiler_files ${TCMALLOC_srcs})
-add_library(heap_profiler_objs OBJECT ${heap_profiler_files})
 
 if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
@@ -751,6 +739,9 @@ add_subdirectory(cls)
 # RADOS client/library
 add_subdirectory(osdc)
 
+# heal_profiler
+add_subdirectory(perfglue)
+
 add_library(rados_snap_set_diff_obj OBJECT librados/snap_set_diff.cc)
 
 add_subdirectory(include)
@@ -779,11 +770,12 @@ if (WITH_MGR)
       mgr/Mgr.cc
       mgr/Gil.cc
       mgr/mgr_commands.cc)
-  add_executable(ceph-mgr ${mgr_srcs}
-                 $<TARGET_OBJECTS:heap_profiler_objs>)
+  add_executable(ceph-mgr ${mgr_srcs})
   target_include_directories(ceph-mgr SYSTEM PRIVATE "${PYTHON_INCLUDE_DIRS}")
-  target_link_libraries(ceph-mgr osdc client global-static ceph-common
-      Boost::python ${MGR_PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
+  target_link_libraries(ceph-mgr
+    osdc client heap_profiler
+    global-static ceph-common
+    Boost::python ${MGR_PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
   install(TARGETS ceph-mgr DESTINATION bin)
 endif (WITH_MGR)
 
