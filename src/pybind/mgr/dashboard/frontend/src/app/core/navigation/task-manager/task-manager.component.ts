@@ -22,7 +22,7 @@ export class TaskManagerComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    this.summaryService.summaryData$.subscribe((data: any) => {
+    this.summaryService.subscribe((data: any) => {
       if (!data) {
         return;
       }

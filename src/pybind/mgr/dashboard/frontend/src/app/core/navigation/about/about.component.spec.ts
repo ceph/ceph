@@ -2,20 +2,24 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { BsModalRef } from 'ngx-bootstrap';
-import 'rxjs/add/observable/of';
-import { Observable } from 'rxjs/Observable';
+import { BehaviorSubject } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { AboutComponent } from './about.component';
 
-class SummaryServiceMock {
-  summaryData$ = Observable.of({
+export class SummaryServiceMock {
+  summaryDataSource = new BehaviorSubject({
     version:
       'ceph version 14.0.0-855-gb8193bb4cd ' +
       '(b8193bb4cda16ccc5b028c3e1df62bc72350a15d) nautilus (dev)'
   });
+  summaryData$ = this.summaryDataSource.asObservable();
+
+  subscribe(call) {
+    return this.summaryData$.subscribe(call);
+  }
 }
 
 describe('AboutComponent', () => {
