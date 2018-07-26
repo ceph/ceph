@@ -709,30 +709,30 @@ start_mgr() {
             key_fn=$CEPH_DEV_DIR/mgr.$name/keyring
             $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mgr.$name $key_fn
             ceph_adm -i $key_fn auth add mgr.$name mon 'allow profile mgr' mds 'allow *' osd 'allow *'
-        fi
 
-        wconf <<EOF
+            wconf <<EOF
 [mgr.$name]
         host = $HOSTNAME
 EOF
 
-        if $with_mgr_dashboard ; then
-            ceph_adm config set mgr mgr/dashboard/$name/server_port $MGR_PORT
-            if [ $mgr -eq 1 ]; then
-                DASH_URLS="https://$IP:$MGR_PORT"
-            else
-                DASH_URLS+=", https://$IP:$MGR_PORT"
+            if $with_mgr_dashboard ; then
+                ceph_adm config set mgr mgr/dashboard/$name/server_port $MGR_PORT
+                if [ $mgr -eq 1 ]; then
+                    DASH_URLS="https://$IP:$MGR_PORT"
+                else
+                    DASH_URLS+=", https://$IP:$MGR_PORT"
+                fi
             fi
-        fi
-	MGR_PORT=$(($MGR_PORT + 1000))
+	    MGR_PORT=$(($MGR_PORT + 1000))
 
-	ceph_adm config set mgr mgr/restful/$name/server_port $MGR_PORT
-        if [ $mgr -eq 1 ]; then
-            RESTFUL_URLS="https://$IP:$MGR_PORT"
-        else
-            RESTFUL_URLS+=", https://$IP:$MGR_PORT"
+	    ceph_adm config set mgr mgr/restful/$name/server_port $MGR_PORT
+            if [ $mgr -eq 1 ]; then
+                RESTFUL_URLS="https://$IP:$MGR_PORT"
+            else
+                RESTFUL_URLS+=", https://$IP:$MGR_PORT"
+            fi
+	    MGR_PORT=$(($MGR_PORT + 1000))
         fi
-	MGR_PORT=$(($MGR_PORT + 1000))
 
         echo "Starting mgr.${name}"
         run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
@@ -740,22 +740,23 @@ EOF
 
     # use tell mgr here because the first mgr might not have activated yet
     # to register the python module commands.
-
-    # setting login credentials for dashboard
-    if $with_mgr_dashboard; then
-        ceph_adm tell mgr dashboard ac-user-create admin admin administrator
-        if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
-            echo dashboard module not working correctly!
+    if [ "$new" -eq 1 ]; then
+        # setting login credentials for dashboard
+        if $with_mgr_dashboard; then
+            ceph_adm tell mgr dashboard ac-user-create admin admin administrator
+            if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
+                echo dashboard module not working correctly!
+            fi
         fi
-    fi
 
-    if ceph_adm tell mgr restful create-self-signed-cert; then
-        SF=`mktemp`
-        ceph_adm restful create-key admin -o $SF
-        RESTFUL_SECRET=`cat $SF`
-        rm $SF
-    else 
-        echo MGR Restful is not working, perhaps the package is not installed?
+        if ceph_adm tell mgr restful create-self-signed-cert; then
+            SF=`mktemp`
+            ceph_adm restful create-key admin -o $SF
+            RESTFUL_SECRET=`cat $SF`
+            rm $SF
+        else
+            echo MGR Restful is not working, perhaps the package is not installed?
+        fi
     fi
 }
 
@@ -1132,13 +1133,15 @@ fi
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 
 echo ""
-if $with_mgr_dashboard; then
-    echo "dashboard urls: $DASH_URLS"
-    echo "  w/ user/pass: admin / admin"
+if [ "$new" -eq 1 ]; then
+    if $with_mgr_dashboard; then
+        echo "dashboard urls: $DASH_URLS"
+        echo "  w/ user/pass: admin / admin"
+    fi
+    echo "restful urls: $RESTFUL_URLS"
+    echo "  w/ user/pass: admin / $RESTFUL_SECRET"
+    echo ""
 fi
-echo "restful urls: $RESTFUL_URLS"
-echo "  w/ user/pass: admin / $RESTFUL_SECRET"
-echo ""
 echo ""
 echo "export PYTHONPATH=./pybind:$PYTHONPATH"
 echo "export LD_LIBRARY_PATH=$CEPH_LIB"
