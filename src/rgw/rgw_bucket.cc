@@ -1345,17 +1345,24 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
 
   flusher.start(0);
 
-  ret = bucket.check_bad_index_multipart(op_state, flusher);
-  if (ret < 0)
+  std::string err_msg;
+  ret = bucket.check_bad_index_multipart(op_state, flusher, &err_msg);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << err_msg << dendl;
     return ret;
+  }
 
-  ret = bucket.check_object_index(op_state, flusher);
-  if (ret < 0)
+  ret = bucket.check_object_index(op_state, flusher, &err_msg);
+  if (ret < 0)  {
+    ldout(store->ctx(), 0) << err_msg << dendl;
     return ret;
+  }
 
-  ret = bucket.check_index(op_state, flusher);
-  if (ret < 0)
+  ret = bucket.check_index(op_state, flusher, &err_msg);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << err_msg << dendl;
     return ret;
+  }
 
   flusher.flush();
 
