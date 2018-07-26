@@ -31,7 +31,7 @@ describe('RgwBucketService', () => {
     service.list().subscribe((resp) => {
       result = resp;
     });
-    const req = httpTesting.expectOne('/api/rgw/bucket');
+    const req = httpTesting.expectOne('api/rgw/bucket');
     req.flush([]);
     expect(req.request.method).toBe('GET');
     expect(result).toEqual([]);
@@ -42,13 +42,13 @@ describe('RgwBucketService', () => {
     service.list().subscribe((resp) => {
       result = resp;
     });
-    let req = httpTesting.expectOne('/api/rgw/bucket');
+    let req = httpTesting.expectOne('api/rgw/bucket');
     req.flush(['foo', 'bar']);
 
-    req = httpTesting.expectOne('/api/rgw/bucket/foo');
+    req = httpTesting.expectOne('api/rgw/bucket/foo');
     req.flush({ name: 'foo' });
 
-    req = httpTesting.expectOne('/api/rgw/bucket/bar');
+    req = httpTesting.expectOne('api/rgw/bucket/bar');
     req.flush({ name: 'bar' });
 
     expect(req.request.method).toBe('GET');
@@ -57,31 +57,31 @@ describe('RgwBucketService', () => {
 
   it('should call get', () => {
     service.get('foo').subscribe();
-    const req = httpTesting.expectOne('/api/rgw/bucket/foo');
+    const req = httpTesting.expectOne('api/rgw/bucket/foo');
     expect(req.request.method).toBe('GET');
   });
 
   it('should call create', () => {
     service.create('foo', 'bar').subscribe();
-    const req = httpTesting.expectOne('/api/rgw/bucket?bucket=foo&uid=bar');
+    const req = httpTesting.expectOne('api/rgw/bucket?bucket=foo&uid=bar');
     expect(req.request.method).toBe('POST');
   });
 
   it('should call update', () => {
     service.update('foo', 'bar', 'baz').subscribe();
-    const req = httpTesting.expectOne('/api/rgw/bucket/foo?bucket_id=bar&uid=baz');
+    const req = httpTesting.expectOne('api/rgw/bucket/foo?bucket_id=bar&uid=baz');
     expect(req.request.method).toBe('PUT');
   });
 
   it('should call delete, with purgeObjects = true', () => {
     service.delete('foo').subscribe();
-    const req = httpTesting.expectOne('/api/rgw/bucket/foo?purge_objects=true');
+    const req = httpTesting.expectOne('api/rgw/bucket/foo?purge_objects=true');
     expect(req.request.method).toBe('DELETE');
   });
 
   it('should call delete, with purgeObjects = false', () => {
     service.delete('foo', false).subscribe();
-    const req = httpTesting.expectOne('/api/rgw/bucket/foo?purge_objects=false');
+    const req = httpTesting.expectOne('api/rgw/bucket/foo?purge_objects=false');
     expect(req.request.method).toBe('DELETE');
   });
 
@@ -90,7 +90,7 @@ describe('RgwBucketService', () => {
     service.exists('foo').subscribe((resp) => {
       result = resp;
     });
-    const req = httpTesting.expectOne('/api/rgw/bucket');
+    const req = httpTesting.expectOne('api/rgw/bucket');
     expect(req.request.method).toBe('GET');
     req.flush(['foo', 'bar']);
     expect(result).toBe(true);
