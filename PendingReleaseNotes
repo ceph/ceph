@@ -111,3 +111,19 @@
     has an error.  This head object is there to show the snapset that was used in
     determining errors.
 
+
+=======
+12.2.6+
+-------
+
+- *Auth*:
+
+  * In 12.2.4 and earlier releases, keyring caps were not checked for validity,
+    so the caps string could be anything. As of 12.2.6, caps strings are
+    validated and providing a keyring with an invalid caps string to, e.g.,
+    "ceph auth add" will result in an error.
+
+* The config-key interface can store arbitrary binary blobs but JSON
+  can only express printable strings.  If binary blobs are present,
+  the 'ceph config-key dump' command will show them as something like
+  ``<<< binary blob of length N >>>``.
