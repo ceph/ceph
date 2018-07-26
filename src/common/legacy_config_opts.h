@@ -975,6 +975,7 @@ OPTION(bluestore_block_wal_size, OPT_U64) // rocksdb wal
 OPTION(bluestore_block_wal_create, OPT_BOOL)
 OPTION(bluestore_block_preallocate_file, OPT_BOOL) //whether preallocate space if block/db_path/wal_path is file rather that block device.
 OPTION(bluestore_csum_type, OPT_STR) // none|xxhash32|xxhash64|crc32c|crc32c_16|crc32c_8
+OPTION(bluestore_retry_disk_reads, OPT_U64)
 OPTION(bluestore_min_alloc_size, OPT_U32)
 OPTION(bluestore_min_alloc_size_hdd, OPT_U32)
 OPTION(bluestore_min_alloc_size_ssd, OPT_U32)
@@ -1069,6 +1070,7 @@ OPTION(bluestore_debug_permit_any_bdev_label, OPT_BOOL)
 OPTION(bluestore_shard_finishers, OPT_BOOL)
 OPTION(bluestore_debug_random_read_err, OPT_DOUBLE)
 OPTION(bluestore_debug_inject_bug21040, OPT_BOOL)
+OPTION(bluestore_debug_inject_csum_err_probability, OPT_FLOAT)
 
 OPTION(kstore_max_ops, OPT_U64)
 OPTION(kstore_max_bytes, OPT_U64)
