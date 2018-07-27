@@ -5,6 +5,8 @@ meta:
    Use xfs beneath the osds.
    install ceph/mimic v13.2.0 point version
    run workload and upgrade-sequence in parallel
+   install ceph/mimic v13.2.1 point version
+   run workload and upgrade-sequence in parallel
    install ceph/mimic v13.2.x point version
    (every point reslease should be tested)
    run workload and upgrade-sequence in parallel
@@ -79,18 +81,39 @@ tasks:
    - workload
 - print: "**** done workload v13.2.0"
 
-#######  upgrade to v13.2.1 TO BE ADDED
+#######  upgrade to v13.2.1
+- install.upgrade:
+    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+    mon.a:
+      tag: v13.2.1
+    mon.b:
+      tag: v13.2.1
+    # Note that client.a IS NOT upgraded at this point
+- parallel:
+   - workload_mimic
+   - upgrade-sequence_mimic
+- print: "**** done parallel mimic v13.2.1"
+- parallel:
+   - workload_mimic
+   - upgrade-sequence_mimic
+- print: "**** done workload v13.2.1"
+
+#######  upgrade to v13.2.x TO BE ADDED for future point releases
 ### - install.upgrade:
 ###    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
 ###    mon.a:
-###      tag: v13.2.1
+###      tag: v13.2.x
 ###    mon.b:
-###      tag: v13.2.1
+###      tag: v13.2.x
 ###    # Note that client.a IS NOT upgraded at this point
 ###- parallel:
 ###   - workload_mimic
 ###   - upgrade-sequence_mimic
-###- print: "**** done parallel mimic v13.2.1"
+###- print: "**** done parallel mimic v13.2.x"
+###- parallel:
+###   - workload_mimic
+###   - upgrade-sequence_mimic
+###- print: "**** done workload v13.2.x"
 
 
 ####  upgrade to latest mimic
