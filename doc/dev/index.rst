@@ -6,7 +6,7 @@ Contributing to Ceph: A Guide for Developers
 :Author: Nathan Cutler
 :License: Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)
 
-.. note:: The old (pre-2016) developer documentation has been moved to :doc:`/dev/index-old`.
+.. note:: You may also be interested in the :doc:`/dev/internals` documentation.
 
 .. contents::
    :depth: 3
