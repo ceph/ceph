@@ -382,13 +382,13 @@ TEST(AES, DecryptNoBl) {
   ASSERT_EQ(0, err);
 }
 
-TEST(AES, Loop) {
+static void aes_loop(const std::size_t text_size) {
   CryptoRandom random;
 
   bufferptr secret(16);
   random.get_bytes(secret.c_str(), secret.length());
 
-  bufferptr orig_plaintext(256);
+  bufferptr orig_plaintext(text_size);
   random.get_bytes(orig_plaintext.c_str(), orig_plaintext.length());
 
   bufferlist plaintext;
@@ -426,14 +426,28 @@ TEST(AES, Loop) {
   ASSERT_EQ(orig, plaintext);
 }
 
-TEST(AES, LoopKey) {
+TEST(AES, Loop) {
+  aes_loop(256);
+}
+
+// These magics reflects Cephx's signature size. Please consult
+// CephxSessionHandler::_calc_signature() for more details.
+TEST(AES, Loop_29) {
+  aes_loop(29);
+}
+
+TEST(AES, Loop_32) {
+  aes_loop(32);
+}
+
+void aes_loopkey(const std::size_t text_size) {
   CryptoRandom random;
   bufferptr k(16);
   random.get_bytes(k.c_str(), k.length());
   CryptoKey key(CEPH_CRYPTO_AES, ceph_clock_now(), k);
 
   bufferlist data;
-  bufferptr r(128);
+  bufferptr r(text_size);
   random.get_bytes(r.c_str(), r.length());
   data.append(r);
 
@@ -450,4 +464,18 @@ TEST(AES, LoopKey) {
   utime_t end = ceph_clock_now();
   utime_t dur = end - start;
   cout << n << " encoded in " << dur << std::endl;
+}
+
+TEST(AES, LoopKey) {
+  aes_loopkey(128);
+}
+
+// These magics reflects Cephx's signature size. Please consult
+// CephxSessionHandler::_calc_signature() for more details.
+TEST(AES, LoopKey_29) {
+  aes_loopkey(29);
+}
+
+TEST(AES, LoopKey_32) {
+  aes_loopkey(32);
 }
