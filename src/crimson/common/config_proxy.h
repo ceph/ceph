@@ -7,6 +7,7 @@
 #include "common/config.h"
 #include "common/config_obs.h"
 #include "common/config_obs_mgr.h"
+#include "common/errno.h"
 
 namespace ceph::common {
 
@@ -34,8 +35,7 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
   }
 
   // apply changes to all shards
-  // @param func a functor which accepts @c "ConfigValues&", and returns
-  //             a boolean indicating if the values is changed or not
+  // @param func a functor which accepts @c "ConfigValues&"
   template<typename Func>
   seastar::future<> do_change(Func&& func) {
     auto new_values = seastar::make_lw_shared(*values);
@@ -76,7 +76,10 @@ public:
   }
   seastar::future<> rm_val(const std::string& key) {
     return do_change([key, this](ConfigValues& values) {
-      return get_config().rm_val(values, key) >= 0;
+      auto ret = get_config().rm_val(values, key);
+      if (ret < 0) {
+        throw std::invalid_argument(cpp_strerror(ret));
+      }
     });
   }
   seastar::future<> set_val(const std::string& key,
@@ -87,7 +90,6 @@ public:
       if (ret < 0) {
 	throw std::invalid_argument(err.str());
       }
-      return ret > 0;
     });
   }
   int get_val(const std::string &key, std::string *val) const {
@@ -100,9 +102,7 @@ public:
 
   seastar::future<> set_mon_vals(const std::map<std::string,std::string>& kv) {
     return do_change([kv, this](ConfigValues& values) {
-	auto ret = get_config().set_mon_vals(nullptr, values, obs_mgr,
-					     kv, nullptr);
-      return ret > 0;
+      get_config().set_mon_vals(nullptr, values, obs_mgr, kv, nullptr);
     });
   }
 
