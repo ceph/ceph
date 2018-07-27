@@ -53,8 +53,8 @@ export class NotificationService {
    * Method used for saving a shown notification (check show() method).
    * @param {Notification} notification
    */
-  save(type: NotificationType, message: string, title?: string) {
-    const notification = new CdNotification(type, message, title);
+  save(type: NotificationType, title: string, message?: string) {
+    const notification = new CdNotification(type, title, message);
 
     const recent = this.dataSource.getValue();
     recent.push(notification);
@@ -69,15 +69,18 @@ export class NotificationService {
   /**
    * Method for showing a notification.
    * @param {NotificationType} type toastr type
-   * @param {string} message
-   * @param {string} [title]
+   * @param {string} title
+   * @param {string} [message]
    * @param {*} [options] toastr compatible options, used when creating a toastr
    * @memberof NotificationService
    * @returns The timeout ID that is set to be able to cancel the notification.
    */
-  show(type: NotificationType, message: string, title?: string, options?: any) {
+  show(type: NotificationType, title: string, message?: string, options?: any) {
     return setTimeout(() => {
-      this.save(type, message, title);
+      this.save(type, title, message);
+      if (!message) {
+        message = '';
+      }
       switch (type) {
         case NotificationType.error:
           this.toastr.error(message, title, options);
@@ -96,13 +99,13 @@ export class NotificationService {
     if (finishedTask.success && success) {
       this.show(
         NotificationType.success,
-        this.taskManagerMessageService.getSuccessMessage(finishedTask)
+        this.taskManagerMessageService.getSuccessTitle(finishedTask)
       );
     } else {
       this.show(
         NotificationType.error,
-        this.taskManagerMessageService.getErrorMessage(finishedTask),
-        this.taskManagerMessageService.getDescription(finishedTask)
+        this.taskManagerMessageService.getErrorTitle(finishedTask),
+        this.taskManagerMessageService.getErrorMessage(finishedTask)
       );
     }
   }

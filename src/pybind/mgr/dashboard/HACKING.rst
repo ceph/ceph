@@ -1026,68 +1026,86 @@ updates its progress:
 How to deal with asynchronous tasks in the front-end?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-All executing and most recently finished asynchronous tasks are displayed on the
-"Backgroud-Tasks" menu.
+All executing and most recently finished asynchronous tasks are displayed on
+"Background-Tasks" and if finished on "Recent-Notifications" in the menu bar.
+For each task a operation name for three states (running, success and failure),
+a function that tells who is involved and error descriptions, if any, have to
+be provided. This can be  achieved by appending
+``TaskManagerMessageService.messages``.  This has to be done to achieve
+consistency among all tasks and states.
 
-The front-end developer should provide a description, success message and error
-messages for each task on ``TaskManagerMessageService.messages``.
-This messages can make use of the task metadata to provide more personalized messages.
+Operation Object
+  Ensures consistency among all tasks. It consists of three verbs for each
+  different state f.e.
+  ``{running: 'Creating', failure: 'create', success: 'Created'}``.
 
-When submitting an asynchronous task, the developer should provide a callback
-that will be automatically triggered after the execution of that task.
-This can be done by using the ``TaskManagerService.subscribe``.
+#. Put running operations in present participle f.e. ``'Updating'``.
+#. Failed messages always start with ``'Failed to '`` and should be continued
+   with the operation in present tense f.e. ``'update'``.
+#. Put successful operations in past tense f.e. ``'Updated'``.
 
-Most of the times, all we want to do after a task completes the execution, is
-displaying a notification message based on the execution result. The
-``NotificationService.notifyTask`` will use the messages from
-``TaskManagerMessageService`` to display a success / error message based on the
-execution result of a task.
+Involves Function
+  Ensures consistency among all messages of a task, it resembles who's
+  involved by the operation. It's a function that returns a string which
+  takes the metadata from the task to return f.e.
+  ``"RBD 'somePool/someImage'"``.
+
+Both combined create the following messages:
+
+* Failure => ``"Failed to create RBD 'somePool/someImage'"``
+* Running => ``"Creating RBD 'somePool/someImage'"``
+* Success => ``"Created RBD 'somePool/someImage'"``
+
+For automatic task handling use ``TaskWrapperService.wrapTaskAroundCall``.
+
+If for some reason ``wrapTaskAroundCall`` is not working for you,
+you have to subscribe to your asynchronous task manually through
+``TaskManagerService.subscribe``, and provide it with a callback,
+in case of a success to notify the user. A notification can
+be triggered with ``NotificationService.notifyTask``. It will use
+``TaskManagerMessageService.messages`` to display a message based on the state
+of a task.
+
+Notifications of API errors are handled by ``ApiInterceptorService``.
 
 Usage example:
 
 .. code-block:: javascript
 
   export class TaskManagerMessageService {
-
+    // ...
     messages = {
-      // Messages for 'rbd/create' task
+      // Messages for task 'rbd/create'
       'rbd/create': new TaskManagerMessage(
-        // Description
-        (metadata) => `Create RBD '${metadata.pool_name}/${metadata.image_name}'`,
-        // Success message
-        (metadata) => `RBD '${metadata.pool_name}/${metadata.image_name}'
-                       have been created successfully`,
-        // Error messages
-        (metadata) => {
-          return {
-            '17': `Name '${metadata.pool_name}/${metadata.image_name}' is already
-                   in use.`
-          };
-        }
+        // Message prefixes
+        ['create', 'Creating', 'Created'],
+        // Message suffix
+        (metadata) => `RBD '${metadata.pool_name}/${metadata.image_name}'`,
+        (metadata) => ({
+          // Error code and description
+          '17': `Name is already used by RBD '${metadata.pool_name}/${
+                 metadata.image_name}'.`
+        })
       ),
       // ...
     };
-
     // ...
   }
 
   export class RBDFormComponent {
     // ...
-
-    submit() {
-      // ...
-      this.rbdService.create(request).then((resp) => {
-        // Subscribe the submitted task
-        this.taskManagerService.subscribe('rbd/create',
-          {'pool_name': request.pool_name, 'rbd_name': request.name},
-          // Callback that will be invoked after task is finished
-          (finishedTask: FinishedTask) => {
-            // Will display a notification message (success or error)
-            this.notificationService.notifyTask(finishedTask, finishedTask.ret_value.success);
-          });
-        // ...
-      })
+    createAction() {
+      const request = this.createRequest();
+      // Subscribes to 'call' with submitted 'task' and handles notifications
+      return this.taskWrapper.wrapTaskAroundCall({
+        task: new FinishedTask('rbd/create', {
+          pool_name: request.pool_name,
+          image_name: request.name
+        }),
+        call: this.rbdService.create(request)
+      });
     }
+    // ...
   }
 
 Error Handling in Python

@@ -87,7 +87,10 @@ describe('NotificationService', () => {
       notificationService.show(NotificationType.info, 'Simple test');
       tick(100);
       expect(notificationService['dataSource'].getValue().length).toBe(1);
-      expect(notificationService['dataSource'].getValue()[0].type).toBe(NotificationType.info);
+      const notification = notificationService['dataSource'].getValue()[0];
+      expect(notification.type).toBe(NotificationType.info);
+      expect(notification.title).toBe('Simple test');
+      expect(notification.message).toBe(undefined);
     })
   );
 
@@ -111,24 +114,35 @@ describe('NotificationService', () => {
       notificationService.notifyTask(task, true);
       tick(100);
       expect(notificationService['dataSource'].getValue().length).toBe(1);
-      expect(notificationService['dataSource'].getValue()[0].type).toBe(NotificationType.success);
+      const notification = notificationService['dataSource'].getValue()[0];
+      expect(notification.type).toBe(NotificationType.success);
+      expect(notification.title).toBe('Executed unknown task');
+      expect(notification.message).toBe(undefined);
     })
   );
 
   it(
     'should show a error task notification',
     fakeAsync(() => {
-      const task = _.assign(new FinishedTask(), {
-        success: false,
-        metadata: 'failed',
-        exception: {
-          code: 404
+      const task = _.assign(
+        new FinishedTask('rbd/create', {
+          pool_name: 'somePool',
+          image_name: 'someImage'
+        }),
+        {
+          success: false,
+          exception: {
+            code: 17
+          }
         }
-      });
+      );
       notificationService.notifyTask(task);
       tick(100);
       expect(notificationService['dataSource'].getValue().length).toBe(1);
-      expect(notificationService['dataSource'].getValue()[0].type).toBe(NotificationType.error);
+      const notification = notificationService['dataSource'].getValue()[0];
+      expect(notification.type).toBe(NotificationType.error);
+      expect(notification.title).toBe(`Failed to create RBD 'somePool/someImage'`);
+      expect(notification.message).toBe(`Name is already used by RBD 'somePool/someImage'.`);
     })
   );
 });

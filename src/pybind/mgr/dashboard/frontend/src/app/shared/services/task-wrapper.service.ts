@@ -50,8 +50,8 @@ export class TaskWrapperService {
   _handleExecutingTasks(task: FinishedTask) {
     this.notificationService.show(
       NotificationType.info,
-      this.taskManagerMessageService.getRunningMessage(task),
-      this.taskManagerMessageService.getDescription(task)
+      this.taskManagerMessageService.getRunningTitle(task),
+      this.taskManagerMessageService.getErrorTitle(task)
     );
 
     const executingTask = new ExecutingTask(task.name, task.metadata);
