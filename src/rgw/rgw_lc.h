@@ -380,6 +380,11 @@ class RGWLC : public DoutPrefixProvider {
   bool going_down();
   void start_processor();
   void stop_processor();
+  int set_bucket_config(RGWBucketInfo& bucket_info,
+                        const map<string, bufferlist>& bucket_attrs,
+                        RGWLifecycleConfiguration *config);
+  int remove_bucket_config(RGWBucketInfo& bucket_info,
+                           const map<string, bufferlist>& bucket_attrs);
 
   CephContext *get_cct() const override { return store->ctx(); }
   unsigned get_subsys() const;
