@@ -1,9 +1,9 @@
-#include "test_ceph_time.h"
+#include "ceph_time.h"
 TYPE(real_time_wrapper)
 TYPE(coarse_real_time_wrapper)
 TYPE(timespan_wrapper)
 
-#include "test_sstring.h"
+#include "sstring.h"
 TYPE(sstring_wrapper)
 
 #include "include/CompatSet.h"
