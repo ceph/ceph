@@ -382,11 +382,13 @@ class ResultsReporter(object):
         return response.json()
 
     def _parse_log_line(self, line, prefix):
+        # parse log lines like
+        # 2018-07-27T00:30:55.967 INFO:teuthology.results:subset: '35/999'
         msg = line.split(' ', 1)[1].split(':', 2)[-1]
         if not msg.startswith(prefix):
             return None
         else:
-            return msg[len(prefix):]
+            return msg[len(prefix):].strip(" '")
 
     def get_rerun_conf(self, run_name):
         log_path = os.path.join(self.archive_base, run_name, 'results.log')
@@ -398,6 +400,7 @@ class ResultsReporter(object):
                 if ':' not in line:
                     # stop if this does not look line a log line
                     break
+                line = line.strip()
                 if subset is None:
                     subset = self._parse_log_line(line, 'subset:')
                 elif seed is None:
