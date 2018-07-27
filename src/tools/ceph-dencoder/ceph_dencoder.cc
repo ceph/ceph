@@ -33,7 +33,7 @@
 #define TYPE_FEATUREFUL_NOCOPY(t)
 #define TYPE_NOCOPY(t)
 #define MESSAGE(t)
-#include "include/types.h"
+#include "tools/ceph-dencoder/types.h"
 #undef TYPE
 #undef TYPE_STRAYDATA
 #undef TYPE_NONDETERMINISTIC
@@ -302,7 +302,7 @@ int main(int argc, const char **argv)
 #define TYPE_FEATUREFUL_NOCOPY(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeaturefulNoCopy<t>(false, false);
 #define TYPE_NOCOPY(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeatureNoCopy<t>(false, false);
 #define MESSAGE(t) dencoders[T_STRINGIFY(t)] = new MessageDencoderImpl<t>;
-#include "include/types.h"
+#include "tools/ceph-dencoder/types.h"
 #undef TYPE
 #undef TYPE_STRAYDATA
 #undef TYPE_NONDETERMINISTIC
