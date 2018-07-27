@@ -163,6 +163,7 @@ void usage()
   cout << "                             --include-all to list all entries, including unexpired)\n";
   cout << "  gc process                 manually process garbage\n";
   cout << "  lc list                    list all bucket lifecycle progress\n";
+  cout << "  lc get                     get a lifecycle bucket configuration\n";
   cout << "  lc process                 manually process lifecycle\n";
   cout << "  metadata get               get metadata info\n";
   cout << "  metadata put               put metadata info\n";
@@ -397,6 +398,7 @@ enum {
   OPT_GC_LIST,
   OPT_GC_PROCESS,
   OPT_LC_LIST,
+  OPT_LC_GET,
   OPT_LC_PROCESS,
   OPT_ORPHANS_FIND,
   OPT_ORPHANS_FINISH,
@@ -829,6 +831,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   } else if (strcmp(prev_cmd, "lc") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_LC_LIST;
+    if (strcmp(cmd, "get") == 0)
+      return OPT_LC_GET;
     if (strcmp(cmd, "process") == 0)
       return OPT_LC_PROCESS;
   } else if (strcmp(prev_cmd, "orphans") == 0) {
@@ -6278,6 +6282,39 @@ next:
     formatter->flush(cout);
   }
 
+
+  if (opt_cmd == OPT_LC_GET) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+
+    rgw_bucket bucket;
+    RGWBucketInfo bucket_info;
+    map<string, bufferlist> attrs;
+    RGWLifecycleConfiguration config;
+    ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    auto aiter = attrs.find(RGW_ATTR_LC);
+    if (aiter == attrs.end()) {
+      return -ENOENT;
+    }
+
+    bufferlist::iterator iter{&aiter->second};
+    try {
+      config.decode(iter);
+    } catch (const buffer::error& e) {
+      cerr << "ERROR: decode life cycle config failed" << std::endl;
+      return -EIO;
+    }
+
+    encode_json("result", config, formatter);
+    formatter->flush(cout);
+  }
 
   if (opt_cmd == OPT_LC_PROCESS) {
     int ret = store->process_lc();

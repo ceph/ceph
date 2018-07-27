@@ -102,6 +102,7 @@
                                --include-all to list all entries, including unexpired)
     gc process                 manually process garbage
     lc list                    list all bucket lifecycle progress
+    lc get                     get a lifecycle bucket configuration
     lc process                 manually process lifecycle
     metadata get               get metadata info
     metadata put               put metadata info

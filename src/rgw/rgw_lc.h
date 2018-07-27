@@ -330,6 +330,7 @@ public:
   void add_rule(LCRule* rule);
 
   int check_and_add_rule(LCRule* rule);
+  static void generate_test_instances(list<RGWLifecycleConfiguration*>& o);
 
   bool valid();
 
