@@ -71,8 +71,8 @@ public:
     return config.find_option(name);
   }
   void diff(Formatter *f, const std::string& name=string{}) const {
-    return config.diff(values, f, name);
     Mutex::Locker l{lock};
+    return config.diff(values, f, name);
   }
   void get_my_sections(std::vector <std::string> &sections) const {
     Mutex::Locker l{lock};
