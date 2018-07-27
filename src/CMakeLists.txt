@@ -491,36 +491,9 @@ add_subdirectory(include)
 add_subdirectory(librados)
 add_subdirectory(libradosstriper)
 
-if (WITH_MGR)
-  set(mgr_srcs
-      ceph_mgr.cc
-      mon/PGMap.cc
-      mgr/DaemonState.cc
-      mgr/DaemonServer.cc
-      mgr/ClusterState.cc
-      mgr/ActivePyModules.cc
-      mgr/DaemonHealthMetricCollector.cc
-      mgr/StandbyPyModules.cc
-      mgr/PyModule.cc
-      mgr/PyModuleRegistry.cc
-      mgr/PyModuleRunner.cc
-      mgr/PyFormatter.cc
-      mgr/PyOSDMap.cc
-      mgr/BaseMgrModule.cc
-      mgr/BaseMgrStandbyModule.cc
-      mgr/ActivePyModule.cc
-      mgr/MgrStandby.cc
-      mgr/Mgr.cc
-      mgr/Gil.cc
-      mgr/mgr_commands.cc)
-  add_executable(ceph-mgr ${mgr_srcs})
-  target_include_directories(ceph-mgr SYSTEM PRIVATE "${PYTHON_INCLUDE_DIRS}")
-  target_link_libraries(ceph-mgr
-    osdc client heap_profiler
-    global-static ceph-common
-    Boost::python ${MGR_PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
-  install(TARGETS ceph-mgr DESTINATION bin)
-endif (WITH_MGR)
+if(WITH_MGR)
+  add_subdirectory(mgr)
+endif()
 
 set(librados_config_srcs
   librados-config.cc)
