@@ -221,11 +221,13 @@ WRITE_CLASS_ENCODER(ParentImageSpec);
 
 struct ChildImageSpec {
   int64_t pool_id = -1;
+  std::string pool_namespace;
   std::string image_id;
 
   ChildImageSpec() {}
-  ChildImageSpec(int64_t pool_id, const std::string& image_id)
-    : pool_id(pool_id), image_id(image_id) {
+  ChildImageSpec(int64_t pool_id, const std::string& pool_namespace,
+                 const std::string& image_id)
+    : pool_id(pool_id), pool_namespace(pool_namespace), image_id(image_id) {
   }
 
   void encode(bufferlist &bl) const;
@@ -236,11 +238,15 @@ struct ChildImageSpec {
 
   inline bool operator==(const ChildImageSpec& rhs) const {
     return (pool_id == rhs.pool_id &&
+            pool_namespace == rhs.pool_namespace &&
             image_id == rhs.image_id);
   }
   inline bool operator<(const ChildImageSpec& rhs) const {
     if (pool_id != rhs.pool_id) {
       return pool_id < rhs.pool_id;
+    }
+    if (pool_namespace != rhs.pool_namespace) {
+      return pool_namespace < rhs.pool_namespace;
     }
     return image_id < rhs.image_id;
   }

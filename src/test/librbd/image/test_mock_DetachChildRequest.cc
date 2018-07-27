@@ -81,7 +81,7 @@ public:
 
     bufferlist bl;
     encode(parent_spec.snap_id, bl);
-    encode(cls::rbd::ChildImageSpec{mock_image_ctx.md_ctx.get_id(),
+    encode(cls::rbd::ChildImageSpec{mock_image_ctx.md_ctx.get_id(), "",
                                     mock_image_ctx.id}, bl);
 
     EXPECT_CALL(mock_io_ctx_impl,

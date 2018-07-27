@@ -2500,10 +2500,10 @@ TEST_F(TestClsRbd, clone_parent)
   ASSERT_EQ(-ENOENT, child_detach(&ioctx, oid, 123, {}));
   ASSERT_EQ(-ENOENT, child_detach(&ioctx, oid, 345, {}));
 
-  ASSERT_EQ(0, child_attach(&ioctx, oid, 123, {1, "image1"}));
-  ASSERT_EQ(-EEXIST, child_attach(&ioctx, oid, 123, {1, "image1"}));
-  ASSERT_EQ(0, child_attach(&ioctx, oid, 123, {1, "image2"}));
-  ASSERT_EQ(0, child_attach(&ioctx, oid, 123, {2, "image2"}));
+  ASSERT_EQ(0, child_attach(&ioctx, oid, 123, {1, "", "image1"}));
+  ASSERT_EQ(-EEXIST, child_attach(&ioctx, oid, 123, {1, "", "image1"}));
+  ASSERT_EQ(0, child_attach(&ioctx, oid, 123, {1, "", "image2"}));
+  ASSERT_EQ(0, child_attach(&ioctx, oid, 123, {2, "", "image2"}));
 
   cls::rbd::SnapshotInfo snap;
   ASSERT_EQ(0, snapshot_get(&ioctx, oid, 123, &snap));
@@ -2529,7 +2529,7 @@ TEST_F(TestClsRbd, clone_parent)
   ASSERT_EQ(0, children_list(&ioctx, oid, 123, &child_images));
 
   cls::rbd::ChildImageSpecs expected_child_images = {
-    {1, "image1"}, {1, "image2"}, {2, "image2"}};
+    {1, "", "image1"}, {1, "", "image2"}, {2, "", "image2"}};
   ASSERT_EQ(expected_child_images, child_images);
 
   // move snapshot to the trash
@@ -2545,17 +2545,17 @@ TEST_F(TestClsRbd, clone_parent)
   ASSERT_EQ(0, op_features_get(&ioctx, oid, &op_features));
   ASSERT_TRUE((op_features & expected_op_features) == expected_op_features);
 
-  expected_child_images = {{1, "image1"}, {2, "image2"}};
-  ASSERT_EQ(0, child_detach(&ioctx, oid, 123, {1, "image2"}));
+  expected_child_images = {{1, "", "image1"}, {2, "", "image2"}};
+  ASSERT_EQ(0, child_detach(&ioctx, oid, 123, {1, "", "image2"}));
   ASSERT_EQ(0, children_list(&ioctx, oid, 123, &child_images));
   ASSERT_EQ(expected_child_images, child_images);
 
-  ASSERT_EQ(0, child_detach(&ioctx, oid, 123, {2, "image2"}));
+  ASSERT_EQ(0, child_detach(&ioctx, oid, 123, {2, "", "image2"}));
 
   ASSERT_EQ(0, op_features_get(&ioctx, oid, &op_features));
   ASSERT_TRUE((op_features & expected_op_features) == expected_op_features);
 
-  ASSERT_EQ(0, child_detach(&ioctx, oid, 123, {1, "image1"}));
+  ASSERT_EQ(0, child_detach(&ioctx, oid, 123, {1, "", "image1"}));
   ASSERT_EQ(-ENOENT, children_list(&ioctx, oid, 123, &child_images));
 
   ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 234));
@@ -2566,6 +2566,37 @@ TEST_F(TestClsRbd, clone_parent)
   ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 123));
   ASSERT_EQ(0, op_features_get(&ioctx, oid, &op_features));
   ASSERT_TRUE((op_features & expected_op_features) == 0);
+}
+
+TEST_F(TestClsRbd, clone_parent_ns)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
+  ASSERT_EQ(0, snapshot_add(&ioctx, oid, 123, "user_snap"));
+
+  ASSERT_EQ(0, child_attach(&ioctx, oid, 123, {1, "ns1", "image1"}));
+  ASSERT_EQ(-EEXIST, child_attach(&ioctx, oid, 123, {1, "ns1", "image1"}));
+  ASSERT_EQ(0, child_attach(&ioctx, oid, 123, {1, "ns2", "image1"}));
+
+  cls::rbd::ChildImageSpecs child_images;
+  ASSERT_EQ(0, children_list(&ioctx, oid, 123, &child_images));
+
+  cls::rbd::ChildImageSpecs expected_child_images = {
+    {1, "ns1", "image1"}, {1, "ns2", "image1"}};
+  ASSERT_EQ(expected_child_images, child_images);
+
+  expected_child_images = {{1, "ns1", "image1"}};
+  ASSERT_EQ(0, child_detach(&ioctx, oid, 123, {1, "ns2", "image1"}));
+  ASSERT_EQ(0, children_list(&ioctx, oid, 123, &child_images));
+  ASSERT_EQ(expected_child_images, child_images);
+
+  ASSERT_EQ(0, child_detach(&ioctx, oid, 123, {1, "ns1", "image1"}));
+  ASSERT_EQ(-ENOENT, children_list(&ioctx, oid, 123, &child_images));
+
+  ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 123));
 }
 
 TEST_F(TestClsRbd, clone_child)

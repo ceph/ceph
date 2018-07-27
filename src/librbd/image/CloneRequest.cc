@@ -388,7 +388,9 @@ void CloneRequest<I>::v2_child_attach() {
 
   librados::ObjectWriteOperation op;
   cls_client::child_attach(&op, m_parent_image_ctx->snap_id,
-                           {m_imctx->md_ctx.get_id(), m_imctx->id});
+                           {m_imctx->md_ctx.get_id(),
+                            m_imctx->md_ctx.get_namespace(),
+                            m_imctx->id});
 
   auto aio_comp = create_rados_callback<
     CloneRequest<I>, &CloneRequest<I>::handle_v2_child_attach>(this);
