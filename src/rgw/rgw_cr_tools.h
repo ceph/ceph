@@ -3,6 +3,7 @@
 
 #include "rgw_cr_rados.h"
 #include "rgw_tools.h"
+#include "rgw_lc.h"
 
 
 struct rgw_user_create_params {
@@ -61,6 +62,14 @@ struct rgw_object_simple_put_params {
 
 using RGWObjectSimplePutCR = RGWSimpleWriteOnlyAsyncCR<rgw_object_simple_put_params>;
 
+
+struct rgw_bucket_lifecycle_config_params {
+  RGWBucketInfo bucket_info;
+  map<string, bufferlist> bucket_attrs;
+  RGWLifecycleConfiguration config;
+};
+
+using RGWBucketLifecycleConfigCR = RGWSimpleWriteOnlyAsyncCR<rgw_bucket_lifecycle_config_params>;
 
 
 #endif
