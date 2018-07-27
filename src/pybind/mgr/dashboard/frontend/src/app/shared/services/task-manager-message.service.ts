@@ -5,22 +5,43 @@ import { FinishedTask } from '../models/finished-task';
 import { Task } from '../models/task';
 import { ServicesModule } from './services.module';
 
+export class TaskMessageOperation {
+  running: string;
+  failure: string;
+  success: string;
+
+  constructor(running: string, failure: string, success: string) {
+    this.running = running;
+    this.failure = failure;
+    this.success = success;
+  }
+}
+
 class TaskManagerMessage {
-  descr: (metadata) => string;
-  running: (metadata) => string;
-  success: (metadata) => string;
-  error: (metadata) => object;
+  operation: TaskMessageOperation;
+  involves: (object) => string;
+  errors: (metadata) => object;
+
+  failure(metadata): string {
+    return `Failed to ${this.operation.failure} ${this.involves(metadata)}`;
+  }
+
+  running(metadata): string {
+    return `${this.operation.running} ${this.involves(metadata)}`;
+  }
+
+  success(metadata): string {
+    return `${this.operation.success} ${this.involves(metadata)}`;
+  }
 
   constructor(
-    descr: (metadata) => string,
-    running: (metadata) => string,
-    success: (metadata) => string,
-    error: (metadata) => object
+    operation: TaskMessageOperation,
+    involves: (metadata) => string,
+    errors?: (metadata) => object
   ) {
-    this.descr = descr;
-    this.running = running;
-    this.success = success;
-    this.error = error;
+    this.operation = operation;
+    this.involves = involves;
+    this.errors = errors || (() => ({}));
   }
 }
 
@@ -28,181 +49,119 @@ class TaskManagerMessage {
   providedIn: ServicesModule
 })
 export class TaskManagerMessageService {
-  messages = {
-    'rbd/create': new TaskManagerMessage(
-      (metadata) => `Create RBD '${metadata.pool_name}/${metadata.image_name}'`,
-      (metadata) => `Creating RBD '${metadata.pool_name}/${metadata.image_name}'`,
-      (metadata) =>
-        `RBD '${metadata.pool_name}/${metadata.image_name}' has been created successfully`,
-      (metadata) => {
-        return {
-          '17': `Name '${metadata.pool_name}/${metadata.image_name}' is already in use.`
-        };
-      }
-    ),
-    'rbd/edit': new TaskManagerMessage(
-      (metadata) => `Update RBD '${metadata.pool_name}/${metadata.image_name}'`,
-      (metadata) => `Updating RBD '${metadata.pool_name}/${metadata.image_name}'`,
-      (metadata) =>
-        `RBD '${metadata.pool_name}/${metadata.image_name}' has been updated successfully`,
-      (metadata) => {
-        return {
-          '17': `Name '${metadata.pool_name}/${metadata.name}' is already in use.`
-        };
-      }
-    ),
-    'rbd/delete': new TaskManagerMessage(
-      (metadata) => `Delete RBD '${metadata.pool_name}/${metadata.image_name}'`,
-      (metadata) => `Deleting RBD '${metadata.pool_name}/${metadata.image_name}'`,
-      (metadata) =>
-        `RBD '${metadata.pool_name}/${metadata.image_name}' has been deleted successfully`,
-      (metadata) => {
-        return {
-          '39': `RBD image contains snapshots.`
-        };
-      }
-    ),
-    'rbd/clone': new TaskManagerMessage(
-      (metadata) => `Clone RBD '${metadata.child_pool_name}/${metadata.child_image_name}'`,
-      (metadata) => `Cloning RBD '${metadata.child_pool_name}/${metadata.child_image_name}'`,
-      (metadata) =>
-        `RBD '${metadata.child_pool_name}/${
-          metadata.child_image_name
-        }' has been cloned successfully`,
-      (metadata) => {
-        return {
-          '17': `Name '${metadata.child_pool_name}/${
-            metadata.child_image_name
-          }' is already in use.`,
-          '22': `Snapshot must be protected.`
-        };
-      }
-    ),
-    'rbd/copy': new TaskManagerMessage(
-      (metadata) => `Copy RBD '${metadata.dest_pool_name}/${metadata.dest_image_name}'`,
-      (metadata) => `Copying RBD '${metadata.dest_pool_name}/${metadata.dest_image_name}'`,
-      (metadata) =>
-        `RBD '${metadata.dest_pool_name}/${metadata.dest_image_name}' has been copied successfully`,
-      (metadata) => {
-        return {
-          '17': `Name '${metadata.dest_pool_name}/${metadata.dest_image_name}' is already in use.`
-        };
-      }
-    ),
-    'rbd/flatten': new TaskManagerMessage(
-      (metadata) => `Flatten RBD '${metadata.pool_name}/${metadata.image_name}'`,
-      (metadata) => `Flattening RBD '${metadata.pool_name}/${metadata.image_name}'`,
-      (metadata) =>
-        `RBD '${metadata.pool_name}/${metadata.image_name}' has been flattened successfully`,
-      () => {
-        return {};
-      }
-    ),
-    'rbd/snap/create': new TaskManagerMessage(
-      (metadata) =>
-        `Create snapshot ` +
-        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
-      (metadata) =>
-        `Creating snapshot ` +
-        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
-      (metadata) =>
-        `Snapshot ` +
-        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
-        `has been created successfully`,
-      (metadata) => {
-        return {
-          '17': `Name '${metadata.snapshot_name}' is already in use.`
-        };
-      }
-    ),
-    'rbd/snap/edit': new TaskManagerMessage(
-      (metadata) =>
-        `Update snapshot ` +
-        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
-      (metadata) =>
-        `Updating snapshot ` +
-        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
-      (metadata) =>
-        `Snapshot ` +
-        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
-        `has been updated successfully`,
-      () => {
-        return {
-          '16': `Cannot unprotect snapshot because it contains child images.`
-        };
-      }
-    ),
-    'rbd/snap/delete': new TaskManagerMessage(
-      (metadata) =>
-        `Delete snapshot ` +
-        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
-      (metadata) =>
-        `Deleting snapshot ` +
-        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
-      (metadata) =>
-        `Snapshot ` +
-        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
-        `has been deleted successfully`,
-      () => {
-        return {
-          '16': `Snapshot is protected.`
-        };
-      }
-    ),
-    'rbd/snap/rollback': new TaskManagerMessage(
-      (metadata) =>
-        `Rollback snapshot ` +
-        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
-      (metadata) =>
-        `Rolling back snapshot ` +
-        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
-      (metadata) =>
-        `Snapshot ` +
-        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
-        `has been rolled back successfully`,
-      () => {
-        return {};
-      }
-    )
-  };
-
   defaultMessage = new TaskManagerMessage(
+    new TaskMessageOperation('Executing', 'execute', 'Executed'),
     (metadata) => {
-      return Components[metadata.component] || metadata.component || 'Unknown Task';
+      return (metadata && (Components[metadata.component] || metadata.component)) || 'unknown task';
     },
-    (metadata) => {
-      return (
-        'Executing ' + (Components[metadata.component] || metadata.component || 'unknown task')
-      );
-    },
-    (metadata) => 'Task executed successfully',
     () => {
       return {};
     }
   );
 
+  commonOperations = {
+    create: new TaskMessageOperation('Creating', 'create', 'Created'),
+    update: new TaskMessageOperation('Updating', 'update', 'Updated'),
+    delete: new TaskMessageOperation('Deleting', 'delete', 'Deleted')
+  };
+
+  rbd = {
+    default: (metadata) => `RBD '${metadata.pool_name}/${metadata.image_name}'`,
+    child: (metadata) => `RBD '${metadata.child_pool_name}/${metadata.child_image_name}'`,
+    destination: (metadata) => `RBD '${metadata.dest_pool_name}/${metadata.dest_image_name}'`,
+    snapshot: (metadata) =>
+      `RBD snapshot '${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`
+  };
+
+  messages = {
+    'rbd/create': new TaskManagerMessage(
+      this.commonOperations.create,
+      this.rbd.default,
+      (metadata) => ({
+        '17': `Name is already used by ${this.rbd.default(metadata)}.`
+      })
+    ),
+    'rbd/edit': new TaskManagerMessage(
+      this.commonOperations.update,
+      this.rbd.default,
+      (metadata) => ({
+        '17': `Name is already used by ${this.rbd.default(metadata)}.`
+      })
+    ),
+    'rbd/delete': new TaskManagerMessage(
+      this.commonOperations.delete,
+      this.rbd.default,
+      (metadata) => ({
+        '39': `${this.rbd.default(metadata)} contains snapshots.`
+      })
+    ),
+    'rbd/clone': new TaskManagerMessage(
+      new TaskMessageOperation('Cloning', 'clone', 'Cloned'),
+      this.rbd.child,
+      (metadata) => ({
+        '17': `Name is already used by ${this.rbd.child(metadata)}.`,
+        '22': `Snapshot of ${this.rbd.child(metadata)} must be protected.`
+      })
+    ),
+    'rbd/copy': new TaskManagerMessage(
+      new TaskMessageOperation('Copying', 'copy', 'Copied'),
+      this.rbd.destination,
+      (metadata) => ({
+        '17': `Name is already used by ${this.rbd.destination(metadata)}.`
+      })
+    ),
+    'rbd/flatten': new TaskManagerMessage(
+      new TaskMessageOperation('Flattening', 'flatten', 'Flattened'),
+      this.rbd.default
+    ),
+    'rbd/snap/create': new TaskManagerMessage(
+      this.commonOperations.create,
+      this.rbd.snapshot,
+      (metadata) => ({
+        '17': `Name is already used by ${this.rbd.snapshot(metadata)}.`
+      })
+    ),
+    'rbd/snap/edit': new TaskManagerMessage(
+      this.commonOperations.update,
+      this.rbd.snapshot,
+      (metadata) => ({
+        '16': `Cannot unprotect ${this.rbd.snapshot(metadata)} because it contains child images.`
+      })
+    ),
+    'rbd/snap/delete': new TaskManagerMessage(
+      this.commonOperations.delete,
+      this.rbd.snapshot,
+      (metadata) => ({
+        '16': `Cannot delete ${this.rbd.snapshot(metadata)} because it's protected.`
+      })
+    ),
+    'rbd/snap/rollback': new TaskManagerMessage(
+      new TaskMessageOperation('Rolling back', 'rollback', 'Rolled back'),
+      this.rbd.snapshot
+    )
+  };
+
   constructor() {}
 
-  getSuccessMessage(finishedTask: FinishedTask) {
-    const taskManagerMessage = this.messages[finishedTask.name] || this.defaultMessage;
-    return taskManagerMessage.success(finishedTask.metadata);
+  _getTaskTitle(task: Task) {
+    return this.messages[task.name] || this.defaultMessage;
   }
 
-  getErrorMessage(finishedTask: FinishedTask) {
-    const taskManagerMessage = this.messages[finishedTask.name] || this.defaultMessage;
+  getSuccessTitle(task: FinishedTask) {
+    return this._getTaskTitle(task).success(task.metadata);
+  }
+
+  getErrorMessage(task: FinishedTask) {
     return (
-      taskManagerMessage.error(finishedTask.metadata)[finishedTask.exception.code] ||
-      finishedTask.exception.detail
+      this._getTaskTitle(task).errors(task.metadata)[task.exception.code] || task.exception.detail
     );
   }
 
-  getDescription(task: Task) {
-    const taskManagerMessage = this.messages[task.name] || this.defaultMessage;
-    return taskManagerMessage.descr(task.metadata);
+  getErrorTitle(task: Task) {
+    return this._getTaskTitle(task).failure(task.metadata);
   }
 
-  getRunningMessage(task: Task) {
-    const taskManagerMessage = this.messages[task.name] || this.defaultMessage;
-    return taskManagerMessage.running(task.metadata);
+  getRunningTitle(task: Task) {
+    return this._getTaskTitle(task).running(task.metadata);
   }
 }
