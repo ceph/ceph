@@ -2640,6 +2640,99 @@ void PG::finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transac
   write_if_dirty(*t);
 }
 
+void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
+		    unsigned split_bits)
+{
+  dout(10) << __func__ << " from " << sources << " split_bits " << split_bits
+	   << dendl;
+  bool incomplete = false;
+  if (info.last_complete != info.last_update ||
+      info.is_incomplete() ||
+      info.dne()) {
+    dout(10) << __func__ << " target incomplete" << dendl;
+    incomplete = true;
+  }
+
+  PGLogEntryHandler handler{this, rctx->transaction};
+  pg_log.roll_forward(&handler);
+
+  info.last_complete = info.last_update;  // to fake out trim()
+  pg_log.reset_recovery_pointers();
+  pg_log.trim(info.last_update, info);
+
+  vector<PGLog*> log_from;
+  for (auto& i : sources) {
+    auto& source = i.second;
+    if (!source) {
+      dout(10) << __func__ << " source " << i.first << " missing" << dendl;
+      incomplete = true;
+      continue;
+    }
+    if (source->info.last_complete != source->info.last_update ||
+	source->info.is_incomplete() ||
+	source->info.dne()) {
+      dout(10) << __func__ << " source " << source->pg_id << " incomplete"
+	       << dendl;
+      incomplete = true;
+    }
+
+    // prepare log
+    PGLogEntryHandler handler{source.get(), rctx->transaction};
+    source->pg_log.roll_forward(&handler);
+    source->info.last_complete = source->info.last_update;  // to fake out trim()
+    source->pg_log.reset_recovery_pointers();
+    source->pg_log.trim(source->info.last_update, source->info);
+    log_from.push_back(&source->pg_log);
+
+    // wipe out source's pgmeta
+    rctx->transaction->remove(source->coll, source->pgmeta_oid);
+
+    // merge (and destroy source collection)
+    rctx->transaction->merge_collection(source->coll, coll, split_bits);
+
+    // combine stats
+    info.stats.add(source->info.stats);
+
+    // pull up last_update
+    info.last_update = std::max(info.last_update, source->info.last_update);
+
+    // adopt source's PastIntervals if target has none.  we can do this since
+    // pgp_num has been reduced prior to the merge, so the OSD mappings for
+    // the PGs are identical.
+    if (past_intervals.empty() && !source->past_intervals.empty()) {
+      dout(10) << __func__ << " taking source's past_intervals" << dendl;
+      past_intervals = source->past_intervals;
+    }
+  }
+
+  // merge_collection does this, but maybe all of our sources were missing.
+  rctx->transaction->collection_set_bits(coll, split_bits);
+
+  info.last_complete = info.last_update;
+  info.log_tail = info.last_update;
+  if (incomplete) {
+    info.last_backfill = hobject_t();
+  }
+
+  snap_mapper.update_bits(split_bits);
+
+  // merge logs
+  pg_log.merge_from(log_from, info.last_update);
+
+  // make sure we have a meaningful last_epoch_started/clean (if we were a
+  // placeholder)
+  if (info.last_epoch_started == 0) {
+    info.history.last_epoch_started =
+      info.history.last_epoch_clean = past_intervals.get_bounds().first;
+    dout(10) << __func__
+	     << " set last_epoch_started/clean based on past intervals"
+	     << dendl;
+  }
+
+  dirty_info = true;
+  dirty_big_info = true;
+}
+
 void PG::add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end)
 {
   ConnectionRef con = s->con;
