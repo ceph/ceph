@@ -42,9 +42,10 @@ if(HAS_VTA)
 endif()
 add_library(osd STATIC ${osd_srcs}
   $<TARGET_OBJECTS:cls_references_objs>
-  $<TARGET_OBJECTS:global_common_objs>
-  $<TARGET_OBJECTS:heap_profiler_objs>)
-target_link_libraries(osd ${LEVELDB_LIBRARIES} dmclock ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
+  $<TARGET_OBJECTS:global_common_objs>)
+target_link_libraries(osd PRIVATE
+  ${LEVELDB_LIBRARIES}
+  dmclock heap_profiler cpu_profiler ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp pg-tp)
 endif()

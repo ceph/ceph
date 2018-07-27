@@ -210,12 +210,6 @@ if(LINUX OR APPLE)
   list(APPEND EXTRALIBS ${LIB_RESOLV})
 endif()
 
-option(WITH_PROFILER "build extra profiler binaries" OFF)
-if(WITH_PROFILER)
-  find_package(gperftools REQUIRED)
-  list(APPEND EXTRALIBS profiler)
-endif(WITH_PROFILER)
-
 if(${ENABLE_COVERAGE})
   find_program(HAVE_GCOV gcov)
   if(NOT HAVE_GCOV)
@@ -299,27 +293,15 @@ endif(HAVE_XIO)
 
 # sort out which allocator to use
 if(ALLOCATOR STREQUAL "tcmalloc")
-  set(ALLOC_LIBS ${GPERFTOOLS_TCMALLOC_LIBRARY})
+  set(ALLOC_LIBS gperftools::tcmalloc)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
-  set(TCMALLOC_srcs perfglue/heap_profiler.cc)
 elseif(ALLOCATOR STREQUAL "tcmalloc_minimal")
-  set(ALLOC_LIBS ${GPERFTOOLS_TCMALLOC_MINIMAL_LIBRARY})
+  set(ALLOC_LIBS gperftools::tcmalloc_minimal)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
-  set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
 elseif(ALLOCATOR STREQUAL "jemalloc")
-  set(ALLOC_LIBS ${JEMALLOC_LIBRARIES})
+  set(ALLOC_LIBS JeMalloc::JeMalloc)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
-  set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-elseif(ALLOCATOR STREQUAL "libc")
-  set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-else()
-  set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-  message(FATAL_ERROR "Unsupported allocator selected: ${ALLOCATOR}")
 endif()
-
-# tcmalloc heap profiler
-set(heap_profiler_files ${TCMALLOC_srcs})
-add_library(heap_profiler_objs OBJECT ${heap_profiler_files})
 
 if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
@@ -631,14 +613,6 @@ set(common_mountcephfs_files
 add_library(common_mountcephfs_objs OBJECT
   ${common_mountcephfs_files})
 
-if(WITH_PROFILER)
-  list(APPEND libcommon_files
-    perfglue/cpu_profiler.cc)
-else()
-  list(APPEND libcommon_files
-    perfglue/disabled_stubs.cc)
-endif()
-
 add_library(common-objs OBJECT ${libcommon_files})
 
 set(ceph_common_objs
@@ -751,6 +725,9 @@ add_subdirectory(cls)
 # RADOS client/library
 add_subdirectory(osdc)
 
+# heal_profiler
+add_subdirectory(perfglue)
+
 add_library(rados_snap_set_diff_obj OBJECT librados/snap_set_diff.cc)
 
 add_subdirectory(include)
@@ -779,11 +756,12 @@ if (WITH_MGR)
       mgr/Mgr.cc
       mgr/Gil.cc
       mgr/mgr_commands.cc)
-  add_executable(ceph-mgr ${mgr_srcs}
-                 $<TARGET_OBJECTS:heap_profiler_objs>)
+  add_executable(ceph-mgr ${mgr_srcs})
   target_include_directories(ceph-mgr SYSTEM PRIVATE "${PYTHON_INCLUDE_DIRS}")
-  target_link_libraries(ceph-mgr osdc client global-static ceph-common
-      Boost::python ${MGR_PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
+  target_link_libraries(ceph-mgr
+    osdc client heap_profiler
+    global-static ceph-common
+    Boost::python ${MGR_PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
   install(TARGETS ceph-mgr DESTINATION bin)
 endif (WITH_MGR)
 
