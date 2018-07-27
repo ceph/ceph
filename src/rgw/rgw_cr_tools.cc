@@ -228,9 +228,11 @@ int RGWObjectSimplePutCR::Request::_send_request()
 {
   RGWDataAccess::ObjectRef obj;
 
+  CephContext *cct = store->ctx();
+
   int ret = params.bucket->get_object(params.key, &obj);
   if (ret < 0) {
-    cerr << "ERROR: failed to get object: " << cpp_strerror(-ret) << std::endl;
+    lderr(cct) << "ERROR: failed to get object: " << cpp_strerror(-ret) << dendl;
     return -ret;
   }
 
@@ -240,7 +242,29 @@ int RGWObjectSimplePutCR::Request::_send_request()
 
   ret = obj->put(params.data, params.attrs);
   if (ret < 0) {
-    cerr << "ERROR: put object returned error: " << cpp_strerror(-ret) << std::endl;
+    lderr(cct) << "ERROR: put object returned error: " << cpp_strerror(-ret) << dendl;
+  }
+
+  return 0;
+}
+
+template<>
+int RGWBucketLifecycleConfigCR::Request::_send_request()
+{
+  CephContext *cct = store->ctx();
+
+  RGWLC *lc = store->get_lc();
+  if (!lc) {
+    lderr(cct) << "ERROR: lifecycle object is not initialized!" << dendl;
+    return -EIO;
+  }
+
+  int ret = lc->set_bucket_config(params.bucket_info,
+                                  params.bucket_attrs,
+                                  &params.config);
+  if (ret < 0) {
+    lderr(cct) << "ERROR: failed to set lifecycle on bucke: " << cpp_strerror(-ret) << dendl;
+    return -ret;
   }
 
   return 0;
