@@ -37,3 +37,5 @@ cdef class Ioctx(object):
         public object safe_completions
         public object complete_completions
         public object lock
+
+        public object tracked_omap_iterators

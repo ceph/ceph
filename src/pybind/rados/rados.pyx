@@ -1559,6 +1559,10 @@ cdef class OmapIterator(object):
 
     cdef public Ioctx ioctx
     cdef rados_omap_iter_t ctx
+    cdef int read_prepared       # bool: was a read prepared for this iterator?
+
+    def flag_read_prepared(self):
+        self.read_prepared = 1
 
     def __cinit__(self, Ioctx ioctx):
         self.ioctx = ioctx
@@ -1576,8 +1580,12 @@ cdef class OmapIterator(object):
             char *val_ = NULL
             size_t len_
 
+        if 0 == self.read_prepared:
+            raise make_ex(-1, "omap iterator not prepared")
+
+        ret = -1
         with nogil:
-            ret = rados_omap_get_next(self.ctx, &key_, &val_, &len_)
+             ret = rados_omap_get_next(self.ctx, &key_, &val_, &len_)
 
         if ret != 0:
             raise make_ex(ret, "error iterating over the omap")
@@ -1639,6 +1647,9 @@ cdef class ObjectIterator(object):
     def __dealloc__(self):
         with nogil:
             rados_nobjects_list_close(self.ctx)
+
+        # Remove ourselves from our owner's tracking set:
+        self.ioctx.__remove_omap_iterator_from_tracking(self)
 
 
 cdef class XattrIterator(object):
@@ -2133,6 +2144,8 @@ cdef class Ioctx(object):
         self.safe_completions = []
         self.complete_completions = []
 
+        self.tracked_omap_iterators = []
+
     def __enter__(self):
         return self
 
@@ -2187,6 +2200,10 @@ cdef class Ioctx(object):
 
         completion_obj.rados_comp = completion
         return completion_obj
+
+    def __remove_omap_iterator_from_tracking(self, omap_iterator):
+        self.tracked_omap_iterators.remove(omap_iterator)
+            
 
     @requires(('object_name', str_type), ('oncomplete', opt(Callable)))
     def aio_stat(self, object_name, oncomplete):
@@ -3478,6 +3495,10 @@ returned %d, but should return zero on success." % (self.name, ret))
         if ret != 0:
             raise make_ex(ret, "Failed to operate read op for oid %s" % oid)
 
+        # Update omap iterators to signal available information/valid state:
+        for omap_iterator in self.tracked_omap_iterators:
+            omap_iterator.flag_read_prepared()
+
     @requires(('read_op', ReadOp), ('oid', str_type), ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)), ('flag', opt(int)))
     def operate_aio_read_op(self, read_op, oid, oncomplete=None, onsafe=None, flag=LIBRADOS_OPERATION_NOFLAG):
         """
@@ -3596,6 +3617,10 @@ returned %d, but should return zero on success." % (self.name, ret))
                                                     key_num, &iter_addr,  &prval)
             it = OmapIterator(self)
             it.ctx = iter_addr
+
+            # Add ourselves to the tracking list for this context:
+            self.tracked_omap_iterators.append(it)
+
             return it, int(prval)
         finally:
             free(_keys)
