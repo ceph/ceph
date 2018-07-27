@@ -38,7 +38,6 @@ export class TaskWrapperService {
         (resp) => {
           task.success = false;
           task.exception = resp.error;
-          this.notificationService.notifyTask(task);
           observer.error();
         },
         () => {
