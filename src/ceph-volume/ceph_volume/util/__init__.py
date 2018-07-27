@@ -16,6 +16,16 @@ def as_string(string):
     return string
 
 
+def as_bytes(string):
+    """
+    Ensure that whatever type of string is incoming, it is returned as bytes,
+    encoding to utf-8 otherwise
+    """
+    if isinstance(string, bytes):
+        return string
+    return string.encode('utf-8', errors='ignore')
+
+
 def str_to_int(string, round_down=True):
     """
     Parses a string number into an integer, optionally converting to a float
