@@ -5114,6 +5114,13 @@ std::vector<Option> get_rgw_options() {
         "This is needed for virtual hosting of buckets, unless configured via zonegroup "
         "configuration."),
 
+    Option("rgw_service_provider_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("Service provider name which is contained in http response headers")
+    .set_long_description(
+        "As S3 or other cloud storage providers do, http response headers should contain the name of the provider. "
+        "This name will be placed in http header 'Server'."),
+
     Option("rgw_content_length_compat", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("Multiple content length headers compatibility")
