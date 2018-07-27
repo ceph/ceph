@@ -97,48 +97,12 @@ if(HAVE_INTEL)
     set(object_format "elf64")
   endif()
   set(CMAKE_ASM_FLAGS "-f ${object_format}")
+  include(CheckYasm)
+  check_yasm_support(${object_format}
+    HAVE_GOOD_YASM_ELF64
+    HAVE_BETTER_YASM_ELF64)
 endif()
 
-execute_process(
-  COMMAND yasm -f "${object_format}" ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.s -o /dev/null
-  RESULT_VARIABLE no_yasm
-  OUTPUT_QUIET)
-if(no_yasm)
-  message(STATUS " we do not have a modern/working yasm")
-else(no_yasm)
-  message(STATUS " we have a modern and working yasm")
-  if(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64")
-    message(STATUS " we are x86_64")
-    set(save_quiet ${CMAKE_REQUIRED_QUIET})
-    set(CMAKE_REQUIRED_QUIET true)
-    include(CheckCXXSourceCompiles)
-    check_cxx_source_compiles("
-      #if defined(__x86_64__) && defined(__ILP32__)
-      #error x32
-      #endif
-      int main() {}
-      " not_arch_x32)
-    set(CMAKE_REQUIRED_QUIET ${save_quiet})
-    if(not_arch_x32)
-      message(STATUS " we are not x32")
-      set(HAVE_GOOD_YASM_ELF64 1)
-      execute_process(COMMAND yasm -f ${object_format} -i
-        ${CMAKE_SOURCE_DIR}/src/isa-l/include/
-        ${CMAKE_SOURCE_DIR}/src/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm
-        -o /dev/null
-        RESULT_VARIABLE rc
-        OUTPUT_QUIET)
-      if(NOT rc)
-        set(HAVE_BETTER_YASM_ELF64 1)
-        message(STATUS " yasm can also build the isa-l stuff")
-      endif(NOT rc)
-    else(not_arch_x32)
-      message(STATUS " we are x32; no yasm for you")
-    endif(not_arch_x32)
-  else(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64")
-    message(STATUS " we are not x86_64 && !x32")
-  endif(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64")
-endif(no_yasm)
 
 # require c++17
 if(CMAKE_VERSION VERSION_LESS "3.8")
