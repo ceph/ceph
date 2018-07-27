@@ -33,12 +33,14 @@ export class TaskManagerComponent implements OnInit {
 
   _handleTasks(executingTasks: ExecutingTask[], finishedTasks: FinishedTask[]) {
     for (const excutingTask of executingTasks) {
-      excutingTask.description = this.taskMessageManager.getRunningMessage(excutingTask);
+      excutingTask.description = this.taskMessageManager.getRunningTitle(excutingTask);
     }
     for (const finishedTask of finishedTasks) {
-      finishedTask.description = this.taskMessageManager.getDescription(finishedTask);
       if (finishedTask.success === false) {
+        finishedTask.description = this.taskMessageManager.getErrorTitle(finishedTask);
         finishedTask.errorMessage = this.taskMessageManager.getErrorMessage(finishedTask);
+      } else {
+        finishedTask.description = this.taskMessageManager.getSuccessTitle(finishedTask);
       }
     }
     this.executingTasks = executingTasks;

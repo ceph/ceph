@@ -6,10 +6,10 @@ export class CdNotification {
   title: string;
   type: NotificationType;
 
-  constructor(type: NotificationType = NotificationType.info, message?: string, title?: string) {
+  constructor(type: NotificationType = NotificationType.info, title?: string, message?: string) {
     this.type = type;
-    this.message = message;
     this.title = title;
+    this.message = message;
 
     /* string representation of the Date object so it can be directly compared
     with the timestamps parsed from localStorage */
