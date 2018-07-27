@@ -6220,7 +6220,7 @@ int namespace_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 }
 
 /**
- * Add a namespace to the namespace directory.
+ * Remove a namespace from the namespace directory.
  *
  * Input:
  * @param name the name of the namespace
