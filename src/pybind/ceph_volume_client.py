@@ -549,14 +549,14 @@ class CephFSVolumeClient(object):
         # of PGs already created by non-manila pools, then divide by ten.  That'll
         # give you a reasonable result on a system where you have "a few" manila
         # shares.
-        pg_num = ((pg_warn_max_per_osd * osd_count) - other_pgs) / 10
+        pg_num = ((pg_warn_max_per_osd * osd_count) - other_pgs) // 10
         # TODO Alternatively, respect an override set by the user.
 
         self._rados_command(
             'osd pool create',
             {
                 'pool': pool_name,
-                'pg_num': pg_num
+                'pg_num': int(pg_num),
             }
         )
 
