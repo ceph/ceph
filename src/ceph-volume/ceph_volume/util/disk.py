@@ -356,6 +356,10 @@ def get_partitions_facts(sys_block_path):
     return partition_metadata
 
 
+def is_mapper_device(device_name):
+    return device_name.startswith(('/dev/mapper', '/dev/dm-'))
+
+
 def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/dev/mapper'):
     """
     Captures all available devices from /sys/block/, including its partitions,
@@ -391,7 +395,7 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
         diskname = mapper_devs.get(block) or dev_devs.get(block)
 
         # If the mapper device is a logical volume it gets excluded
-        if diskname.startswith(('/dev/mapper', '/dev/dm-')):
+        if is_mapper_device(diskname):
             if lvm.is_lv(diskname):
                 continue
 
