@@ -13,146 +13,6 @@
 namespace librbd {
 namespace cls_client {
 
-void get_initial_metadata_start(librados::ObjectReadOperation *op) {
-  bufferlist bl, empty_bl, features_bl;
-  snapid_t snap = CEPH_NOSNAP;
-  encode(snap, bl);
-  op->exec("rbd", "get_size", bl);
-  op->exec("rbd", "get_object_prefix", empty_bl);
-
-  encode(snap, features_bl);
-  encode(true, features_bl);
-  op->exec("rbd", "get_features", features_bl);
-}
-
-int get_initial_metadata_finish(bufferlist::const_iterator *it,
-                                std::string *object_prefix,
-                                uint8_t *order,
-                                uint64_t *features) {
-  try {
-    uint64_t size;
-    uint64_t incompatible_features;
-    // get_size
-    decode(*order, *it);
-    decode(size, *it);
-    // get_object_prefix
-    decode(*object_prefix, *it);
-    // get_features
-    decode(*features, *it);
-    decode(incompatible_features, *it);
-  } catch (const buffer::error &err) {
-    return -EBADMSG;
-  }
-  return 0;
-
-}
-
-int get_initial_metadata(librados::IoCtx *ioctx, const std::string &oid,
-                         std::string *object_prefix, uint8_t *order, uint64_t *features)
-{
-  librados::ObjectReadOperation op;
-  get_initial_metadata_start(&op);
-
-  bufferlist out_bl;
-  int r = ioctx->operate(oid, &op, &out_bl);
-  if (r < 0) {
-    return r;
-  }
-
-  auto it = out_bl.cbegin();
-  return get_initial_metadata_finish(&it, object_prefix, order, features);
-}
-
-void get_mutable_metadata_start(librados::ObjectReadOperation *op,
-                                bool read_only) {
-  snapid_t snap = CEPH_NOSNAP;
-  bufferlist size_bl;
-  encode(snap, size_bl);
-  op->exec("rbd", "get_size", size_bl);
-
-  bufferlist features_bl;
-  encode(snap, features_bl);
-  encode(read_only, features_bl);
-  op->exec("rbd", "get_features", features_bl);
-
-  bufferlist empty_bl;
-  op->exec("rbd", "get_snapcontext", empty_bl);
-
-  get_parent_start(op, snap);
-
-  rados::cls::lock::get_lock_info_start(op, RBD_LOCK_NAME);
-}
-
-int get_mutable_metadata_finish(bufferlist::const_iterator *it,
-                                uint64_t *size, uint64_t *features,
-                                uint64_t *incompatible_features,
-                                std::map<rados::cls::lock::locker_id_t,
-                                         rados::cls::lock::locker_info_t> *lockers,
-                                bool *exclusive_lock, std::string *lock_tag,
-                                ::SnapContext *snapc, ParentInfo *parent) {
-  ceph_assert(size);
-  ceph_assert(features);
-  ceph_assert(incompatible_features);
-  ceph_assert(lockers);
-  ceph_assert(exclusive_lock);
-  ceph_assert(snapc);
-  ceph_assert(parent);
-
-  try {
-    uint8_t order;
-    // get_size
-    decode(order, *it);
-    decode(*size, *it);
-    // get_features
-    decode(*features, *it);
-    decode(*incompatible_features, *it);
-    // get_snapcontext
-    decode(*snapc, *it);
-    // get_parent
-    int r = get_parent_finish(it, &parent->spec, &parent->overlap);
-    if (r < 0) {
-      return r;
-    }
-
-    // get_lock_info
-    ClsLockType lock_type = LOCK_NONE;
-    r = rados::cls::lock::get_lock_info_finish(it, lockers, &lock_type,
-                 lock_tag);
-    if (r == 0) {
-      *exclusive_lock = (lock_type == LOCK_EXCLUSIVE);
-    }
-  } catch (const buffer::error &err) {
-    return -EBADMSG;
-  }
-  return 0;
-}
-
-int get_mutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
-                         bool read_only, uint64_t *size, uint64_t *features,
-                         uint64_t *incompatible_features,
-                         map<rados::cls::lock::locker_id_t,
-                             rados::cls::lock::locker_info_t> *lockers,
-                                     bool *exclusive_lock,
-                         string *lock_tag,
-                         ::SnapContext *snapc,
-                         ParentInfo *parent)
-{
-  librados::ObjectReadOperation op;
-  get_mutable_metadata_start(&op, read_only);
-
-  bufferlist out_bl;
-  int r = ioctx->operate(oid, &op, &out_bl);
-  if (r < 0) {
-    return r;
-  }
-
-  auto it = out_bl.cbegin();
-  return get_mutable_metadata_finish(&it, size, features,
-                                     incompatible_features, lockers,
-                                     exclusive_lock, lock_tag, snapc,
-                                     parent);
-}
-
 void create_image(librados::ObjectWriteOperation *op, uint64_t size,
                   uint8_t order, uint64_t features,
                   const std::string &object_prefix, int64_t data_pool_id)
@@ -177,24 +37,42 @@ int create_image(librados::IoCtx *ioctx, const std::string &oid,
   return ioctx->operate(oid, &op);
 }
 
-int get_features(librados::IoCtx *ioctx, const std::string &oid,
-               snapid_t snap_id, uint64_t *features)
+void get_features_start(librados::ObjectReadOperation *op, bool read_only)
 {
-  bufferlist inbl, outbl;
-  encode(snap_id, inbl);
+  bufferlist bl;
+  encode(static_cast<uint64_t>(CEPH_NOSNAP), bl);
+  encode(read_only, bl);
+  op->exec("rbd", "get_features", bl);
+}
 
-  int r = ioctx->exec(oid, "rbd", "get_features", inbl, outbl);
-  if (r < 0)
-    return r;
-
+int get_features_finish(bufferlist::const_iterator *it, uint64_t *features,
+                        uint64_t *incompatible_features)
+{
   try {
-    auto iter = outbl.cbegin();
-    decode(*features, iter);
+    decode(*features, *it);
+    decode(*incompatible_features, *it);
   } catch (const buffer::error &err) {
     return -EBADMSG;
   }
 
   return 0;
+}
+
+int get_features(librados::IoCtx *ioctx, const std::string &oid,
+                 bool read_only, uint64_t *features,
+                 uint64_t *incompatible_features)
+{
+  librados::ObjectReadOperation op;
+  get_features_start(&op, read_only);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(oid, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto it = out_bl.cbegin();
+  return get_features_finish(&it, features, incompatible_features);
 }
 
 void set_features(librados::ObjectWriteOperation *op, uint64_t features,
@@ -216,22 +94,37 @@ int set_features(librados::IoCtx *ioctx, const std::string &oid,
   return ioctx->operate(oid, &op);
 }
 
-int get_object_prefix(librados::IoCtx *ioctx, const std::string &oid,
-                      std::string *object_prefix)
+void get_object_prefix_start(librados::ObjectReadOperation *op)
 {
-  bufferlist inbl, outbl;
-  int r = ioctx->exec(oid, "rbd", "get_object_prefix", inbl, outbl);
-  if (r < 0)
-    return r;
+  bufferlist bl;
+  op->exec("rbd", "get_object_prefix", bl);
+}
 
+int get_object_prefix_finish(bufferlist::const_iterator *it,
+                             std::string *object_prefix)
+{
   try {
-    auto iter = outbl.cbegin();
-    decode(*object_prefix, iter);
+    decode(*object_prefix, *it);
   } catch (const buffer::error &err) {
     return -EBADMSG;
   }
-
   return 0;
+}
+
+int get_object_prefix(librados::IoCtx *ioctx, const std::string &oid,
+                      std::string *object_prefix)
+{
+  librados::ObjectReadOperation op;
+  get_object_prefix_start(&op);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(oid, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto it = out_bl.cbegin();
+  return get_object_prefix_finish(&it, object_prefix);
 }
 
 void get_data_pool_start(librados::ObjectReadOperation *op) {
@@ -263,25 +156,39 @@ int get_data_pool(librados::IoCtx *ioctx, const std::string &oid,
   return get_data_pool_finish(&it, data_pool_id);
 }
 
-int get_size(librados::IoCtx *ioctx, const std::string &oid,
-             snapid_t snap_id, uint64_t *size, uint8_t *order)
+void get_size_start(librados::ObjectReadOperation *op, snapid_t snap_id)
 {
-  bufferlist inbl, outbl;
-  encode(snap_id, inbl);
+  bufferlist bl;
+  encode(snap_id, bl);
+  op->exec("rbd", "get_size", bl);
+}
 
-  int r = ioctx->exec(oid, "rbd", "get_size", inbl, outbl);
-  if (r < 0)
-    return r;
-
+int get_size_finish(bufferlist::const_iterator *it, uint64_t *size,
+                    uint8_t *order)
+{
   try {
-    auto iter = outbl.cbegin();
-    decode(*order, iter);
-    decode(*size, iter);
+    decode(*order, *it);
+    decode(*size, *it);
   } catch (const buffer::error &err) {
     return -EBADMSG;
   }
-
   return 0;
+}
+
+int get_size(librados::IoCtx *ioctx, const std::string &oid,
+             snapid_t snap_id, uint64_t *size, uint8_t *order)
+{
+  librados::ObjectReadOperation op;
+  get_size_start(&op, snap_id);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(oid, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto it = out_bl.cbegin();
+  return get_size_finish(&it, size, order);
 }
 
 int set_size(librados::IoCtx *ioctx, const std::string &oid,
@@ -356,29 +263,15 @@ void set_parent(librados::ObjectWriteOperation *op,
   op->exec("rbd", "set_parent", in_bl);
 }
 
-void get_flags_start(librados::ObjectReadOperation *op,
-                     const std::vector<snapid_t> &snap_ids) {
+void get_flags_start(librados::ObjectReadOperation *op, snapid_t snap_id) {
   bufferlist in_bl;
-  encode(static_cast<snapid_t>(CEPH_NOSNAP), in_bl);
-
+  encode(static_cast<snapid_t>(snap_id), in_bl);
   op->exec("rbd", "get_flags", in_bl);
-  for (size_t i = 0; i < snap_ids.size(); ++i) {
-    bufferlist snap_bl;
-    encode(snap_ids[i], snap_bl);
-    op->exec("rbd", "get_flags", snap_bl);
-  }
-
 }
 
-int get_flags_finish(bufferlist::const_iterator *it, uint64_t *flags,
-                     const std::vector<snapid_t> &snap_ids,
-                     std::vector<uint64_t> *snap_flags) {
-  snap_flags->resize(snap_ids.size());
+int get_flags_finish(bufferlist::const_iterator *it, uint64_t *flags) {
   try {
     decode(*flags, *it);
-    for (size_t i = 0; i < snap_flags->size(); ++i) {
-      decode((*snap_flags)[i], *it);
-    }
   } catch (const buffer::error &err) {
     return -EBADMSG;
   }
@@ -386,11 +279,10 @@ int get_flags_finish(bufferlist::const_iterator *it, uint64_t *flags,
 }
 
 int get_flags(librados::IoCtx *ioctx, const std::string &oid,
-              uint64_t *flags, const std::vector<snapid_t> &snap_ids,
-              vector<uint64_t> *snap_flags)
+              snapid_t snap_id, uint64_t *flags)
 {
   librados::ObjectReadOperation op;
-  get_flags_start(&op, snap_ids);
+  get_flags_start(&op, snap_id);
 
   bufferlist out_bl;
   int r = ioctx->operate(oid, &op, &out_bl);
@@ -399,7 +291,7 @@ int get_flags(librados::IoCtx *ioctx, const std::string &oid,
   }
 
   auto it = out_bl.cbegin();
-  return get_flags_finish(&it, flags, snap_ids, snap_flags);
+  return get_flags_finish(&it, flags);
 }
 
 void set_flags(librados::ObjectWriteOperation *op, snapid_t snap_id,
@@ -549,16 +441,15 @@ int get_children(librados::IoCtx *ioctx, const std::string &oid,
   return get_children_finish(&it, &children);
 }
 
-void snapshot_info_get_start(librados::ObjectReadOperation *op,
-                             snapid_t snap_id)
+void snapshot_get_start(librados::ObjectReadOperation *op, snapid_t snap_id)
 {
   bufferlist bl;
   encode(snap_id, bl);
   op->exec("rbd", "snapshot_get", bl);
 }
 
-int snapshot_info_get_finish(bufferlist::const_iterator* it,
-                             cls::rbd::SnapshotInfo* snap_info)
+int snapshot_get_finish(bufferlist::const_iterator* it,
+                        cls::rbd::SnapshotInfo* snap_info)
 {
   try {
     decode(*snap_info, *it);
@@ -568,60 +459,11 @@ int snapshot_info_get_finish(bufferlist::const_iterator* it,
   return 0;
 }
 
-void snapshot_get_start(librados::ObjectReadOperation *op,
-                        const std::vector<snapid_t> &ids)
-{
-  for (auto snap_id : ids) {
-    snapshot_info_get_start(op, snap_id);
-    get_parent_start(op, snap_id);
-    get_protection_status_start(op, snap_id);
-  }
-}
-
-int snapshot_get_finish(bufferlist::const_iterator *it,
-                        const std::vector<snapid_t> &ids,
-                        std::vector<cls::rbd::SnapshotInfo>* snaps,
-                        std::vector<ParentInfo> *parents,
-                        std::vector<uint8_t> *protection_statuses)
-{
-  snaps->resize(ids.size());
-  parents->resize(ids.size());
-  protection_statuses->resize(ids.size());
-  try {
-    for (size_t i = 0; i < snaps->size(); ++i) {
-      // snapshot_get
-      int r = snapshot_info_get_finish(it, &(*snaps)[i]);
-      if (r < 0) {
-        return r;
-      }
-
-      // get_parent
-      r = get_parent_finish(it, &(*parents)[i].spec,
-                            &(*parents)[i].overlap);
-      if (r < 0) {
-        return r;
-      }
-
-      // get_protection_status
-      r = get_protection_status_finish(it, &(*protection_statuses)[i]);
-      if (r < 0) {
-        return r;
-      }
-    }
-  } catch (const buffer::error &err) {
-    return -EBADMSG;
-  }
-  return 0;
-}
-
-int snapshot_get(librados::IoCtx* ioctx, const std::string& oid,
-                 const std::vector<snapid_t>& ids,
-                 std::vector<cls::rbd::SnapshotInfo>* snaps,
-                 std::vector<ParentInfo> *parents,
-                 std::vector<uint8_t> *protection_statuses)
+int snapshot_get(librados::IoCtx *ioctx, const std::string &oid,
+                 snapid_t snap_id, cls::rbd::SnapshotInfo* snap_info)
 {
   librados::ObjectReadOperation op;
-  snapshot_get_start(&op, ids);
+  snapshot_get_start(&op, snap_id);
 
   bufferlist out_bl;
   int r = ioctx->operate(oid, &op, &out_bl);
@@ -630,7 +472,7 @@ int snapshot_get(librados::IoCtx* ioctx, const std::string& oid,
   }
 
   auto it = out_bl.cbegin();
-  return snapshot_get_finish(&it, ids, snaps, parents, protection_statuses);
+  return snapshot_get_finish(&it, snap_info);
 }
 
 void snapshot_add(librados::ObjectWriteOperation *op, snapid_t snap_id,
@@ -705,67 +547,30 @@ int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
   return get_snapcontext_finish(&bl_it, snapc);
 }
 
-void snapshot_list_start(librados::ObjectReadOperation *op,
-                         const std::vector<snapid_t> &ids) {
-  for (auto snap_id : ids) {
-    bufferlist bl1, bl2;
-    encode(snap_id, bl1);
-    op->exec("rbd", "get_snapshot_name", bl1);
-    encode(snap_id, bl2);
-    op->exec("rbd", "get_size", bl2);
-    get_parent_start(op, snap_id);
-    get_protection_status_start(op, snap_id);
-  }
+void get_snapshot_name_start(librados::ObjectReadOperation *op,
+                             snapid_t snap_id)
+{
+  bufferlist bl;
+  encode(snap_id, bl);
+  op->exec("rbd", "get_snapshot_name", bl);
 }
 
-int snapshot_list_finish(bufferlist::const_iterator *it,
-                         const std::vector<snapid_t> &ids,
-                         std::vector<string> *names,
-                         std::vector<uint64_t> *sizes,
-                         std::vector<ParentInfo> *parents,
-                         std::vector<uint8_t> *protection_statuses)
+int get_snapshot_name_finish(bufferlist::const_iterator *it,
+                             std::string *name)
 {
-  names->resize(ids.size());
-  sizes->resize(ids.size());
-  parents->resize(ids.size());
-  protection_statuses->resize(ids.size());
   try {
-    for (size_t i = 0; i < names->size(); ++i) {
-      uint8_t order;
-      // get_snapshot_name
-      decode((*names)[i], *it);
-      // get_size
-      decode(order, *it);
-      decode((*sizes)[i], *it);
-
-      // get_parent
-      int r = get_parent_finish(it, &(*parents)[i].spec,
-                                &(*parents)[i].overlap);
-      if (r < 0) {
-        return r;
-      }
-
-      // get_protection_status
-      r = get_protection_status_finish(it, &(*protection_statuses)[i]);
-      if (r < 0) {
-        return r;
-      }
-    }
+    decode(*name, *it);
   } catch (const buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
 }
 
-int snapshot_list(librados::IoCtx *ioctx, const std::string &oid,
-                  const std::vector<snapid_t> &ids,
-                  std::vector<string> *names,
-                  std::vector<uint64_t> *sizes,
-                  std::vector<ParentInfo> *parents,
-                  std::vector<uint8_t> *protection_statuses)
+int get_snapshot_name(librados::IoCtx *ioctx, const std::string &oid,
+                      snapid_t snap_id, std::string *name)
 {
   librados::ObjectReadOperation op;
-  snapshot_list_start(&op, ids);
+  get_snapshot_name_start(&op, snap_id);
 
   bufferlist out_bl;
   int r = ioctx->operate(oid, &op, &out_bl);
@@ -774,43 +579,33 @@ int snapshot_list(librados::IoCtx *ioctx, const std::string &oid,
   }
 
   auto it = out_bl.cbegin();
-  return snapshot_list_finish(&it, ids, names, sizes, parents,
-                              protection_statuses);
+  return get_snapshot_name_finish(&it, name);
 }
 
-void snapshot_timestamp_list_start(librados::ObjectReadOperation *op,
-                                   const std::vector<snapid_t> &ids)
+void get_snapshot_timestamp_start(librados::ObjectReadOperation *op,
+                                  snapid_t snap_id)
 {
-  for (auto snap_id : ids) {
-    bufferlist bl;
-    encode(snap_id, bl);
-    op->exec("rbd", "get_snapshot_timestamp", bl);
-  }
+  bufferlist bl;
+  encode(snap_id, bl);
+  op->exec("rbd", "get_snapshot_timestamp", bl);
 }
 
-int snapshot_timestamp_list_finish(bufferlist::const_iterator *it,
-                                   const std::vector<snapid_t> &ids,
-                                   std::vector<utime_t> *timestamps)
+int get_snapshot_timestamp_finish(bufferlist::const_iterator *it,
+                                  utime_t *timestamp)
 {
-  timestamps->resize(ids.size());
   try {
-    for (size_t i = 0; i < timestamps->size(); ++i) {
-      utime_t t;
-      decode(t, *it);
-      (*timestamps)[i] = t;
-    }
+    decode(*timestamp, *it);
   } catch (const buffer::error &err) {
     return -EBADMSG;
   }
   return 0;
 }
 
-int snapshot_timestamp_list(librados::IoCtx *ioctx, const std::string &oid,
-                            const std::vector<snapid_t> &ids,
-                            std::vector<utime_t> *timestamps)
+int get_snapshot_timestamp(librados::IoCtx *ioctx, const std::string &oid,
+                           snapid_t snap_id, utime_t *timestamp)
 {
   librados::ObjectReadOperation op;
-  snapshot_timestamp_list_start(&op, ids);
+  get_snapshot_timestamp_start(&op, snap_id);
 
   bufferlist out_bl;
   int r = ioctx->operate(oid, &op, &out_bl);
@@ -819,7 +614,7 @@ int snapshot_timestamp_list(librados::IoCtx *ioctx, const std::string &oid,
   }
 
   auto it = out_bl.cbegin();
-  return snapshot_timestamp_list_finish(&it, ids, timestamps);
+  return get_snapshot_timestamp_finish(&it, timestamp);
 }
 
 void old_snapshot_add(librados::ObjectWriteOperation *op,

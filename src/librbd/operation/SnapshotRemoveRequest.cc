@@ -115,7 +115,7 @@ void SnapshotRemoveRequest<I>::get_snap() {
   ldout(cct, 5) << dendl;
 
   librados::ObjectReadOperation op;
-  cls_client::snapshot_info_get_start(&op, m_snap_id);
+  cls_client::snapshot_get_start(&op, m_snap_id);
 
   auto aio_comp = create_rados_callback<
     SnapshotRemoveRequest<I>,
@@ -136,7 +136,7 @@ void SnapshotRemoveRequest<I>::handle_get_snap(int r) {
     cls::rbd::SnapshotInfo snap_info;
 
     auto it = m_out_bl.cbegin();
-    r = cls_client::snapshot_info_get_finish(&it, &snap_info);
+    r = cls_client::snapshot_get_finish(&it, &snap_info);
     if (r == 0) {
       m_child_attached = (snap_info.child_count > 0);
     }

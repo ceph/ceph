@@ -22,34 +22,6 @@ namespace librados {
 namespace librbd {
 namespace cls_client {
 
-// high-level interface to the header
-void get_initial_metadata_start(librados::ObjectReadOperation *op);
-int get_initial_metadata_finish(bufferlist::const_iterator *it,
-                                std::string *object_prefix,
-                                uint8_t *order,
-                                uint64_t *features);
-int get_initial_metadata(librados::IoCtx *ioctx, const std::string &oid,
-                         std::string *object_prefix, uint8_t *order, uint64_t *features);
-
-void get_mutable_metadata_start(librados::ObjectReadOperation *op,
-                                bool read_only);
-int get_mutable_metadata_finish(bufferlist::const_iterator *it,
-                                uint64_t *size, uint64_t *features,
-                                uint64_t *incompatible_features,
-                                std::map<rados::cls::lock::locker_id_t,
-                                         rados::cls::lock::locker_info_t> *lockers,
-                                bool *exclusive_lock, std::string *lock_tag,
-              ::SnapContext *snapc, ParentInfo *parent);
-int get_mutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
-                         bool read_only, uint64_t *size, uint64_t *features,
-                         uint64_t *incompatible_features,
-                         map<rados::cls::lock::locker_id_t,
-                             rados::cls::lock::locker_info_t> *lockers,
-                         bool *exclusive_lock,
-                         std::string *lock_tag,
-                         ::SnapContext *snapc,
-                         ParentInfo *parent);
-
 // low-level interface (mainly for testing)
 void create_image(librados::ObjectWriteOperation *op, uint64_t size,
                   uint8_t order, uint64_t features,
@@ -57,18 +29,32 @@ void create_image(librados::ObjectWriteOperation *op, uint64_t size,
 int create_image(librados::IoCtx *ioctx, const std::string &oid,
                  uint64_t size, uint8_t order, uint64_t features,
                  const std::string &object_prefix, int64_t data_pool_id);
+
+void get_features_start(librados::ObjectReadOperation *op, bool read_only);
+int get_features_finish(bufferlist::const_iterator *it, uint64_t *features,
+                        uint64_t *incompatible_features);
 int get_features(librados::IoCtx *ioctx, const std::string &oid,
-                 snapid_t snap_id, uint64_t *features);
+                 bool read_only, uint64_t *features,
+                 uint64_t *incompatible_features);
 void set_features(librados::ObjectWriteOperation *op, uint64_t features,
                   uint64_t mask);
 int set_features(librados::IoCtx *ioctx, const std::string &oid,
                  uint64_t features, uint64_t mask);
+
+void get_object_prefix_start(librados::ObjectReadOperation *op);
+int get_object_prefix_finish(bufferlist::const_iterator *it,
+                             std::string *object_prefix);
 int get_object_prefix(librados::IoCtx *ioctx, const std::string &oid,
                       std::string *object_prefix);
+
 void get_data_pool_start(librados::ObjectReadOperation *op);
 int get_data_pool_finish(bufferlist::const_iterator *it, int64_t *data_pool_id);
 int get_data_pool(librados::IoCtx *ioctx, const std::string &oid,
                   int64_t *data_pool_id);
+
+void get_size_start(librados::ObjectReadOperation *op, snapid_t snap_id);
+int get_size_finish(bufferlist::const_iterator *it, uint64_t *size,
+                    uint8_t *order);
 int get_size(librados::IoCtx *ioctx, const std::string &oid,
              snapid_t snap_id, uint64_t *size, uint8_t *order);
 int set_size(librados::IoCtx *ioctx, const std::string &oid,
@@ -86,16 +72,15 @@ int set_parent(librados::IoCtx *ioctx, const std::string &oid,
                const ParentSpec &pspec, uint64_t parent_overlap);
 void set_parent(librados::ObjectWriteOperation *op,
                 const ParentSpec &pspec, uint64_t parent_overlap);
-void get_flags_start(librados::ObjectReadOperation *op,
-                     const std::vector<snapid_t> &snap_ids);
-int get_flags_finish(bufferlist::const_iterator *it, uint64_t *flags,
-                     const std::vector<snapid_t> &snap_ids,
-                     std::vector<uint64_t> *snap_flags);
+
+void get_flags_start(librados::ObjectReadOperation *op, snapid_t snap_id);
+int get_flags_finish(bufferlist::const_iterator *it, uint64_t *flags);
 int get_flags(librados::IoCtx *ioctx, const std::string &oid,
-              uint64_t *flags, const std::vector<snapid_t> &snap_ids,
-              vector<uint64_t> *snap_flags);
+              snapid_t snap_id, uint64_t *flags);
+
 void set_flags(librados::ObjectWriteOperation *op, snapid_t snap_id,
                uint64_t flags, uint64_t mask);
+
 void op_features_get_start(librados::ObjectReadOperation *op);
 int op_features_get_finish(bufferlist::const_iterator *it, uint64_t *op_features);
 int op_features_get(librados::IoCtx *ioctx, const std::string &oid,
@@ -121,23 +106,12 @@ int get_children_finish(bufferlist::const_iterator *it,
 int get_children(librados::IoCtx *ioctx, const std::string &oid,
                  const ParentSpec &pspec, set<string>& children);
 
-void snapshot_info_get_start(librados::ObjectReadOperation* op,
-                             snapid_t snap_id);
-int snapshot_info_get_finish(bufferlist::const_iterator* it,
-                             cls::rbd::SnapshotInfo* snap_info);
-
-void snapshot_get_start(librados::ObjectReadOperation *op,
-                        const std::vector<snapid_t> &ids);
-int snapshot_get_finish(bufferlist::const_iterator *it,
-                        const std::vector<snapid_t> &ids,
-                        std::vector<cls::rbd::SnapshotInfo>* snaps,
-                        std::vector<ParentInfo> *parents,
-                        std::vector<uint8_t> *protection_statuses);
-int snapshot_get(librados::IoCtx* ioctx, const std::string& oid,
-                 const std::vector<snapid_t>& ids,
-                 std::vector<cls::rbd::SnapshotInfo>* snaps,
-                 std::vector<ParentInfo> *parents,
-                 std::vector<uint8_t> *protection_statuses);
+void snapshot_get_start(librados::ObjectReadOperation* op,
+                        snapid_t snap_id);
+int snapshot_get_finish(bufferlist::const_iterator* it,
+                        cls::rbd::SnapshotInfo* snap_info);
+int snapshot_get(librados::IoCtx *ioctx, const std::string &oid,
+                 snapid_t snap_id, cls::rbd::SnapshotInfo* snap_info);
 
 void snapshot_add(librados::ObjectWriteOperation *op, snapid_t snap_id,
                   const std::string &snap_name,
@@ -156,30 +130,20 @@ int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
                     ::SnapContext *snapc);
 
 /// NOTE: remove after Luminous is retired
-void snapshot_list_start(librados::ObjectReadOperation *op,
-                         const std::vector<snapid_t> &ids);
-int snapshot_list_finish(bufferlist::const_iterator *it,
-                         const std::vector<snapid_t> &ids,
-                         std::vector<string> *names,
-                         std::vector<uint64_t> *sizes,
-                         std::vector<ParentInfo> *parents,
-                         std::vector<uint8_t> *protection_statuses);
-int snapshot_list(librados::IoCtx *ioctx, const std::string &oid,
-                  const std::vector<snapid_t> &ids,
-                  std::vector<string> *names,
-                  std::vector<uint64_t> *sizes,
-                  std::vector<ParentInfo> *parents,
-                  std::vector<uint8_t> *protection_statuses);
+void get_snapshot_name_start(librados::ObjectReadOperation *op,
+                             snapid_t snap_id);
+int get_snapshot_name_finish(bufferlist::const_iterator *it,
+                             std::string *name);
+int get_snapshot_name(librados::IoCtx *ioctx, const std::string &oid,
+                      snapid_t snap_id, std::string *name);
 
 /// NOTE: remove after Luminous is retired
-void snapshot_timestamp_list_start(librados::ObjectReadOperation *op,
-                                   const std::vector<snapid_t> &ids);
-int snapshot_timestamp_list_finish(bufferlist::const_iterator *it,
-                                   const std::vector<snapid_t> &ids,
-                                   std::vector<utime_t> *timestamps);
-int snapshot_timestamp_list(librados::IoCtx *ioctx, const std::string &oid,
-                            const std::vector<snapid_t> &ids,
-                            std::vector<utime_t> *timestamps);
+void get_snapshot_timestamp_start(librados::ObjectReadOperation *op,
+                                  snapid_t snap_id);
+int get_snapshot_timestamp_finish(bufferlist::const_iterator *it,
+                                  utime_t *timestamp);
+int get_snapshot_timestamp(librados::IoCtx *ioctx, const std::string &oid,
+                           snapid_t snap_id, utime_t *timestamp);
 
 void get_all_features_start(librados::ObjectReadOperation *op);
 int get_all_features_finish(bufferlist::const_iterator *it,
@@ -202,6 +166,7 @@ int set_protection_status(librados::IoCtx *ioctx, const std::string &oid,
                           snapid_t snap_id, uint8_t protection_status);
 void set_protection_status(librados::ObjectWriteOperation *op,
                            snapid_t snap_id, uint8_t protection_status);
+
 int snapshot_get_limit(librados::IoCtx *ioctx, const std::string &oid,
                        uint64_t *limit);
 void snapshot_set_limit(librados::ObjectWriteOperation *op,
@@ -278,7 +243,6 @@ int children_list_finish(bufferlist::const_iterator *it,
 int children_list(librados::IoCtx *ioctx, const std::string &oid,
                   snapid_t snap_id,
                   cls::rbd::ChildImageSpecs *child_images);
-
 int migration_set(librados::IoCtx *ioctx, const std::string &oid,
                   const cls::rbd::MigrationSpec &migration_spec);
 void migration_set(librados::ObjectWriteOperation *op,

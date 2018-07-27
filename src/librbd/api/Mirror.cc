@@ -585,9 +585,9 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
 
     for (const auto& img_pair : images) {
       uint64_t features;
-      r = cls_client::get_features(&io_ctx,
-                                   util::header_name(img_pair.second),
-                                   CEPH_NOSNAP, &features);
+      uint64_t incompatible_features;
+      r = cls_client::get_features(&io_ctx, util::header_name(img_pair.second),
+                                   true, &features, &incompatible_features);
       if (r < 0) {
         lderr(cct) << "error getting features for image " << img_pair.first
                    << ": " << cpp_strerror(r) << dendl;

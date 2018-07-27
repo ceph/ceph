@@ -58,7 +58,7 @@ private:
    *            V2_GET_METADATA                            <apply>
    *                |                                         |
    *                v                                         |
-   *            V2_GET_FLAGS                                  |
+   *            V2_GET_PARENT                                 |
    *                |                                         |
    *                v (skip if not enabled)                   |
    *            V2_GET_OP_FEATURES                            |
@@ -66,16 +66,13 @@ private:
    *                v                                         |
    *            V2_GET_GROUP                                  |
    *                |                                         |
-   *                v                                         |
+   *                |     -EOPNOTSUPP                         |
+   *                |   * * * *                               |
+   *                |   *     *                               |
+   *                v   v     *                               |
    *            V2_GET_SNAPSHOTS (skip if no snaps)           |
-   *                |       .                                 |
-   *                |       v (pre-mimic OSD)                 |
-   *                |   V2_GET_SNAPSHOTS_LEGACY               |
-   *                |       |                                 |
-   *                |       v                                 |
-   *                |   V2_GET_SNAP_TIMESTAMPS                |
-   *                |       |                                 |
-   *                v       v                                 |
+   *                |                                         |
+   *                v                                         |
    *            V2_REFRESH_PARENT (skip if no parent or       |
    *                |              refresh not needed)        |
    *                v                                         |
@@ -132,6 +129,8 @@ private:
 
   bufferlist m_out_bl;
 
+  bool m_legacy_snapshot = false;
+
   uint8_t m_order = 0;
   uint64_t m_size = 0;
   uint64_t m_features = 0;
@@ -178,11 +177,11 @@ private:
   void send_v2_get_mutable_metadata();
   Context *handle_v2_get_mutable_metadata(int *result);
 
+  void send_v2_get_parent();
+  Context *handle_v2_get_parent(int *result);
+
   void send_v2_get_metadata();
   Context *handle_v2_get_metadata(int *result);
-
-  void send_v2_get_flags();
-  Context *handle_v2_get_flags(int *result);
 
   void send_v2_get_op_features();
   Context *handle_v2_get_op_features(int *result);
@@ -195,9 +194,6 @@ private:
 
   void send_v2_get_snapshots_legacy();
   Context *handle_v2_get_snapshots_legacy(int *result);
-
-  void send_v2_get_snap_timestamps();
-  Context *handle_v2_get_snap_timestamps(int *result);
 
   void send_v2_refresh_parent();
   Context *handle_v2_refresh_parent(int *result);
