@@ -11,17 +11,15 @@ static seastar::future<> test_config()
   return ceph::common::sharded_conf().start().then([] {
     return ceph::common::sharded_conf().invoke_on(0, &Config::start);
   }).then([] {
-    return ceph::common::sharded_conf().invoke_on_all([](auto& config) {
+    return ceph::common::sharded_conf().invoke_on_all([](Config& config) {
       return config.set_val("osd_tracing", "true");
     });
   }).then([] {
-    return ceph::common::local_conf().get_val<bool>("osd_tracing");
-  }).then([](bool osd_tracing) {
-    if (osd_tracing) {
-      return seastar::make_ready_future<>();
-    } else {
-      throw std::runtime_error("run osd_tracing");
-    }
+    return ceph::common::sharded_conf().invoke_on_all([](Config& config) {
+      if (!config.get_val<bool>("osd_tracing")) {
+        throw std::runtime_error("run osd_tracing");
+      }
+    });
   }).then([] {
     return ceph::common::sharded_conf().stop();
   });
