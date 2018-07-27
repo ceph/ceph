@@ -63,7 +63,9 @@ void DetachChildRequest<I>::clone_v2_child_detach() {
 
   librados::ObjectWriteOperation op;
   cls_client::child_detach(&op, m_parent_spec.snap_id,
-                           {m_image_ctx.md_ctx.get_id(), m_image_ctx.id});
+                           {m_image_ctx.md_ctx.get_id(),
+                            m_image_ctx.md_ctx.get_namespace(),
+                            m_image_ctx.id});
 
   librados::Rados rados(m_image_ctx.md_ctx);
   int r = rados.ioctx_create2(m_parent_spec.pool_id, m_parent_io_ctx);

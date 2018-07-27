@@ -260,7 +260,8 @@ public:
   void expect_child_attach(MockImageCtx &mock_image_ctx, int r) {
     bufferlist bl;
     encode(mock_image_ctx.snap_id, bl);
-    encode(cls::rbd::ChildImageSpec{m_ioctx.get_id(), mock_image_ctx.id}, bl);
+    encode(cls::rbd::ChildImageSpec{m_ioctx.get_id(), "", mock_image_ctx.id},
+           bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
