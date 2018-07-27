@@ -10207,16 +10207,14 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 
   if (2 == osd->cct->_conf->osd_throttle) { // FOR DEBUGGING
     if (sdata->is_throttled()) {
+      dout(0) << __func__ << " new throttle start waiting" << dendl;
       sdata->sdata_wait_lock.Lock();
-      if (!sdata->stop_waiting) {
-	sdata->shard_lock.Unlock();
-	sdata->sdata_cond.WaitInterval(sdata->sdata_wait_lock,
-				       std::chrono::milliseconds(40));
-	sdata->sdata_wait_lock.Unlock();
-	sdata->shard_lock.Lock();
-      } else {
-	sdata->sdata_wait_lock.Unlock();
-      }
+      sdata->shard_lock.Unlock();
+      sdata->sdata_cond.WaitInterval(sdata->sdata_wait_lock,
+				     std::chrono::milliseconds(30));
+      sdata->sdata_wait_lock.Unlock();
+      sdata->shard_lock.Lock();
+      dout(0) << __func__ << " new throttle done waiting" << dendl;
     }
   }
 
