@@ -45,6 +45,16 @@ bool LCRule::valid()
   return true;
 }
 
+void LCRule::init_simple_days_rule(std::string_view _id, std::string_view _prefix, int num_days)
+{
+  id = _id;
+  prefix = _prefix;
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%d", num_days);
+  expiration.set_days(buf);
+  set_enabled(true);
+}
+
 void RGWLifecycleConfiguration::add_rule(LCRule *rule)
 {
   string id;
@@ -55,9 +65,7 @@ void RGWLifecycleConfiguration::add_rule(LCRule *rule)
 bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
 {
   lc_op op;
-  if (rule->get_status().compare("Enabled") == 0) {
-    op.status = true;
-  }
+  op.status = rule->is_enabled();
   if (rule->get_expiration().has_days()) {
     op.expiration = rule->get_expiration().get_days();
   }

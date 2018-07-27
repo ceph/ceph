@@ -175,6 +175,14 @@ public:
       return status;
   }
 
+  bool is_enabled() {
+    return status == "Enabled";
+  }
+
+  void set_enabled(bool flag) {
+    status = (flag ? "Enabled" : "Disabled");
+  }
+
   string& get_prefix() {
       return prefix;
   }
@@ -199,28 +207,28 @@ public:
     return dm_expiration;
   }
 
-  void set_id(string*_id) {
-    id = *_id;
+  void set_id(const string& _id) {
+    id = _id;
   }
 
-  void set_prefix(string*_prefix) {
-    prefix = *_prefix;
+  void set_prefix(const string& _prefix) {
+    prefix = _prefix;
   }
 
-  void set_status(string*_status) {
-    status = *_status;
+  void set_status(const string& _status) {
+    status = _status;
   }
 
-  void set_expiration(LCExpiration*_expiration) {
-    expiration = *_expiration;
+  void set_expiration(const LCExpiration& _expiration) {
+    expiration = _expiration;
   }
 
-  void set_noncur_expiration(LCExpiration*_noncur_expiration) {
-    noncur_expiration = *_noncur_expiration;
+  void set_noncur_expiration(const LCExpiration& _noncur_expiration) {
+    noncur_expiration = _noncur_expiration;
   }
 
-  void set_mp_expiration(LCExpiration* _mp_expiration) {
-    mp_expiration = *_mp_expiration;
+  void set_mp_expiration(const LCExpiration& _mp_expiration) {
+    mp_expiration = _mp_expiration;
   }
 
   void set_dm_expiration(bool _dm_expiration) {
@@ -263,19 +271,19 @@ public:
    }
   void dump(Formatter *f) const;
 
+  void init_simple_days_rule(std::string_view _id, std::string_view _prefix, int num_days);
 };
 WRITE_CLASS_ENCODER(LCRule)
 
 struct lc_op
 {
-  bool status;
-  bool dm_expiration;
-  int expiration;
-  int noncur_expiration;
-  int mp_expiration;
+  bool status{false};
+  bool dm_expiration{false};
+  int expiration{0};
+  int noncur_expiration{0};
+  int mp_expiration{0};
   boost::optional<ceph::real_time> expiration_date;
   boost::optional<RGWObjTags> obj_tags;
-  lc_op() : status(false), dm_expiration(false), expiration(0), noncur_expiration(0), mp_expiration(0) {}
   
   void dump(Formatter *f) const;
 };
