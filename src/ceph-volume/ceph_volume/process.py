@@ -3,6 +3,7 @@ from os import O_NONBLOCK, read
 import subprocess
 from select import select
 from ceph_volume import terminal
+from ceph_volume.util import as_bytes
 
 import logging
 
@@ -201,9 +202,7 @@ def call(command, **kw):
     )
 
     if stdin:
-        stdout_stream, stderr_stream = process.communicate(
-            stdin.encode(encoding='utf-8', errors='ignore')
-        )
+        stdout_stream, stderr_stream = process.communicate(as_bytes(stdin))
     else:
         stdout_stream = process.stdout.read()
         stderr_stream = process.stderr.read()
