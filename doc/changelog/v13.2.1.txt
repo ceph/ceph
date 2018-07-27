@@ -1,0 +1,4945 @@
+commit 5533ecdc0fda920179d7ad84e0aa65a127b20d77 (tag: refs/tags/v13.2.1)
+Author: Jenkins Build Slave User <ceph-release-team@redhat.com>
+Date:   Thu Jul 26 17:39:56 2018 +0000
+
+    13.2.1
+
+commit dd471db8bce26d29051e8c41d2dbd8a2baf5186e
+Merge: 23a147ded6 16b7a09df1
+Author: Sage Weil <sage@newdream.net>
+Date:   Thu Jul 26 11:31:44 2018 -0500
+
+    Merge pull request #23262 from liewegas/wip-mimic-p2p
+    
+    mimic: qa/suites/upgrade/mimic-p2p: allow target version to apply
+
+commit 16b7a09df197e13e382348cff6d8f092be0640df
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Jul 26 08:07:54 2018 -0500
+
+    qa/suites/upgrade/mimic-p2p: allow target version to apply
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit 23a147ded66673523a0bb8574bae846abba7cece
+Merge: f95b5f6051 4d31c6dad7
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Jul 26 08:47:28 2018 -0500
+
+    Merge PR #23246 into mimic
+    
+    * refs/pull/23246/head:
+            rpm,deb: fix chown to use -h
+            rpm,deb: chown bluestore block* links to ceph.ceph on install/upgrade
+    
+    Reviewed-by: Alfredo Deza <adeza@redhat.com>
+
+commit 4d31c6dad7395ffd15d0097616b23030bc84fe4d
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Jul 26 08:47:28 2018 -0500
+
+    githubmap: update contributors
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit f95b5f6051ef406909067d39ea10254044fe4b9e
+Merge: 5eaeb92aff 783aaebb6d
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Jul 26 08:47:17 2018 -0500
+
+    Merge PR #23250 into mimic
+    
+    * refs/pull/23250/head:
+            osd/OSDMap: fix CEPHX_V2 osd requirement to nautilus, not mimic
+    
+    Reviewed-by: Gregory Farnum <gfarnum@redhat.com>
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    Reviewed-by: Greg Farnum <gfarnum@redhat.com>
+
+commit 783aaebb6d1e15352e2ae6c39d8411a02e2b3df3
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Jul 25 17:12:43 2018 -0500
+
+    osd/OSDMap: fix CEPHX_V2 osd requirement to nautilus, not mimic
+    
+    This was delayed and did not appear in 13.2.0.
+    
+    Fixes: 1fdc85f224d52655d74eff9a29b6029b974661b3
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 37781061022a92e88dff91ff18fd0fc14b5436de)
+
+commit d49efedfd37fb8e8cd3edab9a7c32493a4d3755b (refs/remotes/me/wip-24903-workaround-mimic)
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jul 13 17:10:38 2018 -0500
+
+    rpm,deb: fix chown to use -h
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 92207c76b91c26c0558688a358ade7c0d94d1b59)
+
+commit b511f213a0d5e8633a0f3fa7ebe070ce2034ed9d
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jul 13 09:56:48 2018 -0500
+
+    rpm,deb: chown bluestore block* links to ceph.ceph on install/upgrade
+    
+    This works around https://tracker.ceph.com/issues/24903
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 58cde3fd793c037beca6645cc30b2ae1c30e2af1)
+
+commit 5eaeb92aff178d2e3091c77f77b753e2a33ccd44
+Merge: dfabdd06d5 ba364131ed
+Author: Andrew Schoen <andrew.schoen@gmail.com>
+Date:   Wed Jul 25 20:58:16 2018 +0000
+
+    Merge pull request #23244 from alfredodeza/mimic-ansible-26
+    
+    mimic ceph-volume tests/functional use Ansible 2.6
+    
+    Reviewed-by: Andrew Schoen <aschoen@redhat.com>
+
+commit ba364131edfd804d37a7fd34c5a02fdd692faf60
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Mon Jul 23 14:16:41 2018 -0400
+
+    ceph-volume tests/functional use testinfra latest for ansible 2.6
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 4f48ceab975539c9ce989aade7a1f3ae7d5b51d5)
+
+commit f76637d1927b1afc0c2e9775203c66c5e0c58dca
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Mon Jul 23 10:18:34 2018 -0400
+
+    ceph-volume tests/functional use Ansible 2.6
+    
+    The ceph-ansible project now refuses to use 2.4 even though it works
+    with that version
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 9570864dd614d2442278e2ba3501788fefd753e3)
+
+commit dfabdd06d595f41678a9fe2bcc46bae2bb6eaf53
+Merge: 8dc24c3feb ba5cf519b7
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Jul 25 11:31:38 2018 -0500
+
+    Merge PR #23233 into mimic
+    
+    * refs/pull/23233/head:
+            mon: don't require CEPHX_V2 from mons until nautilus
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit ba5cf519b720846be23c371ad0533167edbed52a
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Jul 25 11:24:27 2018 -0500
+
+    mon: don't require CEPHX_V2 from mons until nautilus
+    
+    The mimic 13.2.0 didn't have it.
+    
+    Fixes: 3dc80e5f9b6ebf1bc1cecbd95b288005216bdbec
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 7ba0c14ce75f6936b59a3c61ea34a6f0fb909280)
+    
+    # Conflicts:
+    #       src/mon/Monitor.cc
+    
+    - dropped the nautilus cases in the original commit
+
+commit 8dc24c3feb04a2b8dbee9bdde072146104baf861
+Merge: d5ad337370 78efe77e4a
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Wed Jul 25 09:24:14 2018 +0200
+
+    Merge pull request #23209 from smithfarm/wip-25081-mimic
+    
+    mimic: qa: krbd_exclusive_option.sh: bump lock_timeout to 60 seconds
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit d5ad3373706868deb45810a6456ea911a7874bb1
+Merge: 056a368274 ba7487e902
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 24 12:47:39 2018 -0700
+
+    Merge pull request #23136 from smithfarm/wip-25010-mimic
+    
+    mimic: tests: osd sends op_reply out of order
+    
+    Reviewed-by: Neha Ojha <nojha@redhat.com>
+    Reviewed-by: Yuri Weinstein <yweins@redhat.com>
+
+commit 78efe77e4a8607cbf00740be4218ca66940dc712
+Author: Ilya Dryomov <idryomov@gmail.com>
+Date:   Wed Jun 20 18:22:36 2018 +0200
+
+    qa: krbd_exclusive_option.sh: bump lock_timeout to 60 seconds
+    
+    Avoid sporadic failures in combination with msgr-failures/many.yaml,
+    where assert_locked() might take over 10 seconds.
+    
+    Signed-off-by: Ilya Dryomov <idryomov@gmail.com>
+    (cherry picked from commit 69619b69663e026aa4e9c7c21c1fc879782c26e9)
+
+commit 056a3682742d87f154fd5e17dd07a79f23e006e4
+Merge: 426a8e2e8e 23615e9a48
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Jul 24 17:48:41 2018 +0200
+
+    Merge pull request #23178 from smithfarm/wip-25065-mimic
+    
+    mimic: build/ops: install-deps.sh fails on newest openSUSE Leap
+    
+    Reviewed-by: Yuri Weinstein <yweinste@redhat.com>
+
+commit 426a8e2e8eef6107d137ecfa2f8ce15b68b025d8
+Merge: 80dbaa06be 87b23ea6dc
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Jul 24 17:47:51 2018 +0200
+
+    Merge pull request #23176 from smithfarm/wip-25062-mimic
+    
+    mimic: doc: ceph-bluestore-tool manpage not getting rendered correctly
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+    Reviewed-by: Igor Fedotov <ifedotov@suse.com>
+
+commit 80dbaa06be4f48490fa4190c1a7859b263a6b3cc
+Merge: d017d9bea3 158a208365
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 24 08:15:29 2018 -0700
+
+    Merge pull request #23154 from smithfarm/wip-25034-mimic
+    
+    mimic: tests: Health check failed: 1 MDSs report slow requests (MDS_SLOW_REQUEST) in powercycle
+    
+    Reviewed-by: Neha Ojha <nojha@redhat.com>
+    Reviewed-by: Yuri Weinstein <yweins@redhat.com>
+
+commit d017d9bea3013ab6588dd37d200b4a0f0141d840
+Merge: 4c7e569f20 230c030fad
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 24 08:14:33 2018 -0700
+
+    Merge pull request #23156 from yuriw/wip-yuriw-25005-mimic
+    
+    mimic: qa/tests -  added overrides stanza to allow runs on ovh on rhel OS
+
+commit 4c7e569f205f0a247d1dcf2da192b42cba3e9a91
+Merge: 13b25fd439 7a50c7f819
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Jul 24 09:05:24 2018 -0500
+
+    Merge PR #23184 into mimic
+    
+    * refs/pull/23184/head:
+            common: add osd_distrust_data_digest option
+            osd: apply osd_skip_data_digest to read operations
+    
+    Reviewed-by: David Zafman <dzafman@redhat.com>
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 13b25fd439c8e624f2ac567cd85c8cb66975bb45
+Merge: 181734be62 25a99ac14d
+Author: Sage Weil <sage@newdream.net>
+Date:   Mon Jul 23 21:43:30 2018 -0500
+
+    Merge pull request #23164 from smithfarm/wip-25056-mimic
+    
+    mimic: tests: upgrade/luminous-x: whitelist REQUEST_SLOW for rados_mon_thrash
+
+commit 7a50c7f819ea4b59103173082ca96921706fcbde
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jul 23 10:11:53 2018 -0500
+
+    common: add osd_distrust_data_digest option
+    
+    If we have reason to distrust the stored full-object oi data digests,
+    this option will ignore them (and opportunistically clear them).  It
+    basically affects the same behaviors that osd_skip_data_digest except
+    the previous option only takes effect if bluestore is in use, while this
+    option is unconditional.
+    
+    This serves a workaround for clusters that suffered the 12.2.6 bug that
+    produced bad full-object digests and *also* had PGs' primaries move from
+    bluestore to filestore nodes.  In those situations, this option can be
+    set to true.
+    
+    After all OSDs are upgrade and all PGs come back with a clean deep
+    scrub this option can be disabled again.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit b8476ebc5b3c5b5d801bf875bbd6dce5b113325c)
+    
+    # Conflicts:
+    #       src/osd/PrimaryLogPG.cc
+    
+    - osd->osd_skip_data_digest, not g_conf->osd_skip_data_digest
+
+commit 8728464364c314cf7120dc8c3d8e71b98a5d2e00
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jul 23 10:07:55 2018 -0500
+
+    osd: apply osd_skip_data_digest to read operations
+    
+    If we would skip updating data digests, apply that same decision to read
+    operations as well.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 49207a6cb388446361aafacfaa863d66dd452ded)
+    
+    # Conflicts:
+    #       src/osd/PrimaryLogPG.cc
+    
+    - one of the do_read() cases moved
+    - osd->osd_skip_data_digest (observed), not g_conf->...
+
+commit 181734be624fdf1a164ef34250e58cfe83a1630b
+Merge: deedcd3237 4506ef68c1
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Mon Jul 23 16:10:51 2018 +0200
+
+    Merge pull request #23122 from yuriw/wip-yuriw-24926-mimic
+    
+    mimic - qa/tests: Set ansible-version: 2.4
+    
+    Reviewed-by: Vasu Kulkarni <vasu@redhat.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 23615e9a48b932cb5ff8a04d40fbe28ecf2d9d80
+Author: Kyr Shatskyy <kyrylo.shatskyy@suse.com>
+Date:   Mon Jul 2 15:23:58 2018 +0200
+
+    Add new OpenSUSE Leap id for install-deps.sh
+    
+    Signed-off-by: Kyr Shatskyy <kyrylo.shatskyy@gmail.com>
+    (cherry picked from commit bd0448c0b5a09a9314fddf1757502529801366e3)
+
+commit 87b23ea6dc9e9febdddd5f2de37b050af1b47b91
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Wed Jul 18 14:01:42 2018 +0200
+
+    doc: use :command: for subcommands in ceph-bluestore-tool manpage
+    
+    Older versions of Sphinx, such as the one in CentOS 7, do not render "..
+    option::" lines correctly if the option contains a hyphen but does not start
+    with a hyphen. And ceph-bluestore-tool appears to be the only Ceph manpage
+    affected by this bug.
+    
+    Fixes: http://tracker.ceph.com/issues/24800
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 7c9229e7876dfc1bf6e415ed7cce924c3b50925d)
+
+commit 25a99ac14d42dbf5076e5114f5da39210682b8fc
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sat Jul 21 11:22:35 2018 +0200
+
+    tests: upgrade/luminous-x: whitelist REQUEST_SLOW for rados_mon_thrash
+    
+    Fixes: http://tracker.ceph.com/issues/25051
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 2555524f1fcf230f5468e1a5fd20f9fb741e03aa)
+
+commit 230c030fad091ae9c136a421e6206d3e8c9378f8
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Jul 20 19:57:05 2018 -0700
+
+    qa/tests -  added overrides stanza to allow runs on ovh on rhel OS
+    
+    Fixes: https://tracker.ceph.com/issues/25005
+    Signed-off-by: Yuri Weinstein <yweinste@redhat.com>
+
+commit 158a208365fea17be37e841621e3a8babe4854cb
+Author: Neha Ojha <nojha@redhat.com>
+Date:   Fri Jul 20 12:50:02 2018 -0700
+
+    qa/suites/powercycle: whitelist MDS_SLOW_REQUEST
+    
+    Signed-off-by: Neha Ojha <nojha@redhat.com>
+    (cherry picked from commit ac87fd946c8806f6f84d6c6ea124b4731b7b8294)
+
+commit 4506ef68c131c10e554875df969b37c5306ead5a
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 18 16:47:42 2018 -0700
+
+    qa/tests: Set ansible-version: 2.4
+    
+    Fixes http://tracker.ceph.com/issues/24926
+    Signed-off-by: Yuri Weinstein <yweinste@redhat.com>
+
+commit deedcd32377fe942ac34f061927ca2e5a02be473
+Merge: d3f6de5019 88786c8ce8
+Author: Andrew Schoen <andrew.schoen@gmail.com>
+Date:   Fri Jul 20 19:24:33 2018 +0000
+
+    Merge pull request #23148 from alfredodeza/mimic-rm24961
+    
+    ceph-volume tests/functional run lvm list after OSD provisioning
+    
+    Reviewed-by: Andrew Schoen <aschoen@redhat.com>
+
+commit 88786c8ce8f953c730f40d5c28c73b800416c5a8
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Wed Jul 18 12:39:01 2018 -0400
+
+    ceph-volume tests/functional run lvm list after OSD provisioning
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit e01fb206d67f26724f3b03e4b22f5ba6eea22207)
+
+commit d3f6de501920e681411d1c1d093b337c8ac88984
+Merge: bd3b97c02d d604028c6d
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Fri Jul 20 14:14:30 2018 -0400
+
+    Merge pull request #23127 from ceph/backport-mimic-23117
+    
+    mimic: ceph-volume: unmount lvs correctly before zapping
+    
+    Reviewed-by: Alfredo Deza <adeza@redhat.com>
+
+commit ba7487e9024be79f77f37513b597d24db93ef930
+Author: Neha Ojha <nojha@redhat.com>
+Date:   Tue May 1 16:20:14 2018 -0700
+
+    qa/suites: set osd_pg_log_dups_tracked in cfuse_workunit_suites_fsync.yaml
+    
+    Signed-off-by: Neha Ojha <nojha@redhat.com>
+    (cherry picked from commit 94a2d810826d710c3c71403d6a78249cc66a39e7)
+
+commit d604028c6d723d81ccf7351d70a86baca79fdb44
+Author: Andrew Schoen <aschoen@redhat.com>
+Date:   Wed Jul 18 11:08:15 2018 -0500
+
+    ceph-volume: unmount lvs correctly before zapping
+    
+    If the lv found does not include the meatadata to construct an osd path,
+    then we should try to unmount it's path instead.
+    
+    Fixes: http://tracker.ceph.com/issues/24796
+    
+    Signed-off-by: Andrew Schoen <aschoen@redhat.com>
+    (cherry picked from commit 5b175a5bb68264b80c00cb4f04026a4d19ca20ad)
+
+commit bd3b97c02d495a98271287b1a7c2825d55bfd0f9
+Merge: 9fb543b015 d08535dd82
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 18 08:18:52 2018 -0700
+
+    Merge pull request #22845 from smithfarm/wip-24736-mimic
+    
+    mimic: add unit test for cls bi list command
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 9fb543b015999f935d3cf2f6595fcefb8518f27c
+Merge: 51fbb5cb39 12d94cae2a
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 18 07:35:16 2018 -0700
+
+    Merge pull request #21523 from smithfarm/wip-18163
+    
+    mimic: ceph-detect-init: stop using platform.linux_distribution
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+    Reviewed-by: Tim Serong <tserong@suse.com>
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 51fbb5cb3924ec402b2831a61435b67127c391c2
+Merge: 08cd3c1312 421cc64e17
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 18 07:32:14 2018 -0700
+
+    Merge pull request #22684 from pdvian/wip-24472-mimic
+    
+    mimic: spdk: fix ceph-osd crash when activate SPDK
+    
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 08cd3c1312a221b66cbc53ccb3f65ec6e043acd6
+Merge: ca97b1c070 0b928a5edc
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 18 07:31:34 2018 -0700
+
+    Merge pull request #22948 from tchaikov/mimic-pr-22871
+    
+    mimic: deb/rpm: add python-six as build-time and run-time dependency
+    
+    Reviewed-by:  Sebastian Wagner <sebastian.wagner@suse.com>
+    Reviewed-by: Lenz Grimmer <lgrimmer@suse.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit ca97b1c070801024db1c416884aa8a06250be04c
+Merge: 18b692f633 4ddf8ed08e
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 18 07:28:01 2018 -0700
+
+    Merge pull request #22988 from pdvian/wip-24825-mimic
+    
+    mimic: tests: make test_ceph_argparse.py pass on py3-only systems
+    
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 18b692f6330f733981eefd7c5941a6804d4f0c52
+Merge: fcbc4eda02 7592ab7d41
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 18 07:26:50 2018 -0700
+
+    Merge pull request #23017 from ceph/wip-cd-fix-supp-distro
+    
+    mimic: qa/tests: fix supported distro lists for ceph-deploy
+    
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+    Reviewed-by: Yuri Weinstein <yweins@redhat.com>
+
+commit fcbc4eda0220d5ff985ae32f8540f17736eac1cc
+Merge: 312675f2bb ccbc00ea85
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 18 07:25:47 2018 -0700
+
+    Merge pull request #23030 from smithfarm/wip-24904-mimic
+    
+    mimic: qa: client socket inaccessible without sudo
+    
+    Reviewed-by: Neha Ojha <nojha@redhat.com>
+
+commit 312675f2bbbd14968988b971af3d76fd63edcb81
+Merge: 1808dc4f7f dae2527490
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 18 07:25:14 2018 -0700
+
+    Merge pull request #23049 from zeichenanonym/mimic
+    
+    mimic: include: fix build with older clang (OSX target)
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+    Reviewed-by: Adam Emerson <aemerson@redhat.com>
+
+commit 1808dc4f7ffbf507b86bd5ad4591838390180d19
+Merge: fa308041e0 306aab0d96
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 18 07:23:55 2018 -0700
+
+    Merge pull request #23084 from dzafman/wip-disable-skip-dd-mimic
+    
+    mimic: osd: Change osd_skip_data_digest default to false and make it LEVEL_DEV
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit fa308041e0c46736207686bb2416c350f6e12af3
+Merge: 254d4a1d2e ac56fb112a
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 18 07:23:19 2018 -0700
+
+    Merge pull request #23094 from theanalyst/wip-mimic-24958
+    
+    mimic: osd: fix deep scrub with osd_skip_data_digest=true (default) and blue…
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+    Reviewed-by: David Zafman <dzafman@redhat.com>
+
+commit 254d4a1d2ef40f8485ab427fdf068ed625972835
+Merge: d9a5f4484f cb98d37271
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 18 07:22:09 2018 -0700
+
+    Merge pull request #23096 from cbodley/wip-mimic-qa-rgw-no-ec-cache
+    
+    mimic: qa/rgw: disable testing on ec-cache pools
+    
+    Reviewed-by: Yuri Weinstein <yweins@redhat.com>
+
+commit d9a5f4484f6914783db40c4a0405b31d33e2c1f3
+Merge: 2e07df32c1 035cff2972
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 18 07:20:17 2018 -0700
+
+    Merge pull request #23024 from smithfarm/wip-24865-mimic
+    
+    mimic: common: Abort in OSDMap::decode() during qa/standalone/erasure-code/test-erasure-eio.sh
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    Reviewed-by: David Zafman <dzafman@redhat.com>
+
+commit 2e07df32c1f06481d82bd28a5cbc041741d5f22a
+Merge: b832f0c113 1f3dea4e6a
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 18 07:17:28 2018 -0700
+
+    Merge pull request #23065 from pdvian/wip-24887-mimic
+    
+    mimic: os/bluestore: fix races on SharedBlob::coll in ~SharedBlob.
+    
+    Reviewed-by: Radoslaw Zarzynski <rzarzyns@redhat.com>
+
+commit b832f0c113d22278f5b084be7e567c8b7681f1e9
+Merge: 2d9c1cdb99 d6dff4ad00
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 18 07:16:41 2018 -0700
+
+    Merge pull request #23070 from smithfarm/wip-24942-mimic
+    
+    mimic: build/ops: ceph.git has two different versions of dpdk in the source tree
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit 2d9c1cdb99006751b8a07c210998104ddecbd6ee
+Merge: 463d81bb57 9270f1c187
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 13:13:01 2018 -0700
+
+    Merge pull request #22812 from smithfarm/wip-24705-mimic
+    
+    mimic: cephfs: allow prohibiting user snapshots in CephFS
+    
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 463d81bb5752634b8b26c4a23730603698598976
+Merge: fd00101ead 1805948b70
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 13:11:17 2018 -0700
+
+    Merge pull request #22835 from batrick/i24758
+    
+    mimic: test gets ENOSPC from bluestore block device
+    
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit fd00101ead76d0a20df6b92ad18918a428ef4a04
+Merge: 036a2237c3 203e94ecd2
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 13:10:36 2018 -0700
+
+    Merge pull request #22869 from pdvian/wip-24583-mimic
+    
+    mimic: osdc: Fix the wrong BufferHead offset
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 036a2237c3d1ad7d16f7221e68bce0fac0d59417
+Merge: 77a378e7e3 7317773193
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 13:09:27 2018 -0700
+
+    Merge pull request #22956 from joscollin/wip-24829-mimic
+    
+    mimic: qa: fix ffsb cd argument
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit 77a378e7e34692a2bef331578c9011596ad1c368
+Merge: 1c8ae29252 b2bc84d172
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 13:08:57 2018 -0700
+
+    Merge pull request #22981 from joscollin/wip-24861-mimic
+    
+    mimic: cephfs-journal-tool: Fix purging when importing an zero-length journal.
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit 1c8ae29252667abc488fe3160622422da6cfd57c
+Merge: 4a6548f080 6fac4b82b1
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 09:37:16 2018 -0700
+
+    Merge pull request #22933 from smithfarm/wip-24813-mimic
+    
+    mimic: rgw: REST admin metadata API paging failure bucket & bucket.instance: InvalidArgument
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 4a6548f080e856b50e014abe77e3dfbed3bfc82b
+Merge: 0cf0fd713a a58dea3832
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 09:36:44 2018 -0700
+
+    Merge pull request #22466 from pdvian/wip-24313-mimic
+    
+    mimic: test/rgw: fix for bucket checkpoints
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 0cf0fd713a02b9c871a0b798dda73c40c39bd8ad
+Merge: 7151e69eeb e31112cde9
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 09:36:10 2018 -0700
+
+    Merge pull request #22523 from smithfarm/wip-24253-mimic
+    
+    mimic: rgw: Admin OPS Api overwrites email when user is modified
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 7151e69eeb99971c6ff396d0adee616b90507f1a
+Merge: a88a31d9f0 8851fd08a1
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 09:35:33 2018 -0700
+
+    Merge pull request #22590 from pdvian/wip-24352-mimic
+    
+    mimic: rgw: add configurable AWS-compat invalid range get behavior
+    
+    Reviewed-by: Matt Benjamin <mbenjami@redhat.com>
+
+commit a88a31d9f0dfcbec097112d1a0c987bd6c55d0e7
+Merge: 7d5f0a8a9d 567e563763
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 09:34:15 2018 -0700
+
+    Merge pull request #22643 from pdvian/wip-24385-mimic
+    
+    mimic: objects in cache never refresh after rgw_cache_expiry_interval
+    
+    Reviewed-by: Adam Emerson <aemerson@redhat.com>
+
+commit 7d5f0a8a9d39510dfafad3cce942bb1d234db120
+Merge: 2636030128 68fd755f9e
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 09:33:30 2018 -0700
+
+    Merge pull request #22815 from smithfarm/wip-24700-mimic
+    
+    mimic: rgw-multisite: endless loop in RGWBucketShardIncrementalSyncCR
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 2636030128296177c26852ac9f8044036c48b115
+Merge: 81f2605a70 09349e18c4
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 09:33:07 2018 -0700
+
+    Merge pull request #22818 from smithfarm/wip-24701-mimic
+    
+    mimic: rgw: index complete miss zones_trace set
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 81f2605a7045ec963cf783e322d652698803b606
+Merge: eba08f68b8 2c56645c1c
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 09:32:39 2018 -0700
+
+    Merge pull request #22821 from smithfarm/wip-24702-mimic
+    
+    mimic: rgw: meta and data notify thread miss stop cr manager
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit eba08f68b8af972b5177288cd7caae67741fbcc5
+Merge: 3046ff6510 c401ded644
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 09:32:08 2018 -0700
+
+    Merge pull request #22880 from smithfarm/wip-24783-mimic
+    
+    mimic: rgw: set cr state if aio_read err return in RGWCloneMetaLogCoroutine::state_send_rest_request
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 3046ff6510c9da17d322b2bf028ebfa3aa7d8630
+Merge: 549cabfded a6bcfc2c71
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 09:29:06 2018 -0700
+
+    Merge pull request #22926 from smithfarm/wip-24619-mimic
+    
+    mimic: multisite: RGWSyncTraceNode released twice and crashed in reload
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 549cabfded9ec60149adf63f24e86605a3999255
+Merge: 15a312bcf3 5376755a33
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 09:26:15 2018 -0700
+
+    Merge pull request #22927 from smithfarm/wip-24631-mimic
+    
+    mimic: cls_bucket_list fails causes cascading osd crashes
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 15a312bcf3bafc8b98d82659a6445b11a744554e
+Merge: 23bb8b7392 1d8aa5eeb4
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 09:25:49 2018 -0700
+
+    Merge pull request #22929 from smithfarm/wip-24633-mimic
+    
+    mimic: rgw performance regression for luminous 12.2.4
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 23bb8b7392fb7e9464a937faa676267a95f6e88c
+Merge: bf1e94d048 0af7266266
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 09:25:05 2018 -0700
+
+    Merge pull request #22935 from smithfarm/wip-24809-mimic
+    
+    mimic: rgw: Invalid Access-Control-Request-Request may bypass validate_cors_rule_method
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit bf1e94d048ba812778012be0ed521c2fec7f4487
+Merge: d2f5a67d0d d38cd59b84
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 09:24:32 2018 -0700
+
+    Merge pull request #22941 from joscollin/wip-24807-mimic
+    
+    mimic: rgw: fix gc may cause a large number of read traffic
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit d2f5a67d0d3859d7f4514d1063a8ab8449acc6fb
+Merge: c8153ec012 831260f3e5
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 09:00:57 2018 -0700
+
+    Merge pull request #23001 from pdvian/wip-24831-mimic
+    
+    mimic: rgw: "radosgw-admin objects expire" always returns ok even if the pro…
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit c8153ec0122f4846b208b78cf3e3bf80375add56
+Merge: e583acc359 ebabc13077
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 17 08:59:20 2018 -0700
+
+    Merge pull request #23021 from pdvian/wip-24834-mimic
+    
+    mimic: rgw: radogw-admin reshard status command should print text for reshar…
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 12d94cae2a06fd2ae39379e233588be99bff91de
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Apr 19 13:21:31 2018 +0200
+
+    ceph-detect-init: stop using platform.linux_distribution
+    
+    This commit introduces a new function, _extract_from_os_release, which is
+    used (only on Linux) to extract the ID and VERSION_ID fields from the
+    /etc/os-release file. This is sufficient to positively determine the OS
+    and version on these systems, and enable ceph-detect-init to correctly
+    return systemd on them.
+    
+    The commit includes unit tests asserting that _extract_from_os_release really
+    extracts the strings that we expect it to, using the contents of
+    /etc/os-release from a number of different operating systems targeted by Ceph.
+    
+    This commit is not cherry-picked because ceph-detect-init has been dropped in
+    master.
+    
+    Fixes: http://tracker.ceph.com/issues/18163
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+
+commit cb98d3727134d7ce3aec941095f7544404a1d9ab
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Mon May 21 13:28:57 2018 -0400
+
+    qa/rgw: disable testing on ec-cache pools
+    
+    Fixes: http://tracker.ceph.com/issues/23965
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 7cb50b495bb878483f9b9f77b137b6b831c96ccc)
+
+commit ac56fb112ae20719d55a727f37869e49947fa5f4
+Author: Sage Weil <sage@redhat.com>
+Date:   Sat Jul 14 12:39:15 2018 -0500
+
+    osd: fix deep scrub with osd_skip_data_digest=true (default) and bluestore
+    
+    The osd_skip_data_digest is about skipping the storing and checking of a
+    full-object data digest.  Here it is also disabling crc checks during
+    deep-scrub, which prevents us from detecting crc differences across
+    replicas.  Fix!
+    
+    Fixes: http://tracker.ceph.com/issues/24922
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 101e88aa70ac56100a631a2da503b8b0ecb4f625)
+    
+    Conflicts:
+            src/osd/ECBackend.cc
+      drop the non existant skip_data_digest in L
+      drop the non existant skip_data_digest in L
+
+commit 306aab0d969c5146309a9b872d5465ebeb09eb72
+Author: David Zafman <dzafman@redhat.com>
+Date:   Mon Jul 16 14:32:54 2018 -0700
+
+    common: Fix description for osd_skip_data_digest
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 3b7f502c85593a1c69b49cb6022c7a57e37d1254)
+
+commit cf4c0f08c0e3202e0526cf75882f2056e2ae671c
+Author: Sage Weil <sage@redhat.com>
+Date:   Sat Jul 14 15:03:43 2018 -0500
+
+    common/options: disable osd_skip_data_digest
+    
+    This is flawed in that it stops doing digests based on the primary's
+    backend store, not the replicas.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit c7d8add701f156eb8bd8c7dc8ae9903bd782e77f)
+
+commit 35ed68a8b239c69c879a065772e3a7df289b4391
+Author: Sage Weil <sage@redhat.com>
+Date:   Sat Jul 14 13:26:31 2018 -0500
+
+    common/options: make osd_skip_data_digest a DEV option
+    
+    And document/warn to never turn it off after it's been on.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit c854ed9b33a5a293c8ace15718e26f74237e3332)
+
+commit e583acc359147800f8c82129449556540301302b
+Merge: 4a3ecfec5a 1e9a440905
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 16 08:23:03 2018 -0700
+
+    Merge pull request #22222 from pdvian/wip-24203-mimic
+    
+    mimic: rbd: Prevent the use of internal feature bits from outside cls/rbd
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 4a3ecfec5aa064f25c934fe6b5586969669b083e
+Merge: cbe2b78bd4 900e1a7d3a
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 16 08:22:31 2018 -0700
+
+    Merge pull request #22662 from pdvian/wip-24388-mimic
+    
+    mimic: librbd: utilize the journal disabled policy when removing images
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit cbe2b78bd49ed60771b449af814477b8cba3b92b
+Merge: 9a1a8f84b8 a44e583fda
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 16 08:21:56 2018 -0700
+
+    Merge pull request #22667 from pdvian/wip-24390-mimic
+    
+    mimic: rbd: rbd-mirror daemon failed to stop on active/passive test case
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 9a1a8f84b8873b08eb85e969bbaaf80af23a7217
+Merge: edfe09b8ad 5ac7961227
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 16 08:21:26 2018 -0700
+
+    Merge pull request #22754 from pdvian/wip-24496-mimic
+    
+    mimic: librbd: force 'invalid object map' flag on-disk update
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit edfe09b8ad41dc84f9aa5bb49133e2b43f53561d
+Merge: 24e2aeb8b5 6fb3d1e11b
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 16 08:20:55 2018 -0700
+
+    Merge pull request #22843 from smithfarm/wip-24734-mimic
+    
+    mimic: build/ops: order rbdmap.service before remote-fs-pre.target
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+    Reviewed-by: Boris Ranto <branto@redhat.com>
+
+commit 24e2aeb8b5f672e31328c389d60c0d93765cfd8d
+Merge: 4aa185e1f5 26c4cf2197
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 16 08:19:59 2018 -0700
+
+    Merge pull request #22891 from smithfarm/wip-24476-mimic
+    
+    mimic: rbd: rbd trash purge --threshold should support data pool
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 4aa185e1f54664d36ad6e30152d47534eb1a5764
+Merge: 6bea6a10b5 260a415a3f
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 16 08:19:29 2018 -0700
+
+    Merge pull request #22892 from smithfarm/wip-24519-mimic
+    
+    mimic: rbd: rbd-mirror simple image map policy doesn't always level-load instances
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 6bea6a10b52b24a25d10b5feae06a4d24420ad2f
+Merge: 513fb47f2e a250874064
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 16 08:18:58 2018 -0700
+
+    Merge pull request #22894 from smithfarm/wip-24596-mimic
+    
+    mimic: rbd: yet another case when deep copying a clone may result in invalid object map
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 513fb47f2eb026be2db7794637dfb605b565096d
+Merge: 6720f47157 a91b6bb3a4
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 16 08:17:52 2018 -0700
+
+    Merge pull request #22943 from pdvian/wip-24698-mimic
+    
+    mimic: librbd: fix crash when opening nonexistent snapshot
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit d6dff4ad002368ecc79a06a57af8f4bd4d47bf0c
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Mon May 7 22:31:51 2018 +0800
+
+    dpdk: drop dpdk submodule
+    
+    we are using spdk/dpdk for async msgr's dpdk backend since 01a9f178. so
+    no need to keep dpdk submodule anymore.
+    
+    Fixes: http://tracker.ceph.com/issues/24032
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit cb8087dfac31b8490fefdfca28d389b7b9901ef8)
+
+commit 1f3dea4e6aa97e956e6fbd977e40f47c66d62ca2
+Author: Radoslaw Zarzynski <rzarzyns@redhat.com>
+Date:   Wed Jul 11 01:14:54 2018 +0200
+
+    os/bluestore: fix races on SharedBlob::coll in ~SharedBlob.
+    
+    Example scenario:
+      ```
+      A: BlueStore::Collection::split_cache(src, dest)
+      A: std::lock(src->cache->lock, dest->cache->lock)
+    
+      B: SharedBlob::~SharedBlob
+      B: waits coll->cache->lock // coll == src
+    
+      A: sb->coll := dest
+      A: unlocks both src and dest's cache mutexes
+    
+      C: // any locked operation on dest's cache
+      C: acquires dest->cache->lock
+      C: begins the op
+    
+      B: // with the src's cache mutex acquired
+      B: BufferSpace::_clear(coll->cache) // coll == dest
+      B: // oops, B operates on cache already locked by C
+      ```
+    
+    Fixes: http://tracker.ceph.com/issues/24859
+    Signed-off-by: Radoslaw Zarzynski <rzarzyns@redhat.com>
+    (cherry picked from commit d1b16749c7d32eead6e326c492ef9edf0d03a2b8)
+
+commit dae252749075bad7b91cae66fa786d1bfc716c6b
+Author: Christopher Blum <zeichenanonym@web.de>
+Date:   Sat Jul 14 17:01:59 2018 +0200
+
+    include: fix build with older clang
+    
+    to fix the FTBFS on clang shipped with xcode 9.1 (based on Clang 4.0).
+    This fixes ceph client library builds for the OSX target
+    initally targetted with PR #23034.
+    
+    refs: #23034
+    
+    Signed-off-by: Christopher Blum <zeichenanonym@web.de>
+
+commit 6720f47157bf50c5a7b0d6c5ab3a3babecef39f6
+Merge: 1480ffc77a 0f42c61a61
+Author: Kefu Chai <tchaikov@gmail.com>
+Date:   Sat Jul 14 20:50:49 2018 +0800
+
+    Merge pull request #23034 from tchaikov/mimic-clang-4
+    
+    include: fix build with older clang
+    
+    Reviewed-by: Adam C. Emerson <aemerson@redhat.com>
+
+commit 1805948b7032326a79e678d0dbf4d9912d93b478
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Thu Jul 12 21:35:46 2018 -0700
+
+    qa: use 4 mds cluster for multifs tests
+    
+    Fixes: http://tracker.ceph.com/issues/24899
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 3b7233a402ec68094ae86333c3f4f09706d173d1)
+
+commit 675ff95fe16295ccb250bcc49423a73c16e18677
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Fri Jun 29 09:30:52 2018 -0700
+
+    qa: add one-off clusters to qa/cephfs/clusters
+    
+    To consistently handle openstack configuration.
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 654aaa90ed478b3e1e77fb7601dd5957f03dc760)
+
+commit 0f42c61a61c8b57f7655e3e1b0144aa7252609cb
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Sat Jul 14 00:40:36 2018 +0800
+
+    include: fix build with older clang
+    
+    to fix the FTBFS on clang shipped with xcode 9.1 (based on Clang 4.0).
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+
+commit 1480ffc77ad67737397b208316b4cc3369d8e1b2
+Merge: 1ebadc73bc 18c4db6d33
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Jul 13 08:18:12 2018 -0700
+
+    Merge pull request #22997 from liewegas/wip-24597-mimic
+    
+    mimic: osd: do not blindly roll forward to log.head
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit ccbc00ea851cad8845b0ed46621d5edb554e38e7
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Wed Jul 11 11:28:20 2018 -0700
+
+    qa: use root to find client admin socket
+    
+    Permissions on /var/run/ceph changed post-Mimic.
+    
+    Fixes: http://tracker.ceph.com/issues/24872
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 4d3060b990dd2cdbe343fb026eaa7a4d2bc19f96)
+
+commit 035cff29728754cf122a5151ae4dc064e178530d
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jul 9 13:26:39 2018 -0500
+
+    global/global_init: fix stdout/stderr/stdin closing for daemonization
+    
+    The global_init_postfork/prefork helpers close stdout/stdin/stderr on
+    fork and reopen /dev/null in their place.  This ensures that if later
+    code writes to those descriptors (e.g., a stray cout or cerr usage) the
+    output/input will go nowhere instead of interfering with some other open
+    fd.
+    
+    However, with the use of preforker, there are other threads running when
+    these helpers are run, which means we can race with, say, filestore
+    opening an object file and end up sending log output there.
+    
+    Fix by atomically replacing the fds with the dup2(2) syscall, which
+    will implicitly close and reopen the target fd in an atomic fashion.  This
+    behavior is present on both Linux and FreeBSD.
+    
+    Fixes: http://tracker.ceph.com/issues/23492
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 3c2d91ed11c19ee8769acef8268938d2cab59152)
+
+commit ebabc13077b716cccb5afaeda43230347fd2894f
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Mon Jul 2 16:03:12 2018 +0300
+
+    rgw: radogw-admin reshard status command should print text for reshard status
+    
+    Fixes: http://tracker.ceph.com/issues/23257
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit 14d25dca343c73108dcd6a04d9695b82d4719a63)
+
+commit 7592ab7d41c28412921d9d08d6fbf7227a335131 (refs/remotes/gh/wip-cd-fix-supp-distro)
+Author: Vasu Kulkarni <vasu@redhat.com>
+Date:   Thu Jul 12 18:18:03 2018 -0700
+
+    qa/tests: fix supported distro lists for ceph-deploy to include only
+    centos and ubuntu.
+    
+    Signed-off-by: Vasu Kulkarni <vasu@redhat.com>
+
+commit 1ebadc73bc213d05dff5796632c763daf1394eb4
+Merge: 2ff79d0bce 3325319eb0
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Thu Jul 12 09:37:03 2018 -0700
+
+    Merge pull request #22842 from pdvian/wip-24547-mimic
+    
+    mimic: rgw: have a configurable authentication order
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 2ff79d0bceb9f56fff628c2a6938e7baa44f7ec9
+Merge: dee70d8ab1 ab09bab0a8
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Thu Jul 12 09:36:24 2018 -0700
+
+    Merge pull request #22888 from smithfarm/wip-24617-mimic
+    
+    mimic: ValueError: too many values to unpack due to lack of subdir
+    
+    Reviewed-by: David Zafman <dzafman@redhat.com>
+
+commit dee70d8ab15777a57d18cbfaca4222c38e649503
+Merge: 128f929a6d 8d492a2a78
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Thu Jul 12 09:35:53 2018 -0700
+
+    Merge pull request #22986 from joscollin/wip-24843-mimic
+    
+    mimic: rgw: require --yes-i-really-mean-it to run radosgw-admin orphans find
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 0b928a5edc50ea252420a3a747644c54e1f00418
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Wed Jul 11 13:56:49 2018 +0200
+
+    rpm: move make check-specific build deps to appropriate conditional block
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 12ef59fdb073261e5210229c7643eb62651cd869)
+
+commit 40bdcaa5cbff67fe1127828fb279626a626a5a89
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Mon Jul 9 13:18:11 2018 +0200
+
+    rpm: remove universal requires from distro-specific conditional blocks
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 3a30dd13a362ffff6d02e5116c47b5f7ace078a3)
+
+commit 052acf7e3e962e344a5b8a44c2da704427fa5606
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Thu Jul 5 18:36:10 2018 +0800
+
+    deb/rpm: add python-six as build-time and run-time dependency
+    
+    python-six is used by dashboard's controllers. please note,
+    ${python:Depends} is able to fill the installation dependencies for
+    debian package. so python-six is not added to Requires of ceph-mgr.
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit e53bb2c5a32e9b458a55fe01b28f23bdf952b6f7)
+
+commit 831260f3e512f468574fbd331338c7316a8a40be
+Author: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+Date:   Wed Jun 20 11:45:45 2018 +0800
+
+    rgw: "radosgw-admin objects expire" always returns ok even if the process
+    fails.
+    
+    Fixes: http://tracker.ceph.com/issues/24592
+    
+    Signed-off-by: Zhang Shaowen <zhangshaowen@cmss.chinamobile.com>
+    (cherry picked from commit f6fe07e8f549f6c54e4bc81a89558f14e71d3d9f)
+
+commit 128f929a6dc59a0313b22bb714c7c12d6a455ad1
+Merge: cb4b433d40 69cbf93d64
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 17:06:41 2018 -0700
+
+    Merge pull request #22291 from pdvian/wip-24204-mimic
+    
+    mimic: ceph_test_rados_api_misc: fix LibRadosMiscPool.PoolCreationRace
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit cb4b433d40dcdf71dd3bd44446b4a1ce61cdf216
+Merge: ca4808fe9d c9303dd636
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 17:06:20 2018 -0700
+
+    Merge pull request #22412 from tchaikov/mimic-cmake-boost-1.67
+    
+    mimic: cmake: bump up the required boost version to 1.67
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit ca4808fe9d7628b36eec3556f1dfb9d41fd1e108
+Merge: 8590c5649e 7571ac6721
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 17:05:33 2018 -0700
+
+    Merge pull request #22492 from tchaikov/mimic-24321
+    
+    mimic: qa: wait longer for osd to flush pg stats
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 8590c5649ea07671f245d30e465978bb295d7493
+Merge: c39962a55c a017557220
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 17:04:58 2018 -0700
+
+    Merge pull request #22777 from croit/mimic-22977
+    
+    mimic:  common/hobject: improved hash calculation for hobject_t etc
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit c39962a55cc40cb0a4684d984a9bf9a05d85edb8
+Merge: 4a9b56ab87 a8592ba08b
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 17:04:30 2018 -0700
+
+    Merge pull request #22805 from smithfarm/wip-24708-mimic
+    
+    mimic: ceph osd safe-to-destroy crashes the mgr
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+    Reviewed-by: John Spray <john.spray@redhat.com>
+
+commit 4a9b56ab875b4a6ce37e4fee2060f840473d58ff
+Merge: 0ad1c46e6e 2b29e5f8ff
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 17:03:47 2018 -0700
+
+    Merge pull request #22813 from smithfarm/wip-24747-mimic
+    
+    mimic: change default filestore_merge_threshold to -10
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 0ad1c46e6ee24eb3920df30bdafa6d17aba8ec37
+Merge: d724279ef5 21128c8616
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 17:02:45 2018 -0700
+
+    Merge pull request #22887 from smithfarm/wip-24473-mimic
+    
+    mimic: cosbench stuck at booting cosbench driver
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit d724279ef5fb0eb1ae1328fb6590fc16a8630da8
+Merge: a3510a1582 40ae873e8c
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 17:02:07 2018 -0700
+
+    Merge pull request #22889 from smithfarm/wip-24618-mimic
+    
+    mimic: osd: choose_acting loop
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    Reviewed-by: David Zafman <dzafman@redhat.com>
+    Reviewed-by: Neha Ojha <nojha@redhat.com>
+
+commit a3510a15824b406710eb0bf467ccf6970e37e708
+Merge: 5fe9c97bae b117d4f0d7
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 17:00:33 2018 -0700
+
+    Merge pull request #22910 from ifed01/wip-ifed-fix-23540-mimic
+    
+    mimic: os/bluestore: fix incomplete faulty range marking when doing compression
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 5fe9c97bae32453138806444e3d3d9064db9614f
+Merge: d43c727198 4996841504
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 17:00:02 2018 -0700
+
+    Merge pull request #22960 from pdvian/wip-24805-mimic
+    
+    mimic: osd/PrimaryLogPG: rebuild attrs from clients
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit d43c7271987ae0cefa6a9eae1e864a98fde76a9c
+Merge: b9c171be00 a9bce41063
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 16:25:45 2018 -0700
+
+    Merge pull request #22550 from smithfarm/wip-24296-mimic
+    
+    mimic: repeated eviction of idle client until some IO happens
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+    Reviewed-by: Yan, Zheng <zyan@redhat.com>
+
+commit b9c171be00ef563e94e16a0ed8313fa5ddb65b8b
+Merge: b5d944c1ca f6cbe0133f
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 16:24:54 2018 -0700
+
+    Merge pull request #22810 from smithfarm/wip-24703-mimic
+    
+    mimic: PurgeQueue sometimes ignores Journaler errors
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit b5d944c1cad0977a75f33f7088e9bda1a70ca020
+Merge: 5487b7b0ea e03baf43fc
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 16:24:32 2018 -0700
+
+    Merge pull request #22816 from pdvian/wip-24537-mimic
+    
+    mimic: common/DecayCounter: set last_decay to current time when decoding dec…
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit 5487b7b0ea7ee92cae7d37b859c1e71af3cd139a
+Merge: b06e848bab 7701f49681
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 16:24:06 2018 -0700
+
+    Merge pull request #22884 from smithfarm/wip-24704-mimic
+    
+    mimic: mds: low wrlock efficiency due to dirfrags traversal
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit 18c4db6d334543d22b7c3e2ec327382a65dfd7f8 (refs/remotes/me/wip-24597-mimic)
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Jul 11 16:14:38 2018 -0500
+
+    qa/standalone/osd/ec-error-rollforward: reproduce bug 24597
+    
+    This reproduces http://tracker.ceph.com/issues/24597
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 4108ebc0abae83777ebc69bda610167f39e22109)
+
+commit bd5d8fbac080c721a717a67b23a6370fd9fbdae7
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Jul 11 07:10:28 2018 -0500
+
+    qa/standalone/osd/repro_long_log.sh: fix test
+    
+    The log trimming case wasn't quite right.  Before HEAD^ we were
+    rolling forward too aggressively and miscalculating the can_rollforward_to,
+    which affected the trim_to calculation.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 4f9fdd98e2dde3979ec88a3f761d76f7b297415c)
+
+commit c20987e49286dc8fee17d55f7559eaf12e20aba8
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Jul 10 20:22:49 2018 -0500
+
+    osd/PG: do not blindly roll forward to log.head
+    
+    If we are told we can roll forward by the primary, we should only roll
+    forward as far as the primary says we can.
+    
+    This probably came out of the similar case in append_log(), but notably
+    that roll_forward() only happens if !transaction_applied (i.e., backfill
+    target), and that condition is not checked here.
+    
+    Fixes: http://tracker.ceph.com/issues/24597
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 858ff647ff7bd1f6277823b5185ead5ffebc05b0)
+
+commit b06e848babb1bd40075756f55e95eb89639f814d
+Merge: dbd82f467a 160096d068
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 13:19:14 2018 -0700
+
+    Merge pull request #22886 from smithfarm/wip-24707-mimic
+    
+    mimic: mgr/dashboard: Float numbers incorrectly formatted
+    
+    Reviewed-by: Neha Ojha <nojha@redhat.com>
+
+commit dbd82f467adbcdee774855a880ca38d551fc7258
+Merge: b9bd227e7f 78f8a06705
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 13:17:08 2018 -0700
+
+    Merge pull request #22265 from liewegas/wip-24308-mimic
+    
+    mimic: mon/MDSMonitor: do not send redundant MDS health messages to cluster log
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit b9bd227e7fce11b6175b7813f60b9ef42fee09e9
+Merge: bf9fc38324 646b31075f
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 13:16:23 2018 -0700
+
+    Merge pull request #22707 from pdvian/wip-24475-mimic
+    
+    mimic: librados: fix buffer overflow for aio_exec python binding
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit bf9fc38324869b2051b56856f13aa25b650125e7
+Merge: d2071779f1 e7d35cd7d1
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 13:15:29 2018 -0700
+
+    Merge pull request #22826 from smithfarm/wip-24738-mimic
+    
+    mimic: Bring back diff -y for non-FreeBSD
+    
+    Reviewed-by: David Zafman <dzafman@redhat.com>
+
+commit d2071779f1ac3f01bf619fc56db6829b7da95fe2
+Merge: 31aa5e0e11 32cf2e197d
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 13:14:37 2018 -0700
+
+    Merge pull request #22851 from smithfarm/wip-24766-mimic
+    
+    mimic: build/ops: Mimic build fails with -DWITH_RADOSGW=0
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+    Reviewed-by: John Spray <john.spray@redhat.com>
+    Reviewed-by: Bassam Tabbara <bassam.tabbara@quantum.com>
+    Reviewed-by: David Disseldorp <ddiss@suse.de>
+
+commit 31aa5e0e11042dbe209cedc446ef05b57569e21e
+Merge: e93816539f 822cb61a49
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 13:11:49 2018 -0700
+
+    Merge pull request #22859 from smithfarm/wip-24769-mimic
+    
+    mimic: set correctly shard for existed Collection
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit e93816539f330a06810d920e6f450d53b07d61c0
+Merge: 50a50266d0 c72abc1088
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 13:11:17 2018 -0700
+
+    Merge pull request #22861 from smithfarm/wip-24771-mimic
+    
+    mimic: osd: may get empty info at recovery
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 50a50266d02a58ad98a37fb4fe8209b977b30357
+Merge: 836d4de933 94fd03d803
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed Jul 11 13:09:29 2018 -0700
+
+    Merge pull request #22917 from smithfarm/wip-24803-mimic
+    
+    mimic: Python bindings use iteritems method which is not Python 3 compatible
+    
+    Reviewed-by: John Spray <john.spray@redhat.com>
+
+commit 8d492a2a784318ea358b190fe31a4246d8477913
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Wed May 16 13:04:55 2018 -0400
+
+    rgw: require --yes-i-really-mean-it to run radosgw-admin orphans find
+    
+    Incorrect use of orphans find can lead to data loss. Warn users to be
+    extra cautious.
+    
+    Fixes: http://tracker.ceph.com/issues/24146
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 3ff47c7f3eb5964464c8cd49144546ce532ed7f7)
+
+commit b2bc84d172b85534b4be577cb165b4ddb9d1f5f6
+Author: chenyupeng360 <chenyupeng-it@360.cn>
+Date:   Tue May 22 12:34:51 2018 +0800
+
+    cephfs-journal-tool: Fix purging when importing an zero-length journal.
+    
+    When importing a zero-length purge_queue journal exported previously, the last object and
+    the following one are now being purged for removing potential junks. In this case,
+    there will be no writing performed actually, so the purged last object get lost permanently.
+    
+    This can be fixed by purging the object following the last object, and by zeroing the last object
+    starting from the offset determined by the write_pos.
+    
+    Fixes: https://tracker.ceph.com/issues/24239
+    
+    Signed-off-by: yupeng chen <chenyupeng-it@360.cn>
+    Signed-off-by: zhongyan gu <guzhongyan@360.cn>
+    (cherry picked from commit b6c68dd55272f9066d7b5cf2fa30ea44f7c36533)
+
+commit 4ddf8ed08e7e3adc4188554e622937aeb20c5f97
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sat Jul 7 00:47:34 2018 +0200
+
+    tests: make test_ceph_argparse.py pass on py3-only systems
+    
+    On systems that do not have Python 2 installed, this test fails to
+    import StringIO.
+    
+    Fixes: http://tracker.ceph.com/issues/24816
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 5ed075d77f2be7aba6ae011b67a7cf9e3cd7d321)
+
+commit a2508740649a0615fab92d93bc51a2401503fc0e
+Author: Mykola Golub <mgolub@suse.com>
+Date:   Tue Jun 19 16:22:15 2018 +0300
+
+    librbd: fix gmock warnings introduced after 9e5b87c
+    
+    Signed-off-by: Mykola Golub <mgolub@suse.com>
+    (cherry picked from commit f434c5c70bc3f51849d1439dcd8448022cb5e056)
+
+commit 8646f8ac3fcb735825397454225248deac3f2c7b
+Author: Mykola Golub <mgolub@suse.com>
+Date:   Tue Jun 19 15:05:27 2018 +0300
+
+    librbd: deep_copy: update end_size only if zero interval caused truncate
+    
+    The problem shown up when stripping was used, and assembling a
+    nonexistent destination object from source objects, and one of these
+    objects existed and snap diff returned a zero interval. The non-zero
+    end_size in that case triggered invalid object map update.
+    
+    Signed-off-by: Mykola Golub <mgolub@suse.com>
+    (cherry picked from commit d1122573b8c6a69857004d042cc75e9581deebda)
+
+commit 4931993f85db2288d86eb7251ccb4ebc90341a4b
+Author: Mykola Golub <mgolub@suse.com>
+Date:   Sat Jun 16 14:19:53 2018 +0300
+
+    librbd: deep_copy: don't hide parent if zero overlap for snapshot
+    
+    Fixes: http://tracker.ceph.com/issues/24545
+    Signed-off-by: Mykola Golub <mgolub@suse.com>
+    (cherry picked from commit d3d730ce0f9f7f287e4b60cface66e9d9fb6882e)
+
+commit cdaf801cefab3eecb941fbc776e8599954e6c98e
+Author: Mykola Golub <to.my.trociny@gmail.com>
+Date:   Sat Dec 9 17:10:10 2017 +0200
+
+    librbd: remove unused header
+    
+    Signed-off-by: Mykola Golub <mgolub@suse.com>
+    (cherry picked from commit 84ed0c5726e6a0707189f7adec0dcfff0fe73c57)
+
+commit 836d4de9334066eb4ab0ee72acdd3ab653933d54
+Merge: 2051b954e5 2e82bfdf7a
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 10 09:01:44 2018 -0700
+
+    Merge pull request #22549 from smithfarm/wip-24391-mimic
+    
+    mimic: [rbd-mirror] entries_behind_master will not be zero after mirror over
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit 2051b954e55c6c0a16f87c4cb7f01a7c1fb0d14f
+Merge: 70e053063d 5dc2d7ddd2
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 10 09:00:53 2018 -0700
+
+    Merge pull request #22768 from pdvian/wip-24499-mimic
+    
+    mimic: librbd: deep_copy: resize head object map if needed
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 70e053063d51c8c2482d0e328c9e227f258af211
+Merge: 2ff4c01858 8f4481f8d6
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jul 10 08:59:35 2018 -0700
+
+    Merge pull request #22770 from jcsp/wip-24689
+    
+    mimic: mon: exception for dashboard in config-key warning
+    
+    Reviewed-by: Ricardo Dias <rdias@suse.com>
+
+commit 2ff4c01858cba300de3e726d67c75ff6d9cb75dc
+Merge: 4ed78ecf2f 9656bf1429
+Author: Kefu Chai <tchaikov@gmail.com>
+Date:   Tue Jul 10 20:41:50 2018 +0800
+
+    Merge pull request #22268 from xiaoxichen/backport_22243_mimic
+    
+    mimic: mon/OSDMonitor: Respect paxos_propose_interval
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 4996841504c35f25fb05f45aa09e929af970ced7
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Jul 4 14:19:04 2018 -0500
+
+    osd/PrimaryLogPG: rebuild attrs from clients
+    
+    Ensure that buffers coming in via client ops are rebuilt before populating
+    the PGTransaction.  This ensures that we don't pin the raw buffers for
+    the entire incoming message in memory.
+    
+    In the past we've addressed this issue at the ObjectStore layer, but we
+    did not consider the attr_cache in ObjectContext.  Rebuilding the buffers
+    at this point will sanitize any incoming attribute before it reaches
+    either PGBackend or ObjectContext object_cache or the ObjectStore
+    implementation.
+    
+    Fixes: http://tracker.ceph.com/issues/24768
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 0a0f8d5e6fa8276f06a9b7a7b18ea6f15fa8cb86)
+
+commit 731777319336bd75268779a024486e5d51782605
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Wed Jun 27 11:26:47 2018 -0700
+
+    qa: fix ffsb cd argument
+    
+    Avoid potential failures relating to HEAD^.
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 6c7e09568d0ebcc054267b6a33e075dbb6407982)
+
+commit 4208e36d42b5977ffed4ac7a432fdd0a399f05a7
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Tue Jun 26 20:28:51 2018 +0800
+
+    qa/workunits/suites/ffsb.sh: fix strncpy bug in ffsb
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    Fixes: http://tracker.ceph.com/issues/24579
+    (cherry picked from commit 843cddaaf83abdff0d900af85e8bd2382d834e0d)
+
+commit 52c566dbbd471c278a5efe0883eeabc1da0100c8
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Wed Jun 27 11:24:09 2018 -0700
+
+    qa: fix cd argument during iogen unpack
+    
+    Fixes: http://tracker.ceph.com/issues/24680
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit fe62ea36d4710a526c0d1d2379d595dc6a43b868)
+
+commit 4ed78ecf2f27aae1e9eb27f83611285ec7445ebd
+Merge: 1e501d7ce6 a0969325ed
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 9 13:31:20 2018 -0700
+
+    Merge pull request #22700 from yuriw/wip-yuriw-22532-backport
+    
+    mimic: qa/suites: Add supported-random-distro$ links.
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+    Reviewed-by:  Warren Usui <wusui@redhat.com>
+
+commit 1e501d7ce6a963590c85cac9ac378b1b1c1664cf
+Merge: 4a5d7f524b c887e875a4
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 9 13:28:24 2018 -0700
+
+    Merge pull request #22791 from pdvian/wip-24534-mimic
+    
+    mimic: client: fix bug #24491 _ll_drop_pins may access invalid iterator
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit 4a5d7f524b306260224184c0f46ae54c1c958ecb
+Merge: 5592299ae2 f31ca04207
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 9 13:27:59 2018 -0700
+
+    Merge pull request #22819 from pdvian/wip-24539-mimic
+    
+    mimic: client:  update inode fields according to issued caps
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit 5592299ae2b22d9d7db261e5ecf95d024d55c402
+Merge: 8da88b1888 dc399ed231
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 9 13:27:26 2018 -0700
+
+    Merge pull request #22841 from pdvian/wip-24541-mimic
+    
+    mimic: mds: add magic to header of open file table
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit 8da88b1888623aa426ae5737f56734491cd21915
+Merge: c61ea19c0f 68c08bf0b1
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 9 13:25:59 2018 -0700
+
+    Merge pull request #22882 from smithfarm/wip-24310-mimic
+    
+    mimic: pjd: cd: too many arguments
+    
+    Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit c61ea19c0fe84366a2dab5673e7faff3e146962f
+Merge: 952d3ce679 92a53a1ed0
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Mon Jul 9 15:36:42 2018 -0400
+
+    Merge pull request #22900 from pdvian/wip-24585-mimic
+    
+    mimic: ceph-volume lvm.common use destroy-new, doesn't need admin keyring
+    
+    Reviewed-by: Alfredo Deza <adeza@redhat.com>
+
+commit 952d3ce679e9d7be893b7cafca053ce0dea00c1e
+Merge: 4e1bc0cd6a d408dffaf1
+Author: Lenz Grimmer <lenz@grimmer.com>
+Date:   Mon Jul 9 20:52:50 2018 +0200
+
+    Merge pull request #22849 from smithfarm/wip-24764-mimic
+    
+    mimic: mgr/dashboard: Missing breadcrumb on monitor performance counters page
+    
+    Reviewed-by: Ricardo Marques <rimarques@suse.com>
+
+commit 4e1bc0cd6a0aaa76eb1936d1717a4ab07e179da6
+Merge: 1c26913db2 b0d6e82a8c
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jul 9 08:29:13 2018 -0500
+
+    Merge remote-tracking branch 'private/wip-mon-snap-caps-mimic' into mimic
+
+commit 1c26913db28eaf168e522985658ff4e4f20b0bdd
+Merge: e367974219 4fe32eaff1
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jul 9 08:09:38 2018 -0500
+
+    Merge remote-tracking branch 'private/wip-cx-mimic' into mimic
+
+commit a91b6bb3a43d5b6316968d4b89ac9f8b164f269e
+Author: Mykola Golub <mgolub@suse.com>
+Date:   Fri Jun 22 20:50:51 2018 +0300
+
+    librbd: fix crash when opening nonexistent snapshot
+    
+    Fixes: http://tracker.ceph.com/issues/24637
+    Signed-off-by: Mykola Golub <mgolub@suse.com>
+    (cherry picked from commit 70936c3bb5c281eed1c0bb5e26337efdedfa1e06)
+
+commit d38cd59b845ec204343f5b5e811b7176fcfad30f
+Author: liaoxin01 <liaoxin01@baidu.com>
+Date:   Thu Jul 5 14:23:34 2018 +0800
+
+    rgw: fix gc may cause a large number of read traffic
+    
+    fix http://tracker.ceph.com/issues/24767
+    
+    Signed-off-by: Xin Liao <liaoxin01@baidu.com>
+    (cherry picked from commit afc3b1ab1f6b24267c5ab846e2e7a5de5ec9a5d0)
+
+commit 0af72662666f9a9722850517abb35b178c491ff9
+Author: Jeegn Chen <jeegnchen@tencent.com>
+Date:   Tue May 22 13:16:45 2018 +0800
+
+    rgw: reject invalid methods in validate_cors_rule_method
+    
+    Fixes: http://tracker.ceph.com/issues/24223
+    Signed-off-by: Jeegn Chen <jeegnchen@tencent.com>
+    (cherry picked from commit 8e34c65e3f59adb0ed549ad7ea394872c6e4248f)
+
+commit 6fac4b82b1b066668a5cd533332609535d6afbfd
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Tue Jun 26 17:40:48 2018 -0400
+
+    rgw: escape markers in RGWOp_Metadata_List::execute
+    
+    Fixes: http://tracker.ceph.com/issues/23099
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 3055a67cc20f1e461f5f1a26cb1522b7e88c79f9)
+
+commit 1d8aa5eeb4f57bb720c8c4be47d01e81fa8e84af
+Author: Mark Kogan <mkogan@redhat.com>
+Date:   Tue Jun 5 11:18:30 2018 +0300
+
+    rgw: remove expired entries from the cache
+    Fixes: http://tracker.ceph.com/issues/23379
+    
+    Signed-off-by: Mark Kogan <mkogan@redhat.com>
+    (cherry picked from commit 98f6dada873f32be8750bf3e101de4f33ea9b26f)
+
+commit 5376755a335cc1bf68910663b0c20e96a1a9530d
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Jun 6 10:00:47 2018 -0700
+
+    cls/rgw: don't assert in decode_list_index_key()
+    
+    Fixes: http://tracker.ceph.com/issues/24117
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit e71fba0c6f5b3b0572b5136840cf0ed3c9186569)
+
+commit a6bcfc2c719a26c2bbd19a1604c579c751e058fe
+Author: Tianshan Qu <tianshan@xsky.com>
+Date:   Wed Jun 6 14:39:37 2018 +0800
+
+    rgw: fix RGWSyncTraceNode crash in reload
+    
+    reload or restart will finalize RGWSyncTraceManager and destroy
+    complete_nodes, which will trigger RGWSyncTraceNode release twice.
+    
+    A situation is sync more than 4096 objects and get full complete_nodes,
+    complete_nodes have a member A who's parent is P which is not finished
+    and A is the last child of P. In destroy complete_nodes, nodes will be
+    released one by one.
+    Release A will trigger release P, and call finish_node(P). there is
+    trap that circular_buffer won't change size until destroy all items,
+    so circular_buffer is still full and pop the first item which is A,
+    and released A again.
+    
+    fixes: http://tracker.ceph.com/issues/24432
+    
+    Signed-off-by: Tianshan Qu <tianshan@xsky.com>
+    (cherry picked from commit 3536c7810ae1c1ed508d4eb62b08b7da0c098c07)
+
+commit e367974219e6bfc8ea5e6d70ceef245e189119e6
+Merge: 9e6761274e c9448bc3c3
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Jul 6 14:50:12 2018 -0700
+
+    Merge pull request #22297 from tchaikov/mimic-24322
+    
+    mimic: mon/OSDMonitor: no_reply on MOSDFailure messages
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 9e6761274ed3cea3c689d7a0d2c169cfa1063483
+Merge: 3213b058c1 a7bc6e1e04
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Jul 6 14:49:43 2018 -0700
+
+    Merge pull request #22333 from pdvian/wip-24246-mimic
+    
+    mimic: mon/MgrMonitor: change 'unresponsive' message to info level
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 3213b058c1ad305df3bd38e8490d397feec63288
+Merge: bb2580b254 85e25cefd2
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Jul 6 14:48:58 2018 -0700
+
+    Merge pull request #22361 from tchaikov/mimic-24361
+    
+    mimic: mon: enable level_compaction_dynamic_level_bytes for rocksdb
+    
+    Reviewed-by: Neha Ojha <nojha@redhat.com>
+
+commit bb2580b2548d95ecbb57e619e9d42836ce9bde46
+Merge: b9f8ba0779 1b6d5a47bb
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Jul 6 14:48:27 2018 -0700
+
+    Merge pull request #22382 from pdvian/wip-24261-mimic
+    
+    mimic: bluestore: flush_commit is racy
+    
+    Reviewed-by: Neha Ojha <nojha@redhat.com>
+
+commit b9f8ba0779e2015add4ddfbb0ed1d203b97af923
+Merge: 9fc7dcfba1 5253b25c3e
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Jul 6 14:47:30 2018 -0700
+
+    Merge pull request #22394 from tchaikov/mimic-24406
+    
+    mimic: osd: retry to read object attrs at EC recovery
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 9fc7dcfba126dd510b616ff490359404c694f4cd
+Merge: c8c9bc6724 fbe6611782
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Jul 6 14:44:44 2018 -0700
+
+    Merge pull request #22406 from pdvian/wip-24292-mimic
+    
+    mimic: common: fix typo in rados bench write JSON output
+    
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit c8c9bc6724792f85b3eb7e4538d3562ce370c41b
+Merge: f7d553783e 7fb63e3ef7
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Jul 6 14:43:42 2018 -0700
+
+    Merge pull request #22525 from tchaikov/mimic-pr-22336
+    
+    mimic: os/bluestore: firstly delete db then delete bluefs if open db met error.
+    
+    Reviewed-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    Reviewed-by: Igor Fedotov <ifedotov@suse.com>
+
+commit f7d553783ea00051e5c54dba38d3b73e5de75ad4
+Merge: 3274e403fd 3ea0aca4b6
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Jul 6 14:42:40 2018 -0700
+
+    Merge pull request #22552 from smithfarm/wip-24468-mimic
+    
+    mimic: tell ... config rm <foo> not idempotent
+    
+    Reviewed-by: Neha Ojha <nojha@redhat.com>
+
+commit 3274e403fdc5a036f98515c58f0ce12409730a0d
+Merge: 310074f240 71b82b5886
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Jul 6 14:42:08 2018 -0700
+
+    Merge pull request #22559 from pdvian/wip-24332-mimic
+    
+    mimic: PG: add custom_reaction Backfilled and release reservations after bac…
+    
+    Reviewed-by: Yuri Weinstein <yweins@redhat.com>
+
+commit 310074f240ab0a1355d2b4a8e15afc53b91100c9
+Merge: d49ab16746 c5534eb689
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Jul 6 14:40:33 2018 -0700
+
+    Merge pull request #22651 from liewegas/wip-24423-mimic
+    
+    mimic: osd: fix getting osd maps on initial osd startup
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit d49ab16746b6b39edbb2d52351462c61ac8b4019
+Merge: 18e6a86cd9 c96211f051
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Jul 6 14:39:55 2018 -0700
+
+    Merge pull request #22722 from liewegas/wip-hobject-hash-mimic
+    
+    mimic: common/hobject: improved hash calculation
+    
+    Reviewed-by: Adam Kupczyk <akupczyk@redhat.com>
+
+commit 18e6a86cd9dfa425795bb59b8629d45274bf4873
+Merge: f4f980c42d 88a5202fd2
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Fri Jul 6 14:38:59 2018 -0700
+
+    Merge pull request #22730 from pdvian/wip-24494-mimic
+    
+    mimic: osd/Session: fix invalid iterator dereference in Sessoin::have_backoff()
+    
+    Reviewed-by: Neha Ojha <nojha@redhat.com>
+
+commit 94fd03d803cfc837a6fdf3676f0a3df5f990a1ee
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Jul 5 17:34:51 2018 +0200
+
+    mgr: replace iteritems with six.iteritems (mgr_module.py)
+    
+    Fixes: http://tracker.ceph.com/issues/24779
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 093562f6de706cb810fef5b0a297fb2422c65c78)
+
+commit 4c7b4e6cf8c9a6a4c93e8c1b9b94d6929a653898
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Jul 5 17:24:43 2018 +0200
+
+    mgr: replace iteritems with six.iteritems (telegraf)
+    
+    Fixes: http://tracker.ceph.com/issues/24779
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit ab001e134238f609823d0aad25f5e758107d9369)
+    
+    Conflicts:
+            src/pybind/mgr/telegraf/module.py (trivial)
+
+commit dc7fbc81a632c265073be5cdd5a4e1d855213792
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Jul 5 17:23:24 2018 +0200
+
+    mgr: replace iteritems with six.iteritems (status)
+    
+    Fixes: http://tracker.ceph.com/issues/24779
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 5866377ec39a3f0954afc8b0a3a8a544f188f307)
+
+commit 346ca540be680ce442deef6c1dcf4f3dccfff76e
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Jul 5 17:22:16 2018 +0200
+
+    mgr: replace iteritems with six.iteritems (restful)
+    
+    Fixes: http://tracker.ceph.com/issues/24779
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit c02c6601755efbe5fb06021d314d5b2d8aa6c79e)
+
+commit 64457556eae0e48587f022ec0355642f463c2a15
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Jul 5 17:20:56 2018 +0200
+
+    mgr: replace iteritems with six.iteritems (influx)
+    
+    Fixes: http://tracker.ceph.com/issues/24779
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit a62ab8ae8c91b91bb6c5367a6af197e5d85fe10a)
+
+commit b163c86ffc484bda3586fe4936d19547883719a9
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Jul 5 17:17:36 2018 +0200
+
+    mgr: replace iteritems with six.iteritems (balancer)
+    
+    Fixes: http://tracker.ceph.com/issues/24779
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 962f0c416c90c2b319d0a9c403fe235086446080)
+
+commit c46562b2412ca06f2a0e644a1488ffb6a59a2f6f
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Fri Jun 22 16:44:38 2018 -0700
+
+    qa: allocate more space for VM disk
+    
+    Otherwise daemons may run out of space due to logging.
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+    (cherry picked from commit 5d4a1f232bd5d4f9aab9be26044af8dc4abf21cd)
+    
+    Conflicts:
+            qa/suites/fs/bugs/client_trim_caps/clusters/small-cluster.yaml
+
+commit 82391afbbf302b1fd46fd92f96c8db7b3bece378
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue May 22 21:45:18 2018 -0500
+
+    qa/cephfs/clusters/*: bigger cinder volumses
+    
+    Fixes: http://tracker.ceph.com/issues/24238
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit aa3dcb2b2600a979efa7997a07297b098ca03a98)
+
+commit 160096d068cb020775e1c0529df5d166567e03fc
+Author: Tiago Melo <tmelo@suse.com>
+Date:   Wed May 30 13:20:05 2018 +0100
+
+    mgr/dashboard: Fix formatter service unit test
+    
+    Signed-off-by: Tiago Melo <tmelo@suse.com>
+    (cherry picked from commit 5058ff960733f19937be1be4c401e89bf744138b)
+
+commit b117d4f0d7aaac914713ac5f820522dc4015a86b
+Author: Igor Fedotov <ifedotov@suse.com>
+Date:   Thu Jul 5 14:27:12 2018 +0300
+
+    os/bluestore: fix incomplete faulty range marking when doing compression
+    GC.
+    
+    Under some scenarios GC might process an extent range where some inner extents are left untouched by GC (as there is no need for that). Hence GC doesn't invaliate these inner extents with fault_range call. If untouched extents are mapped to unloaded shards it results in subsequent assertion on o->extent_map.dirty_range() call.
+    The solution is to invalidate the whole extent range when doing GC.
+    
+    Fixes: https://tracker.ceph.com/issues/23540
+    Fixes: https://tracker.ceph.com/issues/24799
+    
+    Signed-off-by: Igor Fedotov <ifedotov@suse.com>
+    (cherry picked from commit 0f04d4484c8663767bdb60f743a8835897013b5a)
+
+commit 8f4481f8d692205e3cfaf17e153a84145332658a (refs/remotes/ci/wip-tdehler-testing-22770)
+Author: John Spray <john.spray@redhat.com>
+Date:   Fri Jun 29 11:36:39 2018 +0100
+
+    mon: exception for dashboard in config-key warning
+    
+    This warning went in with the expectation that nobody
+    would be using config-key commands for modules any more,
+    but the dashboard does use these in order to get the
+    "-i" functionality on the CLI for loading certs/keys.
+    
+    In Nautilus they can switch to using "-i" on real module
+    commands, but for Mimic let's silence the warning for
+    the dashboard module.
+    
+    Fixes: https://tracker.ceph.com/issues/24689
+    Signed-off-by: John Spray <john.spray@redhat.com>
+
+commit 92a53a1ed0a3bfc74ec90a1880e243f720439556 (refs/remotes/ci/wip-24585-mimic)
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Fri Jun 8 15:36:17 2018 -0400
+
+    ceph-volume lvm.common use destroy-new, doesn't need admin keyring
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 57fb124ce74fe4fb091091be6b4fa63e36d567a2)
+
+commit 260a415a3f5846c203e46463f8f4eef498be9485
+Author: Venky Shankar <vshankar@redhat.com>
+Date:   Mon Jun 4 05:34:58 2018 -0400
+
+    rbd-mirror: fix state transition table for disassociation
+    
+    The final state transition when disassociating (removing) images
+    does not purge the image state map for a given image. This can
+    also result in uneven balance of images across instances as the
+    policy implementation relies on this structure to figure out
+    total number of images tracked.
+    
+    Signed-off-by: Venky Shankar <vshankar@redhat.com>
+    (cherry picked from commit 895d69f226afd0dfa33909ff9766abf780531787)
+
+commit c70bfe07cfa6d5127fbc6eb89290f0aeb5729629
+Author: Venky Shankar <vshankar@redhat.com>
+Date:   Sat Jun 2 10:55:22 2018 -0400
+
+    test: add rbd-mirror image map rebalancer unit test
+    
+    Signed-off-by: Venky Shankar <vshankar@redhat.com>
+    Fixes: http://tracker.ceph.com/issues/24161
+    (cherry picked from commit d491615f084806bc1de408098813d65853ca97af)
+
+commit e8f65389d09a477ab064c3ad3cf5878eebb2a226
+Author: Venky Shankar <vshankar@redhat.com>
+Date:   Tue May 29 01:45:40 2018 -0400
+
+    rbd-mirror: schedule rebalancer to level-load instances
+    
+    Policy implementation takes care of evenly balancing images
+    across rbd mirror instances. This is done when images are
+    added to the map and/or instances are added or removed with
+    the exception of image removal -- removing images does not
+    reshuffle other (mapped) images which can result in some of
+    the instances under loaded (in worst case, if one removes
+    images which all map to a particular instance, that instance
+    would remain idle until more images are added or a shuffle is
+    triggered).
+    
+    We could possibly trigger map shuffle when images are removed,
+    but that would change the interface between Policy and ImageMap
+    class (in the form of changes to Policy::remove_images()). Also,
+    policy (and its implementations) would have to do more work when
+    the above class method is invoked.
+    
+    Therefore, an interval based rebalancer is added to ImageMap for
+    periodic rebalancing of images only if the following conditions
+    are met:
+    
+        - policy has been idle for a configured time duration
+        - no scheduled or in-transit operations
+    
+    Signed-off-by: Venky Shankar <vshankar@redhat.com>
+    (cherry picked from commit d96cee13d7427bca617e473c522ad7cf00274566)
+
+commit 695f4e8e2027f33b5a9f5df63bdc08b6f240a234
+Author: Venky Shankar <vshankar@redhat.com>
+Date:   Mon May 28 00:53:30 2018 -0400
+
+    rbd-mirror: fix state comparison in Policy::is_state_scheduled()
+    
+    Signed-off-by: Venky Shankar <vshankar@redhat.com>
+    (cherry picked from commit bd83d93453b8fb7289594f8ad388f5c83bab84b9)
+
+commit 434e3f4bd25386c2e2202e38c722d31a29e8c881
+Author: Venky Shankar <vshankar@redhat.com>
+Date:   Fri May 25 06:48:10 2018 -0400
+
+    rbd-mirror: remove unneeded instance_ids parameter
+    
+    Signed-off-by: Venky Shankar <vshankar@redhat.com>
+    (cherry picked from commit 65abcd480100516a7186ab6ffbf22907c5a3156c)
+
+commit 26c4cf2197203945545582d4b5c13e2679f567c8
+Author: Mahati Chamarthy <mahati.chamarthy@intel.com>
+Date:   Wed Apr 4 20:54:23 2018 +0530
+
+    rbd trash: add data pool support
+    
+    checks implicitly for datapool utilization of all images and removes
+    respective pool's trashed images until threshold value is hit.
+    
+    Fixes: http://tracker.ceph.com/issues/22872
+    Signed-off-by: Mahati Chamarthy <mahati.chamarthy@intel.com>
+    (cherry picked from commit 00d5c18b18fcbde6d7fee1673b1b084d492d87c1)
+
+commit 40ae873e8c557b0b8b9388b9835a716ef02de8c1
+Author: Neha Ojha <nojha@redhat.com>
+Date:   Wed Jun 20 13:20:58 2018 -0400
+
+    osd/PG: restrict async_recovery_targets to up osds
+    
+    When an osd that is part of the acting set and not the up set, gets chosen
+    as an async_recovery_target, it gets removed from the acting set. Since this
+    osd is no longer in the up or acting set, it is classified as a stray in
+    the next peering cycle. This results in choose_acting() looping between two
+    proposed acting sets.
+    
+    To avoid this, we will only choose up osds as async_recovery_targets.
+    
+    Signed-off-by: Neha Ojha <nojha@redhat.com>
+    (cherry picked from commit 7f1b6adec31e71ef4b3ec9b3c5cba8b1a4b7746f)
+
+commit 63c5e06575a647cb030af73204c26eb9ecad3936
+Author: Neha Ojha <nojha@redhat.com>
+Date:   Wed May 30 11:33:41 2018 -0700
+
+    PG: do not choose stray osds as async_recovery_targets
+    
+    Without this change, we might accept stray osds as async_recovery_targets,
+    and need to ensure that they get a chance to become part of the acting set
+    after recovery is over.
+    
+    However, when choose_acting() is called in the Recovered state, we set
+    restrict_to_up_acting=true, which does not allow them to get back to the
+    acting set.
+    
+    Therefore, similar to backfill, do not allow stray osds to become
+    async_recovery_targets.
+    
+    Signed-off-by: Neha Ojha <nojha@redhat.com>
+    (cherry picked from commit d96732d2448173f70f6514610d1c3780a7c8fab1)
+
+commit ab09bab0a8ac84d95173029e2b7560d84eace58d
+Author: Neha Ojha <nojha@redhat.com>
+Date:   Wed May 23 15:27:41 2018 -0700
+
+    qa/suites/rados/objectstore: move yaml files under a subdir
+    
+    Signed-off-by: Neha Ojha <nojha@redhat.com>
+    (cherry picked from commit 7cfc95b367d8b80d7e42b92f3c0f18147f6aae9c)
+
+commit 1523d65eb1ff335b303b204b4bbfc0d25fc2221f
+Author: Neha Ojha <nojha@redhat.com>
+Date:   Wed May 23 15:15:54 2018 -0700
+
+    qa: whitelist SMALLER_PGP_NUM
+    
+    Signed-off-by: Neha Ojha <nojha@redhat.com>
+    (cherry picked from commit dca3275f0c8f3ce96a73a4143c5658d4a3d73b59)
+
+commit 21128c8616b9f80d7b819ff6495e0fce435b3c35
+Author: Neha Ojha <nojha@redhat.com>
+Date:   Mon Jun 4 17:23:21 2018 -0700
+
+    qa/tasks/cbt.py: changes to run on bionic
+    
+    Signed-off-by: Neha Ojha <nojha@redhat.com>
+    (cherry picked from commit bf62e1fadc6a49a511e3e569cc5c6fa1a0cf78f0)
+
+commit 3628df7dfad7a54118937bacc4338cad3dd30d33
+Author: Stephan Müller <smueller@suse.com>
+Date:   Mon May 14 15:11:27 2018 +0200
+
+    mgr/dashboard: Format small numbers correctly
+    
+    The issue was triggered by numbers that a lower than 1.
+    Doing a logarithm with a number lower than 1 leads to
+    negative value that is not handled anywhere in The formatter service as
+    a result the final value will be quirky.
+    The negative number will also be used as index in the units array, where
+    it will return "undefined".
+    
+    Fixes #24081
+    
+    Signed-off-by: Stephan Müller <smueller@suse.com>
+    (cherry picked from commit b8ecac3603c01764d83e2b8862f3b6f847321e85)
+
+commit 7701f49681f0ba37af2fe1e31144ceb27114d1f5
+Author: Xuehan Xu <xuxuehan@360.cn>
+Date:   Fri Jun 8 22:29:30 2018 +0800
+
+    mds: avoid traversing all dirfrags when trying to get wrlocks
+    
+    Fixes: http://tracker.ceph.com/issues/24467
+    Signed-off-by: Xuehan Xu <xuxuehan@360.cn>
+    (cherry picked from commit da02fbcb0afd1b72d6c030f06613d8b18028a13c)
+
+commit 68c08bf0b1164fd4c0a2ca47a9dde3762c5a345d
+Author: Neha Ojha <nojha@redhat.com>
+Date:   Thu May 24 17:03:01 2018 -0700
+
+    qa/workunits/suites/pjd.sh: use correct dir name
+    
+    Signed-off-by: Neha Ojha <nojha@redhat.com>
+    (cherry picked from commit 8fbab63436467aeb72b43f9db8c6b182e48d993c)
+
+commit c401ded644891f9c1d296a0e44eb8dfc7ee395ca
+Author: Tianshan Qu <tianshan@xsky.com>
+Date:   Tue Jun 19 13:31:17 2018 +0800
+
+    rgw: set cr state if aio_read err return in RGWCloneMetaLogCoroutine
+    
+    fixes: http://tracker.ceph.com/issues/24566
+    
+    Signed-off-by: Tianshan Qu <tianshan@xsky.com>
+    (cherry picked from commit d7f4b3ad5b416b3318f2e97a063f40fc5af07e41)
+
+commit f4f980c42df2667354a7569a4609a2eeb4f60b99
+Merge: 9ebf2d00f6 27056749ed
+Author: John Spray <jspray@redhat.com>
+Date:   Thu Jul 5 14:41:06 2018 +0100
+
+    Merge pull request #22854 from jcsp/wip-mimic-cephfs-doc
+    
+    [mimic] doc/cephfs: remove lingering "experimental" note about multimds
+    
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit d408dffaf1dd1be5e47bd7673f74b2e3a7b581c7
+Author: Tiago Melo <tmelo@suse.com>
+Date:   Mon May 28 14:19:26 2018 +0100
+
+    mgr/dashboard: Improve max-line-length tslint rule
+    
+    Prettier is not breaking strings if they are bigger
+    then the defined max line length.
+    
+    With this rule we can make sure lines are not exceeding it,
+    with the exception of import/export lines.
+    
+    Signed-off-by: Tiago Melo <tmelo@suse.com>
+    (cherry picked from commit fc67af05b67cb2bbb76fcbea35cf10b1284d25de)
+    
+    Conflicts:
+            src/pybind/mgr/dashboard/frontend/tslint.json
+
+commit 203e94ecd2175c05bca1ea37d1ad1ca04ef26df1
+Author: dongdong tao <tdd21151186@gmail.com>
+Date:   Tue May 29 05:44:59 2018 +0800
+
+    osdc: Fix the wrong BufferHead offset
+    
+    the BufferHead offset should be "opos - bh->start()"
+    
+    Fixes: https://tracker.ceph.com/issues/24484
+    Signed-off-by: dongdong tao <tdd21151186@gmail.com>
+    (cherry picked from commit 10f3204cca240c7172aef94b16fde203b33a19fd)
+
+commit c72abc1088abfe5f357c41a3872e5cf337dc6808
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jun 25 21:18:01 2018 -0500
+
+    osd/PG: do not send notify to empty peer
+    
+    This is mostly paranoia to avoid doing something clearly silly if the
+    add_source_info() implementation incorrectly decided we found something
+    new (as it did in http://tracker.ceph.com/issues/24588).
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 3407b39bf36cb5fa5b5bd91c25f571134b7b929b)
+
+commit 6475c9d55a0cb79d7e906067d894dec20b0639d5
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jun 25 21:08:48 2018 -0500
+
+    osd/PG: do not assume delete event means found_missing
+    
+    This condition was introduced in 3a9d056d843bcafd26d78950b84e2844f8a3a9a1
+    as part of the missing deletes series, without a clear motivation.  The
+    best guess is that it was either compensating for some other unfound bug
+    or simply being a bit overaggressive.
+    
+    The problem is that it triggers a notify being sent to the sender, or
+    restarts recovery, both of which are overreactions.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 81d918d449f0211c8eac262e700930473f6e98a3)
+
+commit 822cb61a4962b0c97a4f570f891257752002ee8f
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Tue Jul 3 15:11:07 2018 +0800
+
+    os/bluestore: set correctly shard for existed Collection.
+    
+    For existed Collection, the constructor of Collection will be called in _open_collections.
+    But m_finisher_num can't setup when enable bluestore_shard_finishers.
+    
+    So move m_finisher_num setup before _open_collections && _kv_start.
+    
+    Fixes: http://tracker.ceph.com/issues/24761
+    
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    (cherry picked from commit 42cd25b794d2a2c04e96a24abea7f773bb7a3c2e)
+
+commit 27056749ed00ead7a14a7883ef7a859de33a751d
+Author: John Spray <john.spray@redhat.com>
+Date:   Wed Jul 4 17:03:05 2018 +0100
+
+    doc/cephfs: remove lingering "experimental" note about multimds
+    
+    Signed-off-by: John Spray <john.spray@redhat.com>
+
+commit 9ebf2d00f6b7deaf8600b24368c07e2b0719ae18
+Merge: 9fc7c9e5db d6f4dbfd8b
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Wed Jul 4 15:06:34 2018 +0200
+
+    Merge pull request #22803 from joscollin/wip-24746-mimic
+    
+    mimic: doc: update experimental features - snapshots
+    
+    Reviewed-by: Abhishek Lekshmanan <abhishek@suse.com>
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 32cf2e197d38092c2ba8cf4fc65979d77905b3dd
+Author: Dan Mick <dan.mick@redhat.com>
+Date:   Tue May 8 19:24:17 2018 -0700
+
+    Remove embedded 'cephd' code
+    
+    Signed-off-by: Dan Mick <dan.mick@redhat.com>
+    (cherry picked from commit 39b2626c7a36b3fef8d97cd276e23dc6f1f197f3)
+    
+    Conflicts:
+            src/compressor/CMakeLists.txt
+            src/libcephd/libcephd.cc
+
+commit d6f4dbfd8ba5524e7bbb54c220bd1520da3baf75
+Author: Jos Collin <jcollin@redhat.com>
+Date:   Thu Jun 21 11:33:41 2018 +0530
+
+    doc: update experimental features - snapshots
+    
+    * drop the experimental warning of multi-MDS
+    * update snapshotting blocked off version
+    * update Multiple filesystems availability in Jewel
+    
+    Signed-off-by: Jos Collin <jcollin@redhat.com>
+    (cherry picked from commit 9ed1158e1de3addf0e768fdb489fc128d09335eb)
+
+commit 91babdc2fba3ead3f155ddef362e3e8ded3131f7
+Author: Jos Collin <jcollin@redhat.com>
+Date:   Thu Jun 21 11:37:08 2018 +0530
+
+    doc: highlight the flags
+    
+    Signed-off-by: Jos Collin <jcollin@redhat.com>
+    (cherry picked from commit 1586580d33ff3f1ca4b168d9e3bd1182643e031f)
+
+commit 50eca93021769e30284dd6a5cc810d1cb4bfdc22
+Author: Ricardo Marques <rimarques@suse.com>
+Date:   Thu May 17 13:15:23 2018 +0100
+
+    mgr/dashboard: Add performance counters breadcrumb
+    
+    Fixes: https://tracker.ceph.com/issues/23806
+    Signed-off-by: Ricardo Marques <rimarques@suse.com>
+    (cherry picked from commit e89d5bef7fb768d508db6600174be6388a314b15)
+
+commit 2906a9f2d755c22a93c36f562af2c34331f8beb5
+Author: Ricardo Marques <rimarques@suse.com>
+Date:   Thu May 10 10:40:09 2018 +0100
+
+    mgr/dashboard: Remove useless observable unsubscriptions
+    
+    Signed-off-by: Ricardo Marques <rimarques@suse.com>
+    (cherry picked from commit ae75f15dedf6e9f19744dd4ba568ceb9b2c768e4)
+    
+    Conflicts:
+            src/pybind/mgr/dashboard/frontend/src/app/ceph/rgw/rgw-user-form/rgw-user-form.component.ts
+            (retain mimic "Create an observable to add the S3 key when the form is submitted" logic
+            but add whitespace so it blends in with the rest of the refactor)
+
+commit 595b45b7f37e14dc5be6d7186ec10f3d29aa425d
+Author: Ricardo Marques <rimarques@suse.com>
+Date:   Thu May 17 13:13:45 2018 +0100
+
+    mgr/dashboard: Add support for queryParams on routerLinkTpl
+    
+    Signed-off-by: Ricardo Marques <rimarques@suse.com>
+    (cherry picked from commit 9e710e1ad785c86ec32c5c46a6c63349f8615709)
+
+commit 9fc7c9e5db8412246356dbd71eec885e4715bb0f
+Merge: 538558b981 17a292aa1e
+Author: Lenz Grimmer <lenz@grimmer.com>
+Date:   Wed Jul 4 10:52:37 2018 +0200
+
+    Merge pull request #22807 from smithfarm/wip-24699-mimic
+    
+    mimic: mgr/dashboard: Replace Pool with Pools
+    
+    Reviewed-by: Lenz Grimmer <lgrimmer@suse.com>
+
+commit d08535dd82a8f48c66545cc9c1ba4e78930ae7be
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Thu May 17 14:48:14 2018 +0300
+
+    rgw: add check and test for small osd_max_omap_entries_per_request values
+    
+    Fixes: http://tracker.ceph.com/issues/24483
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit 7f8d484e9c0e870b0a11e22a4883d2de6649746b)
+
+commit 88f06221d641e940435aae88c884afd815a86c23
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Tue May 1 18:41:29 2018 +0300
+
+    rgw: fix bi_list to return max entries not max-1
+    
+    Fixes: http://tracker.ceph.com/issues/24483
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit fc44655b80d818a179a9ce6bf4aa52df13c98fc1)
+
+commit 8a94ffb44a0ed8f6b33fd52233ac89d84267b396
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Thu Apr 26 13:30:47 2018 +0300
+
+    rgw: add bi_list unit test
+    
+    Fixes: http://tracker.ceph.com/issues/24483
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit 95220c9cd0960fb876b8078fccb6e0493884c82f)
+
+commit 6fb3d1e11bab6e800087d5456108f7839e632bf0
+Author: Ilya Dryomov <idryomov@gmail.com>
+Date:   Thu Jun 28 17:16:17 2018 +0200
+
+    systemd/rbdmap.service: order us before remote-fs-pre.target
+    
+    If "/usr/bin/rbdmap unmap-all" notices a file system mounted on top of
+    an rbd device, it will call umount, interfering with systemd shutdown
+    logic.  Make sure we aren't invoked until all _netdev mounts are dealt
+    with by systemd.
+    
+    Fixes: http://tracker.ceph.com/issues/24713
+    Signed-off-by: Ilya Dryomov <idryomov@gmail.com>
+    (cherry picked from commit 37da5d8af95f31105962b778368a515379f6d61c)
+
+commit bfbbd16a18421087f3042421d830f74cf14b2a10
+Author: Ilya Dryomov <idryomov@gmail.com>
+Date:   Thu Jun 28 17:09:00 2018 +0200
+
+    systemd/rbdmap.service: remove a dependency on local-fs.target
+    
+    We don't require anything outside of rootfs.
+    
+    Signed-off-by: Ilya Dryomov <idryomov@gmail.com>
+    (cherry picked from commit ae61cf680b142d16cf5969a073facb5192beb0b3)
+
+commit 3325319eb0dee359621e58728b308898675e2b3b
+Author: Abhishek Lekshmanan <abhishek@suse.com>
+Date:   Thu Mar 1 17:22:33 2018 +0100
+
+    rgw: have a configurable authentication order
+    
+    This implements a configurable authentication order, currently used only for s3
+    authentication and only supporting external & local authentication, though there
+    is potential for more finegrained control by allowing for a map of various
+    engines and the control strategy (required vs sufficient vs fallback)
+    
+    The current implementation just focuses on setting control fallback if the
+    engine is the last in the order (and hence the stack) and just sets sufficient to
+    every other element, so that errors from the last sufficient engine is returned.
+    
+    The configuration option is rgw_s3_auth_order which takes a comma/space seperated
+    list of authentication engines where currently we support the keywords `external`
+    and `local`.
+    
+    Fixes: http://tracker.ceph.com/issues/23089
+    Signed-off-by: Abhishek Lekshmanan <abhishek@suse.com>
+    (cherry picked from commit 9c7fc682ca23259037115db3437c2bc9dd91fa22)
+
+commit dc399ed231d9f3e048f514fcc72a1c74c8c0ea1a
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Fri May 25 10:47:12 2018 +0800
+
+    mds: add magic to header of open file table
+    
+    Fixes: http://tracker.ceph.com/issues/24240
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit c60d55d19276c5c65c18bebbfd5939bb8c53f57c)
+    
+    Conflicts:
+            src/mds/OpenFileTable.cc: Resolved in _load_finish
+
+commit 538558b9815a893d9a84dd918fac50557e2d93fe
+Merge: f2aaf1d24a 8412cbfc99
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Tue Jul 3 18:44:25 2018 -0400
+
+    Merge pull request #22832 from ceph/backport-mimic-22828
+    
+    mimic: ceph-volume: provide a nice errror message when missing ceph.conf
+    
+    Reviewed-by: Alfredo Deza <adeza@redhat.com>
+
+commit 3d39e1089b04df761babb63464bfbca4f89d747d
+Author: Patrick Donnelly <pdonnell@redhat.com>
+Date:   Tue Jul 3 09:14:17 2018 -0700
+
+    qa: add .qa helper link
+    
+    Barebones backport of #22719.
+    
+    Command used:
+    
+         find qa/suites -type d -execdir ln -sfn ../.qa {}/.qa \;
+         ln -sf ../ qa/suites/.qa
+    
+    Signed-off-by: Patrick Donnelly <pdonnell@redhat.com>
+
+commit 8412cbfc9974cb8bd394a850cada350a11da9ffd (refs/remotes/gh/backport-mimic-22828, refs/remotes/ci/backport-mimic-22828)
+Author: Andrew Schoen <aschoen@redhat.com>
+Date:   Tue Jul 3 06:45:24 2018 -0500
+
+    ceph-volume: always ignore a missing ceph conf in main.py
+    
+    Now that we have a nice error message when a ceph.conf is missing
+    and we try to use values from it, maintaining a list of commands that
+    don't need ceph.conf isn't as helpful. We had actually missed 'simple
+    trigger' when we first implemented this causing all our luminous tests
+    for simple to fail when we backported.
+    
+    Signed-off-by: Andrew Schoen <aschoen@redhat.com>
+    (cherry picked from commit 0487a9ac60c5ba289b7dd7c730b014a298c5998f)
+
+commit a58d30c114de9db8c351859e5fc0e2bfe468ee4f
+Author: Andrew Schoen <aschoen@redhat.com>
+Date:   Mon Jul 2 15:58:44 2018 -0500
+
+    ceph-volume: show a nice error message when ceph.conf is not loaded
+    
+    If the ceph configuration file is not loaded correctly and then values
+    from it are used then an undescript error message is shown, e.g.
+    
+    AttributeError: 'property' object has no attribute 'get'
+    
+    With this change that same error condition shows the message:
+    
+    RuntimeError: No valid ceph configuration file was loaded.
+    
+    Signed-off-by: Andrew Schoen <aschoen@redhat.com>
+    (cherry picked from commit e42ecb831914b07c7c8559d4556a8aabd2accd0c)
+
+commit f2aaf1d24ac18b3d9874526af8c3c69c2abdb226
+Merge: ae503a1a0a 70e6a155ed
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Tue Jul 3 11:31:35 2018 -0400
+
+    Merge pull request #22747 from ceph/backport-mimic-22724
+    
+    mimic: ceph-volume: error on commands that need ceph.conf to operate
+    
+    Reviewed-by: Alfredo Deza <adeza@redhat.com>
+
+commit e7d35cd7d1b4532576ca338b83a2f7e015d64e15
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Jun 8 15:31:35 2018 -0700
+
+    test: run-standalone move aside cores found before testing starts
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit ea75e03d2222f890033dee1b2f1f9eba71f9a142)
+
+commit 24628e8f437e40682a0a7f1dd4bec726d7f3729a
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Jun 8 15:27:06 2018 -0700
+
+    test: Fail immediately if some operations fail
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit fe09fc5e9da3fd2681e7c78d1df19142dc9e0eb7)
+
+commit 1f7ecc1c1383079875fba21392c97491055ca300
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Jun 8 12:03:06 2018 -0700
+
+    test: Fix standalone main usage
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 33538aca359546667a9b336901379ec2bde07fdb)
+
+commit 1ab37738a7c1fd41a78c11f52af76449e6650e0b
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Jun 8 11:56:18 2018 -0700
+
+    test: Fix some function desciptions
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit f886ebba083a37c1b2d1fcf1a592008b4b16a8aa)
+    
+    Conflicts:
+            qa/standalone/ceph-helpers.sh (trivial resolution)
+
+commit 4d743475126ecfb2bce703dd524032acf897074e
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Jun 8 11:45:18 2018 -0700
+
+    test: Put files in private test directory
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 39fc43556fb03d27bc1c12ff335c949e487f32a2)
+
+commit 6f634d2701dbd1cf74f75754e129ae7bdcb999ee
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Jun 5 11:01:37 2018 -0700
+
+    test: Use a file that should be on all OSes
+    
+    Also, create temporary files in test specific dir and remove
+    
+    Caused by: 154330fd68d952a4e1b972891f02b6dc9c355424
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit c1e96ae7cb1b39f2cf397b15fa23458226580a68)
+
+commit 2feb1127c9d9b8175a79f80e00b85c2e8460c862
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jun 4 12:51:11 2018 -0500
+
+    osd/PrimaryLogPG: fix on_local_recover crash on stray clone
+    
+    If there is a stray clone (one that does not appear in the SnapSet) and
+    we do any sort of recovery on it the OSD will crash.  Log an error instead
+    but continue.
+    
+    This addresses a problem where a cluster has both (1) an unexpected clone
+    and (2) the clone is not present on all replicas.  Doing repair on that
+    PG will both not fix the unexpected clone and also cause the remaining
+    OSDs to crash trying to recover it.
+    
+    Include a test.
+    
+    Fixes: https://tracker.ceph.com/issues/24396
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 154330fd68d952a4e1b972891f02b6dc9c355424)
+
+commit 42b994e4bb65b0102e1a5da8df0bad21233f93cb
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Jun 26 18:23:07 2018 -0700
+
+    test: When possible show side-by-side diff in addition to regular diff
+    
+    Fixes: https://tracker.ceph.com/issues/21664
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit ebb05b2542be627c88a06da340e9118e908618e3)
+
+commit 7751cc4c619e5398da7746be5f845ed68e078c99
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Jun 28 09:17:06 2018 -0700
+
+    qa: Don't use sudo when moving logs
+    
+    Caused by: f0964beac5b8b54bc44a11bfb50bdea1f2ae8825
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 808c628304fefee3b1344ae22fb36a9235855168)
+
+commit 19a303e777b5e1bbb7fe9ee50e6e353622b472ba
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Jun 20 17:04:50 2018 -0700
+
+    qa: For teuthology copy logs to teuthology expected location
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit f0964beac5b8b54bc44a11bfb50bdea1f2ae8825)
+
+commit 2c56645c1c6f3bedfdff3e8e481b24b4307cbe22
+Author: Tianshan Qu <tianshan@xsky.com>
+Date:   Wed Jun 20 09:42:44 2018 +0800
+
+    rgw: fix meta and data notify thread miss stop cr manager
+    
+    rgw restrat or reload will stuck in RGWCompletionManager::get_next()
+    
+    fixes: http://tracker.ceph.com/issues/24589
+    
+    Signed-off-by: Tianshan Qu <tianshan@xsky.com>
+    (cherry picked from commit 52c22fa9c8ba5d782574625e541f9f2f872d2ce5)
+
+commit 09349e18c481369ed060816c21f2004474a79be7
+Author: Tianshan Qu <tianshan@xsky.com>
+Date:   Wed Jun 20 10:02:47 2018 +0800
+
+    rgw: fix index complete miss zones_trace set
+    
+    index complete default with nullptr of zones_trace, and we should init one,
+    otherwise will cause data sync redundant.
+    
+    fixes: http://tracker.ceph.com/issues/24590
+    
+    Signed-off-by: Tianshan Qu <tianshan@xsky.com>
+    (cherry picked from commit 54d39917fa4bc8eefb846a2eb08698619596f59f)
+
+commit 68fd755f9eb4d811951ababcdea0e01475f606a8
+Author: cfanz <songxinying@sensetime.com>
+Date:   Thu Jun 21 20:48:38 2018 +0800
+
+    rgw-multisite: fix endless loop in RGWBucketShardIncrementalSyncCR
+    
+    Fixes: http://tracker.ceph.com/issues/24603
+    
+    Signed-off-by: cfanz <songxinying@sensetime.com>
+    (cherry picked from commit 0633a9a00ebc6ea487f773af38ddd7a685e78dfc)
+
+commit 2b29e5f8ff60f60e141caf792610c231577ca3cf
+Author: Douglas Fuller <dfuller@redhat.com>
+Date:   Thu Jun 28 10:26:25 2018 -0400
+
+    osd/filestore: Change default filestore_merge_threshold to -1
+    
+    Performance evaluations of medium to large size Ceph clusters have
+    demonstrated negligible performance impact from unnecessarily deep
+    directory hierarchies but significant performance impact from filestore
+    split and merge activity. Disable merges by default.
+    
+    Fixes: http://tracker.ceph.com/issues/24686
+    Signed-off-by: Douglas Fuller <dfuller@redhat.com>
+    (cherry picked from commit 75f55f2dfc92a89ec9d821e00effad75839008c9)
+
+commit 9270f1c187f8390f73553cd5cb32d2ff7b3174d3
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Wed Jun 27 11:11:12 2018 +0800
+
+    qa/fs/upgrade/snaps: whitelist inconsistent rstat
+    
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit 162b1ed5f9fbdfa0661e0ec266ec9669843529fc)
+
+commit f4043c10fe773a8448011ea8458aaa75aa9ff2c1
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Thu Jun 14 17:36:19 2018 +0800
+
+    mds: track snapshot count in rstat
+    
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit 6f1aeed7ba7c6a9f7ce39d710c48155a0436ffae)
+
+commit 5191b5258b8143203daf5a209dac4c75295251c5
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Thu Jun 14 17:21:59 2018 +0800
+
+    mds: add MAY_SNAPSHOT in MDSAuthCaps
+    
+    For controlling whether a client is allowed to create or delete
+    snapshots
+    
+    Fixes: http://tracker.ceph.com/issues/24284
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    (cherry picked from commit 0bb08cf3079bbf36bc4bf52e7ea5cebf701dc919)
+    
+    Conflicts:
+            PendingReleaseNotes (drop notes that have already been released,
+                add caveat regarding notes that might apply to 13.2.0 but
+                seem to have been missed in the 13.2.0 release announcement)
+
+commit f6cbe0133fdb16c308f3d76542371eab16337cc5
+Author: John Spray <john.spray@redhat.com>
+Date:   Fri Jun 15 16:39:02 2018 +0100
+
+    mds: improve error handling in PurgeQueue
+    
+    Fixes: http://tracker.ceph.com/issues/24533
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit b0b7b84da84d69951977045e8812419c19268756)
+
+commit f31ca04207683a7163d8ac386e043bca39570ba7
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Sat May 26 16:46:12 2018 +0800
+
+    client:  update inode fields according to issued caps
+    
+    Cap message and request reply from non-auth MDS may carry stale
+    information (corresponding locks are in LOCK states) even they
+    have the newest inode version. So client should update inode fields
+    according to issued caps.
+    
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    Fixes: http://tracker.ceph.com/issues/24269
+    (cherry picked from commit 0c51508dd2028abd9031e40206cf1753cbf3c412)
+
+commit e03baf43fc5b0d5c89e57ddd6bb256d404daf0d8
+Author: Zhi Zhang <willzzhang@tencent.com>
+Date:   Thu Jun 7 14:18:15 2018 +0800
+
+    common/DecayCounter: set last_decay to current time when decoding decay counter
+    
+    The last_decay in the msg might be 0 (utime_t()), so the eclipse time is very
+    large and the original value would be decayed to 0. We should set last_decay
+    to current time when decoding decay counter.
+    
+    Fixes: http://tracker.ceph.com/issues/24440
+    
+    Signed-off-by: Zhi Zhang <zhangz.david@outlook.com>
+    (cherry picked from commit 25166273764417258c9ad5bd9861d01875d25a1e)
+
+commit 17a292aa1ed600ab8493f1e8c48b83bf1bf1e519
+Author: Lenz Grimmer <lgrimmer@suse.com>
+Date:   Mon Jun 25 13:38:55 2018 +0200
+
+    mgr/dashboard: Replaced "Pool" with "Pools" in navigation bar
+    
+    Replaced the string "Pool" with "Pools" in the navigation component.
+    
+    Fixes: https://tracker.ceph.com/issues/24623
+    Signed-off-by: Lenz Grimmer <lgrimmer@suse.com>
+    (cherry picked from commit ccd59a467864b44a5eb8a4da671f611e0ada7ff9)
+
+commit a8592ba08bbff4676f6e02065664e82702fa1561
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jun 25 16:00:02 2018 -0500
+
+    mgr/DaemonServer: avoid dereferencing end() iterator
+    
+    Fixes: http://tracker.ceph.com/issues/23249
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 97ef5a85100d3166910fc401465950c59a6664f1)
+
+commit ae503a1a0abe3610131a5f9e668fbb0f1808ec05
+Merge: be2090b5aa 44abb652df
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 2 09:52:38 2018 -0700
+
+    Merge pull request #22311 from pdvian/wip-24215-mimic
+    
+    mimic: common: partially revert 95fc248 to make get_process_name work
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit be2090b5aafcb93a7b4fe35770ec09e67f809e88
+Merge: edb219f171 6d7d01ef99
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 2 09:52:04 2018 -0700
+
+    Merge pull request #22545 from smithfarm/wip-24500-mimic
+    
+    mimic: osd: eternal stuck PG in 'unfound_recovery'
+    
+    Reviewed-by: Neha Ojha <nojha@redhat.com>
+
+commit edb219f1712c165104d35e8e0fd74c20b58ea968
+Merge: 430f0bfd8f 56ac444c84
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 2 09:51:30 2018 -0700
+
+    Merge pull request #22621 from pdvian/wip-24355-mimic
+    
+    mimic: osd: increase default hard pg limit
+    
+    Reviewed-by: Neha Ojha <nojha@redhat.com>
+
+commit 430f0bfd8f9f90ca2b8d0dc21087c5bb40b38f8c
+Merge: 367447a8e9 2b9d108b0e
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jul 2 09:50:49 2018 -0700
+
+    Merge pull request #22775 from theanalyst/wip-mimic-24716
+    
+    mimic: qa/workunits/suites/blogbench.sh: use correct dir name
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    Reviewed-by: Yuri Weinstein <yweins@redhat.com>
+
+commit c887e875a456130e98071bcdf59a180c9cc4c646
+Author: LiuYangkuan <liuyangkuan@gmail.com>
+Date:   Mon Jun 11 11:51:16 2018 -0400
+
+    client: fix bug #24491 _ll_drop_pins may access invalid iterator
+    Fixes: https://tracker.ceph.com/issues/24491
+    Signed-off-by: Liu Yangkuan <liuyangkuan@gmail.com>
+    
+    (cherry picked from commit 97188fef8596f098aa43aa745a217b40a6c29ea4)
+
+commit a017557220633de2a6cb77b7295c9828a0e6b50e
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Jun 26 16:57:36 2018 -0500
+
+    githubmap: update contributors
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 3cba9805a3cec18574e3c35cfa9128d8819609eb)
+
+commit 00b29a3d474ca1876ea49e1fbb195caaadf3a40d
+Author: Adam Kupczyk <akupczyk@redhat.com>
+Date:   Mon Jun 4 12:50:49 2018 +0200
+
+    common/performance: Now hobject_t's hash no longer depends directly on oid.
+    
+    Signed-off-by: Adam Kupczyk <akupczyk@redhat.com>
+    (cherry picked from commit c14504c157d3d6a8eecddaf6c83280ee254c069d)
+
+commit 6650a851ba22eba7336d87a49b68cece8c6cee75
+Author: Adam Kupczyk <akupczyk@redhat.com>
+Date:   Tue May 29 12:43:33 2018 +0200
+
+    common/performance: improved hash calculation for hobject_t and ghobject_t
+    
+    Signed-off-by: Adam Kupczyk <akupczyk@redhat.com>
+    (cherry picked from commit 0cdeb682af87a0703f8650e013e4685af0633f3f)
+
+commit 2b9d108b0eb277c1e0d296392aca3a72bab59102
+Author: Neha Ojha <nojha@redhat.com>
+Date:   Tue Jun 26 18:30:38 2018 -0400
+
+    qa/workunits/suites/blogbench.sh: use correct dir name
+    
+    Signed-off-by: Neha Ojha <nojha@redhat.com>
+    (cherry picked from commit 24513c39f1253e6fda2f77aa71aabc0769008a1b)
+
+commit 5dc2d7ddd20c9da1cb48de746eb743710c220c1d
+Author: Mykola Golub <mgolub@suse.com>
+Date:   Tue Jun 5 13:20:14 2018 +0300
+
+    librbd: deep_copy: resize head object map if needed
+    
+    Fixes: http://tracker.ceph.com/issues/24399
+    Signed-off-by: Mykola Golub <mgolub@suse.com>
+    (cherry picked from commit 9e5b87c1935f902c4f2d8607b27b3d94fb20bb02)
+
+commit a0969325ed7936ff30567b2954f0d5b04f06364c
+Author: Warren Usui <wusui@redhat.com>
+Date:   Sat May 19 00:27:17 2018 +0000
+
+    qa/suites: Add supported-random-distro$ links.
+    
+    Add supported-random-distro$ links for fs, kcephfs, and multimds
+    Removed qa/suites/fs/upgrade/supported-random-distros$ per Patrick's comment
+    
+    Fixes: http://tracker.ceph.com/issues/24138
+    Signed-off-by: Warren Usui <wusui@redhat.com>
+    (cherry picked from commit affaae045f4ce090ea614b693e47d47bdf9b7c95)
+
+commit 5ac79612279f98a34bc7e97bfbda2eb2c934be9f
+Author: Mykola Golub <mgolub@suse.com>
+Date:   Wed Jun 6 23:48:07 2018 +0300
+
+    librbd: force 'invalid object map' flag on-disk update
+    
+    when called by object_map::RefreshRequest. Since we really only open
+    the object map when we own the exclusive lock.
+    
+    Fixes: http://tracker.ceph.com/issues/24434
+    Signed-off-by: Mykola Golub <mgolub@suse.com>
+    (cherry picked from commit f087db5709223f18da87a65b0c309342db1a84d5)
+
+commit 367447a8e9e03e6f1577a8089567f3bb001ce636
+Merge: ba494f5d22 f266365575
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Wed Jun 27 16:13:24 2018 -0700
+
+    Merge pull request #22697 from yuriw/wip-24316-mimic
+    
+    qa/tests - added skeleton for mimic point to point upgrades testing
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+    Reviewed-by: Neha Ojha <nojha@redhat.com>
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit f2663655750031c1c6df4a5683ac0c4862d9b048
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Mon Jun 25 14:03:22 2018 -0700
+
+    qa/tests - added skeleton for mimic point to point upgrades testing
+    
+    Fixes https://tracker.ceph.com/issues/24316
+    Signed-off-by: Yuri Weinstein <yweinste@redhat.com>
+
+commit 70e6a155ed920fb071528f657336995fdd28dc46 (refs/remotes/ci/backport-mimic-22724)
+Author: Andrew Schoen <aschoen@redhat.com>
+Date:   Tue Jun 26 14:19:43 2018 -0500
+
+    ceph-volume: error on commands that need ceph.conf to operate
+    
+    We had been ignoring the failure to load ceph.conf for all subcommands
+    but most of them require that a ceph.conf be present. This changes that
+    so only commands that do not need ceph.conf ignore the failure to find
+    it.
+    
+    Fixes: http://tracker.ceph.com/issues/23941
+    
+    Signed-off-by: Andrew Schoen <aschoen@redhat.com>
+    (cherry picked from commit de8b301ac20ae07f59a19bc1b3a083e9c010667d)
+
+commit ba494f5d22376e5d09a309c93aaa3e21d9cbfc56
+Merge: 7cda9121a9 f2a3150974
+Author: Lenz Grimmer <lenz@grimmer.com>
+Date:   Wed Jun 27 15:04:40 2018 +0200
+
+    Merge pull request #22713 from tspmelo/mimic-fix-codelyzer
+    
+    mimic: mgr/dashboard: fix lint error caused by codelyzer update
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+    Reviewed-by: Volker Theile <vtheile@suse.com>
+
+commit 88a5202fd2e6589860e3e1f8e161c6c1b6827b2f
+Author: Sage Weil <sage@redhat.com>
+Date:   Sun Jun 10 13:37:56 2018 -0500
+
+    osd/Session: fix invalid iterator dereference in Sessoin::have_backoff()
+    
+    If p is i->second.end(), we do want to back up a position, but we
+    shouldn't dereference p for p->first.
+    
+    Fixes: http://tracker.ceph.com/issues/24486
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 2d7bfafa879ca1475173a74a84c66fd7f5e1b6bc)
+
+commit c96211f0518dd07cc8fc33140bc9be475a205743 (refs/remotes/me/wip-hobject-hash-mimic)
+Author: Adam Kupczyk <akupczyk@redhat.com>
+Date:   Mon Jun 4 12:50:49 2018 +0200
+
+    common/performance: Now hobject_t's hash no longer depends directly on oid.
+    
+    Signed-off-by: Adam Kupczyk <akupczyk@redhat.com>
+    (cherry picked from commit c14504c157d3d6a8eecddaf6c83280ee254c069d)
+
+commit e6d60fcbc7f2b043464d732b0fc0af37078bc63e
+Author: Adam Kupczyk <akupczyk@redhat.com>
+Date:   Tue May 29 12:43:33 2018 +0200
+
+    common/performance: improved hash calculation for hobject_t and ghobject_t
+    
+    Signed-off-by: Adam Kupczyk <akupczyk@redhat.com>
+    (cherry picked from commit 0cdeb682af87a0703f8650e013e4685af0633f3f)
+
+commit b0d6e82a8c95380183af099a50a638f308b67090 (refs/remotes/private/wip-mon-snap-caps-mimic)
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Jun 20 22:20:14 2018 -0400
+
+    qa/workunits/rados: test pool op permissions
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 97e3f0aa013dad49de1a55f8025327de7e801822)
+
+commit 37926b092dd1434e8fdca4620e86c0168aa26b24
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 5 15:40:44 2018 -0400
+
+    qa/workunits/rbd: test self-managed snapshot create/remove permissions
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit b12dd0bf419ae834abb31c712830fa9c4b5cda9c)
+
+commit 5bd343db3903d8aca45a40436a6dc240bdc1a0f3
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 5 14:48:17 2018 -0400
+
+    pybind/rados: new methods for manipulating self-managed snapshots
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 21538304d78df9f3b9f54a5b3c9b6b62fc3e6b48)
+
+commit fb4526690ccd29f1a03d3cd7e5484b9e2191b04b
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Jun 20 21:30:47 2018 -0400
+
+    mon/OSDMonitor: enforce caps for all remaining pool ops
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 61c06200fe59996bba2bb65fc402207bc10fd459)
+
+commit 3dfb23d036c068ec5166151ed63628738d68908a
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 5 13:24:48 2018 -0400
+
+    mon/OSDMonitor: enforce caps when creating/deleting unmanaged snapshots
+    
+    The entity will require write access to the OSD service or permission
+    for the synthetic "osd pool op unmanaged-snap" command.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 4972e054b32c8200600f27564d50d443e683153e)
+    
+    Conflicts:
+            src/mon/OSDMonitor.cc: use 'bufferlist::begin' instead of 'bufferlist::cbegin'
+
+commit f2a315097488df493b5919ad15034e46c7aada9b
+Author: Tiago Melo <tmelo@suse.com>
+Date:   Mon Jun 25 17:23:00 2018 +0100
+
+    mgr/dashboard: fix lint error caused by codelyzer update
+    
+    fixes: https://tracker.ceph.com/issues/24663
+    
+    Signed-off-by: Tiago Melo <tmelo@suse.com>
+    (cherry picked from commit 4e7f4cbd3fa1d89420a3521888ca7583fd7284fb)
+
+commit 646b31075f5447b02a1e8985d231ef697c8aa7ba
+Author: Aleksei Gutikov <aleksey.gutikov@synesis.ru>
+Date:   Thu May 3 19:20:40 2018 +0300
+
+    librados: fix buffer overflow for aio_exec python binding
+    
+    aio_exec returns ERANGE if provided buffer is not enough.
+    
+    Fixes: https://tracker.ceph.com/issues/23964
+    
+    Signed-off-by: Aleksei Gutikov <aleksey.gutikov@synesis.ru>
+    (cherry picked from commit 2ac2592e1d5548b40f7311840360968040614208)
+
+commit 421cc64e17a64c2ebcbba6243ab46e5cd1fcb654
+Author: tone-zhang <tone.zhang@arm.com>
+Date:   Fri Jun 1 04:41:33 2018 +0000
+
+    spdk: fix ceph-osd crash when activate SPDK
+    
+    When activate SPDK in Ceph, observe a Ceph crash.
+    
+    It happened in the case 1) there is a pending IOContext in
+    NVMEDevice and 2) the lower block device has been recreated and
+    queue_t then points to an NVMEDevice that no longer exists.
+    
+    This patch addresses the problem by deleting and zeroing queue_t
+    when NVMEDevice is closed.
+    
+    Fixes: http://tracker.ceph.com/issues/24371
+    
+    Signed-off-by: tone-zhang <tone.zhang@arm.com>
+    (cherry picked from commit e1bd985b341553876888339620b7b9e76f078e7a)
+
+commit 7cda9121a9348ea7a37c78ca14b3c5bdfdaca041
+Merge: 18590b7499 08f4d45e2b
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Thu Jun 21 17:18:45 2018 -0700
+
+    Merge pull request #22649 from liewegas/wip-24319-24550-mimic
+    
+    mimic: os/bluestore: backport 24319 and 24550
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 18590b7499d2e0838db7dbab5ecfbedcaa3ef00a
+Merge: 98819646e9 759b067c56
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Thu Jun 21 12:59:10 2018 -0700
+
+    Merge pull request #22653 from yuriw/wip-yuriw-distros-mimic
+    
+    qa/tests: changed distro symlink to point to new way using supported OSes
+
+commit 98819646e96eab8aed0a157783a81c693a737986
+Merge: 2dbf090c1d 951e8fd1b6
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Thu Jun 21 09:57:27 2018 -0400
+
+    Merge pull request #22640 from ceph/backport-mimic-22627
+    
+    mimic: lvm: when osd creation fails log the exception
+    
+    Reviewed-by: Alfredo Deza <adeza@redhat.com>
+
+commit a44e583fda52edceb0b20d78f1683a14d0e00f7b
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 31 14:09:30 2018 -0400
+
+    rbd-mirror: attempt to re-acquire leader lock if watcher recovered
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 69645f5433ce48281d3c6b70d979356c7ede2f88)
+
+commit f1c0bda32f0d15c0b0808ec1ef4ccfaee8d177b0
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 31 14:04:19 2018 -0400
+
+    librbd: ensure managed lock can shut down if stuck waiting for register
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit cb6712b0d9d5bccadb23a0e011eef05cf4d92280)
+
+commit 8bac4d165f7c824e73003ec79098f150c14e4045
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 31 19:17:52 2018 -0400
+
+    qa/workunits/rbd: dump long image directory upon rbd-mirror test failure
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 2c451a04f93a2a5ed1b0236162b1e9040a0c94d7)
+
+commit 1e0b1257d3e469f8f9940d1a7fca7cce1cb3e8fa
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 24 10:52:46 2018 -0400
+
+    qa/tasks: rbd_mirror_thrash should wait for daemon exit before restarting
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 21ec764499d468d7d2c201717b9a20e7f0bb314c)
+
+commit 900e1a7d3abf73f3ee7623f70d6ddf972eca2cd4
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed May 30 10:34:48 2018 -0400
+
+    librbd: utilize the journal disabled policy when removing images
+    
+    Fixes: http://tracker.ceph.com/issues/23512
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit cc6ef6d57a71e19dc748890299f41e4b6403058a)
+
+commit 759b067c56b9f18abe6f6228f20de1c4e96e8714
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Tue Jun 12 13:49:55 2018 -0700
+
+    qa/tests: changed disto symlink to point to new way using supporeted OS'es
+    
+    backport of https://github.com/ceph/ceph/pull/22536
+    
+    Signed-off-by: Yuri Weinstein <yweinste@redhat.com>
+    (cherry picked from commit 37ac8df5559a6084091670e6a1f479ab9332c24b)
+    Signed-off-by: Yuri Weinstein <yweinste@redhat.com>
+
+commit c5534eb689ccf594445577964e72fb109b42c017 (refs/remotes/me/wip-24423-mimic)
+Author: Paul Emmerich <paul.emmerich@croit.io>
+Date:   Sat Jun 16 00:45:26 2018 +0200
+
+    osd: fix getting osd maps on initial osd startup
+    
+    Commit 89d0c357964ff28b83ac541c4d946f712a7bee47 introduced a check for
+    deleted pools that relies on getting an older osd map that might not be
+    available in some situations on OSDs starting up for the very first
+    time.
+    
+    fixes https://tracker.ceph.com/issues/24423
+    
+    Signed-off-by: Paul Emmerich <paul.emmerich@croit.io>
+    (cherry picked from commit 02180f644094d520d5763afa0e76403591a90b9b)
+
+commit 08f4d45e2b47cc0da53cc60e6ea83007e19de237 (refs/remotes/me/wip-24319-24550-mimic, refs/remotes/ci/wip-yuri5-testing-2018-06-20-2109-mimic)
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Jun 19 07:15:53 2018 -0500
+
+    os/bluestore: use vector instead of set for zombies
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit ef34d2dc8f3dd40c8426b7373d13dae84f90ff73)
+
+commit 77a38fc98a39e5ccb464e49a67f53706502b2910
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jun 18 07:32:08 2018 -0500
+
+    os/bluestore: reuse zombie OpSequencers by collection id
+    
+    We can get a sequence that deletes and then recreates a collection where
+    the transaction removing the collection is delayed (due to pending IO on
+    its sequencer) but colleciton create is not (new sequencer).
+    
+    Avoid any such reordering by recycling the old collection's sequencer if
+    the zombie_osr has not been reaped yet.
+    
+    Fixes: http://tracker.ceph.com/issues/24550
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 199a110c9e2a42be64bd7fd873b6b172ce1347a8)
+
+commit 16a90d8ba0967e5fd15ca2e22fcd572cdff4ece3
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jun 18 15:35:38 2018 -0500
+
+    qa/suites/rados/objecstore/backends/objectstore: capture coredumps
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 55f390d0eb0c96cc563190371a35c41f103eb662)
+
+commit 9b70c61c0343f8040f399c1dcac0164d46aad2bb
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jun 15 14:13:14 2018 -0500
+
+    os/bluestore: more debug output
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit fd3036d2e186eb0299785c43aefe6f2ce88f244d)
+
+commit 80fd41ee660eaab0e1d99802a8643726762decde
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Jun 14 14:15:20 2018 -0500
+
+    os/bluestore: print cnode from _open_collections
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit b308b6b1554b3203e02e64e3963ef4901274f23f)
+
+commit 8abe0aa6318db026712148785c614103071807a8
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jun 15 10:41:25 2018 -0500
+
+    os/bluestore: print cnode on fsck
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit f3c89ef6e7ce313a2eda2136be5181735e5684d8)
+
+commit 684c7bdaaceea827a8c10bc097937de80d2f67c0
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Jun 13 06:55:18 2018 -0500
+
+    qa/suites/rados/objecstore: preserve data dir for ceph_test_objecstore
+    
+    If we fail, preserve the data directory.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 23dd6279bb518709b0719132d850c70b7fc554a8)
+
+commit 9fe4702424b5c4537d26d129ccb8319eb02d86b0
+Author: Sage Weil <sage@redhat.com>
+Date:   Sun Jun 10 15:57:31 2018 -0500
+
+    os/bluestore: fix SharedBlobSet deregister race
+    
+    In commit 8c8944b2c45ca9dc5b8fd4db1590e1d24206c0b3 we fixed one narrow race
+    and introduced a new (probably less narrow) one:
+    
+    A: put shared blob foo, nref = 0, start removing self from set
+    B: open_shared_blob -> lookup gets nullptr (nref==null), creates a new shared blob
+      B: takes lock, sets sb_map[sbid] = newblob
+    A: gets lock, erases sb_map[sbid]
+    B: open_shared_blob -> lookup gets null, creates another new shared blob
+    
+    Fix by only removing the sb_map entry for the nref=0 sb if it still points
+    to us.  If it doesn't, that means some new blob has shown up in its place.
+    
+    Fixes: http://tracker.ceph.com/issues/24319
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 345ea53bd30426d4e6159d0866497d5a8bf6f327)
+
+commit 951e8fd1b678d74193409fcec6b7280c1777c50f (refs/remotes/gh/backport-mimic-22627)
+Author: Andrew Schoen <aschoen@redhat.com>
+Date:   Tue Jun 19 14:34:57 2018 -0500
+
+    lvm: when osd creation fails log the exception
+    
+    Fixes: http://tracker.ceph.com/issues/24456
+    
+    Signed-off-by: Andrew Schoen <aschoen@redhat.com>
+    (cherry picked from commit d622dadef09a53d24c6a7b9119051594f8da1cae)
+
+commit 567e563763f0aaa539ec9fe2209744279af29d95
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed May 30 09:20:01 2018 -0400
+
+    rgw: update ObjectCacheInfo::time_added on overwrite
+    
+    Fixes: http://tracker.ceph.com/issues/24346
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 124eb5f28cf6e8a33a0d72a1ead8281f6a4e84a7)
+
+commit 5db5e6c9456d731e8e4ee9757afd5e3d08cab9bc
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Wed May 30 09:15:57 2018 -0400
+
+    rgw: ObjectCache::put avoids separate find + insert
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit a0fb5523f9a07e2dbc06d1c13d1a0733215b660e)
+
+commit 2dbf090c1db9bc778d17fdfddd5d18ff9976b25a
+Merge: cf65f73a2f bdc6d75f8d
+Author: Boris Ranto <branto@redhat.com>
+Date:   Tue Jun 19 10:06:42 2018 +0200
+
+    Merge pull request #22341 from b-ranto/wip-branto-mgr-mimic
+    
+    [mimic] Sync up ceph-mgr prometheus related changes
+    
+    Reviewed-by: Jan Fajerski <jfajerski@suse.com>
+    Reviewed-by: Volker Theile <vtheile@suse.com>
+
+commit cf65f73a2fe7ebd779c85fbcf2a88cca9680817c
+Merge: 93ff121c5a 0a7c42095e
+Author: Sage Weil <sage@newdream.net>
+Date:   Mon Jun 18 14:42:12 2018 -0500
+
+    Merge pull request #22224 from yuriw/wip-yuri-powercycle-mimic
+    
+    mimic: qa/tests:  added supported distro for powercycle suite
+
+commit 56ac444c84bac88cc8b05a92b88cc0660df30cb8
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Wed May 23 09:17:04 2018 -0700
+
+    osd: increase default hard pg limit
+    
+    The hard limit was too easy to hit during failure cases, especially
+    due to mismatched device sizes causing high variance in pgs/osd.
+    
+    Fixes: https://tracker.ceph.com/issues/24243
+    Signed-off-by: Josh Durgin <jdurgin@redhat.com>
+    (cherry picked from commit dfdedce89521f89046fb13287d9fdd683c91e242)
+
+commit 8851fd08a1e5a821c0dd8cef24e224641d884248
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Thu May 24 16:09:01 2018 -0400
+
+    rgw: add configurable AWS-compat invalid range get behavior
+    
+    If rgw_ignore_get_invalid_range is set, treat invalid range
+    restrictions as a request for the full object.  By default, retain
+    the RGW behavior to fail with ERANGE.
+    
+    Fixes: http://tracker.ceph.com/issues/24317
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit b8a3baffddb0f0082a9b250693d26d934eaf2650)
+
+commit 93ff121c5ad658d32fed089b1037222f2ade1b5d
+Merge: c16df3100e daf2a1969d
+Author: Lenz Grimmer <lenz@grimmer.com>
+Date:   Fri Jun 15 09:46:48 2018 +0200
+
+    Merge pull request #22468 from votdev/fix_rgw_create_key
+    
+    mimic: mgr/dashboard: Fix bug when creating S3 keys
+    
+    Reviewed-by: Ricardo Marques <rimarques@suse.com>
+    Reviewed-by: Stephan Müller <smueller@suse.com>
+
+commit daf2a1969d5cd8fa9067be509fe01296ccd7155f
+Author: Volker Theile <vtheile@suse.com>
+Date:   Fri Jun 8 13:44:45 2018 +0200
+
+    mgr/dashboard: Fix bug when creating S3 keys
+    
+    Currently a new subuser is created if a key is created for the main user. That's because the uid is set as subuser parameter, too.
+    To fix that the key's user name, e.g. test2 or test1:subuser2, must be splitted into its user and subuser parts.
+    
+    Signed-off-by: Volker Theile <vtheile@suse.com>
+
+commit 71b82b5886af31ac5ca2ec20b201f6e0465e53a6
+Author: Neha Ojha <nojha@redhat.com>
+Date:   Mon May 21 12:34:31 2018 -0700
+
+    PG: add custom_reaction Backfilled and release reservations after backfill
+    
+    After backfill completes, we directly go to the Recovered state without
+    releasing reservations. The outstanding reservations cause double reservation
+    issues.
+    
+    Creating a custom_reaction Backfilled, allows us to release reservations,
+    before transiting to the Recovered state.
+    
+    Signed-off-by: Neha Ojha <nojha@redhat.com>
+    (cherry picked from commit 1abc2320283e9247bec7b0821a6134f31b9b5e29)
+
+commit c16df3100e9fb7c9b15c308e2821b181df3ab617
+Merge: a0bdf1f6ec c1f8df85fd
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Wed Jun 13 13:47:48 2018 -0400
+
+    Merge pull request #22515 from ceph/backport-mimic-21803
+    
+    mimic: ceph-volume initial take on auto sub-command
+    
+    Reviewed-by: Alfredo Deza <adeza@redhat.com>
+
+commit 3ea0aca4b67a5b761b8dbbaa9158b28d76a9d0b4
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jun 4 11:00:08 2018 -0500
+
+    osd,mds,common: make 'config rm ...' idempotent
+    
+    Fixes: http://tracker.ceph.com/issues/24408
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 11044f5f1b6221eeb8a7837a9b90cd2a4c39936e)
+
+commit bb30ae4bf0155c9d1c261ecc9e5091fc4c892807
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jun 4 10:59:51 2018 -0500
+
+    common/config: fix rm_val error codes
+    
+    EINVAL if the config option is invalid.
+    ENOENT if the config option wasn't set.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 4f957a4ad7fb7029435f38a1da086d59f34f3428)
+
+commit a0bdf1f6ec7e7c65e4abffaae184f18f06d7707e
+Merge: 3afce677ec b35de9ffe2
+Author: Andrew Schoen <andrew.schoen@gmail.com>
+Date:   Wed Jun 13 16:06:13 2018 +0000
+
+    Merge pull request #22477 from alfredodeza/mimic-bluestore-no-meta-paths
+    
+    mimic: os/bluestore: don't store/use path_block.{db,wal} from meta
+    
+    Reviewed-by: Andrew Schoen <aschoen@redhat.com>
+
+commit a9bce4106317b9f41ee7f3ec6b175c8db4fa2321
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Wed May 16 17:54:01 2018 +0800
+
+    mds: send cap export message when exporting non-auth caps to auth mds
+    
+    The cap export message makes client open session for the importer mds.
+    Otherwise client may never open session for the importer mds. The
+    importer mds can not get cap renew message from the client. It evicts
+    the client session (opened while importing caps) after a certain time.
+    
+    Signed-off-by: "Yan, Zheng" <zyan@redhat.com>
+    Fixes: http://tracker.ceph.com/issues/24052
+    (cherry picked from commit 7385b37272af6ce07c6e5649cd8ea00644df7173)
+    
+    Conflicts:
+        src/mds/Migrator.cc - replace cbegin() with begin() as per
+                      https://tracker.ceph.com/issues/24296#note-3
+
+commit 2e82bfdf7aec640feef14dec43e285b31940e48c
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 31 09:29:00 2018 -0400
+
+    librbd: commit IO as safe when complete if writeback cache is disabled
+    
+    We do not need to flush IO to ensure its safe if the writeback cache is
+    disabled when performing a journal replay. Instead, immediately mark the
+    IO as safe and let the journal's periodic commit throttle handle updating
+    the position.
+    
+    Fixes: http://tracker.ceph.com/issues/23516
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit a27269ab95e4cadcade2131367e40ccf1011316a)
+
+commit c1f8df85fdb36870761444343c26d7afd84239b2 (refs/remotes/ci/backport-mimic-21803)
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu May 3 14:33:08 2018 -0400
+
+    ceph-volume tests verify get_devices captures device metadata
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 8deb088f101894763d27a6c31a3e8a2e96fc8320)
+
+commit 47adb35410488974851092635620c113fcd27011
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu May 3 14:32:00 2018 -0400
+
+    ceph-volume tests.conftest allow custom dirs in tmpfile fixture
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 9d820e82ac6bc0f46890df1cdaa104e88cab2a7e)
+
+commit 9672e4c434caae2240183408dd24e5d0aea59efc
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu May 3 12:52:21 2018 -0400
+
+    ceph-volume tests ensure human_readable_size works up to terabytes
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 4ad42f4244062995de003d8141cddcdc1d2b80fc)
+
+commit 41ef0f51b7f4d0e3b7c0720d11eca132862a84fb
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu May 3 12:47:53 2018 -0400
+
+    ceph-volume tests verify mapper and /dev devices
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 9cfd37344c69ebf1f3d8440f295d79ae05b545e9)
+
+commit b2fb2960f218575befa6e85a3ff0dbb48b77ad71
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu May 3 12:45:05 2018 -0400
+
+    ceph-volume tests add tests for get_block_devs
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 672c4c4d1c31b4631b1238ed0efb98fef34f2a3d)
+
+commit 0752a6f613abcf874efed2580303ff695fa099f0
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu May 3 12:40:17 2018 -0400
+
+    ceph-volume tests verify _map_dev_paths mappings
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 2c4d46955e8d7f52b090cd8b5b5561a2dba443e5)
+
+commit df5509bf1faed3489adbd40ccbd4c71c184c8000
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu May 3 11:05:42 2018 -0400
+
+    ceph-volume devices.auto initial take on auto sub-command
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit e3b04c9677c273f91e0a9de35dcd68c578d124db)
+
+commit 36a854ec9b3ef4a8851f64c8fdb9018b802e971c
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu May 3 10:51:47 2018 -0400
+
+    ceph-volume util.disk create a device metadata utility
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit c6559538db28d6b8bc8529e6b2a62e8619c69bd6)
+
+commit a0d1728e878c9ae05192a80fb5cec7ddc19028ce
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu May 3 07:38:29 2018 -0400
+
+    ceph-volume util.disk add dev mapping helpers for path resolution
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit c06e63fed8a11e80444e8e7ec2e82373d75aa501)
+
+commit 185759912d77f18b24c2743472bc905bee8a7603
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Wed May 2 19:48:23 2018 -0400
+
+    ceph-volume tests verify get_file_contents utility
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 0177f71caba3fd64de285d6808b5f859c55ed2fe)
+
+commit c97f1345a05c7553525d038a0872e332ff4d516a
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Wed May 2 19:15:10 2018 -0400
+
+    ceph-volume util.system capture file contents
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 39792573dabac3b85a41760c965b60746ca1f059)
+
+commit 1c663e552e2f59ae12782d4c7ceb31d9e1ffd60b
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Fri May 4 13:16:05 2018 -0400
+
+    ceph-volume devices.auto initial take on auto sub-command
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 5649bd724b5d300c7080052433f9b9d1c6774cff)
+
+commit 2c61bb104ba18a90b872a3207bf95dc136e2e983
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Wed May 2 19:01:10 2018 -0400
+
+    ceph-volume main include commented out auto subcommand
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit ad1b8cae055ee6c822370d91027613680ccd3dd3)
+
+commit 4e707d6e012b0c079532ae288dc8f79c71f13486
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Wed May 2 18:59:51 2018 -0400
+
+    ceph-volume tests ensure is_lv detection on LVs
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 47060a1ef4562b29771bdfb5a375a225f18c228c)
+
+commit 7921c8b318ba82ff3f3564e239eb0f8aff0274a3
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Wed May 2 16:39:16 2018 -0400
+
+    ceph-volume api.lvm create helpers to detect an lv from a device path
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 68ca7a691e6e333209b67eb5cea8594f37fb93c1)
+
+commit 6d7d01ef99f290b58ec1cd27f8f99fde3d690ebe
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Jun 7 08:33:46 2018 -0500
+
+    osd/PG: normalize query processing in Stray and ReplicaActive
+    
+    A stray PG may end up in ReplicaActive if it is participating in backfill.
+    However, whether it is or isn't, we should treat queries the same.
+    Otherwise we end up with weird behaviors like:
+    
+     - osd's stray pg moves to ReplicaActive (gets info+log from primary)
+     - osd goes down and back up
+     - primary restarts peering, request FULLLOG to find missing objects
+     - osd ignores FULLLOG because it is ReplicaActive and not Stray
+    
+    Fixes: http://tracker.ceph.com/issues/24373
+    Reported-by: Kouya Shimura <kouya@jp.fujitsu.com>
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 4e14a380becd61d823a1c86e2dbb41dc8e3a5834)
+
+commit 448bd17a6876478438160cc079513e810534e056
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Jun 7 08:20:54 2018 -0500
+
+    osd/PG: move send_notify() into RecoveryCtx
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 856fd0243346ca99fa4a3ba5014a7bcdf2c29450)
+
+commit 9fb63af249d0453902a06ad4da24d212eae938f5
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Jun 7 07:07:19 2018 -0500
+
+    osd/PG: reset PG peering if osd transitions from down -> up
+    
+    Consider a PG that is stray and ends up in ReplicaActive (because it is
+    participating as a recovery source).  If it is marked down wrongly and
+    then comes back up, then the PG will not reset, because there was not
+    an interval change (the PG is not part of the up or acting sets).
+    This can leave the PG in an odd state, leading to questionable behavior.
+    (For example, a stray might be in ReplicaActive and then ignore some
+    types of query messages.)
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 8d3b4ca591090a5ab3b5940f43a86866f2f5b9bc)
+
+commit b35de9ffe2b93b047e6ecb0d37faba33316c82fd (refs/remotes/ci/mimic-bluestore-no-meta-paths)
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Fri Jun 8 08:54:07 2018 -0400
+
+    ceph-volume util make chown links affect links as well as paths
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 7f79932f2c522da222a27c15182434914ca9a738)
+
+commit 1967e3040362cfbc12678f13a7727bf624c60c7f
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Fri Jun 8 08:57:54 2018 -0400
+
+    ceph-volume lvm.activate chown bluestore symlinks
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 2a0911d04cc1eeb19ea2e1d6069095f9e2af26fe)
+
+commit 53a6ca59d46b5741f51ba73f33a35c0a1e20109c
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jun 8 08:34:53 2018 -0500
+
+    os/bluestore: make bad symlink target error messages more informative
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit aea215103caf669c3e289cc07f978511d61f68b0)
+
+commit 0bbc92e6592b73046c67a9f418841e047e829abf
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Jun 7 12:12:46 2018 -0500
+
+    os/bluestore: don't store/use path_block.{db,wal} from meta
+    
+    This reverts most of 8d07fa5ad0772b4d979dc10695d230074d1f1e69.
+    
+    ceph-volume goes to great lengths to ensure that the symlinks in the
+    osd dir are accurate.  Having these values here is an opportunity to
+    get them out of sync.  And that can happen very easily if the initial
+    mkfs was performed using a /dev/sdX device name (which is unstable
+    across reboots).  Even after ceph-volume corrects the symlink, bluestore
+    will continue to use the stale device path.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit ef510e43f0ee14b49e99beed9ae8feda6db3429a)
+
+commit 3afce677ec85b9a6e25e411f9d246fa6d30aacd1
+Merge: 5681597d48 d199ef2aa2
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Tue Jun 12 17:05:25 2018 -0400
+
+    Merge pull request #22507 from ceph/backport-mimic-22437
+    
+    mimic: ceph-volume tests destroy osds on monitor hosts
+    
+    Reviewed-by: Alfredo Deza <adeza@redhat.com>
+
+commit 5681597d48256ffb8d81ccacfbe157770e42fb4d
+Merge: 486189345b 84a18aad04
+Author: Andrew Schoen <andrew.schoen@gmail.com>
+Date:   Tue Jun 12 18:33:12 2018 +0000
+
+    Merge pull request #22535 from alfredodeza/mimic-cv-ansible-deps
+    
+    mimic: ceph-volume tests.functional install new ceph-ansible dependencies
+    
+    Reviewed-by: Andrew Schoen <aschoen@redhat.com>
+
+commit 84a18aad0424f343a850cda764c28184a048568b (refs/remotes/ci/mimic-cv-ansible-deps)
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Mon May 21 07:11:28 2018 -0400
+
+    ceph-volume tests.functional install new ceph-ansible dependencies
+    
+    Make note that ceph-ansible's requirements.txt can't be used just yet
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 22310f43165e474e8e12732be57217b26e2b5424)
+
+commit 486189345bfc685b16355312129c2e877eae417b
+Merge: 5a213d2f1c f3994b2117
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Tue Jun 12 10:44:58 2018 -0400
+
+    Merge pull request #22529 from ceph/backport-mimic-22062
+    
+    mimic: ceph-volume dmcrypt and activate --all documentation updates
+    
+    Reviewed-by: Alfredo Deza <adeza@redhat.com>
+
+commit f3994b211773a97f8a7502d757d9643dabb8acd7
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu May 17 09:40:15 2018 -0400
+
+    doc/man/ceph-volume explain encryption and activate all with examples
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 0a4cebd1dda876cfc19fbfb97c668d4dae05097c)
+
+commit e17f5354d5f544082393b3e0eabc1c052c501a52
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu May 17 09:05:52 2018 -0400
+
+    doc/ceph-volume activate is able to use --all for existing OSDs
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit d8b9a7c0745d6a901988a08a8218d9da585e5aa8)
+
+commit 7c9daf9f207125dcf6313fac3c4d8b93d3b986f6
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu May 17 08:46:03 2018 -0400
+
+    doc/ceph-volume encryption is enabled with the --dmcrypt flag
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 72cef7acf7a9a965960ec3c7c1b99ce8e7fa3922)
+
+commit a1d2f146bfc7bf571f6f0b1e5eeda7e0a737c9ce
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu May 17 08:45:26 2018 -0400
+
+    doc/ceph-volume prepapre accepts a --dmcrypt flag
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit e97d0717d323a08a46aa997c63d2416da7e4941f)
+
+commit 0e983e82e571c92a53f7d0761872d0ddfca7f589
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Thu May 17 08:44:41 2018 -0400
+
+    doc/ceph-volume activate does not need a dmcrypt flag
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit ac0c925c576868107e585ba458fbff956467bccb)
+
+commit 5a213d2f1cab25b4f83357b06a0f3bcf19861441
+Merge: e5f4f4f0c9 849909b00b
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Tue Jun 12 09:25:09 2018 -0400
+
+    Merge pull request #22508 from ceph/backport-mimic-22426
+    
+    mimic: ceph-volume expand on the LVM API to create multiple LVs at different sizes
+    
+    Reviewed-by: Alfredo Deza <adeza@redhat.com>
+
+commit 7fb63e3ef710d516c92b0124858b848a3826b01f
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Fri Jun 1 17:44:56 2018 +0800
+
+    os/bluestore: firstly delete db then delete bluefs if open db met error.
+    
+    When create Rocksdb but failed, met the followong error messages:
+    
+    2018-05-31 22:30:15.017 7facd3f4f240 -1 rocksdb: do_open Failed to create rocksdb column family: L
+    2018-05-31 22:30:15.017 7facd3f4f240 -1 bluestore(/home/jianpeng/ceph/build/dev/osd0) _open_db erroring opening db:
+    *** Caught signal (Segmentation fault) **
+     in thread 7facd3f4f240 thread_name:ceph-osd
+     ceph version 14.0.0-109-g9d317e5d23 (9d317e5d23eb78deec1a048aff5c2a31997c8345) nautilus (dev)
+     1: (()+0x910ee0) [0x555727d3aee0]
+     2: (()+0x12890) [0x7facc9a8d890]
+     3: (pthread_mutex_lock()+0) [0x7facc9a84fa0]
+     4: (BlockDevice::queue_reap_ioc(IOContext*)+0x28) [0x555727ce4fa8]
+     5: (BlueFS::_close_writer(BlueFS::FileWriter*)+0x62) [0x555727ce9d52]
+     6: (BlueRocksWritableFile::~BlueRocksWritableFile()+0x49) [0x555727d0e659]
+     7: (rocksdb::WritableFileWriter::Close()+0x1e7) [0x555727ef0c77]
+     8: (rocksdb::log::Writer::~Writer()+0x4d) [0x555727dfbb1d]
+     9: (rocksdb::DBImpl::CloseHelper()+0x342) [0x555727d6d632]
+     10: (rocksdb::DBImpl::~DBImpl()+0x4dd) [0x555727d7cb6d]
+     11: (rocksdb::DBImpl::~DBImpl()+0x11) [0x555727d7cc11]
+     12: (RocksDBStore::~RocksDBStore()+0xc1) [0x555727c8a6f1]
+     13: (RocksDBStore::~RocksDBStore()+0x9) [0x555727c8aa29]
+     14: (BlueStore::_open_db(bool, bool)+0x2416) [0x555727c204b6]
+     15: (BlueStore::mkfs()+0x805) [0x555727c50105]
+     16: (OSD::mkfs(CephContext*, ObjectStore*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, uuid_d, int)+0x1b0) [0x5557277ffa70]
+     17: (main()+0x4222) [0x5557276ebb92]
+     18: (__libc_start_main()+0xe7) [0x7facc8948b97]
+     19: (_start()+0x2a) [0x5557277b0a9a]
+    2018-05-31 22:30:15.789 7facd3f4f240 -1 *** Caught signal (Segmentation fault) **
+     in thread 7facd3f4f240 thread_name:ceph-osd
+    
+    This because the error handle for this case firstly delete bluefs then
+    db. Like close path, it should firstly delete db than delete bluefs.
+    
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    (cherry picked from commit 5224cc64f5a1f964aabd355cd422405a22dc50b6)
+
+commit e5f4f4f0c9b7ac8e1fc22b2badf0f2d4764e62e3
+Merge: 9858c4dc4b f10009cb75
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Tue Jun 12 06:46:20 2018 -0400
+
+    Merge pull request #22514 from ceph/backport-mimic-21890
+    
+    mimic: ceph-volume describe better the options for migrating away from ceph-disk
+    
+    Reviewed-by: Alfredo Deza <adeza@redhat.com>
+
+commit e31112cde9fd384c9c6c7d91f0a72e4fe87dbb9a
+Author: Volker Theile <vtheile@suse.com>
+Date:   Wed May 16 09:52:51 2018 +0200
+
+    rgw: Do not modify email if argument is not set
+    
+    The RGW Admin OPS API overwrites the users email either it is not set via argument, e.g. when executing /{admin}/user?uid=test5&suspended=true.
+    
+    Signed-off-by: Volker Theile <vtheile@suse.com>
+    (cherry picked from commit c6792a8be2fc1496e7a76b0e6b2579d32556b6b3)
+
+commit f10009cb750aa6beaf43f1be4ad9fe48407c172c (refs/remotes/gh/backport-mimic-21890, refs/remotes/ci/backport-mimic-21890)
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Tue May 8 13:48:20 2018 -0400
+
+    doc/rados add an anchor to reference replacing osds
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 0cc7bdc67ae3f2b1aeab8cc6046b6d172915e548)
+
+commit ae9941119f4661593a00f4a93790d388c515847a
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Tue May 8 13:47:48 2018 -0400
+
+    doc/ceph-volume describe the options for migrating away from ceph-disk
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 537ff9cc3b64c59f9dbb81ac3cf180460ecaa3f3)
+
+commit ef6eced698718b4f4399526bf42c6ef84a57498f
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Tue May 8 13:47:11 2018 -0400
+
+    doc/ceph-volume high-level description of simple activate at index.rst
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit dd6f368158db7f102b485179166ebe73d6ea622f)
+
+commit 849909b00b310fafe9ea6c10c28a029d942c2680 (refs/remotes/gh/backport-mimic-22426, refs/remotes/ci/backport-mimic-22426)
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Mon Jun 4 14:08:44 2018 -0400
+
+    ceph-volume api.lvm fallback to 1 part if none are define when creating lvs
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 552d987233545f6f33b9220ea4ea98753f96962f)
+
+commit c96e37cd6b9241fe40b349a71e1d490c472341f0
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Mon Jun 4 14:04:52 2018 -0400
+
+    ceph-volume tests verify create_lvs behavior
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 8c487124d795778dbbf461ffb95841b1c8025e08)
+
+commit 3b969e2a7ed52021f3253f038cb7779f2057bb56
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Wed May 23 09:23:40 2018 -0400
+
+    ceph-volume api.lvm default to null tags on lvs created
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 490e73eff1b5b7cc98db5d3df292759e1773c0ab)
+
+commit 1f45cd2bfe518e45663ab545c954094603621e35
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Tue May 22 16:06:01 2018 -0400
+
+    ceph-deploy api.lvm allow multiple lv creation
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit e073c56d80d8f37e0f96093f8dd4a95aef81ea02)
+
+commit eea4efcdc6d46975c3a4210c4f0f6235e0d311ea
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Tue May 22 12:58:36 2018 -0400
+
+    ceph-volume api.lvm add a sizing method for VGs to calculate LV creation
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit e61b9e5c771e167990caad3d85c0bfd27682d643)
+
+commit 75a912b6bfb5fd9283c0dae5134dbb7a6cba8b49
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Tue May 22 12:57:19 2018 -0400
+
+    ceph-volume exceptions create an error for size allocations
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit b035bb0f54d4a7777ce242798bdeb18ad0dc28e0)
+
+commit 93f4cdd9a992c8bc1200b380df3e6ba393806672
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Tue May 22 08:29:16 2018 -0400
+
+    ceph-volume tests verify vg sizing behavior
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 08832f21e52f28d65a16aadae54a10c8fd16259f)
+
+commit 39dbeb43c65009c478aaf5726d0d554269228d74
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Mon May 21 13:35:57 2018 -0400
+
+    ceph-volume api.lvm force vgs to display units in 'g'
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit da9f90fcb40e1e82c322f6020253b63da69238da)
+
+commit d199ef2aa2cf023cccb991bc74d95a4949b8f9a2 (refs/remotes/gh/backport-mimic-22437, refs/remotes/ci/backport-mimic-22437)
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Wed Jun 6 11:37:21 2018 -0400
+
+    ceph-volume tests functional osd destroy on mons only for dmcrypt
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 953c7ef54925059e6de75c2e11d9d40d909bbbca)
+
+commit 151bd5da2bbd81a974206f6e1946df278a001471
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Wed Jun 6 09:02:42 2018 -0400
+
+    ceph-volume tests/functional destroy filestore osds on the monitors
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 41277c65b4c745523e3a83bba00eea3482df4100)
+
+commit da607d8d548ebb195311706a9db823f7fac5c79a
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Wed Jun 6 08:59:34 2018 -0400
+
+    ceph-volume tests/functional destroy bluestore osds on the monitors
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit b665e1caa70a8a4b5a8c972b769bf33d5d6edde4)
+
+commit 7571ac67219caac47d51b6ae64da08e284b306d6
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Sat Jun 9 13:51:18 2018 +0800
+
+    qa: wait longer for osd to flush pg stats
+    
+    it's the test_create_from_mon()'s counterpart of 38074726.
+    
+    Fixes: http://tracker.ceph.com/issues/24321
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 16b84f7332fe42c5ca3e378cf23b2fe0185cccc6)
+
+commit 9858c4dc4b5d2176d0bd59ab3f8a348054a378a4
+Merge: 5caee5f84e a367cb9e84
+Author: Andrew Schoen <andrew.schoen@gmail.com>
+Date:   Fri Jun 8 18:42:48 2018 +0000
+
+    Merge pull request #22425 from alfredodeza/mimic-rm24417
+    
+    mimic: ceph-volume tests do not include admin keyring in OSD nodes
+    
+    Reviewed-by: Andrew Schoen <aschoen@redhat.com>
+
+commit 5caee5f84ed8e7aef5cec4aa8e22ffa6d1e73435
+Merge: 6a21295f7f 71c55486a7
+Author: Lenz Grimmer <lenz@grimmer.com>
+Date:   Fri Jun 8 14:57:40 2018 +0200
+
+    Merge pull request #22449 from wido/mimic-dashboard-port
+    
+    mimic: mgr/dashboard: Listen on port 8443 by default and not 8080
+    
+    Reviewed-by: Ricardo Dias <rdias@suse.com>
+    Reviewed-by: Volker Theile <vtheile@suse.com>
+
+commit a58dea3832d108813e6850c2b69d07e7dab4b63e
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Mon May 21 10:42:06 2018 -0400
+
+    test/rgw: fix for bucket checkpoints
+    
+    both zones must complete a checkpoint before comparing their bucket contents
+    
+    Fixes: http://tracker.ceph.com/issues/24212
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 438dafcd1664cbb938f9dcc86c47afe982f43e68)
+
+commit 71c55486a7e73a24658c28f5d22682d908ed8e2d
+Author: Wido den Hollander <wido@42on.com>
+Date:   Tue Jun 5 09:32:58 2018 +0200
+
+    mgr/dashboard: Listen on port 8443 by default and not 8080
+    
+    Port 8080 is a common alternative HTTP port used for web traffic.
+    
+    The dashboard however uses SSL (which can not be turned off) and for
+    that purpose we should use 8443.
+    
+    Signed-off-by: Wido den Hollander <wido@42on.com>
+    (cherry picked from commit b7cc66e809e9f15b211adef5bac369c32a4bacaa)
+    Signed-off-by: Wido den Hollander <wido@42on.com>
+
+commit 6a21295f7f6e7e0363bcfd30d2daf90561ef490c
+Merge: 956531f7e8 5be4046662
+Author: Andrew Schoen <andrew.schoen@gmail.com>
+Date:   Tue Jun 5 19:01:34 2018 +0000
+
+    Merge pull request #22398 from alfredodeza/mimic-rm24416
+    
+    mimic ceph-volume lvm.activate Do not search for a MON configuration
+    
+    Reviewed-by: Andrew Schoen <aschoen@redhat.com>
+
+commit 956531f7e8ba024a040818df69ea4ef18e926ccc
+Merge: b54a7f4137 f41cd17028
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Jun 5 11:10:58 2018 -0700
+
+    Merge pull request #22374 from dzafman/wip-scrub-omap-mimic
+    
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit bdc6d75f8d12640d3944f531ee3509fcb05ec874
+Author: Boris Ranto <branto@redhat.com>
+Date:   Tue Jun 5 13:58:00 2018 +0200
+
+    mgr: expose avg data for long running avgs
+    
+    While exposing the long running avgs, the order of regular and long
+    running avg data got mixed up resulting in exposing empty data for both
+    since there is no regular data for long running avgs and vice versa.
+    This commit fixes this issue by changing the order of the if/else
+    statement exposing regular data for regular counters and avg data for
+    long running avgs.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 2042c6c27beb504454daaaf185b9ce8f04d679d9)
+
+commit a367cb9e84065e57bbd03f38f3333d8516c9caa0 (refs/remotes/alfredodeza/mimic-rm24417)
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Mon Jun 4 16:01:15 2018 -0400
+
+    ceph-volume tests do not include admin keyring in OSD nodes
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 08760632743040520588e1bc03adc17746ff2eca)
+
+commit c9303dd636be0895345f457df266ef7b1e6820c1
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Mon Jun 4 22:27:55 2018 +0800
+
+    cmake: bump up the required boost version to 1.67
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 4af37d47308d01a5c580524fc401e5300f864576)
+
+commit 5be4046662a17fcb9d04156ca8adfc307cba62f1
+Author: Wido den Hollander <wido@42on.com>
+Date:   Mon Jun 4 13:21:12 2018 +0200
+
+    ceph-volume lvm.activate Do not search for a MON configuration
+    
+    This system might not have one nor can we be sure that we have
+    a client.admin keyring on the system.
+    
+    Just prime the directory and have the OSD then use it's own cephx
+    key to communicate with the MONs.
+    
+    Signed-off-by: Wido den Hollander <wido@42on.com>
+    (cherry picked from commit 722d79d16a0da042bbc189709efd3eeff1366558)
+
+commit 5253b25c3e301277749f9bccaabb141241c58e43
+Author: cuixf <cuixiaofei@sangfor.com.cn>
+Date:   Wed May 23 20:01:25 2018 -0400
+
+    osd: retry to read object attrs at EC recovery
+    
+    In EC recovery read, if the object's attrs read failed or with errors, we erase the attrs we have read and
+    try to read it again from left shards. This will make the primary osd get the object's attrs correct and
+    avoid assert.
+    
+    Fixes: http://tracker.ceph.com/issues/24406
+    Signed-off-by: xiaofei cui <cuixiaofei@sangfor.com>
+    (cherry picked from commit 3eb1679b1fadb6adb6ff4ed3f1f6069a85f4bbcd)
+
+commit fbe661178244f7718271ed58aa88c95b3966f7e5
+Author: Sandor Zeestraten <sandor@zeestrataca.com>
+Date:   Mon May 21 10:26:53 2018 +0200
+
+    common: fix typo in rados bench write JSON output
+    
+    Fixes typo in `max_latency` key in JSON output from rados bench write.
+    
+    Fixes: http://tracker.ceph.com/issues/24199
+    Signed-off-by: Sandor Zeestraten <sandor@zeestrataca.com>
+    (cherry picked from commit 1491e08e422d6ad5e612205accd0134203cdc563)
+    
+    Conflicts:
+            src/common/obj_bencher.cc : Resolved in write_bench
+
+commit b54a7f41379f26dc84468249f4da760ce118184c
+Merge: 120765718d 5e257b9a00
+Author: Kefu Chai <tchaikov@gmail.com>
+Date:   Mon Jun 4 21:54:06 2018 +0800
+
+    Merge pull request #22372 from tchaikov/mimic-schedule-links
+    
+    mimic:  doc: fix the links in releases/schedule.rst
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 120765718df2faf17aade7be3be7bec6a7355253
+Merge: cc9167523d 17d11fc689
+Author: Lenz Grimmer <lenz@grimmer.com>
+Date:   Mon Jun 4 11:53:31 2018 +0200
+
+    Merge pull request #22274 from votdev/fix_table_pagination_style_mimic
+    
+    mimic: mgr/dashboard: Fix some datatable CSS issues
+    
+    Reviewed-by: Ricardo Marques <rimarques@suse.com>
+    Reviewed-by: Tiago Melo <tmelo@suse.com>
+
+commit 1b6d5a47bb1d128183d7c192b615263125cf41b9
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon May 21 08:24:54 2018 -0500
+
+    os/bluestore: move txc on_commits assignment into ctor
+    
+    This avoids adjusting the oncommits without a lock after the txc is
+    queued on the sequencer.
+    
+    This is a bit defensive since the ObjectStore caller doesn't call
+    flush_commit() at the same time as queue_transaction(), but the could
+    change in the future.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit efde8d440b482e3fd90c6b60ef5118f408afd0fa)
+
+commit 07671fa9d7504cdab0b9bd63a785bade01253d61
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri May 18 09:18:11 2018 -0500
+
+    os/bluestore: fix flush_commit locking
+    
+    We were updating the txc state to KV_DONE and queuing the oncommits
+    waiters without holding any locks.  This was mostly fine, *except* that
+    Collection|OpSequencer::flush_commit(Context *) was looking at the state
+    (under qlock) and also adding items to oncommits.
+    
+    The flush_commit() method is only used in 2 places: osd bench, and the
+    PG reset_interval_flush outgoing message blocking machinery (which is
+    a bit ick). The first we could get rid of, but the second is hard to
+    remove (despite its ick factor).
+    
+    The simple fix is to take qlock while updating the state value and
+    working with oncommits.
+    
+    Fixes: http://tracker.ceph.com/issues/21480
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit a4042d51bcf1444350fa21763003e57aca984f87)
+
+commit f41cd1702883992597dd3fc7fd4db1d70d5afa50 (refs/remotes/ci/wip-scrub-omap-mimic)
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed May 30 16:22:40 2018 -0700
+
+    Revert "qa/standalone/scrub/osd-scrub-repair.sh: drop omap_digest flag"
+    
+    This reverts commit 886606bfd76b3f327b9376c4cc3875ae4991365a.
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    
+    Conflicts:
+            qa/standalone/scrub/osd-scrub-repair.sh (manually made equivalent changes)
+    
+    (cherry picked from commit 843598b69ba0c6dd3532b4cf3e75475189a3f45d)
+
+commit 33a2b261ca830f476140ea1b38c039b61cc05cc8
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed May 30 17:18:03 2018 -0700
+
+    osd: Handle omap and data digests independently
+    
+    Caused by: be078c8b7b131764caa28bc44452b8c5c2339623
+    The original attempt above to fix the omap_digest handling when
+    data_digest isn't present had 2 errors.  First, it checked
+    is_data_digest() and is_omap_digest() instead of digest_present and
+    omap_digest_present which indicate the source digest is available.
+    Second, MAYBE could only be set if both digests are available.
+    
+    Fixes: http://tracker.ceph.com/issues/24366
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 01f9669928abd571e14421a51a749d44fa041337)
+
+commit cc9167523dd28ed1bf3991a7a6b4be657b3eb621
+Merge: f38fff5d09 45326b002d
+Author: Sage Weil <sage@newdream.net>
+Date:   Fri Jun 1 09:59:19 2018 -0500
+
+    Merge pull request #22299 from tchaikov/mimic-pr-22286
+    
+    mimic: cmake: enable RTTI for both debug and release RocksDB builds
+    
+    Reviewed-by: Igor Fedotov <ifedotov@suse.com>
+
+commit 5e257b9a00f7494edf2696fc0c02429f66da20f1
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Fri Jun 1 15:53:32 2018 +0800
+
+    doc: fix the links in releases/schedule.rst
+    
+    they were broken in e37e49b2
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 27aac7c36cbf9d28ceb81d037de8d9a13ca46564)
+
+commit 760fcc0f8ecf743375a8ac32f55cbe1ce828ba6c
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Fri Jun 1 16:05:16 2018 +0800
+
+    doc: fix some redirected links reported by "build-doc linkcheck"
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 776329abe17987bcc021dac2b444fc7ab24c1b28)
+
+commit 85e25cefd2a78644f4aa668bb8c32cd08d5e30d4
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Thu May 31 23:04:14 2018 +0800
+
+    mon: enable level_compaction_dynamic_level_bytes for rocksdb
+    
+    Fixes: http://tracker.ceph.com/issues/24361
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 60f074fb0639d807e75b6a7858c5e13b5dc7c082)
+
+commit 946647bde631725cbe5869c07ebe9b8219fd4fcd
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed May 30 11:47:04 2018 -0700
+
+    cleanup: Remove debug option osd_debug_scrub_chance_rewrite_digest
+    
+    This option seems pointless and there are no test cases that use it.
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 6adeaed32f70923d012bf9410bfa8651694be3cf)
+
+commit 5f70635e4e26957bb295a62eb54f2441e8caf207 (refs/remotes/ci/wip-branto-mgr-mimic)
+Author: Boris Ranto <branto@redhat.com>
+Date:   Tue May 29 23:32:48 2018 +0200
+
+    dashboard: Return float if rate not available
+    
+    This fixes a test case issue when some of the data might not be
+    available during the test, yet. The test expects the second value to be
+    JFloat but that fails because get_rates return an int in that case.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 58ffd146261586b5598c946fd730df0b223294e7)
+
+commit a7bc6e1e047da13a2c7777bcf416be0793ad3fa3
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue May 22 16:55:03 2018 -0500
+
+    mon/MgrMonitor: change 'unresponsive' message to info level
+    
+    We generate a MGR_DOWN health warning at the appropriate points; having
+    this at WRN level just triggers failed teuthology runs but doesn't much
+    value for the user.
+    
+    Clear out teuthology whitelisting for this message.
+    
+    Fixes: http://tracker.ceph.com/issues/24222
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 4ddbbe561c1e09d82b2f50e44c39896eca6bb5aa)
+
+commit 3f1f9844c43a19e0cb1b4a651cd70f4f5c0f61b4
+Author: Boris Ranto <branto@redhat.com>
+Date:   Tue May 22 22:51:04 2018 +0200
+
+    doc/prometheus: Mention the long running avg types
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 7f468f4d51a23d61063f28c46b5e247c5a309762)
+
+commit aa050f35d817f8c020526b59461101644318c48c
+Author: Boris Ranto <branto@redhat.com>
+Date:   Wed May 16 17:59:59 2018 +0200
+
+    prometheus: Expose sum/count pairs for avgs
+    
+    This patch exposes the long running avgs as sum/count pairs in the
+    prometheus exporter module.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 674118b6f6ea925942bd7944946e45067c518790)
+
+commit 1b20683a445827758a1ee16243be373803ea074a
+Author: Boris Ranto <branto@redhat.com>
+Date:   Tue May 15 11:05:22 2018 +0200
+
+    mgr_module: Deal with long running avgs properly
+    
+    We have recently started exposing long running avgs with the mgr python
+    modules but that only covers the total sum, not the avgcount.
+    
+    With this patch, the counts for long running avgs are exposed to the
+    python modules allowing them to deal with the new data.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit f79ff11302a0364c04601b5ccd3950d80cd063a8)
+
+commit ad00bdb9cc73bb298f8b3a22962f88d1f942816b
+Author: Boris Ranto <branto@redhat.com>
+Date:   Tue May 15 10:27:53 2018 +0200
+
+    mgr: Expose avgcount for long running avgs
+    
+    This provides a basic interface to export avg count for long running
+    averages.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 1164ef2f32d81d4f35623c3f6a77af2b6871f962)
+
+commit 296f65e79b82793c105f712335142ae8a7d6dd56
+Author: Boris Ranto <branto@redhat.com>
+Date:   Wed May 16 18:59:27 2018 +0200
+
+    filestore: Raise the priority of two counters
+    
+    This raises the priority of
+    - journal_latency
+    - queue_transacation_latency_avg
+    
+    so that they are exposed to the ceph-mgr python modules and could be
+    used there.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit ec2a367e492bec848e16e009a79c6dc402e054e3)
+
+commit cea1bcd8e6c5d78844fb4bfd1d971df3ec51e6db
+Author: Boris Ranto <branto@redhat.com>
+Date:   Tue May 22 12:04:20 2018 +0200
+
+    prometheus: Fix order of occupation values
+    
+    When we merged the PR to unify the metadata labels, we forgot to switch
+    the order of hostname and disk in ceph_disk_occupation metric.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit b5f16367eae097cb5994edb6f700a44a9c55504d)
+
+commit 2ad072730bf37d2bf6bd6b745e2254b57a76d48a
+Author: Boris Ranto <branto@redhat.com>
+Date:   Wed May 2 23:32:35 2018 +0200
+
+    prometheus: Expose number of degraded/misplaced/unfound objects
+    
+    These come from the pg dump by polling the pg_stas_sum.
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit df48a34778968ab7141a20e5ade446e2ce3ffd32)
+
+commit 9ffa87fca14b49814c916eb9d77b82e91c161c07
+Author: Boris Ranto <branto@redhat.com>
+Date:   Thu May 3 14:25:30 2018 +0200
+
+    mgr: Expose pg_sum in pg_summary
+    
+    Signed-off-by: Boris Ranto <branto@redhat.com>
+    (cherry picked from commit 6f2a85e3b312dc60b009bcb509f5983905e802e5)
+
+commit 44abb652dfe71b786511367b7647f28f3906c370
+Author: Mykola Golub <mgolub@suse.com>
+Date:   Mon May 14 21:50:17 2018 +0300
+
+    common: partially revert 95fc248 to make get_process_name work
+    
+    "acconfig.h" is needed for HAVE_SYS_PRCTL_H and <string.h> for memset.
+    
+    Fixes: http://tracker.ceph.com/issues/24123
+    Signed-off-by: Mykola Golub <mgolub@suse.com>
+    (cherry picked from commit e1682de4d3e30c2c4a884ee113ca517a2e627a33)
+
+commit 45326b002dfd5b1f722ff1818680e8189ad45af2
+Author: Igor Fedotov <ifedotov@suse.com>
+Date:   Mon May 28 23:00:42 2018 +0300
+
+    cmake: enable RTTI for both debug and release RocksDB builds
+    
+    Overwise ceph build in Release mode is failing.
+    
+    Signed-off-by: Igor Fedotov <ifedotov@suse.com>
+    (cherry picked from commit 83841bf3de4f664df1c5b1b7997861acf2ede767)
+
+commit c9448bc3c3acad2482bba2256fa35cbb4d7dd3f0
+Author: Sage Weil <sage@redhat.com>
+Date:   Sun May 27 09:55:04 2018 -0500
+
+    mon/OSDMonitor: no_reply on MOSDFailure ops we eventually process
+    
+    Failure ops get attached to the failure report.  Once we finally process
+    them, mark them no_reply so that the forwarding mon will know about it.
+    The other paths through prepare_failure() do no_reply on the messages
+    that don't get logged in the failure_info_t::reporters.
+    
+    Fixes: http://tracker.ceph.com/issues/24322
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit f6128e5b53cc8a6e1e97a66794806299c5190d3c)
+
+commit c78c7c01160e942fbe4b67a59930cae1080a795f
+Author: Sage Weil <sage@redhat.com>
+Date:   Sun May 27 09:49:37 2018 -0500
+
+    mon/OSDMonitor: no_reply on ignored MOSDFailure
+    
+    If we are ignoring the message, tell the forwarding mon to discard it's
+    state.
+    
+    Fixes: http://tracker.ceph.com/issues/24322
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 69d9599806bfb189cb99f97f430c1b3629e10cc5)
+
+commit 17d11fc68972a0afb8c6f6838e5e0cb18baf0a07
+Author: Volker Theile <vtheile@suse.com>
+Date:   Mon May 28 12:51:11 2018 +0200
+
+    mgr/dashboard: Fix some datatable CSS issues
+    
+    Signed-off-by: Volker Theile <vtheile@suse.com>
+    (cherry picked from commit 5e84bc5fee6a44b5a18d1f4f2e917af0deeac12c)
+
+commit 9656bf1429135cfe476ac923ea5ab208731f58a5
+Author: Xiaoxi CHEN <xiaoxchen@ebay.com>
+Date:   Fri May 25 02:15:08 2018 -0700
+
+    Revert "mon: no delay for single message MSG_ALIVE and MSG_PGTEMP"
+    
+    This change doesn't looks right and causing twice as much proposal as we targeted to (limited by paxos_propose_interval).
+    
+    Imaging we have a sequence of pg_temp/up_thru during a large recovery.
+    
+    now =T
+    The 1st up_thru/pg_temp will go through fast path and trigger propose at T + paxos_min_wait, last_attempted_minwait_time = T.
+    
+    now = T+ paxos_min_wait
+    The [2, K] up_thru will failed by (now - last_attempted_minwait_time > g_conf->paxos_propose_interval)
+    and go through PaxosService::should_propose, which will schedule the propose at) T+paxos_propose_interval
+    
+    now= T+ paxos_propose_interval + paxos_min_wait
+    The K+1 up_thru/pg_temp comes, both (now - last_attempted_minwait_time > g_conf->paxos_propose_interval
+    and now - paxos->get_last_commit_time() > g_conf->paxos_min_wait satisfied, so we trigger another propose
+    in now+ paxos_min_wait = T+ paxos_propose_interval +paxos_min_wait.
+    
+    clearly we made TWO proposal in each paxos_propose_interval.
+    
+    This reverts commit ca652104fe91ac41c7c1788a2907178c36fbe6ef.
+    
+    Signed-off-by: Xiaoxi CHEN <xiaoxchen@ebay.com>
+    (cherry picked from commit 44283e5abe9e3aab1bacc85ec42cd894262bc400)
+
+commit 69cbf93d64c56959522b6d7a59da5fe8c3094146
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed May 16 16:56:33 2018 -0500
+
+    ceph_test_rados_api_misc: fix LibRadosMiscPool.PoolCreationRace
+    
+    This test is trying to reproduce a case where we don't have a session
+    for the given OSD, drop our big lock to open one, and when we retake the
+    osdmap has changed.  Previously that was an easy situation to reproduce
+    by creating an ioctx for a pool that didn't exist (yet) and then creating
+    it.  The missing pool would send us into the path that rechecks for an
+    updated osdmap and trigger the race condition.
+    
+    However, as of 7037cf8f77588aba1e3f251e04f696da0eccf462 we no longer create
+    ioctxs for pools that don't exist.  And there isn't an easy way that I can
+    think of to trigger the missing osd session that races with an osdmap
+    update.  So, use the debug option that injects the delay to drop us into
+    the same path.  This is a bit artificial in that we do actually have an
+    osdmap session, but the block handles that case (since the old no pool
+    case worked that way), so we cover the same code.
+    
+    This fix ignores the fact that we still have all this "pool doesn't exist"
+    handling code in Objecter that deals with teh fact that you could create
+    an ioctx for a missing pool...that is no longer possible.  Cleanup for
+    another day!
+    
+    Fixes: http://tracker.ceph.com/issues/24150
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit a8288c4b6e62c93b4b292435dba648800314750c)
+
+commit 78f8a0670588d35f421ee012d3c65fd6fe1ed46e (refs/remotes/me/wip-24308-mimic, refs/heads/wip-24308-mimic)
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri May 25 11:42:49 2018 -0500
+
+    mon/MDSMonitor: do not send redundant MDS health messages to cluster log
+    
+    Fixes: http://tracker.ceph.com/issues/24308
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit a2b6d9176e0ad786bf6fe4a0a6eb9ba51f1ce720)
+
+commit 4fe32eaff10ee5a93e6fac9eb22800c6fd600a66 (refs/remotes/private/wip-cx-mimic)
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu May 24 20:40:48 2018 -0500
+
+    auth/cephx/CephxProtocol: better random
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 721d7e622bb4b301f0a69a6e236d25c49bd621ad)
+
+commit fb40e6c6bc74cd434a6f0e829db17658256b5e84
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon May 14 13:35:39 2018 -0500
+
+    cephx: update docs
+    
+    Remove confusing references to ancient releases.  Be a bit more clear
+    about what signatures do/don't protect.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 1004c050a1d750d850379b7f66b8559302faac8b)
+
+commit 4cbd72f11ecda4c28d1bf47328a4f8672295870a
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu May 24 14:20:26 2018 -0500
+
+    auth/cephx: add authorizer challenge
+    
+    Allow the accepting side of a connection to reject an initial authorizer
+    with a random challenge.  The connecting side then has to respond with an
+    updated authorizer proving they are able to decrypt the service's challenge
+    and that the new authorizer was produced for this specific connection
+    instance.
+    
+    The accepting side requires this challenge and response unconditionally
+    if the client side advertises they have the feature bit.  Servers wishing
+    to require this improved level of authentication simply have to require
+    the appropriate feature.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit f80b848d3f830eb6dba50123e04385173fa4540b)
+    
+    # Conflicts:
+    #       src/auth/Auth.h
+    #       src/auth/cephx/CephxProtocol.cc
+    #       src/auth/cephx/CephxProtocol.h
+    #       src/auth/none/AuthNoneProtocol.h
+    #       src/msg/async/AsyncConnection.cc
+    
+    - const_iterator -> iterator
+    - cbegin() -> begin()
+
+commit 7155a154f6da2260d6531a0708afd5c42a59c5fe
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri May 4 10:30:03 2018 -0500
+
+    mon: require cephx v2 signatures from other mons for >= mimic
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 3dc80e5f9b6ebf1bc1cecbd95b288005216bdbec)
+
+commit 70ee835523837276fb88f5d1320971241ce16c99
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri May 4 10:29:50 2018 -0500
+
+    osd/OSDMap: require cephx v2 signatures based on require_min_compat_client, require_osd_release
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 1fdc85f224d52655d74eff9a29b6029b974661b3)
+
+commit d595ee8545b730a3faa09a4721dae46dae939a68
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri May 4 10:22:46 2018 -0500
+
+    mon,msg: implement cephx_*_require_version options
+    
+    Add a new set of options that are parallel to
+    
+     cephx_require_signatures
+     cephx_cluster_require_signatures
+     cephx_service_require_signatures
+    
+    that indicate which version of cephx is required to be supported.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 9bcbc2a3621f9ee4558c9748ab7c73c6e1b22510)
+
+commit 436b08688a5be238280a6e93de8658c10d72044c
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri May 4 10:21:26 2018 -0500
+
+    auth/cephx/CephxSessionHandler: implement CEPHX_V2 calculation mode
+    
+    Derive the signature from the entire buffer (both cipher blocks).
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 8f396cf35a3826044b089141667a196454c0a587)
+
+commit deba818807640bfb78a7154a045a53245887e95a
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri May 4 10:20:47 2018 -0500
+
+    include/ceph_features: define CEPHX2 feature
+    
+    This indicates support for cephx v2.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit d672a7afe62ade4960e3e7f935c004f15945f39b)
+
+commit 16079c8b448a9664a5ddea54651a523750485b7f
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri May 4 10:07:21 2018 -0500
+
+    msg/async,simple: include MGR as service when applying cephx settings
+    
+    mgr is in same category as mds and osd.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 0ec7d6bbc4afd3c8d678943234222468f508f305)
+
+commit 0a7c42095ec22c57d8c842be91f15ff3481822b2
+Author: Yuri Weinstein <yweinste@redhat.com>
+Date:   Wed May 23 08:25:24 2018 -0700
+
+    qa/tests:  added supported distor for powercycle suite
+    
+    Signed-off-by: Yuri Weinstein <yweinste@redhat.com>
+    (cherry picked from commit 9b10512d8e07271089e4fb126e16b410b137c5b8)
+    Signed-off-by: Yuri Weinstein <yweinste@redhat.com>
+
+commit 1e9a4409051e1159379a28ba4dcf20e203c6c7d9
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 17 13:11:09 2018 -0400
+
+    cls/rbd: prevent creating image with internal feature bits enabled
+    
+    Fixes: http://tracker.ceph.com/issues/24165
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 7abafb89f69dbd0d6cb875eaf79154ce2a321611)
+
+commit 3670af33c7ed9bcb1bf2e86ba2d36c738e4f346e
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 17 14:12:27 2018 -0400
+
+    test/librbd: fsx should use the default image features
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 00c289293ac1cc1386ccaf82c51f37204b50e24d)
+
+commit a26cba6f46949cf338a22c8ef4de5986d6f4b5e5
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 17 13:52:04 2018 -0400
+
+    librbd: prevent creation of images with internal feature bits
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 20ff4fdaea4ab0090c75fee427033c2c662a93d0)
+
+commit 9537a4b2caadfe75bf10fe23811a163aca5a9936
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 17 13:46:18 2018 -0400
+
+    rbd-mirror: mask off implicitly enabled feature bits for new images
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit f64fd0a70d834d0657d5be4f9336cc3bfdb4095f)
+
+commit 96a26c6b994b9ab689bf104cb15851697717f081
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 17 13:18:15 2018 -0400
+
+    rbd-mirror: re-use image create option logic for clones
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 3d0081805654609696f6dae30bc7d4a2b882517a)
