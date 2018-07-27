@@ -316,6 +316,7 @@ public:
 
     dest.push_endpoint = s->info.args.get("push-endpoint");
     dest.bucket_name = string(conf["data_bucket_prefix"]) + s->owner.get_id().to_str() + "-" + topic_name;
+    dest.oid_prefix = string(conf["data_oid_prefix"]) + sub_name + "/";
 
     return 0;
   }
