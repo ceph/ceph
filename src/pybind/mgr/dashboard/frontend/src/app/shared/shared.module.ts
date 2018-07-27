@@ -40,10 +40,6 @@ import { ServicesModule } from './services/services.module';
     ApiModule,
     AutofocusDirective
   ],
-  providers: [
-    AuthStorageService,
-    AuthGuardService,
-    FormatterService
-  ]
+  providers: [AuthStorageService, AuthGuardService, FormatterService]
 })
 export class SharedModule {}

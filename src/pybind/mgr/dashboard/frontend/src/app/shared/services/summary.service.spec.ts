@@ -67,7 +67,7 @@ describe('SummaryService', () => {
     });
 
     it('should call getCurrentSummary', () => {
-      expect(summaryService.getCurrentSummary ()).toEqual(summary);
+      expect(summaryService.getCurrentSummary()).toEqual(summary);
     });
 
     it('should call subscribe', () => {
@@ -86,7 +86,7 @@ describe('SummaryService', () => {
           image_name: 'someImage'
         })
       );
-      const result = summaryService.getCurrentSummary ();
+      const result = summaryService.getCurrentSummary();
       expect(result.executing_tasks.length).toBe(1);
       expect(result.executing_tasks[0]).toEqual({
         metadata: { image_name: 'someImage', pool_name: 'somePool' },

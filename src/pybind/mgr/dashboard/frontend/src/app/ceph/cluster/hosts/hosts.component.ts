@@ -63,21 +63,24 @@ export class HostsComponent implements OnInit {
       mgr: 'manager'
     };
     this.isLoadingHosts = true;
-    this.hostService.list().then((resp) => {
-      resp.map((host) => {
-        host.services.map((service) => {
-          service.cdLink = `/perf_counters/${service.type}/${service.id}`;
-          const permissionKey = typeToPermissionKey[service.type];
-          service.canRead = this.permissions[permissionKey].read;
-          return service;
+    this.hostService
+      .list()
+      .then((resp) => {
+        resp.map((host) => {
+          host.services.map((service) => {
+            service.cdLink = `/perf_counters/${service.type}/${service.id}`;
+            const permissionKey = typeToPermissionKey[service.type];
+            service.canRead = this.permissions[permissionKey].read;
+            return service;
+          });
+          return host;
         });
-        return host;
+        this.hosts = resp;
+        this.isLoadingHosts = false;
+      })
+      .catch(() => {
+        this.isLoadingHosts = false;
+        context.error();
       });
-      this.hosts = resp;
-      this.isLoadingHosts = false;
-    }).catch(() => {
-      this.isLoadingHosts = false;
-      context.error();
-    });
   }
 }
