@@ -1316,6 +1316,10 @@ public:
     return *this;
   }
 
+  RGWLC *get_lc() {
+    return lc;
+  }
+
   RGWRados& set_run_gc_thread(bool _use_gc_thread) {
     use_gc_thread = _use_gc_thread;
     return *this;
