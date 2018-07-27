@@ -32,7 +32,8 @@
     ],
     "modulePathIgnorePatterns": [
       "<rootDir>/coverage/"
-    ]
+    ],
+    "testURL": "http://localhost/"
   },
   "dependencies": {
     "@angular/animations": "6.0.6",
