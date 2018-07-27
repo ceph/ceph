@@ -49,7 +49,7 @@ fi
 cd $DASH_DIR/frontend
 jq '.["/api/"].target'=$BASE_URL proxy.conf.json.sample | jq '.["/ui-api/"].target'=$BASE_URL > proxy.conf.json
 . $BUILD_DIR/src/pybind/mgr/dashboard/node-env/bin/activate
-npm install
+npm ci
 
 if [ $DEVICE == "chrome" ]; then
     npm run e2e || stop

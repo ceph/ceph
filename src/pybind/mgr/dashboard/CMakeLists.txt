@@ -34,7 +34,7 @@ add_custom_command(
   OUTPUT "${mgr-dashboard-nodeenv}/bin/npm"
   COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh ${mgr-dashboard-nodeenv}
   COMMAND ${mgr-dashboard-nodeenv}/bin/pip install nodeenv
-  COMMAND ${mgr-dashboard-nodeenv}/bin/nodeenv -p -n 8.11.3
+  COMMAND ${mgr-dashboard-nodeenv}/bin/nodeenv -p --node=8.11.3
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   COMMENT "dashboard nodeenv is being installed"
 )
@@ -45,7 +45,7 @@ add_custom_target(mgr-dashboard-nodeenv
 
 add_npm_command(
   OUTPUT "${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/node_modules"
-  COMMAND npm install
+  COMMAND npm i -g npm@6.2.0 --unsafe-perm && npm ci
   DEPENDS frontend/package.json
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
   COMMENT "dashboard frontend dependencies are being installed"
