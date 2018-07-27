@@ -382,6 +382,50 @@ TEST(AES, DecryptNoBl) {
   ASSERT_EQ(0, err);
 }
 
+template <std::size_t TextSizeV>
+static void aes_loop_cephx() {
+  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+
+  CryptoRandom random;
+
+  bufferptr secret(16);
+  random.get_bytes(secret.c_str(), secret.length());
+  std::string error;
+  std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler(secret, error));
+
+  unsigned char plaintext[TextSizeV];
+  random.get_bytes(reinterpret_cast<char*>(plaintext), sizeof(plaintext));
+
+  const CryptoKey::in_slice_t plain_slice { sizeof(plaintext), plaintext };
+
+  // we need to deduce size first
+  const CryptoKey::out_slice_t probe_slice { 0, nullptr };
+  const auto needed = kh->encrypt(plain_slice, probe_slice);
+  ASSERT_GE(needed, plain_slice.length);
+
+  boost::container::small_vector<
+    // FIXME?
+    //unsigned char, sizeof(plaintext) + kh->get_block_size()> buf;
+    unsigned char, sizeof(plaintext) + 16> buf(needed);
+
+  std::size_t cipher_size;
+  for (std::size_t i = 0; i < 1000000; i++) {
+    const CryptoKey::out_slice_t cipher_slice { needed, buf.data() };
+    cipher_size = kh->encrypt(plain_slice, cipher_slice);
+    ASSERT_EQ(cipher_size, needed);
+  }
+}
+
+// These magics reflects Cephx's signature size. Please consult
+// CephxSessionHandler::_calc_signature() for more details.
+TEST(AES, LoopCephx) {
+  aes_loop_cephx<29>();
+}
+
+TEST(AES, LoopCephxV2) {
+  aes_loop_cephx<32>();
+}
+
 static void aes_loop(const std::size_t text_size) {
   CryptoRandom random;
 
