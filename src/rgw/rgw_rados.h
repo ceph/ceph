@@ -2389,9 +2389,14 @@ public:
     return ++max_req_id;
   }
 
+  RGWLC *get_lc() {
+    return lc;
+  }
+
   librados::IoCtx* get_lc_pool_ctx() {
     return &lc_pool_ctx;
   }
+
   void set_context(CephContext *_cct) {
     cct = _cct;
   }
