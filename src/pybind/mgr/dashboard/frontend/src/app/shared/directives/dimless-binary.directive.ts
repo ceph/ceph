@@ -18,7 +18,6 @@ import { FormatterService } from '../services/formatter.service';
   selector: '[cdDimlessBinary]'
 })
 export class DimlessBinaryDirective implements OnInit {
-
   @Output() ngModelChange: EventEmitter<any> = new EventEmitter();
 
   /**
@@ -66,10 +65,12 @@ export class DimlessBinaryDirective implements OnInit {
 
   private el: HTMLInputElement;
 
-  constructor(private elementRef: ElementRef,
-              private control: NgControl,
-              private dimlessBinaryPipe: DimlessBinaryPipe,
-              private formatter: FormatterService) {
+  constructor(
+    private elementRef: ElementRef,
+    private control: NgControl,
+    private dimlessBinaryPipe: DimlessBinaryPipe,
+    private formatter: FormatterService
+  ) {
     this.el = this.elementRef.nativeElement;
   }
 
@@ -113,5 +114,4 @@ export class DimlessBinaryDirective implements OnInit {
   onBlur(value) {
     this.setValue(value);
   }
-
 }

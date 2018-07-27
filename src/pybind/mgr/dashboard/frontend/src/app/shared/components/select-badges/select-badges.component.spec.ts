@@ -26,8 +26,8 @@ describe('SelectBadgesComponent', () => {
 
   it('should add item', () => {
     component.options = [
-      {name: 'option1', description: '', selected: false},
-      {name: 'option2', description: '', selected: false}
+      { name: 'option1', description: '', selected: false },
+      { name: 'option2', description: '', selected: false }
     ];
     component.data = [];
     component.selectOption(component.options[1]);
@@ -36,8 +36,8 @@ describe('SelectBadgesComponent', () => {
 
   it('should update selected', () => {
     component.options = [
-      {name: 'option1', description: '', selected: false},
-      {name: 'option2', description: '', selected: false}
+      { name: 'option1', description: '', selected: false },
+      { name: 'option2', description: '', selected: false }
     ];
     component.data = ['option2'];
     component.ngOnChanges();
@@ -47,12 +47,11 @@ describe('SelectBadgesComponent', () => {
 
   it('should remove item', () => {
     component.options = [
-      {name: 'option1', description: '', selected: true},
-      {name: 'option2', description: '', selected: true}
+      { name: 'option1', description: '', selected: true },
+      { name: 'option2', description: '', selected: true }
     ];
     component.data = ['option1', 'option2'];
     component.removeItem('option1');
     expect(component.data).toEqual(['option2']);
   });
-
 });

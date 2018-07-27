@@ -22,9 +22,7 @@ export class CustomOption extends ToastOptions {
 }
 
 @NgModule({
-  declarations: [
-    AppComponent
-  ],
+  declarations: [AppComponent],
   imports: [
     HttpClientModule,
     BrowserModule,
@@ -42,7 +40,7 @@ export class CustomOption extends ToastOptions {
   providers: [
     {
       provide: ErrorHandler,
-      useClass: JsErrorHandler,
+      useClass: JsErrorHandler
     },
     {
       provide: HTTP_INTERCEPTORS,
@@ -52,8 +50,8 @@ export class CustomOption extends ToastOptions {
     {
       provide: ToastOptions,
       useClass: CustomOption
-    },
+    }
   ],
   bootstrap: [AppComponent]
 })
-export class AppModule { }
+export class AppModule {}

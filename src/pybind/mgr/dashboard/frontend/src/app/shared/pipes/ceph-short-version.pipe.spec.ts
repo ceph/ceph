@@ -15,8 +15,7 @@ describe('CephShortVersionPipe', () => {
   });
 
   it('transforms with wrong version format', () => {
-    const value =
-      'foo';
+    const value = 'foo';
     expect(pipe.transform(value)).toBe('foo');
   });
 });

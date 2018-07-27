@@ -16,7 +16,7 @@ export class Helper {
       .logs()
       .get('browser')
       .then(function(browserLog) {
-        browserLog = browserLog.filter(log => {
+        browserLog = browserLog.filter((log) => {
           return log.level.value > 900; // SEVERE level
         });
 

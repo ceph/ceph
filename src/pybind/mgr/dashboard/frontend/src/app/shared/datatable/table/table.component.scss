@@ -44,7 +44,7 @@
   th.oadatatablecheckbox {
     width: 16px;
   }
-  .dataTables_length>input {
+  .dataTables_length > input {
     line-height: 25px;
     text-align: right;
   }
@@ -85,7 +85,7 @@
 }
 
 ::ng-deep .oadatatable {
-  border:1px solid $color-table-header-border;
+  border: 1px solid $color-table-header-border;
   margin-bottom: 0;
   max-width: none !important;
   .progress-linear {
@@ -105,10 +105,10 @@
         overflow: hidden;
         background-color: $color-table-active-row;
       }
-      .bar:before{
+      .bar:before {
         display: block;
         position: absolute;
-        content: "";
+        content: '';
         left: -200px;
         width: 200px;
         height: 100%;
@@ -120,15 +120,28 @@
   .datatable-header {
     background-clip: padding-box;
     background-color: $color-table-datatable-header;
-    background-image: -webkit-linear-gradient(top,$color-table-gradient-1 0,$color-table-gradient-2 100%);
-    background-image: -o-linear-gradient(top,$color-table-gradient-1 0,$color-table-gradient-2 100%);
-    background-image: linear-gradient(to bottom,$color-table-gradient-1 0,$color-table-gradient-2 100%);
+    background-image: -webkit-linear-gradient(
+      top,
+      $color-table-gradient-1 0,
+      $color-table-gradient-2 100%
+    );
+    background-image: -o-linear-gradient(
+      top,
+      $color-table-gradient-1 0,
+      $color-table-gradient-2 100%
+    );
+    background-image: linear-gradient(
+      to bottom,
+      $color-table-gradient-1 0,
+      $color-table-gradient-2 100%
+    );
     background-repeat: repeat-x;
     filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#fffafafa', endColorstr='#ffededed', GradientType=0);
-    .sort-asc, .sort-desc {
+    .sort-asc,
+    .sort-desc {
       color: $color-table-sort;
     }
-    .datatable-header-cell{
+    .datatable-header-cell {
       @include table-cell;
       text-align: left;
       font-weight: bold;
@@ -146,14 +159,14 @@
       }
       &.sortable {
         .datatable-header-cell-label:after {
-          content: " \f0dc";
+          content: ' \f0dc';
         }
         &.sort-active {
           &.sort-asc .datatable-header-cell-label:after {
-            content: " \f160";
+            content: ' \f160';
           }
           &.sort-desc .datatable-header-cell-label:after {
-            content: " \f161";
+            content: ' \f161';
           }
         }
       }
@@ -173,9 +186,9 @@
     }
     .datatable-body-row {
       &.clickable:hover .datatable-row-group {
-        background-color: $color-table-hover-row ;
+        background-color: $color-table-hover-row;
         transition-property: background;
-        transition-duration: .3s;
+        transition-duration: 0.3s;
         transition-timing-function: linear;
       }
       &.datatable-row-even {
@@ -184,10 +197,11 @@
       &.datatable-row-odd {
         background-color: $color-table-odd-row-bg;
       }
-      &.active, &.active:hover {
+      &.active,
+      &.active:hover {
         background-color: $color-table-active-row-hover;
       }
-      .datatable-body-cell{
+      .datatable-body-cell {
         @include table-cell;
         &:first-child {
           border-left: none;
@@ -199,7 +213,8 @@
     }
   }
   .datatable-footer {
-    .selected-count, .page-count {
+    .selected-count,
+    .page-count {
       font-style: italic;
       padding-left: 5px;
     }
@@ -209,11 +224,13 @@
         /** Add space between buttons */
         margin-left: 3px;
       }
-      & li > a, & li > span {
+      & li > a,
+      & li > span {
         border-radius: 3px;
       }
       .pages {
-        & > a, & > span {
+        & > a,
+        & > span {
           display: inline-block;
           padding: 5px 10px;
           margin-bottom: 5px;
@@ -231,23 +248,23 @@
 }
 
 @keyframes progress-loading {
-    from {
-      left: -200px;
-      width: 15%;
-    }
-    50% {
-      width: 30%;
-    }
-    70% {
-      width: 70%;
-    }
-    80% {
-      left: 50%;
-    }
-    95% {
-      left: 120%;
-    }
-    to {
-      left: 100%;
-    }
+  from {
+    left: -200px;
+    width: 15%;
+  }
+  50% {
+    width: 30%;
+  }
+  70% {
+    width: 70%;
+  }
+  80% {
+    left: 50%;
+  }
+  95% {
+    left: 120%;
+  }
+  to {
+    left: 100%;
+  }
 }

@@ -81,20 +81,20 @@ export class CdValidators {
    * @param {Function} condition
    * @param {ValidatorFn[]} validators
    */
-  static validateIf(
-    formControl: AbstractControl,
-    condition: Function,
-    validators: ValidatorFn[]
-  ) {
-    formControl.setValidators((control: AbstractControl): {
-      [key: string]: any;
-    } => {
-      const value = condition.call(this);
-      if (value) {
-        return Validators.compose(validators)(control);
+  static validateIf(formControl: AbstractControl, condition: Function, validators: ValidatorFn[]) {
+    formControl.setValidators(
+      (
+        control: AbstractControl
+      ): {
+        [key: string]: any;
+      } => {
+        const value = condition.call(this);
+        if (value) {
+          return Validators.compose(validators)(control);
+        }
+        return null;
       }
-      return null;
-    });
+    );
   }
 
   /**
