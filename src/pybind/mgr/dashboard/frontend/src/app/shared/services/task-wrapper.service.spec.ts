@@ -54,6 +54,7 @@ describe('TaskWrapperService', () => {
       notify = TestBed.get(NotificationService);
       summaryService = TestBed.get(SummaryService);
       spyOn(notify, 'show');
+      spyOn(notify, 'notifyTask').and.stub();
       spyOn(service, '_handleExecutingTasks').and.callThrough();
       spyOn(summaryService, 'addRunningTask').and.callThrough();
     });
@@ -77,7 +78,6 @@ describe('TaskWrapperService', () => {
       spyOn(taskManager, 'subscribe').and.callFake((name, metadata, onTaskFinished) => {
         onTaskFinished();
       });
-      spyOn(notify, 'notifyTask').and.stub();
       callWrapTaskAroundCall(202, 'async').subscribe(null, null, () => (passed = true));
       expect(notify.notifyTask).toHaveBeenCalled();
     });
@@ -87,6 +87,11 @@ describe('TaskWrapperService', () => {
       expect(service._handleExecutingTasks).not.toHaveBeenCalled();
       expect(passed).toBeTruthy();
       expect(summaryService.addRunningTask).not.toHaveBeenCalled();
+      /**
+       * A notification will be raised by the API interceptor.
+       * This resolves this bug https://tracker.ceph.com/issues/25139
+       */
+      expect(notify.notifyTask).not.toHaveBeenCalled();
     });
   });
 });
