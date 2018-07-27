@@ -188,6 +188,10 @@ void MgrStandby::send_beacon()
   // which we will transmit to the monitor.
   std::vector<MgrMap::ModuleInfo> module_info;
   for (const auto &module : modules) {
+    // do not announce always_on modules to the monitor
+    if (module->is_always_on()) {
+      continue;
+    }
     MgrMap::ModuleInfo info;
     info.name = module->get_name();
     info.error_string = module->get_error_string();
