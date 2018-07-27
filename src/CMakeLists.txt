@@ -636,18 +636,8 @@ if(WITH_LIBCEPHFS)
     client/SyntheticClient.cc)
   add_executable(ceph-syn ${ceph_syn_srcs})
   target_link_libraries(ceph-syn client global-static ceph-common)
-
-  set(mount_ceph_srcs
-    mount/mount.ceph.c)
-  add_executable(mount.ceph ${mount_ceph_srcs}
-    $<TARGET_OBJECTS:parse_secret_objs>
-    $<TARGET_OBJECTS:common_mountcephfs_objs>)
-  set_target_properties(mount.ceph PROPERTIES
-    INSTALL_RPATH "")
-  target_link_libraries(mount.ceph ${KEYUTILS_LIBRARIES})
-
   install(TARGETS ceph-syn DESTINATION bin)
-  install(TARGETS mount.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
+  add_subdirectory(mount)
 endif(WITH_LIBCEPHFS)
 
 if(WITH_FUSE)
@@ -668,7 +658,7 @@ if(WITH_RBD)
   if(WITH_KRBD)
     add_library(krbd STATIC krbd.cc
       $<TARGET_OBJECTS:parse_secret_objs>)
-    target_link_libraries(krbd ${KEYUTILS_LIBRARIES})
+    target_link_libraries(krbd keyutils::keyutils)
   endif()
   add_subdirectory(librbd)
   if(WITH_FUSE)
