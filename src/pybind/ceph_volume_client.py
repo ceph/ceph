@@ -629,6 +629,7 @@ class CephFSVolumeClient(object):
                 self._rados_command("mds add_data_pool", {
                     'pool': pool_name
                 })
+            time.sleep(5) # time for MDSMap to be distributed
             self.fs.setxattr(path, 'ceph.dir.layout.pool', pool_name, 0)
 
         # enforce security isolation, use separate namespace for this volume
