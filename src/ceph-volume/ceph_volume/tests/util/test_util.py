@@ -2,6 +2,17 @@ import pytest
 from ceph_volume import util
 
 
+class TestAsBytes(object):
+
+    def test_bytes_just_gets_returned(self):
+        bytes_string = "contents".encode('utf-8')
+        assert util.as_bytes(bytes_string) == bytes_string
+
+    def test_string_gets_converted_to_bytes(self):
+        result = util.as_bytes('contents')
+        assert isinstance(result, bytes)
+
+
 class TestStrToInt(object):
 
     def test_passing_a_float_str(self):
