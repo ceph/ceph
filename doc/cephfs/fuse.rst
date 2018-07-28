@@ -1,6 +1,6 @@
-=========================
-Mount Ceph FS using FUSE
-=========================
+=======================
+Mount CephFS using FUSE
+=======================
 
 Before mounting a Ceph File System in User Space (FUSE), ensure that the client
 host has a copy of the Ceph configuration file and a keyring with CAPS for the

@@ -311,7 +311,7 @@ three monitors may return the following:
 Checking MDS Status
 ===================
 
-Metadata servers provide metadata services for  Ceph FS. Metadata servers have
+Metadata servers provide metadata services for  CephFS. Metadata servers have
 two sets of states: ``up | down`` and ``active | inactive``. To ensure your
 metadata servers are ``up`` and ``active``,  execute the following:: 
 
