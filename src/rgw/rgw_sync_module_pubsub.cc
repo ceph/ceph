@@ -1116,9 +1116,9 @@ public:
           /* FIXME: add push notification */
 
         }
-        if (retcode < 0) {
-          return set_cr_error(retcode);
-        }
+      }
+      if (retcode < 0) {
+        return set_cr_error(retcode);
       }
       return set_cr_done();
     }
