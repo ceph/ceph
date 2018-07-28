@@ -737,6 +737,9 @@ public:
    * @return number of items, or error
    */
   int get_children(int id, list<int> *children) const;
+  /**
+   * returns children of type, by bucket id
+   */
   void get_children_of_type(int id,
                             int type,
 			    set<int> *children,
@@ -748,6 +751,11 @@ public:
     * @return type of failure-domain or a negative errno on error.
     */
   int get_rule_failure_domain(int rule_id);
+  /**
+   * enumerate failure-domains of all rules and return the biggest
+   * of them all
+   */
+  int get_top_failure_domain();
 
   /**
     * enumerate leaves(devices) of given node

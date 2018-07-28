@@ -2941,6 +2941,10 @@ std::vector<Option> get_global_options() {
     .set_default(10)
     .set_description(""),
 
+    Option("osd_heartbeat_disable_rand_choose_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(200)
+    .set_description("If total number of osds is greater than this, we'll no longer randomized choose heartbeat peers by failure domain"),
+
     Option("osd_heartbeat_use_min_delay_socket", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description(""),

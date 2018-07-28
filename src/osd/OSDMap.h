@@ -1453,6 +1453,10 @@ public:
   int parse_osd_id_list(const vector<string>& ls,
 			set<int> *out,
 			ostream *ss) const;
+  void get_random_up_osds_by_failure_domain(int n,     // whoami
+                                            int limit, // how many
+                                            set<int> skip,
+                                            set<int> *out) const;
 };
 WRITE_CLASS_ENCODER_FEATURES(OSDMap)
 WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)

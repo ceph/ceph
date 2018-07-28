@@ -4345,7 +4345,7 @@ void OSD::maybe_update_heartbeat_peers()
   }
 
   // include next and previous up osds to ensure we have a fully-connected set
-  set<int> want, extras;
+  set<int> want, extras, skip;
   const int next = osdmap->get_next_up_osd_after(whoami);
   if (next >= 0)
     want.insert(next);
@@ -4358,10 +4358,12 @@ void OSD::maybe_update_heartbeat_peers()
     extras.insert(*p);
     _add_heartbeat_peer(*p);
   }
+  skip = want;
 
   // remove down peers; enumerate extras
   map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
   while (p != heartbeat_peers.end()) {
+    skip.insert(p->first);
     if (!osdmap->is_up(p->first)) {
       int o = p->first;
       ++p;
@@ -4374,20 +4376,6 @@ void OSD::maybe_update_heartbeat_peers()
     ++p;
   }
 
-  // too few?
-  for (int n = next; n >= 0; ) {
-    if ((int)heartbeat_peers.size() >= cct->_conf->osd_heartbeat_min_peers)
-      break;
-    if (!extras.count(n) && !want.count(n) && n != whoami) {
-      dout(10) << " adding random peer osd." << n << dendl;
-      extras.insert(n);
-      _add_heartbeat_peer(n);
-    }
-    n = osdmap->get_next_up_osd_after(n);
-    if (n == next)
-      break;  // came full circle; stop
-  }
-
   // too many?
   for (set<int>::iterator p = extras.begin();
        (int)heartbeat_peers.size() > cct->_conf->osd_heartbeat_min_peers && p != extras.end();
@@ -4395,6 +4383,41 @@ void OSD::maybe_update_heartbeat_peers()
     if (want.count(*p))
       continue;
     _remove_heartbeat_peer(*p);
+  }
+
+  // too few?
+  int osd_num = osdmap->get_max_osd();
+  bool do_fast_choose = osd_num >
+    cct->_conf.get_val<int64_t>("osd_heartbeat_disable_rand_choose_threshold");
+  if (do_fast_choose) {
+    for (int n = next; n >= 0; ) {
+      if ((int)heartbeat_peers.size() >= cct->_conf->osd_heartbeat_min_peers)
+        break;
+      if (!extras.count(n) && !want.count(n) && n != whoami) {
+        dout(10) << " adding random peer osd." << n << dendl;
+        _add_heartbeat_peer(n);
+      }
+      n = osdmap->get_next_up_osd_after(n);
+      if (n == next)
+        break;  // came full circle; stop
+    }
+  } else {
+    set<int> new_peers;
+    int limit = cct->_conf->osd_heartbeat_min_peers -
+      (int)heartbeat_peers.size();
+    // make sure we have at least two osds coming from different failure-domains
+    // (e.g., hosts) for fast failure detection.
+    if (limit < 2)
+      limit = 2;
+    osdmap->get_random_up_osds_by_failure_domain(whoami, limit, skip,
+      &new_peers);
+    for (auto w : new_peers) {
+      dout(10) << " adding neighbor peer osd." << w
+               << ", full location "
+               << osdmap->crush->get_full_location_ordered_string(w)
+               << dendl;
+      _add_heartbeat_peer(w);
+    }
   }
 
   dout(10) << "maybe_update_heartbeat_peers " << heartbeat_peers.size() << " peers, extras " << extras << dendl;

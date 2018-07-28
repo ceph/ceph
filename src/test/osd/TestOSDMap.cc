@@ -181,6 +181,51 @@ public:
     cout << "first: " << *first << std::endl;;
     cout << "primary: " << *primary << std::endl;;
   }
+  void set_osd_state(set<int>osds, unsigned state) {
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    if (osds.empty()) {
+      // reset all
+      for (int i=0; i< osdmap.get_max_osd(); i++) {
+        pending_inc.pending_osd_state_set(i, state);
+      }
+    } else {
+      for (auto o : osds) {
+        pending_inc.pending_osd_state_set(o, state);
+      }
+    }
+    osdmap.apply_incremental(pending_inc);
+  }
+  int new_osd() {
+    // allocate an id first
+    auto id = osdmap.get_max_osd();
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.new_max_osd = id + 1;
+    entity_addrvec_t sample_addr;
+    sample_addr.v.push_back(entity_addr_t());
+    sample_addr.v[0].nonce = id;
+    uuid_d sample_uuid;
+    sample_uuid.generate_random();
+    pending_inc.new_state[id] = CEPH_OSD_EXISTS | CEPH_OSD_NEW;
+    pending_inc.new_up_client[id] = sample_addr;
+    pending_inc.new_up_cluster[id] = sample_addr;
+    pending_inc.new_hb_back_up[id] = sample_addr;
+    pending_inc.new_hb_front_up[id] = sample_addr;
+    pending_inc.new_weight[id] = CEPH_OSD_IN;
+    pending_inc.new_uuid[id] = sample_uuid;
+
+    // add to crush
+    CrushWrapper newcrush;
+    get_crush(newcrush);
+    map<string,string> loc;
+    stringstream osd_name;
+    osd_name << "osd." << id;
+    loc["root"] = "default";
+    newcrush.insert_item(g_ceph_context, id, 1.0, osd_name.str(), loc);
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    osdmap.apply_incremental(pending_inc);
+    return id;
+  }
 };
 
 TEST_F(OSDMapTest, Create) {
@@ -770,6 +815,282 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
   }
 }
 
+TEST_F(OSDMapTest, ChooseRandomUpOsdsByFailureDomain)
+{
+  int whoami;
+  int limit;
+  set<int> skip;
+  set<int> want;
+  set<int> down;
+
+  set_up_map();
+  // single host, 6 osds
+  whoami = 0;
+  limit = 5; // want other 5 osds as my heartbeat peers
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want);
+  ASSERT_TRUE(want.size() == 5);
+  ASSERT_EQ(want.find(whoami), want.end());
+
+  // skip osd.1 & osd.5
+  skip.insert(1);
+  skip.insert(5);
+  want.clear();
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want);
+  ASSERT_TRUE(want.size() == 3);
+  ASSERT_EQ(want.find(whoami), want.end());
+  ASSERT_EQ(want.find(1), want.end()); 
+  ASSERT_EQ(want.find(5), want.end());
+
+  // mark osd.3 as down
+  down.insert(3);
+  set_osd_state(down, CEPH_OSD_UP);
+  skip.clear();
+  want.clear();
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want);
+  ASSERT_TRUE(want.size() == 4);
+  ASSERT_EQ(want.find(whoami), want.end());
+  ASSERT_EQ(want.find(3), want.end());
+
+  // mark all osd as down
+  set_osd_state(down, CEPH_OSD_UP); // mark osd.3 up first
+  down.clear();
+  set_osd_state(down, CEPH_OSD_UP); // mark all osd down
+  want.clear();
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want);
+  ASSERT_TRUE(want.empty());
+
+  // pick only 2 heartbeat peers
+  set_osd_state(down, CEPH_OSD_UP); // mark all osd up
+  whoami = 5;
+  limit = 2;
+  want.clear();
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want);
+  ASSERT_TRUE(want.size() == 2);
+  ASSERT_EQ(want.find(whoami), want.end());
+  set<int> want2;
+  // test get_random_up_osds_by_failure_domain is idempotent
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want2);
+  ASSERT_TRUE(want == want2);
+  set_osd_state(want, CEPH_OSD_UP); // mark returnning osd down
+  want.clear();
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want);
+  ASSERT_TRUE(want.size() == 2);
+  ASSERT_EQ(want.find(whoami), want.end());
+  for (auto &w : want) {
+    ASSERT_EQ(want2.find(w), want2.end());
+  }
+  set_osd_state(want2, CEPH_OSD_UP); // restore
+
+  // build a crush rule of type host
+  const int expected_host_num = 3;
+  int osd_per_host = get_num_osds() / expected_host_num;
+  ASSERT_GE(2, osd_per_host);
+  int index = 0;
+  for (int i = 0; i < (int)get_num_osds(); i++) {
+    if (i && i % osd_per_host == 0) {
+      ++index;
+    }
+    stringstream osd_name;
+    stringstream host_name;
+    vector<string> move_to;
+    osd_name << "osd." << i;
+    host_name << "host-" << index;
+    move_to.push_back("root=default");
+    string host_loc = "host=" + host_name.str();
+    move_to.push_back(host_loc);
+    int r = crush_move(osd_name.str(), move_to);
+    ASSERT_EQ(0, r);
+  }
+  const string host_rule = "host-rule";
+  int host_rule_no = crush_rule_create_replicated(
+    host_rule, "default", "host");
+  ASSERT_LT(0, host_rule_no);
+
+  /*
+    ID CLASS WEIGHT  TYPE NAME       STATUS REWEIGHT PRI-AFF 
+    -1       0.05878 root default                            
+    -3             0     host ceph11                         
+    -5       0.01959     host host-0                         
+     0   ssd 0.00980         osd.0       up  1.00000 1.00000 
+     1   ssd 0.00980         osd.1       up  1.00000 1.00000 
+    -7       0.01959     host host-1                         
+     2   ssd 0.00980         osd.2       up  1.00000 1.00000 
+     3   ssd 0.00980         osd.3       up  1.00000 1.00000 
+    -9       0.01959     host host-2                         
+     4   ssd 0.00980         osd.4       up  1.00000 1.00000 
+     5   ssd 0.00980         osd.5       up  1.00000 1.00000 
+  */
+  // choose two heartbeat peers for osd.3, host-1
+  whoami = 3;
+  want.clear();
+  limit = 2;
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want);  
+  ASSERT_TRUE(want.size() == 2);
+  ASSERT_EQ(want.find(whoami), want.end());
+  // should at least contain one osd from host-0
+  ASSERT_TRUE(want.count(0) || want.count(1));
+  // should at least contain one osd from host-2
+  ASSERT_TRUE(want.count(4) || want.count(5));
+  // skip some osds
+  skip = want;
+  want.clear();
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want);
+  ASSERT_TRUE(want.size() == 2);
+  ASSERT_EQ(want.find(whoami), want.end());
+  // make sure no one comes from skip
+  for (auto &w: want) {
+    ASSERT_EQ(skip.find(w), skip.end());
+  }
+  // should at least contain one osd from host-0
+  ASSERT_TRUE(want.count(0) || want.count(1));
+  // should at least contain one osd from host-2
+  ASSERT_TRUE(want.count(4) || want.count(5));
+  // add returning osds to skip again
+  for (auto &w: want) {
+    skip.insert(w);
+  }
+  want.clear();
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want);
+  // only left osd.2 to choose
+  ASSERT_TRUE(want.size() == 1);
+  ASSERT_TRUE(want.count(2));
+
+  // raise limit to 5
+  limit = 5;
+  skip.clear();
+  want.clear();
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want);
+  ASSERT_TRUE(want.size() == 5);
+  ASSERT_EQ(want.find(whoami), want.end());
+
+  // switch to another osd and decrease limit to 4
+  whoami = 0;
+  limit = 4;
+  want.clear(); 
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want);
+  ASSERT_TRUE(want.size() == 4);
+  ASSERT_EQ(want.find(whoami), want.end());
+  ASSERT_TRUE(!want.count(1)); // should not include osd.1
+
+  // mark osd.2 & osd.3 as down
+  down.clear();
+  down.insert(2);
+  down.insert(3);
+  set_osd_state(down, CEPH_OSD_UP);
+  skip.clear();
+  want.clear();
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want);
+  // now only left 3 osds to choose
+  ASSERT_TRUE(want.size() == 3);
+  ASSERT_TRUE(want.count(1));
+  ASSERT_TRUE(want.count(4));
+  ASSERT_TRUE(want.count(5));
+  set_osd_state(down, CEPH_OSD_UP); // mark osd.2 & osd.3 as up again
+
+  // add 6 more osds - 6,7,8,9,10,11
+  for (int i = 0; i < 6; i++)
+    new_osd();
+  vector<string> loc;
+  loc.push_back("root=default");
+  loc.push_back("rack=rack-0");
+  loc.push_back("host=host-3");
+  int r;
+  r = crush_move("osd.6", loc);
+  ASSERT_EQ(0, r);
+  r = crush_move("osd.7", loc);
+  ASSERT_EQ(0, r);
+
+  loc.clear();
+  loc.push_back("root=default");
+  loc.push_back("rack=rack-1");
+  loc.push_back("host=host-4");
+  r = crush_move("osd.8", loc);
+  ASSERT_EQ(0, r);
+  r = crush_move("osd.9", loc);
+  ASSERT_EQ(0, r);
+
+  loc.clear();
+  loc.push_back("root=default");
+  loc.push_back("rack=rack-1");
+  loc.push_back("host=host-5");
+  r = crush_move("osd.10", loc);
+  ASSERT_EQ(0, r);
+  r = crush_move("osd.11", loc);
+  ASSERT_EQ(0, r);
+
+  // construct a new rule of failure domain rack 
+  const string rack_rule = "rack-rule";
+  int rack_rule_no = crush_rule_create_replicated(
+    rack_rule, "default", "rack");
+  ASSERT_LT(0, rack_rule_no);
+
+  /*
+    ID  CLASS WEIGHT  TYPE NAME           STATUS REWEIGHT PRI-AFF 
+     -1       0.11755 root default                                
+     -3             0     host ceph11                             
+     -5       0.01959     host host-0                             
+      0   ssd 0.00980         osd.0           up  1.00000 1.00000 
+      1   ssd 0.00980         osd.1           up  1.00000 1.00000 
+     -7       0.01959     host host-1                             
+      2   ssd 0.00980         osd.2           up  1.00000 1.00000 
+      3   ssd 0.00980         osd.3           up  1.00000 1.00000 
+     -9       0.01959     host host-2                             
+      4   ssd 0.00980         osd.4           up  1.00000 1.00000 
+      5   ssd 0.00980         osd.5           up  1.00000 1.00000 
+    -12       0.01959     rack rack-0                             
+    -11       0.01959         host host-3                         
+      6   ssd 0.00980             osd.6       up  1.00000 1.00000 
+      7   ssd 0.00980             osd.7       up  1.00000 1.00000 
+    -16       0.03918     rack rack-1                             
+    -15       0.01959         host host-4                         
+      8   ssd 0.00980             osd.8       up  1.00000 1.00000 
+      9   ssd 0.00980             osd.9       up  1.00000 1.00000 
+    -19       0.01959         host host-5                         
+     10   ssd 0.00980             osd.10      up  1.00000 1.00000 
+     11   ssd 0.00980             osd.11      up  1.00000 1.00000 
+  */
+  
+  whoami = 0;
+  skip.clear();
+  want.clear();
+  limit = 3;
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want);
+  ASSERT_EQ(want.find(whoami), want.end());
+  ASSERT_TRUE(want.size() == 3);
+  // verify that we have at least two osds from rack-0 & rack-1
+  ASSERT_TRUE(want.count(6) || want.count(7));
+  ASSERT_TRUE(want.count(8) || want.count(9) ||
+              want.count(10) || want.count(11));
+
+  whoami = 10; // from rack-1
+  skip.insert(6);
+  want.clear();
+  limit = 1;
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want);
+  ASSERT_EQ(want.find(whoami), want.end());
+  ASSERT_TRUE(want.size() == 1);
+  // we should have osd.7 from rack-0 now
+  ASSERT_TRUE(want.count(7));
+
+  // randomized mark some osds as down
+  down.clear();
+  down.insert(1);
+  down.insert(2);
+  down.insert(6);
+  down.insert(7);
+  down.insert(8);
+  down.insert(9);
+  set_osd_state(down, CEPH_OSD_UP);
+  want.clear();
+  limit = 4;
+  osdmap.get_random_up_osds_by_failure_domain(whoami, limit, skip, &want);
+  ASSERT_TRUE(want.count(0) && want.count(3) &&
+              want.count(4) && want.count(5));
+  // verify we won't pick osd.11 (which is on the same host as osd.10)
+  // since we still have enough good ones
+  ASSERT_TRUE(!want.count(11));
+} 
+
 TEST(PGTempMap, basic)
 {
   PGTempMap m;
@@ -785,4 +1106,3 @@ TEST(PGTempMap, basic)
   ASSERT_EQ(m.find(b), m.end());
   ASSERT_EQ(998u, m.size());
 }
-
