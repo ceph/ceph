@@ -1113,7 +1113,8 @@ public:
             }
           }
 
-#warning push notification
+          /* FIXME: add push notification */
+
         }
         if (retcode < 0) {
           return set_cr_error(retcode);
