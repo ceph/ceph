@@ -517,23 +517,18 @@ endif(HAVE_BLKID)
 
 # ceph_test_admin_socket_output
 
-add_executable(ceph_test_admin_socket_output
-  test_admin_socket_output.cc
-  admin_socket_output.cc
-  admin_socket_output_tests.cc
-  )
-target_link_libraries(ceph_test_admin_socket_output
-  ceph-common)
-if(CXX_STDLIB STREQUAL "libstdc++")
+find_package(StdFilesystem)
+if(StdFilesystem_FOUND)
+  add_executable(ceph_test_admin_socket_output
+    test_admin_socket_output.cc
+    admin_socket_output.cc
+    admin_socket_output_tests.cc)
   target_link_libraries(ceph_test_admin_socket_output
-    -lstdc++fs)
-elseif(CXX_STDLIB STREQUAL "libc++")
-  target_link_libraries(ceph_test_admin_socket_output
-    -lc++experimental)
+    ceph-common StdFilesystem::filesystem)
+  install(TARGETS
+    ceph_test_admin_socket_output
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
-install(TARGETS
-  ceph_test_admin_socket_output
-  DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 #make check starts here
 
