@@ -193,7 +193,7 @@ struct PSConfig {
     encode_json("id", id, f);
     encode_json("user", user, f);
     encode_json("data_bucket_prefix", data_bucket_prefix, f);
-    encode_json("data_oid_prefix", data_bucket_prefix, f);
+    encode_json("data_oid_prefix", data_oid_prefix, f);
     encode_json("events_retention_days", events_retention_days, f);
     encode_json("sync_instance", sync_instance, f);
     encode_json("max_id", max_id, f);
