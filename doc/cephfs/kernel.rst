@@ -1,6 +1,6 @@
-======================================
- Mount Ceph FS with the Kernel Driver
-======================================
+====================================
+ Mount CephFS with the Kernel Driver
+====================================
 
 To mount the Ceph file system you may use the ``mount`` command if you know the
 monitor host IP address(es), or use the ``mount.ceph`` utility to resolve the 

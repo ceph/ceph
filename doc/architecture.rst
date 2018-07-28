@@ -1444,7 +1444,7 @@ architecture.
 
 .. ditaa::
             +--------------+  +----------------+  +-------------+
-            | Block Device |  | Object Storage |  |   Ceph FS   |
+            | Block Device |  | Object Storage |  |   CephFS    |
             +--------------+  +----------------+  +-------------+            
 
             +--------------+  +----------------+  +-------------+
@@ -1513,14 +1513,14 @@ client. Other virtualization technologies such as Xen can access the Ceph Block
 Device kernel object(s). This is done with the  command-line tool ``rbd``.
 
 
-.. index:: Ceph FS; Ceph Filesystem; libcephfs; MDS; metadata server; ceph-mds
+.. index:: CephFS; Ceph Filesystem; libcephfs; MDS; metadata server; ceph-mds
 
 Ceph Filesystem
 ---------------
 
-The Ceph Filesystem (Ceph FS) provides a POSIX-compliant filesystem as a 
+The Ceph Filesystem (CephFS) provides a POSIX-compliant filesystem as a
 service that is layered on top of the object-based Ceph Storage Cluster.
-Ceph FS files get mapped to objects that Ceph stores in the Ceph Storage
+CephFS files get mapped to objects that Ceph stores in the Ceph Storage
 Cluster. Ceph Clients mount a CephFS filesystem as a kernel object or as
 a Filesystem in User Space (FUSE).
 
@@ -1530,7 +1530,7 @@ a Filesystem in User Space (FUSE).
             +-----------------------+  +------------------------+            
 
             +---------------------------------------------------+
-            |            Ceph FS Library (libcephfs)            |
+            |            CephFS Library (libcephfs)             |
             +---------------------------------------------------+
 
             +---------------------------------------------------+
@@ -1552,7 +1552,7 @@ would tax the Ceph OSD Daemons unnecessarily. So separating the metadata from
 the data means that the Ceph Filesystem can provide high performance services
 without taxing the Ceph Storage Cluster.
 
-Ceph FS separates the metadata from the data, storing the metadata in the MDS, 
+CephFS separates the metadata from the data, storing the metadata in the MDS,
 and storing the file data in one or more objects in the Ceph Storage Cluster.
 The Ceph filesystem aims for POSIX compatibility. ``ceph-mds`` can run as a
 single process, or it can be distributed out to multiple physical machines,
