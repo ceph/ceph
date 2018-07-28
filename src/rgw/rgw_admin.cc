@@ -537,6 +537,7 @@ enum {
   OPT_RESHARD_STALE_INSTANCES_DELETE,
   OPT_PUBSUB_TOPICS_LIST,
   OPT_PUBSUB_TOPIC_CREATE,
+  OPT_PUBSUB_TOPIC_GET,
   OPT_PUBSUB_TOPIC_RM,
   OPT_PUBSUB_NOTIFICATION_CREATE,
   OPT_PUBSUB_NOTIFICATION_RM,
@@ -1021,6 +1022,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
     } else if (strcmp(prev_cmd, "topic") == 0) {
       if (strcmp(cmd, "create") == 0)
         return OPT_PUBSUB_TOPIC_CREATE;
+      if (strcmp(cmd, "get") == 0)
+        return OPT_PUBSUB_TOPIC_GET;
       if (strcmp(cmd, "rm") == 0)
         return OPT_PUBSUB_TOPIC_RM;
     } else if (strcmp(prev_cmd, "notification") == 0) {
@@ -7874,6 +7877,32 @@ next:
       cerr << "ERROR: could not create topic: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+  }
+
+  if (opt_cmd == OPT_PUBSUB_TOPIC_GET) {
+    if (get_tier_type(store) != "pubsub") {
+      cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
+      return EINVAL;
+    }
+    if (topic_name.empty()) {
+      cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
+      return EINVAL;
+    }
+    if (user_id.empty()) {
+      cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
+      return EINVAL;
+    }
+    RGWUserInfo& user_info = user_op.get_user_info();
+    RGWUserPubSub ups(store, user_info.user_id);
+
+    rgw_pubsub_topic_subs topic;
+    ret = ups.get_topic(topic_name, &topic);
+    if (ret < 0) {
+      cerr << "ERROR: could not create topic: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    encode_json("topic", topic, formatter);
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT_PUBSUB_NOTIFICATION_CREATE) {
