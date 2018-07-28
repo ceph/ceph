@@ -31,6 +31,7 @@ overrides:
     - application not enabled
     - cache pools at or near target size
     - filesystem is degraded
+    - OBJECT_MISPLACED
     fs: xfs
     conf:
       global:
