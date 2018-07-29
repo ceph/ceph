@@ -23,7 +23,6 @@
 #include "common/TrackedOp.h"
 
 #include "messages/MClientRequest.h"
-#include "messages/MInterMDS.h"
 #include "messages/MCommand.h"
 #include "messages/MMDSMap.h"
 
@@ -377,7 +376,6 @@ class MDSRank {
       send_message_mds(mr, mds);
     }
     void forward_message_mds(const MClientRequest::const_ref& req, mds_rank_t mds);
-    void forward_message_mds(const MInterMDS::const_ref& req, mds_rank_t mds);
 
     void send_message_client_counted(const Message::ref& m, client_t client);
     void send_message_client_counted(Message* m, client_t client) {

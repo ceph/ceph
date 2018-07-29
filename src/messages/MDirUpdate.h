@@ -16,20 +16,20 @@
 #ifndef CEPH_MDIRUPDATE_H
 #define CEPH_MDIRUPDATE_H
 
-#include "MInterMDS.h"
+#include "msg/Message.h"
 
-class MDirUpdate : public MInterMDS {
+class MDirUpdate : public Message {
 public:
   typedef boost::intrusive_ptr<MDirUpdate> ref;
   typedef boost::intrusive_ptr<MDirUpdate const> const_ref;
-  MDirUpdate() : MInterMDS(MSG_MDS_DIRUPDATE) {}
+  MDirUpdate() : Message(MSG_MDS_DIRUPDATE) {}
   MDirUpdate(mds_rank_t f,
 	     dirfrag_t dirfrag,
              int dir_rep,
              const std::set<int32_t>& dir_rep_by,
              filepath& path,
              bool discover = false) :
-    MInterMDS(MSG_MDS_DIRUPDATE), from_mds(f), dirfrag(dirfrag),
+    Message(MSG_MDS_DIRUPDATE), from_mds(f), dirfrag(dirfrag),
     dir_rep(dir_rep), dir_rep_by(dir_rep_by), path(path) {
     this->discover = discover ? 5 : 0;
   }
@@ -69,19 +69,10 @@ public:
     encode(path, payload);
   }
 
-  bool is_forwardable() const override {
-    return true;
-  }
-
-  MInterMDS::ref forwardable() const override {
-    MDirUpdate::ref m(new MDirUpdate(*this), false);
-    return m;
-  }
-
 protected:
   ~MDirUpdate() {}
   MDirUpdate(const MDirUpdate& m)
-  : MInterMDS(MSG_MDS_DIRUPDATE),
+  : Message(MSG_MDS_DIRUPDATE),
     from_mds(m.from_mds),
     dirfrag(m.dirfrag),
     dir_rep(m.dir_rep),
