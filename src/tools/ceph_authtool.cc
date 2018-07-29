@@ -173,6 +173,7 @@ int main(int argc, const char **argv)
 
   // keyring --------
   bool modified = false;
+  bool added_entity = false;
   KeyRing keyring;
 
   bufferlist bl;
@@ -248,7 +249,8 @@ int main(int argc, const char **argv)
     }
     keyring.add(ename, eauth);
     modified = true;
-    cout << "added entity " << ename << " auth " << eauth << std::endl;
+    cout << "added entity " << ename << " " << eauth << std::endl;
+    added_entity = true;
   }
   if (!caps_fn.empty()) {
     ConfFile cf;
@@ -275,6 +277,9 @@ int main(int argc, const char **argv)
   if (!caps.empty()) {
     keyring.set_caps(ename, caps);
     modified = true;
+  }
+  if (added_entity && caps.size() > 0) {
+    cout << "added " << caps.size() << " caps to entity " << ename << std::endl;
   }
 
   // read commands

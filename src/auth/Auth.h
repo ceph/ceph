@@ -47,7 +47,7 @@ struct EntityAuth {
 WRITE_CLASS_ENCODER(EntityAuth)
 
 static inline ostream& operator<<(ostream& out, const EntityAuth& a) {
-  return out << "auth(key=" << a.key << " with " << a.caps.size() << " caps)";
+  return out << "auth(key=" << a.key << ")";
 }
 
 struct AuthCapsInfo {
