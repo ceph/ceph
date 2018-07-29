@@ -964,17 +964,8 @@ void MDSRank::forward_message_mds(const MClientRequest::const_ref& m, mds_rank_t
   bool client_must_resend = true;  //!creq->can_forward();
 
   // tell the client where it should go
-  auto f = MClientRequestForward::ref(new MClientRequestForward(m->get_tid(), mds, m->get_num_fwd()+1, client_must_resend), false);
+  MClientRequestForward::ref f(new MClientRequestForward(m->get_tid(), mds, m->get_num_fwd()+1, client_must_resend), false);
   messenger->send_message(f.detach(), m->get_source_inst());
-}
-
-void MDSRank::forward_message_mds(const MInterMDS::const_ref& m, mds_rank_t mds)
-{
-  assert(mds != whoami);
-
-  if (m->is_forwardable()) {
-    send_message_mds(m->forwardable(), mds);
-  }
 }
 
 void MDSRank::send_message_client_counted(const Message::ref& m, client_t client)
