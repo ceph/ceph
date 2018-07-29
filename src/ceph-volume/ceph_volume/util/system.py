@@ -260,3 +260,12 @@ def get_mounts(devices=False, paths=False, realpath=False):
         return devices_mounted
     else:
         return paths_mounted
+
+
+def set_context(path, recursive = False):
+    # restore selinux context to default policy values
+    if which('restorecon').startswith('/'):
+        if recursive:
+            process.run(['restorecon', '-R', path])
+        else:
+            process.run(['restorecon', path])
