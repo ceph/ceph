@@ -99,7 +99,7 @@ void DispatchQueue::local_delivery(const Message::ref& m, int priority)
   Mutex::Locker l(local_delivery_lock);
   if (local_messages.empty())
     local_delivery_cond.Signal();
-  local_messages.push_back(make_pair(m, priority));
+  local_messages.emplace(m, priority);
   return;
 }
 
@@ -113,8 +113,8 @@ void DispatchQueue::run_local_delivery()
       local_delivery_cond.Wait(local_delivery_lock);
       continue;
     }
-    auto p = local_messages.front();
-    local_messages.pop_front();
+    auto p = std::move(local_messages.front());
+    local_messages.pop();
     local_delivery_lock.Unlock();
     const Message::ref& m = p.first;
     int priority = p.second;
@@ -239,12 +239,7 @@ void DispatchQueue::wait()
 
 void DispatchQueue::discard_local()
 {
-  for (list<pair<Message::ref, int> >::iterator p = local_messages.begin();
-       p != local_messages.end();
-       ++p) {
-    ldout(cct,20) << __func__ << " " << p->first << dendl;
-  }
-  local_messages.clear();
+  decltype(local_messages)().swap(local_messages);
 }
 
 void DispatchQueue::shutdown()
