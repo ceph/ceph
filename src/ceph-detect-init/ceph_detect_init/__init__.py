@@ -88,7 +88,7 @@ def _get_distro(distro, use_rhceph=False):
 
 def _normalized_distro_name(distro):
     distro = distro.lower()
-    if distro.startswith(('redhat', 'red hat')):
+    if distro.startswith(('redhat', 'red hat', 'rhel')):
         return 'redhat'
     elif distro.startswith(('scientific', 'scientific linux')):
         return 'scientific'
