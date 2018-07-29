@@ -384,6 +384,7 @@ public:
 
   bool empty_payload() const { return payload.length() == 0; }
   bufferlist& get_payload() { return payload; }
+  const bufferlist& get_payload() const { return payload; }
   void set_payload(bufferlist& bl) {
     if (byte_throttler)
       byte_throttler->put(payload.length());
