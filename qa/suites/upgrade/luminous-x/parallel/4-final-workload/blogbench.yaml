@@ -5,9 +5,9 @@ meta:
 tasks:
 - sequential:
   - ceph-fuse:
-  - print: "**** done ceph-fuse 5-final-workload"
+  - print: "**** done ceph-fuse 4-final-workload"
   - workunit:
       clients:
          client.3:
           - suites/blogbench.sh
-  - print: "**** done suites/blogbench.sh 5-final-workload"
+  - print: "**** done suites/blogbench.sh 4-final-workload"
