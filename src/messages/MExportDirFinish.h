@@ -22,8 +22,10 @@ class MExportDirFinish : public Message {
   bool last;
 
  public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  bool is_last() { return last; }
+  typedef boost::intrusive_ptr<MExportDirFinish> ref;
+  typedef boost::intrusive_ptr<MExportDirFinish const> const_ref;
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+  bool is_last() const { return last; }
   
   MExportDirFinish() : last(false) {}
   MExportDirFinish(dirfrag_t df, bool l, uint64_t tid) :

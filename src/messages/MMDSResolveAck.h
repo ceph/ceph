@@ -22,6 +22,8 @@
 
 class MMDSResolveAck : public Message {
  public:
+  typedef boost::intrusive_ptr<MMDSResolveAck> ref;
+  typedef boost::intrusive_ptr<MMDSResolveAck const> const_ref;
   map<metareqid_t, bufferlist> commit;
   vector<metareqid_t> abort;
 

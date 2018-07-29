@@ -17,12 +17,16 @@
 
 #include <string_view>
 
+#include "msg/Message.h"
+
 #include "mds/mdstypes.h"
 
 class MCacheExpire : public Message {
   __s32 from;
 
 public:
+  typedef boost::intrusive_ptr<MCacheExpire> ref;
+  typedef boost::intrusive_ptr<MCacheExpire const> const_ref;
   /*
     group things by realm (auth delgation root), since that's how auth is determined.
     that makes it less work to process when exports are in progress.
@@ -32,16 +36,14 @@ public:
     map<dirfrag_t, uint32_t> dirs;
     map<dirfrag_t, map<pair<string,snapid_t>,uint32_t> > dentries;
 
-    void merge(realm& o) {
+    void merge(const realm& o) {
       inodes.insert(o.inodes.begin(), o.inodes.end());
       dirs.insert(o.dirs.begin(), o.dirs.end());
-      for (map<dirfrag_t,map<pair<string,snapid_t>,uint32_t> >::iterator p = o.dentries.begin();
-	   p != o.dentries.end();
-	   ++p) {
-	if (dentries.count(p->first) == 0)
-	  dentries[p->first] = p->second;
-	else
-	  dentries[p->first].insert(p->second.begin(), p->second.end());
+      for (const auto &p : o.dentries) {
+        auto em = dentries.emplace(std::piecewise_construct, std::forward_as_tuple(p.first), std::forward_as_tuple(p.second));
+        if (!em.second) {
+	  em.first->second.insert(p.second.begin(), p.second.end());
+        }
       }
     }
 
@@ -62,7 +64,7 @@ public:
 
   map<dirfrag_t, realm> realms;
 
-  int get_from() { return from; }
+  int get_from() const { return from; }
 
   MCacheExpire() : Message(MSG_MDS_CACHEEXPIRE), from(-1) {}
   MCacheExpire(int f) : 
@@ -84,11 +86,11 @@ public:
     realms[r].dentries[df][pair<string,snapid_t>(dn,last)] = nonce;
   }
 
-  void add_realm(dirfrag_t df, realm& r) {
-    if (realms.count(df) == 0)
-      realms[df] = r;
-    else
-      realms[df].merge(r);
+  void add_realm(dirfrag_t df, const realm& r) {
+    auto em = realms.emplace(std::piecewise_construct, std::forward_as_tuple(df), std::forward_as_tuple(r));
+    if (!em.second) {
+      em.first->second.merge(r);
+    }
   }
 
   void decode_payload() override {

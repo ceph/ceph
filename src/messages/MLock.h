@@ -18,10 +18,11 @@
 
 #include "msg/Message.h"
 #include "mds/locks.h"
+#include "mds/SimpleLock.h"
 
 class MLock : public Message {
   int32_t     action = 0;  // action type
-  int32_t     asker = 0;  // who is initiating this request
+  mds_rank_t  asker = 0;  // who is initiating this request
   metareqid_t reqid;  // for remote lock requests
   
   __u16      lock_type = 0;  // lock object type
@@ -30,26 +31,31 @@ class MLock : public Message {
   bufferlist lockdata;  // and possibly some data
   
 public:
+  typedef boost::intrusive_ptr<MLock> ref;
+  typedef boost::intrusive_ptr<MLock const> const_ref;
+
   bufferlist& get_data() { return lockdata; }
-  int get_asker() { return asker; }
-  int get_action() { return action; }
-  metareqid_t get_reqid() { return reqid; }
+  const bufferlist& get_data() const { return lockdata; }
+  int get_asker() const { return asker; }
+  int get_action() const { return action; }
+  metareqid_t get_reqid() const { return reqid; }
   
-  int get_lock_type() { return lock_type; }
+  int get_lock_type() const { return lock_type; }
+  const MDSCacheObjectInfo &get_object_info() const { return object_info; }
   MDSCacheObjectInfo &get_object_info() { return object_info; }
   
   MLock() : Message(MSG_MDS_LOCK) {}
-  MLock(int ac, int as) :
+  MLock(int ac, mds_rank_t as) :
     Message(MSG_MDS_LOCK),
     action(ac), asker(as),
     lock_type(0) { }
-  MLock(SimpleLock *lock, int ac, int as) :
+  MLock(SimpleLock *lock, int ac, mds_rank_t as) :
     Message(MSG_MDS_LOCK),
     action(ac), asker(as),
     lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
   }
-  MLock(SimpleLock *lock, int ac, int as, bufferlist& bl) :
+  MLock(SimpleLock *lock, int ac, mds_rank_t as, bufferlist& bl) :
     Message(MSG_MDS_LOCK),
     action(ac), asker(as), lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);

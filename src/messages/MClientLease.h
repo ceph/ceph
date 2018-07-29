@@ -20,7 +20,11 @@
 
 #include "msg/Message.h"
 
-struct MClientLease : public Message {
+class MClientLease : public Message {
+public:
+  typedef boost::intrusive_ptr<MClientLease> ref;
+  typedef boost::intrusive_ptr<MClientLease const> const_ref;
+
   struct ceph_mds_lease h;
   std::string dname;
   
@@ -32,6 +36,10 @@ struct MClientLease : public Message {
   snapid_t get_last() const { return snapid_t(h.last); }
 
   MClientLease() : Message(CEPH_MSG_CLIENT_LEASE) {}
+  MClientLease(const MClientLease& m) :
+    Message(CEPH_MSG_CLIENT_LEASE),
+    h(m.h),
+    dname(m.dname) {}
   MClientLease(int ac, ceph_seq_t seq, int m, uint64_t i, uint64_t sf, uint64_t sl) :
     Message(CEPH_MSG_CLIENT_LEASE) {
     h.action = ac;

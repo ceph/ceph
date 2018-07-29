@@ -22,8 +22,10 @@ class MExportDirNotifyAck : public Message {
   pair<__s32,__s32> new_auth;
 
  public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  pair<__s32,__s32> get_new_auth() { return new_auth; }
+  typedef boost::intrusive_ptr<MExportDirNotifyAck>ref;
+  typedef boost::intrusive_ptr<MExportDirNotifyAck const> const_ref;
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+  pair<__s32,__s32> get_new_auth() const { return new_auth; }
   
   MExportDirNotifyAck() {}
   MExportDirNotifyAck(dirfrag_t df, uint64_t tid, pair<__s32,__s32> na) :

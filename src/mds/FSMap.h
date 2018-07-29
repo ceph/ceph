@@ -25,7 +25,6 @@
 
 #include "include/types.h"
 #include "common/Clock.h"
-#include "msg/Message.h"
 #include "mds/MDSMap.h"
 
 #include "common/config.h"

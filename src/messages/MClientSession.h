@@ -23,6 +23,8 @@ class MClientSession : public Message {
   static const int COMPAT_VERSION = 1;
 
 public:
+  typedef boost::intrusive_ptr<MClientSession> ref;
+  typedef boost::intrusive_ptr<MClientSession const> const_ref;
   ceph_mds_session_head head;
 
   std::map<std::string, std::string> metadata;

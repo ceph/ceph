@@ -21,6 +21,8 @@
 
 class MExportDir : public Message {
  public:  
+  typedef boost::intrusive_ptr<MExportDir>ref;
+  typedef boost::intrusive_ptr<MExportDir const> const_ref;
   dirfrag_t dirfrag;
   bufferlist export_data;
   vector<dirfrag_t> bounds;

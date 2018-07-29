@@ -17,7 +17,11 @@
 
 #include "msg/Message.h"
 
-struct MMDSOpenInoReply : public Message {
+class MMDSOpenInoReply : public Message {
+public:
+  typedef boost::intrusive_ptr<MMDSOpenInoReply> ref;
+  typedef boost::intrusive_ptr<MMDSOpenInoReply const> const_ref;
+
   inodeno_t ino;
   vector<inode_backpointer_t> ancestors;
   mds_rank_t hint;

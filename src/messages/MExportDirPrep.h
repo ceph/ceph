@@ -22,6 +22,8 @@
 class MExportDirPrep : public Message {
   dirfrag_t dirfrag;
  public:
+  typedef boost::intrusive_ptr<MExportDirPrep> ref;
+  typedef boost::intrusive_ptr<MExportDirPrep const> const_ref;
   bufferlist basedir;
   list<dirfrag_t> bounds;
   list<bufferlist> traces;
@@ -30,11 +32,11 @@ private:
   bool b_did_assim;
 
 public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  list<dirfrag_t>& get_bounds() { return bounds; }
-  set<mds_rank_t> &get_bystanders() { return bystanders; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+  const list<dirfrag_t>& get_bounds() const { return bounds; }
+  const set<mds_rank_t> &get_bystanders() const { return bystanders; }
 
-  bool did_assim() { return b_did_assim; }
+  bool did_assim() const { return b_did_assim; }
   void mark_assim() { b_did_assim = true; }
 
   MExportDirPrep() {

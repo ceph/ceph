@@ -5,7 +5,10 @@
 
 
 class MGatherCaps : public Message {
- public:
+public:
+  typedef boost::intrusive_ptr<MGatherCaps> ref;
+  typedef boost::intrusive_ptr<MGatherCaps const> const_ref;
+
   inodeno_t ino;
 
   MGatherCaps() :

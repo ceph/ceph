@@ -33,15 +33,17 @@ class MDiscover : public Message {
   bool want_xlocked = false;
 
  public:
-  inodeno_t get_base_ino() { return base_ino; }
-  frag_t    get_base_dir_frag() { return base_dir_frag; }
-  snapid_t  get_snapid() { return snapid; }
+  typedef boost::intrusive_ptr<MDiscover> ref;
+  typedef boost::intrusive_ptr<MDiscover const> const_ref;
+  inodeno_t get_base_ino() const { return base_ino; }
+  frag_t    get_base_dir_frag() const { return base_dir_frag; }
+  snapid_t  get_snapid() const { return snapid; }
 
-  filepath& get_want() { return want; }
-  const std::string& get_dentry(int n) { return want[n]; }
+  const filepath& get_want() const { return want; }
+  const std::string& get_dentry(int n) const { return want[n]; }
 
-  bool wants_base_dir() { return want_base_dir; }
-  bool wants_xlocked() { return want_xlocked; }
+  bool wants_base_dir() const { return want_base_dir; }
+  bool wants_xlocked() const { return want_xlocked; }
   
   void set_base_dir_frag(frag_t f) { base_dir_frag = f; }
 

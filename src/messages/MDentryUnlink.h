@@ -18,13 +18,17 @@
 
 #include <string_view>
 
+#include "msg/Message.h"
+
 class MDentryUnlink : public Message {
   dirfrag_t dirfrag;
   string dn;
 
  public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  string& get_dn() { return dn; }
+  typedef boost::intrusive_ptr<MDentryUnlink> ref;
+  typedef boost::intrusive_ptr<MDentryUnlink const> const_ref;
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+  const string& get_dn() const { return dn; }
 
   bufferlist straybl;
   bufferlist snapbl;

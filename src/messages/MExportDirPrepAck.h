@@ -23,8 +23,10 @@ class MExportDirPrepAck : public Message {
   bool success = false;
 
  public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  
+  typedef boost::intrusive_ptr<MExportDirPrepAck> ref;
+  typedef boost::intrusive_ptr<MExportDirPrepAck const> const_ref;
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+
   MExportDirPrepAck() {}
   MExportDirPrepAck(dirfrag_t df, bool s, uint64_t tid) :
     Message(MSG_MDS_EXPORTDIRPREPACK), dirfrag(df), success(s) {
@@ -34,7 +36,7 @@ private:
   ~MExportDirPrepAck() override {}
 
 public:  
-  bool is_success() { return success; }
+  bool is_success() const { return success; }
   const char *get_type_name() const override { return "ExPAck"; }
   void print(ostream& o) const override {
     o << "export_prep_ack(" << dirfrag << (success ? " success)" : " fail)");

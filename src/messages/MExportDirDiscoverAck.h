@@ -23,9 +23,11 @@ class MExportDirDiscoverAck : public Message {
   bool success;
 
  public:
-  inodeno_t get_ino() { return dirfrag.ino; }
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  bool is_success() { return success; }
+  typedef boost::intrusive_ptr<MExportDirDiscoverAck> ref;
+  typedef boost::intrusive_ptr<MExportDirDiscoverAck const> const_ref;
+  inodeno_t get_ino() const { return dirfrag.ino; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+  bool is_success() const { return success; }
 
   MExportDirDiscoverAck() : Message(MSG_MDS_EXPORTDIRDISCOVERACK) {}
   MExportDirDiscoverAck(dirfrag_t df, uint64_t tid, bool s=true) :

@@ -23,6 +23,9 @@ class MClientCaps : public Message {
   static const int COMPAT_VERSION = 1;
 
  public:
+  typedef boost::intrusive_ptr<MClientCaps> ref;
+  typedef boost::intrusive_ptr<MClientCaps const> const_ref;
+
   static const unsigned FLAG_SYNC		= (1<<0);
   static const unsigned FLAG_NO_CAPSNAP		= (1<<1); // unused
   static const unsigned FLAG_PENDING_CAPSNAP	= (1<<2);
@@ -56,32 +59,32 @@ class MClientCaps : public Message {
   /* advisory CLIENT_CAPS_* flags to send to mds */
   unsigned flags = 0;
 
-  int      get_caps() { return head.caps; }
-  int      get_wanted() { return head.wanted; }
-  int      get_dirty() { return head.dirty; }
-  ceph_seq_t get_seq() { return head.seq; }
-  ceph_seq_t get_issue_seq() { return head.issue_seq; }
-  ceph_seq_t get_mseq() { return head.migrate_seq; }
+  int      get_caps() const { return head.caps; }
+  int      get_wanted() const { return head.wanted; }
+  int      get_dirty() const { return head.dirty; }
+  ceph_seq_t get_seq() const { return head.seq; }
+  ceph_seq_t get_issue_seq() const { return head.issue_seq; }
+  ceph_seq_t get_mseq() const { return head.migrate_seq; }
 
-  inodeno_t get_ino() { return inodeno_t(head.ino); }
-  inodeno_t get_realm() { return inodeno_t(head.realm); }
-  uint64_t get_cap_id() { return head.cap_id; }
+  inodeno_t get_ino() const { return inodeno_t(head.ino); }
+  inodeno_t get_realm() const { return inodeno_t(head.realm); }
+  uint64_t get_cap_id() const { return head.cap_id; }
 
-  uint64_t get_size() { return size;  }
-  uint64_t get_max_size() { return max_size;  }
-  __u32 get_truncate_seq() { return truncate_seq; }
-  uint64_t get_truncate_size() { return truncate_size; }
-  utime_t get_ctime() { return ctime; }
-  utime_t get_btime() { return btime; }
-  utime_t get_mtime() { return mtime; }
-  utime_t get_atime() { return atime; }
-  __u64 get_change_attr() { return change_attr; }
-  __u32 get_time_warp_seq() { return time_warp_seq; }
-  uint64_t get_nfiles() { return nfiles; }
-  uint64_t get_nsubdirs() { return nsubdirs; }
+  uint64_t get_size() const { return size;  }
+  uint64_t get_max_size() const { return max_size;  }
+  __u32 get_truncate_seq() const { return truncate_seq; }
+  uint64_t get_truncate_size() const { return truncate_size; }
+  utime_t get_ctime() const { return ctime; }
+  utime_t get_btime() const { return btime; }
+  utime_t get_mtime() const { return mtime; }
+  utime_t get_atime() const { return atime; }
+  __u64 get_change_attr() const { return change_attr; }
+  __u32 get_time_warp_seq() const { return time_warp_seq; }
+  uint64_t get_nfiles() const { return nfiles; }
+  uint64_t get_nsubdirs() const { return nsubdirs; }
   bool dirstat_is_valid() const { return nfiles != -1 || nsubdirs != -1; }
 
-  const file_layout_t& get_layout() {
+  const file_layout_t& get_layout() const {
     return layout;
   }
 
@@ -89,13 +92,13 @@ class MClientCaps : public Message {
     layout = l;
   }
 
-  int       get_migrate_seq() { return head.migrate_seq; }
-  int       get_op() { return head.op; }
+  int       get_migrate_seq() const { return head.migrate_seq; }
+  int       get_op() const { return head.op; }
 
-  uint64_t get_client_tid() { return get_tid(); }
+  uint64_t get_client_tid() const { return get_tid(); }
   void set_client_tid(uint64_t s) { set_tid(s); }
 
-  snapid_t get_snap_follows() { return snapid_t(head.snap_follows); }
+  snapid_t get_snap_follows() const { return snapid_t(head.snap_follows); }
   void set_snap_follows(snapid_t s) { head.snap_follows = s; }
 
   void set_caps(int c) { head.caps = c; }
@@ -120,7 +123,7 @@ class MClientCaps : public Message {
   }
 
   void set_oldest_flush_tid(ceph_tid_t tid) { oldest_flush_tid = tid; }
-  ceph_tid_t get_oldest_flush_tid() { return oldest_flush_tid; }
+  ceph_tid_t get_oldest_flush_tid() const { return oldest_flush_tid; }
 
   void clear_dirty() { head.dirty = 0; }
 

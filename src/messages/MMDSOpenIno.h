@@ -18,6 +18,9 @@
 #include "msg/Message.h"
 
 struct MMDSOpenIno : public Message {
+public:
+  typedef boost::intrusive_ptr<MMDSOpenIno> ref;
+  typedef boost::intrusive_ptr<MMDSOpenIno const> const_ref;
   inodeno_t ino;
   vector<inode_backpointer_t> ancestors;
 

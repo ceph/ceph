@@ -16,13 +16,16 @@
 #define CEPH_MEXPORTDIRACK_H
 
 #include "MExportDir.h"
+#include "msg/Message.h"
 
 class MExportDirAck : public Message {
 public:
+  typedef boost::intrusive_ptr<MExportDirAck> ref;
+  typedef boost::intrusive_ptr<MExportDirAck const> const_ref;
   dirfrag_t dirfrag;
   bufferlist imported_caps;
 
-  dirfrag_t get_dirfrag() { return dirfrag; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
   
   MExportDirAck() : Message(MSG_MDS_EXPORTDIRACK) {}
   MExportDirAck(dirfrag_t df, uint64_t tid) :

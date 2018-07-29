@@ -21,6 +21,9 @@
 
 class MCommand : public Message {
  public:
+  typedef boost::intrusive_ptr<MCommand> ref;
+  typedef boost::intrusive_ptr<MCommand const> const_ref;
+
   uuid_d fsid;
   std::vector<string> cmd;
 

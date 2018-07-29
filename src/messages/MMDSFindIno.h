@@ -18,7 +18,10 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 
-struct MMDSFindIno : public Message {
+class MMDSFindIno : public Message {
+public:
+  typedef boost::intrusive_ptr<MMDSFindIno> ref;
+  typedef boost::intrusive_ptr<MMDSFindIno const> const_ref;
   ceph_tid_t tid {0};
   inodeno_t ino;
 

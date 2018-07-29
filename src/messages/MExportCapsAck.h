@@ -21,6 +21,8 @@
 
 class MExportCapsAck : public Message {
  public:  
+  typedef boost::intrusive_ptr<MExportCapsAck> ref;
+  typedef boost::intrusive_ptr<MExportCapsAck const> const_ref;
   inodeno_t ino;
   bufferlist cap_bl;
 
