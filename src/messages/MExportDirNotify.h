@@ -24,10 +24,13 @@ class MExportDirNotify : public Message {
   list<dirfrag_t> bounds;  // bounds; these dirs are _not_ included (tho the dirfragdes are)
 
  public:
-  dirfrag_t get_dirfrag() { return base; }
-  pair<__s32,__s32> get_old_auth() { return old_auth; }
-  pair<__s32,__s32> get_new_auth() { return new_auth; }
-  bool wants_ack() { return ack; }
+  typedef boost::intrusive_ptr<MExportDirNotify> ref;
+  typedef boost::intrusive_ptr<MExportDirNotify const> const_ref;
+  dirfrag_t get_dirfrag() const { return base; }
+  pair<__s32,__s32> get_old_auth() const { return old_auth; }
+  pair<__s32,__s32> get_new_auth() const { return new_auth; }
+  bool wants_ack() const { return ack; }
+  const list<dirfrag_t>& get_bounds() const { return bounds; }
   list<dirfrag_t>& get_bounds() { return bounds; }
 
   MExportDirNotify() {}

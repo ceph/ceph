@@ -1913,12 +1913,15 @@ void ETableServer::replay(MDSRank *mds)
   assert(version-1 == server->get_version());
 
   switch (op) {
-  case TABLESERVER_OP_PREPARE:
+  case TABLESERVER_OP_PREPARE: {
     server->_note_prepare(bymds, reqid, true);
-    server->_prepare(mutation, reqid, bymds);
+    bufferlist out;
+    server->_prepare(mutation, reqid, bymds, out);
+    mutation = std::move(out);
     break;
+  }
   case TABLESERVER_OP_COMMIT:
-    server->_commit(tid);
+    server->_commit(tid, MMDSTableRequest::ref());
     server->_note_commit(tid, true);
     break;
   case TABLESERVER_OP_ROLLBACK:

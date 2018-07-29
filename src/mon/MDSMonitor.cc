@@ -376,7 +376,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
       MDSMap null_map;
       null_map.epoch = fsmap.epoch;
       null_map.compat = fsmap.compat;
-      mon->send_reply(op, new MMDSMap(mon->monmap->fsid, &null_map));
+      mon->send_reply(op, new MMDSMap(mon->monmap->fsid, null_map));
       return true;
     } else {
       return false;  // not booted yet.
@@ -826,7 +826,7 @@ void MDSMonitor::_updated(MonOpRequestRef op)
     MDSMap null_map;
     null_map.epoch = fsmap.epoch;
     null_map.compat = fsmap.compat;
-    mon->send_reply(op, new MMDSMap(mon->monmap->fsid, &null_map));
+    mon->send_reply(op, new MMDSMap(mon->monmap->fsid, null_map));
   } else {
     mon->send_reply(op, new MMDSBeacon(mon->monmap->fsid,
 				       m->get_global_id(),
@@ -1570,7 +1570,7 @@ void MDSMonitor::check_sub(Subscription *sub)
     if (sub->next > mds_map->epoch) {
       return;
     }
-    auto msg = new MMDSMap(mon->monmap->fsid, mds_map);
+    auto msg = new MMDSMap(mon->monmap->fsid, *mds_map);
 
     sub->session->con->send_message(msg);
     if (sub->onetime) {

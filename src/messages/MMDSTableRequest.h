@@ -21,6 +21,9 @@
 
 class MMDSTableRequest : public Message {
  public:
+  typedef boost::intrusive_ptr<MMDSTableRequest> ref;
+  typedef boost::intrusive_ptr<MMDSTableRequest const> const_ref;
+
   __u16 table = 0;
   __s16 op = 0;
   uint64_t reqid = 0;

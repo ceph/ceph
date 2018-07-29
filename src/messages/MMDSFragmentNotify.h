@@ -23,9 +23,11 @@ class MMDSFragmentNotify : public Message {
   int8_t bits = 0;
 
  public:
-  inodeno_t get_ino() { return ino; }
-  frag_t get_basefrag() { return basefrag; }
-  int get_bits() { return bits; }
+  typedef boost::intrusive_ptr<MMDSFragmentNotify> ref;
+  typedef boost::intrusive_ptr<MMDSFragmentNotify const> const_ref;
+  inodeno_t get_ino() const { return ino; }
+  frag_t get_basefrag() const { return basefrag; }
+  int get_bits() const { return bits; }
 
   bufferlist basebl;
 

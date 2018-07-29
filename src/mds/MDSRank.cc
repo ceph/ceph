@@ -19,9 +19,7 @@
 
 #include "messages/MClientRequestForward.h"
 #include "messages/MMDSLoadTargets.h"
-#include "messages/MMDSMap.h"
 #include "messages/MMDSTableRequest.h"
-#include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
 
 #include "MDSDaemon.h"
@@ -51,7 +49,7 @@ MDSRank::MDSRank(
     LogChannelRef &clog_,
     SafeTimer &timer_,
     Beacon &beacon_,
-    MDSMap *& mdsmap_,
+    std::unique_ptr<MDSMap>& mdsmap_,
     Messenger *msgr,
     MonClient *monc_,
     Context *respawn_hook_,
@@ -135,7 +133,6 @@ MDSRank::~MDSRank()
   if (inotable) { delete inotable; inotable = NULL; }
   if (snapserver) { delete snapserver; snapserver = NULL; }
   if (snapclient) { delete snapclient; snapclient = NULL; }
-  if (mdsmap) { delete mdsmap; mdsmap = 0; }
 
   if (server) { delete server; server = 0; }
   if (locker) { delete locker; locker = 0; }
@@ -501,7 +498,7 @@ void MDSRank::damaged()
   assert(whoami != MDS_RANK_NONE);
   assert(mds_lock.is_locked_by_me());
 
-  beacon.set_want_state(mdsmap, MDSMap::STATE_DAMAGED);
+  beacon.set_want_state(*mdsmap, MDSMap::STATE_DAMAGED);
   monc->flush_log();  // Flush any clog error from before we were called
   beacon.notify_health(this);  // Include latest status in our swan song
   beacon.send_and_wait(g_conf()->mds_mon_shutdown_timeout);
@@ -577,7 +574,7 @@ void MDSRank::ProgressThread::shutdown()
   }
 }
 
-bool MDSRankDispatcher::ms_dispatch(Message *m)
+bool MDSRankDispatcher::ms_dispatch(const Message::const_ref &m)
 {
   bool ret;
   inc_dispatch_depth();
@@ -586,12 +583,9 @@ bool MDSRankDispatcher::ms_dispatch(Message *m)
   return ret;
 }
 
-/* If this function returns true, it recognizes the message and has taken the
- * reference. If it returns false, it has done neither. */
-bool MDSRank::_dispatch(Message *m, bool new_msg)
+bool MDSRank::_dispatch(const Message::const_ref &m, bool new_msg)
 {
   if (is_stale_message(m)) {
-    m->put();
     return true;
   }
 
@@ -738,7 +732,7 @@ void MDSRank::update_mlogger()
 /*
  * lower priority messages we defer if we seem laggy
  */
-bool MDSRank::handle_deferrable_message(Message *m)
+bool MDSRank::handle_deferrable_message(const Message::const_ref &m)
 {
   int port = m->get_type() & 0xff00;
 
@@ -776,14 +770,14 @@ bool MDSRank::handle_deferrable_message(Message *m)
     case MSG_MDS_TABLE_REQUEST:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
       {
-	MMDSTableRequest *req = static_cast<MMDSTableRequest*>(m);
-	if (req->op < 0) {
-	  MDSTableClient *client = get_table_client(req->table);
-	      client->handle_request(req);
-	} else {
-	  MDSTableServer *server = get_table_server(req->table);
-	  server->handle_request(req);
-	}
+        const MMDSTableRequest::const_ref &req = boost::static_pointer_cast<MMDSTableRequest::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m);
+        if (req->op < 0) {
+          MDSTableClient *client = get_table_client(req->table);
+          client->handle_request(req);
+        } else {
+           MDSTableServer *server = get_table_server(req->table);
+           server->handle_request(req);
+        }
       }
       break;
 
@@ -836,16 +830,13 @@ void MDSRank::_advance_queues()
     if (beacon.is_laggy())
       break;
 
-    Message *old = waiting_for_nolaggy.front();
+    Message::const_ref old = waiting_for_nolaggy.front();
     waiting_for_nolaggy.pop_front();
 
-    if (is_stale_message(old)) {
-      old->put();
-    } else {
+    if (!is_stale_message(old)) {
       dout(7) << " processing laggy deferred " << *old << dendl;
       if (!handle_deferrable_message(old)) {
         dout(0) << "unrecognized message " << *old << dendl;
-        old->put();
       }
     }
 
@@ -873,7 +864,7 @@ void MDSRank::heartbeat_reset()
   g_ceph_context->get_heartbeat_map()->reset_timeout(hb, g_conf()->mds_beacon_grace, 0);
 }
 
-bool MDSRank::is_stale_message(Message *m) const
+bool MDSRank::is_stale_message(const Message::const_ref &m) const
 {
   // from bad mds?
   if (m->get_source().is_mds()) {
@@ -899,7 +890,7 @@ bool MDSRank::is_stale_message(Message *m) const
   return false;
 }
 
-Session *MDSRank::get_session(Message *m)
+Session *MDSRank::get_session(const Message::const_ref &m)
 {
   // do not carry ref
   auto session = static_cast<Session *>(m->get_connection()->get_priv().get());
@@ -919,8 +910,7 @@ Session *MDSRank::get_session(Message *m)
         imported_session->set_connection(session->get_connection().get());
         // send out any queued messages
         while (!session->preopen_out_queue.empty()) {
-          imported_session->get_connection()->send_message(
-	    session->preopen_out_queue.front());
+          imported_session->get_connection()->send_message2(std::move(session->preopen_out_queue.front()));
           session->preopen_out_queue.pop_front();
         }
         imported_session->auth_caps = session->auth_caps;
@@ -935,83 +925,61 @@ Session *MDSRank::get_session(Message *m)
   return session;
 }
 
-void MDSRank::send_message(Message *m, Connection *c)
+void MDSRank::send_message(const Message::ref& m, const ConnectionRef& c)
 {
   assert(c);
-  c->send_message(m);
+  c->send_message2(m);
 }
 
 
-void MDSRank::send_message_mds(Message *m, mds_rank_t mds)
+void MDSRank::send_message_mds(const Message::ref& m, mds_rank_t mds)
 {
   if (!mdsmap->is_up(mds)) {
     dout(10) << "send_message_mds mds." << mds << " not up, dropping " << *m << dendl;
-    m->put();
     return;
   }
 
   // send mdsmap first?
   if (mds != whoami && peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
-    messenger->send_to_mds(new MMDSMap(monc->get_fsid(), mdsmap),
-			   mdsmap->get_addrs(mds));
+    Message::ref _m = MMDSMap::ref(new MMDSMap(monc->get_fsid(), *mdsmap), false);
+    messenger->send_to_mds(_m.detach(), mdsmap->get_addrs(mds));
     peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
   }
 
   // send message
-  messenger->send_to_mds(m, mdsmap->get_addrs(mds));
+  messenger->send_to_mds(Message::ref(m).detach(), mdsmap->get_addrs(mds));
 }
 
-void MDSRank::forward_message_mds(Message *m, mds_rank_t mds)
+void MDSRank::forward_message_mds(const MClientRequest::const_ref& m, mds_rank_t mds)
 {
   assert(mds != whoami);
 
-  // client request?
-  if (m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
-      (static_cast<MClientRequest*>(m))->get_source().is_client()) {
-    MClientRequest *creq = static_cast<MClientRequest*>(m);
-    creq->inc_num_fwd();    // inc forward counter
+  /*
+   * don't actually forward if non-idempotent!
+   * client has to do it.  although the MDS will ignore duplicate requests,
+   * the affected metadata may migrate, in which case the new authority
+   * won't have the metareq_id in the completed request map.
+   */
+  // NEW: always make the client resend!
+  bool client_must_resend = true;  //!creq->can_forward();
 
-    /*
-     * don't actually forward if non-idempotent!
-     * client has to do it.  although the MDS will ignore duplicate requests,
-     * the affected metadata may migrate, in which case the new authority
-     * won't have the metareq_id in the completed request map.
-     */
-    // NEW: always make the client resend!
-    bool client_must_resend = true;  //!creq->can_forward();
-
-    // tell the client where it should go
-    messenger->send_message(new MClientRequestForward(creq->get_tid(), mds, creq->get_num_fwd(),
-						      client_must_resend),
-			    creq->get_source_inst());
-
-    if (client_must_resend) {
-      m->put();
-      return;
-    }
-  }
-
-  // these are the only types of messages we should be 'forwarding'; they
-  // explicitly encode their source mds, which gets clobbered when we resend
-  // them here.
-  assert(m->get_type() == MSG_MDS_DIRUPDATE ||
-	 m->get_type() == MSG_MDS_EXPORTDIRDISCOVER);
-
-  // send mdsmap first?
-  if (peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
-    messenger->send_to_mds(new MMDSMap(monc->get_fsid(), mdsmap),
-			   mdsmap->get_addrs(mds));
-    peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
-  }
-
-  messenger->send_to_mds(m, mdsmap->get_addrs(mds));
+  // tell the client where it should go
+  auto f = MClientRequestForward::ref(new MClientRequestForward(m->get_tid(), mds, m->get_num_fwd()+1, client_must_resend), false);
+  messenger->send_message(f.detach(), m->get_source_inst());
 }
 
-
-
-void MDSRank::send_message_client_counted(Message *m, client_t client)
+void MDSRank::forward_message_mds(const MInterMDS::const_ref& m, mds_rank_t mds)
 {
-  Session *session =  sessionmap.get_session(entity_name_t::CLIENT(client.v));
+  assert(mds != whoami);
+
+  if (m->is_forwardable()) {
+    send_message_mds(m->forwardable(), mds);
+  }
+}
+
+void MDSRank::send_message_client_counted(const Message::ref& m, client_t client)
+{
+  Session *session = sessionmap.get_session(entity_name_t::CLIENT(client.v));
   if (session) {
     send_message_client_counted(m, session);
   } else {
@@ -1019,7 +987,7 @@ void MDSRank::send_message_client_counted(Message *m, client_t client)
   }
 }
 
-void MDSRank::send_message_client_counted(Message *m, Connection *connection)
+void MDSRank::send_message_client_counted(const Message::ref& m, const ConnectionRef& connection)
 {
   // do not carry ref
   auto session = static_cast<Session *>(connection->get_priv().get());
@@ -1031,23 +999,23 @@ void MDSRank::send_message_client_counted(Message *m, Connection *connection)
   }
 }
 
-void MDSRank::send_message_client_counted(Message *m, Session *session)
+void MDSRank::send_message_client_counted(const Message::ref& m, Session* session)
 {
   version_t seq = session->inc_push_seq();
   dout(10) << "send_message_client_counted " << session->info.inst.name << " seq "
 	   << seq << " " << *m << dendl;
   if (session->get_connection()) {
-    session->get_connection()->send_message(m);
+    session->get_connection()->send_message2(m);
   } else {
     session->preopen_out_queue.push_back(m);
   }
 }
 
-void MDSRank::send_message_client(Message *m, Session *session)
+void MDSRank::send_message_client(const Message::ref& m, Session* session)
 {
   dout(10) << "send_message_client " << session->info.inst << " " << *m << dendl;
   if (session->get_connection()) {
-    session->get_connection()->send_message(m);
+    session->get_connection()->send_message2(m);
   } else {
     session->preopen_out_queue.push_back(m);
   }
@@ -1066,7 +1034,7 @@ void MDSRank::set_osd_epoch_barrier(epoch_t e)
   osd_epoch_barrier = e;
 }
 
-void MDSRank::retry_dispatch(Message *m)
+void MDSRank::retry_dispatch(const Message::const_ref &m)
 {
   inc_dispatch_depth();
   _dispatch(m, false);
@@ -1091,7 +1059,7 @@ bool MDSRank::is_daemon_stopping() const
 void MDSRank::request_state(MDSMap::DaemonState s)
 {
   dout(3) << "request_state " << ceph_mds_state_name(s) << dendl;
-  beacon.set_want_state(mdsmap, s);
+  beacon.set_want_state(*mdsmap, s);
   beacon.send();
 }
 
@@ -1699,8 +1667,8 @@ void MDSRank::stopping_done()
 }
 
 void MDSRankDispatcher::handle_mds_map(
-    MMDSMap *m,
-    MDSMap *oldmap)
+    const MMDSMap::const_ref &m,
+    const MDSMap &oldmap)
 {
   // I am only to be passed MDSMaps in which I hold a rank
   assert(whoami != MDS_RANK_NONE);
@@ -1747,7 +1715,7 @@ void MDSRankDispatcher::handle_mds_map(
   if (objecter->get_client_incarnation() != incarnation)
     objecter->set_client_incarnation(incarnation);
 
-  if (oldmap->get_min_compat_client() != mdsmap->get_min_compat_client())
+  if (oldmap.get_min_compat_client() != mdsmap->get_min_compat_client())
     server->update_required_client_features();
 
   // for debug
@@ -1764,11 +1732,11 @@ void MDSRankDispatcher::handle_mds_map(
     // did someone fail?
     //   new down?
     set<mds_rank_t> olddown, down;
-    oldmap->get_down_mds_set(&olddown);
+    oldmap.get_down_mds_set(&olddown);
     mdsmap->get_down_mds_set(&down);
     for (const auto& r : down) {
-      if (oldmap->have_inst(r) && olddown.count(r) == 0) {
-	messenger->mark_down_addrs(oldmap->get_addrs(r));
+      if (oldmap.have_inst(r) && olddown.count(r) == 0) {
+	messenger->mark_down_addrs(oldmap.get_addrs(r));
 	handle_mds_failure(r);
       }
     }
@@ -1779,8 +1747,8 @@ void MDSRankDispatcher::handle_mds_map(
     mdsmap->get_up_mds_set(up);
     for (const auto& r : up) {
       auto& info = mdsmap->get_info(r);
-      if (oldmap->have_inst(r)) {
-	auto& oldinfo = oldmap->get_info(r);
+      if (oldmap.have_inst(r)) {
+	auto& oldinfo = oldmap.get_info(r);
 	if (info.inc != oldinfo.inc) {
 	  messenger->mark_down_addrs(oldinfo.get_addrs());
 	  if (info.state == MDSMap::STATE_REPLAY ||
@@ -1817,7 +1785,7 @@ void MDSRankDispatcher::handle_mds_map(
     dout(1) << "handle_mds_map state change "
 	    << ceph_mds_state_name(oldstate) << " --> "
 	    << ceph_mds_state_name(state) << dendl;
-    beacon.set_want_state(mdsmap, state);
+    beacon.set_want_state(*mdsmap, state);
 
     if (oldstate == MDSMap::STATE_STANDBY_REPLAY) {
         dout(10) << "Monitor activated us! Deactivating replay loop" << dendl;
@@ -1864,7 +1832,7 @@ void MDSRankDispatcher::handle_mds_map(
 	snapserver->finish_recovery(s);
       } else {
 	set<mds_rank_t> old_set, new_set;
-	oldmap->get_mds_set_lower_bound(old_set, MDSMap::STATE_RESOLVE);
+	oldmap.get_mds_set_lower_bound(old_set, MDSMap::STATE_RESOLVE);
 	mdsmap->get_mds_set_lower_bound(new_set, MDSMap::STATE_RESOLVE);
 	for (const auto& r : new_set) {
 	  if (r == whoami)
@@ -1876,7 +1844,7 @@ void MDSRankDispatcher::handle_mds_map(
       }
     }
 
-    if ((!oldmap->is_resolving() || !restart.empty()) && mdsmap->is_resolving()) {
+    if ((!oldmap.is_resolving() || !restart.empty()) && mdsmap->is_resolving()) {
       set<mds_rank_t> resolve;
       mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
       dout(10) << " resolve set is " << resolve << dendl;
@@ -1889,19 +1857,19 @@ void MDSRankDispatcher::handle_mds_map(
   // is everybody finally rejoining?
   if (state >= MDSMap::STATE_REJOIN) {
     // did we start?
-    if (!oldmap->is_rejoining() && mdsmap->is_rejoining())
+    if (!oldmap.is_rejoining() && mdsmap->is_rejoining())
       rejoin_joint_start();
 
     // did we finish?
     if (g_conf()->mds_dump_cache_after_rejoin &&
-	oldmap->is_rejoining() && !mdsmap->is_rejoining())
+	oldmap.is_rejoining() && !mdsmap->is_rejoining())
       mdcache->dump_cache();      // for DEBUG only
 
     if (oldstate >= MDSMap::STATE_REJOIN ||
 	oldstate == MDSMap::STATE_STARTING) {
       // ACTIVE|CLIENTREPLAY|REJOIN => we can discover from them.
       set<mds_rank_t> olddis, dis;
-      oldmap->get_mds_set_lower_bound(olddis, MDSMap::STATE_REJOIN);
+      oldmap.get_mds_set_lower_bound(olddis, MDSMap::STATE_REJOIN);
       mdsmap->get_mds_set_lower_bound(dis, MDSMap::STATE_REJOIN);
       for (const auto& r : dis) {
 	if (r == whoami)
@@ -1914,7 +1882,7 @@ void MDSRankDispatcher::handle_mds_map(
     }
   }
 
-  if (oldmap->is_degraded() && !cluster_degraded && state >= MDSMap::STATE_ACTIVE) {
+  if (oldmap.is_degraded() && !cluster_degraded && state >= MDSMap::STATE_ACTIVE) {
     dout(1) << "cluster recovered." << dendl;
     auto it = waiting_for_active_peer.find(MDS_RANK_NONE);
     if (it != waiting_for_active_peer.end()) {
@@ -1927,7 +1895,7 @@ void MDSRankDispatcher::handle_mds_map(
   if (state >= MDSMap::STATE_CLIENTREPLAY &&
       oldstate >= MDSMap::STATE_CLIENTREPLAY) {
     set<mds_rank_t> oldactive, active;
-    oldmap->get_mds_set_lower_bound(oldactive, MDSMap::STATE_CLIENTREPLAY);
+    oldmap.get_mds_set_lower_bound(oldactive, MDSMap::STATE_CLIENTREPLAY);
     mdsmap->get_mds_set_lower_bound(active, MDSMap::STATE_CLIENTREPLAY);
     for (const auto& r : active) {
       if (r == whoami)
@@ -1940,7 +1908,7 @@ void MDSRankDispatcher::handle_mds_map(
   if (is_clientreplay() || is_active() || is_stopping()) {
     // did anyone stop?
     set<mds_rank_t> oldstopped, stopped;
-    oldmap->get_stopped_mds_set(oldstopped);
+    oldmap.get_stopped_mds_set(oldstopped);
     mdsmap->get_stopped_mds_set(stopped);
     for (const auto& r : stopped)
       if (oldstopped.count(r) == 0) {     // newly so?
@@ -1987,7 +1955,7 @@ void MDSRankDispatcher::handle_mds_map(
       mdlog->set_write_iohint(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
   }
 
-  if (oldmap->get_max_mds() != mdsmap->get_max_mds()) {
+  if (oldmap.get_max_mds() != mdsmap->get_max_mds()) {
     purge_queue.update_op_limit(*mdsmap);
   }
 }
@@ -2187,14 +2155,13 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
 class C_MDS_Send_Command_Reply : public MDSInternalContext
 {
 protected:
-  MCommand *m;
+  MCommand::const_ref m;
 public:
-  C_MDS_Send_Command_Reply(MDSRank *_mds, MCommand *_m) :
-    MDSInternalContext(_mds), m(_m) { m->get(); }
+  C_MDS_Send_Command_Reply(MDSRank *_mds, const MCommand::const_ref &_m) :
+    MDSInternalContext(_mds), m(_m) {}
   void send (int r, std::string_view out_str) {
     bufferlist bl;
     MDSDaemon::send_command_reply(m, mds, r, bl, out_str);
-    m->put();
   }
   void finish (int r) override {
     send(r, "");
@@ -2206,7 +2173,7 @@ public:
  * MDSRank after calling it (we could have gone into shutdown): just
  * send your result back to the calling client and finish.
  */
-void MDSRankDispatcher::evict_clients(const SessionFilter &filter, MCommand *m)
+void MDSRankDispatcher::evict_clients(const SessionFilter &filter, const MCommand::const_ref &m)
 {
   C_MDS_Send_Command_Reply *reply = new C_MDS_Send_Command_Reply(this, m);
 
@@ -3025,10 +2992,10 @@ void MDSRank::bcast_mds_map()
   // share the map with mounted clients
   set<Session*> clients;
   sessionmap.get_client_session_set(clients);
-  for (set<Session*>::const_iterator p = clients.begin();
-       p != clients.end();
-       ++p)
-    (*p)->get_connection()->send_message(new MMDSMap(monc->get_fsid(), mdsmap));
+  for (const auto &session : clients) {
+    MMDSMap::ref m(new MMDSMap(monc->get_fsid(), *mdsmap), false);
+    session->get_connection()->send_message2(std::move(m));
+  }
   last_client_mdsmap_bcast = mdsmap->get_epoch();
 }
 
@@ -3038,7 +3005,7 @@ MDSRankDispatcher::MDSRankDispatcher(
     LogChannelRef &clog_,
     SafeTimer &timer_,
     Beacon &beacon_,
-    MDSMap *& mdsmap_,
+    std::unique_ptr<MDSMap> &mdsmap_,
     Messenger *msgr,
     MonClient *monc_,
     Context *respawn_hook_,
@@ -3049,7 +3016,7 @@ MDSRankDispatcher::MDSRankDispatcher(
 
 bool MDSRankDispatcher::handle_command(
   const cmdmap_t &cmdmap,
-  MCommand *m,
+  const MCommand::const_ref &m,
   int *r,
   std::stringstream *ds,
   std::stringstream *ss,

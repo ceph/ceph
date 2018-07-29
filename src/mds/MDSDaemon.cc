@@ -48,14 +48,6 @@
 #include "events/ESession.h"
 #include "events/ESubtreeMap.h"
 
-#include "messages/MMDSMap.h"
-
-#include "messages/MGenericMessage.h"
-
-#include "messages/MMonCommand.h"
-#include "messages/MCommand.h"
-#include "messages/MCommandReply.h"
-
 #include "auth/AuthAuthorizeHandler.h"
 #include "auth/RotatingKeyRing.h"
 #include "auth/KeyRing.h"
@@ -99,7 +91,7 @@ MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
 
   monc->set_messenger(messenger);
 
-  mdsmap = new MDSMap;
+  mdsmap.reset(new MDSMap);
 }
 
 MDSDaemon::~MDSDaemon() {
@@ -107,8 +99,6 @@ MDSDaemon::~MDSDaemon() {
 
   delete mds_rank;
   mds_rank = NULL;
-  delete mdsmap;
-  mdsmap = NULL;
 
   delete authorize_handler_service_registry;
   delete authorize_handler_cluster_registry;
@@ -530,7 +520,7 @@ int MDSDaemon::init()
 
   timer.init();
 
-  beacon.init(mdsmap);
+  beacon.init(*mdsmap);
   messenger->set_myname(entity_name_t::MDS(MDS_RANK_NONE));
 
   // schedule tick
@@ -565,7 +555,7 @@ void MDSDaemon::tick()
   }
 }
 
-void MDSDaemon::send_command_reply(MCommand *m, MDSRank *mds_rank,
+void MDSDaemon::send_command_reply(const MCommand::const_ref &m, MDSRank *mds_rank,
 				   int r, bufferlist outbl,
 				   std::string_view outs)
 {
@@ -588,14 +578,13 @@ void MDSDaemon::send_command_reply(MCommand *m, MDSRank *mds_rank,
   }
   priv.reset();
 
-  MCommandReply *reply = new MCommandReply(r, outs);
+  MCommandReply::ref reply(new MCommandReply(r, outs), false);
   reply->set_tid(m->get_tid());
   reply->set_data(outbl);
-  m->get_connection()->send_message(reply);
+  m->get_connection()->send_message2(reply);
 }
 
-/* This function DOES put the passed message before returning*/
-void MDSDaemon::handle_command(MCommand *m)
+void MDSDaemon::handle_command(const MCommand::const_ref &m)
 {
   auto priv = m->get_connection()->get_priv();
   auto session = static_cast<Session *>(priv.get());
@@ -635,8 +624,6 @@ void MDSDaemon::handle_command(MCommand *m)
   if (run_after) {
     run_after->complete(0);
   }
-
-  m->put();
 }
 
 
@@ -702,7 +689,7 @@ COMMAND("heap " \
 
 int MDSDaemon::_handle_command(
     const cmdmap_t &cmdmap,
-    MCommand *m,
+    const MCommand::const_ref &m,
     bufferlist *outbl,
     std::string *outs,
     Context **run_later,
@@ -878,7 +865,7 @@ out:
 
 /* This function deletes the passed message before returning. */
 
-void MDSDaemon::handle_mds_map(MMDSMap *m)
+void MDSDaemon::handle_mds_map(const MMDSMap::const_ref &m)
 {
   version_t epoch = m->get_epoch();
 
@@ -886,7 +873,6 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
   if (epoch <= mdsmap->get_epoch()) {
     dout(5) << "handle_mds_map old map epoch " << epoch << " <= "
             << mdsmap->get_epoch() << ", discarding" << dendl;
-    m->put();
     return;
   }
 
@@ -895,10 +881,11 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
   entity_addrvec_t addrs;
 
   // keep old map, for a moment
-  MDSMap *oldmap = mdsmap;
+  std::unique_ptr<MDSMap> oldmap;
+  oldmap.swap(mdsmap);
 
   // decode and process
-  mdsmap = new MDSMap;
+  mdsmap.reset(new MDSMap);
   mdsmap->decode(m->get_encoded());
   const MDSMap::DaemonState new_state = mdsmap->get_state_gid(mds_gid_t(monc->get_global_id()));
   const int incarnation = mdsmap->get_inc_gid(mds_gid_t(monc->get_global_id()));
@@ -922,12 +909,10 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
   }
 
   // mark down any failed peers
-  for (map<mds_gid_t,MDSMap::mds_info_t>::const_iterator p = oldmap->get_mds_info().begin();
-       p != oldmap->get_mds_info().end();
-       ++p) {
-    if (mdsmap->get_mds_info().count(p->first) == 0) {
-      dout(10) << " peer mds gid " << p->first << " removed from map" << dendl;
-      messenger->mark_down_addrs(p->second.addrs);
+  for (const auto &p : oldmap->get_mds_info()) {
+    if (mdsmap->get_mds_info().count(p.first) == 0) {
+      dout(10) << " peer mds gid " << p.first << " removed from map" << dendl;
+      messenger->mark_down_addrs(p.second.addrs);
     }
   }
 
@@ -958,7 +943,6 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
             // has taken our ID, we don't want to keep restarting and
             // fighting them for the ID.
             suicide();
-            m->put();
             return;
           }
         }
@@ -971,7 +955,7 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
     // MDSRank not active: process the map here to see if we have
     // been assigned a rank.
     dout(10) <<  __func__ << ": handling map in rankless mode" << dendl;
-    _handle_mds_map(oldmap);
+    _handle_mds_map(*mdsmap);
   } else {
 
     // Did we already hold a different rank?  MDSMonitor shouldn't try
@@ -996,18 +980,16 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
     // MDSRank is active: let him process the map, we have no say.
     dout(10) <<  __func__ << ": handling map as rank "
              << mds_rank->get_nodeid() << dendl;
-    mds_rank->handle_mds_map(m, oldmap);
+    mds_rank->handle_mds_map(m, *oldmap);
   }
 
 out:
-  beacon.notify_mdsmap(mdsmap);
-  m->put();
-  delete oldmap;
+  beacon.notify_mdsmap(*mdsmap);
 }
 
-void MDSDaemon::_handle_mds_map(MDSMap *oldmap)
+void MDSDaemon::_handle_mds_map(const MDSMap &mdsmap)
 {
-  MDSMap::DaemonState new_state = mdsmap->get_state_gid(mds_gid_t(monc->get_global_id()));
+  MDSMap::DaemonState new_state = mdsmap.get_state_gid(mds_gid_t(monc->get_global_id()));
 
   // Normal rankless case, we're marked as standby
   if (new_state == MDSMap::STATE_STANDBY) {
@@ -1068,7 +1050,7 @@ void MDSDaemon::suicide()
   clean_up_admin_socket();
 
   // Inform MDS we are going away, then shut down beacon
-  beacon.set_want_state(mdsmap, MDSMap::STATE_DNE);
+  beacon.set_want_state(*mdsmap, MDSMap::STATE_DNE);
   if (!mdsmap->is_dne_gid(mds_gid_t(monc->get_global_id()))) {
     // Notify the MDSMonitor that we're dying, so that it doesn't have to
     // wait for us to go laggy.  Only do this if we're actually in the
@@ -1143,7 +1125,7 @@ void MDSDaemon::respawn()
 
 
 
-bool MDSDaemon::ms_dispatch(Message *m)
+bool MDSDaemon::ms_dispatch2(const Message::ref &m)
 {
   Mutex::Locker l(mds_lock);
   if (stopping) {
@@ -1153,7 +1135,6 @@ bool MDSDaemon::ms_dispatch(Message *m)
   // Drop out early if shutting down
   if (beacon.get_want_state() == CEPH_MDS_STATE_DNE) {
     dout(10) << " stopping, discarding " << *m << dendl;
-    m->put();
     return true;
   }
 
@@ -1193,23 +1174,22 @@ bool MDSDaemon::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bo
 /*
  * high priority messages we always process
  */
-bool MDSDaemon::handle_core_message(Message *m)
+bool MDSDaemon::handle_core_message(const Message::const_ref &m)
 {
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
-    m->put();
     break;
 
     // MDS
   case CEPH_MSG_MDS_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_MDS);
-    handle_mds_map(static_cast<MMDSMap*>(m));
+    handle_mds_map(boost::static_pointer_cast<MMDSMap::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
     break;
 
     // OSD
   case MSG_COMMAND:
-    handle_command(static_cast<MCommand*>(m));
+    handle_command(boost::static_pointer_cast<MCommand::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
     break;
   case CEPH_MSG_OSD_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
@@ -1217,13 +1197,11 @@ bool MDSDaemon::handle_core_message(Message *m)
     if (mds_rank) {
       mds_rank->handle_osd_map();
     }
-    m->put();
     break;
 
   case MSG_MON_COMMAND:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
     clog->warn() << "dropping `mds tell` command from legacy monitor";
-    m->put();
     break;
 
   default:
@@ -1432,7 +1410,7 @@ void MDSDaemon::ms_handle_accept(Connection *con)
 
       // send out any queued messages
       while (!s->preopen_out_queue.empty()) {
-	con->send_message(s->preopen_out_queue.front());
+	con->send_message2(s->preopen_out_queue.front());
 	s->preopen_out_queue.pop_front();
       }
     }

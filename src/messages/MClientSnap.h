@@ -18,6 +18,9 @@
 #include "msg/Message.h"
 
 struct MClientSnap : public Message {
+  typedef boost::intrusive_ptr<MClientSnap> ref;
+  typedef boost::intrusive_ptr<MClientSnap const> const_ref;
+
   ceph_mds_snap_head head;
   bufferlist bl;
   

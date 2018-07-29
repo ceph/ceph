@@ -24,10 +24,12 @@ class MExportDirDiscover : public Message {
   filepath path;
 
  public:
-  mds_rank_t get_source_mds() { return from; }
-  inodeno_t get_ino() { return dirfrag.ino; }
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  filepath& get_path() { return path; }
+  typedef boost::intrusive_ptr<MExportDirDiscover> ref;
+  typedef boost::intrusive_ptr<MExportDirDiscover const> const_ref;
+  mds_rank_t get_source_mds() const { return from; }
+  inodeno_t get_ino() const { return dirfrag.ino; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+  const filepath& get_path() const { return path; }
 
   bool started;
 

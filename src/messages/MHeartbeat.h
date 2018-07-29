@@ -26,12 +26,13 @@ class MHeartbeat : public Message {
   map<mds_rank_t, float> import_map;
 
  public:
-  mds_load_t& get_load() { return load; }
-  int get_beat() { return beat; }
+  typedef boost::intrusive_ptr<MHeartbeat> ref;
+  typedef boost::intrusive_ptr<MHeartbeat const> const_ref;
+  const mds_load_t& get_load() const { return load; }
+  int get_beat() const { return beat; }
 
-  map<mds_rank_t, float>& get_import_map() {
-    return import_map;
-  }
+  const map<mds_rank_t, float>& get_import_map() const { return import_map; }
+  map<mds_rank_t, float>& get_import_map() { return import_map; }
 
   MHeartbeat() : Message(MSG_MDS_HEARTBEAT), load(DecayRate()) {}
   MHeartbeat(mds_load_t& load, int beat)

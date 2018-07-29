@@ -18,7 +18,10 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 
-struct MMDSFindInoReply : public Message {
+class MMDSFindInoReply : public Message {
+public:
+  typedef boost::intrusive_ptr<MMDSFindInoReply> ref;
+  typedef boost::intrusive_ptr<MMDSFindInoReply const> const_ref;
   ceph_tid_t tid = 0;
   filepath path;
 

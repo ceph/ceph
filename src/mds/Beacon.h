@@ -22,11 +22,10 @@
 #include "include/Context.h"
 #include "common/Mutex.h"
 #include "msg/Dispatcher.h"
+
 #include "messages/MMDSBeacon.h"
 
 class MonClient;
-class MMDSBeacon;
-class Message;
 class MDSRank;
 
 
@@ -45,25 +44,25 @@ public:
   Beacon(CephContext *cct_, MonClient *monc_, std::string_view name);
   ~Beacon() override;
 
-  void init(MDSMap const *mdsmap);
+  void init(const MDSMap &mdsmap);
   void shutdown();
 
   bool ms_can_fast_dispatch_any() const override { return true; }
-  bool ms_can_fast_dispatch(const Message *m) const override;
-  void ms_fast_dispatch(Message *m) override;
-  bool ms_dispatch(Message *m) override;
+  bool ms_can_fast_dispatch2(const Message::const_ref& m) const override;
+  void ms_fast_dispatch2(const Message::ref& m) override;
+  bool ms_dispatch2(const Message::ref &m) override;
   void ms_handle_connect(Connection *c) override {}
   bool ms_handle_reset(Connection *c) override {return false;}
   void ms_handle_remote_reset(Connection *c) override {}
   bool ms_handle_refused(Connection *c) override {return false;}
 
-  void notify_mdsmap(MDSMap const *mdsmap);
-  void notify_health(MDSRank const *mds);
+  void notify_mdsmap(const MDSMap &mdsmap);
+  void notify_health(const MDSRank *mds);
 
-  void handle_mds_beacon(MMDSBeacon *m);
+  void handle_mds_beacon(const MMDSBeacon::const_ref &m);
   void send();
 
-  void set_want_state(MDSMap const *mdsmap, MDSMap::DaemonState const newstate);
+  void set_want_state(const MDSMap &mdsmap, MDSMap::DaemonState const newstate);
   MDSMap::DaemonState get_want_state() const;
 
   /**
@@ -77,7 +76,7 @@ public:
   utime_t get_laggy_until() const;
 
 private:
-  void _notify_mdsmap(MDSMap const *mdsmap);
+  void _notify_mdsmap(const MDSMap &mdsmap);
   void _send();
 
   //CephContext *cct;

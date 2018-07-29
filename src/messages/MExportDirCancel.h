@@ -22,7 +22,9 @@ class MExportDirCancel : public Message {
   dirfrag_t dirfrag;
 
  public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
+  typedef boost::intrusive_ptr<MExportDirCancel> ref;
+  typedef boost::intrusive_ptr<MExportDirCancel const> const_ref;
+  dirfrag_t get_dirfrag() const { return dirfrag; }
 
   MExportDirCancel() : Message(MSG_MDS_EXPORTDIRCANCEL) {}
   MExportDirCancel(dirfrag_t df, uint64_t tid) :

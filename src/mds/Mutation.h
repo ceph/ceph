@@ -26,6 +26,8 @@
 #include "Capability.h"
 
 #include "common/TrackedOp.h"
+#include "messages/MClientRequest.h"
+#include "messages/MMDSSlaveRequest.h"
 
 class LogSegment;
 class Capability;
@@ -34,8 +36,6 @@ class CDir;
 class CDentry;
 class Session;
 class ScatterLock;
-class MClientRequest;
-class MMDSSlaveRequest;
 struct sr_t;
 
 struct MutationImpl : public TrackedOp {
@@ -180,7 +180,7 @@ struct MDRequestImpl : public MutationImpl {
   elist<MDRequestImpl*>::item item_session_request;  // if not on list, op is aborted.
 
   // -- i am a client (master) request
-  MClientRequest *client_request; // client request (if any)
+  MClientRequest::const_ref client_request; // client request (if any)
 
   // store up to two sets of dn vectors, inode pointers, for request path1 and path2.
   vector<CDentry*> dn[2];
@@ -207,7 +207,7 @@ struct MDRequestImpl : public MutationImpl {
   map<vinodeno_t, ceph_seq_t> cap_releases;  
 
   // -- i am a slave request
-  MMDSSlaveRequest *slave_request; // slave request (if one is pending; implies slave == true)
+  MMDSSlaveRequest::const_ref slave_request; // slave request (if one is pending; implies slave == true)
 
   // -- i am an internal op
   int internal_op;
@@ -290,15 +290,14 @@ struct MDRequestImpl : public MutationImpl {
   struct Params {
     metareqid_t reqid;
     __u32 attempt;
-    MClientRequest *client_req;
-    class Message *triggering_slave_req;
+    MClientRequest::const_ref client_req;
+    Message::const_ref triggering_slave_req;
     mds_rank_t slave_to;
     utime_t initiated;
     utime_t throttled, all_read, dispatched;
     int internal_op;
     // keep these default values synced to MutationImpl's
-    Params() : attempt(0), client_req(NULL),
-        triggering_slave_req(NULL), slave_to(MDS_RANK_NONE), internal_op(-1) {}
+    Params() : attempt(0), slave_to(MDS_RANK_NONE), internal_op(-1) {}
     const utime_t& get_recv_stamp() const {
       return initiated;
     }
@@ -318,7 +317,7 @@ struct MDRequestImpl : public MutationImpl {
     session(NULL), item_session_request(this),
     client_request(params->client_req), straydn(NULL), snapid(CEPH_NOSNAP),
     tracei(NULL), tracedn(NULL), alloc_ino(0), used_prealloc_ino(0),
-    slave_request(NULL), internal_op(params->internal_op), internal_op_finish(NULL),
+    internal_op(params->internal_op), internal_op_finish(NULL),
     internal_op_private(NULL),
     retry(0),
     waited_for_osdmap(false), _more(NULL) {

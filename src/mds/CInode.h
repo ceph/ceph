@@ -41,18 +41,18 @@
 #include "SnapRealm.h"
 #include "Mutation.h"
 
+#include "messages/MClientCaps.h"
+
 #define dout_context g_ceph_context
 
 class Context;
 class CDentry;
 class CDir;
-class Message;
 class CInode;
 class MDCache;
 class LogSegment;
 struct SnapRealm;
 class Session;
-class MClientCaps;
 struct ObjectOperation;
 class EMetaBlob;
 
@@ -799,7 +799,7 @@ public:
   bool is_dirty_pool() { return state_test(STATE_DIRTYPOOL); }
 
   void encode_snap_blob(bufferlist &bl);
-  void decode_snap_blob(bufferlist &bl);
+  void decode_snap_blob(const bufferlist &bl);
   void encode_store(bufferlist& bl, uint64_t features);
   void decode_store(bufferlist::const_iterator& bl);
 
@@ -866,7 +866,7 @@ public:
   int encode_inodestat(bufferlist& bl, Session *session, SnapRealm *realm,
 		       snapid_t snapid=CEPH_NOSNAP, unsigned max_bytes=0,
 		       int getattr_wants=0);
-  void encode_cap_message(MClientCaps *m, Capability *cap);
+  void encode_cap_message(const MClientCaps::ref &m, Capability *cap);
 
 
   // -- locks --
@@ -911,7 +911,7 @@ public:
 
   void set_object_info(MDSCacheObjectInfo &info) override;
   void encode_lock_state(int type, bufferlist& bl) override;
-  void decode_lock_state(int type, bufferlist& bl) override;
+  void decode_lock_state(int type, const bufferlist& bl) override;
 
   void _finish_frag_update(CDir *dir, MutationRef& mut);
 

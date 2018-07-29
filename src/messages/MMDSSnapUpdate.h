@@ -22,8 +22,10 @@ class MMDSSnapUpdate : public Message {
   __s16 snap_op;
 
 public:
-  inodeno_t get_ino() { return ino; }
-  int get_snap_op() { return snap_op; }
+  typedef boost::intrusive_ptr<MMDSSnapUpdate> ref;
+  typedef boost::intrusive_ptr<MMDSSnapUpdate const> const_ref;
+  inodeno_t get_ino() const { return ino; }
+  int get_snap_op() const { return snap_op; }
 
   bufferlist snap_blob;
 

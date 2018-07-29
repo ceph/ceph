@@ -83,47 +83,49 @@ class MDiscoverReply : public Message {
   mds_rank_t dir_auth_hint = 0;
 
  public:
+  typedef boost::intrusive_ptr<MDiscoverReply> ref;
+  typedef boost::intrusive_ptr<MDiscoverReply const> const_ref;
   __u8 starts_with = 0;
   bufferlist trace;
 
   enum { DIR, DENTRY, INODE };
 
   // accessors
-  inodeno_t get_base_ino() { return base_ino; }
-  frag_t get_base_dir_frag() { return base_dir_frag; }
-  bool get_wanted_base_dir() { return wanted_base_dir; }
-  bool get_wanted_xlocked() { return wanted_xlocked; }
-  snapid_t get_wanted_snapid() { return wanted_snapid; }
+  inodeno_t get_base_ino() const { return base_ino; }
+  frag_t get_base_dir_frag() const { return base_dir_frag; }
+  bool get_wanted_base_dir() const { return wanted_base_dir; }
+  bool get_wanted_xlocked() const { return wanted_xlocked; }
+  snapid_t get_wanted_snapid() const { return wanted_snapid; }
 
-  bool is_flag_error_dn() { return flag_error_dn; }
-  bool is_flag_error_dir() { return flag_error_dir; }
-  const std::string& get_error_dentry() { return error_dentry; }
+  bool is_flag_error_dn() const { return flag_error_dn; }
+  bool is_flag_error_dir() const { return flag_error_dir; }
+  const std::string& get_error_dentry() const { return error_dentry; }
 
-  int get_starts_with() { return starts_with; }
+  int get_starts_with() const { return starts_with; }
 
   mds_rank_t get_dir_auth_hint() const { return dir_auth_hint; }
 
-  bool is_unsolicited() { return unsolicited; }
+  bool is_unsolicited() const { return unsolicited; }
   void mark_unsolicited() { unsolicited = true; }
 
   void set_base_dir_frag(frag_t df) { base_dir_frag = df; }
 
   // cons
   MDiscoverReply() : Message(MSG_MDS_DISCOVERREPLY, HEAD_VERSION) { }
-  MDiscoverReply(MDiscover *dis) :
+  MDiscoverReply(const MDiscover &dis) :
     Message(MSG_MDS_DISCOVERREPLY, HEAD_VERSION),
-    base_ino(dis->get_base_ino()),
-    base_dir_frag(dis->get_base_dir_frag()),
-    wanted_base_dir(dis->wants_base_dir()),
-    wanted_xlocked(dis->wants_xlocked()),
-    wanted_snapid(dis->get_snapid()),
+    base_ino(dis.get_base_ino()),
+    base_dir_frag(dis.get_base_dir_frag()),
+    wanted_base_dir(dis.wants_base_dir()),
+    wanted_xlocked(dis.wants_xlocked()),
+    wanted_snapid(dis.get_snapid()),
     flag_error_dn(false),
     flag_error_dir(false),
     unsolicited(false),
     dir_auth_hint(CDIR_AUTH_UNKNOWN),
     starts_with(DIR)
   {
-    header.tid = dis->get_tid();
+    header.tid = dis.get_tid();
   }
   MDiscoverReply(dirfrag_t df) :
     Message(MSG_MDS_DISCOVERREPLY, HEAD_VERSION),
@@ -150,7 +152,7 @@ public:
   }
   
   // builders
-  bool is_empty() {
+  bool is_empty() const {
     return trace.length() == 0 &&
       !flag_error_dn &&
       !flag_error_dir &&

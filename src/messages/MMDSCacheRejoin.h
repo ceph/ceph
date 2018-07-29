@@ -33,6 +33,9 @@ class MMDSCacheRejoin : public Message {
   static const int COMPAT_VERSION = 1;
 
  public:
+  typedef boost::intrusive_ptr<MMDSCacheRejoin> ref;
+  typedef boost::intrusive_ptr<MMDSCacheRejoin const> const_ref;
+
   static const int OP_WEAK    = 1;  // replica -> auth, i exist, + maybe open files.
   static const int OP_STRONG  = 2;  // replica -> auth, i exist, + open files and lock state.
   static const int OP_ACK     = 3;  // auth -> replica, here is your lock state.
@@ -102,9 +105,9 @@ class MMDSCacheRejoin : public Message {
       ino(0), remote_ino(0), remote_d_type(0), nonce(0), lock(0) {}
     dn_strong(snapid_t f, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int l) : 
       first(f), ino(pi), remote_ino(ri), remote_d_type(rdt), nonce(n), lock(l) {}
-    bool is_primary() { return ino > 0; }
-    bool is_remote() { return remote_ino > 0; }
-    bool is_null() { return ino == 0 && remote_ino == 0; }
+    bool is_primary() const { return ino > 0; }
+    bool is_remote() const { return remote_ino > 0; }
+    bool is_null() const { return ino == 0 && remote_ino == 0; }
     void encode(bufferlist &bl) const {
       using ceph::encode;
       encode(first, bl);

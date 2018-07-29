@@ -21,6 +21,8 @@
 
 class MMDSResolve : public Message {
 public:
+  typedef boost::intrusive_ptr<MMDSResolve> ref;
+  typedef boost::intrusive_ptr<MMDSResolve const> const_ref;
   map<dirfrag_t, vector<dirfrag_t> > subtrees;
   map<dirfrag_t, vector<dirfrag_t> > ambiguous_imports;
 

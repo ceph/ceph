@@ -144,7 +144,7 @@ public:
   entity_addr_t socket_addr;
   xlist<Session*>::item item_session_list;
 
-  list<Message*> preopen_out_queue;  ///< messages for client, queued before they connect
+  list<Message::ref> preopen_out_queue;  ///< messages for client, queued before they connect
 
   elist<MDRequestImpl*> requests;
   size_t get_request_count();
@@ -345,10 +345,7 @@ public:
     } else {
       assert(!item_session_list.is_on_list());
     }
-    while (!preopen_out_queue.empty()) {
-      preopen_out_queue.front()->put();
-      preopen_out_queue.pop_front();
-    }
+    preopen_out_queue.clear();
   }
 
   void set_connection(Connection *con) {

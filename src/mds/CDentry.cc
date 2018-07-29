@@ -428,7 +428,7 @@ void CDentry::decode_replica(bufferlist::const_iterator& p, bool is_new)
 // ----------------------------
 // locking
 
-void CDentry::set_object_info(MDSCacheObjectInfo &info) 
+void CDentry::set_object_info(MDSCacheObjectInfo &info)
 {
   info.dirfrag = dir->dirfrag();
   info.dname = name;
@@ -457,7 +457,7 @@ void CDentry::encode_lock_state(int type, bufferlist& bl)
   else ceph_abort();
 }
 
-void CDentry::decode_lock_state(int type, bufferlist& bl)
+void CDentry::decode_lock_state(int type, const bufferlist& bl)
 {  
   auto p = bl.cbegin();
 
