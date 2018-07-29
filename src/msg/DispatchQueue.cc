@@ -36,7 +36,7 @@ double DispatchQueue::get_max_age(utime_t now) const {
     return (now - marrival.begin()->first);
 }
 
-uint64_t DispatchQueue::pre_dispatch(Message *m)
+uint64_t DispatchQueue::pre_dispatch(const Message::ref& m)
 {
   ldout(cct,1) << "<== " << m->get_source_inst()
 	       << " " << m->get_seq()
@@ -54,50 +54,46 @@ uint64_t DispatchQueue::pre_dispatch(Message *m)
   return msize;
 }
 
-void DispatchQueue::post_dispatch(Message *m, uint64_t msize)
+void DispatchQueue::post_dispatch(const Message::ref& m, uint64_t msize)
 {
   dispatch_throttle_release(msize);
   ldout(cct,20) << "done calling dispatch on " << m << dendl;
 }
 
-bool DispatchQueue::can_fast_dispatch(const Message *m) const
+bool DispatchQueue::can_fast_dispatch(const Message::const_ref &m) const
 {
   return msgr->ms_can_fast_dispatch(m);
 }
 
-void DispatchQueue::fast_dispatch(Message *m)
+void DispatchQueue::fast_dispatch(const Message::ref& m)
 {
   uint64_t msize = pre_dispatch(m);
   msgr->ms_fast_dispatch(m);
   post_dispatch(m, msize);
 }
 
-void DispatchQueue::fast_preprocess(Message *m)
+void DispatchQueue::fast_preprocess(const Message::ref& m)
 {
   msgr->ms_fast_preprocess(m);
 }
 
-void DispatchQueue::enqueue(Message *m, int priority, uint64_t id)
+void DispatchQueue::enqueue(const Message::ref& m, int priority, uint64_t id)
 {
-
   Mutex::Locker l(lock);
   if (stop) {
-    m->put();
     return;
   }
   ldout(cct,20) << "queue " << m << " prio " << priority << dendl;
   add_arrival(m);
   if (priority >= CEPH_MSG_PRIO_LOW) {
-    mqueue.enqueue_strict(
-        id, priority, QueueItem(m));
+    mqueue.enqueue_strict(id, priority, QueueItem(m));
   } else {
-    mqueue.enqueue(
-        id, priority, m->get_cost(), QueueItem(m));
+    mqueue.enqueue(id, priority, m->get_cost(), QueueItem(m));
   }
   cond.Signal();
 }
 
-void DispatchQueue::local_delivery(Message *m, int priority)
+void DispatchQueue::local_delivery(const Message::ref& m, int priority)
 {
   m->set_recv_stamp(ceph_clock_now());
   Mutex::Locker l(local_delivery_lock);
@@ -117,11 +113,11 @@ void DispatchQueue::run_local_delivery()
       local_delivery_cond.Wait(local_delivery_lock);
       continue;
     }
-    pair<Message *, int> mp = local_messages.front();
+    auto p = local_messages.front();
     local_messages.pop_front();
     local_delivery_lock.Unlock();
-    Message *m = mp.first;
-    int priority = mp.second;
+    const Message::ref& m = p.first;
+    int priority = p.second;
     fast_preprocess(m);
     if (can_fast_dispatch(m)) {
       fast_dispatch(m);
@@ -192,10 +188,9 @@ void DispatchQueue::entry()
 	  ceph_abort();
 	}
       } else {
-	Message *m = qitem.get_message();
+	const Message::ref& m = qitem.get_message();
 	if (stop) {
 	  ldout(cct,10) << " stop flag set, discarding " << m << " " << *m << dendl;
-	  m->put();
 	} else {
 	  uint64_t msize = pre_dispatch(m);
 	  msgr->ms_deliver_dispatch(m);
@@ -222,10 +217,9 @@ void DispatchQueue::discard_queue(uint64_t id) {
        i != removed.end();
        ++i) {
     assert(!(i->is_code())); // We don't discard id 0, ever!
-    Message *m = i->get_message();
+    const Message::ref& m = i->get_message();
     remove_arrival(m);
     dispatch_throttle_release(m->get_dispatch_throttle_size());
-    m->put();
   }
 }
 
@@ -245,11 +239,10 @@ void DispatchQueue::wait()
 
 void DispatchQueue::discard_local()
 {
-  for (list<pair<Message *, int> >::iterator p = local_messages.begin();
+  for (list<pair<Message::ref, int> >::iterator p = local_messages.begin();
        p != local_messages.end();
        ++p) {
     ldout(cct,20) << __func__ << " " << p->first << dendl;
-    p->first->put();
   }
   local_messages.clear();
 }

@@ -6033,7 +6033,7 @@ void Client::flush_cap_releases()
       if (cct->_conf->client_inject_release_failure) {
         ldout(cct, 20) << __func__ << " injecting failure to send cap release message" << dendl;
       } else {
-        session.con->send_message(session.release);
+        session.con->send_message2(session.release);
       }
       session.release.reset();
     }

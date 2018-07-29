@@ -594,9 +594,9 @@ public:
    *
    * @param m The Message we are testing.
    */
-  bool ms_can_fast_dispatch(const Message* m) {
+  bool ms_can_fast_dispatch(const Message::const_ref& m) {
     for (const auto &dispatcher : fast_dispatchers) {
-      if (dispatcher->ms_can_fast_dispatch(m))
+      if (dispatcher->ms_can_fast_dispatch2(m))
 	return true;
     }
     return false;
@@ -605,26 +605,28 @@ public:
   /**
    * Deliver a single Message via "fast dispatch".
    *
-   * @param m The Message we are fast dispatching. We take ownership
-   * of one reference to it.
+   * @param m The Message we are fast dispatching.
    * If none of our Dispatchers can handle it, ceph_abort().
    */
-  void ms_fast_dispatch(Message* m) {
+  void ms_fast_dispatch(const Message::ref &m) {
     m->set_dispatch_stamp(ceph_clock_now());
     for (const auto &dispatcher : fast_dispatchers) {
-      if (dispatcher->ms_can_fast_dispatch(m)) {
-	dispatcher->ms_fast_dispatch(m);
+      if (dispatcher->ms_can_fast_dispatch2(m)) {
+	dispatcher->ms_fast_dispatch2(m);
 	return;
       }
     }
     ceph_abort();
   }
+  void ms_fast_dispatch(Message *m) {
+    return ms_fast_dispatch(Message::ref(m, false)); /* consume ref */
+  }
   /**
    *
    */
-  void ms_fast_preprocess(Message* m) {
+  void ms_fast_preprocess(const Message::ref &m) {
     for (const auto &dispatcher : fast_dispatchers) {
-      dispatcher->ms_fast_preprocess(m);
+      dispatcher->ms_fast_preprocess2(m);
     }
   }
   /**
@@ -632,19 +634,20 @@ public:
    *  in sequence until one of them handles it.
    *  If none of our Dispatchers can handle it, assert(0).
    *
-   *  @param m The Message to deliver. We take ownership of
-   *  one reference to it.
+   *  @param m The Message to deliver.
    */
-  void ms_deliver_dispatch(Message* m) {
+  void ms_deliver_dispatch(const Message::ref &m) {
     m->set_dispatch_stamp(ceph_clock_now());
     for (const auto &dispatcher : dispatchers) {
-      if (dispatcher->ms_dispatch(m))
+      if (dispatcher->ms_dispatch2(m))
 	return;
     }
     lsubdout(cct, ms, 0) << "ms_deliver_dispatch: unhandled message " << m << " " << *m << " from "
 			 << m->get_source_inst() << dendl;
     assert(!cct->_conf->ms_die_on_unhandled_msg);
-    m->put();
+  }
+  void ms_deliver_dispatch(Message *m) {
+    return ms_deliver_dispatch(Message::ref(m, false)); /* consume ref */
   }
   /**
    * Notify each Dispatcher of a new Connection. Call

@@ -18,22 +18,19 @@
 #include <stdlib.h>
 #include <ostream>
 
-#include <boost/intrusive_ptr.hpp>
 #include <boost/intrusive/list.hpp>
-// Because intrusive_ptr clobbers our assert...
-#include "include/assert.h"
-
-#include "include/types.h"
-#include "include/buffer.h"
-#include "common/ThrottleInterface.h"
-#include "common/zipkin_trace.h"
-#include "msg_types.h"
 
 #include "common/RefCountedObj.h"
-#include "msg/Connection.h"
-
-#include "common/debug.h"
+#include "common/ThrottleInterface.h"
 #include "common/config.h"
+#include "common/debug.h"
+#include "common/zipkin_trace.h"
+#include "include/assert.h" // Because intrusive_ptr clobbers our assert...
+#include "include/buffer.h"
+#include "include/types.h"
+#include "msg/Connection.h"
+#include "msg/MessageRef.h"
+#include "msg_types.h"
 
 // monitor internal
 #define MSG_MON_SCRUB              64
@@ -259,6 +256,9 @@ protected:
   bi::list_member_hook<> dispatch_q;
 
 public:
+  using ref = MessageRef;
+  using const_ref = MessageConstRef;
+
   // zipkin tracing
   ZTracer::Trace trace;
   void encode_trace(bufferlist &bl, uint64_t features) const;
@@ -501,7 +501,6 @@ public:
 
   void encode(uint64_t features, int crcflags);
 };
-typedef boost::intrusive_ptr<Message> MessageRef;
 
 extern Message *decode_message(CephContext *cct, int crcflags,
 			       ceph_msg_header &header,
