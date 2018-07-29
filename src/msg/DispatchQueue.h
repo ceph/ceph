@@ -17,9 +17,9 @@
 
 #include <atomic>
 #include <map>
+#include <queue>
 #include <boost/intrusive_ptr.hpp>
 #include "include/assert.h"
-#include "include/xlist.h"
 #include "common/Throttle.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
@@ -107,7 +107,7 @@ class DispatchQueue {
   Mutex local_delivery_lock;
   Cond local_delivery_cond;
   bool stop_local_delivery;
-  list<pair<Message::ref, int>> local_messages;
+  std::queue<pair<Message::ref, int>> local_messages;
   class LocalDeliveryThread : public Thread {
     DispatchQueue *dq;
   public:
