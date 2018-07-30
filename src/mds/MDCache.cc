@@ -210,7 +210,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   opening_root = open = false;
 
   cache_inode_limit = g_conf().get_val<int64_t>("mds_cache_size");
-  cache_memory_limit = g_conf().get_val<uint64_t>("mds_cache_memory_limit");
+  cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
   cache_reservation = g_conf().get_val<double>("mds_cache_reservation");
   cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
 

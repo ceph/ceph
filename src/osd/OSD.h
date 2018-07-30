@@ -275,7 +275,7 @@ public:
   MonClient   *&monc;
   ClassHandler  *&class_handler;
 
-  md_config_cacher_t<uint64_t> osd_max_object_size;
+  md_config_cacher_t<Option::size_t> osd_max_object_size;
   md_config_cacher_t<bool> osd_skip_data_digest;
 
   void enqueue_back(OpQueueItem&& qi);

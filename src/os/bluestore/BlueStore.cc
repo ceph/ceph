@@ -4009,7 +4009,7 @@ int BlueStore::_set_cache_sizes()
   assert(bdev);
   cache_autotune = cct->_conf.get_val<bool>("bluestore_cache_autotune");
   cache_autotune_chunk_size = 
-      cct->_conf.get_val<uint64_t>("bluestore_cache_autotune_chunk_size");
+      cct->_conf.get_val<Option::size_t>("bluestore_cache_autotune_chunk_size");
   cache_autotune_interval =
       cct->_conf.get_val<double>("bluestore_cache_autotune_interval");
 
@@ -4275,8 +4275,8 @@ int BlueStore::_open_path()
 {
   // sanity check(s)
   auto osd_max_object_size =
-    cct->_conf.get_val<uint64_t>("osd_max_object_size");
-  if (osd_max_object_size >= (uint64_t)OBJECT_MAX_SIZE) {
+    cct->_conf.get_val<Option::size_t>("osd_max_object_size");
+  if (osd_max_object_size >= (size_t)OBJECT_MAX_SIZE) {
     derr << __func__ << " osd_max_object_size >= 0x" << std::hex << OBJECT_MAX_SIZE
       << "; BlueStore has hard limit of 0x" << OBJECT_MAX_SIZE << "." <<  std::dec << dendl;
     return -EINVAL;
@@ -5235,7 +5235,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
       gift = g;
     reclaim = 0;
   }
-  uint64_t min_free = cct->_conf.get_val<uint64_t>("bluestore_bluefs_min_free");
+  uint64_t min_free = cct->_conf.get_val<Option::size_t>("bluestore_bluefs_min_free");
   if (bluefs_free < min_free &&
       min_free < free_cap) {
     uint64_t g = min_free - bluefs_free;

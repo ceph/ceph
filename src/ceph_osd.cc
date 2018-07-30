@@ -518,7 +518,7 @@ flushjournal_out:
        << std::endl;
 
   uint64_t message_size =
-    g_conf().get_val<uint64_t>("osd_client_message_size_cap");
+    g_conf().get_val<Option::size_t>("osd_client_message_size_cap");
   boost::scoped_ptr<Throttle> client_byte_throttler(
     new Throttle(g_ceph_context, "osd_client_bytes", message_size));
 

@@ -5669,9 +5669,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
     if (op.op == CEPH_OSD_OP_ZERO &&
         obs.exists &&
-        op.extent.offset < osd->osd_max_object_size &&
+        op.extent.offset < static_cast<Option::size_t>(osd->osd_max_object_size) &&
         op.extent.length >= 1 &&
-        op.extent.length <= osd->osd_max_object_size &&
+        op.extent.length <= static_cast<Option::size_t>(osd->osd_max_object_size) &&
 	op.extent.offset + op.extent.length >= oi.size) {
       if (op.extent.offset >= oi.size) {
         // no-op
@@ -6369,8 +6369,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    oi.truncate_size = op.extent.truncate_size;
 	  }
 	}
-	result = check_offset_and_length(op.extent.offset, op.extent.length,
-          osd->osd_max_object_size, get_dpp());
+	result = check_offset_and_length(
+	  op.extent.offset, op.extent.length,
+	  static_cast<Option::size_t>(osd->osd_max_object_size), get_dpp());
 	if (result < 0)
 	  break;
 
@@ -6415,8 +6416,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  break;
 	}
-	result = check_offset_and_length(0, op.extent.length,
-          osd->osd_max_object_size, get_dpp());
+	result = check_offset_and_length(
+	  0, op.extent.length,
+          static_cast<Option::size_t>(osd->osd_max_object_size), get_dpp());
 	if (result < 0)
 	  break;
 
@@ -6463,8 +6465,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       ++ctx->num_write;
       { // zero
-	result = check_offset_and_length(op.extent.offset, op.extent.length,
-          osd->osd_max_object_size, get_dpp());
+	result = check_offset_and_length(
+	  op.extent.offset, op.extent.length,
+          static_cast<Option::size_t>(osd->osd_max_object_size), get_dpp());
 	if (result < 0)
 	  break;
  
@@ -6528,8 +6531,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 
-        result = check_offset_and_length(op.extent.offset, op.extent.length,
-          osd->osd_max_object_size, get_dpp());
+        result = check_offset_and_length(
+	  op.extent.offset, op.extent.length,
+          static_cast<Option::size_t>(osd->osd_max_object_size), get_dpp());
         if (result < 0)
 	  break;
 
