@@ -4510,7 +4510,7 @@ bool OSD::maybe_wait_for_max_pg(spg_t pgid, bool is_mon_create)
     bool is_primary = osdmap->get_pg_acting_rank(pgid.pgid, whoami) == 0;
     pending_creates_from_osd.emplace(pgid.pgid, is_primary);
   }
-  dout(5) << __func__ << " withhold creation of pg " << pgid
+  dout(1) << __func__ << " withhold creation of pg " << pgid
 	  << ": " << pg_map.size() << " >= "<< max_pgs_per_osd << dendl;
   return true;
 }
