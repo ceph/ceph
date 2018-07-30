@@ -169,12 +169,15 @@ CEPH_QA_EMAIL="ceph-qa@ceph.com"
 DISTRO_MIMIC="ubuntu_16.04,ubuntu_18.04,centos_7.4,rhel_7.5"
 47 01 * * *  CEPH_BRANCH=mimic; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-jewel -k distro -e $CEPH_QA_EMAIL --suite-branch jewel --filter $DISTRO_MIMIC
 50 01 * * *  CEPH_BRANCH=mimic; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-luminous -k distro -e $CEPH_QA_EMAIL --suite-branch luminous --filter $DISTRO_MIMIC
-
-
 #********** mimic branch END
 
-### upgrade runs on old releases
+#********** nautilus branch START
 
+#change to `nautilus` from master when it's ready
+30 02 * * 2,4,5,7  CEPH_BRANCH=master; MACHINE_NAME=smithi;/home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -m $MACHINE_NAME -s upgrade/mimic-x -k distro -e $CEPH_QA_EMAIL
+#********** nautilus branch END
+
+### upgrade runs on old releases
 ###### on smithi
 
 23 04 * * * CEPH_BRANCH=luminous; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 7 -m $MACHINE_NAME -s upgrade/jewel-x -e $CEPH_QA_EMAIL
