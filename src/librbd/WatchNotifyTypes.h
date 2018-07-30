@@ -33,7 +33,7 @@ struct AsyncRequestId {
     : client_id(client_id_), request_id(request_id_) {}
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   inline bool operator<(const AsyncRequestId &rhs) const {
@@ -77,7 +77,7 @@ struct AcquiredLockPayload {
   AcquiredLockPayload(const ClientId &client_id_) : client_id(client_id_) {}
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -91,7 +91,7 @@ struct ReleasedLockPayload {
   ReleasedLockPayload(const ClientId &client_id_) : client_id(client_id_) {}
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -108,7 +108,7 @@ struct RequestLockPayload {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -117,7 +117,7 @@ struct HeaderUpdatePayload {
   static const bool CHECK_FOR_REFRESH = false;
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -126,7 +126,7 @@ public:
   AsyncRequestId async_request_id;
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 
 protected:
@@ -146,7 +146,7 @@ struct AsyncProgressPayload : public AsyncRequestPayloadBase {
   uint64_t total;
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -161,7 +161,7 @@ struct AsyncCompletePayload : public AsyncRequestPayloadBase {
   int result;
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -185,7 +185,7 @@ struct ResizePayload : public AsyncRequestPayloadBase {
   bool allow_shrink;
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -197,7 +197,7 @@ public:
   std::string snap_name;
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 
 protected:
@@ -216,7 +216,7 @@ struct SnapCreatePayload : public SnapPayloadBase {
     : SnapPayloadBase(_snap_namespace, name) {}
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -231,7 +231,7 @@ struct SnapRenamePayload : public SnapPayloadBase {
   uint64_t snap_id = 0;
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -281,7 +281,7 @@ struct RenamePayload {
   std::string image_name;
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -297,7 +297,7 @@ struct UpdateFeaturesPayload {
   bool enabled;
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -306,7 +306,7 @@ struct UnknownPayload {
   static const bool CHECK_FOR_REFRESH = false;
 
   void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::iterator &iter);
+  void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
@@ -337,8 +337,9 @@ struct NotifyMessage {
   bool check_for_refresh() const;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
+  NotifyOp get_notify_op() const;
 
   static void generate_test_instances(std::list<NotifyMessage *> &o);
 };
@@ -350,22 +351,23 @@ struct ResponseMessage {
   int result;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<ResponseMessage *> &o);
 };
 
+std::ostream &operator<<(std::ostream &out,
+                         const NotifyOp &op);
+std::ostream &operator<<(std::ostream &out,
+                         const AsyncRequestId &request);
+
+WRITE_CLASS_ENCODER(AsyncRequestId);
+WRITE_CLASS_ENCODER(NotifyMessage);
+WRITE_CLASS_ENCODER(ResponseMessage);
+
 } // namespace watch_notify
 } // namespace librbd
 
-std::ostream &operator<<(std::ostream &out,
-                         const librbd::watch_notify::NotifyOp &op);
-std::ostream &operator<<(std::ostream &out,
-                         const librbd::watch_notify::AsyncRequestId &request);
-
-WRITE_CLASS_ENCODER(librbd::watch_notify::AsyncRequestId);
-WRITE_CLASS_ENCODER(librbd::watch_notify::NotifyMessage);
-WRITE_CLASS_ENCODER(librbd::watch_notify::ResponseMessage);
 
 #endif // LIBRBD_WATCH_NOTIFY_TYPES_H

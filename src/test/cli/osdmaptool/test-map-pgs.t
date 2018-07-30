@@ -37,9 +37,6 @@
   $ grep -E "size $SIZE[[:space:]]$TOTAL" $OUT || cat $OUT
   size 3\t8000 (esc)
   $ STATS_RANDOM=$(grep '^ avg ' "$OUT")
-# it is almost impossible to get the same stats with random and crush
-# if they are, it most probably means something went wrong somewhere
-  $ test "$STATS_CRUSH" != "$STATS_RANDOM"
 #
 # cleanup
 #

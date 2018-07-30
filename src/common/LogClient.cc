@@ -16,6 +16,7 @@
 #include "include/str_map.h"
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
+#include "msg/Messenger.h"
 #include "mon/MonMap.h"
 #include "common/Graylog.h"
 
@@ -83,7 +84,7 @@ int parse_log_client_options(CephContext *cct,
     return r;
   }
 
-  fsid = cct->_conf->get_val<uuid_d>("fsid");
+  fsid = cct->_conf.get_val<uuid_d>("fsid");
   host = cct->_conf->host;
   return 0;
 }
@@ -212,13 +213,17 @@ void LogChannel::do_log(clog_type prio, std::stringstream& ss)
 void LogChannel::do_log(clog_type prio, const std::string& s)
 {
   Mutex::Locker l(channel_lock);
-  int lvl = (prio == CLOG_ERROR ? -1 : 0);
-  ldout(cct,lvl) << "log " << prio << " : " << s << dendl;
+  if (CLOG_ERROR == prio) {
+    ldout(cct,-1) << "log " << prio << " : " << s << dendl;
+  } else {
+    ldout(cct,0) << "log " << prio << " : " << s << dendl;
+  }
   LogEntry e;
   e.stamp = ceph_clock_now();
   // seq and who should be set for syslog/graylog/log_to_mon
-  e.who = parent->get_myinst();
+  e.addrs = parent->get_myaddrs();
   e.name = parent->get_myname();
+  e.rank = parent->get_myrank();
   e.prio = prio;
   e.msg = s;
   e.channel = get_log_channel();
@@ -278,7 +283,7 @@ Message *LogClient::_get_mon_log_message()
   unsigned num_unsent = last_log - last_log_sent;
   unsigned num_send;
   if (cct->_conf->mon_client_max_log_entries_per_message > 0)
-    num_send = MIN(num_unsent, (unsigned)cct->_conf->mon_client_max_log_entries_per_message);
+    num_send = std::min(num_unsent, (unsigned)cct->_conf->mon_client_max_log_entries_per_message);
   else
     num_send = num_unsent;
 
@@ -312,7 +317,7 @@ void LogClient::_send_to_mon()
   assert(log_lock.is_locked());
   assert(is_mon);
   assert(messenger->get_myname().is_mon());
-  ldout(cct,10) << __func__ << "log to self" << dendl;
+  ldout(cct,10) << __func__ << " log to self" << dendl;
   Message *log = _get_mon_log_message();
   messenger->get_loopback_connection()->send_message(log);
 }
@@ -336,9 +341,14 @@ uint64_t LogClient::get_next_seq()
   return ++last_log;
 }
 
-const entity_inst_t& LogClient::get_myinst()
+entity_addrvec_t LogClient::get_myaddrs()
 {
-  return messenger->get_myinst();
+  return messenger->get_myaddrs();
+}
+
+entity_name_t LogClient::get_myrank()
+{
+  return messenger->get_myname();
 }
 
 const EntityName& LogClient::get_myname()

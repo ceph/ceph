@@ -62,12 +62,12 @@ ThreadPool::~ThreadPool()
   delete[] _conf_keys;
 }
 
-void ThreadPool::handle_conf_change(const struct md_config_t *conf,
+void ThreadPool::handle_conf_change(const ConfigProxy& conf,
 				    const std::set <std::string> &changed)
 {
   if (changed.count(_thread_num_option)) {
     char *buf;
-    int r = conf->get_val(_thread_num_option.c_str(), &buf, -1);
+    int r = conf.get_val(_thread_num_option.c_str(), &buf, -1);
     assert(r >= 0);
     int v = atoi(buf);
     free(buf);
@@ -157,11 +157,12 @@ void ThreadPool::start_threads()
     ldout(cct, 10) << "start_threads creating and starting " << wt << dendl;
     _threads.insert(wt);
 
+    wt->create(thread_name.c_str());
+
     int r = wt->set_ioprio(ioprio_class, ioprio_priority);
     if (r < 0)
       lderr(cct) << " set_ioprio got " << cpp_strerror(r) << dendl;
 
-    wt->create(thread_name.c_str());
   }
 }
 
@@ -182,7 +183,7 @@ void ThreadPool::start()
 
   if (_thread_num_option.length()) {
     ldout(cct, 10) << " registering config observer on " << _thread_num_option << dendl;
-    cct->_conf->add_observer(this);
+    cct->_conf.add_observer(this);
   }
 
   _lock.Lock();
@@ -197,7 +198,7 @@ void ThreadPool::stop(bool clear_after)
 
   if (_thread_num_option.length()) {
     ldout(cct, 10) << " unregistering config observer on " << _thread_num_option << dendl;
-    cct->_conf->remove_observer(this);
+    cct->_conf.remove_observer(this);
   }
 
   _lock.Lock();
@@ -416,6 +417,7 @@ void ShardedThreadPool::unpause()
   ldout(cct,10) << "unpause" << dendl;
   shardedpool_lock.Lock();
   pause_threads = false;
+  wq->stop_return_waiting_threads();
   shardedpool_cond.Signal();
   shardedpool_lock.Unlock();
   ldout(cct,10) << "unpaused" << dendl;
@@ -432,6 +434,7 @@ void ShardedThreadPool::drain()
     wait_cond.Wait(shardedpool_lock);
   }
   drain_threads = false;
+  wq->stop_return_waiting_threads();
   shardedpool_cond.Signal();
   shardedpool_lock.Unlock();
   ldout(cct,10) << "drained" << dendl;

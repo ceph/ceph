@@ -11,7 +11,6 @@
  * Foundation.  See file COPYING.
  * 
  */
-
 #ifndef CEPH_MONCLIENT_H
 #define CEPH_MONCLIENT_H
 
@@ -25,15 +24,15 @@
 #include "common/Finisher.h"
 #include "common/config.h"
 
-
 class MMonMap;
+class MConfig;
 class MMonGetVersionReply;
 struct MMonSubscribeAck;
 class MMonCommandAck;
 struct MAuthReply;
 class MAuthRotating;
 class LogClient;
-struct AuthAuthorizer;
+class AuthAuthorizer;
 class AuthMethodList;
 class AuthClientHandler;
 class KeyRing;
@@ -74,8 +73,8 @@ struct MonClientPinger : public Dispatcher {
 
     bufferlist &payload = m->get_payload();
     if (result && payload.length() > 0) {
-      bufferlist::iterator p = payload.begin();
-      ::decode(*result, p);
+      auto p = std::cbegin(payload);
+      decode(*result, p);
     }
     done = true;
     ping_recvd_cond.SignalAll();
@@ -147,6 +146,7 @@ private:
 class MonClient : public Dispatcher {
 public:
   MonMap monmap;
+  map<string,string> config_mgr;
 private:
   Messenger *messenger;
 
@@ -177,6 +177,7 @@ private:
   bool ms_handle_refused(Connection *con) override { return false; }
 
   void handle_monmap(MMonMap *m);
+  void handle_config(MConfig *m);
 
   void handle_auth(MAuthReply *m);
 
@@ -188,6 +189,7 @@ private:
   bool want_monmap;
   Cond map_cond;
   bool passthrough_monmap = false;
+  bool got_config = false;
 
   // authenticate
   std::unique_ptr<AuthClientHandler> auth;
@@ -202,7 +204,7 @@ private:
   std::unique_ptr<Context> session_established_context;
   bool had_a_connection;
   double reopen_interval_multiplier;
-
+  
   bool _opened() const;
   bool _hunting() const;
   void _start_hunting();
@@ -214,6 +216,16 @@ private:
   void _add_conns(uint64_t global_id);
   void _send_mon_message(Message *m);
 
+  std::map<entity_addr_t, MonConnection>::iterator _find_pending_con(
+    const ConnectionRef& con) {
+    for (auto i = pending_cons.begin(); i != pending_cons.end(); ++i) {
+      if (i->second.get_con() == con) {
+	return i;
+      }
+    }
+    return pending_cons.end();
+  }
+
 public:
   void set_entity_name(EntityName name) { entity_name = name; }
 
@@ -223,6 +235,8 @@ public:
 
   int authenticate(double timeout=0.0);
   bool is_authenticated() const {return authenticated;}
+
+  bool is_connected() const { return active_con != nullptr; }
 
   /**
    * Try to flush as many log messages as we can in a single
@@ -340,7 +354,7 @@ public:
 
   int build_initial_monmap();
   int get_monmap();
-  int get_monmap_privately();
+  int get_monmap_and_config();
   /**
    * If you want to see MonMap messages, set this and
    * the MonClient will tell the Messenger it hasn't
@@ -419,6 +433,7 @@ public:
 
   void set_messenger(Messenger *m) { messenger = m; }
   entity_addr_t get_myaddr() const { return messenger->get_myaddr(); }
+  entity_addrvec_t get_myaddrs() const { return messenger->get_myaddrs(); }
   AuthAuthorizer* build_authorizer(int service_id) const;
 
   void set_want_keys(uint32_t want) {
@@ -428,6 +443,7 @@ public:
   // admin commands
 private:
   uint64_t last_mon_command_tid;
+
   struct MonCommand {
     string target_name;
     int target_rank;
@@ -479,7 +495,6 @@ public:
    * @return (via context) 0 on success, -EAGAIN if we need to resubmit our request
    */
   void get_version(string map, version_t *newest, version_t *oldest, Context *onfinish);
-
   /**
    * Run a callback within our lock, with a reference
    * to the MonMap
@@ -490,6 +505,9 @@ public:
     Mutex::Locker l(monc_lock);
     return std::forward<Callback>(cb)(monmap, std::forward<Args>(args)...);
   }
+
+  void register_config_callback(md_config_t::config_callback fn);
+  md_config_t::config_callback get_config_callback();
 
 private:
   struct version_req_d {
@@ -502,7 +520,7 @@ private:
   ceph_tid_t version_req_id;
   void handle_get_version_reply(MMonGetVersionReply* m);
 
-
+  md_config_t::config_callback config_cb;
 };
 
 #endif

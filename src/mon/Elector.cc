@@ -93,7 +93,6 @@ void Elector::start()
     int r = mon->store->apply_transaction(t);
     assert(r >= 0);
   }
-  start_stamp = ceph_clock_now();
   electing_me = true;
   acked_me[mon->rank].cluster_features = CEPH_FEATURES_ALL;
   acked_me[mon->rank].mon_features = ceph::features::mon::get_supported();
@@ -106,7 +105,7 @@ void Elector::start()
     MMonElection *m =
       new MMonElection(MMonElection::OP_PROPOSE, epoch, mon->monmap);
     m->mon_features = ceph::features::mon::get_supported();
-    mon->messenger->send_message(m, mon->monmap->get_inst(i));
+    mon->send_mon_message(m, i);
   }
   
   reset_timer();
@@ -124,12 +123,11 @@ void Elector::defer(int who)
 
   // ack them
   leader_acked = who;
-  ack_stamp = ceph_clock_now();
   MMonElection *m = new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap);
   m->mon_features = ceph::features::mon::get_supported();
   mon->collect_metadata(&m->metadata);
 
-  mon->messenger->send_message(m, mon->monmap->get_inst(who));
+  mon->send_mon_message(m, who);
   
   // set a timer
   reset_timer(1.0);  // give the leader some extra time to declare victory
@@ -154,7 +152,7 @@ void Elector::reset_timer(double plus)
    * Leader.
    */
   expire_event = mon->timer.add_event_after(
-    g_conf->mon_election_timeout + plus,
+    g_conf()->mon_election_timeout + plus,
     new C_MonContext(mon, [this](int) {
 	expire();
       }));
@@ -222,7 +220,7 @@ void Elector::victory()
     m->quorum_features = cluster_features;
     m->mon_features = mon_features;
     m->sharing_bl = mon->get_local_commands_bl(mon_features);
-    mon->messenger->send_message(m, mon->monmap->get_inst(*p));
+    mon->send_mon_message(m, *p);
   }
 
   // tell monitor
@@ -398,7 +396,7 @@ void Elector::handle_victory(MonOpRequestRef op)
   // stash leader's commands
   assert(m->sharing_bl.length());
   vector<MonCommand> new_cmds;
-  bufferlist::iterator bi = m->sharing_bl.begin();
+  auto bi = m->sharing_bl.cbegin();
   MonCommand::decode_vector(new_cmds, bi);
   mon->set_leader_commands(new_cmds);
 }
@@ -435,7 +433,7 @@ void Elector::handle_nak(MonOpRequestRef op)
           << dendl;
 
   CompatSet other;
-  bufferlist::iterator bi = m->sharing_bl.begin();
+  auto bi = m->sharing_bl.cbegin();
   other.decode(bi);
   CompatSet diff = Monitor::get_supported_features().unsupported(other);
 

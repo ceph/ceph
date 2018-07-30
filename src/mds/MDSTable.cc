@@ -53,6 +53,9 @@ public:
   void finish(int r) override {
     ida->save_2(r, version);
   }
+  void print(ostream& out) const override {
+    out << "table_save(" << ida->table_name << ")";
+  }
 };
 
 void MDSTable::save(MDSInternalContextBase *onfinish, version_t v)
@@ -60,7 +63,8 @@ void MDSTable::save(MDSInternalContextBase *onfinish, version_t v)
   if (v > 0 && v <= committing_version) {
     dout(10) << "save v " << version << " - already saving "
 	     << committing_version << " >= needed " << v << dendl;
-    waitfor_save[v].push_back(onfinish);
+    if (onfinish)
+      waitfor_save[v].push_back(onfinish);
     return;
   }
   
@@ -68,7 +72,7 @@ void MDSTable::save(MDSInternalContextBase *onfinish, version_t v)
   assert(is_active());
   
   bufferlist bl;
-  ::encode(version, bl);
+  encode(version, bl);
   encode_state(bl);
 
   committing_version = version;
@@ -113,6 +117,7 @@ void MDSTable::save_2(int r, version_t v)
 void MDSTable::reset()
 {
   reset_state();
+  projected_version = version;
   state = STATE_ACTIVE;
 }
 
@@ -127,6 +132,9 @@ public:
   C_IO_MT_Load(MDSTable *i, Context *o) : MDSTableIOContext(i), onfinish(o) {}
   void finish(int r) override {
     ida->load_2(r, bl, onfinish);
+  }
+  void print(ostream& out) const override {
+    out << "table_load(" << ida->table_name << ")";
   }
 };
 
@@ -171,10 +179,10 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
   }
 
   dout(10) << "load_2 got " << bl.length() << " bytes" << dendl;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
 
   try {
-    ::decode(version, p);
+    decode(version, p);
     projected_version = committed_version = version;
     dout(10) << "load_2 loaded v" << version << dendl;
     decode_state(p);

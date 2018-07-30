@@ -1,31 +1,31 @@
->= 12.2.0
----------
+>=13.1.0
+--------
 
+* The Telegraf module for the Manager allows for sending statistics to
+  an Telegraf Agent over TCP, UDP or a UNIX Socket. Telegraf can then
+  send the statistics to databases like InfluxDB, ElasticSearch, Graphite
+  and many more.
 
-12.2.1
-------
+* The graylog fields naming the originator of a log event have
+  changed: the string-form name is now included (e.g., ``"name":
+  "mgr.foo"``), and the rank-form name is now in a nested section
+  (e.g., ``"rank": {"type": "mgr", "num": 43243}``).
 
-- *RGW*
+* If the cluster log is directed at syslog, the entries are now
+  prefixed by both the string-form name and the rank-form name (e.g.,
+  ``mgr.x mgr.12345 ...`` instead of just ``mgr.12345 ...``).
 
-  * dynamic resharding is now enabled by default, RGW will now automatically
-  reshard the bucket index once the index grows beyond `rgw_max_objs_per_shard`
+* The JSON output of the ``osd find`` command has replaced the ``ip``
+  field with an ``addrs`` section to reflect that OSDs may bind to
+  multiple addresses.
 
-- *CephFS*:
+* CephFS clients without the 's' flag in their authentication capability
+  string will no longer be able to create/delete snapshots. To allow
+  ``client.foo`` to create/delete snapshots in the ``bar`` directory of
+  filesystem ``cephfs_a``, use command:
 
-  * Limiting MDS cache via a memory limit is now supported using the new
-    mds_cache_memory_limit config option (1GB by default).  A cache reservation
-    can also be specified using mds_cache_reservation as a percentage of the
-    limit (5% by default). Limits by inode count are still supported using
-    mds_cache_size. Setting mds_cache_size to 0 (the default) disables the
-    inode limit.
+    - ``ceph auth caps client.foo mon 'allow r' osd 'allow rw tag cephfs data=cephfs_a' mds 'allow rw, allow rws path=/bar'``
 
-* The maximum number of PGs per OSD before the monitor issues a
-  warning has been reduced from 300 to 200 PGs.  200 is still twice
-  the generally recommended target of 100 PGs per OSD.  This limit can
-  be adjusted via the ``mon_max_pg_per_osd`` option on the
-  monitors.  The older ``mon_pg_warn_max_per_osd`` option has been removed.
-
-* Creating pools or adjusting pg_num will now fail if the change would
-  make the number of PGs per OSD exceed the configured
-  ``mon_max_pg_per_osd`` limit.  The option can be adjusted if it
-  is really necessary to create a pool with more PGs.
+* The ``osd_heartbeat_addr`` option has been removed as it served no
+  (good) purpose: the OSD should always check heartbeats on both the
+  public and cluster networks.

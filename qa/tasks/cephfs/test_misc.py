@@ -11,9 +11,6 @@ import json
 class TestMisc(CephFSTestCase):
     CLIENTS_REQUIRED = 2
 
-    LOAD_SETTINGS = ["mds_session_autoclose"]
-    mds_session_autoclose = None
-
     def test_getattr_caps(self):
         """
         Check if MDS recognizes the 'mask' parameter of open request.
@@ -104,6 +101,8 @@ class TestMisc(CephFSTestCase):
         only session
         """
 
+        session_autoclose = self.fs.get_var("session_autoclose")
+
         self.mount_b.umount_wait()
         ls_data = self.fs.mds_asok(['session', 'ls'])
         self.assert_session_count(1, ls_data)
@@ -111,7 +110,7 @@ class TestMisc(CephFSTestCase):
         self.mount_a.kill()
         self.mount_a.kill_cleanup()
 
-        time.sleep(self.mds_session_autoclose * 1.5)
+        time.sleep(session_autoclose * 1.5)
         ls_data = self.fs.mds_asok(['session', 'ls'])
         self.assert_session_count(1, ls_data)
 
@@ -126,7 +125,7 @@ class TestMisc(CephFSTestCase):
         self.mount_a.kill()
         self.mount_a.kill_cleanup()
 
-        time.sleep(self.mds_session_autoclose * 1.5)
+        time.sleep(session_autoclose * 1.5)
         ls_data = self.fs.mds_asok(['session', 'ls'])
         self.assert_session_count(1, ls_data)
 
@@ -147,3 +146,8 @@ class TestMisc(CephFSTestCase):
 
         ratio = raw_avail / fs_avail
         assert 0.9 < ratio < 1.1
+
+    def test_dump_inode(self):
+        info = self.fs.mds_asok(['dump', 'inode', '1'])
+        assert(info['path'] == "/")
+

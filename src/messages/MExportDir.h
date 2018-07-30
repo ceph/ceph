@@ -45,17 +45,18 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(dirfrag, payload);
-    ::encode(bounds, payload);
-    ::encode(export_data, payload);
-    ::encode(client_map, payload);
+    using ceph::encode;
+    encode(dirfrag, payload);
+    encode(bounds, payload);
+    encode(export_data, payload);
+    encode(client_map, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(dirfrag, p);
-    ::decode(bounds, p);
-    ::decode(export_data, p);
-    ::decode(client_map, p);
+    auto p = payload.cbegin();
+    decode(dirfrag, p);
+    decode(bounds, p);
+    decode(export_data, p);
+    decode(client_map, p);
   }
 
 };

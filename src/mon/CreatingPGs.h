@@ -5,7 +5,11 @@
 
 #include <map>
 #include <set>
+
 #include "include/encoding.h"
+#include "include/utime.h"
+
+#include "osd/osd_types.h"
 
 struct creating_pgs_t {
   epoch_t last_scan_epoch = 0;
@@ -22,16 +26,18 @@ struct creating_pgs_t {
       return start >= end;
     }
     void encode(bufferlist& bl) const {
-      ::encode(created, bl);
-      ::encode(modified, bl);
-      ::encode(start, bl);
-      ::encode(end, bl);
+      using ceph::encode;
+      encode(created, bl);
+      encode(modified, bl);
+      encode(start, bl);
+      encode(end, bl);
     }
-    void decode(bufferlist::iterator& p) {
-      ::decode(created, p);
-      ::decode(modified, p);
-      ::decode(start, p);
-      ::decode(end, p);
+    void decode(bufferlist::const_iterator& p) {
+      using ceph::decode;
+      decode(created, p);
+      decode(modified, p);
+      decode(start, p);
+      decode(end, p);
     }
   };
 
@@ -65,19 +71,19 @@ struct creating_pgs_t {
   }
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
-    ::encode(last_scan_epoch, bl);
-    ::encode(pgs, bl);
-    ::encode(created_pools, bl);
-    ::encode(queue, bl);
+    encode(last_scan_epoch, bl);
+    encode(pgs, bl);
+    encode(created_pools, bl);
+    encode(queue, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
-    ::decode(last_scan_epoch, bl);
-    ::decode(pgs, bl);
-    ::decode(created_pools, bl);
+    decode(last_scan_epoch, bl);
+    decode(pgs, bl);
+    decode(created_pools, bl);
     if (struct_v >= 2)
-      ::decode(queue, bl);
+      decode(queue, bl);
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const {

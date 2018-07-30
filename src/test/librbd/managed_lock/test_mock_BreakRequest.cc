@@ -82,6 +82,7 @@ public:
     } else {
       obj_watch_t watcher;
       strcpy(watcher.addr, (address + ":0/0").c_str());
+      watcher.watcher_id = 0;
       watcher.cookie = watch_handle;
 
       std::list<obj_watch_t> watchers;

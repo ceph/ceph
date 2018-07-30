@@ -21,7 +21,7 @@ struct MockImageState {
   MOCK_METHOD0(close, int());
   MOCK_METHOD1(close, void(Context*));
 
-  MOCK_METHOD3(snap_set, void(const cls::rbd::SnapshotNamespace &, const std::string &, Context*));
+  MOCK_METHOD2(snap_set, void(uint64_t snap_id, Context*));
 
   MOCK_METHOD1(prepare_lock, void(Context*));
   MOCK_METHOD0(handle_prepare_lock_complete, void());

@@ -43,7 +43,7 @@ function TEST_filestore_to_bluestore() {
     create_pool foo 16
 
     # write some objects
-    rados bench -p foo 10 write -b 4096 --no-cleanup || return 1
+    timeout 20 rados bench -p foo 10 write -b 4096 --no-cleanup || return 1
 
     # kill
     while kill $osd_pid; do sleep 1 ; done
@@ -56,7 +56,7 @@ function TEST_filestore_to_bluestore() {
     O=$CEPH_ARGS
     CEPH_ARGS+="--log-file $dir/cot.log --log-max-recent 0 "
     ceph-objectstore-tool --type bluestore --data-path $dir/0 --fsid $ofsid \
-			  --op mkfs || return 1
+			  --op mkfs --no-mon-config || return 1
     ceph-objectstore-tool --data-path $dir/0.old --target-data-path $dir/0 \
 			  --op dup || return 1
     CEPH_ARGS=$O

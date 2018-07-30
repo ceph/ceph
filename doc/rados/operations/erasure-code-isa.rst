@@ -59,7 +59,7 @@ Where:
 ``crush-root={root}``
 
 :Description: The name of the crush bucket used for the first step of
-              the ruleset. For intance **step take default**.
+              the CRUSH rule. For intance **step take default**.
 
 :Type: String
 :Required: No.
@@ -70,7 +70,7 @@ Where:
 :Description: Ensure that no two chunks are in a bucket with the same
               failure domain. For instance, if the failure domain is
               **host** no two chunks will be stored on the same
-              host. It is used to create a ruleset step such as **step
+              host. It is used to create a CRUSH rule step such as **step
               chooseleaf host**.
 
 :Type: String

@@ -1,7 +1,7 @@
 from pecan import expose, request
 from pecan.rest import RestController
 
-from restful import common, module
+from restful import common, context
 from restful.decorators import auth
 
 
@@ -12,7 +12,7 @@ class ConfigOsd(RestController):
         """
         Show OSD configuration options
         """
-        flags = module.instance.get("osd_map")['flags']
+        flags = context.instance.get("osd_map")['flags']
 
         # pause is a valid osd config command that sets pauserd,pausewr
         flags = flags.replace('pauserd,pausewr', 'pause')
@@ -33,7 +33,7 @@ class ConfigOsd(RestController):
         valid_flags = set(args.keys()) & set(common.OSD_FLAGS)
         invalid_flags = list(set(args.keys()) - valid_flags)
         if invalid_flags:
-            module.instance.log.warn("%s not valid to set/unset" % invalid_flags)
+            context.instance.log.warn("%s not valid to set/unset" % invalid_flags)
 
         for flag in list(valid_flags):
             if args[flag]:
@@ -46,7 +46,7 @@ class ConfigOsd(RestController):
                 'key': flag,
             })
 
-        return module.instance.submit_request([commands], **kwargs)
+        return context.instance.submit_request([commands], **kwargs)
 
 
 
@@ -61,7 +61,7 @@ class ConfigClusterKey(RestController):
         """
         Show specific configuration option
         """
-        return module.instance.get("config").get(self.key, None)
+        return context.instance.get("config").get(self.key, None)
 
 
 
@@ -72,7 +72,7 @@ class ConfigCluster(RestController):
         """
         Show all cluster configuration options
         """
-        return module.instance.get("config")
+        return context.instance.get("config")
 
 
     @expose()

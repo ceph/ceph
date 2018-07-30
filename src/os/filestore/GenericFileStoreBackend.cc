@@ -395,9 +395,9 @@ int GenericFileStoreBackend::_crc_load_or_init(int fd, SloppyCRCMap *cm)
   }
   bufferlist bl;
   bl.append(std::move(bp));
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   try {
-    ::decode(*cm, p);
+    decode(*cm, p);
   }
   catch (buffer::error &e) {
     r = -EIO;
@@ -410,7 +410,7 @@ int GenericFileStoreBackend::_crc_load_or_init(int fd, SloppyCRCMap *cm)
 int GenericFileStoreBackend::_crc_save(int fd, SloppyCRCMap *cm)
 {
   bufferlist bl;
-  ::encode(*cm, bl);
+  encode(*cm, bl);
   int r = chain_fsetxattr(fd, SLOPPY_CRC_XATTR, bl.c_str(), bl.length());
   if (r < 0)
     derr << __func__ << " got " << cpp_strerror(r) << dendl;

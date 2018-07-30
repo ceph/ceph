@@ -46,7 +46,7 @@ public:
   // piggybacked osd state
   eversion_t last_complete_ondisk;
 
-  bufferlist::iterator p;
+  bufferlist::const_iterator p;
   // Decoding flags. Decoding is only needed for messages catched by pipe reader.
   bool final_decode_needed;
 
@@ -61,43 +61,44 @@ public:
   }
 
   void decode_payload() override {
-    p = payload.begin();
-    ::decode(map_epoch, p);
+    p = payload.cbegin();
+    decode(map_epoch, p);
     if (header.version >= 2) {
-      ::decode(min_epoch, p);
+      decode(min_epoch, p);
       decode_trace(p);
     } else {
       min_epoch = map_epoch;
     }
-    ::decode(reqid, p);
-    ::decode(pgid, p);
+    decode(reqid, p);
+    decode(pgid, p);
   }
 
   void finish_decode() {
     if (!final_decode_needed)
       return; // Message is already final decoded
-    ::decode(ack_type, p);
-    ::decode(result, p);
-    ::decode(last_complete_ondisk, p);
+    decode(ack_type, p);
+    decode(result, p);
+    decode(last_complete_ondisk, p);
 
-    ::decode(from, p);
+    decode(from, p);
     final_decode_needed = false;
   }
   void encode_payload(uint64_t features) override {
-    ::encode(map_epoch, payload);
+    using ceph::encode;
+    encode(map_epoch, payload);
     if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       header.version = HEAD_VERSION;
-      ::encode(min_epoch, payload);
+      encode(min_epoch, payload);
       encode_trace(payload, features);
     } else {
       header.version = 1;
     }
-    ::encode(reqid, payload);
-    ::encode(pgid, payload);
-    ::encode(ack_type, payload);
-    ::encode(result, payload);
-    ::encode(last_complete_ondisk, payload);
-    ::encode(from, payload);
+    encode(reqid, payload);
+    encode(pgid, payload);
+    encode(ack_type, payload);
+    encode(result, payload);
+    encode(last_complete_ondisk, payload);
+    encode(from, payload);
   }
 
   spg_t get_pg() { return pgid; }

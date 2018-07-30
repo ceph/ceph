@@ -53,16 +53,17 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     data.clear();
     if (features & CEPH_FEATURE_MDSENC) {
-      ::encode(caps, data);
+      encode(caps, data);
       header.version = HEAD_VERSION;
     } else if (features & CEPH_FEATURE_FLOCK) {
       // encode with old cap_reconnect_t encoding
       __u32 n = caps.size();
-      ::encode(n, data);
+      encode(n, data);
       for (map<inodeno_t,cap_reconnect_t>::iterator p = caps.begin(); p != caps.end(); ++p) {
-	::encode(p->first, data);
+	encode(p->first, data);
 	p->second.encode_old(data);
       }
       header.version = 2;
@@ -72,33 +73,33 @@ public:
       map<inodeno_t, old_cap_reconnect_t> ocaps;
       for (map<inodeno_t,cap_reconnect_t>::iterator p = caps.begin(); p != caps.end(); p++)
 	ocaps[p->first] = p->second;
-      ::encode(ocaps, data);
+      encode(ocaps, data);
     }
-    ::encode_nohead(realms, data);
+    encode_nohead(realms, data);
   }
   void decode_payload() override {
-    bufferlist::iterator p = data.begin();
+    auto p = data.cbegin();
     if (header.version >= 3) {
       // new protocol
-      ::decode(caps, p);
+      decode(caps, p);
     } else if (header.version == 2) {
       __u32 n;
-      ::decode(n, p);
+      decode(n, p);
       inodeno_t ino;
       while (n--) {
-	::decode(ino, p);
+	decode(ino, p);
 	caps[ino].decode_old(p);
       }
     } else {
       // compat crap
       map<inodeno_t, old_cap_reconnect_t> ocaps;
-      ::decode(ocaps, p);
+      decode(ocaps, p);
       for (map<inodeno_t,old_cap_reconnect_t>::iterator q = ocaps.begin(); q != ocaps.end(); q++)
 	caps[q->first] = q->second;
     }
     while (!p.end()) {
       realms.push_back(ceph_mds_snaprealm_reconnect());
-      ::decode(realms.back(), p);
+      decode(realms.back(), p);
     }
   }
 

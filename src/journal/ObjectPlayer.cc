@@ -130,7 +130,7 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl,
   uint32_t invalid_start_off = 0;
 
   clear_invalid_range(m_read_bl_off, m_read_bl.length());
-  bufferlist::iterator iter(&m_read_bl, 0);
+  bufferlist::const_iterator iter{&m_read_bl, 0};
   while (!iter.end()) {
     uint32_t bytes_needed;
     uint32_t bl_off = iter.get_off();
@@ -160,7 +160,7 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl,
     }
 
     Entry entry;
-    ::decode(entry, iter);
+    decode(entry, iter);
     ldout(m_cct, 20) << ": " << entry << " decoded" << dendl;
 
     uint32_t entry_len = iter.get_off() - bl_off;

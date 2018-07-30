@@ -44,17 +44,18 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(ino, payload);
-    ::encode(basefrag, payload);
-    ::encode(bits, payload);
-    ::encode(basebl, payload);
+    using ceph::encode;
+    encode(ino, payload);
+    encode(basefrag, payload);
+    encode(bits, payload);
+    encode(basebl, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(ino, p);
-    ::decode(basefrag, p);
-    ::decode(bits, p);
-    ::decode(basebl, p);
+    auto p = payload.cbegin();
+    decode(ino, p);
+    decode(basefrag, p);
+    decode(bits, p);
+    decode(basebl, p);
   }
   
 };

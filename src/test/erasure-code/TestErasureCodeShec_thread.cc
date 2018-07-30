@@ -173,9 +173,9 @@ void* thread1(void* pParam)
     }
 
     //decode
-    r = shec->decode(set<int>(want_to_decode, want_to_decode + 2),
-		     encoded,
-		     &decoded);
+    r = shec->_decode(set<int>(want_to_decode, want_to_decode + 2),
+		      encoded,
+		      &decoded);
 
     EXPECT_EQ(0, r);
     EXPECT_EQ(2u, decoded.size());

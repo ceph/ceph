@@ -41,6 +41,7 @@ public:
 
 /////////////////////// Functions ///////////////////////
 extern void string_to_vec(std::vector<std::string>& args, std::string argstr);
+extern void clear_g_str_vec();
 extern void env_to_vec(std::vector<const char*>& args, const char *name=NULL);
 extern void argv_to_vec(int argc, const char **argv,
                  std::vector<const char*>& args);
@@ -67,6 +68,7 @@ bool ceph_argparse_binary_flag(std::vector<const char*> &args,
 extern CephInitParameters ceph_argparse_early_args
 	    (std::vector<const char*>& args, uint32_t module_type,
 	     std::string *cluster, std::string *conf_file_list);
+extern bool ceph_argparse_need_usage(const std::vector<const char*>& args);
 extern void generic_server_usage();
 extern void generic_client_usage();
 

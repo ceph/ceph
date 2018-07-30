@@ -14,7 +14,7 @@ CLS_NAME(user)
 static int write_entry(cls_method_context_t hctx, const string& key, const cls_user_bucket_entry& entry)
 {
   bufferlist bl;
-  ::encode(entry, bl);
+  encode(entry, bl);
 
   int ret = cls_cxx_map_set_val(hctx, key, &bl);
   if (ret < 0)
@@ -54,8 +54,8 @@ static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bu
     return rc;
   }
   try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(entry, iter);
+    auto iter = bl.cbegin();
+    decode(entry, iter);
   } catch (buffer::error& err) {
     CLS_LOG(0, "ERROR: failed to decode entry %s", key.c_str());
     return -EIO;
@@ -78,7 +78,7 @@ static int read_header(cls_method_context_t hctx, cls_user_header *header)
   }
 
   try {
-    ::decode(*header, bl);
+    decode(*header, bl);
   } catch (buffer::error& err) {
     CLS_LOG(0, "ERROR: failed to decode user header");
     return -EIO;
@@ -110,11 +110,11 @@ static void apply_entry_stats(const cls_user_bucket_entry& src_entry, cls_user_b
 
 static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_user_set_buckets_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_user_add_op(): failed to decode op");
     return -EINVAL;
@@ -157,12 +157,6 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld",
             key.c_str(), (long long)update_entry.size, (long long)update_entry.count);
 
-    // Update bucket's placement rule info only when linking bucket, not on
-    // usage stats change. */
-    if (op.add) {
-      entry.placement_rule = update_entry.placement_rule;
-    }
-
     // sync entry stats when not an op.add, as when the case is op.add if its a
     // new entry we already have copied update_entry earlier, OTOH, for an existing entry
     // we end up clobbering the existing stats for the bucket
@@ -185,7 +179,7 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
   if (header.last_stats_update < op.time)
     header.last_stats_update = op.time;
 
-  ::encode(header, bl);
+  encode(header, bl);
   
   ret = cls_cxx_map_write_header(hctx, &bl);
   if (ret < 0)
@@ -196,11 +190,11 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
 
 static int cls_user_complete_stats_sync(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_user_complete_stats_sync_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_user_add_op(): failed to decode op");
     return -EINVAL;
@@ -218,7 +212,7 @@ static int cls_user_complete_stats_sync(cls_method_context_t hctx, bufferlist *i
 
   bufferlist bl;
 
-  ::encode(header, bl);
+  encode(header, bl);
 
   ret = cls_cxx_map_write_header(hctx, &bl);
   if (ret < 0)
@@ -229,11 +223,11 @@ static int cls_user_complete_stats_sync(cls_method_context_t hctx, bufferlist *i
 
 static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_user_remove_bucket_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_user_add_op(): failed to decode op");
     return -EINVAL;
@@ -275,11 +269,11 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
 
 static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_user_list_buckets_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_user_list_op(): failed to decode op");
     return -EINVAL;
@@ -323,10 +317,10 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
     }
 
     bufferlist& bl = iter->second;
-    bufferlist::iterator biter = bl.begin();
+    auto biter = bl.cbegin();
     try {
       cls_user_bucket_entry e;
-      ::decode(e, biter);
+      decode(e, biter);
       entries.push_back(e);
     } catch (buffer::error& err) {
       CLS_LOG(0, "ERROR: cls_user_list: could not decode entry, index=%s", index.c_str());
@@ -337,18 +331,18 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
     ret.marker = marker;
   }
 
-  ::encode(ret, *out);
+  encode(ret, *out);
 
   return 0;
 }
 
 static int cls_user_get_header(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_user_get_header_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_user_get_header_op(): failed to decode op");
     return -EINVAL;
@@ -360,9 +354,55 @@ static int cls_user_get_header(cls_method_context_t hctx, bufferlist *in, buffer
   if (ret < 0)
     return ret;
 
-  ::encode(op_ret, *out);
+  encode(op_ret, *out);
 
   return 0;
+}
+
+/// A method to reset the user.buckets header stats in accordance to the values
+/// seen in the user.buckets omap keys. This will not be equivalent to --sync-stats
+/// which requires comparing the values with actual bucket meta stats supplied
+/// by RGW
+static int cls_user_reset_stats(cls_method_context_t hctx, bufferlist *in, bufferlist *out /*ignore*/)
+{
+  cls_user_reset_stats_op op;
+
+  try {
+    auto bliter = in->cbegin();
+    decode(op, bliter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: cls_user_reset_op(): failed to decode op");
+    return -EINVAL;
+  }
+  cls_user_header header;
+  bool truncated = false;
+  string from_index, prefix;
+  do {
+    map<string, bufferlist> keys;
+    int rc = cls_cxx_map_get_vals(hctx, from_index, prefix, MAX_ENTRIES, &keys, &truncated);
+
+    if (rc < 0)
+      return rc;
+
+    for (const auto&kv : keys){
+      cls_user_bucket_entry e;
+      try {
+	auto bl = kv.second;
+	auto bliter = bl.cbegin();
+	decode(e, bliter);
+      } catch (buffer::error& err) {
+	CLS_LOG(0, "ERROR: failed to decode bucket entry for %s", kv.first.c_str());
+	return -EIO;
+      }
+      add_header_stats(&header.stats, e);
+    }
+  } while (truncated);
+
+  bufferlist bl;
+  header.last_stats_update = op.time;
+  encode(header, bl);
+
+  return cls_cxx_map_write_header(hctx, &bl);
 }
 
 CLS_INIT(user)
@@ -375,6 +415,7 @@ CLS_INIT(user)
   cls_method_handle_t h_user_remove_bucket;
   cls_method_handle_t h_user_list_buckets;
   cls_method_handle_t h_user_get_header;
+  cls_method_handle_t h_user_reset_stats;
 
   cls_register("user", &h_class);
 
@@ -386,7 +427,7 @@ CLS_INIT(user)
   cls_register_cxx_method(h_class, "remove_bucket", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_remove_bucket, &h_user_remove_bucket);
   cls_register_cxx_method(h_class, "list_buckets", CLS_METHOD_RD, cls_user_list_buckets, &h_user_list_buckets);
   cls_register_cxx_method(h_class, "get_header", CLS_METHOD_RD, cls_user_get_header, &h_user_get_header);
-
+  cls_register_cxx_method(h_class, "reset_user_stats", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_reset_stats, &h_user_reset_stats);
   return;
 }
 

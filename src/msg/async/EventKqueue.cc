@@ -198,12 +198,12 @@ int KqueueDriver::resize_events(int newsize)
 {
   ldout(cct,30) << __func__ << " kqfd = " << kqfd << "newsize = " << newsize 
                 << dendl;
-  if(newsize > sav_max) {
-    sav_events = (struct SaveEvent*)realloc( sav_events, 
-                    sizeof(struct SaveEvent)*newsize);
+  if (newsize > sav_max) {
+    sav_events = (struct SaveEvent*)realloc(sav_events, sizeof(struct SaveEvent)*newsize);
     if (!sav_events) {
       lderr(cct) << __func__ << " unable to realloc memory: "
                              << cpp_strerror(errno) << dendl;
+      assert(sav_events);
       return -ENOMEM;
     }
     memset(&sav_events[size], 0, sizeof(struct SaveEvent)*(newsize-sav_max));

@@ -62,35 +62,36 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(fsid, payload);
-    ::encode(pool, payload);
-    ::encode(op, payload);
-    ::encode(auid, payload);
-    ::encode(snapid, payload);
-    ::encode(name, payload);
+    encode(fsid, payload);
+    encode(pool, payload);
+    encode(op, payload);
+    encode(auid, payload);
+    encode(snapid, payload);
+    encode(name, payload);
     __u8 pad = 0;
-    ::encode(pad, payload);  /* for v3->v4 encoding change */
-    ::encode(crush_rule, payload);
+    encode(pad, payload);  /* for v3->v4 encoding change */
+    encode(crush_rule, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(fsid, p);
-    ::decode(pool, p);
+    decode(fsid, p);
+    decode(pool, p);
     if (header.version < 2)
-      ::decode(name, p);
-    ::decode(op, p);
-    ::decode(auid, p);
-    ::decode(snapid, p);
+      decode(name, p);
+    decode(op, p);
+    decode(auid, p);
+    decode(snapid, p);
     if (header.version >= 2)
-      ::decode(name, p);
+      decode(name, p);
 
     if (header.version >= 3) {
       __u8 pad;
-      ::decode(pad, p);
+      decode(pad, p);
       if (header.version >= 4)
-	::decode(crush_rule, p);
+	decode(crush_rule, p);
       else
 	crush_rule = pad;
     } else

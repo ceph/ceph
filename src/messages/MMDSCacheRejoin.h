@@ -15,6 +15,8 @@
 #ifndef CEPH_MMDSCACHEREJOIN_H
 #define CEPH_MMDSCACHEREJOIN_H
 
+#include <string_view>
+
 #include "msg/Message.h"
 
 #include "include/types.h"
@@ -27,7 +29,7 @@
 
 class MMDSCacheRejoin : public Message {
 
-  static const int HEAD_VERSION = 1;
+  static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
  public:
@@ -53,18 +55,20 @@ class MMDSCacheRejoin : public Message {
       nonce(n), caps_wanted(cw),
       filelock(dl), nestlock(nl), dftlock(dftl) { }
     void encode(bufferlist &bl) const {
-      ::encode(nonce, bl);
-      ::encode(caps_wanted, bl);
-      ::encode(filelock, bl);
-      ::encode(nestlock, bl);
-      ::encode(dftlock, bl);
+      using ceph::encode;
+      encode(nonce, bl);
+      encode(caps_wanted, bl);
+      encode(filelock, bl);
+      encode(nestlock, bl);
+      encode(dftlock, bl);
     }
-    void decode(bufferlist::iterator &bl) {
-      ::decode(nonce, bl);
-      ::decode(caps_wanted, bl);
-      ::decode(filelock, bl);
-      ::decode(nestlock, bl);
-      ::decode(dftlock, bl);
+    void decode(bufferlist::const_iterator &bl) {
+      using ceph::decode;
+      decode(nonce, bl);
+      decode(caps_wanted, bl);
+      decode(filelock, bl);
+      decode(nestlock, bl);
+      decode(dftlock, bl);
     }
   };
   WRITE_CLASS_ENCODER(inode_strong)
@@ -75,12 +79,14 @@ class MMDSCacheRejoin : public Message {
     dirfrag_strong() {}
     dirfrag_strong(int n, int dr) : nonce(n), dir_rep(dr) {}
     void encode(bufferlist &bl) const {
-      ::encode(nonce, bl);
-      ::encode(dir_rep, bl);
+      using ceph::encode;
+      encode(nonce, bl);
+      encode(dir_rep, bl);
     }
-    void decode(bufferlist::iterator &bl) {
-      ::decode(nonce, bl);
-      ::decode(dir_rep, bl);
+    void decode(bufferlist::const_iterator &bl) {
+      using ceph::decode;
+      decode(nonce, bl);
+      decode(dir_rep, bl);
     }
   };
   WRITE_CLASS_ENCODER(dirfrag_strong)
@@ -100,20 +106,22 @@ class MMDSCacheRejoin : public Message {
     bool is_remote() { return remote_ino > 0; }
     bool is_null() { return ino == 0 && remote_ino == 0; }
     void encode(bufferlist &bl) const {
-      ::encode(first, bl);
-      ::encode(ino, bl);
-      ::encode(remote_ino, bl);
-      ::encode(remote_d_type, bl);
-      ::encode(nonce, bl);
-      ::encode(lock, bl);
+      using ceph::encode;
+      encode(first, bl);
+      encode(ino, bl);
+      encode(remote_ino, bl);
+      encode(remote_d_type, bl);
+      encode(nonce, bl);
+      encode(lock, bl);
     }
-    void decode(bufferlist::iterator &bl) {
-      ::decode(first, bl);
-      ::decode(ino, bl);
-      ::decode(remote_ino, bl);
-      ::decode(remote_d_type, bl);
-      ::decode(nonce, bl);
-      ::decode(lock, bl);
+    void decode(bufferlist::const_iterator &bl) {
+      using ceph::decode;
+      decode(first, bl);
+      decode(ino, bl);
+      decode(remote_ino, bl);
+      decode(remote_d_type, bl);
+      decode(nonce, bl);
+      decode(lock, bl);
     }
   };
   WRITE_CLASS_ENCODER(dn_strong)
@@ -124,12 +132,14 @@ class MMDSCacheRejoin : public Message {
     dn_weak() : ino(0) {}
     dn_weak(snapid_t f, inodeno_t pi) : first(f), ino(pi) {}
     void encode(bufferlist &bl) const {
-      ::encode(first, bl);
-      ::encode(ino, bl);
+      using ceph::encode;
+      encode(first, bl);
+      encode(ino, bl);
     }
-    void decode(bufferlist::iterator &bl) {
-      ::decode(first, bl);
-      ::decode(ino, bl);
+    void decode(bufferlist::const_iterator &bl) {
+      using ceph::decode;
+      decode(first, bl);
+      decode(ino, bl);
     }
   };
   WRITE_CLASS_ENCODER(dn_weak)
@@ -140,14 +150,16 @@ class MMDSCacheRejoin : public Message {
   struct lock_bls {
     bufferlist file, nest, dft;
     void encode(bufferlist& bl) const {
-      ::encode(file, bl);
-      ::encode(nest, bl);
-      ::encode(dft, bl);
+      using ceph::encode;
+      encode(file, bl);
+      encode(nest, bl);
+      encode(dft, bl);
     }
-    void decode(bufferlist::iterator& bl) {
-      ::decode(file, bl);
-      ::decode(nest, bl);
-      ::decode(dft, bl);
+    void decode(bufferlist::const_iterator& bl) {
+      using ceph::decode;
+      decode(file, bl);
+      decode(nest, bl);
+      decode(dft, bl);
     }
   };
   WRITE_CLASS_ENCODER(lock_bls)
@@ -166,6 +178,7 @@ class MMDSCacheRejoin : public Message {
   // open
   map<inodeno_t,map<client_t, cap_reconnect_t> > cap_exports;
   map<client_t, entity_inst_t> client_map;
+  map<client_t,client_metadata_t> client_metadata_map;
   bufferlist imported_caps;
 
   // full
@@ -181,12 +194,14 @@ class MMDSCacheRejoin : public Message {
     slave_reqid(const metareqid_t& r, __u32 a)
       : reqid(r), attempt(a) {}
     void encode(bufferlist& bl) const {
-      ::encode(reqid, bl);
-      ::encode(attempt, bl);
+      using ceph::encode;
+      encode(reqid, bl);
+      encode(attempt, bl);
     }
-    void decode(bufferlist::iterator& bl) {
-      ::decode(reqid, bl);
-      ::decode(attempt, bl);
+    void decode(bufferlist::const_iterator& bl) {
+      using ceph::decode;
+      decode(reqid, bl);
+      decode(attempt, bl);
     }
   };
   map<vinodeno_t, list<slave_reqid> > authpinned_inodes;
@@ -220,17 +235,19 @@ public:
     strong_inodes[i] = inode_strong(n, cw, dl, nl, dftl);
   }
   void add_inode_locks(CInode *in, __u32 nonce, bufferlist& bl) {
-    ::encode(in->inode.ino, inode_locks);
-    ::encode(in->last, inode_locks);
-    ::encode(nonce, inode_locks);
-    ::encode(bl, inode_locks);
+    using ceph::encode;
+    encode(in->inode.ino, inode_locks);
+    encode(in->last, inode_locks);
+    encode(nonce, inode_locks);
+    encode(bl, inode_locks);
   }
   void add_inode_base(CInode *in, uint64_t features) {
-    ::encode(in->inode.ino, inode_base);
-    ::encode(in->last, inode_base);
+    using ceph::encode;
+    encode(in->inode.ino, inode_base);
+    encode(in->last, inode_base);
     bufferlist bl;
     in->_encode_base(bl, features);
-    ::encode(bl, inode_base);
+    encode(bl, inode_base);
   }
   void add_inode_authpin(vinodeno_t ino, const metareqid_t& ri, __u32 attempt) {
     authpinned_inodes[ino].push_back(slave_reqid(ri, attempt));
@@ -266,69 +283,74 @@ public:
   void add_weak_dirfrag(dirfrag_t df) {
     weak_dirfrags.insert(df);
   }
-  void add_weak_dentry(inodeno_t dirino, const string& dname, snapid_t last, dn_weak& dnw) {
+  void add_weak_dentry(inodeno_t dirino, std::string_view dname, snapid_t last, dn_weak& dnw) {
     weak[dirino][string_snap_t(dname, last)] = dnw;
   }
-  void add_weak_primary_dentry(inodeno_t dirino, const string& dname, snapid_t first, snapid_t last, inodeno_t ino) {
+  void add_weak_primary_dentry(inodeno_t dirino, std::string_view dname, snapid_t first, snapid_t last, inodeno_t ino) {
     weak[dirino][string_snap_t(dname, last)] = dn_weak(first, ino);
   }
-  void add_strong_dentry(dirfrag_t df, const string& dname, snapid_t first, snapid_t last, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
+  void add_strong_dentry(dirfrag_t df, std::string_view dname, snapid_t first, snapid_t last, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
     strong_dentries[df][string_snap_t(dname, last)] = dn_strong(first, pi, ri, rdt, n, ls);
   }
-  void add_dentry_authpin(dirfrag_t df, const string& dname, snapid_t last,
+  void add_dentry_authpin(dirfrag_t df, std::string_view dname, snapid_t last,
 			  const metareqid_t& ri, __u32 attempt) {
     authpinned_dentries[df][string_snap_t(dname, last)].push_back(slave_reqid(ri, attempt));
   }
-  void add_dentry_xlock(dirfrag_t df, const string& dname, snapid_t last,
+  void add_dentry_xlock(dirfrag_t df, std::string_view dname, snapid_t last,
 			const metareqid_t& ri, __u32 attempt) {
     xlocked_dentries[df][string_snap_t(dname, last)] = slave_reqid(ri, attempt);
   }
 
   // -- encoding --
   void encode_payload(uint64_t features) override {
-    ::encode(op, payload);
-    ::encode(strong_inodes, payload);
-    ::encode(inode_base, payload);
-    ::encode(inode_locks, payload);
-    ::encode(inode_scatterlocks, payload);
-    ::encode(authpinned_inodes, payload);
-    ::encode(frozen_authpin_inodes, payload);
-    ::encode(xlocked_inodes, payload);
-    ::encode(wrlocked_inodes, payload);
-    ::encode(cap_exports, payload);
-    ::encode(client_map, payload, features);
-    ::encode(imported_caps, payload);
-    ::encode(strong_dirfrags, payload);
-    ::encode(dirfrag_bases, payload);
-    ::encode(weak, payload);
-    ::encode(weak_dirfrags, payload);
-    ::encode(weak_inodes, payload);
-    ::encode(strong_dentries, payload);
-    ::encode(authpinned_dentries, payload);
-    ::encode(xlocked_dentries, payload);
+    using ceph::encode;
+    encode(op, payload);
+    encode(strong_inodes, payload);
+    encode(inode_base, payload);
+    encode(inode_locks, payload);
+    encode(inode_scatterlocks, payload);
+    encode(authpinned_inodes, payload);
+    encode(frozen_authpin_inodes, payload);
+    encode(xlocked_inodes, payload);
+    encode(wrlocked_inodes, payload);
+    encode(cap_exports, payload);
+    encode(client_map, payload, features);
+    encode(imported_caps, payload);
+    encode(strong_dirfrags, payload);
+    encode(dirfrag_bases, payload);
+    encode(weak, payload);
+    encode(weak_dirfrags, payload);
+    encode(weak_inodes, payload);
+    encode(strong_dentries, payload);
+    encode(authpinned_dentries, payload);
+    encode(xlocked_dentries, payload);
+    encode(client_metadata_map, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(op, p);
-    ::decode(strong_inodes, p);
-    ::decode(inode_base, p);
-    ::decode(inode_locks, p);
-    ::decode(inode_scatterlocks, p);
-    ::decode(authpinned_inodes, p);
-    ::decode(frozen_authpin_inodes, p);
-    ::decode(xlocked_inodes, p);
-    ::decode(wrlocked_inodes, p);
-    ::decode(cap_exports, p);
-    ::decode(client_map, p);
-    ::decode(imported_caps, p);
-    ::decode(strong_dirfrags, p);
-    ::decode(dirfrag_bases, p);
-    ::decode(weak, p);
-    ::decode(weak_dirfrags, p);
-    ::decode(weak_inodes, p);
-    ::decode(strong_dentries, p);
-    ::decode(authpinned_dentries, p);
-    ::decode(xlocked_dentries, p);
+    auto p = payload.cbegin();
+    using ceph::decode;
+    decode(op, p);
+    decode(strong_inodes, p);
+    decode(inode_base, p);
+    decode(inode_locks, p);
+    decode(inode_scatterlocks, p);
+    decode(authpinned_inodes, p);
+    decode(frozen_authpin_inodes, p);
+    decode(xlocked_inodes, p);
+    decode(wrlocked_inodes, p);
+    decode(cap_exports, p);
+    decode(client_map, p);
+    decode(imported_caps, p);
+    decode(strong_dirfrags, p);
+    decode(dirfrag_bases, p);
+    decode(weak, p);
+    decode(weak_dirfrags, p);
+    decode(weak_inodes, p);
+    decode(strong_dentries, p);
+    decode(authpinned_dentries, p);
+    decode(xlocked_dentries, p);
+    if (header.version >= 2)
+      decode(client_metadata_map, p);
   }
 
 };

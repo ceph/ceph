@@ -114,11 +114,11 @@ public:
     bufferlist table_bl;
     int read_r = io->read(object_name, table_bl, 0, 0);
     if (read_r >= 0) {
-      bufferlist::iterator q = table_bl.begin();
+      auto q = table_bl.cbegin();
       try {
         if (mds_table) {
           version_t version;
-          ::decode(version, q);
+          decode(version, q);
           f->dump_int("version", version);
         }
         A table_inst;
@@ -155,7 +155,7 @@ protected:
     bufferlist new_bl;
     if (mds_table) {
       version_t version = 1;
-      ::encode(version, new_bl);
+      encode(version, new_bl);
     }
     table_inst.encode_state(new_bl);
 
@@ -227,7 +227,7 @@ public:
     while(true) {
       std::map<std::string, bufferlist> values;
       int r = io->omap_get_vals(object_name, last_key,
-          g_conf->mds_sessionmap_keys_per_op, &values);
+          g_conf()->mds_sessionmap_keys_per_op, &values);
 
       if (r != 0) {
         derr << "error reading values: " << cpp_strerror(r) << dendl;
@@ -319,7 +319,7 @@ int TableTool::main(std::vector<const char*> &argv)
 
   // Require at least 3 args <rank> <mode> <arg> [args...]
   if (argv.size() < 3) {
-    usage();
+    cerr << "missing required 3 arguments" << std::endl;
     return -EINVAL;
   }
 
@@ -368,8 +368,7 @@ int TableTool::main(std::vector<const char*> &argv)
       jf.dump_int("result", r);
       jf.close_section();
     } else {
-      derr << "Invalid table '" << table << "'" << dendl;
-      usage();
+      cerr << "Invalid table '" << table << "'" << std::endl;
       return -EINVAL;
     }
   } else if (mode == "show") {
@@ -391,8 +390,7 @@ int TableTool::main(std::vector<const char*> &argv)
       }
       jf.close_section();
     } else {
-      derr << "Invalid table '" << table << "'" << dendl;
-      usage();
+      cerr << "Invalid table '" << table << "'" << std::endl;
       return -EINVAL;
     }
   } else if (mode == "take_inos") {
@@ -407,8 +405,7 @@ int TableTool::main(std::vector<const char*> &argv)
       return InoTableHandler(rank).take_inos(&io, ino, f);
     }, &jf);
   } else {
-    derr << "Invalid mode '" << mode << "'" << dendl;
-    usage();
+    cerr << "Invalid mode '" << mode << "'" << std::endl;
     return -EINVAL;
   }
 

@@ -23,7 +23,6 @@ struct MMonSubscribeAck : public Message {
   
   MMonSubscribeAck() : Message(CEPH_MSG_MON_SUBSCRIBE_ACK),
 		       interval(0) {
-    memset(&fsid, 0, sizeof(fsid));
   }
   MMonSubscribeAck(uuid_d& f, int i) : Message(CEPH_MSG_MON_SUBSCRIBE_ACK),
 				       interval(i), fsid(f) { }
@@ -37,13 +36,14 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(interval, p);
-    ::decode(fsid, p);
+    auto p = payload.cbegin();
+    decode(interval, p);
+    decode(fsid, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(interval, payload);
-    ::encode(fsid, payload);
+    using ceph::encode;
+    encode(interval, payload);
+    encode(fsid, payload);
   }
 };
 

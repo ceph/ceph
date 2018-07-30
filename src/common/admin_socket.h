@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,33 +7,47 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #ifndef CEPH_COMMON_ADMIN_SOCKET_H
 #define CEPH_COMMON_ADMIN_SOCKET_H
 
-#include "common/Cond.h"
+#include <condition_variable>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <thread>
+
+#include "include/buffer.h"
+#include "common/cmdparse.h"
 
 class AdminSocket;
 class CephContext;
 
-#define CEPH_ADMIN_SOCK_VERSION "2"
+using namespace std::literals;
+
+inline constexpr auto CEPH_ADMIN_SOCK_VERSION = "2"sv;
 
 class AdminSocketHook {
 public:
-  virtual bool call(std::string command, cmdmap_t &cmdmap, std::string format,
-		    bufferlist& out) = 0;
+  virtual bool call(std::string_view command, const cmdmap_t& cmdmap,
+		    std::string_view format, bufferlist& out) = 0;
   virtual ~AdminSocketHook() {}
 };
 
-class AdminSocket : public Thread
+class AdminSocket
 {
 public:
   AdminSocket(CephContext *cct);
-  ~AdminSocket() override;
+  ~AdminSocket();
+
+  AdminSocket(const AdminSocket&) = delete;
+  AdminSocket& operator =(const AdminSocket&) = delete;
+  AdminSocket(AdminSocket&&) = delete;
+  AdminSocket& operator =(AdminSocket&&) = delete;
 
   /**
    * register an admin socket command
@@ -54,7 +68,10 @@ public:
    *
    * @return 0 for success, -EEXIST if command already registered.
    */
-  int register_command(std::string command, std::string cmddesc, AdminSocketHook *hook, std::string help);
+  int register_command(std::string_view command,
+		       std::string_view cmddesc,
+		       AdminSocketHook *hook,
+		       std::string_view help);
 
   /**
    * unregister an admin socket command.
@@ -66,16 +83,19 @@ public:
    * @param command command string
    * @return 0 on succest, -ENOENT if command dne.
    */
-  int unregister_command(std::string command);
+  int unregister_command(std::string_view command);
 
-  bool init(const std::string &path);
+  /*
+   * unregister all commands belong to hook.
+   */
+  void unregister_commands(const AdminSocketHook *hook);
+
+  bool init(const std::string& path);
 
   void chown(uid_t uid, gid_t gid);
   void chmod(mode_t mode);
 
 private:
-  AdminSocket(const AdminSocket& rhs);
-  AdminSocket& operator=(const AdminSocket &rhs);
 
   void shutdown();
 
@@ -83,23 +103,37 @@ private:
   std::string destroy_shutdown_pipe();
   std::string bind_and_listen(const std::string &sock_path, int *fd);
 
-  void *entry() override;
+  std::thread th;
+  void entry() noexcept;
   bool do_accept();
+  bool validate(const std::string& command,
+		const cmdmap_t& cmdmap,
+		bufferlist& out) const;
 
   CephContext *m_cct;
   std::string m_path;
-  int m_sock_fd;
-  int m_shutdown_rd_fd;
-  int m_shutdown_wr_fd;
+  int m_sock_fd = -1;
+  int m_shutdown_rd_fd = -1;
+  int m_shutdown_wr_fd = -1;
 
-  bool in_hook;
-  Cond in_hook_cond;
-  Mutex m_lock;    // protects m_hooks, m_descs, m_help
-  AdminSocketHook *m_version_hook, *m_help_hook, *m_getdescs_hook;
+  bool in_hook = false;
+  std::condition_variable in_hook_cond;
+  std::mutex lock;  // protects `hooks`
+  std::unique_ptr<AdminSocketHook> version_hook;
+  std::unique_ptr<AdminSocketHook> help_hook;
+  std::unique_ptr<AdminSocketHook> getdescs_hook;
 
-  std::map<std::string,AdminSocketHook*> m_hooks;
-  std::map<std::string,std::string> m_descs;
-  std::map<std::string,std::string> m_help;
+  struct hook_info {
+    AdminSocketHook* hook;
+    std::string desc;
+    std::string help;
+
+    hook_info(AdminSocketHook* hook, std::string_view desc,
+	      std::string_view help)
+      : hook(hook), desc(desc), help(help) {}
+  };
+
+  std::map<std::string, hook_info, std::less<>> hooks;
 
   friend class AdminSocketTest;
   friend class HelpHook;

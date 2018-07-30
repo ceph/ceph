@@ -1,3 +1,4 @@
+.. _cephfs-administration:
 
 CephFS Administrative commands
 ==============================
@@ -74,10 +75,62 @@ appear to be eg. exabytes in size, causing load on the MDS as it tries
 to enumerate the objects during operations like stats or deletes.
 
 
+Taking the cluster down
+-----------------------
+
+Taking a CephFS cluster down is done by setting the down flag:
+ 
+:: 
+ 
+    mds set <fs_name> down true
+ 
+To bring the cluster back online:
+ 
+:: 
+
+    mds set <fs_name> down false
+
+This will also restore the previous value of max_mds. MDS daemons are brought
+down in a way such that journals are flushed to the metadata pool and all
+client I/O is stopped.
+
+
+Taking the cluster down rapidly for deletion or disaster recovery
+-----------------------------------------------------------------
+
+To allow rapidly deleting a file system (for testing) or to quickly bring MDS
+daemons down, the operator may also set a flag to prevent standbys from
+activating on the file system. This is done using the ``joinable`` flag:
+
+::
+
+    fs set <fs_name> joinable false
+
+Then the operator can fail all of the ranks which causes the MDS daemons to
+respawn as standbys. The file system will be left in a degraded state.
+
+::
+
+    # For all ranks, 0-N:
+    mds fail <fs_name>:<n>
+
+Once all ranks are inactive, the file system may also be deleted or left in
+this state for other purposes (perhaps disaster recovery).
+
+
 Daemons
 -------
 
-These commands act on specific mds daemons or ranks.
+Most commands manipulating MDSs take a ``<role>`` argument which can take one
+of three forms:
+
+::
+
+    <fs_name>:<rank>
+    <fs_id>:<rank>
+    <rank>
+
+Comamnds to manipulate MDS daemons:
 
 ::
 
@@ -92,29 +145,13 @@ If the MDS daemon was in reality still running, then using ``mds fail``
 will cause the daemon to restart.  If it was active and a standby was
 available, then the "failed" daemon will return as a standby.
 
-::
-
-    mds deactivate <role>
-
-Deactivate an MDS, causing it to flush its entire journal to
-backing RADOS objects and close all open client sessions. Deactivating an MDS
-is primarily intended for bringing down a rank after reducing the number of
-active MDS (max_mds). Once the rank is deactivated, the MDS daemon will rejoin the
-cluster as a standby.
-``<role>`` can take one of three forms:
 
 ::
 
-    <fs_name>:<rank>
-    <fs_id>:<rank>
-    <rank>
+    tell mds.<daemon name> command ...
 
-Use ``mds deactivate`` in conjunction with adjustments to ``max_mds`` to
-shrink an MDS cluster.  See :doc:`/cephfs/multimds`
-
-::
-
-    tell mds.<daemon name>
+Send a command to the MDS daemon(s). Use ``mds.*`` to send a command to all
+daemons. Use ``ceph tell mds.* help`` to learn available commands.
 
 ::
 
@@ -123,6 +160,11 @@ shrink an MDS cluster.  See :doc:`/cephfs/multimds`
 ::
 
     mds repaired <role>
+
+::
+
+    mds stat
+
 
 
 Global settings
@@ -165,10 +207,6 @@ filesystem.
 
 ::
 
-    mds getmap
-
-::
-
     mds set_state
 
 ::
@@ -178,21 +216,18 @@ filesystem.
 Legacy
 ------
 
-The ``ceph mds set`` command is the deprecated version of ``ceph fs set``,
-from before there was more than one filesystem per cluster. It operates
-on whichever filesystem is marked as the default (see ``ceph fs
-set-default``.)
+These legacy commands are obsolete and no longer usable post-Luminous.
 
 ::
 
-    mds stat
-    mds dump  # replaced by "fs get"
-    mds stop  # replaced by "mds deactivate"
-    mds set_max_mds # replaced by "fs set max_mds"
-    mds set # replaced by "fs set"
+    mds add_data_pool # replaced by "fs add_data_pool"
     mds cluster_down  # replaced by "fs set cluster_down"
     mds cluster_up  # replaced by "fs set cluster_up"
+    mds dump  # replaced by "fs get"
+    mds getmap # replaced by "fs dump"
     mds newfs # replaced by "fs new"
-    mds add_data_pool # replaced by "fs add_data_pool"
-    mds remove_data_pool #replaced by "fs remove_data_pool"
+    mds remove_data_pool # replaced by "fs rm_data_pool"
+    mds set # replaced by "fs set"
+    mds set_max_mds # replaced by "fs set max_mds"
+    mds stop  # obsolete
 

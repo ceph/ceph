@@ -6,6 +6,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/internal.h"
+#include "librbd/io/ImageRequestWQ.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -24,7 +25,7 @@ public:
   explicit FlushCacheCommand(ImageCtx *ictx) : ictx(ictx) {}
 
   bool call(stringstream *ss) override {
-    int r = flush(ictx);
+    int r = ictx->io_work_queue->flush();
     if (r < 0) {
       *ss << "flush: " << cpp_strerror(r);
       return false;
@@ -87,8 +88,10 @@ LibrbdAdminSocketHook::~LibrbdAdminSocketHook() {
   }
 }
 
-bool LibrbdAdminSocketHook::call(std::string command, cmdmap_t& cmdmap,
-				 std::string format, bufferlist& out) {
+bool LibrbdAdminSocketHook::call(std::string_view command,
+				 const cmdmap_t& cmdmap,
+				 std::string_view format,
+				 bufferlist& out) {
   Commands::const_iterator i = commands.find(command);
   assert(i != commands.end());
   stringstream ss;

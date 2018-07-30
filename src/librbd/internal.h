@@ -15,47 +15,8 @@
 #include "include/rbd_types.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/WorkQueue.h"
+#include "common/ceph_time.h"
 #include "librbd/Types.h"
-
-enum {
-  l_librbd_first = 26000,
-
-  l_librbd_rd,               // read ops
-  l_librbd_rd_bytes,         // bytes read
-  l_librbd_rd_latency,       // average latency
-  l_librbd_wr,
-  l_librbd_wr_bytes,
-  l_librbd_wr_latency,
-  l_librbd_discard,
-  l_librbd_discard_bytes,
-  l_librbd_discard_latency,
-  l_librbd_flush,
-
-  l_librbd_aio_flush,
-  l_librbd_aio_flush_latency,
-  l_librbd_ws,
-  l_librbd_ws_bytes,
-  l_librbd_ws_latency,
-
-  l_librbd_cmp,
-  l_librbd_cmp_bytes,
-  l_librbd_cmp_latency,
-
-  l_librbd_snap_create,
-  l_librbd_snap_remove,
-  l_librbd_snap_rollback,
-  l_librbd_snap_rename,
-
-  l_librbd_notify,
-  l_librbd_resize,
-
-  l_librbd_readahead,
-  l_librbd_readahead_bytes,
-
-  l_librbd_invalidate_cache,
-
-  l_librbd_last,
-};
 
 namespace librbd {
 
@@ -99,12 +60,9 @@ namespace librbd {
   void image_options_clear(rbd_image_options_t opts);
   bool image_options_is_empty(rbd_image_options_t opts);
 
-  int snap_set(ImageCtx *ictx, const cls::rbd::SnapshotNamespace &snap_namespace,
-	       const char *snap_name);
-
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
-		    std::set<std::pair<std::string, std::string> > & names);
+                    std::vector<child_info_t> *names);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -205,12 +163,14 @@ namespace librbd {
   void readahead(ImageCtx *ictx,
                  const vector<pair<uint64_t,uint64_t> >& image_extents);
 
-  int flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);
   int poll_io_events(ImageCtx *ictx, io::AioCompletion **comps, int numcomp);
   int metadata_list(ImageCtx *ictx, const string &last, uint64_t max, map<string, bufferlist> *pairs);
   int metadata_get(ImageCtx *ictx, const std::string &key, std::string *value);
 
+  int list_watchers(ImageCtx *ictx, std::list<librbd::image_watcher_t> &watchers);
 }
+
+std::ostream &operator<<(std::ostream &os, const librbd::ImageOptions &opts);
 
 #endif

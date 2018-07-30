@@ -18,12 +18,12 @@
 #include "messages/PaxosServiceMessage.h"
 
 #include <vector>
-using std::vector;
+#include <string>
 
 class MMonCommand : public PaxosServiceMessage {
  public:
   uuid_d fsid;
-  vector<string> cmd;
+  std::vector<std::string> cmd;
 
   MMonCommand() : PaxosServiceMessage(MSG_MON_COMMAND, 0) {}
   MMonCommand(const uuid_d &f)
@@ -46,15 +46,16 @@ public:
   }
   
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(fsid, payload);
-    ::encode(cmd, payload);
+    encode(fsid, payload);
+    encode(cmd, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(fsid, p);
-    ::decode(cmd, p);
+    decode(fsid, p);
+    decode(cmd, p);
   }
 };
 

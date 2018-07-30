@@ -57,8 +57,14 @@ void ClusterWatcher::refresh_pools()
 void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers,
 				     PoolNames *pool_names)
 {
+  int r = m_cluster->wait_for_latest_osdmap();
+  if (r < 0) {
+    derr << "error waiting for OSD map: " << cpp_strerror(r) << dendl;
+    return;
+  }
+
   list<pair<int64_t, string> > pools;
-  int r = m_cluster->pool_list2(pools);
+  r = m_cluster->pool_list2(pools);
   if (r < 0) {
     derr << "error listing pools: " << cpp_strerror(r) << dendl;
     return;

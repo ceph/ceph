@@ -505,7 +505,7 @@ TEST_F(TestMockInstanceWatcher, ImageAcquireReleaseCancel) {
                     auto ctx = new FunctionContext(
                       [instance_watcher, &mock_io_ctx, c, pbl](int r) {
                         instance_watcher->cancel_notify_requests("other");
-                        ::encode(librbd::watcher::NotifyResponse(), *pbl);
+                        encode(librbd::watcher::NotifyResponse(), *pbl);
                         mock_io_ctx.get_mock_rados_client()->
                             finish_aio_completion(c, -ETIMEDOUT);
                       });
@@ -526,7 +526,7 @@ TEST_F(TestMockInstanceWatcher, ImageAcquireReleaseCancel) {
                     auto ctx = new FunctionContext(
                       [instance_watcher, &mock_io_ctx, c, pbl](int r) {
                         instance_watcher->cancel_notify_requests("other");
-                        ::encode(librbd::watcher::NotifyResponse(), *pbl);
+                        encode(librbd::watcher::NotifyResponse(), *pbl);
                         mock_io_ctx.get_mock_rados_client()->
                             finish_aio_completion(c, -ETIMEDOUT);
                       });
@@ -536,6 +536,70 @@ TEST_F(TestMockInstanceWatcher, ImageAcquireReleaseCancel) {
   C_SaferCond on_release;
   instance_watcher->notify_image_release("other", "gid", &on_release);
   ASSERT_EQ(-ECANCELED, on_release.wait());
+
+  // Shutdown
+  expect_release_lock(mock_managed_lock, 0);
+  expect_unregister_watch(mock_io_ctx);
+  expect_unregister_instance(mock_io_ctx, 0);
+  instance_watcher->shut_down();
+
+  expect_destroy_lock(mock_managed_lock);
+  delete instance_watcher;
+}
+
+TEST_F(TestMockInstanceWatcher, PeerImageAcquireWatchDNE) {
+  MockManagedLock mock_managed_lock;
+  librados::MockTestMemIoCtxImpl &mock_io_ctx(get_mock_io_ctx(m_local_io_ctx));
+
+  MockInstanceReplayer mock_instance_replayer;
+  auto instance_watcher = new MockInstanceWatcher(
+    m_local_io_ctx, m_mock_threads->work_queue, &mock_instance_replayer,
+    m_instance_id);
+  InSequence seq;
+
+  // Init
+  expect_register_instance(mock_io_ctx, 0);
+  expect_register_watch(mock_io_ctx);
+  expect_acquire_lock(mock_managed_lock, 0);
+  ASSERT_EQ(0, instance_watcher->init());
+
+  // Acquire image on dead (blacklisted) instance
+  C_SaferCond on_acquire;
+  instance_watcher->notify_image_acquire("dead instance", "global image id",
+                                         &on_acquire);
+  ASSERT_EQ(-ENOENT, on_acquire.wait());
+
+  // Shutdown
+  expect_release_lock(mock_managed_lock, 0);
+  expect_unregister_watch(mock_io_ctx);
+  expect_unregister_instance(mock_io_ctx, 0);
+  instance_watcher->shut_down();
+
+  expect_destroy_lock(mock_managed_lock);
+  delete instance_watcher;
+}
+
+TEST_F(TestMockInstanceWatcher, PeerImageReleaseWatchDNE) {
+  MockManagedLock mock_managed_lock;
+  librados::MockTestMemIoCtxImpl &mock_io_ctx(get_mock_io_ctx(m_local_io_ctx));
+
+  MockInstanceReplayer mock_instance_replayer;
+  auto instance_watcher = new MockInstanceWatcher(
+    m_local_io_ctx, m_mock_threads->work_queue, &mock_instance_replayer,
+    m_instance_id);
+  InSequence seq;
+
+  // Init
+  expect_register_instance(mock_io_ctx, 0);
+  expect_register_watch(mock_io_ctx);
+  expect_acquire_lock(mock_managed_lock, 0);
+  ASSERT_EQ(0, instance_watcher->init());
+
+  // Release image on dead (blacklisted) instance
+  C_SaferCond on_acquire;
+  instance_watcher->notify_image_release("dead instance", "global image id",
+                                         &on_acquire);
+  ASSERT_EQ(-ENOENT, on_acquire.wait());
 
   // Shutdown
   expect_release_lock(mock_managed_lock, 0);
@@ -571,7 +635,7 @@ TEST_F(TestMockInstanceWatcher, PeerImageRemovedCancel) {
                     auto ctx = new FunctionContext(
                       [instance_watcher, &mock_io_ctx, c, pbl](int r) {
                         instance_watcher->cancel_notify_requests("other");
-                        ::encode(librbd::watcher::NotifyResponse(), *pbl);
+                        encode(librbd::watcher::NotifyResponse(), *pbl);
                         mock_io_ctx.get_mock_rados_client()->
                             finish_aio_completion(c, -ETIMEDOUT);
                       });
@@ -592,7 +656,6 @@ TEST_F(TestMockInstanceWatcher, PeerImageRemovedCancel) {
   expect_destroy_lock(mock_managed_lock);
   delete instance_watcher;
 }
-
 
 class TestMockInstanceWatcher_NotifySync : public TestMockInstanceWatcher {
 public:
@@ -692,13 +755,13 @@ public:
     EXPECT_CALL(mock_image_sync_throttler, start_op(sync_id, _))
         .WillOnce(Invoke([on_call, on_start_ctx] (const std::string &,
                                                   Context *ctx) {
-                           if (on_call != nullptr) {
-                             on_call->complete(0);
-                           }
                            if (on_start_ctx != nullptr) {
                              *on_start_ctx = ctx;
                            } else {
                              ctx->complete(0);
+                           }
+                           if (on_call != nullptr) {
+                             on_call->complete(0);
                            }
                          }));
   }

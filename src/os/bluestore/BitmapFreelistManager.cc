@@ -42,7 +42,7 @@ struct XorMergeOperator : public KeyValueDB::MergeOperator {
 
 void BitmapFreelistManager::setup_merge_operator(KeyValueDB *db, string prefix)
 {
-  ceph::shared_ptr<XorMergeOperator> merge_op(new XorMergeOperator);
+  std::shared_ptr<XorMergeOperator> merge_op(new XorMergeOperator);
   db->set_merge_operator(prefix, merge_op);
 }
 
@@ -58,13 +58,12 @@ BitmapFreelistManager::BitmapFreelistManager(CephContext* cct,
 {
 }
 
-int BitmapFreelistManager::create(uint64_t new_size, uint64_t min_alloc_size,
+int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
 				  KeyValueDB::Transaction txn)
 {
-  bytes_per_block = std::max(cct->_conf->bdev_block_size,
-			     (int64_t)min_alloc_size);
-  assert(ISP2(bytes_per_block));
-  size = P2ALIGN(new_size, bytes_per_block);
+  bytes_per_block = granularity;
+  assert(isp2(bytes_per_block));
+  size = p2align(new_size, bytes_per_block);
   blocks_per_key = cct->_conf->bluestore_freelist_blocks_per_key;
 
   _init_misc();
@@ -86,22 +85,22 @@ int BitmapFreelistManager::create(uint64_t new_size, uint64_t min_alloc_size,
 	   << std::dec << dendl;
   {
     bufferlist bl;
-    ::encode(bytes_per_block, bl);
+    encode(bytes_per_block, bl);
     txn->set(meta_prefix, "bytes_per_block", bl);
   }
   {
     bufferlist bl;
-    ::encode(blocks_per_key, bl);
+    encode(blocks_per_key, bl);
     txn->set(meta_prefix, "blocks_per_key", bl);
   }
   {
     bufferlist bl;
-    ::encode(blocks, bl);
+    encode(blocks, bl);
     txn->set(meta_prefix, "blocks", bl);
   }
   {
     bufferlist bl;
-    ::encode(size, bl);
+    encode(size, bl);
     txn->set(meta_prefix, "size", bl);
   }
   return 0;
@@ -119,26 +118,26 @@ int BitmapFreelistManager::init()
     string k = it->key();
     if (k == "bytes_per_block") {
       bufferlist bl = it->value();
-      bufferlist::iterator p = bl.begin();
-      ::decode(bytes_per_block, p);
+      auto p = bl.cbegin();
+      decode(bytes_per_block, p);
       dout(10) << __func__ << " bytes_per_block 0x" << std::hex
 	       << bytes_per_block << std::dec << dendl;
     } else if (k == "blocks") {
       bufferlist bl = it->value();
-      bufferlist::iterator p = bl.begin();
-      ::decode(blocks, p);
+      auto p = bl.cbegin();
+      decode(blocks, p);
       dout(10) << __func__ << " blocks 0x" << std::hex << blocks << std::dec
 	       << dendl;
     } else if (k == "size") {
       bufferlist bl = it->value();
-      bufferlist::iterator p = bl.begin();
-      ::decode(size, p);
+      auto p = bl.cbegin();
+      decode(size, p);
       dout(10) << __func__ << " size 0x" << std::hex << size << std::dec
 	       << dendl;
     } else if (k == "blocks_per_key") {
       bufferlist bl = it->value();
-      bufferlist::iterator p = bl.begin();
-      ::decode(blocks_per_key, p);
+      auto p = bl.cbegin();
+      decode(blocks_per_key, p);
       dout(10) << __func__ << " blocks_per_key 0x" << std::hex << blocks_per_key
 	       << std::dec << dendl;
     } else {
@@ -291,8 +290,8 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
 		 << enumerate_offset << " bit 0x" << enumerate_bl_pos
 		 << " offset 0x" << end << std::dec
 		 << dendl;
+	end = std::min(get_alloc_units() * bytes_per_block, end);
 	*length = end - *offset;
-        assert((*offset  + *length) <= size);
         dout(10) << __func__ << std::hex << " 0x" << *offset << "~" << *length
 		 << std::dec << dendl;
 	return true;
@@ -312,14 +311,13 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
     }
   }
 
-  end = size;
-  if (enumerate_offset < end) {
+  if (enumerate_offset < size) {
+    end = get_alloc_units() * bytes_per_block;
     *length = end - *offset;
     dout(10) << __func__ << std::hex << " 0x" << *offset << "~" << *length
 	     << std::dec << dendl;
-    enumerate_offset = end;
+    enumerate_offset = size;
     enumerate_bl_pos = blocks_per_key;
-    assert((*offset  + *length) <= size);
     return true;
   }
 
@@ -464,8 +462,6 @@ void BitmapFreelistManager::allocate(
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  if (cct->_conf->bluestore_debug_freelist)
-    _verify_range(offset, length, 0);
   _xor(offset, length, txn);
 }
 
@@ -475,8 +471,6 @@ void BitmapFreelistManager::release(
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  if (cct->_conf->bluestore_debug_freelist)
-    _verify_range(offset, length, 1);
   _xor(offset, length, txn);
 }
 

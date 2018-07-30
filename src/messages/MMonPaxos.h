@@ -92,37 +92,38 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     header.version = HEAD_VERSION;
-    ::encode(epoch, payload);
-    ::encode(op, payload);
-    ::encode(first_committed, payload);
-    ::encode(last_committed, payload);
-    ::encode(pn_from, payload);
-    ::encode(pn, payload);
-    ::encode(uncommitted_pn, payload);
-    ::encode(lease_timestamp, payload);
-    ::encode(sent_timestamp, payload);
-    ::encode(latest_version, payload);
-    ::encode(latest_value, payload);
-    ::encode(values, payload);
-    ::encode(feature_map, payload);
+    encode(epoch, payload);
+    encode(op, payload);
+    encode(first_committed, payload);
+    encode(last_committed, payload);
+    encode(pn_from, payload);
+    encode(pn, payload);
+    encode(uncommitted_pn, payload);
+    encode(lease_timestamp, payload);
+    encode(sent_timestamp, payload);
+    encode(latest_version, payload);
+    encode(latest_value, payload);
+    encode(values, payload);
+    encode(feature_map, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(epoch, p);
-    ::decode(op, p);
-    ::decode(first_committed, p);
-    ::decode(last_committed, p);
-    ::decode(pn_from, p);   
-    ::decode(pn, p);   
-    ::decode(uncommitted_pn, p);
-    ::decode(lease_timestamp, p);
-    ::decode(sent_timestamp, p);
-    ::decode(latest_version, p);
-    ::decode(latest_value, p);
-    ::decode(values, p);
+    auto p = payload.cbegin();
+    decode(epoch, p);
+    decode(op, p);
+    decode(first_committed, p);
+    decode(last_committed, p);
+    decode(pn_from, p);   
+    decode(pn, p);   
+    decode(uncommitted_pn, p);
+    decode(lease_timestamp, p);
+    decode(sent_timestamp, p);
+    decode(latest_version, p);
+    decode(latest_value, p);
+    decode(values, p);
     if (header.version >= 4) {
-      ::decode(feature_map, p);
+      decode(feature_map, p);
     }
   }
 };

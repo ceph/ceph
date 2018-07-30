@@ -22,8 +22,8 @@ MATCHER_P(IsLockType, exclusive, "") {
   cls_lock_set_cookie_op op;
   bufferlist bl;
   bl.share(arg);
-  bufferlist::iterator iter = bl.begin();
-  ::decode(op, iter);
+  auto iter = bl.cbegin();
+  decode(op, iter);
   return op.type == (exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED);
 }
 

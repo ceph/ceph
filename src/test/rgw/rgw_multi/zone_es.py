@@ -254,3 +254,7 @@ class ESZone(Zone):
         return self.Conn(self, credentials)
 
 
+class ESZoneConfig:
+    def __init__(self, cfg, section):
+        self.endpoint = cfg.get(section, 'endpoint')
+

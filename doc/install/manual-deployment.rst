@@ -164,11 +164,15 @@ The procedure is as follows:
 
 	sudo ceph-authtool --create-keyring /etc/ceph/ceph.client.admin.keyring --gen-key -n client.admin --set-uid=0 --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *' --cap mgr 'allow *'
 
+#. Generate a bootstrap-osd keyring, generate a ``client.bootstrap-osd`` user and add
+   the user to the keyring. ::
 
-#. Add the ``client.admin`` key to the ``ceph.mon.keyring``. ::
+	sudo ceph-authtool --create-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring --gen-key -n client.bootstrap-osd --cap mon 'profile bootstrap-osd'
 
-	ceph-authtool /tmp/ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
+#. Add the generated keys to the ``ceph.mon.keyring``. ::
 
+	sudo ceph-authtool /tmp/ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
+	sudo ceph-authtool /tmp/ceph.mon.keyring --import-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring
 
 #. Generate a monitor map using the hostname(s), host IP address(es) and the FSID.
    Save it as ``/tmp/monmap``::
@@ -186,7 +190,7 @@ The procedure is as follows:
 
    For example::
 
-	sudo mkdir /var/lib/ceph/mon/ceph-node1
+	sudo -u ceph mkdir /var/lib/ceph/mon/ceph-node1
 
    See `Monitor Config Reference - Data`_ for details.
 
@@ -213,7 +217,7 @@ The procedure is as follows:
 	auth client required = cephx
 	osd journal size = {n}
 	osd pool default size = {n}  # Write an object n times.
-	osd pool default min size = {n} # Allow writing n copy in a degraded state.
+	osd pool default min size = {n} # Allow writing n copies in a degraded state.
 	osd pool default pg num = {n}
 	osd pool default pgp num = {n}
 	osd crush chooseleaf type = {n}
@@ -230,8 +234,8 @@ The procedure is as follows:
 	auth service required = cephx
 	auth client required = cephx
 	osd journal size = 1024
-	osd pool default size = 2
-	osd pool default min size = 1
+	osd pool default size = 3
+	osd pool default min size = 2
 	osd pool default pg num = 333
 	osd pool default pgp num = 333
 	osd crush chooseleaf type = 1
@@ -244,7 +248,11 @@ The procedure is as follows:
 
 #. Start the monitor(s).
 
-   For Ubuntu, use Upstart::
+   For most distributions, services are started via systemd now::
+
+	sudo systemctl start ceph-mon@node1
+
+   For Ubuntu Trusty, use Upstart::
 
 	sudo start ceph-mon id=node1 [cluster={cluster-name}]
 
@@ -257,18 +265,9 @@ The procedure is as follows:
 
 	sudo touch /var/lib/ceph/mon/ceph-node1/upstart
 
-   For Debian/CentOS/RHEL, use sysvinit::
+   For older Debian/CentOS/RHEL, use sysvinit::
 
 	sudo /etc/init.d/ceph start mon.node1
-
-
-#. Verify that Ceph created the default pools. ::
-
-	ceph osd lspools
-
-   You should see output like this::
-
-	0 data,1 metadata,2 rbd,
 
 
 #. Verify that the monitor is running. ::
@@ -279,16 +278,24 @@ The procedure is as follows:
    you should see a health error indicating that placement groups are stuck
    inactive. It should look something like this::
 
-	cluster a7f64266-0894-4f1e-a635-d0aeaca0e993
-	  health HEALTH_ERR 192 pgs stuck inactive; 192 pgs stuck unclean; no osds
-	  monmap e1: 1 mons at {node1=192.168.0.1:6789/0}, election epoch 1, quorum 0 node1
-	  osdmap e1: 0 osds: 0 up, 0 in
-	  pgmap v2: 192 pgs, 3 pools, 0 bytes data, 0 objects
-	     0 kB used, 0 kB / 0 kB avail
-	     192 creating
+      cluster:
+        id:     a7f64266-0894-4f1e-a635-d0aeaca0e993
+        health: HEALTH_OK
+
+      services:
+        mon: 1 daemons, quorum node1
+        mgr: node1(active)
+        osd: 0 osds: 0 up, 0 in
+
+      data:
+        pools:   0 pools, 0 pgs
+        objects: 0 objects, 0 bytes
+        usage:   0 kB used, 0 kB / 0 kB avail
+        pgs:
+
 
    **Note:** Once you add OSDs and start them, the placement group health errors
-   should disappear. See the next section for details.
+   should disappear. See `Adding OSDs`_ for details.
 
 Manager daemon configuration
 ============================
@@ -311,36 +318,90 @@ a Ceph Node.
 Short Form
 ----------
 
-Ceph provides the ``ceph-disk`` utility, which can prepare a disk, partition or
-directory for use with Ceph. The ``ceph-disk`` utility creates the OSD ID by
-incrementing the index. Additionally, ``ceph-disk`` will add the new OSD to the
-CRUSH map under the host for you. Execute ``ceph-disk -h`` for CLI details.
-The ``ceph-disk`` utility automates the steps of the `Long Form`_ below. To
+Ceph provides the ``ceph-volume`` utility, which can prepare a logical volume, disk, or partition
+for use with Ceph. The ``ceph-volume`` utility creates the OSD ID by
+incrementing the index. Additionally, ``ceph-volume`` will add the new OSD to the
+CRUSH map under the host for you. Execute ``ceph-volume -h`` for CLI details.
+The ``ceph-volume`` utility automates the steps of the `Long Form`_ below. To
 create the first two OSDs with the short form procedure, execute the following
 on  ``node2`` and ``node3``:
 
-
-#. Prepare the OSD. ::
+bluestore
+^^^^^^^^^
+#. Create the OSD. ::
 
 	ssh {node-name}
-	sudo ceph-disk prepare --cluster {cluster-name} --cluster-uuid {uuid} {data-path} [{journal-path}]
+	sudo ceph-volume lvm create --data {data-path}
 
    For example::
 
 	ssh node1
-	sudo ceph-disk prepare --cluster ceph --cluster-uuid a7f64266-0894-4f1e-a635-d0aeaca0e993 --fs-type ext4 /dev/hdd1
+	sudo ceph-volume lvm create --data /dev/hdd1
 
+Alternatively, the creation process can be split in two phases (prepare, and
+activate):
 
-#. Activate the OSD::
+#. Prepare the OSD. ::
 
-	sudo ceph-disk activate {data-path} [--activate-key {path}]
+	ssh {node-name}
+	sudo ceph-volume lvm prepare --data {data-path} {data-path}
 
    For example::
 
-	sudo ceph-disk activate /dev/hdd1
+	ssh node1
+	sudo ceph-volume lvm prepare --data /dev/hdd1
 
-   **Note:** Use the ``--activate-key`` argument if you do not have a copy
-   of ``/var/lib/ceph/bootstrap-osd/{cluster}.keyring`` on the Ceph Node.
+   Once prepared, the ``ID`` and ``FSID`` of the prepared OSD are required for
+   activation. These can be obtained by listing OSDs in the current server::
+
+    sudo ceph-volume lvm list
+
+#. Activate the OSD::
+
+	sudo ceph-volume lvm activate {ID} {FSID}
+
+   For example::
+
+	sudo ceph-volume lvm activate 0 a7f64266-0894-4f1e-a635-d0aeaca0e993
+
+
+filestore
+^^^^^^^^^
+#. Create the OSD. ::
+
+	ssh {node-name}
+	sudo ceph-volume lvm create --filestore --data {data-path} --journal {journal-path}
+
+   For example::
+
+	ssh node1
+	sudo ceph-volume lvm create --filestore --data /dev/hdd1 --journal /dev/hdd2
+
+Alternatively, the creation process can be split in two phases (prepare, and
+activate):
+
+#. Prepare the OSD. ::
+
+	ssh {node-name}
+	sudo ceph-volume lvm prepare --filestore --data {data-path} --journal {journal-path}
+
+   For example::
+
+	ssh node1
+	sudo ceph-volume lvm prepare --filestore --data /dev/hdd1 --journal /dev/hdd2
+
+   Once prepared, the ``ID`` and ``FSID`` of the prepared OSD are required for
+   activation. These can be obtained by listing OSDs in the current server::
+
+    sudo ceph-volume lvm list
+
+#. Activate the OSD::
+
+	sudo ceph-volume lvm activate --filestore {ID} {FSID}
+
+   For example::
+
+	sudo ceph-volume lvm activate --filestore 0 a7f64266-0894-4f1e-a635-d0aeaca0e993
 
 
 Long Form
@@ -376,6 +437,10 @@ OSDs with the long form procedure, execute the following steps for each OSD.
      ID=$(echo "{\"cephx_secret\": \"$OSD_SECRET\"}" | \
 	ceph osd new $UUID -i - \
 	-n client.bootstrap-osd -k /var/lib/ceph/bootstrap-osd/ceph.keyring)
+
+   It is also possible to include a ``crush_device_class`` property in the JSON
+   to set an initial class other than the default (``ssd`` or ``hdd`` based on
+   the auto-detected device type).
 
 #. Create the default directory on your new OSD. ::
 

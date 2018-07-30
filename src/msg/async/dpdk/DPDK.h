@@ -19,19 +19,6 @@
 /*
  * Copyright (C) 2014 Cloudius Systems, Ltd.
  */
-/*
- * Ceph - scalable distributed file system
- *
- * Copyright (C) 2015 XSky <haomai@xsky.com>
- *
- * Author: Haomai Wang <haomaiwang@gmail.com>
- *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.  See file COPYING.
- *
- */
 
 #ifndef CEPH_DPDK_DEV_H
 #define CEPH_DPDK_DEV_H
@@ -51,7 +38,6 @@
 #include "const.h"
 #include "circular_buffer.h"
 #include "ethernet.h"
-#include "memory.h"
 #include "Packet.h"
 #include "stream.h"
 #include "net.h"
@@ -301,7 +287,7 @@ class DPDKQueuePair {
       // devices have a 15.5K limitation on a maximum single fragment
       // size.
       //
-      phys_addr_t pa = rte_malloc_virt2phy(va);
+      rte_iova_t pa = rte_malloc_virt2iova(va);
       if (!pa)
         return copy_one_data_buf(qp, m, va, buf_len);
 
@@ -626,18 +612,7 @@ class DPDKQueuePair {
     // actual data buffer.
     //
     m->buf_addr      = (char*)data - RTE_PKTMBUF_HEADROOM;
-    m->buf_physaddr  = rte_malloc_virt2phy(data) - RTE_PKTMBUF_HEADROOM;
-    return true;
-  }
-
-  static bool init_noninline_rx_mbuf(rte_mbuf* m, size_t size,
-                                     std::vector<void*> &datas) {
-    if (!refill_rx_mbuf(m, size, datas)) {
-      return false;
-    }
-    // The below fields stay constant during the execution.
-    m->buf_len       = size + RTE_PKTMBUF_HEADROOM;
-    m->data_off      = RTE_PKTMBUF_HEADROOM;
+    m->buf_physaddr  = rte_mem_virt2phy(data) - RTE_PKTMBUF_HEADROOM;
     return true;
   }
 

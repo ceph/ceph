@@ -156,12 +156,7 @@ public:
     DEFAULT_M = "3";
     DEFAULT_W = "8";
   }
-  ~ErasureCodeJerasureCauchy() override {
-    if (bitmatrix)
-      free(bitmatrix);
-    if (schedule)
-      free(schedule);
-  }
+  ~ErasureCodeJerasureCauchy() override;
 
   void jerasure_encode(char **data,
                                char **coding,

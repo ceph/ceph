@@ -1,14 +1,12 @@
 #ifndef __LIBRADOS_HPP
 #define __LIBRADOS_HPP
 
-#include <stdbool.h>
 #include <string>
 #include <list>
 #include <map>
 #include <set>
 #include <vector>
 #include <utility>
-#include "memory.h"
 #include "buffer.h"
 
 #include "librados.h"
@@ -268,6 +266,7 @@ namespace librados
     //mainly for delete
     OPERATION_FULL_FORCE	 = LIBRADOS_OPERATION_FULL_FORCE,
     OPERATION_IGNORE_REDIRECT	 = LIBRADOS_OPERATION_IGNORE_REDIRECT,
+    OPERATION_ORDERSNAP          = LIBRADOS_OPERATION_ORDERSNAP,
   };
 
   /*
@@ -470,7 +469,12 @@ namespace librados
      * Set redirect target
      */
     void set_redirect(const std::string& tgt_obj, const IoCtx& tgt_ioctx,
-		      uint64_t tgt_version);
+		      uint64_t tgt_version, int flag = 0);
+    void set_chunk(uint64_t src_offset, uint64_t src_length, const IoCtx& tgt_ioctx,
+                   std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
+    void tier_promote();
+    void unset_manifest();
+
 
     friend class IoCtx;
   };
@@ -1107,6 +1111,10 @@ namespace librados
         std::vector<snap_t>& snaps,
         const blkin_trace_info *trace_info);
     int aio_operate(const std::string& oid, AioCompletion *c,
+        ObjectWriteOperation *op, snap_t seq,
+        std::vector<snap_t>& snaps, int flags,
+        const blkin_trace_info *trace_info);
+    int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectReadOperation *op, bufferlist *pbl);
 
     int aio_operate(const std::string& oid, AioCompletion *c,
@@ -1133,7 +1141,7 @@ namespace librados
     int unwatch2(uint64_t handle);
     int aio_unwatch(uint64_t handle, AioCompletion *c);
     /**
-     * Send a notify event ot watchers
+     * Send a notify event to watchers
      *
      * Upon completion the pbl bufferlist reply payload will be
      * encoded like so:
@@ -1181,8 +1189,8 @@ namespace librados
      * a known error, return it.
      *
      * If there is an error, the watch is no longer valid, and should
-     * be destroyed with unwatch().  The the user is still interested
-     * in the object, a new watch should be created with watch().
+     * be destroyed with unwatch().  The user is still interested in
+     * the object, a new watch should be created with watch().
      *
      * @param cookie watch handle
      * @returns ms since last confirmed valid, or error
@@ -1233,6 +1241,7 @@ namespace librados
 
     void locator_set_key(const std::string& key);
     void set_namespace(const std::string& nspace);
+    std::string get_namespace() const;
 
     int64_t get_id();
 
@@ -1318,7 +1327,7 @@ namespace librados
       const std::string& name,     ///< daemon name (e.g., 'gwfoo')
       const std::map<std::string,std::string>& metadata); ///< static metadata about daemon
     int service_daemon_update_status(
-      const std::map<std::string,std::string>& status);
+      std::map<std::string,std::string>&& status);
 
     int pool_create(const char *name);
     int pool_create(const char *name, uint64_t auid);
@@ -1333,6 +1342,9 @@ namespace librados
     int pool_reverse_lookup(int64_t id, std::string *name);
 
     uint64_t get_instance_id();
+
+    int get_min_compatible_client(int8_t* min_compat_client,
+                                  int8_t* require_min_compat_client);
 
     int mon_command(std::string cmd, const bufferlist& inbl,
 		    bufferlist *outbl, std::string *outs);

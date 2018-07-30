@@ -38,11 +38,11 @@ struct C_GetInstances : public Context {
   }
 
   void finish(int r) override {
-    dout(20) << "C_GetInstances: " << this << " " <<  __func__ << ": r=" << r
+    dout(10) << "C_GetInstances: " << this << " " <<  __func__ << ": r=" << r
              << dendl;
 
     if (r == 0) {
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       r = librbd::cls_client::mirror_instances_list_finish(&it, instance_ids);
     } else if (r == -ENOENT) {
       r = 0;
@@ -63,13 +63,13 @@ struct C_RemoveInstanceRequest : public Context {
   }
 
   void send() {
-    dout(20) << "C_RemoveInstanceRequest: " << this << " " << __func__ << dendl;
+    dout(10) << "C_RemoveInstanceRequest: " << this << " " << __func__ << dendl;
 
     instance_watcher.remove(this);
   }
 
   void finish(int r) override {
-    dout(20) << "C_RemoveInstanceRequest: " << this << " " << __func__ << ": r="
+    dout(10) << "C_RemoveInstanceRequest: " << this << " " << __func__ << ": r="
              << r << dendl;
     assert(r == 0);
 
@@ -97,7 +97,7 @@ struct InstanceWatcher<I>::C_NotifyInstanceRequest : public Context {
     : instance_watcher(instance_watcher), instance_id(instance_id),
       request_id(request_id), bl(bl), on_finish(on_finish),
       send_to_leader(instance_id.empty()) {
-    dout(20) << "C_NotifyInstanceRequest: " << this << " " << __func__
+    dout(10) << "C_NotifyInstanceRequest: " << this << " " << __func__
              << ": instance_watcher=" << instance_watcher << ", instance_id="
              << instance_id << ", request_id=" << request_id << dendl;
 
@@ -118,12 +118,12 @@ struct InstanceWatcher<I>::C_NotifyInstanceRequest : public Context {
   }
 
   void send() {
-    dout(20) << "C_NotifyInstanceRequest: " << this << " " << __func__ << dendl;
+    dout(10) << "C_NotifyInstanceRequest: " << this << " " << __func__ << dendl;
 
     assert(instance_watcher->m_lock.is_locked());
 
     if (canceling) {
-      dout(20) << "C_NotifyInstanceRequest: " << this << " " << __func__
+      dout(10) << "C_NotifyInstanceRequest: " << this << " " << __func__
                << ": canceling" << dendl;
       instance_watcher->m_work_queue->queue(this, -ECANCELED);
       return;
@@ -131,7 +131,7 @@ struct InstanceWatcher<I>::C_NotifyInstanceRequest : public Context {
 
     if (send_to_leader) {
       if (instance_watcher->m_leader_instance_id.empty()) {
-        dout(20) << "C_NotifyInstanceRequest: " << this << " " << __func__
+        dout(10) << "C_NotifyInstanceRequest: " << this << " " << __func__
                  << ": suspending" << dendl;
         instance_watcher->suspend_notify_request(this);
         return;
@@ -155,13 +155,13 @@ struct InstanceWatcher<I>::C_NotifyInstanceRequest : public Context {
       }
     }
 
-    dout(20) << "C_NotifyInstanceRequest: " << this << " " << __func__
+    dout(10) << "C_NotifyInstanceRequest: " << this << " " << __func__
              << ": sending to " << instance_id << dendl;
     notifier->notify(bl, &response, this);
   }
 
   void cancel() {
-    dout(20) << "C_NotifyInstanceRequest: " << this << " " << __func__ << dendl;
+    dout(10) << "C_NotifyInstanceRequest: " << this << " " << __func__ << dendl;
 
     assert(instance_watcher->m_lock.is_locked());
 
@@ -170,7 +170,7 @@ struct InstanceWatcher<I>::C_NotifyInstanceRequest : public Context {
   }
 
   void finish(int r) override {
-    dout(20) << "C_NotifyInstanceRequest: " << this << " " << __func__ << ": r="
+    dout(10) << "C_NotifyInstanceRequest: " << this << " " << __func__ << ": r="
              << r << dendl;
 
     if (r == 0 || r == -ETIMEDOUT) {
@@ -178,14 +178,14 @@ struct InstanceWatcher<I>::C_NotifyInstanceRequest : public Context {
       for (auto &it : response.acks) {
         auto &bl = it.second;
         if (it.second.length() == 0) {
-          dout(20) << "C_NotifyInstanceRequest: " << this << " " << __func__
-                   << ": no payload in ack, ignoring" << dendl;
+          dout(5) << "C_NotifyInstanceRequest: " << this << " " << __func__
+                  << ": no payload in ack, ignoring" << dendl;
           continue;
         }
         try {
-          auto iter = bl.begin();
+          auto iter = bl.cbegin();
           NotifyAckPayload ack;
-          ::decode(ack, iter);
+          decode(ack, iter);
           if (ack.instance_id != instance_watcher->get_instance_id()) {
             derr << "C_NotifyInstanceRequest: " << this << " " << __func__
                  << ": ack instance_id (" << ack.instance_id << ") "
@@ -259,12 +259,12 @@ struct InstanceWatcher<I>::C_SyncRequest : public Context {
                 const std::string &sync_id, Context *on_start)
     : instance_watcher(instance_watcher), sync_id(sync_id),
       on_start(on_start) {
-    dout(20) << "C_SyncRequest: " << this << " " << __func__ << ": sync_id="
+    dout(10) << "C_SyncRequest: " << this << " " << __func__ << ": sync_id="
              << sync_id << dendl;
   }
 
   void finish(int r) override {
-    dout(20) << "C_SyncRequest: " << this << " " << __func__ << ": r="
+    dout(10) << "C_SyncRequest: " << this << " " << __func__ << ": r="
              << r << dendl;
 
     if (on_start != nullptr) {
@@ -326,7 +326,7 @@ InstanceWatcher<I>::InstanceWatcher(librados::IoCtx &io_ctx,
     m_lock(unique_lock_name("rbd::mirror::InstanceWatcher::m_lock", this)),
     m_instance_lock(librbd::ManagedLock<I>::create(
       m_ioctx, m_work_queue, m_oid, this, librbd::managed_lock::EXCLUSIVE, true,
-      m_cct->_conf->get_val<int64_t>("rbd_blacklist_expire_seconds"))) {
+      m_cct->_conf.get_val<int64_t>("rbd_blacklist_expire_seconds"))) {
 }
 
 template <typename I>
@@ -348,7 +348,7 @@ int InstanceWatcher<I>::init() {
 
 template <typename I>
 void InstanceWatcher<I>::init(Context *on_finish) {
-  dout(20) << "instance_id=" << m_instance_id << dendl;
+  dout(10) << "instance_id=" << m_instance_id << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -369,7 +369,7 @@ void InstanceWatcher<I>::shut_down() {
 
 template <typename I>
 void InstanceWatcher<I>::shut_down(Context *on_finish) {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -382,14 +382,13 @@ void InstanceWatcher<I>::shut_down(Context *on_finish) {
 
 template <typename I>
 void InstanceWatcher<I>::remove(Context *on_finish) {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
 
   assert(m_on_finish == nullptr);
   m_on_finish = on_finish;
   m_ret_val = 0;
-  m_removing = true;
 
   get_instance_locker();
 }
@@ -398,7 +397,7 @@ template <typename I>
 void InstanceWatcher<I>::notify_image_acquire(
     const std::string &instance_id, const std::string &global_image_id,
     Context *on_notify_ack) {
-  dout(20) << "instance_id=" << instance_id << ", global_image_id="
+  dout(10) << "instance_id=" << instance_id << ", global_image_id="
            << global_image_id << dendl;
 
   Mutex::Locker locker(m_lock);
@@ -410,7 +409,7 @@ void InstanceWatcher<I>::notify_image_acquire(
   } else {
     uint64_t request_id = ++m_request_seq;
     bufferlist bl;
-    ::encode(NotifyMessage{ImageAcquirePayload{request_id, global_image_id}},
+    encode(NotifyMessage{ImageAcquirePayload{request_id, global_image_id}},
              bl);
     auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
                                            std::move(bl), on_notify_ack);
@@ -422,7 +421,7 @@ template <typename I>
 void InstanceWatcher<I>::notify_image_release(
     const std::string &instance_id, const std::string &global_image_id,
     Context *on_notify_ack) {
-  dout(20) << "instance_id=" << instance_id << ", global_image_id="
+  dout(10) << "instance_id=" << instance_id << ", global_image_id="
            << global_image_id << dendl;
 
   Mutex::Locker locker(m_lock);
@@ -434,7 +433,7 @@ void InstanceWatcher<I>::notify_image_release(
   } else {
     uint64_t request_id = ++m_request_seq;
     bufferlist bl;
-    ::encode(NotifyMessage{ImageReleasePayload{request_id, global_image_id}},
+    encode(NotifyMessage{ImageReleasePayload{request_id, global_image_id}},
              bl);
     auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
                                            std::move(bl), on_notify_ack);
@@ -446,7 +445,7 @@ template <typename I>
 void InstanceWatcher<I>::notify_peer_image_removed(
     const std::string &instance_id, const std::string &global_image_id,
     const std::string &peer_mirror_uuid, Context *on_notify_ack) {
-  dout(20) << "instance_id=" << instance_id << ", "
+  dout(10) << "instance_id=" << instance_id << ", "
            << "global_image_id=" << global_image_id << ", "
            << "peer_mirror_uuid=" << peer_mirror_uuid << dendl;
 
@@ -458,7 +457,7 @@ void InstanceWatcher<I>::notify_peer_image_removed(
   } else {
     uint64_t request_id = ++m_request_seq;
     bufferlist bl;
-    ::encode(NotifyMessage{PeerImageRemovedPayload{request_id, global_image_id,
+    encode(NotifyMessage{PeerImageRemovedPayload{request_id, global_image_id,
                                                    peer_mirror_uuid}}, bl);
     auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
                                            std::move(bl), on_notify_ack);
@@ -469,7 +468,7 @@ void InstanceWatcher<I>::notify_peer_image_removed(
 template <typename I>
 void InstanceWatcher<I>::notify_sync_request(const std::string &sync_id,
                                              Context *on_sync_start) {
-  dout(20) << "sync_id=" << sync_id << dendl;
+  dout(10) << "sync_id=" << sync_id << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -478,7 +477,7 @@ void InstanceWatcher<I>::notify_sync_request(const std::string &sync_id,
   uint64_t request_id = ++m_request_seq;
 
   bufferlist bl;
-  ::encode(NotifyMessage{SyncRequestPayload{request_id, sync_id}}, bl);
+  encode(NotifyMessage{SyncRequestPayload{request_id, sync_id}}, bl);
 
   auto sync_ctx = new C_SyncRequest(this, sync_id, on_sync_start);
   sync_ctx->req = new C_NotifyInstanceRequest(this, "", request_id,
@@ -490,7 +489,7 @@ void InstanceWatcher<I>::notify_sync_request(const std::string &sync_id,
 
 template <typename I>
 bool InstanceWatcher<I>::cancel_sync_request(const std::string &sync_id) {
-  dout(20) << "sync_id=" << sync_id << dendl;
+  dout(10) << "sync_id=" << sync_id << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -513,18 +512,18 @@ bool InstanceWatcher<I>::cancel_sync_request(const std::string &sync_id) {
 template <typename I>
 void InstanceWatcher<I>::notify_sync_start(const std::string &instance_id,
                                            const std::string &sync_id) {
-  dout(20) << "sync_id=" << sync_id << dendl;
+  dout(10) << "sync_id=" << sync_id << dendl;
 
   Mutex::Locker locker(m_lock);
 
   uint64_t request_id = ++m_request_seq;
 
   bufferlist bl;
-  ::encode(NotifyMessage{SyncStartPayload{request_id, sync_id}}, bl);
+  encode(NotifyMessage{SyncStartPayload{request_id, sync_id}}, bl);
 
   auto ctx = new FunctionContext(
     [this, sync_id] (int r) {
-      dout(20) << "finish: sync_id=" << sync_id << ", r=" << r << dendl;
+      dout(10) << "finish: sync_id=" << sync_id << ", r=" << r << dendl;
       Mutex::Locker locker(m_lock);
       if (r != -ESTALE && m_image_sync_throttler != nullptr) {
         m_image_sync_throttler->finish_op(sync_id);
@@ -537,9 +536,15 @@ void InstanceWatcher<I>::notify_sync_start(const std::string &instance_id,
 
 template <typename I>
 void InstanceWatcher<I>::notify_sync_complete(const std::string &sync_id) {
-  dout(20) << "sync_id=" << sync_id << dendl;
-
   Mutex::Locker locker(m_lock);
+  notify_sync_complete(m_lock, sync_id);
+}
+
+template <typename I>
+void InstanceWatcher<I>::notify_sync_complete(const Mutex&,
+                                              const std::string &sync_id) {
+  dout(10) << "sync_id=" << sync_id << dendl;
+  assert(m_lock.is_locked());
 
   auto it = m_inflight_sync_reqs.find(sync_id);
   assert(it != m_inflight_sync_reqs.end());
@@ -554,12 +559,11 @@ void InstanceWatcher<I>::notify_sync_complete(const std::string &sync_id) {
 template <typename I>
 void InstanceWatcher<I>::handle_notify_sync_request(C_SyncRequest *sync_ctx,
                                                     int r) {
-  dout(20) << "sync_id=" << sync_ctx->sync_id << ", r=" << r << dendl;
+  dout(10) << "sync_id=" << sync_ctx->sync_id << ", r=" << r << dendl;
 
   Context *on_start = nullptr;
   {
     Mutex::Locker locker(m_lock);
-
     assert(sync_ctx->req != nullptr);
     assert(sync_ctx->on_start != nullptr);
 
@@ -569,19 +573,19 @@ void InstanceWatcher<I>::handle_notify_sync_request(C_SyncRequest *sync_ctx,
 
     std::swap(sync_ctx->on_start, on_start);
     sync_ctx->req = nullptr;
+
+    if (r == -ECANCELED) {
+      notify_sync_complete(m_lock, sync_ctx->sync_id);
+    }
   }
 
   on_start->complete(r == -ECANCELED ? r : 0);
-
-  if (r == -ECANCELED) {
-    notify_sync_complete(sync_ctx->sync_id);
-  }
 }
 
 template <typename I>
 void InstanceWatcher<I>::handle_notify_sync_complete(C_SyncRequest *sync_ctx,
                                                      int r) {
-  dout(20) << "sync_id=" << sync_ctx->sync_id << ", r=" << r << dendl;
+  dout(10) << "sync_id=" << sync_ctx->sync_id << ", r=" << r << dendl;
 
   if (sync_ctx->on_complete != nullptr) {
     sync_ctx->on_complete->complete(r);
@@ -590,7 +594,7 @@ void InstanceWatcher<I>::handle_notify_sync_complete(C_SyncRequest *sync_ctx,
 
 template <typename I>
 void InstanceWatcher<I>::print_sync_status(Formatter *f, stringstream *ss) {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
   if (m_image_sync_throttler != nullptr) {
@@ -600,7 +604,7 @@ void InstanceWatcher<I>::print_sync_status(Formatter *f, stringstream *ss) {
 
 template <typename I>
 void InstanceWatcher<I>::handle_acquire_leader() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -613,7 +617,7 @@ void InstanceWatcher<I>::handle_acquire_leader() {
 
 template <typename I>
 void InstanceWatcher<I>::handle_release_leader() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -629,7 +633,7 @@ void InstanceWatcher<I>::handle_release_leader() {
 template <typename I>
 void InstanceWatcher<I>::handle_update_leader(
   const std::string &leader_instance_id) {
-  dout(20) << "leader_instance_id=" << leader_instance_id << dendl;
+  dout(10) << "leader_instance_id=" << leader_instance_id << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -643,7 +647,7 @@ void InstanceWatcher<I>::handle_update_leader(
 template <typename I>
 void InstanceWatcher<I>::cancel_notify_requests(
     const std::string &instance_id) {
-  dout(20) << "instance_id=" << instance_id << dendl;
+  dout(10) << "instance_id=" << instance_id << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -658,7 +662,7 @@ template <typename I>
 void InstanceWatcher<I>::register_instance() {
   assert(m_lock.is_locked());
 
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_instances_add(&op, m_instance_id);
@@ -672,7 +676,7 @@ void InstanceWatcher<I>::register_instance() {
 
 template <typename I>
 void InstanceWatcher<I>::handle_register_instance(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   Context *on_finish = nullptr;
   {
@@ -693,7 +697,7 @@ void InstanceWatcher<I>::handle_register_instance(int r) {
 
 template <typename I>
 void InstanceWatcher<I>::create_instance_object() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   assert(m_lock.is_locked());
 
@@ -710,7 +714,7 @@ void InstanceWatcher<I>::create_instance_object() {
 
 template <typename I>
 void InstanceWatcher<I>::handle_create_instance_object(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -728,7 +732,7 @@ void InstanceWatcher<I>::handle_create_instance_object(int r) {
 
 template <typename I>
 void InstanceWatcher<I>::register_watch() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   assert(m_lock.is_locked());
 
@@ -741,7 +745,7 @@ void InstanceWatcher<I>::register_watch() {
 
 template <typename I>
 void InstanceWatcher<I>::handle_register_watch(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -759,7 +763,7 @@ void InstanceWatcher<I>::handle_register_watch(int r) {
 
 template <typename I>
 void InstanceWatcher<I>::acquire_lock() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   assert(m_lock.is_locked());
 
@@ -772,7 +776,7 @@ void InstanceWatcher<I>::acquire_lock() {
 
 template <typename I>
 void InstanceWatcher<I>::handle_acquire_lock(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   Context *on_finish = nullptr;
   {
@@ -795,7 +799,7 @@ void InstanceWatcher<I>::handle_acquire_lock(int r) {
 
 template <typename I>
 void InstanceWatcher<I>::release_lock() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   assert(m_lock.is_locked());
 
@@ -808,7 +812,7 @@ void InstanceWatcher<I>::release_lock() {
 
 template <typename I>
 void InstanceWatcher<I>::handle_release_lock(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -821,7 +825,7 @@ void InstanceWatcher<I>::handle_release_lock(int r) {
 
 template <typename I>
 void InstanceWatcher<I>::unregister_watch() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   assert(m_lock.is_locked());
 
@@ -834,7 +838,7 @@ void InstanceWatcher<I>::unregister_watch() {
 
 template <typename I>
 void InstanceWatcher<I>::handle_unregister_watch(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   if (r < 0) {
     derr << "error unregistering instance watcher for " << m_oid << " object: "
@@ -849,7 +853,7 @@ template <typename I>
 void InstanceWatcher<I>::remove_instance_object() {
   assert(m_lock.is_locked());
 
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   librados::ObjectWriteOperation op;
   op.remove();
@@ -864,9 +868,9 @@ void InstanceWatcher<I>::remove_instance_object() {
 
 template <typename I>
 void InstanceWatcher<I>::handle_remove_instance_object(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
-  if (m_removing && r == -ENOENT) {
+  if (r == -ENOENT) {
     r = 0;
   }
 
@@ -881,7 +885,7 @@ void InstanceWatcher<I>::handle_remove_instance_object(int r) {
 
 template <typename I>
 void InstanceWatcher<I>::unregister_instance() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   assert(m_lock.is_locked());
 
@@ -897,7 +901,7 @@ void InstanceWatcher<I>::unregister_instance() {
 
 template <typename I>
 void InstanceWatcher<I>::handle_unregister_instance(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   if (r < 0) {
     derr << "error unregistering instance: " << cpp_strerror(r) << dendl;
@@ -909,7 +913,7 @@ void InstanceWatcher<I>::handle_unregister_instance(int r) {
 
 template <typename I>
 void InstanceWatcher<I>::wait_for_notify_ops() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   assert(m_lock.is_locked());
 
@@ -926,7 +930,7 @@ void InstanceWatcher<I>::wait_for_notify_ops() {
 
 template <typename I>
 void InstanceWatcher<I>::handle_wait_for_notify_ops(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   assert(r == 0);
 
@@ -938,17 +942,13 @@ void InstanceWatcher<I>::handle_wait_for_notify_ops(int r) {
 
     std::swap(on_finish, m_on_finish);
     r = m_ret_val;
-
-    if (m_removing) {
-      m_removing = false;
-    }
   }
   on_finish->complete(r);
 }
 
 template <typename I>
 void InstanceWatcher<I>::get_instance_locker() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   assert(m_lock.is_locked());
 
@@ -961,7 +961,7 @@ void InstanceWatcher<I>::get_instance_locker() {
 
 template <typename I>
 void InstanceWatcher<I>::handle_get_instance_locker(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -978,7 +978,7 @@ void InstanceWatcher<I>::handle_get_instance_locker(int r) {
 
 template <typename I>
 void InstanceWatcher<I>::break_instance_lock() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   assert(m_lock.is_locked());
 
@@ -991,7 +991,7 @@ void InstanceWatcher<I>::break_instance_lock() {
 
 template <typename I>
 void InstanceWatcher<I>::handle_break_instance_lock(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -1008,7 +1008,7 @@ void InstanceWatcher<I>::handle_break_instance_lock(int r) {
 
 template <typename I>
 void InstanceWatcher<I>::suspend_notify_request(C_NotifyInstanceRequest *req) {
-  dout(20) << req << dendl;
+  dout(10) << req << dendl;
 
   assert(m_lock.is_locked());
 
@@ -1019,7 +1019,7 @@ void InstanceWatcher<I>::suspend_notify_request(C_NotifyInstanceRequest *req) {
 template <typename I>
 bool InstanceWatcher<I>::unsuspend_notify_request(
   C_NotifyInstanceRequest *req) {
-  dout(20) << req << dendl;
+  dout(10) << req << dendl;
 
   assert(m_lock.is_locked());
 
@@ -1034,7 +1034,7 @@ bool InstanceWatcher<I>::unsuspend_notify_request(
 
 template <typename I>
 void InstanceWatcher<I>::unsuspend_notify_requests() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   assert(m_lock.is_locked());
 
@@ -1050,7 +1050,7 @@ template <typename I>
 Context *InstanceWatcher<I>::prepare_request(const std::string &instance_id,
                                              uint64_t request_id,
                                              C_NotifyAck *on_notify_ack) {
-  dout(20) << "instance_id=" << instance_id << ", request_id=" << request_id
+  dout(10) << "instance_id=" << instance_id << ", request_id=" << request_id
            << dendl;
 
   Mutex::Locker locker(m_lock);
@@ -1060,7 +1060,7 @@ Context *InstanceWatcher<I>::prepare_request(const std::string &instance_id,
   auto it = m_requests.find(request);
 
   if (it != m_requests.end()) {
-    dout(20) << "duplicate for in-progress request" << dendl;
+    dout(10) << "duplicate for in-progress request" << dendl;
     delete it->on_notify_ack;
     m_requests.erase(it);
   } else {
@@ -1079,7 +1079,7 @@ Context *InstanceWatcher<I>::prepare_request(const std::string &instance_id,
 template <typename I>
 void InstanceWatcher<I>::complete_request(const std::string &instance_id,
                                           uint64_t request_id, int r) {
-  dout(20) << "instance_id=" << instance_id << ", request_id=" << request_id
+  dout(10) << "instance_id=" << instance_id << ", request_id=" << request_id
            << dendl;
 
   C_NotifyAck *on_notify_ack;
@@ -1092,22 +1092,22 @@ void InstanceWatcher<I>::complete_request(const std::string &instance_id,
     m_requests.erase(it);
   }
 
-  ::encode(NotifyAckPayload(instance_id, request_id, r), on_notify_ack->out);
+  encode(NotifyAckPayload(instance_id, request_id, r), on_notify_ack->out);
   on_notify_ack->complete(0);
 }
 
 template <typename I>
 void InstanceWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
                                        uint64_t notifier_id, bufferlist &bl) {
-  dout(20) << "notify_id=" << notify_id << ", handle=" << handle << ", "
+  dout(10) << "notify_id=" << notify_id << ", handle=" << handle << ", "
            << "notifier_id=" << notifier_id << dendl;
 
   auto ctx = new C_NotifyAck(this, notify_id, handle);
 
   NotifyMessage notify_message;
   try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(notify_message, iter);
+    auto iter = bl.cbegin();
+    decode(notify_message, iter);
   } catch (const buffer::error &err) {
     derr << "error decoding image notification: " << err.what() << dendl;
     ctx->complete(0);
@@ -1121,7 +1121,7 @@ void InstanceWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
 template <typename I>
 void InstanceWatcher<I>::handle_image_acquire(
     const std::string &global_image_id, Context *on_finish) {
-  dout(20) << "global_image_id=" << global_image_id << dendl;
+  dout(10) << "global_image_id=" << global_image_id << dendl;
 
   auto ctx = new FunctionContext(
       [this, global_image_id, on_finish] (int r) {
@@ -1136,7 +1136,7 @@ void InstanceWatcher<I>::handle_image_acquire(
 template <typename I>
 void InstanceWatcher<I>::handle_image_release(
     const std::string &global_image_id, Context *on_finish) {
-  dout(20) << "global_image_id=" << global_image_id << dendl;
+  dout(10) << "global_image_id=" << global_image_id << dendl;
 
   auto ctx = new FunctionContext(
       [this, global_image_id, on_finish] (int r) {
@@ -1152,7 +1152,7 @@ template <typename I>
 void InstanceWatcher<I>::handle_peer_image_removed(
     const std::string &global_image_id, const std::string &peer_mirror_uuid,
     Context *on_finish) {
-  dout(20) << "global_image_id=" << global_image_id << ", "
+  dout(10) << "global_image_id=" << global_image_id << ", "
            << "peer_mirror_uuid=" << peer_mirror_uuid << dendl;
 
   auto ctx = new FunctionContext(
@@ -1170,12 +1170,12 @@ template <typename I>
 void InstanceWatcher<I>::handle_sync_request(const std::string &instance_id,
                                              const std::string &sync_id,
                                              Context *on_finish) {
-  dout(20) << "instance_id=" << instance_id << ", sync_id=" << sync_id << dendl;
+  dout(10) << "instance_id=" << instance_id << ", sync_id=" << sync_id << dendl;
 
   Mutex::Locker locker(m_lock);
 
   if (m_image_sync_throttler == nullptr) {
-    dout(20) << "sync request for non-leader" << dendl;
+    dout(10) << "sync request for non-leader" << dendl;
     m_work_queue->queue(on_finish, -ESTALE);
     return;
   }
@@ -1183,7 +1183,7 @@ void InstanceWatcher<I>::handle_sync_request(const std::string &instance_id,
   Context *on_start = create_async_context_callback(
     m_work_queue, new FunctionContext(
       [this, instance_id, sync_id, on_finish] (int r) {
-        dout(20) << "handle_sync_request: finish: instance_id=" << instance_id
+        dout(10) << "handle_sync_request: finish: instance_id=" << instance_id
                  << ", sync_id=" << sync_id << ", r=" << r << dendl;
         if (r == 0) {
           notify_sync_start(instance_id, sync_id);
@@ -1197,13 +1197,13 @@ template <typename I>
 void InstanceWatcher<I>::handle_sync_start(const std::string &instance_id,
                                            const std::string &sync_id,
                                            Context *on_finish) {
-  dout(20) << "instance_id=" << instance_id << ", sync_id=" << sync_id << dendl;
+  dout(10) << "instance_id=" << instance_id << ", sync_id=" << sync_id << dendl;
 
   Mutex::Locker locker(m_lock);
 
   auto it = m_inflight_sync_reqs.find(sync_id);
   if (it == m_inflight_sync_reqs.end()) {
-    dout(20) << "not found" << dendl;
+    dout(5) << "not found" << dendl;
     m_work_queue->queue(on_finish, 0);
     return;
   }
@@ -1211,7 +1211,7 @@ void InstanceWatcher<I>::handle_sync_start(const std::string &instance_id,
   auto sync_ctx = it->second;
 
   if (sync_ctx->on_complete != nullptr) {
-    dout(20) << "duplicate request" << dendl;
+    dout(5) << "duplicate request" << dendl;
     m_work_queue->queue(sync_ctx->on_complete, -ESTALE);
   }
 
@@ -1222,7 +1222,7 @@ template <typename I>
 void InstanceWatcher<I>::handle_payload(const std::string &instance_id,
                                         const ImageAcquirePayload &payload,
                                         C_NotifyAck *on_notify_ack) {
-  dout(20) << "image_acquire: instance_id=" << instance_id << ", "
+  dout(10) << "image_acquire: instance_id=" << instance_id << ", "
            << "request_id=" << payload.request_id << dendl;
 
   auto on_finish = prepare_request(instance_id, payload.request_id,
@@ -1236,7 +1236,7 @@ template <typename I>
 void InstanceWatcher<I>::handle_payload(const std::string &instance_id,
                                         const ImageReleasePayload &payload,
                                         C_NotifyAck *on_notify_ack) {
-  dout(20) << "image_release: instance_id=" << instance_id << ", "
+  dout(10) << "image_release: instance_id=" << instance_id << ", "
            << "request_id=" << payload.request_id << dendl;
 
   auto on_finish = prepare_request(instance_id, payload.request_id,
@@ -1250,7 +1250,7 @@ template <typename I>
 void InstanceWatcher<I>::handle_payload(const std::string &instance_id,
                                         const PeerImageRemovedPayload &payload,
                                         C_NotifyAck *on_notify_ack) {
-  dout(20) << "remove_peer_image: instance_id=" << instance_id << ", "
+  dout(10) << "remove_peer_image: instance_id=" << instance_id << ", "
            << "request_id=" << payload.request_id << dendl;
 
   auto on_finish = prepare_request(instance_id, payload.request_id,
@@ -1265,7 +1265,7 @@ template <typename I>
 void InstanceWatcher<I>::handle_payload(const std::string &instance_id,
                                         const SyncRequestPayload &payload,
                                         C_NotifyAck *on_notify_ack) {
-  dout(20) << "sync_request: instance_id=" << instance_id << ", "
+  dout(10) << "sync_request: instance_id=" << instance_id << ", "
            << "request_id=" << payload.request_id << dendl;
 
   auto on_finish = prepare_request(instance_id, payload.request_id,
@@ -1281,7 +1281,7 @@ template <typename I>
 void InstanceWatcher<I>::handle_payload(const std::string &instance_id,
                                         const SyncStartPayload &payload,
                                         C_NotifyAck *on_notify_ack) {
-  dout(20) << "sync_start: instance_id=" << instance_id << ", "
+  dout(10) << "sync_start: instance_id=" << instance_id << ", "
            << "request_id=" << payload.request_id << dendl;
 
   auto on_finish = prepare_request(instance_id, payload.request_id,
@@ -1297,7 +1297,7 @@ template <typename I>
 void InstanceWatcher<I>::handle_payload(const std::string &instance_id,
                                         const UnknownPayload &payload,
                                         C_NotifyAck *on_notify_ack) {
-  dout(20) << "unknown: instance_id=" << instance_id << dendl;
+  dout(5) << "unknown: instance_id=" << instance_id << dendl;
 
   on_notify_ack->complete(0);
 }

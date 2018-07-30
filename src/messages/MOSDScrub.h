@@ -58,17 +58,18 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(fsid, payload);
-    ::encode(scrub_pgs, payload);
-    ::encode(repair, payload);
-    ::encode(deep, payload);
+    using ceph::encode;
+    encode(fsid, payload);
+    encode(scrub_pgs, payload);
+    encode(repair, payload);
+    encode(deep, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(fsid, p);
-    ::decode(scrub_pgs, p);
-    ::decode(repair, p);
-    ::decode(deep, p);
+    auto p = payload.cbegin();
+    decode(fsid, p);
+    decode(scrub_pgs, p);
+    decode(repair, p);
+    decode(deep, p);
   }
 };
 

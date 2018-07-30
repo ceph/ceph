@@ -9,6 +9,8 @@
 #include "include/stringify.h"
 #include "include/rbd/features.h"
 #include "common/dout.h"
+#include "librbd/ImageCtx.h"
+#include "librbd/Features.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -65,9 +67,10 @@ std::string generate_image_id(librados::IoCtx &ioctx) {
 
 uint64_t get_rbd_default_features(CephContext* cct)
 {
-  auto str_val = cct->_conf->get_val<std::string>("rbd_default_features");
-  return boost::lexical_cast<uint64_t>(str_val);
+  auto value = cct->_conf.get_val<std::string>("rbd_default_features");
+  return librbd::rbd_features_from_string(value, nullptr);
 }
+
 
 bool calc_sparse_extent(const bufferptr &bp,
                         size_t sparse_size,
@@ -98,6 +101,19 @@ bool calc_sparse_extent(const bufferptr &bp,
   }
   return false;
 }
-} // namespace util
 
+bool is_metadata_config_override(const std::string& metadata_key,
+                                 std::string* config_key) {
+  size_t prefix_len = librbd::ImageCtx::METADATA_CONF_PREFIX.size();
+  if (metadata_key.size() > prefix_len &&
+      metadata_key.compare(0, prefix_len,
+                           librbd::ImageCtx::METADATA_CONF_PREFIX) == 0) {
+    *config_key = metadata_key.substr(prefix_len,
+                                      metadata_key.size() - prefix_len);
+    return true;
+  }
+  return false;
+}
+
+} // namespace util
 } // namespace librbd

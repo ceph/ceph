@@ -41,6 +41,7 @@
 #define RBD_SUFFIX	 	".rbd"
 #define RBD_DIRECTORY           "rbd_directory"
 #define RBD_INFO                "rbd_info"
+#define RBD_NAMESPACE           "rbd_namespace"
 
 /*
  * rbd_children object in each pool contains omap entries
@@ -100,6 +101,8 @@
 #define RBD_HEADER_TEXT		"<<< Rados Block Device Image >>>\n"
 #define RBD_HEADER_SIGNATURE	"RBD"
 #define RBD_HEADER_VERSION	"001.005"
+
+#define RBD_GROUP_INVALID_POOL (-1)
 
 #define RBD_GROUP_HEADER_PREFIX "rbd_group_header."
 

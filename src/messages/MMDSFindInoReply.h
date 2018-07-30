@@ -31,13 +31,14 @@ struct MMDSFindInoReply : public Message {
   }
   
   void encode_payload(uint64_t features) override {
-    ::encode(tid, payload);
-    ::encode(path, payload);
+    using ceph::encode;
+    encode(tid, payload);
+    encode(path, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(tid, p);
-    ::decode(path, p);
+    auto p = payload.cbegin();
+    decode(tid, p);
+    decode(path, p);
   }
 };
 

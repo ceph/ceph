@@ -16,7 +16,7 @@
 #ifndef CEPH_DISPATCHER_H
 #define CEPH_DISPATCHER_H
 
-#include "include/assert.h"
+#include <memory>
 #include "include/buffer_fwd.h"
 #include "include/assert.h"
 
@@ -26,6 +26,7 @@ class Connection;
 class AuthAuthorizer;
 class CryptoKey;
 class CephContext;
+class AuthAuthorizerChallenge;
 
 class Dispatcher {
 public:
@@ -204,7 +205,10 @@ public:
 				    ceph::bufferlist& authorizer,
 				    ceph::bufferlist& authorizer_reply,
 				    bool& isvalid,
-				    CryptoKey& session_key) { return false; }
+				    CryptoKey& session_key,
+				    std::unique_ptr<AuthAuthorizerChallenge> *challenge) {
+    return false;
+  }
   /**
    * @} //Authentication
    */

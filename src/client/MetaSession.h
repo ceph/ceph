@@ -6,15 +6,15 @@
 
 #include "include/types.h"
 #include "include/utime.h"
-#include "msg/Message.h"
 #include "include/xlist.h"
+#include "mds/MDSMap.h"
 #include "mds/mdstypes.h"
+#include "messages/MClientCapRelease.h"
 
 struct Cap;
 struct Inode;
 struct CapSnap;
 struct MetaRequest;
-class MClientCapRelease;
 
 struct MetaSession {
   mds_rank_t mds_num;
@@ -23,11 +23,10 @@ struct MetaSession {
   uint64_t cap_gen;
   utime_t cap_ttl, last_cap_renew_request;
   uint64_t cap_renew_seq;
-  int num_caps;
-  entity_inst_t inst;
+  entity_addrvec_t addrs;
 
   enum {
-    STATE_NEW,
+    STATE_NEW, // Unused
     STATE_OPENING,
     STATE_OPEN,
     STATE_CLOSING,
@@ -47,15 +46,14 @@ struct MetaSession {
   std::set<ceph_tid_t> flushing_caps_tids;
   std::set<Inode*> early_flushing_caps;
 
-  MClientCapRelease *release;
-  
-  MetaSession()
-    : mds_num(-1), con(NULL),
-      seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0),
-      state(STATE_NEW), mds_state(0), readonly(false),
-      release(NULL)
+  boost::intrusive_ptr<MClientCapRelease> release;
+
+  MetaSession(mds_rank_t mds_num, ConnectionRef con,
+	      const entity_addrvec_t& addrs)
+    : mds_num(mds_num), con(con),
+      seq(0), cap_gen(0), cap_renew_seq(0), addrs(addrs),
+      state(STATE_OPENING), mds_state(MDSMap::STATE_NULL), readonly(false)
   {}
-  ~MetaSession();
 
   const char *get_state_name() const;
 

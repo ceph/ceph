@@ -80,7 +80,7 @@ public:
   int init_messenger() {
     dout(1) << __func__ << dendl;
 
-    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
+    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf.get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
     msg = Messenger::create(cct, public_msgr_type, entity_name_t::CLIENT(-1),
                             "test-mon-msg", 0, 0);
     assert(msg != NULL);
@@ -219,7 +219,7 @@ class MonMsgTest : public MonClientHelper,
                    public ::testing::Test
 {
 protected:
-  int reply_type;
+  int reply_type = 0;
   Message *reply_msg = nullptr;
   Mutex lock;
   Cond cond;
@@ -301,7 +301,6 @@ TEST_F(MonMsgTest, MRouteTest)
   Message *payload = new MGenericMessage(CEPH_MSG_SHUTDOWN);
   MRoute *m = new MRoute;
   m->msg = payload;
-  m->dest = msg->get_myinst();
   Message *r = send_wait_reply(m, CEPH_MSG_SHUTDOWN);
   // we want an error
   ASSERT_NE(IS_ERR(r), 0);
@@ -330,9 +329,9 @@ int main(int argc, char *argv[])
 
   auto cct = global_init(nullptr, args,
 			 CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-			 0);
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
   ::testing::InitGoogleTest(&argc, argv);
 
   return RUN_ALL_TESTS();

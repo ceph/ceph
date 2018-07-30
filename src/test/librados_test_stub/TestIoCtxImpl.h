@@ -61,6 +61,14 @@ public:
   virtual int64_t get_id();
   virtual uint64_t get_last_version();
   virtual std::string get_pool_name();
+
+  inline void set_namespace(const std::string& namespace_name) {
+    m_namespace_name = namespace_name;
+  }
+  inline std::string get_namespace() const {
+    return m_namespace_name;
+  }
+
   snap_t get_snap_read() const {
     return m_snap_seq;
   }
@@ -135,7 +143,8 @@ public:
                                              std::vector<snap_t>& snaps);
   virtual int set_alloc_hint(const std::string& oid,
                              uint64_t expected_object_size,
-                             uint64_t expected_write_size);
+                             uint64_t expected_write_size,
+                             const SnapContext &snapc);
   virtual void set_snap_read(snap_t seq);
   virtual int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
                           std::map<uint64_t,uint64_t> *m,
@@ -185,9 +194,11 @@ private:
   };
 
   TestRadosClient *m_client;
-  int64_t m_pool_id;
+  int64_t m_pool_id = 0;
   std::string m_pool_name;
-  snap_t m_snap_seq;
+  std::string m_namespace_name;
+
+  snap_t m_snap_seq = 0;
   SnapContext m_snapc;
   std::atomic<uint64_t> m_refcount = { 0 };
   std::atomic<uint64_t> m_pending_ops = { 0 };

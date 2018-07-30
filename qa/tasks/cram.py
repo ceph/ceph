@@ -144,6 +144,7 @@ def _run_tests(ctx, role):
         args=[
             run.Raw('CEPH_REF={ref}'.format(ref=ceph_ref)),
             run.Raw('CEPH_ID="{id}"'.format(id=id_)),
+            run.Raw('PATH=$PATH:/usr/sbin'),
             'adjust-ulimits',
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),

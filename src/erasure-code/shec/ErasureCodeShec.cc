@@ -66,7 +66,7 @@ unsigned int ErasureCodeShec::get_chunk_size(unsigned int object_size) const
   return padded_length / k;
 }
 
-int ErasureCodeShec::minimum_to_decode(const set<int> &want_to_read,
+int ErasureCodeShec::_minimum_to_decode(const set<int> &want_to_read,
 				       const set<int> &available_chunks,
 				       set<int> *minimum_chunks)
 {
@@ -131,7 +131,7 @@ int ErasureCodeShec::minimum_to_decode_with_cost(const set<int> &want_to_read,
        ++i)
     available_chunks.insert(i->first);
 
-  return minimum_to_decode(want_to_read, available_chunks, minimum_chunks);
+  return _minimum_to_decode(want_to_read, available_chunks, minimum_chunks);
 }
 
 int ErasureCodeShec::encode(const set<int> &want_to_encode,
@@ -168,7 +168,7 @@ int ErasureCodeShec::encode_chunks(const set<int> &want_to_encode,
   return 0;
 }
 
-int ErasureCodeShec::decode(const set<int> &want_to_read,
+int ErasureCodeShec::_decode(const set<int> &want_to_read,
 			    const map<int, bufferlist> &chunks,
 			    map<int, bufferlist> *decoded)
 {
@@ -198,8 +198,11 @@ int ErasureCodeShec::decode(const set<int> &want_to_read,
   unsigned blocksize = (*chunks.begin()).second.length();
   for (unsigned int i =  0; i < k + m; i++) {
     if (chunks.find(i) == chunks.end()) {
+      bufferlist tmp;
       bufferptr ptr(buffer::create_aligned(blocksize, SIMD_ALIGN));
-      (*decoded)[i].push_front(ptr);
+      tmp.push_back(ptr);
+      tmp.claim_append((*decoded)[i]);
+      (*decoded)[i].swap(tmp);
     } else {
       (*decoded)[i] = chunks.find(i)->second;
       (*decoded)[i].rebuild_aligned(SIMD_ALIGN);

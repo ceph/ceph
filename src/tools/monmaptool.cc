@@ -20,7 +20,6 @@
 #include "include/str_list.h"
 #include "mon/MonMap.h"
 
-using namespace std;
 
 void usage()
 {
@@ -158,7 +157,7 @@ bool handle_features(list<feature_op_t>& lst, MonMap &m)
         target.unset_feature(f.feature);
       }
     } else {
-      cerr << "unknow feature operation type '" << f.op << "'" << std::endl; 
+      cerr << "unknown feature operation type '" << f.op << "'" << std::endl;
     }
   }
   return modified;
@@ -168,6 +167,14 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   const char *me = argv[0];
 
@@ -191,8 +198,6 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
-      usage();
     } else if (ceph_argparse_flag(args, i, "-p", "--print", (char*)NULL)) {
       print = true;
     } else if (ceph_argparse_flag(args, i, "--create", (char*)NULL)) {
@@ -214,7 +219,7 @@ int main(int argc, const char **argv)
 	return -1;
       }
       if (addr.get_port() == 0)
-	addr.set_port(CEPH_MON_PORT);
+	addr.set_port(CEPH_MON_PORT_LEGACY);
       add[name] = addr;
       modified = true;
       i = args.erase(i);
@@ -310,7 +315,7 @@ int main(int argc, const char **argv)
     monmap.created = ceph_clock_now();
     monmap.last_changed = monmap.created;
     srand(getpid() + time(0));
-    if (g_conf->get_val<uuid_d>("fsid").is_zero()) {
+    if (g_conf().get_val<uuid_d>("fsid").is_zero()) {
       monmap.generate_fsid();
       cout << me << ": generated fsid " << monmap.fsid << std::endl;
     }
@@ -326,7 +331,7 @@ int main(int argc, const char **argv)
   if (filter) {
     // apply initial members
     list<string> initial_members;
-    get_str_list(g_conf->mon_initial_members, initial_members);
+    get_str_list(g_conf()->mon_initial_members, initial_members);
     if (!initial_members.empty()) {
       cout << "initial_members " << initial_members << ", filtering seed monmap" << std::endl;
       set<entity_addr_t> removed;
@@ -338,8 +343,8 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
-  if (!g_conf->get_val<uuid_d>("fsid").is_zero()) {
-    monmap.fsid = g_conf->get_val<uuid_d>("fsid");
+  if (!g_conf().get_val<uuid_d>("fsid").is_zero()) {
+    monmap.fsid = g_conf().get_val<uuid_d>("fsid");
     cout << me << ": set fsid to " << monmap.fsid << std::endl;
     modified = true;
   }

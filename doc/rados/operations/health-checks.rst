@@ -21,6 +21,38 @@ that are defined by ceph-mgr python modules.
 Definitions
 ===========
 
+Manager
+-------
+
+MGR_MODULE_DEPENDENCY
+_____________________
+
+An enabled manager module is failing its dependency check.  This health check
+should come with an explanatory message from the module about the problem.
+
+For example, a module might report that a required package is not installed:
+install the required package and restart your manager daemons.
+
+This health check is only applied to enabled modules.  If a module is
+not enabled, you can see whether it is reporting dependency issues in
+the output of `ceph module ls`.
+
+
+MGR_MODULE_ERROR
+________________
+
+A manager module has experienced an unexpected error.  Typically,
+this means an unhandled exception was raised from the module's `serve`
+function.  The human readable description of the error may be obscurely
+worded if the exception did not provide a useful description of itself.
+
+This health check may indicate a bug: please open a Ceph bug report if you
+think you have encountered a bug.
+
+If you believe the error is transient, you may restart your manager
+daemon(s), or use `ceph mgr fail` on the active daemon to prompt
+a failover to another daemon.
+
 
 OSDs
 ----
@@ -463,8 +495,8 @@ If the latest copy of the object is not available, the cluster can be
 told to roll back to a previous version of the object. See
 :ref:`failures-osd-unfound` for more information.
 
-REQUEST_SLOW
-____________
+SLOW_OPS
+________
 
 One or more OSD requests is taking a long time to process.  This can
 be an indication of extreme load, a slow storage device, or a software
@@ -482,15 +514,6 @@ A summary of the slowest recent requests can be seen with::
 The location of an OSD can be found with::
 
   ceph osd find osd.<id>
-
-REQUEST_STUCK
-_____________
-
-One or more OSD requests has been blocked for an extremely long time.
-This is an indication that either the cluster has been unhealthy for
-an extended period of time (e.g., not enough running OSDs) or there is
-some internal problem with the OSD.  See the dicussion of
-*REQUEST_SLOW* above.
 
 PG_NOT_SCRUBBED
 _______________

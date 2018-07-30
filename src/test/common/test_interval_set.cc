@@ -15,8 +15,9 @@
  */
 
 #include <gtest/gtest.h>
+#include <boost/container/flat_map.hpp>
 #include "include/interval_set.h"
-#include "include/btree_interval_set.h"
+#include "include/btree_map.h"
 
 using namespace ceph;
 
@@ -29,7 +30,13 @@ class IntervalSetTest : public ::testing::Test {
   typedef T ISet;
 };
 
-typedef ::testing::Types< interval_set<IntervalValueType> ,  btree_interval_set<IntervalValueType> > IntervalSetTypes;
+typedef ::testing::Types<
+  interval_set<IntervalValueType>,
+  interval_set<IntervalValueType,
+	       btree::btree_map<IntervalValueType,IntervalValueType>>,
+  interval_set<IntervalValueType,
+	       boost::container::flat_map<IntervalValueType,IntervalValueType>>
+  > IntervalSetTypes;
 
 TYPED_TEST_CASE(IntervalSetTest, IntervalSetTypes);
 
@@ -525,6 +532,37 @@ TYPED_TEST(IntervalSetTest, subset_of) {
   ASSERT_TRUE(iset1.subset_of(iset2));
 
   iset1.insert( 24, 1);
+  ASSERT_FALSE(iset1.subset_of(iset2));
+
+  iset2.insert( 24, 1);
+  ASSERT_TRUE(iset1.subset_of(iset2));
+
+  iset1.insert( 30, 5);
+  ASSERT_FALSE(iset1.subset_of(iset2));
+
+  iset2.insert( 30, 5);
+  ASSERT_TRUE(iset1.subset_of(iset2));
+
+  iset2.erase( 30, 1);
+  ASSERT_FALSE(iset1.subset_of(iset2));
+
+  iset1.erase( 30, 1);
+  ASSERT_TRUE(iset1.subset_of(iset2));
+
+  iset2.erase( 34, 1);
+  ASSERT_FALSE(iset1.subset_of(iset2));
+
+  iset1.erase( 34, 1);
+  ASSERT_TRUE(iset1.subset_of(iset2));
+
+  iset1.insert( 40, 5);
+  ASSERT_FALSE(iset1.subset_of(iset2));
+
+  iset2.insert( 39, 7);
+  ASSERT_TRUE(iset1.subset_of(iset2));
+
+  iset1.insert( 50, 5);
+  iset2.insert( 55, 2);
   ASSERT_FALSE(iset1.subset_of(iset2));
 }
 

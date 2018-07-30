@@ -21,7 +21,7 @@ void register_test_leader_watcher() {
 
 class TestLeaderWatcher : public ::rbd::mirror::TestFixture {
 public:
-  class Listener : public rbd::mirror::LeaderWatcher<>::Listener {
+  class Listener : public rbd::mirror::leader_watcher::Listener {
   public:
     Listener()
       : m_test_lock(unique_lock_name("LeaderWatcher::m_test_lock", this)) {
@@ -72,6 +72,11 @@ public:
     }
 
     void update_leader_handler(const std::string &leader_instance_id) override {
+    }
+
+    void handle_instances_added(const InstanceIds& instance_ids) override {
+    }
+    void handle_instances_removed(const InstanceIds& instance_ids) override {
     }
 
   private:

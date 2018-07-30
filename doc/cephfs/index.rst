@@ -1,8 +1,10 @@
+.. _ceph-filesystem:
+
 =================
  Ceph Filesystem
 =================
 
-The :term:`Ceph Filesystem` (Ceph FS) is a POSIX-compliant filesystem that uses
+The Ceph Filesystem (CephFS) is a POSIX-compliant filesystem that uses
 a Ceph Storage Cluster to store its data. The Ceph filesystem uses the same Ceph
 Storage Cluster system as Ceph Block Devices, Ceph Object Storage with its S3
 and Swift APIs, or native bindings (librados).
@@ -48,7 +50,8 @@ least one :term:`Ceph Metadata Server` running.
 .. toctree:: 
 	:maxdepth: 1
 
-	Add/Remove MDS(s) <../../rados/deployment/ceph-deploy-mds>
+	Add/Remove MDS(s) <add-remove-mds>
+	MDS states <mds-states>
 	MDS failover and standby configuration <standby>
 	MDS Configuration Settings <mds-config-ref>
 	Client Configuration Settings <client-config-ref>
@@ -61,7 +64,7 @@ least one :term:`Ceph Metadata Server` running.
 
 Once you have a healthy Ceph Storage Cluster with at least
 one Ceph Metadata Server, you may create and mount your Ceph Filesystem.
-Ensure that you client has network connectivity and the proper
+Ensure that your client has network connectivity and the proper
 authentication keyring.
 
 .. toctree:: 
@@ -73,6 +76,7 @@ authentication keyring.
 	Mount CephFS in fstab <fstab>
 	Manpage ceph-fuse <../../man/8/ceph-fuse>
 	Manpage mount.ceph <../../man/8/mount.ceph>
+	Manpage mount.fuse.ceph <../../man/8/mount.fuse.ceph>
 
 
 .. raw:: html 
@@ -83,7 +87,9 @@ authentication keyring.
     :maxdepth: 1
 
     Deployment best practices <best-practices>
+    MDS States <mds-states>
     Administrative commands <administration>
+    Understanding MDS Cache Size Limits <cache-size-limits>
     POSIX compatibility <posix>
     Experimental Features <experimental-features>
     CephFS Quotas <quota>
@@ -99,6 +105,12 @@ authentication keyring.
     Upgrading old filesystems <upgrading>
     Configuring directory fragmentation <dirfrags>
     Configuring multiple active MDS daemons <multimds>
+    Export over NFS <nfs>
+
+.. toctree:: 
+   :hidden:
+
+    Advanced: Metadata repair <disaster-recovery-experts>
 
 .. raw:: html
 

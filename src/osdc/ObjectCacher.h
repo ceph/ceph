@@ -341,6 +341,7 @@ class ObjectCacher {
     // mid-level
     BufferHead *split(BufferHead *bh, loff_t off);
     void merge_left(BufferHead *left, BufferHead *right);
+    bool can_merge_bh(BufferHead *left, BufferHead *right);
     void try_merge_bh(BufferHead *bh);
 
     bool is_cached(loff_t off, loff_t len) const;
@@ -354,7 +355,7 @@ class ObjectCacher {
 
     void replace_journal_tid(BufferHead *bh, ceph_tid_t tid);
     void truncate(loff_t s);
-    void discard(loff_t off, loff_t len);
+    void discard(loff_t off, loff_t len, C_GatherBuilder* commit_gather);
 
     // reference counting
     int get() {
@@ -461,6 +462,8 @@ class ObjectCacher {
   loff_t stat_error;
   loff_t stat_dirty_waiting;   // bytes that writers are waiting on to write
 
+  size_t stat_nr_dirty_waiters;
+
   void verify_stats() const;
 
   void bh_stat_add(BufferHead *bh);
@@ -468,9 +471,10 @@ class ObjectCacher {
   loff_t get_stat_tx() const { return stat_tx; }
   loff_t get_stat_rx() const { return stat_rx; }
   loff_t get_stat_dirty() const { return stat_dirty; }
-  loff_t get_stat_dirty_waiting() const { return stat_dirty_waiting; }
   loff_t get_stat_clean() const { return stat_clean; }
   loff_t get_stat_zero() const { return stat_zero; }
+  loff_t get_stat_dirty_waiting() const { return stat_dirty_waiting; }
+  size_t get_stat_nr_dirty_waiters() const { return stat_nr_dirty_waiters; }
 
   void touch_bh(BufferHead *bh) {
     if (bh->is_dirty())
@@ -616,6 +620,10 @@ private:
   void maybe_wait_for_writeback(uint64_t len, ZTracer::Trace *trace);
   bool _flush_set_finish(C_GatherBuilder *gather, Context *onfinish);
 
+  void _discard(ObjectSet *oset, const vector<ObjectExtent>& exls,
+                C_GatherBuilder* gather);
+  void _discard_finish(ObjectSet *oset, bool was_dirty, Context* on_finish);
+
 public:
   bool set_is_empty(ObjectSet *oset);
   bool set_is_cached(ObjectSet *oset);
@@ -633,6 +641,8 @@ public:
   uint64_t release_all();
 
   void discard_set(ObjectSet *oset, const vector<ObjectExtent>& ex);
+  void discard_writeback(ObjectSet *oset, const vector<ObjectExtent>& ex,
+                         Context* on_finish);
 
   /**
    * Retry any in-flight reads that get -ENOENT instead of marking

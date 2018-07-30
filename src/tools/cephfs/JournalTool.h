@@ -37,6 +37,8 @@ class JournalTool : public MDSUtility
     // Bit hacky, use this `rank` member to control behaviour of the
     // various main_ functions.
     mds_rank_t rank;
+   
+    std::string type;
 
     // Entry points
     int main_journal(std::vector<const char*> &argv);
@@ -48,7 +50,7 @@ class JournalTool : public MDSUtility
 
     // Journal operations
     int journal_inspect();
-    int journal_export(std::string const &path, bool import);
+    int journal_export(std::string const &path, bool import, bool force);
     int journal_reset(bool hard);
 
     // Header operations
@@ -78,8 +80,10 @@ class JournalTool : public MDSUtility
         bufferlist *out_bl);
     int consume_inos(const std::set<inodeno_t> &inos);
 
+    //validate type
+    int validate_type(const std::string &type);
   public:
-    void usage();
+    static void usage();
     JournalTool() :
       rank(0), other_pool(false) {}
     int main(std::vector<const char*> &argv);

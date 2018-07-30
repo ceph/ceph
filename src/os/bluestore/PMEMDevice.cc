@@ -18,9 +18,9 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <libpmem.h>
 
 #include "PMEMDevice.h"
+#include "libpmem.h"
 #include "include/types.h"
 #include "include/compat.h"
 #include "include/stringify.h"
@@ -82,21 +82,11 @@ int PMEMDevice::open(const string& p)
     derr << __func__ << " fstat got " << cpp_strerror(r) << dendl;
     goto out_fail;
   }
-  if (S_ISBLK(st.st_mode)) {
-    int64_t s;
-    r = get_block_device_size(fd, &s);
-    if (r < 0) {
-      goto out_fail;
-    }
-    size = s;
-  } else {
-    size = st.st_size;
-  }
 
   size_t map_len;
-  addr = (char *)pmem_map_file(path.c_str(), size, PMEM_FILE_EXCL, O_RDWR, &map_len, NULL);
+  addr = (char *)pmem_map_file(path.c_str(), 0, PMEM_FILE_EXCL, O_RDWR, &map_len, NULL);
   if (addr == NULL) {
-    derr << __func__ << " pmem_map_file error" << dendl;
+    derr << __func__ << " pmem_map_file failed: " << pmem_errormsg() << dendl;
     goto out_fail;
   }
   size = map_len;
@@ -105,7 +95,7 @@ int PMEMDevice::open(const string& p)
   // blksize doesn't strictly matter except that some file systems may
   // require a read/modify/write if we write something smaller than
   // it.
-  block_size = g_conf->bdev_block_size;
+  block_size = g_conf()->bdev_block_size;
   if (block_size != (unsigned)st.st_blksize) {
     dout(1) << __func__ << " backing device/file reports st_blksize "
       << st.st_blksize << ", using bdev_block_size "
@@ -114,9 +104,9 @@ int PMEMDevice::open(const string& p)
 
   dout(1) << __func__
     << " size " << size
-    << " (" << pretty_si_t(size) << "B)"
+    << " (" << byte_u_t(size) << ")"
     << " block_size " << block_size
-    << " (" << pretty_si_t(block_size) << "B)"
+    << " (" << byte_u_t(block_size) << ")"
     << dendl;
   return 0;
 
@@ -210,6 +200,12 @@ int PMEMDevice::flush()
 
 void PMEMDevice::aio_submit(IOContext *ioc)
 {
+  if (ioc->priv) {
+    assert(ioc->num_running == 0);
+    aio_callback(aio_callback_priv, ioc->priv);
+  } else {
+    ioc->try_aio_wake();
+  }
   return;
 }
 
@@ -223,8 +219,8 @@ int PMEMDevice::write(uint64_t off, bufferlist& bl, bool buffered)
   bl.hexdump(*_dout);
   *_dout << dendl;
 
-  if (g_conf->bdev_inject_crash &&
-      rand() % g_conf->bdev_inject_crash == 0) {
+  if (g_conf()->bdev_inject_crash &&
+      rand() % g_conf()->bdev_inject_crash == 0) {
     derr << __func__ << " bdev_inject_crash: dropping io " << off << "~" << len
       << dendl;
     ++injecting_crash;
@@ -240,7 +236,6 @@ int PMEMDevice::write(uint64_t off, bufferlist& bl, bool buffered)
     len -= l;
     off1 += l;
   }
-
   return 0;
 }
 

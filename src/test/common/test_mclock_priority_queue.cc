@@ -25,7 +25,7 @@ struct Request {
     value(0)
   {}
   Request(const Request& o) = default;
-  Request(int value) :
+  explicit Request(int value) :
     value(value)
   {}
 };
@@ -48,10 +48,10 @@ struct Client {
 };
 
 
-crimson::dmclock::ClientInfo client_info_func(const Client& c) {
+const crimson::dmclock::ClientInfo* client_info_func(const Client& c) {
   static const crimson::dmclock::ClientInfo
     the_info(10.0, 10.0, 10.0);
-  return the_info;
+  return &the_info;
 }
 
 
@@ -200,9 +200,9 @@ TEST(mClockPriorityQueue, EnqueuFront)
   for (uint i = 0; i < 4; ++i) {
     Request& r = reqs.front();
     if (r.value > 5) {
-      q.enqueue_strict_front(r.value == 6 ? c2 : 1, r.value, r);
+      q.enqueue_strict_front(r.value == 6 ? c2 : 1, r.value, std::move(r));
     } else {
-      q.enqueue_front(r.value <= 2 ? c1 : c2, r.value, 0, r);
+      q.enqueue_front(r.value <= 2 ? c1 : c2, r.value, 0, std::move(r));
     }
     reqs.pop_front();
   }

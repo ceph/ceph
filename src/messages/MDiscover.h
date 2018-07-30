@@ -70,21 +70,22 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(base_ino, p);
-    ::decode(base_dir_frag, p);
-    ::decode(snapid, p);
-    ::decode(want, p);
-    ::decode(want_base_dir, p);
-    ::decode(want_xlocked, p);
+    auto p = payload.cbegin();
+    decode(base_ino, p);
+    decode(base_dir_frag, p);
+    decode(snapid, p);
+    decode(want, p);
+    decode(want_base_dir, p);
+    decode(want_xlocked, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(base_ino, payload);
-    ::encode(base_dir_frag, payload);
-    ::encode(snapid, payload);
-    ::encode(want, payload);
-    ::encode(want_base_dir, payload);
-    ::encode(want_xlocked, payload);
+    using ceph::encode;
+    encode(base_ino, payload);
+    encode(base_dir_frag, payload);
+    encode(snapid, payload);
+    encode(want, payload);
+    encode(want_base_dir, payload);
+    encode(want_xlocked, payload);
   }
 
 };

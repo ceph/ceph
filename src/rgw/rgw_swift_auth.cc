@@ -14,7 +14,7 @@
 #include "common/ceph_crypto.h"
 #include "common/Clock.h"
 
-#include "auth/Crypto.h"
+#include "include/random.h"
 
 #include "rgw_client_io.h"
 #include "rgw_http_client.h"
@@ -289,7 +289,7 @@ TempURLEngine::authenticate(const req_state* const s) const
    * of Swift API entry point removed. */
 
   /* XXX can we search this ONCE? */
-  const size_t pos = g_conf->rgw_swift_url_prefix.find_last_not_of('/') + 1;
+  const size_t pos = g_conf()->rgw_swift_url_prefix.find_last_not_of('/') + 1;
   const boost::string_view ref_uri = s->decoded_uri;
   const std::array<boost::string_view, 2> allowed_paths = {
     ref_uri,
@@ -355,7 +355,7 @@ bool ExternalTokenEngine::is_applicable(const std::string& token) const noexcept
 {
   if (token.empty()) {
     return false;
-  } else if (g_conf->rgw_swift_auth_url.empty()) {
+  } else if (g_conf()->rgw_swift_auth_url.empty()) {
     return false;
   } else {
     return true;
@@ -370,7 +370,7 @@ ExternalTokenEngine::authenticate(const std::string& token,
     return result_t::deny();
   }
 
-  std::string auth_url = g_conf->rgw_swift_auth_url;
+  std::string auth_url = g_conf()->rgw_swift_auth_url;
   if (auth_url.back() != '/') {
     auth_url.append("/");
   }
@@ -379,11 +379,11 @@ ExternalTokenEngine::authenticate(const std::string& token,
   char url_buf[auth_url.size() + 1 + token.length() + 1];
   sprintf(url_buf, "%s/%s", auth_url.c_str(), token.c_str());
 
-  RGWHTTPHeadersCollector validator(cct, { "X-Auth-Groups", "X-Auth-Ttl" });
+  RGWHTTPHeadersCollector validator(cct, "GET", url_buf, { "X-Auth-Groups", "X-Auth-Ttl" });
 
   ldout(cct, 10) << "rgw_swift_validate_token url=" << url_buf << dendl;
 
-  int ret = validator.process(url_buf);
+  int ret = validator.process();
   if (ret < 0) {
     throw ret;
   }
@@ -399,7 +399,7 @@ ExternalTokenEngine::authenticate(const std::string& token,
     } else {
       swift_user = std::move(swift_groups[0]);
     }
-  } catch (std::out_of_range) {
+  } catch (const std::out_of_range&) {
     /* The X-Auth-Groups header isn't present in the response. */
     return result_t::deny(-EPERM);
   }
@@ -428,9 +428,10 @@ static int build_token(const string& swift_user,
                        const utime_t& expiration,
                        bufferlist& bl)
 {
-  ::encode(swift_user, bl);
-  ::encode(nonce, bl);
-  ::encode(expiration, bl);
+  using ceph::encode;
+  encode(swift_user, bl);
+  encode(nonce, bl);
+  encode(expiration, bl);
 
   bufferptr p(CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
 
@@ -455,11 +456,7 @@ static int build_token(const string& swift_user,
 static int encode_token(CephContext *cct, string& swift_user, string& key,
 			bufferlist& bl)
 {
-  uint64_t nonce;
-
-  int ret = get_random_bytes((char *)&nonce, sizeof(nonce));
-  if (ret < 0)
-    return ret;
+  const auto nonce = ceph::util::generate_random_number<uint64_t>();
 
   utime_t expiration = ceph_clock_now();
   expiration += cct->_conf->rgw_swift_token_expiration;
@@ -510,11 +507,12 @@ SignedTokenEngine::authenticate(const std::string& token,
   std::string swift_user;
 
   try {
-    /*const*/ auto iter = tok_bl.begin();
+    auto iter = tok_bl.cbegin();
 
-    ::decode(swift_user, iter);
-    ::decode(nonce, iter);
-    ::decode(expiration, iter);
+    using ceph::decode;
+    decode(swift_user, iter);
+    decode(nonce, iter);
+    decode(expiration, iter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "NOTICE: failed to decode token" << dendl;
     throw -EINVAL;
@@ -593,8 +591,8 @@ void RGW_SWIFT_Auth_Get::execute()
   RGWAccessKey *swift_key;
   map<string, RGWAccessKey>::iterator siter;
 
-  string swift_url = g_conf->rgw_swift_url;
-  string swift_prefix = g_conf->rgw_swift_url_prefix;
+  string swift_url = g_conf()->rgw_swift_url;
+  string swift_prefix = g_conf()->rgw_swift_url_prefix;
   string tenant_path;
 
   /*
@@ -664,10 +662,10 @@ void RGW_SWIFT_Auth_Get::execute()
     goto done;
   }
 
-  if (!g_conf->rgw_swift_tenant_name.empty()) {
+  if (!g_conf()->rgw_swift_tenant_name.empty()) {
     tenant_path = "/AUTH_";
-    tenant_path.append(g_conf->rgw_swift_tenant_name);
-  } else if (g_conf->rgw_swift_account_in_url) {
+    tenant_path.append(g_conf()->rgw_swift_tenant_name);
+  } else if (g_conf()->rgw_swift_account_in_url) {
     tenant_path = "/AUTH_";
     tenant_path.append(info.user_id.to_str());
   }

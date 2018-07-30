@@ -38,7 +38,6 @@
 
 #include "capture.h"
 #include "IP.h"
-#include "shared_ptr.h"
 #include "toeplitz.h"
 
 #include "common/dout.h"
@@ -63,7 +62,7 @@ class C_handle_frag_timeout : public EventCallback {
 
  public:
   C_handle_frag_timeout(ipv4 *i): _ipv4(i) {}
-  void do_request(int fd_or_id) {
+  void do_request(uint64_t fd_or_id) {
     _ipv4->frag_timeout();
   }
 };

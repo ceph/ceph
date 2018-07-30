@@ -30,8 +30,8 @@ You must also have a ``github`` account. If you do not have a
 Follow the directions for setting up git at 
 `Set Up Git`_.
 
-.. _github.com: http://github.com
-.. _Set Up Git: http://help.github.com/linux-set-up-git
+.. _github.com: https://github.com
+.. _Set Up Git: https://help.github.com/linux-set-up-git
 
 
 Add SSH Keys (Optional)

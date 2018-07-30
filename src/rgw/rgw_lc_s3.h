@@ -9,6 +9,7 @@
 #include "include/str_list.h"
 #include "rgw_lc.h"
 #include "rgw_xml.h"
+#include "rgw_tag_s3.h"
 
 class LCID_S3 : public XMLObj
 {
@@ -33,16 +34,41 @@ class LCFilter_S3 : public LCFilter, public XMLObj
   string& to_str() { return data; }
   void to_xml(ostream& out){
     out << "<Filter>";
-      if (!prefix.empty())
-        out << "<Prefix>" << prefix << "</Prefix>";
+    stringstream ss;
+    if (has_prefix())
+      out << "<Prefix>" << prefix << "</Prefix>";
+    if (has_tags()){
+      for (const auto&kv : obj_tags.get_tags()){
+        ss << "<Tag>";
+        ss << "<Key>" << kv.first << "</Key>";
+        ss << "<Value>" << kv.second << "</Value>";
+        ss << "</Tag>";
+      }
+    }
+
+    if (has_multi_condition()) {
+      out << "<And>" << ss.str() << "</And>";
+    } else {
+      out << ss.str();
+    }
+
     out << "</Filter>";
   }
   void dump_xml(Formatter *f) const {
     f->open_object_section("Filter");
+    if (has_multi_condition())
+      f->open_object_section("And");
     if (!prefix.empty())
       encode_xml("Prefix", prefix, f);
+    if (has_tags()){
+      const auto& tagset_s3 = static_cast<const RGWObjTagSet_S3 &>(obj_tags);
+      tagset_s3.dump_xml(f);
+    }
+    if (has_multi_condition())
+      f->close_section(); // And;
     f->close_section(); // Filter
   }
+  bool xml_end(const char *el) override;
 };
 
 class LCStatus_S3 : public XMLObj
@@ -146,7 +172,7 @@ public:
   LCMPExpiration_S3() {}
   ~LCMPExpiration_S3() {}
 
-  bool xml_end(const char *el);
+  bool xml_end(const char *el) override;
   void to_xml(ostream& out) {
     out << "<AbortIncompleteMultipartUpload>" << "<DaysAfterInitiation>" << days << "</DaysAfterInitiation>" << "</AbortIncompleteMultipartUpload>";
   }
@@ -159,11 +185,14 @@ public:
 
 class LCRule_S3 : public LCRule, public XMLObj
 {
+private:
+  CephContext *cct;
 public:
-  LCRule_S3() {}
+  LCRule_S3(): cct(nullptr) {}
+  explicit LCRule_S3(CephContext *_cct): cct(_cct) {}
   ~LCRule_S3() override {}
 
-  void to_xml(CephContext *cct, ostream& out);
+  void to_xml(ostream& out);
   bool xml_end(const char *el) override;
   bool xml_start(const char *el, const char **attr);
   void dump_xml(Formatter *f) const {
@@ -192,6 +221,10 @@ public:
 
     f->close_section(); // Rule
   }
+
+  void set_ctx(CephContext *ctx) {
+    cct = ctx;
+  }
 };
 
 class RGWLCXMLParser_S3 : public RGWXMLParser
@@ -200,13 +233,13 @@ class RGWLCXMLParser_S3 : public RGWXMLParser
 
   XMLObj *alloc_obj(const char *el) override;
 public:
-  RGWLCXMLParser_S3(CephContext *_cct) : cct(_cct) {}
+  explicit RGWLCXMLParser_S3(CephContext *_cct) : cct(_cct) {}
 };
 
 class RGWLifecycleConfiguration_S3 : public RGWLifecycleConfiguration, public XMLObj
 {
 public:
-  RGWLifecycleConfiguration_S3(CephContext *_cct) : RGWLifecycleConfiguration(_cct) {}
+  explicit RGWLifecycleConfiguration_S3(CephContext *_cct) : RGWLifecycleConfiguration(_cct) {}
   RGWLifecycleConfiguration_S3() : RGWLifecycleConfiguration(NULL) {}
   ~RGWLifecycleConfiguration_S3() override {}
 
@@ -217,7 +250,7 @@ public:
     multimap<string, LCRule>::iterator iter;
     for (iter = rule_map.begin(); iter != rule_map.end(); ++iter) {
       LCRule_S3& rule = static_cast<LCRule_S3&>(iter->second);
-      rule.to_xml(cct, out);
+      rule.to_xml(out);
     }
     out << "</LifecycleConfiguration>";
   }

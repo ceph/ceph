@@ -31,7 +31,7 @@ public:
   void send_response() override;
   virtual void send_response(list<cls_statelog_entry> entries);
   virtual void send_response_end();
-  const string name() override {
+  const char* name() const override {
     return "opstate_list";
   }
 };
@@ -45,7 +45,7 @@ public:
     return caps.check_cap("opstate", RGW_CAP_WRITE);
   }
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "set_opstate";
   }
 };
@@ -59,7 +59,7 @@ public:
     return caps.check_cap("opstate", RGW_CAP_WRITE);
   }
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "renew_opstate";
   }
 };
@@ -73,7 +73,7 @@ public:
     return caps.check_cap("opstate", RGW_CAP_WRITE);
   }
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "delete_opstate";
   }
 };

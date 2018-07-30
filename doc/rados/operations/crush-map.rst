@@ -71,16 +71,15 @@ Custom location hooks
 ---------------------
 
 A customized location hook can be used to generate a more complete
-crush location on startup. The sample ``ceph-crush-location`` utility
-will generate a CRUSH location string for a given daemon.  The
-location is based on, in order of preference:
+crush location on startup.  The crush location is based on, in order
+of preference:
 
 #. A ``crush location`` option in ceph.conf.
 #. A default of ``root=default host=HOSTNAME`` where the hostname is
    generated with the ``hostname -s`` command.
 
 This is not useful by itself, as the OSD itself has the exact same
-behavior.  However, the script can be modified to provide additional
+behavior.  However, a script can be written to provide additional
 location fields (for example, the rack or datacenter), and then the
 hook enabled via the config option::
 
@@ -89,10 +88,17 @@ hook enabled via the config option::
 This hook is passed several arguments (below) and should output a single line
 to stdout with the CRUSH location description.::
 
-  $ ceph-crush-location --cluster CLUSTER --id ID --type TYPE
+  --cluster CLUSTER --id ID --type TYPE
 
 where the cluster name is typically 'ceph', the id is the daemon
-identifier (the OSD number), and the daemon type is typically ``osd``.
+identifier (e.g., the OSD number or daemon identifier), and the daemon
+type is ``osd``, ``mds``, or similar.
+
+For example, a simple hook that additionally specified a rack location
+based on a hypothetical file ``/etc/rack`` might be::
+
+  #!/bin/sh
+  echo "host=$(hostname -s) rack=$(cat /etc/rack) root=default"
 
 
 CRUSH structure
@@ -882,7 +888,7 @@ To make this warning go away, you have two options:
    For the change to take effect, you will need to restart the monitors, or
    apply the option to running monitors with::
 
-      ceph tell mon.\* injectargs --no-mon-warn-on-legacy-crush-tunables
+      ceph tell mon.\* config set mon_warn_on_legacy_crush_tunables false
 
 
 A few important points

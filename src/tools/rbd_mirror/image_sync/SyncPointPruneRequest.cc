@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "SyncPointPruneRequest.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
@@ -180,7 +181,7 @@ void SyncPointPruneRequest<I>::send_update_client() {
 
   bufferlist client_data_bl;
   librbd::journal::ClientData client_data(m_client_meta_copy);
-  ::encode(client_data, client_data_bl);
+  encode(client_data, client_data_bl);
 
   Context *ctx = create_context_callback<
     SyncPointPruneRequest<I>, &SyncPointPruneRequest<I>::handle_update_client>(

@@ -46,10 +46,13 @@ static const std::string RBD_DIFF_BANNER_V2 ("rbd diff v2\n");
 #define RBD_DIFF_ZERO		'z'
 #define RBD_DIFF_END		'e'
 
+#define RBD_SNAP_PROTECTION_STATUS     'p'
+
 #define RBD_EXPORT_IMAGE_ORDER		'O'
 #define RBD_EXPORT_IMAGE_FEATURES	'T'
 #define RBD_EXPORT_IMAGE_STRIPE_UNIT	'U'
 #define RBD_EXPORT_IMAGE_STRIPE_COUNT	'C'
+#define RBD_EXPORT_IMAGE_META		'M'
 #define RBD_EXPORT_IMAGE_END		'E'
 
 enum SnapshotPresence {
@@ -89,15 +92,8 @@ void aio_context_callback(librbd::completion_t completion, void *arg);
 int read_string(int fd, unsigned max, std::string *out);
 
 int extract_spec(const std::string &spec, std::string *pool_name,
-                 std::string *image_name, std::string *snap_name,
-                 SpecValidation spec_validation);
-
-int extract_group_spec(const std::string &spec,
-		       std::string *pool_name,
-		       std::string *group_name);
-
-int extract_image_id_spec(const std::string &spec, std::string *pool_name,
-                          std::string *image_id);
+                 std::string *namespace_name, std::string *name,
+                 std::string *snap_name, SpecValidation spec_validation);
 
 std::string get_positional_argument(
     const boost::program_options::variables_map &vm, size_t index);
@@ -105,45 +101,30 @@ std::string get_positional_argument(
 std::string get_default_pool_name();
 std::string get_pool_name(const boost::program_options::variables_map &vm,
                           size_t *arg_index);
+std::string get_namespace_name(const boost::program_options::variables_map &vm,
+                               size_t *arg_index);
 
 int get_pool_image_snapshot_names(
     const boost::program_options::variables_map &vm,
     argument_types::ArgumentModifier mod, size_t *spec_arg_index,
-    std::string *pool_name, std::string *image_name, std::string *snap_name,
-    SnapshotPresence snapshot_presence, SpecValidation spec_validation,
-    bool image_required = true);
+    std::string *pool_name, std::string *namespace_name,
+    std::string *image_name, std::string *snap_name, bool image_name_required,
+    SnapshotPresence snapshot_presence, SpecValidation spec_validation);
 
-int get_pool_snapshot_names(const boost::program_options::variables_map &vm,
-                            argument_types::ArgumentModifier mod,
-                            size_t *spec_arg_index, std::string *pool_name,
-                            std::string *snap_name,
-                            SnapshotPresence snapshot_presence,
-                            SpecValidation spec_validation);
-
-int get_special_pool_group_names(const boost::program_options::variables_map &vm,
-				 size_t *arg_index,
-				 std::string *group_pool_name,
-				 std::string *group_name);
-
-int get_special_pool_image_names(const boost::program_options::variables_map &vm,
-				 size_t *arg_index,
-				 std::string *image_pool_name,
-				 std::string *image_name);
-
-int get_pool_image_id(const boost::program_options::variables_map &vm,
-		      size_t *arg_index, std::string *image_pool_name,
-		      std::string *image_id);
-
-int get_pool_group_names(const boost::program_options::variables_map &vm,
-			 argument_types::ArgumentModifier mod,
-			 size_t *spec_arg_index,
-			 std::string *pool_name,
-			 std::string *group_name);
-
-int get_pool_journal_names(
+int get_pool_generic_snapshot_names(
     const boost::program_options::variables_map &vm,
     argument_types::ArgumentModifier mod, size_t *spec_arg_index,
-    std::string *pool_name, std::string *journal_name);
+    const std::string& pool_key, std::string *pool_name,
+    std::string *namespace_name, const std::string& generic_key,
+    const std::string& generic_key_desc, std::string *generic_name,
+    std::string *snap_name, bool generic_name_required,
+    SnapshotPresence snapshot_presence, SpecValidation spec_validation);
+
+int get_pool_image_id(const boost::program_options::variables_map &vm,
+                      size_t *spec_arg_index,
+                      std::string *pool_name,
+                      std::string *namespace_name,
+                      std::string *image_id);
 
 int validate_snapshot_name(argument_types::ArgumentModifier mod,
                            const std::string &snap_name,
@@ -156,22 +137,26 @@ int get_image_options(const boost::program_options::variables_map &vm,
 int get_journal_options(const boost::program_options::variables_map &vm,
 			librbd::ImageOptions *opts);
 
+int get_flatten_option(const boost::program_options::variables_map &vm,
+                       librbd::ImageOptions *opts);
+
 int get_image_size(const boost::program_options::variables_map &vm,
                    uint64_t *size);
 
 int get_path(const boost::program_options::variables_map &vm,
-             const std::string &positional_path, std::string *path);
+             size_t *arg_index, std::string *path);
 
 int get_formatter(const boost::program_options::variables_map &vm,
                   argument_types::Format::Formatter *formatter);
 
 void init_context();
 
-int init(const std::string &pool_name, librados::Rados *rados,
-         librados::IoCtx *io_ctx);
-
+int init(const std::string &pool_name, const std::string& namespace_name,
+         librados::Rados *rados, librados::IoCtx *io_ctx);
 int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
-                librados::IoCtx *io_ctx);
+                const std::string& namespace_name, librados::IoCtx *io_ctx);
+
+void disable_cache();
 
 int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
                bool read_only, librbd::Image *image);
@@ -180,6 +165,7 @@ int open_image_by_id(librados::IoCtx &io_ctx, const std::string &image_id,
                      bool read_only, librbd::Image *image);
 
 int init_and_open_image(const std::string &pool_name,
+                        const std::string &namespace_name,
                         const std::string &image_name,
                         const std::string &image_id,
                         const std::string &snap_name, bool read_only,
@@ -195,9 +181,8 @@ void calc_sparse_extent(const bufferptr &bp,
                         size_t *write_length,
 			bool *zeroed);
 
-bool check_if_image_spec_present(const boost::program_options::variables_map &vm,
-                                 argument_types::ArgumentModifier mod,
-                                 size_t spec_arg_index);
+bool is_not_user_snap_namespace(librbd::Image* image,
+                                const librbd::snap_info_t &snap_info);
 
 std::string image_id(librbd::Image& image);
 

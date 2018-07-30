@@ -27,15 +27,16 @@ class PaxosServiceMessage : public Message {
 
  public:
   void paxos_encode() {
-    ::encode(version, payload);
-    ::encode(deprecated_session_mon, payload);
-    ::encode(deprecated_session_mon_tid, payload);
+    using ceph::encode;
+    encode(version, payload);
+    encode(deprecated_session_mon, payload);
+    encode(deprecated_session_mon_tid, payload);
   }
 
-  void paxos_decode( bufferlist::iterator& p ) {
-    ::decode(version, p);
-    ::decode(deprecated_session_mon, p);
-    ::decode(deprecated_session_mon_tid, p);
+  void paxos_decode(bufferlist::const_iterator& p ) {
+    decode(version, p);
+    decode(deprecated_session_mon, p);
+    decode(deprecated_session_mon_tid, p);
   }
 
   void encode_payload(uint64_t features) override {
@@ -45,7 +46,7 @@ class PaxosServiceMessage : public Message {
 
   void decode_payload() override {
     ceph_abort();
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
   }
 
@@ -58,10 +59,8 @@ class PaxosServiceMessage : public Message {
    * normally.
    */
   MonSession *get_session() {
-    MonSession *session = (MonSession *)get_connection()->get_priv();
-    if (session)
-      session->put();
-    return session;
+    auto priv = get_connection()->get_priv();
+    return static_cast<MonSession*>(priv.get());
   }
   
   const char *get_type_name() const override { return "PaxosServiceMessage"; }

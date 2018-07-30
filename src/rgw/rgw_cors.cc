@@ -27,7 +27,6 @@
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
-using namespace std;
 
 void RGWCORSRule::dump_origins() {
   unsigned num_origins = allowed_origins.size();

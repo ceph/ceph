@@ -269,7 +269,7 @@ protected:
 
 public:
   template <typename U>
-  ChunkingFilter(U&& decoratee)
+  explicit ChunkingFilter(U&& decoratee)
     : DecoratedRestfulClient<T>(std::forward<U>(decoratee)),
       chunking_enabled(false) {
   }
@@ -331,7 +331,7 @@ protected:
 
 public:
   template <typename U>
-  ConLenControllingFilter(U&& decoratee)
+  explicit ConLenControllingFilter(U&& decoratee)
     : DecoratedRestfulClient<T>(std::forward<U>(decoratee)),
       action(ContentLengthAction::UNKNOWN) {
   }
@@ -339,7 +339,7 @@ public:
   size_t send_status(const int status,
                      const char* const status_name) override {
     if ((204 == status || 304 == status) &&
-        ! g_conf->rgw_print_prohibited_content_length) {
+        ! g_conf()->rgw_print_prohibited_content_length) {
       action = ContentLengthAction::INHIBIT;
     } else {
       action = ContentLengthAction::FORWARD;
@@ -399,7 +399,7 @@ protected:
 
 public:
   template <typename U>
-  ReorderingFilter(U&& decoratee)
+  explicit ReorderingFilter(U&& decoratee)
     : DecoratedRestfulClient<T>(std::forward<U>(decoratee)),
       phase(ReorderState::RGW_EARLY_HEADERS) {
   }

@@ -231,7 +231,7 @@ void JournalPlayer::process_state(uint64_t object_number, int r) {
       break;
     default:
       lderr(m_cct) << "UNEXPECTED STATE (" << m_state << ")" << dendl;
-      assert(false);
+      ceph_abort();
       break;
     }
   }
@@ -502,7 +502,7 @@ void JournalPlayer::prune_tag(uint64_t tag_tid) {
 
   // avoid watch delay when pruning stale tags from journal objects
   if (pruned) {
-    ldout(m_cct, 15) << __func__ << ": reseting refetch state to immediate"
+    ldout(m_cct, 15) << __func__ << ": resetting refetch state to immediate"
                      << dendl;
     for (auto &player_pair : m_object_players) {
       ObjectPlayerPtr object_player(player_pair.second);
@@ -714,7 +714,7 @@ void JournalPlayer::schedule_watch(bool immediate) {
     watch_interval = 0;
     break;
   default:
-    assert(false);
+    ceph_abort();
   }
 
   ldout(m_cct, 20) << __func__ << ": scheduling watch on "

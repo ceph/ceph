@@ -12,23 +12,29 @@
  */
 
 #include "DaemonServer.h"
+#include "mgr/Mgr.h"
 
+#include "include/stringify.h"
 #include "include/str_list.h"
 #include "auth/RotatingKeyRing.h"
 #include "json_spirit/json_spirit_writer.h"
 
 #include "mgr/mgr_commands.h"
+#include "mgr/DaemonHealthMetricCollector.h"
 #include "mon/MonCommand.h"
 
 #include "messages/MMgrOpen.h"
+#include "messages/MMgrClose.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MMonMgrReport.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
 #include "messages/MPGStats.h"
 #include "messages/MOSDScrub.h"
+#include "messages/MOSDScrub2.h"
 #include "messages/MOSDForceRecovery.h"
 #include "common/errno.h"
+#include "common/pick_address.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -41,26 +47,26 @@ DaemonServer::DaemonServer(MonClient *monc_,
                            Finisher &finisher_,
 			   DaemonStateIndex &daemon_state_,
 			   ClusterState &cluster_state_,
-			   PyModules &py_modules_,
+			   PyModuleRegistry &py_modules_,
 			   LogChannelRef clog_,
 			   LogChannelRef audit_clog_)
     : Dispatcher(g_ceph_context),
       client_byte_throttler(new Throttle(g_ceph_context, "mgr_client_bytes",
-					 g_conf->get_val<uint64_t>("mgr_client_bytes"))),
+					 g_conf().get_val<Option::size_t>("mgr_client_bytes"))),
       client_msg_throttler(new Throttle(g_ceph_context, "mgr_client_messages",
-					g_conf->get_val<uint64_t>("mgr_client_messages"))),
+					g_conf().get_val<uint64_t>("mgr_client_messages"))),
       osd_byte_throttler(new Throttle(g_ceph_context, "mgr_osd_bytes",
-				      g_conf->get_val<uint64_t>("mgr_osd_bytes"))),
+				      g_conf().get_val<Option::size_t>("mgr_osd_bytes"))),
       osd_msg_throttler(new Throttle(g_ceph_context, "mgr_osd_messsages",
-				     g_conf->get_val<uint64_t>("mgr_osd_messages"))),
+				     g_conf().get_val<uint64_t>("mgr_osd_messages"))),
       mds_byte_throttler(new Throttle(g_ceph_context, "mgr_mds_bytes",
-				      g_conf->get_val<uint64_t>("mgr_mds_bytes"))),
+				      g_conf().get_val<Option::size_t>("mgr_mds_bytes"))),
       mds_msg_throttler(new Throttle(g_ceph_context, "mgr_mds_messsages",
-				     g_conf->get_val<uint64_t>("mgr_mds_messages"))),
+				     g_conf().get_val<uint64_t>("mgr_mds_messages"))),
       mon_byte_throttler(new Throttle(g_ceph_context, "mgr_mon_bytes",
-				      g_conf->get_val<uint64_t>("mgr_mon_bytes"))),
+				      g_conf().get_val<Option::size_t>("mgr_mon_bytes"))),
       mon_msg_throttler(new Throttle(g_ceph_context, "mgr_mon_messsages",
-				     g_conf->get_val<uint64_t>("mgr_mon_messages"))),
+				     g_conf().get_val<uint64_t>("mgr_mon_messages"))),
       msgr(nullptr),
       monc(monc_),
       finisher(finisher_),
@@ -69,26 +75,30 @@ DaemonServer::DaemonServer(MonClient *monc_,
       py_modules(py_modules_),
       clog(clog_),
       audit_clog(audit_clog_),
-      auth_registry(g_ceph_context,
-                    g_conf->auth_supported.empty() ?
-                      g_conf->auth_cluster_required :
-                      g_conf->auth_supported),
+      auth_cluster_registry(g_ceph_context,
+                    g_conf()->auth_supported.empty() ?
+                      g_conf()->auth_cluster_required :
+                      g_conf()->auth_supported),
+      auth_service_registry(g_ceph_context,
+                   g_conf()->auth_supported.empty() ?
+                      g_conf()->auth_service_required :
+                      g_conf()->auth_supported),
       lock("DaemonServer"),
       pgmap_ready(false)
 {
-  g_conf->add_observer(this);
+  g_conf().add_observer(this);
 }
 
 DaemonServer::~DaemonServer() {
   delete msgr;
-  g_conf->remove_observer(this);
+  g_conf().remove_observer(this);
 }
 
-int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
+int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 {
   // Initialize Messenger
-  std::string public_msgr_type = g_conf->ms_public_type.empty() ?
-    g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
+  std::string public_msgr_type = g_conf()->ms_public_type.empty() ?
+    g_conf().get_val<std::string>("ms_type") : g_conf()->ms_public_type;
   msgr = Messenger::create(g_ceph_context, public_msgr_type,
 			   entity_name_t::MGR(gid),
 			   "mgr",
@@ -111,14 +121,20 @@ int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
 			      mon_byte_throttler.get(),
 			      mon_msg_throttler.get());
 
-  int r = msgr->bind(g_conf->public_addr);
+  entity_addrvec_t addrs;
+  int r = pick_addresses(cct, CEPH_PICK_ADDRESS_PUBLIC, &addrs);
   if (r < 0) {
-    derr << "unable to bind mgr to " << g_conf->public_addr << dendl;
+    return r;
+  }
+  dout(20) << __func__ << " will bind to " << addrs << dendl;
+  r = msgr->bindv(addrs);
+  if (r < 0) {
+    derr << "unable to bind mgr to " << addrs << dendl;
     return r;
   }
 
   msgr->set_myname(entity_name_t::MGR(gid));
-  msgr->set_addr_unknowns(client_addr);
+  msgr->set_addr_unknowns(client_addrs);
 
   msgr->start();
   msgr->add_dispatcher_tail(this);
@@ -128,21 +144,31 @@ int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
   return 0;
 }
 
-entity_addr_t DaemonServer::get_myaddr() const
+entity_addrvec_t DaemonServer::get_myaddrs() const
 {
-  return msgr->get_myaddr();
+  return msgr->get_myaddrs();
 }
 
 
-bool DaemonServer::ms_verify_authorizer(Connection *con,
-    int peer_type,
-    int protocol,
-    ceph::bufferlist& authorizer_data,
-    ceph::bufferlist& authorizer_reply,
-    bool& is_valid,
-    CryptoKey& session_key)
+bool DaemonServer::ms_verify_authorizer(
+  Connection *con,
+  int peer_type,
+  int protocol,
+  ceph::bufferlist& authorizer_data,
+  ceph::bufferlist& authorizer_reply,
+  bool& is_valid,
+  CryptoKey& session_key,
+  std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
-  auto handler = auth_registry.get_handler(protocol);
+  AuthAuthorizeHandler *handler = nullptr;
+  if (peer_type == CEPH_ENTITY_TYPE_OSD ||
+      peer_type == CEPH_ENTITY_TYPE_MON ||
+      peer_type == CEPH_ENTITY_TYPE_MDS ||
+      peer_type == CEPH_ENTITY_TYPE_MGR) {
+    handler = auth_cluster_registry.get_handler(protocol);
+  } else {
+    handler = auth_service_registry.get_handler(protocol);
+  }
   if (!handler) {
     dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
     is_valid = false;
@@ -160,7 +186,9 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
       authorizer_data,
       authorizer_reply, s->entity_name,
       s->global_id, caps_info,
-      session_key);
+      session_key,
+      nullptr,
+      challenge);
   } else {
     dout(10) << __func__ << " no rotating_keys (yet), denied" << dendl;
     is_valid = false;
@@ -173,10 +201,10 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
       s->caps.set_allow_all();
     }
     if (caps_info.caps.length() > 0) {
-      bufferlist::iterator p = caps_info.caps.begin();
+      auto p = caps_info.caps.cbegin();
       string str;
       try {
-	::decode(str, p);
+	decode(str, p);
       }
       catch (buffer::error& e) {
         is_valid = false;
@@ -228,11 +256,11 @@ bool DaemonServer::ms_get_authorizer(int dest_type,
 bool DaemonServer::ms_handle_reset(Connection *con)
 {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
-    MgrSessionRef session(static_cast<MgrSession*>(con->get_priv()));
+    auto priv = con->get_priv();
+    auto session = static_cast<MgrSession*>(priv.get());
     if (!session) {
       return false;
     }
-    session->put(); // SessionRef takes a ref
     Mutex::Locker l(lock);
     dout(10) << "unregistering osd." << session->osd_id
 	     << "  session " << session << " con " << con << dendl;
@@ -267,6 +295,8 @@ bool DaemonServer::ms_dispatch(Message *m)
       return handle_report(static_cast<MMgrReport*>(m));
     case MSG_MGR_OPEN:
       return handle_open(static_cast<MMgrOpen*>(m));
+    case MSG_MGR_CLOSE:
+      return handle_close(static_cast<MMgrClose*>(m));
     case MSG_COMMAND:
       return handle_command(static_cast<MCommand*>(m));
     default:
@@ -319,19 +349,38 @@ void DaemonServer::shutdown()
   dout(10) << "done" << dendl;
 }
 
+static DaemonKey key_from_service(
+  const std::string& service_name,
+  int peer_type,
+  const std::string& daemon_name)
+{
+  if (!service_name.empty()) {
+    return DaemonKey(service_name, daemon_name);
+  } else {
+    return DaemonKey(ceph_entity_type_name(peer_type), daemon_name);
+  }
+}
 
+static bool key_from_string(
+  const std::string& name,
+  DaemonKey *out)
+{
+  auto p = name.find('.');
+  if (p == std::string::npos) {
+    return false;
+  }
+  out->first = name.substr(0, p);
+  out->second = name.substr(p + 1);
+  return true;
+}
 
 bool DaemonServer::handle_open(MMgrOpen *m)
 {
   Mutex::Locker l(lock);
 
-  DaemonKey key;
-  if (!m->service_name.empty()) {
-    key.first = m->service_name;
-  } else {
-    key.first = ceph_entity_type_name(m->get_connection()->get_peer_type());
-  }
-  key.second = m->daemon_name;
+  DaemonKey key = key_from_service(m->service_name,
+				   m->get_connection()->get_peer_type(),
+				   m->daemon_name);
 
   dout(4) << "from " << m->get_connection() << "  " << key << dendl;
 
@@ -341,39 +390,50 @@ bool DaemonServer::handle_open(MMgrOpen *m)
   if (daemon_state.exists(key)) {
     daemon = daemon_state.get(key);
   }
+  if (m->service_daemon && !daemon) {
+    dout(4) << "constructing new DaemonState for " << key << dendl;
+    daemon = std::make_shared<DaemonState>(daemon_state.types);
+    daemon->key = key;
+    daemon->service_daemon = true;
+    if (m->daemon_metadata.count("hostname")) {
+      daemon->hostname = m->daemon_metadata["hostname"];
+    }
+    daemon_state.insert(daemon);
+  }
   if (daemon) {
     dout(20) << "updating existing DaemonState for " << m->daemon_name << dendl;
     Mutex::Locker l(daemon->lock);
     daemon->perf_counters.clear();
-  }
 
-  if (m->service_daemon) {
-    if (!daemon) {
-      dout(4) << "constructing new DaemonState for " << key << dendl;
-      daemon = std::make_shared<DaemonState>(daemon_state.types);
-      daemon->key = key;
-      if (m->daemon_metadata.count("hostname")) {
-        daemon->hostname = m->daemon_metadata["hostname"];
+    if (m->service_daemon) {
+      daemon->set_metadata(m->daemon_metadata);
+      daemon->service_status = m->daemon_status;
+
+      utime_t now = ceph_clock_now();
+      auto d = pending_service_map.get_daemon(m->service_name,
+					      m->daemon_name);
+      if (d->gid != (uint64_t)m->get_source().num()) {
+	dout(10) << "registering " << key << " in pending_service_map" << dendl;
+	d->gid = m->get_source().num();
+	d->addr = m->get_source_addr();
+	d->start_epoch = pending_service_map.epoch;
+	d->start_stamp = now;
+	d->metadata = m->daemon_metadata;
+	pending_service_map_dirty = pending_service_map.epoch;
       }
-      daemon_state.insert(daemon);
     }
-    Mutex::Locker l(daemon->lock);
-    daemon->service_daemon = true;
-    daemon->metadata = m->daemon_metadata;
-    daemon->service_status = m->daemon_status;
 
-    utime_t now = ceph_clock_now();
-    auto d = pending_service_map.get_daemon(m->service_name,
-					    m->daemon_name);
-    if (d->gid != (uint64_t)m->get_source().num()) {
-      dout(10) << "registering " << key << " in pending_service_map" << dendl;
-      d->gid = m->get_source().num();
-      d->addr = m->get_source_addr();
-      d->start_epoch = pending_service_map.epoch;
-      d->start_stamp = now;
-      d->metadata = m->daemon_metadata;
-      pending_service_map_dirty = pending_service_map.epoch;
+    auto p = m->config_bl.cbegin();
+    if (p != m->config_bl.end()) {
+      decode(daemon->config, p);
+      decode(daemon->ignored_mon_config, p);
+      dout(20) << " got config " << daemon->config
+	       << " ignored " << daemon->ignored_mon_config << dendl;
     }
+    daemon->config_defaults_bl = m->config_defaults_bl;
+    daemon->config_defaults.clear();
+    dout(20) << " got config_defaults_bl " << daemon->config_defaults_bl.length()
+	     << " bytes" << dendl;
   }
 
   if (m->get_connection()->get_peer_type() != entity_name_t::TYPE_CLIENT &&
@@ -386,6 +446,32 @@ bool DaemonServer::handle_open(MMgrOpen *m)
   }
 
   m->put();
+  return true;
+}
+
+bool DaemonServer::handle_close(MMgrClose *m)
+{
+  Mutex::Locker l(lock);
+
+  DaemonKey key = key_from_service(m->service_name,
+				   m->get_connection()->get_peer_type(),
+				   m->daemon_name);
+  dout(4) << "from " << m->get_connection() << "  " << key << dendl;
+
+  if (daemon_state.exists(key)) {
+    DaemonStatePtr daemon = daemon_state.get(key);
+    daemon_state.rm(key);
+    {
+      Mutex::Locker l(daemon->lock);
+      if (daemon->service_daemon) {
+	pending_service_map.rm_daemon(m->service_name, m->daemon_name);
+	pending_service_map_dirty = pending_service_map.epoch;
+      }
+    }
+  }
+
+  // send same message back as a reply
+  m->get_connection()->send_message(m);
   return true;
 }
 
@@ -407,6 +493,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
     // themselves to be a daemon for some service.
     dout(4) << "rejecting report from non-daemon client " << m->daemon_name
 	    << dendl;
+    m->get_connection()->mark_down();
     m->put();
     return true;
   }
@@ -418,15 +505,53 @@ bool DaemonServer::handle_report(MMgrReport *m)
     daemon = daemon_state.get(key);
   } else {
     // we don't know the hostname at this stage, reject MMgrReport here.
-    dout(1) << "rejecting report from " << key << ", since we do not have its metadata now."
+    dout(5) << "rejecting report from " << key << ", since we do not have its metadata now."
 	    << dendl;
-    // kill session
-    MgrSessionRef session(static_cast<MgrSession*>(m->get_connection()->get_priv()));
-    if (!session) {
-      return false;
+
+    // issue metadata request in background
+    if (!daemon_state.is_updating(key) && 
+	(key.first == "osd" || key.first == "mds")) {
+
+      std::ostringstream oss;
+      auto c = new MetadataUpdate(daemon_state, key);
+      if (key.first == "osd") {
+        oss << "{\"prefix\": \"osd metadata\", \"id\": "
+            << key.second<< "}";
+
+      } else if (key.first == "mds") {
+        c->set_default("addr", stringify(m->get_source_addr()));
+        oss << "{\"prefix\": \"mds metadata\", \"who\": \""
+            << key.second << "\"}";
+ 
+      } else {
+	ceph_abort();
+      }
+
+      monc->start_mon_command({oss.str()}, {}, &c->outbl, &c->outs, c);
     }
-    m->get_connection()->mark_down();
-    session->put();
+    
+    {
+      Mutex::Locker l(lock);
+      // kill session
+      auto priv = m->get_connection()->get_priv();
+      auto session = static_cast<MgrSession*>(priv.get());
+      if (!session) {
+	return false;
+      }
+      m->get_connection()->mark_down();
+
+      dout(10) << "unregistering osd." << session->osd_id
+	       << "  session " << session << " con " << m->get_connection() << dendl;
+      
+      if (osd_cons.find(session->osd_id) != osd_cons.end()) {
+	   osd_cons[session->osd_id].erase(m->get_connection());
+      } 
+
+      auto iter = daemon_connections.find(m->get_connection());
+      if (iter != daemon_connections.end()) {
+	daemon_connections.erase(iter);
+      }
+    }
 
     return false;
   }
@@ -438,6 +563,14 @@ bool DaemonServer::handle_report(MMgrReport *m)
     auto &daemon_counters = daemon->perf_counters;
     daemon_counters.update(m);
 
+    auto p = m->config_bl.cbegin();
+    if (p != m->config_bl.end()) {
+      decode(daemon->config, p);
+      decode(daemon->ignored_mon_config, p);
+      dout(20) << " got config " << daemon->config
+	       << " ignored " << daemon->ignored_mon_config << dendl;
+    }
+
     if (daemon->service_daemon) {
       utime_t now = ceph_clock_now();
       if (m->daemon_status) {
@@ -447,6 +580,12 @@ bool DaemonServer::handle_report(MMgrReport *m)
       daemon->last_service_beacon = now;
     } else if (m->daemon_status) {
       derr << "got status from non-daemon " << key << dendl;
+    }
+    if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon()) {
+      // only OSD and MON send health_checks to me now
+      daemon->daemon_health_metrics = std::move(m->daemon_health_metrics);
+      dout(10) << "daemon_health_metrics " << daemon->daemon_health_metrics
+	       << dendl;
     }
   }
 
@@ -463,10 +602,10 @@ bool DaemonServer::handle_report(MMgrReport *m)
 
 
 void DaemonServer::_generate_command_map(
-  map<string,cmd_vartype>& cmdmap,
+  cmdmap_t& cmdmap,
   map<string,string> &param_str_map)
 {
-  for (map<string,cmd_vartype>::const_iterator p = cmdmap.begin();
+  for (auto p = cmdmap.begin();
        p != cmdmap.end(); ++p) {
     if (p->first == "prefix")
       continue;
@@ -503,7 +642,7 @@ bool DaemonServer::_allowed_command(
   MgrSession *s,
   const string &module,
   const string &prefix,
-  const map<string,cmd_vartype>& cmdmap,
+  const cmdmap_t& cmdmap,
   const map<string,string>& param_str_map,
   const MonCommand *this_cmd) {
 
@@ -550,7 +689,7 @@ bool DaemonServer::handle_command(MCommand *m)
     bufferlist odata;
     cmdmap_t cmdmap;
 
-    CommandContext(MCommand *m_)
+    explicit CommandContext(MCommand *m_)
       : m(m_)
     {
     }
@@ -573,7 +712,11 @@ bool DaemonServer::handle_command(MCommand *m)
         con->mark_disposable();
       }
 
-      dout(1) << "handle_command " << cpp_strerror(r) << " " << rs << dendl;
+      if (r == 0) {
+        dout(4) << __func__ << " success" << dendl;
+      } else {
+        derr << __func__ << " " << cpp_strerror(r) << " " << rs << dendl;
+      }
       if (con) {
         MCommandReply *reply = new MCommandReply(r, rs);
         reply->set_tid(m->get_tid());
@@ -594,7 +737,7 @@ bool DaemonServer::handle_command(MCommand *m)
     bufferlist from_mon;
     string outs;
 
-    ReplyOnFinish(std::shared_ptr<CommandContext> cmdctx_)
+    explicit ReplyOnFinish(const std::shared_ptr<CommandContext> &cmdctx_)
       : cmdctx(cmdctx_)
     {}
     void finish(int r) override {
@@ -605,11 +748,11 @@ bool DaemonServer::handle_command(MCommand *m)
 
   std::shared_ptr<CommandContext> cmdctx = std::make_shared<CommandContext>(m);
 
-  MgrSessionRef session(static_cast<MgrSession*>(m->get_connection()->get_priv()));
+  auto priv = m->get_connection()->get_priv();
+  auto session = static_cast<MgrSession*>(priv.get());
   if (!session) {
     return true;
   }
-  session->put(); // SessionRef takes a ref
   if (session->inst.name == entity_name_t())
     session->inst.name = m->get_source();
 
@@ -665,29 +808,27 @@ bool DaemonServer::handle_command(MCommand *m)
   // lookup command
   const MonCommand *mgr_cmd = _get_mgrcommand(prefix, mgr_commands);
   _generate_command_map(cmdctx->cmdmap, param_str_map);
+
+  bool is_allowed;
   if (!mgr_cmd) {
     MonCommand py_command = {"", "", "py", "rw", "cli"};
-    if (!_allowed_command(session.get(), py_command.module, prefix, cmdctx->cmdmap,
-                          param_str_map, &py_command)) {
-      dout(1) << " access denied" << dendl;
-      ss << "access denied; does your client key have mgr caps?"
-	" See http://docs.ceph.com/docs/master/mgr/administrator/#client-authentication";
-      cmdctx->reply(-EACCES, ss);
-      return true;
-    }
+    is_allowed = _allowed_command(session, py_command.module,
+      prefix, cmdctx->cmdmap, param_str_map, &py_command);
   } else {
     // validate user's permissions for requested command
-    if (!_allowed_command(session.get(), mgr_cmd->module, prefix, cmdctx->cmdmap,
-                          param_str_map, mgr_cmd)) {
+    is_allowed = _allowed_command(session, mgr_cmd->module,
+      prefix, cmdctx->cmdmap,  param_str_map, mgr_cmd);
+  }
+  if (!is_allowed) {
       dout(1) << " access denied" << dendl;
       audit_clog->info() << "from='" << session->inst << "' "
                          << "entity='" << session->entity_name << "' "
                          << "cmd=" << m->cmd << ":  access denied";
-      ss << "access denied' does your client key have mgr caps?"
-	" See http://docs.ceph.com/docs/master/mgr/administrator/#client-authentication";
+      ss << "access denied: does your client key have mgr caps? "
+            "See http://docs.ceph.com/docs/master/mgr/administrator/"
+            "#client-authentication";
       cmdctx->reply(-EACCES, ss);
       return true;
-    }
   }
 
   audit_clog->debug()
@@ -746,9 +887,9 @@ bool DaemonServer::handle_command(MCommand *m)
     std::string val;
     cmd_getval(cct, cmdctx->cmdmap, "key", key);
     cmd_getval(cct, cmdctx->cmdmap, "value", val);
-    r = cct->_conf->set_val(key, val, true, &ss);
+    r = cct->_conf.set_val(key, val, &ss);
     if (r == 0) {
-      cct->_conf->apply_changes(nullptr);
+      cct->_conf.apply_changes(nullptr);
     }
     cmdctx->reply(0, ss);
     return true;
@@ -762,6 +903,7 @@ bool DaemonServer::handle_command(MCommand *m)
       prefix == "pg deep-scrub") {
     string scrubop = prefix.substr(3, string::npos);
     pg_t pgid;
+    spg_t spgid;
     string pgidstr;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "pgid", pgidstr);
     if (!pgid.parse(pgidstr.c_str())) {
@@ -779,8 +921,10 @@ bool DaemonServer::handle_command(MCommand *m)
       return true;
     }
     int acting_primary = -1;
+    epoch_t epoch;
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	acting_primary = osdmap.get_pg_acting_primary(pgid);
+	epoch = osdmap.get_epoch();
+	osdmap.get_primary_shard(pgid, &acting_primary, &spgid);
       });
     if (acting_primary == -1) {
       ss << "pg " << pgid << " has no primary osd";
@@ -793,14 +937,23 @@ bool DaemonServer::handle_command(MCommand *m)
 	 << " is not currently connected";
       cmdctx->reply(-EAGAIN, ss);
     }
-    vector<pg_t> pgs = { pgid };
     for (auto& con : p->second) {
-      con->send_message(new MOSDScrub(monc->get_fsid(),
-				      pgs,
-				      scrubop == "repair",
-				      scrubop == "deep-scrub"));
+      if (HAVE_FEATURE(con->get_features(), SERVER_MIMIC)) {
+	vector<spg_t> pgs = { spgid };
+	con->send_message(new MOSDScrub2(monc->get_fsid(),
+					 epoch,
+					 pgs,
+					 scrubop == "repair",
+					 scrubop == "deep-scrub"));
+      } else {
+	vector<pg_t> pgs = { pgid };
+	con->send_message(new MOSDScrub(monc->get_fsid(),
+					pgs,
+					scrubop == "repair",
+					scrubop == "deep-scrub"));
+      }
     }
-    ss << "instructing pg " << pgid << " on osd." << acting_primary
+    ss << "instructing pg " << spgid << " on osd." << acting_primary
        << " to " << scrubop;
     cmdctx->reply(0, ss);
     return true;
@@ -840,15 +993,41 @@ bool DaemonServer::handle_command(MCommand *m)
     }
     set<int> sent_osds, failed_osds;
     for (auto osd : osds) {
+      vector<spg_t> spgs;
+      epoch_t epoch;
+      cluster_state.with_pgmap([&](const PGMap& pgmap) {
+	  cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	      epoch = osdmap.get_epoch();
+	      auto p = pgmap.pg_by_osd.find(osd);
+	      if (p != pgmap.pg_by_osd.end()) {
+		for (auto pgid : p->second) {
+		  int primary;
+		  spg_t spg;
+		  osdmap.get_primary_shard(pgid, &primary, &spg);
+		  if (primary == osd) {
+		    spgs.push_back(spg);
+		  }
+		}
+	      }
+	    });
+	});
       auto p = osd_cons.find(osd);
       if (p == osd_cons.end()) {
 	failed_osds.insert(osd);
       } else {
 	sent_osds.insert(osd);
 	for (auto& con : p->second) {
-	  con->send_message(new MOSDScrub(monc->get_fsid(),
-					  pvec.back() == "repair",
-					  pvec.back() == "deep-scrub"));
+	  if (HAVE_FEATURE(con->get_features(), SERVER_MIMIC)) {
+	    con->send_message(new MOSDScrub2(monc->get_fsid(),
+					     epoch,
+					     spgs,
+					     pvec.back() == "repair",
+					     pvec.back() == "deep-scrub"));
+	  } else {
+	    con->send_message(new MOSDScrub(monc->get_fsid(),
+					    pvec.back() == "repair",
+					    pvec.back() == "deep-scrub"));
+	  }
 	}
       }
     }
@@ -893,14 +1072,15 @@ bool DaemonServer::handle_command(MCommand *m)
       cmdctx->reply(r, ss);
       return true;
     }
-    double max_change = g_conf->mon_reweight_max_change;
+    
+    double max_change = g_conf().get_val<double>("mon_reweight_max_change");
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "max_change", max_change);
     if (max_change <= 0.0) {
       ss << "max_change " << max_change << " must be positive";
       cmdctx->reply(-EINVAL, ss);
       return true;
     }
-    int64_t max_osds = g_conf->mon_reweight_max_osds;
+    int64_t max_osds = g_conf().get_val<int64_t>("mon_reweight_max_osds");
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "max_osds", max_osds);
     if (max_osds <= 0) {
       ss << "max_osds " << max_osds << " must be positive";
@@ -973,6 +1153,54 @@ bool DaemonServer::handle_command(MCommand *m)
       });
     cmdctx->reply(r, "");
     return true;
+  } else if (prefix == "osd pool stats") {
+    string pool_name;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "pool_name", pool_name);
+    int64_t poolid = -ENOENT;
+    bool one_pool = false;
+    r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
+      return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+        if (!pool_name.empty()) {
+          poolid = osdmap.lookup_pg_pool_name(pool_name);
+          if (poolid < 0) {
+            assert(poolid == -ENOENT);
+            ss << "unrecognized pool '" << pool_name << "'";
+            return -ENOENT;
+          }
+          one_pool = true;
+        }
+        stringstream rs;
+        if (f)
+          f->open_array_section("pool_stats");
+        else {
+          if (osdmap.get_pools().empty()) {
+            ss << "there are no pools!";
+            goto stats_out;
+          }
+        }
+        for (auto &p : osdmap.get_pools()) {
+          if (!one_pool) {
+            poolid = p.first;
+          }
+          pg_map.dump_pool_stats_and_io_rate(poolid, osdmap, f.get(), &rs); 
+          if (one_pool) {
+            break;
+          }
+        }
+      stats_out:
+        if (f) {
+          f->close_section();
+          f->flush(cmdctx->odata);
+        } else {
+          cmdctx->odata.append(rs.str());
+        }
+        return 0;
+      });
+    });
+    if (r != -EOPNOTSUPP) {
+      cmdctx->reply(r, ss);
+      return true;
+    }
   } else if (prefix == "osd safe-to-destroy") {
     vector<string> ids;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "ids", ids);
@@ -1023,8 +1251,7 @@ bool DaemonServer::handle_command(MCommand *m)
 		auto p = pg_map.osd_stat.find(osd);
 		if (p == pg_map.osd_stat.end()) {
 		  missing_stats.insert(osd);
-		}
-		if (p->second.num_pgs > 0) {
+		} else if (p->second.num_pgs > 0) {
 		  stored_pgs.insert(osd);
 		}
 	      }
@@ -1136,7 +1363,6 @@ bool DaemonServer::handle_command(MCommand *m)
   	       prefix == "pg cancel-force-backfill") {
     string forceop = prefix.substr(3, string::npos);
     list<pg_t> parsed_pgs;
-    map<int, list<pg_t> > osdpgs;
 
     // figure out actual op just once
     int actual_op = 0;
@@ -1176,7 +1402,7 @@ bool DaemonServer::handle_command(MCommand *m)
 	  } else {
 	    auto workit = pg_map.pg_stat.find(parsed_pg);
 	    if (workit == pg_map.pg_stat.end()) {
-	      ss << "pg " << pstr << " not exists; ";
+	      ss << "pg " << pstr << " does not exist; ";
 	      r = -ENOENT;
 	    } else {
 	      pg_stat_t workpg = workit->second;
@@ -1197,7 +1423,7 @@ bool DaemonServer::handle_command(MCommand *m)
 		  }
 		  break;
 		case OFR_BACKFILL:
-		  if ((workpg.state & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILL)) == 0) {
+		  if ((workpg.state & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILLING)) == 0) {
 		    ss << "pg " << pstr << " doesn't require backfilling; ";
 		    continue;
 		  } else  if (workpg.state & PG_STATE_FORCED_BACKFILL) {
@@ -1226,20 +1452,6 @@ bool DaemonServer::handle_command(MCommand *m)
 	    }
 	  }
 	}
-
-	// group pgs to process by osd
-	for (auto& pgid : parsed_pgs) {
-	  auto workit = pg_map.pg_stat.find(pgid);
-	  if (workit != pg_map.pg_stat.end()) {
-	    pg_stat_t workpg = workit->second;
-	    set<int32_t> osds(workpg.up.begin(), workpg.up.end());
-	    osds.insert(workpg.acting.begin(), workpg.acting.end());
-	    for (auto i : osds) {
-	      osdpgs[i].push_back(pgid);
-	    }
-	  }
-	}
-
       });
     }
 
@@ -1251,28 +1463,453 @@ bool DaemonServer::handle_command(MCommand *m)
       r = 0;
     }
 
-    // optimize the command -> messages conversion, use only one message per distinct OSD
+    // optimize the command -> messages conversion, use only one
+    // message per distinct OSD
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-      for (auto& i : osdpgs) {
-	if (osdmap.is_up(i.first)) {
-	  vector<pg_t> pgvec(make_move_iterator(i.second.begin()), make_move_iterator(i.second.end()));
-	  auto p = osd_cons.find(i.first);
-	  if (p == osd_cons.end()) {
-	    ss << "osd." << i.first << " is not currently connected";
-	    r = -EAGAIN;
-	    continue;
+	// group pgs to process by osd
+	map<int, vector<spg_t>> osdpgs;
+	for (auto& pgid : parsed_pgs) {
+	  int primary;
+	  spg_t spg;
+	  if (osdmap.get_primary_shard(pgid, &primary, &spg)) {
+	    osdpgs[primary].push_back(spg);
 	  }
-	  for (auto& con : p->second) {
-	    con->send_message(new MOSDForceRecovery(monc->get_fsid(), pgvec, actual_op));
-	  }
-	  ss << "instructing pg(s) " << i.second << " on osd." << i.first << " to " << forceop << "; ";
 	}
-      }
-    });
+	for (auto& i : osdpgs) {
+	  if (osdmap.is_up(i.first)) {
+	    auto p = osd_cons.find(i.first);
+	    if (p == osd_cons.end()) {
+	      ss << "osd." << i.first << " is not currently connected";
+	      r = -EAGAIN;
+	      continue;
+	    }
+	    for (auto& con : p->second) {
+	      con->send_message(
+		new MOSDForceRecovery(monc->get_fsid(), i.second, actual_op));
+	    }
+	    ss << "instructing pg(s) " << i.second << " on osd." << i.first
+	       << " to " << forceop << "; ";
+	  }
+	}
+      });
     ss << std::endl;
     cmdctx->reply(r, ss);
     return true;
+  } else if (prefix == "config show" ||
+	     prefix == "config show-with-defaults") {
+    string who;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "who", who);
+    int r = 0;
+    auto dot = who.find('.');
+    DaemonKey key;
+    key.first = who.substr(0, dot);
+    key.second = who.substr(dot + 1);
+    DaemonStatePtr daemon = daemon_state.get(key);
+    string name;
+    if (!daemon) {
+      ss << "no config state for daemon " << who;
+      r = -ENOENT;
+    } else if (cmd_getval(g_ceph_context, cmdctx->cmdmap, "key", name)) {
+      auto p = daemon->config.find(name);
+      if (p != daemon->config.end() &&
+	  !p->second.empty()) {
+	cmdctx->odata.append(p->second.rbegin()->second + "\n");
+      } else {
+	auto& defaults = daemon->get_config_defaults();
+	auto q = defaults.find(name);
+	if (q != defaults.end()) {
+	  cmdctx->odata.append(q->second + "\n");
+	} else {
+	  r = -ENOENT;
+	}
+      }
+    } else if (daemon->config_defaults_bl.length() > 0) {
+      Mutex::Locker l(daemon->lock);
+      TextTable tbl;
+      if (f) {
+	f->open_array_section("config");
+      } else {
+	tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("SOURCE", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("OVERRIDES", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("IGNORES", TextTable::LEFT, TextTable::LEFT);
+      }
+      if (prefix == "config show") {
+	// show
+	for (auto& i : daemon->config) {
+	  dout(20) << " " << i.first << " -> " << i.second << dendl;
+	  if (i.second.empty()) {
+	    continue;
+	  }
+	  if (f) {
+	    f->open_object_section("value");
+	    f->dump_string("name", i.first);
+	    f->dump_string("value", i.second.rbegin()->second);
+	    f->dump_string("source", ceph_conf_level_name(
+			     i.second.rbegin()->first));
+	    if (i.second.size() > 1) {
+	      f->open_array_section("overrides");
+	      auto j = i.second.rend();
+	      for (--j; j != i.second.rbegin(); --j) {
+		f->open_object_section("value");
+		f->dump_string("source", ceph_conf_level_name(j->first));
+		f->dump_string("value", j->second);
+		f->close_section();
+	      }
+	      f->close_section();
+	    }
+	    if (daemon->ignored_mon_config.count(i.first)) {
+	      f->dump_string("ignores", "mon");
+	    }
+	    f->close_section();
+	  } else {
+	    tbl << i.first;
+	    tbl << i.second.rbegin()->second;
+	    tbl << ceph_conf_level_name(i.second.rbegin()->first);
+	    if (i.second.size() > 1) {
+	      list<string> ov;
+	      auto j = i.second.rend();
+	      for (--j; j != i.second.rbegin(); --j) {
+		if (j->second == i.second.rbegin()->second) {
+		  ov.push_front(string("(") + ceph_conf_level_name(j->first) +
+				string("[") + j->second + string("]") +
+				string(")"));
+		} else {
+                  ov.push_front(ceph_conf_level_name(j->first) +
+                                string("[") + j->second + string("]"));
+
+		}
+	      }
+	      tbl << ov;
+	    } else {
+	      tbl << "";
+	    }
+	    tbl << (daemon->ignored_mon_config.count(i.first) ? "mon" : "");
+	    tbl << TextTable::endrow;
+	  }
+	}
+      } else {
+	// show-with-defaults
+	auto& defaults = daemon->get_config_defaults();
+	for (auto& i : defaults) {
+	  if (f) {
+	    f->open_object_section("value");
+	    f->dump_string("name", i.first);
+	  } else {
+	    tbl << i.first;
+	  }
+	  auto j = daemon->config.find(i.first);
+	  if (j != daemon->config.end() && !j->second.empty()) {
+	    // have config
+	    if (f) {
+	      f->dump_string("value", j->second.rbegin()->second);
+	      f->dump_string("source", ceph_conf_level_name(
+			       j->second.rbegin()->first));
+	      if (j->second.size() > 1) {
+		f->open_array_section("overrides");
+		auto k = j->second.rend();
+		for (--k; k != j->second.rbegin(); --k) {
+		  f->open_object_section("value");
+		  f->dump_string("source", ceph_conf_level_name(k->first));
+		  f->dump_string("value", k->second);
+		  f->close_section();
+		}
+		f->close_section();
+	      }
+	      if (daemon->ignored_mon_config.count(i.first)) {
+		f->dump_string("ignores", "mon");
+	      }
+	      f->close_section();
+	    } else {
+	      tbl << j->second.rbegin()->second;
+	      tbl << ceph_conf_level_name(j->second.rbegin()->first);
+	      if (j->second.size() > 1) {
+		list<string> ov;
+		auto k = j->second.rend();
+		for (--k; k != j->second.rbegin(); --k) {
+		  if (k->second == j->second.rbegin()->second) {
+		    ov.push_front(string("(") + ceph_conf_level_name(k->first) +
+				  string("[") + k->second + string("]") +
+				  string(")"));
+		  } else {
+                    ov.push_front(ceph_conf_level_name(k->first) +
+                                  string("[") + k->second + string("]"));
+		  }
+		}
+		tbl << ov;
+	      } else {
+		tbl << "";
+	      }
+	      tbl << (daemon->ignored_mon_config.count(i.first) ? "mon" : "");
+	      tbl << TextTable::endrow;
+	    }
+	  } else {
+	    // only have default
+	    if (f) {
+	      f->dump_string("value", i.second);
+	      f->dump_string("source", ceph_conf_level_name(CONF_DEFAULT));
+	      f->close_section();
+	    } else {
+	      tbl << i.second;
+	      tbl << ceph_conf_level_name(CONF_DEFAULT);
+	      tbl << "";
+	      tbl << "";
+	      tbl << TextTable::endrow;
+	    }
+	  }
+	}
+      }
+      if (f) {
+	f->close_section();
+	f->flush(cmdctx->odata);
+      } else {
+	cmdctx->odata.append(stringify(tbl));
+      }
+    }
+    cmdctx->reply(r, ss);
+    return true;
+  } else if (prefix == "device ls") {
+    set<string> devids;
+    TextTable tbl;
+    if (f) {
+      f->open_array_section("devices");
+      daemon_state.with_devices([&f](const DeviceState& dev) {
+	  f->dump_object("device", dev);
+	});
+      f->close_section();
+      f->flush(cmdctx->odata);
+    } else {
+      tbl.define_column("DEVICE", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("HOST:DEV", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("DAEMONS", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("LIFE EXPECTANCY", TextTable::LEFT, TextTable::LEFT);
+      auto now = ceph_clock_now();
+      daemon_state.with_devices([&tbl, now](const DeviceState& dev) {
+	  string h;
+	  for (auto& i : dev.devnames) {
+	    if (h.size()) {
+	      h += " ";
+	    }
+	    h += i.first + ":" + i.second;
+	  }
+	  string d;
+	  for (auto& i : dev.daemons) {
+	    if (d.size()) {
+	      d += " ";
+	    }
+	    d += to_string(i);
+	  }
+	  tbl << dev.devid
+	      << h
+	      << d
+	      << dev.get_life_expectancy_str(now)
+	      << TextTable::endrow;
+	});
+      cmdctx->odata.append(stringify(tbl));
+    }
+    cmdctx->reply(0, ss);
+    return true;
+  } else if (prefix == "device ls-by-daemon") {
+    string who;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "who", who);
+    DaemonKey k;
+    if (!key_from_string(who, &k)) {
+      ss << who << " is not a valid daemon name";
+      r = -EINVAL;
+    } else {
+      auto dm = daemon_state.get(k);
+      if (dm) {
+	if (f) {
+	  f->open_array_section("devices");
+	  for (auto& i : dm->devices) {
+	    daemon_state.with_device(i.first, [&f] (const DeviceState& dev) {
+		f->dump_object("device", dev);
+	      });
+	  }
+	  f->close_section();
+	  f->flush(cmdctx->odata);
+	} else {
+	  TextTable tbl;
+	  tbl.define_column("DEVICE", TextTable::LEFT, TextTable::LEFT);
+	  tbl.define_column("HOST:DEV", TextTable::LEFT, TextTable::LEFT);
+	  tbl.define_column("EXPECTED FAILURE", TextTable::LEFT,
+			    TextTable::LEFT);
+	  auto now = ceph_clock_now();
+	  for (auto& i : dm->devices) {
+	    daemon_state.with_device(
+	      i.first, [&tbl, now] (const DeviceState& dev) {
+		string h;
+		for (auto& i : dev.devnames) {
+		  if (h.size()) {
+		    h += " ";
+		  }
+		  h += i.first + ":" + i.second;
+		}
+		tbl << dev.devid
+		    << h
+		    << dev.get_life_expectancy_str(now)
+		    << TextTable::endrow;
+	      });
+	  }
+	  cmdctx->odata.append(stringify(tbl));
+	}
+      } else {
+	r = -ENOENT;
+	ss << "daemon " << who << " not found";
+      }
+      cmdctx->reply(r, ss);
+    }
+  } else if (prefix == "device ls-by-host") {
+    string host;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "host", host);
+    set<string> devids;
+    daemon_state.list_devids_by_server(host, &devids);
+    if (f) {
+      f->open_array_section("devices");
+      for (auto& devid : devids) {
+	daemon_state.with_device(
+	  devid, [&f, &host] (const DeviceState& dev) {
+	    f->dump_object("device", dev);
+	  });
+      }
+      f->close_section();
+      f->flush(cmdctx->odata);
+    } else {
+      TextTable tbl;
+      tbl.define_column("DEVICE", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("DEV", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("DAEMONS", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("EXPECTED FAILURE", TextTable::LEFT, TextTable::LEFT);
+      auto now = ceph_clock_now();
+      for (auto& devid : devids) {
+	daemon_state.with_device(
+	  devid, [&tbl, &host, now] (const DeviceState& dev) {
+	    string n;
+	    for (auto& j : dev.devnames) {
+	      if (j.first == host) {
+		if (n.size()) {
+		  n += " ";
+		}
+		n += j.second;
+	      }
+	    }
+	    string d;
+	    for (auto& i : dev.daemons) {
+	      if (d.size()) {
+		d += " ";
+	      }
+	      d += to_string(i);
+	    }
+	    tbl << dev.devid
+		<< n
+		<< d
+		<< dev.get_life_expectancy_str(now)
+		<< TextTable::endrow;
+	  });
+      }
+      cmdctx->odata.append(stringify(tbl));
+    }
+    cmdctx->reply(0, ss);
+    return true;
+  } else if (prefix == "device info") {
+    string devid;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "devid", devid);
+    int r = 0;
+    ostringstream rs;
+    if (!daemon_state.with_device(devid,
+				  [&f, &rs] (const DeviceState& dev) {
+	  if (f) {
+	    f->dump_object("device", dev);
+	  } else {
+	    dev.print(rs);
+	  }
+	})) {
+      ss << "device " << devid << " not found";
+      r = -ENOENT;
+    } else {
+      if (f) {
+	f->flush(cmdctx->odata);
+      } else {
+	cmdctx->odata.append(rs.str());
+      }
+    }
+    cmdctx->reply(r, ss);
+    return true;
+  } else if (prefix == "device set-life-expectancy") {
+    string devid;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "devid", devid);
+    string from_str, to_str;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "from", from_str);
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "to", to_str);
+    utime_t from, to;
+    if (!from.parse(from_str)) {
+      ss << "unable to parse datetime '" << from_str << "'";
+      r = -EINVAL;
+      cmdctx->reply(r, ss);
+    } else if (to_str.size() && !to.parse(to_str)) {
+      ss << "unable to parse datetime '" << to_str << "'";
+      r = -EINVAL;
+      cmdctx->reply(r, ss);
+    } else {
+      map<string,string> meta;
+      daemon_state.with_device_create(
+	devid,
+	[from, to, &meta] (DeviceState& dev) {
+	  dev.set_life_expectancy(from, to, ceph_clock_now());
+	  meta = dev.metadata;
+	});
+      json_spirit::Object json_object;
+      for (auto& i : meta) {
+	json_spirit::Config::add(json_object, i.first, i.second);
+      }
+      bufferlist json;
+      json.append(json_spirit::write(json_object));
+      const string cmd =
+	"{"
+	"\"prefix\": \"config-key set\", "
+	"\"key\": \"device/" + devid + "\""
+	"}";
+      auto on_finish = new ReplyOnFinish(cmdctx);
+      monc->start_mon_command({cmd}, json, nullptr, nullptr, on_finish);
+    }
+    return true;
+  } else if (prefix == "device rm-life-expectancy") {
+    string devid;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "devid", devid);
+    map<string,string> meta;
+    if (daemon_state.with_device_write(devid, [&meta] (DeviceState& dev) {
+	  dev.rm_life_expectancy();
+	  meta = dev.metadata;
+	})) {
+      string cmd;
+      bufferlist json;
+      if (meta.empty()) {
+	cmd =
+	  "{"
+	  "\"prefix\": \"config-key rm\", "
+	  "\"key\": \"device/" + devid + "\""
+	  "}";
+      } else {
+	json_spirit::Object json_object;
+	for (auto& i : meta) {
+	  json_spirit::Config::add(json_object, i.first, i.second);
+	}
+	json.append(json_spirit::write(json_object));
+	cmd =
+	  "{"
+	  "\"prefix\": \"config-key set\", "
+	  "\"key\": \"device/" + devid + "\""
+	  "}";
+      }
+      auto on_finish = new ReplyOnFinish(cmdctx);
+      monc->start_mon_command({cmd}, json, nullptr, nullptr, on_finish);
+    } else {
+      cmdctx->reply(0, ss);
+    }
+    return true;
   } else {
+    // fall back to feeding command to PGMap
     r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
 	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	    return process_pg_map_command(prefix, cmdctx->cmdmap, pg_map, osdmap,
@@ -1286,43 +1923,86 @@ bool DaemonServer::handle_command(MCommand *m)
     }
   }
 
-  // None of the special native commands, 
-  MgrPyModule *handler = nullptr;
+  // Resolve the command to the name of the module that will
+  // handle it (if the command exists)
+  std::string handler_name;
   auto py_commands = py_modules.get_py_commands();
   for (const auto &pyc : py_commands) {
     auto pyc_prefix = cmddesc_get_prefix(pyc.cmdstring);
-    dout(1) << "pyc_prefix: '" << pyc_prefix << "'" << dendl;
     if (pyc_prefix == prefix) {
-      handler = pyc.handler;
+      handler_name = pyc.module_name;
       break;
     }
   }
 
-  if (handler == nullptr) {
+  // Was the command unfound?
+  if (handler_name.empty()) {
     ss << "No handler found for '" << prefix << "'";
     dout(4) << "No handler found for '" << prefix << "'" << dendl;
     cmdctx->reply(-EINVAL, ss);
     return true;
-  } else {
-    // Okay, now we have a handler to call, but we must not call it
-    // in this thread, because the python handlers can do anything,
-    // including blocking, and including calling back into mgr.
-    dout(4) << "passing through " << cmdctx->cmdmap.size() << dendl;
-    finisher.queue(new FunctionContext([cmdctx, handler](int r_) {
-      std::stringstream ds;
-      std::stringstream ss;
-      int r = handler->handle_command(cmdctx->cmdmap, &ds, &ss);
-      cmdctx->odata.append(ds);
-      cmdctx->reply(r, ss);
-    }));
-    return true;
   }
+
+  dout(4) << "passing through " << cmdctx->cmdmap.size() << dendl;
+  finisher.queue(new FunctionContext([this, cmdctx, handler_name, prefix](int r_) {
+    std::stringstream ss;
+
+    // Validate that the module is enabled
+    PyModuleRef module = py_modules.get_module(handler_name);
+    if (!module->is_enabled()) {
+      ss << "Module '" << handler_name << "' is not enabled (required by "
+            "command '" << prefix << "'): use `ceph mgr module enable "
+            << handler_name << "` to enable it";
+      dout(4) << ss.str() << dendl;
+      cmdctx->reply(-EOPNOTSUPP, ss);
+      return;
+    }
+
+    // Hack: allow the self-test method to run on unhealthy modules.
+    // Fix this in future by creating a special path for self test rather
+    // than having the hook be a normal module command.
+    std::string self_test_prefix = handler_name + " " + "self-test";
+
+    // Validate that the module is healthy
+    bool accept_command;
+    if (module->is_loaded()) {
+      if (module->get_can_run() && !module->is_failed()) {
+        // Healthy module
+        accept_command = true;
+      } else if (self_test_prefix == prefix) {
+        // Unhealthy, but allow because it's a self test command
+        accept_command = true;
+      } else {
+        accept_command = false;
+        ss << "Module '" << handler_name << "' has experienced an error and "
+              "cannot handle commands: " << module->get_error_string();
+      }
+    } else {
+      // Module not loaded
+      accept_command = false;
+      ss << "Module '" << handler_name << "' failed to load and "
+            "cannot handle commands: " << module->get_error_string();
+    }
+
+    if (!accept_command) {
+      dout(4) << ss.str() << dendl;
+      cmdctx->reply(-EIO, ss);
+      return;
+    }
+
+    std::stringstream ds;
+    bufferlist inbl = cmdctx->m->get_data();
+    int r = py_modules.handle_command(handler_name, cmdctx->cmdmap, inbl, &ds, &ss);
+    cmdctx->odata.append(ds);
+    cmdctx->reply(r, ss);
+  }));
+  return true;
 }
 
 void DaemonServer::_prune_pending_service_map()
 {
   utime_t cutoff = ceph_clock_now();
-  cutoff -= g_conf->get_val<double>("mgr_service_beacon_grace");
+  cutoff -= g_conf().get_val<double>("mgr_service_beacon_grace");
   auto p = pending_service_map.services.begin();
   while (p != pending_service_map.services.end()) {
     auto q = p->second.daemons.begin();
@@ -1362,7 +2042,7 @@ void DaemonServer::_prune_pending_service_map()
 void DaemonServer::send_report()
 {
   if (!pgmap_ready) {
-    if (ceph_clock_now() - started_at > g_conf->get_val<int64_t>("mgr_stats_period") * 4.0) {
+    if (ceph_clock_now() - started_at > g_conf().get_val<int64_t>("mgr_stats_period") * 4.0) {
       pgmap_ready = true;
       reported_osds.clear();
       dout(1) << "Giving up on OSDs that haven't reported yet, sending "
@@ -1377,14 +2057,14 @@ void DaemonServer::send_report()
   auto m = new MMonMgrReport();
   py_modules.get_health_checks(&m->health_checks);
 
-  cluster_state.with_pgmap([&](const PGMap& pg_map) {
+  cluster_state.with_mutable_pgmap([&](PGMap& pg_map) {
       cluster_state.update_delta_stats();
 
       if (pending_service_map.epoch) {
 	_prune_pending_service_map();
 	if (pending_service_map_dirty >= pending_service_map.epoch) {
 	  pending_service_map.modified = ceph_clock_now();
-	  ::encode(pending_service_map, m->service_map_bl, CEPH_FEATURES_ALL);
+	  encode(pending_service_map, m->service_map_bl, CEPH_FEATURES_ALL);
 	  dout(10) << "sending service_map e" << pending_service_map.epoch
 		   << dendl;
 	  pending_service_map.epoch++;
@@ -1409,6 +2089,35 @@ void DaemonServer::send_report()
 	  *_dout << dendl;
 	});
     });
+
+  map<daemon_metric, unique_ptr<DaemonHealthMetricCollector>> accumulated;
+  for (auto service : {"osd", "mon"} ) {
+    auto daemons = daemon_state.get_by_service(service);
+    for (const auto& [key,state] : daemons) {
+      Mutex::Locker l{state->lock};
+      for (const auto& metric : state->daemon_health_metrics) {
+        auto acc = accumulated.find(metric.get_type());
+        if (acc == accumulated.end()) {
+          auto collector = DaemonHealthMetricCollector::create(metric.get_type());
+          if (!collector) {
+            derr << __func__ << " " << key.first << "." << key.second
+		 << " sent me an unknown health metric: "
+		 << std::hex << static_cast<uint8_t>(metric.get_type())
+		 << std::dec << dendl;
+            continue;
+          }
+	  dout(20) << " + " << state->key << " "
+		   << metric << dendl;
+          tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
+              std::move(collector));
+        }
+        acc->second->update(key, metric);
+      }
+    }
+  }
+  for (const auto& acc : accumulated) {
+    acc.second->summarize(m->health_checks);
+  }
   // TODO? We currently do not notify the PyModules
   // TODO: respect needs_send, so we send the report only if we are asked to do
   //       so, or the state is updated.
@@ -1441,7 +2150,7 @@ void DaemonServer::got_service_map()
       if (!daemon_state.exists(key)) {
 	auto daemon = std::make_shared<DaemonState>(daemon_state.types);
 	daemon->key = key;
-	daemon->metadata = q.second.metadata;
+	daemon->set_metadata(q.second.metadata);
         if (q.second.metadata.count("hostname")) {
           daemon->hostname = q.second.metadata["hostname"];
         }
@@ -1454,6 +2163,37 @@ void DaemonServer::got_service_map()
   }
 }
 
+void DaemonServer::got_mgr_map()
+{
+  Mutex::Locker l(lock);
+  set<std::string> have;
+  cluster_state.with_mgrmap([&](const MgrMap& mgrmap) {
+      auto md_update = [&] (DaemonKey key) {
+        std::ostringstream oss;
+        auto c = new MetadataUpdate(daemon_state, key);
+        oss << "{\"prefix\": \"mgr metadata\", \"who\": \""
+              << key.second << "\"}";
+        monc->start_mon_command({oss.str()}, {}, &c->outbl, &c->outs, c);
+      };
+      if (mgrmap.active_name.size()) {
+	DaemonKey key("mgr", mgrmap.active_name);
+	have.insert(mgrmap.active_name);
+	if (!daemon_state.exists(key) && !daemon_state.is_updating(key)) {
+	  md_update(key);
+	  dout(10) << "triggered addition of " << key << " via metadata update" << dendl;
+	}
+      }
+      for (auto& i : mgrmap.standbys) {
+        DaemonKey key("mgr", i.second.name);
+	have.insert(i.second.name);
+	if (!daemon_state.exists(key) && !daemon_state.is_updating(key)) {
+	  md_update(key);
+	  dout(10) << "triggered addition of " << key << " via metadata update" << dendl;
+	}
+      }
+    });
+  daemon_state.cull("mgr", have);
+}
 
 const char** DaemonServer::get_tracked_conf_keys() const
 {
@@ -1466,10 +2206,9 @@ const char** DaemonServer::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void DaemonServer::handle_conf_change(const struct md_config_t *conf,
-                                              const std::set <std::string> &changed)
+void DaemonServer::handle_conf_change(const ConfigProxy& conf,
+				      const std::set <std::string> &changed)
 {
-  dout(4) << "ohai" << dendl;
   // We may be called within lock (via MCommand `config set`) or outwith the
   // lock (via admin socket `config set`), so handle either case.
   const bool initially_locked = lock.is_locked_by_me();
@@ -1493,8 +2232,8 @@ void DaemonServer::_send_configure(ConnectionRef c)
   assert(lock.is_locked_by_me());
 
   auto configure = new MMgrConfigure();
-  configure->stats_period = g_conf->get_val<int64_t>("mgr_stats_period");
-  configure->stats_threshold = g_conf->get_val<int64_t>("mgr_stats_threshold");
+  configure->stats_period = g_conf().get_val<int64_t>("mgr_stats_period");
+  configure->stats_threshold = g_conf().get_val<int64_t>("mgr_stats_threshold");
   c->send_message(configure);
 }
 

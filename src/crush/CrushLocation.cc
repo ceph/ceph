@@ -7,6 +7,7 @@
 #include "common/config.h"
 #include "include/str_list.h"
 #include "common/debug.h"
+#include "common/errno.h"
 #include "include/compat.h"
 
 #include "common/SubProcess.h"
@@ -76,13 +77,15 @@ int CrushLocation::update_from_hook()
     lderr(cct) << "stderr:\n";
     err.hexdump(*_dout);
     *_dout << dendl;
-    return ret;
   }
 
   if (hook.join() != 0) {
     lderr(cct) << "error: failed to join: " << hook.err() << dendl;
     return -EINVAL;
   }
+
+  if (ret < 0)
+    return ret;
 
   std::string out;
   bl.copy(0, bl.length(), out);

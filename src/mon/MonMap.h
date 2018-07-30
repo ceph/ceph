@@ -55,7 +55,7 @@ struct mon_info_t {
 
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void print(ostream& out) const;
 };
 WRITE_CLASS_ENCODER_FEATURES(mon_info_t)
@@ -113,12 +113,17 @@ class MonMap {
   }
 
 public:
-  void sanitize_mons(map<string,entity_addr_t>& o);
-  void calc_ranks();
+  void calc_legacy_ranks();
+  void calc_addr_mons() {
+    // populate addr_mons
+    addr_mons.clear();
+    for (auto& p : mon_info) {
+      addr_mons[p.second.public_addr] = p.first;
+    }
+  }
 
   MonMap()
     : epoch(0) {
-    memset(&fsid, 0, sizeof(fsid));
   }
 
   uuid_d& get_fsid() { return fsid; }
@@ -148,11 +153,18 @@ public:
    *
    * @param m monitor info of the new monitor
    */
-  void add(mon_info_t &&m) {
+  void add(const mon_info_t& m) {
     assert(mon_info.count(m.name) == 0);
     assert(addr_mons.count(m.public_addr) == 0);
-    mon_info[m.name] = std::move(m);
-    calc_ranks();
+    mon_info[m.name] = m;
+    if (get_required_features().contains_all(
+	  ceph::features::mon::FEATURE_NAUTILUS)) {
+      ranks.push_back(m.name);
+      assert(ranks.size() == mon_info.size());
+    } else {
+      calc_legacy_ranks();
+    }
+    calc_addr_mons();
   }
 
   /**
@@ -174,7 +186,14 @@ public:
     assert(mon_info.count(name));
     mon_info.erase(name);
     assert(mon_info.count(name) == 0);
-    calc_ranks();
+    if (get_required_features().contains_all(
+	  ceph::features::mon::FEATURE_NAUTILUS)) {
+      ranks.erase(std::find(ranks.begin(), ranks.end(), name));
+      assert(ranks.size() == mon_info.size());
+    } else {
+      calc_legacy_ranks();
+    }
+    calc_addr_mons();
   }
 
   /**
@@ -189,7 +208,29 @@ public:
     mon_info[newname] = mon_info[oldname];
     mon_info.erase(oldname);
     mon_info[newname].name = newname;
-    calc_ranks();
+    if (get_required_features().contains_all(
+	  ceph::features::mon::FEATURE_NAUTILUS)) {
+      *std::find(ranks.begin(), ranks.end(), oldname) = newname;
+      assert(ranks.size() == mon_info.size());
+    } else {
+      calc_legacy_ranks();
+    }
+    calc_addr_mons();
+  }
+
+  int set_rank(const string& name, int rank) {
+    int oldrank = get_rank(name);
+    if (oldrank < 0) {
+      return -ENOENT;
+    }
+    if (rank < 0 || rank >= (int)ranks.size()) {
+      return -EINVAL;
+    }
+    if (oldrank != rank) {
+      ranks.erase(ranks.begin() + oldrank);
+      ranks.insert(ranks.begin() + rank, name);
+    }
+    return 0;
   }
 
   bool contains(const string& name) const {
@@ -262,7 +303,6 @@ public:
   void set_addr(const string& n, const entity_addr_t& a) {
     assert(mon_info.count(n));
     mon_info[n].public_addr = a;
-    calc_ranks();
   }
   entity_inst_t get_inst(const string& n) {
     assert(mon_info.count(n));
@@ -280,10 +320,10 @@ public:
 
   void encode(bufferlist& blist, uint64_t con_features) const;
   void decode(bufferlist& blist) {
-    bufferlist::iterator p = blist.begin();
+    auto p = std::cbegin(blist);
     decode(p);
   }
-  void decode(bufferlist::iterator &p);
+  void decode(bufferlist::const_iterator& p);
 
   void generate_fsid() {
     fsid.generate_random();
@@ -317,7 +357,7 @@ public:
    * @param prefix prefix to prepend to generated mon names
    * @return 0 for success, -errno on error
    */
-  int build_from_host_list(std::string hosts, std::string prefix);
+  int build_from_host_list(std::string hosts, const std::string &prefix);
 
   /**
    * filter monmap given a set of initial members.

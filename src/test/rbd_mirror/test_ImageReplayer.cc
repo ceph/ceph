@@ -35,7 +35,6 @@
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
 #include "tools/rbd_mirror/types.h"
-#include "tools/rbd_mirror/ImageDeleter.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/ServiceDaemon.h"
@@ -83,6 +82,11 @@ public:
   TestImageReplayer()
     : m_local_cluster(new librados::Rados()), m_watch_handle(0)
   {
+    EXPECT_EQ(0, g_ceph_context->_conf.get_val("rbd_mirror_journal_commit_age",
+                                                &m_journal_commit_age));
+    EXPECT_EQ(0, g_ceph_context->_conf.set_val("rbd_mirror_journal_commit_age",
+                                                "0.1"));
+
     EXPECT_EQ("", connect_cluster_pp(*m_local_cluster.get()));
     EXPECT_EQ(0, m_local_cluster->conf_set("rbd_cache", "false"));
     EXPECT_EQ(0, m_local_cluster->conf_set("rbd_mirror_journal_poll_age", "1"));
@@ -123,9 +127,7 @@ public:
     m_service_daemon.reset(new rbd::mirror::ServiceDaemon<>(g_ceph_context,
                                                             m_local_cluster,
                                                             m_threads.get()));
-    m_image_deleter.reset(new rbd::mirror::ImageDeleter<>(
-      m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
-      m_service_daemon.get()));
+
     m_instance_watcher = rbd::mirror::InstanceWatcher<>::create(
         m_local_ioctx, m_threads->work_queue, nullptr);
     m_instance_watcher->handle_acquire_leader();
@@ -142,12 +144,14 @@ public:
 
     EXPECT_EQ(0, m_remote_cluster.pool_delete(m_remote_pool_name.c_str()));
     EXPECT_EQ(0, m_local_cluster->pool_delete(m_local_pool_name.c_str()));
+    EXPECT_EQ(0, g_ceph_context->_conf.set_val("rbd_mirror_journal_commit_age",
+                                                m_journal_commit_age));
   }
 
   template <typename ImageReplayerT = rbd::mirror::ImageReplayer<> >
   void create_replayer() {
     m_replayer = new ImageReplayerT(
-        m_threads.get(), m_image_deleter.get(), m_instance_watcher,
+        m_threads.get(), m_instance_watcher,
         rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
         m_local_mirror_uuid, m_local_ioctx.get_id(), m_global_image_id);
     m_replayer->add_peer("peer uuid", m_remote_ioctx);
@@ -301,10 +305,6 @@ public:
     cls::journal::ObjectPosition mirror_position;
 
     for (int i = 0; i < 100; i++) {
-      printf("m_replayer->flush()\n");
-      C_SaferCond cond;
-      m_replayer->flush(&cond);
-      ASSERT_EQ(0, cond.wait());
       get_commit_positions(&master_position, &mirror_position);
       if (master_position == mirror_position) {
 	break;
@@ -383,7 +383,6 @@ public:
   std::shared_ptr<librados::Rados> m_local_cluster;
   std::unique_ptr<rbd::mirror::Threads<>> m_threads;
   std::unique_ptr<rbd::mirror::ServiceDaemon<>> m_service_daemon;
-  std::unique_ptr<rbd::mirror::ImageDeleter<>> m_image_deleter;
   librados::Rados m_remote_cluster;
   rbd::mirror::InstanceWatcher<> *m_instance_watcher;
   std::string m_local_mirror_uuid = "local mirror uuid";
@@ -398,6 +397,7 @@ public:
   C_WatchCtx *m_watch_ctx;
   uint64_t m_watch_handle;
   char m_test_data[TEST_IO_SIZE + 1];
+  std::string m_journal_commit_age;
 };
 
 int TestImageReplayer::_image_number;
@@ -660,17 +660,13 @@ TEST_F(TestImageReplayer, Resync)
   m_replayer->resync_image(&ctx);
   ASSERT_EQ(0, ctx.wait());
 
-  C_SaferCond delete_ctx;
-  m_image_deleter->wait_for_scheduled_deletion(
-    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_ctx);
-  EXPECT_EQ(0, delete_ctx.wait());
+  wait_for_stopped();
 
   C_SaferCond cond;
   m_replayer->start(&cond);
   ASSERT_EQ(0, cond.wait());
 
   ASSERT_TRUE(m_replayer->is_replaying());
-
   wait_for_replay_complete();
 
   open_local_image(&ictx);
@@ -722,11 +718,6 @@ TEST_F(TestImageReplayer, Resync_While_Stop)
 
   ASSERT_TRUE(m_replayer->is_stopped());
 
-  C_SaferCond delete_ctx;
-  m_image_deleter->wait_for_scheduled_deletion(
-    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_ctx);
-  EXPECT_EQ(0, delete_ctx.wait());
-
   C_SaferCond cond3;
   m_replayer->start(&cond3);
   ASSERT_EQ(0, cond3.wait());
@@ -759,11 +750,6 @@ TEST_F(TestImageReplayer, Resync_StartInterrupted)
   ASSERT_EQ(0, cond.wait());
 
   ASSERT_TRUE(m_replayer->is_stopped());
-
-  C_SaferCond delete_ctx;
-  m_image_deleter->wait_for_scheduled_deletion(
-    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_ctx);
-  EXPECT_EQ(0, delete_ctx.wait());
 
   C_SaferCond cond2;
   m_replayer->start(&cond2);
@@ -947,10 +933,6 @@ TEST_F(TestImageReplayer, Disconnect)
   C_SaferCond cond2;
   m_replayer->start(&cond2);
   ASSERT_EQ(0, cond2.wait());
-  C_SaferCond delete_cond;
-  m_image_deleter->wait_for_scheduled_deletion(
-    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_cond);
-  EXPECT_EQ(0, delete_cond.wait());
 
   start();
   wait_for_replay_complete();
@@ -988,10 +970,6 @@ TEST_F(TestImageReplayer, Disconnect)
   C_SaferCond cond5;
   m_replayer->start(&cond5);
   ASSERT_EQ(-ENOTCONN, cond5.wait());
-  C_SaferCond delete_cond1;
-  m_image_deleter->wait_for_scheduled_deletion(
-    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_cond1);
-  EXPECT_EQ(0, delete_cond1.wait());
 
   C_SaferCond cond6;
   m_replayer->start(&cond6);

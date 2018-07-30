@@ -8,7 +8,7 @@ Please see http://ceph.com/ for current info.
 Most of Ceph is licensed under the LGPL version 2.1.  Some
 miscellaneous code is under BSD-style license or is public domain.
 The documentation is licensed under Creative Commons
-Attribution-ShareAlike (CC BY-SA).  There are a handful of headers
+Attribution Share Alike 3.0 (CC-BY-SA-3.0).  There are a handful of headers
 included here that are licensed under the GPL.  Please see the file
 COPYING for a full inventory of licenses by file.
 
@@ -51,7 +51,7 @@ suitable for installation we recommend you build deb or rpm packages,
 or refer to the `ceph.spec.in` or `debian/rules` to see which
 configuration options are specified for production builds.
 
-Prerequisite: CMake 2.8.11
+Prerequisite: CMake 2.8.12
 
 Build instructions:
 
@@ -61,15 +61,19 @@ Build instructions:
 
 This assumes you make your build dir a subdirectory of the ceph.git
 checkout. If you put it elsewhere, just replace `..` in do_cmake.sh with a
-correct path to the checkout.
+correct path to the checkout. Any additional CMake args can be specified
+setting ARGS before invoking do_cmake. See [cmake options](#cmake-options) 
+for more details. Eg.
+
+    ARGS="-DCMAKE_C_COMPILER=gcc-7" ./do_cmake.sh
 
 To build only certain targets use:
 
-        make [target name]
+	make [target name]
 
 To install:
 
-        make install
+	make install
  
 ### CMake Options
 
@@ -77,28 +81,28 @@ If you run the `cmake` command by hand, there are many options you can
 set with "-D". For example the option to build the RADOS Gateway is
 defaulted to ON. To build without the RADOS Gateway:
 
-        cmake -DWITH_RADOSGW=OFF [path to top level ceph directory]
+	cmake -DWITH_RADOSGW=OFF [path to top level ceph directory]
 
 Another example below is building with debugging and alternate locations 
 for a couple of external dependencies:
 
-        cmake -DLEVELDB_PREFIX="/opt/hyperleveldb" -DOFED_PREFIX="/opt/ofed" \
-        -DCMAKE_INSTALL_PREFIX=/opt/accelio -DCMAKE_C_FLAGS="-O0 -g3 -gdwarf-4" \
-        ..
+	cmake -DLEVELDB_PREFIX="/opt/hyperleveldb" -DOFED_PREFIX="/opt/ofed" \
+	-DCMAKE_INSTALL_PREFIX=/opt/accelio -DCMAKE_C_FLAGS="-O0 -g3 -gdwarf-4" \
+	..
 
 To view an exhaustive list of -D options, you can invoke `cmake` with:
 
-        cmake -LH
+	cmake -LH
 
 If you often pipe `make` to `less` and would like to maintain the
 diagnostic colors for errors and warnings (and if your compiler
 supports it), you can invoke `cmake` with:
 
-        cmake -DDIAGNOSTICS_COLOR=always ..
+	cmake -DDIAGNOSTICS_COLOR=always ..
 
 Then you'll get the diagnostic colors when you execute:
 
-        make | less -R
+	make | less -R
 
 Other available values for 'DIAGNOSTICS_COLOR' are 'auto' (default) and
 'never'.
@@ -159,8 +163,8 @@ When failures occur, look in build/Testing/Temporary for logs.
 To build and run all tests and their dependencies without other
 unnecessary targets in Ceph:
 
-        cd build
-        make check -j$(nproc)
+	cd build
+	make check -j$(nproc)
 
 To run an individual test manually, run `ctest` with -R (regex matching):
 

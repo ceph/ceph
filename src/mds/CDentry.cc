@@ -86,7 +86,15 @@ ostream& operator<<(ostream& out, const CDentry& dn)
   if (dn.is_auth_pinned())
     out << " ap=" << dn.get_num_auth_pins() << "+" << dn.get_num_nested_auth_pins();
 
-  out << " inode=" << dn.get_linkage()->get_inode();
+  {
+    const CInode *inode = dn.get_linkage()->get_inode();
+    out << " ino=";
+     if (inode) {
+       out << inode->ino();
+     } else {
+       out << "(nil)";
+     }
+  }
 
   out << " state=" << dn.get_state();
   if (dn.is_new()) out << "|new";
@@ -149,7 +157,7 @@ void CDentry::add_waiter(uint64_t tag, MDSInternalContextBase *c)
 version_t CDentry::pre_dirty(version_t min)
 {
   projected_version = dir->pre_dirty(min);
-  dout(10) << " pre_dirty " << *this << dendl;
+  dout(10) << __func__ << " " << *this << dendl;
   return projected_version;
 }
 
@@ -159,8 +167,9 @@ void CDentry::_mark_dirty(LogSegment *ls)
   // state+pin
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
-    dir->inc_num_dirty();
     get(PIN_DIRTY);
+    dir->inc_num_dirty();
+    dir->dirty_dentries.push_back(&item_dir_dirty);
     assert(ls);
   }
   if (ls) 
@@ -169,7 +178,7 @@ void CDentry::_mark_dirty(LogSegment *ls)
 
 void CDentry::mark_dirty(version_t pv, LogSegment *ls) 
 {
-  dout(10) << " mark_dirty " << *this << dendl;
+  dout(10) << __func__ << " " << *this << dendl;
 
   // i now live in this new dir version
   assert(pv <= projected_version);
@@ -183,25 +192,24 @@ void CDentry::mark_dirty(version_t pv, LogSegment *ls)
 
 void CDentry::mark_clean() 
 {
-  dout(10) << " mark_clean " << *this << dendl;
+  dout(10) << __func__ << " " << *this << dendl;
   assert(is_dirty());
 
   // not always true for recalc_auth_bits during resolve finish
   //assert(dir->get_version() == 0 || version <= dir->get_version());  // hmm?
 
-  // state+pin
-  state_clear(STATE_DIRTY);
+  state_clear(STATE_DIRTY|STATE_NEW);
   dir->dec_num_dirty();
-  put(PIN_DIRTY);
-  
+
+  item_dir_dirty.remove_myself();
   item_dirty.remove_myself();
 
-  clear_new();
-}    
+  put(PIN_DIRTY);
+}
 
 void CDentry::mark_new() 
 {
-  dout(10) << " mark_new " << *this << dendl;
+  dout(10) << __func__ << " " << *this << dendl;
   state_set(STATE_NEW);
 }
 
@@ -220,7 +228,7 @@ void CDentry::make_path(filepath& fp, bool projected) const
 {
   assert(dir);
   dir->inode->make_path(fp, projected);
-  fp.push_dentry(name);
+  fp.push_dentry(get_name());
 }
 
 /*
@@ -373,7 +381,7 @@ void CDentry::adjust_nested_auth_pins(int adjustment, int diradj, void *by)
 {
   nested_auth_pins += adjustment;
 
-  dout(35) << "adjust_nested_auth_pins by " << by 
+  dout(35) << __func__ << " by " << by 
 	   << ", change " << adjustment << " yields "
 	   << auth_pins << "+" << nested_auth_pins
 	   << dendl;
@@ -392,25 +400,28 @@ bool CDentry::is_freezing() const
   return dir->is_freezing();
 }
 
-void CDentry::decode_replica(bufferlist::iterator& p, bool is_new)
+void CDentry::decode_replica(bufferlist::const_iterator& p, bool is_new)
 {
   __u32 nonce;
-  ::decode(nonce, p);
+  decode(nonce, p);
   replica_nonce = nonce;
   
-  ::decode(first, p);
+  decode(first, p);
 
   inodeno_t rino;
   unsigned char rdtype;
-  __s32 ls;
-  ::decode(rino, p);
-  ::decode(rdtype, p);
-  ::decode(ls, p);
+  decode(rino, p);
+  decode(rdtype, p);
+  lock.decode_state(p, is_new);
+
+  bool need_recover;
+  decode(need_recover, p);
 
   if (is_new) {
     if (rino)
       dir->link_remote_inode(this, rino, rdtype);
-    lock.set_state(ls);
+    if (need_recover)
+      lock.mark_need_recover();
   }
 }
 
@@ -426,19 +437,19 @@ void CDentry::set_object_info(MDSCacheObjectInfo &info)
 
 void CDentry::encode_lock_state(int type, bufferlist& bl)
 {
-  ::encode(first, bl);
+  encode(first, bl);
 
   // null, ino, or remote_ino?
   char c;
   if (linkage.is_primary()) {
     c = 1;
-    ::encode(c, bl);
-    ::encode(linkage.get_inode()->inode.ino, bl);
+    encode(c, bl);
+    encode(linkage.get_inode()->inode.ino, bl);
   }
   else if (linkage.is_remote()) {
     c = 2;
-    ::encode(c, bl);
-    ::encode(linkage.get_remote_ino(), bl);
+    encode(c, bl);
+    encode(linkage.get_remote_ino(), bl);
   }
   else if (linkage.is_null()) {
     // encode nothing.
@@ -448,13 +459,13 @@ void CDentry::encode_lock_state(int type, bufferlist& bl)
 
 void CDentry::decode_lock_state(int type, bufferlist& bl)
 {  
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
 
   snapid_t newfirst;
-  ::decode(newfirst, p);
+  decode(newfirst, p);
 
   if (!is_auth() && newfirst != first) {
-    dout(10) << "decode_lock_state first " << first << " -> " << newfirst << dendl;
+    dout(10) << __func__ << " first " << first << " -> " << newfirst << dendl;
     assert(newfirst > first);
     first = newfirst;
   }
@@ -467,16 +478,16 @@ void CDentry::decode_lock_state(int type, bufferlist& bl)
 
   char c;
   inodeno_t ino;
-  ::decode(c, p);
+  decode(c, p);
 
   switch (c) {
   case 1:
   case 2:
-    ::decode(ino, p);
+    decode(ino, p);
     // newly linked?
     if (linkage.is_null() && !is_auth()) {
       // force trim from cache!
-      dout(10) << "decode_lock_state replica dentry null -> non-null, must trim" << dendl;
+      dout(10) << __func__ << " replica dentry null -> non-null, must trim" << dendl;
       //assert(get_num_ref() == 0);
     } else {
       // verify?
@@ -495,13 +506,14 @@ ClientLease *CDentry::add_client_lease(client_t c, Session *session)
   if (client_lease_map.count(c))
     l = client_lease_map[c];
   else {
-    dout(20) << "add_client_lease client." << c << " on " << lock << dendl;
-    if (client_lease_map.empty())
+    dout(20) << __func__ << " client." << c << " on " << lock << dendl;
+    if (client_lease_map.empty()) {
       get(PIN_CLIENTLEASE);
+      lock.get_client_lease();
+    }
     l = client_lease_map[c] = new ClientLease(c, this);
     l->seq = ++session->lease_seq;
   
-    lock.get_client_lease();
   }
   
   return l;
@@ -513,18 +525,18 @@ void CDentry::remove_client_lease(ClientLease *l, Locker *locker)
 
   bool gather = false;
 
-  dout(20) << "remove_client_lease client." << l->client << " on " << lock << dendl;
-  lock.put_client_lease();
-  if (lock.get_num_client_lease() == 0 && !lock.is_stable())
-    gather = true;
+  dout(20) << __func__ << " client." << l->client << " on " << lock << dendl;
 
   client_lease_map.erase(l->client);
   l->item_lease.remove_myself();
   l->item_session_lease.remove_myself();
   delete l;
 
-  if (client_lease_map.empty())
+  if (client_lease_map.empty()) {
+    gather = !lock.is_stable();
+    lock.put_client_lease();
     put(PIN_CLIENTLEASE);
+  }
 
   if (gather)
     locker->eval_gather(&lock);

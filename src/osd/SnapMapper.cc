@@ -28,7 +28,7 @@ int OSDriver::get_keys(
   const std::set<std::string> &keys,
   std::map<std::string, bufferlist> *out)
 {
-  return os->omap_get_values(cid, hoid, keys, out);
+  return os->omap_get_values(ch, hoid, keys, out);
 }
 
 int OSDriver::get_next(
@@ -36,7 +36,7 @@ int OSDriver::get_next(
   pair<std::string, bufferlist> *next)
 {
   ObjectMap::ObjectMapIterator iter =
-    os->get_omap_iterator(cid, hoid);
+    os->get_omap_iterator(ch, hoid);
   if (!iter) {
     ceph_abort();
     return -EINVAL;
@@ -59,14 +59,14 @@ struct Mapping {
   Mapping() : snap(0) {}
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(snap, bl);
-    ::encode(hoid, bl);
+    encode(snap, bl);
+    encode(hoid, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(snap, bl);
-    ::decode(hoid, bl);
+    decode(snap, bl);
+    decode(hoid, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -92,7 +92,7 @@ pair<string, bufferlist> SnapMapper::to_raw(
   const pair<snapid_t, hobject_t> &in)
 {
   bufferlist bl;
-  ::encode(Mapping(in), bl);
+  encode(Mapping(in), bl);
   return make_pair(
     to_raw_key(in),
     bl);
@@ -103,8 +103,8 @@ pair<snapid_t, hobject_t> SnapMapper::from_raw(
 {
   Mapping map;
   bufferlist bl(image.second);
-  bufferlist::iterator bp(bl.begin());
-  ::decode(map, bp);
+  auto bp = bl.cbegin();
+  decode(map, bp);
   return make_pair(map.snap, map.hoid);
 }
 
@@ -121,17 +121,28 @@ string SnapMapper::to_object_key(const hobject_t &hoid)
 void SnapMapper::object_snaps::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(oid, bl);
-  ::encode(snaps, bl);
+  encode(oid, bl);
+  encode(snaps, bl);
   ENCODE_FINISH(bl);
 }
 
-void SnapMapper::object_snaps::decode(bufferlist::iterator &bl)
+void SnapMapper::object_snaps::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(1, bl);
-  ::decode(oid, bl);
-  ::decode(snaps, bl);
+  decode(oid, bl);
+  decode(snaps, bl);
   DECODE_FINISH(bl);
+}
+
+bool SnapMapper::check(const hobject_t &hoid) const
+{
+  if (hoid.match(mask_bits, match)) {
+    return true;
+  }
+  derr << __func__ << " " << hoid << " mask_bits " << mask_bits
+       << " match 0x" << std::hex << match << std::dec << " is false"
+       << dendl;
+  return false;
 }
 
 int SnapMapper::get_snaps(
@@ -143,15 +154,22 @@ int SnapMapper::get_snaps(
   map<string, bufferlist> got;
   keys.insert(to_object_key(oid));
   int r = backend.get_keys(keys, &got);
-  if (r < 0)
+  if (r < 0) {
+    dout(20) << __func__ << " " << oid << " got err " << r << dendl;
     return r;
-  if (got.empty())
+  }
+  if (got.empty()) {
+    dout(20) << __func__ << " " << oid << " got.empty()" << dendl;
     return -ENOENT;
+  }
   if (out) {
-    bufferlist::iterator bp = got.begin()->second.begin();
-    ::decode(*out, bp);
+    auto bp = got.begin()->second.cbegin();
+    decode(*out, bp);
     dout(20) << __func__ << " " << oid << " " << out->snaps << dendl;
-    assert(!out->snaps.empty());
+    if (out->snaps.empty()) {
+      dout(1) << __func__ << " " << oid << " empty snapset" << dendl;
+      assert(!cct->_conf->osd_debug_verify_snaps);
+    }
   } else {
     dout(20) << __func__ << " " << oid << " (out == NULL)" << dendl;
   }
@@ -166,7 +184,7 @@ void SnapMapper::clear_snaps(
   assert(check(oid));
   set<string> to_remove;
   to_remove.insert(to_object_key(oid));
-  if (g_conf->subsys.should_gather(ceph_subsys_osd, 20)) {
+  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_remove) {
       dout(20) << __func__ << " rm " << i << dendl;
     }
@@ -182,10 +200,10 @@ void SnapMapper::set_snaps(
   assert(check(oid));
   map<string, bufferlist> to_set;
   bufferlist bl;
-  ::encode(in, bl);
+  encode(in, bl);
   to_set[to_object_key(oid)] = bl;
   dout(20) << __func__ << " " << oid << " " << in.snaps << dendl;
-  if (g_conf->subsys.should_gather(ceph_subsys_osd, 20)) {
+  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_set) {
       dout(20) << __func__ << " set " << i.first << dendl;
     }
@@ -224,7 +242,7 @@ int SnapMapper::update_snaps(
       to_remove.insert(to_raw_key(make_pair(*i, oid)));
     }
   }
-  if (g_conf->subsys.should_gather(ceph_subsys_osd, 20)) {
+  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_remove) {
       dout(20) << __func__ << " rm " << i << dendl;
     }
@@ -239,11 +257,17 @@ void SnapMapper::add_oid(
   MapCacher::Transaction<std::string, bufferlist> *t)
 {
   dout(20) << __func__ << " " << oid << " " << snaps << dendl;
+  assert(!snaps.empty());
   assert(check(oid));
   {
     object_snaps out;
     int r = get_snaps(oid, &out);
-    assert(r == -ENOENT);
+    if (r != -ENOENT) {
+      derr << __func__ << " found existing snaps mapped on " << oid
+	   << ", removing" << dendl;
+      assert(!cct->_conf->osd_debug_verify_snaps);
+      remove_oid(oid, t);
+    }
   }
 
   object_snaps _snaps(oid, snaps);
@@ -255,7 +279,7 @@ void SnapMapper::add_oid(
        ++i) {
     to_add.insert(to_raw(make_pair(*i, oid)));
   }
-  if (g_conf->subsys.should_gather(ceph_subsys_osd, 20)) {
+  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_add) {
       dout(20) << __func__ << " set " << i.first << dendl;
     }
@@ -336,7 +360,7 @@ int SnapMapper::_remove_oid(
        ++i) {
     to_remove.insert(to_raw_key(make_pair(*i, oid)));
   }
-  if (g_conf->subsys.should_gather(ceph_subsys_osd, 20)) {
+  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_remove) {
       dout(20) << __func__ << " rm " << i << dendl;
     }

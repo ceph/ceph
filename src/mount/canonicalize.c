@@ -154,7 +154,7 @@ canonicalize_dm_name(const char *ptname)
 {
 	FILE	*f;
 	size_t	sz;
-	char	path[256], name[256], *res = NULL;
+	char	path[268], name[256], *res = NULL;
 
 	snprintf(path, sizeof(path), "/sys/block/%s/dm/name", ptname);
 	if (!(f = fopen(path, "r")))

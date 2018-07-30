@@ -1,0 +1,13 @@
+<div class="modal-header">
+  <h4 class="modal-title pull-left">
+    <ng-content select=".modal-title"></ng-content>
+  </h4>
+  <button type="button"
+          class="close pull-right"
+          aria-label="Close"
+          (click)="modalRef.hide()">
+    <span aria-hidden="true">&times;</span>
+  </button>
+</div>
+
+<ng-content select=".modal-content"></ng-content>

@@ -13,6 +13,17 @@ specified in the command. Thus variables meant to be applied to all RGW
 instances or all radosgw-admin commands can be put into the ``[global]`` or the
 ``[client]`` section to avoid specifying instance-name.
 
+``rgw frontends``
+
+:Description: Configures the HTTP frontend(s). The configuration for multiple
+              frontends can be provided in a comma-delimited list. Each frontend
+              configuration may include a list of options separated by spaces,
+              where each option is in the form "key=value" or "key". See
+              `HTTP Frontends`_ for more on supported options.
+
+:Type: String
+:Default: ``civetweb port=7480``
+
 ``rgw data``
 
 :Description: Sets the location of the data files for Ceph Object Gateway.
@@ -848,3 +859,4 @@ Barbican Settings
 .. _Rados cluster handles: ../../rados/api/librados-intro/#step-2-configuring-a-cluster-handle
 .. _Barbican: ../barbican
 .. _Encryption: ../encryption
+.. _HTTP Frontends: ../frontends

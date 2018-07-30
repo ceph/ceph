@@ -20,6 +20,7 @@
 #include "tools/rbd_mirror/PoolWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/types.h"
+#include "tools/rbd_mirror/pool_watcher/Types.h"
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
 #include <boost/scope_exit.hpp>
@@ -67,12 +68,12 @@ public:
     TestFixture::TearDown();
   }
 
-  struct PoolWatcherListener : public PoolWatcher<>::Listener {
+  struct PoolWatcherListener : public rbd::mirror::pool_watcher::Listener {
     TestPoolWatcher *test;
     Cond cond;
     ImageIds image_ids;
 
-    PoolWatcherListener(TestPoolWatcher *test) : test(test) {
+    explicit PoolWatcherListener(TestPoolWatcher *test) : test(test) {
     }
 
     void handle_update(const std::string &mirror_uuid,

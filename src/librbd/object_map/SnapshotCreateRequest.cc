@@ -68,7 +68,7 @@ bool SnapshotCreateRequest::should_complete(int r) {
     finished = true;
     break;
   default:
-    assert(false);
+    ceph_abort();
     break;
   }
   return finished;
@@ -135,10 +135,12 @@ bool SnapshotCreateRequest::send_add_snapshot() {
 void SnapshotCreateRequest::update_object_map() {
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
   RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
-
-  for (uint64_t i = 0; i < m_object_map.size(); ++i) {
-    if (m_object_map[i] == OBJECT_EXISTS) {
-      m_object_map[i] = OBJECT_EXISTS_CLEAN;
+  
+  auto it = m_object_map.begin();
+  auto end_it = m_object_map.end();
+  for (; it != end_it; ++it) {
+    if (*it == OBJECT_EXISTS) {
+      *it = OBJECT_EXISTS_CLEAN;
     }
   }
 }

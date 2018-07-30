@@ -29,8 +29,9 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <vector>
 #include <atomic>
+#include <limits>
+#include <vector>
 
 using std::ostringstream;
 using std::string;
@@ -176,7 +177,7 @@ void SysTestRunnable::
 update_id_str(bool started)
 {
   bool use_threads = SysTestSettings::inst().use_threads();
-  char extra[128];
+  char extra[std::numeric_limits<int>::digits10 + 1];
   extra[0] = '\0';
 
   if (started) {

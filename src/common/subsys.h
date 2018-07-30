@@ -53,6 +53,7 @@ SUBSYS(tp, 0, 5)
 SUBSYS(auth, 1, 5)
 SUBSYS(crypto, 1, 5)
 SUBSYS(finisher, 1, 1)
+SUBSYS(reserver, 1, 1)
 SUBSYS(heartbeatmap, 1, 5)
 SUBSYS(perfcounter, 1, 5)
 SUBSYS(rgw, 1, 5)                 // log level for the Rados gateway

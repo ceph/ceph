@@ -1021,6 +1021,36 @@ TRACEPOINT_EVENT(librbd, copy4_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, deep_copy_enter,
+    TP_ARGS(
+        void*, src_imagectx,
+        const char*, src_name,
+        const char*, src_snap_name,
+        char, src_read_only,
+        const char*, dst_pool_name,
+        uint64_t, dst_id,
+        const char*, dst_name,
+        void*, opts),
+    TP_FIELDS(
+        ctf_integer_hex(void*, src_imagectx, src_imagectx)
+        ctf_string(src_name, src_name)
+        ctf_string(src_snap_name, src_snap_name)
+        ctf_integer(char, src_read_only, src_read_only)
+        ctf_string(dst_pool_name, dst_pool_name)
+        ctf_integer(uint64_t, dst_id, dst_id)
+        ctf_string(dst_name, dst_name)
+        ctf_integer_hex(void*, opts, opts)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, deep_copy_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, resize_enter,
     TP_ARGS(
         void*, imagectx,
@@ -2323,6 +2353,28 @@ TRACEPOINT_EVENT(librbd, group_remove_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, group_rename_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, groupname,
+        const char*, destgroupname),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(groupname, groupname)
+        ctf_string(destgroupname, destgroupname)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_rename_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, group_list_enter,
     TP_ARGS(
         const char*, pool_name,
@@ -2383,6 +2435,42 @@ TRACEPOINT_EVENT(librbd, update_unwatch_exit,
     TP_ARGS(
         int, retval),
     TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, snap_get_namespace_type_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, snap_get_namespace_type_exit,
+    TP_ARGS(
+        int, retval),
+	TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, snap_get_group_namespace_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, snap_get_group_namespace_exit,
+    TP_ARGS(
+        int, retval),
+	TP_FIELDS(
         ctf_integer(int, retval, retval)
     )
 )
@@ -2498,5 +2586,129 @@ TRACEPOINT_EVENT(librbd, image_get_group_exit,
 	    int, retval),
     TP_FIELDS(
         ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_snap_create_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, group_name,
+        const char*, snap_name),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(group_name, group_name)
+        ctf_string(snap_name, snap_name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_snap_create_exit,
+    TP_ARGS(
+	    int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_snap_remove_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, group_name,
+        const char*, snap_name),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(group_name, group_name)
+        ctf_string(snap_name, snap_name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_snap_remove_exit,
+    TP_ARGS(
+	    int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_snap_rename_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, group_name,
+        const char*, old_snap_name,
+        const char*, new_snap_name),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(group_name, group_name)
+        ctf_string(old_snap_name, old_snap_name)
+        ctf_string(new_snap_name, new_snap_name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_snap_rename_exit,
+    TP_ARGS(
+	    int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_snap_list_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, group_name),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(group_name, group_name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_snap_list_exit,
+    TP_ARGS(
+	    int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, list_watchers_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name,
+        const char*, snap_name,
+        char, read_only),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, list_watchers_entry,
+    TP_ARGS(
+        const char*, addr,
+        int64_t, id,
+        uint64_t, cookie),
+    TP_FIELDS(
+        ctf_string(addr, addr)
+        ctf_integer(int64_t, id, id)
+        ctf_integer(uint64_t, cookie, cookie)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, list_watchers_exit,
+    TP_ARGS(
+        int, retval,
+        size_t, num_watchers),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(size_t, num_watchers, num_watchers)
     )
 )

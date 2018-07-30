@@ -8,22 +8,25 @@ import os
 from StringIO import StringIO
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
+from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 
 
 class CephFSMount(object):
-    def __init__(self, test_dir, client_id, client_remote):
+    def __init__(self, ctx, test_dir, client_id, client_remote):
         """
         :param test_dir: Global teuthology test dir
         :param client_id: Client ID, the 'foo' in client.foo
         :param client_remote: Remote instance for the host where client will run
         """
 
+        self.ctx = ctx
         self.test_dir = test_dir
         self.client_id = client_id
         self.client_remote = client_remote
         self.mountpoint_dir_name = 'mnt.{id}'.format(id=self.client_id)
+        self.fs = None
 
         self.test_files = ['a', 'b', 'c']
 
@@ -36,6 +39,15 @@ class CephFSMount(object):
 
     def is_mounted(self):
         raise NotImplementedError()
+
+    def setupfs(self, name=None):
+        if name is None and self.fs is not None:
+            # Previous mount existed, reuse the old name
+            name = self.fs.name
+        self.fs = Filesystem(self.ctx, name=name)
+        log.info('Wait for MDS to reach steady state...')
+        self.fs.wait_for_daemons()
+        log.info('Ready to start {}...'.format(type(self).__name__))
 
     def mount(self, mount_path=None, mount_fs_name=None):
         raise NotImplementedError()
@@ -90,6 +102,14 @@ class CephFSMount(object):
             yield
         finally:
             self.umount_wait()
+
+    def is_blacklisted(self):
+        addr = self.get_global_addr()
+        blacklist = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "blacklist", "ls", "--format=json"))
+        for b in blacklist:
+            if addr == b["addr"]:
+                return True
+        return False
 
     def create_files(self):
         assert(self.is_mounted())
@@ -457,6 +477,12 @@ class CephFSMount(object):
         self.background_procs.remove(p)
 
     def get_global_id(self):
+        raise NotImplementedError()
+
+    def get_global_inst(self):
+        raise NotImplementedError()
+
+    def get_global_addr(self):
         raise NotImplementedError()
 
     def get_osd_epoch(self):

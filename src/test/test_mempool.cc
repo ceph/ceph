@@ -176,7 +176,7 @@ struct obj {
   int a;
   int b;
   obj() : a(1), b(1) {}
-  obj(int _a) : a(_a), b(2) {}
+  explicit obj(int _a) : a(_a), b(2) {}
   obj(int _a,int _b) : a(_a), b(_b) {}
   friend inline bool operator<(const obj& l, const obj& r) {
     return l.a < r.a;
@@ -256,6 +256,49 @@ TEST(mempool, list)
     v.push_back(obj());
     v.push_back(obj(1));
   }
+ 
+}
+
+TEST(mempool, dump)
+{
+  ostringstream ostr;
+
+  Formatter* f = Formatter::create("xml-pretty", "xml-pretty", "xml-pretty");
+  mempool::dump(f);
+  f->flush(ostr);
+
+  delete f;
+  ASSERT_NE(ostr.str().find(mempool::get_pool_name((mempool::pool_index_t)0)),
+    std::string::npos);
+
+  ostr.str("");
+
+  f = Formatter::create("html-pretty", "html-pretty", "html-pretty");
+  mempool::dump(f);
+  f->flush(ostr);
+
+  delete f;
+  ASSERT_NE(ostr.str().find(mempool::get_pool_name((mempool::pool_index_t)0)),
+    std::string::npos);
+
+  ostr.str("");
+  f = Formatter::create("table", "table", "table");
+  mempool::dump(f);
+  f->flush(ostr);
+
+  delete f;
+  ASSERT_NE(ostr.str().find(mempool::get_pool_name((mempool::pool_index_t)0)),
+    std::string::npos);
+
+  ostr.str("");
+
+  f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
+  mempool::dump(f);
+  f->flush(ostr);
+  delete f;
+
+  ASSERT_NE(ostr.str().find(mempool::get_pool_name((mempool::pool_index_t)0)),
+    std::string::npos);
 }
 
 TEST(mempool, unordered_map)
@@ -328,7 +371,8 @@ int main(int argc, char **argv)
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   // enable debug mode for the tests

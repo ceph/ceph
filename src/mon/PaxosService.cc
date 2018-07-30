@@ -172,10 +172,10 @@ bool PaxosService::should_propose(double& delay)
     delay = 0.0;
   } else {
     utime_t now = ceph_clock_now();
-    if ((now - paxos->last_commit_time) > g_conf->paxos_propose_interval)
-      delay = (double)g_conf->paxos_min_wait;
+    if ((now - paxos->last_commit_time) > g_conf()->paxos_propose_interval)
+      delay = (double)g_conf()->paxos_min_wait;
     else
-      delay = (double)(g_conf->paxos_propose_interval + paxos->last_commit_time
+      delay = (double)(g_conf()->paxos_propose_interval + paxos->last_commit_time
 		       - now);
   }
   return true;
@@ -257,7 +257,7 @@ bool PaxosService::should_stash_full()
    */
   return (!latest_full ||
 	  (latest_full <= get_trim_to()) ||
-	  (get_last_committed() - latest_full > (version_t)g_conf->paxos_stash_full_interval));
+	  (get_last_committed() - latest_full > (version_t)g_conf()->paxos_stash_full_interval));
 }
 
 void PaxosService::restart()
@@ -335,9 +335,7 @@ void PaxosService::_active()
       return;
     }
   } else {
-    if (!mon->is_leader()) {
-      dout(7) << __func__ << " we are not the leader, hence we propose nothing!" << dendl;
-    }
+    dout(7) << __func__ << " we are not the leader, hence we propose nothing!" << dendl;
   }
 
   // wake up anyone who came in while we were proposing.  note that
@@ -379,26 +377,27 @@ void PaxosService::maybe_trim()
     return;
 
   version_t to_remove = trim_to - get_first_committed();
-  if (g_conf->paxos_service_trim_min > 0 &&
-      to_remove < (version_t)g_conf->paxos_service_trim_min) {
+  if (g_conf()->paxos_service_trim_min > 0 &&
+      to_remove < (version_t)g_conf()->paxos_service_trim_min) {
     dout(10) << __func__ << " trim_to " << trim_to << " would only trim " << to_remove
-	     << " < paxos_service_trim_min " << g_conf->paxos_service_trim_min << dendl;
+	     << " < paxos_service_trim_min " << g_conf()->paxos_service_trim_min << dendl;
     return;
   }
 
-  if (g_conf->paxos_service_trim_max > 0 &&
-      to_remove > (version_t)g_conf->paxos_service_trim_max) {
+  if (g_conf()->paxos_service_trim_max > 0 &&
+      to_remove > (version_t)g_conf()->paxos_service_trim_max) {
     dout(10) << __func__ << " trim_to " << trim_to << " would only trim " << to_remove
-	     << " > paxos_service_trim_max, limiting to " << g_conf->paxos_service_trim_max
+	     << " > paxos_service_trim_max, limiting to " << g_conf()->paxos_service_trim_max
 	     << dendl;
-    trim_to = get_first_committed() + g_conf->paxos_service_trim_max;
-    to_remove = g_conf->paxos_service_trim_max;
+    trim_to = get_first_committed() + g_conf()->paxos_service_trim_max;
+    to_remove = g_conf()->paxos_service_trim_max;
   }
 
   dout(10) << __func__ << " trimming to " << trim_to << ", " << to_remove << " states" << dendl;
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   trim(t, get_first_committed(), trim_to);
   put_first_committed(t, trim_to);
+  cached_first_committed = trim_to;
 
   // let the service add any extra stuff
   encode_trim_extra(t, trim_to);
@@ -422,7 +421,7 @@ void PaxosService::trim(MonitorDBStore::TransactionRef t,
       t->erase(get_service_name(), full_key);
     }
   }
-  if (g_conf->mon_compact_on_trim) {
+  if (g_conf()->mon_compact_on_trim) {
     dout(20) << " compacting prefix " << get_service_name() << dendl;
     t->compact_range(get_service_name(), stringify(from - 1), stringify(to));
     t->compact_range(get_service_name(),
@@ -436,7 +435,7 @@ void PaxosService::load_health()
   bufferlist bl;
   mon->store->get("health", service_name, bl);
   if (bl.length()) {
-    auto p = bl.begin();
-    ::decode(health_checks, p);
+    auto p = bl.cbegin();
+    decode(health_checks, p);
   }
 }

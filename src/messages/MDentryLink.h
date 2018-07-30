@@ -16,6 +16,8 @@
 #ifndef CEPH_MDENTRYLINK_H
 #define CEPH_MDENTRYLINK_H
 
+#include <string_view>
+
 class MDentryLink : public Message {
   dirfrag_t subtree;
   dirfrag_t dirfrag;
@@ -32,7 +34,7 @@ class MDentryLink : public Message {
 
   MDentryLink() :
     Message(MSG_MDS_DENTRYLINK) { }
-  MDentryLink(dirfrag_t r, dirfrag_t df, string& n, bool p) :
+  MDentryLink(dirfrag_t r, dirfrag_t df, std::string_view n, bool p) :
     Message(MSG_MDS_DENTRYLINK),
     subtree(r),
     dirfrag(df),
@@ -48,19 +50,20 @@ public:
   }
   
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(subtree, p);
-    ::decode(dirfrag, p);
-    ::decode(dn, p);
-    ::decode(is_primary, p);
-    ::decode(bl, p);
+    auto p = payload.cbegin();
+    decode(subtree, p);
+    decode(dirfrag, p);
+    decode(dn, p);
+    decode(is_primary, p);
+    decode(bl, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(subtree, payload);
-    ::encode(dirfrag, payload);
-    ::encode(dn, payload);
-    ::encode(is_primary, payload);
-    ::encode(bl, payload);
+    using ceph::encode;
+    encode(subtree, payload);
+    encode(dirfrag, payload);
+    encode(dn, payload);
+    encode(is_primary, payload);
+    encode(bl, payload);
   }
 };
 

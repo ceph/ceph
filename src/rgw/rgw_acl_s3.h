@@ -86,7 +86,7 @@ public:
   int rebuild(RGWRados *store, ACLOwner *owner, RGWAccessControlPolicy& dest);
   bool compare_group_name(string& id, ACLGroupTypeEnum group) override;
 
-  virtual int create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, string canned_acl) {
+  virtual int create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, const string& canned_acl) {
     RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
     int ret = _acl.create_canned(_owner, bucket_owner, canned_acl);
     owner = _owner;

@@ -43,7 +43,6 @@ inline const char *get_lock_type_name(int t) {
   }
 }
 
-#include "include/memory.h"
 
 struct MutationImpl;
 typedef boost::intrusive_ptr<MutationImpl> MutationRef;
@@ -120,6 +119,8 @@ public:
     case LOCK_XSYN_EXCL: return "xsyn->excl";
     case LOCK_EXCL_XSYN: return "excl->xsyn";
     case LOCK_XSYN_SYNC: return "xsyn->sync";
+    case LOCK_XSYN_LOCK: return "xsyn->lock";
+    case LOCK_XSYN_MIX: return "xsyn->mix";
 
     case LOCK_SYNC_MIX: return "sync->mix";
     case LOCK_SYNC_MIX2: return "sync->mix(2)";
@@ -165,19 +166,25 @@ protected:
 
   // lock state
   __s16 state;
+  __s16 state_flags;
+
+  enum {
+    LEASED		= 1 << 0,
+    NEED_RECOVER	= 1 << 1,
+  };
 
 private:
-  __s16 num_rdlock;
-  __s32 num_client_lease;
+  int num_rdlock;
 
+  // XXX not in mempool
   struct unstable_bits_t {
     set<__s32> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
 
     // local state
-    int num_wrlock, num_xlock;
+    int num_wrlock = 0, num_xlock = 0;
     MutationRef xlock_by;
-    client_t xlock_by_client;
-    client_t excl_client;
+    client_t xlock_by_client = -1;
+    client_t excl_client = -1;
 
     bool empty() {
       return
@@ -189,11 +196,7 @@ private:
 	excl_client == -1;
     }
 
-    unstable_bits_t() : num_wrlock(0),
-			num_xlock(0),
-			xlock_by(),
-			xlock_by_client(-1),
-			excl_client(-1) {}
+    unstable_bits_t() {}
   };
 
   mutable std::unique_ptr<unstable_bits_t> _unstable;
@@ -225,8 +228,8 @@ public:
     type(lt),
     parent(o), 
     state(LOCK_SYNC),
-    num_rdlock(0),
-    num_client_lease(0)
+    state_flags(0),
+    num_rdlock(0)
   {}
   virtual ~SimpleLock() {}
 
@@ -321,13 +324,17 @@ public:
     //assert(!is_stable() || gather_set.size() == 0);  // gather should be empty in stable states.
     return s;
   }
-  void set_state_rejoin(int s, list<MDSInternalContextBase*>& waiters) {
-    if (!is_stable() && get_parent()->is_auth()) {
-      state = s;
-      get_parent()->auth_unpin(this);
-    } else {
-      state = s;
-    }
+  void set_state_rejoin(int s, list<MDSInternalContextBase*>& waiters, bool survivor) {
+    assert(!get_parent()->is_auth());
+
+    // If lock in the replica object was not in SYNC state when auth mds of the object failed.
+    // Auth mds of the object may take xlock on the lock and change the object when replaying
+    // unsafe requests.
+    if (!survivor || state != LOCK_SYNC)
+      mark_need_recover();
+
+    state = s;
+
     if (is_stable())
       take_waiting(SimpleLock::WAIT_ALL, waiters);
   }
@@ -525,60 +532,68 @@ public:
   }
   
   // lease
+  bool is_leased() const {
+    return state_flags & LEASED;
+  }
   void get_client_lease() {
-    num_client_lease++;
+    assert(!is_leased());
+    state_flags |= LEASED;
   }
   void put_client_lease() {
-    assert(num_client_lease > 0);
-    num_client_lease--;
-    if (num_client_lease == 0) {
-      try_clear_more();
-    }
-  }
-  bool is_leased() const {
-    return num_client_lease > 0;
-  }
-  int get_num_client_lease() const {
-    return num_client_lease;
+    assert(is_leased());
+    state_flags &= ~LEASED;
   }
 
   bool is_used() const {
-    return is_xlocked() || is_rdlocked() || is_wrlocked() || num_client_lease;
+    return is_xlocked() || is_rdlocked() || is_wrlocked() || is_leased();
+  }
+
+  bool needs_recover() const {
+    return state_flags & NEED_RECOVER;
+  }
+  void mark_need_recover() {
+    state_flags |= NEED_RECOVER;
+  }
+  void clear_need_recover() {
+    state_flags &= ~NEED_RECOVER;
   }
 
   // encode/decode
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
-    ::encode(state, bl);
+    encode(state, bl);
     if (have_more())
-      ::encode(more()->gather_set, bl);
+      encode(more()->gather_set, bl);
     else
-      ::encode(empty_gather_set, bl);
+      encode(empty_gather_set, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     DECODE_START(2, p);
-    ::decode(state, p);
+    decode(state, p);
     set<__s32> g;
-    ::decode(g, p);
+    decode(g, p);
     if (!g.empty())
       more()->gather_set.swap(g);
     DECODE_FINISH(p);
   }
   void encode_state_for_replica(bufferlist& bl) const {
     __s16 s = get_replica_state();
-    ::encode(s, bl);
+    using ceph::encode;
+    encode(s, bl);
   }
-  void decode_state(bufferlist::iterator& p, bool is_new=true) {
+  void decode_state(bufferlist::const_iterator& p, bool is_new=true) {
+    using ceph::decode;
     __s16 s;
-    ::decode(s, p);
+    decode(s, p);
     if (is_new)
       state = s;
   }
-  void decode_state_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters) {
+  void decode_state_rejoin(bufferlist::const_iterator& p, list<MDSInternalContextBase*>& waiters, bool survivor) {
     __s16 s;
-    ::decode(s, p);
-    set_state_rejoin(s, waiters);
+    using ceph::decode;
+    decode(s, p);
+    set_state_rejoin(s, waiters, survivor);
   }
 
 
@@ -657,8 +672,8 @@ public:
     out << get_state_name(get_state());
     if (!get_gather_set().empty())
       out << " g=" << get_gather_set();
-    if (num_client_lease)
-      out << " l=" << num_client_lease;
+    if (is_leased())
+      out << " l";
     if (is_rdlocked()) 
       out << " r=" << get_num_rdlocks();
     if (is_wrlocked()) 

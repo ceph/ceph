@@ -14,12 +14,6 @@
 
 struct obj_list_watch_response_t;
 
-#if __GNUC__ >= 4
-  #define CEPH_CLS_API    __attribute__ ((visibility ("default")))
-#else
-  #define CEPH_CLS_API
-#endif
-
 extern "C" {
 #endif
 
@@ -95,7 +89,7 @@ public:
    * handle any encoding errors, and return an appropriate error code,
    * or 0 on valid input.
    */
-  virtual int init(bufferlist::iterator &params) = 0;
+  virtual int init(bufferlist::const_iterator &params) = 0;
 
   /**
    * xattr key, or empty string.  If non-empty, this xattr will be fetched

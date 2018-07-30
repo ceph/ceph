@@ -27,7 +27,7 @@ extern "C" {
 
 #define LIBRGW_FILE_VER_MAJOR 1
 #define LIBRGW_FILE_VER_MINOR 1
-#define LIBRGW_FILE_VER_EXTRA 5
+#define LIBRGW_FILE_VER_EXTRA 6
 
 #define LIBRGW_FILE_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBRGW_FILE_VERSION_CODE LIBRGW_FILE_VERSION(LIBRGW_FILE_VER_MAJOR, LIBRGW_FILE_VER_MINOR, LIBRGW_FILE_VER_EXTRA)
@@ -220,6 +220,12 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *parent_fh, uint64_t *offset,
 		rgw_readdir_cb rcb, void *cb_arg, bool *eof,
 		uint32_t flags);
+
+/* enumeration continuing from name */
+int rgw_readdir2(struct rgw_fs *rgw_fs,
+		 struct rgw_file_handle *parent_fh, const char *name,
+		 rgw_readdir_cb rcb, void *cb_arg, bool *eof,
+		 uint32_t flags);
 
 /* project offset of dirent name */
 #define RGW_DIRENT_OFFSET_FLAG_NONE 0x0000

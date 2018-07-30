@@ -53,8 +53,8 @@ static string make_key(const string &prefix, const string &value)
 
 void MemDB::_encode(mdb_iter_t iter, bufferlist &bl)
 {
-  ::encode(iter->first, bl);
-  ::encode(iter->second, bl);
+  encode(iter->first, bl);
+  encode(iter->second, bl);
 }
 
 std::string MemDB::_get_data_fn()
@@ -165,6 +165,20 @@ int MemDB::do_open(ostream &out, bool create)
   m_allocated_bytes = 1;
 
   return _init(create);
+}
+
+int MemDB::open(ostream &out, const vector<ColumnFamily>& cfs) {
+  if (!cfs.empty()) {
+    assert(0 == "Not implemented");
+  }
+  return do_open(out, false);
+}
+
+int MemDB::create_and_open(ostream &out, const vector<ColumnFamily>& cfs) {
+  if (!cfs.empty()) {
+    assert(0 == "Not implemented");
+  }
+  return do_open(out, true);
 }
 
 MemDB::~MemDB()
@@ -304,7 +318,7 @@ int MemDB::_rmkey(ms_op_t &op)
   return m_map.erase(key);
 }
 
-std::shared_ptr<KeyValueDB::MergeOperator> MemDB::_find_merge_op(std::string prefix)
+std::shared_ptr<KeyValueDB::MergeOperator> MemDB::_find_merge_op(const std::string &prefix)
 {
   for (const auto& i : merge_ops) {
     if (i.first == prefix) {

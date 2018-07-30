@@ -54,24 +54,21 @@ private:
    *                                  <start> . . . . > . . . . .
    *                                     |                      .
    *                                     v                      .
-   *                               VALIDATE POOL                v (pool validation
+   *                               VALIDATE DATA POOL           v (pool validation
    *                                     |                      .  disabled)
    *                                     v                      .
-   *                             VALIDATE OVERWRITE             .
-   *                                     |                      .
-   *                                     v                      .
-   * (error: bottom up)           CREATE ID OBJECT. . < . . . . .
+   * (error: bottom up)         ADD IMAGE TO DIRECTORY  < . . . .
    *  _______<_______                    |
    * |               |                   v
-   * |               |          ADD IMAGE TO DIRECTORY
+   * |               |            CREATE ID OBJECT
    * |               |               /   |
-   * |      REMOVE ID OBJECT<-------/    v
+   * |      REMOVE FROM DIR <-------/    v
    * |               |           NEGOTIATE FEATURES (when using default features)
    * |               |                   |
    * |               |                   v         (stripingv2 disabled)
    * |               |              CREATE IMAGE. . . . > . . . .
    * v               |               /   |                      .
-   * |      REMOVE FROM DIR<--------/    v                      .
+   * |      REMOVE ID OBJ <---------/    v                      .
    * |               |          SET STRIPE UNIT COUNT           .
    * |               |               /   |  \ . . . . . > . . . .
    * |      REMOVE HEADER OBJ<------/    v                     /. (object-map
@@ -101,7 +98,7 @@ private:
                 bool skip_mirror_enable,
                 ContextWQ *op_work_queue, Context *on_finish);
 
-  IoCtx &m_ioctx;
+  IoCtx m_io_ctx;
   IoCtx m_data_io_ctx;
   std::string m_image_name;
   std::string m_image_id;
@@ -133,17 +130,14 @@ private:
   rbd_mirror_mode_t m_mirror_mode = RBD_MIRROR_MODE_DISABLED;
   cls::rbd::MirrorImage m_mirror_image_internal;
 
-  void validate_pool();
-  void handle_validate_pool(int r);
-
-  void validate_overwrite();
-  void handle_validate_overwrite(int r);
-
-  void create_id_object();
-  void handle_create_id_object(int r);
+  void validate_data_pool();
+  void handle_validate_data_pool(int r);
 
   void add_image_to_directory();
   void handle_add_image_to_directory(int r);
+
+  void create_id_object();
+  void handle_create_id_object(int r);
 
   void negotiate_features();
   void handle_negotiate_features(int r);
@@ -178,11 +172,12 @@ private:
   void remove_header_object();
   void handle_remove_header_object(int r);
 
+  void remove_id_object();
+  void handle_remove_id_object(int r);
+
   void remove_from_dir();
   void handle_remove_from_dir(int r);
 
-  void remove_id_object();
-  void handle_remove_id_object(int r);
 };
 
 } //namespace image

@@ -24,27 +24,21 @@ const char *MetaSession::get_state_name() const
 void MetaSession::dump(Formatter *f) const
 {
   f->dump_int("mds", mds_num);
-  f->dump_stream("addr") << inst.addr;
+  f->dump_object("addrs", addrs);
   f->dump_unsigned("seq", seq);
   f->dump_unsigned("cap_gen", cap_gen);
   f->dump_stream("cap_ttl") << cap_ttl;
   f->dump_stream("last_cap_renew_request") << last_cap_renew_request;
   f->dump_unsigned("cap_renew_seq", cap_renew_seq);
-  f->dump_int("num_caps", num_caps);
+  f->dump_int("num_caps", caps.size());
   f->dump_string("state", get_state_name());
-}
-
-MetaSession::~MetaSession()
-{
-  if (release)
-    release->put();
 }
 
 void MetaSession::enqueue_cap_release(inodeno_t ino, uint64_t cap_id, ceph_seq_t iseq,
     ceph_seq_t mseq, epoch_t osd_barrier)
 {
   if (!release) {
-    release = new MClientCapRelease;
+    release.reset(new MClientCapRelease, false);
   }
 
   if (osd_barrier > release->osd_epoch_barrier) {

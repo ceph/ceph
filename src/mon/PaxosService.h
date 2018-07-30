@@ -428,13 +428,12 @@ public:
   void encode_health(const health_check_map_t& next,
 		     MonitorDBStore::TransactionRef t) {
     bufferlist bl;
-    ::encode(next, bl);
+    encode(next, bl);
     t->put("health", service_name, bl);
     mon->log_health(next, health_checks, t);
   }
   void load_health();
 
- private:
   /**
    * @defgroup PaxosService_h_store_keys Set of keys that are usually used on
    *					 all the services implementing this
@@ -451,6 +450,7 @@ public:
    * @}
    */
 
+ private:
   /**
    * @defgroup PaxosService_h_version_cache Variables holding cached values
    *                                        for the most used versions (first
@@ -530,16 +530,6 @@ public:
    * @returns true if writeable; false otherwise
    */
   bool is_writeable() const {
-    return is_write_ready(); 
-  }
-
-  /**
-   * Check if we are ready to be written to.  This means we must have a
-   * pending value and be active.
-   *
-   * @returns true if we are ready to be written to; false otherwise.
-   */
-  bool is_write_ready() const {
     return is_active() && have_pending;
   }
 
@@ -625,7 +615,7 @@ public:
 
     if (is_proposing())
       wait_for_finished_proposal(op, c);
-    else if (!is_write_ready())
+    else if (!is_writeable())
       wait_for_active(op, c);
     else
       paxos->wait_for_writeable(op, c);

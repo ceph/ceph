@@ -18,9 +18,8 @@
 #include "osd/mClockOpClassQueue.h"
 #include "common/dout.h"
 
-
 namespace dmc = crimson::dmclock;
-
+using namespace std::placeholders;
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -30,96 +29,26 @@ namespace dmc = crimson::dmclock;
 
 namespace ceph {
 
-  mClockOpClassQueue::mclock_op_tags_t::mclock_op_tags_t(CephContext *cct) :
-    client_op(cct->_conf->osd_op_queue_mclock_client_op_res,
-	      cct->_conf->osd_op_queue_mclock_client_op_wgt,
-	      cct->_conf->osd_op_queue_mclock_client_op_lim),
-    osd_subop(cct->_conf->osd_op_queue_mclock_osd_subop_res,
-	      cct->_conf->osd_op_queue_mclock_osd_subop_wgt,
-	      cct->_conf->osd_op_queue_mclock_osd_subop_lim),
-    snaptrim(cct->_conf->osd_op_queue_mclock_snap_res,
-	     cct->_conf->osd_op_queue_mclock_snap_wgt,
-	     cct->_conf->osd_op_queue_mclock_snap_lim),
-    recov(cct->_conf->osd_op_queue_mclock_recov_res,
-	  cct->_conf->osd_op_queue_mclock_recov_wgt,
-	  cct->_conf->osd_op_queue_mclock_recov_lim),
-    scrub(cct->_conf->osd_op_queue_mclock_scrub_res,
-	  cct->_conf->osd_op_queue_mclock_scrub_wgt,
-	  cct->_conf->osd_op_queue_mclock_scrub_lim)
-  {
-    dout(20) <<
-      "mClockOpClassQueue settings:: " <<
-      "client_op:" << client_op <<
-      "; osd_subop:" << osd_subop <<
-      "; snaptrim:" << snaptrim <<
-      "; recov:" << recov <<
-      "; scrub:" << scrub <<
-      dendl;
-  }
-
-
-  dmc::ClientInfo
-  mClockOpClassQueue::op_class_client_info_f(const osd_op_type_t& op_type) {
-    switch(op_type) {
-    case osd_op_type_t::client_op:
-      return mclock_op_tags->client_op;
-    case osd_op_type_t::osd_subop:
-      return mclock_op_tags->osd_subop;
-    case osd_op_type_t::bg_snaptrim:
-      return mclock_op_tags->snaptrim;
-    case osd_op_type_t::bg_recovery:
-      return mclock_op_tags->recov;
-    case osd_op_type_t::bg_scrub:
-      return mclock_op_tags->scrub;
-    default:
-      assert(0);
-      return dmc::ClientInfo(-1, -1, -1);
-    }
-  }
-
   /*
    * class mClockOpClassQueue
    */
 
-  std::unique_ptr<mClockOpClassQueue::mclock_op_tags_t>
-  mClockOpClassQueue::mclock_op_tags(nullptr);
-
-  mClockOpClassQueue::pg_queueable_visitor_t
-  mClockOpClassQueue::pg_queueable_visitor;
-
   mClockOpClassQueue::mClockOpClassQueue(CephContext *cct) :
-    queue(&mClockOpClassQueue::op_class_client_info_f)
+    queue(std::bind(&mClockOpClassQueue::op_class_client_info_f, this, _1),
+	  cct->_conf->osd_op_queue_mclock_anticipation_timeout),
+    client_info_mgr(cct)
   {
-    // manage the singleton
-    if (!mclock_op_tags) {
-      mclock_op_tags.reset(new mclock_op_tags_t(cct));
-    }
+    // empty
   }
 
-  mClockOpClassQueue::osd_op_type_t
-  mClockOpClassQueue::get_osd_op_type(const Request& request) {
-    osd_op_type_t type =
-      boost::apply_visitor(pg_queueable_visitor, request.second.get_variant());
-
-    // if we got client_op back then we need to distinguish between
-    // a client op and an osd subop.
-
-    if (osd_op_type_t::client_op != type) {
-      return type;
-      /* fixme: this should match REPOP and probably others
-    } else if (MSG_OSD_SUBOP ==
-	       boost::get<OpRequestRef>(
-		 request.second.get_variant())->get_req()->get_header().type) {
-      return osd_op_type_t::osd_subop;
-      */
-    } else {
-      return osd_op_type_t::client_op;
-    }
+  const dmc::ClientInfo* mClockOpClassQueue::op_class_client_info_f(
+    const osd_op_type_t& op_type)
+  {
+    return client_info_mgr.get_client_info(op_type);
   }
 
   // Formatted output of the queue
   void mClockOpClassQueue::dump(ceph::Formatter *f) const {
     queue.dump(f);
   }
-
 } // namespace ceph

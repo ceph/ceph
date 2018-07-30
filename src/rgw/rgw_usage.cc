@@ -8,7 +8,6 @@
 #include "rgw_usage.h"
 #include "rgw_formats.h"
 
-using namespace std;
 
 
 static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log_entry& entry, map<string, bool> *categories)
@@ -145,4 +144,9 @@ int RGWUsage::trim(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
 		   uint64_t end_epoch)
 {
   return store->trim_usage(uid, start_epoch, end_epoch);
+}
+
+int RGWUsage::clear(RGWRados *store)
+{
+  return store->clear_usage();
 }

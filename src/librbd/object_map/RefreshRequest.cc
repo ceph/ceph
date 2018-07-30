@@ -116,7 +116,7 @@ Context *RefreshRequest<I>::handle_load(int *ret_val) {
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *ret_val << dendl;
 
   if (*ret_val == 0) {
-    bufferlist::iterator bl_it = m_out_bl.begin();
+    auto bl_it = m_out_bl.cbegin();
     *ret_val = cls_client::object_map_load_finish(&bl_it,
                                                   &m_on_disk_object_map);
   }
@@ -169,7 +169,7 @@ void RefreshRequest<I>::send_invalidate() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_invalidate>(this);
   InvalidateRequest<I> *req = InvalidateRequest<I>::create(
-    m_image_ctx, m_snap_id, false, ctx);
+    m_image_ctx, m_snap_id, true, ctx);
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
@@ -199,7 +199,7 @@ void RefreshRequest<I>::send_resize_invalidate() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_resize_invalidate>(this);
   InvalidateRequest<I> *req = InvalidateRequest<I>::create(
-    m_image_ctx, m_snap_id, false, ctx);
+    m_image_ctx, m_snap_id, true, ctx);
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);

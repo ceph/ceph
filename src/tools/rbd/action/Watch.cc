@@ -5,6 +5,7 @@
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "include/rbd_types.h"
+#include "librbd/WatchNotifyTypes.h"
 #include "common/errno.h"
 #include <iostream>
 #include <boost/program_options.hpp>
@@ -19,7 +20,7 @@ namespace po = boost::program_options;
 class RbdWatchCtx : public librados::WatchCtx2 {
 public:
   RbdWatchCtx(librados::IoCtx& io_ctx, const char *image_name,
-              std::string header_oid)
+              const std::string &header_oid)
     : m_io_ctx(io_ctx), m_image_name(image_name), m_header_oid(header_oid)
   {
   }
@@ -30,9 +31,23 @@ public:
                              uint64_t cookie,
                              uint64_t notifier_id,
                              bufferlist& bl) override {
+    using namespace librbd::watch_notify;
+    NotifyMessage notify_message;
+    if (bl.length() == 0) {
+      notify_message = NotifyMessage(HeaderUpdatePayload());
+    } else {
+      try {
+        auto iter = bl.cbegin();
+        notify_message.decode(iter);
+      } catch (const buffer::error &err) {
+        std::cerr << "rbd: failed to decode image notification" << std::endl;
+      }
+    }
+   
     std::cout << m_image_name << " received notification: notify_id="
               << notify_id << ", cookie=" << cookie << ", notifier_id="
-              << notifier_id << ", bl.length=" << bl.length() << std::endl;
+              << notifier_id << ", bl.length=" << bl.length() << ", notify_op=" 
+              << notify_message.get_notify_op()  << std::endl;
     bufferlist reply;
     m_io_ctx.notify_ack(m_header_oid, notify_id, cookie, reply);
   }
@@ -94,14 +109,17 @@ void get_arguments(po::options_description *positional,
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
 }
 
-int execute(const po::variables_map &vm) {
+int execute(const po::variables_map &vm,
+            const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -109,8 +127,8 @@ int execute(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", true, &rados,
-                                 &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 true, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }

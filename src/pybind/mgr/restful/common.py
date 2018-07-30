@@ -11,8 +11,8 @@ OSD_IMPLEMENTED_COMMANDS = [
 
 # Valid values for the 'var' argument to 'ceph osd pool set'
 POOL_PROPERTIES_1 = [
-    'size', 'min_size', 'crash_replay_interval', 'pg_num',
-    'crush_rule', 'hashpspool',
+    'size', 'min_size', 'pg_num',
+    'crush_rule', 'hashpspool', 'auid',
 ]
 
 POOL_PROPERTIES_2 = [
@@ -27,10 +27,7 @@ POOL_QUOTA_PROPERTIES = [
     ('quota_max_objects', 'max_objects'),
 ]
 
-POOL_ARGS = POOL_PROPERTIES + map(
-    lambda x: x[0],
-    POOL_QUOTA_PROPERTIES
-)
+POOL_ARGS = POOL_PROPERTIES + [x for x,_ in POOL_QUOTA_PROPERTIES]
 
 
 # Transform command to a human readable form
@@ -86,6 +83,7 @@ def pool_update_commands(pool_name, args):
                 'prefix': 'osd pool set',
                 'pool': pool_name,
                 'var': var,
+                'val': args[var],
             })
 
     return commands

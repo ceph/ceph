@@ -25,7 +25,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Ceph
 	Ceph Platform
 		All Ceph software, which includes any piece of code hosted at
-		`http://github.com/ceph`_.
+		`https://github.com/ceph`_.
 
 	Ceph System
 	Ceph Stack
@@ -69,7 +69,9 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Ceph Filesystem
 	CephFS
 	Ceph FS
-		The POSIX filesystem components of Ceph.
+		The POSIX filesystem components of Ceph. Refer
+		:ref:`CephFS Architecture <arch-cephfs>` and :ref:`ceph-filesystem` for
+		more details.
 
 	Cloud Platforms
 	Cloud Stacks
@@ -122,6 +124,13 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		The Ceph manager software, which collects all the state from the whole
 		cluster in one place.
 
+	Ceph Manager Dashboard
+	Ceph Dashboard
+	Dashboard Plugin
+	Dashboard
+                A built-in web based monitoring and administration application to
+                Ceph Manager. Refer :ref:`mgr-dashboard` for more details.
+
 	Ceph Metadata Server
 	MDS
 		The Ceph metadata software.
@@ -135,7 +144,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 
 	Ceph Kernel Modules
 		The collection of kernel modules which can be used to interact with the
-		Ceph System (e.g,. ``ceph.ko``, ``rbd.ko``).
+		Ceph System (e.g., ``ceph.ko``, ``rbd.ko``).
 
 	Ceph Client Libraries
 		The collection of libraries that can be used to interact with components
@@ -167,8 +176,8 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		Controlled Replication Under Scalable Hashing. It is the algorithm
 		Ceph uses to compute object storage locations.
 
-	ruleset
-		A set of CRUSH data placement rules that applies to a particular pool(s).
+	CRUSH rule
+		The CRUSH data placement rule that applies to a particular pool(s).
 
 	Pool
 	Pools
@@ -183,5 +192,5 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		Ceph-specific information about devices and its relationship with
 		OSDs.
 
-.. _http://github.com/ceph: http://github.com/ceph
+.. _https://github.com/ceph: https://github.com/ceph
 .. _Cluster Map: ../architecture#cluster-map

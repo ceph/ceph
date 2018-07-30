@@ -27,15 +27,16 @@ public:
 
 public:
   void encode_payload(uint64_t features) {
+    using ceph::encode;
     paxos_encode();
-    ::encode(map_epoch, payload);
-    ::encode(state, payload);
+    encode(map_epoch, payload);
+    encode(state, payload);
   }
   void decode_payload() {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(map_epoch, p);
-    ::decode(state, p);
+    decode(map_epoch, p);
+    decode(state, p);
   }
 
   const char *get_type_name() const { return "osd_full"; }

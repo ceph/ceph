@@ -18,9 +18,9 @@ overrides:
       - attr name mismatch
       - Regular scrub request, deep-scrub details will be lost
       - overall HEALTH_
-      - (OSDMAP_FLAGS)
-      - (OSD_
-      - (PG_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
     conf:
       osd:
         filestore debug inject read err: true

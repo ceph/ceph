@@ -17,7 +17,30 @@ else:
 
 from distutils.ccompiler import new_compiler
 from distutils.errors import CompileError, LinkError
-from distutils.sysconfig import customize_compiler
+import distutils.sysconfig
+
+unwrapped_customize = distutils.sysconfig.customize_compiler
+
+clang = False
+
+def filter_unsupported_flags(flags):
+    if clang:
+        return [f for f in flags if not (f == '-mcet' or
+                                         f.startswith('-fcf-protection'))]
+    else:
+        return flags
+
+def monkey_with_compiler(compiler):
+    unwrapped_customize(compiler)
+    if compiler.compiler_type == 'unix':
+        if compiler.compiler[0].find('clang') != -1:
+            global clang
+            clang = True
+            compiler.compiler = filter_unsupported_flags(compiler.compiler)
+            compiler.compiler_so = filter_unsupported_flags(
+                compiler.compiler_so)
+
+distutils.sysconfig.customize_compiler = monkey_with_compiler
 
 # PEP 440 versioning of the Rados package on PyPI
 # Bump this version, after every changeset
@@ -35,17 +58,15 @@ def get_python_flags():
 
     python_config = python + '-config'
 
-    for cflag in subprocess.check_output(
-            [python_config, "--cflags"]
-    ).strip().decode('utf-8').split():
+    for cflag in filter_unsupported_flags(subprocess.check_output(
+            [python_config, "--cflags"]).strip().decode('utf-8').split()):
         if cflag.startswith('-I'):
             cflags['I'].append(cflag.replace('-I', ''))
         else:
             cflags['extras'].append(cflag)
 
-    for ldflag in subprocess.check_output(
-            [python_config, "--ldflags"]
-    ).strip().decode('utf-8').split():
+    for ldflag in filter_unsupported_flags(subprocess.check_output(
+            [python_config, "--ldflags"]).strip().decode('utf-8').split()):
         if ldflag.startswith('-l'):
             ldflags['l'].append(ldflag.replace('-l', ''))
         if ldflag.startswith('-L'):
@@ -85,7 +106,7 @@ def check_sanity():
         fp.write(dummy_prog)
 
     compiler = new_compiler()
-    customize_compiler(compiler)
+    distutils.sysconfig.customize_compiler(compiler)
 
     if {'MAKEFLAGS', 'MFLAGS', 'MAKELEVEL'}.issubset(set(os.environ.keys())):
         # The setup.py has been invoked by a top-level Ceph make.

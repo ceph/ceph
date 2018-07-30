@@ -1,3 +1,1 @@
-overrides:
-  rgw:
-    frontend: civetweb 
+.qa/rgw_frontend/civetweb.yaml

@@ -51,16 +51,17 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(dest_mds, payload);
-    ::encode(num_fwd, payload);
-    ::encode(client_must_resend, payload);
+    using ceph::encode;
+    encode(dest_mds, payload);
+    encode(num_fwd, payload);
+    encode(client_must_resend, payload);
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(dest_mds, p);
-    ::decode(num_fwd, p);
-    ::decode(client_must_resend, p);
+    auto p = payload.cbegin();
+    decode(dest_mds, p);
+    decode(num_fwd, p);
+    decode(client_must_resend, p);
   }
 };
 

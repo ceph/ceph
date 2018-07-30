@@ -12,28 +12,11 @@
  *
  */
 
+#include "common/ceph_context.h"
 #include "common/config.h"
 #include "ceph_crypto.h"
 
-#ifdef USE_CRYPTOPP
-void ceph::crypto::init(CephContext *cct)
-{
-}
-
-void ceph::crypto::shutdown(bool)
-{
-}
-
-// nothing
-ceph::crypto::HMACSHA1::~HMACSHA1()
-{
-}
-
-ceph::crypto::HMACSHA256::~HMACSHA256()
-{
-}
-
-#elif defined(USE_NSS)
+#ifdef USE_NSS
 
 // for SECMOD_RestartModules()
 #include <secmod.h>

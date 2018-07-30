@@ -17,8 +17,6 @@
 
 #include <utility>
 
-#include "common/backport14.h"
-
 template <typename F>
 struct scope_guard {
   F f;
@@ -30,7 +28,7 @@ struct scope_guard {
   scope_guard(const F& f) : f(f) {}
   scope_guard(F &&f) : f(std::move(f)) {}
   template<typename... Args>
-  scope_guard(ceph::in_place_t, Args&& ...args) : f(std::forward<Args>(args)...) {}
+  scope_guard(std::in_place_t, Args&& ...args) : f(std::forward<Args>(args)...) {}
   ~scope_guard() {
     std::move(f)(); // Support at-most-once functions
   }
@@ -42,8 +40,8 @@ scope_guard<F> make_scope_guard(F &&f) {
 }
 
 template<typename F, typename... Args>
-scope_guard<F> make_scope_guard(ceph::in_place_type_t<F>, Args&& ...args) {
-  return { ceph::in_place, std::forward<Args>(args)... };
+scope_guard<F> make_scope_guard(std::in_place_type_t<F>, Args&& ...args) {
+  return { std::in_place, std::forward<Args>(args)... };
 }
 
 #endif

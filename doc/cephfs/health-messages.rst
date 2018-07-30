@@ -37,7 +37,7 @@ automatically replace laggy daemons with standbys if any are available.
 Message: insufficient standby daemons available
 Description: One or more file systems are configured to have a certain number
 of standby daemons available (including daemons in standby-replay) but the
-cluster does not have enough standby daemons. The standby deamons not in replay
+cluster does not have enough standby daemons. The standby daemons not in replay
 count towards any file system (i.e. they may overlap). This warning can
 configured by setting ``ceph fs set <fs> standby_count_wanted <count>``.  Use
 zero for ``count`` to disable.
@@ -69,7 +69,7 @@ are like locks.  Sometimes, for example when another client needs access,
 the MDS will request clients release their capabilities.  If the client
 is unresponsive or buggy, it might fail to do so promptly or fail to do
 so at all.  This message appears if a client has taken longer than
-``mds_revoke_cap_timeout`` (default 60s) to comply.
+``session_timeout`` (default 60s) to comply.
 
 Message: "Client *name* failing to respond to cache pressure"
 Code: MDS_HEALTH_CLIENT_RECALL, MDS_HEALTH_CLIENT_RECALL_MANY

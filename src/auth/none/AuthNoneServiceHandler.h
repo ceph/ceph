@@ -26,12 +26,12 @@ public:
     : AuthServiceHandler(cct_) {}
   ~AuthNoneServiceHandler() override {}
   
-  int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps) override {
+  int start_session(EntityName& name, bufferlist::const_iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps) override {
     entity_name = name;
     caps.allow_all = true;
     return CEPH_AUTH_NONE;
   }
-  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, uint64_t *auid = NULL) override {
+  int handle_request(bufferlist::const_iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, uint64_t *auid = NULL) override {
     return 0;
   }
   void build_cephx_response_header(int request_type, int status, bufferlist& bl) { }

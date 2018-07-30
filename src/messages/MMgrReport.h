@@ -20,6 +20,7 @@
 #include "msg/Message.h"
 
 #include "common/perf_counters.h"
+#include "mgr/DaemonHealthMetric.h"
 
 class PerfCounterType
 {
@@ -29,27 +30,41 @@ public:
   std::string nick;
   enum perfcounter_type_d type;
 
+  // For older clients that did not send priority, pretend everything
+  // is "useful" so that mgr plugins filtering on prio will get some
+  // data (albeit probably more than they wanted)
+  uint8_t priority = PerfCountersBuilder::PRIO_USEFUL;
+  enum unit_t unit;
+
   void encode(bufferlist &bl) const
   {
     // TODO: decide whether to drop the per-type
     // encoding here, we could rely on the MgrReport
     // verisoning instead.
-    ENCODE_START(1, 1, bl);
-    ::encode(path, bl);
-    ::encode(description, bl);
-    ::encode(nick, bl);
+    ENCODE_START(3, 1, bl);
+    encode(path, bl);
+    encode(description, bl);
+    encode(nick, bl);
     static_assert(sizeof(type) == 1, "perfcounter_type_d must be one byte");
-    ::encode((uint8_t)type, bl);
+    encode((uint8_t)type, bl);
+    encode(priority, bl);
+    encode((uint8_t)unit, bl);
     ENCODE_FINISH(bl);
   }
   
-  void decode(bufferlist::iterator &p)
+  void decode(bufferlist::const_iterator &p)
   {
-    DECODE_START(1, p);
-    ::decode(path, p);
-    ::decode(description, p);
-    ::decode(nick, p);
-    ::decode((uint8_t&)type, p);
+    DECODE_START(3, p);
+    decode(path, p);
+    decode(description, p);
+    decode(nick, p);
+    decode((uint8_t&)type, p);
+    if (struct_v >= 2) {
+      decode(priority, p);
+    }
+    if (struct_v >= 3) {
+      decode((uint8_t&)unit, p);
+    }
     DECODE_FINISH(p);
   }
 };
@@ -57,7 +72,7 @@ WRITE_CLASS_ENCODER(PerfCounterType)
 
 class MMgrReport : public Message
 {
-  static const int HEAD_VERSION = 4;
+  static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -83,27 +98,41 @@ public:
   // for service registration
   boost::optional<std::map<std::string,std::string>> daemon_status;
 
+  std::vector<DaemonHealthMetric> daemon_health_metrics;
+
+  // encode map<string,map<int32_t,string>> of current config
+  bufferlist config_bl;
+
   void decode_payload() override
   {
-    bufferlist::iterator p = payload.begin();
-    ::decode(daemon_name, p);
-    ::decode(declare_types, p);
-    ::decode(packed, p);
+    auto p = payload.cbegin();
+    decode(daemon_name, p);
+    decode(declare_types, p);
+    decode(packed, p);
     if (header.version >= 2)
-      ::decode(undeclare_types, p);
+      decode(undeclare_types, p);
     if (header.version >= 3) {
-      ::decode(service_name, p);
-      ::decode(daemon_status, p);
+      decode(service_name, p);
+      decode(daemon_status, p);
+    }
+    if (header.version >= 5) {
+      decode(daemon_health_metrics, p);
+    }
+    if (header.version >= 6) {
+      decode(config_bl, p);
     }
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(daemon_name, payload);
-    ::encode(declare_types, payload);
-    ::encode(packed, payload);
-    ::encode(undeclare_types, payload);
-    ::encode(service_name, payload);
-    ::encode(daemon_status, payload);
+    using ceph::encode;
+    encode(daemon_name, payload);
+    encode(declare_types, payload);
+    encode(packed, payload);
+    encode(undeclare_types, payload);
+    encode(service_name, payload);
+    encode(daemon_status, payload);
+    encode(daemon_health_metrics, payload);
+    encode(config_bl, payload);
   }
 
   const char *get_type_name() const override { return "mgrreport"; }
@@ -120,6 +149,9 @@ public:
         << " packed " << packed.length();
     if (daemon_status) {
       out << " status=" << daemon_status->size();
+    }
+    if (!daemon_health_metrics.empty()) {
+      out << " daemon_metrics=" << daemon_health_metrics.size();
     }
     out << ")";
   }

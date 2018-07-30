@@ -102,8 +102,8 @@ void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen) {
 librados::TestRadosClient *create_rados_client() {
   CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
   CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
-  cct->_conf->parse_env();
-  cct->_conf->apply_changes(nullptr);
+  cct->_conf.parse_env();
+  cct->_conf.apply_changes(nullptr);
 
   auto rados_client =
     librados_test_stub::get_cluster()->create_rados_client(cct);
@@ -145,31 +145,27 @@ extern "C" int rados_conf_set(rados_t cluster, const char *option,
   librados::TestRadosClient *impl =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   CephContext *cct = impl->cct();
-  return cct->_conf->set_val(option, value);
+  return cct->_conf.set_val(option, value);
 }
 
 extern "C" int rados_conf_parse_env(rados_t cluster, const char *var) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
-  md_config_t *conf = client->cct()->_conf;
-  std::vector<const char*> args;
-  env_to_vec(args, var);
-  int ret = conf->parse_argv(args);
-  if (ret == 0) {
-    conf->apply_changes(NULL);
-  }
-  return ret;
+  auto& conf = client->cct()->_conf;
+  conf.parse_env(var);
+  conf.apply_changes(NULL);
+  return 0;
 }
 
 extern "C" int rados_conf_read_file(rados_t cluster, const char *path) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
-  md_config_t *conf = client->cct()->_conf;
-  int ret = conf->parse_config_files(path, NULL, 0);
+  auto& conf = client->cct()->_conf;
+  int ret = conf.parse_config_files(path, NULL, 0);
   if (ret == 0) {
-    conf->parse_env();
-    conf->apply_changes(NULL);
-    conf->complain_about_parse_errors(client->cct());
+    conf.parse_env();
+    conf.apply_changes(NULL);
+    conf.complain_about_parse_errors(client->cct());
   } else if (ret == -ENOENT) {
     // ignore missing client config
     return 0;
@@ -425,7 +421,8 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op, snap_t seq,
-                       std::vector<snap_t>& snaps) {
+                       std::vector<snap_t>& snaps, int flags,
+                       const blkin_trace_info *trace_info) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
 
@@ -435,14 +432,20 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
     snv[i] = snaps[i];
   SnapContext snapc(seq, snv);
 
-  return ctx->aio_operate(oid, *ops, c->pc, &snapc, 0);
+  return ctx->aio_operate(oid, *ops, c->pc, &snapc, flags);
+}
+
+int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+                       ObjectWriteOperation *op, snap_t seq,
+                       std::vector<snap_t>& snaps) {
+  return aio_operate(oid, c, op, seq, snaps, 0, nullptr);
 }
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op, snap_t seq,
                        std::vector<snap_t>& snaps,
 		       const blkin_trace_info *trace_info) {
-  return aio_operate(oid, c, op, seq, snaps);
+  return aio_operate(oid, c, op, seq, snaps, 0, trace_info);
 }
 
 int IoCtx::aio_remove(const std::string& oid, AioCompletion *c) {
@@ -730,6 +733,16 @@ int IoCtx::application_metadata_list(const std::string& app_name,
   return -EOPNOTSUPP;
 }
 
+void IoCtx::set_namespace(const std::string& nspace) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  ctx->set_namespace(nspace);
+}
+
+std::string IoCtx::get_namespace() const {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->get_namespace();
+}
+
 static int save_operation_result(int result, int *pval) {
   if (pval != NULL) {
     *pval = result;
@@ -886,7 +899,7 @@ void ObjectWriteOperation::set_alloc_hint(uint64_t expected_object_size,
                                           uint64_t expected_write_size) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(boost::bind(&TestIoCtxImpl::set_alloc_hint, _1, _2,
-			       expected_object_size, expected_write_size));
+			       expected_object_size, expected_write_size, _4));
 }
 
 
@@ -979,7 +992,7 @@ int Rados::conf_get(const char *option, std::string &val) {
   CephContext *cct = impl->cct();
 
   char *str = NULL;
-  int ret = cct->_conf->get_val(option, &str, -1);
+  int ret = cct->_conf.get_val(option, &str, -1);
   if (ret != 0) {
     free(str);
     return ret;
@@ -1005,6 +1018,13 @@ int Rados::connect() {
 uint64_t Rados::get_instance_id() {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
   return impl->get_instance_id();
+}
+
+int Rados::get_min_compatible_client(int8_t* min_compat_client,
+                                     int8_t* require_min_compat_client) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->get_min_compatible_client(min_compat_client,
+                                         require_min_compat_client);
 }
 
 int Rados::init(const char * const id) {
@@ -1052,9 +1072,9 @@ int Rados::service_daemon_register(const std::string& service,
   return impl->service_daemon_register(service, name, metadata);
 }
 
-int Rados::service_daemon_update_status(const std::map<std::string,std::string>& status) {
+int Rados::service_daemon_update_status(std::map<std::string,std::string>&& status) {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
-  return impl->service_daemon_update_status(status);
+  return impl->service_daemon_update_status(std::move(status));
 }
 
 int Rados::pool_create(const char *name) {
@@ -1344,7 +1364,7 @@ int cls_log(int level, const char *format, ...) {
     int n = vsnprintf(buf, size, format, ap);
     va_end(ap);
     if ((n > -1 && n < size) || size > 8196) {
-      dout(level) << buf << dendl;
+      dout(ceph::dout::need_dynamic(level)) << buf << dendl;
       return n;
     }
     size *= 2;

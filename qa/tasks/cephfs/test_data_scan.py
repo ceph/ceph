@@ -425,8 +425,6 @@ class TestDataScan(CephFSTestCase):
         That when injecting a dentry into a fragmented directory, we put it in the right fragment.
         """
 
-        self.fs.set_allow_dirfrags(True)
-
         file_count = 100
         file_names = ["%s" % n for n in range(0, file_count)]
 

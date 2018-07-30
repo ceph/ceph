@@ -26,8 +26,8 @@
 #include "common/Formatter.h"
 
 #include <algorithm>
+#include <regex>
 
-#include <boost/regex.hpp>
 #include "include/assert.h"
 
 static inline bool is_not_alnum_space(char c)
@@ -198,13 +198,7 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("auth", MON_CAP_R | MON_CAP_X));
     profile_grants.push_back(MonCapGrant("config-key", MON_CAP_R | MON_CAP_W));
-    StringConstraint constraint(StringConstraint::MATCH_TYPE_PREFIX,
-                                "daemon-private/mgr/");
-    profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
-    profile_grants.push_back(MonCapGrant("config-key set", "key", constraint));
-    profile_grants.push_back(MonCapGrant("config-key put", "key", constraint));
-    profile_grants.push_back(MonCapGrant("config-key exists", "key", constraint));
-    profile_grants.push_back(MonCapGrant("config-key delete", "key", constraint));
+    profile_grants.push_back(MonCapGrant("config", MON_CAP_R | MON_CAP_W));
   }
   if (profile == "osd" || profile == "mds" || profile == "mon" ||
       profile == "mgr") {
@@ -223,6 +217,7 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));  // read osdmap
     profile_grants.push_back(MonCapGrant("mon getmap"));
     profile_grants.push_back(MonCapGrant("osd new"));
+    profile_grants.push_back(MonCapGrant("osd purge-new"));
   }
   if (profile == "bootstrap-mds") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));  // read monmap
@@ -340,12 +335,14 @@ mon_rwxa_t MonCapGrant::get_allowed(CephContext *cct,
 	  return 0;
         break;
       case StringConstraint::MATCH_TYPE_REGEX:
-        {
-	  boost::regex pattern(
-            p->second.value, boost::regex::extended | boost::regex::no_except);
-          if (pattern.empty() || !boost::regex_match(q->second, pattern))
+        try {
+	  std::regex pattern(
+            p->second.value, std::regex::extended);
+          if (!std::regex_match(q->second, pattern))
 	    return 0;
-        }
+        } catch(const std::regex_error&) {
+	  return 0;
+	}
         break;
       default:
         break;
@@ -424,15 +421,15 @@ bool MonCap::is_capable(CephContext *cct,
 void MonCap::encode(bufferlist& bl) const
 {
   ENCODE_START(4, 4, bl);   // legacy MonCaps was 3, 3
-  ::encode(text, bl);
+  encode(text, bl);
   ENCODE_FINISH(bl);
 }
 
-void MonCap::decode(bufferlist::iterator& bl)
+void MonCap::decode(bufferlist::const_iterator& bl)
 {
   string s;
   DECODE_START(4, bl);
-  ::decode(s, bl);
+  decode(s, bl);
   DECODE_FINISH(bl);
   parse(s, NULL);
 }
@@ -530,6 +527,7 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
     // rwxa := * | [r][w][x]
     rwxa =
       (lit("*")[_val = MON_CAP_ANY]) |
+      (lit("all")[_val = MON_CAP_ANY]) |
       ( eps[_val = 0] >>
 	( lit('r')[_val |= MON_CAP_R] ||
 	  lit('w')[_val |= MON_CAP_W] ||

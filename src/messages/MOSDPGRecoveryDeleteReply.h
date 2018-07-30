@@ -31,22 +31,23 @@ struct MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
     {}
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(pgid.pgid, p);
-    ::decode(map_epoch, p);
-    ::decode(min_epoch, p);
-    ::decode(objects, p);
-    ::decode(pgid.shard, p);
-    ::decode(from, p);
+    auto p = payload.cbegin();
+    decode(pgid.pgid, p);
+    decode(map_epoch, p);
+    decode(min_epoch, p);
+    decode(objects, p);
+    decode(pgid.shard, p);
+    decode(from, p);
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(pgid.pgid, payload);
-    ::encode(map_epoch, payload);
-    ::encode(min_epoch, payload);
-    ::encode(objects, payload);
-    ::encode(pgid.shard, payload);
-    ::encode(from, payload);
+    using ceph::encode;
+    encode(pgid.pgid, payload);
+    encode(map_epoch, payload);
+    encode(min_epoch, payload);
+    encode(objects, payload);
+    encode(pgid.shard, payload);
+    encode(from, payload);
   }
 
   void print(ostream& out) const override {

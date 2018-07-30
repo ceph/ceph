@@ -59,7 +59,7 @@ public:
     ClassHandler *handler;
     void *handle;
 
-    bool whitelisted;
+    bool whitelisted = false;
 
     map<string, ClassMethod> methods_map;
     map<string, ClassFilter> filters_map;

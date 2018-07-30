@@ -6,7 +6,6 @@
 #include "common/Throttle.h"
 #include "common/ceph_time.h"
 #include "common/perf_counters.h"
-#include "common/Throttle.h"
 
 
 // re-include our assert to clobber the system one; fix dout:
@@ -77,7 +76,7 @@ Throttle::~Throttle()
 void Throttle::_reset_max(int64_t m)
 {
   // lock must be held.
-  if (static_cast<int64_t>(max) == m)
+  if (max == m)
     return;
   if (!conds.empty())
     conds.front().notify_one();
@@ -223,7 +222,7 @@ int64_t Throttle::put(int64_t c)
     if (!conds.empty())
       conds.front().notify_one();
     // if count goes negative, we failed somewhere!
-    assert(static_cast<int64_t>(count) >= c);
+    assert(count >= c);
     count -= c;
     if (logger) {
       logger->inc(l_throttle_put);
@@ -578,7 +577,7 @@ C_OrderedThrottle *OrderedThrottle::start_op(Context *on_finish) {
   auto l = uniquely_lock(m_lock);
   uint64_t tid = m_next_tid++;
   m_tid_result[tid] = Result(on_finish);
-  auto ctx = make_unique<C_OrderedThrottle>(this, tid);
+  auto ctx = std::make_unique<C_OrderedThrottle>(this, tid);
 
   complete_pending_ops(l);
   while (m_max == m_current) {
@@ -649,4 +648,128 @@ void OrderedThrottle::complete_pending_ops(UNIQUE_LOCK_T(m_lock)& l) {
 
     ++m_complete_tid;
   }
+}
+
+uint64_t TokenBucketThrottle::Bucket::get(uint64_t c) {
+  if (0 == max) {
+    return 0;
+  }
+
+  uint64_t got = 0;
+  if (remain >= c) {
+    // There is enough token in bucket, take c.
+    got = c;
+    remain -= c;
+  } else {
+    // There is not enough, take all remain.
+    got = remain;
+    remain = 0;
+  }
+  return got;
+}
+
+uint64_t TokenBucketThrottle::Bucket::put(uint64_t c) {
+  if (0 == max) {
+    return 0;
+  }
+  if (c) {
+    // put c tokens into bucket
+    uint64_t current = remain;
+    if ((current + c) <= (uint64_t)max) {
+      remain += c;
+    } else {
+      remain = (uint64_t)max;
+    }
+  }
+  return remain;
+}
+
+void TokenBucketThrottle::Bucket::set_max(uint64_t m) {
+  if (remain > m || max == 0)
+    remain = m;
+  max = m;
+}
+
+TokenBucketThrottle::TokenBucketThrottle(
+    CephContext *cct,
+    uint64_t capacity,
+    uint64_t avg,
+    SafeTimer *timer,
+    Mutex *timer_lock)
+  : m_cct(cct), m_throttle(m_cct, "token_bucket_throttle", capacity),
+    m_avg(avg), m_timer(timer), m_timer_lock(timer_lock),
+    m_lock("token_bucket_throttle_lock")
+{
+  Mutex::Locker timer_locker(*m_timer_lock);
+  schedule_timer();
+}
+
+TokenBucketThrottle::~TokenBucketThrottle()
+{
+  // cancel the timer events.
+  {
+    Mutex::Locker timer_locker(*m_timer_lock);
+    cancel_timer();
+  }
+
+  list<Blocker> tmp_blockers;
+  {
+    Mutex::Locker blockers_lock(m_lock);
+    tmp_blockers.splice(tmp_blockers.begin(), m_blockers, m_blockers.begin(), m_blockers.end());
+  }
+
+  for (auto b : tmp_blockers) {
+    b.ctx->complete(0);
+  }
+}
+
+void TokenBucketThrottle::set_max(uint64_t m) {
+  Mutex::Locker lock(m_lock);
+  m_throttle.set_max(m);
+}
+
+void TokenBucketThrottle::set_average(uint64_t avg) {
+  m_avg = avg;
+}
+
+void TokenBucketThrottle::add_tokens() {
+  list<Blocker> tmp_blockers;
+  {
+    // put m_avg tokens into bucket.
+    Mutex::Locker lock(m_lock);
+    m_throttle.put(m_avg);
+    // check the m_blockers from head to tail, if blocker can get
+    // enough tokens, let it go.
+    while (!m_blockers.empty()) {
+      Blocker blocker = m_blockers.front();
+      uint64_t got = m_throttle.get(blocker.tokens_requested);
+      if (got == blocker.tokens_requested) {
+	// got enough tokens for front.
+	tmp_blockers.splice(tmp_blockers.end(), m_blockers, m_blockers.begin());
+      } else {
+	// there is no more tokens.
+	blocker.tokens_requested -= got;
+	break;
+      }
+    }
+  }
+
+  for (auto b : tmp_blockers) {
+    b.ctx->complete(0);
+  }
+}
+
+void TokenBucketThrottle::schedule_timer() {
+  add_tokens();
+
+  m_token_ctx = new FunctionContext(
+      [this](int r) {
+        schedule_timer();
+      });
+
+  m_timer->add_event_after(1, m_token_ctx);
+}
+
+void TokenBucketThrottle::cancel_timer() {
+  m_timer->cancel_event(m_token_ctx);
 }

@@ -14,8 +14,8 @@ python $RBDRW $IMAGE $LOCKID &
 iochild=$!
 
 # give client time to lock and start reading/writing
-LOCKS='{}'
-while [ "$LOCKS" == "{}" ]
+LOCKS='[]'
+while [ "$LOCKS" == '[]' ]
 do
     LOCKS=$(rbd lock list $IMAGE --format json)
     sleep 1

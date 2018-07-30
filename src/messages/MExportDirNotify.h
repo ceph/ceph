@@ -60,19 +60,20 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(base, payload);
-    ::encode(ack, payload);
-    ::encode(old_auth, payload);
-    ::encode(new_auth, payload);
-    ::encode(bounds, payload);
+    using ceph::encode;
+    encode(base, payload);
+    encode(ack, payload);
+    encode(old_auth, payload);
+    encode(new_auth, payload);
+    encode(bounds, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(base, p);
-    ::decode(ack, p);
-    ::decode(old_auth, p);
-    ::decode(new_auth, p);
-    ::decode(bounds, p);
+    auto p = payload.cbegin();
+    decode(base, p);
+    decode(ack, p);
+    decode(old_auth, p);
+    decode(new_auth, p);
+    decode(bounds, p);
   }
 };
 

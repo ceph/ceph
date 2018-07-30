@@ -20,14 +20,16 @@
 
 #include <iosfwd>
 #include <iomanip>
-using namespace std;
 
+#include "include/rados.h"
 #include "include/unordered_map.h"
 
 #include "hash.h"
 #include "encoding.h"
 #include "ceph_hash.h"
 #include "cmp.h"
+
+using namespace std;
 
 struct object_t {
   string name;
@@ -46,10 +48,12 @@ struct object_t {
   }
   
   void encode(bufferlist &bl) const {
-    ::encode(name, bl);
+    using ceph::encode;
+    encode(name, bl);
   }
-  void decode(bufferlist::iterator &bl) {
-    ::decode(name, bl);
+  void decode(bufferlist::const_iterator &bl) {
+    using ceph::decode;
+    decode(name, bl);
   }
 };
 WRITE_CLASS_ENCODER(object_t)
@@ -120,7 +124,7 @@ struct snapid_t {
 };
 
 inline void encode(snapid_t i, bufferlist &bl) { encode(i.val, bl); }
-inline void decode(snapid_t &i, bufferlist::iterator &p) { decode(i.val, p); }
+inline void decode(snapid_t &i, bufferlist::const_iterator &p) { decode(i.val, p); }
 
 template<>
 struct denc_traits<snapid_t> {
@@ -134,7 +138,7 @@ struct denc_traits<snapid_t> {
   static void encode(const snapid_t &o, buffer::list::contiguous_appender& p) {
     denc(o.val, p);
   }
-  static void decode(snapid_t& o, buffer::ptr::iterator &p) {
+  static void decode(snapid_t& o, buffer::ptr::const_iterator &p) {
     denc(o.val, p);
   }
 };
@@ -164,12 +168,14 @@ struct sobject_t {
   }
 
   void encode(bufferlist& bl) const {
-    ::encode(oid, bl);
-    ::encode(snap, bl);
+    using ceph::encode;
+    encode(oid, bl);
+    encode(snap, bl);
   }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(oid, bl);
-    ::decode(snap, bl);
+  void decode(bufferlist::const_iterator& bl) {
+    using ceph::decode;
+    decode(oid, bl);
+    decode(snap, bl);
   }
 };
 WRITE_CLASS_ENCODER(sobject_t)

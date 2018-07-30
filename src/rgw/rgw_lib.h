@@ -60,10 +60,13 @@ namespace rgw {
     RGWLibIO() {
       get_env().set("HTTP_HOST", "");
     }
-    RGWLibIO(const RGWUserInfo &_user_info)
+    explicit RGWLibIO(const RGWUserInfo &_user_info)
       : user_info(_user_info) {}
 
-    void init_env(CephContext *cct) override {}
+    int init_env(CephContext *cct) override {
+      env.init(cct);
+      return 0;
+    }
 
     const RGWUserInfo& get_user() {
       return user_info;
@@ -154,17 +157,12 @@ namespace rgw {
       RGWRequest::init_state(_s);
       RGWHandler::init(rados_ctx->store, _s, io);
 
-      /* fixup _s->req */
-      _s->req = this;
-
-      log_init();
-
       get_state()->obj_ctx = rados_ctx;
       get_state()->req_id = store->unique_id(id);
       get_state()->trans_id = store->unique_trans_id(id);
 
-      log_format(_s, "initializing for trans_id = %s",
-		 get_state()->trans_id.c_str());
+      ldpp_dout(_s, 2) << "initializing for trans_id = "
+	  << get_state()->trans_id.c_str() << dendl;
 
       int ret = header_init();
       if (ret == 0) {
@@ -187,25 +185,20 @@ namespace rgw {
 
     RGWLibContinuedReq(CephContext* _cct, RGWUserInfo* _user)
       :  RGWLibRequest(_cct, _user), io_ctx(),
-	 rstate(_cct, &io_ctx.get_env(), _user), rados_ctx(rgwlib.get_store(),
-							   &rstate)
+	 rstate(_cct, &io_ctx.get_env(), _user, id),
+	 rados_ctx(rgwlib.get_store(), &rstate)
       {
 	io_ctx.init(_cct);
 
 	RGWRequest::init_state(&rstate);
 	RGWHandler::init(rados_ctx.store, &rstate, &io_ctx);
 
-	/* fixup _s->req */
-	get_state()->req = this;
-
-	log_init();
-
 	get_state()->obj_ctx = &rados_ctx;
 	get_state()->req_id = store->unique_id(id);
 	get_state()->trans_id = store->unique_trans_id(id);
 
-	log_format(get_state(), "initializing for trans_id = %s",
-		   get_state()->trans_id.c_str());
+	ldpp_dout(get_state(), 2) << "initializing for trans_id = "
+	    << get_state()->trans_id.c_str() << dendl;
       }
 
     inline RGWRados* get_store() { return store; }

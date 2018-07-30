@@ -13,7 +13,7 @@ namespace librbd {
 namespace {
 
 struct MockTestImageCtx : public MockImageCtx {
-  MockTestImageCtx(librbd::ImageCtx& image_ctx) : MockImageCtx(image_ctx) {
+  explicit MockTestImageCtx(librbd::ImageCtx& image_ctx) : MockImageCtx(image_ctx) {
   }
 };
 
@@ -91,7 +91,8 @@ public:
     tag_data.predecessor = predecessor;
 
     bufferlist tag_data_bl;
-    ::encode(tag_data, tag_data_bl);
+    using ceph::encode;
+    encode(tag_data, tag_data_bl);
 
     EXPECT_CALL(mock_journaler, allocate_tag(456, ContentsEqual(tag_data_bl),
                                              _, _))

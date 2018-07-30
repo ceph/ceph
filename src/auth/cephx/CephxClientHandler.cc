@@ -19,6 +19,7 @@
 #include "CephxProtocol.h"
 
 #include "auth/KeyRing.h"
+#include "include/random.h"
 #include "common/config.h"
 #include "common/dout.h"
 
@@ -37,7 +38,7 @@ int CephxClientHandler::build_request(bufferlist& bl) const
     /* authenticate */
     CephXRequestHeader header;
     header.request_type = CEPHX_GET_AUTH_SESSION_KEY;
-    ::encode(header, bl);
+    encode(header, bl);
 
     CryptoKey secret;
     const bool got = keyring->get_secret(cct->_conf->name, secret);
@@ -53,7 +54,7 @@ int CephxClientHandler::build_request(bufferlist& bl) const
     }
 
     CephXAuthenticate req;
-    get_random_bytes((char *)&req.client_challenge, sizeof(req.client_challenge));
+    req.client_challenge = ceph::util::generate_random_number<uint64_t>();
     std::string error;
     cephx_calc_client_server_challenge(cct, secret, server_challenge,
 				       req.client_challenge, &req.key, error);
@@ -68,10 +69,10 @@ int CephxClientHandler::build_request(bufferlist& bl) const
       ldout(cct, 20) << "old ticket len=" << req.old_ticket.blob.length() << dendl;
     }
 
-    ::encode(req, bl);
+    encode(req, bl);
 
     ldout(cct, 10) << "get auth session key: client_challenge "
-		   << hex << req.client_challenge << dendl;
+		   << std::hex << req.client_challenge << std::dec << dendl;
     return 0;
   }
 
@@ -81,7 +82,7 @@ int CephxClientHandler::build_request(bufferlist& bl) const
 
     CephXRequestHeader header;
     header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
-    ::encode(header, bl);
+    encode(header, bl);
 
     CephXAuthorizer *authorizer = ticket_handler->build_authorizer(global_id);
     if (!authorizer)
@@ -91,7 +92,7 @@ int CephxClientHandler::build_request(bufferlist& bl) const
 
     CephXServiceTicketRequest req;
     req.keys = need;
-    ::encode(req, bl);
+    encode(req, bl);
   }
 
   return 0;
@@ -106,7 +107,7 @@ bool CephxClientHandler::_need_tickets() const
   return need && need != CEPH_ENTITY_TYPE_MGR;
 }
 
-int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
+int CephxClientHandler::handle_response(int ret, bufferlist::const_iterator& indata)
 {
   ldout(cct, 10) << "handle_response ret = " << ret << dendl;
   RWLock::WLocker l(lock);
@@ -116,10 +117,10 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 
   if (starting) {
     CephXServerChallenge ch;
-    ::decode(ch, indata);
+    decode(ch, indata);
     server_challenge = ch.server_challenge;
     ldout(cct, 10) << " got initial server challenge "
-		   << hex << server_challenge << dendl;
+		   << std::hex << server_challenge << std::dec << dendl;
     starting = false;
 
     tickets.invalidate_ticket(CEPH_ENTITY_TYPE_AUTH);
@@ -127,7 +128,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
   }
 
   struct CephXResponseHeader header;
-  ::decode(header, indata);
+  decode(header, indata);
 
   switch (header.request_type) {
   case CEPHX_GET_AUTH_SESSION_KEY:
@@ -214,7 +215,7 @@ bool CephxClientHandler::build_rotating_request(bufferlist& bl) const
   ldout(cct, 10) << "build_rotating_request" << dendl;
   CephXRequestHeader header;
   header.request_type = CEPHX_GET_ROTATING_KEY;
-  ::encode(header, bl);
+  encode(header, bl);
   return true;
 }
 
@@ -248,4 +249,3 @@ bool CephxClientHandler::need_tickets()
 
   return _need_tickets();
 }
-

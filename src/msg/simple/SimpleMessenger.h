@@ -17,7 +17,6 @@
 
 #include <list>
 #include <map>
-using namespace std;
 
 #include "include/types.h"
 #include "include/xlist.h"
@@ -94,8 +93,9 @@ public:
   /** @defgroup Accessors
    * @{
    */
-  void set_addr_unknowns(const entity_addr_t& addr) override;
-  void set_addr(const entity_addr_t &addr) override;
+  bool set_addr_unknowns(const entity_addrvec_t& addr) override;
+  void set_addrs(const entity_addrvec_t &addr) override;
+  void set_myaddrs(const entity_addrvec_t& a) override;
 
   int get_dispatch_queue_len() override {
     return dispatch_queue.get_queue_len();
@@ -287,6 +287,8 @@ private:
   /// lock to protect the global_seq
   ceph::spinlock global_seq_lock;
 
+  entity_addr_t my_addr;
+
   /**
    * hash map of addresses to Pipes
    *
@@ -348,8 +350,10 @@ public:
   /**
    * This wraps ms_deliver_verify_authorizer; we use it for Pipe.
    */
-  bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth, bufferlist& auth_reply,
-                         bool& isvalid,CryptoKey& session_key);
+  bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth,
+			 bufferlist& auth_reply,
+                         bool& isvalid,CryptoKey& session_key,
+			 std::unique_ptr<AuthAuthorizerChallenge> *challenge);
   /**
    * Increment the global sequence for this SimpleMessenger and return it.
    * This is for the connect protocol, although it doesn't hurt if somebody

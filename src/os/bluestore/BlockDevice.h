@@ -19,13 +19,23 @@
 
 #include <atomic>
 #include <condition_variable>
-#include <mutex>
 #include <list>
+#include <map>
+#include <mutex>
+#include <set>
+#include <string>
+#include <vector>
 
 #include "acconfig.h"
+#ifdef HAVE_LIBAIO
 #include "aio.h"
-
+#endif
+#include "include/assert.h"
+#include "include/buffer.h"
+#include "include/interval_set.h"
 #define SPDK_PREFIX "spdk:"
+
+class CephContext;
 
 /// track in-flight io
 struct IOContext {
@@ -43,9 +53,10 @@ public:
   std::atomic_int total_nseg = {0};
 #endif
 
-
+#ifdef HAVE_LIBAIO
   std::list<aio_t> pending_aios;    ///< not yet submitted
   std::list<aio_t> running_aios;    ///< submitting or submitted
+#endif
   std::atomic_int num_pending = {0};
   std::atomic_int num_running = {0};
   bool allow_eio;
@@ -61,8 +72,9 @@ public:
   bool has_pending_aios() {
     return num_pending.load();
   }
-
+  void release_running_aios();
   void aio_wait();
+  uint64_t get_num_ios() const;
 
   void try_aio_wake() {
     if (num_running == 1) {
@@ -117,7 +129,7 @@ public:
   virtual ~BlockDevice() = default;
 
   static BlockDevice *create(
-    CephContext* cct, const std::string& path, aio_callback_t cb, void *cbpriv);
+    CephContext* cct, const std::string& path, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
   virtual bool supported_bdev_label() { return true; }
   virtual bool is_rotational() { return rotational; }
 
@@ -126,7 +138,23 @@ public:
   uint64_t get_size() const { return size; }
   uint64_t get_block_size() const { return block_size; }
 
+  /// hook to provide utilization of thinly-provisioned device
+  virtual bool get_thin_utilization(uint64_t *total, uint64_t *avail) const {
+    return false;
+  }
+
   virtual int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const = 0;
+
+  virtual int get_devname(std::string *out) {
+    return -ENOENT;
+  }
+  virtual int get_devices(std::set<std::string> *ls) {
+    std::string s;
+    if (get_devname(&s) == 0) {
+      ls->insert(s);
+    }
+    return 0;
+  }
 
   virtual int read(
     uint64_t off,
@@ -155,6 +183,9 @@ public:
     IOContext *ioc,
     bool buffered) = 0;
   virtual int flush() = 0;
+  virtual int discard(uint64_t offset, uint64_t len) { return 0; }
+  virtual int queue_discard(interval_set<uint64_t> &to_release) { return -1; }
+  virtual void discard_drain() { return; }
 
   void queue_reap_ioc(IOContext *ioc);
   void reap_ioc();

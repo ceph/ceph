@@ -230,7 +230,8 @@ TEST(ParameterTest, combination_all)
   }
   EXPECT_FALSE(out1 == in);
 
-  set<int> want_to_read, available_chunks, minimum_chunks, want_to_read_without_avails;
+  set<int> want_to_read, available_chunks, want_to_read_without_avails;
+  map<int, vector<pair<int,int>>> minimum_chunks;
   set<int>::iterator itr;
   int array_want_to_read[shec->get_chunk_count()];
   int array_available_chunks[shec->get_chunk_count()];
@@ -273,7 +274,8 @@ TEST(ParameterTest, combination_all)
 
           result = shec->minimum_to_decode(want_to_read, available_chunks,
 				           &minimum_chunks);
-          dresult = shec->decode(want_to_read, inchunks, &decoded);
+          dresult = shec->decode(want_to_read, inchunks, &decoded,
+				 shec->get_chunk_size(kObjectSize));
           ++count_num;
           minimum_count = 0;
 
@@ -394,12 +396,9 @@ int main(int argc, char **argv)
   argv_to_vec(argc, (const char **) argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(g_ceph_context);
-
-  const char* env = getenv("CEPH_LIB");
-  std::string directory(env ? env : ".libs");
-  g_conf->set_val_or_die("erasure_code_dir", directory, false);
 
   ::testing::InitGoogleTest(&argc, argv);
 

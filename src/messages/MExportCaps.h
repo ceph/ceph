@@ -20,13 +20,16 @@
 
 
 class MExportCaps : public Message {
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
  public:  
   inodeno_t ino;
   bufferlist cap_bl;
   map<client_t,entity_inst_t> client_map;
+  map<client_t,client_metadata_t> client_metadata_map;
 
   MExportCaps() :
-    Message(MSG_MDS_EXPORTCAPS) {}
+    Message(MSG_MDS_EXPORTCAPS, HEAD_VERSION, COMPAT_VERSION) {}
 private:
   ~MExportCaps() override {}
 
@@ -37,15 +40,19 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(ino, payload);
-    ::encode(cap_bl, payload);
-    ::encode(client_map, payload, features);
+    using ceph::encode;
+    encode(ino, payload);
+    encode(cap_bl, payload);
+    encode(client_map, payload, features);
+    encode(client_metadata_map, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(ino, p);
-    ::decode(cap_bl, p);
-    ::decode(client_map, p);
+    auto p = payload.cbegin();
+    decode(ino, p);
+    decode(cap_bl, p);
+    decode(client_map, p);
+    if (header.version >= 2)
+      decode(client_metadata_map, p);
   }
 
 };

@@ -50,22 +50,23 @@ public:
       end(end_) { }
 
   void encode_payload(uint64_t features) override {
-    ::encode(pgid, payload);
-    ::encode(map_epoch, payload);
-    ::encode(op, payload);
-    ::encode(id, payload);
-    ::encode(begin, payload);
-    ::encode(end, payload);
+    using ceph::encode;
+    encode(pgid, payload);
+    encode(map_epoch, payload);
+    encode(op, payload);
+    encode(id, payload);
+    encode(begin, payload);
+    encode(end, payload);
   }
 
   void decode_payload() override {
-    auto p = payload.begin();
-    ::decode(pgid, p);
-    ::decode(map_epoch, p);
-    ::decode(op, p);
-    ::decode(id, p);
-    ::decode(begin, p);
-    ::decode(end, p);
+    auto p = payload.cbegin();
+    decode(pgid, p);
+    decode(map_epoch, p);
+    decode(op, p);
+    decode(id, p);
+    decode(begin, p);
+    decode(end, p);
   }
 
   const char *get_type_name() const override { return "osd_backoff"; }

@@ -69,7 +69,7 @@ private:
 
 template <typename I>
 PoolWatcher<I>::PoolWatcher(Threads<I> *threads, librados::IoCtx &remote_io_ctx,
-                            Listener &listener)
+                            pool_watcher::Listener &listener)
   : m_threads(threads), m_remote_io_ctx(remote_io_ctx), m_listener(listener),
     m_lock(librbd::util::unique_lock_name("rbd::mirror::PoolWatcher", this)) {
   m_mirroring_watcher = new MirroringWatcher(m_remote_io_ctx,
@@ -304,7 +304,7 @@ void PoolWatcher<I>::handle_get_mirror_uuid(int r) {
 
     m_pending_mirror_uuid = "";
     if (r >= 0) {
-      bufferlist::iterator it = m_out_bl.begin();
+      auto it = m_out_bl.cbegin();
       r = librbd::cls_client::mirror_uuid_get_finish(
         &it, &m_pending_mirror_uuid);
     }

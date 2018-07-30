@@ -44,12 +44,12 @@
 #define ERROR_LRC_K_MODULO		-(MAX_ERRNO + 20)
 #define ERROR_LRC_M_MODULO		-(MAX_ERRNO + 21)
 
-class ErasureCodeLrc : public ErasureCode {
+class ErasureCodeLrc final : public ErasureCode {
 public:
   static const std::string DEFAULT_KML;
 
   struct Layer {
-    explicit Layer(std::string _chunks_map) : chunks_map(_chunks_map) { }
+    explicit Layer(const std::string &_chunks_map) : chunks_map(_chunks_map) { }
     ErasureCodeInterfaceRef erasure_code;
     std::vector<int> data;
     std::vector<int> coding;
@@ -65,7 +65,7 @@ public:
   std::string rule_root;
   std::string rule_device_class;
   struct Step {
-    Step(std::string _op, std::string _type, int _n) :
+    Step(const std::string &_op, const std::string &_type, int _n) :
       op(_op),
       type(_type),
       n(_n) {}
@@ -87,9 +87,9 @@ public:
   std::set<int> get_erasures(const std::set<int> &need,
 			const std::set<int> &available) const;
 
-  int minimum_to_decode(const std::set<int> &want_to_read,
-				const std::set<int> &available,
-				std::set<int> *minimum) override;
+  int _minimum_to_decode(const std::set<int> &want_to_read,
+			 const std::set<int> &available,
+			 std::set<int> *minimum) override;
 
   int create_rule(const std::string &name,
 			     CrushWrapper &crush,
@@ -120,18 +120,18 @@ public:
 
   int parse_rule(ErasureCodeProfile &profile, std::ostream *ss);
 
-  int parse_rule_step(std::string description_string,
+  int parse_rule_step(const std::string &description_string,
 		      json_spirit::mArray description,
 		      std::ostream *ss);
 
   int layers_description(const ErasureCodeProfile &profile,
 			 json_spirit::mArray *description,
 			 std::ostream *ss) const;
-  int layers_parse(std::string description_string,
+  int layers_parse(const std::string &description_string,
 		   json_spirit::mArray description,
 		   std::ostream *ss);
   int layers_init(std::ostream *ss);
-  int layers_sanity_checks(std::string description_string,
+  int layers_sanity_checks(const std::string &description_string,
 			   std::ostream *ss) const;
 };
 

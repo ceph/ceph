@@ -1,8 +1,15 @@
 #ifndef CEPH_RGW_ROLE_H
 #define CEPH_RGW_ROLE_H
 
+#include <string>
+
+#include "common/ceph_context.h"
+
+#include "rgw/rgw_rados.h"
+
 class RGWRole
 {
+  using string = std::string;
   static const string role_name_oid_prefix;
   static const string role_oid_prefix;
   static const string role_path_oid_prefix;
@@ -78,28 +85,28 @@ public:
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
-    ::encode(id, bl);
-    ::encode(name, bl);
-    ::encode(path, bl);
-    ::encode(arn, bl);
-    ::encode(creation_date, bl);
-    ::encode(trust_policy, bl);
-    ::encode(perm_policy_map, bl);
-    ::encode(tenant, bl);
+    encode(id, bl);
+    encode(name, bl);
+    encode(path, bl);
+    encode(arn, bl);
+    encode(creation_date, bl);
+    encode(trust_policy, bl);
+    encode(perm_policy_map, bl);
+    encode(tenant, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
-    ::decode(id, bl);
-    ::decode(name, bl);
-    ::decode(path, bl);
-    ::decode(arn, bl);
-    ::decode(creation_date, bl);
-    ::decode(trust_policy, bl);
-    ::decode(perm_policy_map, bl);
+    decode(id, bl);
+    decode(name, bl);
+    decode(path, bl);
+    decode(arn, bl);
+    decode(creation_date, bl);
+    decode(trust_policy, bl);
+    decode(perm_policy_map, bl);
     if (struct_v >= 2) {
-      ::decode(tenant, bl);
+      decode(tenant, bl);
     }
     DECODE_FINISH(bl);
   }

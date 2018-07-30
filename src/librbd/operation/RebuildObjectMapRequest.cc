@@ -4,6 +4,7 @@
 #include "librbd/operation/RebuildObjectMapRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "osdc/Striper.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -75,7 +76,7 @@ bool RebuildObjectMapRequest<I>::should_complete(int r) {
     break;
 
   default:
-    assert(false);
+    ceph_abort();
     break;
   }
 

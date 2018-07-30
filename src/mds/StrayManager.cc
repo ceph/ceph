@@ -80,6 +80,10 @@ public:
     assert(r == 0 || r == -ENOENT);
     sm->_purge_stray_purged(dn, only_head);
   }
+  void print(ostream& out) const override {
+    CInode *in = dn->get_projected_linkage()->get_inode();
+    out << "purge_stray(" << in->ino() << ")";
+  }
 };
 
 
@@ -118,18 +122,20 @@ void StrayManager::purge(CDentry *dn)
     uint64_t to = 0;
     if (in->is_file()) {
       to = in->inode.get_max_size();
-      to = MAX(in->inode.size, to);
+      to = std::max(in->inode.size, to);
       // when truncating a file, the filer does not delete stripe objects that are
       // truncated to zero. so we need to purge stripe objects up to the max size
       // the file has ever been.
-      to = MAX(in->inode.max_size_ever, to);
+      to = std::max(in->inode.max_size_ever, to);
     }
 
-    inode_t *pi = in->get_projected_inode();
+    auto pi = in->get_projected_inode();
 
     item.size = to;
     item.layout = pi->layout;
-    item.old_pools = pi->old_pools;
+    item.old_pools.clear();
+    for (const auto &p : pi->old_pools)
+      item.old_pools.insert(p);
     item.snapc = *snapc;
   }
 
@@ -175,13 +181,13 @@ void StrayManager::_purge_stray_purged(
     EUpdate *le = new EUpdate(mds->mdlog, "purge_stray truncate");
     mds->mdlog->start_entry(le);
     
-    inode_t *pi = in->project_inode();
-    pi->size = 0;
-    pi->max_size_ever = 0;
-    pi->client_ranges.clear();
-    pi->truncate_size = 0;
-    pi->truncate_from = 0;
-    pi->version = in->pre_dirty();
+    auto &pi = in->project_inode();
+    pi.inode.size = 0;
+    pi.inode.max_size_ever = 0;
+    pi.inode.client_ranges.clear();
+    pi.inode.truncate_size = 0;
+    pi.inode.truncate_from = 0;
+    pi.inode.version = in->pre_dirty();
 
     le->metablob.add_dir_context(dn->dir);
     le->metablob.add_primary_dentry(dn, in, true);
@@ -450,7 +456,7 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
     if (in->is_dir()) {
       if (in->snaprealm && in->snaprealm->has_past_parents()) {
 	dout(20) << "  directory has past parents "
-		 << in->snaprealm->srnode.past_parents << dendl;
+		 << in->snaprealm << dendl;
 	if (in->state_test(CInode::STATE_MISSINGOBJS)) {
 	  mds->clog->error() << "previous attempt at committing dirfrag of ino "
 			     << in->ino() << " has failed, missing object";
@@ -463,10 +469,9 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
 
       if (!in->remote_parents.empty()) {
 	// unlink any stale remote snap dentry.
-	for (compact_set<CDentry*>::iterator p = in->remote_parents.begin();
-	     p != in->remote_parents.end(); ) {
-	  CDentry *remote_dn = *p;
-	  ++p;
+	for (auto it = in->remote_parents.begin(); it != in->remote_parents.end(); ) {
+	  CDentry *remote_dn = *it;
+	  ++it;
 	  assert(remote_dn->last != CEPH_NOSNAP);
 	  remote_dn->unlink_remote(remote_dn->get_linkage());
 	}
@@ -506,7 +511,7 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
       // but leave the metadata intact.
       assert(!in->is_dir());
       dout(20) << " file has past parents "
-        << in->snaprealm->srnode.past_parents << dendl;
+        << in->snaprealm << dendl;
       if (in->is_file() && in->get_projected_inode()->size > 0) {
 	enqueue(dn, true); // truncate head objects    
       }
@@ -606,18 +611,17 @@ void StrayManager::_eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn)
   /* If no remote_dn hinted, pick one arbitrarily */
   if (remote_dn == NULL) {
     if (!stray_in->remote_parents.empty()) {
-      for (compact_set<CDentry*>::iterator p = stray_in->remote_parents.begin();
-	   p != stray_in->remote_parents.end();
-	   ++p)
-	if ((*p)->last == CEPH_NOSNAP && !(*p)->is_projected()) {
-	  if ((*p)->is_auth()) {
-	    remote_dn = *p;
+      for (const auto &dn : stray_in->remote_parents) {
+	if (dn->last == CEPH_NOSNAP && !dn->is_projected()) {
+	  if (dn->is_auth()) {
+	    remote_dn = dn;
 	    if (remote_dn->dir->can_auth_pin())
 	      break;
 	  } else if (!remote_dn) {
-	    remote_dn = *p;
+	    remote_dn = dn;
 	  }
 	}
+      }
     }
     if (!remote_dn) {
       dout(20) << __func__ << ": not reintegrating (no remote parents in cache)" << dendl;
@@ -719,11 +723,11 @@ void StrayManager::truncate(CDentry *dn)
   const SnapContext *snapc = &realm->get_snap_context();
 
   uint64_t to = in->inode.get_max_size();
-  to = MAX(in->inode.size, to);
+  to = std::max(in->inode.size, to);
   // when truncating a file, the filer does not delete stripe objects that are
   // truncated to zero. so we need to purge stripe objects up to the max size
   // the file has ever been.
-  to = MAX(in->inode.max_size_ever, to);
+  to = std::max(in->inode.max_size_ever, to);
 
   assert(to > 0);
 

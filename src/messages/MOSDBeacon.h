@@ -16,15 +16,16 @@ public:
       min_last_epoch_clean(min_lec)
   {}
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(pgs, payload);
-    ::encode(min_last_epoch_clean, payload);
+    encode(pgs, payload);
+    encode(min_last_epoch_clean, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(pgs, p);
-    ::decode(min_last_epoch_clean, p);
+    decode(pgs, p);
+    decode(min_last_epoch_clean, p);
   }
   const char *get_type_name() const override { return "osd_beacon"; }
   void print(ostream &out) const {

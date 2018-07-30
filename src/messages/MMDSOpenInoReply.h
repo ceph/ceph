@@ -36,17 +36,18 @@ struct MMDSOpenInoReply : public Message {
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(ino, payload);
-    ::encode(ancestors, payload);
-    ::encode(hint, payload);
-    ::encode(error, payload);
+    using ceph::encode;
+    encode(ino, payload);
+    encode(ancestors, payload);
+    encode(hint, payload);
+    encode(error, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(ino, p);
-    ::decode(ancestors, p);
-    ::decode(hint, p);
-    ::decode(error, p);
+    auto p = payload.cbegin();
+    decode(ino, p);
+    decode(ancestors, p);
+    decode(hint, p);
+    decode(error, p);
   }
 };
 

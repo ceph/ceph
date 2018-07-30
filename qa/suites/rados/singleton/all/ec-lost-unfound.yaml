@@ -21,4 +21,5 @@ tasks:
       - \(OSD_
       - \(PG_
       - \(OBJECT_
+      - \(SLOW_OPS\)
 - ec_lost_unfound:

@@ -133,7 +133,7 @@ struct MonCap {
   std::vector<MonCapGrant> grants;
 
   MonCap() {}
-  explicit MonCap(std::vector<MonCapGrant> g) : grants(g) {}
+  explicit MonCap(const std::vector<MonCapGrant> &g) : grants(g) {}
 
   string get_str() const {
     return text;
@@ -166,7 +166,7 @@ struct MonCap {
 		  bool op_may_read, bool op_may_write, bool op_may_exec) const;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<MonCap*>& ls);
 };

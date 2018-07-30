@@ -51,10 +51,10 @@ void RGWRealmWatcher::handle_notify(uint64_t notify_id, uint64_t cookie,
   pool_ctx.notify_ack(watch_oid, notify_id, cookie, reply);
 
   try {
-    auto p = bl.begin();
+    auto p = bl.cbegin();
     while (!p.end()) {
       RGWRealmNotify notify;
-      ::decode(notify, p);
+      decode(notify, p);
       auto watcher = watchers.find(notify);
       if (watcher == watchers.end()) {
         lderr(cct) << "Failed to find a watcher for notify type "

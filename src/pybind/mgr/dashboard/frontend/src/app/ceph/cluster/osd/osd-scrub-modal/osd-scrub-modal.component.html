@@ -1,0 +1,37 @@
+<cd-modal [modalRef]="bsModalRef">
+  <ng-container class="modal-title"
+                i18n>
+    OSDs {{ deep ? 'Deep ' : '' }}Scrub
+  </ng-container>
+
+  <ng-container class="modal-content">
+    <form name="scrubForm"
+          class="form-horizontal"
+          #formDir="ngForm"
+          [formGroup]="scrubForm"
+          novalidate>
+      <div class="modal-body">
+        <div *ngIf="selected.length === 1">
+          <p i18n>
+            You are about to apply a {{ deep ? 'deep ' : '' }}scrub to the OSD
+            <strong>{{ selected[0].id }}</strong>.
+          </p>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <cd-submit-button (submitAction)="scrub()"
+                          [form]="scrubForm"
+                          i18n>
+          Submit
+        </cd-submit-button>
+
+        <button class="btn btn-link btn-sm"
+                (click)="bsModalRef.hide()"
+                i18n>
+          Cancel
+        </button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

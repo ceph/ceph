@@ -142,7 +142,7 @@ int ErasureCodeLrc::layers_description(const ErasureCodeProfile &profile,
   return 0;
 }
 
-int ErasureCodeLrc::layers_parse(string description_string,
+int ErasureCodeLrc::layers_parse(const string &description_string,
 				 json_spirit::mArray description,
 				 ostream *ss)
 {
@@ -251,7 +251,7 @@ int ErasureCodeLrc::layers_init(ostream *ss)
   return 0;
 }
 
-int ErasureCodeLrc::layers_sanity_checks(string description_string,
+int ErasureCodeLrc::layers_sanity_checks(const string &description_string,
 					 ostream *ss) const
 {
   int position = 0;
@@ -452,7 +452,7 @@ int ErasureCodeLrc::parse_rule(ErasureCodeProfile &profile,
   return 0;
 }
 
-int ErasureCodeLrc::parse_rule_step(string description_string,
+int ErasureCodeLrc::parse_rule_step(const string &description_string,
 				       json_spirit::mArray description,
 				       ostream *ss)
 {
@@ -527,11 +527,7 @@ int ErasureCodeLrc::init(ErasureCodeProfile &profile,
     return ERROR_LRC_MAPPING;
   }
   string mapping = profile.find("mapping")->second;
-  data_chunk_count = 0;
-  for(std::string::iterator it = mapping.begin(); it != mapping.end(); ++it) {
-    if (*it == 'D')
-      data_chunk_count++;
-  }
+  data_chunk_count = count(begin(mapping), end(mapping), 'D');
   chunk_count = mapping.length();
 
   r = layers_sanity_checks(description_string, ss);
@@ -569,9 +565,9 @@ unsigned int ErasureCodeLrc::get_chunk_size(unsigned int object_size) const
 
 void p(const set<int> &s) { cerr << s; } // for gdb
 
-int ErasureCodeLrc::minimum_to_decode(const set<int> &want_to_read,
-				      const set<int> &available_chunks,
-				      set<int> *minimum)
+int ErasureCodeLrc::_minimum_to_decode(const set<int> &want_to_read,
+				       const set<int> &available_chunks,
+				       set<int> *minimum)
 {
   dout(20) << __func__ << " want_to_read " << want_to_read
 	   << " available_chunks " << available_chunks << dendl;
@@ -661,8 +657,7 @@ int ErasureCodeLrc::minimum_to_decode(const set<int> &want_to_read,
 	       j != erasures.end();
 	       ++j) {
 	    erasures_not_recovered.erase(*j);
-	    if (erasures_want.count(*j))
-	      erasures_want.erase(*j);
+	    erasures_want.erase(*j);
 	  }
 	}
       }
@@ -843,8 +838,7 @@ int ErasureCodeLrc::decode_chunks(const set<int> &want_to_read,
 	   ++c) {
 	(*decoded)[*c] = layer_decoded[j];
 	++j;
-	if (erasures.count(*c) != 0)
-	  erasures.erase(*c);
+	erasures.erase(*c);
       }
       want_to_read_erasures.clear();
       set_intersection(erasures.begin(), erasures.end(),

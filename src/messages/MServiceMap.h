@@ -25,10 +25,11 @@ public:
 	<< service_map.services.size() << " svc)";
   }
   void encode_payload(uint64_t features) override {
-    ::encode(service_map, payload, features);
+    using ceph::encode;
+    encode(service_map, payload, features);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(service_map, p);
+    auto p = payload.cbegin();
+    decode(service_map, p);
   }
 };

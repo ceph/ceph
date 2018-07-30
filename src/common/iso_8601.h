@@ -4,6 +4,7 @@
 #ifndef CEPH_COMMON_ISO_8601_H
 #define CEPH_COMMON_ISO_8601_H
 
+#include <boost/optional.hpp>
 #include <boost/utility/string_ref.hpp>
 
 #include "common/ceph_time.h"

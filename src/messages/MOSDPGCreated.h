@@ -21,12 +21,13 @@ public:
     out << "osd_pg_created(" << pgid << ")";
   }
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(pgid, payload);
+    encode(pgid, payload);
   }
   void decode_payload() override {
-    auto p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(pgid, p);
+    decode(pgid, p);
   }
 };

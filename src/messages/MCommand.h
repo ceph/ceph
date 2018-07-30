@@ -45,13 +45,14 @@ public:
   }
   
   void encode_payload(uint64_t features) override {
-    ::encode(fsid, payload);
-    ::encode(cmd, payload);
+    using ceph::encode;
+    encode(fsid, payload);
+    encode(cmd, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(fsid, p);
-    ::decode(cmd, p);
+    auto p = payload.cbegin();
+    decode(fsid, p);
+    decode(cmd, p);
   }
 };
 

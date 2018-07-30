@@ -45,22 +45,22 @@ HitSet::HitSet(const HitSet::Params& params)
 void HitSet::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(sealed, bl);
+  encode(sealed, bl);
   if (impl) {
-    ::encode((__u8)impl->get_type(), bl);
+    encode((__u8)impl->get_type(), bl);
     impl->encode(bl);
   } else {
-    ::encode((__u8)TYPE_NONE, bl);
+    encode((__u8)TYPE_NONE, bl);
   }
   ENCODE_FINISH(bl);
 }
 
-void HitSet::decode(bufferlist::iterator &bl)
+void HitSet::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START(1, bl);
-  ::decode(sealed, bl);
+  decode(sealed, bl);
   __u8 type;
-  ::decode(type, bl);
+  decode(type, bl);
   switch ((impl_type_t)type) {
   case TYPE_EXPLICIT_HASH:
     impl.reset(new ExplicitHashHitSet);
@@ -115,7 +115,7 @@ HitSet::Params::Params(const Params& o)
     // instead.
     bufferlist bl;
     o.impl->encode(bl);
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     impl->decode(p);
   } // else we don't need to do anything
 }
@@ -128,7 +128,7 @@ const HitSet::Params& HitSet::Params::operator=(const Params& o)
     // instead.
     bufferlist bl;
     o.impl->encode(bl);
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     impl->decode(p);
   }
   return *this;
@@ -138,10 +138,10 @@ void HitSet::Params::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
   if (impl) {
-    ::encode((__u8)impl->get_type(), bl);
+    encode((__u8)impl->get_type(), bl);
     impl->encode(bl);
   } else {
-    ::encode((__u8)TYPE_NONE, bl);
+    encode((__u8)TYPE_NONE, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -167,11 +167,11 @@ bool HitSet::Params::create_impl(impl_type_t type)
   return true;
 }
 
-void HitSet::Params::decode(bufferlist::iterator &bl)
+void HitSet::Params::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START(1, bl);
   __u8 type;
-  ::decode(type, bl);
+  decode(type, bl);
   if (!create_impl((impl_type_t)type))
     throw buffer::malformed_input("unrecognized HitMap type");
   if (impl)

@@ -1,5 +1,6 @@
 function(do_build_rocksdb)
-    set(ROCKSDB_CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON)
+  set(ROCKSDB_CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON)
+  list(APPEND ROCKSDB_CMAKE_ARGS -DWITH_GFLAGS=OFF)
 
   if(ALLOCATOR STREQUAL "jemalloc")
     list(APPEND ROCKSDB_CMAKE_ARGS -DWITH_JEMALLOC=ON)
@@ -12,14 +13,18 @@ function(do_build_rocksdb)
     list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER})
   endif()
 
+  list(APPEND ROCKSDB_CMAKE_ARGS -DWITH_SNAPPY=${SNAPPY_FOUND})
+  list(APPEND ROCKSDB_CMAKE_ARGS -DWITH_LZ4=${LZ4_FOUND})
+  list(APPEND ROCKSDB_CMAKE_ARGS -DWITH_ZLIB=${ZLIB_FOUND})
   list(APPEND ROCKSDB_CMAKE_ARGS -DPORTABLE=ON)
   list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_AR=${CMAKE_AR})
   list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
-
-  if (CMAKE_CXX_COMPILER_ID STREQUAL Clang)
-    list(APPEND ROCKSDB_CMAKE_ARGS -DFAIL_ON_WARNINGS=OFF)
+  list(APPEND ROCKSDB_CMAKE_ARGS -DFAIL_ON_WARNINGS=OFF)
+  list(APPEND ROCKSDB_CMAKE_ARGS -DUSE_RTTI=1)
+  CHECK_C_COMPILER_FLAG("-Wno-stringop-truncation" HAS_WARNING_STRINGOP_TRUNCATION)
+  if(HAS_WARNING_STRINGOP_TRUNCATION)
+    list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_C_FLAGS="-Wno-stringop-truncation")
   endif()
-
   # we use an external project and copy the sources to bin directory to ensure
   # that object files are built outside of the source tree.
   include(ExternalProject)
@@ -54,17 +59,4 @@ macro(build_rocksdb)
   endforeach()
   set(ROCKSDB_VERSION_STRING
     "${ROCKSDB_VERSION_MAJOR}.${ROCKSDB_VERSION_MINOR}.${ROCKSDB_VERSION_PATCH}")
-
-  if(ALLOCATOR MATCHES "tcmalloc(_minimal)?")
-    # see http://tracker.ceph.com/issues/21422
-    if(ROCKSDB_VERSION_STRING VERSION_GREATER 5.7 AND
-        TCMALLOC_VERSION_STRING VERSION_GREATER 2.5 AND
-        TCMALLOC_VERSION_STRING VERSION_LESS 2.6.2)
-      message(SEND_ERROR
-        "Incompatible tcmalloc v${TCMALLOC_VERSION_STRING} and rocksdb "
-        "v${ROCKSDB_VERSION_STRING}, please install gperf-tools 2.5 (not 2.5.93) "
-        "or >= 2.6.2, or switch to another allocator using "
-        "'cmake -DALLOCATOR=libc'.")
-    endif()
-  endif()
 endmacro()

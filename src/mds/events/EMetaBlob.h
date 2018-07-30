@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_EMETABLOB_H
 #define CEPH_MDS_EMETABLOB_H
 
+#include <string_view>
+
 #include <stdlib.h>
 
 #include "../CInode.h"
@@ -63,27 +65,26 @@ public:
     static const int STATE_DIRTYPARENT = (1<<1);
     static const int STATE_DIRTYPOOL   = (1<<2);
     static const int STATE_NEED_SNAPFLUSH = (1<<3);
-    typedef compact_map<snapid_t, old_inode_t> old_inodes_t;
-    string  dn;         // dentry
+    std::string  dn;         // dentry
     snapid_t dnfirst, dnlast;
     version_t dnv{0};
-    inode_t inode;      // if it's not
+    CInode::mempool_inode inode;      // if it's not XXX should not be part of mempool; wait for std::pmr to simplify
     fragtree_t dirfragtree;
-    map<string,bufferptr> xattrs;
-    string symlink;
+    CInode::mempool_xattr_map xattrs;
+    std::string symlink;
     snapid_t oldest_snap;
     bufferlist snapbl;
     __u8 state{0};
-    old_inodes_t old_inodes;
+    CInode::mempool_old_inode_map old_inodes; // XXX should not be part of mempool; wait for std::pmr to simplify
 
     fullbit(const fullbit& o);
     const fullbit& operator=(const fullbit& o);
 
-    fullbit(const string& d, snapid_t df, snapid_t dl, 
-	    version_t v, const inode_t& i, const fragtree_t &dft, 
-	    const map<string,bufferptr> &xa, const string& sym,
+    fullbit(std::string_view d, snapid_t df, snapid_t dl, 
+	    version_t v, const CInode::mempool_inode& i, const fragtree_t &dft,
+	    const CInode::mempool_xattr_map &xa, std::string_view sym,
 	    snapid_t os, const bufferlist &sbl, __u8 st,
-	    const old_inodes_t *oi = NULL) :
+	    const CInode::mempool_old_inode_map *oi = NULL) :
       dn(d), dnfirst(df), dnlast(dl), dnv(v), inode(i), xattrs(xa),
       oldest_snap(os), state(st)
     {
@@ -95,14 +96,14 @@ public:
 	old_inodes = *oi;
       snapbl = sbl;
     }
-    explicit fullbit(bufferlist::iterator &p) {
+    explicit fullbit(bufferlist::const_iterator &p) {
       decode(p);
     }
     fullbit() {}
     ~fullbit() {}
 
     void encode(bufferlist& bl, uint64_t features) const;
-    void decode(bufferlist::iterator &bl);
+    void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<EMetaBlob::fullbit*>& ls);
 
@@ -137,21 +138,21 @@ public:
   /* remotebit - a dentry + remote inode link (i.e. just an ino)
    */
   struct remotebit {
-    string dn;
+    std::string dn;
     snapid_t dnfirst, dnlast;
     version_t dnv;
     inodeno_t ino;
     unsigned char d_type;
     bool dirty;
 
-    remotebit(const string& d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
+    remotebit(std::string_view d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
       dn(d), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
-    explicit remotebit(bufferlist::iterator &p) { decode(p); }
+    explicit remotebit(bufferlist::const_iterator &p) { decode(p); }
     remotebit(): dnfirst(0), dnlast(0), dnv(0), ino(0),
 	d_type('\0'), dirty(false) {}
 
     void encode(bufferlist& bl) const;
-    void decode(bufferlist::iterator &bl);
+    void decode(bufferlist::const_iterator &bl);
     void print(ostream& out) const {
       out << " remotebit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " ino " << ino
@@ -166,18 +167,18 @@ public:
    * nullbit - a null dentry
    */
   struct nullbit {
-    string dn;
+    std::string dn;
     snapid_t dnfirst, dnlast;
     version_t dnv;
     bool dirty;
 
-    nullbit(const string& d, snapid_t df, snapid_t dl, version_t v, bool dr) : 
+    nullbit(std::string_view d, snapid_t df, snapid_t dl, version_t v, bool dr) :
       dn(d), dnfirst(df), dnlast(dl), dnv(v), dirty(dr) { }
-    explicit nullbit(bufferlist::iterator &p) { decode(p); }
+    explicit nullbit(bufferlist::const_iterator &p) { decode(p); }
     nullbit(): dnfirst(0), dnlast(0), dnv(0), dirty(false) {}
 
     void encode(bufferlist& bl) const;
-    void decode(bufferlist::iterator &bl);
+    void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<nullbit*>& ls);
     void print(ostream& out) {
@@ -206,7 +207,7 @@ public:
   private:
     mutable bufferlist dnbl;
     mutable bool dn_decoded;
-    mutable list<ceph::shared_ptr<fullbit> > dfull;
+    mutable list<std::shared_ptr<fullbit> > dfull;
     mutable list<remotebit> dremote;
     mutable list<nullbit> dnull;
 
@@ -224,12 +225,12 @@ public:
     bool is_dirty_dft() { return state & STATE_DIRTYDFT; }
     void mark_dirty_dft() { state |= STATE_DIRTYDFT; }
 
-    const list<ceph::shared_ptr<fullbit> > &get_dfull()   const { return dfull; }
+    const list<std::shared_ptr<fullbit> > &get_dfull()   const { return dfull; }
     const list<remotebit>                  &get_dremote() const { return dremote; }
     const list<nullbit>                    &get_dnull()   const { return dnull; }
 
     void add_dnull(nullbit const &n)                   { dnull.push_back(n); };
-    void add_dfull(ceph::shared_ptr<fullbit> const &p) { dfull.push_back(p); };
+    void add_dfull(std::shared_ptr<fullbit> const &p) { dfull.push_back(p); };
     void add_dremote(remotebit const &r)               { dremote.push_back(r); };
 
     void print(dirfrag_t dirfrag, ostream& out) {
@@ -238,7 +239,7 @@ public:
 	  << " num " << nfull << "/" << nremote << "/" << nnull
 	  << std::endl;
       _decode_bits();
-      for (list<ceph::shared_ptr<fullbit> >::iterator p = dfull.begin(); p != dfull.end(); ++p)
+      for (list<std::shared_ptr<fullbit> >::iterator p = dfull.begin(); p != dfull.end(); ++p)
 	(*p)->print(out);
       for (list<remotebit>::iterator p = dremote.begin(); p != dremote.end(); ++p)
 	p->print(out);
@@ -265,22 +266,24 @@ public:
 
     // if this changes, update the versioning in encode for it!
     void _encode_bits(uint64_t features) const {
+      using ceph::encode;
       if (!dn_decoded) return;
-      ::encode(dfull, dnbl, features);
-      ::encode(dremote, dnbl);
-      ::encode(dnull, dnbl);
+      encode(dfull, dnbl, features);
+      encode(dremote, dnbl);
+      encode(dnull, dnbl);
     }
     void _decode_bits() const { 
+      using ceph::decode;
       if (dn_decoded) return;
-      bufferlist::iterator p = dnbl.begin();
-      ::decode(dfull, p);
-      ::decode(dremote, p);
-      ::decode(dnull, p);
+      auto p = dnbl.cbegin();
+      decode(dfull, p);
+      decode(dremote, p);
+      decode(dnull, p);
       dn_decoded = true;
     }
 
     void encode(bufferlist& bl, uint64_t features) const;
-    void decode(bufferlist::iterator &bl);
+    void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<dirlump*>& ls);
   };
@@ -289,7 +292,7 @@ public:
   // my lumps.  preserve the order we added them in a list.
   list<dirfrag_t>         lump_order;
   map<dirfrag_t, dirlump> lump_map;
-  list<ceph::shared_ptr<fullbit> > roots;
+  list<std::shared_ptr<fullbit> > roots;
 public:
   list<pair<__u8,version_t> > table_tids;  // tableclient transactions
 
@@ -320,7 +323,7 @@ private:
 
  public:
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void get_inodes(std::set<inodeno_t> &inodes) const;
   void get_paths(std::vector<std::string> &paths) const;
   void get_dentries(std::map<dirfrag_t, std::set<std::string> > &dentries) const;
@@ -442,7 +445,7 @@ private:
     in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
-    const inode_t *pi = in->get_projected_inode();
+    const auto pi = in->get_projected_inode();
     if ((state & fullbit::STATE_DIRTY) && pi->is_backtrace_updated())
       state |= fullbit::STATE_DIRTYPARENT;
 
@@ -452,7 +455,7 @@ private:
       sr->encode(snapbl);
 
     lump.nfull++;
-    lump.add_dfull(ceph::shared_ptr<fullbit>(new fullbit(dn->get_name(),
+    lump.add_dfull(std::shared_ptr<fullbit>(new fullbit(dn->get_name(),
 							 dn->first, dn->last,
 							 dn->get_projected_version(),
 							 *pi, in->dirfragtree,
@@ -490,22 +493,20 @@ private:
     add_primary_dentry(dn, 0, dirty, dirty_parent, dirty_pool);
   }
 
-  void add_root(bool dirty, CInode *in, const inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
-		    map<string,bufferptr> *px=0) {
+  void add_root(bool dirty, CInode *in) {
     in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
-    if (!pi) pi = in->get_projected_inode();
-    if (!pdft) pdft = &in->dirfragtree;
-    if (!px) px = in->get_projected_xattrs();
+    const auto& pi = *(in->get_projected_inode());
+    const auto& pdft = in->dirfragtree;
+    const auto& px = *(in->get_projected_xattrs());
 
     bufferlist snapbl;
-    if (psnapbl)
-      snapbl = *psnapbl;
-    else
-      in->encode_snap_blob(snapbl);
+    const sr_t *sr = in->get_projected_srnode();
+    if (sr)
+      sr->encode(snapbl);
 
-    for (list<ceph::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); ++p) {
+    for (list<std::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); ++p) {
       if ((*p)->inode.ino == in->ino()) {
 	roots.erase(p);
 	break;
@@ -513,8 +514,8 @@ private:
     }
 
     string empty;
-    roots.push_back(ceph::shared_ptr<fullbit>(new fullbit(empty, in->first, in->last, 0, *pi,
-							  *pdft, *px, in->symlink,
+    roots.push_back(std::shared_ptr<fullbit>(new fullbit(empty, in->first, in->last, 0, pi,
+							  pdft, px, in->symlink,
 							  in->oldest_snap, snapbl,
 							  dirty ? fullbit::STATE_DIRTY : 0,
 							  &in->old_inodes)));

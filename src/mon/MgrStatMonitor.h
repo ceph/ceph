@@ -60,7 +60,7 @@ public:
 
   void update_logger();
 
-  const ServiceMap& get_service_map() {
+  const ServiceMap& get_service_map() const {
     return service_map;
   }
 
@@ -73,6 +73,10 @@ public:
     return nullptr;
   }
 
+  const PGMapDigest& get_digest() {
+    return digest;
+  }
+
   ceph_statfs get_statfs(OSDMap& osdmap,
 			 boost::optional<int64_t> data_pool) const {
     return digest.get_statfs(osdmap, data_pool);
@@ -83,6 +87,7 @@ public:
   }
   void dump_info(Formatter *f) const {
     digest.dump(f);
+    f->dump_object("servicemap", get_service_map());
   }
   void dump_fs_stats(stringstream *ss,
 		     Formatter *f,

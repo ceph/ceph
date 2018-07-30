@@ -46,13 +46,15 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(commit, payload);
-    ::encode(abort, payload);
+    using ceph::encode;
+    encode(commit, payload);
+    encode(abort, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(commit, p);
-    ::decode(abort, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(commit, p);
+    decode(abort, p);
   }
 };
 

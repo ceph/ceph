@@ -18,7 +18,7 @@
 
 class MStatfsReply : public Message {
 public:
-  struct ceph_mon_statfs_reply h;
+  struct ceph_mon_statfs_reply h{};
 
   MStatfsReply() : Message(CEPH_MSG_STATFS_REPLY) {}
   MStatfsReply(uuid_d &f, ceph_tid_t t, epoch_t epoch) : Message(CEPH_MSG_STATFS_REPLY) {
@@ -33,11 +33,12 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(h, payload);
+    using ceph::encode;
+    encode(h, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(h, p);
+    auto p = payload.cbegin();
+    decode(h, p);
   }
 };
 

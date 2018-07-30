@@ -24,12 +24,17 @@
 #include "include/timegm.h"
 #include "common/strtol.h"
 #include "common/ceph_time.h"
+#include "common/safe_io.h"
+#include "common/SubProcess.h"
 #include "include/denc.h"
 
 
 // --------
 // utime_t
 
+inline __u32 cap_to_u32_max(__u64 t) {
+  return std::min(t, (__u64)std::numeric_limits<uint32_t>::max());
+}
 /* WARNING: If add member in utime_t, please make sure the encode/decode funtion
  * work well. For little-endian machine, we should make sure there is no padding
  * in 32-bit machine and 64-bit machine.
@@ -45,9 +50,10 @@ public:
   bool is_zero() const {
     return (tv.tv_sec == 0) && (tv.tv_nsec == 0);
   }
+
   void normalize() {
     if (tv.tv_nsec > 1000000000ul) {
-      tv.tv_sec += tv.tv_nsec / (1000000000ul);
+      tv.tv_sec = cap_to_u32_max(tv.tv_sec + tv.tv_nsec / (1000000000ul));
       tv.tv_nsec %= 1000000000ul;
     }
   }
@@ -60,13 +66,17 @@ public:
   }
   utime_t(const struct timespec v)
   {
+    // NOTE: this is used by ceph_clock_now() so should be kept
+    // as thin as possible.
     tv.tv_sec = v.tv_sec;
     tv.tv_nsec = v.tv_nsec;
   }
-  explicit utime_t(const ceph::real_time& rt) {
-    ceph_timespec ts = real_clock::to_ceph_timespec(rt);
-    decode_timeval(&ts);
-  }
+  // conversion from ceph::real_time/coarse_real_time
+  template <typename Clock, typename std::enable_if_t<
+            ceph::converts_to_timespec_v<Clock>>* = nullptr>
+  explicit utime_t(const std::chrono::time_point<Clock>& t)
+    : utime_t(Clock::to_timespec(t)) {} // forward to timespec ctor
+
   utime_t(const struct timeval &v) {
     set_from_timeval(&v);
   }
@@ -79,7 +89,7 @@ public:
   }
   void set_from_double(double d) { 
     tv.tv_sec = (__u32)trunc(d);
-    tv.tv_nsec = (__u32)((d - (double)tv.tv_sec) * (double)1000000000.0);
+    tv.tv_nsec = (__u32)((d - (double)tv.tv_sec) * 1000000000.0);
   }
 
   real_time to_real_time() const {
@@ -124,16 +134,18 @@ public:
 #if defined(CEPH_LITTLE_ENDIAN)
     bl.append((char *)(this), sizeof(__u32) + sizeof(__u32));
 #else
-    ::encode(tv.tv_sec, bl);
-    ::encode(tv.tv_nsec, bl);
+    using ceph::encode;
+    encode(tv.tv_sec, bl);
+    encode(tv.tv_nsec, bl);
 #endif
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
 #if defined(CEPH_LITTLE_ENDIAN)
     p.copy(sizeof(__u32) + sizeof(__u32), (char *)(this));
 #else
-    ::decode(tv.tv_sec, p);
-    ::decode(tv.tv_nsec, p);
+    using ceph::decode;
+    decode(tv.tv_sec, p);
+    decode(tv.tv_nsec, p);
 #endif
   }
 
@@ -167,6 +179,17 @@ public:
     localtime_r(&tt, &bdt);
     bdt.tm_sec = 0;
     bdt.tm_min = 0;
+    tt = mktime(&bdt);
+    return utime_t(tt, 0);
+  }
+
+  utime_t round_to_day() {
+    struct tm bdt;
+    time_t tt = sec();
+    localtime_r(&tt, &bdt);
+    bdt.tm_sec = 0;
+    bdt.tm_min = 0;
+    bdt.tm_hour = 0;
     tt = mktime(&bdt);
     return utime_t(tt, 0);
   }
@@ -322,6 +345,32 @@ public:
         bdt.tm_hour, bdt.tm_min, bdt.tm_sec);
   }
 
+  static int invoke_date(const std::string& date_str, utime_t *result) {
+     char buf[256];
+
+     SubProcess bin_date("/bin/date", SubProcess::CLOSE, SubProcess::PIPE, SubProcess::KEEP);
+     bin_date.add_cmd_args("-d", date_str.c_str(), "+%s %N", NULL);
+
+     int r = bin_date.spawn();
+     if (r < 0) return r;
+
+     ssize_t n = safe_read(bin_date.get_stdout(), buf, sizeof(buf));
+
+     r = bin_date.join();
+     if (r || n <= 0) return -EINVAL;
+
+     uint64_t epoch, nsec;
+     std::istringstream iss(buf);
+
+     iss >> epoch;
+     iss >> nsec;
+
+     *result = utime_t(epoch, nsec);
+
+     return 0;
+  }
+
+
   static int parse_date(const string& date, uint64_t *epoch, uint64_t *nsec,
                         string *out_date=NULL, string *out_time=NULL) {
     struct tm tm;
@@ -386,26 +435,35 @@ public:
 
     return 0;
   }
+
+  bool parse(const string& s) {
+    uint64_t epoch, nsec;
+    int r = parse_date(s, &epoch, &nsec);
+    if (r < 0) {
+      return false;
+    }
+    *this = utime_t(epoch, nsec);
+    return true;
+  }
 };
 WRITE_CLASS_ENCODER(utime_t)
 WRITE_CLASS_DENC(utime_t)
 
-
 // arithmetic operators
 inline utime_t operator+(const utime_t& l, const utime_t& r) {
-  return utime_t( l.sec() + r.sec() + (l.nsec()+r.nsec())/1000000000L,
-                  (l.nsec()+r.nsec())%1000000000L );
+  __u64 sec = (__u64)l.sec() + r.sec();
+  return utime_t(cap_to_u32_max(sec), l.nsec() + r.nsec());
 }
 inline utime_t& operator+=(utime_t& l, const utime_t& r) {
-  l.sec_ref() += r.sec() + (l.nsec()+r.nsec())/1000000000L;
+  l.sec_ref() = cap_to_u32_max((__u64)l.sec() + r.sec());
   l.nsec_ref() += r.nsec();
-  l.nsec_ref() %= 1000000000L;
+  l.normalize();
   return l;
 }
 inline utime_t& operator+=(utime_t& l, double f) {
   double fs = trunc(f);
-  double ns = (f - fs) * (double)1000000000.0;
-  l.sec_ref() += (long)fs;
+  double ns = (f - fs) * 1000000000.0;
+  l.sec_ref() = cap_to_u32_max(l.sec() + (__u64)fs);
   l.nsec_ref() += (long)ns;
   l.normalize();
   return l;
@@ -427,7 +485,7 @@ inline utime_t& operator-=(utime_t& l, const utime_t& r) {
 }
 inline utime_t& operator-=(utime_t& l, double f) {
   double fs = trunc(f);
-  double ns = (f - fs) * (double)1000000000.0;
+  double ns = (f - fs) * 1000000000.0;
   l.sec_ref() -= (long)fs;
   long nsl = (long)ns;
   if (nsl) {

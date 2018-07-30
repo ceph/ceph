@@ -24,7 +24,8 @@ overrides:
     - scrub mismatch
     - ScrubResult
     - wrongly marked
-    - (POOL_APP_NOT_ENABLED)
+    - \(POOL_APP_NOT_ENABLED\)
+    - \(SLOW_OPS\)
     - overall HEALTH_
     conf:
       global:
@@ -33,7 +34,7 @@ overrides:
         mon warn on osd down out interval zero: false
       osd:
         osd_class_load_list: "cephfs hello journal lock log numops rbd refcount 
-                              replica_log rgw sdk statelog timeindex user version"
+                              rgw sdk statelog timeindex user version"
         osd_class_default_list: "cephfs hello journal lock log numops rbd refcount 
-                                 replica_log rgw sdk statelog timeindex user version"
+                                 rgw sdk statelog timeindex user version"
     fs: xfs

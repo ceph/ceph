@@ -5,8 +5,10 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/IndentStream.h"
 #include "tools/rbd/OptionPrinter.h"
+#include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "global/global_context.h"
+#include "global/global_init.h"
 #include "include/stringify.h"
 #include <algorithm>
 #include <iostream>
@@ -22,6 +24,40 @@ namespace {
 static const std::string APP_NAME("rbd");
 static const std::string HELP_SPEC("help");
 static const std::string BASH_COMPLETION_SPEC("bash-completion");
+
+boost::intrusive_ptr<CephContext> global_init(
+    int argc, const char **argv, std::vector<std::string> *command_args,
+    std::vector<std::string> *global_init_args) {
+  std::vector<const char*> cmd_args;
+  argv_to_vec(argc, argv, cmd_args);
+  std::vector<const char*> args(cmd_args);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+                         CODE_ENVIRONMENT_UTILITY,
+                         CINIT_FLAG_NO_MON_CONFIG);
+
+  *command_args = {args.begin(), args.end()};
+
+  // Scan command line arguments for ceph global init args (those are
+  // filtered out from args vector by global_init).
+
+  auto cursor = args.begin();
+  for (auto &arg : cmd_args) {
+    auto iter = cursor;
+    for (; iter != args.end(); iter++) {
+      if (*iter == arg) {
+        break;
+      }
+    }
+    if (iter == args.end()) {
+      // filtered out by global_init
+      global_init_args->push_back(arg);
+    } else {
+      cursor = ++iter;
+    }
+  }
+
+  return cct;
+}
 
 std::string format_command_spec(const Shell::CommandSpec &spec) {
   return joinify<std::string>(spec.begin(), spec.end(), " ");
@@ -66,10 +102,11 @@ std::set<std::string>& Shell::get_switch_arguments() {
   return switch_arguments;
 }
 
-int Shell::execute(const Arguments& cmdline_arguments) {
+int Shell::execute(int argc, const char **argv) {
+  std::vector<std::string> arguments;
+  std::vector<std::string> ceph_global_init_args;
+  auto cct = global_init(argc, argv, &arguments, &ceph_global_init_args);
 
-  std::vector<std::string> arguments(cmdline_arguments.begin(),
-                                     cmdline_arguments.end());
   std::vector<std::string> command_spec;
   get_command_spec(arguments, &command_spec);
   bool is_alias = true;
@@ -127,13 +164,9 @@ int Shell::execute(const Arguments& cmdline_arguments) {
       positional_options.add(at::POSITIONAL_ARGUMENTS.c_str(), max_count);
     }
 
-    po::options_description global_opts;
-    get_global_options(&global_opts);
-
     po::options_description group_opts;
     group_opts.add(command_opts)
-              .add(argument_opts)
-              .add(global_opts);
+              .add(argument_opts);
 
     po::store(po::command_line_parser(arguments)
       .style(po::command_line_style::default_style &
@@ -148,7 +181,7 @@ int Shell::execute(const Arguments& cmdline_arguments) {
       return EXIT_FAILURE;
     }
 
-    int r = (*action->execute)(vm);
+    int r = (*action->execute)(vm, ceph_global_init_args);
     if (r != 0) {
       return std::abs(r);
     }

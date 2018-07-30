@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_LOCKER_H
 #define CEPH_MDS_LOCKER_H
 
+#include <string_view>
+
 #include "include/types.h"
 
 #include <map>
@@ -26,7 +28,6 @@ using std::set;
 
 class MDSRank;
 class Session;
-class CInode;
 class CDentry;
 struct SnapRealm;
 
@@ -40,6 +41,7 @@ class SimpleLock;
 class ScatterLock;
 class LocalLock;
 
+#include "CInode.h"
 #include "SimpleLock.h"
 #include "Mutation.h"
 
@@ -49,7 +51,7 @@ private:
   MDCache *mdcache;
  
  public:
-  Locker(MDSRank *m, MDCache *c) : mds(m), mdcache(c) {}  
+  Locker(MDSRank *m, MDCache *c);
 
   SimpleLock *get_lock(int lock_type, MDSCacheObjectInfo &info);
   
@@ -85,7 +87,7 @@ public:
   void drop_locks(MutationImpl *mut, set<CInode*> *pneed_issue=0);
   void set_xlocks_done(MutationImpl *mut, bool skip_dentry=false);
   void drop_non_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue=0);
-  void drop_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue=0);
+  void drop_rdlocks_for_early_reply(MutationImpl *mut);
 
   void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, list<MDSInternalContextBase*> *pfinishers=0);
   void eval(SimpleLock *lock, bool *need_issue);
@@ -177,7 +179,7 @@ public:
   bool should_defer_client_cap_frozen(CInode *in);
 
   void process_request_cap_release(MDRequestRef& mdr, client_t client, const ceph_mds_request_release& r,
-				   const string &dname);
+				   std::string_view dname);
 
   void kick_cap_releases(MDRequestRef& mdr);
   void kick_issue_caps(CInode *in, client_t client, ceph_seq_t seq);
@@ -187,11 +189,11 @@ public:
   void get_late_revoking_clients(std::list<client_t> *result) const;
   bool any_late_revoking_caps(xlist<Capability*> const &revoking) const;
 
- protected:
+protected:
   bool _need_flush_mdlog(CInode *in, int wanted_caps);
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(class MClientCaps *m);
-  void _update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi);
+  void _update_cap_fields(CInode *in, int dirty, MClientCaps *m, CInode::mempool_inode *pi);
   void _do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, MClientCaps *m, MClientCaps *ack);
   void _do_null_snapflush(CInode *head_in, client_t client, snapid_t last=CEPH_NOSNAP);
   bool _do_cap_update(CInode *in, Capability *cap, int dirty, snapid_t follows, MClientCaps *m,
@@ -204,6 +206,11 @@ public:
   xlist<Capability*> revoking_caps;
   // Maintain a per-client list to find clients responsible for late ones quickly
   std::map<client_t, xlist<Capability*> > revoking_caps_by_client;
+
+  elist<CInode*> need_snapflush_inodes;
+public:
+  void snapflush_nudge(CInode *in);
+  void mark_need_snapflush_inode(CInode *in);
 
   // local
 public:
@@ -249,13 +256,13 @@ public:
 protected:
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
-  void file_update_finish(CInode *in, MutationRef& mut, bool share_max, bool issue_client_cap,
+  void file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
 			  client_t client, MClientCaps *ack);
 private:
-  uint64_t calc_new_max_size(inode_t *pi, uint64_t size);
+  uint64_t calc_new_max_size(CInode::mempool_inode *pi, uint64_t size);
 public:
   void calc_new_client_ranges(CInode *in, uint64_t size,
-			      map<client_t, client_writeable_range_t>* new_ranges,
+			      CInode::mempool_inode::client_range_map* new_ranges,
 			      bool *max_increased);
   bool check_inode_max_size(CInode *in, bool force_wrlock=false,
                             uint64_t newmax=0, uint64_t newsize=0,

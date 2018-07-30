@@ -4,6 +4,7 @@
 #include "CreateImageRequest.h"
 #include "CloseImageRequest.h"
 #include "OpenImageRequest.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "cls/rbd/cls_rbd_client.h"
@@ -68,14 +69,7 @@ void CreateImageRequest<I>::create_image() {
   RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
 
   librbd::ImageOptions image_options;
-  image_options.set(RBD_IMAGE_OPTION_FEATURES, m_remote_image_ctx->features);
-  image_options.set(RBD_IMAGE_OPTION_ORDER, m_remote_image_ctx->order);
-  image_options.set(RBD_IMAGE_OPTION_STRIPE_UNIT,
-                    m_remote_image_ctx->stripe_unit);
-  image_options.set(RBD_IMAGE_OPTION_STRIPE_COUNT,
-                    m_remote_image_ctx->stripe_count);
-  image_options.set(RBD_IMAGE_OPTION_DATA_POOL,
-		    m_remote_image_ctx->data_ctx.get_pool_name());
+  populate_image_options(&image_options);
 
   librbd::image::CreateRequest<I> *req = librbd::image::CreateRequest<I>::create(
     m_local_io_ctx, m_local_image_name, m_local_image_id,
@@ -118,7 +112,7 @@ void CreateImageRequest<I>::handle_get_parent_global_image_id(int r) {
   dout(20) << ": r=" << r << dendl;
   if (r == 0) {
     cls::rbd::MirrorImage mirror_image;
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_image_get_finish(&iter, &mirror_image);
     if (r == 0) {
       m_parent_global_image_id = mirror_image.global_image_id;
@@ -165,7 +159,7 @@ void CreateImageRequest<I>::handle_get_local_parent_image_id(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_image_get_image_id_finish(
       &iter, &m_local_parent_spec.image_id);
   }
@@ -240,37 +234,55 @@ void CreateImageRequest<I>::handle_open_local_parent_image(int r) {
 
 template <typename I>
 void CreateImageRequest<I>::set_local_parent_snap() {
-  dout(20) << dendl;
-
+  std::string snap_name;
+  cls::rbd::SnapshotNamespace snap_namespace;
   {
     RWLock::RLocker remote_snap_locker(m_remote_parent_image_ctx->snap_lock);
     auto it = m_remote_parent_image_ctx->snap_info.find(
       m_remote_parent_spec.snap_id);
     if (it != m_remote_parent_image_ctx->snap_info.end()) {
-      m_parent_snap_name = it->second.name;
+      snap_name = it->second.name;
+      snap_namespace = it->second.snap_namespace;
     }
   }
 
-  if (m_parent_snap_name.empty()) {
+  if (snap_name.empty()) {
+    dout(15) << ": failed to locate remote parent snapshot" << dendl;
     m_ret_val = -ENOENT;
     close_local_parent_image();
     return;
   }
-  dout(20) << ": parent_snap_name=" << m_parent_snap_name << dendl;
+
+  m_local_parent_spec.snap_id = CEPH_NOSNAP;
+  {
+    RWLock::RLocker local_snap_locker(m_local_parent_image_ctx->snap_lock);
+    auto it = m_local_parent_image_ctx->snap_ids.find(
+      {snap_namespace, snap_name});
+    if (it != m_local_parent_image_ctx->snap_ids.end()) {
+      m_local_parent_spec.snap_id = it->second;
+    }
+  }
+
+  if (m_local_parent_spec.snap_id == CEPH_NOSNAP) {
+    dout(15) << ": failed to locate local parent snapshot" << dendl;
+    m_ret_val = -ENOENT;
+    close_local_parent_image();
+    return;
+  }
+
+  dout(15) << ": local_snap_id=" << m_local_parent_spec.snap_id << dendl;
 
   Context *ctx = create_context_callback<
     CreateImageRequest<I>,
     &CreateImageRequest<I>::handle_set_local_parent_snap>(this);
-  m_local_parent_image_ctx->state->snap_set(cls::rbd::UserSnapshotNamespace(),
-					    m_parent_snap_name,
-					    ctx);
+  m_local_parent_image_ctx->state->snap_set(m_local_parent_spec.snap_id, ctx);
 }
 
 template <typename I>
 void CreateImageRequest<I>::handle_set_local_parent_snap(int r) {
   dout(20) << ": r=" << r << dendl;
   if (r < 0) {
-    derr << ": failed to set parent snapshot " << m_parent_snap_name
+    derr << ": failed to set parent snapshot " << m_local_parent_spec.snap_id
          << ": " << cpp_strerror(r) << dendl;
     m_ret_val = r;
     close_local_parent_image();
@@ -285,10 +297,7 @@ void CreateImageRequest<I>::clone_image() {
   dout(20) << dendl;
 
   librbd::ImageOptions opts;
-  opts.set(RBD_IMAGE_OPTION_FEATURES, m_remote_image_ctx->features);
-  opts.set(RBD_IMAGE_OPTION_ORDER, m_remote_image_ctx->order);
-  opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, m_remote_image_ctx->stripe_unit);
-  opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, m_remote_image_ctx->stripe_count);
+  populate_image_options(&opts);
 
   using klass = CreateImageRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_clone_image>(this);
@@ -421,6 +430,42 @@ int CreateImageRequest<I>::validate_parent() {
   }
 
   return 0;
+}
+
+template <typename I>
+void CreateImageRequest<I>::populate_image_options(
+    librbd::ImageOptions* image_options) {
+  image_options->set(RBD_IMAGE_OPTION_FEATURES,
+                     (m_remote_image_ctx->features &
+                        ~RBD_FEATURES_IMPLICIT_ENABLE));
+  image_options->set(RBD_IMAGE_OPTION_ORDER, m_remote_image_ctx->order);
+  image_options->set(RBD_IMAGE_OPTION_STRIPE_UNIT,
+                     m_remote_image_ctx->stripe_unit);
+  image_options->set(RBD_IMAGE_OPTION_STRIPE_COUNT,
+                     m_remote_image_ctx->stripe_count);
+
+  // Determine the data pool for the local image as follows:
+  // 1. If the local pool has a default data pool, use it.
+  // 2. If the remote image has a data pool different from its metadata pool and
+  //    a pool with the same name exists locally, use it.
+  // 3. Don't set the data pool explicitly.
+  std::string data_pool;
+  librados::Rados local_rados(m_local_io_ctx);
+  auto default_data_pool = g_ceph_context->_conf.get_val<std::string>("rbd_default_data_pool");
+  auto remote_md_pool = m_remote_image_ctx->md_ctx.get_pool_name();
+  auto remote_data_pool = m_remote_image_ctx->data_ctx.get_pool_name();
+
+  if (default_data_pool != "") {
+    data_pool = default_data_pool;
+  } else if (remote_data_pool != remote_md_pool) {
+    if (local_rados.pool_lookup(remote_data_pool.c_str()) >= 0) {
+      data_pool = remote_data_pool;
+    }
+  }
+
+  if (data_pool != "") {
+    image_options->set(RBD_IMAGE_OPTION_DATA_POOL, data_pool);
+  }
 }
 
 } // namespace image_replayer

@@ -96,7 +96,7 @@ public:
       object_map->set_crc_enabled(false);
 
       bufferlist bl;
-      ::encode(*object_map, bl);
+      encode(*object_map, bl);
 
       std::string str(bl.c_str(), bl.length());
       expect.WillOnce(DoAll(WithArg<5>(CopyInBufferlist(str)), Return(0)));

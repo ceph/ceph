@@ -30,13 +30,14 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(old_max_id, p);
+    decode(old_max_id, p);
   }
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(old_max_id, payload);
+    encode(old_max_id, payload);
   }
 };
 

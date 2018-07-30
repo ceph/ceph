@@ -58,7 +58,7 @@ std::ostream& operator<<(std::ostream& os, const ethernet_address& ea);
 struct ethernet {
   using address = ethernet_address;
   static address broadcast_address() {
-      return  {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+      return {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
   }
   static constexpr uint16_t arp_hardware_type() { return 1; }
 };

@@ -29,17 +29,41 @@ public:
     bool committing;
     slave_request() : committing(false) {}
     void encode(bufferlist &bl) const {
-      ::encode(inode_caps, bl);
-      ::encode(committing, bl);
+      using ceph::encode;
+      encode(inode_caps, bl);
+      encode(committing, bl);
     }
-    void decode(bufferlist::iterator &bl) {
-      ::decode(inode_caps, bl);
-      ::decode(committing, bl);
+    void decode(bufferlist::const_iterator &bl) {
+      using ceph::decode;
+      decode(inode_caps, bl);
+      decode(committing, bl);
     }
   };
-  WRITE_CLASS_ENCODER(slave_request)
 
   map<metareqid_t, slave_request> slave_requests;
+
+  // table client information
+  struct table_client {
+    __u8 type;
+    set<version_t> pending_commits;
+
+    table_client() : type(0) {}
+    table_client(int _type, const set<version_t>& commits)
+      : type(_type), pending_commits(commits) {}
+
+    void encode(bufferlist& bl) const {
+      using ceph::encode;
+      encode(type, bl);
+      encode(pending_commits, bl);
+    }
+    void decode(bufferlist::const_iterator& bl) {
+      using ceph::decode;
+      decode(type, bl);
+      decode(pending_commits, bl);
+    }
+  };
+
+  list<table_client> table_clients;
 
   MMDSResolve() : Message(MSG_MDS_RESOLVE) {}
 private:
@@ -73,16 +97,24 @@ public:
     slave_requests[reqid].inode_caps.claim(bl);
   }
 
+  void add_table_commits(int table, const set<version_t>& pending_commits) {
+    table_clients.push_back(table_client(table, pending_commits));
+  }
+
   void encode_payload(uint64_t features) override {
-    ::encode(subtrees, payload);
-    ::encode(ambiguous_imports, payload);
-    ::encode(slave_requests, payload);
+    using ceph::encode;
+    encode(subtrees, payload);
+    encode(ambiguous_imports, payload);
+    encode(slave_requests, payload);
+    encode(table_clients, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(subtrees, p);
-    ::decode(ambiguous_imports, p);
-    ::decode(slave_requests, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(subtrees, p);
+    decode(ambiguous_imports, p);
+    decode(slave_requests, p);
+    decode(table_clients, p);
   }
 };
 
@@ -91,4 +123,5 @@ inline ostream& operator<<(ostream& out, const MMDSResolve::slave_request&) {
 }
 
 WRITE_CLASS_ENCODER(MMDSResolve::slave_request)
+WRITE_CLASS_ENCODER(MMDSResolve::table_client)
 #endif

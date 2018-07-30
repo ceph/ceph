@@ -7,10 +7,14 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/internal.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageDispatchSpec.h"
+#include "librbd/io/ImageRequestWQ.h"
 #include "include/rados/librados.hpp"
 #include "include/interval_set.h"
 #include "common/errno.h"
 #include "common/Throttle.h"
+#include "osdc/Striper.h"
 #include "librados/snap_set_diff.h"
 #include <boost/tuple/tuple.hpp>
 #include <list>
@@ -131,17 +135,22 @@ private:
     uint64_t end_size;
     bool end_exists;
     librados::snap_t clone_end_snap_id;
+    bool whole_object;
     calc_snap_set_diff(cct, m_snap_set, m_diff_context.from_snap_id,
                        m_diff_context.end_snap_id, &diff, &end_size,
-                       &end_exists, &clone_end_snap_id);
+                       &end_exists, &clone_end_snap_id, &whole_object);
+    if (whole_object) {
+      ldout(cct, 1) << "object " << m_oid << ": need to provide full object"
+                    << dendl;
+    }
     ldout(cct, 20) << "  diff " << diff << " end_exists=" << end_exists
                    << dendl;
-    if (diff.empty()) {
+    if (diff.empty() && !whole_object) {
       if (m_diff_context.from_snap_id == 0 && !end_exists) {
         compute_parent_overlap(diffs);
       }
       return;
-    } else if (m_diff_context.whole_object) {
+    } else if (m_diff_context.whole_object || whole_object) {
       // provide the full object extents to the callback
       for (vector<ObjectExtent>::iterator q = m_object_extents.begin();
            q != m_object_extents.end(); ++q) {
@@ -230,12 +239,22 @@ int DiffIterate<I>::diff_iterate(I *ictx,
       		 << " len = " << len << dendl;
 
   // ensure previous writes are visible to listsnaps
+  C_SaferCond flush_ctx;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->flush();
+    auto aio_comp = io::AioCompletion::create(&flush_ctx, ictx,
+                                              io::AIO_TYPE_FLUSH);
+    auto req = io::ImageDispatchSpec<I>::create_flush_request(
+      *ictx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+    req->send();
+    delete req;
+  }
+  int r = flush_ctx.wait();
+  if (r < 0) {
+    return r;
   }
 
-  int r = ictx->state->refresh_if_required();
+  r = ictx->state->refresh_if_required();
   if (r < 0) {
     return r;
   }
@@ -456,35 +475,40 @@ int DiffIterate<I>::diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
       return -EINVAL;
     }
     object_map.resize(num_objs);
+    object_diff_state->resize(object_map.size());
 
-    uint64_t overlap = MIN(object_map.size(), prev_object_map.size());
-    for (uint64_t i = 0; i < overlap; ++i) {
+    uint64_t overlap = std::min(object_map.size(), prev_object_map.size());
+    auto it = object_map.begin();
+    auto overlap_end_it = it + overlap;
+    auto pre_it = prev_object_map.begin();
+    auto diff_it = object_diff_state->begin();
+    uint64_t i = 0;
+    for (; it != overlap_end_it; ++it, ++pre_it, ++diff_it, ++i) {
       ldout(cct, 20) << __func__ << ": object state: " << i << " "
-                     << static_cast<uint32_t>(prev_object_map[i])
-                     << "->" << static_cast<uint32_t>(object_map[i]) << dendl;
-      if (object_map[i] == OBJECT_NONEXISTENT) {
-        if (prev_object_map[i] != OBJECT_NONEXISTENT) {
-          (*object_diff_state)[i] = OBJECT_DIFF_STATE_HOLE;
+                     << static_cast<uint32_t>(*pre_it)
+                     << "->" << static_cast<uint32_t>(*it) << dendl;
+      if (*it == OBJECT_NONEXISTENT) {
+        if (*pre_it != OBJECT_NONEXISTENT) {
+          *diff_it = OBJECT_DIFF_STATE_HOLE;
         }
-      } else if (object_map[i] == OBJECT_EXISTS ||
-                 (prev_object_map[i] != object_map[i] &&
-                  !(prev_object_map[i] == OBJECT_EXISTS &&
-                    object_map[i] == OBJECT_EXISTS_CLEAN))) {
-        (*object_diff_state)[i] = OBJECT_DIFF_STATE_UPDATED;
+      } else if (*it == OBJECT_EXISTS ||
+                 (*pre_it != *it &&
+                  !(*pre_it == OBJECT_EXISTS &&
+                    *it == OBJECT_EXISTS_CLEAN))) {
+        *diff_it = OBJECT_DIFF_STATE_UPDATED;
       }
     }
     ldout(cct, 20) << "diff_object_map: computed overlap diffs" << dendl;
-
-    object_diff_state->resize(object_map.size());
+    auto end_it = object_map.end();
     if (object_map.size() > prev_object_map.size() &&
         (diff_from_start || prev_object_map_valid)) {
-      for (uint64_t i = overlap; i < object_diff_state->size(); ++i) {
+      for (; it != end_it; ++it,++diff_it, ++i) {
         ldout(cct, 20) << __func__ << ": object state: " << i << " "
-                       << "->" << static_cast<uint32_t>(object_map[i]) << dendl;
-        if (object_map[i] == OBJECT_NONEXISTENT) {
-          (*object_diff_state)[i] = OBJECT_DIFF_STATE_NONE;
+                       << "->" << static_cast<uint32_t>(*it) << dendl;
+        if (*it == OBJECT_NONEXISTENT) {
+          *diff_it = OBJECT_DIFF_STATE_NONE;
         } else {
-          (*object_diff_state)[i] = OBJECT_DIFF_STATE_UPDATED;
+          *diff_it = OBJECT_DIFF_STATE_UPDATED;
         }
       }
     }

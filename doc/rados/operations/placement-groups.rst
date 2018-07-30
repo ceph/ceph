@@ -118,9 +118,9 @@ permanent data loss in a single placement group:
 
 - The OSD fails and all copies of the object it contains are lost.
   For all objects within the placement group the number of replica
-  suddently drops from three to two.
+  suddenly drops from three to two.
 
-- Ceph starts recovery for this placement group by chosing a new OSD
+- Ceph starts recovery for this placement group by choosing a new OSD
   to re-create the third copy of all objects.
 
 - Another OSD, within the same placement group, fails before the new
@@ -216,7 +216,7 @@ placement group, the ratio between the number of placement groups and
 the number of OSDs may influence the distribution of the data
 significantly.
 
-For instance, if there was single a placement group for ten OSDs in a
+For instance, if there was a single placement group for ten OSDs in a
 three replica pool, only three OSD would be used because CRUSH would
 have no other choice. When more placement groups are available,
 objects are more likely to be evenly spread among them. CRUSH also
@@ -257,7 +257,7 @@ Choosing the number of Placement Groups
 
 If you have more than 50 OSDs, we recommend approximately 50-100
 placement groups per OSD to balance out resource usage, data
-durability and distribution. If you have less than 50 OSDs, chosing
+durability and distribution. If you have less than 50 OSDs, choosing
 among the `preselection`_ above is best. For a single pool of objects,
 you can use the following formula to get a baseline::
 

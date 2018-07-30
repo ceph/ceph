@@ -18,24 +18,26 @@
 #define CEPH_MESSENGER_H
 
 #include <map>
-using namespace std;
 
 #include "Message.h"
 #include "Dispatcher.h"
-#include "common/Mutex.h"
+#include "Policy.h"
 #include "common/Cond.h"
+#include "common/Mutex.h"
+#include "common/Throttle.h"
 #include "include/Context.h"
 #include "include/types.h"
 #include "include/ceph_features.h"
 #include "auth/Crypto.h"
+#include "common/item_history.h"
 
 #include <errno.h>
 #include <sstream>
+#include <signal.h>
 
 #define SOCKET_PRIORITY_MIN_DELAY 6
 
 class Timer;
-
 
 class Messenger {
 private:
@@ -43,12 +45,17 @@ private:
   list <Dispatcher*> fast_dispatchers;
   ZTracer::Endpoint trace_endpoint;
 
+protected:
   void set_endpoint_addr(const entity_addr_t& a,
                          const entity_name_t &name);
 
 protected:
   /// the "name" of the local daemon. eg client.99
-  entity_inst_t my_inst;
+  entity_name_t my_name;
+
+  /// my addr
+  safe_item_history<entity_addrvec_t> my_addrs;
+
   int default_send_priority;
   /// set to true once the Messenger has started, and set to false on shutdown
   bool started;
@@ -71,85 +78,13 @@ public:
   CephContext *cct;
   int crcflags;
 
-  /**
-   * A Policy describes the rules of a Connection. Is there a limit on how
-   * much data this Connection can have locally? When the underlying connection
-   * experiences an error, does the Connection disappear? Can this Messenger
-   * re-establish the underlying connection?
-   */
-  struct Policy {
-    /// If true, the Connection is tossed out on errors.
-    bool lossy;
-    /// If true, the underlying connection can't be re-established from this end.
-    bool server;
-    /// If true, we will standby when idle
-    bool standby;
-    /// If true, we will try to detect session resets
-    bool resetcheck;
-    /**
-     *  The throttler is used to limit how much data is held by Messages from
-     *  the associated Connection(s). When reading in a new Message, the Messenger
-     *  will call throttler->throttle() for the size of the new Message.
-     */
-    Throttle *throttler_bytes;
-    Throttle *throttler_messages;
-
-    /// Specify features supported locally by the endpoint.
-    uint64_t features_supported;
-    /// Specify features any remotes must have to talk to this endpoint.
-    uint64_t features_required;
-
-    Policy()
-      : lossy(false), server(false), standby(false), resetcheck(true),
-	throttler_bytes(NULL),
-	throttler_messages(NULL),
-	features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
-	features_required(0) {}
-  private:
-    Policy(bool l, bool s, bool st, bool r, uint64_t req)
-      : lossy(l), server(s), standby(st), resetcheck(r),
-	throttler_bytes(NULL),
-	throttler_messages(NULL),
-	features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
-	features_required(req) {}
-
-  public:
-    static Policy stateful_server(uint64_t req) {
-      return Policy(false, true, true, true, req);
-    }
-    static Policy stateless_server(uint64_t req) {
-      return Policy(true, true, false, false, req);
-    }
-    static Policy lossless_peer(uint64_t req) {
-      return Policy(false, false, true, false, req);
-    }
-    static Policy lossless_peer_reuse(uint64_t req) {
-      return Policy(false, false, true, true, req);
-    }
-    static Policy lossy_client(uint64_t req) {
-      return Policy(true, false, false, false, req);
-    }
-    static Policy lossless_client(uint64_t req) {
-      return Policy(false, false, false, true, req);
-    }
-  };
-
+  using Policy = ceph::net::Policy<Throttle>;
   /**
    * Messenger constructor. Call this from your implementation.
    * Messenger users should construct full implementations directly,
    * or use the create() function.
    */
-  Messenger(CephContext *cct_, entity_name_t w)
-    : trace_endpoint("0.0.0.0", 0, "Messenger"),
-      my_inst(),
-      default_send_priority(CEPH_MSG_PRIO_DEFAULT), started(false),
-      magic(0),
-      socket_priority(-1),
-      cct(cct_),
-      crcflags(get_default_crc_flags(cct->_conf))
-  {
-    my_inst.name = w;
-  }
+  Messenger(CephContext *cct_, entity_name_t w);
   virtual ~Messenger() {}
 
   /**
@@ -192,20 +127,15 @@ public:
    * @defgroup Accessors
    * @{
    */
+  int get_mytype() const { return my_name.type(); }
+
   /**
-   * Retrieve the Messenger's instance.
+   * Retrieve the Messenger's name
    *
-   * @return A const reference to the instance this Messenger
+   * @return A const reference to the name this Messenger
    * currently believes to be its own.
    */
-  const entity_inst_t& get_myinst() { return my_inst; }
-  /**
-   * set messenger's instance
-   */
-  void set_myinst(entity_inst_t i) { my_inst = i; }
-
-  uint32_t get_magic() { return magic; }
-  void set_magic(int _magic) { magic = _magic; }
+  const entity_name_t& get_myname() { return my_name; }
 
   /**
    * Retrieve the Messenger's address.
@@ -213,14 +143,26 @@ public:
    * @return A const reference to the address this Messenger
    * currently believes to be its own.
    */
-  const entity_addr_t& get_myaddr() { return my_inst.addr; }
+  entity_addr_t get_myaddr() {
+    return my_addrs->front();
+  }
+  const entity_addrvec_t& get_myaddrs() {
+    return *my_addrs;
+  }
+
+  /**
+   * set messenger's instance
+   */
+  uint32_t get_magic() { return magic; }
+  void set_magic(int _magic) { magic = _magic; }
+
 protected:
   /**
    * set messenger's address
    */
-  virtual void set_myaddr(const entity_addr_t& a) {
-    my_inst.addr = a;
-    set_endpoint_addr(a, my_inst.name);
+  virtual void set_myaddrs(const entity_addrvec_t& a) {
+    my_addrs = a;
+    set_endpoint_addr(a.front(), my_name);
   }
 public:
   /**
@@ -231,20 +173,14 @@ public:
   }
 
   /**
-   * Retrieve the Messenger's name.
-   *
-   * @return A const reference to the name this Messenger
-   * currently believes to be its own.
-   */
-  const entity_name_t& get_myname() { return my_inst.name; }
-  /**
    * Set the name of the local entity. The name is reported to others and
    * can be changed while the system is running, but doing so at incorrect
    * times may have bad results.
    *
    * @param m The name to set.
    */
-  void set_myname(const entity_name_t& m) { my_inst.name = m; }
+  void set_myname(const entity_name_t& m) { my_name = m; }
+
   /**
    * Set the unknown address components for this Messenger.
    * This is useful if the Messenger doesn't know its full address just by
@@ -254,7 +190,7 @@ public:
    *
    * @param addr The address to use as a template.
    */
-  virtual void set_addr_unknowns(const entity_addr_t &addr) = 0;
+  virtual bool set_addr_unknowns(const entity_addrvec_t &addrs) = 0;
   /**
    * Set the address for this Messenger. This is useful if the Messenger
    * binds to a specific address but advertises a different address on the
@@ -262,7 +198,7 @@ public:
    *
    * @param addr The address to use.
    */
-  virtual void set_addr(const entity_addr_t &addr) = 0;
+  virtual void set_addrs(const entity_addrvec_t &addr) = 0;
   /// Get the default send priority.
   int get_default_send_priority() { return default_send_priority; }
   /**
@@ -276,11 +212,6 @@ public:
    * (0 if the queue is empty)
    */
   virtual double get_dispatch_queue_max_age(utime_t now) = 0;
-  /**
-   * Get the default crc flags for this messenger.
-   * but not yet dispatched.
-   */
-  static int get_default_crc_flags(md_config_t *);
 
   /**
    * @} // Accessors
@@ -421,6 +352,7 @@ public:
    * we can be more specific about the failure.
    */
   virtual int bind(const entity_addr_t& bind_addr) = 0;
+
   /**
    * This function performs a full restart of the Messenger component,
    * whatever that means.  Other entities who connect to this
@@ -439,6 +371,9 @@ public:
    * @return 0 on success, or -1 on error, or -errno if
    */
   virtual int client_bind(const entity_addr_t& bind_addr) = 0;
+
+  virtual int bindv(const entity_addrvec_t& addrs);
+
   /**
    * @} // Configuration
    */
@@ -496,6 +431,31 @@ public:
    */
   virtual int send_message(Message *m, const entity_inst_t& dest) = 0;
 
+  virtual int send_to(
+    Message *m,
+    int type,
+    const entity_addrvec_t& addr) {
+    // temporary
+    return send_message(m, entity_inst_t(entity_name_t(type, -1),
+					 addr.legacy_addr()));
+  }
+  int send_to_mon(
+    Message *m, const entity_addrvec_t& addrs) {
+    return send_to(m, CEPH_ENTITY_TYPE_MON, addrs);
+  }
+  int send_to_mds(
+    Message *m, const entity_addrvec_t& addrs) {
+    return send_to(m, CEPH_ENTITY_TYPE_MDS, addrs);
+  }
+  int send_to_osd(
+    Message *m, const entity_addrvec_t& addrs) {
+    return send_to(m, CEPH_ENTITY_TYPE_OSD, addrs);
+  }
+  int send_to_mgr(
+    Message *m, const entity_addrvec_t& addrs) {
+    return send_to(m, CEPH_ENTITY_TYPE_MGR, addrs);
+  }
+
   /**
    * @} // Messaging
    */
@@ -512,6 +472,26 @@ public:
    * @param dest The entity to get a connection for.
    */
   virtual ConnectionRef get_connection(const entity_inst_t& dest) = 0;
+
+  virtual ConnectionRef connect_to(
+    int type, const entity_addrvec_t& dest) {
+    // temporary
+    return get_connection(entity_inst_t(entity_name_t(type, -1),
+					dest.legacy_addr()));
+  }
+  ConnectionRef connect_to_mon(const entity_addrvec_t& dest) {
+    return connect_to(CEPH_ENTITY_TYPE_MON, dest);
+  }
+  ConnectionRef connect_to_mds(const entity_addrvec_t& dest) {
+    return connect_to(CEPH_ENTITY_TYPE_MDS, dest);
+  }
+  ConnectionRef connect_to_osd(const entity_addrvec_t& dest) {
+    return connect_to(CEPH_ENTITY_TYPE_OSD, dest);
+  }
+  ConnectionRef connect_to_mgr(const entity_addrvec_t& dest) {
+    return connect_to(CEPH_ENTITY_TYPE_MGR, dest);
+  }
+
   /**
    * Get the Connection object associated with ourselves.
    */
@@ -534,6 +514,9 @@ public:
    * @param a The address to mark down.
    */
   virtual void mark_down(const entity_addr_t& a) = 0;
+  virtual void mark_down_addrs(const entity_addrvec_t& a) {
+    mark_down(a.legacy_addr());
+  }
   /**
    * Mark all the existing Connections down. This is equivalent
    * to iterating over all Connections and calling mark_down()
@@ -558,11 +541,53 @@ protected:
   /**
    * @} // Subclass Interfacing
    */
+public:
+#ifdef CEPH_USE_SIGPIPE_BLOCKER
+  /**
+   * We need to disable SIGPIPE on all platforms, and if they
+   * don't give us a better mechanism (read: are on Solaris) that
+   * means blocking the signal whenever we do a send or sendmsg...
+   * That means any implementations must invoke MSGR_SIGPIPE_STOPPER in-scope
+   * whenever doing so. On most systems that's blank, but on systems where
+   * it's needed we construct an RAII object to plug and un-plug the SIGPIPE.
+   * See http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html
+   */
+  struct sigpipe_stopper {
+    bool blocked;
+    sigset_t existing_mask;
+    sigset_t pipe_mask;
+    sigpipe_stopper() {
+      sigemptyset(&pipe_mask);
+      sigaddset(&pipe_mask, SIGPIPE);
+      sigset_t signals;
+      sigemptyset(&signals);
+      sigpending(&signals);
+      if (sigismember(&signals, SIGPIPE)) {
+	blocked = false;
+      } else {
+	blocked = true;
+	int r = pthread_sigmask(SIG_BLOCK, &pipe_mask, &existing_mask);
+	assert(r == 0);
+      }
+    }
+    ~sigpipe_stopper() {
+      if (blocked) {
+	struct timespec nowait{0};
+	int r = sigtimedwait(&pipe_mask, 0, &nowait);
+	assert(r == EAGAIN || r == 0);
+	r = pthread_sigmask(SIG_SETMASK, &existing_mask, 0);
+	assert(r == 0);
+      }
+    }
+  };
+#  define MSGR_SIGPIPE_STOPPER Messenger::sigpipe_stopper stopper();
+#else
+#  define MSGR_SIGPIPE_STOPPER
+#endif
   /**
    * @defgroup Dispatcher Interfacing
    * @{
    */
-public:
   /**
    * Determine whether a message can be fast-dispatched. We will
    * query each Dispatcher in sequence to determine if they are
@@ -763,11 +788,13 @@ public:
    */
   bool ms_deliver_verify_authorizer(Connection *con, int peer_type,
 				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-				    bool& isvalid, CryptoKey& session_key) {
+				    bool& isvalid, CryptoKey& session_key,
+				    std::unique_ptr<AuthAuthorizerChallenge> *challenge) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 ++p) {
-      if ((*p)->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid, session_key))
+      if ((*p)->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply,
+				     isvalid, session_key, challenge))
 	return true;
     }
     return false;

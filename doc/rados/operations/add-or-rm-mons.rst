@@ -45,7 +45,7 @@ Deploy your Hardware
 If you are adding a new host when adding a new monitor,  see `Hardware
 Recommendations`_ for details on minimum recommendations for monitor hardware.
 To add a monitor host to your cluster, first make sure you have an up-to-date
-version of Linux installed (typically Ubuntu 14.04 or RHEL 7). 
+version of Linux installed (typically Ubuntu 16.04 or RHEL 7). 
 
 Add your monitor host to a rack in your cluster, connect it to the network
 and ensure that it has network connectivity.
@@ -367,4 +367,4 @@ the monitors should operate successfully.
 
 .. _Manual Deployment: ../../../install/manual-deployment
 .. _Monitor Bootstrap: ../../../dev/mon-bootstrap
-.. _Paxos: http://en.wikipedia.org/wiki/Paxos_(computer_science)
+.. _Paxos: https://en.wikipedia.org/wiki/Paxos_(computer_science)

@@ -17,9 +17,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-// from include/linux/falloc.h:
-#ifndef FALLOC_FL_PUNCH_HOLE
-# define FALLOC_FL_PUNCH_HOLE 0x2
+#ifdef __linux__
+#include <linux/falloc.h>
 #endif
 
 #include "FS.h"

@@ -21,13 +21,11 @@ namespace image {
 using util::create_context_callback;
 
 template <typename I>
-SetSnapRequest<I>::SetSnapRequest(I &image_ctx, const cls::rbd::SnapshotNamespace& snap_namespace,
-				  const std::string &snap_name,
+SetSnapRequest<I>::SetSnapRequest(I &image_ctx, uint64_t snap_id,
                                   Context *on_finish)
-  : m_image_ctx(image_ctx), m_snap_namespace(snap_namespace),
-    m_snap_name(snap_name), m_on_finish(on_finish),
-    m_snap_id(CEPH_NOSNAP), m_exclusive_lock(nullptr), m_object_map(nullptr),
-    m_refresh_parent(nullptr), m_writes_blocked(false) {
+  : m_image_ctx(image_ctx), m_snap_id(snap_id), m_on_finish(on_finish),
+    m_exclusive_lock(nullptr), m_object_map(nullptr), m_refresh_parent(nullptr),
+    m_writes_blocked(false) {
 }
 
 template <typename I>
@@ -40,7 +38,7 @@ SetSnapRequest<I>::~SetSnapRequest() {
 
 template <typename I>
 void SetSnapRequest<I>::send() {
-  if (m_snap_name.empty()) {
+  if (m_snap_id == CEPH_NOSNAP) {
     send_init_exclusive_lock();
   } else {
     send_block_writes();
@@ -123,9 +121,9 @@ Context *SetSnapRequest<I>::handle_block_writes(int *result) {
 
   {
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-    m_snap_id = m_image_ctx.get_snap_id(m_snap_namespace, m_snap_name);
-    if (m_snap_id == CEPH_NOSNAP) {
-      ldout(cct, 5) << "failed to locate snapshot '" << m_snap_name << "'"
+    auto it = m_image_ctx.snap_info.find(m_snap_id);
+    if (it == m_image_ctx.snap_info.end()) {
+      ldout(cct, 5) << "failed to locate snapshot '" << m_snap_id << "'"
                     << dendl;
 
       *result = -ENOENT;
@@ -330,7 +328,7 @@ int SetSnapRequest<I>::apply() {
   RWLock::WLocker parent_locker(m_image_ctx.parent_lock);
   if (m_snap_id != CEPH_NOSNAP) {
     assert(m_image_ctx.exclusive_lock == nullptr);
-    int r = m_image_ctx.snap_set(m_snap_namespace, m_snap_name);
+    int r = m_image_ctx.snap_set(m_snap_id);
     if (r < 0) {
       return r;
     }

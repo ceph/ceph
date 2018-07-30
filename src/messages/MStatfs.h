@@ -47,16 +47,17 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(fsid, payload);
-    ::encode(data_pool, payload);
+    encode(fsid, payload);
+    encode(data_pool, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(fsid, p);
+    decode(fsid, p);
     if (header.version >= 2) {
-      ::decode(data_pool, p);
+      decode(data_pool, p);
     } else {
       data_pool = boost::optional<int64_t> ();
     }

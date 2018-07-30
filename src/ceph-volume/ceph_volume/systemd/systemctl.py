@@ -5,19 +5,31 @@ from ceph_volume import process
 
 
 def start(unit):
-    process.run(['sudo', 'systemctl', 'start', unit])
+    process.run(['systemctl', 'start', unit])
 
 
 def stop(unit):
-    process.run(['sudo', 'systemctl', 'stop', unit])
+    process.run(['systemctl', 'stop', unit])
 
 
 def enable(unit):
-    process.run(['sudo', 'systemctl', 'enable', unit])
+    process.run(['systemctl', 'enable', unit])
 
 
 def disable(unit):
-    process.run(['sudo', 'systemctl', 'disable', unit])
+    process.run(['systemctl', 'disable', unit])
+
+
+def mask(unit):
+    process.run(['systemctl', 'mask', unit])
+
+
+def is_active(unit):
+    out, err, rc = process.call(
+        ['systemctl', 'is-active', unit],
+        verbose_on_failure=False
+    )
+    return rc == 0
 
 
 def start_osd(id_):
@@ -36,8 +48,22 @@ def disable_osd(id_):
     return disable(osd_unit % id_)
 
 
+def osd_is_active(id_):
+    return is_active(osd_unit % id_)
+
+
 def enable_volume(id_, fsid, device_type='lvm'):
     return enable(volume_unit % (device_type, id_, fsid))
+
+
+def mask_ceph_disk():
+    # systemctl allows using a glob like '*' for masking, but there was a bug
+    # in that it wouldn't allow this for service templates. This means that
+    # masking ceph-disk@* will not work, so we must link the service directly.
+    # /etc/systemd takes precedence regardless of the location of the unit
+    process.run(
+        ['ln', '-sf', '/dev/null', '/etc/systemd/system/ceph-disk@.service']
+    )
 
 
 #
@@ -45,4 +71,5 @@ def enable_volume(id_, fsid, device_type='lvm'):
 #
 
 osd_unit = "ceph-osd@%s"
+ceph_disk_unit = "ceph-disk@%s"
 volume_unit = "ceph-volume@%s-%s-%s"

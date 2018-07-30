@@ -2,7 +2,7 @@ import sys
 import os
 
 project = u'Ceph'
-copyright = u'2016, Red Hat, Inc, and contributors. Licensed under Creative Commons BY-SA'
+copyright = u'2016, Red Hat, Inc, and contributors. Licensed under Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)'
 version = 'dev'
 release = 'dev'
 
@@ -16,6 +16,7 @@ if tags.has('man'):
                          'api/*',
                          'cephfs/*',
                          'dev/*',
+                         'governance.rst',
                          'install/*',
                          'mon/*',
                          'rados/*',
@@ -23,7 +24,8 @@ if tags.has('man'):
                          'ceph-volume/*',
                          'radosgw/*',
                          'rbd/*',
-                         'start/*']
+                         'start/*',
+                         'releases/*']
 else:
     exclude_patterns += ['man_index.rst']
 
@@ -65,6 +67,30 @@ breathe_projects_source = {
              ["rados_types.h", "librados.h"])
 }
 breathe_domain_by_extension = {'py': 'py', 'c': 'c', 'h': 'c', 'cc': 'cxx', 'hpp': 'cxx'}
-pybind = os.path.join(top_level, 'src/pybind')
-if pybind not in sys.path:
-    sys.path.insert(0, pybind)
+
+# mocking ceph_module offered by ceph-mgr. `ceph_module` is required by
+# mgr.mgr_module
+class Dummy(object):
+    def __getattr__(self, _):
+        return lambda *args, **kwargs: None
+
+class Mock(object):
+    __all__ = []
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __call__(self, *args, **kwargs):
+        return Mock()
+
+    @classmethod
+    def __getattr__(cls, name):
+        mock = type(name, (Dummy,), {})
+        mock.__module__ = __name__
+        return mock
+
+sys.modules['ceph_module'] = Mock()
+
+for pybind in [os.path.join(top_level, 'src/pybind'),
+               os.path.join(top_level, 'src/pybind/mgr')]:
+    if pybind not in sys.path:
+        sys.path.insert(0, pybind)

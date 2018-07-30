@@ -27,7 +27,8 @@ OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   TrackedOp(tracker, req->get_recv_stamp()),
   rmw_flags(0), request(req),
   hit_flag_points(0), latest_flag_point(0),
-  hitset_inserted(false) {
+  hitset_inserted(false)
+{
   if (req->get_priority() < tracker->cct->_conf->osd_client_op_priority) {
     // don't warn as quickly for low priority ops
     warn_interval_multiplier = tracker->cct->_conf->osd_recovery_op_warn_multiple;
@@ -40,10 +41,6 @@ OpRequest::OpRequest(Message *req, OpTracker *tracker) :
     reqid = static_cast<MOSDRepOpReply*>(req)->reqid;
   }
   req_src_inst = req->get_source_inst();
-  mark_event("header_read", request->get_recv_stamp());
-  mark_event("throttled", request->get_throttle_stamp());
-  mark_event("all_read", request->get_recv_complete_stamp());
-  mark_event("dispatched", request->get_dispatch_stamp());
 }
 
 void OpRequest::_dump(Formatter *f) const
@@ -82,29 +79,29 @@ void OpRequest::_unregistered() {
   request->set_connection(nullptr);
 }
 
-bool OpRequest::check_rmw(int flag) {
+bool OpRequest::check_rmw(int flag) const {
   assert(rmw_flags != 0);
   return rmw_flags & flag;
 }
-bool OpRequest::may_read() {
+bool OpRequest::may_read() const {
   return need_read_cap() || check_rmw(CEPH_OSD_RMW_FLAG_CLASS_READ);
 }
-bool OpRequest::may_write() {
+bool OpRequest::may_write() const {
   return need_write_cap() || check_rmw(CEPH_OSD_RMW_FLAG_CLASS_WRITE);
 }
-bool OpRequest::may_cache() { return check_rmw(CEPH_OSD_RMW_FLAG_CACHE); }
-bool OpRequest::rwordered_forced() {
+bool OpRequest::may_cache() const { return check_rmw(CEPH_OSD_RMW_FLAG_CACHE); }
+bool OpRequest::rwordered_forced() const {
   return check_rmw(CEPH_OSD_RMW_FLAG_RWORDERED);
 }
-bool OpRequest::rwordered() {
+bool OpRequest::rwordered() const {
   return may_write() || may_cache() || rwordered_forced();
 }
 
 bool OpRequest::includes_pg_op() { return check_rmw(CEPH_OSD_RMW_FLAG_PGOP); }
-bool OpRequest::need_read_cap() {
+bool OpRequest::need_read_cap() const {
   return check_rmw(CEPH_OSD_RMW_FLAG_READ);
 }
-bool OpRequest::need_write_cap() {
+bool OpRequest::need_write_cap() const {
   return check_rmw(CEPH_OSD_RMW_FLAG_WRITE);
 }
 bool OpRequest::need_promote() {
@@ -192,7 +189,7 @@ bool OpRequest::filter_out(const set<string>& filters)
 
 ostream& operator<<(ostream& out, const OpRequest::ClassInfo& i)
 {
-  out << "class " << i.name << " rd " << i.read
-    << " wr " << i.write << " wl " << i.whitelisted;
+  out << "class " << i.class_name << " method " << i.method_name
+      << " rd " << i.read << " wr " << i.write << " wl " << i.whitelisted;
   return out;
 }

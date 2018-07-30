@@ -20,7 +20,6 @@
 #include <boost/intrusive_ptr.hpp>
 
 #include "include/unordered_map.h"
-#include "include/memory.h"
 #include "common/Finisher.h"
 #include "common/RefCountedObj.h"
 #include "common/RWLock.h"
@@ -50,17 +49,19 @@ public:
                       uint64_t dstoff) = 0;
     virtual int truncate(uint64_t offset) = 0;
     virtual void encode(bufferlist& bl) const = 0;
-    virtual void decode(bufferlist::iterator& p) = 0;
+    virtual void decode(bufferlist::const_iterator& p) = 0;
 
     void encode_base(bufferlist& bl) const {
-      ::encode(xattr, bl);
-      ::encode(omap_header, bl);
-      ::encode(omap, bl);
+      using ceph::encode;
+      encode(xattr, bl);
+      encode(omap_header, bl);
+      encode(omap, bl);
     }
-    void decode_base(bufferlist::iterator& p) {
-      ::decode(xattr, p);
-      ::decode(omap_header, p);
-      ::decode(omap, p);
+    void decode_base(bufferlist::const_iterator& p) {
+      using ceph::decode;
+      decode(xattr, p);
+      decode(omap_header, p);
+      decode(omap, p);
     }
 
     void dump(Formatter *f) const {
@@ -94,8 +95,7 @@ public:
 
   struct PageSetObject;
   struct Collection : public CollectionImpl {
-    coll_t cid;
-    int bits;
+    int bits = 0;
     CephContext *cct;
     bool use_page_set;
     ceph::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
@@ -103,14 +103,11 @@ public:
     map<string,bufferptr> xattr;
     RWLock lock;   ///< for object_{map,hash}
     bool exists;
+    std::mutex sequencer_mutex;
 
     typedef boost::intrusive_ptr<Collection> Ref;
     friend void intrusive_ptr_add_ref(Collection *c) { c->get(); }
     friend void intrusive_ptr_release(Collection *c) { c->put(); }
-
-    const coll_t &get_cid() override {
-      return cid;
-    }
 
     ObjectRef create_object() const;
 
@@ -137,27 +134,27 @@ public:
 
     void encode(bufferlist& bl) const {
       ENCODE_START(1, 1, bl);
-      ::encode(xattr, bl);
-      ::encode(use_page_set, bl);
+      encode(xattr, bl);
+      encode(use_page_set, bl);
       uint32_t s = object_map.size();
-      ::encode(s, bl);
+      encode(s, bl);
       for (map<ghobject_t, ObjectRef>::const_iterator p = object_map.begin();
 	   p != object_map.end();
 	   ++p) {
-	::encode(p->first, bl);
+	encode(p->first, bl);
 	p->second->encode(bl);
       }
       ENCODE_FINISH(bl);
     }
-    void decode(bufferlist::iterator& p) {
+    void decode(bufferlist::const_iterator& p) {
       DECODE_START(1, p);
-      ::decode(xattr, p);
-      ::decode(use_page_set, p);
+      decode(xattr, p);
+      decode(use_page_set, p);
       uint32_t s;
-      ::decode(s, p);
+      decode(s, p);
       while (s--) {
 	ghobject_t k;
-	::decode(k, p);
+	decode(k, p);
 	auto o = create_object();
 	o->decode(p);
 	object_map.insert(make_pair(k, o));
@@ -177,8 +174,14 @@ public:
       return result;
     }
 
+    void flush() override {
+    }
+    bool flush_commit(Context *c) override {
+      return true;
+    }
+
     explicit Collection(CephContext *cct, coll_t c)
-      : cid(c),
+      : CollectionImpl(c),
 	cct(cct),
 	use_page_set(cct->_conf->memstore_page_set),
         lock("MemStore::Collection::lock", true, false),
@@ -192,6 +195,7 @@ private:
 
   ceph::unordered_map<coll_t, CollectionRef> coll_map;
   RWLock coll_lock;    ///< rwlock to protect coll_map
+  map<coll_t,CollectionRef> new_coll_map;
 
   CollectionRef get_collection(const coll_t& cid);
 
@@ -280,24 +284,19 @@ public:
     return false;
   }
 
+  int get_devices(set<string> *ls) override {
+    // no devices for us!
+    return 0;
+  }
+
   int statfs(struct store_statfs_t *buf) override;
 
-  bool exists(const coll_t& cid, const ghobject_t& oid) override;
   bool exists(CollectionHandle &c, const ghobject_t& oid) override;
-  int stat(const coll_t& cid, const ghobject_t& oid,
-	   struct stat *st, bool allow_eio = false) override;
   int stat(CollectionHandle &c, const ghobject_t& oid,
 	   struct stat *st, bool allow_eio = false) override;
   int set_collection_opts(
-    const coll_t& cid,
+    CollectionHandle& c,
     const pool_opts_t& opts) override;
-  int read(
-    const coll_t& cid,
-    const ghobject_t& oid,
-    uint64_t offset,
-    size_t len,
-    bufferlist& bl,
-    uint32_t op_flags = 0) override;
   int read(
     CollectionHandle &c,
     const ghobject_t& oid,
@@ -306,14 +305,12 @@ public:
     bufferlist& bl,
     uint32_t op_flags = 0) override;
   using ObjectStore::fiemap;
-  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) override;
-  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
-  int getattr(const coll_t& cid, const ghobject_t& oid, const char *name,
-	      bufferptr& value) override;
+  int fiemap(CollectionHandle& c, const ghobject_t& oid,
+	     uint64_t offset, size_t len, bufferlist& bl) override;
+  int fiemap(CollectionHandle& c, const ghobject_t& oid, uint64_t offset,
+	     size_t len, map<uint64_t, uint64_t>& destmap) override;
   int getattr(CollectionHandle &c, const ghobject_t& oid, const char *name,
 	      bufferptr& value) override;
-  int getattrs(const coll_t& cid, const ghobject_t& oid,
-	       map<string,bufferptr>& aset) override;
   int getattrs(CollectionHandle &c, const ghobject_t& oid,
 	       map<string,bufferptr>& aset) override;
 
@@ -322,17 +319,17 @@ public:
   CollectionHandle open_collection(const coll_t& c) override {
     return get_collection(c);
   }
+  CollectionHandle create_new_collection(const coll_t& c) override;
   bool collection_exists(const coll_t& c) override;
-  int collection_empty(const coll_t& c, bool *empty) override;
-  int collection_bits(const coll_t& c) override;
-  using ObjectStore::collection_list;
-  int collection_list(const coll_t& cid,
+  int collection_empty(CollectionHandle& c, bool *empty) override;
+  int collection_bits(CollectionHandle& c) override;
+  int collection_list(CollectionHandle& cid,
 		      const ghobject_t& start, const ghobject_t& end, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
 
   using ObjectStore::omap_get;
   int omap_get(
-    const coll_t& cid,                ///< [in] Collection containing oid
+    CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
     map<string, bufferlist> *out /// < [out] Key to value map
@@ -341,7 +338,7 @@ public:
   using ObjectStore::omap_get_header;
   /// Get omap header
   int omap_get_header(
-    const coll_t& cid,                ///< [in] Collection containing oid
+    CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
     bool allow_eio = false ///< [in] don't assert on eio
@@ -350,7 +347,7 @@ public:
   using ObjectStore::omap_get_keys;
   /// Get keys defined on oid
   int omap_get_keys(
-    const coll_t& cid,              ///< [in] Collection containing oid
+    CollectionHandle& c,              ///< [in] Collection containing oid
     const ghobject_t &oid, ///< [in] Object containing omap
     set<string> *keys      ///< [out] Keys defined on oid
     ) override;
@@ -358,7 +355,7 @@ public:
   using ObjectStore::omap_get_values;
   /// Get key values
   int omap_get_values(
-    const coll_t& cid,                    ///< [in] Collection containing oid
+    CollectionHandle& c,                    ///< [in] Collection containing oid
     const ghobject_t &oid,       ///< [in] Object containing omap
     const set<string> &keys,     ///< [in] Keys to get
     map<string, bufferlist> *out ///< [out] Returned keys and values
@@ -367,7 +364,7 @@ public:
   using ObjectStore::omap_check_keys;
   /// Filters keys into out which are defined on oid
   int omap_check_keys(
-    const coll_t& cid,                ///< [in] Collection containing oid
+    CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     const set<string> &keys, ///< [in] Keys to check
     set<string> *out         ///< [out] Subset of keys defined on oid
@@ -375,7 +372,7 @@ public:
 
   using ObjectStore::get_omap_iterator;
   ObjectMap::ObjectMapIterator get_omap_iterator(
-    const coll_t& cid,              ///< [in] collection
+    CollectionHandle& c,              ///< [in] collection
     const ghobject_t &oid  ///< [in] object
     ) override;
 
@@ -394,7 +391,8 @@ public:
 
 
   int queue_transactions(
-    Sequencer *osr, vector<Transaction>& tls,
+    CollectionHandle& ch,
+    vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) override;
 };

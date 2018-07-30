@@ -31,6 +31,7 @@ class MDSRank;
 class CDir;
 class CInode;
 class CDentry;
+class Session;
 
 class MExportDirDiscover;
 class MExportDirDiscoverAck;
@@ -101,9 +102,13 @@ public:
   }
 
   // -- cons --
-  Migrator(MDSRank *m, MDCache *c) : mds(m), cache(c) {}
+  Migrator(MDSRank *m, MDCache *c) : mds(m), cache(c) {
+    inject_session_race = g_conf().get_val<bool>("mds_inject_migrator_session_race");
+  }
 
-
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set <std::string> &changed,
+                          const MDSMap &mds_map);
 
 protected:
   // export fun
@@ -114,6 +119,8 @@ protected:
     set<mds_rank_t> warning_ack_waiting;
     set<mds_rank_t> notify_ack_waiting;
     map<inodeno_t,map<client_t,Capability::Import> > peer_imported;
+    set<CDir*> residual_dirs;
+
     MutationRef mut;
     // for freeze tree deadlock detection
     utime_t last_cum_auth_pins_change;
@@ -135,7 +142,7 @@ protected:
     set<mds_rank_t> bystanders;
     list<dirfrag_t> bound_ls;
     list<ScatterLock*> updated_scatterlocks;
-    map<client_t,entity_inst_t> client_map;
+    map<client_t,pair<Session*,uint64_t> > session_map;
     map<CInode*, map<client_t,Capability::Export> > peer_exports;
     MutationRef mut;
     import_state_t() : state(0), peer(0), tid(0), mut() {}
@@ -145,14 +152,15 @@ protected:
 
   void handle_export_discover_ack(MExportDirDiscoverAck *m);
   void export_frozen(CDir *dir, uint64_t tid);
+  void check_export_size(CDir *dir, export_state_t& stat, set<client_t> &client_set);
   void handle_export_prep_ack(MExportDirPrepAck *m);
   void export_sessions_flushed(CDir *dir, uint64_t tid);
   void export_go(CDir *dir);
   void export_go_synced(CDir *dir, uint64_t tid);
   void export_try_cancel(CDir *dir, bool notify_peer=true);
   void export_cancel_finish(CDir *dir);
-  void export_reverse(CDir *dir);
-  void export_notify_abort(CDir *dir, set<CDir*>& bounds);
+  void export_reverse(CDir *dir, export_state_t& stat);
+  void export_notify_abort(CDir *dir, export_state_t& stat, set<CDir*>& bounds);
   void handle_export_ack(MExportDirAck *m);
   void export_logged_finish(CDir *dir);
   void handle_export_notify_ack(MExportDirNotifyAck *m);
@@ -175,23 +183,22 @@ protected:
 
   void import_reverse_discovering(dirfrag_t df);
   void import_reverse_discovered(dirfrag_t df, CInode *diri);
-  void import_reverse_prepping(CDir *dir);
+  void import_reverse_prepping(CDir *dir, import_state_t& stat);
   void import_remove_pins(CDir *dir, set<CDir*>& bounds);
   void import_reverse_unfreeze(CDir *dir);
   void import_reverse_final(CDir *dir);
   void import_notify_abort(CDir *dir, set<CDir*>& bounds);
   void import_notify_finish(CDir *dir, set<CDir*>& bounds);
   void import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
-			   map<client_t,entity_inst_t> &imported_client_map,
-			   map<client_t,uint64_t>& sseqmap);
+			   map<client_t,pair<Session*,uint64_t> >& imported_session_map);
   void handle_export_finish(MExportDirFinish *m);
 
   void handle_export_caps(MExportCaps *m);
+  void handle_export_caps_ack(MExportCapsAck *m);
   void logged_import_caps(CInode *in,
 			  mds_rank_t from,
-			  map<CInode*, map<client_t,Capability::Export> >& cap_imports,
-			  map<client_t,entity_inst_t>& client_map,
-			  map<client_t,uint64_t>& sseqmap);
+			  map<client_t,pair<Session*,uint64_t> >& imported_session_map,
+			  map<CInode*, map<client_t,Capability::Export> >& cap_imports);
 
 
   friend class C_MDS_ImportDirLoggedStart;
@@ -295,14 +302,15 @@ public:
   }
   
   void get_export_lock_set(CDir *dir, set<SimpleLock*>& locks);
-  void get_export_client_set(CDir *dir, set<client_t> &client_set);
   void get_export_client_set(CInode *in, set<client_t> &client_set);
 
   void encode_export_inode(CInode *in, bufferlist& bl, 
-			   map<client_t,entity_inst_t>& exported_client_map);
+			   map<client_t,entity_inst_t>& exported_client_map,
+			   map<client_t,client_metadata_t>& exported_client_metadata_map);
   void encode_export_inode_caps(CInode *in, bool auth_cap, bufferlist& bl,
-				map<client_t,entity_inst_t>& exported_client_map);
-  void finish_export_inode(CInode *in, utime_t now, mds_rank_t target,
+				map<client_t,entity_inst_t>& exported_client_map,
+				map<client_t,client_metadata_t>& exported_client_metadata_map);
+  void finish_export_inode(CInode *in, mds_rank_t target,
 			   map<client_t,Capability::Import>& peer_imported,
 			   list<MDSInternalContextBase*>& finished);
   void finish_export_inode_caps(CInode *in, mds_rank_t target,
@@ -312,8 +320,8 @@ public:
   uint64_t encode_export_dir(bufferlist& exportbl,
 			CDir *dir,
 			map<client_t,entity_inst_t>& exported_client_map,
-			utime_t now);
-  void finish_export_dir(CDir *dir, utime_t now, mds_rank_t target,
+			map<client_t,client_metadata_t>& exported_client_metadata_map);
+  void finish_export_dir(CDir *dir, mds_rank_t target,
 			 map<inodeno_t,map<client_t,Capability::Import> >& peer_imported,
 			 list<MDSInternalContextBase*>& finished, int *num_dentries);
 
@@ -321,22 +329,23 @@ public:
 
   void export_caps(CInode *in);
 
-  void decode_import_inode(CDentry *dn, bufferlist::iterator& blp,
+  void decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 			   mds_rank_t oldauth, LogSegment *ls,
 			   map<CInode*, map<client_t,Capability::Export> >& cap_imports,
 			   list<ScatterLock*>& updated_scatterlocks);
-  void decode_import_inode_caps(CInode *in, bool auth_cap, bufferlist::iterator &blp,
+  void decode_import_inode_caps(CInode *in, bool auth_cap, bufferlist::const_iterator &blp,
 				map<CInode*, map<client_t,Capability::Export> >& cap_imports);
   void finish_import_inode_caps(CInode *in, mds_rank_t from, bool auth_cap,
-				map<client_t,Capability::Export> &export_map,
+				const map<client_t,pair<Session*,uint64_t> >& smap,
+				const map<client_t,Capability::Export> &export_map,
 				map<client_t,Capability::Import> &import_map);
-  int decode_import_dir(bufferlist::iterator& blp,
+  int decode_import_dir(bufferlist::const_iterator& blp,
 			mds_rank_t oldauth,
 			CDir *import_root,
 			EImportStart *le, 
 			LogSegment *ls,
 			map<CInode*, map<client_t,Capability::Export> >& cap_imports,
-			list<ScatterLock*>& updated_scatterlocks, utime_t now);
+			list<ScatterLock*>& updated_scatterlocks);
 
   void import_reverse(CDir *dir);
 
@@ -345,6 +354,7 @@ public:
 private:
   MDSRank *mds;
   MDCache *cache;
+  bool inject_session_race = false;
 };
 
 #endif

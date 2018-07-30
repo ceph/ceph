@@ -98,6 +98,9 @@ public:
       return r;
     }
 
+    // TODO support clone v2 child namespaces
+    m_pool_ioctx.set_namespace(image_ctx.md_ctx.get_namespace());
+
     librados::ObjectReadOperation op;
     cls_client::get_children_start(&op, m_pspec);
 
@@ -116,7 +119,7 @@ protected:
     CephContext *cct = image_ctx.cct;
 
     if (r == 0) {
-      bufferlist::iterator it = m_children_bl.begin();
+      auto it = m_children_bl.cbegin();
       r= cls_client::get_children_finish(&it, &m_children);
     }
 
@@ -155,7 +158,8 @@ SnapshotUnprotectRequest<I>::SnapshotUnprotectRequest(I &image_ctx,
                                                       const cls::rbd::SnapshotNamespace &snap_namespace,
 						      const std::string &snap_name)
   : Request<I>(image_ctx, on_finish), m_snap_namespace(snap_namespace),
-    m_snap_name(snap_name), m_ret_val(0), m_snap_id(CEPH_NOSNAP) {
+    m_snap_name(snap_name), m_state(STATE_UNPROTECT_SNAP_START),
+    m_ret_val(0), m_snap_id(CEPH_NOSNAP) {
 }
 
 template <typename I>
@@ -198,7 +202,7 @@ bool SnapshotUnprotectRequest<I>::should_complete(int r) {
     finished = true;
     break;
   default:
-    assert(false);
+    ceph_abort();
     break;
   }
   return finished;
@@ -228,8 +232,6 @@ void SnapshotUnprotectRequest<I>::send_unprotect_snap_start() {
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
-
-  m_state = STATE_UNPROTECT_SNAP_START;
 
   int r = verify_and_send_unprotect_snap_start();
   if (r < 0) {

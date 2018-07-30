@@ -79,19 +79,28 @@ bool ceph_heap_profiler_running()
 
 static void get_profile_name(char *profile_name, int profile_name_len)
 {
+#if __GNUC__ && __GNUC__ >= 8
+#pragma GCC diagnostic push
+  // Don't care, it doesn't matter, and we can't do anything about it.
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
+
   char path[PATH_MAX];
-  snprintf(path, sizeof(path), "%s", g_conf->log_file.c_str());
+  snprintf(path, sizeof(path), "%s", g_conf()->log_file.c_str());
   char *last_slash = rindex(path, '/');
 
   if (last_slash == NULL) {
     snprintf(profile_name, profile_name_len, "./%s.profile",
-	     g_conf->name.to_cstr());
+	     g_conf()->name.to_cstr());
   }
   else {
     last_slash[1] = '\0';
     snprintf(profile_name, profile_name_len, "%s/%s.profile",
-	     path, g_conf->name.to_cstr());
+	     path, g_conf()->name.to_cstr());
   }
+#if __GNUC__ && __GNUC__ >= 8
+#pragma GCC diagnostic pop
+#endif
 }
 
 void ceph_heap_profiler_start()
@@ -132,24 +141,24 @@ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
     }
     char heap_stats[HEAP_PROFILER_STATS_SIZE];
     ceph_heap_profiler_stats(heap_stats, sizeof(heap_stats));
-    out << g_conf->name << " dumping heap profile now.\n"
+    out << g_conf()->name << " dumping heap profile now.\n"
 	<< heap_stats;
     ceph_heap_profiler_dump("admin request");
   } else if (cmd.size() == 1 && cmd[0] == "start_profiler") {
     ceph_heap_profiler_start();
-    out << g_conf->name << " started profiler";
+    out << g_conf()->name << " started profiler";
   } else if (cmd.size() == 1 && cmd[0] == "stop_profiler") {
     ceph_heap_profiler_stop();
-    out << g_conf->name << " stopped profiler";
+    out << g_conf()->name << " stopped profiler";
   } else if (cmd.size() == 1 && cmd[0] == "release") {
     ceph_heap_release_free_memory();
-    out << g_conf->name << " releasing free RAM back to system.";
+    out << g_conf()->name << " releasing free RAM back to system.";
   } else
 #endif
   if (cmd.size() == 1 && cmd[0] == "stats") {
     char heap_stats[HEAP_PROFILER_STATS_SIZE];
     ceph_heap_profiler_stats(heap_stats, sizeof(heap_stats));
-    out << g_conf->name << " tcmalloc heap stats:"
+    out << g_conf()->name << " tcmalloc heap stats:"
 	<< heap_stats;
   } else {
     out << "unknown command " << cmd;

@@ -17,9 +17,6 @@
 
 extern std::map<std::string, std::string> rgw_to_http_attrs;
 
-extern string camelcase_dash_http_attr(const string& orig);
-extern string lowercase_dash_http_attr(const string& orig);
-
 extern void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group);
 
 extern void rgw_flush_formatter_and_reset(struct req_state *s,
@@ -716,13 +713,26 @@ static inline void dump_header_if_nonempty(struct req_state* s,
   }
 }
 
+static inline std::string compute_domain_uri(const struct req_state *s) {
+  std::string uri = (!s->info.domain.empty()) ? s->info.domain :
+    [&s]() -> std::string {
+    auto env = *(s->info.env);
+    std::string uri =
+    env.get("SERVER_PORT_SECURE") ? "https://" : "http://";
+    if (env.exists("SERVER_NAME")) {
+      uri.append(env.get("SERVER_NAME", "<SERVER_NAME>"));
+    } else {
+      uri.append(env.get("HTTP_HOST", "<HTTP_HOST>"));
+    }
+    return uri;
+  }();
+  return uri;
+}
+
 extern void dump_content_length(struct req_state *s, uint64_t len);
 extern int64_t parse_content_length(const char *content_length);
 extern void dump_etag(struct req_state *s,
                       const boost::string_ref& etag,
-                      bool quoted = false);
-extern void dump_etag(struct req_state *s,
-                      ceph::buffer::list& bl_etag,
                       bool quoted = false);
 extern void dump_epoch_header(struct req_state *s, const char *name, real_time t);
 extern void dump_time_header(struct req_state *s, const char *name, real_time t);
@@ -736,7 +746,6 @@ extern void list_all_buckets_end(struct req_state *s);
 extern void dump_time(struct req_state *s, const char *name, real_time *t);
 extern std::string dump_time_to_str(const real_time& t);
 extern void dump_bucket_from_state(struct req_state *s);
-extern void dump_uri_from_state(struct req_state *s);
 extern void dump_redirect(struct req_state *s, const string& redirect);
 extern bool is_valid_url(const char *url);
 extern void dump_access_control(struct req_state *s, const char *origin,
@@ -748,7 +757,6 @@ extern void dump_access_control(req_state *s, RGWOp *op);
 extern int dump_body(struct req_state* s, const char* buf, size_t len);
 extern int dump_body(struct req_state* s, /* const */ ceph::buffer::list& bl);
 extern int dump_body(struct req_state* s, const std::string& str);
-
 extern int recv_body(struct req_state* s, char* buf, size_t max);
 
 #endif /* CEPH_RGW_REST_H */

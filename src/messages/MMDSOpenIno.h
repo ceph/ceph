@@ -35,13 +35,14 @@ struct MMDSOpenIno : public Message {
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(ino, payload);
-    ::encode(ancestors, payload);
+    using ceph::encode;
+    encode(ino, payload);
+    encode(ancestors, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(ino, p);
-    ::decode(ancestors, p);
+    auto p = payload.cbegin();
+    decode(ino, p);
+    decode(ancestors, p);
   }
 };
 

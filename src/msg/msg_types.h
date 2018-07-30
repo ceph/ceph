@@ -22,6 +22,8 @@
 #include "include/blobhash.h"
 #include "include/encoding.h"
 
+#define MAX_PORT_NUMBER 65535
+
 namespace ceph {
   class Formatter;
 }
@@ -159,7 +161,7 @@ struct ceph_sockaddr_storage {
     ::encode_raw(ss, bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     struct ceph_sockaddr_storage ss;
     ::decode_raw(ss, bl);
     ss.ss_family = ntohs(ss.ss_family);
@@ -187,21 +189,21 @@ static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
   const auto copy_size = std::min((unsigned char*)(&a + 1) - src,
 				  (unsigned char*)(&ss + 1) - dst);
   ::memcpy(dst, src, copy_size);
-  ::encode(ss, bl);
+  encode(ss, bl);
 #else
   ceph_sockaddr_storage ss{};
   ::memset(&ss, '\0', sizeof(ss));
   ::memcpy(&wireaddr, &ss, std::min(sizeof(ss), sizeof(a)));
-  ::encode(ss, bl);
+  encode(ss, bl);
 #endif
 }
-static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
+static inline void decode(sockaddr_storage& a, bufferlist::const_iterator& bl) {
 #if defined(__linux__)
   ::decode_raw(a, bl);
   a.ss_family = ntohs(a.ss_family);
 #elif defined(__FreeBSD__) || defined(__APPLE__)
   ceph_sockaddr_storage ss{};
-  ::decode(ss, bl);
+  decode(ss, bl);
   auto src = (unsigned char const *)&ss;
   auto dst = (unsigned char *)&a;
   a.ss_len = 0;
@@ -214,7 +216,7 @@ static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
   ::memcpy(dst, src, copy_size);
 #else
   ceph_sockaddr_storage ss{};
-  ::decode(ss, bl);
+  decode(ss, bl);
   ::memcpy(&a, &ss, std::min(sizeof(ss), sizeof(a)));
 #endif
 }
@@ -266,6 +268,8 @@ struct entity_addr_t {
 
   uint32_t get_type() const { return type; }
   void set_type(uint32_t t) { type = t; }
+  bool is_legacy() const { return type == TYPE_LEGACY; }
+  bool is_msgr2() const { return type == TYPE_MSGR2; }
 
   __u32 get_nonce() const { return nonce; }
   void set_nonce(__u32 n) { nonce = n; }
@@ -412,16 +416,17 @@ struct entity_addr_t {
 
   bool parse(const char *s, const char **end = 0);
 
-  void decode_legacy_addr_after_marker(bufferlist::iterator& bl)
+  void decode_legacy_addr_after_marker(bufferlist::const_iterator& bl)
   {
+    using ceph::decode;
     __u8 marker;
     __u16 rest;
-    ::decode(marker, bl);
-    ::decode(rest, bl);
+    decode(marker, bl);
+    decode(rest, bl);
     type = TYPE_LEGACY;
-    ::decode(nonce, bl);
+    decode(nonce, bl);
     sockaddr_storage ss;
-    ::decode(ss, bl);
+    decode(ss, bl);
     set_sockaddr((sockaddr*)&ss);
   }
 
@@ -430,23 +435,24 @@ struct entity_addr_t {
   // broader study
 
   void encode(bufferlist& bl, uint64_t features) const {
+    using ceph::encode;
     if ((features & CEPH_FEATURE_MSG_ADDR2) == 0) {
-      ::encode((__u32)0, bl);
-      ::encode(nonce, bl);
+      encode((__u32)0, bl);
+      encode(nonce, bl);
       sockaddr_storage ss = get_sockaddr_storage();
-      ::encode(ss, bl);
+      encode(ss, bl);
       return;
     }
-    ::encode((__u8)1, bl);
+    encode((__u8)1, bl);
     ENCODE_START(1, 1, bl);
-    ::encode(type, bl);
-    ::encode(nonce, bl);
+    encode(type, bl);
+    encode(nonce, bl);
     __u32 elen = get_sockaddr_len();
-    ::encode(elen, bl);
+    encode(elen, bl);
     if (elen) {
 #if (__FreeBSD__) || defined(__APPLE__)
       __le16 ss_family = u.sa.sa_family;
-      ::encode(ss_family, bl);
+      encode(ss_family, bl);
       bl.append(u.sa.sa_data,
 		elen - sizeof(u.sa.sa_len) - sizeof(u.sa.sa_family));
 #else
@@ -455,9 +461,10 @@ struct entity_addr_t {
     }
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
+    using ceph::decode;
     __u8 marker;
-    ::decode(marker, bl);
+    decode(marker, bl);
     if (marker == 0) {
       decode_legacy_addr_after_marker(bl);
       return;
@@ -465,10 +472,10 @@ struct entity_addr_t {
     if (marker != 1)
       throw buffer::malformed_input("entity_addr_t marker != 1");
     DECODE_START(1, bl);
-    ::decode(type, bl);
-    ::decode(nonce, bl);
+    decode(type, bl);
+    decode(nonce, bl);
     __u32 elen;
-    ::decode(elen, bl);
+    decode(elen, bl);
     if (elen) {
 #if defined(__FreeBSD__) || defined(__APPLE__)
       u.sa.sa_len = 0;
@@ -476,7 +483,7 @@ struct entity_addr_t {
       if (elen < sizeof(ss_family)) {
 	throw buffer::malformed_input("elen smaller than family len");
       }
-      ::decode(ss_family, bl);
+      decode(ss_family, bl);
       u.sa.sa_family = ss_family;
       elen -= sizeof(ss_family);
       if (elen > get_sockaddr_len() - sizeof(u.sa.sa_family)) {
@@ -527,15 +534,109 @@ namespace std {
 struct entity_addrvec_t {
   vector<entity_addr_t> v;
 
+  entity_addrvec_t() {}
+  explicit entity_addrvec_t(const entity_addr_t& a) : v({ a }) {}
+
   unsigned size() const { return v.size(); }
   bool empty() const { return v.empty(); }
 
+  entity_addr_t legacy_addr() const {
+    for (auto& a : v) {
+      if (a.type == entity_addr_t::TYPE_LEGACY) {
+	return a;
+      }
+    }
+    return entity_addr_t();
+  }
+  entity_addr_t front() const {
+    if (!v.empty()) {
+      return v.front();
+    }
+    return entity_addr_t();
+  }
+
+  bool parse(const char *s, const char **end = 0);
+
+  void get_ports(set<int> *ports) const {
+    for (auto& a : v) {
+      ports->insert(a.get_port());
+    }
+  }
+  set<int> get_ports() const {
+    set<int> r;
+    get_ports(&r);
+    return r;
+  }
+
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<entity_addrvec_t*>& ls);
+
+  bool probably_equals(const entity_addrvec_t& o) const {
+    if (o.v.size() != v.size()) {
+      return false;
+    }
+    for (unsigned i = 0; i < v.size(); ++i) {
+      if (!v[i].probably_equals(o.v[i])) {
+	return false;
+      }
+    }
+    return true;
+  }
+  bool contains(const entity_addr_t& a) const {
+    for (auto& i : v) {
+      if (a == i) {
+	return true;
+      }
+    }
+    return false;
+  }
+  bool is_same_host(const entity_addr_t& a) const {
+    for (auto& i : v) {
+      if (i.is_same_host(a)) {
+	return true;
+      }
+    }
+    return false;
+  }
+
+  friend ostream& operator<<(ostream& out, const entity_addrvec_t& av) {
+    if (av.v.empty()) {
+      return out;
+    } else if (av.v.size() == 1) {
+      return out << av.v[0];
+    } else {
+      return out << av.v;
+    }
+  }
+
+  friend bool operator==(const entity_addrvec_t& l, const entity_addrvec_t& r) {
+    return l.v == r.v;
+  }
+  friend bool operator!=(const entity_addrvec_t& l, const entity_addrvec_t& r) {
+    return l.v != r.v;
+  }
+  friend bool operator<(const entity_addrvec_t& l, const entity_addrvec_t& r) {
+    return l.v < r.v;  // see lexicographical_compare()
+  }
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_addrvec_t);
+
+namespace std {
+  template<> struct hash< entity_addrvec_t >
+  {
+    size_t operator()( const entity_addrvec_t& x ) const
+    {
+      static blobhash H;
+      size_t r = 0;
+      for (auto& i : x.v) {
+	r += H((const char*)&i, sizeof(i));
+      }
+      return r;
+    }
+  };
+} // namespace std
 
 /*
  * a particular entity instance
@@ -554,12 +655,14 @@ struct entity_inst_t {
   }
 
   void encode(bufferlist& bl, uint64_t features) const {
-    ::encode(name, bl);
-    ::encode(addr, bl, features);
+    using ceph::encode;
+    encode(name, bl);
+    encode(addr, bl, features);
   }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(name, bl);
-    ::decode(addr, bl);
+  void decode(bufferlist::const_iterator& bl) {
+    using ceph::decode;
+    decode(name, bl);
+    decode(addr, bl);
   }
 
   void dump(Formatter *f) const;

@@ -9,7 +9,6 @@
 #include "include/rados/librados.hpp"
 #include "ClusterWatcher.h"
 #include "PoolReplayer.h"
-#include "ImageDeleter.h"
 #include "types.h"
 
 #include <set>
@@ -66,8 +65,7 @@ private:
 
   // monitor local cluster for config changes in peers
   std::unique_ptr<ClusterWatcher> m_local_cluster_watcher;
-  std::unique_ptr<ImageDeleter<>> m_image_deleter;
-  std::map<PoolPeer, std::unique_ptr<PoolReplayer> > m_pool_replayers;
+  std::map<PoolPeer, std::unique_ptr<PoolReplayer<>>> m_pool_replayers;
   std::atomic<bool> m_stopping = { false };
   bool m_manual_stop = false;
   MirrorAdminSocketHook *m_asok_hook;

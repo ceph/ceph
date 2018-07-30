@@ -176,6 +176,7 @@ private:
 
     unsigned size = 0;
     unsigned pg_num = 0;
+    bool erasure = false;
     mempool::osdmap_mapping::vector<int32_t> table;
 
     size_t row_size() const {
@@ -188,9 +189,10 @@ private:
 	size;  // up
     }
 
-    PoolMapping(int s, int p)
+    PoolMapping(int s, int p, bool e)
       : size(s),
 	pg_num(p),
+	erasure(e),
 	table(pg_num * row_size()) {
     }
 
@@ -289,16 +291,32 @@ public:
     p->second.get(pgid.ps(), up, up_primary, acting, acting_primary);
   }
 
+  bool get_primary_and_shard(pg_t pgid,
+			     int *acting_primary,
+			     spg_t *spgid) {
+    auto p = pools.find(pgid.pool());
+    assert(p != pools.end());
+    assert(pgid.ps() < p->second.pg_num);
+    vector<int> acting;
+    p->second.get(pgid.ps(), nullptr, nullptr, &acting, acting_primary);
+    if (p->second.erasure) {
+      for (uint8_t i = 0; i < acting.size(); ++i) {
+	if (acting[i] == *acting_primary) {
+	  *spgid = spg_t(pgid, shard_id_t(i));
+	  return true;
+	}
+      }
+      return false;
+    } else {
+      *spgid = spg_t(pgid);
+      return true;
+    }
+  }
+
   const mempool::osdmap_mapping::vector<pg_t>& get_osd_acting_pgs(unsigned osd) {
     assert(osd < acting_rmap.size());
     return acting_rmap[osd];
   }
-  /* unsued
-  const std::vector<pg_t>& get_osd_up_pgs(unsigned osd) {
-    assert(osd < up_rmap.size());
-    return up_rmap[osd];
-  }
-  */
 
   void update(const OSDMap& map);
   void update(const OSDMap& map, pg_t pgid);

@@ -203,7 +203,7 @@ TEST_F(TestClsJournal, GetClient) {
   ASSERT_EQ(-ENOENT, client::get_client(ioctx, oid, "id", &client));
 
   bufferlist data;
-  data.append(std::string('1', 128));
+  data.append(std::string(128, '1'));
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", data));
 
   ASSERT_EQ(0, client::get_client(ioctx, oid, "id1", &client));
@@ -251,7 +251,7 @@ TEST_F(TestClsJournal, ClientUpdateData) {
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
   bufferlist data;
-  data.append(std::string('1', 128));
+  data.append(std::string(128, '1'));
   ASSERT_EQ(0, client::client_update_data(ioctx, oid, "id1", data));
 
   Client client;
@@ -273,7 +273,7 @@ TEST_F(TestClsJournal, ClientUpdateState) {
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
   bufferlist data;
-  data.append(std::string('1', 128));
+  data.append(std::string(128, '1'));
   ASSERT_EQ(0, client::client_update_state(ioctx, oid, "id1",
                                            CLIENT_STATE_DISCONNECTED));
 
@@ -322,15 +322,21 @@ TEST_F(TestClsJournal, ClientUnregisterPruneTags) {
                                   bufferlist()));
   ASSERT_EQ(0, client::tag_create(ioctx, oid, 1, Tag::TAG_CLASS_NEW,
                                   bufferlist()));
-  ASSERT_EQ(0, client::tag_create(ioctx, oid, 2, 1, bufferlist()));
+
+  for (uint32_t i = 2; i <= 96; ++i) {
+    ASSERT_EQ(0, client::tag_create(ioctx, oid, i, 1, bufferlist()));
+  }
 
   librados::ObjectWriteOperation op1;
-  client::client_commit(&op1, "id1", {{{1, 2, 120}}});
+  client::client_commit(&op1, "id1", {{{1, 32, 120}}});
   ASSERT_EQ(0, ioctx.operate(oid, &op1));
 
   ASSERT_EQ(0, client::client_unregister(ioctx, oid, "id2"));
 
-  std::set<Tag> expected_tags = {{0, 0, {}}, {2, 1, {}}};
+  std::set<Tag> expected_tags = {{0, 0, {}}};
+  for (uint32_t i = 32; i <= 96; ++i) {
+    expected_tags.insert({i, 1, {}});
+  }
   std::set<Tag> tags;
   ASSERT_EQ(0, client::tag_list(ioctx, oid, "id1",
                                 boost::optional<uint64_t>(), &tags));
@@ -547,6 +553,14 @@ TEST_F(TestClsJournal, TagList) {
   ASSERT_EQ(0, client::tag_list(ioctx, oid, "id1", boost::optional<uint64_t>(0),
                                 &tags));
   ASSERT_EQ(expected_filtered_tags, tags);
+
+  librados::ObjectWriteOperation op1;
+  client::client_commit(&op1, "id1", {{{96, 0, 120}}});
+  ASSERT_EQ(0, ioctx.operate(oid, &op1));
+
+  ASSERT_EQ(0, client::tag_list(ioctx, oid, "id1", boost::optional<uint64_t>(),
+                                &tags));
+  ASSERT_EQ(expected_all_tags, tags);
 }
 
 TEST_F(TestClsJournal, GuardAppend) {

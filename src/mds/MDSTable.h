@@ -85,8 +85,11 @@ public:
 
   // child must overload these
   virtual void reset_state() = 0;
-  virtual void decode_state(bufferlist::iterator& p) = 0;
+  virtual void decode_state(bufferlist::const_iterator& p) = 0;
   virtual void encode_state(bufferlist& bl) const = 0;
+
+  friend class C_IO_MT_Load;
+  friend class C_IO_MT_Save;
 };
 
 #endif

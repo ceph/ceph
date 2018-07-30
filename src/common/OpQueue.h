@@ -44,13 +44,14 @@ class OpQueue {
     // them into out.
     virtual void remove_by_class(K k, std::list<T> *out) = 0;
     // Enqueue op in the back of the strict queue
-    virtual void enqueue_strict(K cl, unsigned priority, T item) = 0;
+    virtual void enqueue_strict(K cl, unsigned priority, T &&item) = 0;
     // Enqueue op in the front of the strict queue
-    virtual void enqueue_strict_front(K cl, unsigned priority, T item) = 0;
+    virtual void enqueue_strict_front(K cl, unsigned priority, T &&item) = 0;
     // Enqueue op in the back of the regular queue
-    virtual void enqueue(K cl, unsigned priority, unsigned cost, T item) = 0;
+    virtual void enqueue(K cl, unsigned priority, unsigned cost, T &&item) = 0;
     // Enqueue the op in the front of the regular queue
-    virtual void enqueue_front(K cl, unsigned priority, unsigned cost, T item) = 0;
+    virtual void enqueue_front(
+      K cl, unsigned priority, unsigned cost, T &&item) = 0;
     // Returns if the queue is empty
     virtual bool empty() const = 0;
     // Return an op to be dispatch

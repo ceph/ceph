@@ -10,7 +10,7 @@
 namespace ceph {
 namespace logging {
 
-Graylog::Graylog(const SubsystemMap * const s, std::string logger)
+Graylog::Graylog(const SubsystemMap * const s, const std::string &logger)
     : m_subs(s),
       m_log_dst_valid(false),
       m_hostname(""),
@@ -24,7 +24,7 @@ Graylog::Graylog(const SubsystemMap * const s, std::string logger)
   m_formatter_section = std::unique_ptr<Formatter>(Formatter::create("json"));
 }
 
-Graylog::Graylog(std::string logger)
+Graylog::Graylog(const std::string &logger)
     : m_subs(NULL),
       m_log_dst_valid(false),
       m_hostname(""),
@@ -77,7 +77,8 @@ void Graylog::log_entry(Entry const * const e)
     m_formatter->dump_string("host", m_hostname);
     m_formatter->dump_string("short_message", s);
     m_formatter->dump_string("_app", "ceph");
-    m_formatter->dump_float("timestamp", e->m_stamp.sec() + (e->m_stamp.usec() / 1000000.0));
+    auto t = ceph::logging::log_clock::to_timeval(e->m_stamp);
+    m_formatter->dump_float("timestamp", t.tv_sec + (t.tv_usec / 1000000.0));
     m_formatter->dump_unsigned("_thread", (uint64_t)e->m_thread);
     m_formatter->dump_int("_level", e->m_prio);
     if (m_subs != NULL)
@@ -120,9 +121,14 @@ void Graylog::log_log_entry(LogEntry const * const e)
     m_formatter->dump_float("timestamp", e->stamp.sec() + (e->stamp.usec() / 1000000.0));
     m_formatter->dump_string("_app", "ceph");
 
-    m_formatter_section->open_object_section("");
-    e->who.addr.dump(m_formatter_section.get());
-    e->who.name.dump(m_formatter_section.get());
+    m_formatter->dump_string("name", e->name.to_str());
+
+    m_formatter_section->open_object_section("rank");
+    e->rank.dump(m_formatter_section.get());
+    m_formatter_section->close_section();
+
+    m_formatter_section->open_object_section("addrs");
+    e->addrs.dump(m_formatter_section.get());
     m_formatter_section->close_section();
 
     m_ostream_section.clear();

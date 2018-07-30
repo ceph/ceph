@@ -23,7 +23,6 @@
 #include "kv/KeyValueDB.h"
 
 namespace po = boost::program_options;
-using namespace std;
 
 int main(int argc, char **argv) {
   po::options_description desc("Allowed options");
@@ -37,7 +36,7 @@ int main(int argc, char **argv) {
     ("debug", "Additional debug output from DBObjectMap")
     ("oid", po::value<string>(&oid), "Restrict to this object id when dumping objects")
     ("command", po::value<string>(&cmd),
-     "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check, dump-headers, repair], mandatory")
+     "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check, dump-headers, repair, compact], mandatory")
     ("backend", po::value<string>(&backend),
      "DB backend (default rocksdb)")
     ;
@@ -61,7 +60,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  vector<const char *> ceph_options, def_args;
+  vector<const char *> ceph_options;
   ceph_options.reserve(ceph_option_strings.size());
   for (vector<string>::iterator i = ceph_option_strings.begin();
        i != ceph_option_strings.end();
@@ -71,22 +70,21 @@ int main(int argc, char **argv) {
 
   if (vm.count("debug")) debug = true;
 
-  auto cct = global_init(
-    &def_args, ceph_options, CEPH_ENTITY_TYPE_OSD,
-    CODE_ENVIRONMENT_UTILITY_NODOUT, 0);
-  common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
-  g_conf = g_ceph_context->_conf;
-  if (debug) {
-    g_conf->set_val_or_die("log_to_stderr", "true");
-    g_conf->set_val_or_die("err_to_stderr", "true");
-  }
-  g_conf->apply_changes(NULL);
-
   if (vm.count("help")) {
     std::cerr << desc << std::endl;
     return 1;
   }
+
+  auto cct = global_init(
+    NULL, ceph_options, CEPH_ENTITY_TYPE_OSD,
+    CODE_ENVIRONMENT_UTILITY_NODOUT, 0);
+  common_init_finish(g_ceph_context);
+  cct->_conf.apply_changes(nullptr);
+  if (debug) {
+    g_conf().set_val_or_die("log_to_stderr", "true");
+    g_conf().set_val_or_die("err_to_stderr", "true");
+  }
+  g_conf().apply_changes(nullptr);
 
   if (vm.count("omap-path") == 0) {
     std::cerr << "Required argument --omap-path" << std::endl;
@@ -129,13 +127,13 @@ int main(int argc, char **argv) {
   std::cout << "legacy: " << (omap.state.legacy ? "true" : "false") << std::endl;
 
   if (cmd == "dump-raw-keys") {
-    KeyValueDB::WholeSpaceIterator i = store->get_iterator();
+    KeyValueDB::WholeSpaceIterator i = store->get_wholespace_iterator();
     for (i->seek_to_first(); i->valid(); i->next()) {
       std::cout << i->raw_key() << std::endl;
     }
     return 0;
   } else if (cmd == "dump-raw-key-vals") {
-    KeyValueDB::WholeSpaceIterator i = store->get_iterator();
+    KeyValueDB::WholeSpaceIterator i = store->get_wholespace_iterator();
     for (i->seek_to_first(); i->valid(); i->next()) {
       std::cout << i->raw_key() << std::endl;
       i->value().hexdump(std::cout);
@@ -203,6 +201,9 @@ int main(int argc, char **argv) {
     omap.state.v = 2;
     omap.state.legacy = false;
     omap.set_state();
+  } else if (cmd == "compact") {
+    omap.compact();
+    return 0;
   } else {
     std::cerr << "Did not recognize command " << cmd << std::endl;
     return 1;

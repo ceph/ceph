@@ -19,7 +19,7 @@
 
 class MMgrOpen : public Message
 {
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -31,28 +31,41 @@ public:
   std::map<std::string,std::string> daemon_metadata;
   std::map<std::string,std::string> daemon_status;
 
+  // encode map<string,map<int32_t,string>> of current config
+  bufferlist config_bl;
+
+  // encode map<string,string> of compiled-in defaults
+  bufferlist config_defaults_bl;
+
   void decode_payload() override
   {
-    bufferlist::iterator p = payload.begin();
-    ::decode(daemon_name, p);
+    auto p = payload.cbegin();
+    decode(daemon_name, p);
     if (header.version >= 2) {
-      ::decode(service_name, p);
-      ::decode(service_daemon, p);
+      decode(service_name, p);
+      decode(service_daemon, p);
       if (service_daemon) {
-	::decode(daemon_metadata, p);
-	::decode(daemon_status, p);
+	decode(daemon_metadata, p);
+	decode(daemon_status, p);
       }
+    }
+    if (header.version >= 3) {
+      decode(config_bl, p);
+      decode(config_defaults_bl, p);
     }
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(daemon_name, payload);
-    ::encode(service_name, payload);
-    ::encode(service_daemon, payload);
+    using ceph::encode;
+    encode(daemon_name, payload);
+    encode(service_name, payload);
+    encode(service_daemon, payload);
     if (service_daemon) {
-      ::encode(daemon_metadata, payload);
-      ::encode(daemon_status, payload);
+      encode(daemon_metadata, payload);
+      encode(daemon_status, payload);
     }
+    encode(config_bl, payload);
+    encode(config_defaults_bl, payload);
   }
 
   const char *get_type_name() const override { return "mgropen"; }

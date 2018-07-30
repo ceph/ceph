@@ -49,16 +49,17 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(from, p);
-    ::decode(dirfrag, p);
-    ::decode(path, p);
+    auto p = payload.cbegin();
+    decode(from, p);
+    decode(dirfrag, p);
+    decode(path, p);
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(from, payload);
-    ::encode(dirfrag, payload);
-    ::encode(path, payload);
+    using ceph::encode;
+    encode(from, payload);
+    encode(dirfrag, payload);
+    encode(path, payload);
   }
 };
 

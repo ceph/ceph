@@ -12,11 +12,17 @@
  *
  */
 
+#include <sys/utsname.h>
+
 #include "include/compat.h"
 #include "pthread.h"
 
 #include "common/BackTrace.h"
 #include "common/debug.h"
+#include "common/safe_io.h"
+#include "common/version.h"
+
+#include "include/uuid.h"
 #include "global/pidfile.h"
 #include "global/signal_handler.h"
 
@@ -88,6 +94,49 @@ static void reraise_fatal(int signum)
   exit(1);
 }
 
+
+// /etc/os-release looks like
+//
+//   NAME=Fedora
+//   VERSION="28 (Server Edition)"
+//   ID=fedora
+//   VERSION_ID=28
+//
+// or
+//
+//   NAME="Ubuntu"
+//   VERSION="16.04.3 LTS (Xenial Xerus)"
+//   ID=ubuntu
+//   ID_LIKE=debian
+//
+// get_from_os_release("FOO=bar\nTHIS=\"that\"\n", "FOO=", ...) will
+// write "bar\0" to out buffer, which is assumed to be as large as the input
+// file.
+static int parse_from_os_release(
+  const char *file, const char *key,
+  char *out)
+{
+  const char *p = strstr(file, key);
+  if (!p) {
+    return -1;
+  }
+  const char *start = p + strlen(key);
+  const char *end = strchr(start, '\n');
+  if (!end) {
+    return -1;
+  }
+  if (*start == '"' && *(end - 1) == '"') {
+    ++start;
+    --end;
+  }
+  if (start >= end) {
+    return -1;
+  }
+  memcpy(out, start, end - start);
+  out[end - start] = 0;
+  return 0;
+}
+
 static void handle_fatal_signal(int signum)
 {
   // This code may itself trigger a SIGSEGV if the heap is corrupt. In that
@@ -114,10 +163,105 @@ static void handle_fatal_signal(int signum)
   // TODO: don't use an ostringstream here. It could call malloc(), which we
   // don't want inside a signal handler.
   // Also fix the backtrace code not to allocate memory.
-  BackTrace bt(0);
+  BackTrace bt(1);
   ostringstream oss;
   bt.print(oss);
   dout_emergency(oss.str());
+
+  char base[PATH_MAX] = { 0 };
+  if (g_ceph_context &&
+      g_ceph_context->_conf->crash_dir.size()) {
+    // -- crash dump --
+    // id
+    ostringstream idss;
+    utime_t now = ceph_clock_now();
+    now.gmtime(idss);
+    uuid_d uuid;
+    uuid.generate_random();
+    idss << "_" << uuid;
+    string id = idss.str();
+    std::replace(id.begin(), id.end(), ' ', '_');
+
+    snprintf(base, sizeof(base), "%s/%s",
+	     g_ceph_context->_conf->crash_dir.c_str(),
+	     id.c_str());
+    int r = ::mkdir(base, 0700);
+    if (r >= 0) {
+      char fn[PATH_MAX*2];
+      snprintf(fn, sizeof(fn)-1, "%s/meta", base);
+      int fd = ::open(fn, O_CREAT|O_WRONLY, 0600);
+      if (fd >= 0) {
+	JSONFormatter jf(true);
+	jf.open_object_section("crash");
+	jf.dump_string("crash_id", id);
+	now.gmtime(jf.dump_stream("timestamp"));
+	jf.dump_string("entity_name", g_ceph_context->_conf->name.to_str());
+	jf.dump_string("ceph_version", ceph_version_to_str());
+
+	struct utsname u;
+	r = uname(&u);
+	if (r >= 0) {
+	  jf.dump_string("utsname_hostname", u.nodename);
+	  jf.dump_string("utsname_sysname", u.sysname);
+	  jf.dump_string("utsname_release", u.release);
+	  jf.dump_string("utsname_version", u.version);
+	  jf.dump_string("utsname_machine", u.machine);
+	}
+
+	// os-releaes
+	int in = ::open("/etc/os-release", O_RDONLY);
+	if (in >= 0) {
+	  char buf[4096];
+	  r = safe_read(in, buf, sizeof(buf)-1);
+	  if (r >= 0) {
+	    buf[r] = 0;
+	    char v[4096];
+	    if (parse_from_os_release(buf, "NAME=", v) >= 0) {
+	      jf.dump_string("os_name", v);
+	    }
+	    if (parse_from_os_release(buf, "ID=", v) >= 0) {
+	      jf.dump_string("os_id", v);
+	    }
+	    if (parse_from_os_release(buf, "VERSION_ID=", v) >= 0) {
+	      jf.dump_string("os_version_id", v);
+	    }
+	    if (parse_from_os_release(buf, "VERSION=", v) >= 0) {
+	      jf.dump_string("os_version", v);
+	    }
+	  }
+	  ::close(in);
+	}
+
+	// assert?
+	if (g_assert_condition) {
+	  jf.dump_string("assert_condition", g_assert_condition);
+	}
+	if (g_assert_func) {
+	  jf.dump_string("assert_func", g_assert_func);
+	}
+	if (g_assert_file) {
+	  jf.dump_string("assert_file", g_assert_file);
+	}
+	if (g_assert_line) {
+	  jf.dump_unsigned("assert_file", g_assert_line);
+	}
+	if (g_assert_thread_name[0]) {
+	  jf.dump_string("assert_thread_name", g_assert_thread_name);
+	}
+
+	// backtrace
+	bt.dump(&jf);
+
+	jf.close_section();
+	ostringstream oss;
+	jf.flush(oss);
+	string s = oss.str();
+	r = safe_write(fd, s.c_str(), s.size());
+	(void)r;
+	::close(fd);
+      }
+    }
+  }
 
   // avoid recursion back into logging code if that is where
   // we got the SEGV.
@@ -133,6 +277,14 @@ static void handle_fatal_signal(int signum)
 	   << dendl;
 
     g_ceph_context->_log->dump_recent();
+
+    if (base[0]) {
+      char fn[PATH_MAX*2];
+      snprintf(fn, sizeof(fn)-1, "%s/log", base);
+      g_ceph_context->_log->set_log_file(fn);
+      g_ceph_context->_log->reopen_log_file();
+      g_ceph_context->_log->dump_recent();
+    }
   }
 
   reraise_fatal(signum);
@@ -175,6 +327,10 @@ string get_name_by_pid(pid_t pid)
 #else
 string get_name_by_pid(pid_t pid)
 {
+  // If the PID is 0, its means the sender is the Kernel itself
+  if (pid == 0) {
+    return "Kernel";
+  }
   char proc_pid_path[PATH_MAX] = {0};
   snprintf(proc_pid_path, PATH_MAX, PROCPREFIX "/proc/%d/cmdline", pid);
   int fd = open(proc_pid_path, O_RDONLY);
@@ -309,13 +465,33 @@ struct SignalHandler : public Thread {
 	    r = read(handlers[signum]->pipefd[0], &v, 1);
 	    if (r == 1) {
 	      siginfo_t * siginfo = &handlers[signum]->info_t;
-	      string task_name = get_name_by_pid(siginfo->si_pid);
-	      derr << "received  signal: " << sig_str(signum)
-		   << " from " << " PID: " << siginfo->si_pid
-		   << " task name: " << task_name
-		   << " UID: " << siginfo->si_uid
-		   << dendl;
-	      handlers[signum]->handler(signum);
+              ostringstream message;
+              message << "received  signal: " << sig_str(signum);
+              switch (siginfo->si_code) {
+                case SI_USER:
+                  message << " from " << get_name_by_pid(siginfo->si_pid);
+                  // If PID is undefined, it doesn't have a meaning to be displayed
+                  if (siginfo->si_pid) {
+                    message << " (PID: " << siginfo->si_pid << ")";
+                  } else {
+                    message << " ( Could be generated by pthread_kill(), raise(), abort(), alarm() )";
+                  }
+                  message << " UID: " << siginfo->si_uid;
+                  break;
+                default:
+                  /* As we have a not expected signal, let's report the structure to help debugging */
+                  message << ", si_code : " << siginfo->si_code;
+                  message << ", si_value (int): " << siginfo->si_value.sival_int;
+                  message << ", si_value (ptr): " << siginfo->si_value.sival_ptr;
+                  message << ", si_errno: " << siginfo->si_errno;
+                  message << ", si_pid : " << siginfo->si_pid;
+                  message << ", si_uid : " << siginfo->si_uid;
+                  message << ", si_addr" << siginfo->si_addr;
+                  message << ", si_status" << siginfo->si_status;
+                  break;
+              }
+              derr << message.str() << dendl;
+              handlers[signum]->handler(signum);
 	    }
 	  }
 	}

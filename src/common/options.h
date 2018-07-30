@@ -3,8 +3,9 @@
 
 #pragma once
 
+#include <chrono>
 #include <string>
-#include <list>
+#include <vector>
 #include <boost/variant.hpp>
 #include "include/str_list.h"
 #include "msg/msg_types.h"
@@ -18,7 +19,10 @@ struct Option {
     TYPE_FLOAT,
     TYPE_BOOL,
     TYPE_ADDR,
+    TYPE_ADDRVEC,
     TYPE_UUID,
+    TYPE_SIZE,
+    TYPE_SECS,
   };
 
   const char *type_to_str(type_t t) const {
@@ -29,7 +33,10 @@ struct Option {
     case TYPE_FLOAT: return "double";
     case TYPE_BOOL: return "bool";
     case TYPE_ADDR: return "entity_addr_t";
+    case TYPE_ADDRVEC: return "entity_addrvec_t";
     case TYPE_UUID: return "uuid_d";
+    case TYPE_SIZE: return "size_t";
+    case TYPE_SECS: return "secs";
     default: return "unknown";
     }
   }
@@ -43,16 +50,35 @@ struct Option {
     LEVEL_BASIC,
     LEVEL_ADVANCED,
     LEVEL_DEV,
+    LEVEL_UNKNOWN,
   };
 
-  const char *level_to_str(level_t l) const {
-    switch(l) {
+  static const char *level_to_str(level_t l) {
+    switch (l) {
       case LEVEL_BASIC: return "basic";
       case LEVEL_ADVANCED: return "advanced";
-      case LEVEL_DEV: return "developer";
+      case LEVEL_DEV: return "dev";
       default: return "unknown";
     }
   }
+
+  enum flag_t {
+    FLAG_RUNTIME = 0x1,         ///< option can change changed at runtime
+    FLAG_NO_MON_UPDATE = 0x2,   ///< option cannot be changed via mon config
+    FLAG_STARTUP = 0x4,         ///< option can only take effect at startup
+    FLAG_CLUSTER_CREATE = 0x8,  ///< option only has effect at cluster creation
+    FLAG_CREATE = 0x10,         ///< option only has effect at daemon creation
+  };
+
+  struct size_t {
+    std::size_t value;
+    operator uint64_t() const {
+      return static_cast<uint64_t>(value);
+    }
+    bool operator==(const size_t& rhs) const {
+      return value == rhs.value;
+    }
+  };
 
   using value_t = boost::variant<
     boost::blank,
@@ -62,6 +88,9 @@ struct Option {
     double,
     bool,
     entity_addr_t,
+    entity_addrvec_t,
+    std::chrono::seconds,
+    size_t,
     uuid_d>;
   const std::string name;
   const type_t type;
@@ -70,8 +99,14 @@ struct Option {
   std::string desc;
   std::string long_desc;
 
+  unsigned flags = 0;
+
+  int subsys = -1; // if >= 0, we are a subsys debug level
+
   value_t value;
   value_t daemon_value;
+
+  static std::string to_str(const value_t& v);
 
   // Items like mon, osd, rgw, rbd, ceph-fuse.  This is advisory metadata
   // for presentation layers (like web dashboards, or generated docs), so that
@@ -79,21 +114,19 @@ struct Option {
   // Additionally: "common" for settings that exist in any Ceph code.  Do
   // not use common for settings that are just shared some places: for those
   // places, list them.
-  std::list<const char*> services;
+  std::vector<const char*> services;
 
   // Topics like:
   // "service": a catchall for the boring stuff like log/asok paths.
   // "network"
   // "performance": a setting that may need adjustment depending on
   //                environment/workload to get best performance.
-  std::list<const char*> tags;
+  std::vector<const char*> tags;
 
-  std::list<const char*> see_also;
+  std::vector<const char*> see_also;
 
   value_t min, max;
-  std::list<std::string> enum_allowed;
-
-  bool safe;
+  std::vector<const char*> enum_allowed;
 
   /**
    * Return nonzero and set second argument to error string if the
@@ -106,26 +139,33 @@ struct Option {
   validator_fn_t validator;
 
   Option(std::string const &name, type_t t, level_t l)
-    : name(name), type(t), level(l), safe(false)
+    : name(name), type(t), level(l)
   {
     // While value_t is nullable (via boost::blank), we don't ever
     // want it set that way in an Option instance: within an instance,
     // the type of ::value should always match the declared type.
-    if (type == TYPE_INT) {
-      value = int64_t(0);
-    } else if (type == TYPE_UINT) {
-      value = uint64_t(0);
-    } else if (type == TYPE_STR) {
-      value = std::string("");
-    } else if (type == TYPE_FLOAT) {
-      value = 0.0;
-    } else if (type == TYPE_BOOL) {
-      value = false;
-    } else if (type == TYPE_ADDR) {
-      value = entity_addr_t();
-    } else if (type == TYPE_UUID) {
-      value = uuid_d();
-    } else {
+    switch (type) {
+    case TYPE_INT:
+      value = int64_t(0); break;
+    case TYPE_UINT:
+      value = uint64_t(0); break;
+    case TYPE_STR:
+      value = std::string(""); break;
+    case TYPE_FLOAT:
+      value = 0.0; break;
+    case TYPE_BOOL:
+      value = false; break;
+    case TYPE_ADDR:
+      value = entity_addr_t(); break;
+    case TYPE_ADDRVEC:
+      value = entity_addrvec_t(); break;
+    case TYPE_UUID:
+      value = uuid_d(); break;
+    case TYPE_SIZE:
+      value = size_t{0}; break;
+    case TYPE_SECS:
+      value = std::chrono::seconds{0}; break;
+    default:
       ceph_abort();
     }
   }
@@ -162,21 +202,33 @@ struct Option {
   // a float option to "0" actually sets the double part of variant.
   template<typename T, typename is_integer<T>::type = 0>
   Option& set_value(value_t& v, T new_value) {
-    if (type == TYPE_INT) {
-      v = int64_t(new_value);
-    } else if (type == TYPE_UINT) {
-      v = uint64_t(new_value);
-    } else if (type == TYPE_FLOAT) {
-      v = double(new_value);
-    } else if (type == TYPE_BOOL) {
-      v = bool(new_value);
-    } else {
+    switch (type) {
+    case TYPE_INT:
+      v = int64_t(new_value); break;
+    case TYPE_UINT:
+      v = uint64_t(new_value); break;
+    case TYPE_FLOAT:
+      v = double(new_value); break;
+    case TYPE_BOOL:
+      v = bool(new_value); break;
+    case TYPE_SIZE:
+      v = size_t{static_cast<std::size_t>(new_value)}; break;
+    case TYPE_SECS:
+      v = std::chrono::seconds{new_value}; break;
+    default:
       std::cerr << "Bad type in set_value: " << name << ": "
                 << typeid(T).name() << std::endl;
       ceph_abort();
     }
     return *this;
   }
+
+  /// parse and validate a string input
+  int parse_value(
+    const std::string& raw_val,
+    value_t *out,
+    std::string *error_message,
+    std::string *normalized_value=nullptr) const;
 
   template<typename T>
   Option& set_default(const T& v) {
@@ -191,7 +243,7 @@ struct Option {
     tags.push_back(tag);
     return *this;
   }
-  Option& add_tag(std::initializer_list<const char*> ts) {
+  Option& add_tag(const std::initializer_list<const char*>& ts) {
     tags.insert(tags.end(), ts);
     return *this;
   }
@@ -199,7 +251,7 @@ struct Option {
     services.push_back(service);
     return *this;
   }
-  Option& add_service(std::initializer_list<const char*> ss) {
+  Option& add_service(const std::initializer_list<const char*>& ss) {
     services.insert(services.end(), ss);
     return *this;
   }
@@ -207,7 +259,7 @@ struct Option {
     see_also.push_back(t);
     return *this;
   }
-  Option& add_see_also(std::initializer_list<const char*> ts) {
+  Option& add_see_also(const std::initializer_list<const char*>& ts) {
     see_also.insert(see_also.end(), ts);
     return *this;
   }
@@ -233,14 +285,18 @@ struct Option {
     return *this;
   }
 
-  Option& set_enum_allowed(const std::list<std::string> allowed)
+  Option& set_enum_allowed(const std::initializer_list<const char*>& allowed)
   {
-    enum_allowed = allowed;
+    enum_allowed.insert(enum_allowed.end(), allowed);
     return *this;
   }
 
-  Option &set_safe() {
-    safe = true;
+  Option &set_flag(flag_t f) {
+    flags |= f;
+    return *this;
+  }
+  Option &set_flags(flag_t f) {
+    flags |= f;
     return *this;
   }
 
@@ -250,17 +306,33 @@ struct Option {
     return *this;
   }
 
+  Option &set_subsys(int s) {
+    subsys = s;
+    return *this;
+  }
+
   void dump(Formatter *f) const;
+  void print(ostream *out) const;
+
+  bool has_flag(flag_t f) const {
+    return flags & f;
+  }
 
   /**
    * A crude indicator of whether the value may be
    * modified safely at runtime -- should be replaced
    * with proper locking!
    */
-  bool is_safe() const
+  bool can_update_at_runtime() const
   {
-    return safe || type == TYPE_BOOL || type == TYPE_INT
-                || type == TYPE_UINT || type == TYPE_FLOAT;
+    return
+      (has_flag(FLAG_RUNTIME)
+       || type == TYPE_BOOL || type == TYPE_INT
+       || type == TYPE_UINT || type == TYPE_FLOAT
+       || type == TYPE_SIZE || type == TYPE_SECS)
+      && !has_flag(FLAG_STARTUP)
+      && !has_flag(FLAG_CLUSTER_CREATE)
+      && !has_flag(FLAG_CREATE);
   }
 };
 

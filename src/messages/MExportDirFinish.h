@@ -40,13 +40,14 @@ public:
   }
   
   void encode_payload(uint64_t features) override {
-    ::encode(dirfrag, payload);
-    ::encode(last, payload);
+    using ceph::encode;
+    encode(dirfrag, payload);
+    encode(last, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(dirfrag, p);
-    ::decode(last, p);
+    auto p = payload.cbegin();
+    decode(dirfrag, p);
+    decode(last, p);
   }
 
 };

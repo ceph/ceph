@@ -65,22 +65,23 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(op, p);
-    ::decode(epoch, p);
-    ::decode(round, p);
-    ::decode(timestamp, p);
-    ::decode(skews, p);
-    ::decode(latencies, p);
+    auto p = payload.cbegin();
+    decode(op, p);
+    decode(epoch, p);
+    decode(round, p);
+    decode(timestamp, p);
+    decode(skews, p);
+    decode(latencies, p);
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(op, payload);
-    ::encode(epoch, payload);
-    ::encode(round, payload);
-    ::encode(timestamp, payload);
-    ::encode(skews, payload, features);
-    ::encode(latencies, payload, features);
+    using ceph::encode;
+    encode(op, payload);
+    encode(epoch, payload);
+    encode(round, payload);
+    encode(timestamp, payload);
+    encode(skews, payload, features);
+    encode(latencies, payload, features);
   }
 };
 

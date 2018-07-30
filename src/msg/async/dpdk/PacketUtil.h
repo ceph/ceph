@@ -19,19 +19,6 @@
 /*
  * Copyright (C) 2014 Cloudius Systems, Ltd.
  */
-/*
- * Ceph - scalable distributed file system
- *
- * Copyright (C) 2015 XSky <haomai@xsky.com>
- *
- * Author: Haomai Wang <haomaiwang@gmail.com>
- *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.  See file COPYING.
- *
- */
 
 #ifndef CEPH_MSG_PACKET_UTIL_H_
 #define CEPH_MSG_PACKET_UTIL_H_
@@ -159,7 +146,6 @@ class packet_merger {
         // If we reach here, we have a bug with merge.
         std::cout << "packet_merger: merge error\n";
         abort();
-        break;
       }
     }
   }

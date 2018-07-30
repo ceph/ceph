@@ -26,11 +26,10 @@ tasks:
         - generic/046
         - generic/223
         - ext4/304
-        - generic/050  # krbd BLKROSET bug
         - generic/388
         - generic/405
         - generic/422
-        - generic/448
+        - shared/298  # lockdep false positive
         randomize: true
     client.1:
         <<: *ref

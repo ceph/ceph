@@ -437,11 +437,12 @@ int main(int argc, char **argv) {
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->set_val("err_to_stderr", "false");
-  g_ceph_context->_conf->set_val("log_to_stderr", "false");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.set_val("err_to_stderr", "false");
+  g_ceph_context->_conf.set_val("log_to_stderr", "false");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   const char* file = FILENAME;
   int x = 1234;

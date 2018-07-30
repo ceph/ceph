@@ -3,6 +3,7 @@
 
 #include "SyncPointCreateRequest.h"
 #include "include/uuid.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
@@ -65,7 +66,7 @@ void SyncPointCreateRequest<I>::send_update_client() {
 
   bufferlist client_data_bl;
   librbd::journal::ClientData client_data(m_client_meta_copy);
-  ::encode(client_data, client_data_bl);
+  encode(client_data, client_data_bl);
 
   Context *ctx = create_context_callback<
     SyncPointCreateRequest<I>, &SyncPointCreateRequest<I>::handle_update_client>(

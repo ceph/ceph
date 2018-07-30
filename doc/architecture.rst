@@ -440,7 +440,7 @@ The Ceph storage system supports the notion of 'Pools', which are logical
 partitions for storing objects.
 
 Ceph Clients retrieve a `Cluster Map`_ from a Ceph Monitor, and write objects to
-pools. The pool's ``size`` or number of replicas, the CRUSH ruleset and the
+pools. The pool's ``size`` or number of replicas, the CRUSH rule and the
 number of placement groups determine how Ceph will place the data.
 
 .. ditaa:: 
@@ -455,7 +455,7 @@ number of placement groups determine how Ceph will place the data.
                  |      To
                  v
             +--------+           +---------------+
-            |  Pool  |---------->| CRUSH Ruleset |
+            |  Pool  |---------->|  CRUSH Rule   |
             +--------+  Selects  +---------------+
                  
 
@@ -463,7 +463,7 @@ Pools set at least the following parameters:
 
 - Ownership/Access to Objects
 - The Number of Placement Groups, and 
-- The CRUSH Ruleset to Use.
+- The CRUSH Rule to Use.
 
 See `Set Pool Values`_ for details.
 
@@ -1515,6 +1515,8 @@ Device kernel object(s). This is done with the  command-line tool ``rbd``.
 
 .. index:: Ceph FS; Ceph Filesystem; libcephfs; MDS; metadata server; ceph-mds
 
+.. _arch-cephfs:
+
 Ceph Filesystem
 ---------------
 
@@ -1576,7 +1578,7 @@ instance for high availability.
 
 
 .. _RADOS - A Scalable, Reliable Storage Service for Petabyte-scale Storage Clusters: https://ceph.com/wp-content/uploads/2016/08/weil-rados-pdsw07.pdf
-.. _Paxos: http://en.wikipedia.org/wiki/Paxos_(computer_science)
+.. _Paxos: https://en.wikipedia.org/wiki/Paxos_(computer_science)
 .. _Monitor Config Reference: ../rados/configuration/mon-config-ref
 .. _Monitoring OSDs and PGs: ../rados/operations/monitoring-osd-pg
 .. _Heartbeats: ../rados/configuration/mon-osd-interaction
@@ -1589,14 +1591,14 @@ instance for high availability.
 .. _Hardware Recommendations: ../start/hardware-recommendations
 .. _Network Config Reference: ../rados/configuration/network-config-ref
 .. _Data Scrubbing: ../rados/configuration/osd-config-ref#scrubbing
-.. _striping: http://en.wikipedia.org/wiki/Data_striping
-.. _RAID: http://en.wikipedia.org/wiki/RAID 
-.. _RAID 0: http://en.wikipedia.org/wiki/RAID_0#RAID_0
+.. _striping: https://en.wikipedia.org/wiki/Data_striping
+.. _RAID: https://en.wikipedia.org/wiki/RAID
+.. _RAID 0: https://en.wikipedia.org/wiki/RAID_0#RAID_0
 .. _Ceph Object Storage: ../radosgw/
-.. _RESTful: http://en.wikipedia.org/wiki/RESTful
+.. _RESTful: https://en.wikipedia.org/wiki/RESTful
 .. _Erasure Code Notes: https://github.com/ceph/ceph/blob/40059e12af88267d0da67d8fd8d9cd81244d8f93/doc/dev/osd_internals/erasure_coding/developer_notes.rst
 .. _Cache Tiering: ../rados/operations/cache-tiering
 .. _Set Pool Values: ../rados/operations/pools#set-pool-values
-.. _Kerberos: http://en.wikipedia.org/wiki/Kerberos_(protocol)
+.. _Kerberos: https://en.wikipedia.org/wiki/Kerberos_(protocol)
 .. _Cephx Config Guide: ../rados/configuration/auth-config-ref
 .. _User Management: ../rados/operations/user-management

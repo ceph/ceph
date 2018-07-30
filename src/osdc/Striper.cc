@@ -185,7 +185,7 @@ void Striper::extent_to_file(CephContext *cct, file_layout_t *layout,
     uint64_t stripeno = off / su + objectsetno * stripes_per_object;
     uint64_t blockno = stripeno * stripe_count + stripepos;
     uint64_t extent_off = blockno * su + off_in_block;
-    uint64_t extent_len = MIN(len, su - off_in_block);
+    uint64_t extent_len = std::min(len, su - off_in_block);
     extents.push_back(make_pair(extent_off, extent_len));
 
     ldout(cct, 20) << " object " << off << "~" << extent_len
@@ -267,7 +267,7 @@ void Striper::StripedReadResult::add_partial_result(
        p != buffer_extents.end();
        ++p) {
     pair<bufferlist, uint64_t>& r = partial[p->first];
-    size_t actual = MIN(bl.length(), p->second);
+    size_t actual = std::min<uint64_t>(bl.length(), p->second);
     bl.splice(0, actual, &r.first);
     r.second = p->second;
     total_intended_len += r.second;
@@ -287,7 +287,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
        p != buffer_extents.end();
        ++p) {
     uint64_t tofs = p->first;
-    uint64_t tlen = p->second;
+    size_t tlen = p->second;
     ldout(cct, 30) << " be " << tofs << "~" << tlen << dendl;
     while (tlen > 0) {
       ldout(cct, 20) << "  t " << tofs << "~" << tlen
@@ -314,7 +314,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
       if (s->first > bl_off) {
 	// gap in sparse read result
 	pair<bufferlist, uint64_t>& r = partial[tofs];
-	size_t gap = MIN(s->first - bl_off, tlen);
+	size_t gap = std::min<size_t>(s->first - bl_off, tlen);
 	ldout(cct, 20) << "  s gap " << gap << ", skipping" << dendl;
 	r.second = gap;
 	total_intended_len += r.second;
@@ -328,7 +328,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
 
       assert(s->first <= bl_off);
       size_t left = (s->first + s->second) - bl_off;
-      size_t actual = MIN(left, tlen);
+      size_t actual = std::min(left, tlen);
 
       if (actual > 0) {
 	ldout(cct, 20) << "  s has " << actual << ", copying" << dendl;
@@ -354,36 +354,21 @@ void Striper::StripedReadResult::assemble_result(CephContext *cct,
 {
   ldout(cct, 10) << "assemble_result(" << this << ") zero_tail=" << zero_tail
 		 << dendl;
-
-  // go backwards, so that we can efficiently discard zeros
-  map<uint64_t,pair<bufferlist,uint64_t> >::reverse_iterator p
-    = partial.rbegin();
-  if (p == partial.rend())
-    return;
-
-  uint64_t end = p->first + p->second.second;
-  while (p != partial.rend()) {
-    // sanity check
-    ldout(cct, 20) << "assemble_result(" << this << ") " << p->first << "~"
-		   << p->second.second << " " << p->second.first.length()
-		   << " bytes" << dendl;
-    assert(p->first == end - p->second.second);
-    end = p->first;
-
-    size_t len = p->second.first.length();
-    if (len < p->second.second) {
-      if (zero_tail || bl.length()) {
-        bufferptr bp(p->second.second - len);
-        bp.zero();
-        bl.push_front(std::move(bp));
-	bl.claim_prepend(p->second.first);
-      } else {
-	bl.claim_prepend(p->second.first);
+  size_t zeros = 0;  // zeros preceding current position
+  for (auto& p : partial) {
+    size_t got = p.second.first.length();
+    size_t expect = p.second.second;
+    if (got) {
+      if (zeros) {
+	bl.append_zero(zeros);
+	zeros = 0;
       }
-    } else {
-      bl.claim_prepend(p->second.first);
+      bl.claim_append(p.second.first);
     }
-    ++p;
+    zeros += expect - got;
+  }
+  if (zero_tail && zeros) {
+    bl.append_zero(zeros);
   }
   partial.clear();
 }

@@ -1388,27 +1388,6 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(dirty_big_info);
   }
 
-  // If our log is empty, the incoming log needs to have not been trimmed.
-  {
-    clear();
-
-    pg_log_t olog;
-    pg_info_t oinfo;
-    pg_shard_t fromosd;
-    pg_info_t info;
-    list<hobject_t> remove_snap;
-    bool dirty_info = false;
-    bool dirty_big_info = false;
-
-    // olog has been trimmed
-    olog.tail = eversion_t(1, 1);
-
-    TestHandler h(remove_snap);
-    PrCtl unset_dumpable;
-    ASSERT_DEATH(merge_log(oinfo, olog, fromosd, info, &h,
-			   dirty_info, dirty_big_info), "");
-  }
-
 }
 
 TEST_F(PGLogTest, proc_replica_log) {
@@ -2294,7 +2273,7 @@ TEST_F(PGLogTest, split_into_preserves_may_include_deletes) {
   {
     rebuilt_missing_with_deletes = false;
     missing.may_include_deletes = true;
-    PGLog child_log(cct, prefix_provider);
+    PGLog child_log(cct);
     pg_t child_pg;
     split_into(child_pg, 6, &child_log);
     ASSERT_TRUE(child_log.get_missing().may_include_deletes);
@@ -2304,7 +2283,7 @@ TEST_F(PGLogTest, split_into_preserves_may_include_deletes) {
   {
     rebuilt_missing_with_deletes = false;
     missing.may_include_deletes = false;
-    PGLog child_log(cct, prefix_provider);
+    PGLog child_log(cct);
     pg_t child_pg;
     split_into(child_pg, 6, &child_log);
     ASSERT_FALSE(child_log.get_missing().may_include_deletes);
@@ -2317,22 +2296,22 @@ public:
   PGLogTestRebuildMissing() : PGLogTest(), StoreTestFixture("memstore") {}
   void SetUp() override {
     StoreTestFixture::SetUp();
-    ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     test_coll = coll_t(spg_t(pg_t(1, 1)));
+    ch = store->create_new_collection(test_coll);
     t.create_collection(test_coll, 0);
-    store->apply_transaction(&osr, std::move(t));
+    store->queue_transaction(ch, std::move(t));
     existing_oid = mk_obj(0);
     nonexistent_oid = mk_obj(1);
     ghobject_t existing_ghobj(existing_oid);
     object_info_t existing_info;
     existing_info.version = eversion_t(6, 2);
     bufferlist enc_oi;
-    ::encode(existing_info, enc_oi, 0);
+    encode(existing_info, enc_oi, 0);
     ObjectStore::Transaction t2;
     t2.touch(test_coll, ghobject_t(existing_oid));
     t2.setattr(test_coll, ghobject_t(existing_oid), OI_ATTR, enc_oi);
-    ASSERT_EQ(0u, store->apply_transaction(&osr, std::move(t2)));
+    ASSERT_EQ(0u, store->queue_transaction(ch, std::move(t2)));
     info.last_backfill = hobject_t::get_max();
     info.last_complete = eversion_t();
   }
@@ -2348,7 +2327,7 @@ public:
   hobject_t existing_oid, nonexistent_oid;
 
   void run_rebuild_missing_test(const map<hobject_t, pg_missing_item> &expected_missing_items) {
-    rebuild_missing_set_with_deletes(store.get(), test_coll, info);
+    rebuild_missing_set_with_deletes(store.get(), ch, info);
     ASSERT_EQ(expected_missing_items, missing.get_items());
   }
 };
@@ -2400,11 +2379,11 @@ public:
 
   void SetUp() override {
     StoreTestFixture::SetUp();
-    ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     test_coll = coll_t(spg_t(pg_t(1, 1)));
+    auto ch = store->create_new_collection(test_coll);
     t.create_collection(test_coll, 0);
-    store->apply_transaction(&osr, std::move(t));
+    store->queue_transaction(ch, std::move(t));
   }
 
   void TearDown() override {
@@ -2446,13 +2425,13 @@ public:
 
   void add_dups(uint a, uint b) {
     log.dups.push_back(create_dup_entry(a, b));
-    write_from_dups = MIN(write_from_dups, log.dups.back().version);
+    write_from_dups = std::min(write_from_dups, log.dups.back().version);
   }
 
   void add_dups(const std::vector<pg_log_dup_t>& l) {
     for (auto& i : l) {
       log.dups.push_back(i);
-      write_from_dups = MIN(write_from_dups, log.dups.back().version);
+      write_from_dups = std::min(write_from_dups, log.dups.back().version);
     }
   }
 
@@ -2479,7 +2458,6 @@ public:
   }
 
   void test_disk_roundtrip() {
-    ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     hobject_t hoid;
     hoid.pool = 1;
@@ -2490,12 +2468,13 @@ public:
     if (!km.empty()) {
       t.omap_setkeys(test_coll, log_oid, km);
     }
-    ASSERT_EQ(0u, store->apply_transaction(&osr, std::move(t)));
+    auto ch = store->open_collection(test_coll);
+    ASSERT_EQ(0u, store->queue_transaction(ch, std::move(t)));
 
     auto orig_dups = log.dups;
     clear();
     ostringstream err;
-    read_log_and_missing(store.get(), test_coll, test_coll, log_oid,
+    read_log_and_missing(store.get(), ch, log_oid,
 			 pg_info_t(), err, false);
     ASSERT_EQ(orig_dups.size(), log.dups.size());
     ASSERT_EQ(orig_dups, log.dups);
@@ -2712,9 +2691,9 @@ struct PGLogTrimTest :
     snprintf(max_entries_s, size, "%u", max_entries);
     snprintf(dup_track_s, size, "%u", dup_track);
 
-    cct->_conf->set_val_or_die("osd_min_pg_log_entries", min_entries_s);
-    cct->_conf->set_val_or_die("osd_max_pg_log_entries", max_entries_s);
-    cct->_conf->set_val_or_die("osd_pg_log_dups_tracked", dup_track_s);
+    cct->_conf.set_val_or_die("osd_min_pg_log_entries", min_entries_s);
+    cct->_conf.set_val_or_die("osd_max_pg_log_entries", max_entries_s);
+    cct->_conf.set_val_or_die("osd_pg_log_dups_tracked", dup_track_s);
   }
 }; // struct PGLogTrimTest
 

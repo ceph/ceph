@@ -13,6 +13,7 @@
 class Context;
 class ContextWQ;
 namespace librbd { class ImageCtx; }
+namespace librbd { class ImageOptions; }
 
 namespace rbd {
 namespace mirror {
@@ -101,7 +102,6 @@ private:
   bufferlist m_out_bl;
   std::string m_parent_global_image_id;
   std::string m_parent_pool_name;
-  std::string m_parent_snap_name;
   int m_ret_val = 0;
 
   void create_image();
@@ -135,6 +135,8 @@ private:
   void finish(int r);
 
   int validate_parent();
+
+  void populate_image_options(librbd::ImageOptions* image_options);
 
 };
 

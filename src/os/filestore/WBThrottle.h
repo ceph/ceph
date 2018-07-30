@@ -17,7 +17,6 @@
 
 #include "include/unordered_map.h"
 #include <boost/tuple/tuple.hpp>
-#include "include/memory.h"
 #include "common/Formatter.h"
 #include "common/hobject.h"
 #include "include/interval_set.h"
@@ -178,7 +177,7 @@ public:
 
   /// md_config_obs_t
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
 			  const std::set<std::string> &changed) override;
 
   /// Thread

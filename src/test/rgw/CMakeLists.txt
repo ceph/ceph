@@ -1,23 +1,23 @@
 #unittest_rgw_bencode
 add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
-add_ceph_unittest(unittest_rgw_bencode ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_bencode)
+add_ceph_unittest(unittest_rgw_bencode)
 target_link_libraries(unittest_rgw_bencode rgw_a)
 
 #unitttest_rgw_period_history
 add_executable(unittest_rgw_period_history test_rgw_period_history.cc)
-add_ceph_unittest(unittest_rgw_period_history ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_period_history)
+add_ceph_unittest(unittest_rgw_period_history)
 target_link_libraries(unittest_rgw_period_history rgw_a)
 
 # unitttest_rgw_compression
 add_executable(unittest_rgw_compression
   test_rgw_compression.cc
   $<TARGET_OBJECTS:unit-main>)
-add_ceph_unittest(unittest_rgw_compression ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_compression)
+add_ceph_unittest(unittest_rgw_compression)
 target_link_libraries(unittest_rgw_compression rgw_a)
 
 # unitttest_http_manager
 add_executable(unittest_http_manager test_http_manager.cc)
-add_ceph_unittest(unittest_http_manager ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_http_manager)
+add_ceph_unittest(unittest_http_manager)
 target_link_libraries(unittest_http_manager rgw_a)
 
 set(test_rgw_a_src
@@ -39,7 +39,6 @@ target_link_libraries(ceph_test_rgw_manifest
   cls_statelog_client
   cls_timeindex_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global
@@ -67,7 +66,6 @@ target_link_libraries(ceph_test_rgw_obj
   cls_log_client
   cls_statelog_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global
@@ -85,7 +83,7 @@ set(test_rgw_crypto_srcs test_rgw_crypto.cc)
 add_executable(unittest_rgw_crypto
   ${test_rgw_crypto_srcs}
   )
-add_ceph_unittest(unittest_rgw_crypto ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_crypto)
+add_ceph_unittest(unittest_rgw_crypto)
 
 target_link_libraries(unittest_rgw_crypto
   rgw_a
@@ -95,7 +93,6 @@ target_link_libraries(unittest_rgw_crypto
   cls_log_client
   cls_statelog_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global
@@ -109,7 +106,7 @@ set_target_properties(unittest_rgw_crypto PROPERTIES COMPILE_FLAGS$ {UNITTEST_CX
 
 # ceph_test_rgw_iam_policy
 add_executable(unittest_rgw_iam_policy test_rgw_iam_policy.cc)
-add_ceph_unittest(unittest_rgw_iam_policy ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_iam_policy)
+add_ceph_unittest(unittest_rgw_iam_policy)
 target_link_libraries(unittest_rgw_iam_policy
   rgw_a
   cls_rgw_client
@@ -118,7 +115,6 @@ target_link_libraries(unittest_rgw_iam_policy
   cls_log_client
   cls_statelog_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global
@@ -132,4 +128,4 @@ set_target_properties(unittest_rgw_iam_policy PROPERTIES COMPILE_FLAGS ${UNITTES
 
 # unitttest_rgw_string
 add_executable(unittest_rgw_string test_rgw_string.cc)
-add_ceph_unittest(unittest_rgw_string ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_string)
+add_ceph_unittest(unittest_rgw_string)

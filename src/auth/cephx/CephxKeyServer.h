@@ -40,33 +40,37 @@ struct KeyServerData {
 
   void encode(bufferlist& bl) const {
      __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(version, bl);
-    ::encode(rotating_ver, bl);
-    ::encode(secrets, bl);
-    ::encode(rotating_secrets, bl);
+    using ceph::encode;
+    encode(struct_v, bl);
+    encode(version, bl);
+    encode(rotating_ver, bl);
+    encode(secrets, bl);
+    encode(rotating_secrets, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
+    using ceph::decode;
     __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(version, bl);
-    ::decode(rotating_ver, bl);
-    ::decode(secrets, bl);
-    ::decode(rotating_secrets, bl);
+    decode(struct_v, bl);
+    decode(version, bl);
+    decode(rotating_ver, bl);
+    decode(secrets, bl);
+    decode(rotating_secrets, bl);
   }
 
   void encode_rotating(bufferlist& bl) const {
+    using ceph::encode;
      __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(rotating_ver, bl);
-    ::encode(rotating_secrets, bl);
+    encode(struct_v, bl);
+    encode(rotating_ver, bl);
+    encode(rotating_secrets, bl);
   }
   void decode_rotating(bufferlist& rotating_bl) {
-    bufferlist::iterator iter = rotating_bl.begin();
+    using ceph::decode;
+    auto iter = rotating_bl.cbegin();
     __u8 struct_v;
-    ::decode(struct_v, iter);
-    ::decode(rotating_ver, iter);
-    ::decode(rotating_secrets, iter);
+    decode(struct_v, iter);
+    decode(rotating_ver, iter);
+    decode(rotating_secrets, iter);
   }
 
   bool contains(const EntityName& name) const {
@@ -128,29 +132,31 @@ struct KeyServerData {
     EntityAuth auth;
     
     void encode(bufferlist& bl) const {
+      using ceph::encode;
       __u8 struct_v = 1;
-      ::encode(struct_v, bl);
+      encode(struct_v, bl);
      __u32 _op = (__u32)op;
-      ::encode(_op, bl);
+      encode(_op, bl);
       if (op == AUTH_INC_SET_ROTATING) {
-	::encode(rotating_bl, bl);
+	encode(rotating_bl, bl);
       } else {
-	::encode(name, bl);
-	::encode(auth, bl);
+	encode(name, bl);
+	encode(auth, bl);
       }
     }
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
+      using ceph::decode;
       __u8 struct_v;
-      ::decode(struct_v, bl);
+      decode(struct_v, bl);
       __u32 _op;
-      ::decode(_op, bl);
+      decode(_op, bl);
       op = (IncrementalOp)_op;
       assert(op >= AUTH_INC_NOP && op <= AUTH_INC_SET_ROTATING);
       if (op == AUTH_INC_SET_ROTATING) {
-	::decode(rotating_bl, bl);
+	decode(rotating_bl, bl);
       } else {
-	::decode(name, bl);
-	::decode(auth, bl);
+	decode(name, bl);
+	decode(auth, bl);
       }
     }
   };
@@ -222,11 +228,13 @@ public:
   bool generate_secret(EntityName& name, CryptoKey& secret);
 
   void encode(bufferlist& bl) const {
-    ::encode(data, bl);
+    using ceph::encode;
+    encode(data, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     Mutex::Locker l(lock);
-    ::decode(data, bl);
+    using ceph::decode;
+    decode(data, bl);
   }
   bool contains(const EntityName& name) const;
   int encode_secrets(Formatter *f, stringstream *ds) const;

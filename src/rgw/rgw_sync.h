@@ -1,15 +1,18 @@
 #ifndef CEPH_RGW_SYNC_H
 #define CEPH_RGW_SYNC_H
 
-#include "rgw_coroutine.h"
-#include "rgw_http_client.h"
-#include "rgw_meta_sync_status.h"
-#include "rgw_sync_trace.h"
+#include <atomic>
 
 #include "include/stringify.h"
 #include "common/RWLock.h"
 
-#include <atomic>
+#include "rgw_coroutine.h"
+#include "rgw_http_client.h"
+#include "rgw_metadata.h"
+#include "rgw_meta_sync_status.h"
+#include "rgw_rados.h"
+#include "rgw_sync_trace.h"
+
 
 #define ERROR_LOGGER_SHARDS 32
 #define RGW_SYNC_ERROR_LOG_SHARD_PREFIX "sync.error-log"
@@ -40,8 +43,8 @@ struct rgw_mdlog_entry {
     name = le.name;
     timestamp = le.timestamp.to_real_time();
     try {
-      bufferlist::iterator iter = le.data.begin();
-      ::decode(log_data, iter);
+      auto iter = le.data.cbegin();
+      decode(log_data, iter);
     } catch (buffer::error& err) {
       return false;
     }
@@ -87,17 +90,17 @@ struct rgw_sync_error_info {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(source_zone, bl);
-    ::encode(error_code, bl);
-    ::encode(message, bl);
+    encode(source_zone, bl);
+    encode(error_code, bl);
+    encode(message, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(source_zone, bl);
-    ::decode(error_code, bl);
-    ::decode(message, bl);
+    decode(source_zone, bl);
+    decode(error_code, bl);
+    decode(message, bl);
     DECODE_FINISH(bl);
   }
 
@@ -113,7 +116,7 @@ class RGWSyncBackoff {
 
   void update_wait_time();
 public:
-  RGWSyncBackoff(int _max_secs = DEFAULT_BACKOFF_MAX) : cur_wait(0), max_secs(_max_secs) {}
+  explicit RGWSyncBackoff(int _max_secs = DEFAULT_BACKOFF_MAX) : cur_wait(0), max_secs(_max_secs) {}
 
   void backoff_sleep();
   void reset() {
@@ -286,6 +289,36 @@ public:
   }
 };
 
+class RGWOrderCallCR : public RGWCoroutine
+{
+public:
+  RGWOrderCallCR(CephContext *cct) : RGWCoroutine(cct) {}
+
+  virtual void call_cr(RGWCoroutine *_cr) = 0;
+};
+
+class RGWLastCallerWinsCR : public RGWOrderCallCR
+{
+  RGWCoroutine *cr{nullptr};
+
+public:
+  explicit RGWLastCallerWinsCR(CephContext *cct) : RGWOrderCallCR(cct) {}
+  ~RGWLastCallerWinsCR() {
+    if (cr) {
+      cr->put();
+    }
+  }
+
+  int operate() override;
+
+  void call_cr(RGWCoroutine *_cr) override {
+    if (cr) {
+      cr->put();
+    }
+    cr = _cr;
+  }
+};
+
 template <class T, class K>
 class RGWSyncShardMarkerTrack {
   struct marker_entry {
@@ -302,16 +335,22 @@ class RGWSyncShardMarkerTrack {
   int window_size;
   int updates_since_flush;
 
+  RGWOrderCallCR *order_cr{nullptr};
 
 protected:
   typename std::set<K> need_retry_set;
 
   virtual RGWCoroutine *store_marker(const T& new_marker, uint64_t index_pos, const real_time& timestamp) = 0;
+  virtual RGWOrderCallCR *allocate_order_control_cr() = 0;
   virtual void handle_finish(const T& marker) { }
 
 public:
   RGWSyncShardMarkerTrack(int _window_size) : window_size(_window_size), updates_since_flush(0) {}
-  virtual ~RGWSyncShardMarkerTrack() {}
+  virtual ~RGWSyncShardMarkerTrack() {
+    if (order_cr) {
+      order_cr->put();
+    }
+  }
 
   bool start(const T& pos, int index_pos, const real_time& timestamp) {
     if (pending.find(pos) != pending.end()) {
@@ -378,7 +417,7 @@ public:
     --i;
     const T& high_marker = i->first;
     marker_entry& high_entry = i->second;
-    RGWCoroutine *cr = store_marker(high_marker, high_entry.pos, high_entry.timestamp);
+    RGWCoroutine *cr = order(store_marker(high_marker, high_entry.pos, high_entry.timestamp));
     finish_markers.erase(finish_markers.begin(), last);
     return cr;
   }
@@ -400,6 +439,24 @@ public:
 
   void reset_need_retry(const K& key) {
     need_retry_set.erase(key);
+  }
+
+  RGWCoroutine *order(RGWCoroutine *cr) {
+    /* either returns a new RGWLastWriteWinsCR, or update existing one, in which case it returns
+     * nothing and the existing one will call the cr
+     */
+    if (order_cr && order_cr->is_done()) {
+      order_cr->put();
+      order_cr = nullptr;
+    }
+    if (!order_cr) {
+      order_cr = allocate_order_control_cr();
+      order_cr->get();
+      order_cr->call_cr(cr);
+      return order_cr;
+    }
+    order_cr->call_cr(cr);
+    return nullptr; /* don't call it a second time */
   }
 };
 

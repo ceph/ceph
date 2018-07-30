@@ -45,11 +45,18 @@ public:
     return !((*this) == rhs);
   }
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bp);
+  void decode(bufferlist::const_iterator &bp);
 };
 WRITE_CLASS_ENCODER(ContDesc)
 
 std::ostream &operator<<(std::ostream &out, const ContDesc &rhs);
+
+class ChunkDesc {
+public:
+  uint32_t offset;
+  uint32_t length;
+  std::string oid;
+};
 
 class ContentsGenerator {
 public:
@@ -307,7 +314,7 @@ public:
   ObjectDesc(const ContDesc &init, ContentsGenerator *cont_gen)
     : exists(false), dirty(false),
       version(0) {
-    layers.push_front(std::pair<ceph::shared_ptr<ContentsGenerator>, ContDesc>(ceph::shared_ptr<ContentsGenerator>(cont_gen), init));
+    layers.push_front(std::pair<std::shared_ptr<ContentsGenerator>, ContDesc>(std::shared_ptr<ContentsGenerator>(cont_gen), init));
   }
 
   class iterator {
@@ -322,12 +329,12 @@ public:
 
     public:
       ContDesc cont;
-      ceph::shared_ptr<ContentsGenerator> gen;
+      std::shared_ptr<ContentsGenerator> gen;
       ContentsGenerator::iterator iter;
 
       ContState(
-	ContDesc _cont,
-	ceph::shared_ptr<ContentsGenerator> _gen,
+	const ContDesc &_cont,
+	std::shared_ptr<ContentsGenerator> _gen,
 	ContentsGenerator::iterator _iter)
 	: size(_gen->get_length(_cont)), cont(_cont), gen(_gen), iter(_iter) {
 	gen->get_ranges(cont, ranges);
@@ -507,8 +514,9 @@ public:
 
   uint64_t version;
   std::string redirect_target;
+  std::map<uint64_t, ChunkDesc> chunk_info;
 private:
-  std::list<std::pair<ceph::shared_ptr<ContentsGenerator>, ContDesc> > layers;
+  std::list<std::pair<std::shared_ptr<ContentsGenerator>, ContDesc> > layers;
 };
 
 #endif

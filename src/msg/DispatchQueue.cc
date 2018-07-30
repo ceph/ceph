@@ -26,7 +26,7 @@
  */
 
 #undef dout_prefix
-#define dout_prefix *_dout << "-- " << msgr->get_myaddr() << " "
+#define dout_prefix *_dout << "-- " << msgr->get_myaddrs() << " "
 
 double DispatchQueue::get_max_age(utime_t now) const {
   Mutex::Locker l(lock);
@@ -81,6 +81,10 @@ void DispatchQueue::enqueue(Message *m, int priority, uint64_t id)
 {
 
   Mutex::Locker l(lock);
+  if (stop) {
+    m->put();
+    return;
+  }
   ldout(cct,20) << "queue " << m << " prio " << priority << dendl;
   add_arrival(m);
   if (priority >= CEPH_MSG_PRIO_LOW) {

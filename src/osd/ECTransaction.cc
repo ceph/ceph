@@ -14,7 +14,6 @@
 
 #include <iostream>
 #include <vector>
-#include <vector>
 #include <sstream>
 
 #include "ECTransaction.h"
@@ -117,10 +116,6 @@ void ECTransaction::generate_transactions(
 
   auto &hash_infos = plan.hash_infos;
 
-  assert(transactions);
-  assert(temp_added);
-  assert(temp_removed);
-
   map<hobject_t, pg_log_entry_t*> obj_to_log;
   for (auto &&i: entries) {
     obj_to_log.insert(make_pair(i.soid, &i));
@@ -166,7 +161,7 @@ void ECTransaction::generate_transactions(
 	  entry->is_modify() &&
 	  op.updated_snaps) {
 	bufferlist bl(op.updated_snaps->second.size() * 8 + 8);
-	::encode(op.updated_snaps->second, bl);
+	encode(op.updated_snaps->second, bl);
 	entry->snaps.swap(bl);
 	entry->snaps.reassign_to_mempool(mempool::mempool_osd_pglog);
       }
@@ -192,7 +187,7 @@ void ECTransaction::generate_transactions(
       map<string, boost::optional<bufferlist> > xattr_rollback;
       assert(hinfo);
       bufferlist old_hinfo;
-      ::encode(*hinfo, old_hinfo);
+      encode(*hinfo, old_hinfo);
       xattr_rollback[ECUtil::get_hinfo_key()] = old_hinfo;
       
       if (op.is_none() && op.truncate && op.truncate->first == 0) {
@@ -644,7 +639,7 @@ void ECTransaction::generate_transactions(
 
       if (!op.is_delete()) {
 	bufferlist hbuf;
-	::encode(*hinfo, hbuf);
+	encode(*hinfo, hbuf);
 	for (auto &&i : *transactions) {
 	  i.second.setattr(
 	    coll_t(spg_t(pgid, i.first)),

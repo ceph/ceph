@@ -18,7 +18,7 @@ set(libos_srcs
   kstore/kstore_types.cc
   fs/FS.cc)
 
-if(HAVE_LIBAIO)
+if(WITH_BLUESTORE)
   list(APPEND libos_srcs
     bluestore/Allocator.cc
     bluestore/BitmapFreelistManager.cc
@@ -28,14 +28,18 @@ if(HAVE_LIBAIO)
     bluestore/BlueRocksEnv.cc
     bluestore/BlueStore.cc
     bluestore/bluestore_types.cc
+    bluestore/fastbmap_allocator_impl.cc
     bluestore/FreelistManager.cc
-    bluestore/KernelDevice.cc
     bluestore/StupidAllocator.cc
-    bluestore/BitMapAllocator.cc
-    bluestore/BitAllocator.cc
-    bluestore/aio.cc
+    bluestore/BitmapAllocator.cc
   )
-endif(HAVE_LIBAIO)
+endif(WITH_BLUESTORE)
+
+if(HAVE_LIBAIO)
+  list(APPEND libos_srcs
+    bluestore/KernelDevice.cc
+    bluestore/aio.cc)
+endif()
 
 if(WITH_FUSE)
   list(APPEND libos_srcs
@@ -57,7 +61,7 @@ if(HAVE_LIBZFS)
   add_library(os_zfs_objs OBJECT
     filestore/ZFSFileStoreBackend.cc
     fs/ZFS.cc)
-  target_include_directories(os_zfs_objs PRIVATE
+  target_include_directories(os_zfs_objs SYSTEM PRIVATE
     ${ZFS_INCLUDE_DIRS})
   list(APPEND libos_srcs $<TARGET_OBJECTS:os_zfs_objs>)
 endif()
@@ -72,7 +76,7 @@ add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
 if(WITH_BLUEFS)
   add_library(bluefs SHARED 
     bluestore/BlueRocksEnv.cc)
-  target_include_directories(bluefs PUBLIC ${ROCKSDB_INCLUDE_DIR})
+  target_include_directories(bluefs SYSTEM PUBLIC ${ROCKSDB_INCLUDE_DIR})
   target_link_libraries(bluefs global)
   install(TARGETS bluefs DESTINATION lib)
 endif(WITH_BLUEFS)
@@ -82,11 +86,8 @@ if(HAVE_LIBAIO)
 endif(HAVE_LIBAIO)
 
 if(WITH_FUSE)
+  target_include_directories(os SYSTEM PRIVATE ${FUSE_INCLUDE_DIRS})
   target_link_libraries(os ${FUSE_LIBRARIES})
-endif()
-
-if(WITH_PMEM)
-  target_link_libraries(os ${PMEM_LIBRARY})
 endif()
 
 if(HAVE_LIBZFS)
@@ -95,12 +96,8 @@ endif()
 
 if(WITH_SPDK)
   target_link_libraries(os
-    ${SPDK_LIBRARIES}
-    ${DPDK_LIBRARIES})
-  target_include_directories(os
-    PRIVATE
-    ${DPDK_INCLUDE_DIR})
-endif(WITH_SPDK)
+    ${SPDK_LIBRARIES})
+endif()
 
 if(WITH_LTTNG)
   add_dependencies(os objectstore-tp)
@@ -112,7 +109,7 @@ add_dependencies(os compressor_plugins)
 add_dependencies(os crypto_plugins)
 
 
-if(HAVE_LIBAIO)
+if(WITH_BLUESTORE)
   add_executable(ceph-bluestore-tool
     bluestore/bluestore_tool.cc)
   target_link_libraries(ceph-bluestore-tool
@@ -121,25 +118,31 @@ if(HAVE_LIBAIO)
     DESTINATION bin)
 endif()
 
-if(WITH_SPDK)
-  include_directories("${CMAKE_SOURCE_DIR}/src/spdk/include")
-  add_custom_target(build_spdk
-    COMMAND
-    $(MAKE) DPDK_INC_DIR=${DPDK_INCLUDE_DIR}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk/lib
-    COMMENT "spdk building")
-  # TODO: should use add_library(spdk INTERFACE IMPORTED) instead in new cmake,
-  # if INTERFACE is supported.
-  foreach(lib nvme log env_dpdk util)
-    add_library(spdk_${lib} STATIC IMPORTED)
-    add_dependencies(spdk_${lib} build_spdk)
-    target_link_libraries(os LINK_PRIVATE spdk_${lib})
-    set_target_properties(spdk_${lib} PROPERTIES
-      IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/spdk/build/lib/libspdk_${lib}.a"
-      INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/src/spdk/include")
-    list(APPEND SPDK_LIBRARIES spdk_${lib})
-  endforeach()
-endif(WITH_SPDK)
+if(WITH_PMEM)
+  include(ExternalProject)
+  ExternalProject_Add(nvml_ext
+    DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/src/
+    GIT_REPOSITORY "https://github.com/ceph/nvml.git"
+    GIT_TAG "dd622819dd4ee97d3920f913c70be"
+    SOURCE_DIR ${CMAKE_BINARY_DIR}/src/nvml
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND $(MAKE)
+    BUILD_IN_SOURCE 1
+    INSTALL_COMMAND "true")
+
+  ExternalProject_Add_Step(nvml_ext forcebuild
+    DEPENDEES configure
+    DEPENDERS build
+    COMMAND "true"
+    ALWAYS 1)
+  add_library(pmem STATIC IMPORTED GLOBAL)
+  add_dependencies(pmem nvml_ext)
+  set_target_properties(pmem PROPERTIES
+    IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/src/nvml/src/nondebug/libpmem.a"
+    INTERFACE_LINK_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
+  target_link_libraries(os pmem)
+  target_include_directories(os SYSTEM PRIVATE "${CMAKE_BINARY_DIR}/src/nvml/src/include")
+endif(WITH_PMEM)
 
 if(WITH_LTTNG AND WITH_EVENTTRACE)
   add_dependencies(os eventtrace_tp)

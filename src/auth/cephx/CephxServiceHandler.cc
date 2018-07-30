@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <sstream>
 
+#include "include/random.h"
 #include "common/config.h"
 #include "common/debug.h"
 
@@ -26,27 +27,27 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx server " << entity_name << ": "
 
-int CephxServiceHandler::start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps)
+int CephxServiceHandler::start_session(EntityName& name, bufferlist::const_iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps)
 {
   entity_name = name;
 
-  get_random_bytes((char *)&server_challenge, sizeof(server_challenge));
-  if (!server_challenge)
-    server_challenge = 1;  // always non-zero.
+  uint64_t min = 1; // always non-zero
+  uint64_t max = std::numeric_limits<uint64_t>::max();
+  server_challenge = ceph::util::generate_random_number<uint64_t>(min, max);
   ldout(cct, 10) << "start_session server_challenge " << hex << server_challenge << dec << dendl;
 
   CephXServerChallenge ch;
   ch.server_challenge = server_challenge;
-  ::encode(ch, result_bl);
+  encode(ch, result_bl);
   return CEPH_AUTH_CEPHX;
 }
 
-int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, uint64_t *auid)
+int CephxServiceHandler::handle_request(bufferlist::const_iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, uint64_t *auid)
 {
   int ret = 0;
 
   struct CephXRequestHeader cephx_header;
-  ::decode(cephx_header, indata);
+  decode(cephx_header, indata);
 
 
   switch (cephx_header.request_type) {
@@ -55,7 +56,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       ldout(cct, 10) << "handle_request get_auth_session_key for " << entity_name << dendl;
 
       CephXAuthenticate req;
-      ::decode(req, indata);
+      decode(req, indata);
 
       CryptoKey secret;
       if (!key_server->get_secret(entity_name, secret)) {
@@ -152,13 +153,15 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 
       bufferlist tmp_bl;
       CephXServiceTicketInfo auth_ticket_info;
-      if (!cephx_verify_authorizer(cct, key_server, indata, auth_ticket_info, tmp_bl)) {
+      // note: no challenge here.
+      if (!cephx_verify_authorizer(cct, key_server, indata, auth_ticket_info, nullptr,
+				   tmp_bl)) {
         ret = -EPERM;
 	break;
       }
 
       CephXServiceTicketRequest ticket_req;
-      ::decode(ticket_req, indata);
+      decode(ticket_req, indata);
       ldout(cct, 10) << " ticket_req.keys = " << ticket_req.keys << dendl;
 
       ret = 0;
@@ -218,5 +221,5 @@ void CephxServiceHandler::build_cephx_response_header(int request_type, int stat
   struct CephXResponseHeader header;
   header.request_type = request_type;
   header.status = status;
-  ::encode(header, bl);
+  encode(header, bl);
 }

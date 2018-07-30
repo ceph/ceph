@@ -75,18 +75,19 @@ public:
   }
 
   void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(pgid, p);
-    ::decode(map_epoch, p);
-    ::decode(type, p);
-    ::decode(from, p);
+    auto p = payload.cbegin();
+    decode(pgid, p);
+    decode(map_epoch, p);
+    decode(type, p);
+    decode(from, p);
   }
 
   void encode_payload(uint64_t features) {
-    ::encode(pgid, payload);
-    ::encode(map_epoch, payload);
-    ::encode(type, payload);
-    ::encode(from, payload);
+    using ceph::encode;
+    encode(pgid, payload);
+    encode(map_epoch, payload);
+    encode(type, payload);
+    encode(from, payload);
   }
 };
 

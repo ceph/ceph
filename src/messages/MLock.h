@@ -73,21 +73,23 @@ public:
   }
   
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(asker, p);
-    ::decode(action, p);
-    ::decode(reqid, p);
-    ::decode(lock_type, p);
-    ::decode(object_info, p);
-    ::decode(lockdata, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(asker, p);
+    decode(action, p);
+    decode(reqid, p);
+    decode(lock_type, p);
+    decode(object_info, p);
+    decode(lockdata, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(asker, payload);
-    ::encode(action, payload);
-    ::encode(reqid, payload);
-    ::encode(lock_type, payload);
-    ::encode(object_info, payload);
-    ::encode(lockdata, payload);
+    using ceph::encode;
+    encode(asker, payload);
+    encode(action, payload);
+    encode(reqid, payload);
+    encode(lock_type, payload);
+    encode(object_info, payload);
+    encode(lockdata, payload);
   }
 
 };

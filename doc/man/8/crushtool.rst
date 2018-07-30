@@ -245,8 +245,8 @@ the following::
     5	1					osd.5	1
     ...
 
-CRUSH rulesets are created so the generated crushmap can be
-tested. They are the same rulesets as the one created by default when
+CRUSH rules are created so the generated crushmap can be
+tested. They are the same rules as the ones created by default when
 creating a new Ceph cluster. They can be further edited with::
 
        # decompile

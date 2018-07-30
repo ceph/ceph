@@ -153,9 +153,9 @@ bool ipv4_tcp::forward(forward_hash& out_hash_data, Packet& p, size_t off)
 }
 
 int tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, const SocketOptions &opts,
-                 ServerSocket *sock)
+                 int type, ServerSocket *sock)
 {
-  auto p = new DPDKServerSocketImpl<tcp<ipv4_traits>>(tcpv4, port, opts);
+  auto p = new DPDKServerSocketImpl<tcp<ipv4_traits>>(tcpv4, port, opts, type);
   int r = p->listen();
   if (r < 0) {
     delete p;

@@ -219,6 +219,10 @@ div.warning {
     border: 1px solid #9C4850;
     color: #fff;
 }
+
+div.warning a {
+    color: black;
+}
  
 p.admonition-title {
     display: inline;

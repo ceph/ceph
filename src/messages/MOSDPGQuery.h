@@ -63,13 +63,14 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(epoch, payload);
-    ::encode(pg_list, payload, features);
+    using ceph::encode;
+    encode(epoch, payload);
+    encode(pg_list, payload, features);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(epoch, p);
-    ::decode(pg_list, p);
+    auto p = payload.cbegin();
+    decode(epoch, p);
+    decode(pg_list, p);
   }
 };
 

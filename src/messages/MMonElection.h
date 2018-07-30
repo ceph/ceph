@@ -76,6 +76,7 @@ public:
   }
   
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     if (monmap_bl.length() && (features != CEPH_FEATURES_ALL)) {
       // reencode old-format monmap
       MonMap t;
@@ -84,36 +85,36 @@ public:
       t.encode(monmap_bl, features);
     }
 
-    ::encode(fsid, payload);
-    ::encode(op, payload);
-    ::encode(epoch, payload);
-    ::encode(monmap_bl, payload);
-    ::encode(quorum, payload);
-    ::encode(quorum_features, payload);
-    ::encode((version_t)0, payload);  // defunct
-    ::encode((version_t)0, payload);  // defunct
-    ::encode(sharing_bl, payload);
-    ::encode(mon_features, payload);
-    ::encode(metadata, payload);
+    encode(fsid, payload);
+    encode(op, payload);
+    encode(epoch, payload);
+    encode(monmap_bl, payload);
+    encode(quorum, payload);
+    encode(quorum_features, payload);
+    encode((version_t)0, payload);  // defunct
+    encode((version_t)0, payload);  // defunct
+    encode(sharing_bl, payload);
+    encode(mon_features, payload);
+    encode(metadata, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(fsid, p);
-    ::decode(op, p);
-    ::decode(epoch, p);
-    ::decode(monmap_bl, p);
-    ::decode(quorum, p);
-    ::decode(quorum_features, p);
+    auto p = payload.cbegin();
+    decode(fsid, p);
+    decode(op, p);
+    decode(epoch, p);
+    decode(monmap_bl, p);
+    decode(quorum, p);
+    decode(quorum_features, p);
     {
       version_t v;  // defunct fields from old encoding
-      ::decode(v, p);
-      ::decode(v, p);
+      decode(v, p);
+      decode(v, p);
     }
-    ::decode(sharing_bl, p);
+    decode(sharing_bl, p);
     if (header.version >= 6)
-      ::decode(mon_features, p);
+      decode(mon_features, p);
     if (header.version >= 7)
-      ::decode(metadata, p);
+      decode(metadata, p);
   }
   
 };

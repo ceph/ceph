@@ -4,7 +4,6 @@
 #include <map>
 #include <string>
 #include <iostream>
-#include <include/types.h>
 
 #include "common/debug.h"
 
@@ -18,6 +17,7 @@
 #include "rgw_rados.h"
 #include "rgw_multi.h"
 #include "cls/rgw/cls_rgw_types.h"
+#include "rgw_tag.h"
 
 #include <atomic>
 
@@ -47,15 +47,15 @@ public:
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 2, bl);
-    ::encode(days, bl);
-    ::encode(date, bl);
+    encode(days, bl);
+    encode(date, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
-    ::decode(days, bl);
+    decode(days, bl);
     if (struct_v >= 3) {
-      ::decode(date, bl);
+      decode(date, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -95,38 +95,55 @@ class LCFilter
 {
  protected:
   std::string prefix;
-  // TODO add support for tagging
+  RGWObjTags obj_tags;
+
  public:
-  const std::string& get_prefix() const{
+
+  const std::string& get_prefix() const {
     return prefix;
   }
 
-  void set_prefix(const string& _prefix){
-    prefix = _prefix;
-  }
-
-  void set_prefix(std::string&& _prefix){
-    prefix = std::move(_prefix);
+  const RGWObjTags& get_tags() const {
+    return obj_tags;
   }
 
   bool empty() const {
-    return prefix.empty();
+    return !(has_prefix() || has_tags());
+  }
+
+  // Determine if we need AND tag when creating xml
+  bool has_multi_condition() const {
+    if (obj_tags.count() > 1)
+      return true;
+    else if (has_prefix() && has_tags())
+      return true;
+
+    return false;
   }
 
   bool has_prefix() const {
     return !prefix.empty();
   }
 
+  bool has_tags() const {
+    return !obj_tags.empty();
+  }
+
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(prefix, bl);
+    ENCODE_START(2, 1, bl);
+    encode(prefix, bl);
+    encode(obj_tags, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
-    ::decode(prefix, bl);
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(2, bl);
+    decode(prefix, bl);
+    if (struct_v >= 2) {
+      decode(obj_tags, bl);
+    }
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(LCFilter);
 
@@ -214,36 +231,37 @@ public:
   
   void encode(bufferlist& bl) const {
      ENCODE_START(5, 1, bl);
-     ::encode(id, bl);
-     ::encode(prefix, bl);
-     ::encode(status, bl);
-     ::encode(expiration, bl);
-     ::encode(noncur_expiration, bl);
-     ::encode(mp_expiration, bl);
-     ::encode(dm_expiration, bl);
-     ::encode(filter, bl);
+     encode(id, bl);
+     encode(prefix, bl);
+     encode(status, bl);
+     encode(expiration, bl);
+     encode(noncur_expiration, bl);
+     encode(mp_expiration, bl);
+     encode(dm_expiration, bl);
+     encode(filter, bl);
      ENCODE_FINISH(bl);
    }
-   void decode(bufferlist::iterator& bl) {
+   void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN(5, 1, 1, bl);
-     ::decode(id, bl);
-     ::decode(prefix, bl);
-     ::decode(status, bl);
-     ::decode(expiration, bl);
+     decode(id, bl);
+     decode(prefix, bl);
+     decode(status, bl);
+     decode(expiration, bl);
      if (struct_v >=2) {
-       ::decode(noncur_expiration, bl);
+       decode(noncur_expiration, bl);
      }
      if (struct_v >= 3) {
-       ::decode(mp_expiration, bl);
+       decode(mp_expiration, bl);
      }
      if (struct_v >= 4) {
-        ::decode(dm_expiration, bl);
+        decode(dm_expiration, bl);
      }
      if (struct_v >= 5) {
-       ::decode(filter, bl);
+       decode(filter, bl);
      }
      DECODE_FINISH(bl);
    }
+  void dump(Formatter *f) const;
 
 };
 WRITE_CLASS_ENCODER(LCRule)
@@ -256,9 +274,10 @@ struct lc_op
   int noncur_expiration;
   int mp_expiration;
   boost::optional<ceph::real_time> expiration_date;
-
+  boost::optional<RGWObjTags> obj_tags;
   lc_op() : status(false), dm_expiration(false), expiration(0), noncur_expiration(0), mp_expiration(0) {}
   
+  void dump(Formatter *f) const;
 };
 
 class RGWLifecycleConfiguration
@@ -270,7 +289,7 @@ protected:
   bool _add_rule(LCRule *rule);
   bool has_same_action(const lc_op& first, const lc_op& second);
 public:
-  RGWLifecycleConfiguration(CephContext *_cct) : cct(_cct) {}
+  explicit RGWLifecycleConfiguration(CephContext *_cct) : cct(_cct) {}
   RGWLifecycleConfiguration() : cct(NULL) {}
 
   void set_ctx(CephContext *ctx) {
@@ -283,12 +302,12 @@ public:
 //  int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(rule_map, bl);
+    encode(rule_map, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(rule_map, bl);
+    decode(rule_map, bl);
     multimap<string, LCRule>::iterator iter;
     for (iter = rule_map.begin(); iter != rule_map.end(); ++iter) {
       LCRule& rule = iter->second;
@@ -297,7 +316,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-//  static void generate_test_instances(list<RGWAccessControlList*>& o);
+  static void generate_test_instances(list<RGWLifecycleConfiguration*>& o);
 
   void add_rule(LCRule* rule);
 
@@ -362,8 +381,8 @@ class RGWLC {
   void stop_processor();
 
   private:
-  int remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, bool remove_indeed = true);
-  bool obj_has_expired(double timediff, int days);
+  int remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, const string& owner, const string& owner_display_name, bool remove_indeed = true);
+  bool obj_has_expired(ceph::real_time mtime, int days);
   int handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map);
 };
 

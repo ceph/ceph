@@ -19,7 +19,6 @@
  *
  */
 
-#include "include/memory.h"
 #include <limits.h>
 #include <errno.h>
 #include <sys/uio.h>
@@ -89,6 +88,7 @@ TEST(Buffer, constructors) {
     history_alloc_bytes += len;
     history_alloc_num++;
     EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
+    delete [] str;
   }
   //
   // buffer::create_static
@@ -396,10 +396,11 @@ TEST_F(TestRawPipe, buffer_list_write_fd_zero_copy) {
   EXPECT_EQ(0, bl.read_fd_zero_copy(fd, len));
   EXPECT_TRUE(bl.can_zero_copy());
   int out_fd = ::open(FILENAME, O_RDWR|O_CREAT|O_TRUNC, 0600);
+  ASSERT_NE(-1, out_fd);
   EXPECT_EQ(0, bl.write_fd_zero_copy(out_fd));
   struct stat st;
   memset(&st, 0, sizeof(st));
-  EXPECT_EQ(0, ::stat(FILENAME, &st));
+  ASSERT_EQ(0, ::stat(FILENAME, &st));
   EXPECT_EQ(len, st.st_size);
   char buf[len + 1];
   EXPECT_EQ((int)len, safe_read(out_fd, buf, len + 1));
@@ -1255,6 +1256,7 @@ TEST(BufferListIterator, copy) {
     i.seek(0);
     i.copy(3, copy);
     EXPECT_EQ(0, ::memcmp(copy, expected, 3));
+    free(copy);
   }
   //
   // void buffer::list::iterator::copy_deep(unsigned len, ptr &dest)
@@ -1814,66 +1816,6 @@ TEST(BufferList, clear) {
   EXPECT_EQ((unsigned)0, bl.get_num_buffers());
 }
 
-TEST(BufferList, push_front) {
-  //
-  // void push_front(ptr& bp)
-  //
-  {
-    bufferlist bl;
-    bufferptr ptr;
-    bl.push_front(ptr);
-    EXPECT_EQ((unsigned)0, bl.length());
-    EXPECT_EQ((unsigned)0, bl.get_num_buffers());
-  }
-  unsigned len = 17;
-  {
-    bufferlist bl;
-    bl.append('A');
-    bufferptr ptr(len);
-    ptr.c_str()[0] = 'B';
-    bl.push_front(ptr);
-    EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
-    EXPECT_EQ('B', bl.front()[0]);
-    EXPECT_EQ(ptr.get_raw(), bl.front().get_raw());
-  }
-  //
-  // void push_front(raw *r)
-  //
-  {
-    bufferlist bl;
-    bl.append('A');
-    bufferptr ptr(len);
-    ptr.c_str()[0] = 'B';
-    bl.push_front(ptr.get_raw());
-    EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
-    EXPECT_EQ('B', bl.front()[0]);
-    EXPECT_EQ(ptr.get_raw(), bl.front().get_raw());
-  }
-  //
-  // void push_front(ptr&& bp)
-  //
-  {
-    bufferlist bl;
-    bufferptr ptr;
-    bl.push_front(std::move(ptr));
-    EXPECT_EQ((unsigned)0, bl.length());
-    EXPECT_EQ((unsigned)0, bl.buffers().size());
-  }
-  {
-    bufferlist bl;
-    bl.append('A');
-    bufferptr ptr(len);
-    ptr.c_str()[0] = 'B';
-    bl.push_front(std::move(ptr));
-    EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.buffers().size());
-    EXPECT_EQ('B', bl.buffers().front()[0]);
-    EXPECT_FALSE(ptr.get_raw());
-  }
-}
-
 TEST(BufferList, push_back) {
   //
   // void push_back(ptr& bp)
@@ -2098,28 +2040,6 @@ TEST(BufferList, claim_append) {
   EXPECT_EQ((unsigned)(4 + 2), to.length());
   EXPECT_EQ((unsigned)4, to.front().length());
   EXPECT_EQ((unsigned)2, to.back().length());
-  EXPECT_EQ((unsigned)2, to.get_num_buffers());
-  EXPECT_EQ((unsigned)0, from.get_num_buffers());
-  EXPECT_EQ((unsigned)0, from.length());
-}
-
-TEST(BufferList, claim_prepend) {
-  bufferlist from;
-  {
-    bufferptr ptr(2);
-    from.append(ptr);
-  }
-  bufferlist to;
-  {
-    bufferptr ptr(4);
-    to.append(ptr);
-  }
-  EXPECT_EQ((unsigned)4, to.length());
-  EXPECT_EQ((unsigned)1, to.get_num_buffers());
-  to.claim_prepend(from);
-  EXPECT_EQ((unsigned)(2 + 4), to.length());
-  EXPECT_EQ((unsigned)2, to.front().length());
-  EXPECT_EQ((unsigned)4, to.back().length());
   EXPECT_EQ((unsigned)2, to.get_num_buffers());
   EXPECT_EQ((unsigned)0, from.get_num_buffers());
   EXPECT_EQ((unsigned)0, from.length());
@@ -2363,7 +2283,7 @@ TEST(BufferList, append_zero) {
   EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   EXPECT_EQ((unsigned)1, bl.length());
   bl.append_zero(1);
-  EXPECT_EQ((unsigned)2, bl.get_num_buffers());
+  EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   EXPECT_EQ((unsigned)2, bl.length());
   EXPECT_EQ('\0', bl[1]);
 }
@@ -2526,6 +2446,7 @@ TEST(BufferList, read_fd) {
   bufferlist bl;
   EXPECT_EQ(-EBADF, bl.read_fd(fd, len));
   fd = ::open(FILENAME, O_RDONLY);
+  ASSERT_NE(-1, fd);
   EXPECT_EQ(len, (unsigned)bl.read_fd(fd, len));
   //EXPECT_EQ(CEPH_BUFFER_APPEND_SIZE - len, bl.front().unused_tail_length());
   EXPECT_EQ(len, bl.length());
@@ -2542,7 +2463,7 @@ TEST(BufferList, write_file) {
   EXPECT_EQ(0, bl.write_file(FILENAME, mode));
   struct stat st;
   memset(&st, 0, sizeof(st));
-  ::stat(FILENAME, &st);
+  ASSERT_EQ(0, ::stat(FILENAME, &st));
   EXPECT_EQ((unsigned)(mode | S_IFREG), st.st_mode);
   ::unlink(FILENAME);
 }
@@ -2550,6 +2471,7 @@ TEST(BufferList, write_file) {
 TEST(BufferList, write_fd) {
   ::unlink(FILENAME);
   int fd = ::open(FILENAME, O_WRONLY|O_CREAT|O_TRUNC, 0600);
+  ASSERT_NE(-1, fd);
   bufferlist bl;
   for (unsigned i = 0; i < IOV_MAX * 2; i++) {
     bufferptr ptr("A", 1);
@@ -2559,7 +2481,7 @@ TEST(BufferList, write_fd) {
   ::close(fd);
   struct stat st;
   memset(&st, 0, sizeof(st));
-  ::stat(FILENAME, &st);
+  ASSERT_EQ(0, ::stat(FILENAME, &st));
   EXPECT_EQ(IOV_MAX * 2, st.st_size);
   ::unlink(FILENAME);
 }
@@ -2567,6 +2489,7 @@ TEST(BufferList, write_fd) {
 TEST(BufferList, write_fd_offset) {
   ::unlink(FILENAME);
   int fd = ::open(FILENAME, O_WRONLY|O_CREAT|O_TRUNC, 0600);
+  ASSERT_NE(-1, fd);
   bufferlist bl;
   for (unsigned i = 0; i < IOV_MAX * 2; i++) {
     bufferptr ptr("A", 1);
@@ -2577,7 +2500,7 @@ TEST(BufferList, write_fd_offset) {
   ::close(fd);
   struct stat st;
   memset(&st, 0, sizeof(st));
-  ::stat(FILENAME, &st);
+  ASSERT_EQ(0, ::stat(FILENAME, &st));
   EXPECT_EQ(IOV_MAX * 2 + offset, (unsigned)st.st_size);
   ::unlink(FILENAME);
 }
@@ -2992,7 +2915,7 @@ TEST(BufferList, TestCloneNonShareable) {
 
 TEST(BufferList, TestCopyAll) {
   const static size_t BIG_SZ = 10737414;
-  ceph::shared_ptr <unsigned char> big(
+  std::shared_ptr <unsigned char> big(
       (unsigned char*)malloc(BIG_SZ), free);
   unsigned char c = 0;
   for (size_t i = 0; i < BIG_SZ; ++i) {
@@ -3004,7 +2927,7 @@ TEST(BufferList, TestCopyAll) {
   bufferlist bl2;
   i.copy_all(bl2);
   ASSERT_EQ(bl2.length(), BIG_SZ);
-  ceph::shared_ptr <unsigned char> big2(
+  std::shared_ptr <unsigned char> big2(
       (unsigned char*)malloc(BIG_SZ), free);
   bl2.copy(0, BIG_SZ, (char*)big2.get());
   ASSERT_EQ(memcmp(big.get(), big2.get(), BIG_SZ), 0);
@@ -3012,7 +2935,7 @@ TEST(BufferList, TestCopyAll) {
 
 TEST(BufferList, InvalidateCrc) {
   const static size_t buffer_size = 262144;
-  ceph::shared_ptr <unsigned char> big(
+  std::shared_ptr <unsigned char> big(
       (unsigned char*)malloc(buffer_size), free);
   unsigned char c = 0;
   char* ptr = (char*) big.get();

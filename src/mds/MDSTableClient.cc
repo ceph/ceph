@@ -53,6 +53,15 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
   dout(10) << "handle_request " << *m << dendl;
   assert(m->table == table);
 
+  if (mds->get_state() < MDSMap::STATE_RESOLVE) {
+    if (mds->get_want_state() == CEPH_MDS_STATE_RESOLVE) {
+      mds->wait_for_resolve(new C_MDS_RetryMessage(mds, m));
+    } else {
+      m->put();
+    }
+    return;
+  }
+
   version_t tid = m->get_tid();
   uint64_t reqid = m->reqid;
 
@@ -60,12 +69,17 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
   case TABLESERVER_OP_QUERY_REPLY:
     handle_query_result(m);
     break;
+
+  case TABLESERVER_OP_NOTIFY_PREP:
+    assert(g_conf()->mds_kill_mdstable_at != 9);
+    handle_notify_prep(m);
+    break;
     
   case TABLESERVER_OP_AGREE:
     if (pending_prepare.count(reqid)) {
       dout(10) << "got agree on " << reqid << " atid " << tid << dendl;
 
-      assert(g_conf->mds_kill_mdstable_at != 3);
+      assert(g_conf()->mds_kill_mdstable_at != 3);
 
       MDSInternalContextBase *onfinish = pending_prepare[reqid].onfinish;
       *pending_prepare[reqid].ptid = tid;
@@ -102,7 +116,7 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
 	pending_commit[tid]->pending_commit_tids[table].count(tid)) {
       dout(10) << "got ack on tid " << tid << ", logging" << dendl;
       
-      assert(g_conf->mds_kill_mdstable_at != 7);
+      assert(g_conf()->mds_kill_mdstable_at != 7);
       
       // remove from committing list
       pending_commit[tid]->pending_commit_tids[table].erase(tid);
@@ -139,9 +153,6 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
 void MDSTableClient::_logged_ack(version_t tid)
 {
   dout(10) << "_logged_ack " << tid << dendl;
-
-  assert(g_conf->mds_kill_mdstable_at != 8);
-
   // kick any waiters (LogSegment trim)
   if (ack_waiters.count(tid)) {
     dout(15) << "kicking ack waiters on tid " << tid << dendl;
@@ -187,7 +198,9 @@ void MDSTableClient::commit(version_t tid, LogSegment *ls)
   pending_commit[tid] = ls;
   ls->pending_commit_tids[table].insert(tid);
 
-  assert(g_conf->mds_kill_mdstable_at != 4);
+  notify_commit(tid);
+
+  assert(g_conf()->mds_kill_mdstable_at != 4);
 
   if (server_ready) {
     // send message
@@ -206,6 +219,8 @@ void MDSTableClient::got_journaled_agree(version_t tid, LogSegment *ls)
   dout(10) << "got_journaled_agree " << tid << dendl;
   ls->pending_commit_tids[table].insert(tid);
   pending_commit[tid] = ls;
+
+  notify_commit(tid);
 }
 
 void MDSTableClient::got_journaled_ack(version_t tid)

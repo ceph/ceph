@@ -23,7 +23,6 @@
 #include "include/types.h"
 #include "rgw_website.h"
 
-using namespace std;
 
 
 bool RGWBWRoutingRuleCondition::check_key_condition(const string& key) {

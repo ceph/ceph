@@ -5,6 +5,7 @@
 #include "test/librbd/test_support.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "librbd/internal.h"
+#include "librbd/api/Image.h"
 #include "librbd/object_map/InvalidateRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -79,9 +80,9 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesSnapOnDiskFlag) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));
-  ASSERT_EQ(0, librbd::snap_set(ictx,
-				cls::rbd::UserSnapshotNamespace(),
-				"snap1"));
+  ASSERT_EQ(0, librbd::api::Image<>::snap_set(ictx,
+				              cls::rbd::UserSnapshotNamespace(),
+				              "snap1"));
 
   C_SaferCond cond_ctx;
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, ictx->snap_id, false,

@@ -44,15 +44,16 @@ public:
   const char *get_type_name() const override { return "pg_create"; }
 
   void encode_payload(uint64_t features) override {
-    ::encode(epoch, payload);
-    ::encode(mkpg, payload);
-    ::encode(ctimes, payload);
+    using ceph::encode;
+    encode(epoch, payload);
+    encode(mkpg, payload);
+    encode(ctimes, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(epoch, p);
-    ::decode(mkpg, p);
-    ::decode(ctimes, p);
+    auto p = payload.cbegin();
+    decode(epoch, p);
+    decode(mkpg, p);
+    decode(ctimes, p);
   }
 
   void print(ostream& out) const override {

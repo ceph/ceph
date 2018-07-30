@@ -14,7 +14,10 @@
 
 #include "common/admin_socket.h"
 #include "common/ceph_argparse.h"
+#include "common/ceph_context.h"
 #include "common/common_init.h"
+#include "common/config.h"
+#include "common/dout.h"
 #include "common/valgrind.h"
 #include "common/zipkin_trace.h"
 
@@ -24,8 +27,7 @@
 #define STRINGIFY(x) _STR(x)
 
 CephContext *common_preinit(const CephInitParameters &iparams,
-			    enum code_environment_t code_env, int flags,
-			    const char *data_dir_option)
+			    enum code_environment_t code_env, int flags)
 {
   // set code environment
   ANNOTATE_BENIGN_RACE_SIZED(&g_code_env, sizeof(g_code_env), "g_code_env");
@@ -34,29 +36,36 @@ CephContext *common_preinit(const CephInitParameters &iparams,
   // Create a configuration object
   CephContext *cct = new CephContext(iparams.module_type, code_env, flags);
 
-  md_config_t *conf = cct->_conf;
+  auto& conf = cct->_conf;
   // add config observers here
 
   // Set up our entity name.
   conf->name = iparams.name;
 
-  if (data_dir_option)
-    conf->data_dir_option = data_dir_option;
-
   // different default keyring locations for osd and mds.  this is
   // for backward compatibility.  moving forward, we want all keyrings
   // in these locations.  the mon already forces $mon_data/keyring.
   if (conf->name.is_mds()) {
-    conf->set_val("keyring", "$mds_data/keyring", false);
+    conf.set_val_default("keyring", "$mds_data/keyring");
   } else if (conf->name.is_osd()) {
-    conf->set_val("keyring", "$osd_data/keyring", false);
+    conf.set_val_default("keyring", "$osd_data/keyring");
+  }
+
+  if ((flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS)) {
+    // make this unique despite multiple instances by the same name.
+    conf.set_val_default("admin_socket",
+			  "$run_dir/$cluster-$name.$pid.$cctid.asok");
   }
 
   if (code_env == CODE_ENVIRONMENT_LIBRARY ||
       code_env == CODE_ENVIRONMENT_UTILITY_NODOUT) {
-    conf->set_val_or_die("log_to_stderr", "false");
-    conf->set_val_or_die("err_to_stderr", "false");
-    conf->set_val_or_die("log_flush_on_exit", "false");
+    conf.set_val_default("log_to_stderr", "false");
+    conf.set_val_default("err_to_stderr", "false");
+    conf.set_val_default("log_flush_on_exit", "false");
+  }
+  if (code_env != CODE_ENVIRONMENT_DAEMON) {
+    // NOTE: disable ms subsystem gathering in clients by default
+    conf.set_val_default("debug_ms", "0/0");
   }
 
   return cct;
@@ -87,6 +96,11 @@ void complain_about_parse_errors(CephContext *cct,
  * same application. */
 void common_init_finish(CephContext *cct)
 {
+  // only do this once per cct
+  if (cct->_finished) {
+    return;
+  }
+  cct->_finished = true;
   cct->init_crypto();
   ZTracer::ztrace_init();
 
@@ -99,7 +113,7 @@ void common_init_finish(CephContext *cct)
     cct->get_admin_socket()->chown(cct->get_set_uid(), cct->get_set_gid());
   }
 
-  md_config_t *conf = cct->_conf;
+  const auto& conf = cct->_conf;
 
   if (!conf->admin_socket.empty() && !conf->admin_socket_mode.empty()) {
     int ret = 0;

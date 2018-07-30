@@ -45,12 +45,12 @@ public:
     {}
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(pgid, p);
-    ::decode(map_epoch, p);
-    ::decode(op, p);
+    auto p = payload.cbegin();
+    decode(pgid, p);
+    decode(map_epoch, p);
+    decode(op, p);
     if (header.version >= 3) {
-      ::decode(min_epoch, p);
+      decode(min_epoch, p);
       decode_trace(p);
     } else {
       min_epoch = map_epoch;
@@ -58,10 +58,11 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(pgid, payload);
-    ::encode(map_epoch, payload);
-    ::encode(op, payload, features);
-    ::encode(min_epoch, payload);
+    using ceph::encode;
+    encode(pgid, payload);
+    encode(map_epoch, payload);
+    encode(op, payload, features);
+    encode(min_epoch, payload);
     encode_trace(payload, features);
   }
 

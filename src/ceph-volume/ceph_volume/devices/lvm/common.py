@@ -1,5 +1,37 @@
 from ceph_volume.util import arg_validators
+from ceph_volume import process, conf
+from ceph_volume import terminal
 import argparse
+
+
+def rollback_osd(args, osd_id=None):
+    """
+    When the process of creating or preparing fails, the OSD needs to be
+    destroyed so that the ID cane be reused.  This is prevents leaving the ID
+    around as "used" on the monitor, which can cause confusion if expecting
+    sequential OSD IDs.
+
+    The usage of `destroy-new` allows this to be done without requiring the
+    admin keyring (otherwise needed for destroy and purge commands)
+    """
+    if not osd_id:
+        # it means that it wasn't generated, so there is nothing to rollback here
+        return
+
+    # once here, this is an error condition that needs to be rolled back
+    terminal.error('Was unable to complete a new OSD, will rollback changes')
+    osd_name = 'osd.%s'
+    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
+    cmd = [
+        'ceph',
+        '--cluster', conf.cluster,
+        '--name', 'client.bootstrap-osd',
+        '--keyring', bootstrap_keyring,
+        'osd', 'purge-new', osd_name % osd_id,
+        '--yes-i-really-mean-it',
+    ]
+
+    process.run(cmd)
 
 
 def common_parser(prog, description):
@@ -12,42 +44,76 @@ def common_parser(prog, description):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=description,
     )
-    required_args = parser.add_argument_group('required arguments')
-    parser.add_argument(
-        '--journal',
-        help='A logical volume (vg_name/lv_name), or path to a device',
-    )
-    required_args.add_argument(
+
+    required_group = parser.add_argument_group('required arguments')
+    filestore_group = parser.add_argument_group('filestore')
+    bluestore_group = parser.add_argument_group('bluestore')
+
+    required_group.add_argument(
         '--data',
         required=True,
         type=arg_validators.LVPath(),
-        help='A logical volume (vg_name/lv_name) for OSD data',
+        help='OSD data path. A physical device or logical volume',
     )
-    parser.add_argument(
-        '--journal-size',
-        default=5,
-        metavar='GB',
-        type=int,
-        help='Size (in GB) A logical group name or a path to a logical volume',
-    )
-    parser.add_argument(
-        '--bluestore',
-        action='store_true', default=False,
-        help='Use the bluestore objectstore (not currently supported)',
-    )
-    parser.add_argument(
+
+    filestore_group.add_argument(
         '--filestore',
-        action='store_true', default=True,
-        help='Use the filestore objectstore (currently the only supported object store)',
+        action='store_true',
+        help='Use the filestore objectstore',
     )
+
+    filestore_group.add_argument(
+        '--journal',
+        help='(REQUIRED) A logical volume (vg_name/lv_name), or path to a device',
+    )
+
+    bluestore_group.add_argument(
+        '--bluestore',
+        action='store_true',
+        help='Use the bluestore objectstore',
+    )
+
+    bluestore_group.add_argument(
+        '--block.db',
+        dest='block_db',
+        help='Path to bluestore block.db logical volume or device',
+    )
+
+    bluestore_group.add_argument(
+        '--block.wal',
+        dest='block_wal',
+        help='Path to bluestore block.wal logical volume or device',
+    )
+
     parser.add_argument(
         '--osd-id',
         help='Reuse an existing OSD id',
     )
+
     parser.add_argument(
         '--osd-fsid',
         help='Reuse an existing OSD fsid',
     )
+
+    parser.add_argument(
+        '--crush-device-class',
+        dest='crush_device_class',
+        help='Crush device class to assign this OSD to',
+    )
+
+    parser.add_argument(
+        '--dmcrypt',
+        action='store_true',
+        help='Enable device encryption via dm-crypt',
+    )
+
+    parser.add_argument(
+        '--no-systemd',
+        dest='no_systemd',
+        action='store_true',
+        help='Skip creating and enabling systemd units and starting OSD services when activating',
+    )
+
     # Do not parse args, so that consumers can do something before the args get
     # parsed triggering argparse behavior
     return parser

@@ -30,14 +30,15 @@ and **do not use snapshots**.  Both of these are the default.
 
 Note that creating multiple MDS daemons is fine, as these will simply be
 used as standbys.  However, for best stability you should avoid
-adjusting ``max_mds`` upwards, as this would cause multiple
+adjusting ``max_mds`` upwards, as this would cause multiple MDS
 daemons to be active at once.
 
 Which client?
 -------------
 
-The fuse client is the easiest way to get up to date code, while
-the kernel client will often give better performance.
+The FUSE client is the most accessible and the easiest to upgrade to the
+version of Ceph used by the storage cluster, while the kernel client will
+often give better performance.
 
 The clients do not always provide equivalent functionality, for example
 the fuse client supports client-enforced quotas while the kernel client
@@ -48,7 +49,7 @@ try using the other client, in order to find out whether the bug was
 client-specific or not (and then to let the developers know).
 
 Which kernel version?
-~~~~~~~~~~~~~~~~~~~~~
+---------------------
 
 Because the kernel client is distributed as part of the linux kernel (not
 as part of packaged ceph releases),
@@ -83,6 +84,5 @@ information as possible.  Especially important information:
 * Any backtraces in the ceph logs from crashes
 
 If you are satisfied that you have found a bug, please file it on
-http://tracker.ceph.com.  For more general queries please write
-to the ceph-users mailing list.
-
+`the tracker <http://tracker.ceph.com>`_.  For more general queries please write
+to the `ceph-users mailing list <http://lists.ceph.com/listinfo.cgi/ceph-users-ceph.com/>`_.

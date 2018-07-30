@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_SERVER_H
 #define CEPH_MDS_SERVER_H
 
+#include <string_view>
+
 #include "MDSRank.h"
 #include "Mutation.h"
 
@@ -36,34 +38,34 @@ enum {
   l_mdss_handle_client_request,
   l_mdss_handle_client_session,
   l_mdss_handle_slave_request,
-  l_mdss_req_create,
-  l_mdss_req_getattr,
-  l_mdss_req_getfilelock,
-  l_mdss_req_link,
-  l_mdss_req_lookup,
-  l_mdss_req_lookuphash,
-  l_mdss_req_lookupino,
-  l_mdss_req_lookupname,
-  l_mdss_req_lookupparent,
-  l_mdss_req_lookupsnap,
-  l_mdss_req_lssnap,
-  l_mdss_req_mkdir,
-  l_mdss_req_mknod,
-  l_mdss_req_mksnap,
-  l_mdss_req_open,
-  l_mdss_req_readdir,
-  l_mdss_req_rename,
-  l_mdss_req_renamesnap,
-  l_mdss_req_rmdir,
-  l_mdss_req_rmsnap,
-  l_mdss_req_rmxattr,
-  l_mdss_req_setattr,
-  l_mdss_req_setdirlayout,
-  l_mdss_req_setfilelock,
-  l_mdss_req_setlayout,
-  l_mdss_req_setxattr,
-  l_mdss_req_symlink,
-  l_mdss_req_unlink,
+  l_mdss_req_create_latency,
+  l_mdss_req_getattr_latency,
+  l_mdss_req_getfilelock_latency,
+  l_mdss_req_link_latency,
+  l_mdss_req_lookup_latency,
+  l_mdss_req_lookuphash_latency,
+  l_mdss_req_lookupino_latency,
+  l_mdss_req_lookupname_latency,
+  l_mdss_req_lookupparent_latency,
+  l_mdss_req_lookupsnap_latency,
+  l_mdss_req_lssnap_latency,
+  l_mdss_req_mkdir_latency,
+  l_mdss_req_mknod_latency,
+  l_mdss_req_mksnap_latency,
+  l_mdss_req_open_latency,
+  l_mdss_req_readdir_latency,
+  l_mdss_req_rename_latency,
+  l_mdss_req_renamesnap_latency,
+  l_mdss_req_rmdir_latency,
+  l_mdss_req_rmsnap_latency,
+  l_mdss_req_rmxattr_latency,
+  l_mdss_req_setattr_latency,
+  l_mdss_req_setdirlayout_latency,
+  l_mdss_req_setfilelock_latency,
+  l_mdss_req_setlayout_latency,
+  l_mdss_req_setxattr_latency,
+  l_mdss_req_symlink_latency,
+  l_mdss_req_unlink_latency,
   l_mdss_last,
 };
 
@@ -82,6 +84,11 @@ private:
   int failed_reconnects;
   bool reconnect_evicting;  // true if I am waiting for evictions to complete
                             // before proceeding to reconnect_gather_finish
+  utime_t  reconnect_start;
+  set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
+
+  feature_bitset_t supported_features;
+  feature_bitset_t required_client_features;
 
   friend class MDSContinuation;
   friend class ServerContext;
@@ -105,19 +112,16 @@ public:
   void handle_osd_map();
 
   // -- sessions and recovery --
-  utime_t  reconnect_start;
-  set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
   bool waiting_for_reconnect(client_t c) const;
   void dump_reconnect_status(Formatter *f) const;
 
-  Session *get_session(Message *m);
   void handle_client_session(class MClientSession *m);
   void _session_logged(Session *session, uint64_t state_seq, 
 		       bool open, version_t pv, interval_set<inodeno_t>& inos,version_t piv);
   version_t prepare_force_open_sessions(map<client_t,entity_inst_t> &cm,
-					map<client_t,uint64_t>& sseqmap);
-  void finish_force_open_sessions(map<client_t,entity_inst_t> &cm,
-				  map<client_t,uint64_t>& sseqmap,
+					map<client_t,client_metadata_t>& cmm,
+					map<client_t,pair<Session*,uint64_t> >& smap);
+  void finish_force_open_sessions(const map<client_t,pair<Session*,uint64_t> >& smap,
 				  bool dec_import=true);
   void flush_client_sessions(set<client_t>& client_set, MDSGatherBuilder& gather);
   void finish_flush_session(Session *session, version_t seq);
@@ -128,6 +132,9 @@ public:
   void journal_close_session(Session *session, int state, Context *on_safe);
   void reconnect_clients(MDSInternalContext *reconnect_done_);
   void handle_client_reconnect(class MClientReconnect *m);
+  void infer_supported_features(Session *session, client_metadata_t& client_metadata);
+  void update_required_client_features();
+
   //void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
   void reconnect_gather_finish();
   void reconnect_tick();
@@ -144,6 +151,7 @@ public:
   void submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin,
                           MDRequestRef& mdr, const char *evt);
   void dispatch_client_request(MDRequestRef& mdr);
+  void perf_gather_op_latency(const MClientRequest* req, utime_t lat);
   void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
   void respond_to_request(MDRequestRef& mdr, int r = 0);
   void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
@@ -165,9 +173,9 @@ public:
   bool check_fragment_space(MDRequestRef& mdr, CDir *in);
   bool check_access(MDRequestRef& mdr, CInode *in, unsigned mask);
   bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
-  CDir *validate_dentry_dir(MDRequestRef& mdr, CInode *diri, const string& dname);
+  CDir *validate_dentry_dir(MDRequestRef& mdr, CInode *diri, std::string_view dname);
   CDir *traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, filepath refpath);
-  CDentry *prepare_null_dentry(MDRequestRef& mdr, CDir *dir, const string& dname, bool okexist=false);
+  CDentry *prepare_null_dentry(MDRequestRef& mdr, CDir *dir, std::string_view dname, bool okexist=false);
   CDentry *prepare_stray_dentry(MDRequestRef& mdr, CInode *in);
   CInode* prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
 			    file_layout_t *layout=NULL);
@@ -192,6 +200,7 @@ public:
   void handle_client_getattr(MDRequestRef& mdr, bool is_lookup);
   void handle_client_lookup_ino(MDRequestRef& mdr,
 				bool want_parent, bool want_dentry);
+  void _lookup_snap_ino(MDRequestRef& mdr);
   void _lookup_ino_2(MDRequestRef& mdr, int r);
   void handle_client_readdir(MDRequestRef& mdr);
   void handle_client_file_setlock(MDRequestRef& mdr);
@@ -201,9 +210,10 @@ public:
   void handle_client_setlayout(MDRequestRef& mdr);
   void handle_client_setdirlayout(MDRequestRef& mdr);
 
+  int parse_quota_vxattr(string name, string value, quota_info_t *quota);
+  void create_quota_realm(CInode *in);
   int parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
 			  file_layout_t *layout, bool validate=true);
-  int parse_quota_vxattr(string name, string value, quota_info_t *quota);
   int check_layout_vxattr(MDRequestRef& mdr,
                           string name,
                           string value,
@@ -236,21 +246,21 @@ public:
   // link
   void handle_client_link(MDRequestRef& mdr);
   void _link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti);
-  void _link_local_finish(MDRequestRef& mdr,
-			  CDentry *dn, CInode *targeti,
-			  version_t, version_t);
+  void _link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
+			  version_t, version_t, bool);
 
   void _link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti);
   void _link_remote_finish(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti,
 			   version_t);
 
   void handle_slave_link_prep(MDRequestRef& mdr);
-  void _logged_slave_link(MDRequestRef& mdr, CInode *targeti);
+  void _logged_slave_link(MDRequestRef& mdr, CInode *targeti, bool adjust_realm);
   void _commit_slave_link(MDRequestRef& mdr, int r, CInode *targeti);
   void _committed_slave(MDRequestRef& mdr);  // use for rename, too
   void handle_slave_link_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *m);
   void do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr);
-  void _link_rollback_finish(MutationRef& mut, MDRequestRef& mdr);
+  void _link_rollback_finish(MutationRef& mut, MDRequestRef& mdr,
+			     map<client_t,MClientSnap*>& split);
 
   // unlink
   void handle_client_unlink(MDRequestRef& mdr);
@@ -304,7 +314,8 @@ public:
   void _commit_slave_rename(MDRequestRef& mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr, bool finish_mdr=false);
   void _rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentry *srcdn, version_t srcdnpv,
-			       CDentry *destdn, CDentry *staydn, bool finish_mdr);
+			       CDentry *destdn, CDentry *staydn, map<client_t,MClientSnap*> splits[2],
+			       bool finish_mdr);
 
 private:
   void reply_client_request(MDRequestRef& mdr, MClientReply *reply);

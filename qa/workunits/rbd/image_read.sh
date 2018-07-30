@@ -54,6 +54,8 @@ DEFAULT_OBJECT_ORDER=22
 MIN_OBJECT_ORDER=12	# technically 9, but the rbd CLI enforces 12
 MAX_OBJECT_ORDER=32
 
+RBD_FORCE_ALLOW_V1=1
+
 PROGNAME=$(basename $0)
 
 ORIGINAL=original-$$

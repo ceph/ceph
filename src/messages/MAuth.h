@@ -36,20 +36,22 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    using ceph::encode;
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(protocol, p);
-    ::decode(auth_payload, p);
+    decode(protocol, p);
+    decode(auth_payload, p);
     if (!p.end())
-      ::decode(monmap_epoch, p);
+      decode(monmap_epoch, p);
     else
       monmap_epoch = 0;
   }
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(protocol, payload);
-    ::encode(auth_payload, payload);
-    ::encode(monmap_epoch, payload);
+    encode(protocol, payload);
+    encode(auth_payload, payload);
+    encode(monmap_epoch, payload);
   }
   bufferlist& get_auth_payload() { return auth_payload; }
 };

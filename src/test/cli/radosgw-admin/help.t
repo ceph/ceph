@@ -25,16 +25,19 @@
     bucket rm                  remove bucket
     bucket check               check bucket index
     bucket reshard             reshard bucket
+    bucket rewrite             rewrite all objects in the specified bucket
     bucket sync disable        disable bucket sync
     bucket sync enable         enable bucket sync
     bi get                     retrieve bucket index object entries
     bi put                     store bucket index object entries
     bi list                    list raw bucket index entries
+    bi purge                   purge bucket index entries
     object rm                  remove object
     object stat                stat an object for its metadata
     object unlink              unlink object from bucket index
+    object rewrite             rewrite the specified object
     objects expire             run expired objects cleanup
-    period delete              delete a period
+    period rm                  remove a period
     period get                 get period info
     period get-current         get current period info
     period pull                pull a period
@@ -50,12 +53,11 @@
     global quota enable        enable a global quota
     global quota disable       disable a global quota
     realm create               create a new realm
-    realm delete               delete a realm
+    realm rm                   remove a realm
     realm get                  show realm info
     realm get-default          get default realm name
     realm list                 list realms
     realm list-periods         list all realm periods
-    realm remove               remove a zonegroup from the realm
     realm rename               rename a realm
     realm set                  set realm info (requires infile)
     realm default              set realm as default
@@ -63,11 +65,11 @@
     zonegroup add              add a zone to a zonegroup
     zonegroup create           create a new zone group info
     zonegroup default          set default zone group
-    zonegroup delete           delete a zone group info
+    zonegroup rm               remove a zone group info
     zonegroup get              show zone group info
     zonegroup modify           modify an existing zonegroup
     zonegroup set              set zone group info (requires infile)
-    zonegroup remove           remove a zone from a zonegroup
+    zonegroup rm               remove a zone from a zonegroup
     zonegroup rename           rename a zone group
     zonegroup list             list all zone groups set on this cluster
     zonegroup placement list   list zonegroup's placement targets
@@ -76,7 +78,7 @@
     zonegroup placement rm     remove a placement target from a zonegroup
     zonegroup placement default  set a zonegroup's default placement target
     zone create                create a new zone
-    zone delete                delete a zone
+    zone rm                    remove a zone
     zone get                   show zone cluster params
     zone modify                modify an existing zone
     zone set                   set zone cluster params (requires infile)
@@ -86,6 +88,12 @@
     zone placement add         add a zone placement target
     zone placement modify      modify a zone placement target
     zone placement rm          remove a zone placement target
+    metadata sync status       get metadata sync status
+    metadata sync init         init metadata sync
+    metadata sync run          run metadata sync
+    data sync status           get data sync status of the specified source zone
+    data sync init             init data sync for the specified source zone
+    data sync run              run data sync for the specified source zone
     pool add                   add an existing pool for data placement
     pool rm                    remove an existing pool from data placement set
     pools list                 list placement active set
@@ -98,9 +106,11 @@
     log rm                     remove log object
     usage show                 show usage (by user, date range)
     usage trim                 trim usage (by user, date range)
+    usage clear                reset all the usage stats for the cluster
     gc list                    dump expired garbage collection objects (specify
                                --include-all to list all entries, including unexpired)
-    gc process                 manually process garbage
+    gc process                 manually process garbage (specify
+                               --include-all to process all entries, including unexpired)
     lc list                    list all bucket lifecycle progress
     lc process                 manually process lifecycle
     metadata get               get metadata info
@@ -121,31 +131,31 @@
     opstate set                set state on an entry (use client_id, op_id, object, state)
     opstate renew              renew state on an entry (use client_id, op_id, object)
     opstate rm                 remove entry (use client_id, op_id, object)
-    replicalog get             get replica metadata log entry
-    replicalog update          update replica metadata log entry
-    replicalog delete          delete replica metadata log entry
     orphans find               init and run search for leaked rados objects (use job-id, pool)
     orphans finish             clean up search for leaked rados objects
     orphans list-jobs          list the current job-ids for orphans search
     role create                create a AWS role for use with STS
-    role delete                delete a role
+    role rm                    remove a role
     role get                   get a role
     role list                  list roles with specified path prefix
     role modify                modify the assume role policy of an existing role
     role-policy put            add/update permission policy to role
     role-policy list           list policies attached to a role
     role-policy get            get the specified inline policy document embedded with the given role
-    role-policy delete         delete policy attached to a role
+    role-policy rm             remove policy attached to a role
     reshard add                schedule a resharding of a bucket
-    reshard list               list all bucket resharding or scheduled to be reshared
+    reshard list               list all bucket resharding or scheduled to be resharded
+    reshard status             read bucket resharding status
     reshard process            process of scheduled reshard jobs
     reshard cancel             cancel resharding a bucket
+    sync error list            list sync error
+    sync error trim            trim sync error
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
      --subuser=<name>          subuser name
      --access-key=<key>        S3 access key
-     --email=<email>
+     --email=<email>           user's email address
      --secret/--secret-key=<key>
                                specify secret key
      --gen-access-key          generate random access key (for S3)
@@ -154,31 +164,31 @@
      --temp-url-key[-2]=<key>  temp url key
      --access=<access>         Set access permissions for sub-user, should be one
                                of read, write, readwrite, full
-     --display-name=<name>
+     --display-name=<name>     user's display name
      --max-buckets             max number of buckets for a user
      --admin                   set the admin flag on the user
      --system                  set the system flag on the user
-     --bucket=<bucket>
-     --pool=<pool>
-     --object=<object>
-     --date=<date>
-     --start-date=<date>
-     --end-date=<date>
-     --bucket-id=<bucket-id>
-     --shard-id=<shard-id>     optional for mdlog list
+     --bucket=<bucket>         Specify the bucket name. Also used by the quota command.
+     --pool=<pool>             Specify the pool name. Also used to scan for leaked rados objects.
+     --object=<object>         object name
+     --date=<date>             date in the format yyyy-mm-dd
+     --start-date=<date>       start date in the format yyyy-mm-dd
+     --end-date=<date>         end date in the format yyyy-mm-dd
+     --bucket-id=<bucket-id>   bucket id
+     --shard-id=<shard-id>     optional for: 
+                                 mdlog list
+                                 data sync status
                                required for: 
                                  mdlog trim
-                                 replica mdlog get/delete
-                                 replica datalog get/delete
+     --max-entries=<entries>   max entries for listing operations
      --metadata-key=<key>      key to retrieve metadata from with metadata get
      --remote=<remote>         zone or zonegroup id of remote gateway
      --period=<id>             period id
+     --url=<url>               url for pushing/pulling period/realm
      --epoch=<number>          period epoch
      --commit                  commit the period during 'period update'
      --staging                 get staging period info
      --master                  set as master
-     --master-url              master url
-     --master-zonegroup=<id>   master zonegroup id
      --master-zone=<id>        master zone id
      --rgw-realm=<name>        realm name
      --realm-id=<id>           realm id
@@ -193,6 +203,7 @@
      --source-zone             specify the source zone (for data sync)
      --default                 set entity (realm, zonegroup, zone) as default
      --read-only               set zone as read-only (when adding to zonegroup)
+     --redirect-zone           specify zone id to redirect when response is 404 (not found)
      --placement-id            placement id for zonegroup placement commands
      --tags=<list>             list of tags for zonegroup placement add and modify commands
      --tags-add=<list>         list of tags to add for zonegroup placement modify command
@@ -227,14 +238,13 @@
                                (NOTE: required to delete a non-empty bucket)
      --sync-stats              option to 'user stats', update user stats with current
                                stats reported by user's buckets indexes
+     --reset-stats             option to 'user stats', reset stats in accordance with user buckets
      --show-log-entries=<flag> enable/disable dump of log entries on log show
      --show-log-sum=<flag>     enable/disable dump of log summation on log show
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
      --infile=<file>           specify a file to read in when setting data
-     --state=<state string>    specify a state for the opstate set command
-     --replica-log-type        replica log type (metadata, data, bucket), required for
-                               replica log operations
+     --state=<state>           specify a state for the opstate set command
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
      --yes-i-really-mean-it    required for certain operations
@@ -245,17 +255,18 @@
                                object deletions by not involving GC
      --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,
                                ignores bucket index consistency
+     --min-rewrite-size        min object size for bucket rewrite (default 4M)
+     --max-rewrite-size        max object size for bucket rewrite (default ULLONG_MAX)
+     --min-rewrite-stripe-size min stripe size for object rewrite (default 0)
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
   Quota options:
-     --bucket                  specified bucket for quota command
      --max-objects             specify max objects (negative value to disable)
      --max-size                specify max size (in B/K/M/G/T, negative value to disable)
      --quota-scope             scope of quota (bucket, user)
   
   Orphans search options:
-     --pool                    data pool to scan for leaked rados objects in
      --num-shards              num of shards to use for keeping the temporary scan info
      --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)
      --job-id                  set the job id (for orphans find)
@@ -273,13 +284,12 @@
      --path-prefix             path prefix for filtering roles
   
     --conf/-c FILE    read configuration from the given configuration file
-    --id/-i ID        set ID portion of my name
+    --id ID           set ID portion of my name
     --name/-n TYPE.ID set name
     --cluster NAME    set cluster name (default: ceph)
     --setuser USER    set uid to user or uid (and gid to user's gid)
     --setgroup GROUP  set gid to group or gid
     --version         show version and quit
   
-  [1]
 
 

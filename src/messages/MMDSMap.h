@@ -34,7 +34,7 @@ public:
 
   MMDSMap() : 
     Message(CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION) {}
-  MMDSMap(const uuid_d &f, MDSMap *mm) :
+  MMDSMap(const uuid_d &f, const MDSMap *mm) :
     Message(CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION),
     fsid(f) {
     epoch = mm->get_epoch();
@@ -51,24 +51,26 @@ public:
 
   // marshalling
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(fsid, p);
-    ::decode(epoch, p);
-    ::decode(encoded, p);
+    auto p = payload.cbegin();
+    decode(fsid, p);
+    decode(epoch, p);
+    decode(encoded, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(fsid, payload);
-    ::encode(epoch, payload);
+    using ceph::encode;
+    encode(fsid, payload);
+    encode(epoch, payload);
     if ((features & CEPH_FEATURE_PGID64) == 0 ||
 	(features & CEPH_FEATURE_MDSENC) == 0 ||
-	(features & CEPH_FEATURE_MSG_ADDR2) == 0) {
+	(features & CEPH_FEATURE_MSG_ADDR2) == 0 ||
+	!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
       // reencode for old clients.
       MDSMap m;
       m.decode(encoded);
       encoded.clear();
       m.encode(encoded, features);
     }
-    ::encode(encoded, payload);
+    encode(encoded, payload);
   }
 };
 

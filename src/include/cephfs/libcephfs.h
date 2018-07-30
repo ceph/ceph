@@ -165,6 +165,20 @@ void ceph_userperm_destroy(UserPerm *perm);
 struct UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount);
 
 /**
+ * Set cmount's default permissions
+ *
+ * @param cmount the mount info handle
+ * @param perm permissions to set to default for mount
+ *
+ * Every cmount has a default set of credentials. This does a deep copy of
+ * the given permissions to the ones in the cmount. Must be done after
+ * ceph_init but before ceph_mount.
+ *
+ * Returns 0 on success, and -EISCONN if the cmount is already mounted.
+ */
+int ceph_mount_perms_set(struct ceph_mount_info *cmount, UserPerm *perm);
+
+/**
  * @defgroup libcephfs_h_init Setup and Teardown
  * These are the first and last functions that should be called
  * when using libcephfs.
@@ -285,6 +299,14 @@ void ceph_buffer_free(char *buf);
 int ceph_unmount(struct ceph_mount_info *cmount);
 
 /**
+ * Abort mds connections
+ *
+ * @param cmount the mount handle
+ * @return 0 on success, negative error code on failure
+ */
+int ceph_abort_conn(struct ceph_mount_info *cmount);
+
+/**
  * Destroy the mount handle.
  *
  * The handle should not be mounted. This should be called on completion of
@@ -304,6 +326,17 @@ int ceph_release(struct ceph_mount_info *cmount);
  * @param cmount the mount handle to shutdown
  */
 void ceph_shutdown(struct ceph_mount_info *cmount);
+
+/**
+ * Get a global id for current instance
+ *
+ * The handle should not be mounted. This should be called on completion of
+ * all libcephfs functions.
+ *
+ * @param cmount the mount handle
+ * @returns instance global id
+ */
+uint64_t ceph_get_instance_id(struct ceph_mount_info *cmount);
 
 /**
  * Extract the CephContext from the mount point handle.
@@ -770,6 +803,56 @@ int ceph_lchown(struct ceph_mount_info *cmount, const char *path, int uid, int g
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_utime(struct ceph_mount_info *cmount, const char *path, struct utimbuf *buf);
+
+/**
+ * Change file/directory last access and modification times.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param fd the fd of the open file/directory to set the time values of.
+ * @param buf holding the access and modification times to set on the file.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_futime(struct ceph_mount_info *cmount, int fd, struct utimbuf *buf);
+
+/**
+ * Change file/directory last access and modification times.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param path the path to the file/directory to set the time values of.
+ * @param times holding the access and modification times to set on the file.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_utimes(struct ceph_mount_info *cmount, const char *path, struct timeval times[2]);
+
+/**
+ * Change file/directory last access and modification times, don't follow symlinks.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param path the path to the file/directory to set the time values of.
+ * @param times holding the access and modification times to set on the file.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_lutimes(struct ceph_mount_info *cmount, const char *path, struct timeval times[2]);
+
+/**
+ * Change file/directory last access and modification times.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param fd the fd of the open file/directory to set the time values of.
+ * @param times holding the access and modification times to set on the file.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_futimes(struct ceph_mount_info *cmount, int fd, struct timeval times[2]);
+
+/**
+ * Change file/directory last access and modification times.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param fd the fd of the open file/directory to set the time values of.
+ * @param times holding the access and modification times to set on the file.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_futimens(struct ceph_mount_info *cmount, int fd, struct timespec times[2]);
 
 /**
  * Apply or remove an advisory lock.
@@ -1473,6 +1556,10 @@ int ceph_ll_read(struct ceph_mount_info *cmount, struct Fh* filehandle,
 		 int64_t off, uint64_t len, char* buf);
 int ceph_ll_fsync(struct ceph_mount_info *cmount, struct Fh *fh,
 		  int syncdataonly);
+int ceph_ll_sync_inode(struct ceph_mount_info *cmount, struct Inode *in,
+		  int syncdataonly);
+int ceph_ll_fallocate(struct ceph_mount_info *cmount, struct Fh *fh,
+		      int mode, int64_t offset, int64_t length);
 int ceph_ll_write(struct ceph_mount_info *cmount, struct Fh* filehandle,
 		  int64_t off, uint64_t len, const char *data);
 int64_t ceph_ll_readv(struct ceph_mount_info *cmount, struct Fh *fh,
@@ -1572,6 +1659,85 @@ int ceph_ll_getlk(struct ceph_mount_info *cmount,
 int ceph_ll_setlk(struct ceph_mount_info *cmount,
 		  Fh *fh, struct flock *fl, uint64_t owner, int sleep);
 
+/*
+ * Delegation support
+ *
+ * Delegations are way for an application to request exclusive or
+ * semi-exclusive access to an Inode. The client requests the delegation and
+ * if it's successful it can reliably cache file data and metadata until the
+ * delegation is recalled.
+ *
+ * Recalls are issued via a callback function, provided by the application.
+ * Callback functions should act something like signal handlers.  You want to
+ * do as little as possible in the callback. Any major work should be deferred
+ * in some fashion as it's difficult to predict the context in which this
+ * function will be called.
+ *
+ * Once the delegation has been recalled, the application should return it as
+ * soon as possible. The application has client_deleg_timeout seconds to
+ * return it, after which the cmount structure is forcibly unmounted and
+ * further calls into it fail.
+ *
+ * The application can set the client_deleg_timeout config option to suit its
+ * needs, but it should take care to choose a value that allows it to avoid
+ * forcible eviction from the cluster in the event of an application bug.
+ */
+typedef void (*ceph_deleg_cb_t)(struct Fh *fh, void *priv);
+
+/* Commands for manipulating delegation state */
+#ifndef CEPH_DELEGATION_NONE
+# define CEPH_DELEGATION_NONE	0
+# define CEPH_DELEGATION_RD	1
+# define CEPH_DELEGATION_WR	2
+#endif
+
+/**
+ * Get the amount of time that the client has to return caps
+ * @param cmount the ceph mount handle to use.
+ *
+ * In the event that a client does not return its caps, the MDS may blacklist
+ * it after this timeout. Applications should check this value and ensure
+ * that they set the delegation timeout to a value lower than this.
+ *
+ * This call returns the cap return timeout (in seconds) for this cmount, or
+ * zero if it's not mounted.
+ */
+uint32_t ceph_get_cap_return_timeout(struct ceph_mount_info *cmount);
+
+/**
+ * Set the delegation timeout for the mount (thereby enabling delegations)
+ * @param cmount the ceph mount handle to use.
+ * @param timeout the delegation timeout (in seconds)
+ *
+ * Since the client could end up blacklisted if it doesn't return delegations
+ * in time, we mandate that any application wanting to use delegations
+ * explicitly set the timeout beforehand. Until this call is done on the
+ * mount, attempts to set a delegation will return -ETIME.
+ *
+ * Once a delegation is recalled, if it is not returned in this amount of
+ * time, the cmount will be forcibly unmounted and further access attempts
+ * will fail (usually with -ENOTCONN errors).
+ *
+ * This value is further vetted against the cap return timeout, and this call
+ * can fail with -EINVAL if the timeout value is too long. Delegations can be
+ * disabled again by setting the timeout to 0.
+ */
+int ceph_set_deleg_timeout(struct ceph_mount_info *cmount, uint32_t timeout);
+
+/**
+ * Request a delegation on an open Fh
+ * @param cmount the ceph mount handle to use.
+ * @param fh file handle
+ * @param cmd CEPH_DELEGATION_* command
+ * @param cb callback function for recalling delegation
+ * @param priv opaque token passed back during recalls
+ *
+ * Returns 0 if the delegation was granted, -EAGAIN if there was a conflict
+ * and other error codes if there is a fatal error of some sort (e.g. -ENOMEM,
+ * -ETIME)
+ */
+int ceph_ll_delegation(struct ceph_mount_info *cmount, Fh *fh,
+		       unsigned int cmd, ceph_deleg_cb_t cb, void *priv);
 #ifdef __cplusplus
 }
 #endif

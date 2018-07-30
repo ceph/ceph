@@ -59,7 +59,7 @@ Context *DisableRequest<I>::handle_get_mirror_image(int *result) {
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
   if (*result == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     *result = cls_client::mirror_image_get_finish(&iter, &m_mirror_image);
   }
 
@@ -72,7 +72,7 @@ Context *DisableRequest<I>::handle_get_mirror_image(int *result) {
       ldout(cct, 5) << this << " " << __func__
                     << ": mirroring is not supported by OSD" << dendl;
     } else {
-      lderr(cct) << "failed to retreive mirror image: " << cpp_strerror(*result)
+      lderr(cct) << "failed to retrieve mirror image: " << cpp_strerror(*result)
                  << dendl;
     }
     return m_on_finish;
@@ -245,9 +245,10 @@ Context *DisableRequest<I>::handle_get_clients(int *result) {
 
   for (auto client : m_clients) {
     journal::ClientData client_data;
-    bufferlist::iterator bl_it = client.data.begin();
+    auto bl_it = client.data.cbegin();
     try {
-      ::decode(client_data, bl_it);
+      using ceph::decode;
+      decode(client_data, bl_it);
     } catch (const buffer::error &err) {
       lderr(cct) << "failed to decode client data" << dendl;
       m_error_result = -EBADMSG;
@@ -313,10 +314,9 @@ void DisableRequest<I>::send_remove_snap(const std::string &client_id,
     &DisableRequest<I>::handle_remove_snap, client_id);
 
   ctx = new FunctionContext([this, snap_namespace, snap_name, ctx](int r) {
-      RWLock::WLocker owner_locker(m_image_ctx->owner_lock);
-      m_image_ctx->operations->execute_snap_remove(snap_namespace,
-						   snap_name.c_str(),
-						   ctx);
+      m_image_ctx->operations->snap_remove(snap_namespace,
+                                           snap_name.c_str(),
+                                           ctx);
     });
 
   m_image_ctx->op_work_queue->queue(ctx, 0);

@@ -15,11 +15,14 @@
 #include <random>
 
 #include "include/scope_guard.h"
+#include "include/stringify.h"
 
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonMap.h"
+#include "messages/MConfig.h"
+#include "messages/MGetConfig.h"
 #include "messages/MAuth.h"
 #include "messages/MLogAck.h"
 #include "messages/MAuthReply.h"
@@ -58,11 +61,10 @@ MonClient::MonClient(CephContext *cct_) :
   want_monmap(true),
   had_a_connection(false),
   reopen_interval_multiplier(
-    cct_->_conf->get_val<double>("mon_client_hunt_interval_min_multiple")),
+    cct_->_conf.get_val<double>("mon_client_hunt_interval_min_multiple")),
   last_mon_command_tid(0),
   version_req_id(0)
-{
-}
+{}
 
 MonClient::~MonClient()
 {
@@ -90,67 +92,83 @@ int MonClient::get_monmap()
   return 0;
 }
 
-int MonClient::get_monmap_privately()
+int MonClient::get_monmap_and_config()
 {
   ldout(cct, 10) << __func__ << dendl;
-  Mutex::Locker l(monc_lock);
+  assert(!messenger);
 
-  bool temp_msgr = false;
-  Messenger* smessenger = NULL;
-  if (!messenger) {
-    messenger = smessenger = Messenger::create_client_messenger(cct, "temp_mon_client");
-    if (NULL == messenger) {
-        return -1;
-    }
-    messenger->add_dispatcher_head(this);
-    smessenger->start();
-    temp_msgr = true;
+  int tries = 10;
+
+  utime_t interval;
+  interval.set_from_double(cct->_conf->mon_client_hunt_interval);
+
+  cct->init_crypto();
+
+  int r = build_initial_monmap();
+  if (r < 0) {
+    lderr(cct) << __func__ << " cannot identify monitors to contact" << dendl;
+    goto out;
   }
 
-  int attempt = 10;
+  messenger = Messenger::create_client_messenger(
+    cct, "temp_mon_client");
+  assert(messenger);
+  messenger->add_dispatcher_head(this);
+  messenger->start();
 
-  ldout(cct, 10) << "have " << monmap.epoch << " fsid " << monmap.fsid << dendl;
-
-  std::random_device rd;
-  std::mt19937 rng(rd());
-  assert(monmap.size() > 0);
-  std::uniform_int_distribution<unsigned> ranks(0, monmap.size() - 1);
-  while (monmap.fsid.is_zero()) {
-    auto rank = ranks(rng);
-    auto& pending_con = _add_conn(rank, 0);
-    auto con = pending_con.get_con();
-    ldout(cct, 10) << "querying mon." << monmap.get_name(rank) << " "
-		   << con->get_peer_addr() << dendl;
-    con->send_message(new MMonGetMap);
-
-    if (--attempt == 0)
+  while (tries-- > 0) {
+    r = init();
+    if (r < 0) {
+      goto out_msgr;
+    }
+    r = authenticate(cct->_conf->client_mount_timeout);
+    if (r == -ETIMEDOUT) {
+      shutdown();
+      continue;
+    }
+    if (r < 0) {
+      goto out_shutdown;
+    }
+    if (!monmap.persistent_features.contains_all(
+	  ceph::features::mon::FEATURE_MIMIC)) {
+      ldout(cct,10) << __func__ << " pre-mimic monitor, no config to fetch"
+		    << dendl;
+      r = 0;
       break;
-
-    utime_t interval;
-    interval.set_from_double(cct->_conf->mon_client_hunt_interval);
-    map_cond.WaitInterval(monc_lock, interval);
-
-    if (monmap.fsid.is_zero() && con) {
-      con->mark_down();  // nope, clean that connection up
     }
+    {
+      Mutex::Locker l(monc_lock);
+      while (!got_config && r == 0) {
+	ldout(cct,20) << __func__ << " waiting for config" << dendl;
+	r = map_cond.WaitInterval(monc_lock, interval);
+      }
+      if (got_config) {
+	ldout(cct,10) << __func__ << " success" << dendl;
+	r = 0;
+	break;
+      }
+    }
+    lderr(cct) << __func__ << " failed to get config" << dendl;
+    shutdown();
+    continue;
   }
 
-  if (temp_msgr) {
-    pending_cons.clear();
-    monc_lock.Unlock();
-    messenger->shutdown();
-    if (smessenger)
-      smessenger->wait();
-    delete messenger;
-    messenger = 0;
-    monc_lock.Lock();
+out_shutdown:
+  shutdown();
+
+out_msgr:
+  messenger->shutdown();
+  messenger->wait();
+  delete messenger;
+  messenger = nullptr;
+
+  if (!monmap.fsid.is_zero()) {
+    cct->_conf.set_val("fsid", stringify(monmap.fsid));
   }
 
-  pending_cons.clear();
-
-  if (!monmap.fsid.is_zero())
-    return 0;
-  return -1;
+out:
+  cct->shutdown_crypto();
+  return r;
 }
 
 
@@ -244,6 +262,7 @@ bool MonClient::ms_dispatch(Message *m)
   case CEPH_MSG_MON_GET_VERSION_REPLY:
   case MSG_MON_COMMAND_ACK:
   case MSG_LOGACK:
+  case MSG_CONFIG:
     break;
   default:
     return false;
@@ -252,9 +271,8 @@ bool MonClient::ms_dispatch(Message *m)
   Mutex::Locker lock(monc_lock);
 
   if (_hunting()) {
-    auto pending_con = pending_cons.find(m->get_source_addr());
-    if (pending_con == pending_cons.end() ||
-	pending_con->second.get_con() != m->get_connection()) {
+    auto p = _find_pending_con(m->get_connection());
+    if (p == pending_cons.end()) {
       // ignore any messages outside hunting sessions
       ldout(cct, 10) << "discarding stray monitor message " << *m << dendl;
       m->put();
@@ -299,6 +317,9 @@ bool MonClient::ms_dispatch(Message *m)
       m->put();
     }
     break;
+  case MSG_CONFIG:
+    handle_config(static_cast<MConfig*>(m));
+    break;
   }
   return true;
 }
@@ -327,12 +348,12 @@ void MonClient::handle_monmap(MMonMap *m)
   auto peer = m->get_source_addr();
   string cur_mon = monmap.get_name(peer);
 
-  bufferlist::iterator p = m->monmapbl.begin();
-  ::decode(monmap, p);
+  auto p = m->monmapbl.cbegin();
+  decode(monmap, p);
 
   ldout(cct, 10) << " got monmap " << monmap.epoch
-		 << ", mon." << cur_mon << " is now rank " << monmap.get_rank(cur_mon)
-		 << dendl;
+ 		 << ", mon." << cur_mon << " is now rank " << monmap.get_rank(cur_mon)
+ 		 << dendl;
   ldout(cct, 10) << "dump:\n";
   monmap.print(*_dout);
   *_dout << dendl;
@@ -347,6 +368,17 @@ void MonClient::handle_monmap(MMonMap *m)
 
   map_cond.Signal();
   want_monmap = false;
+}
+
+void MonClient::handle_config(MConfig *m)
+{
+  ldout(cct,10) << __func__ << " " << *m << dendl;
+  finisher.queue(new FunctionContext([this, m](int r) {
+	cct->_conf.set_mon_vals(cct, m->config, config_cb);
+	m->put();
+      }));
+  got_config = true;
+  map_cond.Signal();
 }
 
 // ----------------------
@@ -366,7 +398,8 @@ int MonClient::init()
     method = cct->_conf->auth_supported;
   else if (entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
 	   entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
-	   entity_name.get_type() == CEPH_ENTITY_TYPE_MON)
+	   entity_name.get_type() == CEPH_ENTITY_TYPE_MON ||
+	   entity_name.get_type() == CEPH_ENTITY_TYPE_MGR)
     method = cct->_conf->auth_cluster_required;
   else
     method = cct->_conf->auth_client_required;
@@ -435,6 +468,7 @@ void MonClient::shutdown()
   if (initialized) {
     finisher.wait_for_empty();
     finisher.stop();
+    initialized = false;
   }
   monc_lock.Lock();
   timer.shutdown();
@@ -450,8 +484,8 @@ int MonClient::authenticate(double timeout)
     ldout(cct, 5) << "already authenticated" << dendl;
     return 0;
   }
-
   _sub_want("monmap", monmap.get_epoch() ? monmap.get_epoch() + 1 : 0, 0);
+  _sub_want("config", 0, 0);
   if (!_opened())
     _reopen_session();
 
@@ -459,10 +493,11 @@ int MonClient::authenticate(double timeout)
   until += timeout;
   if (timeout > 0.0)
     ldout(cct, 10) << "authenticate will time out at " << until << dendl;
+  authenticate_err = 0;
   while (!active_con && !authenticate_err) {
     if (timeout > 0.0) {
       int r = auth_cond.WaitUntil(monc_lock, until);
-      if (r == ETIMEDOUT) {
+      if (r == ETIMEDOUT && !active_con) {
 	ldout(cct, 0) << "authenticate timed out after " << timeout << dendl;
 	authenticate_err = -r;
       }
@@ -505,7 +540,7 @@ void MonClient::handle_auth(MAuthReply *m)
   }
 
   // hunting
-  auto found = pending_cons.find(m->get_source_addr());
+  auto found = _find_pending_con(m->get_connection());
   assert(found != pending_cons.end());
   int auth_err = found->second.handle_auth(m, entity_name, want_keys,
 					   rotating_secrets.get());
@@ -783,29 +818,23 @@ void MonClient::_un_backoff()
 {
   // un-backoff our reconnect interval
   reopen_interval_multiplier = std::max(
-    cct->_conf->get_val<double>("mon_client_hunt_interval_min_multiple"),
+    cct->_conf.get_val<double>("mon_client_hunt_interval_min_multiple"),
     reopen_interval_multiplier /
-    cct->_conf->get_val<double>("mon_client_hunt_interval_backoff"));
+    cct->_conf.get_val<double>("mon_client_hunt_interval_backoff"));
   ldout(cct, 20) << __func__ << " reopen_interval_multipler now "
 		 << reopen_interval_multiplier << dendl;
 }
 
 void MonClient::schedule_tick()
 {
-  struct C_Tick : public Context {
-    MonClient *monc;
-    explicit C_Tick(MonClient *m) : monc(m) {}
-    void finish(int r) override {
-      monc->tick();
-    }
-  };
-
+  auto do_tick = make_lambda_context([this]() { tick(); });
   if (_hunting()) {
-    timer.add_event_after(cct->_conf->mon_client_hunt_interval
-			  * reopen_interval_multiplier,
-			  new C_Tick(this));
-  } else
-    timer.add_event_after(cct->_conf->mon_client_ping_interval, new C_Tick(this));
+    const auto hunt_interval = (cct->_conf->mon_client_hunt_interval *
+				reopen_interval_multiplier);
+    timer.add_event_after(hunt_interval, do_tick);
+  } else {
+    timer.add_event_after(cct->_conf->mon_client_ping_interval, do_tick);
+  }
 }
 
 // ---------
@@ -886,7 +915,7 @@ int MonClient::_check_auth_rotating()
 
   utime_t now = ceph_clock_now();
   utime_t cutoff = now;
-  cutoff -= MIN(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
+  cutoff -= std::min(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
   utime_t issued_at_lower_bound = now;
   issued_at_lower_bound -= cct->_conf->auth_service_ticket_ttl;
   if (!rotating_secrets->need_new_secrets(cutoff)) {
@@ -1211,10 +1240,10 @@ void MonConnection::start(epoch_t epoch,
   m->protocol = 0;
   m->monmap_epoch = epoch;
   __u8 struct_v = 1;
-  ::encode(struct_v, m->auth_payload);
-  ::encode(auth_supported.get_supported_set(), m->auth_payload);
-  ::encode(entity_name, m->auth_payload);
-  ::encode(global_id, m->auth_payload);
+  encode(struct_v, m->auth_payload);
+  encode(auth_supported.get_supported_set(), m->auth_payload);
+  encode(entity_name, m->auth_payload);
+  encode(global_id, m->auth_payload);
   con->send_message(m);
 }
 
@@ -1288,7 +1317,7 @@ int MonConnection::authenticate(MAuthReply *m)
     auth->set_global_id(global_id);
     ldout(cct, 10) << "my global_id is " << m->global_id << dendl;
   }
-  auto p = m->result_bl.begin();
+  auto p = m->result_bl.cbegin();
   int ret = auth->handle_response(m->result, p);
   if (ret == -EAGAIN) {
     auto ma = new MAuth;
@@ -1298,4 +1327,13 @@ int MonConnection::authenticate(MAuthReply *m)
     con->send_message(ma);
   }
   return ret;
+}
+
+void MonClient::register_config_callback(md_config_t::config_callback fn) {
+  assert(!config_cb);
+  config_cb = fn;
+}
+
+md_config_t::config_callback MonClient::get_config_callback() {
+  return config_cb;
 }

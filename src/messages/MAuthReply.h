@@ -46,19 +46,20 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(protocol, p);
-    ::decode(result, p);
-    ::decode(global_id, p);
-    ::decode(result_bl, p);
-    ::decode(result_msg, p);
+    auto p = payload.cbegin();
+    decode(protocol, p);
+    decode(result, p);
+    decode(global_id, p);
+    decode(result_bl, p);
+    decode(result_msg, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(protocol, payload);
-    ::encode(result, payload);
-    ::encode(global_id, payload);
-    ::encode(result_bl, payload);
-    ::encode(result_msg, payload);
+    using ceph::encode;
+    encode(protocol, payload);
+    encode(result, payload);
+    encode(global_id, payload);
+    encode(result_bl, payload);
+    encode(result_msg, payload);
   }
 };
 

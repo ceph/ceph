@@ -5,6 +5,9 @@ from . import activate
 from . import prepare
 from . import create
 from . import trigger
+from . import listing
+from . import zap
+from . import batch
 
 
 class LVM(object):
@@ -19,9 +22,12 @@ class LVM(object):
 
     mapper = {
         'activate': activate.Activate,
+        'batch': batch.Batch,
         'prepare': prepare.Prepare,
         'create': create.Create,
         'trigger': trigger.Trigger,
+        'list': listing.List,
+        'zap': zap.Zap,
     }
 
     def __init__(self, argv):

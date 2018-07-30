@@ -14,12 +14,9 @@
 #include <map>
 #include <string>
 #include <memory>
-#include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 #include "include/encoding.h"
-#include "include/cpp-btree/btree.h"
-#include "include/cpp-btree/btree_map.h"
-#include "include/encoding_btree.h"
+#include "include/btree_map.h"
 #include "KeyValueDB.h"
 #include "osd/osd_types.h"
 
@@ -57,7 +54,8 @@ class MemDB : public KeyValueDB
 
 public:
   MemDB(CephContext *c, const string &path, void *p) :
-    m_using_btree(false), m_cct(c), m_priv(p), m_db_path(path), iterator_seq_no(1)
+    m_total_bytes(0), m_allocated_bytes(0), m_using_btree(false),
+    m_cct(c), m_priv(p), m_db_path(path), iterator_seq_no(1)
   {
     //Nothing as of now
   }
@@ -66,7 +64,7 @@ public:
   int set_merge_operator(const std::string& prefix,
          std::shared_ptr<MergeOperator> mop) override;
 
-  std::shared_ptr<MergeOperator> _find_merge_op(std::string prefix);
+  std::shared_ptr<MergeOperator> _find_merge_op(const std::string &prefix);
 
   static
   int _test_init(const string& dir) { return 0; };
@@ -99,7 +97,7 @@ public:
     void clear() {
       ops.clear();
     }
-    MDBTransactionImpl(MemDB* _db) :m_db(_db)
+    explicit MDBTransactionImpl(MemDB* _db) :m_db(_db)
     {
       ops.clear();
     }
@@ -122,8 +120,9 @@ public:
   int _init(bool format);
 
   int do_open(ostream &out, bool create);
-  int open(ostream &out) override { return do_open(out, false); }
-  int create_and_open(ostream &out) override { return do_open(out, true); }
+  int open(ostream &out, const std::vector<ColumnFamily>&) override;
+  int create_and_open(ostream &out, const std::vector<ColumnFamily>&) override;
+  using KeyValueDB::create_and_open;
 
   KeyValueDB::Transaction get_transaction() override {
     return std::shared_ptr<MDBTransactionImpl>(new MDBTransactionImpl(this));
@@ -201,9 +200,7 @@ public:
     return 0;
   }
 
-protected:
-
-  WholeSpaceIterator _get_iterator() override {
+  WholeSpaceIterator get_wholespace_iterator() override {
     return std::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
       new MDBWholeSpaceIteratorImpl(&m_map, &m_lock, &iterator_seq_no, m_using_btree));
   }

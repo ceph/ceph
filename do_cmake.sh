@@ -5,23 +5,25 @@ if test -e build; then
     exit 1
 fi
 
-ARGS=""
-if which ccache ; then
+if type ccache > /dev/null 2>&1 ; then
     echo "enabling ccache"
     ARGS="$ARGS -DWITH_CCACHE=ON"
 fi
 
 mkdir build
 cd build
-cmake -DBOOST_J=$(nproc) $ARGS "$@" ..
+NPROC=${NPROC:-$(nproc)}
+if type cmake3 > /dev/null 2>&1 ; then
+    CMAKE=cmake3
+else
+    CMAKE=cmake
+fi
+${CMAKE} -DBOOST_J=$NPROC $ARGS "$@" .. || exit 1
 
 # minimal config to find plugins
 cat <<EOF > ceph.conf
 plugin dir = lib
 erasure code dir = lib
 EOF
-
-# give vstart a (hopefully) unique mon port to start with
-echo $(( RANDOM % 1000 + 40000 )) > .ceph_port
 
 echo done.

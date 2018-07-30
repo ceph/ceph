@@ -19,20 +19,6 @@
 /*
  * Copyright (C) 2014 Cloudius Systems, Ltd.
  */
-/*
- * Ceph - scalable distributed file system
- *
- * Copyright (C) 2015 XSky <haomai@xsky.com>
- *
- * Author: Haomai Wang <haomaiwang@gmail.com>
- *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.  See file COPYING.
- *
- */
-
 
 #ifndef CEPH_MSG_PACKET_H_
 #define CEPH_MSG_PACKET_H_
@@ -118,14 +104,14 @@ class Packet {
 
     fragment frags[];
 
-    impl(size_t nr_frags = default_nr_frags);
+    explicit impl(size_t nr_frags = default_nr_frags);
     impl(const impl&) = delete;
     impl(fragment frag, size_t nr_frags = default_nr_frags);
 
     pseudo_vector fragments() { return { frags, _nr_frags }; }
 
     static std::unique_ptr<impl> allocate(size_t nr_frags) {
-      nr_frags = MAX(nr_frags, default_nr_frags);
+      nr_frags = std::max(nr_frags, default_nr_frags);
       return std::unique_ptr<impl>(new (nr_frags) impl(nr_frags));
     }
 
@@ -194,7 +180,7 @@ class Packet {
               to->frags[0].base);
     }
   };
-  Packet(std::unique_ptr<impl>&& impl) : _impl(std::move(impl)) {}
+  explicit Packet(std::unique_ptr<impl>&& impl) : _impl(std::move(impl)) {}
   std::unique_ptr<impl> _impl;
 public:
   static Packet from_static_data(const char* data, size_t len) {
@@ -204,13 +190,13 @@ public:
   // build empty Packet
   Packet();
   // build empty Packet with nr_frags allocated
-  Packet(size_t nr_frags);
+  explicit Packet(size_t nr_frags);
   // move existing Packet
   Packet(Packet&& x) noexcept;
   // copy data into Packet
   Packet(const char* data, size_t len);
   // copy data into Packet
-  Packet(fragment frag);
+  explicit Packet(fragment frag);
   // zero-copy single fragment
   Packet(fragment frag, deleter del);
   // zero-copy multiple fragments

@@ -111,7 +111,7 @@ void JournalTrimmer::trim_objects(uint64_t minimum_set) {
   }
 
   if (m_remove_set_pending) {
-    m_remove_set = MAX(m_remove_set, minimum_set);
+    m_remove_set = std::max(m_remove_set, minimum_set);
     return;
   }
 

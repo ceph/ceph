@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_H
 #define CEPH_MDS_H
 
+#include <string_view>
+
 #include "common/LogClient.h"
 #include "common/Mutex.h"
 #include "common/Timer.h"
@@ -27,7 +29,7 @@
 #include "MDSMap.h"
 #include "MDSRank.h"
 
-#define CEPH_MDS_PROTOCOL    30 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    33 /* cluster internal */
 
 class AuthAuthorizeHandlerRegistry;
 class Message;
@@ -44,6 +46,15 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   bool         stopping;
 
   SafeTimer    timer;
+
+
+  mono_time get_starttime() const {
+    return starttime;
+  }
+  chrono::duration<double> get_uptime() const {
+    mono_time now = mono_clock::now();
+    return chrono::duration<double>(now-starttime);
+  }
 
  protected:
   Beacon  beacon;
@@ -63,7 +74,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   MDSRankDispatcher *mds_rank;
 
  public:
-  MDSDaemon(const std::string &n, Messenger *m, MonClient *mc);
+  MDSDaemon(std::string_view n, Messenger *m, MonClient *mc);
   ~MDSDaemon() override;
   int orig_argc;
   const char **orig_argv;
@@ -83,8 +94,8 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
 
   // config observer bits
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const struct md_config_t *conf,
-				  const std::set <std::string> &changed) override;
+  void handle_conf_change(const ConfigProxy& conf,
+			  const std::set <std::string> &changed) override;
  protected:
   // tick and other timer fun
   Context *tick_event = nullptr;
@@ -97,7 +108,8 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			       bool& isvalid, CryptoKey& session_key) override;
+			    bool& isvalid, CryptoKey& session_key,
+			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override;
   void ms_handle_accept(Connection *con) override;
   void ms_handle_connect(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;
@@ -111,8 +123,8 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   void set_up_admin_socket();
   void clean_up_admin_socket();
   void check_ops_in_flight(); // send off any slow ops to monitor
-  bool asok_command(string command, cmdmap_t& cmdmap, string format,
-		    ostream& ss);
+  bool asok_command(std::string_view command, const cmdmap_t& cmdmap,
+		    std::string_view format, ostream& ss);
 
   void dump_status(Formatter *f);
 
@@ -141,7 +153,7 @@ protected:
   // special message types
   friend class C_MDS_Send_Command_Reply;
   static void send_command_reply(MCommand *m, MDSRank* mds_rank, int r,
-				 bufferlist outbl, const std::string& outs);
+				 bufferlist outbl, std::string_view outs);
   int _handle_command(
       const cmdmap_t &cmdmap,
       MCommand *m,
@@ -152,6 +164,9 @@ protected:
   void handle_command(class MCommand *m);
   void handle_mds_map(class MMDSMap *m);
   void _handle_mds_map(MDSMap *oldmap);
+
+private:
+    mono_time starttime = mono_clock::zero();
 };
 
 

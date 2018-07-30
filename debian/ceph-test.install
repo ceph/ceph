@@ -1,8 +1,5 @@
 usr/bin/ceph-client-debug
 usr/bin/ceph-coverage
-usr/bin/ceph-kvstore-tool
-usr/bin/ceph-monstore-tool
-usr/bin/ceph-osdomap-tool
 usr/bin/ceph_bench_log
 usr/bin/ceph_erasure_code
 usr/bin/ceph_erasure_code_benchmark
@@ -19,13 +16,6 @@ usr/bin/ceph_rgw_jsonparser
 usr/bin/ceph_rgw_multiparser
 usr/bin/ceph_scratchtool
 usr/bin/ceph_scratchtoolpp
-usr/bin/ceph_smalliobench
-usr/bin/ceph_smalliobenchdumb
-usr/bin/ceph_smalliobenchfs
-usr/bin/ceph_smalliobenchrbd
 usr/bin/ceph_test_*
-usr/bin/ceph_tpbench
-usr/bin/ceph_xattr_bench
 usr/lib/ceph/ceph-monstore-update-crush.sh
 usr/share/java/libcephfs-test.jar
-usr/share/man/man8/ceph-kvstore-tool.8

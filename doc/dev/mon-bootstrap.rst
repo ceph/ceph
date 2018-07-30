@@ -167,7 +167,7 @@ New nodes can be forced to join an existing cluster in two ways:
 Initially peerless expansion
 ----------------------------
 
-Create a new monitor and give it no peer addresses other than it's own.  For
+Create a new monitor and give it no peer addresses other than its own.  For
 example::
 
      ceph-mon --mkfs -i <myid> --fsid <fsid> --keyring <mon secret key> --public-addr <ip>

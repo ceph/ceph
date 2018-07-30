@@ -306,6 +306,7 @@ private:
 
   friend class C_MaybeExpiredSegment;
   friend class C_MDL_Flushed;
+  friend class C_OFT_Committed;
 
 public:
   void trim_expired_segments();

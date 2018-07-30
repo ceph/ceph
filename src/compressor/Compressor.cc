@@ -14,41 +14,35 @@
 
 #include <random>
 #include <sstream>
+#include <iterator>
+#include <algorithm>
 
 #include "CompressionPlugin.h"
 #include "Compressor.h"
+#include "include/random.h"
 #include "common/ceph_context.h"
 #include "common/debug.h"
 #include "common/dout.h"
 
-const char * Compressor::get_comp_alg_name(int a) {
-  switch (a) {
-  case COMP_ALG_NONE: return "none";
-  case COMP_ALG_SNAPPY: return "snappy";
-  case COMP_ALG_ZLIB: return "zlib";
-  case COMP_ALG_ZSTD: return "zstd";
-#ifdef HAVE_LZ4
-  case COMP_ALG_LZ4: return "lz4";
-#endif
-  default: return "???";
-  }
+const char* Compressor::get_comp_alg_name(int a) {
+
+  auto p = std::find_if(std::cbegin(compression_algorithms), std::cend(compression_algorithms),
+		   [a](const auto& kv) { return kv.second == a; });
+
+  if (std::cend(compression_algorithms) == p)
+   return "???"; // It would be nice to revise this...
+
+  return p->first;
 }
 
 boost::optional<Compressor::CompressionAlgorithm> Compressor::get_comp_alg_type(const std::string &s) {
-  if (s == "snappy")
-    return COMP_ALG_SNAPPY;
-  if (s == "zlib")
-    return COMP_ALG_ZLIB;
-  if (s == "zstd")
-    return COMP_ALG_ZSTD;
-#ifdef HAVE_LZ4
-  if (s == "lz4")
-    return COMP_ALG_LZ4;
-#endif
-  if (s == "" || s == "none")
-    return COMP_ALG_NONE;
 
-  return boost::optional<CompressionAlgorithm>();
+  auto p = std::find_if(std::cbegin(compression_algorithms), std::cend(compression_algorithms),
+		   [&s](const auto& kv) { return kv.first == s; });
+  if (std::cend(compression_algorithms) == p)
+    return {};
+
+  return p->second;
 }
 
 const char *Compressor::get_comp_mode_name(int m) {
@@ -76,16 +70,7 @@ CompressorRef Compressor::create(CephContext *cct, const std::string &type)
 {
   // support "random" for teuthology testing
   if (type == "random") {
-    static std::random_device seed;
-    static std::default_random_engine engine(seed());
-    static ceph::spinlock mutex;
-
-    int alg = COMP_ALG_NONE;
-    std::uniform_int_distribution<> dist(0, COMP_ALG_LAST - 1);
-    {
-      std::lock_guard<decltype(mutex)> lock(mutex);
-      alg = dist(engine);
-    }
+    int alg = ceph::util::generate_random_number(0, COMP_ALG_LAST - 1);
     if (alg == COMP_ALG_NONE) {
       return nullptr;
     }

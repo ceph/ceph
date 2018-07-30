@@ -45,18 +45,19 @@ public:
   }
   
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(head, p);
-    ::decode_nohead(head.num, caps, p);
+    auto p = payload.cbegin();
+    decode(head, p);
+    decode_nohead(head.num, caps, p);
     if (header.version >= 2) {
-      ::decode(osd_epoch_barrier, p);
+      decode(osd_epoch_barrier, p);
     }
   }
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     head.num = caps.size();
-    ::encode(head, payload);
-    ::encode_nohead(caps, payload);
-    ::encode(osd_epoch_barrier, payload);
+    encode(head, payload);
+    encode_nohead(caps, payload);
+    encode(osd_epoch_barrier, payload);
   }
 };
 

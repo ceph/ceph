@@ -45,10 +45,11 @@ void JournalTool::usage()
     << "  cephfs-journal-tool [options] journal <command>\n"
     << "    <command>:\n"
     << "      inspect\n"
-    << "      import <path>\n"
+    << "      import <path> [--force]\n"
     << "      export <path>\n"
     << "      reset [--force]\n"
     << "  cephfs-journal-tool [options] header <get|set <field> <value>\n"
+    << "    <field>: [trimmed_pos|expire_pos|write_pos|pool_id]"
     << "  cephfs-journal-tool [options] event <effect> <selector> <output> [special options]\n"
     << "    <selector>:\n"
     << "      --range=<start>..<end>\n"
@@ -63,7 +64,10 @@ void JournalTool::usage()
     << "General options:\n"
     << "  --rank=filesystem:mds-rank  Journal rank (required if multiple\n"
     << "                              file systems, default is rank 0 on\n"
-    << "                              the only filesystem otherwise.\n"
+    << "                              the only filesystem otherwise.)\n"
+    << "  --journal=<mdlog|purge_queue>  Journal type (purge_queue means\n"
+    << "                                 this journal is used to queue for purge operation,\n"
+    << "                                 default is mdlog, and only mdlog support event mode)\n" 
     << "\n"
     << "Special options\n"
     << "  --alternate-pool <name>     Alternative metadata pool to target\n"
@@ -84,17 +88,28 @@ int JournalTool::main(std::vector<const char*> &argv)
   // Common arg parsing
   // ==================
   if (argv.empty()) {
-    usage();
+    cerr << "missing positional argument" << std::endl;
     return -EINVAL;
   }
 
   std::vector<const char*>::iterator arg = argv.begin();
 
   std::string rank_str;
-  if(!ceph_argparse_witharg(argv, arg, &rank_str, "--rank", (char*)NULL)) {
+  if (!ceph_argparse_witharg(argv, arg, &rank_str, "--rank", (char*)NULL)) {
     // Default: act on rank 0.  Will give the user an error if they
     // try invoking this way when they have more than one filesystem.
     rank_str = "0";
+  }
+
+  if (!ceph_argparse_witharg(argv, arg, &type, "--journal", (char*)NULL)) {
+    // Default is mdlog
+    type = "mdlog";
+  }
+  
+  r = validate_type(type);
+  if (r != 0) {
+    derr << "journal type is not correct." << dendl;
+    return r;
   }
 
   r = role_selector.parse(*fsmap, rank_str);
@@ -144,6 +159,8 @@ int JournalTool::main(std::vector<const char*> &argv)
 
   // Execution
   // =========
+  // journal and header are general journal mode
+  // event mode is only specific for mdlog
   for (auto role : role_selector.get_roles()) {
     rank = role.rank;
     dout(4) << "Executing for rank " << rank << dendl;
@@ -151,11 +168,10 @@ int JournalTool::main(std::vector<const char*> &argv)
       r = main_journal(argv);
     } else if (mode == std::string("header")) {
       r = main_header(argv);
-    } else if (mode == std::string("event")) {
+    } else if (type == std::string("mdlog") && mode == std::string("event")) {
       r = main_event(argv);
     } else {
-      derr << "Bad command '" << mode << "'" << dendl;
-      usage();
+      cerr << "Bad command '" << mode << "'" << std::endl;
       return -EINVAL;
     }
 
@@ -167,6 +183,13 @@ int JournalTool::main(std::vector<const char*> &argv)
   return r;
 }
 
+int JournalTool::validate_type(const std::string &type)
+{
+  if (type == "mdlog" || type == "purge_queue") {
+    return 0;
+  }
+  return -1;
+}
 
 /**
  * Handle arguments for 'journal' mode
@@ -179,9 +202,18 @@ int JournalTool::main_journal(std::vector<const char*> &argv)
   if (command == "inspect") {
     return journal_inspect();
   } else if (command == "export" || command == "import") {
+    bool force = false;
     if (argv.size() >= 2) {
       std::string const path = argv[1];
-      return journal_export(path, command == "import");
+      if (argv.size() == 3) {
+        if (std::string(argv[2]) == "--force") {
+          force = true;
+        } else {
+          std::cerr << "Unknown argument " << argv[1] << std::endl;
+          return -EINVAL;
+        }
+      }
+      return journal_export(path, command == "import", force);
     } else {
       derr << "Missing path" << dendl;
       return -EINVAL;
@@ -193,12 +225,10 @@ int JournalTool::main_journal(std::vector<const char*> &argv)
         force = true;
       } else {
         std::cerr << "Unknown argument " << argv[1] << std::endl;
-        usage();
         return -EINVAL;
       }
     } else if (argv.size() > 2) {
       std::cerr << "Too many arguments!" << std::endl;
-      usage();
       return -EINVAL;
     }
     return journal_reset(force);
@@ -217,7 +247,7 @@ int JournalTool::main_journal(std::vector<const char*> &argv)
 int JournalTool::main_header(std::vector<const char*> &argv)
 {
   JournalFilter filter;
-  JournalScanner js(input, rank, filter);
+  JournalScanner js(input, rank, type, filter);
   int r = js.scan(false);
   if (r < 0) {
     std::cerr << "Unable to scan journal" << std::endl;
@@ -277,6 +307,8 @@ int JournalTool::main_header(std::vector<const char*> &argv)
       field = &(js.header->expire_pos);
     } else if (field_name == "write_pos") {
       field = &(js.header->write_pos);
+    } else if (field_name == "pool_id") {
+      field = (uint64_t*)(&(js.header->layout.pool_id));
     } else {
       derr << "Invalid field '" << field_name << "'" << dendl;
       return -EINVAL;
@@ -287,7 +319,7 @@ int JournalTool::main_header(std::vector<const char*> &argv)
 
     dout(4) << "Writing object..." << dendl;
     bufferlist header_bl;
-    ::encode(*(js.header), header_bl);
+    encode(*(js.header), header_bl);
     output.write_full(js.obj_name(0), header_bl);
     dout(4) << "Write complete." << dendl;
     std::cout << "Successfully updated header." << std::endl;
@@ -314,13 +346,11 @@ int JournalTool::main_event(std::vector<const char*> &argv)
   std::string command = *(arg++);
   if (command != "get" && command != "splice" && command != "recover_dentries") {
     derr << "Unknown argument '" << command << "'" << dendl;
-    usage();
     return -EINVAL;
   }
 
   if (arg == argv.end()) {
     derr << "Incomplete command line" << dendl;
-    usage();
     return -EINVAL;
   }
 
@@ -335,15 +365,14 @@ int JournalTool::main_event(std::vector<const char*> &argv)
   // Parse output options
   // ====================
   if (arg == argv.end()) {
-    derr << "Missing output command" << dendl;
-    usage();
+    cerr << "Missing output command" << std::endl;
+    return -EINVAL;
   }
   std::string output_style = *(arg++);
   if (output_style != "binary" && output_style != "json" &&
       output_style != "summary" && output_style != "list") {
-      derr << "Unknown argument: '" << output_style << "'" << dendl;
-      usage();
-      return -EINVAL;
+    cerr << "Unknown argument: '" << output_style << "'" << std::endl;
+    return -EINVAL;
   }
 
   std::string output_path = "dump";
@@ -358,15 +387,14 @@ int JournalTool::main_event(std::vector<const char*> &argv)
       assert(r == 0);
       other_pool = true;
     } else {
-      derr << "Unknown argument: '" << *arg << "'" << dendl;
-      usage();
+      cerr << "Unknown argument: '" << *arg << "'" << std::endl;
       return -EINVAL;
     }
   }
 
   // Execute command
   // ===============
-  JournalScanner js(input, rank, filter);
+  JournalScanner js(input, rank, type, filter);
   if (command == "get") {
     r = js.scan();
     if (r) {
@@ -474,8 +502,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
 
 
   } else {
-    derr << "Unknown argument '" << command << "'" << dendl;
-    usage();
+    cerr << "Unknown argument '" << command << "'" << std::endl;
     return -EINVAL;
   }
 
@@ -513,7 +540,7 @@ int JournalTool::journal_inspect()
   int r;
 
   JournalFilter filter;
-  JournalScanner js(input, rank, filter);
+  JournalScanner js(input, rank, type, filter);
   r = js.scan();
   if (r) {
     std::cerr << "Failed to scan journal (" << cpp_strerror(r) << ")" << std::endl;
@@ -534,10 +561,10 @@ int JournalTool::journal_inspect()
  * back to manually listing RADOS objects and extracting them, which
  * they can do with the ``rados`` CLI.
  */
-int JournalTool::journal_export(std::string const &path, bool import)
+int JournalTool::journal_export(std::string const &path, bool import, bool force)
 {
   int r = 0;
-  JournalScanner js(input, rank);
+  JournalScanner js(input, rank, type);
 
   if (!import) {
     /*
@@ -560,17 +587,16 @@ int JournalTool::journal_export(std::string const &path, bool import)
    */
   {
     Dumper dumper;
-    r = dumper.init(mds_role_t(role_selector.get_ns(), rank));
+    r = dumper.init(mds_role_t(role_selector.get_ns(), rank), type);
     if (r < 0) {
       derr << "dumper::init failed: " << cpp_strerror(r) << dendl;
       return r;
     }
     if (import) {
-      r = dumper.undump(path.c_str());
+      r = dumper.undump(path.c_str(), force);
     } else {
       r = dumper.dump(path.c_str());
     }
-    dumper.shutdown();
   }
 
   return r;
@@ -584,18 +610,17 @@ int JournalTool::journal_reset(bool hard)
 {
   int r = 0;
   Resetter resetter;
-  r = resetter.init();
+  r = resetter.init(mds_role_t(role_selector.get_ns(), rank), type, hard);
   if (r < 0) {
     derr << "resetter::init failed: " << cpp_strerror(r) << dendl;
     return r;
   }
 
   if (hard) {
-    r = resetter.reset_hard(mds_role_t(role_selector.get_ns(), rank));
+    r = resetter.reset_hard();
   } else {
-    r = resetter.reset(mds_role_t(role_selector.get_ns(), rank));
+    r = resetter.reset();
   }
-  resetter.shutdown();
 
   return r;
 }
@@ -658,7 +683,7 @@ int JournalTool::recover_dentries(
     } else if (r == 0) {
       // Conditionally update existing omap header
       fnode_t old_fnode;
-      bufferlist::iterator old_fnode_iter = old_fnode_bl.begin();
+      auto old_fnode_iter = old_fnode_bl.cbegin();
       try {
         old_fnode.decode(old_fnode_iter);
         dout(4) << "frag " << frag_oid.name << " fnode old v" <<
@@ -694,9 +719,9 @@ int JournalTool::recover_dentries(
     std::set<std::string> read_keys;
 
     // Compose list of potentially-existing dentries we would like to fetch
-    list<ceph::shared_ptr<EMetaBlob::fullbit> > const &fb_list =
+    list<std::shared_ptr<EMetaBlob::fullbit> > const &fb_list =
       lump.get_dfull();
-    for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi =
+    for (list<std::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi =
         fb_list.begin(); fbi != fb_list.end(); ++fbi) {
       EMetaBlob::fullbit const &fb = *(*fbi);
 
@@ -743,7 +768,7 @@ int JournalTool::recover_dentries(
 
     // Compose list of dentries we will write back
     std::map<std::string, bufferlist> write_vals;
-    for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi =
+    for (list<std::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi =
         fb_list.begin(); fbi != fb_list.end(); ++fbi) {
       EMetaBlob::fullbit const &fb = *(*fbi);
 
@@ -763,12 +788,12 @@ int JournalTool::recover_dentries(
         dout(4) << "dentry exists, checking versions..." << dendl;
         bufferlist &old_dentry = read_vals[key];
         // Decode dentry+inode
-        bufferlist::iterator q = old_dentry.begin();
+        auto q = old_dentry.cbegin();
 
         snapid_t dnfirst;
-        ::decode(dnfirst, q);
+        decode(dnfirst, q);
         char dentry_type;
-        ::decode(dentry_type, q);
+        decode(dentry_type, q);
 
         if (dentry_type == 'L') {
           // leave write_dentry false, we have no version to
@@ -802,8 +827,8 @@ int JournalTool::recover_dentries(
 
         // Compose: Dentry format is dnfirst, [I|L], InodeStore(bare=true)
         bufferlist dentry_bl;
-        ::encode(fb.dnfirst, dentry_bl);
-        ::encode('I', dentry_bl);
+        encode(fb.dnfirst, dentry_bl);
+        encode('I', dentry_bl);
         encode_fullbit_as_inode(fb, true, &dentry_bl);
 
         // Record for writing to RADOS
@@ -832,12 +857,12 @@ int JournalTool::recover_dentries(
         dout(4) << "dentry exists, checking versions..." << dendl;
         bufferlist &old_dentry = read_vals[key];
         // Decode dentry+inode
-        bufferlist::iterator q = old_dentry.begin();
+        auto q = old_dentry.cbegin();
 
         snapid_t dnfirst;
-        ::decode(dnfirst, q);
+        decode(dnfirst, q);
         char dentry_type;
-        ::decode(dentry_type, q);
+        decode(dentry_type, q);
 
         if (dentry_type == 'L') {
           dout(10) << "Existing hardlink inode in slot to be (maybe) written "
@@ -864,10 +889,10 @@ int JournalTool::recover_dentries(
 
         // Compose: Dentry format is dnfirst, [I|L], InodeStore(bare=true)
         bufferlist dentry_bl;
-        ::encode(rb.dnfirst, dentry_bl);
-        ::encode('L', dentry_bl);
-        ::encode(rb.ino, dentry_bl);
-        ::encode(rb.d_type, dentry_bl);
+        encode(rb.dnfirst, dentry_bl);
+        encode('L', dentry_bl);
+        encode(rb.ino, dentry_bl);
+        encode(rb.d_type, dentry_bl);
 
         // Record for writing to RADOS
         write_vals[key] = dentry_bl;
@@ -888,11 +913,11 @@ int JournalTool::recover_dentries(
       if (it != read_vals.end()) {
 	dout(4) << "dentry exists, will remove" << dendl;
 
-	bufferlist::iterator q = it->second.begin();
+	auto q = it->second.cbegin();
 	snapid_t dnfirst;
-	::decode(dnfirst, q);
+	decode(dnfirst, q);
 	char dentry_type;
-	::decode(dentry_type, q);
+	decode(dentry_type, q);
 
 	bool remove_dentry = false;
 	if (dentry_type == 'L') {
@@ -944,7 +969,7 @@ int JournalTool::recover_dentries(
    * important because clients use them to infer completeness
    * of directories
    */
-  for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator p =
+  for (list<std::shared_ptr<EMetaBlob::fullbit> >::const_iterator p =
        metablob.roots.begin(); p != metablob.roots.end(); ++p) {
     EMetaBlob::fullbit const &fb = *(*p);
     inodeno_t ino = fb.inode.ino;
@@ -964,9 +989,9 @@ int JournalTool::recover_dentries(
       InodeStore old_inode;
       dout(4) << "root exists, will modify (" << old_root_ino_bl.length()
         << ")" << dendl;
-      bufferlist::iterator inode_bl_iter = old_root_ino_bl.begin(); 
+      auto inode_bl_iter = old_root_ino_bl.cbegin(); 
       std::string magic;
-      ::decode(magic, inode_bl_iter);
+      decode(magic, inode_bl_iter);
       if (magic == CEPH_FS_ONDISK_MAGIC) {
         dout(4) << "magic ok" << dendl;
         old_inode.decode(inode_bl_iter);
@@ -990,7 +1015,7 @@ int JournalTool::recover_dentries(
 
       // Compose: root ino format is magic,InodeStore(bare=false)
       bufferlist new_root_ino_bl;
-      ::encode(std::string(CEPH_FS_ONDISK_MAGIC), new_root_ino_bl);
+      encode(std::string(CEPH_FS_ONDISK_MAGIC), new_root_ino_bl);
       encode_fullbit_as_inode(fb, false, &new_root_ino_bl);
 
       // Write to RADOS
@@ -1046,7 +1071,7 @@ int JournalTool::erase_region(JournalScanner const &js, uint64_t const pos, uint
 
   // Write log stream region to RADOS
   // FIXME: get object size somewhere common to scan_events
-  uint32_t object_size = g_conf->mds_log_segment_size;
+  uint32_t object_size = g_conf()->mds_log_segment_size;
   if (object_size == 0) {
     // Default layout object size
     object_size = file_layout_t::get_default().object_size;
@@ -1157,8 +1182,8 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
 
     // Deserialize InoTable
     version_t inotable_ver;
-    bufferlist::iterator q = inotable_bl.begin();
-    ::decode(inotable_ver, q);
+    auto q = inotable_bl.cbegin();
+    decode(inotable_ver, q);
     InoTable ino_table(NULL);
     ino_table.decode(q);
     
@@ -1180,7 +1205,7 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
       inotable_ver += 1;
       dout(4) << "writing modified inotable version " << inotable_ver << dendl;
       bufferlist inotable_new_bl;
-      ::encode(inotable_ver, inotable_new_bl);
+      encode(inotable_ver, inotable_new_bl);
       ino_table.encode_state(inotable_new_bl);
       int write_r = output.write_full(inotable_oid.name, inotable_new_bl);
       if (write_r != 0) {

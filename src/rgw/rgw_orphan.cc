@@ -3,7 +3,6 @@
 
 #include <string>
 
-using namespace std;
 
 #include "common/config.h"
 #include "common/Formatter.h"
@@ -70,7 +69,7 @@ int RGWOrphanStore::read_job(const string& job_name, RGWOrphanSearchState & stat
 
   try {
     bufferlist& bl = iter->second;
-    ::decode(state, bl);
+    decode(state, bl);
   } catch (buffer::error& err) {
     lderr(store->ctx()) << "ERROR: could not decode buffer" << dendl;
     return -EIO;
@@ -83,7 +82,7 @@ int RGWOrphanStore::write_job(const string& job_name, const RGWOrphanSearchState
 {
   map<string, bufferlist> vals;
   bufferlist bl;
-  ::encode(state, bl);
+  encode(state, bl);
   vals[job_name] = bl;
   int r = ioctx.omap_set(oid, vals);
   if (r < 0) {
@@ -128,7 +127,7 @@ int RGWOrphanStore::list_jobs(map <string,RGWOrphanSearchState>& job_list)
       RGWOrphanSearchState state;
       try {
         bufferlist bl = it.second;
-        ::decode(state, bl);
+        decode(state, bl);
       } catch (buffer::error& err) {
         lderr(store->ctx()) << "ERROR: could not decode buffer" << dendl;
         return -EIO;

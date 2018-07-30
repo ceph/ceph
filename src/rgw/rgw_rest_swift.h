@@ -233,7 +233,7 @@ protected:
   struct info
   {
     bool is_admin_info;
-    function<void (Formatter&, const md_config_t&, RGWRados&)> list_data;
+    function<void (Formatter&, const ConfigProxy&, RGWRados&)> list_data;
   };
 
   static const vector<pair<string, struct info>> swift_info;
@@ -243,10 +243,10 @@ public:
 
   void execute() override;
   void send_response() override;
-  static void list_swift_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
-  static void list_tempauth_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
-  static void list_tempurl_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
-  static void list_slo_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
+  static void list_swift_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
+  static void list_tempauth_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
+  static void list_tempurl_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
+  static void list_slo_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
   static bool is_expired(const std::string& expires, CephContext* cct);
 };
 
@@ -385,7 +385,7 @@ protected:
   static int init_from_header(struct req_state* s,
                               const std::string& frontend_prefix);
 public:
-  RGWHandler_REST_SWIFT(const rgw::auth::Strategy& auth_strategy)
+  explicit RGWHandler_REST_SWIFT(const rgw::auth::Strategy& auth_strategy)
     : auth_strategy(auth_strategy) {
   }
   ~RGWHandler_REST_SWIFT() override = default;

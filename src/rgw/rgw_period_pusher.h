@@ -23,11 +23,11 @@ using RGWZonesNeedPeriod = RGWPeriod;
 class RGWPeriodPusher final : public RGWRealmWatcher::Watcher,
                               public RGWRealmReloader::Pauser {
  public:
-  RGWPeriodPusher(RGWRados* store);
+  explicit RGWPeriodPusher(RGWRados* store);
   ~RGWPeriodPusher() override;
 
   /// respond to realm notifications by pushing new periods to other zones
-  void handle_notify(RGWRealmNotify type, bufferlist::iterator& p) override;
+  void handle_notify(RGWRealmNotify type, bufferlist::const_iterator& p) override;
 
   /// avoid accessing RGWRados while dynamic reconfiguration is in progress.
   /// notifications will be enqueued until resume()

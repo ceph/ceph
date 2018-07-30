@@ -275,7 +275,7 @@ rgw::auth::Strategy::apply(const rgw::auth::Strategy& auth_strategy,
       applier->load_acct_info(*s->user);
       s->perm_mask = applier->get_perm_mask();
 
-      /* This is the signle place where we pass req_state as a pointer
+      /* This is the single place where we pass req_state as a pointer
        * to non-const and thus its modification is allowed. In the time
        * of writing only RGWTempURLEngine needed that feature. */
       applier->modify_request_state(s);

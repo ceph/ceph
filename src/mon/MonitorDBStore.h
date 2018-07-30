@@ -65,22 +65,22 @@ class MonitorDBStore
 
     void encode(bufferlist& encode_bl) const {
       ENCODE_START(2, 1, encode_bl);
-      ::encode(type, encode_bl);
-      ::encode(prefix, encode_bl);
-      ::encode(key, encode_bl);
-      ::encode(bl, encode_bl);
-      ::encode(endkey, encode_bl);
+      encode(type, encode_bl);
+      encode(prefix, encode_bl);
+      encode(key, encode_bl);
+      encode(bl, encode_bl);
+      encode(endkey, encode_bl);
       ENCODE_FINISH(encode_bl);
     }
 
-    void decode(bufferlist::iterator& decode_bl) {
+    void decode(bufferlist::const_iterator& decode_bl) {
       DECODE_START(2, decode_bl);
-      ::decode(type, decode_bl);
-      ::decode(prefix, decode_bl);
-      ::decode(key, decode_bl);
-      ::decode(bl, decode_bl);
+      decode(type, decode_bl);
+      decode(prefix, decode_bl);
+      decode(key, decode_bl);
+      decode(bl, decode_bl);
       if (struct_v >= 2)
-	::decode(endkey, decode_bl);
+	decode(endkey, decode_bl);
       DECODE_FINISH(decode_bl);
     }
 
@@ -99,7 +99,7 @@ class MonitorDBStore
   };
 
   struct Transaction;
-  typedef ceph::shared_ptr<Transaction> TransactionRef;
+  typedef std::shared_ptr<Transaction> TransactionRef;
   struct Transaction {
     list<Op> ops;
     uint64_t bytes, keys;
@@ -125,8 +125,9 @@ class MonitorDBStore
     }
 
     void put(string prefix, string key, version_t ver) {
+      using ceph::encode;
       bufferlist bl;
-      ::encode(ver, bl);
+      encode(ver, bl);
       put(prefix, key, bl);
     }
 
@@ -152,18 +153,18 @@ class MonitorDBStore
 
     void encode(bufferlist& bl) const {
       ENCODE_START(2, 1, bl);
-      ::encode(ops, bl);
-      ::encode(bytes, bl);
-      ::encode(keys, bl);
+      encode(ops, bl);
+      encode(bytes, bl);
+      encode(keys, bl);
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       DECODE_START(2, bl);
-      ::decode(ops, bl);
+      decode(ops, bl);
       if (struct_v >= 2) {
-	::decode(bytes, bl);
-	::decode(keys, bl);
+	decode(bytes, bl);
+	decode(keys, bl);
       }
       DECODE_FINISH(bl);
     }
@@ -187,7 +188,7 @@ class MonitorDBStore
 
     void append_from_encoded(bufferlist& bl) {
       auto other(std::make_shared<Transaction>());
-      bufferlist::iterator it = bl.begin();
+      auto it = bl.cbegin();
       other->decode(it);
       append(other);
     }
@@ -264,7 +265,7 @@ class MonitorDBStore
     KeyValueDB::Transaction dbt = db->get_transaction();
 
     if (do_dump) {
-      if (!g_conf->mon_debug_dump_json) {
+      if (!g_conf()->mon_debug_dump_json) {
         bufferlist bl;
         t->encode(bl);
         bl.write_fd(dump_fd_binary);
@@ -329,10 +330,10 @@ class MonitorDBStore
        * We will now randomly inject random delays.  We can safely sleep prior
        * to applying the transaction as it won't break the model.
        */
-      double delay_prob = g_conf->mon_inject_transaction_delay_probability;
+      double delay_prob = g_conf()->mon_inject_transaction_delay_probability;
       if (delay_prob && (rand() % 10000 < delay_prob * 10000.0)) {
         utime_t delay;
-        double delay_max = g_conf->mon_inject_transaction_delay_max;
+        double delay_max = g_conf()->mon_inject_transaction_delay_max;
         delay.set_from_double(delay_max * (double)(rand() % 10000) / 10000.0);
         lsubdout(g_ceph_context, mon, 1)
           << "apply_transaction will be delayed for " << delay
@@ -394,10 +395,10 @@ class MonitorDBStore
       last_key.first = prefix;
       last_key.second = key;
 
-      if (g_conf->mon_sync_debug) {
-	::encode(prefix, crc_bl);
-	::encode(key, crc_bl);
-	::encode(value, crc_bl);
+      if (g_conf()->mon_sync_debug) {
+	encode(prefix, crc_bl);
+	encode(key, crc_bl);
+	encode(value, crc_bl);
       }
 
       return true;
@@ -407,7 +408,7 @@ class MonitorDBStore
 
   public:
     __u32 crc() {
-      if (g_conf->mon_sync_debug)
+      if (g_conf()->mon_sync_debug)
 	return crc_bl.crc32c(0);
       return 0;
     }
@@ -420,7 +421,7 @@ class MonitorDBStore
     virtual void get_chunk_tx(TransactionRef tx, uint64_t max) = 0;
     virtual pair<string,string> get_next_key() = 0;
   };
-  typedef ceph::shared_ptr<StoreIteratorImpl> Synchronizer;
+  typedef std::shared_ptr<StoreIteratorImpl> Synchronizer;
 
   class WholeStoreIteratorImpl : public StoreIteratorImpl {
     KeyValueDB::WholeSpaceIterator iter;
@@ -484,14 +485,14 @@ class MonitorDBStore
   Synchronizer get_synchronizer(pair<string,string> &key,
 				set<string> &prefixes) {
     KeyValueDB::WholeSpaceIterator iter;
-    iter = db->get_iterator();
+    iter = db->get_wholespace_iterator();
 
     if (!key.first.empty() && !key.second.empty())
       iter->upper_bound(key.first, key.second);
     else
       iter->seek_to_first();
 
-    return ceph::shared_ptr<StoreIteratorImpl>(
+    return std::shared_ptr<StoreIteratorImpl>(
 	new WholeStoreIteratorImpl(iter, prefixes)
     );
   }
@@ -505,7 +506,7 @@ class MonitorDBStore
 
   KeyValueDB::WholeSpaceIterator get_iterator() {
     KeyValueDB::WholeSpaceIterator iter;
-    iter = db->get_iterator();
+    iter = db->get_wholespace_iterator();
     iter->seek_to_first();
     return iter;
   }
@@ -537,8 +538,8 @@ class MonitorDBStore
 
     assert(bl.length());
     version_t ver;
-    bufferlist::iterator p = bl.begin();
-    ::decode(ver, p);
+    auto p = bl.cbegin();
+    decode(ver, p);
     return ver;
   }
 
@@ -603,10 +604,10 @@ class MonitorDBStore
     }
     db.reset(db_ptr);
 
-    if (g_conf->mon_debug_dump_transactions) {
-      if (!g_conf->mon_debug_dump_json) {
+    if (g_conf()->mon_debug_dump_transactions) {
+      if (!g_conf()->mon_debug_dump_json) {
         dump_fd_binary = ::open(
-          g_conf->mon_debug_dump_location.c_str(),
+          g_conf()->mon_debug_dump_location.c_str(),
           O_CREAT|O_APPEND|O_WRONLY, 0644);
         if (dump_fd_binary < 0) {
           dump_fd_binary = -errno;
@@ -616,14 +617,16 @@ class MonitorDBStore
       } else {
         dump_fmt.reset();
         dump_fmt.open_array_section("dump");
-        dump_fd_json.open(g_conf->mon_debug_dump_location.c_str());
+        dump_fd_json.open(g_conf()->mon_debug_dump_location.c_str());
       }
       do_dump = true;
     }
     if (kv_type == "rocksdb")
-      db->init(g_conf->mon_rocksdb_options);
+      db->init(g_conf()->mon_rocksdb_options);
     else
       db->init();
+
+
   }
 
   int open(ostream &out) {
@@ -640,6 +643,16 @@ class MonitorDBStore
     r = db->open(out);
     if (r < 0)
       return r;
+
+    // Monitors are few in number, so the resource cost of exposing 
+    // very detailed stats is low: ramp up the priority of all the
+    // KV store's perf counters.  Do this after open, because backend may
+    // not have constructed PerfCounters earlier.
+    if (db->get_perf_counters()) {
+      db->get_perf_counters()->set_prio_adjust(
+          PerfCountersBuilder::PRIO_USEFUL - PerfCountersBuilder::PRIO_DEBUGONLY);
+    }
+
     io_work.start();
     is_open = true;
     return 0;
@@ -650,7 +663,7 @@ class MonitorDBStore
     string kv_type;
     int r = read_meta("kv_backend", &kv_type);
     if (r < 0) {
-      kv_type = g_conf->mon_keyvaluedb;
+      kv_type = g_conf()->mon_keyvaluedb;
       r = write_meta("kv_backend", kv_type);
       if (r < 0)
 	return r;
@@ -673,6 +686,10 @@ class MonitorDBStore
 
   void compact() {
     db->compact();
+  }
+
+  void compact_async() {
+    db->compact_async();
   }
 
   void compact_prefix(const string& prefix) {
@@ -746,7 +763,7 @@ class MonitorDBStore
   ~MonitorDBStore() {
     assert(!is_open);
     if (do_dump) {
-      if (!g_conf->mon_debug_dump_json) {
+      if (!g_conf()->mon_debug_dump_json) {
         ::close(dump_fd_binary);
       } else {
         dump_fmt.close_section();

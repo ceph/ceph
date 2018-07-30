@@ -23,18 +23,20 @@
 #include "client/Client.h"
 #include "mon/MonClient.h"
 #include "osdc/Objecter.h"
-
+#include "PyModuleRegistry.h"
+#include "MgrClient.h"
 
 class MMgrMap;
 class Mgr;
+class PyModuleConfig;
 
 class MgrStandby : public Dispatcher,
 		   public md_config_obs_t {
 public:
   // config observer bits
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const struct md_config_t *conf,
-                         const std::set <std::string> &changed) override;
+  void handle_conf_change(const ConfigProxy& conf,
+			  const std::set <std::string> &changed) override;
 
 protected:
   MonClient monc;
@@ -42,12 +44,15 @@ protected:
   Objecter objecter;
   Client client;
 
+  MgrClient mgrc;
+
   LogClient log_client;
   LogChannelRef clog, audit_clog;
 
   Mutex lock;
   SafeTimer timer;
 
+  PyModuleRegistry py_module_registry;
   std::shared_ptr<Mgr> active_mgr;
 
   int orig_argc;

@@ -14,6 +14,7 @@
 #ifndef CEPH_LIBRADOS_RADOSCLIENT_H
 #define CEPH_LIBRADOS_RADOSCLIENT_H
 
+#include "common/config_fwd.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
@@ -30,7 +31,6 @@ struct AuthAuthorizer;
 struct Context;
 class CephContext;
 struct Connection;
-struct md_config_t;
 class Message;
 class MLog;
 class Messenger;
@@ -43,7 +43,7 @@ class librados::RadosClient : public Dispatcher
 
 public:
   using Dispatcher::cct;
-  md_config_t *conf;
+  const ConfigProxy& conf;
 private:
   enum {
     DISCONNECTED,
@@ -99,6 +99,9 @@ public:
 
   uint64_t get_instance_id();
 
+  int get_min_compatible_client(int8_t* min_compat_client,
+                                int8_t* require_min_compat_client);
+
   int wait_for_latest_osdmap();
 
   int create_ioctx(const char *name, IoCtxImpl **io);
@@ -111,7 +114,7 @@ public:
   uint64_t pool_required_alignment(int64_t pool_id);
   int pool_required_alignment2(int64_t pool_id, uint64_t *alignment);
   int pool_get_auid(uint64_t pool_id, unsigned long long *auid);
-  int pool_get_name(uint64_t pool_id, std::string *auid);
+  int pool_get_name(uint64_t pool_id, std::string *auid, bool wait_latest_map = false);
 
   int pool_list(std::list<std::pair<int64_t, string> >& ls);
   int get_pool_stats(std::list<string>& ls, map<string,::pool_stat_t>& result);
@@ -164,7 +167,7 @@ public:
     const std::string& name,     ///< daemon name (e.g., 'gwfoo')
     const std::map<std::string,std::string>& metadata); ///< static metadata about daemon
   int service_daemon_update_status(
-    const std::map<std::string,std::string>& status);
+    std::map<std::string,std::string>&& status);
 
   mon_feature_t get_required_monitor_features() const;
 };

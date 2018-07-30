@@ -14,11 +14,14 @@
 
 // For ceph_timespec
 #include "ceph_time.h"
+#include "log/LogClock.h"
 #include "config.h"
 
 #if defined(__APPLE__)
 #include <mach/mach.h>
 #include <mach/mach_time.h>
+
+#include <ostringstream>
 
 #ifndef NSEC_PER_SEC
 #define NSEC_PER_SEC 1000000000ULL
@@ -80,6 +83,7 @@ namespace ceph {
       const struct ceph_timespec& ts) {
       return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
     }
+
   }
 
   using std::chrono::duration_cast;
@@ -132,4 +136,49 @@ namespace ceph {
   operator<< <coarse_mono_clock>(std::ostream& m, const coarse_mono_time& t);
   template std::ostream&
   operator<< <coarse_real_clock>(std::ostream& m, const coarse_real_time& t);
+
+  std::string timespan_str(timespan t)
+  {
+    // FIXME: somebody pretty please make a version of this function
+    // that isn't as lame as this one!
+    uint64_t nsec = std::chrono::nanoseconds(t).count();
+    ostringstream ss;
+    if (nsec < 2000000000) {
+      ss << ((float)nsec / 1000000000) << "s";
+      return ss.str();
+    }
+    uint64_t sec = nsec / 1000000000;
+    if (sec < 120) {
+      ss << sec << "s";
+      return ss.str();
+    }
+    uint64_t min = sec / 60;
+    if (min < 120) {
+      ss << min << "m";
+      return ss.str();
+    }
+    uint64_t hr = min / 60;
+    if (hr < 48) {
+      ss << hr << "h";
+      return ss.str();
+    }
+    uint64_t day = hr / 24;
+    if (day < 14) {
+      ss << day << "d";
+      return ss.str();
+    }
+    uint64_t wk = day / 7;
+    if (wk < 12) {
+      ss << wk << "w";
+      return ss.str();
+    }
+    uint64_t mn = day / 30;
+    if (mn < 24) {
+      ss << mn << "M";
+      return ss.str();
+    }
+    uint64_t yr = day / 365;
+    ss << yr << "y";
+    return ss.str();
+  }
 }

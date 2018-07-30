@@ -7,5 +7,5 @@ tasks:
     env:
       # override workunit setting of CEPH_ARGS='--cluster'
       CEPH_ARGS: ''
+      RBD_MIRROR_INSTANCES: '4'
       RBD_MIRROR_USE_EXISTING_CLUSTER: '1'
-      RBD_MIRROR_USE_RBD_MIRROR: '1'

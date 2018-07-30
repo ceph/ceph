@@ -122,7 +122,7 @@ public:
   static bool decode_json(const char *name, C& container, void (*cb)(C&, JSONObj *obj), JSONObj *obj, bool mandatory = false);
 
   template<class T>
-  static void decode_json(const char *name, T& val, T& default_val, JSONObj *obj);
+  static void decode_json(const char *name, T& val, const T& default_val, JSONObj *obj);
 };
 
 template<class T>
@@ -304,7 +304,7 @@ bool JSONDecoder::decode_json(const char *name, C& container, void (*cb)(C&, JSO
 }
 
 template<class T>
-void JSONDecoder::decode_json(const char *name, T& val, T& default_val, JSONObj *obj)
+void JSONDecoder::decode_json(const char *name, T& val, const T& default_val, JSONObj *obj)
 {
   JSONObjIter iter = obj->find_first(name);
   if (iter.end()) {
@@ -466,5 +466,133 @@ void encode_json_map(const char *name, const char *index_name, const char *value
 {
   encode_json_map<K, V>(name, index_name, NULL, value_name, NULL, NULL, m, f);
 }
+
+struct JSONFormattable {
+  enum Type {
+    FMT_NONE,
+    FMT_STRING,
+    FMT_ARRAY,
+    FMT_OBJ,
+  } type{FMT_NONE};
+
+  string str;
+  vector<JSONFormattable> arr;
+  map<std::string, JSONFormattable> obj;
+  void decode_json(JSONObj *jo) {
+    if (jo->is_array()) {
+      type = JSONFormattable::FMT_ARRAY;
+      decode_json_obj(arr, jo);
+    } else if (jo->is_object()) {
+      type = JSONFormattable::FMT_OBJ;
+      auto iter = jo->find_first();
+      for (;!iter.end(); ++iter) {
+        JSONObj *field = *iter;
+        decode_json_obj(obj[field->get_name()], field);
+      }
+    } else {
+      type = JSONFormattable::FMT_STRING;
+      decode_json_obj(str, jo);
+    }
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode((uint8_t)type, bl);
+    encode(str, bl);
+    encode(arr, bl);
+    encode(obj, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    uint8_t t;
+    decode(t, bl);
+    type = (Type)t;
+    decode(str, bl);
+    decode(arr, bl);
+    decode(obj, bl);
+    DECODE_FINISH(bl);
+  }
+
+  const std::string& val() const {
+    return str;
+  }
+
+  int val_int() const;
+  bool val_bool() const;
+
+  const vector<JSONFormattable>& array() const {
+    return arr;
+  }
+
+  const JSONFormattable& operator[](const std::string& name) const;
+  const JSONFormattable& operator[](size_t index) const;
+
+  JSONFormattable& operator[](const std::string& name);
+  JSONFormattable& operator[](size_t index);
+
+  operator std::string() const {
+    return str;
+  }
+
+  explicit operator int() const {
+    return val_int();
+  }
+
+  explicit operator bool() const {
+    return val_bool();
+  }
+
+  template<class T>
+  T operator[](const std::string& name) const {
+    return this->operator[](name)(T());
+  }
+
+  template<class T>
+  T operator[](const std::string& name) {
+    return this->operator[](name)(T());
+  }
+
+  string operator ()(const char *def_val) const {
+    return def(string(def_val));
+  }
+
+#if 0
+  string operator ()(const string& def_val) const {
+    return def(def_val);
+  }
+#endif
+
+  int operator()(int def_val) const {
+    return def(def_val);
+  }
+
+  bool operator()(bool def_val) const {
+    return def(def_val);
+  }
+
+  bool exists(const string& name) const;
+  bool exists(size_t index) const;
+
+  std::string def(const std::string& def_val) const;
+  int def(int def_val) const;
+  bool def(bool def_val) const;
+
+  bool find(const std::string& name, std::string *val) const;
+
+  std::string get(const std::string& name, const std::string& def_val) const;
+
+  int get_int(const std::string& name, int def_val) const;
+  bool get_bool(const std::string& name, bool def_val) const;
+
+  int set(const string& name, const string& val);
+  int erase(const string& name);
+
+  void derive_from(const JSONFormattable& jf);
+};
+WRITE_CLASS_ENCODER(JSONFormattable)
+
+void encode_json(const char *name, const JSONFormattable& v, Formatter *f);
 
 #endif

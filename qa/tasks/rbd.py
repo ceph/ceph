@@ -5,6 +5,7 @@ import contextlib
 import logging
 import os
 import tempfile
+import sys
 
 from cStringIO import StringIO
 from teuthology.orchestra import run
@@ -14,6 +15,9 @@ from teuthology.parallel import parallel
 from teuthology.task.common_fs_utils import generic_mkfs
 from teuthology.task.common_fs_utils import generic_mount
 from teuthology.task.common_fs_utils import default_image_name
+
+#V1 image unsupported but required for testing purposes
+os.environ["RBD_FORCE_ALLOW_V1"] = "1"
 
 log = logging.getLogger(__name__)
 
@@ -342,6 +346,16 @@ def run_xfstests(ctx, config):
     with parallel() as p:
         for role, properties in config.items():
             p.spawn(run_xfstests_one_client, ctx, role, properties)
+        exc_info = None
+        while True:
+            try:
+                p.next()
+            except StopIteration:
+                break
+            except:
+                exc_info = sys.exc_info()
+        if exc_info:
+            raise exc_info[0], exc_info[1], exc_info[2]
     yield
 
 def run_xfstests_one_client(ctx, role, properties):

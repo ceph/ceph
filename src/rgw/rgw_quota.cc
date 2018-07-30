@@ -110,10 +110,9 @@ bool RGWQuotaCache<T>::can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats
       quota.max_size_soft_threshold = quota.max_size * store->ctx()->_conf->rgw_bucket_quota_soft_threshold;
     }
 
-    const auto cached_stats_num_kb_rounded = rgw_rounded_kb(cached_stats.size_rounded);
-    if (cached_stats_num_kb_rounded >= (uint64_t)quota.max_size_soft_threshold) {
+    if (cached_stats.size_rounded  >= (uint64_t)quota.max_size_soft_threshold) {
       ldout(store->ctx(), 20) << "quota: can't use cached stats, exceeded soft threshold (size): "
-        << cached_stats_num_kb_rounded << " >= " << quota.max_size_soft_threshold << dendl;
+        << cached_stats.size_rounded << " >= " << quota.max_size_soft_threshold << dendl;
       return false;
     }
   }
@@ -970,7 +969,7 @@ public:
 
   int check_bucket_shards(uint64_t max_objs_per_shard, uint64_t num_shards,
 			  const rgw_user& user, const rgw_bucket& bucket, RGWQuotaInfo& bucket_quota,
-			  uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards)
+			  uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards) override
   {
     RGWStorageStats bucket_stats;
     int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats,

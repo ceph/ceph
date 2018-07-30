@@ -246,6 +246,17 @@ def task(ctx, config):
     assert out['keys'][0]['secret_key'] == secret_key
     assert not out['suspended']
 
+    # TESTCASE 'info-existing','user','info','existing user query with wrong uid but correct access key','returns correct info'
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'access-key' : access_key, 'uid': 'uid_not_exist'})
+
+    assert out['user_id'] == user1
+    assert out['email'] == email
+    assert out['display_name'] == display_name1
+    assert len(out['keys']) == 1
+    assert out['keys'][0]['access_key'] == access_key
+    assert out['keys'][0]['secret_key'] == secret_key
+    assert not out['suspended']
+
     # TESTCASE 'suspend-ok','user','suspend','active user','succeeds'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'modify'], {'uid' : user1, 'suspended' : True})
     assert ret == 200
@@ -254,6 +265,7 @@ def task(ctx, config):
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
     assert ret == 200
     assert out['suspended']
+    assert out['email'] == email
 
     # TESTCASE 're-enable','user','enable','suspended user','succeeds'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'modify'], {'uid' : user1, 'suspended' : 'false'})

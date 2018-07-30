@@ -16,26 +16,44 @@ namespace children {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-int do_list_children(librbd::Image &image, Formatter *f)
+int do_list_children(librados::IoCtx &io_ctx, librbd::Image &image,
+                     bool all_flag, Formatter *f)
 {
-  std::set<std::pair<std::string, std::string> > children;
-  int r;
-
-  r = image.list_children(&children);
+  std::vector<librbd::child_info_t> children;
+  librbd::RBD rbd;
+  int r = image.list_children2(&children);
   if (r < 0)
     return r;
 
   if (f)
     f->open_array_section("children");
 
-  for (auto &child_it : children) {
+  for (std::vector<librbd::child_info_t>::iterator it = children.begin();
+       it != children.end(); ++it) {
+    bool trash = it->trash;
     if (f) {
-      f->open_object_section("child");
-      f->dump_string("pool", child_it.first);
-      f->dump_string("image", child_it.second);
-      f->close_section();
+      if (all_flag) {
+        f->open_object_section("child");
+        f->dump_string("pool", it->pool_name);
+        f->dump_string("image", it->image_name);
+        f->dump_string("id", it->image_id);
+        f->dump_bool("trash", it->trash);
+        f->close_section();
+      } else if (!trash) {
+        f->open_object_section("child");
+        f->dump_string("pool", it->pool_name);
+        f->dump_string("image", it->image_name);
+        f->close_section();
+      }
     } else {
-      std::cout << child_it.first << "/" << child_it.second << std::endl;
+      if (all_flag) {
+        std::cout << it->pool_name << "/" << it->image_name;
+        if (trash)
+          std::cout << " (trash " << it->image_id << ")";
+        std::cout << std::endl;
+      } else if (!trash) {
+        std::cout << it->pool_name << "/" << it->image_name << std::endl;
+      }
     }
   }
 
@@ -50,19 +68,37 @@ int do_list_children(librbd::Image &image, Formatter *f)
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_snap_id_option(options);
+  options->add_options()
+    ("all,a", po::bool_switch(), "list all children of snapshot (include trash)");
   at::add_format_options(options);
 }
 
-int execute(const po::variables_map &vm) {
+int execute(const po::variables_map &vm,
+            const std::vector<std::string> &ceph_global_init_args) {
+  uint64_t snap_id = LIBRADOS_SNAP_HEAD;
+  auto snap_presence = utils::SNAPSHOT_PRESENCE_REQUIRED;
+  if (vm.count(at::SNAPSHOT_ID)) {
+    snap_id = vm[at::SNAPSHOT_ID].as<uint64_t>();
+    snap_presence = utils::SNAPSHOT_PRESENCE_PERMITTED;
+  }
+
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_NONE);
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, snap_presence, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
+  }
+
+  if (snap_id != LIBRADOS_SNAP_HEAD && !snap_name.empty()) {
+    std::cerr << "rbd: trying to access snapshot using both name and id."
+              << std::endl;
+    return -EINVAL;
   }
 
   at::Format::Formatter formatter;
@@ -74,13 +110,27 @@ int execute(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", snap_name, true,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 true, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
 
-  r = do_list_children(image, formatter.get());
+  if (snap_id == LIBRADOS_SNAP_HEAD) {
+    r = image.snap_set(snap_name.c_str());
+  } else {
+    r = image.snap_set_by_id(snap_id);
+  }
+  if (r == -ENOENT) {
+    std::cerr << "rbd: snapshot does not exist." << std::endl;
+    return r;
+  } else if (r < 0) {
+    std::cerr << "rbd: error setting snapshot: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
+
+  r = do_list_children(io_ctx, image, vm["all"].as<bool>(), formatter.get());
   if (r < 0) {
     std::cerr << "rbd: listing children failed: " << cpp_strerror(r)
               << std::endl;

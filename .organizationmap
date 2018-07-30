@@ -1,6 +1,6 @@
 #
 # More information at
-#  https://wiki.ceph.com/Community/Ceph_contributors_list_maintenance_guide
+#  http://tracker.ceph.com/projects/ceph/wiki/Ceph_contributors_list_maintenance_guide
 #
 # See .githubmap for GitHub username contributors
 # See .mailmap for name and mail normalization.
@@ -98,6 +98,10 @@ Debian GNU/Linux <contact@debian.org> Thorsten Glaser <tg@mirbsd.de>
 Deutsche Telekom <contact@telekom.de> Daniel Gollub <d.gollub@telekom.de>
 Deutsche Telekom <contact@telekom.de> Danny Al-Gaaf <danny.al-gaaf@bisect.de>
 Deutsche Telekom <contact@telekom.de> Thomas Bechtold <t.bechtold@telekom.de>
+DiDi <contact@didichuxing.com> Xin Yuan <mychoxin@gmail.com>
+DiDi <contact@didichuxing.com> Yichao Li <liyichao.good@gmail.com>
+DiDi <contact@didichuxing.com> Li Wang <laurence.liwang@gmail.com>
+DigitalOcean <contact@digitalocean.com> Adam Wolfe Gordon <awg@digitalocean.com>
 DigitalOcean <contact@digitalocean.com> Vaibhav Bhembre <vaibhav@digitalocean.com>
 Digiware <contact@digiware.nl> Willem Jan Withagen <wjw@digiware.nl>
 DreamHost <contact@dreamhost.com> Andrew Farmer <andrewf@hq.newdream.net>
@@ -262,6 +266,8 @@ Inktank <contact@inktank.com> Yehuda Sadeh <yehuda@inktank.com>
 Inktank <contact@inktank.com> Yuri Weinstein <yuri.weinstein@inktank.com>
 Inspur <contact@inspur.com> Fufei Shang <shangfufei@inspur.com>
 Inspur <contact@inspur.com> Mingqiao Wu <wumingqiao@inspur.com>
+Inspur <contact@inspur.com> Sibei Gao <gaosb@inspur.com>
+Inspur <contact@inspur.com> XueYu Bai <baixueyu@inspur.com>
 Inspur <contact@inspur.com> Ying He <heyingbj@inspur.com>
 Intel <contact@intel.com> Anjaneya Chagam <anjaneya.chagam@intel.com>
 Intel <contact@intel.com> Chendi Xue <chendi.xue@intel.com>
@@ -298,7 +304,6 @@ Johannes Gutenberg-Universität Mainz <contact@uni-mainz.de> Marcel Lauhoff <lau
 Karlsruhe Institute of Technology <ceph@lists.kit.edu> Daniel J. Hofmann <daniel@trvx.org>
 Keeper Technology <contact@keepertech.com> Wyllys Ingersoll <wyllys.ingersoll@keepertech.com>
 Kylin Cloud <contact@kylin-cloud.com> Jie Wang <jie.wang@kylin-cloud.com>
-Kylin Cloud <contact@kylin-cloud.com> Li Wang <li.wang@kylin-cloud.com>
 Kylin Cloud <contact@kylin-cloud.com> MingXin Liu <mingxin.liu@kylin-cloud.com>
 Kylin Cloud <contact@kylin-cloud.com> Xianxia Xiao <xianxia.xiao@kylin-cloud.com>
 Kylin Cloud <contact@kylin-cloud.com> Yunchuan Wen <yunchuan.wen@kylin-cloud.com>
@@ -329,7 +334,6 @@ Mirantis <contact@mirantis.com> Alexey Sheplyakov <asheplyakov@mirantis.com>
 Mirantis <contact@mirantis.com> Andrew Woodward <awoodward@mirantis.com>
 Mirantis <contact@mirantis.com> Dmitry Yatsushkevich <dyatsushkevich@mirantis.com>
 Mirantis <contact@mirantis.com> Dmytro Iurchenko <diurchenko@mirantis.com>
-Mirantis <contact@mirantis.com> Igor Fedotov <ifedotov@mirantis.com>
 Mirantis <contact@mirantis.com> Kiseleva Alyona <akiselyova@mirantis.com>
 Mirantis <contact@mirantis.com> Mykola Golub <mgolub@mirantis.com>
 Mirantis <contact@mirantis.com> Proskurin Kirill <kproskurin@mirantis.com>
@@ -495,20 +499,33 @@ SUSE <contact@suse.com> David Disseldorp <ddiss@suse.de>
 SUSE <contact@suse.com> Dirk Mueller <dmueller@suse.com>
 SUSE <contact@suse.com> Hannes Reinecke <hare@suse.de>
 SUSE <contact@suse.com> Holger Macht <hmacht@suse.de>
+SUSE <contact@suse.com> Igor Fedotov <ifedotov@suse.com>
 SUSE <contact@suse.com> Jan Fajerski <jfajerski@suse.com>
 SUSE <contact@suse.com> Jesse Williamson <jesse.williamson@suse.com>
 SUSE <contact@suse.com> João Eduardo Luís <joao@suse.de>
+SUSE <contact@suse.com> Kai Wagner <kwagner@suse.com>
 SUSE <contact@suse.com> Karl Eichwalder <ke@suse.de>
 SUSE <contact@suse.com> Karol Mroz <kmroz@suse.com>
 SUSE <contact@suse.com> Kapil Sharma <ksharma@suse.com>
+SUSE <contact@suse.com> Laura Paduano <lpaduano@suse.com>
+SUSE <contact@suse.com> Lenz Grimmer <lgrimmer@suse.com>
 SUSE <contact@suse.com> Mohamad Gebai <mgebai@suse.com>
 SUSE <contact@suse.com> Michal Koutný <mkoutny@suse.com>
+SUSE <contact@suse.com> Mykola Golub <mgolub@suse.com>
 SUSE <contact@suse.com> Nathan Cutler <ncutler@suse.com>
 SUSE <contact@suse.com> Owen Synge <osynge@suse.com>
+SUSE <contact@suse.com> Patrick Nawracay <pnawracay@suse.com>
 SUSE <contact@suse.com> Ricardo Dias <rdias@suse.com>
+SUSE <contact@suse.com> Ricardo Marques <rimarques@suse.com>
+SUSE <contact@suse.com> Sebastian Krah <skrah@suse.com>
+SUSE <contact@suse.com> Sebastian Wagner <swagner@suse.com>
+SUSE <contact@suse.com> Stephan Müller <smueller@suse.com>
 SUSE <contact@suse.com> Sven Seeberg <sseebergelverfeldt@suse.com>
+SUSE <contact@suse.com> Tatjana Dehler <tdehler@suse.com>
 SUSE <contact@suse.com> Thorsten Behrens <tbehrens@suse.com>
+SUSE <contact@suse.com> Tiago Melo <tmelo@suse.com>
 SUSE <contact@suse.com> Tim Serong <tserong@suse.com>
+SUSE <contact@suse.com> Volker Theile <vtheile@suse.com>
 SWITCH <contact@switch.ch> Jens-Christian Fischer <jens-christian.fischer@switch.ch>
 SWITCH <contact@switch.ch> Simon Leinen <simon.leinen@switch.ch>
 T2Cloud <contact@t2cloud.net> Leo Zhang <nguzcf@gmail.com>
@@ -523,6 +540,10 @@ Telecom Bretagne <contact@telecom-bretagne.eu> Thomas Cantin <thomas.cantin@tele
 Tencent <contact@tencent.com> Wei Luo <weilluo@tencent.com>
 Tencent <contact@tencent.com> Wenjun Huang <wenjunhuang@tencent.com>
 Tencent <contact@tencent.com> Zhi Zhang <willzzhang@tencent.com>
+Tencent Cloud <contact@cloud.tencent.com> Chang Liu <liuchang0812@gmail.com>
+Tencent Cloud <contact@cloud.tencent.com> Jing Chen <jeegnchen@gmail.com>
+Tencent Cloud <contact@cloud.tencent.com> Shanchun Lv <lvshanchun@gmail.com>
+Tencent Cloud <contact@cloud.tencent.com> Zongyou Yao <yaozongyou@vip.qq.com>
 Teradata <contact@teradata.com> Nitin A Kamble <Nitin.Kamble@Teradata.com>
 The Linux Box <contact@linuxbox.com> Adam C. Emerson <aemerson@linuxbox.com>
 The Linux Box <contact@linuxbox.com> Ali Maredia <ali@linuxbox.com>
@@ -537,6 +558,8 @@ Ubuntu Kylin <contact@ubuntukylin.com> Min Chen <minchen@ubuntukylin.com>
 UMCloud <contact@umcloud.com> Jiaying Ren <mikulely@gmail.com>
 UMCloud <contact@umcloud.com> Rongze Zhu <zrzhit@gmail.com>
 UMCloud <contact@umcloud.com> Enming Zhang <enming.zhang@umcloud.com>
+UMCloud <contact@umcloud.com> Shengjing Zhu <zhsj@umcloud.com>
+UMCloud <contact@umcloud.com> Yixing Yan <yanyx@umcloud.com>
 Unaffiliated <no@organization.net> Aaron Bassett <abassett@gmail.com>
 Unaffiliated <no@organization.net> Abhishek Dixit <dixitabhi@gmail.com>
 Unaffiliated <no@organization.net> Accela Zhao <accelazh@gmail.com>
@@ -557,7 +580,6 @@ Unaffiliated <no@organization.net> Bosse Klykken <larkly@gmail.com>
 Unaffiliated <no@organization.net> Brian Felton <bjfelton@gmail.com>
 Unaffiliated <no@organization.net> Burkhard Linke <Burkhard.Linke@computational.bio.uni-giessen.de>
 Unaffiliated <no@organization.net> craigchi <craig10624@gmail.com>
-Unaffiliated <no@organization.net> Chang Liu <liuchang0812@gmail.com>
 Unaffiliated <no@organization.net> Charles Alva <charlesalva@gmail.com>
 Unaffiliated <no@organization.net> Chanyoung Park <park910113@gmail.com>
 Unaffiliated <no@organization.net> Cheng Cheng <ccheng.leo@gmail.com>
@@ -658,6 +680,7 @@ Unaffiliated <no@organization.net> Michael Nelson <mikenel@tnld.net>
 Unaffiliated <no@organization.net> Michael Riederer <michael@riederer.org>
 Unaffiliated <no@organization.net> Michael Sevilla <mikesevilla3@gmail.com>
 Unaffiliated <no@organization.net> Michal Jarzabek <stiopa@gmail.com>
+Unaffiliated <no@organization.net> Mykola Golub <to.my.trociny@gmail.com>
 Unaffiliated <no@organization.net> Neha Ummareddy <nehaummareddy@gmail.com>
 Unaffiliated <no@organization.net> Nick Fisk <nick@fisk.me.uk>
 Unaffiliated <no@organization.net> Nicolas Yong <nicolas.yong93@gmail.com>

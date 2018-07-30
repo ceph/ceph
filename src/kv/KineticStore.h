@@ -9,7 +9,6 @@
 #include <set>
 #include <map>
 #include <string>
-#include "include/memory.h"
 #include <kinetic/kinetic.h>
 
 #include <errno.h>
@@ -52,15 +51,11 @@ public:
   int init();
 
   /// Opens underlying db
-  int open(ostream &out) {
-    return do_open(out, false);
-  }
+  int open(ostream &out, const std::vector<ColumnFamily>& = {}) override;
   /// Creates underlying db if missing and opens it
-  int create_and_open(ostream &out) {
-    return do_open(out, true);
-  }
+  int create_and_open(ostream &out, const std::vector<ColumnFamily>& = {}) override;
 
-  void close();
+  void close() override;
 
   enum KineticOpType {
     KINETIC_OP_WRITE,
@@ -95,15 +90,15 @@ public:
     void rm_range_keys(
         const string &prefix,
         const string &start,
-        const string &end);
+        const string &end) override;
   };
 
-  KeyValueDB::Transaction get_transaction() {
+  KeyValueDB::Transaction get_transaction() override {
     return std::make_shared<KineticTransactionImpl>(this);
   }
 
-  int submit_transaction(KeyValueDB::Transaction t);
-  int submit_transaction_sync(KeyValueDB::Transaction t);
+  int submit_transaction(KeyValueDB::Transaction t) override;
+  int submit_transaction_sync(KeyValueDB::Transaction t) override;
   int get(
     const string &prefix,
     const std::set<string> &key,
@@ -121,22 +116,22 @@ public:
     explicit KineticWholeSpaceIteratorImpl(kinetic::BlockingKineticConnection *conn);
     virtual ~KineticWholeSpaceIteratorImpl() { }
 
-    int seek_to_first() {
+    int seek_to_first() override {
       return seek_to_first("");
     }
     int seek_to_first(const string &prefix);
-    int seek_to_last();
+    int seek_to_last() override;
     int seek_to_last(const string &prefix);
     int upper_bound(const string &prefix, const string &after);
     int lower_bound(const string &prefix, const string &to);
-    bool valid();
-    int next();
-    int prev();
+    bool valid() override;
+    int next() override;
+    int prev() override;
     string key();
     pair<string,string> raw_key();
     bool raw_key_is_prefixed(const string &prefix);
-    bufferlist value();
-    int status();
+    bufferlist value() override;
+    int status() override;
   };
 
   /// Utility
@@ -149,8 +144,7 @@ public:
   }
 
 
-protected:
-  WholeSpaceIterator _get_iterator() {
+  WholeSpaceIterator get_wholespace_iterator() {
     return std::make_shared<KineticWholeSpaceIteratorImpl>(kinetic_conn.get());
   }
 };

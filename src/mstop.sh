@@ -30,17 +30,17 @@ fi
 for pidfile in $pfiles; do
   pid=`cat $pidfile`
   fname=`echo $pidfile | sed 's/.*\///g'`
-  echo $pid
   [ "$pid" == "" ] && exit
   [ $pid -eq 0 ] && exit
   echo pid=$pid
   extra_check=""
   entity=`echo $fname | sed 's/\..*//g'`
+  name=`echo $fname | sed 's/\.pid$//g'`
   [ "$entity" == "radosgw" ] && extra_check="-e lt-radosgw"
-  echo entity=$entity pid=$pid
+  echo entity=$entity pid=$pid name=$name
   while ps -p $pid -o args= | grep -q -e $entity $extracheck ; do
     cmd="kill $signal $pid"
-    printf "$cmd..."
+    printf "$cmd...\n"
     $cmd
     sleep 1
     continue

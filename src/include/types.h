@@ -54,12 +54,13 @@ extern "C" {
 #include <string>
 #include <list>
 #include <set>
+#include <boost/container/flat_set.hpp>
+#include <boost/container/flat_map.hpp>
 #include <map>
 #include <vector>
 #include <iostream>
 #include <iomanip>
 
-using namespace std;
 
 #include "include/unordered_map.h"
 
@@ -100,12 +101,18 @@ template<class A, class Alloc>
 inline ostream& operator<<(ostream& out, const vector<A,Alloc>& v);
 template<class A, class Comp, class Alloc>
 inline ostream& operator<<(ostream& out, const deque<A,Alloc>& v);
-template<class A, class B, class C>
-inline ostream& operator<<(ostream&out, const boost::tuple<A, B, C> &t);
+template<typename... Ts>
+inline ostream& operator<<(ostream& out, const std::tuple<Ts...> &t);
+template<typename... Ts>
+inline ostream& operator<<(ostream& out, const boost::tuple<Ts...> &t);
 template<class A, class Alloc>
 inline ostream& operator<<(ostream& out, const list<A,Alloc>& ilist);
 template<class A, class Comp, class Alloc>
 inline ostream& operator<<(ostream& out, const set<A, Comp, Alloc>& iset);
+template<class A, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const boost::container::flat_set<A, Comp, Alloc>& iset);
+template<class A, class B, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const boost::container::flat_map<A, B, Comp, Alloc>& iset);
 template<class A, class Comp, class Alloc>
 inline ostream& operator<<(ostream& out, const multiset<A,Comp,Alloc>& iset);
 template<class A, class B, class Comp, class Alloc>
@@ -139,9 +146,21 @@ inline ostream& operator<<(ostream& out, const deque<A,Alloc>& v) {
   return out;
 }
 
-template<class A, class B, class C>
-inline ostream& operator<<(ostream&out, const boost::tuple<A, B, C> &t) {
-  out << boost::get<0>(t) <<"," << boost::get<1>(t) << "," << boost::get<2>(t);
+template<typename A, typename B, typename C>
+inline ostream& operator<<(ostream& out, const boost::tuple<A, B, C> &t) {
+  return out << boost::get<0>(t) << ","
+	     << boost::get<1>(t) << ","
+	     << boost::get<2>(t);
+}
+
+template<typename... Ts>
+inline ostream& operator<<(ostream& out, const std::tuple<Ts...> &t) {
+  auto f = [n = sizeof...(Ts), i = 0, &out](const auto& e) mutable {
+    out << e;
+    if (++i != n)
+      out << ",";
+  };
+  ceph::for_each(t, f);
   return out;
 }
 
@@ -163,6 +182,28 @@ inline ostream& operator<<(ostream& out, const set<A, Comp, Alloc>& iset) {
        ++it) {
     if (it != iset.begin()) out << ",";
     out << *it;
+  }
+  return out;
+}
+
+template<class A, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const boost::container::flat_set<A, Comp, Alloc>& iset) {
+  for (auto it = iset.begin();
+       it != iset.end();
+       ++it) {
+    if (it != iset.begin()) out << ",";
+    out << *it;
+  }
+  return out;
+}
+
+template<class A, class B, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const boost::container::flat_map<A, B, Comp, Alloc>& m) {
+  for (auto it = m.begin();
+       it != m.end();
+       ++it) {
+    if (it != m.begin()) out << ",";
+    out << it->first << "=" << it->second;
   }
   return out;
 }
@@ -287,10 +328,12 @@ struct client_t {
   client_t(int64_t _v = -2) : v(_v) {}
   
   void encode(bufferlist& bl) const {
-    ::encode(v, bl);
+    using ceph::encode;
+    encode(v, bl);
   }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(v, bl);
+  void decode(bufferlist::const_iterator& bl) {
+    using ceph::decode;
+    decode(v, bl);
   }
 };
 WRITE_CLASS_ENCODER(client_t)
@@ -313,116 +356,87 @@ inline ostream& operator<<(ostream& out, const client_t& c) {
 
 // --
 
-struct prettybyte_t {
-  uint64_t v;
-  // cppcheck-suppress noExplicitConstructor
-  prettybyte_t(uint64_t _v) : v(_v) {}
-};
+namespace {
+  inline ostream& format_u(ostream& out, const uint64_t v, const uint64_t n,
+      const int index, const uint64_t mult, const char* u)
+  {
+    char buffer[32];
 
-inline ostream& operator<<(ostream& out, const prettybyte_t& b)
-{
-  uint64_t bump_after = 100;
-  if (b.v > bump_after << 60)
-    return out << (b.v >> 60) << " EB";    
-  if (b.v > bump_after << 50)
-    return out << (b.v >> 50) << " PB";    
-  if (b.v > bump_after << 40)
-    return out << (b.v >> 40) << " TB";    
-  if (b.v > bump_after << 30)
-    return out << (b.v >> 30) << " GB";    
-  if (b.v > bump_after << 20)
-    return out << (b.v >> 20) << " MB";    
-  if (b.v > bump_after << 10)
-    return out << (b.v >> 10) << " kB";
-  return out << b.v << " bytes";
+    if (index == 0) {
+      (void) snprintf(buffer, sizeof(buffer), "%" PRId64 " %s", n, u);
+    } else if ((v % mult) == 0) {
+      // If this is an even multiple of the base, always display
+      // without any decimal fraction.
+      (void) snprintf(buffer, sizeof(buffer), "%" PRId64 " %s", n, u);
+    } else {
+      // We want to choose a precision that reflects the best choice
+      // for fitting in 5 characters.  This can get rather tricky when
+      // we have numbers that are very close to an order of magnitude.
+      // For example, when displaying 10239 (which is really 9.999K),
+      // we want only a single place of precision for 10.0K.  We could
+      // develop some complex heuristics for this, but it's much
+      // easier just to try each combination in turn.
+      int i;
+      for (i = 2; i >= 0; i--) {
+        if (snprintf(buffer, sizeof(buffer), "%.*f %s", i,
+          static_cast<double>(v) / mult, u) <= 7)
+          break;
+      }
+    }
+
+    return out << buffer;
+  }
 }
 
-struct si_t {
+/*
+ * Use this struct to pretty print values that should be formatted with a
+ * decimal unit prefix (the classic SI units). No actual unit will be added.
+ */
+struct si_u_t {
   uint64_t v;
-  // cppcheck-suppress noExplicitConstructor
-  si_t(uint64_t _v) : v(_v) {}
+  explicit si_u_t(uint64_t _v) : v(_v) {};
 };
 
-inline ostream& operator<<(ostream& out, const si_t& b)
+inline ostream& operator<<(ostream& out, const si_u_t& b)
 {
-  char buffer[32];
   uint64_t n = b.v;
   int index = 0;
+  uint64_t mult = 1;
+  const char* u[] = {"", "k", "M", "G", "T", "P", "E"};
 
-  while (n >= 1024 && index < 6) {
+  while (n >= 1000 && index < 7) {
+    n /= 1000;
+    index++;
+    mult *= 1000;
+  }
+
+  return format_u(out, b.v, n, index, mult, u[index]);
+}
+
+/*
+ * Use this struct to pretty print values that should be formatted with a
+ * binary unit prefix (IEC units). Since binary unit prefixes are to be used for
+ * "multiples of units in data processing, data transmission, and digital
+ * information" (so bits and bytes) and so far bits are not printed, the unit
+ * "B" for "byte" is added besides the multiplier.
+ */
+struct byte_u_t {
+  uint64_t v;
+  explicit byte_u_t(uint64_t _v) : v(_v) {};
+};
+
+inline ostream& operator<<(ostream& out, const byte_u_t& b)
+{
+  uint64_t n = b.v;
+  int index = 0;
+  const char* u[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"};
+
+  while (n >= 1024 && index < 7) {
     n /= 1024;
     index++;
   }
 
-  char u = " KMGTPE"[index];
-
-  if (index == 0) {
-    (void) snprintf(buffer, sizeof(buffer), "%" PRId64, n);
-  } else if ((b.v & ((1ULL << 10 * index) - 1)) == 0) {
-    // If this is an even multiple of the base, always display
-    // without any decimal fraction.
-    (void) snprintf(buffer, sizeof(buffer), "%" PRId64 "%c", n, u);
-  } else {
-    // We want to choose a precision that reflects the best choice
-    // for fitting in 5 characters.  This can get rather tricky when
-    // we have numbers that are very close to an order of magnitude.
-    // For example, when displaying 10239 (which is really 9.999K),
-    // we want only a single place of precision for 10.0K.  We could
-    // develop some complex heuristics for this, but it's much
-    // easier just to try each combination in turn.
-    int i;
-    for (i = 2; i >= 0; i--) {
-      if (snprintf(buffer, sizeof(buffer), "%.*f%c", i,
-        (double)b.v / (1ULL << 10 * index), u) <= 5)
-        break;
-    }
-  }
-
-  return out << buffer;
-}
-
-struct pretty_si_t {
-  uint64_t v;
-  // cppcheck-suppress noExplicitConstructor
-  pretty_si_t(uint64_t _v) : v(_v) {}
-};
-
-inline ostream& operator<<(ostream& out, const pretty_si_t& b)
-{
-  uint64_t bump_after = 100;
-  if (b.v > bump_after << 60)
-    return out << (b.v >> 60) << " E";
-  if (b.v > bump_after << 50)
-    return out << (b.v >> 50) << " P";
-  if (b.v > bump_after << 40)
-    return out << (b.v >> 40) << " T";
-  if (b.v > bump_after << 30)
-    return out << (b.v >> 30) << " G";
-  if (b.v > bump_after << 20)
-    return out << (b.v >> 20) << " M";
-  if (b.v > bump_after << 10)
-    return out << (b.v >> 10) << " k";
-  return out << b.v << " ";
-}
-
-struct kb_t {
-  uint64_t v;
-  // cppcheck-suppress noExplicitConstructor
-  kb_t(uint64_t _v) : v(_v) {}
-};
-
-inline ostream& operator<<(ostream& out, const kb_t& kb)
-{
-  uint64_t bump_after = 100;
-  if (kb.v > bump_after << 40)
-    return out << (kb.v >> 40) << " PB";    
-  if (kb.v > bump_after << 30)
-    return out << (kb.v >> 30) << " TB";    
-  if (kb.v > bump_after << 20)
-    return out << (kb.v >> 20) << " GB";    
-  if (kb.v > bump_after << 10)
-    return out << (kb.v >> 10) << " MB";
-  return out << kb.v << " kB";
+  return format_u(out, b.v, n, index, 1ULL << (10 * index), u[index]);
 }
 
 inline ostream& operator<<(ostream& out, const ceph_mon_subscribe_item& i)
@@ -439,9 +453,9 @@ struct weightf_t {
 
 inline ostream& operator<<(ostream& out, const weightf_t& w)
 {
-  if (w.v < -0.01) {
+  if (w.v < -0.01F) {
     return out << "-";
-  } else if (w.v < 0.000001) {
+  } else if (w.v < 0.000001F) {
     return out << "0";
   } else {
     std::streamsize p = out.precision();
@@ -460,10 +474,12 @@ struct shard_id_t {
   const static shard_id_t NO_SHARD;
 
   void encode(bufferlist &bl) const {
-    ::encode(id, bl);
+    using ceph::encode;
+    encode(id, bl);
   }
-  void decode(bufferlist::iterator &bl) {
-    ::decode(id, bl);
+  void decode(bufferlist::const_iterator &bl) {
+    using ceph::decode;
+    decode(id, bl);
   }
 };
 WRITE_CLASS_ENCODER(shard_id_t)
@@ -495,11 +511,13 @@ struct errorcode32_t {
   int operator<=(int i) { return code <= i; }
 
   void encode(bufferlist &bl) const {
+    using ceph::encode;
     __s32 newcode = hostos_to_ceph_errno(code);
-    ::encode(newcode, bl);
+    encode(newcode, bl);
   }
-  void decode(bufferlist::iterator &bl) {
-    ::decode(code, bl);
+  void decode(bufferlist::const_iterator &bl) {
+    using ceph::decode;
+    decode(code, bl);
     code = ceph_to_hostos_errno(code);
   }
 };

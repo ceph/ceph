@@ -14,6 +14,7 @@
 #include "common/Formatter.h"
 #include "include/assert.h"
 #include "include/encoding.h"
+#include <utility>
 
 namespace ceph {
 
@@ -28,35 +29,149 @@ private:
   // must be power of 2
   BOOST_STATIC_ASSERT((_bit_count != 0) && !(_bit_count & (_bit_count - 1)));
   BOOST_STATIC_ASSERT(_bit_count <= BITS_PER_BYTE);
+
+  template <typename DataIterator>
+  class ReferenceImpl {
+  protected:
+    DataIterator m_data_iterator;
+    uint64_t m_shift;
+
+    ReferenceImpl(const DataIterator& data_iterator, uint64_t shift)
+      : m_data_iterator(data_iterator), m_shift(shift) {
+    }
+    ReferenceImpl(DataIterator&& data_iterator, uint64_t shift)
+      : m_data_iterator(std::move(data_iterator)), m_shift(shift) {
+    }
+
+  public:
+    inline operator uint8_t() const {
+      return (*m_data_iterator >> m_shift) & MASK;
+    }
+  };
+
 public:
-  static const uint32_t BLOCK_SIZE;
 
-  class ConstReference {
-  public:
-    operator uint8_t() const;
+  class ConstReference : public ReferenceImpl<bufferlist::const_iterator> {
   private:
     friend class BitVector;
-    const BitVector &m_bit_vector;
-    uint64_t m_offset;
 
-    ConstReference(const BitVector &bit_vector, uint64_t offset);
+    ConstReference(const bufferlist::const_iterator& data_iterator,
+                   uint64_t shift)
+      : ReferenceImpl<bufferlist::const_iterator>(data_iterator, shift) {
+    }
+    ConstReference(bufferlist::const_iterator&& data_iterator, uint64_t shift)
+      : ReferenceImpl<bufferlist::const_iterator>(std::move(data_iterator),
+                                                  shift) {
+    }
   };
 
-  class Reference {
+  class Reference : public ReferenceImpl<bufferlist::iterator> {
   public:
-    operator uint8_t() const;
     Reference& operator=(uint8_t v);
+
   private:
     friend class BitVector;
-    BitVector &m_bit_vector;
-    uint64_t m_offset;
 
-    Reference(BitVector &bit_vector, uint64_t offset);
+    Reference(const bufferlist::iterator& data_iterator, uint64_t shift)
+      : ReferenceImpl<bufferlist::iterator>(data_iterator, shift) {
+    }
+    Reference(bufferlist::iterator&& data_iterator, uint64_t shift)
+      : ReferenceImpl<bufferlist::iterator>(std::move(data_iterator), shift) {
+    }
   };
 
+public:
+  template <typename BitVectorT, typename DataIterator>
+  class IteratorImpl {
+  private:
+    friend class BitVector;
+
+    uint64_t m_offset = 0;
+    BitVectorT *m_bit_vector;
+
+    // cached derived values
+    uint64_t m_index = 0;
+    uint64_t m_shift = 0;
+    DataIterator m_data_iterator;
+
+    IteratorImpl(BitVectorT *bit_vector, uint64_t offset)
+      : m_bit_vector(bit_vector),
+        m_data_iterator(bit_vector->m_data.begin()) {
+      *this += offset;
+    }
+
+  public:
+    inline IteratorImpl& operator++() {
+      ++m_offset;
+
+      uint64_t index;
+      compute_index(m_offset, &index, &m_shift);
+
+      assert(index == m_index || index == m_index + 1);
+      if (index > m_index) {
+        m_index = index;
+        ++m_data_iterator;
+      }
+      return *this;
+    }
+    inline IteratorImpl& operator+=(uint64_t offset) {
+      m_offset += offset;
+      compute_index(m_offset, &m_index, &m_shift);
+      if (m_offset < m_bit_vector->size()) {
+        m_data_iterator.seek(m_index);
+      } else {
+        m_data_iterator = m_bit_vector->m_data.end();
+      }
+      return *this;
+    }
+
+    inline IteratorImpl operator++(int) {
+      IteratorImpl iterator_impl(*this);
+      ++iterator_impl;
+      return iterator_impl;
+    }
+    inline IteratorImpl operator+(uint64_t offset) {
+      IteratorImpl iterator_impl(*this);
+      iterator_impl += offset;
+      return iterator_impl;
+    }
+
+    inline bool operator==(const IteratorImpl& rhs) const {
+      return (m_offset == rhs.m_offset && m_bit_vector == rhs.m_bit_vector);
+    }
+    inline bool operator!=(const IteratorImpl& rhs) const {
+      return (m_offset != rhs.m_offset || m_bit_vector != rhs.m_bit_vector);
+    }
+
+    inline ConstReference operator*() const {
+      return ConstReference(m_data_iterator, m_shift);
+    }
+    inline Reference operator*() {
+      return Reference(m_data_iterator, m_shift);
+    }
+  };
+
+  typedef IteratorImpl<const BitVector,
+                       bufferlist::const_iterator> ConstIterator;
+  typedef IteratorImpl<BitVector, bufferlist::iterator> Iterator;
+
+  static const uint32_t BLOCK_SIZE;
   static const uint8_t BIT_COUNT = _bit_count;
 
   BitVector();
+
+  inline ConstIterator begin() const {
+    return ConstIterator(this, 0);
+  }
+  inline ConstIterator end() const {
+    return ConstIterator(this, m_size);
+  }
+  inline Iterator begin() {
+    return Iterator(this, 0);
+  }
+  inline Iterator end() {
+    return Iterator(this, m_size);
+  }
 
   void set_crc_enabled(bool enabled) {
     m_crc_enabled = enabled;
@@ -72,21 +187,21 @@ public:
   ConstReference operator[](uint64_t offset) const;
 
   void encode_header(bufferlist& bl) const;
-  void decode_header(bufferlist::iterator& it);
+  void decode_header(bufferlist::const_iterator& it);
   uint64_t get_header_length() const;
 
   void encode_data(bufferlist& bl, uint64_t byte_offset,
 		   uint64_t byte_length) const;
-  void decode_data(bufferlist::iterator& it, uint64_t byte_offset);
+  void decode_data(bufferlist::const_iterator& it, uint64_t byte_offset);
   void get_data_extents(uint64_t offset, uint64_t length,
 		        uint64_t *byte_offset, uint64_t *byte_length) const;
 
   void encode_footer(bufferlist& bl) const;
-  void decode_footer(bufferlist::iterator& it);
+  void decode_footer(bufferlist::const_iterator& it);
   uint64_t get_footer_offset() const;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   bool operator==(const BitVector &b) const;
@@ -157,22 +272,23 @@ template <uint8_t _b>
 void BitVector<_b>::encode_header(bufferlist& bl) const {
   bufferlist header_bl;
   ENCODE_START(1, 1, header_bl);
-  ::encode(m_size, header_bl);
+  encode(m_size, header_bl);
   ENCODE_FINISH(header_bl);
   m_header_crc = header_bl.crc32c(0);
 
-  ::encode(header_bl, bl);
+  encode(header_bl, bl);
 }
 
 template <uint8_t _b>
-void BitVector<_b>::decode_header(bufferlist::iterator& it) {
+void BitVector<_b>::decode_header(bufferlist::const_iterator& it) {
+  using ceph::decode;
   bufferlist header_bl;
-  ::decode(header_bl, it);
+  decode(header_bl, it);
 
-  bufferlist::iterator header_it = header_bl.begin();
+  auto header_it = header_bl.cbegin();
   uint64_t size;
   DECODE_START(1, header_it);
-  ::decode(size, header_it);
+  decode(size, header_it);
   DECODE_FINISH(header_it);
 
   resize(size);
@@ -194,7 +310,7 @@ void BitVector<_b>::encode_data(bufferlist& bl, uint64_t byte_offset,
 
   uint64_t end_offset = byte_offset + byte_length;
   while (byte_offset < end_offset) {
-    uint64_t len = MIN(BLOCK_SIZE, end_offset - byte_offset);
+    uint64_t len = std::min<uint64_t>(BLOCK_SIZE, end_offset - byte_offset);
 
     bufferlist bit;
     bit.substr_of(m_data, byte_offset, len);
@@ -206,7 +322,7 @@ void BitVector<_b>::encode_data(bufferlist& bl, uint64_t byte_offset,
 }
 
 template <uint8_t _b>
-void BitVector<_b>::decode_data(bufferlist::iterator& it, uint64_t byte_offset) {
+void BitVector<_b>::decode_data(bufferlist::const_iterator& it, uint64_t byte_offset) {
   assert(byte_offset % BLOCK_SIZE == 0);
   if (it.end()) {
     return;
@@ -223,7 +339,7 @@ void BitVector<_b>::decode_data(bufferlist::iterator& it, uint64_t byte_offset) 
   }
 
   while (byte_offset < end_offset) {
-    uint64_t len = MIN(BLOCK_SIZE, end_offset - byte_offset);
+    uint64_t len = std::min<uint64_t>(BLOCK_SIZE, end_offset - byte_offset);
 
     bufferptr ptr;
     it.copy_deep(len, ptr);
@@ -270,31 +386,33 @@ void BitVector<_b>::get_data_extents(uint64_t offset, uint64_t length,
 
 template <uint8_t _b>
 void BitVector<_b>::encode_footer(bufferlist& bl) const {
+  using ceph::encode;
   bufferlist footer_bl;
   if (m_crc_enabled) {
-    ::encode(m_header_crc, footer_bl);
-    ::encode(m_data_crcs, footer_bl);
+    encode(m_header_crc, footer_bl);
+    encode(m_data_crcs, footer_bl);
   }
-  ::encode(footer_bl, bl);
+  encode(footer_bl, bl);
 }
 
 template <uint8_t _b>
-void BitVector<_b>::decode_footer(bufferlist::iterator& it) {
+void BitVector<_b>::decode_footer(bufferlist::const_iterator& it) {
+  using ceph::decode;
   bufferlist footer_bl;
-  ::decode(footer_bl, it);
+  decode(footer_bl, it);
 
   m_crc_enabled = (footer_bl.length() > 0);
   if (m_crc_enabled) {
-    bufferlist::iterator footer_it = footer_bl.begin();
+    auto footer_it = footer_bl.cbegin();
 
     __u32 header_crc;
-    ::decode(header_crc, footer_it);
+    decode(header_crc, footer_it);
     if (m_header_crc != header_crc) {
       throw buffer::malformed_input("incorrect header CRC");
     }
 
     uint64_t block_count = (m_data.length() + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    ::decode(m_data_crcs, footer_it);
+    decode(m_data_crcs, footer_it);
     if (m_data_crcs.size() != block_count) {
       throw buffer::malformed_input("invalid data block CRCs");
     }
@@ -314,7 +432,7 @@ void BitVector<_b>::encode(bufferlist& bl) const {
 }
 
 template <uint8_t _b>
-void BitVector<_b>::decode(bufferlist::iterator& it) {
+void BitVector<_b>::decode(bufferlist::const_iterator& it) {
   decode_header(it);
 
   bufferlist data_bl;
@@ -324,7 +442,7 @@ void BitVector<_b>::decode(bufferlist::iterator& it) {
 
   decode_footer(it);
 
-  bufferlist::iterator data_it = data_bl.begin();
+  auto data_it = data_bl.cbegin();
   decode_data(data_it, 0);
 }
 
@@ -345,55 +463,33 @@ bool BitVector<_b>::operator==(const BitVector &b) const {
 
 template <uint8_t _b>
 typename BitVector<_b>::Reference BitVector<_b>::operator[](uint64_t offset) {
-  return Reference(*this, offset);
+  uint64_t index;
+  uint64_t shift;
+  compute_index(offset, &index, &shift);
+
+  bufferlist::iterator data_iterator(m_data.begin());
+  data_iterator.seek(index);
+  return Reference(std::move(data_iterator), shift);
 }
 
 template <uint8_t _b>
 typename BitVector<_b>::ConstReference BitVector<_b>::operator[](uint64_t offset) const {
-  return ConstReference(*this, offset);
-}
-
-template <uint8_t _b>
-BitVector<_b>::ConstReference::ConstReference(const BitVector<_b> &bit_vector,
-					      uint64_t offset)
-  : m_bit_vector(bit_vector), m_offset(offset)
-{
-}
-
-template <uint8_t _b>
-BitVector<_b>::ConstReference::operator uint8_t() const {
   uint64_t index;
   uint64_t shift;
-  this->m_bit_vector.compute_index(this->m_offset, &index, &shift);
+  compute_index(offset, &index, &shift);
 
-  return (this->m_bit_vector.m_data[index] >> shift) & MASK;
-}
-
-template <uint8_t _b>
-BitVector<_b>::Reference::Reference(BitVector<_b> &bit_vector, uint64_t offset)
-  : m_bit_vector(bit_vector), m_offset(offset)
-{
-}
-
-template <uint8_t _b>
-BitVector<_b>::Reference::operator uint8_t() const {
-  uint64_t index;
-  uint64_t shift;
-  this->m_bit_vector.compute_index(this->m_offset, &index, &shift);
-
-  return (this->m_bit_vector.m_data[index] >> shift) & MASK;
+  bufferlist::const_iterator data_iterator(m_data.begin());
+  data_iterator.seek(index);
+  return ConstReference(std::move(data_iterator), shift);
 }
 
 template <uint8_t _b>
 typename BitVector<_b>::Reference& BitVector<_b>::Reference::operator=(uint8_t v) {
-  uint64_t index;
-  uint64_t shift;
-  this->m_bit_vector.compute_index(this->m_offset, &index, &shift);
-
-  uint8_t mask = MASK << shift;
-  char packed_value = (this->m_bit_vector.m_data[index] & ~mask) |
-		      ((v << shift) & mask);
-  this->m_bit_vector.m_data.copy_in(index, 1, &packed_value);
+  uint8_t mask = MASK << this->m_shift;
+  char packed_value = (*this->m_data_iterator & ~mask) |
+                      ((v << this->m_shift) & mask);
+  bufferlist::iterator it(this->m_data_iterator);
+  it.copy_in(1, &packed_value, true);
   return *this;
 }
 
@@ -412,7 +508,6 @@ void BitVector<_b>::generate_test_instances(std::list<BitVector *> &o) {
   o.push_back(b);
 }
 
-}
 
 WRITE_CLASS_ENCODER(ceph::BitVector<2>)
 
@@ -422,6 +517,7 @@ inline std::ostream& operator<<(std::ostream& out, const ceph::BitVector<_b> &b)
   out << "ceph::BitVector<" << _b << ">(size=" << b.size() << ", data="
       << b.get_data() << ")";
   return out;
+}
 }
 
 #endif // BIT_VECTOR_HPP

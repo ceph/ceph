@@ -33,6 +33,8 @@
  *  
  */
 
+#include <string_view>
+
 #include "msg/Message.h"
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
@@ -63,13 +65,15 @@ public:
       item(rel), dname(name) {}
 
     void encode(bufferlist& bl) const {
+      using ceph::encode;
       item.dname_len = dname.length();
-      ::encode(item, bl);
-      ::encode_nohead(dname, bl);
+      encode(item, bl);
+      encode_nohead(dname, bl);
     }
-    void decode(bufferlist::iterator& bl) {
-      ::decode(item, bl);
-      ::decode_nohead(item.dname_len, dname, bl);
+    void decode(bufferlist::const_iterator& bl) {
+      using ceph::decode;
+      decode(item, bl);
+      decode_nohead(item.dname_len, dname, bl);
     }
   };
   vector<Release> releases;
@@ -135,7 +139,7 @@ public:
   void set_retry_attempt(int a) { head.num_retry = a; }
   void set_filepath(const filepath& fp) { path = fp; }
   void set_filepath2(const filepath& fp) { path2 = fp; }
-  void set_string2(const char *s) { path2.set_path(s, 0); }
+  void set_string2(const char *s) { path2.set_path(std::string_view(s), 0); }
   void set_caller_uid(unsigned u) { head.caller_uid = u; }
   void set_caller_gid(unsigned g) { head.caller_gid = g; }
   void set_gid_list(int count, const gid_t *gids) {
@@ -171,14 +175,14 @@ public:
   bool is_queued_for_replay() { return queued_for_replay; }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
 
     if (header.version >= 4) {
-      ::decode(head, p);
+      decode(head, p);
     } else {
       struct ceph_mds_request_head_legacy old_mds_head;
 
-      ::decode(old_mds_head, p);
+      decode(old_mds_head, p);
       copy_from_legacy_head(&head, &old_mds_head);
       head.version = 0;
 
@@ -193,33 +197,34 @@ public:
       }
     }
 
-    ::decode(path, p);
-    ::decode(path2, p);
-    ::decode_nohead(head.num_releases, releases, p);
+    decode(path, p);
+    decode(path2, p);
+    decode_nohead(head.num_releases, releases, p);
     if (header.version >= 2)
-      ::decode(stamp, p);
+      decode(stamp, p);
     if (header.version >= 4) // epoch 3 was for a ceph_mds_request_args change
-      ::decode(gid_list, p);
+      decode(gid_list, p);
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     head.num_releases = releases.size();
     head.version = CEPH_MDS_REQUEST_HEAD_VERSION;
 
     if (features & CEPH_FEATURE_FS_BTIME) {
-      ::encode(head, payload);
+      encode(head, payload);
     } else {
       struct ceph_mds_request_head_legacy old_mds_head;
 
       copy_to_legacy_head(&old_mds_head, &head);
-      ::encode(old_mds_head, payload);
+      encode(old_mds_head, payload);
     }
 
-    ::encode(path, payload);
-    ::encode(path2, payload);
-    ::encode_nohead(releases, payload);
-    ::encode(stamp, payload);
-    ::encode(gid_list, payload);
+    encode(path, payload);
+    encode(path2, payload);
+    encode_nohead(releases, payload);
+    encode(stamp, payload);
+    encode(gid_list, payload);
   }
 
   const char *get_type_name() const override { return "creq"; }
@@ -245,7 +250,7 @@ public:
     }
     if (head.op == CEPH_MDS_OP_SETFILELOCK ||
 	head.op == CEPH_MDS_OP_GETFILELOCK) {
-      out << "rule " << (int)head.args.filelock_change.rule
+      out << " rule " << (int)head.args.filelock_change.rule
 	  << ", type " << (int)head.args.filelock_change.type
 	  << ", owner " << head.args.filelock_change.owner
 	  << ", pid " << head.args.filelock_change.pid

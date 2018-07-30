@@ -19,10 +19,12 @@ struct inodeno_t {
   operator _inodeno_t() const { return val; }
 
   void encode(bufferlist& bl) const {
-    ::encode(val, bl);
+    using ceph::encode;
+    encode(val, bl);
   }
-  void decode(bufferlist::iterator& p) {
-    ::decode(val, p);
+  void decode(bufferlist::const_iterator& p) {
+    using ceph::decode;
+    decode(val, p);
   }
 } __attribute__ ((__may_alias__));
 WRITE_CLASS_ENCODER(inodeno_t)
@@ -39,7 +41,7 @@ struct denc_traits<inodeno_t> {
   static void encode(const inodeno_t &o, buffer::list::contiguous_appender& p) {
     denc(o.val, p);
   }
-  static void decode(inodeno_t& o, buffer::ptr::iterator &p) {
+  static void decode(inodeno_t& o, buffer::ptr::const_iterator &p) {
     denc(o.val, p);
   }
 };
@@ -62,7 +64,7 @@ namespace std {
 
 // file modes
 
-static inline bool file_mode_is_readonly(int mode) {
+inline bool file_mode_is_readonly(int mode) {
   return (mode & CEPH_FILE_MODE_WR) == 0;
 }
 
@@ -111,7 +113,7 @@ struct file_layout_t {
   bool is_valid() const;
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<file_layout_t*>& o);
 };

@@ -33,18 +33,18 @@ static const int OFR_CANCEL = 4;
 
 struct MOSDForceRecovery : public Message {
 
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 2;
 
   uuid_d fsid;
-  vector<pg_t> forced_pgs;
-  uint8_t options;
+  vector<spg_t> forced_pgs;
+  uint8_t options = 0;
 
   MOSDForceRecovery() : Message(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDForceRecovery(const uuid_d& f, char opts) :
     Message(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), options(opts) {}
-  MOSDForceRecovery(const uuid_d& f, vector<pg_t>& pgs, char opts) :
+  MOSDForceRecovery(const uuid_d& f, vector<spg_t>& pgs, char opts) :
     Message(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), forced_pgs(pgs), options(opts) {}
 private:
@@ -68,15 +68,42 @@ public:
   }
 
   void encode_payload(uint64_t features) {
-    ::encode(fsid, payload);
-    ::encode(forced_pgs, payload);
-    ::encode(options, payload);
+    using ceph::encode;
+    if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+      header.version = 1;
+      header.compat_version = 1;
+      vector<pg_t> pgs;
+      for (auto pgid : forced_pgs) {
+	pgs.push_back(pgid.pgid);
+      }
+      encode(fsid, payload);
+      encode(pgs, payload);
+      encode(options, payload);
+      return;
+    }
+    header.version = HEAD_VERSION;
+    header.compat_version = COMPAT_VERSION;
+    encode(fsid, payload);
+    encode(forced_pgs, payload);
+    encode(options, payload);
   }
   void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(fsid, p);
-    ::decode(forced_pgs, p);
-    ::decode(options, p);
+    auto p = payload.cbegin();
+    if (header.version == 1) {
+      vector<pg_t> pgs;
+      decode(fsid, p);
+      decode(pgs, p);
+      decode(options, p);
+      for (auto pg : pgs) {
+	// note: this only works with replicated pools.  if a pre-mimic mon
+	// tries to force a mimic+ osd on an ec pool it will not work.
+	forced_pgs.push_back(spg_t(pg));
+      }
+      return;
+    }
+    decode(fsid, p);
+    decode(forced_pgs, p);
+    decode(options, p);
   }
 };
 

@@ -33,11 +33,12 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(pg_stat, payload);
+    using ceph::encode;
+    encode(pg_stat, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(pg_stat, p);
+    auto p = payload.cbegin();
+    decode(pg_stat, p);
   }
 };
 

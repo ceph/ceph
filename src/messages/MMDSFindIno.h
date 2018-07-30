@@ -31,13 +31,14 @@ struct MMDSFindIno : public Message {
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(tid, payload);
-    ::encode(ino, payload);
+    using ceph::encode;
+    encode(tid, payload);
+    encode(ino, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(tid, p);
-    ::decode(ino, p);
+    auto p = payload.cbegin();
+    decode(tid, p);
+    decode(ino, p);
   }
 };
 

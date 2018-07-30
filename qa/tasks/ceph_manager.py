@@ -111,12 +111,12 @@ class Thrasher:
         self.stopping = False
         self.logger = logger
         self.config = config
-        self.revive_timeout = self.config.get("revive_timeout", 150)
+        self.revive_timeout = self.config.get("revive_timeout", 360)
         self.pools_to_fix_pgp_num = set()
         if self.config.get('powercycle'):
             self.revive_timeout += 120
         self.clean_wait = self.config.get('clean_wait', 0)
-        self.minin = self.config.get("min_in", 3)
+        self.minin = self.config.get("min_in", 4)
         self.chance_move_pg = self.config.get('chance_move_pg', 1.0)
         self.sighup_delay = self.config.get('sighup_delay')
         self.optrack_toggle_delay = self.config.get('optrack_toggle_delay')
@@ -153,14 +153,13 @@ class Thrasher:
                                            first_mon[1],
                                            opt)
             self.saved_options.append((service, opt, old_value))
-            self._set_config(service, '*', opt, new_value)
+            manager.inject_args(service, '*', opt, new_value)
         # initialize ceph_objectstore_tool property - must be done before
         # do_thrash is spawned - http://tracker.ceph.com/issues/18799
         if (self.config.get('powercycle') or
             not self.cmd_exists_on_osds("ceph-objectstore-tool") or
             self.config.get('disable_objectstore_tool_tests', False)):
             self.ceph_objectstore_tool = False
-            self.test_rm_past_intervals = False
             if self.config.get('powercycle'):
                 self.log("Unable to test ceph-objectstore-tool, "
                          "powercycle testing")
@@ -170,8 +169,6 @@ class Thrasher:
         else:
             self.ceph_objectstore_tool = \
                 self.config.get('ceph_objectstore_tool', True)
-            self.test_rm_past_intervals = \
-                self.config.get('test_rm_past_intervals', True)
         # spawn do_thrash
         self.thread = gevent.spawn(self.do_thrash)
         if self.sighup_delay:
@@ -182,13 +179,6 @@ class Thrasher:
             self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
         if self.noscrub_toggle_delay:
             self.noscrub_toggle_thread = gevent.spawn(self.do_noscrub_toggle)
-
-    def _set_config(self, service_type, service_id, name, value):
-        opt_arg = '--{name} {value}'.format(name=name, value=value)
-        whom = '.'.join([service_type, service_id])
-        self.ceph_manager.raw_cluster_cmd('--', 'tell', whom,
-                                          'injectargs', opt_arg)
-
 
     def cmd_exists_on_osds(self, cmd):
         allremotes = self.ceph_manager.ctx.cluster.only(\
@@ -366,50 +356,6 @@ class Thrasher:
                     raise Exception("ceph-objectstore-tool apply-layout-settings"
                                     " failed with {status}".format(status=proc.exitstatus))
 
-    def rm_past_intervals(self, osd=None):
-        """
-        :param osd: Osd to find pg to remove past intervals
-        """
-        if self.test_rm_past_intervals:
-            if osd is None:
-                osd = random.choice(self.dead_osds)
-            self.log("Use ceph_objectstore_tool to remove past intervals")
-            remote = self.ceph_manager.find_remote('osd', osd)
-            FSPATH = self.ceph_manager.get_filepath()
-            JPATH = os.path.join(FSPATH, "journal")
-            if ('keyvaluestore_backend' in
-                    self.ceph_manager.ctx.ceph[self.cluster].conf['osd']):
-                prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
-                          "--data-path {fpath} --journal-path {jpath} "
-                          "--type keyvaluestore "
-                          "--log-file="
-                          "/var/log/ceph/objectstore_tool.\\$pid.log ".
-                          format(fpath=FSPATH, jpath=JPATH))
-            else:
-                prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
-                          "--data-path {fpath} --journal-path {jpath} "
-                          "--log-file="
-                          "/var/log/ceph/objectstore_tool.\\$pid.log ".
-                          format(fpath=FSPATH, jpath=JPATH))
-            cmd = (prefix + "--op list-pgs").format(id=osd)
-            proc = remote.run(args=cmd, wait=True,
-                              check_status=False, stdout=StringIO())
-            if proc.exitstatus:
-                raise Exception("ceph_objectstore_tool: "
-                                "exp list-pgs failure with status {ret}".
-                                format(ret=proc.exitstatus))
-            pgs = proc.stdout.getvalue().split('\n')[:-1]
-            if len(pgs) == 0:
-                self.log("No PGs found for osd.{osd}".format(osd=osd))
-                return
-            pg = random.choice(pgs)
-            cmd = (prefix + "--op rm-past-intervals --pgid {pg}").\
-                format(id=osd, pg=pg)
-            proc = remote.run(args=cmd)
-            if proc.exitstatus:
-                raise Exception("ceph_objectstore_tool: "
-                                "rm-past-intervals failure with status {ret}".
-                                format(ret=proc.exitstatus))
 
     def blackhole_kill_osd(self, osd=None):
         """
@@ -438,11 +384,11 @@ class Thrasher:
             skip_admin_check=skip_admin_check)
         self.dead_osds.remove(osd)
         self.live_osds.append(osd)
-        if self.random_eio > 0 and osd is self.rerrosd:
-            self.ceph_manager.raw_cluster_cmd('tell', 'osd.'+str(self.rerrosd),
-                          'injectargs', '--', '--filestore_debug_random_read_err='+str(self.random_eio))
-            self.ceph_manager.raw_cluster_cmd('tell', 'osd.'+str(self.rerrosd),
-                          'injectargs', '--', '--bluestore_debug_random_read_err='+str(self.random_eio))
+        if self.random_eio > 0 and osd == self.rerrosd:
+            self.ceph_manager.set_config(self.rerrosd,
+                                         filestore_debug_random_read_err = self.random_eio)
+            self.ceph_manager.set_config(self.rerrosd,
+                                         bluestore_debug_random_read_err = self.random_eio)
 
 
     def out_osd(self, osd=None):
@@ -612,10 +558,14 @@ class Thrasher:
         backfill = random.random() >= 0.5
         j = self.ceph_manager.get_pgids_to_force(backfill)
         if j:
-            if backfill:
-                self.ceph_manager.raw_cluster_cmd('pg', 'force-backfill', *j)
-            else:
-                self.ceph_manager.raw_cluster_cmd('pg', 'force-recovery', *j)
+            try:
+                if backfill:
+                    self.ceph_manager.raw_cluster_cmd('pg', 'force-backfill', *j)
+                else:
+                    self.ceph_manager.raw_cluster_cmd('pg', 'force-recovery', *j)
+            except CommandFailedError:
+                self.log('Failed to force backfill|recovery, ignoring')
+
 
     def cancel_force_recovery(self):
         """
@@ -624,10 +574,13 @@ class Thrasher:
         backfill = random.random() >= 0.5
         j = self.ceph_manager.get_pgids_to_cancel_force(backfill)
         if j:
-            if backfill:
-                self.ceph_manager.raw_cluster_cmd('pg', 'cancel-force-backfill', *j)
-            else:
-                self.ceph_manager.raw_cluster_cmd('pg', 'cancel-force-recovery', *j)
+            try:
+                if backfill:
+                    self.ceph_manager.raw_cluster_cmd('pg', 'cancel-force-backfill', *j)
+                else:
+                    self.ceph_manager.raw_cluster_cmd('pg', 'cancel-force-recovery', *j)
+            except CommandFailedError:
+                self.log('Failed to force backfill|recovery, ignoring')
 
     def force_cancel_recovery(self):
         """
@@ -768,7 +721,7 @@ class Thrasher:
         osd_debug_skip_full_check_in_backfill_reservation to force
         the more complicated check in do_scan to be exercised.
 
-        Then, verify that all backfills stop.
+        Then, verify that all backfillings stop.
         """
         self.log("injecting backfill full")
         for i in self.live_osds:
@@ -780,13 +733,13 @@ class Thrasher:
                                      check_status=True, timeout=30, stdout=DEVNULL)
         for i in range(30):
             status = self.ceph_manager.compile_pg_status()
-            if 'backfill' not in status.keys():
+            if 'backfilling' not in status.keys():
                 break
             self.log(
-                "waiting for {still_going} backfills".format(
-                    still_going=status.get('backfill')))
+                "waiting for {still_going} backfillings".format(
+                    still_going=status.get('backfilling')))
             time.sleep(1)
-        assert('backfill' not in self.ceph_manager.compile_pg_status().keys())
+        assert('backfilling' not in self.ceph_manager.compile_pg_status().keys())
         for i in self.live_osds:
             self.ceph_manager.set_config(
                 i,
@@ -852,8 +805,6 @@ class Thrasher:
             actions.append((self.out_osd, 1.0,))
         if len(self.live_osds) > minlive and chance_down > 0:
             actions.append((self.kill_osd, chance_down,))
-        if len(self.dead_osds) > 1:
-            actions.append((self.rm_past_intervals, 1.0,))
         if len(self.out_osds) > minout:
             actions.append((self.in_osd, 1.7,))
         if len(self.dead_osds) > mindead:
@@ -942,8 +893,12 @@ class Thrasher:
                 osd_state = "false"
             else:
                 osd_state = "true"
-            self.ceph_manager.raw_cluster_cmd_result('tell', 'osd.*',
-                             'injectargs', '--osd_enable_op_tracker=%s' % osd_state)
+            try:
+                self.ceph_manager.inject_args('osd', '*',
+                                              'osd_enable_op_tracker',
+                                              osd_state)
+            except CommandFailedError:
+                self.log('Failed to tell all osds, ignoring')
             gevent.sleep(delay)
 
     @log_exc
@@ -1001,10 +956,12 @@ class Thrasher:
         delay = self.config.get("op_delay", 5)
         self.rerrosd = self.live_osds[0]
         if self.random_eio > 0:
-            self.ceph_manager.raw_cluster_cmd('tell', 'osd.'+str(self.rerrosd),
-                          'injectargs', '--', '--filestore_debug_random_read_err='+str(self.random_eio))
-            self.ceph_manager.raw_cluster_cmd('tell', 'osd.'+str(self.rerrosd),
-                          'injectargs', '--', '--bluestore_debug_random_read_err='+str(self.random_eio))
+            self.ceph_manager.inject_args('osd', self.rerrosd,
+                                          'filestore_debug_random_read_err',
+                                          self.random_eio)
+            self.ceph_manager.inject_args('osd', self.rerrosd,
+                                          'bluestore_debug_random_read_err',
+                                          self.random_eio)
         self.log("starting do_thrash")
         while not self.stopping:
             to_log = [str(x) for x in ["in_osds: ", self.in_osds,
@@ -1034,16 +991,16 @@ class Thrasher:
             time.sleep(delay)
         self.all_up()
         if self.random_eio > 0:
-            self.ceph_manager.raw_cluster_cmd('tell', 'osd.'+str(self.rerrosd),
-                          'injectargs', '--', '--filestore_debug_random_read_err=0.0')
-            self.ceph_manager.raw_cluster_cmd('tell', 'osd.'+str(self.rerrosd),
-                          'injectargs', '--', '--bluestore_debug_random_read_err=0.0')
+            self.ceph_manager.inject_args('osd', self.rerrosd,
+                                          'filestore_debug_random_read_err', '0.0')
+            self.ceph_manager.inject_args('osd', self.rerrosd,
+                                          'bluestore_debug_random_read_err', '0.0')
         for pool in list(self.pools_to_fix_pgp_num):
             if self.ceph_manager.get_pool_pg_num(pool) > 0:
                 self.fix_pgp_num(pool)
         self.pools_to_fix_pgp_num.clear()
         for service, opt, saved_value in self.saved_options:
-            self._set_config(service, '*', opt, saved_value)
+            self.ceph_manager.inject_args(service, '*', opt, saved_value)
         self.saved_options = []
         self.all_up_in()
 
@@ -1178,7 +1135,7 @@ class CephManager:
             )
         return proc.stdout.getvalue()
 
-    def raw_cluster_cmd_result(self, *args):
+    def raw_cluster_cmd_result(self, *args, **kwargs):
         """
         Start ceph on a cluster.  Return success or failure information.
         """
@@ -1195,10 +1152,9 @@ class CephManager:
             self.cluster,
         ]
         ceph_args.extend(args)
-        proc = self.controller.run(
-            args=ceph_args,
-            check_status=False,
-            )
+        kwargs['args'] = ceph_args
+        kwargs['check_status'] = False
+        proc = self.controller.run(**kwargs)
         return proc.exitstatus
 
     def run_ceph_w(self):
@@ -1427,10 +1383,10 @@ class CephManager:
         assert False
 
     def wait_for_pg_stats(func):
-        # both osd_mon_report_interval_min and mgr_stats_period are 5 seconds
+        # both osd_mon_report_interval and mgr_stats_period are 5 seconds
         # by default, and take the faulty injection in ms into consideration,
         # 12 seconds are more than enough
-        delays = [1, 1, 2, 3, 5, 8, 13]
+        delays = [1, 1, 2, 3, 5, 8, 13, 0]
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             exc = None
@@ -1529,6 +1485,13 @@ class CephManager:
                                           ['config', 'show'])
         j = json.loads(proc.stdout.getvalue())
         return j[name]
+
+    def inject_args(self, service_type, service_id, name, value):
+        whom = '{0}.{1}'.format(service_type, service_id)
+        if isinstance(value, bool):
+            value = 'true' if value else 'false'
+        opt_arg = '--{name}={value}'.format(name=name, value=value)
+        self.raw_cluster_cmd('--', 'tell', whom, 'injectargs', opt_arg)
 
     def set_config(self, osdnum, **argdict):
         """
@@ -1991,6 +1954,14 @@ class CephManager:
         """
         return self.get_osd_dump_json()['osds']
 
+    def get_osd_metadata(self):
+        """
+        osd metadata --format=json converted to a python object
+        :returns: the python object containing osd metadata information
+        """
+        out = self.raw_cluster_cmd('osd', 'metadata', '--format=json')
+        return json.loads('\n'.join(out.split('\n')[1:]))
+
     def get_mgr_dump(self):
         out = self.raw_cluster_cmd('mgr', 'dump', '--format=json')
         return json.loads(out)
@@ -2044,7 +2015,7 @@ class CephManager:
         for pg in pgs:
             if (pg['state'].count('active') and
                     not pg['state'].count('recover') and
-                    not pg['state'].count('backfill') and
+                    not pg['state'].count('backfilling') and
                     not pg['state'].count('stale')):
                 num += 1
         return num
@@ -2119,7 +2090,7 @@ class CephManager:
         """
         return self.get_num_active_down() == self.get_num_pgs()
 
-    def wait_for_clean(self, timeout=None):
+    def wait_for_clean(self, timeout=1200):
         """
         Returns true when all pgs are clean.
         """
@@ -2218,6 +2189,8 @@ class CephManager:
                 else:
                     self.log("no progress seen, keeping timeout for now")
                     if now - start >= timeout:
+			if self.is_recovered():
+			    break
                         self.log('dumping pgs')
                         out = self.raw_cluster_cmd('pg', 'dump')
                         self.log(out)
@@ -2318,6 +2291,30 @@ class CephManager:
             time.sleep(3)
         self.log("active!")
 
+    def wait_till_pg_convergence(self, timeout=None):
+        start = time.time()
+        old_stats = None
+        active_osds = [osd['osd'] for osd in self.get_osd_dump()
+                       if osd['in'] and osd['up']]
+        while True:
+            # strictly speaking, no need to wait for mon. but due to the
+            # "ms inject socket failures" setting, the osdmap could be delayed,
+            # so mgr is likely to ignore the pg-stat messages with pgs serving
+            # newly created pools which is not yet known by mgr. so, to make sure
+            # the mgr is updated with the latest pg-stats, waiting for mon/mgr is
+            # necessary.
+            self.flush_pg_stats(active_osds)
+            new_stats = dict((stat['pgid'], stat['state'])
+                             for stat in self.get_pg_stats())
+            if old_stats == new_stats:
+                return old_stats
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'failed to reach convergence before %d secs' % timeout
+            old_stats = new_stats
+            # longer than mgr_stats_period
+            time.sleep(5 + 1)
+
     def mark_out_osd(self, osd):
         """
         Wrapper to mark osd out.
@@ -2337,11 +2334,9 @@ class CephManager:
             remote.console.power_off()
         elif self.config.get('bdev_inject_crash') and self.config.get('bdev_inject_crash_probability'):
             if random.uniform(0, 1) < self.config.get('bdev_inject_crash_probability', .5):
-                self.raw_cluster_cmd(
-                    '--', 'tell', 'osd.%d' % osd,
-                    'injectargs',
-                    '--bdev-inject-crash %d' % self.config.get('bdev_inject_crash'),
-                )
+                self.inject_args(
+                    'osd', osd,
+                    'bdev-inject-crash', self.config.get('bdev_inject_crash'))
                 try:
                     self.ctx.daemons.get_daemon('osd', osd, self.cluster).wait()
                 except:
@@ -2363,13 +2358,12 @@ class CephManager:
         """
         Stop osd if nothing else works.
         """
-        self.raw_cluster_cmd('--', 'tell', 'osd.%d' % osd,
-                             'injectargs',
-                             '--objectstore-blackhole')
+        self.inject_args('osd', osd,
+                         'objectstore-blackhole', True)
         time.sleep(2)
         self.ctx.daemons.get_daemon('osd', osd, self.cluster).stop()
 
-    def revive_osd(self, osd, timeout=150, skip_admin_check=False):
+    def revive_osd(self, osd, timeout=360, skip_admin_check=False):
         """
         Revive osds by either power cycling (if indicated by the config)
         or by restarting.
@@ -2507,18 +2501,6 @@ class CephManager:
         if debug:
             self.log('health:\n{h}'.format(h=out))
         return json.loads(out)
-
-    def get_mds_status(self, mds):
-        """
-        Run cluster commands for the mds in order to get mds information
-        """
-        out = self.raw_cluster_cmd('mds', 'dump', '--format=json')
-        j = json.loads(' '.join(out.splitlines()[1:]))
-        # collate; for dup ids, larger gid wins.
-        for info in j['info'].itervalues():
-            if info['name'] == mds:
-                return info
-        return None
 
     def get_filepath(self):
         """

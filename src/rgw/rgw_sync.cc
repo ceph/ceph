@@ -51,7 +51,7 @@ RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const string& source_zone, const 
 
   rgw_sync_error_info info(source_zone, error_code, message);
   bufferlist bl;
-  ::encode(info, bl);
+  encode(info, bl);
   store->time_log_prepare_entry(entry, real_clock::now(), section, name, bl);
 
   uint32_t shard_id = ++counter % num_shards;
@@ -277,9 +277,9 @@ int RGWRemoteMetaLog::init()
 {
   conn = store->rest_master_conn;
 
-  int ret = http_manager.set_threaded();
+  int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
 
@@ -489,7 +489,7 @@ public:
         http_op = new RGWRESTReadResource(conn, p, pairs, NULL,
                                           env->http_manager);
 
-        http_op->set_user_info((void *)stack);
+        init_new_io(http_op);
 
         int ret = http_op->aio_read();
         if (ret < 0) {
@@ -553,7 +553,7 @@ public:
     string p = "/admin/log/";
 
     http_op = new RGWRESTReadResource(conn, p, pairs, NULL, sync_env->http_manager);
-    http_op->set_user_info((void *)stack);
+    init_new_io(http_op);
 
     int ret = http_op->aio_read();
     if (ret < 0) {
@@ -905,12 +905,17 @@ public:
             call(new RGWReadRESTResourceCR<meta_list_result >(cct, conn, sync_env->http_manager,
                                                               entrypoint, pairs, &result));
           }
-          if (get_ret_status() < 0) {
+          ret_status = get_ret_status();
+          if (ret_status == -ENOENT) {
+            set_retcode(0); /* reset coroutine status so that we don't return it */
+            ret_status = 0;
+          }
+          if (ret_status < 0) {
             tn->log(0, SSTR("ERROR: failed to fetch metadata section: " << *sections_iter));
             yield entries_index->finish();
             yield lease_cr->go_down();
             drain_all();
-            return set_cr_error(get_ret_status());
+            return set_cr_error(ret_status);
           }
           iter = result.keys.begin();
           for (; iter != result.keys.end(); ++iter) {
@@ -1026,7 +1031,7 @@ public:
 
         http_op = new RGWRESTReadResource(conn, p, pairs, NULL, sync_env->http_manager);
 
-        http_op->set_user_info((void *)stack);
+        init_new_io(http_op);
 
         int ret = http_op->aio_read();
         if (ret < 0) {
@@ -1039,7 +1044,7 @@ public:
         return io_block(0);
       }
       yield {
-        int ret = http_op->wait_bl(pbl);
+        int ret = http_op->wait(pbl);
         http_op->put();
         if (ret < 0) {
           return set_cr_error(ret);
@@ -1159,6 +1164,21 @@ public:
 
 #define META_SYNC_UPDATE_MARKER_WINDOW 10
 
+
+int RGWLastCallerWinsCR::operate() {
+  RGWCoroutine *call_cr;
+  reenter(this) {
+    while (cr) {
+      call_cr = cr;
+      cr = nullptr;
+      yield call(call_cr);
+      /* cr might have been modified at this point */
+    }
+    return set_cr_done();
+  }
+  return 0;
+}
+
 class RGWMetaSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, string> {
   RGWMetaSyncEnv *sync_env;
 
@@ -1194,6 +1214,10 @@ public:
                                                            store,
                                                            rgw_raw_obj(store->get_zone_params().log_pool, marker_oid),
                                                            sync_marker);
+  }
+
+  RGWOrderCallCR *allocate_order_control_cr() override {
+    return new RGWLastCallerWinsCR(sync_env->cct);
   }
 };
 
@@ -1360,8 +1384,8 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   string max_marker;
   const std::string& period_marker; //< max marker stored in next period
 
-  map<string, bufferlist> entries;
-  map<string, bufferlist>::iterator iter;
+  std::set<std::string> entries;
+  std::set<std::string>::iterator iter;
 
   string oid;
 
@@ -1562,20 +1586,20 @@ public:
         }
         iter = entries.begin();
         for (; iter != entries.end(); ++iter) {
-          tn->log(20, SSTR("full sync: " << iter->first));
+          marker = *iter;
+          tn->log(20, SSTR("full sync: " << marker));
           total_entries++;
-          if (!marker_tracker->start(iter->first, total_entries, real_time())) {
-            tn->log(0, SSTR("ERROR: cannot start syncing " << iter->first << ". Duplicate entry?"));
+          if (!marker_tracker->start(marker, total_entries, real_time())) {
+            tn->log(0, SSTR("ERROR: cannot start syncing " << marker << ". Duplicate entry?"));
           } else {
             // fetch remote and write locally
             yield {
-              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, iter->first, iter->first, MDLOG_STATUS_COMPLETE, marker_tracker, tn), false);
+              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, marker, marker, MDLOG_STATUS_COMPLETE, marker_tracker, tn), false);
               // stack_to_pos holds a reference to the stack
-              stack_to_pos[stack] = iter->first;
-              pos_to_prev[iter->first] = marker;
+              stack_to_pos[stack] = marker;
+              pos_to_prev[marker] = marker;
             }
           }
-          marker = iter->first;
         }
         collect_children();
       } while ((int)entries.size() == max_entries && can_adjust_marker);
@@ -1875,7 +1899,7 @@ class RGWMetaSyncCR : public RGWCoroutine {
   int ret{0};
 
 public:
-  RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, RGWPeriodHistory::Cursor cursor,
+  RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, const RGWPeriodHistory::Cursor &cursor,
                 const rgw_meta_sync_status& _sync_status, RGWSyncTraceNodeRef& _tn)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
       pool(sync_env->store->get_zone_params().log_pool),
@@ -1999,9 +2023,9 @@ int RGWRemoteMetaLog::read_sync_status(rgw_meta_sync_status *sync_status)
   // cannot run concurrently with run_sync(), so run in a separate manager
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
   RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
-  int ret = http_manager.set_threaded();
+  int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
   RGWMetaSyncEnv sync_env_local = sync_env;
@@ -2295,7 +2319,7 @@ int RGWCloneMetaLogCoroutine::state_read_shard_status()
         shard_info.last_update = header.max_time.to_real_time();
       }
       // wake up parent stack
-      stack->get_completion_mgr()->complete(nullptr, stack);
+      io_complete();
     }), add_ref);
 
   int ret = mdlog->get_info_async(shard_id, completion.get());
@@ -2339,7 +2363,7 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request()
 
   http_op = new RGWRESTReadResource(conn, "/admin/log", pairs, NULL, sync_env->http_manager);
 
-  http_op->set_user_info((void *)stack);
+  init_new_io(http_op);
 
   int ret = http_op->aio_read();
   if (ret < 0) {
@@ -2347,7 +2371,7 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request()
     log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
     http_op->put();
     http_op = NULL;
-    return ret;
+    return set_cr_error(ret);
   }
 
   return io_block(0);
@@ -2400,7 +2424,7 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
     dest_entry.name = entry.name;
     dest_entry.timestamp = utime_t(entry.timestamp);
   
-    ::encode(entry.log_data, dest_entry.data);
+    encode(entry.log_data, dest_entry.data);
 
     dest_entries.push_back(dest_entry);
 
@@ -2472,7 +2496,7 @@ class PurgePeriodLogsCR : public RGWCoroutine {
       realm_epoch(realm_epoch), last_trim_epoch(last_trim)
   {}
 
-  int operate();
+  int operate() override;
 };
 
 int PurgePeriodLogsCR::operate()
@@ -2716,7 +2740,7 @@ class MetaMasterStatusCollectCR : public RGWShardCollectCR {
   connection_map::iterator c;
   std::vector<rgw_meta_sync_status>::iterator s;
  public:
-  MetaMasterStatusCollectCR(MasterTrimEnv& env)
+  explicit MetaMasterStatusCollectCR(MasterTrimEnv& env)
     : RGWShardCollectCR(env.store->ctx(), MAX_CONCURRENT_SHARDS),
       env(env), c(env.connections.begin()), s(env.peer_status.begin())
   {}
@@ -2748,11 +2772,11 @@ class MetaMasterTrimCR : public RGWCoroutine {
   int ret{0};
 
  public:
-  MetaMasterTrimCR(MasterTrimEnv& env)
+  explicit MetaMasterTrimCR(MasterTrimEnv& env)
     : RGWCoroutine(env.store->ctx()), env(env)
   {}
 
-  int operate();
+  int operate() override;
 };
 
 int MetaMasterTrimCR::operate()
@@ -2952,9 +2976,9 @@ class MetaPeerTrimCR : public RGWCoroutine {
   rgw_mdlog_info mdlog_info; //< master's mdlog info
 
  public:
-  MetaPeerTrimCR(PeerTrimEnv& env) : RGWCoroutine(env.store->ctx()), env(env) {}
+  explicit MetaPeerTrimCR(PeerTrimEnv& env) : RGWCoroutine(env.store->ctx()), env(env) {}
 
-  int operate();
+  int operate() override;
 };
 
 int MetaPeerTrimCR::operate()
@@ -3020,7 +3044,7 @@ class MetaTrimPollCR : public RGWCoroutine {
       cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct))
   {}
 
-  int operate();
+  int operate() override;
 };
 
 int MetaTrimPollCR::operate()

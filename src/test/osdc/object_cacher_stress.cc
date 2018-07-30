@@ -26,7 +26,7 @@
 
 // XXX: Only tests default namespace
 struct op_data {
-  op_data(std::string oid, uint64_t offset, uint64_t len, bool read)
+  op_data(const std::string &oid, uint64_t offset, uint64_t len, bool read)
     : extent(oid, 0, offset, len, 0), is_read(read)
   {
     extent.oloc.pool = 0;
@@ -60,16 +60,16 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
   FakeWriteback writeback(g_ceph_context, &lock, delay_ns);
 
   ObjectCacher obc(g_ceph_context, "test", writeback, lock, NULL, NULL,
-		   g_conf->client_oc_size,
-		   g_conf->client_oc_max_objects,
-		   g_conf->client_oc_max_dirty,
-		   g_conf->client_oc_target_dirty,
-		   g_conf->client_oc_max_dirty_age,
+		   g_conf()->client_oc_size,
+		   g_conf()->client_oc_max_objects,
+		   g_conf()->client_oc_max_dirty,
+		   g_conf()->client_oc_target_dirty,
+		   g_conf()->client_oc_max_dirty_age,
 		   true);
   obc.start();
 
   std::atomic<unsigned> outstanding_reads = { 0 };
-  vector<ceph::shared_ptr<op_data> > ops;
+  vector<std::shared_ptr<op_data> > ops;
   ObjectCacher::ObjectSet object_set(NULL, 0, 0);
   SnapContext snapc;
   ceph::buffer::ptr bp(max_op_len);
@@ -89,12 +89,12 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
 
   for (uint64_t i = 0; i < num_ops; ++i) {
     uint64_t offset = random() % max_obj_size;
-    uint64_t max_len = MIN(max_obj_size - offset, max_op_len);
+    uint64_t max_len = std::min(max_obj_size - offset, max_op_len);
     // no zero-length operations
-    uint64_t length = random() % (MAX(max_len - 1, 1)) + 1;
+    uint64_t length = random() % (std::max<uint64_t>(max_len - 1, 1)) + 1;
     std::string oid = "test" + stringify(random() % num_objs);
     bool is_read = random() < percent_reads * RAND_MAX;
-    ceph::shared_ptr<op_data> op(new op_data(oid, offset, length, is_read));
+    std::shared_ptr<op_data> op(new op_data(oid, offset, length, is_read));
     ops.push_back(op);
     std::cout << "op " << i << " " << (is_read ? "read" : "write")
 	      << " " << op->extent << "\n";
@@ -186,7 +186,7 @@ int correctness_test(uint64_t delay_ns)
 		   1, // max objects, just one
 		   1<<18, // max dirty, 256KB
 		   1<<17, // target dirty, 128KB
-		   g_conf->client_oc_max_dirty_age,
+		   g_conf()->client_oc_max_dirty_age,
 		   true);
   obc.start();
   std::cerr << "just start()ed ObjectCacher" << std::endl;
@@ -355,9 +355,9 @@ int main(int argc, const char **argv)
 {
   std::vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
   long long delay_ns = 0;
   long long num_ops = 1000;

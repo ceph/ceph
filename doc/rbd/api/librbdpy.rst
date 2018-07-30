@@ -45,6 +45,7 @@ block::
 
     cluster = rados.Rados(conffile='my_ceph_conf')
     try:
+        cluster.connect()
         ioctx = cluster.open_ioctx('my_pool')
         try:
             rbd_inst = rbd.RBD()

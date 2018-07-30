@@ -42,13 +42,18 @@ const char *mempool::get_pool_name(mempool::pool_index_t ix) {
 void mempool::dump(ceph::Formatter *f)
 {
   stats_t total;
+  f->open_object_section("mempool"); // we need (dummy?) topmost section for 
+				     // JSON Formatter to print pool names. It omits them otherwise.
+  f->open_object_section("by_pool");
   for (size_t i = 0; i < num_pools; ++i) {
     const pool_t &pool = mempool::get_pool((pool_index_t)i);
     f->open_object_section(get_pool_name((pool_index_t)i));
     pool.dump(f, &total);
     f->close_section();
   }
+  f->close_section();
   f->dump_object("total", total);
+  f->close_section();
 }
 
 void mempool::set_debug_mode(bool d)
@@ -95,7 +100,7 @@ void mempool::pool_t::get_stats(
     total->bytes += shard[i].bytes;
   }
   if (debug_mode) {
-    std::unique_lock<std::mutex> shard_lock(lock);
+    std::lock_guard<std::mutex> shard_lock(lock);
     for (auto &p : type_map) {
       std::string n = ceph_demangle(p.second.type_name);
       stats_t &s = (*by_type)[n];

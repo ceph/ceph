@@ -49,7 +49,7 @@ public:
   {}
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &p);
+  void decode(bufferlist::const_iterator &p);
 };
 WRITE_CLASS_ENCODER(PurgeItem)
 
@@ -95,6 +95,8 @@ protected:
   // Map of Journaler offset to PurgeItem
   std::map<uint64_t, PurgeItem> in_flight;
 
+  std::set<uint64_t> pending_expire;
+
   // Throttled allowances
   uint64_t ops_in_flight;
 
@@ -113,7 +115,7 @@ protected:
   bool draining;
 
   // recover the journal write_pos (drop any partial written entry)
-  void _recover(Context *completion);
+  void _recover();
 
   /**
    * @return true if we were in a position to try and consume something:
@@ -130,6 +132,8 @@ protected:
   void _execute_item_complete(
       uint64_t expire_to);
 
+  bool recovered;
+  std::list<Context*> waiting_for_recovery;
 
 public:
   void init();
@@ -143,6 +147,8 @@ public:
 
   // Read the Journaler header for an existing queue and start consuming
   void open(Context *completion);
+
+  void wait_for_recovery(Context *c);
 
   // Submit one entry to the work queue.  Call back when it is persisted
   // to the queue (there is no callback for when it is executed)
@@ -170,7 +176,7 @@ public:
 
   void update_op_limit(const MDSMap &mds_map);
 
-  void handle_conf_change(const struct md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed,
                           const MDSMap &mds_map);
 

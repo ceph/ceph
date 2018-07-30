@@ -42,37 +42,38 @@ struct MonSession : public RefCountedObject {
   ConnectionRef con;
   int con_type = 0;
   uint64_t con_features = 0;  // zero if AnonConnection
-  entity_inst_t inst;
+  entity_name_t name;
+  entity_addrvec_t addrs;
   utime_t session_timeout;
-  utime_t time_established;
-  bool closed;
+  bool closed = false;
   xlist<MonSession*>::item item;
   set<uint64_t> routed_request_tids;
   MonCap caps;
-  uint64_t auid;
-  uint64_t global_id;
+  uint64_t auid = 0;
+  uint64_t global_id = 0;
+
+  bool authenticated = false;  ///< true if auth handshake is complete
 
   map<string, Subscription*> sub_map;
-  epoch_t osd_epoch;		// the osdmap epoch sent to the mon client
+  epoch_t osd_epoch = 0;       ///< the osdmap epoch sent to the mon client
 
-  AuthServiceHandler *auth_handler;
+  AuthServiceHandler *auth_handler = nullptr;
   EntityName entity_name;
 
   ConnectionRef proxy_con;
-  uint64_t proxy_tid;
+  uint64_t proxy_tid = 0;
 
-  MonSession(const entity_inst_t& i, Connection *c) :
+  string remote_host;                ///< remote host name
+  map<string,string> last_config;    ///< most recently shared config
+  bool any_config = false;
+
+  MonSession(const entity_name_t& n, const entity_addrvec_t& av, Connection *c) :
     RefCountedObject(g_ceph_context),
     con(c),
     con_type(c->get_peer_type()),
-    con_features(0),
-    inst(i), closed(false), item(this),
-    auid(0),
-    global_id(0),
-    osd_epoch(0),
-    auth_handler(NULL),
-    proxy_con(NULL), proxy_tid(0) {
-    time_established = ceph_clock_now();
+    name(n),
+    addrs(av),
+    item(this) {
     if (c->get_messenger()) {
       // only fill in features if this is a non-anonymous connection
       con_features = c->get_features();
@@ -125,9 +126,9 @@ struct MonSessionMap {
     }
     s->sub_map.clear();
     s->item.remove_myself();
-    if (s->inst.name.is_osd()) {
-      for (multimap<int,MonSession*>::iterator p = by_osd.find(s->inst.name.num());
-	   p->first == s->inst.name.num();
+    if (s->name.is_osd()) {
+      for (multimap<int,MonSession*>::iterator p = by_osd.find(s->name.num());
+	   p->first == s->name.num();
 	   ++p)
 	if (p->second == s) {
 	  by_osd.erase(p);
@@ -141,12 +142,14 @@ struct MonSessionMap {
     s->put();
   }
 
-  MonSession *new_session(const entity_inst_t& i, Connection *c) {
-    MonSession *s = new MonSession(i, c);
+  MonSession *new_session(const entity_name_t& n,
+			  const entity_addrvec_t& av,
+			  Connection *c) {
+    MonSession *s = new MonSession(n, av, c);
     assert(s);
     sessions.push_back(&s->item);
-    if (i.name.is_osd())
-      by_osd.insert(pair<int,MonSession*>(i.name.num(), s));
+    if (n.is_osd())
+      by_osd.insert(pair<int,MonSession*>(n.num(), s));
     if (s->con_features) {
       feature_map.add(s->con_type, s->con_features);
     }
@@ -176,7 +179,7 @@ struct MonSessionMap {
     while (backward || forward) {
       if (backward) {
         if (osdmap->is_up(b->first) &&
-	    osdmap->get_addr(b->first) == b->second->con->get_peer_addr()) {
+	    osdmap->get_addrs(b->first) == b->second->con->get_peer_addrs()) {
           s = b->second;
           break;
         }
@@ -225,9 +228,12 @@ struct MonSessionMap {
 
 inline ostream& operator<<(ostream& out, const MonSession& s)
 {
-  out << "MonSession(" << s.inst << " is "
-      << (s.closed ? "closed" : "open");
-  out << " " << s.caps << ")";
+  out << "MonSession(" << s.name << " " << s.addrs
+      << " is " << (s.closed ? "closed" : "open")
+      << " " << s.caps
+      << ", features 0x" << std::hex << s.con_features << std::dec
+      <<  " (" << ceph_release_name(ceph_release_from_features(s.con_features))
+      << "))";
   return out;
 }
 

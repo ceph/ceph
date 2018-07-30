@@ -44,11 +44,12 @@ public:
       t.encode(monmapbl, features);
     }
 
-    ::encode(monmapbl, payload);
+    using ceph::encode;
+    encode(monmapbl, payload);
   }
   void decode_payload() override { 
-    bufferlist::iterator p = payload.begin();
-    ::decode(monmapbl, p);
+    auto p = payload.cbegin();
+    decode(monmapbl, p);
   }
 };
 

@@ -68,19 +68,21 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(full_first, payload);
-    ::encode(full_last, payload);
-    ::encode(inc_first, payload);
-    ::encode(inc_last, payload);
+    encode(full_first, payload);
+    encode(full_last, payload);
+    encode(inc_first, payload);
+    encode(inc_last, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    using ceph::decode;
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(full_first, p);
-    ::decode(full_last, p);
-    ::decode(inc_first, p);
-    ::decode(inc_last, p);
+    decode(full_first, p);
+    decode(full_last, p);
+    decode(inc_first, p);
+    decode(inc_last, p);
   }
 };
 

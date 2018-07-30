@@ -134,7 +134,7 @@ class FullnessTestCase(CephFSTestCase):
                           the failed write.
         """
 
-        osd_mon_report_interval_max = int(self.fs.get_config("osd_mon_report_interval_max", service_type='osd'))
+        osd_mon_report_interval = int(self.fs.get_config("osd_mon_report_interval", service_type='osd'))
 
         log.info("Writing {0}MB should fill this cluster".format(self.fill_mb))
 
@@ -149,7 +149,7 @@ class FullnessTestCase(CephFSTestCase):
         else:
             log.info("Writing file B succeeded (full status will happen soon)")
             self.wait_until_true(lambda: self.is_full(),
-                                 timeout=osd_mon_report_interval_max * 5)
+                                 timeout=osd_mon_report_interval * 5)
 
         # Attempting to write more data should give me ENOSPC
         with self.assertRaises(CommandFailedError) as ar:
@@ -184,7 +184,7 @@ class FullnessTestCase(CephFSTestCase):
         # * The MDS to purge the stray folder and execute object deletions
         #  * The OSDs to inform the mon that they are no longer full
         self.wait_until_true(lambda: not self.is_full(),
-                             timeout=osd_mon_report_interval_max * 5)
+                             timeout=osd_mon_report_interval * 5)
 
         # Wait for the MDS to see the latest OSD map so that it will reliably
         # be applying the free space policy
@@ -212,7 +212,7 @@ class FullnessTestCase(CephFSTestCase):
         file_path = os.path.join(self.mount_a.mountpoint, "full_test_file")
 
         # Enough to trip the full flag
-        osd_mon_report_interval_max = int(self.fs.get_config("osd_mon_report_interval_max", service_type='osd'))
+        osd_mon_report_interval = int(self.fs.get_config("osd_mon_report_interval", service_type='osd'))
         mon_tick_interval = int(self.fs.get_config("mon_tick_interval", service_type="mon"))
 
         # Sufficient data to cause RADOS cluster to go 'full'
@@ -222,13 +222,13 @@ class FullnessTestCase(CephFSTestCase):
         # (report_interval for mon to learn PG stats, tick interval for it to update OSD map,
         #  factor of 1.5 for I/O + network latency in committing OSD map and distributing it
         #  to the OSDs)
-        full_wait = (osd_mon_report_interval_max + mon_tick_interval) * 1.5
+        full_wait = (osd_mon_report_interval + mon_tick_interval) * 1.5
 
         # Configs for this test should bring this setting down in order to
         # run reasonably quickly
-        if osd_mon_report_interval_max > 10:
+        if osd_mon_report_interval > 10:
             log.warn("This test may run rather slowly unless you decrease"
-                     "osd_mon_report_interval_max (5 is a good setting)!")
+                     "osd_mon_report_interval (5 is a good setting)!")
 
         self.mount_a.run_python(template.format(
             fill_mb=self.fill_mb,
@@ -250,7 +250,7 @@ class FullnessTestCase(CephFSTestCase):
             print "writing some data through which we expect to succeed"
             bytes = 0
             f = os.open("{file_path}", os.O_WRONLY | os.O_CREAT)
-            bytes += os.write(f, 'a' * 4096)
+            bytes += os.write(f, 'a' * 512 * 1024)
             os.fsync(f)
             print "fsync'ed data successfully, will now attempt to fill fs"
 
@@ -260,10 +260,10 @@ class FullnessTestCase(CephFSTestCase):
             # from write
             full = False
 
-            for n in range(0, {fill_mb}):
+            for n in range(0, int({fill_mb} * 0.9)):
                 bytes += os.write(f, 'x' * 1024 * 1024)
-                print "wrote bytes via buffered write, may repeat"
-            print "done writing bytes"
+                print "wrote {{0}} bytes via buffered write, may repeat".format(bytes)
+            print "done writing {{0}} bytes".format(bytes)
 
             # OK, now we should sneak in under the full condition
             # due to the time it takes the OSDs to report to the
@@ -271,13 +271,16 @@ class FullnessTestCase(CephFSTestCase):
             os.fsync(f)
             print "successfully fsync'ed prior to getting full state reported"
 
-            # Now wait for the full flag to get set so that our
-            # next flush IO will fail
-            time.sleep(30)
+            # buffered write, add more dirty data to the buffer
+            print "starting buffered write"
+            try:
+                for n in range(0, int({fill_mb} * 0.2)):
+                    bytes += os.write(f, 'x' * 1024 * 1024)
+                    print "sleeping a bit as we've exceeded 90% of our expected full ratio"
+                    time.sleep({full_wait})
+            except OSError:
+                pass;
 
-            # A buffered IO, should succeed
-            print "starting buffered write we expect to succeed"
-            os.write(f, 'x' * 4096)
             print "wrote, now waiting 30s and then doing a close we expect to fail"
 
             # Wait long enough for a background flush that should fail
@@ -328,7 +331,7 @@ class FullnessTestCase(CephFSTestCase):
             # from write
             full = False
 
-            for n in range(0, {fill_mb} + 1):
+            for n in range(0, int({fill_mb} * 1.1)):
                 try:
                     bytes += os.write(f, 'x' * 1024 * 1024)
                     print "wrote bytes via buffered write, moving on to fsync"
@@ -346,10 +349,10 @@ class FullnessTestCase(CephFSTestCase):
                 else:
                     print "Not full yet after %.2f MB" % (bytes / (1024.0 * 1024.0))
 
-                if n > {fill_mb} * 0.8:
+                if n > {fill_mb} * 0.9:
                     # Be cautious in the last region where we expect to hit
                     # the full condition, so that we don't overshoot too dramatically
-                    print "sleeping a bit as we've exceeded 80% of our expected full ratio"
+                    print "sleeping a bit as we've exceeded 90% of our expected full ratio"
                     time.sleep({full_wait})
 
             if not full:
@@ -387,12 +390,12 @@ class TestQuotaFull(FullnessTestCase):
                                             "max_bytes", "{0}".format(self.pool_capacity))
 
     def is_full(self):
-        return self.fs.is_pool_full(self.fs.get_data_pool_name())
+        return self.fs.is_full()
 
 
 class TestClusterFull(FullnessTestCase):
     """
-    Test cluster-wide fullness, which indicates that an OSD has become too full
+    Test data pool fullness, which indicates that an OSD has become too full
     """
     pool_capacity = None
     REQUIRE_MEMSTORE = True
@@ -401,11 +404,10 @@ class TestClusterFull(FullnessTestCase):
         super(TestClusterFull, self).setUp()
 
         if self.pool_capacity is None:
-            # This is a hack to overcome weird fluctuations in the reported
-            # `max_avail` attribute of pools that sometimes occurs in between
-            # tests (reason as yet unclear, but this dodges the issue)
-            TestClusterFull.pool_capacity = self.fs.get_pool_df(self._data_pool_name())['max_avail']
-            TestClusterFull.fill_mb = int(1.05 * (self.pool_capacity / (1024.0 * 1024.0)))
+            max_avail = self.fs.get_pool_df(self._data_pool_name())['max_avail']
+            full_ratio = float(self.fs.get_config("mon_osd_full_ratio", service_type="mon"))
+            TestClusterFull.pool_capacity = int(max_avail * full_ratio)
+            TestClusterFull.fill_mb = (self.pool_capacity / (1024 * 1024))
 
     def is_full(self):
         return self.fs.is_full()

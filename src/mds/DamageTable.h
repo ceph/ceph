@@ -16,8 +16,10 @@
 #ifndef DAMAGE_TABLE_H_
 #define DAMAGE_TABLE_H_
 
+#include <string_view>
+
 #include "mdstypes.h"
-#include "auth/Crypto.h"
+#include "include/random.h"
 
 class CDir;
 
@@ -43,7 +45,7 @@ class DamageEntry
 
   DamageEntry()
   {
-    id = get_random(0, 0xffffffff);
+    id = ceph::util::generate_random_number<damage_entry_id_t>(0, 0xffffffff);
     reported_at = ceph_clock_now();
   }
 
@@ -55,7 +57,7 @@ class DamageEntry
 };
 
 
-typedef ceph::shared_ptr<DamageEntry> DamageEntryRef;
+typedef std::shared_ptr<DamageEntry> DamageEntryRef;
 
 
 class DirFragIdent
@@ -93,7 +95,7 @@ class DentryIdent
     }
   }
 
-  DentryIdent(const std::string &dname_, snapid_t snap_id_)
+  DentryIdent(std::string_view dname_, snapid_t snap_id_)
     : dname(dname_), snap_id(snap_id_)
   {}
 };
@@ -161,7 +163,7 @@ public:
    *
    * @return true if fatal
    */
-  bool notify_dirfrag(inodeno_t ino, frag_t frag, const std::string &path);
+  bool notify_dirfrag(inodeno_t ino, frag_t frag, std::string_view path);
 
   /**
    * Indicate that a particular dentry cannot be loaded.
@@ -170,17 +172,17 @@ public:
    */
   bool notify_dentry(
     inodeno_t ino, frag_t frag,
-    snapid_t snap_id, const std::string &dname, const std::string &path);
+    snapid_t snap_id, std::string_view dname, std::string_view path);
 
   /**
    * Indicate that a particular Inode could not be loaded by number
    */
   bool notify_remote_damaged(
-      inodeno_t ino, const std::string &path);
+      inodeno_t ino, std::string_view path);
 
   bool is_dentry_damaged(
       const CDir *dir_frag,
-      const std::string &dname,
+      std::string_view dname,
       const snapid_t snap_id) const;
 
   bool is_dirfrag_damaged(
@@ -190,7 +192,7 @@ public:
       const inodeno_t ino) const;
 
 
-  DamageTable(const mds_rank_t rank_)
+  explicit DamageTable(const mds_rank_t rank_)
     : rank(rank_)
   {
     assert(rank_ != MDS_RANK_NONE);

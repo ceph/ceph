@@ -20,7 +20,6 @@
 #include <map>
 #include <set>
 #include <vector>
-#include "include/memory.h"
 #include <exception>
 
 #include "osd/osd_types.h"
@@ -63,7 +62,7 @@
       out:					\
       complete_inject_failure();		\
       return r;					\
-    } catch (RetryException) {			\
+    } catch (RetryException&) {			\
       failed = true;				\
     } catch (...) {				\
       ceph_abort();				\

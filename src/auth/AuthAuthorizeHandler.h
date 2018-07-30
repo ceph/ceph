@@ -34,7 +34,9 @@ struct AuthAuthorizeHandler {
   virtual bool verify_authorizer(CephContext *cct, KeyStore *keys,
 				 bufferlist& authorizer_data, bufferlist& authorizer_reply,
                                  EntityName& entity_name, uint64_t& global_id,
-				 AuthCapsInfo& caps_info, CryptoKey& session_key, uint64_t *auid = NULL) = 0;
+				 AuthCapsInfo& caps_info, CryptoKey& session_key,
+				 uint64_t *auid,
+				 std::unique_ptr<AuthAuthorizerChallenge> *challenge) = 0;
   virtual int authorizer_session_crypto() = 0;
 };
 
@@ -44,7 +46,7 @@ class AuthAuthorizeHandlerRegistry {
   AuthMethodList supported;
 
 public:
-  AuthAuthorizeHandlerRegistry(CephContext *cct_, std::string methods)
+  AuthAuthorizeHandlerRegistry(CephContext *cct_, const std::string &methods)
     : m_lock("AuthAuthorizeHandlerRegistry::m_lock"), supported(cct_, methods)
   {}
   ~AuthAuthorizeHandlerRegistry();

@@ -9,7 +9,7 @@ placement planning.  The main data placement planning concepts in Ceph include:
 
 - **Pools:** Ceph stores data within pools, which are logical groups for storing
   objects. Pools manage the number of placement groups, the number of replicas,
-  and the ruleset for the pool. To store data in a pool, you must have
+  and the CRUSH rule for the pool. To store data in a pool, you must have
   an authenticated user with permissions for the pool. Ceph can snapshot pools.
   See `Pools`_ for additional details.
 

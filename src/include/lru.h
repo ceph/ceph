@@ -157,6 +157,7 @@ public:
 
   // expire -- expire a single item
   LRUObject *lru_get_next_expire() {
+    adjust();
     // look through tail of bot
     while (bottom.size()) {
       LRUObject *p = bottom.back();
@@ -164,7 +165,6 @@ public:
 
       // move to pintail
       pintail.push_front(&p->lru_link);
-      adjust();
     }
 
     // ok, try head then
@@ -174,7 +174,6 @@ public:
 
       // move to pintail
       pintail.push_front(&p->lru_link);
-      adjust();
     }
     
     // no luck!

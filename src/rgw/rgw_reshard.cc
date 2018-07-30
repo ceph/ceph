@@ -18,7 +18,6 @@ const string reshard_oid_prefix = "reshard.";
 const string reshard_lock_name = "reshard_process";
 const string bucket_instance_lock_name = "bucket_instance_lock";
 
-using namespace std;
 
 #define RESHARD_SHARD_WINDOW 64
 #define RESHARD_MAX_AIO 128
@@ -293,6 +292,19 @@ int RGWBucketReshard::create_new_bucket_instance(int new_num_shards,
   return ::create_new_bucket_instance(store, new_num_shards, bucket_info, bucket_attrs, new_bucket_info);
 }
 
+int RGWBucketReshard::cancel()
+{
+  int ret = lock_bucket();
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = clear_resharding();
+
+  unlock_bucket();
+  return 0;
+}
+
 class BucketInfoReshardUpdate
 {
   RGWRados *store;
@@ -346,7 +358,7 @@ public:
 
 int RGWBucketReshard::do_reshard(
 		   int num_shards,
-		   const RGWBucketInfo& new_bucket_info,
+		   RGWBucketInfo& new_bucket_info,
 		   int max_entries,
                    bool verbose,
                    ostream *out,
@@ -470,16 +482,10 @@ int RGWBucketReshard::do_reshard(
     return EIO;
   }
 
-  RGWBucketAdminOpState bucket_op;
-
-  bucket_op.set_bucket_name(new_bucket_info.bucket.name);
-  bucket_op.set_bucket_id(new_bucket_info.bucket.bucket_id);
-  bucket_op.set_user_id(new_bucket_info.owner);
-  string err;
-  int r = RGWBucketAdminOp::link(store, bucket_op, &err);
-  if (r < 0) {
-    lderr(store->ctx()) << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << err << "; " << cpp_strerror(-r) << ")" << dendl;
-    return -r;
+  ret = rgw_link_bucket(store, new_bucket_info.owner, new_bucket_info.bucket, bucket_info.creation_time);
+  if (ret < 0) {
+    lderr(store->ctx()) << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << cpp_strerror(-ret) << ")" << dendl;
+    return -ret;
   }
 
   ret = bucket_info_updater.complete();
@@ -588,13 +594,17 @@ void RGWReshard::get_bucket_logshard_oid(const string& tenant, const string& buc
   uint32_t sid = ceph_str_hash_linux(key.c_str(), key.size());
   uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
   sid = sid2 % MAX_RESHARD_LOGSHARDS_PRIME % num_logshards;
-  int logshard = sid % num_logshards;
 
-  get_logshard_oid(logshard, oid);
+  get_logshard_oid(int(sid), oid);
 }
 
 int RGWReshard::add(cls_rgw_reshard_entry& entry)
 {
+  if (!store->can_reshard()) {
+    ldout(store->ctx(), 20) << __func__ << " Resharding is disabled"  << dendl;
+    return 0;
+  }
+
   string logshard_oid;
 
   get_bucket_logshard_oid(entry.tenant, entry.bucket_name, &logshard_oid);
@@ -615,6 +625,7 @@ int RGWReshard::update(const RGWBucketInfo& bucket_info, const RGWBucketInfo& ne
   cls_rgw_reshard_entry entry;
   entry.bucket_name = bucket_info.bucket.name;
   entry.bucket_id = bucket_info.bucket.bucket_id;
+  entry.tenant = bucket_info.owner.tenant;
 
   int ret = get(entry);
   if (ret < 0) {
@@ -664,7 +675,10 @@ int RGWReshard::get(cls_rgw_reshard_entry& entry)
 
   int ret = cls_rgw_reshard_get(store->reshard_pool_ctx, logshard_oid, entry);
   if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: failed to get entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant << " bucket=" << entry.bucket_name << dendl;
+    if (ret != -ENOENT) {
+      lderr(store->ctx()) << "ERROR: failed to get entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant <<
+	" bucket=" << entry.bucket_name << dendl;
+    }
     return ret;
   }
 
@@ -856,6 +870,10 @@ void  RGWReshard::get_logshard_oid(int shard_num, string *logshard)
 
 int RGWReshard::process_all_logshards()
 {
+  if (!store->can_reshard()) {
+    ldout(store->ctx(), 20) << __func__ << " Resharding is disabled"  << dendl;
+    return 0;
+  }
   int ret = 0;
 
   for (int i = 0; i < num_logshards; i++) {
@@ -899,14 +917,11 @@ void *RGWReshard::ReshardWorker::entry() {
   utime_t last_run;
   do {
     utime_t start = ceph_clock_now();
-    ldout(cct, 2) << "object expiration: start" << dendl;
     if (reshard->process_all_logshards()) {
       /* All shards have been processed properly. Next time we can start
        * from this moment. */
       last_run = start;
     }
-    ldout(cct, 2) << "object expiration: stop" << dendl;
-
 
     if (reshard->going_down())
       break;

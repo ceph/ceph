@@ -49,13 +49,14 @@ public:
   }
 
   void service_encode() {
-    ::encode(epoch, payload);
-    ::encode(round, payload);
+    using ceph::encode;
+    encode(epoch, payload);
+    encode(round, payload);
   }
 
-  void service_decode(bufferlist::iterator &p) {
-    ::decode(epoch, p);
-    ::decode(round, p);
+  void service_decode(bufferlist::const_iterator &p) {
+    decode(epoch, p);
+    decode(round, p);
   }
 
   void encode_payload(uint64_t features) override {

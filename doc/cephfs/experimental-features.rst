@@ -21,12 +21,10 @@ load on the MDS. It is not sufficiently tested to support at this time, although
 failures within it are unlikely to make non-inlined data inaccessible
 
 Inline data has always been off by default and requires setting
-the "inline_data" flag.
-
-
+the ``inline_data`` flag.
 
 Mantle: Programmable Metadata Load Balancer
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-------------------------------------------
 
 Mantle is a programmable metadata balancer built into the MDS. The idea is to
 protect the mechanisms for balancing load (migration, replication,
@@ -46,9 +44,10 @@ some cases. Specifically, if you share a pool for multiple FSes and delete
 a snapshot in one FS, expect to lose snapshotted file data in any other FS using
 snapshots. See the :doc:`/dev/cephfs-snapshots` page for more information.
 
-Snapshots are known not to work with multi-MDS filesystems.
+For somewhat obscure implementation reasons, the kernel client only supports up
+to 400 snapshots (http://tracker.ceph.com/issues/21420).
 
-Snapshotting was blocked off with the "allow_new_snaps" flag prior to Firefly.
+Snapshotting was blocked off with the ``allow_new_snaps`` flag prior to Mimic.
 
 Multiple filesystems within a Ceph cluster
 ------------------------------------------
@@ -69,7 +68,7 @@ Note that snapshots and multiple filesystems are *not* tested in combination
 and may not work together; see above.
 
 Multiple filesystems were available starting in the Jewel release candidates
-but were protected behind the "enable_multiple" flag before the final release.
+but must be turned on via the ``enable_multiple`` flag until declared stable.
 
 
 Previously experimental features
@@ -85,7 +84,7 @@ the ``allow_dirfrags`` flag on the filesystem:
 
 ::
 
-    ceph fs set <filesystem name> allow_dirfrags
+    ceph fs set <filesystem name> allow_dirfrags 1
 
 Multiple active metadata servers
 --------------------------------
@@ -100,7 +99,7 @@ enabling multiple active metadata servers as follows:
 
 ::
 
-    ceph fs set <filesystem name> allow_multimds
+    ceph fs set <filesystem name> allow_multimds 1
 
 Note that the default size of the active mds cluster (``max_mds``) is
 still set to 1 initially.

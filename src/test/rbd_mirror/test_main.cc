@@ -9,6 +9,7 @@
 #include <string>
 
 extern void register_test_cluster_watcher();
+extern void register_test_image_policy();
 extern void register_test_image_sync();
 extern void register_test_instance_watcher();
 extern void register_test_instances();
@@ -20,6 +21,7 @@ extern void register_test_rbd_mirror_image_deleter();
 int main(int argc, char **argv)
 {
   register_test_cluster_watcher();
+  register_test_image_policy();
   register_test_image_sync();
   register_test_instance_watcher();
   register_test_instances();

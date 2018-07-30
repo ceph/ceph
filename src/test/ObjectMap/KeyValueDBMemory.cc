@@ -4,7 +4,6 @@
 #include "KeyValueDBMemory.h"
 #include <map>
 #include <set>
-#include "include/memory.h"
 #include <iostream>
 
 using namespace std;
@@ -235,8 +234,8 @@ int KeyValueDBMemory::rm_range_keys(const string &prefix, const string &start, c
   return 0;
 }
 
-KeyValueDB::WholeSpaceIterator KeyValueDBMemory::_get_iterator() {
-  return ceph::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
+KeyValueDB::WholeSpaceIterator KeyValueDBMemory::get_wholespace_iterator() {
+  return std::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
     new WholeSpaceMemIterator(this)
   );
 }

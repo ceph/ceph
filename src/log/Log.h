@@ -4,6 +4,8 @@
 #ifndef __CEPH_LOG_LOG_H
 #define __CEPH_LOG_LOG_H
 
+#include <memory>
+
 #include "common/Thread.h"
 
 #include "EntryQueue.h"
@@ -18,8 +20,9 @@ class Entry;
 class Log : private Thread
 {
   Log **m_indirect_this;
+  log_clock clock;
 
-  SubsystemMap *m_subs;
+  const SubsystemMap *m_subs;
 
   pthread_mutex_t m_queue_mutex;
   pthread_mutex_t m_flush_mutex;
@@ -43,7 +46,12 @@ class Log : private Thread
   int m_stderr_log, m_stderr_crash;
   int m_graylog_log, m_graylog_crash;
 
-  shared_ptr<Graylog> m_graylog;
+  std::string m_log_stderr_prefix;
+
+  std::shared_ptr<Graylog> m_graylog;
+
+  char* m_log_buf;   ///< coalescing buffer
+  int m_log_buf_pos; ///< where we're at within coalescing buffer
 
   bool m_stop;
 
@@ -53,21 +61,26 @@ class Log : private Thread
 
   void *entry() override;
 
+  void _log_safe_write(const char* what, size_t write_len);
+  void _write_and_copy(char* what, size_t len);
+  void _flush_logbuf();
   void _flush(EntryQueue *q, EntryQueue *requeue, bool crash);
 
   void _log_message(const char *s, bool crash);
 
 public:
-  explicit Log(SubsystemMap *s);
+  Log(const SubsystemMap *s);
   ~Log() override;
 
   void set_flush_on_exit();
 
+  void set_coarse_timestamps(bool coarse);
   void set_max_new(int n);
   void set_max_recent(int n);
   void set_log_file(std::string fn);
   void reopen_log_file();
   void chown_log_file(uid_t uid, gid_t gid);
+  void set_log_stderr_prefix(const std::string& p);
 
   void flush();
 
@@ -80,9 +93,9 @@ public:
   void start_graylog();
   void stop_graylog();
 
-  shared_ptr<Graylog> graylog() { return m_graylog; }
+  std::shared_ptr<Graylog> graylog() { return m_graylog; }
 
-  Entry *create_entry(int level, int subsys);
+  Entry *create_entry(int level, int subsys, const char* msg = nullptr);
   Entry *create_entry(int level, int subsys, size_t* expected_size);
   void submit_entry(Entry *e);
 

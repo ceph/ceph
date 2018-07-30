@@ -17,14 +17,19 @@
 #include <libgen.h>
 #include <unistd.h>
 
+#include "BlockDevice.h"
+
+#if defined(HAVE_LIBAIO)
 #include "KernelDevice.h"
+#endif
+
 #if defined(HAVE_SPDK)
 #include "NVMEDevice.h"
 #endif
 
 #if defined(HAVE_PMEM)
 #include "PMEMDevice.h"
-#include <libpmem.h>
+#include "libpmem.h"
 #endif
 
 #include "common/debug.h"
@@ -50,8 +55,36 @@ void IOContext::aio_wait()
   dout(20) << __func__ << " " << this << " done" << dendl;
 }
 
+uint64_t IOContext::get_num_ios() const
+{
+  // this is about the simplest model for transaction cost you can
+  // imagine.  there is some fixed overhead cost by saying there is a
+  // minimum of one "io".  and then we have some cost per "io" that is
+  // a configurable (with different hdd and ssd defaults), and add
+  // that to the bytes value.
+  uint64_t ios = 0;
+#ifdef HAVE_LIBAIO
+  for (auto& p : pending_aios) {
+    ios += p.iov.size();
+  }
+#endif
+#ifdef HAVE_SPDK
+  ios += total_nseg;
+#endif
+  return ios;
+}
+
+void IOContext::release_running_aios()
+{
+  assert(!num_running);
+#ifdef HAVE_LIBAIO
+  // release aio contexts (including pinned buffers).
+  running_aios.clear();
+#endif
+}
+
 BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
-				 aio_callback_t cb, void *cbpriv)
+				 aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
 {
   string type = "kernel";
   char buf[PATH_MAX + 1];
@@ -66,11 +99,16 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
 #if defined(HAVE_PMEM)
   if (type == "kernel") {
     int is_pmem = 0;
-    void *addr = pmem_map_file(path.c_str(), 1024*1024, PMEM_FILE_EXCL, O_RDONLY, NULL, &is_pmem);
+    size_t map_len = 0;
+    void *addr = pmem_map_file(path.c_str(), 0, PMEM_FILE_EXCL, O_RDONLY, &map_len, &is_pmem);
     if (addr != NULL) {
       if (is_pmem)
 	type = "pmem";
-      pmem_unmap(addr, 1024*1024);
+      else
+	dout(1) << path.c_str() << " isn't pmem file" << dendl;
+      pmem_unmap(addr, map_len);
+    } else {
+      dout(1) << "pmem_map_file:" << path.c_str() << " failed." << pmem_errormsg() << dendl;
     }
   }
 #endif
@@ -82,10 +120,11 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
     return new PMEMDevice(cct, cb, cbpriv);
   }
 #endif
-
+#if defined(HAVE_LIBAIO)
   if (type == "kernel") {
-    return new KernelDevice(cct, cb, cbpriv);
+    return new KernelDevice(cct, cb, cbpriv, d_cb, d_cbpriv);
   }
+#endif
 #if defined(HAVE_SPDK)
   if (type == "ust-nvme") {
     return new NVMEDevice(cct, cb, cbpriv);

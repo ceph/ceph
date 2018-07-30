@@ -188,18 +188,18 @@ struct DummyBlock {
   int a = 1, b = 2, c = 3, d = 4;
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(a, bl);
-    ::encode(b, bl);
-    ::encode(c, bl);
-    ::encode(d, bl);
+    encode(a, bl);
+    encode(b, bl);
+    encode(c, bl);
+    encode(d, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(a, bl);
-    ::decode(b, bl);
-    ::decode(c, bl);
-    ::decode(d, bl);
+    decode(a, bl);
+    decode(b, bl);
+    decode(c, bl);
+    decode(d, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -214,9 +214,9 @@ double buffer_encode_decode()
   for (int i = 0; i < count; i++) {
     bufferlist b;
     DummyBlock dummy_block;
-    ::encode(dummy_block, b);
-    bufferlist::iterator iter = b.begin();
-    ::decode(dummy_block, iter);
+    encode(dummy_block, b);
+    auto iter = b.cbegin();
+    decode(dummy_block, iter);
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -261,18 +261,18 @@ double buffer_encode()
   for (int i = 0; i < count; i++) {
     bufferlist b;
     DummyBlock dummy_block;
-    ::encode(dummy_block, b);
+    encode(dummy_block, b);
     uint64_t start = Cycles::rdtsc();
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
     total += Cycles::rdtsc() - start;
   }
   return Cycles::to_seconds(total)/(count*10);
@@ -308,7 +308,7 @@ double buffer_iterator()
   int sum = 0;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    bufferlist::iterator it = b.begin();
+    auto it = b.cbegin();
     while (!it.end()) {
       sum += (static_cast<const char*>(it.get_current_ptr().c_str()))[it.get_remaining()-1];
       ++it;
@@ -488,7 +488,7 @@ class CountEvent: public EventCallback {
 
  public:
   explicit CountEvent(std::atomic<int64_t> *atomic): count(atomic) {}
-  void do_request(int id) override {
+  void do_request(uint64_t id) override {
     (*count)--;
   }
 };
@@ -637,11 +637,10 @@ double perf_prefetch()
   uint64_t total_ticks = 0;
   int count = 10;
   char buf[16 * 64];
-  uint64_t start, stop;
 
   for (int i = 0; i < count; i++) {
     PerfHelper::flush_cache();
-    start = Cycles::rdtsc();
+    uint64_t start = Cycles::rdtsc();
     prefetch(&buf[576], 64);
     prefetch(&buf[0],   64);
     prefetch(&buf[512], 64);
@@ -658,7 +657,7 @@ double perf_prefetch()
     prefetch(&buf[832], 64);
     prefetch(&buf[64],  64);
     prefetch(&buf[192], 64);
-    stop = Cycles::rdtsc();
+    uint64_t stop = Cycles::rdtsc();
     total_ticks += stop - start;
   }
   return Cycles::to_seconds(total_ticks) / count / 16;
@@ -1021,7 +1020,8 @@ int main(int argc, char *argv[])
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   Cycles::init();
 

@@ -18,6 +18,7 @@
 #include "common/Cond.h"
 #include "osdc/Objecter.h"
 #include "mds/mdstypes.h"
+#include "msg/Messenger.h"
 
 #include "mds/JournalPointer.h"
 
@@ -56,7 +57,7 @@ int JournalPointer::load(Objecter *objecter)
 
   // Construct JournalPointer result, null or decoded data
   if (r == 0) {
-    bufferlist::iterator q = data.begin();
+    auto q = data.cbegin();
     try {
       decode(q);
     } catch (const buffer::error &e) {

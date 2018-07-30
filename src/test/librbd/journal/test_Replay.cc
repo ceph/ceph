@@ -1,7 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "cls/rbd/cls_rbd_types.h"
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
 #include "cls/rbd/cls_rbd_types.h"
@@ -16,6 +15,7 @@
 #include "librbd/Journal.h"
 #include "librbd/Operations.h"
 #include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
@@ -47,11 +47,10 @@ public:
   void inject_into_journal(librbd::ImageCtx *ictx, T event) {
     C_SaferCond ctx;
     librbd::journal::EventEntry event_entry(event);
-    librbd::Journal<>::IOObjectRequests requests;
     {
       RWLock::RLocker owner_locker(ictx->owner_lock);
-      uint64_t tid = ictx->journal->append_io_event(std::move(event_entry),
-                                                    requests, 0, 0, true);
+      uint64_t tid = ictx->journal->append_io_event(std::move(event_entry),0, 0,
+                                                    true, 0);
       ictx->journal->wait_event(tid, &ctx);
     }
     ASSERT_EQ(0, ctx.wait());
@@ -741,7 +740,8 @@ TEST_F(TestJournalReplay, MetadataSet) {
   get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   // inject metadata_set op into journal
-  inject_into_journal(ictx, librbd::journal::MetadataSetEvent(1, "key", "value"));
+  inject_into_journal(ictx, librbd::journal::MetadataSetEvent(
+    1, "conf_rbd_mirroring_replay_delay", "9876"));
   inject_into_journal(ictx, librbd::journal::OpFinishEvent(1, 0));
   close_image(ictx);
 
@@ -755,9 +755,12 @@ TEST_F(TestJournalReplay, MetadataSet) {
   ASSERT_EQ(initial_tag + 1, current_tag);
   ASSERT_EQ(1, current_entry);
 
+  ASSERT_EQ(9876, ictx->mirroring_replay_delay);
+
   std::string value;
-  ASSERT_EQ(0, librbd::metadata_get(ictx, "key", &value));
-  ASSERT_EQ("value", value);
+  ASSERT_EQ(0, librbd::metadata_get(ictx, "conf_rbd_mirroring_replay_delay",
+                                    &value));
+  ASSERT_EQ("9876", value);
 
   // verify lock ordering constraints
   ASSERT_EQ(0, ictx->operations->metadata_set("key2", "value"));
@@ -771,7 +774,8 @@ TEST_F(TestJournalReplay, MetadataRemove) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, when_acquired_lock(ictx));
 
-  ASSERT_EQ(0, ictx->operations->metadata_set("key", "value"));
+  ASSERT_EQ(0, ictx->operations->metadata_set(
+    "conf_rbd_mirroring_replay_delay", "9876"));
 
   // get current commit position
   int64_t initial_tag;
@@ -779,7 +783,8 @@ TEST_F(TestJournalReplay, MetadataRemove) {
   get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   // inject metadata_remove op into journal
-  inject_into_journal(ictx, librbd::journal::MetadataRemoveEvent(1, "key"));
+  inject_into_journal(ictx, librbd::journal::MetadataRemoveEvent(
+    1, "conf_rbd_mirroring_replay_delay"));
   inject_into_journal(ictx, librbd::journal::OpFinishEvent(1, 0));
   close_image(ictx);
 
@@ -792,9 +797,12 @@ TEST_F(TestJournalReplay, MetadataRemove) {
   get_journal_commit_position(ictx, &current_tag, &current_entry);
   ASSERT_EQ(initial_tag, current_tag);
   ASSERT_EQ(initial_entry + 2, current_entry);
+  ASSERT_EQ(0, ictx->mirroring_replay_delay);
 
   std::string value;
-  ASSERT_EQ(-ENOENT, librbd::metadata_get(ictx, "key", &value));
+  ASSERT_EQ(-ENOENT,
+            librbd::metadata_get(ictx, "conf_rbd_mirroring_replay_delay",
+                                 &value));
 
   // verify lock ordering constraints
   ASSERT_EQ(0, ictx->operations->metadata_set("key", "value"));
@@ -847,11 +855,15 @@ TEST_F(TestJournalReplay, ObjectPosition) {
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
 
-  {
-    // user flush requests are ignored when journaling + cache are enabled
-    RWLock::RLocker owner_lock(ictx->owner_lock);
-    ictx->flush();
-  }
+  // user flush requests are ignored when journaling + cache are enabled
+  C_SaferCond flush_ctx;
+  aio_comp = librbd::io::AioCompletion::create(
+    &flush_ctx, ictx, librbd::io::AIO_TYPE_FLUSH);
+  auto req = librbd::io::ImageDispatchSpec<>::create_flush_request(
+    *ictx, aio_comp, librbd::io::FLUSH_SOURCE_INTERNAL, {});
+  req->send();
+  delete req;
+  ASSERT_EQ(0, flush_ctx.wait());
 
   // check the commit position updated
   get_journal_commit_position(ictx, &current_tag, &current_entry);

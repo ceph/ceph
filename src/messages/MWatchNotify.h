@@ -49,33 +49,34 @@ private:
 public:
   void decode_payload() override {
     uint8_t msg_ver;
-    bufferlist::iterator p = payload.begin();
-    ::decode(msg_ver, p);
-    ::decode(opcode, p);
-    ::decode(cookie, p);
-    ::decode(ver, p);
-    ::decode(notify_id, p);
+    auto p = payload.cbegin();
+    decode(msg_ver, p);
+    decode(opcode, p);
+    decode(cookie, p);
+    decode(ver, p);
+    decode(notify_id, p);
     if (msg_ver >= 1)
-      ::decode(bl, p);
+      decode(bl, p);
     if (header.version >= 2)
-      ::decode(return_code, p);
+      decode(return_code, p);
     else
       return_code = 0;
     if (header.version >= 3)
-      ::decode(notifier_gid, p);
+      decode(notifier_gid, p);
     else
       notifier_gid = 0;
   }
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     uint8_t msg_ver = 1;
-    ::encode(msg_ver, payload);
-    ::encode(opcode, payload);
-    ::encode(cookie, payload);
-    ::encode(ver, payload);
-    ::encode(notify_id, payload);
-    ::encode(bl, payload);
-    ::encode(return_code, payload);
-    ::encode(notifier_gid, payload);
+    encode(msg_ver, payload);
+    encode(opcode, payload);
+    encode(cookie, payload);
+    encode(ver, payload);
+    encode(notify_id, payload);
+    encode(bl, payload);
+    encode(return_code, payload);
+    encode(notifier_gid, payload);
   }
 
   const char *get_type_name() const override { return "watch-notify"; }

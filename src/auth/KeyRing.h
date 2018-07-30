@@ -24,7 +24,7 @@ class KeyRing : public KeyStore {
 
   int set_modifier(const char *type, const char *val, EntityName& name, map<string, bufferlist>& caps);
 public:
-  void decode_plaintext(bufferlist::iterator& bl);
+  void decode_plaintext(bufferlist::const_iterator& bl);
   /* Create a KeyRing from a Ceph context.
    * We will use the configuration stored inside the context. */
   int from_ceph_context(CephContext *cct);
@@ -38,6 +38,10 @@ public:
   void print(ostream& out);
 
   // accessors
+  bool exists(const EntityName& name) const {
+    auto p = keys.find(name);
+    return p != keys.end();
+  }
   bool get_auth(const EntityName& name, EntityAuth &a) const {
     map<EntityName, EntityAuth>::const_iterator k = keys.find(name);
     if (k == keys.end())
@@ -67,6 +71,9 @@ public:
     }
     return true;
   }
+  size_t size() const {
+    return keys.size();
+  }
 
   // modifiers
   void add(const EntityName& name, EntityAuth &a) {
@@ -92,7 +99,7 @@ public:
   void import(CephContext *cct, KeyRing& other);
 
   // encoders
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
 
   void encode_plaintext(bufferlist& bl);
   void encode_formatted(string label, Formatter *f, bufferlist& bl);
@@ -101,7 +108,7 @@ public:
 // don't use WRITE_CLASS_ENCODER macro because we don't have an encode
 // macro.  don't juse encode_plaintext in that case because it is not
 // wrappable; it assumes it gets the entire bufferlist.
-static inline void decode(KeyRing& kr, bufferlist::iterator& p) {
+static inline void decode(KeyRing& kr, bufferlist::const_iterator& p) {
   kr.decode(p);
 }
 

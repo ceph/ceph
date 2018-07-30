@@ -75,7 +75,7 @@ COMMAND("osd blocked-by", \
 	"print histogram of which OSDs are blocking their peers", \
 	"osd", "r", "cli,rest")
 COMMAND("osd pool stats " \
-        "name=name,type=CephString,req=false",
+        "name=pool_name,type=CephPoolname,req=false",
         "obtain stats from all pools, or from specified pool",
         "osd", "r", "cli,rest")
 COMMAND("osd reweight-by-utilization " \
@@ -116,15 +116,15 @@ COMMAND("osd ok-to-stop name=ids,type=CephString,n=N",
 
 COMMAND("osd scrub " \
 	"name=who,type=CephString", \
-	"initiate scrub on osd <who>, or use <all|any|*> to scrub all", \
+	"initiate scrub on osd <who>, or use <all|any> to scrub all", \
         "osd", "rw", "cli,rest")
 COMMAND("osd deep-scrub " \
 	"name=who,type=CephString", \
-	"initiate deep scrub on osd <who>, or use <all|any|*> to deep scrub all", \
+	"initiate deep scrub on osd <who>, or use <all|any> to deep scrub all", \
         "osd", "rw", "cli,rest")
 COMMAND("osd repair " \
 	"name=who,type=CephString", \
-	"initiate repair on osd <who>, or use <all|any|*> to repair all", \
+	"initiate repair on osd <who>, or use <all|any> to repair all", \
         "osd", "rw", "cli,rest")
 
 COMMAND("service dump",
@@ -132,7 +132,32 @@ COMMAND("service dump",
 COMMAND("service status",
         "dump service state", "service", "r", "cli,rest")
 
-COMMAND("config set " \
-	"name=key,type=CephString name=value,type=CephString",
-	"Set a configuration option at runtime (not persistent)",
+COMMAND("config show " \
+	"name=who,type=CephString name=key,type=CephString,req=False",
+	"Show running configuration",
+	"mgr", "r", "cli,rest")
+COMMAND("config show-with-defaults " \
+	"name=who,type=CephString",
+	"Show running configuration (including compiled-in defaults)",
+	"mgr", "r", "cli,rest")
+
+COMMAND("device ls",
+	"Show devices",
+	"mgr", "r", "cli,rest")
+COMMAND("device info name=devid,type=CephString",
+	"Show information about a device",
+	"mgr", "r", "cli,rest")
+COMMAND("device ls-by-daemon name=who,type=CephString",
+	"Show devices associated with a daemon",
+	"mgr", "r", "cli,rest")
+COMMAND("device ls-by-host name=host,type=CephString",
+	"Show devices on a host",
+	"mgr", "r", "cli,rest")
+COMMAND("device set-life-expectancy name=devid,type=CephString "\
+	"name=from,type=CephString "\
+	"name=to,type=CephString,req=False",
+	"Set predicted device life expectancy",
+	"mgr", "rw", "cli,rest")
+COMMAND("device rm-life-expectancy name=devid,type=CephString",
+	"Clear predicted device life expectancy",
 	"mgr", "rw", "cli,rest")

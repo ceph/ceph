@@ -26,6 +26,7 @@
 #include "common/perf_histogram.h"
 #include "include/utime.h"
 #include "common/Mutex.h"
+#include "common/ceph_context.h"
 #include "common/ceph_time.h"
 
 class CephContext;
@@ -41,6 +42,85 @@ enum perfcounter_type_d : uint8_t
   PERFCOUNTER_HISTOGRAM = 0x10, // histogram (vector) of values
 };
 
+enum unit_t : uint8_t
+{
+  UNIT_BYTES,
+  UNIT_NONE
+};
+
+/* Class for constructing a PerfCounters object.
+ *
+ * This class performs some validation that the parameters we have supplied are
+ * correct in create_perf_counters().
+ *
+ * In the future, we will probably get rid of the first/last arguments, since
+ * PerfCountersBuilder can deduce them itself.
+ */
+class PerfCountersBuilder
+{
+public:
+  PerfCountersBuilder(CephContext *cct, const std::string &name,
+		    int first, int last);
+  ~PerfCountersBuilder();
+
+  // prio values: higher is better, and higher values get included in
+  // 'ceph daemonperf' (and similar) results.
+  // Use of priorities enables us to add large numbers of counters
+  // internally without necessarily overwhelming consumers.
+  enum {
+    PRIO_CRITICAL = 10,
+    // 'interesting' is the default threshold for `daemonperf` output
+    PRIO_INTERESTING = 8,
+    // `useful` is the default threshold for transmission to ceph-mgr
+    // and inclusion in prometheus/influxdb plugin output
+    PRIO_USEFUL = 5,
+    PRIO_UNINTERESTING = 2,
+    PRIO_DEBUGONLY = 0,
+  };
+  void add_u64(int key, const char *name,
+	       const char *description=NULL, const char *nick = NULL,
+	       int prio=0, int unit=UNIT_NONE);
+  void add_u64_counter(int key, const char *name,
+		       const char *description=NULL,
+		       const char *nick = NULL,
+		       int prio=0, int unit=UNIT_NONE);
+  void add_u64_avg(int key, const char *name,
+		   const char *description=NULL,
+		   const char *nick = NULL,
+		   int prio=0, int unit=UNIT_NONE);
+  void add_time(int key, const char *name,
+		const char *description=NULL,
+		const char *nick = NULL,
+		int prio=0);
+  void add_time_avg(int key, const char *name,
+		    const char *description=NULL,
+		    const char *nick = NULL,
+		    int prio=0);
+  void add_u64_counter_histogram(
+    int key, const char* name,
+    PerfHistogramCommon::axis_config_d x_axis_config,
+    PerfHistogramCommon::axis_config_d y_axis_config,
+    const char *description=NULL,
+    const char* nick = NULL,
+    int prio=0, int unit=UNIT_NONE);
+
+  void set_prio_default(int prio_)
+  {
+    prio_default = prio_;
+  }
+
+  PerfCounters* create_perf_counters();
+private:
+  PerfCountersBuilder(const PerfCountersBuilder &rhs);
+  PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
+  void add_impl(int idx, const char *name,
+                const char *description, const char *nick, int prio, int ty, int unit=UNIT_NONE,
+                unique_ptr<PerfHistogram<>> histogram = nullptr);
+
+  PerfCounters *m_perf_counters;
+
+  int prio_default = 0;
+};
 
 /*
  * A PerfCounters object is usually associated with a single subsystem.
@@ -76,14 +156,16 @@ public:
       : name(NULL),
         description(NULL),
         nick(NULL),
-	    type(PERFCOUNTER_NONE)
+	 type(PERFCOUNTER_NONE),
+	 unit(UNIT_NONE)
     {}
     perf_counter_data_any_d(const perf_counter_data_any_d& other)
       : name(other.name),
         description(other.description),
         nick(other.nick),
-	type(other.type),
-	u64(other.u64.load()) {
+	 type(other.type),
+	 unit(other.unit),
+	 u64(other.u64.load()) {
       pair<uint64_t,uint64_t> a = other.read_avg();
       u64 = a.first;
       avgcount = a.second;
@@ -96,8 +178,9 @@ public:
     const char *name;
     const char *description;
     const char *nick;
-    int prio = 0;
+    uint8_t prio = 0;
     enum perfcounter_type_d type;
+    enum unit_t unit;
     std::atomic<uint64_t> u64 = { 0 };
     std::atomic<uint64_t> avgcount = { 0 };
     std::atomic<uint64_t> avgcount2 = { 0 };
@@ -152,8 +235,8 @@ public:
   uint64_t get(int idx) const;
 
   void tset(int idx, utime_t v);
-  void tinc(int idx, utime_t v, uint32_t avgcount = 1);
-  void tinc(int idx, ceph::timespan v, uint32_t avgcount = 1);
+  void tinc(int idx, utime_t v);
+  void tinc(int idx, ceph::timespan v);
   utime_t tget(int idx) const;
 
   void hinc(int idx, int64_t x, int64_t y);
@@ -167,7 +250,7 @@ public:
                                  const std::string &counter = "") {
     dump_formatted_generic(f, schema, true, counter);
   }
-  pair<uint64_t, uint64_t> get_tavg_ms(int idx) const;
+  pair<uint64_t, uint64_t> get_tavg_ns(int idx) const;
 
   const std::string& get_name() const;
   void set_name(std::string s) {
@@ -177,6 +260,12 @@ public:
   /// adjust priority values by some value
   void set_prio_adjust(int p) {
     prio_adjust = p;
+  }
+
+  int get_adjusted_priority(int p) const {
+    return std::max(std::min(p + prio_adjust,
+                             (int)PerfCountersBuilder::PRIO_CRITICAL),
+                    0);
   }
 
 private:
@@ -240,8 +329,17 @@ public:
     dump_formatted_generic(f, schema, true, logger, counter);
   }
 
+  // A reference to a perf_counter_data_any_d, with an accompanying
+  // pointer to the enclosing PerfCounters, in order that the consumer
+  // can see the prio_adjust
+  class PerfCounterRef
+  {
+    public:
+    PerfCounters::perf_counter_data_any_d *data;
+    PerfCounters *perf_counters;
+  };
   typedef std::map<std::string,
-          PerfCounters::perf_counter_data_any_d *> CounterMap;
+          PerfCounterRef> CounterMap;
 
   void with_counters(std::function<void(const CounterMap &)>) const;
 
@@ -257,72 +355,30 @@ private:
 
   perf_counters_set_t m_loggers;
 
-  std::map<std::string, PerfCounters::perf_counter_data_any_d *> by_path; 
+  CounterMap by_path; 
 
   friend class PerfCountersCollectionTest;
 };
 
-/* Class for constructing a PerfCounters object.
- *
- * This class performs some validation that the parameters we have supplied are
- * correct in create_perf_counters().
- *
- * In the future, we will probably get rid of the first/last arguments, since
- * PerfCountersBuilder can deduce them itself.
- */
-class PerfCountersBuilder
-{
+
+class PerfGuard {
+  const ceph::real_clock::time_point start;
+  PerfCounters* const counters;
+  const int event;
+
 public:
-  PerfCountersBuilder(CephContext *cct, const std::string &name,
-		    int first, int last);
-  ~PerfCountersBuilder();
+  PerfGuard(PerfCounters* const counters,
+            const int event)
+  : start(ceph::real_clock::now()),
+    counters(counters),
+    event(event) {
+  }
 
-  // prio values: higher is better, and higher values get included in
-  // 'ceph daemonperf' (and similar) results.
-  enum {
-    PRIO_CRITICAL = 10,
-    PRIO_INTERESTING = 8,
-    PRIO_USEFUL = 5,
-    PRIO_UNINTERESTING = 2,
-    PRIO_DEBUGONLY = 0,
-  };
-  void add_u64(int key, const char *name,
-	       const char *description=NULL, const char *nick = NULL,
-	       int prio=0);
-  void add_u64_counter(int key, const char *name,
-		       const char *description=NULL,
-		       const char *nick = NULL,
-		       int prio=0);
-  void add_u64_avg(int key, const char *name,
-		   const char *description=NULL,
-		   const char *nick = NULL,
-		   int prio=0);
-  void add_time(int key, const char *name,
-		const char *description=NULL,
-		const char *nick = NULL,
-		int prio=0);
-  void add_time_avg(int key, const char *name,
-		    const char *description=NULL,
-		    const char *nick = NULL,
-		    int prio=0);
-  void add_u64_counter_histogram(
-    int key, const char* name,
-    PerfHistogramCommon::axis_config_d x_axis_config,
-    PerfHistogramCommon::axis_config_d y_axis_config,
-    const char *description=NULL,
-    const char* nick = NULL,
-    int prio=0);
-
-  PerfCounters* create_perf_counters();
-private:
-  PerfCountersBuilder(const PerfCountersBuilder &rhs);
-  PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
-  void add_impl(int idx, const char *name,
-                const char *description, const char *nick, int prio, int ty,
-                unique_ptr<PerfHistogram<>> histogram = nullptr);
-
-  PerfCounters *m_perf_counters;
+  ~PerfGuard() {
+    counters->tinc(event, ceph::real_clock::now() - start);
+  }
 };
+
 
 class PerfCountersDeleter {
   CephContext* cct;

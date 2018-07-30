@@ -4,6 +4,7 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
+#include "test/librbd/mock/io/MockObjectDispatch.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "include/stringify.h"
 #include "common/bit_vector.hpp"
@@ -159,11 +160,10 @@ public:
     }
   }
 
-  void expect_invalidate_cache(MockOperationImageCtx &mock_image_ctx, int r) {
-    if (mock_image_ctx.object_cacher != nullptr) {
-      EXPECT_CALL(mock_image_ctx, invalidate_cache(true, _))
-                    .WillOnce(WithArg<1>(CompleteContext(r, static_cast<ContextWQ*>(NULL))));
-    }
+  void expect_invalidate_cache(MockOperationImageCtx &mock_image_ctx,
+                               int r) {
+    EXPECT_CALL(*mock_image_ctx.io_object_dispatcher, invalidate_cache(_))
+                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   int when_snap_rollback(MockOperationImageCtx &mock_image_ctx,

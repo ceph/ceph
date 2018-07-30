@@ -49,7 +49,7 @@ struct health_check_t {
     f->close_section();
   }
 
-  static void generate_test_instances(list<health_check_t*>& ls) {
+  static void generate_test_instances(std::list<health_check_t*>& ls) {
     ls.push_back(new health_check_t);
     ls.push_back(new health_check_t);
     ls.back()->severity = HEALTH_ERR;
@@ -61,7 +61,7 @@ WRITE_CLASS_DENC(health_check_t)
 
 
 struct health_check_map_t {
-  map<std::string,health_check_t> checks;
+  std::map<std::string,health_check_t> checks;
 
   DENC(health_check_map_t, v, p) {
     DENC_START(1, 1, p);
@@ -75,7 +75,7 @@ struct health_check_map_t {
     }
   }
 
-  static void generate_test_instances(list<health_check_map_t*>& ls) {
+  static void generate_test_instances(std::list<health_check_map_t*>& ls) {
     ls.push_back(new health_check_map_t);
     ls.push_back(new health_check_map_t);
     {

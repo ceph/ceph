@@ -53,8 +53,8 @@ static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t 
   }
 
   try {
-    bufferlist::iterator it = bl.begin();
-    ::decode(*lock, it);
+    auto it = bl.cbegin();
+    decode(*lock, it);
   } catch (const buffer::error &err) {
     CLS_ERR("error decoding %s", key.c_str());
     return -EIO;
@@ -84,11 +84,12 @@ static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t 
 
 static int write_lock(cls_method_context_t hctx, const string& name, const lock_info_t& lock)
 {
+  using ceph::encode;
   string key = LOCK_PREFIX;
   key.append(name);
 
   bufferlist lock_bl;
-  ::encode(lock, lock_bl, cls_get_client_features(hctx));
+  encode(lock, lock_bl, cls_get_client_features(hctx));
 
   int r = cls_cxx_setxattr(hctx, key.c_str(), &lock_bl);
   if (r < 0)
@@ -213,8 +214,8 @@ static int lock_op(cls_method_context_t hctx,
   CLS_LOG(20, "lock_op");
   cls_lock_lock_op op;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(op, iter);
+    auto iter = in->cbegin();
+    decode(op, iter);
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
@@ -278,8 +279,8 @@ static int unlock_op(cls_method_context_t hctx,
   CLS_LOG(20, "unlock_op");
   cls_lock_unlock_op op;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(op, iter);
+    auto iter = in->cbegin();
+    decode(op, iter);
   } catch (const buffer::error& err) {
     return -EINVAL;
   }
@@ -306,8 +307,8 @@ static int break_lock(cls_method_context_t hctx,
   CLS_LOG(20, "break_lock");
   cls_lock_break_op op;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(op, iter);
+    auto iter = in->cbegin();
+    decode(op, iter);
   } catch (const buffer::error& err) {
     return -EINVAL;
   }
@@ -332,8 +333,8 @@ static int get_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   CLS_LOG(20, "get_info");
   cls_lock_get_info_op op;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(op, iter);
+    auto iter = in->cbegin();
+    decode(op, iter);
   } catch (const buffer::error& err) {
     return -EINVAL;
   }
@@ -355,7 +356,7 @@ static int get_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   ret.lock_type = linfo.lock_type;
   ret.tag = linfo.tag;
 
-  ::encode(ret, *out, cls_get_client_features(hctx));
+  encode(ret, *out, cls_get_client_features(hctx));
 
   return 0;
 }
@@ -393,7 +394,7 @@ static int list_locks(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     }
   }
 
-  ::encode(ret, *out);
+  encode(ret, *out);
 
   return 0;
 }
@@ -415,8 +416,8 @@ int assert_locked(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   cls_lock_assert_op op;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(op, iter);
+    auto iter = in->cbegin();
+    decode(op, iter);
   } catch (const buffer::error& err) {
     return -EINVAL;
   }
@@ -487,8 +488,8 @@ int set_cookie(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   cls_lock_set_cookie_op op;
   try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(op, iter);
+    auto iter = in->cbegin();
+    decode(op, iter);
   } catch (const buffer::error& err) {
     return -EINVAL;
   }

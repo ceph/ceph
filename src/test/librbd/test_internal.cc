@@ -12,6 +12,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
 #include "librbd/api/DiffIterate.h"
+#include "librbd/api/Image.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
@@ -141,6 +142,14 @@ TEST_F(TestInternal, OpenByID) {
    close_image(ictx);
 }
 
+TEST_F(TestInternal, OpenSnapDNE) {
+   librbd::ImageCtx *ictx;
+   ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+   ictx = new librbd::ImageCtx(m_image_name, "", "unknown_snap", m_ioctx, true);
+   ASSERT_EQ(-ENOENT, ictx->state->open(true));
+}
+
 TEST_F(TestInternal, IsExclusiveLockOwner) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
@@ -256,7 +265,8 @@ TEST_F(TestInternal, SnapSetReleasesLock) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_set(ictx, cls::rbd::UserSnapshotNamespace(), "snap1"));
+  ASSERT_EQ(0, librbd::api::Image<>::snap_set(
+                 ictx, cls::rbd::UserSnapshotNamespace(), "snap1"));
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -398,7 +408,7 @@ TEST_F(TestInternal, CancelAsyncResize) {
     C_SaferCond ctx;
     librbd::NoOpProgressContext prog_ctx;
 
-    size -= MIN(size, 1<<18);
+    size -= std::min<uint64_t>(size, 1 << 18);
     {
       RWLock::RLocker l(ictx->owner_lock);
       ictx->operations->execute_resize(size, true, prog_ctx, &ctx, 0);
@@ -443,7 +453,7 @@ TEST_F(TestInternal, MultipleResize) {
   while (size > 0) {
     uint64_t new_size = original_size;
     if (attempts++ % 2 == 0) {
-      size -= MIN(size, 1<<18);
+      size -= std::min<uint64_t>(size, 1 << 18);
       new_size = size;
     }
 
@@ -548,6 +558,26 @@ TEST_F(TestInternal, MetadataFilter) {
   ASSERT_TRUE(res.size() == 3U);
 }
 
+TEST_F(TestInternal, MetadataConfApply) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  ASSERT_EQ(-ENOENT, ictx->operations->metadata_remove("conf_rbd_cache"));
+
+  bool cache = ictx->cache;
+  std::string rbd_conf_cache = cache ? "true" : "false";
+  std::string new_rbd_conf_cache = !cache ? "true" : "false";
+
+  ASSERT_EQ(0, ictx->operations->metadata_set("conf_rbd_cache",
+                                              new_rbd_conf_cache));
+  ASSERT_EQ(!cache, ictx->cache);
+
+  ASSERT_EQ(0, ictx->operations->metadata_remove("conf_rbd_cache"));
+  ASSERT_EQ(cache, ictx->cache);
+}
+
 TEST_F(TestInternal, SnapshotCopyup)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
@@ -607,9 +637,8 @@ TEST_F(TestInternal, SnapshotCopyup)
   for (std::list<std::string>::iterator it = snaps.begin();
        it != snaps.end(); ++it) {
     const char *snap_name = it->empty() ? NULL : it->c_str();
-    ASSERT_EQ(0, librbd::snap_set(ictx2,
-				  cls::rbd::UserSnapshotNamespace(),
-				  snap_name));
+    ASSERT_EQ(0, librbd::api::Image<>::snap_set(
+                   ictx2, cls::rbd::UserSnapshotNamespace(), snap_name));
 
     ASSERT_EQ(256,
               ictx2->io_work_queue->read(0, 256,
@@ -693,9 +722,9 @@ TEST_F(TestInternal, ResizeCopyup)
                                          true, no_op));
   ASSERT_EQ(0, ictx2->operations->resize(m_image_size - (2 << order) - 32,
                                          true, no_op));
-  ASSERT_EQ(0, librbd::snap_set(ictx2,
-				cls::rbd::UserSnapshotNamespace(),
-				"snap1"));
+  ASSERT_EQ(0, librbd::api::Image<>::snap_set(ictx2,
+				              cls::rbd::UserSnapshotNamespace(),
+				              "snap1"));
 
   {
     // hide the parent from the snapshot
@@ -718,7 +747,7 @@ TEST_F(TestInternal, DiscardCopyup)
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   CephContext* cct = reinterpret_cast<CephContext*>(_rados.cct());
-  REQUIRE(!cct->_conf->get_val<bool>("rbd_skip_partial_discard"));
+  REQUIRE(!cct->_conf.get_val<bool>("rbd_skip_partial_discard"));
 
   m_image_name = get_temp_image_name();
   m_image_size = 1 << 14;
@@ -760,9 +789,9 @@ TEST_F(TestInternal, DiscardCopyup)
 
   ASSERT_EQ(static_cast<int>(m_image_size - 64),
             ictx2->io_work_queue->discard(32, m_image_size - 64, false));
-  ASSERT_EQ(0, librbd::snap_set(ictx2,
-				cls::rbd::UserSnapshotNamespace(),
-				"snap1"));
+  ASSERT_EQ(0, librbd::api::Image<>::snap_set(ictx2,
+				              cls::rbd::UserSnapshotNamespace(),
+				              "snap1"));
 
   {
     // hide the parent from the snapshot
@@ -885,7 +914,7 @@ TEST_F(TestInternal, WriteFullCopyup) {
   bl.append(std::string(1 << ictx->order, '1'));
   ASSERT_EQ((ssize_t)bl.length(),
             ictx->io_work_queue->write(0, bl.length(), bufferlist{bl}, 0));
-  ASSERT_EQ(0, librbd::flush(ictx));
+  ASSERT_EQ(0, ictx->io_work_queue->flush());
 
   ASSERT_EQ(0, create_snapshot("snap1", true));
 
@@ -929,9 +958,9 @@ TEST_F(TestInternal, WriteFullCopyup) {
                                        librbd::io::ReadResult{read_result}, 0));
   ASSERT_TRUE(write_full_bl.contents_equal(read_bl));
 
-  ASSERT_EQ(0, librbd::snap_set(ictx2,
-				cls::rbd::UserSnapshotNamespace(),
-				"snap1"));
+  ASSERT_EQ(0, librbd::api::Image<>::snap_set(ictx2,
+				              cls::rbd::UserSnapshotNamespace(),
+				              "snap1"));
   ASSERT_EQ((ssize_t)read_bl.length(),
             ictx2->io_work_queue->read(0, read_bl.length(),
                                        librbd::io::ReadResult{read_result}, 0));
@@ -998,7 +1027,9 @@ TEST_F(TestInternal, DiffIterateCloneOverwrite) {
   ASSERT_EQ(0, io_ctx.write(oid, bl, 4096, 4096));
 
   interval_set<uint64_t> diff;
-  ASSERT_EQ(0, librbd::snap_set(ictx, cls::rbd::UserSnapshotNamespace(), "one"));
+  ASSERT_EQ(0, librbd::api::Image<>::snap_set(ictx,
+                                              cls::rbd::UserSnapshotNamespace(),
+                                              "one"));
   ASSERT_EQ(0, librbd::api::DiffIterate<>::diff_iterate(
     ictx, cls::rbd::UserSnapshotNamespace(), nullptr, 0, size, true, false,
     iterate_cb, (void *)&diff));
@@ -1051,7 +1082,7 @@ TEST_F(TestInternal, TestCoR)
   printf("generated random write map:\n");
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr)
-    printf("\t [%-8ld, %-8ld]\n",
+    printf("\t [%-8lu, %-8lu]\n",
            (unsigned long)itr->first, (unsigned long)itr->second);
 
   bufferlist bl;
@@ -1060,7 +1091,7 @@ TEST_F(TestInternal, TestCoR)
   printf("write data based on random map\n");
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr) {
-    printf("\twrite object-%-4ld\t\n", (unsigned long)itr->first);
+    printf("\twrite object-%-4lu\t\n", (unsigned long)itr->first);
     ASSERT_EQ(TEST_IO_SIZE, image.write(itr->second, TEST_IO_SIZE, bl));
   }
 
@@ -1070,7 +1101,7 @@ TEST_F(TestInternal, TestCoR)
   printf("verify written data by reading\n");
   {
     map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
-    printf("\tread object-%-4ld\n", (unsigned long)itr->first);
+    printf("\tread object-%-4lu\n", (unsigned long)itr->first);
     ASSERT_EQ(TEST_IO_SIZE, image.read(itr->second, TEST_IO_SIZE, readbl));
     ASSERT_TRUE(readbl.contents_equal(bl));
   }
@@ -1111,14 +1142,14 @@ TEST_F(TestInternal, TestCoR)
   printf("read from \"child\"\n");
   {
     map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
-    printf("\tread object-%-4ld\n", (unsigned long)itr->first);
+    printf("\tread object-%-4lu\n", (unsigned long)itr->first);
     ASSERT_EQ(TEST_IO_SIZE, image.read(itr->second, TEST_IO_SIZE, readbl));
     ASSERT_TRUE(readbl.contents_equal(bl));
   }
 
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr) {
-    printf("\tread object-%-4ld\n", (unsigned long)itr->first);
+    printf("\tread object-%-4lu\n", (unsigned long)itr->first);
     ASSERT_EQ(TEST_IO_SIZE, image.read(itr->second, TEST_IO_SIZE, readbl));
     ASSERT_TRUE(readbl.contents_equal(bl));
   }
@@ -1126,7 +1157,7 @@ TEST_F(TestInternal, TestCoR)
   printf("read again reversely\n");
   for (map<uint64_t, uint64_t>::iterator itr = --write_tracker.end();
        itr != write_tracker.begin(); --itr) {
-    printf("\tread object-%-4ld\n", (unsigned long)itr->first);
+    printf("\tread object-%-4lu\n", (unsigned long)itr->first);
     ASSERT_EQ(TEST_IO_SIZE, image.read(itr->second, TEST_IO_SIZE, readbl));
     ASSERT_TRUE(readbl.contents_equal(bl));
   }
@@ -1193,7 +1224,7 @@ TEST_F(TestInternal, FlattenNoEmptyObjects)
   printf("generated random write map:\n");
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr)
-    printf("\t [%-8ld, %-8ld]\n",
+    printf("\t [%-8lu, %-8lu]\n",
            (unsigned long)itr->first, (unsigned long)itr->second);
 
   bufferlist bl;
@@ -1202,7 +1233,7 @@ TEST_F(TestInternal, FlattenNoEmptyObjects)
   printf("write data based on random map\n");
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr) {
-    printf("\twrite object-%-4ld\t\n", (unsigned long)itr->first);
+    printf("\twrite object-%-4lu\t\n", (unsigned long)itr->first);
     ASSERT_EQ(TEST_IO_SIZE, image.write(itr->second, TEST_IO_SIZE, bl));
   }
 
@@ -1212,7 +1243,7 @@ TEST_F(TestInternal, FlattenNoEmptyObjects)
   printf("verify written data by reading\n");
   {
     map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
-    printf("\tread object-%-4ld\n", (unsigned long)itr->first);
+    printf("\tread object-%-4lu\n", (unsigned long)itr->first);
     ASSERT_EQ(TEST_IO_SIZE, image.read(itr->second, TEST_IO_SIZE, readbl));
     ASSERT_TRUE(readbl.contents_equal(bl));
   }

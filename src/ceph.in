@@ -20,9 +20,12 @@ Foundation.  See file COPYING.
 """
 
 from __future__ import print_function
+from time import sleep
 import codecs
 import os
 import sys
+import subprocess
+import time
 import platform
 
 try:
@@ -40,6 +43,7 @@ CEPH_RELEASE_TYPE = "@CEPH_RELEASE_TYPE@"
 FLAG_NOFORWARD = (1 << 0)
 FLAG_OBSOLETE = (1 << 1)
 FLAG_DEPRECATED = (1 << 2)
+FLAG_POLL = (1 << 4)
 
 # priorities from src/common/perf_counters.h
 PRIO_CRITICAL = 10
@@ -48,7 +52,7 @@ PRIO_USEFUL = 5
 PRIO_UNINTERESTING = 2
 PRIO_DEBUGONLY = 0
 
-PRIO_DEFAULT = PRIO_USEFUL
+PRIO_DEFAULT = PRIO_INTERESTING
 
 # Make life easier on developers:
 # If our parent dir contains CMakeCache.txt and bin/init-ceph,
@@ -116,7 +120,7 @@ if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
         respawn_in_path(lib_path, pybind_path, pythonlib_path)
 
         if 'PATH' in os.environ and bin_path not in os.environ['PATH']:
-            os.environ['PATH'] += ':' + bin_path
+            os.environ['PATH'] = os.pathsep.join([bin_path, os.environ['PATH']])
 
 import argparse
 import errno
@@ -130,7 +134,7 @@ import subprocess
 from ceph_argparse import \
     concise_sig, descsort_key, parse_json_funcsigs, \
     matchnum, validate_command, find_cmd_target, \
-    send_command, json_command, run_in_thread
+    json_command, run_in_thread
 
 from ceph_daemon import admin_socket, DaemonWatcher, Termsize
 
@@ -296,8 +300,9 @@ def parse_cmdargs(args=None, target=''):
                         help='watch error events')
 
     parser.add_argument('--watch-channel', dest="watch_channel",
+                        choices=['cluster', 'audit', '*'],
                         help="which log channel to follow " \
-                        "when using -w/--watch.  One of ['cluster', 'audit', '*'",
+                        "when using -w/--watch.  One of ['cluster', 'audit', '*']",
                         default='cluster')
 
     parser.add_argument('--version', '-v', action="store_true", help="display version")
@@ -311,6 +316,12 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('--connect-timeout', dest='cluster_timeout',
                         type=int,
                         help='set a timeout for connecting to the cluster')
+
+    parser.add_argument('--block', action='store_true',
+                        help='block until completion (scrub and deep-scrub only)')
+    parser.add_argument('--period', '-p', default=1, type=float,
+                        help='polling period, default 1.0 second (for ' \
+                        'polling commands only)')
 
     # returns a Namespace with the parsed args, and a list of all extras
     parsed_args, extras = parser.parse_known_args(args)
@@ -509,6 +520,60 @@ else:
                 return line
 
 
+def do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose):
+    ''' Validate a command, and handle the polling flag '''
+
+    valid_dict = validate_command(sigdict, cmdargs, verbose)
+    # Validate input args against list of sigs
+    if valid_dict:
+        if parsed_args.output_format:
+            valid_dict['format'] = parsed_args.output_format
+        if verbose:
+            print("Submitting command: ", valid_dict, file=sys.stderr)
+    else:
+        return -errno.EINVAL, '', 'invalid command'
+
+    next_header_print = 0
+    # Set extra options for polling commands only:
+    if valid_dict.get('poll', False):
+        valid_dict['width'] = Termsize().cols
+    while True:
+        try:
+            # Only print the header for polling commands
+            if next_header_print == 0 and valid_dict.get('poll', False):
+                valid_dict['print_header'] = True
+                next_header_print = Termsize().rows - 3
+            next_header_print -= 1
+            ret, outbuf, outs = json_command(cluster_handle, target=target,
+                argdict=valid_dict, inbuf=inbuf)
+            if valid_dict.get('poll', False):
+                valid_dict['print_header'] = False
+            if not valid_dict.get('poll', False):
+                # Don't print here if it's not a polling command
+                break
+            if ret:
+                ret = abs(ret)
+                print('Error: {0} {1}'.format(ret, errno.errorcode.get(ret, 'Unknown')),
+                        file=sys.stderr)
+                break
+            if outbuf:
+                print(outbuf.decode('utf-8'))
+            if outs:
+                print(outs, file=sys.stderr)
+            if parsed_args.period <= 0:
+                break
+            sleep(parsed_args.period)
+        except KeyboardInterrupt:
+            print('Interrupted')
+            return ret, '', ''
+    if ret == errno.ETIMEDOUT:
+        ret = -ret
+        if not outs:
+            outs = ("Connection timed out. Please check the client's " +
+                    "permission and connection.")
+    return ret, outbuf, outs
+
+
 def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
     """
     Do new-style command dance.
@@ -525,21 +590,21 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
 
     if True:
         if cmdargs:
-            # Validate input args against list of sigs
-            valid_dict = validate_command(sigdict, cmdargs, verbose)
-            if valid_dict:
-                if parsed_args.output_format:
-                    valid_dict['format'] = parsed_args.output_format
-            else:
-                return -errno.EINVAL, '', 'invalid command'
+            # Non interactive mode
+            ret, outbuf, outs = do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose)
         else:
+            # Interactive mode (ceph cli)
             if sys.stdin.isatty():
                 # do the command-interpreter looping
                 # for input to do readline cmd editing
                 import readline  # noqa
 
             while True:
-                interactive_input = read_input()
+                try:
+                    interactive_input = read_input()
+                except EOFError:
+                    # leave user an uncluttered prompt
+                    return 0, '\n', ''
                 if interactive_input is None:
                     return 0, '', ''
                 cmdargs = parse_cmdargs(shlex.split(interactive_input))[2]
@@ -553,30 +618,9 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                     print('Can not use \'tell\' in interactive mode.',
                           file=sys.stderr)
                     continue
-                valid_dict = validate_command(sigdict, cmdargs, verbose)
-                if valid_dict:
-                    if parsed_args.output_format:
-                        valid_dict['format'] = parsed_args.output_format
-                    if verbose:
-                        print("Submitting command: ", valid_dict, file=sys.stderr)
-                    ret, outbuf, outs = json_command(cluster_handle,
-                                                     target=target,
-                                                     argdict=valid_dict)
-                    if ret:
-                        ret = abs(ret)
-                        print('Error: {0} {1}'.format(ret, errno.errorcode.get(ret, 'Unknown')),
-                              file=sys.stderr)
-                    if outbuf:
-                        print(outbuf)
-                    if outs:
-                        print('Status:\n', outs, file=sys.stderr)
-                else:
-                    print("Invalid command", file=sys.stderr)
+                do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose)
 
-    if verbose:
-        print("Submitting command: ", valid_dict, file=sys.stderr)
-    return json_command(cluster_handle, target=target, argdict=valid_dict,
-                        inbuf=inbuf)
+    return ret, outbuf, outs
 
 
 def complete(sigdict, args, target):
@@ -776,6 +820,40 @@ def daemonperf(childargs, sockpath):
 
     return 0
 
+def get_scrub_timestamps(childargs):
+    last_scrub_stamp = "last_" + childargs[1].replace('-', '_') + "_stamp"
+    results = dict()
+    scruball = False
+    if childargs[2] in ['all', 'any', '*']:
+        scruball = True
+    devnull = open(os.devnull, 'w')
+    out = subprocess.check_output(['ceph', 'pg', 'dump', '--format=json-pretty'],
+                                  stderr=devnull)
+    for stat in json.loads(out)['pg_stats']:
+        if scruball or stat['up_primary'] == int(childargs[2]):
+            scrub_tuple = (stat['up_primary'], stat[last_scrub_stamp])
+            results[stat['pgid']] = scrub_tuple
+    return results
+
+def check_scrub_stamps(waitdata, currdata):
+    for pg in waitdata.keys():
+       # Try to handle the case where a pg may not exist in current results
+       if pg in currdata and waitdata[pg][1] == currdata[pg][1]:
+           return False
+    return True
+
+def waitscrub(childargs, waitdata):
+    print(u'Waiting for {0} to complete...'.format(childargs[1]), file=sys.stdout)
+    currdata = get_scrub_timestamps(childargs)
+    while not check_scrub_stamps(waitdata, currdata):
+        time.sleep(3)
+        currdata = get_scrub_timestamps(childargs)
+    print(u'{0} completed'.format(childargs[1]), file=sys.stdout)
+
+def wait(childargs, waitdata):
+    if childargs[1] in ['scrub', 'deep-scrub']:
+        waitscrub(childargs, waitdata)
+
 
 def main():
     ceph_args = os.environ.get('CEPH_ARGS')
@@ -885,6 +963,15 @@ def main():
               file=sys.stderr)
         return 1
 
+    block = False
+    waitdata = dict()
+    if parsed_args.block:
+        if (len(childargs) >= 2 and
+                childargs[0] == 'osd' and
+                childargs[1] in ['deep-scrub', 'scrub']):
+            block = True
+            waitdata = get_scrub_timestamps(childargs)
+
     if parsed_args.help:
         # short default timeout for -h
         if not timeout:
@@ -945,7 +1032,7 @@ def main():
             # Filter on channel
             if (channel == parsed_args.watch_channel or \
                            parsed_args.watch_channel == "*"):
-                print(line)
+                print(line.decode('utf-8'))
                 sys.stdout.flush()
 
         # first do a ceph status
@@ -953,7 +1040,7 @@ def main():
         if ret:
             print("status query failed: ", outs, file=sys.stderr)
             return ret
-        print(outbuf)
+        print(outbuf.decode('utf-8'))
 
         # this instance keeps the watch connection alive, but is
         # otherwise unused
@@ -1108,6 +1195,10 @@ def main():
                         raise e
 
         sys.stdout.flush()
+
+    # Block until command completion (currently scrub and deep_scrub only)
+    if block:
+        wait(childargs, waitdata)
 
     if parsed_args.output_file and parsed_args.output_file != '-':
         outf.close()

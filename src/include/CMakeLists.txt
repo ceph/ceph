@@ -5,7 +5,6 @@ install(FILES rados/librados.h
   buffer.h
   buffer_fwd.h
   inline_memory.h
-  memory.h
   page.h
   crc32c.h
   rados/objclass.h
@@ -27,5 +26,6 @@ if(WITH_RADOSGW)
   install(FILES
     rados/librgw.h
     rados/rgw_file.h
+    rgw/librgw_admin_user.h
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rados)
 endif()

@@ -19,7 +19,6 @@
 #include "Object.h"
 #include "TestOpStat.h"
 #include "test/librados/test.h"
-#include "include/memory.h"
 #include "common/sharedptr_registry.hpp"
 #include "common/errno.h"
 #include "osd/HitSet.h"
@@ -66,7 +65,9 @@ enum TestOpType {
   TEST_OP_APPEND,
   TEST_OP_APPEND_EXCL,
   TEST_OP_SET_REDIRECT,
-  TEST_OP_UNSET_REDIRECT
+  TEST_OP_UNSET_REDIRECT,
+  TEST_OP_CHUNK_READ,
+  TEST_OP_TIER_PROMOTE
 };
 
 class TestWatchContext : public librados::WatchCtx2 {
@@ -193,6 +194,8 @@ public:
   const bool no_sparse;
   bool pool_snaps;
   bool write_fadvise_dontneed;
+  string low_tier_pool_name;
+  librados::IoCtx low_tier_io_ctx;
   int snapname_num;
   map<string,string > redirect_objs;
 
@@ -205,6 +208,7 @@ public:
 		   bool no_sparse,
 		   bool pool_snaps,
 		   bool write_fadvise_dontneed,
+		   const string &low_tier_pool_name,
 		   const char *id = 0) :
     state_lock("Context Lock"),
     pool_obj_cont(),
@@ -222,6 +226,7 @@ public:
     no_sparse(no_sparse),
     pool_snaps(pool_snaps),
     write_fadvise_dontneed(write_fadvise_dontneed),
+    low_tier_pool_name(low_tier_pool_name),
     snapname_num(0)
   {
   }
@@ -244,6 +249,13 @@ public:
     if (r < 0) {
       rados.shutdown();
       return r;
+    }
+    if (!low_tier_pool_name.empty()) {
+      r = rados.ioctx_create(low_tier_pool_name.c_str(), low_tier_io_ctx);
+      if (r < 0) {
+	rados.shutdown();
+	return r;
+      }
     }
     bufferlist inbl;
     r = rados.mon_command(
@@ -485,6 +497,22 @@ public:
   void update_object_redirect_target(const string &oid, const string &target)
   {
     redirect_objs[oid] = target;
+  }
+
+  void update_object_chunk_target(const string &oid, uint64_t offset, const ChunkDesc &info)
+  {
+    for (map<int, map<string,ObjectDesc> >::const_reverse_iterator i = 
+	   pool_obj_cont.rbegin();
+	 i != pool_obj_cont.rend();
+	 ++i) {
+      if (i->second.count(oid) != 0) {
+	ObjectDesc obj_desc = i->second.find(oid)->second;
+	obj_desc.chunk_info[offset] = info;
+	update_object_full(oid, obj_desc);
+	return ;
+      }
+    }
+    return;
   }
 
   bool object_existed_at(const string &oid, int snap = -1) const
@@ -831,7 +859,7 @@ public:
     }
 
     bufferlist contbl;
-    ::encode(cont, contbl);
+    encode(cont, contbl);
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(
 	this,
@@ -1010,7 +1038,7 @@ public:
     }
 
     bufferlist contbl;
-    ::encode(cont, contbl);
+    encode(cont, contbl);
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(
 	this,
@@ -1180,7 +1208,7 @@ public:
   int snap;
   bool balance_reads;
 
-  ceph::shared_ptr<int> in_use;
+  std::shared_ptr<int> in_use;
 
   vector<bufferlist> results;
   vector<int> retvals;
@@ -1232,7 +1260,7 @@ public:
 		   &results[index],
 		   &retvals[index]);
       bufferlist init_value_bl;
-      ::encode(static_cast<uint32_t>(-1), init_value_bl);
+      encode(static_cast<uint32_t>(-1), init_value_bl);
       read_op.checksum(LIBRADOS_CHECKSUM_TYPE_CRC32C, init_value_bl, 0, len,
 		       0, &checksums[index], &checksum_retvals[index]);
     } else {
@@ -1390,8 +1418,8 @@ public:
       }
       if (old_value.has_contents()) {
 	ContDesc to_check;
-	bufferlist::iterator p = headerbl.begin();
-	::decode(to_check, p);
+	auto p = headerbl.cbegin();
+	decode(to_check, p);
 	if (to_check != old_value.most_recent()) {
 	  cerr << num << ": oid " << oid << " found incorrect object contents " << to_check
 	       << ", expected " << old_value.most_recent() << std::endl;
@@ -1412,10 +1440,10 @@ public:
 	    uint32_t checksum = 0;
 	    if (checksum_retvals[i] == 0) {
 	      try {
-	        auto bl_it = checksums[i].begin();
+	        auto bl_it = checksums[i].cbegin();
 	        uint32_t csum_count;
-	        ::decode(csum_count, bl_it);
-	        ::decode(checksum, bl_it);
+	        decode(csum_count, bl_it);
+	        decode(checksum, bl_it);
 	      } catch (const buffer::error &err) {
 	        checksum_retvals[i] = -EBADMSG;
 	      }
@@ -1698,7 +1726,7 @@ public:
   librados::ObjectWriteOperation zero_write_op2;
   librados::ObjectWriteOperation op;
   vector<librados::AioCompletion *> comps;
-  ceph::shared_ptr<int> in_use;
+  std::shared_ptr<int> in_use;
   int last_finished;
   int outstanding;
 
@@ -1810,7 +1838,7 @@ public:
       context->update_object_version(oid, comps[tid]->get_version64());
       context->oid_in_use.erase(oid);
       context->oid_not_in_use.insert(oid);
-      in_use = ceph::shared_ptr<int>();
+      in_use = std::shared_ptr<int>();
       context->kick();
     }
   }
@@ -1833,8 +1861,8 @@ public:
   librados::ObjectWriteOperation op;
   librados::ObjectReadOperation rd_op;
   librados::AioCompletion *comp;
-  librados::AioCompletion *comp_racing_read;
-  ceph::shared_ptr<int> in_use;
+  librados::AioCompletion *comp_racing_read = nullptr;
+  std::shared_ptr<int> in_use;
   int snap;
   int done;
   uint64_t version;
@@ -1956,6 +1984,428 @@ public:
   }
 };
 
+class ChunkReadOp : public TestOp {
+public:
+  vector<librados::AioCompletion *> completions;
+  librados::ObjectReadOperation op;
+  string oid;
+  ObjectDesc old_value;
+  ObjectDesc tgt_value;
+  int snap;
+  bool balance_reads;
+
+  std::shared_ptr<int> in_use;
+
+  vector<bufferlist> results;
+  vector<int> retvals;
+  vector<bool> is_sparse_read;
+  uint64_t waiting_on;
+
+  vector<bufferlist> checksums;
+  vector<int> checksum_retvals;
+  uint32_t offset = 0;
+  uint32_t length = 0;
+  string tgt_oid;
+  string tgt_pool_name;
+  uint32_t tgt_offset = 0;
+
+  ChunkReadOp(int n,
+	 RadosTestContext *context,
+	 const string &oid,
+	 const string &tgt_pool_name,
+	 bool balance_reads,
+	 TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      completions(2),
+      oid(oid),
+      snap(0),
+      balance_reads(balance_reads),
+      results(2),
+      retvals(2),
+      waiting_on(0),
+      checksums(2),
+      checksum_retvals(2),
+      tgt_pool_name(tgt_pool_name)
+  {}
+
+  void _do_read(librados::ObjectReadOperation& read_op, uint32_t offset, uint32_t length, int index) {
+    read_op.read(offset,
+		 length,
+		 &results[index],
+		 &retvals[index]);
+    if (index != 0) {
+      bufferlist init_value_bl;
+      encode(static_cast<uint32_t>(-1), init_value_bl);
+      read_op.checksum(LIBRADOS_CHECKSUM_TYPE_CRC32C, init_value_bl, offset, length,
+		       0, &checksums[index], &checksum_retvals[index]);
+    }
+
+  }
+
+  void _begin() override
+  {
+    context->state_lock.Lock();
+    std::cout << num << ": chunk read oid " << oid << " snap " << snap << std::endl;
+    done = 0;
+    for (uint32_t i = 0; i < 2; i++) {
+      completions[i] = context->rados.aio_create_completion((void *) this, &read_callback, 0);
+    }
+
+    context->find_object(oid, &old_value);
+
+    if (old_value.chunk_info.size() == 0) {
+      std::cout << ":  no chunks" << std::endl;
+      context->kick();
+      context->state_lock.Unlock();
+      done = true;
+      return;
+    }
+
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+    if (old_value.deleted()) {
+      std::cout << num << ":  expect deleted" << std::endl;
+    } else {
+      std::cout << num << ":  expect " << old_value.most_recent() << std::endl;
+    }
+
+    int rand_index = rand() % old_value.chunk_info.size();
+    auto iter = old_value.chunk_info.begin();
+    for (int i = 0; i < rand_index; i++) {
+      iter++;
+    }
+    offset = iter->first;
+    offset += (rand() % iter->second.length)/2;
+    uint32_t t_length = rand() % iter->second.length;
+    while (t_length + offset > iter->first + iter->second.length) {
+      t_length = rand() % iter->second.length;
+    }
+    length = t_length;
+    tgt_offset = iter->second.offset + offset - iter->first;
+    tgt_oid = iter->second.oid;
+
+    std::cout << num << ": ori offset " << iter->first << " req offset " << offset 
+	      << " ori length " << iter->second.length << " req length " << length
+	      << " ori tgt_offset " << iter->second.offset << " req tgt_offset " << tgt_offset 
+	      << " tgt_oid " << tgt_oid << std::endl;
+
+    TestWatchContext *ctx = context->get_watch_context(oid);
+    context->state_lock.Unlock();
+    if (ctx) {
+      assert(old_value.exists);
+      TestAlarm alarm;
+      std::cerr << num << ":  about to start" << std::endl;
+      ctx->start();
+      std::cerr << num << ":  started" << std::endl;
+      bufferlist bl;
+      context->io_ctx.set_notify_timeout(600);
+      int r = context->io_ctx.notify2(context->prefix+oid, bl, 0, NULL);
+      if (r < 0) {
+	std::cerr << "r is " << r << std::endl;
+	ceph_abort();
+      }
+      std::cerr << num << ":  notified, waiting" << std::endl;
+      ctx->wait();
+    }
+    context->state_lock.Lock();
+
+    _do_read(op, offset, length, 0);
+
+    unsigned flags = 0;
+    if (balance_reads)
+      flags |= librados::OPERATION_BALANCE_READS;
+
+    assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[0], &op,
+					flags, NULL));
+    waiting_on++;
+
+    _do_read(op, tgt_offset, length, 1);
+    assert(!context->io_ctx.aio_operate(context->prefix+tgt_oid, completions[1], &op,
+					flags, NULL));
+
+    waiting_on++;
+    context->state_lock.Unlock();
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    Mutex::Locker l(context->state_lock);
+    assert(!done);
+    assert(waiting_on > 0);
+    if (--waiting_on) {
+      return;
+    }
+
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+    int retval = completions[0]->get_return_value();
+    std::cout << ":  finish!! ret: " << retval << std::endl;
+    context->find_object(tgt_oid, &tgt_value);
+
+    for (int i = 0; i < 2; i++) {
+      assert(completions[i]->is_complete()); 
+      int err = completions[i]->get_return_value();
+      if (err != retval) {
+        cerr << num << ": Error: oid " << oid << " read returned different error codes: "
+             << retval << " and " << err << std::endl;
+	ceph_abort();
+      }
+      if (err) {
+        if (!(err == -ENOENT && old_value.deleted())) {
+          cerr << num << ": Error: oid " << oid << " read returned error code "
+               << err << std::endl;
+          ceph_abort();
+        }
+      }
+    }
+
+    if (!retval) {
+      if (old_value.deleted()) {
+	std::cout << num << ":  expect deleted" << std::endl;
+	assert(0 == "expected deleted");
+      } else {
+	std::cout << num << ":  expect " << old_value.most_recent() << std::endl;
+      }
+      if (tgt_value.has_contents()) {
+	uint32_t checksum[2] = {0};
+	if (checksum_retvals[1] == 0) {
+	  try {
+	    auto bl_it = checksums[1].cbegin();
+	    uint32_t csum_count;
+	    decode(csum_count, bl_it);
+	    decode(checksum[1], bl_it);
+	  } catch (const buffer::error &err) {
+	    checksum_retvals[1] = -EBADMSG;
+	  }
+	}
+    
+	if (checksum_retvals[1] != 0) {
+	  cerr << num << ": oid " << oid << " checksum retvals " << checksums[0]
+	       << " error " << std::endl;
+	  context->errors++;
+	}
+
+	checksum[0] = results[0].crc32c(-1);
+      
+	if (checksum[0] != checksum[1]) {
+	  cerr << num << ": oid " << oid << " checksum src " << checksum[0]
+	       << " chunksum tgt " << checksum[1] << " incorrect, expecting " 
+	       << results[0].crc32c(-1)
+	       << std::endl;
+	  context->errors++;
+	}
+	if (context->errors) ceph_abort();
+      }
+    }
+    for (vector<librados::AioCompletion *>::iterator it = completions.begin();
+         it != completions.end(); ++it) {
+      (*it)->release();
+    }
+    context->kick();
+    done = true;
+  }
+
+  bool finished() override
+  {
+    return done;
+  }
+
+  string getType() override
+  {
+    return "ChunkReadOp";
+  }
+};
+
+class CopyOp : public TestOp {
+public:
+  string oid, oid_src, tgt_pool_name;
+  librados::ObjectWriteOperation op;
+  librados::ObjectReadOperation rd_op;
+  librados::AioCompletion *comp;
+  ObjectDesc src_value, tgt_value;
+  int done;
+  int r;
+  CopyOp(int n,
+	   RadosTestContext *context,
+	   const string &oid_src,
+	   const string &oid,
+	   const string &tgt_pool_name,
+	   TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      oid(oid), oid_src(oid_src), tgt_pool_name(tgt_pool_name),
+      comp(NULL), done(0), r(0) 
+  {}
+
+  void _begin() override
+  {
+    Mutex::Locker l(context->state_lock);
+    context->oid_in_use.insert(oid_src);
+    context->oid_not_in_use.erase(oid_src);
+
+    string src = context->prefix+oid_src;
+    context->find_object(oid_src, &src_value); 
+    op.copy_from(src.c_str(), context->io_ctx, src_value.version);
+
+    cout << "copy op oid " << oid_src << " to " << oid << " tgt_pool_name " << tgt_pool_name <<  std::endl;
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    comp = context->rados.aio_create_completion((void*) cb_arg, NULL,
+						&write_callback);
+    if (tgt_pool_name == context->low_tier_pool_name) {
+      context->low_tier_io_ctx.aio_operate(context->prefix+oid, comp, &op);
+    } else {
+      context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
+    }
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    Mutex::Locker l(context->state_lock);
+
+    if (info->id == 0) {
+      assert(comp->is_complete());
+      cout << num << ":  finishing copy op to oid " << oid << std::endl;
+      if ((r = comp->get_return_value())) {
+	cerr << "Error: oid " << oid << " write returned error code "
+	     << r << std::endl;
+	ceph_abort();
+      }
+    }
+
+    if (++done == 1) {
+      context->oid_in_use.erase(oid_src);
+      context->oid_not_in_use.insert(oid_src);
+      context->kick();
+    }
+  }
+
+  bool finished() override
+  {
+    return done == 1;
+  }
+
+  string getType() override
+  {
+    return "CopyOp";
+  }
+};
+
+class SetChunkOp : public TestOp {
+public:
+  string oid, oid_tgt, tgt_pool_name;
+  ObjectDesc src_value, tgt_value;
+  librados::ObjectWriteOperation op;
+  librados::ObjectReadOperation rd_op;
+  librados::AioCompletion *comp;
+  std::shared_ptr<int> in_use;
+  int done;
+  int r;
+  uint64_t offset;
+  uint32_t length;
+  uint64_t tgt_offset;
+  SetChunkOp(int n,
+	     RadosTestContext *context,
+	     const string &oid,
+	     uint64_t offset,
+	     uint32_t length,
+	     const string &oid_tgt,
+	     const string &tgt_pool_name,
+	     uint64_t tgt_offset,
+	     TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      oid(oid), oid_tgt(oid_tgt), tgt_pool_name(tgt_pool_name),
+      comp(NULL), done(0), 
+      r(0), offset(offset), length(length), 
+      tgt_offset(tgt_offset)
+  {}
+
+  void _begin() override
+  {
+    Mutex::Locker l(context->state_lock);
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+
+    if (tgt_pool_name.empty()) ceph_abort();
+
+    context->find_object(oid, &src_value); 
+    context->find_object(oid_tgt, &tgt_value);
+
+    if (src_value.version != 0 && !src_value.deleted())
+      op.assert_version(src_value.version);
+    op.set_chunk(offset, length, context->low_tier_io_ctx, 
+		 context->prefix+oid_tgt, tgt_offset);
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    comp = context->rados.aio_create_completion((void*) cb_arg, NULL,
+						&write_callback);
+    context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
+				librados::OPERATION_ORDER_READS_WRITES);
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    Mutex::Locker l(context->state_lock);
+
+    if (info->id == 0) {
+      assert(comp->is_complete());
+      cout << num << ":  finishing set_chunk to oid " << oid << std::endl;
+      if ((r = comp->get_return_value())) {
+	if (r == -ENOENT && src_value.deleted()) {
+	  cout << num << ":  got expected ENOENT (src dne)" << std::endl;
+	} else if (r == -EOPNOTSUPP) {
+	  bool is_overlapped = false;
+	  for (auto &p : src_value.chunk_info) {
+	    if ((p.first <= offset && p.first + p.second.length > offset) ||
+                (p.first > offset && p.first <= offset + length)) {
+	      cout << " range is overlapped  offset: " << offset << " length: " << length
+		    << " chunk_info offset: " << p.second.offset << " length " 
+		    << p.second.length << std::endl;
+	      is_overlapped = true;
+	      context->update_object_version(oid, comp->get_version64());
+	    } 
+	  }
+	  if (!is_overlapped) {
+	    cerr << "Error: oid " << oid << " set_chunk " << oid_tgt << " returned error code "
+		  << r << " offset: " << offset << " length: " << length <<  std::endl;
+	    ceph_abort();
+	  }
+	} else {
+	  cerr << "Error: oid " << oid << " set_chunk " << oid_tgt << " returned error code "
+	       << r << std::endl;
+	  ceph_abort();
+	}
+      } else {
+	ChunkDesc info;
+	info.offset = tgt_offset;
+	info.length = length;
+	info.oid = oid_tgt;
+	context->update_object_chunk_target(oid, offset, info);
+	context->update_object_version(oid, comp->get_version64());
+      }
+    }
+
+    if (++done == 1) {
+      context->oid_in_use.erase(oid);
+      context->oid_not_in_use.insert(oid);
+      context->kick();
+    }
+  }
+
+  bool finished() override
+  {
+    return done == 1;
+  }
+
+  string getType() override
+  {
+    return "SetChunkOp";
+  }
+};
+
 class SetRedirectOp : public TestOp {
 public:
   string oid, oid_tgt, tgt_pool_name;
@@ -1963,7 +2413,7 @@ public:
   librados::ObjectWriteOperation op;
   librados::ObjectReadOperation rd_op;
   librados::AioCompletion *comp;
-  ceph::shared_ptr<int> in_use;
+  std::shared_ptr<int> in_use;
   int done;
   int r;
   SetRedirectOp(int n,
@@ -1986,16 +2436,22 @@ public:
     context->oid_redirect_in_use.insert(oid_tgt);
     context->oid_redirect_not_in_use.erase(oid_tgt);
 
+    if (tgt_pool_name.empty()) ceph_abort();
+
     context->find_object(oid, &src_value); 
     if(!context->redirect_objs[oid].empty()) {
-      /* update target's user_version */
-      rd_op.stat(NULL, NULL, NULL);
+      /* copy_from oid --> oid_tgt */
       comp = context->rados.aio_create_completion();
-      context->io_ctx.aio_operate(context->prefix+oid_tgt, comp, &rd_op,
-			    librados::OPERATION_ORDER_READS_WRITES,
-			    NULL);
+      string src = context->prefix+oid;
+      op.copy_from(src.c_str(), context->io_ctx, src_value.version);
+      context->low_tier_io_ctx.aio_operate(context->prefix+oid_tgt, comp, &op,
+					   librados::OPERATION_ORDER_READS_WRITES);
       comp->wait_for_safe();
-      context->update_object_version(oid_tgt, comp->get_version64());
+      if ((r = comp->get_return_value())) {
+	cerr << "Error: oid " << oid << " copy_from " << oid_tgt << " returned error code "
+	     << r << std::endl;
+	ceph_abort();
+      }
       comp->release();
 
       /* unset redirect target */
@@ -2017,23 +2473,6 @@ public:
 
       context->oid_redirect_not_in_use.insert(context->redirect_objs[oid]);
       context->oid_redirect_in_use.erase(context->redirect_objs[oid]);
-
-      /* copy_from oid_tgt --> oid */
-      comp = context->rados.aio_create_completion();
-      context->find_object(oid_tgt, &tgt_value);
-      string src = context->prefix+oid_tgt;
-      op.copy_from(src.c_str(), context->io_ctx, tgt_value.version);
-      context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
-				  librados::OPERATION_ORDER_READS_WRITES);
-      comp->wait_for_safe();
-      if ((r = comp->get_return_value())) {
-	cerr << "Error: oid " << oid << " copy_from " << oid_tgt << " returned error code "
-	     << r << std::endl;
-	ceph_abort();
-      }
-      context->update_object_full(oid, tgt_value);
-      context->update_object_version(oid, comp->get_version64());
-      comp->release();
     }
 
     comp = context->rados.aio_create_completion();
@@ -2051,15 +2490,27 @@ public:
     context->update_object_version(oid, comp->get_version64());
     comp->release();
 
+    comp = context->rados.aio_create_completion();
+    rd_op.stat(NULL, NULL, NULL);
+    context->low_tier_io_ctx.aio_operate(context->prefix+oid_tgt, comp, &rd_op,
+     			  librados::OPERATION_ORDER_READS_WRITES |
+     			  librados::OPERATION_IGNORE_REDIRECT,
+     			  NULL);
+    comp->wait_for_safe();
+    if ((r = comp->get_return_value())) {
+      cerr << "Error: oid " << oid_tgt << " stat returned error code "
+	   << r << std::endl;
+      ceph_abort();
+    }
+    uint64_t tgt_version = comp->get_version64();
+    comp->release();
+    
+    
     context->find_object(oid, &src_value); 
-    context->find_object(oid_tgt, &tgt_value);
-
-    if (!src_value.deleted() && !tgt_value.deleted())
-      context->update_object_full(oid, tgt_value);
 
     if (src_value.version != 0 && !src_value.deleted())
       op.assert_version(src_value.version);
-    op.set_redirect(context->prefix+oid_tgt, context->io_ctx, tgt_value.version);
+    op.set_redirect(context->prefix+oid_tgt, context->low_tier_io_ctx, tgt_version);
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
@@ -2173,6 +2624,77 @@ public:
   }
 };
 
+class TierPromoteOp : public TestOp {
+public:
+  librados::AioCompletion *completion;
+  librados::ObjectWriteOperation op;
+  string oid;
+  std::shared_ptr<int> in_use;
+
+  TierPromoteOp(int n,
+	       RadosTestContext *context,
+	       const string &oid,
+	       TestOpStat *stat)
+    : TestOp(n, context, stat),
+      completion(NULL),
+      oid(oid)
+  {}
+
+  void _begin() override
+  {
+    context->state_lock.Lock();
+
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    completion = context->rados.aio_create_completion((void *) cb_arg, NULL,
+						      &write_callback);
+    context->state_lock.Unlock();
+
+    op.tier_promote();
+    int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
+					&op);
+    assert(!r);
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    context->state_lock.Lock();
+    assert(!done);
+    assert(completion->is_complete());
+
+    ObjectDesc oid_value;
+    context->find_object(oid, &oid_value);
+    int r = completion->get_return_value();
+    cout << num << ":  got " << cpp_strerror(r) << std::endl;
+    if (r == 0) {
+      // sucess
+    } else {
+      assert(0 == "shouldn't happen");
+    }
+    context->update_object_version(oid, completion->get_version64());
+    context->find_object(oid, &oid_value);
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+    context->kick();
+    done = true;
+    context->state_lock.Unlock();
+  }
+
+  bool finished() override
+  {
+    return done;
+  }
+
+  string getType() override
+  {
+    return "TierPromoteOp";
+  }
+};
+
 class HitSetListOp : public TestOp {
   librados::AioCompletion *comp1, *comp2;
   uint32_t hash;
@@ -2224,8 +2746,8 @@ public:
       int r = comp2->get_return_value();
       if (r == 0) {
 	HitSet hitset;
-	bufferlist::iterator p = bl.begin();
-	::decode(hitset, p);
+	auto p = bl.cbegin();
+	decode(hitset, p);
 	cout << num << ": got hitset of type " << hitset.get_type_name()
 	     << " size " << bl.length()
 	     << std::endl;
@@ -2314,8 +2836,8 @@ public:
   string oid;
   bool dirty;
   ObjectDesc old_value;
-  int snap;
-  ceph::shared_ptr<int> in_use;
+  int snap = 0;
+  std::shared_ptr<int> in_use;
 
   IsDirtyOp(int n,
 	    RadosTestContext *context,
@@ -2410,7 +2932,7 @@ public:
   bool blocking;
   int snap;
   bool can_fail;
-  ceph::shared_ptr<int> in_use;
+  std::shared_ptr<int> in_use;
 
   CacheFlushOp(int n,
 	       RadosTestContext *context,
@@ -2514,7 +3036,7 @@ public:
   librados::AioCompletion *completion;
   librados::ObjectReadOperation op;
   string oid;
-  ceph::shared_ptr<int> in_use;
+  std::shared_ptr<int> in_use;
 
   CacheEvictOp(int n,
 	       RadosTestContext *context,

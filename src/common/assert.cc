@@ -12,6 +12,7 @@
  *
  */
 
+#include "include/compat.h"
 #include "common/debug.h"
 
 namespace ceph {
@@ -35,6 +36,14 @@ namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,
 			  const char *func)
   {
+    g_assert_condition = assertion;
+    g_assert_file = file;
+    g_assert_line = line;
+    g_assert_func = func;
+    g_assert_thread = (unsigned long long)pthread_self();
+    ceph_pthread_getname(pthread_self(), g_assert_thread_name,
+		       sizeof(g_assert_thread_name));
+
     ostringstream tss;
     tss << ceph_clock_now();
 
@@ -51,19 +60,22 @@ namespace ceph {
     oss << BackTrace(1);
     dout_emergency(oss.str());
 
-    dout_emergency(" NOTE: a copy of the executable, or `objdump -rdS <executable>` "
-		   "is needed to interpret this.\n");
-
     if (g_assert_context) {
       lderr(g_assert_context) << buf << std::endl;
-      *_dout << oss.str();
-      *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
-	     << "is needed to interpret this.\n" << dendl;
+      *_dout << oss.str() << dendl;
 
-      g_assert_context->_log->dump_recent();
+      // dump recent only if the abort signal handler won't do it for us
+      if (!g_assert_context->_conf->fatal_signal_handlers) {
+	g_assert_context->_log->dump_recent();
+      }
     }
 
     abort();
+  }
+
+  void __ceph_assert_fail(const assert_data &ctx)
+  {
+    __ceph_assert_fail(ctx.assertion, ctx.file, ctx.line, ctx.function);
   }
 
   void __ceph_assertf_fail(const char *assertion, const char *file, int line,
@@ -71,6 +83,14 @@ namespace ceph {
   {
     ostringstream tss;
     tss << ceph_clock_now();
+
+    g_assert_condition = assertion;
+    g_assert_file = file;
+    g_assert_line = line;
+    g_assert_func = func;
+    g_assert_thread = (unsigned long long)pthread_self();
+    ceph_pthread_getname(pthread_self(), g_assert_thread_name,
+		       sizeof(g_assert_thread_name));
 
     class BufAppender {
     public:
@@ -121,16 +141,14 @@ namespace ceph {
     oss << *bt;
     dout_emergency(oss.str());
 
-    dout_emergency(" NOTE: a copy of the executable, or `objdump -rdS <executable>` "
-		   "is needed to interpret this.\n");
-
     if (g_assert_context) {
       lderr(g_assert_context) << buf << std::endl;
-      *_dout << oss.str();
-      *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
-	     << "is needed to interpret this.\n" << dendl;
+      *_dout << oss.str() << dendl;
 
-      g_assert_context->_log->dump_recent();
+      // dump recent only if the abort signal handler won't do it for us
+      if (!g_assert_context->_conf->fatal_signal_handlers) {
+	g_assert_context->_log->dump_recent();
+      }
     }
 
     abort();

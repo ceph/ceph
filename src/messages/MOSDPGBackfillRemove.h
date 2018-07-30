@@ -51,22 +51,23 @@ private:
   ~MOSDPGBackfillRemove() {}
 
 public:
-  const char *get_type_name() const { return "backfill_remove"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "backfill_remove"; }
+  void print(ostream& out) const override {
     out << "backfill_remove(" << pgid << " e" << map_epoch
 	<< " " << ls << ")";
   }
 
-  void encode_payload(uint64_t features) {
-    ::encode(pgid, payload);
-    ::encode(map_epoch, payload);
-    ::encode(ls, payload);
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(pgid, payload);
+    encode(map_epoch, payload);
+    encode(ls, payload);
   }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(pgid, p);
-    ::decode(map_epoch, p);
-    ::decode(ls, p);
+  void decode_payload() override {
+    auto p = payload.cbegin();
+    decode(pgid, p);
+    decode(map_epoch, p);
+    decode(ls, p);
   }
 };
 

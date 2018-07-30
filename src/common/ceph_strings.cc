@@ -92,6 +92,8 @@ const char *ceph_release_name(int r)
 	case CEPH_RELEASE_NAUTILUS:
 		return "nautilus";
 	default:
+		if (r < 0)
+			return "unspecified";
 		return "unknown";
 	}
 }
@@ -290,6 +292,7 @@ const char *ceph_session_op_name(int op)
 	case CEPH_SESSION_FLUSHMSG_ACK: return "flushmsg_ack";
 	case CEPH_SESSION_FORCE_RO: return "force_ro";
 	case CEPH_SESSION_REJECT: return "reject";
+	case CEPH_SESSION_REQUEST_FLUSH_MDLOG: return "request_flush_mdlog";
 	}
 	return "???";
 }

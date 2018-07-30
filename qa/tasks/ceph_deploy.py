@@ -166,8 +166,13 @@ def get_nodes_using_role(ctx, target_role):
                 modified_remotes[_remote].append(svc_id)
 
     ctx.cluster.remotes = modified_remotes
-    ctx.cluster.mapped_role = ceph_deploy_mapped
-
+    # since the function is called multiple times for target roles
+    # append new mapped roles
+    if not hasattr(ctx.cluster, 'mapped_role'):
+        ctx.cluster.mapped_role = ceph_deploy_mapped
+    else:
+        ctx.cluster.mapped_role.update(ceph_deploy_mapped)
+    log.info("New mapped_role={mr}".format(mr=ctx.cluster.mapped_role))
     return nodes_of_interest
 
 
@@ -209,7 +214,6 @@ def get_all_nodes(ctx, config):
     nodelist = " ".join(nodelist)
     return nodelist
 
-
 @contextlib.contextmanager
 def build_ceph_cluster(ctx, config):
     """Build a ceph cluster"""
@@ -231,6 +235,76 @@ def build_ceph_cluster(ctx, config):
             ],
             check_status=False,
         ).exitstatus
+
+    def ceph_disk_osd_create(ctx, config):
+        node_dev_list = get_dev_for_osd(ctx, config)
+        no_of_osds = 0
+        for d in node_dev_list:
+            node = d[0]
+            for disk in d[1:]:
+                zap = './ceph-deploy disk zap ' + node + ':' + disk
+                estatus = execute_ceph_deploy(zap)
+                if estatus != 0:
+                    raise RuntimeError("ceph-deploy: Failed to zap osds")
+            osd_create_cmd = './ceph-deploy osd create '
+            # first check for filestore, default is bluestore with ceph-deploy
+            if config.get('filestore') is not None:
+                osd_create_cmd += '--filestore '
+            elif config.get('bluestore') is not None:
+                osd_create_cmd += '--bluestore '
+            if config.get('dmcrypt') is not None:
+                osd_create_cmd += '--dmcrypt '
+            osd_create_cmd += ":".join(d)
+            estatus_osd = execute_ceph_deploy(osd_create_cmd)
+            if estatus_osd == 0:
+                log.info('successfully created osd')
+                no_of_osds += 1
+            else:
+                raise RuntimeError("ceph-deploy: Failed to create osds")
+        return no_of_osds
+
+    def ceph_volume_osd_create(ctx, config):
+        osds = ctx.cluster.only(teuthology.is_type('osd'))
+        no_of_osds = 0
+        for remote in osds.remotes.iterkeys():
+            # all devs should be lvm
+            osd_create_cmd = './ceph-deploy osd create --debug ' + remote.shortname + ' '
+            # default is bluestore so we just need config item for filestore
+            roles = ctx.cluster.remotes[remote]
+            dev_needed = len([role for role in roles
+                              if role.startswith('osd')])
+            all_devs = teuthology.get_scratch_devices(remote)
+            log.info("node={n}, need_devs={d}, available={a}".format(
+                        n=remote.shortname,
+                        d=dev_needed,
+                        a=all_devs,
+                        ))
+            devs = all_devs[0:dev_needed]
+            # rest of the devices can be used for journal if required
+            jdevs = dev_needed
+            for device in devs:
+                device_split = device.split('/')
+                lv_device = device_split[-2] + '/' + device_split[-1]
+                if config.get('filestore') is not None:
+                    osd_create_cmd += '--filestore --data ' + lv_device + ' '
+                    # filestore with ceph-volume also needs journal disk
+                    try:
+                        jdevice = all_devs.pop(jdevs)
+                    except IndexError:
+                        raise RuntimeError("No device available for \
+                                            journal configuration")
+                    jdevice_split = jdevice.split('/')
+                    j_lv = jdevice_split[-2] + '/' + jdevice_split[-1]
+                    osd_create_cmd += '--journal ' + j_lv
+                else:
+                    osd_create_cmd += ' --data ' + lv_device
+                estatus_osd = execute_ceph_deploy(osd_create_cmd)
+                if estatus_osd == 0:
+                    log.info('successfully created osd')
+                    no_of_osds += 1
+                else:
+                    raise RuntimeError("ceph-deploy: Failed to create osds")
+        return no_of_osds
 
     try:
         log.info('Building ceph cluster using ceph-deploy...')
@@ -259,7 +333,6 @@ def build_ceph_cluster(ctx, config):
         mon_hostname = str(mon_hostname)
         gather_keys = './ceph-deploy gatherkeys' + " " + mon_hostname
         deploy_mds = './ceph-deploy mds create' + " " + mds_nodes
-        no_of_osds = 0
 
         if mon_nodes is None:
             raise RuntimeError("no monitor nodes in the config file")
@@ -316,6 +389,14 @@ def build_ceph_cluster(ctx, config):
                              '--id', remote.shortname])
 
         estatus_gather = execute_ceph_deploy(gather_keys)
+        if estatus_gather != 0:
+            raise RuntimeError("ceph-deploy: Failed during gather keys")
+        # create osd's
+        if config.get('use-ceph-volume', False):
+            no_of_osds = ceph_volume_osd_create(ctx, config)
+        else:
+            # this method will only work with ceph-deploy v1.5.39 or older
+            no_of_osds = ceph_disk_osd_create(ctx, config)
 
         if not skip_mgr:
             execute_ceph_deploy(mgr_create)
@@ -333,29 +414,7 @@ def build_ceph_cluster(ctx, config):
                 if estatus_mon_d != 0:
                     raise RuntimeError("ceph-deploy: Failed to delete monitor")
 
-        node_dev_list = get_dev_for_osd(ctx, config)
-        for d in node_dev_list:
-            node = d[0]
-            for disk in d[1:]:
-                zap = './ceph-deploy disk zap ' + node + ':' + disk
-                estatus = execute_ceph_deploy(zap)
-                if estatus != 0:
-                    raise RuntimeError("ceph-deploy: Failed to zap osds")
-            osd_create_cmd = './ceph-deploy osd create '
-            # first check for filestore, default is bluestore with ceph-deploy
-            if config.get('filestore') is not None:
-                osd_create_cmd += '--filestore '
-            elif config.get('bluestore') is not None:
-                osd_create_cmd += '--bluestore '
-            if config.get('dmcrypt') is not None:
-                osd_create_cmd += '--dmcrypt '
-            osd_create_cmd += ":".join(d)
-            estatus_osd = execute_ceph_deploy(osd_create_cmd)
-            if estatus_osd == 0:
-                log.info('successfully created osd')
-                no_of_osds += 1
-            else:
-                raise RuntimeError("ceph-deploy: Failed to create osds")
+
 
         if config.get('wait-for-healthy', True) and no_of_osds >= 2:
             is_healthy(ctx=ctx, config=None)
@@ -727,13 +786,15 @@ def upgrade(ctx, config):
     # get the roles that are mapped as per ceph-deploy
     # roles are mapped for mon/mds eg: mon.a  => mon.host_short_name
     mapped_role = ctx.cluster.mapped_role
+    log.info("roles={r}, mapped_roles={mr}".format(r=roles, mr=mapped_role))
     if config.get('branch'):
         branch = config.get('branch')
         (var, val) = branch.items()[0]
         ceph_branch = '--{var}={val}'.format(var=var, val=val)
     else:
-        # default to master
-        ceph_branch = '--dev=master'
+        # default to wip-branch under test
+        dev_branch = ctx.config['branch']
+        ceph_branch = '--dev={branch}'.format(branch=dev_branch)
     # get the node used for initial deployment which is mon.a
     mon_a = mapped_role.get('mon.a')
     (ceph_admin,) = ctx.cluster.only(mon_a).remotes.iterkeys()
@@ -831,6 +892,9 @@ def task(ctx, config):
              filestore: True
              # skip install of mgr for old release using below flag
              skip-mgr: True  ( default is False )
+             # to use ceph-volume instead of ceph-disk
+             # ceph-disk can only be used with old ceph-deploy release from pypi
+             use-ceph-volume: true
 
         tasks:
         - install:
@@ -868,6 +932,13 @@ def task(ctx, config):
             config['branch'], dict), 'branch must be a dictionary'
 
     log.info('task ceph-deploy with config ' + str(config))
+
+    # we need to use 1.5.39-stable for testing jewel or master branch with
+    # ceph-disk
+    if config.get('use-ceph-volume', False) is False:
+        # check we are not testing specific branch
+        if config.get('ceph-deploy-branch', False) is False:
+            config['ceph-deploy-branch'] = '1.5.39-stable'
 
     with contextutil.nested(
         lambda: install_fn.ship_utilities(ctx=ctx, config=None),

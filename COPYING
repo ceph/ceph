@@ -9,7 +9,7 @@ License: LGPL2.1 (see COPYING-LGPL2.1)
 
 Files: doc/*
 Copyright: (c) 2010-2012 New Dream Network and contributors
-License: Creative Commons Attribution-ShareAlike (CC BY-SA)
+License: Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)
 
 Files: bin/git-archive-all.sh
 License: GPL3
@@ -145,8 +145,3 @@ Files: src/include/timegm.h
   Copyright (C) Copyright Howard Hinnant
   Copyright (C) Copyright 2010-2011 Vicente J. Botet Escriba
   License: Boost Software License, Version 1.0
-
-Files: src/msg/async/AsyncConnection.cc, src/msg/simple/Pipe.cc (sigpipe suppression)
-  Copyright (C) 2010 Tomash Brechko.  All rights reserved.
-  License: GPL3
-

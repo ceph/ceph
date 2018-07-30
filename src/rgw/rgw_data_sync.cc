@@ -18,10 +18,11 @@
 #include "rgw_bucket.h"
 #include "rgw_metadata.h"
 #include "rgw_sync_module.h"
+#include "rgw_sync_log_trim.h"
 
 #include "cls/lock/cls_lock_client.h"
 
-#include "auth/Crypto.h"
+#include "include/random.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -34,6 +35,7 @@ static string datalog_sync_status_oid_prefix = "datalog.sync-status";
 static string datalog_sync_status_shard_prefix = "datalog.sync-status.shard";
 static string datalog_sync_full_sync_index_prefix = "data.full-sync.index";
 static string bucket_status_oid_prefix = "bucket.sync-status";
+static string object_status_oid_prefix = "bucket.sync-status";
 
 class RGWSyncDebugLogger {
   CephContext *cct;
@@ -151,6 +153,40 @@ bool RGWReadDataSyncStatusMarkersCR::spawn_next()
   return true;
 }
 
+class RGWReadDataSyncRecoveringShardsCR : public RGWShardCollectCR {
+  static constexpr int MAX_CONCURRENT_SHARDS = 16;
+
+  RGWDataSyncEnv *env;
+
+  uint64_t max_entries;
+  int num_shards;
+  int shard_id{0};;
+
+  string marker;
+  map<int, std::set<std::string>> &entries_map;
+
+ public:
+  RGWReadDataSyncRecoveringShardsCR(RGWDataSyncEnv *env, uint64_t _max_entries, int _num_shards,
+      map<int, std::set<std::string>>& _entries_map)
+    : RGWShardCollectCR(env->cct, MAX_CONCURRENT_SHARDS), env(env),
+    max_entries(_max_entries), num_shards(_num_shards), entries_map(_entries_map)
+  {}
+  bool spawn_next() override;
+};
+
+bool RGWReadDataSyncRecoveringShardsCR::spawn_next()
+{
+  if (shard_id > num_shards)
+    return false;
+ 
+  string error_oid = RGWDataSyncStatusManager::shard_obj_name(env->source_zone, shard_id) + ".retry";
+  spawn(new RGWRadosGetOmapKeysCR(env->store, rgw_raw_obj(env->store->get_zone_params().log_pool, error_oid),
+                                  marker, &entries_map[shard_id], max_entries), false);
+
+  ++shard_id;
+  return true;
+}
+
 class RGWReadDataSyncStatusCoroutine : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   rgw_data_sync_status *sync_status;
@@ -230,7 +266,7 @@ public:
 
         http_op = new RGWRESTReadResource(sync_env->conn, p, pairs, NULL, sync_env->http_manager);
 
-        http_op->set_user_info((void *)stack);
+        init_new_io(http_op);
 
         int ret = http_op->aio_read();
         if (ret < 0) {
@@ -310,7 +346,7 @@ public:
 
         http_op = new RGWRESTReadResource(sync_env->conn, p, pairs, NULL, sync_env->http_manager);
 
-        http_op->set_user_info((void *)stack);
+        init_new_io(http_op);
 
         int ret = http_op->aio_read();
         if (ret < 0) {
@@ -401,7 +437,7 @@ public:
     string p = "/admin/log/";
 
     http_op = new RGWRESTReadResource(conn, p, pairs, NULL, sync_env->http_manager);
-    http_op->set_user_info((void *)stack);
+    init_new_io(http_op);
 
     int ret = http_op->aio_read();
     if (ret < 0) {
@@ -626,15 +662,15 @@ int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn, RGWSy
                            RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& _sync_module)
 {
   sync_env.init(store->ctx(), store, _conn, async_rados, &http_manager, _error_logger,
-                _sync_tracer, _source_zone, _sync_module);
+                _sync_tracer, _source_zone, _sync_module, observer);
 
   if (initialized) {
     return 0;
   }
 
-  int ret = http_manager.set_threaded();
+  int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
 
@@ -659,9 +695,9 @@ int RGWRemoteDataLog::read_sync_status(rgw_data_sync_status *sync_status)
   // cannot run concurrently with run_sync(), so run in a separate manager
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
   RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
-  int ret = http_manager.set_threaded();
+  int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
   RGWDataSyncEnv sync_env_local = sync_env;
@@ -671,20 +707,49 @@ int RGWRemoteDataLog::read_sync_status(rgw_data_sync_status *sync_status)
   return ret;
 }
 
-int RGWRemoteDataLog::init_sync_status(int num_shards)
+int RGWRemoteDataLog::read_recovering_shards(const int num_shards, set<int>& recovering_shards)
 {
-  rgw_data_sync_status sync_status;
+  // cannot run concurrently with run_sync(), so run in a separate manager
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
   RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
-  int ret = http_manager.set_threaded();
+  int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
   RGWDataSyncEnv sync_env_local = sync_env;
   sync_env_local.http_manager = &http_manager;
-  uint64_t instance_id;
-  get_random_bytes((char *)&instance_id, sizeof(instance_id));
+  map<int, std::set<std::string>> entries_map;
+  uint64_t max_entries{1};
+  ret = crs.run(new RGWReadDataSyncRecoveringShardsCR(&sync_env_local, max_entries, num_shards, entries_map));
+  http_manager.stop();
+
+  if (ret == 0) {
+    for (const auto& entry : entries_map) {
+      if (entry.second.size() != 0) {
+        recovering_shards.insert(entry.first);
+      }
+    }
+  }
+
+  return ret;
+}
+
+int RGWRemoteDataLog::init_sync_status(int num_shards)
+{
+  rgw_data_sync_status sync_status;
+  sync_status.sync_info.num_shards = num_shards;
+
+  RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
+  RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
+  int ret = http_manager.start();
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
+    return ret;
+  }
+  RGWDataSyncEnv sync_env_local = sync_env;
+  sync_env_local.http_manager = &http_manager;
+  auto instance_id = ceph::util::generate_random_number<uint64_t>();
   ret = crs.run(new RGWInitDataSyncStatusCoroutine(&sync_env_local, num_shards, instance_id, tn, &sync_status));
   http_manager.stop();
   return ret;
@@ -754,21 +819,22 @@ public:
 
   int operate() override {
     reenter(this) {
-      entries_index = new RGWShardedOmapCRManager(sync_env->async_rados, store, this, num_shards,
-						  store->get_zone_params().log_pool,
-                                                  oid_prefix);
       yield {
         string entrypoint = string("/admin/metadata/bucket.instance");
         /* FIXME: need a better scaling solution here, requires streaming output */
         call(new RGWReadRESTResourceCR<list<string> >(store->ctx(), sync_env->conn, sync_env->http_manager,
                                                       entrypoint, NULL, &result));
       }
-      if (get_ret_status() < 0) {
-        ldout(sync_env->cct, 0) << "ERROR: failed to fetch metadata for section bucket.index" << dendl;
-        return set_state(RGWCoroutine_Error);
+      if (retcode < 0) {
+        ldout(sync_env->cct, 0) << "ERROR: failed to fetch metadata for section bucket.instance" << dendl;
+        return set_cr_error(retcode);
       }
+      entries_index = new RGWShardedOmapCRManager(sync_env->async_rados, store, this, num_shards,
+						  store->get_zone_params().log_pool,
+                                                  oid_prefix);
+      yield; // yield so OmapAppendCRs can start
       for (iter = result.begin(); iter != result.end(); ++iter) {
-        ldout(sync_env->cct, 20) << "list metadata: section=bucket.index key=" << *iter << dendl;
+        ldout(sync_env->cct, 20) << "list metadata: section=bucket.instance key=" << *iter << dendl;
 
         key = *iter;
 
@@ -888,12 +954,16 @@ public:
     marker_to_key[marker] = key;
     return true;
   }
+
+  RGWOrderCallCR *allocate_order_control_cr() override {
+    return new RGWLastCallerWinsCR(sync_env->cct);
+  }
 };
 
 // ostream wrappers to print buckets without copying strings
 struct bucket_str {
   const rgw_bucket& b;
-  bucket_str(const rgw_bucket& b) : b(b) {}
+  explicit bucket_str(const rgw_bucket& b) : b(b) {}
 };
 std::ostream& operator<<(std::ostream& out, const bucket_str& rhs) {
   auto& b = rhs.b;
@@ -909,7 +979,7 @@ std::ostream& operator<<(std::ostream& out, const bucket_str& rhs) {
 
 struct bucket_str_noinstance {
   const rgw_bucket& b;
-  bucket_str_noinstance(const rgw_bucket& b) : b(b) {}
+  explicit bucket_str_noinstance(const rgw_bucket& b) : b(b) {}
 };
 std::ostream& operator<<(std::ostream& out, const bucket_str_noinstance& rhs) {
   auto& b = rhs.b;
@@ -922,7 +992,7 @@ std::ostream& operator<<(std::ostream& out, const bucket_str_noinstance& rhs) {
 
 struct bucket_shard_str {
   const rgw_bucket_shard& bs;
-  bucket_shard_str(const rgw_bucket_shard& bs) : bs(bs) {}
+  explicit bucket_shard_str(const rgw_bucket_shard& bs) : bs(bs) {}
 };
 std::ostream& operator<<(std::ostream& out, const bucket_shard_str& rhs) {
   auto& bs = rhs.bs;
@@ -1034,10 +1104,13 @@ public:
       }
 
       if (sync_status < 0) {
-        yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data", raw_key,
-                                                        -sync_status, string("failed to sync bucket instance: ") + cpp_strerror(-sync_status)));
-        if (retcode < 0) {
-          tn->log(0, SSTR("ERROR: failed to log sync failure: retcode=" << retcode));
+        // write actual sync failures for 'radosgw-admin sync error list'
+        if (sync_status != -EBUSY && sync_status != -EAGAIN) {
+          yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data", raw_key,
+                                                          -sync_status, string("failed to sync bucket instance: ") + cpp_strerror(-sync_status)));
+          if (retcode < 0) {
+            tn->log(0, SSTR("ERROR: failed to log sync failure: retcode=" << retcode));
+          }
         }
         if (error_repo && !error_repo->append(raw_key)) {
           tn->log(0, SSTR("ERROR: failed to log sync failure in error repo: retcode=" << retcode));
@@ -1049,6 +1122,9 @@ public:
           tn->log(0, SSTR("ERROR: failed to remove omap key from error repo ("
              << error_repo->get_obj() << " retcode=" << retcode));
         }
+      }
+      if (sync_env->observer) {
+        sync_env->observer->on_bucket_changed(bs.bucket.get_key());
       }
       /* FIXME: what do do in case of error */
       if (marker_tracker && !entry_marker.empty()) {
@@ -1084,8 +1160,8 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   uint32_t shard_id;
   rgw_data_sync_marker sync_marker;
 
-  map<string, bufferlist> entries;
-  map<string, bufferlist>::iterator iter;
+  std::set<std::string> entries;
+  std::set<std::string>::iterator iter;
 
   string oid;
 
@@ -1126,7 +1202,7 @@ class RGWDataSyncShardCR : public RGWCoroutine {
 
   string error_oid;
   RGWOmapAppend *error_repo;
-  map<string, bufferlist> error_entries;
+  std::set<std::string> error_entries;
   string error_marker;
   int max_error_entries;
 
@@ -1258,20 +1334,20 @@ public:
         tn->log(20, SSTR("retrieved " << entries.size() << " entries to sync"));
         iter = entries.begin();
         for (; iter != entries.end(); ++iter) {
-          tn->log(20, SSTR("full sync: " << iter->first));
+          tn->log(20, SSTR("full sync: " << *iter));
           total_entries++;
-          if (!marker_tracker->start(iter->first, total_entries, real_time())) {
-            tn->log(0, SSTR("ERROR: cannot start syncing " << iter->first << ". Duplicate entry?"));
+          if (!marker_tracker->start(*iter, total_entries, real_time())) {
+            tn->log(0, SSTR("ERROR: cannot start syncing " << *iter << ". Duplicate entry?"));
           } else {
             // fetch remote and write locally
-            yield spawn(new RGWDataSyncSingleEntryCR(sync_env, iter->first, iter->first, marker_tracker, error_repo, false, tn), false);
+            yield spawn(new RGWDataSyncSingleEntryCR(sync_env, *iter, *iter, marker_tracker, error_repo, false, tn), false);
             if (retcode < 0) {
               lease_cr->go_down();
               drain_all();
               return set_cr_error(retcode);
             }
           }
-          sync_marker.marker = iter->first;
+          sync_marker.marker = *iter;
         }
       } while ((int)entries.size() == max_entries);
 
@@ -1292,7 +1368,6 @@ public:
       }
       if (retcode < 0) {
         tn->log(0, SSTR("ERROR: failed to set sync marker: retcode=" << retcode));
-        lease_cr->go_down();
         return set_cr_error(retcode);
       }
     }
@@ -1345,9 +1420,9 @@ public:
         tn->log(20, SSTR("read error repo, got " << error_entries.size() << " entries"));
         iter = error_entries.begin();
         for (; iter != error_entries.end(); ++iter) {
-          tn->log(20, SSTR("handle error entry: " << iter->first));
-          spawn(new RGWDataSyncSingleEntryCR(sync_env, iter->first, iter->first, nullptr /* no marker tracker */, error_repo, true, tn), false);
-          error_marker = iter->first;
+          error_marker = *iter;
+          tn->log(20, SSTR("handle error entry: " << error_marker));
+          spawn(new RGWDataSyncSingleEntryCR(sync_env, error_marker, error_marker, nullptr /* no marker tracker */, error_repo, true, tn), false);
         }
         if ((int)error_entries.size() != max_error_entries) {
           if (error_marker.empty() && error_entries.empty()) {
@@ -1552,7 +1627,7 @@ public:
         tn->log(20, SSTR("init"));
         sync_status.sync_info.num_shards = num_shards;
         uint64_t instance_id;
-        get_random_bytes((char *)&instance_id, sizeof(instance_id));
+        instance_id = ceph::util::generate_random_number<uint64_t>();
         yield call(new RGWInitDataSyncStatusCoroutine(sync_env, num_shards, instance_id, tn, &sync_status));
         if (retcode < 0) {
           tn->log(0, SSTR("ERROR: failed to init sync, retcode=" << retcode));
@@ -1568,6 +1643,7 @@ public:
       if  ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateBuildingFullSyncMaps) {
         tn->log(10, SSTR("building full sync maps"));
         /* call sync module init here */
+        sync_status.sync_info.num_shards = num_shards;
         yield call(data_sync_module->init_sync(sync_env));
         if (retcode < 0) {
           tn->log(0, SSTR("ERROR: sync module init_sync() failed, retcode=" << retcode));
@@ -1634,7 +1710,7 @@ class RGWDefaultDataSyncModule : public RGWDataSyncModule {
 public:
   RGWDefaultDataSyncModule() {}
 
-  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
+  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override;
   RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
   RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
@@ -1649,13 +1725,13 @@ public:
   }
 };
 
-int RGWDefaultSyncModule::create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance)
+int RGWDefaultSyncModule::create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance)
 {
   instance->reset(new RGWDefaultSyncModuleInstance());
   return 0;
 }
 
-RGWCoroutine *RGWDefaultDataSyncModule::sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
+RGWCoroutine *RGWDefaultDataSyncModule::sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace)
 {
   return new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone, bucket_info,
                                  key, versioned_epoch,
@@ -1685,9 +1761,10 @@ class RGWDataSyncControlCR : public RGWBackoffControlCR
 
   RGWSyncTraceNodeRef tn;
 
+  static constexpr bool exit_on_error = false; // retry on all errors
 public:
   RGWDataSyncControlCR(RGWDataSyncEnv *_sync_env, uint32_t _num_shards,
-                       RGWSyncTraceNodeRef& _tn_parent) : RGWBackoffControlCR(_sync_env->cct, true),
+                       RGWSyncTraceNodeRef& _tn_parent) : RGWBackoffControlCR(_sync_env->cct, exit_on_error),
                                                           sync_env(_sync_env), num_shards(_num_shards) {
     tn = sync_env->sync_tracer->add_node(new RGWSyncTraceNode(sync_env->cct,
                                          sync_env->sync_tracer, 
@@ -1767,7 +1844,9 @@ int RGWDataSyncStatusManager::init()
 
   RGWZoneParams& zone_params = store->get_zone_params();
 
-  sync_module = store->get_sync_module();
+  if (sync_module == nullptr) { 
+    sync_module = store->get_sync_module();
+  }
 
   conn = store->get_zone_conn_by_id(source_zone);
   if (!conn) {
@@ -1834,35 +1913,23 @@ int RGWRemoteBucketLog::init(const string& _source_zone, RGWRESTConn *_conn,
   bs.bucket = bucket;
   bs.shard_id = shard_id;
 
-  sync_env.init(store->ctx(), store, conn, async_rados, http_manager, _error_logger, _sync_tracer, source_zone, _sync_module);
+  sync_env.init(store->ctx(), store, conn, async_rados, http_manager,
+                _error_logger, _sync_tracer, source_zone, _sync_module,
+                nullptr);
 
   return 0;
 }
-
-struct bucket_index_marker_info {
-  string bucket_ver;
-  string master_ver;
-  string max_marker;
-  bool syncstopped{false};
-
-  void decode_json(JSONObj *obj) {
-    JSONDecoder::decode_json("bucket_ver", bucket_ver, obj);
-    JSONDecoder::decode_json("master_ver", master_ver, obj);
-    JSONDecoder::decode_json("max_marker", max_marker, obj);
-    JSONDecoder::decode_json("syncstopped", syncstopped, obj);
-  }
-};
 
 class RGWReadRemoteBucketIndexLogInfoCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   const string instance_key;
 
-  bucket_index_marker_info *info;
+  rgw_bucket_index_marker_info *info;
 
 public:
   RGWReadRemoteBucketIndexLogInfoCR(RGWDataSyncEnv *_sync_env,
                                   const rgw_bucket_shard& bs,
-                                  bucket_index_marker_info *_info)
+                                  rgw_bucket_index_marker_info *_info)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
       instance_key(bs.get_key()), info(_info) {}
 
@@ -1875,7 +1942,7 @@ public:
 	                                { NULL, NULL } };
 
         string p = "/admin/log/";
-        call(new RGWReadRESTResourceCR<bucket_index_marker_info>(sync_env->cct, sync_env->conn, sync_env->http_manager, p, pairs, info));
+        call(new RGWReadRESTResourceCR<rgw_bucket_index_marker_info>(sync_env->cct, sync_env->conn, sync_env->http_manager, p, pairs, info));
       }
       if (retcode < 0) {
         return set_cr_error(retcode);
@@ -1894,7 +1961,7 @@ class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
 
   rgw_bucket_shard_sync_info& status;
 
-  bucket_index_marker_info info;
+  rgw_bucket_index_marker_info info;
 public:
   RGWInitBucketShardSyncStatusCoroutine(RGWDataSyncEnv *_sync_env,
                                         const rgw_bucket_shard& bs,
@@ -1946,9 +2013,9 @@ static void decode_attr(CephContext *cct, map<string, bufferlist>& attrs, const 
     return;
   }
 
-  bufferlist::iterator biter = iter->second.begin();
+  auto biter = iter->second.cbegin();
   try {
-    ::decode(*val, biter);
+    decode(*val, biter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "ERROR: failed to decode attribute: " << attr_name << dendl;
   }
@@ -1970,17 +2037,20 @@ void rgw_bucket_shard_sync_info::encode_all_attrs(map<string, bufferlist>& attrs
 
 void rgw_bucket_shard_sync_info::encode_state_attr(map<string, bufferlist>& attrs)
 {
-  ::encode(state, attrs["state"]);
+  using ceph::encode;
+  encode(state, attrs["state"]);
 }
 
 void rgw_bucket_shard_full_sync_marker::encode_attr(map<string, bufferlist>& attrs)
 {
-  ::encode(*this, attrs["full_marker"]);
+  using ceph::encode;
+  encode(*this, attrs["full_marker"]);
 }
 
 void rgw_bucket_shard_inc_sync_marker::encode_attr(map<string, bufferlist>& attrs)
 {
-  ::encode(*this, attrs["inc_marker"]);
+  using ceph::encode;
+  encode(*this, attrs["inc_marker"]);
 }
 
 class RGWReadBucketSyncStatusCoroutine : public RGWCoroutine {
@@ -2018,6 +2088,172 @@ int RGWReadBucketSyncStatusCoroutine::operate()
   }
   return 0;
 }
+
+#define OMAP_READ_MAX_ENTRIES 10
+class RGWReadRecoveringBucketShardsCoroutine : public RGWCoroutine {
+  RGWDataSyncEnv *sync_env;
+  RGWRados *store;
+  
+  const int shard_id;
+  int max_entries;
+
+  set<string>& recovering_buckets;
+  string marker;
+  string error_oid;
+
+  set<string> error_entries;
+  int max_omap_entries;
+  int count;
+
+public:
+  RGWReadRecoveringBucketShardsCoroutine(RGWDataSyncEnv *_sync_env, const int _shard_id,
+                                      set<string>& _recovering_buckets, const int _max_entries) 
+  : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+  store(sync_env->store), shard_id(_shard_id), max_entries(_max_entries),
+  recovering_buckets(_recovering_buckets), max_omap_entries(OMAP_READ_MAX_ENTRIES)
+  {
+    error_oid = RGWDataSyncStatusManager::shard_obj_name(sync_env->source_zone, shard_id) + ".retry";
+  }
+
+  int operate() override;
+};
+
+int RGWReadRecoveringBucketShardsCoroutine::operate()
+{
+  reenter(this){
+    //read recovering bucket shards
+    count = 0;
+    do {
+      yield call(new RGWRadosGetOmapKeysCR(store, rgw_raw_obj(store->get_zone_params().log_pool, error_oid), 
+            marker, &error_entries, max_omap_entries));
+
+      if (retcode == -ENOENT) {
+        break;
+      }
+
+      if (retcode < 0) {
+        ldout(sync_env->cct, 0) << "failed to read recovering bucket shards with " 
+          << cpp_strerror(retcode) << dendl;
+        return set_cr_error(retcode);
+      }
+
+      if (error_entries.empty()) {
+        break;
+      }
+
+      count += error_entries.size();
+      marker = *error_entries.rbegin();
+      recovering_buckets.insert(std::make_move_iterator(error_entries.begin()),
+                                std::make_move_iterator(error_entries.end()));
+    }while((int)error_entries.size() == max_omap_entries && count < max_entries);
+  
+    return set_cr_done();
+  }
+
+  return 0;
+}
+
+class RGWReadPendingBucketShardsCoroutine : public RGWCoroutine {
+  RGWDataSyncEnv *sync_env;
+  RGWRados *store;
+  
+  const int shard_id;
+  int max_entries;
+
+  set<string>& pending_buckets;
+  string marker;
+  string status_oid;
+
+  rgw_data_sync_marker* sync_marker;
+  int count;
+
+  list<rgw_data_change_log_entry> log_entries;
+  bool truncated;
+
+public:
+  RGWReadPendingBucketShardsCoroutine(RGWDataSyncEnv *_sync_env, const int _shard_id,
+                                      set<string>& _pending_buckets,
+                                      rgw_data_sync_marker* _sync_marker, const int _max_entries) 
+  : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+  store(sync_env->store), shard_id(_shard_id), max_entries(_max_entries),
+  pending_buckets(_pending_buckets), sync_marker(_sync_marker)
+  {
+    status_oid = RGWDataSyncStatusManager::shard_obj_name(sync_env->source_zone, shard_id);
+  }
+
+  int operate() override;
+};
+
+int RGWReadPendingBucketShardsCoroutine::operate()
+{
+  reenter(this){
+    //read sync status marker
+    using CR = RGWSimpleRadosReadCR<rgw_data_sync_marker>;
+    yield call(new CR(sync_env->async_rados, store, 
+                      rgw_raw_obj(store->get_zone_params().log_pool, status_oid),
+                      sync_marker));
+    if (retcode < 0) {
+      ldout(sync_env->cct,0) << "failed to read sync status marker with " 
+        << cpp_strerror(retcode) << dendl;
+      return set_cr_error(retcode);
+    }
+
+    //read pending bucket shards
+    marker = sync_marker->marker;
+    count = 0;
+    do{
+      yield call(new RGWReadRemoteDataLogShardCR(sync_env, shard_id, &marker, &log_entries, &truncated));
+
+      if (retcode == -ENOENT) {
+        break;
+      }
+
+      if (retcode < 0) {
+        ldout(sync_env->cct,0) << "failed to read remote data log info with " 
+          << cpp_strerror(retcode) << dendl;
+        return set_cr_error(retcode);
+      }
+
+      if (log_entries.empty()) {
+        break;
+      }
+
+      count += log_entries.size();
+      for (const auto& entry : log_entries) {
+        pending_buckets.insert(entry.entry.key);
+      }
+    }while(truncated && count < max_entries);
+
+    return set_cr_done();
+  }
+
+  return 0;
+}
+
+int RGWRemoteDataLog::read_shard_status(int shard_id, set<string>& pending_buckets, set<string>& recovering_buckets, rgw_data_sync_marker *sync_marker, const int max_entries)
+{
+  // cannot run concurrently with run_sync(), so run in a separate manager
+  RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
+  RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
+  int ret = http_manager.start();
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
+    return ret;
+  }
+  RGWDataSyncEnv sync_env_local = sync_env;
+  sync_env_local.http_manager = &http_manager;
+  list<RGWCoroutinesStack *> stacks;
+  RGWCoroutinesStack* recovering_stack = new RGWCoroutinesStack(store->ctx(), &crs);
+  recovering_stack->call(new RGWReadRecoveringBucketShardsCoroutine(&sync_env_local, shard_id, recovering_buckets, max_entries));
+  stacks.push_back(recovering_stack);
+  RGWCoroutinesStack* pending_stack = new RGWCoroutinesStack(store->ctx(), &crs);
+  pending_stack->call(new RGWReadPendingBucketShardsCoroutine(&sync_env_local, shard_id, pending_buckets, sync_marker, max_entries));
+  stacks.push_back(pending_stack);
+  ret = crs.run(stacks);
+  http_manager.stop();
+  return ret;
+}
+
 RGWCoroutine *RGWRemoteBucketLog::read_sync_status_cr(rgw_bucket_shard_sync_info *sync_status)
 {
   return new RGWReadBucketSyncStatusCoroutine(&sync_env, bs, sync_status);
@@ -2205,6 +2441,10 @@ public:
                                           rgw_raw_obj(store->get_zone_params().log_pool, marker_oid),
                                           attrs);
   }
+
+  RGWOrderCallCR *allocate_order_control_cr() override {
+    return new RGWLastCallerWinsCR(sync_env->cct);
+  }
 };
 
 class RGWBucketIncSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, rgw_obj_key> {
@@ -2214,18 +2454,28 @@ class RGWBucketIncSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, 
   rgw_bucket_shard_inc_sync_marker sync_marker;
 
   map<rgw_obj_key, string> key_to_marker;
-  map<string, rgw_obj_key> marker_to_key;
+
+  struct operation {
+    rgw_obj_key key;
+    bool is_olh;
+  };
+  map<string, operation> marker_to_op;
+  std::set<std::string> pending_olh; // object names with pending olh operations
 
   RGWSyncTraceNodeRef tn;
 
   void handle_finish(const string& marker) override {
-    map<string, rgw_obj_key>::iterator iter = marker_to_key.find(marker);
-    if (iter == marker_to_key.end()) {
+    auto iter = marker_to_op.find(marker);
+    if (iter == marker_to_op.end()) {
       return;
     }
-    key_to_marker.erase(iter->second);
-    reset_need_retry(iter->second);
-    marker_to_key.erase(iter);
+    auto& op = iter->second;
+    key_to_marker.erase(op.key);
+    reset_need_retry(op.key);
+    if (op.is_olh) {
+      pending_olh.erase(op.key.name);
+    }
+    marker_to_op.erase(iter);
   }
 
 public:
@@ -2264,18 +2514,31 @@ public:
    * Also, we should make sure that we don't run concurrent operations on the same key with
    * different ops.
    */
-  bool index_key_to_marker(const rgw_obj_key& key, const string& marker) {
-    if (key_to_marker.find(key) != key_to_marker.end()) {
+  bool index_key_to_marker(const rgw_obj_key& key, const string& marker, bool is_olh) {
+    auto result = key_to_marker.emplace(key, marker);
+    if (!result.second) { // exists
       set_need_retry(key);
       return false;
     }
-    key_to_marker[key] = marker;
-    marker_to_key[marker] = key;
+    marker_to_op[marker] = operation{key, is_olh};
+    if (is_olh) {
+      // prevent other olh ops from starting on this object name
+      pending_olh.insert(key.name);
+    }
     return true;
   }
 
-  bool can_do_op(const rgw_obj_key& key) {
+  bool can_do_op(const rgw_obj_key& key, bool is_olh) {
+    // serialize olh ops on the same object name
+    if (is_olh && pending_olh.count(key.name)) {
+      tn->log(20, SSTR("sync of " << key << " waiting for pending olh op"));
+      return false;
+    }
     return (key_to_marker.find(key) == key_to_marker.end());
+  }
+
+  RGWOrderCallCR *allocate_order_control_cr() override {
+    return new RGWLastCallerWinsCR(sync_env->cct);
   }
 };
 
@@ -2288,7 +2551,7 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
 
   rgw_obj_key key;
   bool versioned;
-  uint64_t versioned_epoch;
+  std::optional<uint64_t> versioned_epoch;
   rgw_bucket_entry_owner owner;
   real_time timestamp;
   RGWModifyOp op;
@@ -2314,7 +2577,8 @@ public:
   RGWBucketSyncSingleEntryCR(RGWDataSyncEnv *_sync_env,
                              RGWBucketInfo *_bucket_info,
                              const rgw_bucket_shard& bs,
-                             const rgw_obj_key& _key, bool _versioned, uint64_t _versioned_epoch,
+                             const rgw_obj_key& _key, bool _versioned,
+                             std::optional<uint64_t> _versioned_epoch,
                              real_time& _timestamp,
                              const rgw_bucket_entry_owner& _owner,
                              RGWModifyOp _op, RGWPendingState _op_state,
@@ -2330,7 +2594,7 @@ public:
                                                       marker_tracker(_marker_tracker),
                                                       sync_status(0){
     stringstream ss;
-    ss << bucket_shard_str{bs} << "/" << key << "[" << versioned_epoch << "]";
+    ss << bucket_shard_str{bs} << "/" << key << "[" << versioned_epoch.value_or(0) << "]";
     set_description() << "bucket sync single entry (source_zone=" << sync_env->source_zone << ") b=" << ss.str() << " log_entry=" << entry_marker << " op=" << (int)op << " op_state=" << (int)op_state;
     set_status("init");
 
@@ -2372,14 +2636,8 @@ public:
             retcode = -EIO;
           } else if (op == CLS_RGW_OP_ADD ||
                      op == CLS_RGW_OP_LINK_OLH) {
-            if (op == CLS_RGW_OP_ADD && !key.instance.empty() && key.instance != "null") {
-              set_status("skipping entry");
-              tn->log(10, SSTR("bucket skipping sync obj: " << sync_env->source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]: versioned object will be synced on link_olh"));
-              goto done;
-
-            }
             set_status("syncing obj");
-            tn->log(5, SSTR("bucket sync: sync obj: " << sync_env->source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]"));
+            tn->log(5, SSTR("bucket sync: sync obj: " << sync_env->source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch.value_or(0) << "]"));
             logger.log("fetch");
             call(data_sync_module->sync_object(sync_env, *bucket_info, key, versioned_epoch, &zones_trace));
           } else if (op == CLS_RGW_OP_DEL || op == CLS_RGW_OP_UNLINK_INSTANCE) {
@@ -2388,12 +2646,12 @@ public:
               versioned = true;
             }
             logger.log("remove");
-            call(data_sync_module->remove_object(sync_env, *bucket_info, key, timestamp, versioned, versioned_epoch, &zones_trace));
+            call(data_sync_module->remove_object(sync_env, *bucket_info, key, timestamp, versioned, versioned_epoch.value_or(0), &zones_trace));
           } else if (op == CLS_RGW_OP_LINK_OLH_DM) {
             logger.log("creating delete marker");
             set_status("creating delete marker");
-            tn->log(10, SSTR("creating delete marker: obj: " << sync_env->source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]"));
-            call(data_sync_module->create_delete_marker(sync_env, *bucket_info, key, timestamp, owner, versioned, versioned_epoch, &zones_trace));
+            tn->log(10, SSTR("creating delete marker: obj: " << sync_env->source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch.value_or(0) << "]"));
+            call(data_sync_module->create_delete_marker(sync_env, *bucket_info, key, timestamp, owner, versioned, versioned_epoch.value_or(0), &zones_trace));
           }
           tn->set_resource_name(SSTR(bucket_str_noinstance(bucket_info->bucket) << "/" << key));
         }
@@ -2419,7 +2677,7 @@ public:
         sync_status = retcode;
       }
       if (!error_ss.str().empty()) {
-        yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data", error_ss.str(), -retcode, "failed to sync object"));
+        yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data", error_ss.str(), -retcode, string("failed to sync object") + cpp_strerror(-sync_status)));
       }
 done:
       if (sync_status == 0) {
@@ -2593,6 +2851,10 @@ int RGWBucketShardFullSyncCR::operate()
   return 0;
 }
 
+static bool has_olh_epoch(RGWModifyOp op) {
+  return op == CLS_RGW_OP_LINK_OLH || op == CLS_RGW_OP_UNLINK_INSTANCE;
+}
+
 class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   const rgw_bucket_shard& bs;
@@ -2682,6 +2944,9 @@ int RGWBucketShardIncrementalSyncCR::operate()
           syncstopped = false;
           continue;
         }
+        if (e.op == CLS_RGW_OP_CANCEL) {
+          continue;
+        }
         if (e.state != CLS_RGW_STATE_COMPLETE) {
           continue;
         }
@@ -2689,6 +2954,10 @@ int RGWBucketShardIncrementalSyncCR::operate()
           continue;
         }
         auto& squash_entry = squash_map[make_pair(e.object, e.instance)];
+        // don't squash over olh entries - we need to apply their olh_epoch
+        if (has_olh_epoch(squash_entry.second) && !has_olh_epoch(e.op)) {
+          continue;
+        }
         if (squash_entry.first <= e.timestamp) {
           squash_entry = make_pair<>(e.timestamp, e.op);
         }
@@ -2759,14 +3028,14 @@ int RGWBucketShardIncrementalSyncCR::operate()
           set_status() << "squashed operation, skipping";
           tn->log(20, SSTR("skipping object: "
               << bucket_shard_str{bs} << "/" << key << ": squashed operation"));
-          /* not updating high marker though */
+          marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
         tn->set_flag(RGW_SNS_FLAG_ACTIVE);
         tn->log(20, SSTR("syncing object: "
             << bucket_shard_str{bs} << "/" << key));
         updated_status = false;
-        while (!marker_tracker.can_do_op(key)) {
+        while (!marker_tracker.can_do_op(key, has_olh_epoch(entry->op))) {
           if (!updated_status) {
             set_status() << "can't do op, conflicting inflight operation";
             updated_status = true;
@@ -2782,8 +3051,14 @@ int RGWBucketShardIncrementalSyncCR::operate()
               /* we have reported this error */
             }
           }
+          if (sync_status != 0)
+            break;
         }
-        if (!marker_tracker.index_key_to_marker(key, cur_id)) {
+        if (sync_status != 0) {
+          /* get error, stop */
+          break;
+        }
+        if (!marker_tracker.index_key_to_marker(key, cur_id, has_olh_epoch(entry->op))) {
           set_status() << "can't do op, sync already in progress for object";
           tn->log(20, SSTR("skipping sync of entry: " << cur_id << ":" << key << " sync already in progress for object"));
           marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
@@ -2794,7 +3069,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
           if (!marker_tracker.start(cur_id, 0, entry->timestamp)) {
             tn->log(0, SSTR("ERROR: cannot start syncing " << cur_id << ". Duplicate entry?"));
           } else {
-            uint64_t versioned_epoch = 0;
+            std::optional<uint64_t> versioned_epoch;
             rgw_bucket_entry_owner owner(entry->owner, entry->owner_display_name);
             if (entry->ver.pool < 0) {
               versioned_epoch = entry->ver.epoch;
@@ -2995,9 +3270,9 @@ int RGWBucketSyncStatusManager::init()
     return -EINVAL;
   }
 
-  int ret = http_manager.set_threaded();
+  int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
 
@@ -3103,6 +3378,62 @@ string RGWBucketSyncStatusManager::status_oid(const string& source_zone,
                                               const rgw_bucket_shard& bs)
 {
   return bucket_status_oid_prefix + "." + source_zone + ":" + bs.get_key();
+}
+
+string RGWBucketSyncStatusManager::obj_status_oid(const string& source_zone,
+                                                  const rgw_obj& obj)
+{
+  return object_status_oid_prefix + "." + source_zone + ":" + obj.bucket.get_key() + ":" +
+         obj.key.name + ":" + obj.key.instance;
+}
+
+class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
+  static constexpr int max_concurrent_shards = 16;
+  RGWRados *const store;
+  RGWDataSyncEnv *const env;
+  const int num_shards;
+  rgw_bucket_shard bs;
+
+  using Vector = std::vector<rgw_bucket_shard_sync_info>;
+  Vector::iterator i, end;
+
+ public:
+  RGWCollectBucketSyncStatusCR(RGWRados *store, RGWDataSyncEnv *env,
+                               int num_shards, const rgw_bucket& bucket,
+                               Vector *status)
+    : RGWShardCollectCR(store->ctx(), max_concurrent_shards),
+      store(store), env(env), num_shards(num_shards),
+      bs(bucket, num_shards > 0 ? 0 : -1), // start at shard 0 or -1
+      i(status->begin()), end(status->end())
+  {}
+
+  bool spawn_next() override {
+    if (i == end) {
+      return false;
+    }
+    spawn(new RGWReadBucketSyncStatusCoroutine(env, bs, &*i), false);
+    ++i;
+    ++bs.shard_id;
+    return true;
+  }
+};
+
+int rgw_bucket_sync_status(RGWRados *store, const std::string& source_zone,
+                           const RGWBucketInfo& bucket_info,
+                           std::vector<rgw_bucket_shard_sync_info> *status)
+{
+  const auto num_shards = bucket_info.num_shards;
+  status->clear();
+  status->resize(std::max<size_t>(1, num_shards));
+
+  RGWDataSyncEnv env;
+  RGWSyncModuleInstanceRef module; // null sync module
+  env.init(store->ctx(), store, nullptr, store->get_async_rados(),
+           nullptr, nullptr, nullptr, source_zone, module, nullptr);
+
+  RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
+  return crs.run(new RGWCollectBucketSyncStatusCR(store, &env, num_shards,
+                                                  bucket_info.bucket, status));
 }
 
 

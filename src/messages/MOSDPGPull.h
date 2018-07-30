@@ -65,28 +65,29 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(pgid.pgid, p);
-    ::decode(map_epoch, p);
-    ::decode(pulls, p);
-    ::decode(cost, p);
-    ::decode(pgid.shard, p);
-    ::decode(from, p);
+    auto p = payload.cbegin();
+    decode(pgid.pgid, p);
+    decode(map_epoch, p);
+    decode(pulls, p);
+    decode(cost, p);
+    decode(pgid.shard, p);
+    decode(from, p);
     if (header.version >= 3) {
-      ::decode(min_epoch, p);
+      decode(min_epoch, p);
     } else {
       min_epoch = map_epoch;
     }
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(pgid.pgid, payload);
-    ::encode(map_epoch, payload);
-    ::encode(pulls, payload, features);
-    ::encode(cost, payload);
-    ::encode(pgid.shard, payload);
-    ::encode(from, payload);
-    ::encode(min_epoch, payload);
+    using ceph::encode;
+    encode(pgid.pgid, payload);
+    encode(map_epoch, payload);
+    encode(pulls, payload, features);
+    encode(cost, payload);
+    encode(pgid.shard, payload);
+    encode(from, payload);
+    encode(min_epoch, payload);
   }
 
   const char *get_type_name() const override { return "MOSDPGPull"; }

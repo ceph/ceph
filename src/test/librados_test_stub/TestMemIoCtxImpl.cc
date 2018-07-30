@@ -69,7 +69,9 @@ int TestMemIoCtxImpl::append(const std::string& oid, const bufferlist &bl,
   }
 
   RWLock::WLocker l(file->lock);
-  file->data.append(bl);
+  auto off = file->data.length();
+  ensure_minimum_length(off + bl.length(), &file->data);
+  file->data.copy_in(off, bl.length(), bl);
   return 0;
 }
 
@@ -107,7 +109,8 @@ int TestMemIoCtxImpl::list_snaps(const std::string& oid, snap_set_t *out_snaps) 
   out_snaps->clones.clear();
 
   RWLock::RLocker l(m_pool->file_lock);
-  TestMemCluster::Files::iterator it = m_pool->files.find(oid);
+  TestMemCluster::Files::iterator it = m_pool->files.find(
+    {get_namespace(), oid});
   if (it == m_pool->files.end()) {
     return -ENOENT;
   }
@@ -192,7 +195,8 @@ int TestMemIoCtxImpl::omap_get_vals2(const std::string& oid,
   out_vals->clear();
 
   RWLock::RLocker l(file->lock);
-  TestMemCluster::FileOMaps::iterator o_it = m_pool->file_omaps.find(oid);
+  TestMemCluster::FileOMaps::iterator o_it = m_pool->file_omaps.find(
+    {get_namespace(), oid});
   if (o_it == m_pool->file_omaps.end()) {
     if (pmore) {
       *pmore = false;
@@ -248,7 +252,7 @@ int TestMemIoCtxImpl::omap_rm_keys(const std::string& oid,
   RWLock::WLocker l(file->lock);
   for (std::set<std::string>::iterator it = keys.begin();
        it != keys.end(); ++it) {
-    m_pool->file_omaps[oid].erase(*it);
+    m_pool->file_omaps[{get_namespace(), oid}].erase(*it);
   }
   return 0;
 }
@@ -275,7 +279,7 @@ int TestMemIoCtxImpl::omap_set(const std::string& oid,
       it != map.end(); ++it) {
     bufferlist bl;
     bl.append(it->second);
-    m_pool->file_omaps[oid][it->first] = bl;
+    m_pool->file_omaps[{get_namespace(), oid}][it->first] = bl;
   }
 
   return 0;
@@ -323,14 +327,28 @@ int TestMemIoCtxImpl::remove(const std::string& oid, const SnapContext &snapc) {
   }
   file = get_file(oid, true, snapc);
 
-  RWLock::WLocker l2(file->lock);
-  file->exists = false;
+  {
+    RWLock::WLocker l2(file->lock);
+    file->exists = false;
+  }
 
-  TestMemCluster::Files::iterator it = m_pool->files.find(oid);
+  TestCluster::ObjectLocator locator(get_namespace(), oid);
+  TestMemCluster::Files::iterator it = m_pool->files.find(locator);
   assert(it != m_pool->files.end());
+
+  if (*it->second.rbegin() == file) {
+    TestMemCluster::ObjectHandlers object_handlers;
+    std::swap(object_handlers, m_pool->file_handlers[locator]);
+    m_pool->file_handlers.erase(locator);
+
+    for (auto object_handler : object_handlers) {
+      object_handler->handle_removed(m_client);
+    }
+  }
+
   if (it->second.size() == 1) {
     m_pool->files.erase(it);
-    m_pool->file_omaps.erase(oid);
+    m_pool->file_omaps.erase(locator);
   }
   return 0;
 }
@@ -372,7 +390,8 @@ int TestMemIoCtxImpl::selfmanaged_snap_rollback(const std::string& oid,
   RWLock::WLocker l(m_pool->file_lock);
 
   TestMemCluster::SharedFile file;
-  TestMemCluster::Files::iterator f_it = m_pool->files.find(oid);
+  TestMemCluster::Files::iterator f_it = m_pool->files.find(
+    {get_namespace(), oid});
   if (f_it == m_pool->files.end()) {
     return 0;
   }
@@ -408,6 +427,24 @@ int TestMemIoCtxImpl::selfmanaged_snap_rollback(const std::string& oid,
     }
     ++versions;
   }
+  return 0;
+}
+
+int TestMemIoCtxImpl::set_alloc_hint(const std::string& oid,
+                                     uint64_t expected_object_size,
+                                     uint64_t expected_write_size,
+                                     const SnapContext &snapc) {
+  if (get_snap_read() != CEPH_NOSNAP) {
+    return -EROFS;
+  } else if (m_client->is_blacklisted()) {
+    return -EBLACKLISTED;
+  }
+
+  {
+    RWLock::WLocker l(m_pool->file_lock);
+    get_file(oid, true, snapc);
+  }
+
   return 0;
 }
 
@@ -561,7 +598,8 @@ int TestMemIoCtxImpl::write_full(const std::string& oid, bufferlist& bl,
   }
 
   file->data.clear();
-  file->data.append(bl);
+  ensure_minimum_length(bl.length(), &file->data);
+  file->data.copy_in(0, bl.length(), bl);
   return 0;
 }
 
@@ -638,7 +676,8 @@ int TestMemIoCtxImpl::xattr_get(const std::string& oid,
 
   TestMemCluster::SharedFile file;
   RWLock::RLocker l(m_pool->file_lock);
-  TestMemCluster::FileXAttrs::iterator it = m_pool->file_xattrs.find(oid);
+  TestMemCluster::FileXAttrs::iterator it = m_pool->file_xattrs.find(
+    {get_namespace(), oid});
   if (it == m_pool->file_xattrs.end()) {
     return -ENODATA;
   }
@@ -653,7 +692,7 @@ int TestMemIoCtxImpl::xattr_set(const std::string& oid, const std::string &name,
   }
 
   RWLock::WLocker l(m_pool->file_lock);
-  m_pool->file_xattrs[oid][name] = bl;
+  m_pool->file_xattrs[{get_namespace(), oid}][name] = bl;
   return 0;
 }
 
@@ -722,7 +761,8 @@ TestMemCluster::SharedFile TestMemIoCtxImpl::get_file(
   assert(!write || m_pool->file_lock.is_wlocked());
 
   TestMemCluster::SharedFile file;
-  TestMemCluster::Files::iterator it = m_pool->files.find(oid);
+  TestMemCluster::Files::iterator it = m_pool->files.find(
+    {get_namespace(), oid});
   if (it != m_pool->files.end()) {
     file = it->second.back();
   } else if (!write) {
@@ -759,7 +799,7 @@ TestMemCluster::SharedFile TestMemIoCtxImpl::get_file(
     if (new_version) {
       file->snap_id = snapc.seq;
       file->mtime = ceph_clock_now().sec();
-      m_pool->files[oid].push_back(file);
+      m_pool->files[{get_namespace(), oid}].push_back(file);
     }
     return file;
   }

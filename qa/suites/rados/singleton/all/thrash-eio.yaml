@@ -25,10 +25,13 @@ tasks:
     - missing primary copy of
     - objects unfound and apparently lost
     - overall HEALTH_
-    - (OSDMAP_FLAGS)
-    - (REQUEST_SLOW)
-    - (PG_
-    - (OSD_
+    - \(OSDMAP_FLAGS\)
+    - \(SLOW_OPS\)
+    - \(PG_
+    - \(OBJECT_MISPLACED\)
+    - \(OSD_
+    - \(OBJECT_
+    - \(TOO_FEW_PGS\)
 - thrashosds:
     op_delay: 30
     clean_interval: 120

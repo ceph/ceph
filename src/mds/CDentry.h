@@ -18,6 +18,7 @@
 #define CEPH_CDENTRY_H
 
 #include <string>
+#include <string_view>
 #include <set>
 
 #include "include/counter.h"
@@ -53,11 +54,11 @@ public:
   friend class CDir;
 
   struct linkage_t {
-    CInode *inode;
-    inodeno_t remote_ino;
-    unsigned char remote_d_type;
+    CInode *inode = nullptr;
+    inodeno_t remote_ino = 0;
+    unsigned char remote_d_type = 0;
     
-    linkage_t() : inode(0), remote_ino(0), remote_d_type(0) {}
+    linkage_t() {}
 
     // dentry type is primary || remote || null
     // inode ptr is required for primary, optional for remote, undefined for null
@@ -101,25 +102,24 @@ public:
   static const unsigned EXPORT_NONCE = 1;
 
 
-  CDentry(const std::string& n, __u32 h,
+  CDentry(std::string_view n, __u32 h,
 	  snapid_t f, snapid_t l) :
-    name(n), hash(h),
+    hash(h),
     first(f), last(l),
     item_dirty(this),
     lock(this, &lock_type),
     versionlock(this, &versionlock_type),
-    dir(0),
-    version(0), projected_version(0) {
-  }
-  CDentry(const std::string& n, __u32 h, inodeno_t ino, unsigned char dt,
+    name(n)
+  {}
+  CDentry(std::string_view n, __u32 h, inodeno_t ino, unsigned char dt,
 	  snapid_t f, snapid_t l) :
-    name(n), hash(h),
+    hash(h),
     first(f), last(l),
     item_dirty(this),
     lock(this, &lock_type),
     versionlock(this, &versionlock_type),
-    dir(0),
-    version(0), projected_version(0) {
+    name(n)
+  {
     linkage.remote_ino = ino;
     linkage.remote_d_type = dt;
   }
@@ -149,7 +149,7 @@ public:
 
   const CDir *get_dir() const { return dir; }
   CDir *get_dir() { return dir; }
-  const std::string& get_name() const { return name; }
+  std::string_view get_name() const { return std::string_view(name); }
 
   __u32 get_hash() const { return hash; }
 
@@ -244,30 +244,30 @@ public:
   void clear_new() { state_clear(STATE_NEW); }
   
   // -- replication
-  void encode_replica(mds_rank_t mds, bufferlist& bl) {
+  void encode_replica(mds_rank_t mds, bufferlist& bl, bool need_recover) {
     if (!is_replicated())
       lock.replicate_relax();
 
     __u32 nonce = add_replica(mds);
-    ::encode(nonce, bl);
-    ::encode(first, bl);
-    ::encode(linkage.remote_ino, bl);
-    ::encode(linkage.remote_d_type, bl);
-    __s32 ls = lock.get_replica_state();
-    ::encode(ls, bl);
+    encode(nonce, bl);
+    encode(first, bl);
+    encode(linkage.remote_ino, bl);
+    encode(linkage.remote_d_type, bl);
+    lock.encode_state_for_replica(bl);
+    encode(need_recover, bl);
   }
-  void decode_replica(bufferlist::iterator& p, bool is_new);
+  void decode_replica(bufferlist::const_iterator& p, bool is_new);
 
   // -- exporting
   // note: this assumes the dentry already exists.  
   // i.e., the name is already extracted... so we just need the other state.
   void encode_export(bufferlist& bl) {
-    ::encode(first, bl);
-    ::encode(state, bl);
-    ::encode(version, bl);
-    ::encode(projected_version, bl);
-    ::encode(lock, bl);
-    ::encode(get_replicas(), bl);
+    encode(first, bl);
+    encode(state, bl);
+    encode(version, bl);
+    encode(projected_version, bl);
+    encode(lock, bl);
+    encode(get_replicas(), bl);
     get(PIN_TEMPEXPORTING);
   }
   void finish_export() {
@@ -282,14 +282,14 @@ public:
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(bufferlist::iterator& blp, LogSegment *ls) {
-    ::decode(first, blp);
+  void decode_import(bufferlist::const_iterator& blp, LogSegment *ls) {
+    decode(first, blp);
     __u32 nstate;
-    ::decode(nstate, blp);
-    ::decode(version, blp);
-    ::decode(projected_version, blp);
-    ::decode(lock, blp);
-    ::decode(get_replicas(), blp);
+    decode(nstate, blp);
+    decode(version, blp);
+    decode(projected_version, blp);
+    decode(lock, blp);
+    decode(get_replicas(), blp);
 
     // twiddle
     state &= MASK_STATE_IMPORT_KEPT;
@@ -343,21 +343,20 @@ public:
   void dump(Formatter *f) const;
 
 
-  std::string name;
   __u32 hash;
   snapid_t first, last;
 
-  elist<CDentry*>::item item_dirty;
+  elist<CDentry*>::item item_dirty, item_dir_dirty;
   elist<CDentry*>::item item_stray;
 
   // lock
   static LockType lock_type;
   static LockType versionlock_type;
 
-  SimpleLock lock;
-  LocalLock versionlock;
+  SimpleLock lock; // FIXME referenced containers not in mempool
+  LocalLock versionlock; // FIXME referenced containers not in mempool
 
-  map<client_t,ClientLease*> client_lease_map;
+  mempool::mds_co::map<client_t,ClientLease*> client_lease_map;
 
 
 protected:
@@ -368,12 +367,15 @@ protected:
   friend class CInode;
   friend class C_MDC_XlockRequest;
 
-  CDir *dir;     // containing dirfrag
+  CDir *dir = nullptr;     // containing dirfrag
   linkage_t linkage;
-  list<linkage_t> projected;
+  mempool::mds_co::list<linkage_t> projected;
 
-  version_t version;  // dir version when last touched.
-  version_t projected_version;  // what it will be when i unlock/commit.
+  version_t version = 0;  // dir version when last touched.
+  version_t projected_version = 0;  // what it will be when i unlock/commit.
+
+private:
+  mempool::mds_co::string name;
 };
 
 ostream& operator<<(ostream& out, const CDentry& dn);

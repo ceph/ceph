@@ -24,7 +24,10 @@
 #include "compact_map.h"
 
 #include "ceph_frag.h"
+#include "include/encoding.h"
 #include "include/assert.h"
+
+#include "common/dout.h"
 
 /*
  * 
@@ -160,10 +163,10 @@ inline std::ostream& operator<<(std::ostream& out, const frag_t& hb)
   return out << '*';
 }
 
-inline void encode(frag_t f, bufferlist& bl) { encode_raw(f._enc, bl); }
-inline void decode(frag_t &f, bufferlist::iterator& p) { 
+inline void encode(const frag_t &f, bufferlist& bl) { encode_raw(f._enc, bl); }
+inline void decode(frag_t &f, bufferlist::const_iterator& p) {
   __u32 v;
-  decode_raw(v, p); 
+  decode_raw(v, p);
   f._enc = v;
 }
 
@@ -454,25 +457,29 @@ public:
 
   // encoding
   void encode(bufferlist& bl) const {
-    ::encode(_splits, bl);
+    using ceph::encode;
+    encode(_splits, bl);
   }
-  void decode(bufferlist::iterator& p) {
-    ::decode(_splits, p);
+  void decode(bufferlist::const_iterator& p) {
+    using ceph::decode;
+    decode(_splits, p);
   }
   void encode_nohead(bufferlist& bl) const {
+    using ceph::encode;
     for (compact_map<frag_t,int32_t>::const_iterator p = _splits.begin();
 	 p != _splits.end();
 	 ++p) {
-      ::encode(p->first, bl);
-      ::encode(p->second, bl);
+      encode(p->first, bl);
+      encode(p->second, bl);
     }
   }
-  void decode_nohead(int n, bufferlist::iterator& p) {
+  void decode_nohead(int n, bufferlist::const_iterator& p) {
+    using ceph::decode;
     _splits.clear();
     while (n-- > 0) {
       frag_t f;
-      ::decode(f, p);
-      ::decode(_splits[f], p);
+      decode(f, p);
+      decode(_splits[f], p);
     }
   }
 

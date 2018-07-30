@@ -19,7 +19,7 @@ namespace io {
 struct ReadResult::SetClipLengthVisitor : public boost::static_visitor<void> {
   size_t length;
 
-  SetClipLengthVisitor(size_t length) : length(length) {
+  explicit SetClipLengthVisitor(size_t length) : length(length) {
   }
 
   void operator()(Linear &linear) const {
@@ -62,7 +62,7 @@ struct ReadResult::AssembleResultVisitor : public boost::static_visitor<void> {
     size_t offset = 0;
     int idx = 0;
     for (; offset < length && idx < vector.iov_count; idx++) {
-      size_t len = MIN(vector.iov[idx].iov_len, length - offset);
+      size_t len = std::min(vector.iov[idx].iov_len, length - offset);
       it.copy(len, static_cast<char *>(vector.iov[idx].iov_base));
       offset += len;
     }
@@ -79,13 +79,10 @@ struct ReadResult::AssembleResultVisitor : public boost::static_visitor<void> {
   }
 };
 
-ReadResult::C_ReadRequest::C_ReadRequest(AioCompletion *aio_completion)
-  : aio_completion(aio_completion) {
+ReadResult::C_ImageReadRequest::C_ImageReadRequest(
+    AioCompletion *aio_completion, const Extents image_extents)
+  : aio_completion(aio_completion), image_extents(image_extents) {
   aio_completion->add_request();
-}
-
-void ReadResult::C_ReadRequest::finish(int r) {
-  aio_completion->complete_request(r);
 }
 
 void ReadResult::C_ImageReadRequest::finish(int r) {
@@ -106,36 +103,43 @@ void ReadResult::C_ImageReadRequest::finish(int r) {
     r = length;
   }
 
-  C_ReadRequest::finish(r);
+  aio_completion->complete_request(r);
 }
 
-void ReadResult::C_SparseReadRequestBase::finish(ExtentMap &extent_map,
-                                                 const Extents &buffer_extents,
-                                                 uint64_t offset, size_t length,
-                                                 bufferlist &bl, int r) {
-  aio_completion->lock.Lock();
+ReadResult::C_ObjectReadRequest::C_ObjectReadRequest(
+    AioCompletion *aio_completion, uint64_t object_off, uint64_t object_len,
+    Extents&& buffer_extents)
+  : aio_completion(aio_completion), object_off(object_off),
+    object_len(object_len), buffer_extents(std::move(buffer_extents)) {
+  aio_completion->add_request();
+}
+
+void ReadResult::C_ObjectReadRequest::finish(int r) {
   CephContext *cct = aio_completion->ictx->cct;
-  ldout(cct, 10) << "C_SparseReadRequestBase: r = " << r
+  ldout(cct, 10) << "C_ObjectReadRequest: r=" << r
                  << dendl;
 
-  if (r >= 0 || r == -ENOENT) { // this was a sparse_read operation
+  if (r == -ENOENT) {
+    r = 0;
+  }
+  if (r >= 0) {
     ldout(cct, 10) << " got " << extent_map
                    << " for " << buffer_extents
                    << " bl " << bl.length() << dendl;
-    // reads from the parent don't populate the m_ext_map and the overlap
-    // may not be the full buffer.  compensate here by filling in m_ext_map
-    // with the read extent when it is empty.
+    // handle the case where a sparse-read wasn't issued
     if (extent_map.empty()) {
-      extent_map[offset] = bl.length();
+      extent_map[object_off] = bl.length();
     }
 
+    aio_completion->lock.Lock();
     aio_completion->read_result.m_destriper.add_partial_sparse_result(
-      cct, bl, extent_map, offset, buffer_extents);
-    r = length;
-  }
-  aio_completion->lock.Unlock();
+      cct, bl, extent_map, object_off, buffer_extents);
+    aio_completion->lock.Unlock();
 
-  C_ReadRequest::finish(r);
+    r = object_len;
+  }
+
+  aio_completion->complete_request(r);
 }
 
 ReadResult::ReadResult() : m_buffer(Empty()) {

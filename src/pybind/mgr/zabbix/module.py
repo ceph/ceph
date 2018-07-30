@@ -12,7 +12,10 @@ from mgr_module import MgrModule
 
 
 def avg(data):
-    return sum(data) / float(len(data))
+    if len(data):
+        return sum(data) / float(len(data))
+    else:
+        return 0
 
 
 class ZabbixSender(object):
@@ -28,6 +31,8 @@ class ZabbixSender(object):
 
         cmd = [self.sender, '-z', self.host, '-p', str(self.port), '-s',
                hostname, '-vv', '-i', '-']
+
+        self.log.debug('Executing: %s', cmd)
 
         proc = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
 
@@ -47,12 +52,33 @@ class Module(MgrModule):
     config = dict()
     ceph_health_mapping = {'HEALTH_OK': 0, 'HEALTH_WARN': 1, 'HEALTH_ERR': 2}
 
-    config_keys = {
-        'zabbix_sender': '/usr/bin/zabbix_sender',
-        'zabbix_host': None,
-        'zabbix_port': 10051,
-        'identifier': None, 'interval': 60
-    }
+    @property
+    def config_keys(self):
+        return dict((o['name'], o.get('default', None))
+                for o in self.OPTIONS)
+
+    OPTIONS = [
+            {
+                'name': 'zabbix_sender',
+                'default': '/usr/bin/zabbix_sender'
+            },
+            {
+                'name': 'zabbix_host',
+                'default': None
+            },
+            {
+                'name': 'zabbix_port',
+                'default': 10051
+            },
+            {
+                'name': 'identifier',
+                'default': ""
+            },
+            {
+                'name': 'interval',
+                'default': 60
+            }
+    ]
 
     COMMANDS = [
         {
@@ -68,14 +94,9 @@ class Module(MgrModule):
         },
         {
             "cmd": "zabbix send",
-            "desc": "Force sending data to Zabbux",
+            "desc": "Force sending data to Zabbix",
             "perm": "rw"
         },
-        {
-            "cmd": "zabbix self-test",
-            "desc": "Run a self-test on the Zabbix module",
-            "perm": "r"
-        }
     ]
 
     def __init__(self, *args, **kwargs):
@@ -83,14 +104,11 @@ class Module(MgrModule):
         self.event = Event()
 
     def init_module_config(self):
-        for key, default in self.config_keys.items():
-            value = self.get_localized_config(key, default)
-            if value is None:
-                raise RuntimeError('Configuration key {0} not set; "ceph '
-                                   'config-key set mgr/zabbix/{0} '
-                                   '<value>"'.format(key))
+        self.fsid = self.get('mon_map')['fsid']
+        self.log.debug('Found Ceph fsid %s', self.fsid)
 
-            self.set_config_option(key, value)
+        for key, default in self.config_keys.items():
+            self.set_config_option(key, self.get_config(key, default))
 
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():
@@ -107,7 +125,34 @@ class Module(MgrModule):
         if option == 'interval' and value < 10:
             raise RuntimeError('interval should be set to at least 10 seconds')
 
+        self.log.debug('Setting in-memory config option %s to: %s', option,
+                       value)
         self.config[option] = value
+        return True
+
+    def get_pg_stats(self):
+        stats = dict()
+
+        pg_states = ['active', 'peering', 'clean', 'scrubbing', 'undersized',
+                     'backfilling', 'recovering', 'degraded', 'inconsistent',
+                     'remapped', 'backfill_toofull', 'wait_backfill',
+                     'recovery_wait']
+
+        for state in pg_states:
+            stats['num_pg_{0}'.format(state)] = 0
+
+        pg_status = self.get('pg_status')
+
+        stats['num_pg'] = pg_status['num_pgs']
+
+        for state in pg_status['pgs_by_state']:
+            states = state['state_name'].split('+')
+            for s in pg_states:
+                key = 'num_pg_{0}'.format(s)
+                if s in states:
+                    stats[key] += state['count']
+
+        return stats
 
     def get_data(self):
         data = dict()
@@ -166,58 +211,89 @@ class Module(MgrModule):
         data['num_osd_in'] = num_in
 
         osd_fill = list()
-        osd_apply_latency = list()
-        osd_commit_latency = list()
+        osd_pgs = list()
+        osd_apply_latency_ns = list()
+        osd_commit_latency_ns = list()
 
         osd_stats = self.get('osd_stats')
         for osd in osd_stats['osd_stats']:
+            if osd['kb'] == 0:
+                continue
             osd_fill.append((float(osd['kb_used']) / float(osd['kb'])) * 100)
-            osd_apply_latency.append(osd['perf_stat']['apply_latency_ms'])
-            osd_commit_latency.append(osd['perf_stat']['commit_latency_ms'])
+            osd_pgs.append(osd['num_pgs'])
+            osd_apply_latency_ns.append(osd['perf_stat']['apply_latency_ns'])
+            osd_commit_latency_ns.append(osd['perf_stat']['commit_latency_ns'])
 
         try:
             data['osd_max_fill'] = max(osd_fill)
             data['osd_min_fill'] = min(osd_fill)
             data['osd_avg_fill'] = avg(osd_fill)
+            data['osd_max_pgs'] = max(osd_pgs)
+            data['osd_min_pgs'] = min(osd_pgs)
+            data['osd_avg_pgs'] = avg(osd_pgs)
         except ValueError:
             pass
 
         try:
-            data['osd_latency_apply_max'] = max(osd_apply_latency)
-            data['osd_latency_apply_min'] = min(osd_apply_latency)
-            data['osd_latency_apply_avg'] = avg(osd_apply_latency)
+            data['osd_latency_apply_max'] = max(osd_apply_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_apply_min'] = min(osd_apply_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_apply_avg'] = avg(osd_apply_latency_ns) / 1000000.0 # ns -> ms
 
-            data['osd_latency_commit_max'] = max(osd_commit_latency)
-            data['osd_latency_commit_min'] = min(osd_commit_latency)
-            data['osd_latency_commit_avg'] = avg(osd_commit_latency)
+            data['osd_latency_commit_max'] = max(osd_commit_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_commit_min'] = min(osd_commit_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_commit_avg'] = avg(osd_commit_latency_ns) / 1000000.0 # ns -> ms
         except ValueError:
             pass
 
-        pg_summary = self.get('pg_summary')
-        num_pg = 0
-        for state, num in pg_summary['all'].items():
-            num_pg += num
-
-        data['num_pg'] = num_pg
+        data.update(self.get_pg_stats())
 
         return data
 
     def send(self):
         data = self.get_data()
 
-        self.log.debug('Sending data to Zabbix server %s',
-                       self.config['zabbix_host'])
-        self.log.debug(data)
+        identifier = self.config['identifier']
+        if identifier is None or len(identifier) == 0:
+            identifier = 'ceph-{0}'.format(self.fsid)
+
+        if not self.config['zabbix_host']:
+            self.log.error('Zabbix server not set, please configure using: '
+                           'ceph zabbix config-set zabbix_host <zabbix_host>')
+            self.set_health_checks({
+                'MGR_ZABBIX_NO_SERVER': {
+                    'severity': 'warning',
+                    'summary': 'No Zabbix server configured',
+                    'detail': ['Configuration value zabbix_host not configured']
+                }
+            })
+            return
 
         try:
+            self.log.info(
+                'Sending data to Zabbix server %s as host/identifier %s',
+                self.config['zabbix_host'], identifier)
+            self.log.debug(data)
+
             zabbix = ZabbixSender(self.config['zabbix_sender'],
                                   self.config['zabbix_host'],
                                   self.config['zabbix_port'], self.log)
-            zabbix.send(self.config['identifier'], data)
+
+            zabbix.send(identifier, data)
+            self.set_health_checks(dict())
+            return True
         except Exception as exc:
             self.log.error('Exception when sending: %s', exc)
+            self.set_health_checks({
+                'MGR_ZABBIX_SEND_FAILED': {
+                    'severity': 'warning',
+                    'summary': 'Failed to send data to Zabbix',
+                    'detail': [str(exc)]
+                }
+            })
 
-    def handle_command(self, command):
+        return False
+
+    def handle_command(self, inbuf, command):
         if command['prefix'] == 'zabbix config-show':
             return 0, json.dumps(self.config), ''
         elif command['prefix'] == 'zabbix config-set':
@@ -227,15 +303,18 @@ class Module(MgrModule):
                 return -errno.EINVAL, '', 'Value should not be empty or None'
 
             self.log.debug('Setting configuration option %s to %s', key, value)
-            self.set_config_option(key, value)
-            self.set_localized_config(key, value)
-            return 0, 'Configuration option {0} updated'.format(key), ''
+            if self.set_config_option(key, value):
+                self.set_config(key, value)
+                return 0, 'Configuration option {0} updated'.format(key), ''
+
+            return 1,\
+                'Failed to update configuration option {0}'.format(key), ''
+
         elif command['prefix'] == 'zabbix send':
-            self.send()
-            return 0, 'Sending data to Zabbix', ''
-        elif command['prefix'] == 'zabbix self-test':
-            self.self_test()
-            return 0, 'Self-test succeeded', ''
+            if self.send():
+                return 0, 'Sending data to Zabbix', ''
+
+            return 1, 'Failed to send data to Zabbix', ''
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
@@ -246,22 +325,20 @@ class Module(MgrModule):
         self.event.set()
 
     def serve(self):
-        self.log.debug('Zabbix module starting up')
+        self.log.info('Zabbix module starting up')
         self.run = True
 
         self.init_module_config()
 
-        for key, value in self.config.items():
-            self.log.debug('%s: %s', key, value)
-
         while self.run:
             self.log.debug('Waking up for new iteration')
 
-            # Sometimes fetching data fails, should be fixed by PR #16020
             try:
                 self.send()
             except Exception as exc:
-                self.log.error(exc)
+                # Shouldn't happen, but let's log it and retry next interval,
+                # rather than dying completely.
+                self.log.exception("Unexpected error during send():")
 
             interval = self.config['interval']
             self.log.debug('Sleeping for %d seconds', interval)

@@ -15,6 +15,8 @@
 #ifndef CEPH_MCOMMANDREPLY_H
 #define CEPH_MCOMMANDREPLY_H
 
+#include <string_view>
+
 #include "msg/Message.h"
 #include "MCommand.h"
 
@@ -29,7 +31,7 @@ class MCommandReply : public Message {
     : Message(MSG_COMMAND_REPLY), r(_r) {
     header.tid = m->get_tid();
   }
-  MCommandReply(int _r, string s)
+  MCommandReply(int _r, std::string_view s)
     : Message(MSG_COMMAND_REPLY),
       r(_r), rs(s) { }
 private:
@@ -42,13 +44,14 @@ public:
   }
   
   void encode_payload(uint64_t features) override {
-    ::encode(r, payload);
-    ::encode(rs, payload);
+    using ceph::encode;
+    encode(r, payload);
+    encode(rs, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(r, p);
-    ::decode(rs, p);
+    auto p = payload.cbegin();
+    decode(r, p);
+    decode(rs, p);
   }
 };
 

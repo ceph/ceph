@@ -45,26 +45,25 @@ public:
                       Context *on_finish, uint64_t journal_op_tid);
 
   int snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
-		  const char *snap_name);
+		  const std::string& snap_name);
   void snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
-		   const char *snap_name,
-		   Context *on_finish);
+		   const std::string& snap_name, Context *on_finish);
   void execute_snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
 			   const std::string &snap_name,
 			   Context *on_finish,
                            uint64_t journal_op_tid, bool skip_object_map);
 
   int snap_rollback(const cls::rbd::SnapshotNamespace& snap_namespace,
-		    const char *snap_name,
+		    const std::string& snap_name,
 		    ProgressContext& prog_ctx);
   void execute_snap_rollback(const cls::rbd::SnapshotNamespace& snap_namespace,
 			     const std::string &snap_name,
                              ProgressContext& prog_ctx, Context *on_finish);
 
   int snap_remove(const cls::rbd::SnapshotNamespace& snap_namespace,
-		  const char *snap_name);
+		  const std::string& snap_name);
   void snap_remove(const cls::rbd::SnapshotNamespace& snap_namespace,
-		   const char *snap_name,
+		   const std::string& snap_name,
 		   Context *on_finish);
   void execute_snap_remove(const cls::rbd::SnapshotNamespace& snap_namespace,
 			   const std::string &snap_name,
@@ -76,13 +75,13 @@ public:
                            Context *on_finish);
 
   int snap_protect(const cls::rbd::SnapshotNamespace& snap_namespace,
-		   const char *snap_name);
+		   const std::string& snap_name);
   void execute_snap_protect(const cls::rbd::SnapshotNamespace& snap_namespace,
 			    const std::string &snap_name,
 			    Context *on_finish);
 
   int snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namespace,
-		     const char *snap_name);
+		     const std::string& snap_name);
   void execute_snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namespace,
 			      const std::string &snap_name,
 			      Context *on_finish);
@@ -101,7 +100,7 @@ public:
   int metadata_remove(const std::string &key);
   void execute_metadata_remove(const std::string &key, Context *on_finish);
 
-  int prepare_image_update();
+  int prepare_image_update(bool request_lock);
 
 private:
   ImageCtxT &m_image_ctx;

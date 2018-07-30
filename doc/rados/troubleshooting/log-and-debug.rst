@@ -43,14 +43,14 @@ For example,::
 To activate Ceph's debugging output (*i.e.*, ``dout()``) at runtime,  use the
 ``ceph tell`` command to inject arguments into the runtime configuration:: 
 
-	ceph tell {daemon-type}.{daemon id or *} injectargs --{name} {value} [--{name} {value}]
+	ceph tell {daemon-type}.{daemon id or *} config set {name} {value}
 	
 Replace ``{daemon-type}`` with one of ``osd``, ``mon`` or ``mds``. You may apply
 the runtime setting to all daemons of a particular type with ``*``, or specify
 a specific daemon's ID. For example, to increase
 debug logging for a ``ceph-osd`` daemon named ``osd.0``, execute the following:: 
 
-	ceph tell osd.0 injectargs --debug-osd 0/5
+	ceph tell osd.0 config set debug_osd 0/5
 
 The ``ceph tell`` command goes through the monitors. If you cannot bind to the
 monitor, you can still make the change by logging into the host of the daemon
@@ -182,11 +182,11 @@ to their default level or to a level suitable for normal operations.
 +====================+===========+==============+
 | ``default``        |     0     |      5       |
 +--------------------+-----------+--------------+
-| ``lockdep``        |     0     |      5       |
+| ``lockdep``        |     0     |      1       |
 +--------------------+-----------+--------------+
-| ``context``        |     0     |      5       |
+| ``context``        |     0     |      1       |
 +--------------------+-----------+--------------+
-| ``crush``          |     1     |      5       |
+| ``crush``          |     1     |      1       |
 +--------------------+-----------+--------------+
 | ``mds``            |     1     |      5       |
 +--------------------+-----------+--------------+
@@ -200,17 +200,23 @@ to their default level or to a level suitable for normal operations.
 +--------------------+-----------+--------------+
 | ``mds migrator``   |     1     |      5       |
 +--------------------+-----------+--------------+
-| ``buffer``         |     0     |      0       |
+| ``buffer``         |     0     |      1       |
 +--------------------+-----------+--------------+
-| ``timer``          |     0     |      5       |
+| ``timer``          |     0     |      1       |
 +--------------------+-----------+--------------+
-| ``filer``          |     0     |      5       |
+| ``filer``          |     0     |      1       |
 +--------------------+-----------+--------------+
-| ``objecter``       |     0     |      0       |
+| ``striper``        |     0     |      1       |
++--------------------+-----------+--------------+
+| ``objecter``       |     0     |      1       |
 +--------------------+-----------+--------------+
 | ``rados``          |     0     |      5       |
 +--------------------+-----------+--------------+
 | ``rbd``            |     0     |      5       |
++--------------------+-----------+--------------+
+| ``rbd mirror``     |     0     |      5       |
++--------------------+-----------+--------------+
+| ``rbd replay``     |     0     |      5       |
 +--------------------+-----------+--------------+
 | ``journaler``      |     0     |      5       |
 +--------------------+-----------+--------------+
@@ -218,29 +224,33 @@ to their default level or to a level suitable for normal operations.
 +--------------------+-----------+--------------+
 | ``client``         |     0     |      5       |
 +--------------------+-----------+--------------+
-| ``osd``            |     0     |      5       |
+| ``osd``            |     1     |      5       |
 +--------------------+-----------+--------------+
 | ``optracker``      |     0     |      5       |
 +--------------------+-----------+--------------+
 | ``objclass``       |     0     |      5       |
 +--------------------+-----------+--------------+
-| ``filestore``      |     1     |      5       |
+| ``filestore``      |     1     |      3       |
 +--------------------+-----------+--------------+
-| ``journal``        |     1     |      5       |
+| ``journal``        |     1     |      3       |
 +--------------------+-----------+--------------+
 | ``ms``             |     0     |      5       |
 +--------------------+-----------+--------------+
 | ``mon``            |     1     |      5       |
 +--------------------+-----------+--------------+
-| ``monc``           |     0     |      5       |
+| ``monc``           |     0     |      10      |
 +--------------------+-----------+--------------+
-| ``paxos``          |     0     |      5       |
+| ``paxos``          |     1     |      5       |
 +--------------------+-----------+--------------+
 | ``tp``             |     0     |      5       |
 +--------------------+-----------+--------------+
 | ``auth``           |     1     |      5       |
 +--------------------+-----------+--------------+
-| ``finisher``       |     1     |      5       |
+| ``crypto``         |     1     |      5       |
++--------------------+-----------+--------------+
+| ``finisher``       |     1     |      1       |
++--------------------+-----------+--------------+
+| ``reserver``       |     1     |      1       |
 +--------------------+-----------+--------------+
 | ``heartbeatmap``   |     1     |      5       |
 +--------------------+-----------+--------------+
@@ -248,11 +258,43 @@ to their default level or to a level suitable for normal operations.
 +--------------------+-----------+--------------+
 | ``rgw``            |     1     |      5       |
 +--------------------+-----------+--------------+
+| ``rgw sync``       |     1     |      5       |
++--------------------+-----------+--------------+
+| ``civetweb``       |     1     |      10      |
++--------------------+-----------+--------------+
 | ``javaclient``     |     1     |      5       |
 +--------------------+-----------+--------------+
 | ``asok``           |     1     |      5       |
 +--------------------+-----------+--------------+
-| ``throttle``       |     1     |      5       |
+| ``throttle``       |     1     |      1       |
++--------------------+-----------+--------------+
+| ``refs``           |     0     |      0       |
++--------------------+-----------+--------------+
+| ``compressor``     |     1     |      5       |
++--------------------+-----------+--------------+
+| ``bluestore``      |     1     |      5       |
++--------------------+-----------+--------------+
+| ``bluefs``         |     1     |      5       |
++--------------------+-----------+--------------+
+| ``bdev``           |     1     |      3       |
++--------------------+-----------+--------------+
+| ``kstore``         |     1     |      5       |
++--------------------+-----------+--------------+
+| ``rocksdb``        |     4     |      5       |
++--------------------+-----------+--------------+
+| ``leveldb``        |     4     |      5       |
++--------------------+-----------+--------------+
+| ``memdb``          |     4     |      5       |
++--------------------+-----------+--------------+
+| ``fuse``           |     1     |      5       |
++--------------------+-----------+--------------+
+| ``mgr``            |     1     |      5       |
++--------------------+-----------+--------------+
+| ``mgrc``           |     1     |      5       |
++--------------------+-----------+--------------+
+| ``dpdk``           |     1     |      5       |
++--------------------+-----------+--------------+
+| ``eventtrace``     |     1     |      5       |
 +--------------------+-----------+--------------+
 
 
@@ -285,7 +327,7 @@ settings:
 :Description: The maximum number of recent events to include in a log file.
 :Type: Integer
 :Required:  No
-:Default: ``1000000``
+:Default: ``10000``
 
 
 ``log to stderr``
@@ -354,10 +396,17 @@ settings:
 
 ``mon cluster log file``
 
-:Description: The location of the cluster's log file. 
+:Description: The locations of the cluster's log files. There are two channels in
+              Ceph: ``cluster`` and ``audit``. This option represents a mapping
+              from channels to log files, where the log entries of that
+              channel are sent to. The ``default`` entry is a fallback
+              mapping for channels not explicitly specified. So, the following
+              default setting will send cluster log to ``$cluster.log``, and
+              send audit log to ``$cluster.audit.log``, where ``$cluster`` will
+              be replaced with the actual cluster name.
 :Type: String
 :Required: No
-:Default: ``/var/log/ceph/$cluster.log``
+:Default: ``default=/var/log/ceph/$cluster.$channel.log,cluster=/var/log/ceph/$cluster.log``
 
 
 

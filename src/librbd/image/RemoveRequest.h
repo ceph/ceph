@@ -4,6 +4,8 @@
 #ifndef CEPH_LIBRBD_IMAGE_REMOVE_REQUEST_H
 #define CEPH_LIBRBD_IMAGE_REMOVE_REQUEST_H
 
+#include "include/rados/librados.hpp"
+#include "librbd/ImageCtx.h"
 #include "librbd/image/TypeTraits.h"
 
 class Context;
@@ -12,7 +14,6 @@ class SafeTimer;
 
 namespace librbd {
 
-class ImageCtx;
 class ProgressContext;
 
 namespace image {
@@ -58,12 +59,15 @@ private:
    * |               |                   v                |     |
    * |               |            VALIDATE IMAGE REMOVAL<-/     |
    * |               |                /  |                      v
-   * |               \------<--------/   |             		|
+   * |               \------<--------/   |   /------\ 		|
+   * |                                   v   v      |           |
+   * |                             REMOVE SNAPS ----/           |
+   * |                                   |                      |
    * |                                   v                      |
    * |                              TRIM IMAGE                  |
    * |                                   |                      |
    * v                                   v                      |
-   * |                            REMOVE CHILD                  |
+   * |                              DETACH CHILD                |
    * |                                   |                      |
    * |                                   v                      v
    * \--------->------------------>CLOSE IMAGE                  |
@@ -118,12 +122,16 @@ private:
   bool m_unknown_format = true;
   ImageCtxT *m_image_ctx;
 
+  librados::IoCtx m_parent_io_ctx;
+
   decltype(m_image_ctx->exclusive_lock) m_exclusive_lock = nullptr;
 
   int m_ret_val = 0;
   bufferlist m_out_bl;
   std::list<obj_watch_t> m_watchers;
   std::list<obj_watch_t> m_mirror_watchers;
+
+  std::map<uint64_t, SnapInfo> m_snap_infos;
 
   void open_image();
   void handle_open_image(int r);
@@ -160,11 +168,14 @@ private:
   void check_group();
   void handle_check_group(int r);
 
+  void remove_snapshot();
+  void handle_remove_snapshot(int r);
+
   void trim_image();
   void handle_trim_image(int r);
 
-  void remove_child();
-  void handle_remove_child(int r);
+  void detach_child();
+  void handle_detach_child(int r);
 
   void send_disable_mirror();
   void handle_disable_mirror(int r);

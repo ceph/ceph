@@ -107,7 +107,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
 
   // Load scan_ceiling
   try {
-    bufferlist::iterator scan_ceiling_bl_iter = scan_ceiling_bl.begin();
+    auto scan_ceiling_bl_iter = scan_ceiling_bl.cbegin();
     ObjCeiling ceiling;
     ceiling.decode(scan_ceiling_bl_iter);
     result->ceiling_obj_index = ceiling.id;
@@ -119,8 +119,8 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
 
   // Load scan_max_size
   try {
-    bufferlist::iterator scan_max_size_bl_iter = scan_max_size_bl.begin();
-    ::decode(result->max_obj_size, scan_max_size_bl_iter);
+    auto scan_max_size_bl_iter = scan_max_size_bl.cbegin();
+    decode(result->max_obj_size, scan_max_size_bl_iter);
   } catch (const buffer::error &err) {
     //dout(4) << "Invalid size attr on '" << oid << "'" << dendl;
     return -EINVAL;
@@ -128,8 +128,8 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
 
   // Load scan_max_mtime
   try {
-    bufferlist::iterator scan_max_mtime_bl_iter = scan_max_mtime_bl.begin();
-    ::decode(result->max_mtime, scan_max_mtime_bl_iter);
+    auto scan_max_mtime_bl_iter = scan_max_mtime_bl.cbegin();
+    decode(result->max_mtime, scan_max_mtime_bl_iter);
   } catch (const buffer::error &err) {
     //dout(4) << "Invalid size attr on '" << oid << "'" << dendl;
     return -EINVAL;
@@ -138,7 +138,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   // Deserialize backtrace
   if (parent_bl.length()) {
     try {
-      bufferlist::iterator q = parent_bl.begin();
+      auto q = parent_bl.cbegin();
       backtrace->decode(q);
     } catch (buffer::error &e) {
       //dout(4) << "Corrupt backtrace on '" << oid << "': " << e << dendl;
@@ -149,8 +149,8 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   // Deserialize layout
   if (layout_bl.length()) {
     try {
-      bufferlist::iterator q = layout_bl.begin();
-      ::decode(*layout, q);
+      auto q = layout_bl.cbegin();
+      decode(*layout, q);
     } catch (buffer::error &e) {
       return -EINVAL;
     }
@@ -166,11 +166,10 @@ void ClsCephFSClient::build_tag_filter(
   assert(out_bl != NULL);
 
   // Leading part of bl is un-versioned string naming the filter
-  ::encode(std::string("cephfs.inode_tag"), *out_bl);
+  encode(std::string("cephfs.inode_tag"), *out_bl);
 
   // Filter-specific part of the bl: in our case this is a versioned structure
   InodeTagFilterArgs args;
   args.scrub_tag = scrub_tag;
   args.encode(*out_bl);
 }
-

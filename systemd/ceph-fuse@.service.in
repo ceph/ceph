@@ -1,0 +1,18 @@
+[Unit]
+Description=Ceph FUSE client
+After=network-online.target local-fs.target time-sync.target
+Wants=network-online.target local-fs.target time-sync.target
+Conflicts=umount.target
+PartOf=ceph-fuse.target
+
+[Service]
+EnvironmentFile=-@SYSTEMD_ENV_FILE@
+Environment=CLUSTER=ceph
+ExecStart=/usr/bin/ceph-fuse -f --cluster ${CLUSTER} %I
+TasksMax=infinity
+Restart=on-failure
+StartLimitInterval=30min
+StartLimitBurst=3
+
+[Install]
+WantedBy=ceph-fuse.target

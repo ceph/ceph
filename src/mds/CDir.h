@@ -17,24 +17,21 @@
 #ifndef CEPH_CDIR_H
 #define CEPH_CDIR_H
 
-#include "include/counter.h"
-#include "include/types.h"
-#include "include/buffer_fwd.h"
+#include <iosfwd>
+#include <list>
+#include <map>
+#include <set>
+#include <string>
+#include <string_view>
+
 #include "common/bloom_filter.hpp"
 #include "common/config.h"
-#include "common/DecayCounter.h"
-
-#include "MDSCacheObject.h"
-
-#include <iosfwd>
-
-#include <list>
-#include <set>
-#include <map>
-#include <string>
-
+#include "include/buffer_fwd.h"
+#include "include/counter.h"
+#include "include/types.h"
 
 #include "CInode.h"
+#include "MDSCacheObject.h"
 
 class CDentry;
 class MDCache;
@@ -43,6 +40,9 @@ struct ObjectOperation;
 
 ostream& operator<<(ostream& out, const class CDir& dir);
 class CDir : public MDSCacheObject, public Counter<CDir> {
+  using time = ceph::coarse_mono_time;
+  using clock = ceph::coarse_mono_clock;
+
   friend ostream& operator<<(ostream& out, const class CDir& dir);
 
 public:
@@ -75,29 +75,29 @@ public:
   }
 
   // -- state --
-  static const unsigned STATE_COMPLETE =      (1<< 1);   // the complete contents are in cache
-  static const unsigned STATE_FROZENTREE =    (1<< 2);   // root of tree (bounded by exports)
-  static const unsigned STATE_FREEZINGTREE =  (1<< 3);   // in process of freezing 
-  static const unsigned STATE_FROZENDIR =     (1<< 4);
-  static const unsigned STATE_FREEZINGDIR =   (1<< 5);
-  static const unsigned STATE_COMMITTING =    (1<< 6);   // mid-commit
-  static const unsigned STATE_FETCHING =      (1<< 7);   // currenting fetching
-  static const unsigned STATE_CREATING =      (1<< 8);
-  static const unsigned STATE_IMPORTBOUND =   (1<<10);
-  static const unsigned STATE_EXPORTBOUND =   (1<<11);
-  static const unsigned STATE_EXPORTING =     (1<<12);
-  static const unsigned STATE_IMPORTING =     (1<<13);
-  static const unsigned STATE_FRAGMENTING =   (1<<14);
-  static const unsigned STATE_STICKY =        (1<<15);  // sticky pin due to inode stickydirs
-  static const unsigned STATE_DNPINNEDFRAG =  (1<<16);  // dir is refragmenting
-  static const unsigned STATE_ASSIMRSTAT =    (1<<17);  // assimilating inode->frag rstats
-  static const unsigned STATE_DIRTYDFT =      (1<<18);  // dirty dirfragtree
-  static const unsigned STATE_BADFRAG =       (1<<19);  // bad dirfrag
-  static const unsigned STATE_AUXSUBTREE =    (1<<20);  // no subtree merge
+  static const unsigned STATE_COMPLETE =      (1<< 0);   // the complete contents are in cache
+  static const unsigned STATE_FROZENTREE =    (1<< 1);   // root of tree (bounded by exports)
+  static const unsigned STATE_FREEZINGTREE =  (1<< 2);   // in process of freezing
+  static const unsigned STATE_FROZENDIR =     (1<< 3);
+  static const unsigned STATE_FREEZINGDIR =   (1<< 4);
+  static const unsigned STATE_COMMITTING =    (1<< 5);   // mid-commit
+  static const unsigned STATE_FETCHING =      (1<< 6);   // currenting fetching
+  static const unsigned STATE_CREATING =      (1<< 7);
+  static const unsigned STATE_IMPORTBOUND =   (1<< 8);
+  static const unsigned STATE_EXPORTBOUND =   (1<< 9);
+  static const unsigned STATE_EXPORTING =     (1<<10);
+  static const unsigned STATE_IMPORTING =     (1<<11);
+  static const unsigned STATE_FRAGMENTING =   (1<<12);
+  static const unsigned STATE_STICKY =        (1<<13);  // sticky pin due to inode stickydirs
+  static const unsigned STATE_DNPINNEDFRAG =  (1<<14);  // dir is refragmenting
+  static const unsigned STATE_ASSIMRSTAT =    (1<<15);  // assimilating inode->frag rstats
+  static const unsigned STATE_DIRTYDFT =      (1<<16);  // dirty dirfragtree
+  static const unsigned STATE_BADFRAG =       (1<<17);  // bad dirfrag
+  static const unsigned STATE_TRACKEDBYOFT =  (1<<18);  // tracked by open file table
+  static const unsigned STATE_AUXSUBTREE =    (1<<19);  // no subtree merge
 
   // common states
   static const unsigned STATE_CLEAN =  0;
-  static const unsigned STATE_INITIAL = 0;
 
   // these state bits are preserved by an import/export
   // ...except if the directory is hashed, in which case none of them are!
@@ -105,18 +105,22 @@ public:
   (STATE_COMPLETE|STATE_DIRTY|STATE_DIRTYDFT|STATE_BADFRAG);
   static const unsigned MASK_STATE_IMPORT_KEPT = 
   (						  
-   STATE_IMPORTING
-   |STATE_IMPORTBOUND|STATE_EXPORTBOUND
-   |STATE_FROZENTREE
-   |STATE_STICKY);
+   STATE_IMPORTING |
+   STATE_IMPORTBOUND |
+   STATE_EXPORTBOUND |
+   STATE_FROZENTREE |
+   STATE_STICKY |
+   STATE_TRACKEDBYOFT);
   static const unsigned MASK_STATE_EXPORT_KEPT = 
-  (STATE_EXPORTING
-   |STATE_IMPORTBOUND|STATE_EXPORTBOUND
-   |STATE_FROZENTREE
-   |STATE_FROZENDIR
-   |STATE_STICKY);
+  (STATE_EXPORTING |
+   STATE_IMPORTBOUND |
+   STATE_EXPORTBOUND |
+   STATE_FROZENTREE |
+   STATE_FROZENDIR |
+   STATE_STICKY |
+   STATE_TRACKEDBYOFT);
   static const unsigned MASK_STATE_FRAGMENT_KEPT = 
-  (STATE_DIRTY|
+  (STATE_DIRTY |
    STATE_EXPORTBOUND |
    STATE_IMPORTBOUND |
    STATE_AUXSUBTREE |
@@ -143,8 +147,18 @@ public:
   static const uint64_t WAIT_ATFREEZEROOT = (WAIT_UNFREEZE);
   static const uint64_t WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
 
-
-
+  // -- dump flags --
+  static const int DUMP_PATH             = (1 << 0);
+  static const int DUMP_DIRFRAG          = (1 << 1);
+  static const int DUMP_SNAPID_FIRST     = (1 << 2);
+  static const int DUMP_VERSIONS         = (1 << 3);
+  static const int DUMP_REP              = (1 << 4);
+  static const int DUMP_DIR_AUTH         = (1 << 5);
+  static const int DUMP_STATES           = (1 << 6);
+  static const int DUMP_MDS_CACHE_OBJECT = (1 << 7);
+  static const int DUMP_ITEMS            = (1 << 8);
+  static const int DUMP_ALL              = (-1);
+  static const int DUMP_DEFAULT          = DUMP_ALL & (~DUMP_ITEMS); 
 
  public:
   // context
@@ -159,7 +173,7 @@ public:
 
   fnode_t fnode;
   snapid_t first;
-  compact_map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
+  mempool::mds_co::compact_map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
 
   // my inodes with dirty rstat data
   elist<CInode*> dirty_rstat_inodes;     
@@ -169,13 +183,22 @@ public:
   void assimilate_dirty_rstat_inodes();
   void assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blob);
 
+  void mark_exporting() {
+    state_set(CDir::STATE_EXPORTING);
+    inode->num_exporting_dirs++;
+  }
+  void clear_exporting() {
+    state_clear(CDir::STATE_EXPORTING);
+    inode->num_exporting_dirs--;
+  }
+
 protected:
   version_t projected_version;
-  std::list<fnode_t*> projected_fnode;
+  mempool::mds_co::list<fnode_t> projected_fnode;
 
 public:
+  elist<CDentry*> dirty_dentries;
   elist<CDir*>::item item_dirty, item_new;
-
 
 public:
   version_t get_version() const { return fnode.version; }
@@ -189,14 +212,14 @@ public:
     if (projected_fnode.empty())
       return &fnode;
     else
-      return projected_fnode.back();
+      return &projected_fnode.back();
   }
 
   fnode_t *get_projected_fnode() {
     if (projected_fnode.empty())
       return &fnode;
     else
-      return projected_fnode.back();
+      return &projected_fnode.back();
   }
   fnode_t *project_fnode();
 
@@ -221,12 +244,13 @@ private:
   void log_mark_dirty();
 
 public:
-  typedef std::map<dentry_key_t, CDentry*> map_t;
+  typedef mempool::mds_co::map<dentry_key_t, CDentry*> dentry_key_map;
+  typedef mempool::mds_co::set<dentry_key_t> dentry_key_set;
 
   class scrub_info_t {
   public:
     /// inodes we contain with dirty scrub stamps
-    map<dentry_key_t,CInode*> dirty_scrub_stamps; // TODO: make use of this!
+    dentry_key_map dirty_scrub_stamps; // TODO: make use of this!
     struct scrub_stamps {
       version_t version;
       utime_t time;
@@ -247,12 +271,12 @@ public:
     bool pending_scrub_error;
 
     /// these are lists of children in each stage of scrubbing
-    set<dentry_key_t> directories_to_scrub;
-    set<dentry_key_t> directories_scrubbing;
-    set<dentry_key_t> directories_scrubbed;
-    set<dentry_key_t> others_to_scrub;
-    set<dentry_key_t> others_scrubbing;
-    set<dentry_key_t> others_scrubbed;
+    dentry_key_set directories_to_scrub;
+    dentry_key_set directories_scrubbing;
+    dentry_key_set directories_scrubbed;
+    dentry_key_set others_to_scrub;
+    dentry_key_set others_scrubbing;
+    dentry_key_set others_scrubbed;
 
     ScrubHeaderRefConst header;
 
@@ -290,7 +314,7 @@ public:
    * list will be filled with all CDentry * which have been returned
    * from scrub_dentry_next() but not sent back via scrub_dentry_finished().
    */
-  void scrub_dentries_scrubbing(list<CDentry*> *out_dentries);
+  void scrub_dentries_scrubbing(std::list<CDentry*> *out_dentries);
   /**
    * Report to the CDir that a CDentry has been scrubbed. Call this
    * for every CDentry returned from scrub_dentry_next().
@@ -321,15 +345,15 @@ private:
    * Check the given set (presumably one of those in scrub_info_t) for the
    * next key to scrub and look it up (or fail!).
    */
-  int _next_dentry_on_set(set<dentry_key_t>& dns, bool missing_okay,
+  int _next_dentry_on_set(dentry_key_set &dns, bool missing_okay,
                           MDSInternalContext *cb, CDentry **dnout);
 
 
 protected:
-  std::unique_ptr<scrub_info_t> scrub_infop;
+  std::unique_ptr<scrub_info_t> scrub_infop; // FIXME not in mempool
 
   // contents of this directory
-  map_t items;       // non-null AND null
+  dentry_key_map items;       // non-null AND null
   unsigned num_head_items;
   unsigned num_head_null;
   unsigned num_snap_items;
@@ -337,11 +361,13 @@ protected:
 
   int num_dirty;
 
+  int num_inodes_with_caps = 0;
+
   // state
   version_t committing_version;
   version_t committed_version;
 
-  compact_set<string> stale_items;
+  mempool::mds_co::compact_set<mempool::mds_co::string> stale_items;
 
   // lock nesting, freeze
   static int num_frozen_trees;
@@ -352,7 +378,7 @@ protected:
 
   // cache control  (defined for authority; hints for replicas)
   __s32      dir_rep;
-  compact_set<__s32> dir_rep_by;      // if dir_rep == REP_LIST
+  mempool::mds_co::compact_set<__s32> dir_rep_by;      // if dir_rep == REP_LIST
 
   // popularity
   dirfrag_load_vec_t pop_me;
@@ -360,9 +386,11 @@ protected:
   dirfrag_load_vec_t pop_auth_subtree;
   dirfrag_load_vec_t pop_auth_subtree_nested;
  
-  utime_t last_popularity_sample;
+  time last_popularity_sample = clock::zero();
 
   load_spread_t pop_spread;
+
+  elist<CInode*> pop_lru_subdirs;
 
   // and to provide density
   int num_dentries_nested;
@@ -384,7 +412,7 @@ protected:
   friend class C_IO_Dir_OMAP_FetchedMore;
   friend class C_IO_Dir_Committed;
 
-  std::unique_ptr<bloom_filter> bloom;
+  std::unique_ptr<bloom_filter> bloom; // XXX not part of mempool::mds_co
   /* If you set up the bloom filter, you must keep it accurate!
    * It's deleted when you mark_complete() and is deliberately not serialized.*/
 
@@ -408,9 +436,9 @@ protected:
   const CInode *get_inode() const { return inode; }
   CDir *get_parent_dir() { return inode->get_parent_dir(); }
 
-  map_t::iterator begin() { return items.begin(); }
-  map_t::iterator end() { return items.end(); }
-  map_t::iterator lower_bound(dentry_key_t key) { return items.lower_bound(key); }
+  dentry_key_map::iterator begin() { return items.begin(); }
+  dentry_key_map::iterator end() { return items.end(); }
+  dentry_key_map::iterator lower_bound(dentry_key_t key) { return items.lower_bound(key); }
 
   unsigned get_num_head_items() const { return num_head_items; }
   unsigned get_num_head_null() const { return num_head_null; }
@@ -429,23 +457,25 @@ protected:
     return num_dirty;
   }
 
+  void adjust_num_inodes_with_caps(int d);
+
   int64_t get_frag_size() const {
     return get_projected_fnode()->fragstat.size();
   }
 
   // -- dentries and inodes --
  public:
-  CDentry* lookup_exact_snap(const std::string& dname, snapid_t last);
-  CDentry* lookup(const std::string& n, snapid_t snap=CEPH_NOSNAP);
+  CDentry* lookup_exact_snap(std::string_view dname, snapid_t last);
+  CDentry* lookup(std::string_view n, snapid_t snap=CEPH_NOSNAP);
   CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP) {
-    return lookup(std::string(n), snap);
+    return lookup(std::string_view(n), snap);
   }
 
-  CDentry* add_null_dentry(const std::string& dname, 
+  CDentry* add_null_dentry(std::string_view dname,
 			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
-  CDentry* add_primary_dentry(const std::string& dname, CInode *in, 
+  CDentry* add_primary_dentry(std::string_view dname, CInode *in,
 			      snapid_t first=2, snapid_t last=CEPH_NOSNAP);
-  CDentry* add_remote_dentry(const std::string& dname, inodeno_t ino, unsigned char d_type, 
+  CDentry* add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned char d_type,
 			     snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
@@ -455,7 +485,7 @@ protected:
   void try_remove_unlinked_dn(CDentry *dn);
 
   void add_to_bloom(CDentry *dn);
-  bool is_in_bloom(const std::string& name);
+  bool is_in_bloom(std::string_view name);
   bool has_bloom() { return (bloom ? true : false); }
   void remove_bloom() {
     bloom.reset();
@@ -471,22 +501,22 @@ public:
 
 
 public:
-  void split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay);
-  void merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay);
+  void split(int bits, std::list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay);
+  void merge(std::list<CDir*>& subs, std::list<MDSInternalContextBase*>& waiters, bool replay);
 
   bool should_split() const {
-    return (int)get_frag_size() > g_conf->mds_bal_split_size;
+    return (int)get_frag_size() > g_conf()->mds_bal_split_size;
   }
   bool should_split_fast() const;
   bool should_merge() const {
-    return (int)get_frag_size() < g_conf->mds_bal_merge_size;
+    return (int)get_frag_size() < g_conf()->mds_bal_merge_size;
   }
 
 private:
   void prepare_new_fragment(bool replay);
   void prepare_old_fragment(map<string_snap_t, std::list<MDSInternalContextBase*> >& dentry_waiters, bool replay);
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
-  void finish_old_fragment(list<MDSInternalContextBase*>& waiters, bool replay);
+  void finish_old_fragment(std::list<MDSInternalContextBase*>& waiters, bool replay);
   void init_fragment_pins();
 
 
@@ -504,7 +534,7 @@ private:
  public:
   mds_authority_t authority() const override;
   mds_authority_t get_dir_auth() const { return dir_auth; }
-  void set_dir_auth(mds_authority_t a);
+  void set_dir_auth(const mds_authority_t &a);
   void set_dir_auth(mds_rank_t a) { set_dir_auth(mds_authority_t(a, CDIR_AUTH_UNKNOWN)); }
   bool is_ambiguous_dir_auth() const {
     return dir_auth.second != CDIR_AUTH_UNKNOWN;
@@ -543,31 +573,31 @@ private:
     if (is_auth()) 
       get_dist_spec(dist, whoami);
 
-    ::encode(frag, bl);
-    ::encode(auth, bl);
-    ::encode(dist, bl);
+    encode(frag, bl);
+    encode(auth, bl);
+    encode(dist, bl);
   }
 
   void _encode_base(bufferlist& bl) {
-    ::encode(first, bl);
-    ::encode(fnode, bl);
-    ::encode(dir_rep, bl);
-    ::encode(dir_rep_by, bl);
+    encode(first, bl);
+    encode(fnode, bl);
+    encode(dir_rep, bl);
+    encode(dir_rep_by, bl);
   }
-  void _decode_base(bufferlist::iterator& p) {
-    ::decode(first, p);
-    ::decode(fnode, p);
-    ::decode(dir_rep, p);
-    ::decode(dir_rep_by, p);
+  void _decode_base(bufferlist::const_iterator& p) {
+    decode(first, p);
+    decode(fnode, p);
+    decode(dir_rep, p);
+    decode(dir_rep_by, p);
   }
   void encode_replica(mds_rank_t who, bufferlist& bl) {
     __u32 nonce = add_replica(who);
-    ::encode(nonce, bl);
+    encode(nonce, bl);
     _encode_base(bl);
   }
-  void decode_replica(bufferlist::iterator& p) {
+  void decode_replica(bufferlist::const_iterator& p) {
     __u32 nonce;
-    ::decode(nonce, p);
+    decode(nonce, p);
     replica_nonce = nonce;
     _decode_base(p);
   }
@@ -591,24 +621,23 @@ private:
     return file_object_t(ino(), frag);
   }
   void fetch(MDSInternalContextBase *c, bool ignore_authpinnability=false);
-  void fetch(MDSInternalContextBase *c, const std::string& want_dn, bool ignore_authpinnability=false);
+  void fetch(MDSInternalContextBase *c, std::string_view want_dn, bool ignore_authpinnability=false);
   void fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& keys);
 protected:
-  compact_set<string> wanted_items;
+  mempool::mds_co::compact_set<mempool::mds_co::string> wanted_items;
 
   void _omap_fetch(MDSInternalContextBase *fin, const std::set<dentry_key_t>& keys);
   void _omap_fetch_more(
     bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
     MDSInternalContextBase *fin);
   CDentry *_load_dentry(
-      const std::string &key,
-      const std::string &dname,
+      std::string_view key,
+      std::string_view dname,
       snapid_t last,
       bufferlist &bl,
       int pos,
       const std::set<snapid_t> *snaps,
-      bool *force_dirty,
-      list<CInode*> *undef_inodes);
+      bool *force_dirty);
 
   /**
    * Mark this fragment as BADFRAG (common part of go_bad and go_bad_dentry)
@@ -618,7 +647,7 @@ protected:
   /**
    * Go bad due to a damaged dentry (register with damagetable and go BADFRAG)
    */
-  void go_bad_dentry(snapid_t last, const std::string &dname);
+  void go_bad_dentry(snapid_t last, std::string_view dname);
 
   /**
    * Go bad due to a damaged header (register with damagetable and go BADFRAG)
@@ -629,7 +658,7 @@ protected:
 		     bool complete, int r);
 
   // -- commit --
-  compact_map<version_t, std::list<MDSInternalContextBase*> > waiting_for_commit;
+  mempool::mds_co::compact_map<version_t, mempool::mds_co::list<MDSInternalContextBase*> > waiting_for_commit;
   void _commit(version_t want, int op_prio);
   void _omap_commit(int op_prio);
   void _encode_dentry(CDentry *dn, bufferlist& bl, const std::set<snapid_t> *snaps);
@@ -665,14 +694,14 @@ public:
 
   // -- waiters --
 protected:
-  compact_map< string_snap_t, std::list<MDSInternalContextBase*> > waiting_on_dentry;
+  mempool::mds_co::compact_map< string_snap_t, mempool::mds_co::list<MDSInternalContextBase*> > waiting_on_dentry; // FIXME string_snap_t not in mempool
 
 public:
-  bool is_waiting_for_dentry(const std::string& dname, snapid_t snap) {
+  bool is_waiting_for_dentry(std::string_view dname, snapid_t snap) {
     return waiting_on_dentry.count(string_snap_t(dname, snap));
   }
-  void add_dentry_waiter(const std::string& dentry, snapid_t snap, MDSInternalContextBase *c);
-  void take_dentry_waiting(const std::string& dentry, snapid_t first, snapid_t last, std::list<MDSInternalContextBase*>& ls);
+  void add_dentry_waiter(std::string_view dentry, snapid_t snap, MDSInternalContextBase *c);
+  void take_dentry_waiting(std::string_view dentry, snapid_t first, snapid_t last, std::list<MDSInternalContextBase*>& ls);
   void take_sub_waiting(std::list<MDSInternalContextBase*>& ls);  // dentry or ino
 
   void add_waiter(uint64_t mask, MDSInternalContextBase *c) override;
@@ -682,11 +711,12 @@ public:
 
   // -- import/export --
   void encode_export(bufferlist& bl);
-  void finish_export(utime_t now);
+  void finish_export();
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls);
+  void decode_import(bufferlist::const_iterator& blp, LogSegment *ls);
+  void abort_import();
 
   // -- auth pins --
   bool can_auth_pin() const override { return is_auth() && !(is_frozen() || is_freezing()); }
@@ -748,7 +778,8 @@ public:
 
   ostream& print_db_line_prefix(ostream& out) override;
   void print(ostream& out) override;
-  void dump(Formatter *f) const;
+  void dump(Formatter *f, int flags = DUMP_DEFAULT) const;
+  void dump_load(Formatter *f);
 };
 
 #endif

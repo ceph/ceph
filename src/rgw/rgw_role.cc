@@ -1,7 +1,6 @@
 #include <errno.h>
 #include <ctime>
-
-#include <boost/regex.hpp>
+#include <regex>
 
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -18,7 +17,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 const string RGWRole::role_name_oid_prefix = "role_names.";
 const string RGWRole::role_oid_prefix = "roles.";
@@ -27,12 +25,13 @@ const string RGWRole::role_arn_prefix = "arn:aws:iam::";
 
 int RGWRole::store_info(bool exclusive)
 {
+  using ceph::encode;
   string oid = get_info_oid_prefix() + id;
 
   bufferlist bl;
-  ::encode(*this, bl);
+  encode(*this, bl);
   return rgw_put_system_obj(store, store->get_zone_params().roles_pool, oid,
-                bl.c_str(), bl.length(), exclusive, NULL, real_time(), NULL);
+                bl, exclusive, NULL, real_time(), NULL);
 }
 
 int RGWRole::store_name(bool exclusive)
@@ -43,17 +42,19 @@ int RGWRole::store_name(bool exclusive)
   string oid = tenant + get_names_oid_prefix() + name;
 
   bufferlist bl;
-  ::encode(nameToId, bl);
+  using ceph::encode;
+  encode(nameToId, bl);
   return rgw_put_system_obj(store, store->get_zone_params().roles_pool, oid,
-              bl.c_str(), bl.length(), exclusive, NULL, real_time(), NULL);
+              bl, exclusive, NULL, real_time(), NULL);
 }
 
 int RGWRole::store_path(bool exclusive)
 {
   string oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
 
+  bufferlist bl;
   return rgw_put_system_obj(store, store->get_zone_params().roles_pool, oid,
-              NULL, 0, exclusive, NULL, real_time(), NULL);
+              bl, exclusive, NULL, real_time(), NULL);
 }
 
 int RGWRole::create(bool exclusive)
@@ -302,8 +303,9 @@ int RGWRole::read_id(const string& role_name, const string& tenant, string& role
 
   RGWNameToId nameToId;
   try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(nameToId, iter);
+    auto iter = bl.cbegin();
+    using ceph::decode;
+    decode(nameToId, iter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "ERROR: failed to decode role from pool: " << pool.name << ": "
                   << role_name << dendl;
@@ -328,8 +330,9 @@ int RGWRole::read_info()
   }
 
   try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(*this, iter);
+    using ceph::decode;
+    auto iter = bl.cbegin();
+    decode(*this, iter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "ERROR: failed to decode role info from pool: " << pool.name <<
                   ": " << id << dendl;
@@ -355,8 +358,9 @@ int RGWRole::read_name()
 
   RGWNameToId nameToId;
   try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(nameToId, iter);
+    using ceph::decode;
+    auto iter = bl.cbegin();
+    decode(nameToId, iter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "ERROR: failed to decode role name from pool: " << pool.name << ": "
                   << name << dendl;
@@ -378,14 +382,14 @@ bool RGWRole::validate_input()
     return false;
   }
 
-  boost::regex regex_name("[A-Za-z0-9:=,.@-]+");
-  if (! boost::regex_match(name, regex_name)) {
+  std::regex regex_name("[A-Za-z0-9:=,.@-]+");
+  if (! std::regex_match(name, regex_name)) {
     ldout(cct, 0) << "ERROR: Invalid chars in name " << dendl;
     return false;
   }
 
-  boost::regex regex_path("(/[!-~]+/)|(/)");
-  if (! boost::regex_match(path,regex_path)) {
+  std::regex regex_path("(/[!-~]+/)|(/)");
+  if (! std::regex_match(path,regex_path)) {
     ldout(cct, 0) << "ERROR: Invalid chars in path " << dendl;
     return false;
   }

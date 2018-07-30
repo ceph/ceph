@@ -18,89 +18,67 @@ using std::string;
 using std::vector;
 using std::set;
 using std::list;
-
-static bool get_next_token(const string &s, size_t& pos, const char *delims, string& token)
-{
-  int start = s.find_first_not_of(delims, pos);
-  int end;
-
-  if (start < 0){
-    pos = s.size();
-    return false;
-  }
-
-  end = s.find_first_of(delims, start);
-  if (end >= 0)
-    pos = end + 1;
-  else {
-    pos = end = s.size();
-  }
-
-  token = s.substr(start, end - start);
-  return true;
-}
+using ceph::for_each_substr;
 
 void get_str_list(const string& str, const char *delims, list<string>& str_list)
 {
-  size_t pos = 0;
-  string token;
-
   str_list.clear();
-
-  while (pos < str.size()) {
-    if (get_next_token(str, pos, delims, token)) {
-      if (token.size() > 0) {
-        str_list.push_back(token);
-      }
-    }
-  }
+  for_each_substr(str, delims, [&str_list] (auto token) {
+      str_list.emplace_back(token.begin(), token.end());
+    });
 }
 
 void get_str_list(const string& str, list<string>& str_list)
 {
   const char *delims = ";,= \t";
-  return get_str_list(str, delims, str_list);
+  get_str_list(str, delims, str_list);
+}
+
+list<string> get_str_list(const string& str, const char *delims)
+{
+  list<string> result;
+  get_str_list(str, delims, result);
+  return result;
 }
 
 void get_str_vec(const string& str, const char *delims, vector<string>& str_vec)
 {
-  size_t pos = 0;
-  string token;
   str_vec.clear();
-
-  while (pos < str.size()) {
-    if (get_next_token(str, pos, delims, token)) {
-      if (token.size() > 0) {
-        str_vec.push_back(token);
-      }
-    }
-  }
+  for_each_substr(str, delims, [&str_vec] (auto token) {
+      str_vec.emplace_back(token.begin(), token.end());
+    });
 }
 
 void get_str_vec(const string& str, vector<string>& str_vec)
 {
   const char *delims = ";,= \t";
-  return get_str_vec(str, delims, str_vec);
+  get_str_vec(str, delims, str_vec);
+}
+
+vector<string> get_str_vec(const string& str, const char *delims)
+{
+  vector<string> result;
+  get_str_vec(str, delims, result);
+  return result;
 }
 
 void get_str_set(const string& str, const char *delims, set<string>& str_set)
 {
-  size_t pos = 0;
-  string token;
-
   str_set.clear();
-
-  while (pos < str.size()) {
-    if (get_next_token(str, pos, delims, token)) {
-      if (token.size() > 0) {
-        str_set.insert(token);
-      }
-    }
-  }
+  for_each_substr(str, delims, [&str_set] (auto token) {
+      str_set.emplace(token.begin(), token.end());
+    });
 }
 
 void get_str_set(const string& str, set<string>& str_set)
 {
   const char *delims = ";,= \t";
-  return get_str_set(str, delims, str_set);
+  get_str_set(str, delims, str_set);
+}
+
+set<string> get_str_set(const string& str, const char *delims)
+{
+  set<string> result;
+  get_str_set(str, delims, result);
+  return result;
 }

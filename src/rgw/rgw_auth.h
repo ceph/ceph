@@ -128,7 +128,7 @@ class Completer {
 public:
   /* It's expected that Completers would tend to implement many interfaces
    * and be used not only in req_state::auth::completer. Ref counting their
-   * instances woild be helpful. */
+   * instances would be helpful. */
   typedef std::shared_ptr<Completer> cmplptr_t;
 
   virtual ~Completer() = default;
@@ -188,7 +188,7 @@ public:
 
     std::pair<IdentityApplier::aplptr_t, Completer::cmplptr_t> result_pair;
 
-    AuthResult(const int reason)
+    explicit AuthResult(const int reason)
       : reason(reason) {
     }
 
@@ -199,7 +199,7 @@ public:
 
     /* Allow only the reasonable combintations - returning just Completer
      * without accompanying IdentityApplier is strictly prohibited! */
-    AuthResult(IdentityApplier::aplptr_t&& applier)
+    explicit AuthResult(IdentityApplier::aplptr_t&& applier)
       : result_pair(std::move(applier), nullptr) {
     }
 
@@ -431,7 +431,7 @@ public:
     virtual aplptr_t create_apl_remote(CephContext* cct,
                                        const req_state* s,
                                        acl_strategy_t&& extra_acl_strategy,
-                                       const AuthInfo info) const = 0;
+                                       const AuthInfo &info) const = 0;
   };
 };
 

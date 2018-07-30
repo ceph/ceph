@@ -44,15 +44,16 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(health_checks, payload);
-    ::encode(service_map_bl, payload);
+    encode(health_checks, payload);
+    encode(service_map_bl, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(health_checks, p);
-    ::decode(service_map_bl, p);
+    decode(health_checks, p);
+    decode(service_map_bl, p);
   }
 };
 

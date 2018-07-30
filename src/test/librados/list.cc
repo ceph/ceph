@@ -142,7 +142,7 @@ TEST_F(LibRadosListPP, ListObjectsEndIter) {
 static void check_list(
   std::set<std::string>& myset,
   rados_list_ctx_t& ctx,
-  std::string check_nspace)
+  const std::string &check_nspace)
 {
   const char *entry, *nspace;
   cout << "myset " << myset << std::endl;
@@ -182,6 +182,11 @@ TEST_F(LibRadosList, ListObjectsNS) {
   rados_ioctx_set_namespace(ioctx, "ns2");
   ASSERT_EQ(0, rados_write(ioctx, "foo6", buf, sizeof(buf), 0));
   ASSERT_EQ(0, rados_write(ioctx, "foo7", buf, sizeof(buf), 0));
+
+  char nspace[4];
+  ASSERT_EQ(-ERANGE, rados_ioctx_get_namespace(ioctx, nspace, 3));
+  ASSERT_EQ(strlen("ns2"), rados_ioctx_get_namespace(ioctx, nspace, sizeof(nspace)));
+  ASSERT_EQ(0, strcmp("ns2", nspace));
 
   std::set<std::string> def, ns1, ns2, all;
   def.insert(std::string("foo1"));
@@ -227,7 +232,7 @@ TEST_F(LibRadosList, ListObjectsNS) {
   rados_nobjects_list_close(ctx);
 }
 
-static void check_listpp(std::set<std::string>& myset, IoCtx& ioctx, std::string check_nspace)
+static void check_listpp(std::set<std::string>& myset, IoCtx& ioctx, const std::string &check_nspace)
 {
   NObjectIterator iter(ioctx.nobjects_begin());
   std::set<std::string> orig_set(myset);
@@ -271,6 +276,7 @@ TEST_F(LibRadosListPP, ListObjectsPPNS) {
   ioctx.set_namespace("ns2");
   ASSERT_EQ(0, ioctx.write("foo6", bl1, sizeof(buf), 0));
   ASSERT_EQ(0, ioctx.write("foo7", bl1, sizeof(buf), 0));
+  ASSERT_EQ(std::string("ns2"), ioctx.get_namespace());
 
   std::set<std::string> def, ns1, ns2, all;
   def.insert(std::string("foo1"));
@@ -935,9 +941,9 @@ TEST_F(LibRadosListPP, ListObjectsFilterPP) {
 
   bufferlist filter_bl;
   std::string filter_name = "plain";
-  ::encode(filter_name, filter_bl);
-  ::encode("_theattr", filter_bl);
-  ::encode(target_str, filter_bl);
+  encode(filter_name, filter_bl);
+  encode("_theattr", filter_bl);
+  encode(target_str, filter_bl);
 
   NObjectIterator iter(ioctx.nobjects_begin(filter_bl));
   bool foundit = false;
@@ -1002,8 +1008,8 @@ TEST_F(LibRadosList, EnumerateObjects) {
 
   // Ensure a non-power-of-two PG count to avoid only
   // touching the easy path.
-  std::string err_str = set_pg_num(&s_cluster, pool_name, 11);
-  ASSERT_TRUE(err_str.empty());
+  ASSERT_TRUE(set_pg_num(&s_cluster, pool_name, 11).empty());
+  ASSERT_TRUE(set_pgp_num(&s_cluster, pool_name, 11).empty());
 
   std::set<std::string> saw_obj;
   rados_object_list_cursor c = rados_object_list_begin(ioctx);
@@ -1050,8 +1056,8 @@ TEST_F(LibRadosList, EnumerateObjectsSplit) {
 
   // Ensure a non-power-of-two PG count to avoid only
   // touching the easy path.
-  std::string err_str = set_pg_num(&s_cluster, pool_name, 11);
-  ASSERT_TRUE(err_str.empty());
+  ASSERT_TRUE(set_pg_num(&s_cluster, pool_name, 11).empty());
+  ASSERT_TRUE(set_pgp_num(&s_cluster, pool_name, 11).empty());
 
   rados_object_list_cursor begin = rados_object_list_begin(ioctx);
   rados_object_list_cursor end = rados_object_list_end(ioctx);
@@ -1230,9 +1236,9 @@ TEST_F(LibRadosListPP, EnumerateObjectsFilterPP) {
 
   bufferlist filter_bl;
   std::string filter_name = "plain";
-  ::encode(filter_name, filter_bl);
-  ::encode("_theattr", filter_bl);
-  ::encode(target_str, filter_bl);
+  encode(filter_name, filter_bl);
+  encode("_theattr", filter_bl);
+  encode(target_str, filter_bl);
 
   ObjectCursor c = ioctx.object_list_begin();
   ObjectCursor end = ioctx.object_list_end();

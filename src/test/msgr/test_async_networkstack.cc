@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <atomic>
 #include <iostream>
+#include <list>
 #include <random>
 #include <string>
 #include <set>
@@ -24,34 +25,65 @@
 #include <gtest/gtest.h>
 
 #include "acconfig.h"
+#include "common/config_obs.h"
 #include "include/Context.h"
-
 #include "msg/async/Event.h"
 #include "msg/async/Stack.h"
 
 
 #if GTEST_HAS_PARAM_TEST
 
+class NoopConfigObserver : public md_config_obs_t {
+  std::list<std::string> options;
+  const char **ptrs = 0;
+
+public:
+  NoopConfigObserver(std::list<std::string> l) : options(l) {
+    ptrs = new const char*[options.size() + 1];
+    unsigned j = 0;
+    for (auto& i : options) {
+      ptrs[j++] = i.c_str();
+    }
+    ptrs[j] = 0;
+  }
+  ~NoopConfigObserver() {
+    delete[] ptrs;
+  }
+
+  const char** get_tracked_conf_keys() const override {
+    return ptrs;
+  }
+  void handle_conf_change(const ConfigProxy& conf,
+			  const std::set <std::string> &changed) override {
+  }
+};
+
 class NetworkWorkerTest : public ::testing::TestWithParam<const char*> {
  public:
   std::shared_ptr<NetworkStack> stack;
   string addr, port_addr;
 
+  NoopConfigObserver fake_obs = {{"ms_type",
+				 "ms_dpdk_coremask",
+				 "ms_dpdk_host_ipv4_addr",
+				 "ms_dpdk_gateway_ipv4_addr",
+				 "ms_dpdk_netmask_ipv4_addr"}};
+
   NetworkWorkerTest() {}
   void SetUp() override {
     cerr << __func__ << " start set up " << GetParam() << std::endl;
     if (strncmp(GetParam(), "dpdk", 4)) {
-      g_ceph_context->_conf->set_val("ms_type", "async+posix", false);
+      g_ceph_context->_conf.set_val("ms_type", "async+posix");
       addr = "127.0.0.1:15000";
       port_addr = "127.0.0.1:15001";
     } else {
-      g_ceph_context->_conf->set_val("ms_type", "async+dpdk", false);
-      g_ceph_context->_conf->set_val("ms_dpdk_debug_allow_loopback", "true", false);
-      g_ceph_context->_conf->set_val("ms_async_op_threads", "2", false);
-      g_ceph_context->_conf->set_val("ms_dpdk_coremask", "0x7", false);
-      g_ceph_context->_conf->set_val("ms_dpdk_host_ipv4_addr", "172.16.218.3", false);
-      g_ceph_context->_conf->set_val("ms_dpdk_gateway_ipv4_addr", "172.16.218.2", false);
-      g_ceph_context->_conf->set_val("ms_dpdk_netmask_ipv4_addr", "255.255.255.0", false);
+      g_ceph_context->_conf.set_val_or_die("ms_type", "async+dpdk");
+      g_ceph_context->_conf.set_val_or_die("ms_dpdk_debug_allow_loopback", "true");
+      g_ceph_context->_conf.set_val_or_die("ms_async_op_threads", "2");
+      g_ceph_context->_conf.set_val_or_die("ms_dpdk_coremask", "0x7");
+      g_ceph_context->_conf.set_val_or_die("ms_dpdk_host_ipv4_addr", "172.16.218.3");
+      g_ceph_context->_conf.set_val_or_die("ms_dpdk_gateway_ipv4_addr", "172.16.218.2");
+      g_ceph_context->_conf.set_val_or_die("ms_dpdk_netmask_ipv4_addr", "255.255.255.0");
       addr = "172.16.218.3:15000";
       port_addr = "172.16.218.3:15001";
     }
@@ -83,7 +115,7 @@ class NetworkWorkerTest : public ::testing::TestWithParam<const char*> {
     std::atomic_bool done;
    public:
     C_dispatch(Worker *w, func &&_f): worker(w), f(std::move(_f)), done(false) {}
-    void do_request(int id) override {
+    void do_request(uint64_t id) override {
       f(worker);
       done = true;
     }
@@ -119,8 +151,8 @@ class C_poll : public EventCallback {
   static const int sleepus = 500;
 
  public:
-  C_poll(EventCenter *c): center(c), woken(false) {}
-  void do_request(int r) override {
+  explicit C_poll(EventCenter *c): center(c), woken(false) {}
+  void do_request(uint64_t r) override {
     woken = true;
   }
   bool poll(int milliseconds) {
@@ -567,7 +599,7 @@ class StressFactory {
     std::random_device rd;
     std::default_random_engine rng;
 
-    RandomString(size_t s): slen(s), rng(rd()) {}
+    explicit RandomString(size_t s): slen(s), rng(rd()) {}
     void prepare(size_t n) {
       static const char alphabet[] =
           "abcdefghijklmnopqrstuvwxyz"
@@ -625,8 +657,8 @@ class StressFactory {
   class C_delete : public EventCallback {
     T *ctxt;
    public:
-    C_delete(T *c): ctxt(c) {}
-    void do_request(int id) override {
+    explicit C_delete(T *c): ctxt(c) {}
+    void do_request(uint64_t id) override {
       delete ctxt;
       delete this;
     }
@@ -650,8 +682,8 @@ class StressFactory {
     class Client_read_handle : public EventCallback {
       Client *c;
      public:
-      Client_read_handle(Client *_c): c(_c) {}
-      void do_request(int id) override {
+      explicit Client_read_handle(Client *_c): c(_c) {}
+      void do_request(uint64_t id) override {
         c->do_read_request();
       }
     } read_ctxt;
@@ -659,8 +691,8 @@ class StressFactory {
     class Client_write_handle : public EventCallback {
       Client *c;
      public:
-      Client_write_handle(Client *_c): c(_c) {}
-      void do_request(int id) override {
+      explicit Client_write_handle(Client *_c): c(_c) {}
+      void do_request(uint64_t id) override {
         c->do_write_request();
       }
     } write_ctxt;
@@ -789,8 +821,8 @@ class StressFactory {
     class Server_read_handle : public EventCallback {
       Server *s;
      public:
-      Server_read_handle(Server *_s): s(_s) {}
-      void do_request(int id) override {
+      explicit Server_read_handle(Server *_s): s(_s) {}
+      void do_request(uint64_t id) override {
         s->do_read_request();
       }
     } read_ctxt;
@@ -798,8 +830,8 @@ class StressFactory {
     class Server_write_handle : public EventCallback {
       Server *s;
      public:
-      Server_write_handle(Server *_s): s(_s) {}
-      void do_request(int id) override {
+      explicit Server_write_handle(Server *_s): s(_s) {}
+      void do_request(uint64_t id) override {
         s->do_write_request();
       }
     } write_ctxt;
@@ -903,7 +935,7 @@ class StressFactory {
    public:
     C_accept(StressFactory *f, ServerSocket s, ThreadData *data, Worker *w)
         : factory(f), bind_socket(std::move(s)), t_data(data), worker(w) {}
-    void do_request(int id) override {
+    void do_request(uint64_t id) override {
       while (true) {
         entity_addr_t cli_addr;
         ConnectedSocket srv_socket;
@@ -934,7 +966,7 @@ class StressFactory {
   bool zero_copy_read;
   SocketOptions options;
 
-  explicit StressFactory(std::shared_ptr<NetworkStack> s, const string &addr,
+  explicit StressFactory(const std::shared_ptr<NetworkStack> &s, const string &addr,
                          size_t cli, size_t qd, size_t mc, size_t l, bool zero_copy)
       : stack(s), rs(128), client_num(cli), queue_depth(qd),
         max_message_length(l), message_count(mc), message_left(mc),

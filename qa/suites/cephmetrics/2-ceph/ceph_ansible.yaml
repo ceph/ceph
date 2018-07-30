@@ -1,0 +1,32 @@
+meta:
+- desc: "Build the ceph cluster using ceph-ansible"
+
+overrides:
+   ceph_ansible:
+     vars:
+        ceph_conf_overrides:
+          global:
+            osd default pool size: 2
+            mon pg warn min per osd: 2
+            osd pool default pg num: 64
+            osd pool default pgp num: 64
+            mon_max_pg_per_osd: 1024
+        ceph_test: true
+        ceph_stable_release: luminous
+        osd_scenario: collocated
+        journal_size: 1024
+        osd_auto_discovery: false
+        ceph_origin: repository
+        ceph_repository: dev
+        ceph_mgr_modules:
+          - status
+          - restful
+        cephfs_pools:
+          - name: "cephfs_data"
+            pgs: "64"
+          - name: "cephfs_metadata"
+            pgs: "64"
+tasks:
+- ssh-keys:
+- ceph_ansible:
+- install.ship_utilities:

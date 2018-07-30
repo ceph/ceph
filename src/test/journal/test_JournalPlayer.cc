@@ -127,7 +127,7 @@ public:
   int write_entry(const std::string &oid, uint64_t object_num,
                   uint64_t tag_tid, uint64_t entry_tid) {
     bufferlist bl;
-    ::encode(create_entry(tag_tid, entry_tid), bl);
+    encode(create_entry(tag_tid, entry_tid), bl);
     return append(oid + "." + stringify(object_num), bl);
   }
 

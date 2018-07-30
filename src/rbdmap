@@ -27,7 +27,7 @@ do_map() {
 		if [ -b /dev/rbd/$DEV ]; then
 			MAP_RV="$(readlink -f /dev/rbd/$DEV)"
 		else
-			MAP_RV="$(rbd map $DEV $CMDPARAMS 2>&1)"
+			MAP_RV="$(rbd device map $DEV $CMDPARAMS 2>&1)"
 			if [ $? -eq 0 ]; then
 			    newrbd="yes"
 			else
@@ -58,21 +58,21 @@ do_map() {
 
 unmount_unmap() {
 	local rbd_dev=$1
-	local mnt=$(findmnt --mtab --source ${rbd_dev} --noheadings \
+	local mnts=$(findmnt --mtab --source ${rbd_dev} --noheadings \
 							| awk '{print $1'})
 
 	logger -p "daemon.debug" -t rbdmap "Unmapping '${rbd_dev}'"
-	if [ -n "${mnt}" ]; then
+	for mnt in ${mnts}; do
 	    logger -p "daemon.debug" -t rbdmap "Unmounting '${mnt}'"
 	    umount "${mnt}" >>/dev/null 2>&1
-	fi
-	if mountpoint -q "${mnt}"; then
-	    ## Un-mounting failed.
-	    logger -p "daemon.warning" -t rbdmap "Failed to unmount '${mnt}'"
-	    return 1
-	fi
+	    if mountpoint -q "${mnt}"; then
+		  ## Un-mounting failed.
+		  logger -p "daemon.warning" -t rbdmap "Failed to unmount '${mnt}'"
+		  return 1
+	    fi
+	done
 	## Un-mapping.
-	rbd unmap $rbd_dev >>/dev/null 2>&1
+	rbd device unmap $rbd_dev >>/dev/null 2>&1
 	if [ $? -ne 0 ]; then
 	    logger -p "daemon.warning" -t rbdmap "Failed to unmap '${mnt}'"
 	    return 1

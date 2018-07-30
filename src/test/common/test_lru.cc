@@ -24,7 +24,7 @@ class Item : public LRUObject {
 public:
   int id;
   Item() : id(0) {}
-  Item(int i) : id(i) {}
+  explicit Item(int i) : id(i) {}
   void set(int i) {id = i;}
 };
 

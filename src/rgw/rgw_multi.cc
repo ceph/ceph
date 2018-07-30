@@ -14,7 +14,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 
 bool RGWMultiPart::xml_end(const char *el)
@@ -120,10 +119,10 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
 
   for (i = 0, iter = parts_map.begin(); (i < num_parts || !sorted_omap) && iter != parts_map.end(); ++iter, ++i) {
     bufferlist& bl = iter->second;
-    bufferlist::iterator bli = bl.begin();
+    auto bli = bl.cbegin();
     RGWUploadPartInfo info;
     try {
-      ::decode(info, bli);
+      decode(info, bli);
     } catch (buffer::error& err) {
       ldout(cct, 0) << "ERROR: could not part info, caught buffer::error" << dendl;
       return -EIO;
@@ -200,7 +199,7 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
     ret = list_multipart_parts(store, bucket_info, cct, mp_obj.get_upload_id(), mp_obj.get_meta(), 1000,
       marker, obj_parts, &marker, &truncated);
     if (ret < 0)
-      return ret;
+      return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
     for (auto obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
       RGWUploadPartInfo& obj_part = obj_iter->second;
       rgw_obj obj;
@@ -230,7 +229,7 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
   ret = store->send_chain_to_gc(chain, mp_obj.get_upload_id() , false);  // do it async
   if (ret < 0) {
     ldout(cct, 5) << "gc->send_chain() returned " << ret << dendl;
-    return ret;
+    return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
   }
   RGWRados::Object del_target(store, bucket_info, *obj_ctx, meta_obj);
   RGWRados::Object::Delete del_op(&del_target);
@@ -243,7 +242,7 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
 
   // and also remove the metadata obj
   ret = del_op.delete_obj();
-  return ret == -ENOENT?-ERR_NO_SUCH_UPLOAD:ret;
+  return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
 }
 
 int list_bucket_multiparts(RGWRados *store, RGWBucketInfo& bucket_info,
@@ -271,23 +270,21 @@ int abort_bucket_multiparts(RGWRados *store, CephContext *cct, RGWBucketInfo& bu
   vector<rgw_bucket_dir_entry> objs;
   RGWObjectCtx obj_ctx(store);
   string marker;
-  map<string, bool> common_prefixes;
   bool is_truncated;
 
   do {
     ret = list_bucket_multiparts(store, bucket_info, prefix, marker, delim,
-				max, &objs, &common_prefixes, &is_truncated);
+				max, &objs, nullptr, &is_truncated);
     if (ret < 0) {
       return ret;
     }
     if (!objs.empty()) {
-      RGWMultipartUploadEntry entry;
+      RGWMPObj mp;
       for (const auto& obj : objs) {
         rgw_obj_key key(obj.key);
-        if (!entry.mp.from_meta(key.name))
+        if (!mp.from_meta(key.name))
           continue;
-        entry.obj = obj;
-        ret = abort_multipart_upload(store, cct, &obj_ctx, bucket_info, entry.mp);
+        ret = abort_multipart_upload(store, cct, &obj_ctx, bucket_info, mp);
         if (ret < 0) {
           return ret;
         }

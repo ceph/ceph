@@ -16,8 +16,9 @@
 #define CEPH_MOSDPGTRIM_H
 
 #include "msg/Message.h"
+#include "messages/MOSDPeeringOp.h"
 
-class MOSDPGTrim : public Message {
+class MOSDPGTrim : public MOSDPeeringOp {
 
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 2;
@@ -28,32 +29,48 @@ public:
   eversion_t trim_to;
 
   epoch_t get_epoch() const { return epoch; }
+  spg_t get_spg() const {
+    return pgid;
+  }
+  epoch_t get_map_epoch() const {
+    return epoch;
+  }
+  epoch_t get_min_epoch() const {
+    return epoch;
+  }
+  PGPeeringEvent *get_event() override {
+    return new PGPeeringEvent(
+      epoch,
+      epoch,
+      MTrim(epoch, get_source().num(), pgid.shard, trim_to));
+  }
 
-  MOSDPGTrim() : Message(MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDPGTrim() : MOSDPeeringOp(MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGTrim(version_t mv, spg_t p, eversion_t tt) :
-    Message(MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION),
+    MOSDPeeringOp(MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION),
     epoch(mv), pgid(p), trim_to(tt) { }
 private:
   ~MOSDPGTrim() override {}
 
 public:
   const char *get_type_name() const override { return "pg_trim"; }
-  void print(ostream& out) const override {
-    out << "pg_trim(" << pgid << " to " << trim_to << " e" << epoch << ")";
+  void inner_print(ostream& out) const override {
+    out << trim_to;
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(epoch, payload);
-    ::encode(pgid.pgid, payload);
-    ::encode(trim_to, payload);
-    ::encode(pgid.shard, payload);
+    using ceph::encode;
+    encode(epoch, payload);
+    encode(pgid.pgid, payload);
+    encode(trim_to, payload);
+    encode(pgid.shard, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(epoch, p);
-    ::decode(pgid.pgid, p);
-    ::decode(trim_to, p);
-    ::decode(pgid.shard, p);
+    auto p = payload.cbegin();
+    decode(epoch, p);
+    decode(pgid.pgid, p);
+    decode(trim_to, p);
+    decode(pgid.shard, p);
   }
 };
 

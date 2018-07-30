@@ -64,7 +64,7 @@ struct pidfh {
   }
   int verify();
   int remove();
-  int open(const md_config_t *conf);
+  int open(const ConfigProxy& conf);
   int write();
 };
 
@@ -132,7 +132,7 @@ int pidfh::remove()
   return 0;
 }
 
-int pidfh::open(const md_config_t *conf)
+int pidfh::open(const ConfigProxy& conf)
 {
   int len = snprintf(pf_path, sizeof(pf_path),
 		    "%s", conf->pid_file.c_str());
@@ -209,7 +209,7 @@ void pidfile_remove()
   pfh = nullptr;
 }
 
-int pidfile_write(const md_config_t *conf)
+int pidfile_write(const ConfigProxy& conf)
 {
   if (conf->pid_file.empty()) {
     dout(0) << __func__ << ": ignore empty --pid-file" << dendl;

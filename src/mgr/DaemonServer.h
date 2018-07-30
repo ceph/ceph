@@ -14,7 +14,7 @@
 #ifndef DAEMON_SERVER_H_
 #define DAEMON_SERVER_H_
 
-#include "PyModules.h"
+#include "PyModuleRegistry.h"
 
 #include <set>
 #include <string>
@@ -33,6 +33,7 @@
 
 class MMgrReport;
 class MMgrOpen;
+class MMgrClose;
 class MMonMgrReport;
 class MCommand;
 struct MonCommand;
@@ -59,10 +60,13 @@ protected:
   Finisher  &finisher;
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
-  PyModules &py_modules;
+  PyModuleRegistry &py_modules;
   LogChannelRef clog, audit_clog;
 
-  AuthAuthorizeHandlerRegistry auth_registry;
+  // Authentication methods for cluster peers
+  AuthAuthorizeHandlerRegistry auth_cluster_registry;
+  // Authentication methods for clients
+  AuthAuthorizeHandlerRegistry auth_service_registry;
 
   // Connections for daemons, and clients with service names set
   // (i.e. those MgrClients that are allowed to send MMgrReports)
@@ -77,13 +81,13 @@ protected:
 
   Mutex lock;
 
-  static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
+  static void _generate_command_map(cmdmap_t& cmdmap,
                                     map<string,string> &param_str_map);
   static const MonCommand *_get_mgrcommand(const string &cmd_prefix,
                                            const std::vector<MonCommand> &commands);
   bool _allowed_command(
     MgrSession *s, const string &module, const string &prefix,
-    const map<string,cmd_vartype>& cmdmap,
+    const cmdmap_t& cmdmap,
     const map<string,string>& param_str_map,
     const MonCommand *this_cmd);
 
@@ -100,16 +104,16 @@ private:
   void maybe_ready(int32_t osd_id);
 
 public:
-  int init(uint64_t gid, entity_addr_t client_addr);
+  int init(uint64_t gid, entity_addrvec_t client_addrs);
   void shutdown();
 
-  entity_addr_t get_myaddr() const;
+  entity_addrvec_t get_myaddrs() const;
 
   DaemonServer(MonClient *monc_,
                Finisher &finisher_,
 	       DaemonStateIndex &daemon_state_,
 	       ClusterState &cluster_state_,
-	       PyModules &py_modules_,
+	       PyModuleRegistry &py_modules_,
 	       LogChannelRef cl,
 	       LogChannelRef auditcl);
   ~DaemonServer() override;
@@ -120,24 +124,28 @@ public:
   bool ms_handle_refused(Connection *con) override;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
                          bool force_new) override;
-  bool ms_verify_authorizer(Connection *con,
-      int peer_type,
-      int protocol,
-      ceph::bufferlist& authorizer,
-      ceph::bufferlist& authorizer_reply,
-      bool& isvalid,
-      CryptoKey& session_key) override;
+  bool ms_verify_authorizer(
+    Connection *con,
+    int peer_type,
+    int protocol,
+    ceph::bufferlist& authorizer,
+    ceph::bufferlist& authorizer_reply,
+    bool& isvalid,
+    CryptoKey& session_key,
+    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override;
 
   bool handle_open(MMgrOpen *m);
+  bool handle_close(MMgrClose *m);
   bool handle_report(MMgrReport *m);
   bool handle_command(MCommand *m);
   void send_report();
   void got_service_map();
+  void got_mgr_map();
 
   void _send_configure(ConnectionRef c);
 
   virtual const char** get_tracked_conf_keys() const override;
-  virtual void handle_conf_change(const struct md_config_t *conf,
+  virtual void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
 };
 

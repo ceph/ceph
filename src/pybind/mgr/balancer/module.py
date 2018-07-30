@@ -3,21 +3,23 @@
 Balance PG distribution across OSDs.
 """
 
+import copy
 import errno
 import json
 import math
 import random
+import six
 import time
 from mgr_module import MgrModule, CommandResult
 from threading import Event
+from mgr_module import CRUSHMap
 
 # available modes: 'none', 'crush', 'crush-compat', 'upmap', 'osd_weight'
 default_mode = 'none'
 default_sleep_interval = 60   # seconds
-default_max_misplaced = .03   # max ratio of pgs replaced at a time
+default_max_misplaced = .05    # max ratio of pgs replaced at a time
 
 TIME_FORMAT = '%Y-%m-%d_%H:%M:%S'
-
 
 class MappingState:
     def __init__(self, osdmap, pg_dump, desc=''):
@@ -30,13 +32,32 @@ class MappingState:
         self.pg_stat = {
             i['pgid']: i['stat_sum'] for i in pg_dump.get('pg_stats', [])
         }
+        osd_poolids = [p['pool'] for p in self.osdmap_dump.get('pools', [])]
+        pg_poolids = [p['poolid'] for p in pg_dump.get('pool_stats', [])]
+        self.poolids = set(osd_poolids) & set(pg_poolids)
+        self.pg_up = {}
+        self.pg_up_by_poolid = {}
+        for poolid in self.poolids:
+            self.pg_up_by_poolid[poolid] = osdmap.map_pool_pgs_up(poolid)
+            for a,b in six.iteritems(self.pg_up_by_poolid[poolid]):
+                self.pg_up[a] = b
 
+    def calc_misplaced_from(self, other_ms):
+        num = len(other_ms.pg_up)
+        misplaced = 0
+        for pgid, before in six.iteritems(other_ms.pg_up):
+            if before != self.pg_up.get(pgid, []):
+                misplaced += 1
+        if num > 0:
+            return float(misplaced) / float(num)
+        return 0.0
 
 class Plan:
-    def __init__(self, name, ms):
+    def __init__(self, name, ms, pools):
         self.mode = 'unknown'
         self.name = name
         self.initial = ms
+        self.pools = pools
 
         self.osd_weights = {}
         self.compat_ws = {}
@@ -59,12 +80,12 @@ class Plan:
                   self.initial.osdmap.get_crush_version())
         ls.append('# mode %s' % self.mode)
         if len(self.compat_ws) and \
-           '-1' not in self.initial.crush_dump.get('choose_args', {}):
+           not CRUSHMap.have_default_choose_args(self.initial.crush_dump):
             ls.append('ceph osd crush weight-set create-compat')
-        for osd, weight in self.compat_ws.iteritems():
+        for osd, weight in six.iteritems(self.compat_ws):
             ls.append('ceph osd crush weight-set reweight-compat %s %f' %
                       (osd, weight))
-        for osd, weight in self.osd_weights.iteritems():
+        for osd, weight in six.iteritems(self.osd_weights):
             ls.append('ceph osd reweight osd.%d %f' % (osd, weight))
         incdump = self.inc.dump()
         for pgid in incdump.get('old_pg_upmap_items', []):
@@ -79,40 +100,43 @@ class Plan:
 
 
 class Eval:
-    pool_name = {}       # pool id -> pool name
-    pool_id = {}         # pool name -> id
-    pool_roots = {}      # pool name -> root name
-    root_pools = {}      # root name -> pools
-    target_by_root = {}  # root name -> target weight map
-    count_by_pool = {}
-    count_by_root = {}
-    actual_by_pool = {}  # pool -> by_* -> actual weight map
-    actual_by_root = {}  # pool -> by_* -> actual weight map
-    total_by_pool = {}   # pool -> by_* -> total
-    total_by_root = {}   # root -> by_* -> total
-    stats_by_pool = {}   # pool -> by_* -> stddev or avg -> value
-    stats_by_root = {}   # root -> by_* -> stddev or avg -> value
-
-    score_by_pool = {}
-    score_by_root = {}
-
-    score = 0.0
-
     def __init__(self, ms):
         self.ms = ms
+        self.root_ids = {}        # root name -> id
+        self.pool_name = {}       # pool id -> pool name
+        self.pool_id = {}         # pool name -> id
+        self.pool_roots = {}      # pool name -> root name
+        self.root_pools = {}      # root name -> pools
+        self.target_by_root = {}  # root name -> target weight map
+        self.count_by_pool = {}
+        self.count_by_root = {}
+        self.actual_by_pool = {}  # pool -> by_* -> actual weight map
+        self.actual_by_root = {}  # pool -> by_* -> actual weight map
+        self.total_by_pool = {}   # pool -> by_* -> total
+        self.total_by_root = {}   # root -> by_* -> total
+        self.stats_by_pool = {}   # pool -> by_* -> stddev or avg -> value
+        self.stats_by_root = {}   # root -> by_* -> stddev or avg -> value
 
-    def show(self):
-        r = self.ms.desc + '\n'
-        r += 'target_by_root %s\n' % self.target_by_root
-        r += 'actual_by_pool %s\n' % self.actual_by_pool
-        r += 'actual_by_root %s\n' % self.actual_by_root
-        r += 'count_by_pool %s\n' % self.count_by_pool
-        r += 'count_by_root %s\n' % self.count_by_root
-        r += 'total_by_pool %s\n' % self.total_by_pool
-        r += 'total_by_root %s\n' % self.total_by_root
-        r += 'stats_by_root %s\n' % self.stats_by_root
-        r += 'score_by_pool %s\n' % self.score_by_pool
-        r += 'score_by_root %s\n' % self.score_by_root
+        self.score_by_pool = {}
+        self.score_by_root = {}
+
+        self.score = 0.0
+
+    def show(self, verbose=False):
+        if verbose:
+            r = self.ms.desc + '\n'
+            r += 'target_by_root %s\n' % self.target_by_root
+            r += 'actual_by_pool %s\n' % self.actual_by_pool
+            r += 'actual_by_root %s\n' % self.actual_by_root
+            r += 'count_by_pool %s\n' % self.count_by_pool
+            r += 'count_by_root %s\n' % self.count_by_root
+            r += 'total_by_pool %s\n' % self.total_by_pool
+            r += 'total_by_root %s\n' % self.total_by_root
+            r += 'stats_by_root %s\n' % self.stats_by_root
+            r += 'score_by_pool %s\n' % self.score_by_pool
+            r += 'score_by_root %s\n' % self.score_by_root
+        else:
+            r = self.ms.desc + ' '
         r += 'score %f (lower is better)\n' % self.score
         return r
 
@@ -120,6 +144,15 @@ class Eval:
         num = max(len(target), 1)
         r = {}
         for t in ('pgs', 'objects', 'bytes'):
+            if total[t] == 0:
+                r[t] = {
+                    'avg': 0,
+                    'stddev': 0,
+                    'sum_weight': 0,
+                    'score': 0,
+                }
+                continue
+
             avg = float(total[t]) / float(num)
             dev = 0.0
 
@@ -128,9 +161,12 @@ class Eval:
             score = 0.0
             sum_weight = 0.0
 
-            for k, v in count[t].iteritems():
+            for k, v in six.iteritems(count[t]):
                 # adjust/normalize by weight
-                adjusted = float(v) / target[k] / float(num)
+                if target[k]:
+                    adjusted = float(v) / target[k] / float(num)
+                else:
+                    adjusted = 0.0
 
                 # Overweighted devices and their weights are factors to calculate reweight_urgency.
                 # One 10% underfilled device with 5 2% overfilled devices, is arguably a better
@@ -160,11 +196,26 @@ class Eval:
             r[t] = {
                 'avg': avg,
                 'stddev': stddev,
-                'score': sum_weight,
+                'sum_weight': sum_weight,
+                'score': score,
             }
         return r
 
 class Module(MgrModule):
+    OPTIONS = [
+            {'name': 'active'},
+            {'name': 'begin_time'},
+            {'name': 'crush_compat_max_iterations'},
+            {'name': 'crush_compat_step'},
+            {'name': 'end_time'},
+            {'name': 'max_misplaced'},
+            {'name': 'min_score'},
+            {'name': 'mode'},
+            {'name': 'sleep_interval'},
+            {'name': 'upmap_max_iterations'},
+            {'name': 'upmap_max_deviation'},
+    ]
+
     COMMANDS = [
         {
             "cmd": "balancer status",
@@ -187,12 +238,17 @@ class Module(MgrModule):
             "perm": "rw",
         },
         {
-            "cmd": "balancer eval name=plan,type=CephString,req=false",
-            "desc": "Evaluate data distribution for the current cluster or specific plan",
+            "cmd": "balancer eval name=option,type=CephString,req=false",
+            "desc": "Evaluate data distribution for the current cluster or specific pool or specific plan",
             "perm": "r",
         },
         {
-            "cmd": "balancer optimize name=plan,type=CephString",
+            "cmd": "balancer eval-verbose name=option,type=CephString,req=false",
+            "desc": "Evaluate data distribution for the current cluster or specific pool or specific plan (verbosely)",
+            "perm": "r",
+        },
+        {
+            "cmd": "balancer optimize name=plan,type=CephString name=pools,type=CephString,n=N,req=false",
             "desc": "Run optimizer to create a new plan",
             "perm": "rw",
         },
@@ -217,6 +273,11 @@ class Module(MgrModule):
             "perm": "r",
         },
         {
+            "cmd": "balancer ls",
+            "desc": "List all plans",
+            "perm": "r",
+        },
+        {
             "cmd": "balancer execute name=plan,type=CephString",
             "desc": "Execute an optimization plan",
             "perm": "r",
@@ -231,7 +292,7 @@ class Module(MgrModule):
         super(Module, self).__init__(*args, **kwargs)
         self.event = Event()
 
-    def handle_command(self, command):
+    def handle_command(self, inbuf, command):
         self.log.warn("Handling command: '%s'" % str(command))
         if command['prefix'] == 'balancer status':
             s = {
@@ -255,28 +316,55 @@ class Module(MgrModule):
                 self.active = False
             self.event.set()
             return (0, '', '')
-        elif command['prefix'] == 'balancer eval':
-            if 'plan' in command:
-                plan = self.plans.get(command['plan'])
+        elif command['prefix'] == 'balancer eval' or command['prefix'] == 'balancer eval-verbose':
+            verbose = command['prefix'] == 'balancer eval-verbose'
+            pools = []
+            if 'option' in command:
+                plan = self.plans.get(command['option'])
                 if not plan:
-                    return (-errno.ENOENT, '', 'plan %s not found' %
-                            command['plan'])
-                ms = plan.final_state()
+                    # not a plan, does it look like a pool?
+                    osdmap = self.get_osdmap()
+                    valid_pool_names = [p['pool_name'] for p in osdmap.dump().get('pools', [])]
+                    option = command['option']
+                    if option not in valid_pool_names:
+                         return (-errno.EINVAL, '', 'option "%s" not a plan or a pool' % option)
+                    pools.append(option)
+                    ms = MappingState(osdmap, self.get("pg_dump"), 'pool "%s"' % option)
+                else:
+                    pools = plan.pools
+                    ms = plan.final_state()
             else:
                 ms = MappingState(self.get_osdmap(),
                                   self.get("pg_dump"),
                                   'current cluster')
-            return (0, self.evaluate(ms), '')
+            return (0, self.evaluate(ms, pools, verbose=verbose), '')
         elif command['prefix'] == 'balancer optimize':
-            plan = self.plan_create(command['plan'])
-            self.optimize(plan)
-            return (0, '', '')
+            pools = []
+            if 'pools' in command:
+                pools = command['pools']
+            osdmap = self.get_osdmap()
+            valid_pool_names = [p['pool_name'] for p in osdmap.dump().get('pools', [])]
+            invalid_pool_names = []
+            for p in pools:
+                if p not in valid_pool_names:
+                    invalid_pool_names.append(p)
+            if len(invalid_pool_names):
+                return (-errno.EINVAL, '', 'pools %s not found' % invalid_pool_names)
+            plan = self.plan_create(command['plan'], osdmap, pools)
+            r, detail = self.optimize(plan)
+            # remove plan if we are currently unable to find an optimization
+            # or distribution is already perfect
+            if r:
+                self.plan_rm(command['plan'])
+            return (r, '', detail)
         elif command['prefix'] == 'balancer rm':
-            self.plan_rm(command['name'])
+            self.plan_rm(command['plan'])
             return (0, '', '')
         elif command['prefix'] == 'balancer reset':
             self.plans = {}
             return (0, '', '')
+        elif command['prefix'] == 'balancer ls':
+            return (0, json.dumps([p for p in self.plans], indent=4), '')
         elif command['prefix'] == 'balancer dump':
             plan = self.plans.get(command['plan'])
             if not plan:
@@ -291,9 +379,9 @@ class Module(MgrModule):
             plan = self.plans.get(command['plan'])
             if not plan:
                 return (-errno.ENOENT, '', 'plan %s not found' % command['plan'])
-            self.execute(plan)
-            self.plan_rm(plan)
-            return (0, '', '')
+            r, detail = self.execute(plan)
+            self.plan_rm(command['plan'])
+            return (r, '', detail)
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
@@ -303,28 +391,42 @@ class Module(MgrModule):
         self.run = False
         self.event.set()
 
+    def time_in_interval(self, tod, begin, end):
+        if begin <= end:
+            return tod >= begin and tod < end
+        else:
+            return tod >= begin or tod < end
+
     def serve(self):
         self.log.info('Starting')
         while self.run:
-            self.log.debug('Waking up')
             self.active = self.get_config('active', '') is not ''
+            begin_time = self.get_config('begin_time') or '0000'
+            end_time = self.get_config('end_time') or '2400'
+            timeofday = time.strftime('%H%M', time.localtime())
+            self.log.debug('Waking up [%s, scheduled for %s-%s, now %s]',
+                           "active" if self.active else "inactive",
+                           begin_time, end_time, timeofday)
             sleep_interval = float(self.get_config('sleep_interval',
                                                    default_sleep_interval))
-            if self.active:
+            if self.active and self.time_in_interval(timeofday, begin_time, end_time):
                 self.log.debug('Running')
                 name = 'auto_%s' % time.strftime(TIME_FORMAT, time.gmtime())
-                plan = self.plan_create(name)
-                if self.optimize(plan):
+                plan = self.plan_create(name, self.get_osdmap(), [])
+                r, detail = self.optimize(plan)
+                if r == 0:
                     self.execute(plan)
                 self.plan_rm(name)
             self.log.debug('Sleeping for %d', sleep_interval)
             self.event.wait(sleep_interval)
             self.event.clear()
 
-    def plan_create(self, name):
-        plan = Plan(name, MappingState(self.get_osdmap(),
-                                       self.get("pg_dump"),
-                                       'plan %s initial' % name))
+    def plan_create(self, name, osdmap, pools):
+        plan = Plan(name,
+                    MappingState(osdmap,
+                                 self.get("pg_dump"),
+                                 'plan %s initial' % name),
+                    pools)
         self.plans[name] = plan
         return plan
 
@@ -332,35 +434,60 @@ class Module(MgrModule):
         if name in self.plans:
             del self.plans[name]
 
-    def calc_eval(self, ms):
+    def calc_eval(self, ms, pools):
         pe = Eval(ms)
         pool_rule = {}
+        pool_info = {}
         for p in ms.osdmap_dump.get('pools',[]):
+            if len(pools) and p['pool_name'] not in pools:
+                continue
+            # skip dead or not-yet-ready pools too
+            if p['pool'] not in ms.poolids:
+                continue
             pe.pool_name[p['pool']] = p['pool_name']
             pe.pool_id[p['pool_name']] = p['pool']
             pool_rule[p['pool_name']] = p['crush_rule']
             pe.pool_roots[p['pool_name']] = []
-        pools = pe.pool_id.keys()
-        if len(pools) == 0:
+            pool_info[p['pool_name']] = p
+        if len(pool_info) == 0:
             return pe
         self.log.debug('pool_name %s' % pe.pool_name)
         self.log.debug('pool_id %s' % pe.pool_id)
         self.log.debug('pools %s' % pools)
         self.log.debug('pool_rule %s' % pool_rule)
 
+        osd_weight = { a['osd']: a['weight']
+                       for a in ms.osdmap_dump.get('osds',[]) if a['weight'] > 0 }
+
         # get expected distributions by root
         actual_by_root = {}
         rootids = ms.crush.find_takes()
         roots = []
         for rootid in rootids:
-            root = ms.crush.get_item_name(rootid)
-            roots.append(root)
             ls = ms.osdmap.get_pools_by_take(rootid)
+            want = []
+            # find out roots associating with pools we are passed in
+            for candidate in ls:
+                if candidate in pe.pool_name:
+                    want.append(candidate)
+            if len(want) == 0:
+                continue
+            root = ms.crush.get_item_name(rootid)
             pe.root_pools[root] = []
-            for poolid in ls:
+            for poolid in want:
                 pe.pool_roots[pe.pool_name[poolid]].append(root)
                 pe.root_pools[root].append(pe.pool_name[poolid])
-            pe.target_by_root[root] = ms.crush.get_take_weight_osd_map(rootid)
+            pe.root_ids[root] = rootid
+            roots.append(root)
+            weight_map = ms.crush.get_take_weight_osd_map(rootid)
+            adjusted_map = {
+                osd: cw * osd_weight[osd]
+                for osd,cw in six.iteritems(weight_map) if osd in osd_weight and cw > 0
+            }
+            sum_w = sum(adjusted_map.values())
+            assert len(adjusted_map) == 0 or sum_w > 0
+            pe.target_by_root[root] = { osd: w / sum_w
+                                        for osd,w in six.iteritems(adjusted_map) }
             actual_by_root[root] = {
                 'pgs': {},
                 'objects': {},
@@ -380,11 +507,9 @@ class Module(MgrModule):
         self.log.debug('target_by_root %s' % pe.target_by_root)
 
         # pool and root actual
-        for pool in pools:
-            pi = [p for p in ms.osdmap_dump.get('pools',[])
-                  if p['pool_name'] == pool][0]
+        for pool, pi in six.iteritems(pool_info):
             poolid = pi['pool']
-            pm = ms.osdmap.map_pool_pgs_up(poolid)
+            pm = ms.pg_up_by_poolid[poolid]
             pgs = 0
             objects = 0
             bytes = 0
@@ -396,8 +521,10 @@ class Module(MgrModule):
                     pgs_by_osd[osd] = 0
                     objects_by_osd[osd] = 0
                     bytes_by_osd[osd] = 0
-            for pgid, up in pm.iteritems():
+            for pgid, up in six.iteritems(pm):
                 for osd in [int(osd) for osd in up]:
+                    if osd == CRUSHMap.ITEM_NONE:
+                        continue
                     pgs_by_osd[osd] += 1
                     objects_by_osd[osd] += ms.pg_stat[pgid]['num_objects']
                     bytes_by_osd[osd] += ms.pg_stat[pgid]['num_bytes']
@@ -420,29 +547,29 @@ class Module(MgrModule):
             pe.count_by_pool[pool] = {
                 'pgs': {
                     k: v
-                    for k, v in pgs_by_osd.iteritems()
+                    for k, v in six.iteritems(pgs_by_osd)
                 },
                 'objects': {
                     k: v
-                    for k, v in objects_by_osd.iteritems()
+                    for k, v in six.iteritems(objects_by_osd)
                 },
                 'bytes': {
                     k: v
-                    for k, v in bytes_by_osd.iteritems()
+                    for k, v in six.iteritems(bytes_by_osd)
                 },
             }
             pe.actual_by_pool[pool] = {
                 'pgs': {
                     k: float(v) / float(max(pgs, 1))
-                    for k, v in pgs_by_osd.iteritems()
+                    for k, v in six.iteritems(pgs_by_osd)
                 },
                 'objects': {
                     k: float(v) / float(max(objects, 1))
-                    for k, v in objects_by_osd.iteritems()
+                    for k, v in six.iteritems(objects_by_osd)
                 },
                 'bytes': {
                     k: float(v) / float(max(bytes, 1))
-                    for k, v in bytes_by_osd.iteritems()
+                    for k, v in six.iteritems(bytes_by_osd)
                 },
             }
             pe.total_by_pool[pool] = {
@@ -450,33 +577,33 @@ class Module(MgrModule):
                 'objects': objects,
                 'bytes': bytes,
             }
-        for root, m in pe.total_by_root.iteritems():
+        for root in pe.total_by_root.iterkeys():
             pe.count_by_root[root] = {
                 'pgs': {
                     k: float(v)
-                    for k, v in actual_by_root[root]['pgs'].iteritems()
+                    for k, v in six.iteritems(actual_by_root[root]['pgs'])
                 },
                 'objects': {
                     k: float(v)
-                    for k, v in actual_by_root[root]['objects'].iteritems()
+                    for k, v in six.iteritems(actual_by_root[root]['objects'])
                 },
                 'bytes': {
                     k: float(v)
-                    for k, v in actual_by_root[root]['bytes'].iteritems()
+                    for k, v in six.iteritems(actual_by_root[root]['bytes'])
                 },
             }
             pe.actual_by_root[root] = {
                 'pgs': {
                     k: float(v) / float(max(pe.total_by_root[root]['pgs'], 1))
-                    for k, v in actual_by_root[root]['pgs'].iteritems()
+                    for k, v in six.iteritems(actual_by_root[root]['pgs'])
                 },
                 'objects': {
                     k: float(v) / float(max(pe.total_by_root[root]['objects'], 1))
-                    for k, v in actual_by_root[root]['objects'].iteritems()
+                    for k, v in six.iteritems(actual_by_root[root]['objects'])
                 },
                 'bytes': {
                     k: float(v) / float(max(pe.total_by_root[root]['bytes'], 1))
-                    for k, v in actual_by_root[root]['bytes'].iteritems()
+                    for k, v in six.iteritems(actual_by_root[root]['bytes'])
                 },
             }
         self.log.debug('actual_by_pool %s' % pe.actual_by_pool)
@@ -488,8 +615,9 @@ class Module(MgrModule):
                 b,
                 pe.target_by_root[a],
                 pe.total_by_root[a]
-            ) for a, b in pe.count_by_root.iteritems()
+            ) for a, b in six.iteritems(pe.count_by_root)
         }
+        self.log.debug('stats_by_root %s' % pe.stats_by_root)
 
 	# the scores are already normalized
         pe.score_by_root = {
@@ -499,18 +627,19 @@ class Module(MgrModule):
                 'bytes': pe.stats_by_root[r]['bytes']['score'],
             } for r in pe.total_by_root.keys()
         }
+        self.log.debug('score_by_root %s' % pe.score_by_root)
 
         # total score is just average of normalized stddevs
         pe.score = 0.0
-        for r, vs in pe.score_by_root.iteritems():
-            for k, v in vs.iteritems():
+        for r, vs in six.iteritems(pe.score_by_root):
+            for k, v in six.iteritems(vs):
                 pe.score += v
         pe.score /= 3 * len(roots)
         return pe
 
-    def evaluate(self, ms):
-        pe = self.calc_eval(ms)
-        return pe.show()
+    def evaluate(self, ms, pools, verbose=False):
+        pe = self.calc_eval(ms, pools)
+        return pe.show(verbose=verbose)
 
     def optimize(self, plan):
         self.log.info('Optimize plan %s' % plan.name)
@@ -528,37 +657,51 @@ class Module(MgrModule):
         self.log.debug('unknown %f degraded %f inactive %f misplaced %g',
                        unknown, degraded, inactive, misplaced)
         if unknown > 0.0:
-            self.log.info('Some PGs (%f) are unknown; waiting', unknown)
+            detail = 'Some PGs (%f) are unknown; try again later' % unknown
+            self.log.info(detail)
+            return -errno.EAGAIN, detail
         elif degraded > 0.0:
-            self.log.info('Some PGs (%f) are degraded; waiting', degraded)
+            detail = 'Some objects (%f) are degraded; try again later' % degraded
+            self.log.info(detail)
+            return -errno.EAGAIN, detail
         elif inactive > 0.0:
-            self.log.info('Some PGs (%f) are inactive; waiting', inactive)
+            detail = 'Some PGs (%f) are inactive; try again later' % inactive
+            self.log.info(detail)
+            return -errno.EAGAIN, detail
         elif misplaced >= max_misplaced:
-            self.log.info('Too many PGs (%f > %f) are misplaced; waiting',
-                          misplaced, max_misplaced)
+            detail = 'Too many objects (%f > %f) are misplaced; ' \
+                     'try again later' % (misplaced, max_misplaced)
+            self.log.info(detail)
+            return -errno.EAGAIN, detail
         else:
             if plan.mode == 'upmap':
                 return self.do_upmap(plan)
             elif plan.mode == 'crush-compat':
                 return self.do_crush_compat(plan)
             elif plan.mode == 'none':
+                detail = 'Please do "ceph balancer mode" to choose a valid mode first'
                 self.log.info('Idle')
+                return -errno.ENOEXEC, detail
             else:
-                self.log.info('Unrecognized mode %s' % plan.mode)
-        return False
-
+                detail = 'Unrecognized mode %s' % plan.mode
+                self.log.info(detail)
+                return -errno.EINVAL, detail
         ##
 
     def do_upmap(self, plan):
         self.log.info('do_upmap')
-        max_iterations = self.get_config('upmap_max_iterations', 10)
-        max_deviation = self.get_config('upmap_max_deviation', .01)
+        max_iterations = int(self.get_config('upmap_max_iterations', 10))
+        max_deviation = float(self.get_config('upmap_max_deviation', .01))
 
         ms = plan.initial
-        pools = [str(i['pool_name']) for i in ms.osdmap_dump.get('pools',[])]
+        if len(plan.pools):
+            pools = plan.pools
+        else: # all
+            pools = [str(i['pool_name']) for i in ms.osdmap_dump.get('pools',[])]
         if len(pools) == 0:
-            self.log.info('no pools, nothing to do')
-            return False
+            detail = 'No pools available'
+            self.log.info(detail)
+            return -errno.ENOENT, detail
         # shuffle pool list so they all get equal (in)attention
         random.shuffle(pools)
         self.log.info('pools %s' % pools)
@@ -573,18 +716,48 @@ class Module(MgrModule):
             if left <= 0:
                 break
         self.log.info('prepared %d/%d changes' % (total_did, max_iterations))
-        return True
+        if total_did == 0:
+            return -errno.EALREADY, 'Unable to find further optimization,' \
+                                    'or distribution is already perfect'
+        return 0, ''
 
     def do_crush_compat(self, plan):
         self.log.info('do_crush_compat')
-        osdmap = self.get_osdmap()
-        crush = osdmap.get_crush()
-
-        # get current compat weight-set weights
-        old_ws = self.get_compat_weight_set_weights()
+        max_iterations = int(self.get_config('crush_compat_max_iterations', 25))
+        if max_iterations < 1:
+            return -errno.EINVAL, '"crush_compat_max_iterations" must be >= 1'
+        step = float(self.get_config('crush_compat_step', .5))
+        if step <= 0 or step >= 1.0:
+            return -errno.EINVAL, '"crush_compat_step" must be in (0, 1)'
+        max_misplaced = float(self.get_config('max_misplaced',
+                                              default_max_misplaced))
+        min_pg_per_osd = 2
 
         ms = plan.initial
-        pe = self.calc_eval(ms)
+        osdmap = ms.osdmap
+        crush = osdmap.get_crush()
+        pe = self.calc_eval(ms, plan.pools)
+        min_score_to_optimize = float(self.get_config('min_score', 0))
+        if pe.score <= min_score_to_optimize:
+            if pe.score == 0:
+                detail = 'Distribution is already perfect'
+            else:
+                detail = 'score %f <= min_score %f, will not optimize' \
+                         % (pe.score, min_score_to_optimize)
+            self.log.info(detail)
+            return -errno.EALREADY, detail
+
+        # get current osd reweights
+        orig_osd_weight = { a['osd']: a['weight']
+                            for a in ms.osdmap_dump.get('osds',[]) }
+        reweighted_osds = [ a for a,b in six.iteritems(orig_osd_weight)
+                            if b < 1.0 and b > 0.0 ]
+
+        # get current compat weight-set weights
+        orig_ws = self.get_compat_weight_set_weights(ms)
+        if not orig_ws:
+            return -errno.EAGAIN, 'compat weight-set not available'
+        orig_ws = { a: b for a, b in six.iteritems(orig_ws) if a >= 0 }
 
         # Make sure roots don't overlap their devices.  If so, we
         # can't proceed.
@@ -593,85 +766,178 @@ class Module(MgrModule):
         visited = {}
         overlap = {}
         root_ids = {}
-        for root, wm in pe.target_by_root.iteritems():
+        for root, wm in six.iteritems(pe.target_by_root):
             for osd in wm.iterkeys():
                 if osd in visited:
-                    overlap[osd] = 1
-                visited[osd] = 1
+                    if osd not in overlap:
+                        overlap[osd] = [ visited[osd] ]
+                    overlap[osd].append(root)
+                visited[osd] = root
         if len(overlap) > 0:
-            self.log.err('error: some osds belong to multiple subtrees: %s' %
-                         overlap)
-            return False
+            detail = 'Some osds belong to multiple subtrees: %s' % \
+                     overlap
+            self.log.error(detail)
+            return -errno.EOPNOTSUPP, detail
 
         key = 'pgs'  # pgs objects or bytes
 
         # go
-        random.shuffle(roots)
-        for root in roots:
-            pools = pe.root_pools[root]
-            self.log.info('Balancing root %s (pools %s) by %s' %
-                          (root, pools, key))
-            target = pe.target_by_root[root]
-            actual = pe.actual_by_root[root][key]
-            queue = sorted(actual.keys(),
-                           key=lambda osd: -abs(target[osd] - actual[osd]))
-            self.log.debug('queue %s' % queue)
-            for osd in queue:
-                deviation = target[osd] - actual[osd]
-                if deviation == 0:
+        best_ws = copy.deepcopy(orig_ws)
+        best_ow = copy.deepcopy(orig_osd_weight)
+        best_pe = pe
+        left = max_iterations
+        bad_steps = 0
+        next_ws = copy.deepcopy(best_ws)
+        next_ow = copy.deepcopy(best_ow)
+        while left > 0:
+            # adjust
+            self.log.debug('best_ws %s' % best_ws)
+            random.shuffle(roots)
+            for root in roots:
+                pools = best_pe.root_pools[root]
+                osds = len(best_pe.target_by_root[root])
+                min_pgs = osds * min_pg_per_osd
+                if best_pe.total_by_root[root][key] < min_pgs:
+                    self.log.info('Skipping root %s (pools %s), total pgs %d '
+                                  '< minimum %d (%d per osd)',
+                                  root, pools,
+                                  best_pe.total_by_root[root][key],
+                                  min_pgs, min_pg_per_osd)
+                    continue
+                self.log.info('Balancing root %s (pools %s) by %s' %
+                              (root, pools, key))
+                target = best_pe.target_by_root[root]
+                actual = best_pe.actual_by_root[root][key]
+                queue = sorted(actual.keys(),
+                               key=lambda osd: -abs(target[osd] - actual[osd]))
+                for osd in queue:
+                    if orig_osd_weight[osd] == 0:
+                        self.log.debug('skipping out osd.%d', osd)
+                    else:
+                        deviation = target[osd] - actual[osd]
+                        if deviation == 0:
+                            break
+                        self.log.debug('osd.%d deviation %f', osd, deviation)
+                        weight = best_ws[osd]
+                        ow = orig_osd_weight[osd]
+                        if actual[osd] > 0:
+                            calc_weight = target[osd] / actual[osd] * weight * ow
+                        else:
+                            # not enough to go on here... keep orig weight
+                            calc_weight = weight / orig_osd_weight[osd]
+                        new_weight = weight * (1.0 - step) + calc_weight * step
+                        self.log.debug('Reweight osd.%d %f -> %f', osd, weight,
+                                       new_weight)
+                        next_ws[osd] = new_weight
+                        if ow < 1.0:
+                            new_ow = min(1.0, max(step + (1.0 - step) * ow,
+                                                  ow + .005))
+                            self.log.debug('Reweight osd.%d reweight %f -> %f',
+                                           osd, ow, new_ow)
+                            next_ow[osd] = new_ow
+
+                # normalize weights under this root
+                root_weight = crush.get_item_weight(pe.root_ids[root])
+                root_sum = sum(b for a,b in six.iteritems(next_ws)
+                               if a in target.keys())
+                if root_sum > 0 and root_weight > 0:
+                    factor = root_sum / root_weight
+                    self.log.debug('normalizing root %s %d, weight %f, '
+                                   'ws sum %f, factor %f',
+                                   root, pe.root_ids[root], root_weight,
+                                   root_sum, factor)
+                    for osd in actual.keys():
+                        next_ws[osd] = next_ws[osd] / factor
+
+            # recalc
+            plan.compat_ws = copy.deepcopy(next_ws)
+            next_ms = plan.final_state()
+            next_pe = self.calc_eval(next_ms, plan.pools)
+            next_misplaced = next_ms.calc_misplaced_from(ms)
+            self.log.debug('Step result score %f -> %f, misplacing %f',
+                           best_pe.score, next_pe.score, next_misplaced)
+
+            if next_misplaced > max_misplaced:
+                if best_pe.score < pe.score:
+                    self.log.debug('Step misplaced %f > max %f, stopping',
+                                   next_misplaced, max_misplaced)
                     break
-                self.log.debug('osd.%d deviation %f', osd, deviation)
-                weight = old_ws[osd]
-                calc_weight = target[osd] / actual[osd] * weight
-                new_weight = weight * .7 + calc_weight * .3
-                self.log.debug('Reweight osd.%d %f -> %f', osd, weight,
-                               new_weight)
-                plan.compat_ws[osd] = new_weight
-        return True
+                step /= 2.0
+                next_ws = copy.deepcopy(best_ws)
+                next_ow = copy.deepcopy(best_ow)
+                self.log.debug('Step misplaced %f > max %f, reducing step to %f',
+                               next_misplaced, max_misplaced, step)
+            else:
+                if next_pe.score > best_pe.score * 1.0001:
+                    bad_steps += 1
+                    if bad_steps < 5 and random.randint(0, 100) < 70:
+                        self.log.debug('Score got worse, taking another step')
+                    else:
+                        step /= 2.0
+                        next_ws = copy.deepcopy(best_ws)
+                        next_ow = copy.deepcopy(best_ow)
+                        self.log.debug('Score got worse, trying smaller step %f',
+                                       step)
+                else:
+                    bad_steps = 0
+                    best_pe = next_pe
+                    best_ws = next_ws
+                    best_ow = next_ow
+                    if best_pe.score == 0:
+                        break
+            left -= 1
 
-    def compat_weight_set_reweight(self, osd, new_weight):
-        self.log.debug('ceph osd crush weight-set reweight-compat')
-        result = CommandResult('')
-        self.send_command(result, 'mon', '', json.dumps({
-            'prefix': 'osd crush weight-set reweight-compat',
-            'format': 'json',
-            'item': 'osd.%d' % osd,
-            'weight': [new_weight],
-        }), '')
-        r, outb, outs = result.wait()
-        if r != 0:
-            self.log.error('Error setting compat weight-set osd.%d to %f' %
-            (osd, new_weight))
-            return
+        # allow a small regression if we are phasing out osd weights
+        fudge = 0
+        if next_ow != orig_osd_weight:
+            fudge = .001
 
-    def get_compat_weight_set_weights(self):
-        # enable compat weight-set
-        self.log.debug('ceph osd crush weight-set create-compat')
-        result = CommandResult('')
-        self.send_command(result, 'mon', '', json.dumps({
-            'prefix': 'osd crush weight-set create-compat',
-            'format': 'json',
-        }), '')
-        r, outb, outs = result.wait()
-        if r != 0:
-            self.log.error('Error creating compat weight-set')
-            return
+        if best_pe.score < pe.score + fudge:
+            self.log.info('Success, score %f -> %f', pe.score, best_pe.score)
+            plan.compat_ws = best_ws
+            for osd, w in six.iteritems(best_ow):
+                if w != orig_osd_weight[osd]:
+                    self.log.debug('osd.%d reweight %f', osd, w)
+                    plan.osd_weights[osd] = w
+            return 0, ''
+        else:
+            self.log.info('Failed to find further optimization, score %f',
+                          pe.score)
+            plan.compat_ws = {}
+            return -errno.EDOM, 'Unable to find further optimization, ' \
+                                'change balancer mode and retry might help'
 
-        result = CommandResult('')
-        self.send_command(result, 'mon', '', json.dumps({
-            'prefix': 'osd crush dump',
-            'format': 'json',
-        }), '')
-        r, outb, outs = result.wait()
-        if r != 0:
-            self.log.error('Error dumping crush map')
-            return
-        try:
-            crushmap = json.loads(outb)
-        except:
-            raise RuntimeError('unable to parse crush map')
+    def get_compat_weight_set_weights(self, ms):
+        if not CRUSHMap.have_default_choose_args(ms.crush_dump):
+            # enable compat weight-set first
+            self.log.debug('ceph osd crush weight-set create-compat')
+            result = CommandResult('')
+            self.send_command(result, 'mon', '', json.dumps({
+                'prefix': 'osd crush weight-set create-compat',
+                'format': 'json',
+            }), '')
+            r, outb, outs = result.wait()
+            if r != 0:
+                self.log.error('Error creating compat weight-set')
+                return
 
-        raw = crushmap.get('choose_args',{}).get('-1', [])
+            result = CommandResult('')
+            self.send_command(result, 'mon', '', json.dumps({
+                'prefix': 'osd crush dump',
+                'format': 'json',
+            }), '')
+            r, outb, outs = result.wait()
+            if r != 0:
+                self.log.error('Error dumping crush map')
+                return
+            try:
+                crushmap = json.loads(outb)
+            except:
+                raise RuntimeError('unable to parse crush map')
+        else:
+            crushmap = ms.crush_dump
+
+        raw = CRUSHMap.get_default_choose_args(crushmap)
         weight_set = {}
         for b in raw:
             bucket = None
@@ -691,46 +957,6 @@ class Module(MgrModule):
         self.log.debug('weight_set weights %s' % weight_set)
         return weight_set
 
-    def get_util(self, cost_mode, pools, osds):
-        if cost_mode == 'pg' or \
-           cost_mode == 'pg_bytes' or \
-           cost_mode == 'pg_objects':
-            util_map = {}
-            for osd in osds:
-                util_map[osd] = 0
-            dump = self.get('pg_dump')
-            #self.log.info('dump %s' % dump)
-            self.log.info('osds %s' % osds)
-            for pg in dump['pg_stats']:
-                inpool = False
-                for pool in pools:
-                    if pg['pgid'].startswith(str(pool) + '.'):
-                        inpool = True
-                        break
-                if not inpool:
-                    self.log.info('skipping %s' % pg['pgid'])
-                    continue
-                self.log.info('pg %s osds %s' % (pg['pgid'], pg['up']))
-                for osd in [int(a) for a in pg['up']]:
-                    if osd in osds:
-                        if cost_mode == 'pg':
-                            util_map[osd] += 1
-                        elif cost_mode == 'pg_bytes':
-                            util_map[osd] += pg['stat_sum']['num_bytes']
-                        elif cost_mode == 'pg_objects':
-                            util_map[osd] += pg['stat_sum']['num_objects']
-            return util_map
-        else:
-            raise RuntimeError('unsupported cost mode %s' % cost_mode)
-
-    def get_target(self, util_map):
-        total = 0
-        count = 0
-        for k, v in util_map.iteritems():
-            total += v;
-            count += 1
-        return total / count
-
     def do_crush(self):
         self.log.info('do_crush (not yet implemented)')
 
@@ -744,7 +970,7 @@ class Module(MgrModule):
 
         # compat weight-set
         if len(plan.compat_ws) and \
-           '-1' not in plan.initial.crush_dump.get('choose_args', {}):
+           not CRUSHMap.have_default_choose_args(plan.initial.crush_dump):
             self.log.debug('ceph osd crush weight-set create-compat')
             result = CommandResult('')
             self.send_command(result, 'mon', '', json.dumps({
@@ -754,32 +980,32 @@ class Module(MgrModule):
             r, outb, outs = result.wait()
             if r != 0:
                 self.log.error('Error creating compat weight-set')
-                return
+                return r, outs
 
-        for osd, weight in plan.compat_ws.iteritems():
+        for osd, weight in six.iteritems(plan.compat_ws):
             self.log.info('ceph osd crush weight-set reweight-compat osd.%d %f',
                           osd, weight)
-            result = CommandResult('foo')
+            result = CommandResult('')
             self.send_command(result, 'mon', '', json.dumps({
                 'prefix': 'osd crush weight-set reweight-compat',
                 'format': 'json',
                 'item': 'osd.%d' % osd,
                 'weight': [weight],
-            }), 'foo')
+            }), '')
             commands.append(result)
 
         # new_weight
         reweightn = {}
-        for osd, weight in plan.osd_weights.iteritems():
-            reweightn[int(osd)] = float(weight) / float(0x10000)
+        for osd, weight in six.iteritems(plan.osd_weights):
+            reweightn[str(osd)] = str(int(weight * float(0x10000)))
         if len(reweightn):
             self.log.info('ceph osd reweightn %s', reweightn)
-            result = CommandResult('foo')
+            result = CommandResult('')
             self.send_command(result, 'mon', '', json.dumps({
                 'prefix': 'osd reweightn',
                 'format': 'json',
                 'weights': json.dumps(reweightn),
-            }), 'foo')
+            }), '')
             commands.append(result)
 
         # upmap
@@ -814,6 +1040,7 @@ class Module(MgrModule):
         for result in commands:
             r, outb, outs = result.wait()
             if r != 0:
-                self.log.error('Error on command')
-                return
+                self.log.error('execute error: r = %d, detail = %s' % (r, outs))
+                return r, outs
         self.log.debug('done')
+        return 0, ''

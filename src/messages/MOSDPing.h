@@ -76,29 +76,30 @@ private:
 
 public:
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(fsid, p);
-    ::decode(map_epoch, p);
-    ::decode(op, p);
-    ::decode(stamp, p);
+    auto p = payload.cbegin();
+    decode(fsid, p);
+    decode(map_epoch, p);
+    decode(op, p);
+    decode(stamp, p);
 
     int payload_mid_length = p.get_off();
     uint32_t size;
-    ::decode(size, p);
+    decode(size, p);
     p.advance(size);
     min_message_size = size + payload_mid_length;
   }
   void encode_payload(uint64_t features) override {
-    ::encode(fsid, payload);
-    ::encode(map_epoch, payload);
-    ::encode(op, payload);
-    ::encode(stamp, payload);
+    using ceph::encode;
+    encode(fsid, payload);
+    encode(map_epoch, payload);
+    encode(op, payload);
+    encode(stamp, payload);
 
     size_t s = 0;
     if (min_message_size > payload.length()) {
       s = min_message_size - payload.length();
     }
-    ::encode((uint32_t)s, payload);
+    encode((uint32_t)s, payload);
     if (s) {
       // this should be big enough for normal min_message padding sizes. since
       // we are targetting jumbo ethernet frames around 9000 bytes, 16k should

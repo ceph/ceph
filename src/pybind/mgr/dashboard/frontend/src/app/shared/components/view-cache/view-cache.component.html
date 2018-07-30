@@ -1,0 +1,14 @@
+<cd-info-panel i18n
+               *ngIf="status === vcs.ValueNone">
+  Retrieving data<span *ngIf="statusFor"> for <span [innerHtml]="statusFor"></span></span>. Please wait...
+</cd-info-panel>
+
+<cd-warning-panel i18n
+                  *ngIf="status === vcs.ValueStale">
+  Displaying previously cached data<span *ngIf="statusFor"> for <span [innerHtml]="statusFor"></span></span>.
+</cd-warning-panel>
+
+<cd-error-panel i18n
+                *ngIf="status === vcs.ValueException">
+  Could not load data<span *ngIf="statusFor"> for <span [innerHtml]="statusFor"></span></span>. Please check the cluster health.
+</cd-error-panel>

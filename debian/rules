@@ -5,28 +5,24 @@ export DESTDIR=$(CURDIR)/debian/tmp
 
 export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
-extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON -DWITH_PYTHON3=ON -DWITH_EMBEDDED=OFF
+extraopts += -DWITH_OCF=ON -DWITH_LTTNG=ON -DWITH_PYTHON3=ON -DWITH_MGR_DASHBOARD_FRONTEND=OFF
 extraopts += -DWITH_CEPHFS_JAVA=ON
+extraopts += -DWITH_SYSTEMD=ON -DCEPH_SYSTEMD_ENV_DIR=/etc/default
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
 extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/lib
 extraopts += -DCMAKE_INSTALL_SYSCONFDIR=/etc
+extraopts += -DCMAKE_INSTALL_SYSTEMD_SERVICEDIR=/lib/systemd/system
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
   NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
   extraopts += -DBOOST_J=$(NUMJOBS)
 endif
 
-ifeq ($(DEB_HOST_ARCH), armel)
-  # armel supports ARMv4t or above instructions sets.
-  # libatomic-ops is only usable with Ceph for ARMv6 or above.
-  extraopts += -DWITH_ATOMIC_OPS=OFF
-endif
-
 ifneq (,$(filter $(DEB_HOST_ARCH), arm armel armhf arm64 i386 amd64 mips mipsel powerpc ppc64))
-  # beast depends on libboost_context which only support the archs above
-  extraopts += -DWITH_RADOSGW_BEAST_FRONTEND=ON
+  # libboost_context only support the archs above
+  extraopts += -DWITH_BOOST_CONTEXT=ON
 else
-  extraopts += -DWITH_RADOSGW_BEAST_FRONTEND=OFF
+  extraopts += -DWITH_BOOST_CONTEXT=OFF
 endif
 
 %:
@@ -47,16 +43,15 @@ override_dh_auto_clean:
 override_dh_auto_install:
 	dh_auto_install --buildsystem=cmake --destdir=$(DESTDIR)
 	install -D -m 644 udev/50-rbd.rules $(DESTDIR)/lib/udev/rules.d/50-rbd.rules
-	install -D -m 644 udev/95-ceph-osd.rules $(DESTDIR)/lib/udev/rules.d/95-ceph-osd.rules
-	install -D -m 644 udev/60-ceph-by-parttypeuuid.rules $(DESTDIR)/lib/udev/rules.d/60-ceph-by-parttypeuuid.rules
 	install -D -m 644 src/etc-rbdmap $(DESTDIR)/etc/ceph/rbdmap
+	install -D -m 644 etc/sysctl/90-ceph-osd.conf $(DESTDIR)/etc/sysctl.d/30-ceph-osd.conf
+	install -D -m 600 sudoers.d/ceph-osd-smartctl $(DESTDIR)/etc/sudoers.d/ceph-osd-smartctl
 
 # doc/changelog is a directory, which confuses dh_installchangelogs
 override_dh_installchangelogs:
 	dh_installchangelogs --exclude doc/changelog
 
 override_dh_installdocs:
-	dh_installdocs -a --all ChangeLog
 
 override_dh_installlogrotate:
 	cp src/logrotate.conf debian/ceph-common.logrotate
@@ -69,7 +64,6 @@ override_dh_installinit:
 	install -m0644 src/upstart/ceph-all.conf debian/ceph-base/etc/init
 	install -d -m0755 debian/ceph-osd/etc/init
 	install -m0644 src/upstart/ceph-osd*.conf debian/ceph-osd/etc/init
-	install -m0644 src/upstart/ceph-disk.conf debian/ceph-osd/etc/init
 	install -d -m0755 debian/ceph-mon/etc/init
 	install -m0644 src/upstart/ceph-mon*.conf debian/ceph-mon/etc/init
 	install -d -m0755 debian/ceph-common/etc/init
@@ -83,52 +77,10 @@ override_dh_installinit:
 	install -d -m0755 debian/rbd-mirror/etc/init
 	install -m0644 src/upstart/ceph-rbd-mirror*.conf debian/rbd-mirror/etc/init
 	# install the systemd stuff manually since we have funny service names
-	install -d -m0755 debian/ceph-common/lib/systemd/system
-	install -m0644 systemd/ceph.target debian/ceph-common/lib/systemd/system
 	install -d -m0755 debian/ceph-common/etc/default
 	install -m0644 etc/default/ceph debian/ceph-common/etc/default/
 	install -d -m0755 debian/ceph-common/usr/lib/tmpfiles.d
 	install -m 0644 -D systemd/ceph.tmpfiles.d debian/ceph-common/usr/lib/tmpfiles.d/ceph.conf
-
-	install -d -m0755 debian/ceph-base/lib/systemd/system
-	install -d -m0755 debian/ceph-mon/lib/systemd/system
-	install -d -m0755 debian/ceph-osd/lib/systemd/system
-	install -m0644 systemd/ceph-mon@.service debian/ceph-mon/lib/systemd/system
-	install -m0644 systemd/ceph-osd@.service debian/ceph-osd/lib/systemd/system
-	install -m0644 systemd/ceph-disk@.service debian/ceph-osd/lib/systemd/system
-	install -m0644 systemd/ceph-volume@.service debian/ceph-osd/lib/systemd/system
-	install -m0644 systemd/rbdmap.service debian/ceph-common/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mon/lib/systemd/system/ceph-mon@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-osd@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-disk@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-volume@.service
-	install -m0644 systemd/ceph-mon.target debian/ceph-mon/lib/systemd/system
-	install -m0644 systemd/ceph-osd.target debian/ceph-osd/lib/systemd/system
-
-	install -d -m0755 debian/ceph-mds/lib/systemd/system
-	install -m0644 systemd/ceph-mds@.service debian/ceph-mds/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mds/lib/systemd/system/ceph-mds@.service
-	install -m0644 systemd/ceph-mds.target debian/ceph-mds/lib/systemd/system
-
-	install -d -m0755 debian/ceph-fuse/lib/systemd/system
-	install -m0644 systemd/ceph-fuse@.service debian/ceph-fuse/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-fuse/lib/systemd/system/ceph-fuse@.service
-	install -m0644 systemd/ceph-fuse.target debian/ceph-fuse/lib/systemd/system
-
-	install -d -m0755 debian/ceph-mgr/lib/systemd/system
-	install -m0644 systemd/ceph-mgr@.service debian/ceph-mgr/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mgr/lib/systemd/system/ceph-mgr@.service
-	install -m0644 systemd/ceph-mgr.target debian/ceph-mgr/lib/systemd/system
-
-	install -d -m0755 debian/radosgw/lib/systemd/system
-	install -m0644 systemd/ceph-radosgw@.service debian/radosgw/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/radosgw/lib/systemd/system/ceph-radosgw@.service
-	install -m0644 systemd/ceph-radosgw.target debian/radosgw/lib/systemd/system
-
-	install -d -m0755 debian/rbd-mirror/lib/systemd/system
-	install -m0644 systemd/ceph-rbd-mirror@.service debian/rbd-mirror/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/rbd-mirror/lib/systemd/system/ceph-rbd-mirror@.service
-	install -m0644 systemd/ceph-rbd-mirror.target debian/rbd-mirror/lib/systemd/system
 
 	dh_installinit -p ceph-base --name ceph --no-start
 	dh_installinit -p radosgw --no-start
@@ -149,6 +101,7 @@ override_dh_strip:
 	dh_strip -pceph-mgr --dbg-package=ceph-mgr-dbg
 	dh_strip -pceph-mon --dbg-package=ceph-mon-dbg
 	dh_strip -pceph-osd --dbg-package=ceph-osd-dbg
+	dh_strip -pceph-base --dbg-package=ceph-base-dbg
 	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
 	dh_strip -prbd-fuse --dbg-package=rbd-fuse-dbg
 	dh_strip -prbd-mirror --dbg-package=rbd-mirror-dbg
@@ -161,6 +114,14 @@ override_dh_strip:
 	dh_strip -plibrgw2 --dbg-package=librgw2-dbg
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
 	dh_strip -pceph-test --dbg-package=ceph-test-dbg
+	dh_strip -ppython-rados --dbg-package=python-rados-dbg
+	dh_strip -ppython3-rados --dbg-package=python3-rados-dbg
+	dh_strip -ppython-rbd --dbg-package=python-rbd-dbg
+	dh_strip -ppython3-rbd --dbg-package=python3-rbd-dbg
+	dh_strip -ppython-rgw --dbg-package=python-rgw-dbg
+	dh_strip -ppython3-rgw --dbg-package=python3-rgw-dbg
+	dh_strip -ppython-cephfs --dbg-package=python-cephfs-dbg
+	dh_strip -ppython3-cephfs --dbg-package=python3-cephfs-dbg
 
 override_dh_shlibdeps:
 	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor

@@ -352,7 +352,7 @@ void RGWOp_MDLog_Notify::execute() {
     return;
   }
 
-  if (store->ctx()->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+  if (store->ctx()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     for (set<int>::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
       ldout(s->cct, 20) << __func__ << "(): updated shard=" << *iter << dendl;
     }
@@ -782,7 +782,7 @@ void RGWOp_DATALog_Notify::execute() {
     return;
   }
 
-  if (store->ctx()->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+  if (store->ctx()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     for (map<int, set<string> >::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
       ldout(s->cct, 20) << __func__ << "(): updated shard=" << iter->first << dendl;
       set<string>& keys = iter->second;
@@ -846,7 +846,7 @@ public:
   }
   void execute() override;
   void send_response() override;
-  const string name() override { return "get_metadata_log_status"; }
+  const char* name() const override { return "get_metadata_log_status"; }
 };
 
 void RGWOp_MDLog_Status::execute()
@@ -873,6 +873,63 @@ void RGWOp_MDLog_Status::send_response()
 }
 
 // not in header to avoid pulling in rgw_data_sync.h
+class RGWOp_BILog_Status : public RGWRESTOp {
+  std::vector<rgw_bucket_shard_sync_info> status;
+public:
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("bilog", RGW_CAP_READ);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->caps);
+  }
+  void execute() override;
+  void send_response() override;
+  const char* name() const override { return "get_bucket_index_log_status"; }
+};
+
+void RGWOp_BILog_Status::execute()
+{
+  const auto source_zone = s->info.args.get("source-zone");
+  const auto key = s->info.args.get("bucket");
+  if (key.empty()) {
+    ldout(s->cct, 4) << "no 'bucket' provided" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  rgw_bucket bucket;
+  int shard_id{-1}; // unused
+  http_ret = rgw_bucket_parse_bucket_key(s->cct, key, &bucket, &shard_id);
+  if (http_ret < 0) {
+    ldout(s->cct, 4) << "no 'bucket' provided" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  // read the bucket instance info for num_shards
+  RGWObjectCtx ctx(store);
+  RGWBucketInfo info;
+  http_ret = store->get_bucket_instance_info(ctx, bucket, info, nullptr, nullptr);
+  if (http_ret < 0) {
+    ldout(s->cct, 4) << "failed to read bucket info: " << cpp_strerror(http_ret) << dendl;
+    return;
+  }
+  http_ret = rgw_bucket_sync_status(store, source_zone, info, &status);
+}
+
+void RGWOp_BILog_Status::send_response()
+{
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (http_ret >= 0) {
+    encode_json("status", status, s->formatter);
+  }
+  flusher.flush();
+}
+
+// not in header to avoid pulling in rgw_data_sync.h
 class RGWOp_DATALog_Status : public RGWRESTOp {
   rgw_data_sync_status status;
 public:
@@ -884,7 +941,7 @@ public:
   }
   void execute() override ;
   void send_response() override;
-  const string name() override { return "get_data_changes_log_status"; }
+  const char* name() const override { return "get_data_changes_log_status"; }
 };
 
 void RGWOp_DATALog_Status::execute()
@@ -935,6 +992,8 @@ RGWOp *RGWHandler_Log::op_get() {
   } else if (type.compare("bucket-index") == 0) {
     if (s->info.args.exists("info")) {
       return new RGWOp_BILog_Info;
+    } else if (s->info.args.exists("status")) {
+      return new RGWOp_BILog_Status;
     } else {
       return new RGWOp_BILog_List;
     }

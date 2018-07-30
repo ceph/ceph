@@ -1,14 +1,6 @@
 #!/bin/sh -xve
-NPROC=`sysctl -n hw.ncpu`
+export NPROC=`sysctl -n hw.ncpu`
 
-# we need bash first otherwise almost nothing will work
-if [ ! -L /bin/bash ]; then
-    echo install bash and link /bin/bash to /usr/local/bin/bash
-    echo Run:
-    echo     sudo pkg install bash
-    echo     ln -s /usr/local/bin/bash /bin/bash
-    exit 1
-fi
 if [ x"$1"x = x"--deps"x ]; then
     sudo ./install-deps.sh
 fi
@@ -31,6 +23,7 @@ rm -rf build && ./do_cmake.sh "$*" \
 	-D WITH_SYSTEM_BOOST=ON \
 	-D WITH_LTTNG=OFF \
 	-D WITH_BLKID=OFF \
+	-D WITH_BLUESTORE=OFF \
 	-D WITH_FUSE=ON \
 	-D WITH_KRBD=OFF \
 	-D WITH_XFS=OFF \
@@ -38,15 +31,14 @@ rm -rf build && ./do_cmake.sh "$*" \
 	-D CEPH_MAN_DIR=man \
 	-D WITH_LIBCEPHFS=OFF \
 	-D WITH_CEPHFS=OFF \
-	-D WITH_EMBEDDED=OFF \
 	-D WITH_MGR=YES \
+	-D WITH_RDMA=OFF \
+	-D WITH_SPDK=OFF \
 	2>&1 | tee cmake.log
 
 echo start building 
 date
 (cd build; gmake -j$NPROC $BUILDOPTS )
-(cd build; gmake -j$NPROC $BUILDOPTS ceph-disk)
-(cd build; gmake -j$NPROC $BUILDOPTS ceph-detect-init)
 
 echo start testing 
 date

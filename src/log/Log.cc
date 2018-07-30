@@ -17,13 +17,14 @@
 #include "include/on_exit.h"
 
 #include "Entry.h"
+#include "LogClock.h"
 #include "SubsystemMap.h"
 
 #define DEFAULT_MAX_NEW    100
 #define DEFAULT_MAX_RECENT 10000
 
 #define PREALLOC 1000000
-
+#define MAX_LOG_BUF 65536
 
 namespace ceph {
 namespace logging {
@@ -38,7 +39,7 @@ static void log_on_exit(void *p)
   delete (Log **)p;// Delete allocated pointer (not Log object, the pointer only!)
 }
 
-Log::Log(SubsystemMap *s)
+Log::Log(const SubsystemMap *s)
   : m_indirect_this(NULL),
     m_subs(s),
     m_queue_mutex_holder(0),
@@ -51,6 +52,7 @@ Log::Log(SubsystemMap *s)
     m_syslog_log(-2), m_syslog_crash(-2),
     m_stderr_log(1), m_stderr_crash(-1),
     m_graylog_log(-3), m_graylog_crash(-3),
+    m_log_buf(nullptr), m_log_buf_pos(0),
     m_stop(false),
     m_max_new(DEFAULT_MAX_NEW),
     m_max_recent(DEFAULT_MAX_RECENT),
@@ -70,6 +72,8 @@ Log::Log(SubsystemMap *s)
   ret = pthread_cond_init(&m_cond_flusher, NULL);
   assert(ret == 0);
 
+  m_log_buf = (char*)malloc(MAX_LOG_BUF);
+
   // kludge for prealloc testing
   if (false)
     for (int i=0; i < PREALLOC; i++)
@@ -85,6 +89,7 @@ Log::~Log()
   assert(!is_started());
   if (m_fd >= 0)
     VOID_TEMP_FAILURE_RETRY(::close(m_fd));
+  free(m_log_buf);
 
   pthread_mutex_destroy(&m_queue_mutex);
   pthread_mutex_destroy(&m_flush_mutex);
@@ -94,6 +99,12 @@ Log::~Log()
 
 
 ///
+void Log::set_coarse_timestamps(bool coarse) {
+  if (coarse)
+    clock.coarsen();
+  else
+    clock.refine();
+}
 
 void Log::set_flush_on_exit()
 {
@@ -124,6 +135,11 @@ void Log::set_max_recent(int n)
 void Log::set_log_file(string fn)
 {
   m_log_file = fn;
+}
+
+void Log::set_log_stderr_prefix(const std::string& p)
+{
+  m_log_stderr_prefix = p;
 }
 
 void Log::reopen_log_file()
@@ -205,6 +221,8 @@ void Log::stop_graylog()
 
 void Log::submit_entry(Entry *e)
 {
+  e->finish();
+
   pthread_mutex_lock(&m_queue_mutex);
   m_queue_mutex_holder = pthread_self();
 
@@ -222,16 +240,16 @@ void Log::submit_entry(Entry *e)
 }
 
 
-Entry *Log::create_entry(int level, int subsys)
+Entry *Log::create_entry(int level, int subsys, const char* msg)
 {
   if (true) {
-    return new Entry(ceph_clock_now(),
+    return new Entry(clock.now(),
 		     pthread_self(),
-		     level, subsys);
+		     level, subsys, msg);
   } else {
     // kludge for perf testing
     Entry *e = m_recent.dequeue();
-    e->m_stamp = ceph_clock_now();
+    e->m_stamp = clock.now();
     e->m_thread = pthread_self();
     e->m_prio = level;
     e->m_subsys = subsys;
@@ -246,13 +264,13 @@ Entry *Log::create_entry(int level, int subsys, size_t* expected_size)
                                "Log hint");
     size_t size = __atomic_load_n(expected_size, __ATOMIC_RELAXED);
     void *ptr = ::operator new(sizeof(Entry) + size);
-    return new(ptr) Entry(ceph_clock_now(),
+    return new(ptr) Entry(clock.now(),
        pthread_self(), level, subsys,
        reinterpret_cast<char*>(ptr) + sizeof(Entry), size, expected_size);
   } else {
     // kludge for perf testing
     Entry *e = m_recent.dequeue();
-    e->m_stamp = ceph_clock_now();
+    e->m_stamp = clock.now();
     e->m_thread = pthread_self();
     e->m_prio = level;
     e->m_subsys = subsys;
@@ -275,17 +293,79 @@ void Log::flush()
 
   // trim
   while (m_recent.m_len > m_max_recent) {
-    delete m_recent.dequeue();
+    m_recent.dequeue()->destroy();
   }
 
   m_flush_mutex_holder = 0;
   pthread_mutex_unlock(&m_flush_mutex);
 }
 
+void Log::_log_safe_write(const char* what, size_t write_len)
+{
+  if (m_fd < 0)
+    return;
+  int r = safe_write(m_fd, m_log_buf, m_log_buf_pos);
+  if (r != m_fd_last_error) {
+    if (r < 0)
+      cerr << "problem writing to " << m_log_file
+           << ": " << cpp_strerror(r)
+           << std::endl;
+    m_fd_last_error = r;
+  }
+}
+
+void Log::_flush_logbuf()
+{
+  if (m_log_buf_pos) {
+    _log_safe_write(m_log_buf, m_log_buf_pos);
+    m_log_buf_pos = 0;
+  }
+}
+
+// write part of "what" directly to disk, copy remaining part to m_log_buf
+// for later coalescing
+void Log::_write_and_copy(char* what, size_t len)
+{
+  size_t write_len = len - (len & (MAX_LOG_BUF - 1));
+  if (write_len) {
+    _log_safe_write(what, write_len);
+    what += write_len;
+  }
+
+  write_len = len - write_len;
+  if (write_len) {
+     maybe_inline_memcpy((void*)m_log_buf, (void*)what, write_len, 32);
+     m_log_buf_pos = write_len;
+  }
+}
+
 void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 {
-  Entry *e;
-  while ((e = t->dequeue()) != NULL) {
+  Entry *e = nullptr;
+  long len = 0;
+  if (crash) {
+    len = t->m_len;
+  }
+  if (!requeue) {
+    e = t->m_head;
+    if (!e) {
+      return;
+    }
+  }
+  while (true) {
+    if (requeue) {
+      e = t->dequeue();
+      if (!e) {
+	break;
+      }
+      requeue->enqueue(e);
+    } else {
+      e = e->m_next;
+      if (!e) {
+	break;
+      }
+    }
+
     unsigned sub = e->m_subsys;
 
     bool should_log = crash || m_subs->get_log_level(sub) >= e->m_prio;
@@ -296,59 +376,66 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 
     e->hint_size();
     if (do_fd || do_syslog || do_stderr) {
-      size_t buflen = 0;
+      size_t line_used = 0;
 
-      char *buf;
-      size_t buf_size = 80 + e->size();
-      bool need_dynamic = buf_size >= 0x10000; //avoids >64K buffers
-					       //allocation at stack
-      char buf0[need_dynamic ? 1 : buf_size];
+      char *line;
+      size_t line_size = 80 + e->size();
+      bool need_dynamic = line_size >= MAX_LOG_BUF;
+
+      // this flushes the existing buffers if either line is longer
+      // than our buffer, or buffer is too full to fit it
+      if (m_log_buf_pos + line_size >= MAX_LOG_BUF) {
+          _flush_logbuf();
+      }
       if (need_dynamic) {
-        buf = new char[buf_size];
+        line = new char[line_size];
       } else {
-        buf = buf0;
+        line = &m_log_buf[m_log_buf_pos];
       }
 
-      if (crash)
-	buflen += snprintf(buf, buf_size, "%6d> ", -t->m_len);
-      buflen += e->m_stamp.sprintf(buf + buflen, buf_size-buflen);
-      buflen += snprintf(buf + buflen, buf_size-buflen, " %lx %2d ",
+      if (crash) {
+        line_used += snprintf(line, line_size, "%6ld> ", -(--len));
+      }
+      line_used += append_time(e->m_stamp, line + line_used, line_size - line_used);
+      line_used += snprintf(line + line_used, line_size - line_used, " %lx %2d ",
 			(unsigned long)e->m_thread, e->m_prio);
 
-      buflen += e->snprintf(buf + buflen, buf_size - buflen - 1);
-      if (buflen > buf_size - 1) { //paranoid check, buf was declared
+      line_used += e->snprintf(line + line_used, line_size - line_used - 1);
+      if (line_used > line_size - 1) { //paranoid check, buf was declared
 				   //to hold everything
-        buflen = buf_size - 1;
-        buf[buflen] = 0;
+        line_used = line_size - 1;
+        line[line_used] = 0;
       }
 
       if (do_syslog) {
-        syslog(LOG_USER|LOG_INFO, "%s", buf);
+        syslog(LOG_USER|LOG_INFO, "%s", line);
       }
 
       if (do_stderr) {
-        cerr << buf << std::endl;
+        cerr << m_log_stderr_prefix << line << std::endl;
       }
+
       if (do_fd) {
-        buf[buflen] = '\n';
-        int r = safe_write(m_fd, buf, buflen+1);
-	if (r != m_fd_last_error) {
-	  if (r < 0)
-	    cerr << "problem writing to " << m_log_file
-		 << ": " << cpp_strerror(r)
-		 << std::endl;
-	  m_fd_last_error = r;
-	}
+        line[line_used] = '\n';
+        if (need_dynamic) {
+          _write_and_copy(line, line_used + 1);
+        }
       }
+
       if (need_dynamic)
-        delete[] buf;
+        delete[] line;
+
+      m_log_buf_pos += line_used + 1;
     }
+
     if (do_graylog2 && m_graylog) {
       m_graylog->log_entry(e);
     }
 
-    requeue->enqueue(e);
   }
+
+  _flush_logbuf();
+
 }
 
 void Log::_log_message(const char *s, bool crash)
@@ -386,17 +473,15 @@ void Log::dump_recent()
   m_queue_mutex_holder = 0;
   pthread_mutex_unlock(&m_queue_mutex);
   _flush(&t, &m_recent, false);
+  _flush_logbuf();
 
-  EntryQueue old;
   _log_message("--- begin dump of recent events ---", true);
-  _flush(&m_recent, &old, true);
+  _flush(&m_recent, nullptr, true);
 
   char buf[4096];
   _log_message("--- logging levels ---", true);
-  for (vector<Subsystem>::iterator p = m_subs->m_subsys.begin();
-       p != m_subs->m_subsys.end();
-       ++p) {
-    snprintf(buf, sizeof(buf), "  %2d/%2d %s", p->log_level, p->gather_level, p->name.c_str());
+  for (const auto& p : m_subs->m_subsys) {
+    snprintf(buf, sizeof(buf), "  %2d/%2d %s", p.log_level, p.gather_level, p.name);
     _log_message(buf, true);
   }
 
@@ -413,6 +498,8 @@ void Log::dump_recent()
 
   _log_message("--- end dump of recent events ---", true);
 
+  _flush_logbuf();
+
   m_flush_mutex_holder = 0;
   pthread_mutex_unlock(&m_flush_mutex);
 }
@@ -428,13 +515,14 @@ void Log::start()
 
 void Log::stop()
 {
-  assert(is_started());
-  pthread_mutex_lock(&m_queue_mutex);
-  m_stop = true;
-  pthread_cond_signal(&m_cond_flusher);
-  pthread_cond_broadcast(&m_cond_loggers);
-  pthread_mutex_unlock(&m_queue_mutex);
-  join();
+  if (is_started()) {
+    pthread_mutex_lock(&m_queue_mutex);
+    m_stop = true;
+    pthread_cond_signal(&m_cond_flusher);
+    pthread_cond_broadcast(&m_cond_loggers);
+    pthread_mutex_unlock(&m_queue_mutex);
+    join();
+  }
 }
 
 void *Log::entry()

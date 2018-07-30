@@ -1,7 +1,7 @@
 from pecan import expose, response
 from pecan.rest import RestController
 
-from restful import module
+from restful import context
 from restful.decorators import auth
 
 
@@ -18,7 +18,7 @@ class MonName(RestController):
         """
         mon = filter(
             lambda x: x['name'] == self.name,
-            module.instance.get_mons()
+            context.instance.get_mons()
         )
 
         if len(mon) != 1:
@@ -36,7 +36,7 @@ class Mon(RestController):
         """
         Show the information for all the monitors
         """
-        return module.instance.get_mons()
+        return context.instance.get_mons()
 
 
     @expose()

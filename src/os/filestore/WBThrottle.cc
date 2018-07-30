@@ -22,8 +22,8 @@ WBThrottle::WBThrottle(CephContext *cct) :
   PerfCountersBuilder b(
     cct, string("WBThrottle"),
     l_wbthrottle_first, l_wbthrottle_last);
-  b.add_u64(l_wbthrottle_bytes_dirtied, "bytes_dirtied", "Dirty data");
-  b.add_u64(l_wbthrottle_bytes_wb, "bytes_wb", "Written data");
+  b.add_u64(l_wbthrottle_bytes_dirtied, "bytes_dirtied", "Dirty data", NULL, 0, unit_t(UNIT_BYTES));
+  b.add_u64(l_wbthrottle_bytes_wb, "bytes_wb", "Written data", NULL, 0, unit_t(UNIT_BYTES));
   b.add_u64(l_wbthrottle_ios_dirtied, "ios_dirtied", "Dirty operations");
   b.add_u64(l_wbthrottle_ios_wb, "ios_wb", "Written operations");
   b.add_u64(l_wbthrottle_inodes_dirtied, "inodes_dirtied", "Entries waiting for write");
@@ -33,14 +33,14 @@ WBThrottle::WBThrottle(CephContext *cct) :
   for (unsigned i = l_wbthrottle_first + 1; i != l_wbthrottle_last; ++i)
     logger->set(i, 0);
 
-  cct->_conf->add_observer(this);
+  cct->_conf.add_observer(this);
 }
 
 WBThrottle::~WBThrottle() {
   assert(cct);
   cct->get_perfcounters_collection()->remove(logger);
   delete logger;
-  cct->_conf->remove_observer(this);
+  cct->_conf.remove_observer(this);
 }
 
 void WBThrottle::start()
@@ -118,7 +118,7 @@ void WBThrottle::set_from_conf()
   cond.Signal();
 }
 
-void WBThrottle::handle_conf_change(const md_config_t *conf,
+void WBThrottle::handle_conf_change(const ConfigProxy& conf,
 				    const std::set<std::string> &changed)
 {
   Mutex::Locker l(lock);
@@ -135,7 +135,7 @@ bool WBThrottle::get_next_should_flush(
 {
   assert(lock.is_locked());
   assert(next);
-  while (!stopping && !beyond_limit())
+  while (!stopping && (!beyond_limit() || pending_wbs.empty()))
          cond.Wait(lock);
   if (stopping)
     return false;

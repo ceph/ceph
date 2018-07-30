@@ -41,7 +41,7 @@ class C_handle_notify : public EventCallback {
 
  public:
   C_handle_notify(EventCenter *c, CephContext *cc): center(c), cct(cc) {}
-  void do_request(int fd_or_id) override {
+  void do_request(uint64_t fd_or_id) override {
     char c[256];
     int r = 0;
     do {
@@ -171,7 +171,8 @@ EventCenter::~EventCenter()
       external_events.pop_front();
     }
   }
-  assert(time_events.empty());
+  time_events.clear();
+  //assert(time_events.empty());
 
   if (notify_receive_fd >= 0)
     ::close(notify_receive_fd);
@@ -189,8 +190,9 @@ void EventCenter::set_owner()
   owner = pthread_self();
   ldout(cct, 2) << __func__ << " idx=" << idx << " owner=" << owner << dendl;
   if (!global_centers) {
-    cct->lookup_or_create_singleton_object<EventCenter::AssociatedCenters>(
-        global_centers, "AsyncMessenger::EventCenter::global_center::"+type);
+    global_centers = &cct->lookup_or_create_singleton_object<
+      EventCenter::AssociatedCenters>(
+	"AsyncMessenger::EventCenter::global_center::" + type, true);
     assert(global_centers);
     global_centers->centers[idx] = this;
     if (driver->need_wakeup()) {
@@ -207,7 +209,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
   int r = 0;
   if (fd >= nevent) {
     int new_size = nevent << 2;
-    while (fd > new_size)
+    while (fd >= new_size)
       new_size <<= 2;
     ldout(cct, 20) << __func__ << " event count exceed " << nevent << ", expand to " << new_size << dendl;
     r = driver->resize_events(new_size);
@@ -357,7 +359,7 @@ int EventCenter::process_time_events()
   return processed;
 }
 
-int EventCenter::process_events(int timeout_microseconds,  ceph::timespan *working_dur)
+int EventCenter::process_events(unsigned timeout_microseconds,  ceph::timespan *working_dur)
 {
   struct timeval tv;
   int numevents;
@@ -430,12 +432,12 @@ int EventCenter::process_events(int timeout_microseconds,  ceph::timespan *worki
     cur_process.swap(external_events);
     external_num_events.store(0);
     external_lock.unlock();
+    numevents += cur_process.size();
     while (!cur_process.empty()) {
       EventCallbackRef e = cur_process.front();
       ldout(cct, 30) << __func__ << " do " << e << dendl;
       e->do_request(0);
       cur_process.pop_front();
-      numevents++;
     }
   }
 

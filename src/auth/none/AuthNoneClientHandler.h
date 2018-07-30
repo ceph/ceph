@@ -29,7 +29,7 @@ public:
 
   void prepare_build_request() override {}
   int build_request(bufferlist& bl) const override { return 0; }
-  int handle_response(int ret, bufferlist::iterator& iter) override { return 0; }
+  int handle_response(int ret, bufferlist::const_iterator& iter) override { return 0; }
   bool build_rotating_request(bufferlist& bl) const override { return false; }
 
   int get_protocol() const override { return CEPH_AUTH_NONE; }

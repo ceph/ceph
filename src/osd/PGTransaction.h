@@ -363,7 +363,9 @@ public:
     ) {
     auto &op = get_object_op_for_modify(hoid);
     for (auto &&i: attrs) {
-      op.attr_updates[i.first] = i.second;
+      auto& d = op.attr_updates[i.first];
+      d = i.second;
+      d->rebuild();
     }
   }
   void setattr(
@@ -372,7 +374,9 @@ public:
     bufferlist &bl                 ///< [in] val to write, may be claimed
     ) {
     auto &op = get_object_op_for_modify(hoid);
-    op.attr_updates[attrname] = bl;
+    auto& d = op.attr_updates[attrname];
+    d = bl;
+    d->rebuild();
   }
   void rmattr(
     const hobject_t &hoid,         ///< [in] object to write
@@ -454,7 +458,7 @@ public:
     map<string, bufferlist> &keys  ///< [in] omap keys, may be cleared
     ) {
     bufferlist bl;
-    ::encode(keys, bl);
+    encode(keys, bl);
     omap_setkeys(hoid, bl);
   }
   void omap_rmkeys(
@@ -472,7 +476,7 @@ public:
     set<string> &keys              ///< [in] omap keys, may be cleared
     ) {
     bufferlist bl;
-    ::encode(keys, bl);
+    encode(keys, bl);
     omap_rmkeys(hoid, bl);
   }
   void omap_setheader(

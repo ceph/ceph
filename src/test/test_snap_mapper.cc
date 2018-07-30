@@ -1,5 +1,4 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-#include "include/memory.h"
 #include <map>
 #include <set>
 #include <boost/scoped_ptr.hpp>
@@ -40,7 +39,7 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
     virtual void operate(map<string, bufferlist> *store) = 0;
     virtual ~_Op() {}
   };
-  typedef ceph::shared_ptr<_Op> Op;
+  typedef std::shared_ptr<_Op> Op;
   struct Remove : public _Op {
     set<string> to_remove;
     explicit Remove(const set<string> &to_remove) : to_remove(to_remove) {}
@@ -389,7 +388,7 @@ TEST_F(MapCacherTest, Simple)
   set<string> truth_keys;
   string blah("asdf");
   bufferlist bl;
-  ::encode(blah, bl);
+  encode(blah, bl);
   truth[string("asdf")] = bl;
   truth_keys.insert(truth.begin()->first);
   {
@@ -584,7 +583,7 @@ public:
 class SnapMapperTest : public ::testing::Test {
 protected:
   boost::scoped_ptr< PausyAsyncMap > driver;
-  map<pg_t, ceph::shared_ptr<MapperVerifier> > mappers;
+  map<pg_t, std::shared_ptr<MapperVerifier> > mappers;
   uint32_t pgnum;
 
   void SetUp() override {
@@ -606,7 +605,7 @@ protected:
   void init(uint32_t to_set) {
     pgnum = to_set;
     for (uint32_t i = 0; i < pgnum; ++i) {
-      pg_t pgid(i, 0, -1);
+      pg_t pgid(i, 0);
       mappers[pgid].reset(
 	new MapperVerifier(
 	  driver.get(),

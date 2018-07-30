@@ -16,7 +16,7 @@
 namespace librbd {
 
 struct MockManagedLockImageCtx : public MockImageCtx {
-  MockManagedLockImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {}
+  explicit MockManagedLockImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {}
 };
 
 namespace watcher {
@@ -25,6 +25,18 @@ struct Traits<MockManagedLockImageCtx> {
   typedef librbd::MockImageWatcher Watcher;
 };
 }
+
+struct MockMockManagedLock : public ManagedLock<MockManagedLockImageCtx> {
+  MockMockManagedLock(librados::IoCtx& ioctx, ContextWQ *work_queue,
+                 const std::string& oid, librbd::MockImageWatcher *watcher,
+                 managed_lock::Mode  mode, bool blacklist_on_break_lock, 
+                 uint32_t blacklist_expire_seconds)
+    : ManagedLock<MockManagedLockImageCtx>(ioctx, work_queue, oid, watcher, 
+      librbd::managed_lock::EXCLUSIVE, true, 0) {
+  };
+  virtual ~MockMockManagedLock() = default;
+  MOCK_METHOD2(post_reacquire_lock_handler, void(int, Context*));
+};
 
 namespace managed_lock {
 
@@ -139,6 +151,10 @@ ACTION_P2(QueueContext, r, wq) {
   wq->queue(arg0, r);
 }
 
+ACTION_P(Notify, ctx) {
+  ctx->complete(0);
+}
+
 namespace librbd {
 
 using ::testing::_;
@@ -186,6 +202,17 @@ public:
   void expect_flush_notifies(MockImageWatcher *mock_watcher) {
     EXPECT_CALL(*mock_watcher, flush(_))
                   .WillOnce(CompleteContext(0, (ContextWQ *)nullptr));
+  }
+
+  void expect_post_reacquired_lock_handler(MockImageWatcher& watcher, 
+                        MockMockManagedLock &managed_lock, uint64_t &client_id) {
+    expect_get_watch_handle(watcher);
+    EXPECT_CALL(managed_lock, post_reacquire_lock_handler(_, _))
+      .WillOnce(Invoke([&client_id](int r, Context *on_finish){
+        if (r >= 0) {
+          client_id = 98765;
+        }
+        on_finish->complete(r);}));
   }
 
   int when_acquire_lock(MockManagedLock &managed_lock) {
@@ -496,6 +523,56 @@ TEST_F(TestMockManagedLock, ReacquireLockError) {
   MockReleaseRequest shutdown_release;
   expect_release_lock(ictx->op_work_queue, shutdown_release, 0);
   ASSERT_EQ(0, when_shut_down(managed_lock));
+  ASSERT_FALSE(is_lock_owner(managed_lock));
+}
+
+TEST_F(TestMockManagedLock, ReacquireWithSameCookie) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockManagedLockImageCtx mock_image_ctx(*ictx);
+  MockMockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+                               ictx->header_oid, mock_image_ctx.image_watcher,
+                               librbd::managed_lock::EXCLUSIVE, true, 0);
+  InSequence seq;
+
+  MockAcquireRequest request_lock_acquire;
+  expect_acquire_lock(*mock_image_ctx.image_watcher, ictx->op_work_queue, request_lock_acquire, 0);
+  ASSERT_EQ(0, when_acquire_lock(managed_lock));
+  ASSERT_TRUE(is_lock_owner(managed_lock));
+
+  // watcher with same cookie after rewatch
+  uint64_t client_id = 0;
+  C_SaferCond reacquire_ctx;
+  expect_post_reacquired_lock_handler(*mock_image_ctx.image_watcher, managed_lock, client_id);
+  managed_lock.reacquire_lock(&reacquire_ctx);
+  ASSERT_LT(0, client_id);
+  ASSERT_TRUE(is_lock_owner(managed_lock));
+
+  MockReleaseRequest shutdown_release;
+  expect_release_lock(ictx->op_work_queue, shutdown_release, 0);
+  //ASSERT_EQ(0, when_release_lock(managed_lock));
+  ASSERT_EQ(0, when_shut_down(managed_lock));
+}
+
+TEST_F(TestMockManagedLock, ShutDownWhileWaiting) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockManagedLockImageCtx mock_image_ctx(*ictx);
+  MockMockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+                               ictx->header_oid, mock_image_ctx.image_watcher,
+                               librbd::managed_lock::EXCLUSIVE, true, 0);
+
+  InSequence seq;
+
+  expect_get_watch_handle(*mock_image_ctx.image_watcher, 0);
+
+  C_SaferCond acquire_ctx;
+  managed_lock.acquire_lock(&acquire_ctx);
+
+  ASSERT_EQ(0, when_shut_down(managed_lock));
+  ASSERT_EQ(-ESHUTDOWN, acquire_ctx.wait());
   ASSERT_FALSE(is_lock_owner(managed_lock));
 }
 

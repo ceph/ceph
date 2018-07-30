@@ -47,7 +47,7 @@ void RGWOp_Period_Base::send_response()
 class RGWOp_Period_Get : public RGWOp_Period_Base {
  public:
   void execute() override;
-  const string name() override { return "get_period"; }
+  const char* name() const override { return "get_period"; }
 };
 
 void RGWOp_Period_Get::execute()
@@ -71,7 +71,7 @@ void RGWOp_Period_Get::execute()
 class RGWOp_Period_Post : public RGWOp_Period_Base {
  public:
   void execute() override;
-  const string name() override { return "post_period"; }
+  const char* name() const override { return "post_period"; }
 };
 
 void RGWOp_Period_Post::execute()
@@ -243,7 +243,7 @@ public:
   int verify_permission() override { return 0; }
   void execute() override;
   void send_response() override;
-  const string name() override { return "get_realm"; }
+  const char* name() const override { return "get_realm"; }
 };
 
 void RGWOp_Realm_Get::execute()

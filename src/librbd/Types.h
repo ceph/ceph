@@ -6,9 +6,55 @@
 
 #include "include/types.h"
 #include "cls/rbd/cls_rbd_types.h"
+#include <map>
 #include <string>
 
 namespace librbd {
+
+// Performance counters
+enum {
+  l_librbd_first = 26000,
+
+  l_librbd_rd,               // read ops
+  l_librbd_rd_bytes,         // bytes read
+  l_librbd_rd_latency,       // average latency
+  l_librbd_wr,
+  l_librbd_wr_bytes,
+  l_librbd_wr_latency,
+  l_librbd_discard,
+  l_librbd_discard_bytes,
+  l_librbd_discard_latency,
+  l_librbd_flush,
+  l_librbd_flush_latency,
+
+  l_librbd_ws,
+  l_librbd_ws_bytes,
+  l_librbd_ws_latency,
+
+  l_librbd_cmp,
+  l_librbd_cmp_bytes,
+  l_librbd_cmp_latency,
+
+  l_librbd_snap_create,
+  l_librbd_snap_remove,
+  l_librbd_snap_rollback,
+  l_librbd_snap_rename,
+
+  l_librbd_notify,
+  l_librbd_resize,
+
+  l_librbd_readahead,
+  l_librbd_readahead_bytes,
+
+  l_librbd_invalidate_cache,
+
+  l_librbd_opened_time,
+  l_librbd_lock_acquired_time,
+
+  l_librbd_last,
+};
+
+typedef std::map<uint64_t, uint64_t> SnapSeqs;
 
 /** @brief Unique identification of a parent in clone relationship.
  * Cloning an image creates a child image that keeps a reference

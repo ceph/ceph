@@ -36,13 +36,14 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(mon_status_json, p);
-    ::decode(health_json, p);
+    auto p = payload.cbegin();
+    decode(mon_status_json, p);
+    decode(health_json, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(mon_status_json, payload);
-    ::encode(health_json, payload);
+    using ceph::encode;
+    encode(mon_status_json, payload);
+    encode(health_json, payload);
   }
 
 private:

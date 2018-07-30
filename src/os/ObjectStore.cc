@@ -13,47 +13,46 @@
  */
 #include <ctype.h>
 #include <sstream>
-#include "include/memory.h"
 #include "ObjectStore.h"
 #include "common/Formatter.h"
 #include "common/safe_io.h"
 
 #include "filestore/FileStore.h"
 #include "memstore/MemStore.h"
-#if defined(HAVE_LIBAIO)
+#if defined(WITH_BLUESTORE)
 #include "bluestore/BlueStore.h"
 #endif
 #include "kstore/KStore.h"
 
-void decode_str_str_map_to_bl(bufferlist::iterator& p,
+void decode_str_str_map_to_bl(bufferlist::const_iterator& p,
 			      bufferlist *out)
 {
-  bufferlist::iterator start = p;
+  auto start = p;
   __u32 n;
-  ::decode(n, p);
+  decode(n, p);
   unsigned len = 4;
   while (n--) {
     __u32 l;
-    ::decode(l, p);
+    decode(l, p);
     p.advance(l);
     len += 4 + l;
-    ::decode(l, p);
+    decode(l, p);
     p.advance(l);
     len += 4 + l;
   }
   start.copy(len, *out);
 }
 
-void decode_str_set_to_bl(bufferlist::iterator& p,
+void decode_str_set_to_bl(bufferlist::const_iterator& p,
 			  bufferlist *out)
 {
-  bufferlist::iterator start = p;
+  auto start = p;
   __u32 n;
-  ::decode(n, p);
+  decode(n, p);
   unsigned len = 4;
   while (n--) {
     __u32 l;
-    ::decode(l, p);
+    decode(l, p);
     p.advance(l);
     len += 4 + l;
   }
@@ -72,7 +71,7 @@ ObjectStore *ObjectStore::create(CephContext *cct,
   if (type == "memstore") {
     return new MemStore(cct, data);
   }
-#if defined(HAVE_LIBAIO)
+#if defined(WITH_BLUESTORE)
   if (type == "bluestore") {
     return new BlueStore(cct, data);
   }
@@ -102,7 +101,7 @@ int ObjectStore::probe_block_device_fsid(
 {
   int r;
 
-#if defined(HAVE_LIBAIO)
+#if defined(WITH_BLUESTORE)
   // first try bluestore -- it has a crc on its header and will fail
   // reliably.
   r = BlueStore::get_block_device_fsid(cct, path, fsid);
@@ -155,50 +154,7 @@ int ObjectStore::read_meta(const std::string& key,
 
 
 
-ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s)
-{
-  return out << "osr(" << s.get_name() << " " << &s << ")";
-}
-
 ostream& operator<<(ostream& out, const ObjectStore::Transaction& tx) {
 
   return out << "Transaction(" << &tx << ")"; 
-}
-
-unsigned ObjectStore::apply_transactions(Sequencer *osr,
-					 vector<Transaction>& tls,
-					 Context *ondisk)
-{
-  // use op pool
-  Cond my_cond;
-  Mutex my_lock("ObjectStore::apply_transaction::my_lock");
-  int r = 0;
-  bool done;
-  C_SafeCond *onreadable = new C_SafeCond(&my_lock, &my_cond, &done, &r);
-
-  queue_transactions(osr, tls, onreadable, ondisk);
-
-  my_lock.Lock();
-  while (!done)
-    my_cond.Wait(my_lock);
-  my_lock.Unlock();
-  return r;
-}
-
-int ObjectStore::queue_transactions(
-  Sequencer *osr,
-  vector<Transaction>& tls,
-  Context *onreadable,
-  Context *oncommit,
-  Context *onreadable_sync,
-  Context *oncomplete,
-  TrackedOpRef op = TrackedOpRef())
-{
-  RunOnDeleteRef _complete (std::make_shared<RunOnDelete>(oncomplete));
-  Context *_onreadable = new Wrapper<RunOnDeleteRef>(
-    onreadable, _complete);
-  Context *_oncommit = new Wrapper<RunOnDeleteRef>(
-    oncommit, _complete);
-  return queue_transactions(osr, tls, _onreadable, _oncommit,
-			    onreadable_sync, op);
 }

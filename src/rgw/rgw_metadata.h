@@ -5,6 +5,7 @@
 #define CEPH_RGW_METADATA_H
 
 #include <string>
+#include <utility>
 #include <boost/optional.hpp>
 
 #include "include/types.h"
@@ -98,9 +99,9 @@ protected:
    *
    * @return true if the update should proceed, false otherwise.
    */
-  bool check_versions(const obj_version& ondisk, const real_time& ondisk_time,
-                      const obj_version& incoming, const real_time& incoming_time,
-                      sync_type_t sync_mode) {
+  static bool check_versions(const obj_version& ondisk, const real_time& ondisk_time,
+                             const obj_version& incoming, const real_time& incoming_time,
+                             sync_type_t sync_mode) {
     switch (sync_mode) {
     case APPLY_UPDATES:
       if ((ondisk.tag != incoming.tag) ||
@@ -166,7 +167,7 @@ class RGWMetadataLogInfoCompletion : public RefCountedObject {
   std::mutex mutex; //< protects callback between cancel/complete
   boost::optional<info_callback_t> callback; //< cleared on cancel
  public:
-  RGWMetadataLogInfoCompletion(info_callback_t callback);
+  explicit RGWMetadataLogInfoCompletion(info_callback_t callback);
   ~RGWMetadataLogInfoCompletion() override;
 
   librados::IoCtx& get_io_ctx() { return io_ctx; }
@@ -262,7 +263,7 @@ struct RGWMetadataLogData {
   RGWMetadataLogData() : status(MDLOG_STATUS_UNKNOWN) {}
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
@@ -274,14 +275,14 @@ struct RGWMetadataLogHistory {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(oldest_realm_epoch, bl);
-    ::encode(oldest_period_id, bl);
+    encode(oldest_realm_epoch, bl);
+    encode(oldest_period_id, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     DECODE_START(1, p);
-    ::decode(oldest_realm_epoch, p);
-    ::decode(oldest_period_id, p);
+    decode(oldest_realm_epoch, p);
+    decode(oldest_period_id, p);
     DECODE_FINISH(p);
   }
 
@@ -313,6 +314,11 @@ class RGWMetadataManager {
                     RGWObjVersionTracker *objv_tracker, real_time mtime,
                     map<string, bufferlist> *pattrs);
   int remove_from_heap(RGWMetadataHandler *handler, const string& key, RGWObjVersionTracker *objv_tracker);
+  int prepare_mutate(RGWRados *store, rgw_pool& pool, const string& oid,
+                     const real_time& mtime,
+                     RGWObjVersionTracker *objv_tracker,
+                     RGWMetadataHandler::sync_type_t sync_mode);
+
 public:
   RGWMetadataManager(CephContext *_cct, RGWRados *_store);
   ~RGWMetadataManager();
@@ -342,6 +348,13 @@ public:
 
   int register_handler(RGWMetadataHandler *handler);
 
+  template <typename F>
+  int mutate(RGWMetadataHandler *handler, const string& key,
+             const ceph::real_time& mtime, RGWObjVersionTracker *objv_tracker,
+             RGWMDLogStatus op_type,
+             RGWMetadataHandler::sync_type_t sync_mode,
+             F&& f);
+
   RGWMetadataHandler *get_handler(const string& type);
 
   int put_entry(RGWMetadataHandler *handler, const string& key, bufferlist& bl, bool exclusive,
@@ -353,8 +366,8 @@ public:
           obj_version *existing_version = NULL);
   int remove(string& metadata_key);
 
-  int list_keys_init(string& section, void **phandle);
-  int list_keys_init(string& section, const string& marker, void **phandle);
+  int list_keys_init(const string& section, void **phandle);
+  int list_keys_init(const string& section, const string& marker, void **phandle);
   int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated);
   void list_keys_complete(void *handle);
 
@@ -368,5 +381,41 @@ public:
 
   int get_log_shard_id(const string& section, const string& key, int *shard_id);
 };
+
+template <typename F>
+int RGWMetadataManager::mutate(RGWMetadataHandler *handler, const string& key,
+                               const ceph::real_time& mtime, RGWObjVersionTracker *objv_tracker,
+                               RGWMDLogStatus op_type,
+                               RGWMetadataHandler::sync_type_t sync_mode,
+                               F&& f)
+{
+  string oid;
+  rgw_pool pool;
+
+  handler->get_pool_and_oid(store, key, pool, oid);
+
+  int ret = prepare_mutate(store, pool, oid, mtime, objv_tracker, sync_mode);
+  if (ret < 0 ||
+      ret == STATUS_NO_APPLY) {
+    return ret;
+  }
+
+  string section;
+  RGWMetadataLogData log_data;
+  ret = pre_modify(handler, section, key, log_data, objv_tracker, MDLOG_STATUS_WRITE);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = std::forward<F>(f)();
+
+  /* cascading ret into post_modify() */
+
+  ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
 
 #endif

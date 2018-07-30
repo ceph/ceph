@@ -17,28 +17,6 @@
 #include "common/Checksummer.h"
 #include "include/stringify.h"
 
-void ExtentList::add_extents(int64_t start, int64_t count) {
-  AllocExtent *last_extent = NULL;
-  bool can_merge = false;
-
-  if (!m_extents->empty()) {
-    last_extent = &(m_extents->back());
-    uint64_t last_offset = last_extent->end() / m_block_size;
-    uint32_t last_length = last_extent->length / m_block_size;
-    if ((last_offset == (uint64_t) start) &&
-        (!m_max_blocks || (last_length + count) <= m_max_blocks)) {
-      can_merge = true;
-    }
-  }
-
-  if (can_merge) {
-    last_extent->length += (count * m_block_size);
-  } else {
-    m_extents->emplace_back(AllocExtent(start * m_block_size,
-					count * m_block_size));
-  }
-}
-
 // bluestore_bdev_label_t
 
 void bluestore_bdev_label_t::encode(bufferlist& bl) const
@@ -47,22 +25,26 @@ void bluestore_bdev_label_t::encode(bufferlist& bl) const
   bl.append("bluestore block device\n");
   bl.append(stringify(osd_uuid));
   bl.append("\n");
-  ENCODE_START(1, 1, bl);
-  ::encode(osd_uuid, bl);
-  ::encode(size, bl);
-  ::encode(btime, bl);
-  ::encode(description, bl);
+  ENCODE_START(2, 1, bl);
+  encode(osd_uuid, bl);
+  encode(size, bl);
+  encode(btime, bl);
+  encode(description, bl);
+  encode(meta, bl);
   ENCODE_FINISH(bl);
 }
 
-void bluestore_bdev_label_t::decode(bufferlist::iterator& p)
+void bluestore_bdev_label_t::decode(bufferlist::const_iterator& p)
 {
   p.advance(60); // see above
-  DECODE_START(1, p);
-  ::decode(osd_uuid, p);
-  ::decode(size, p);
-  ::decode(btime, p);
-  ::decode(description, p);
+  DECODE_START(2, p);
+  decode(osd_uuid, p);
+  decode(size, p);
+  decode(btime, p);
+  decode(description, p);
+  if (struct_v >= 2) {
+    decode(meta, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -72,6 +54,9 @@ void bluestore_bdev_label_t::dump(Formatter *f) const
   f->dump_unsigned("size", size);
   f->dump_stream("btime") << btime;
   f->dump_string("description", description);
+  for (auto& i : meta) {
+    f->dump_string(i.first.c_str(), i.second);
+  }
 }
 
 void bluestore_bdev_label_t::generate_test_instances(
@@ -82,14 +67,17 @@ void bluestore_bdev_label_t::generate_test_instances(
   o.back()->size = 123;
   o.back()->btime = utime_t(4, 5);
   o.back()->description = "fakey";
+  o.back()->meta["foo"] = "bar";
 }
 
 ostream& operator<<(ostream& out, const bluestore_bdev_label_t& l)
 {
   return out << "bdev(osd_uuid " << l.osd_uuid
-	     << " size 0x" << std::hex << l.size << std::dec
-	     << " btime " << l.btime
-	     << " desc " << l.description << ")";
+	     << ", size 0x" << std::hex << l.size << std::dec
+	     << ", btime " << l.btime
+	     << ", desc " << l.description
+	     << ", " << l.meta.size() << " meta"
+	     << ")";
 }
 
 // cnode_t
@@ -104,6 +92,11 @@ void bluestore_cnode_t::generate_test_instances(list<bluestore_cnode_t*>& o)
   o.push_back(new bluestore_cnode_t());
   o.push_back(new bluestore_cnode_t(0));
   o.push_back(new bluestore_cnode_t(123));
+}
+
+ostream& operator<<(ostream& out, const bluestore_cnode_t& l)
+{
+  return out << "cnode(bits " << l.bits << ")";
 }
 
 // bluestore_extent_ref_map_t
@@ -155,7 +148,7 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
     }
     if (p->first > offset) {
       // gap
-      uint64_t newlen = MIN(p->first - offset, length);
+      uint64_t newlen = std::min<uint64_t>(p->first - offset, length);
       p = ref_map.insert(
 	map<uint64_t,record_t>::value_type(offset,
 					   record_t(newlen, 1))).first;
@@ -376,9 +369,9 @@ void bluestore_blob_use_tracker_t::init(
   assert(_au_size > 0);
   assert(full_length > 0);
   clear();  
-  uint32_t _num_au = ROUND_UP_TO(full_length, _au_size) / _au_size;
+  uint32_t _num_au = round_up_to(full_length, _au_size) / _au_size;
   au_size = _au_size;
-  if( _num_au > 1 ) {
+  if ( _num_au > 1 ) {
     num_au = _num_au;
     allocate();
   }
@@ -390,13 +383,13 @@ void bluestore_blob_use_tracker_t::get(
   assert(au_size);
   if (!num_au) {
     total_bytes += length;
-  }else {
+  } else {
     auto end = offset + length;
 
     while (offset < end) {
       auto phase = offset % au_size;
       bytes_per_au[offset / au_size] += 
-	MIN(au_size - phase, end - offset);
+	std::min(au_size - phase, end - offset);
       offset += (phase ? au_size - phase : au_size);
     }
   }
@@ -420,7 +413,7 @@ bool bluestore_blob_use_tracker_t::put(
     while (offset < end) {
       auto phase = offset % au_size;
       size_t pos = offset / au_size;
-      auto diff = MIN(au_size - phase, end - offset);
+      auto diff = std::min(au_size - phase, end - offset);
       assert(diff <= bytes_per_au[pos]);
       bytes_per_au[pos] -= diff;
       offset += (phase ? au_size - phase : au_size);
@@ -752,7 +745,7 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
     return 0;
 }
 
-void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const AllocExtentVector& allocs)
+void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const PExtentVector& allocs)
 {
   if (extents.size() == 0) {
     // if blob is compressed then logical length to be already configured
@@ -764,6 +757,7 @@ void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const AllocExt
     if (b_off) {
       extents.emplace_back(
         bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, b_off));
+
     }
     uint32_t new_len = b_off;
     for (auto& a : allocs) {
@@ -780,7 +774,7 @@ void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const AllocExt
     uint32_t cur_offs = 0;
     auto start_it = extents.begin();
     size_t pos = 0;
-    while(true) {
+    while (true) {
       assert(start_it != extents.end());
       if (cur_offs + start_it->length > b_off) {
 	break;
@@ -844,7 +838,8 @@ struct vecbuilder {
   void flush() {
     if (invalid) {
       v.emplace_back(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET,
-	invalid));
+        invalid));
+
       invalid = 0;
     }
   }
@@ -854,7 +849,7 @@ struct vecbuilder {
     }
     else {
       flush();
-      v.emplace_back(bluestore_pextent_t(offset, length));
+      v.emplace_back(offset, length);
     }
   }
 };
@@ -925,7 +920,7 @@ bool bluestore_blob_t::release_extents(bool all,
       uint32_t to_release = loffs_it->length;
       do {
 	uint32_t to_release_part =
-	  MIN(pext_it->length - delta0 - delta, to_release);
+	  std::min(pext_it->length - delta0 - delta, to_release);
 	auto o = pext_it->offset + delta0 + delta;
 	if (last_r != r->end() && last_r->offset + last_r->length == o) {
 	  last_r->length += to_release_part;
