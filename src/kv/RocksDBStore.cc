@@ -435,8 +435,8 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
       g_conf().get_val<bool>("rocksdb_pin_l0_filter_and_index_blocks_in_cache");
   }
   bbt_opts.partition_filters = g_conf().get_val<bool>("rocksdb_partition_filters");
-  if (g_conf().get_val<uint64_t>("rocksdb_metadata_block_size") > 0)
-    bbt_opts.metadata_block_size = g_conf().get_val<uint64_t>("rocksdb_metadata_block_size");
+  if (g_conf().get_val<Option::size_t>("rocksdb_metadata_block_size") > 0)
+    bbt_opts.metadata_block_size = g_conf().get_val<Option::size_t>("rocksdb_metadata_block_size");
 
   opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
   dout(10) << __func__ << " block size " << g_conf()->rocksdb_block_size

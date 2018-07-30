@@ -1227,8 +1227,6 @@ OPTION(journal_aio, OPT_BOOL)
 OPTION(journal_force_aio, OPT_BOOL)
 OPTION(journal_block_size, OPT_INT)
 
-// max bytes to search ahead in journal searching for corruption
-OPTION(journal_max_corrupt_search, OPT_U64)
 OPTION(journal_block_align, OPT_BOOL)
 OPTION(journal_write_header_frequency, OPT_U64)
 OPTION(journal_max_write_bytes, OPT_INT)
