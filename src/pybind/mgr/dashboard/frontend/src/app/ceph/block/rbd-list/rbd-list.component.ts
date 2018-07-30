@@ -114,14 +114,17 @@ export class RbdListComponent implements OnInit, OnDestroy {
       }
     ];
 
-    this.summaryDataSubscription = this.summaryService.subscribe((data: any) => {
-      if (!data) {
+    this.summaryDataSubscription = this.summaryService.subscribe(
+      (data: any) => {
+        if (data) {
+          this.loadImages(data.executing_tasks);
+        }
+      },
+      () => {
         this.table.reset(); // Disable loading indicator.
         this.viewCacheStatusList = [{ status: ViewCacheStatus.ValueException }];
-        return;
       }
-      this.loadImages(data.executing_tasks);
-    });
+    );
   }
 
   ngOnDestroy() {
