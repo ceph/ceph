@@ -10431,6 +10431,7 @@ int Client::_ll_put(Inode *in, int num)
 void Client::_ll_drop_pins()
 {
   ldout(cct, 10) << "_ll_drop_pins" << dendl;
+  std::set<InodeRef> to_be_put; //this set will be deconstructed item by item when exit
   ceph::unordered_map<vinodeno_t, Inode*>::iterator next;
   for (ceph::unordered_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
        it != inode_map.end();
@@ -10438,8 +10439,10 @@ void Client::_ll_drop_pins()
     Inode *in = it->second;
     next = it;
     ++next;
-    if (in->ll_ref)
+    if (in->ll_ref){
+      to_be_put.insert(in);
       _ll_put(in, in->ll_ref);
+    }
   }
 }
 
