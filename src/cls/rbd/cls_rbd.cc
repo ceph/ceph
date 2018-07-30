@@ -6893,6 +6893,62 @@ int trash_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return r;
 }
 
+/**
+ * Set state of an image in the rbd_trash object.
+ *
+ * Input:
+ * @param id the id of the image
+ * @param trash_state the state of the image to be set
+ * @param expect_state the expected state of the image
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int trash_state_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string id;
+  cls::rbd::TrashImageState trash_state;
+  cls::rbd::TrashImageState expect_state;
+  try {
+    bufferlist::const_iterator iter = in->begin();
+    decode(id, iter);
+    decode(trash_state, iter);
+    decode(expect_state, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "trash_state_set id=%s", id.c_str());
+
+  string key = trash::image_key(id);
+  cls::rbd::TrashImageSpec trash_spec;
+  int r = read_key(hctx, key, &trash_spec);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("Could not read trash image spec off disk: %s",
+              cpp_strerror(r).c_str());
+    }
+    return r;
+  }
+
+  if (trash_spec.state == expect_state) {
+    trash_spec.state = trash_state;
+    r = write_key(hctx, key, trash_spec);
+    if (r < 0) {
+      CLS_ERR("error setting trash image state: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+
+    return 0;
+  } else if (trash_spec.state == trash_state) {
+    return 0;
+  } else {
+    CLS_ERR("Current trash state: %d do not match expected: %d or set: %d",
+            trash_spec.state, expect_state, trash_state);
+    return -ESTALE;
+  }
+}
+
 namespace nspace {
 
 const std::string NAME_KEY_PREFIX("name_");
@@ -7158,6 +7214,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_trash_remove;
   cls_method_handle_t h_trash_list;
   cls_method_handle_t h_trash_get;
+  cls_method_handle_t h_trash_state_set;
   cls_method_handle_t h_namespace_add;
   cls_method_handle_t h_namespace_remove;
   cls_method_handle_t h_namespace_list;
@@ -7532,6 +7589,9 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "trash_get",
                           CLS_METHOD_RD,
                           trash_get, &h_trash_get);
+  cls_register_cxx_method(h_class, "trash_state_set",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          trash_state_set, &h_trash_state_set);
 
   /* rbd_namespace object methods */
   cls_register_cxx_method(h_class, "namespace_add",
