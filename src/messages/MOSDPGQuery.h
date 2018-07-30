@@ -24,6 +24,12 @@
  */
 
 class MOSDPGQuery : public Message {
+public:
+  typedef boost::intrusive_ptr<MOSDPGQuery> ref;
+  typedef boost::intrusive_ptr<MOSDPGQuery const> const_ref;
+  using factory = MessageFactory<MOSDPGQuery>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 4;
 

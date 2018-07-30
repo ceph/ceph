@@ -19,6 +19,12 @@
 #include "msg/Message.h"
 
 class MClientRequestForward : public Message {
+public:
+  typedef boost::intrusive_ptr<MClientRequestForward> ref;
+  typedef boost::intrusive_ptr<MClientRequestForward const> const_ref;
+  using factory = MessageFactory<MClientRequestForward>;
+  friend factory;
+private:
   int32_t dest_mds;
   int32_t num_fwd;
   bool client_must_resend;

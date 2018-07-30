@@ -22,11 +22,15 @@
 #include "mds/mdstypes.h"
 
 class MCacheExpire : public Message {
-  __s32 from;
-
 public:
   typedef boost::intrusive_ptr<MCacheExpire> ref;
   typedef boost::intrusive_ptr<MCacheExpire const> const_ref;
+  using factory = MessageFactory<MCacheExpire>;
+  friend factory;
+private:
+  __s32 from;
+
+public:
   /*
     group things by realm (auth delgation root), since that's how auth is determined.
     that makes it less work to process when exports are in progress.

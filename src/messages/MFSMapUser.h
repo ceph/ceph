@@ -20,7 +20,12 @@
 #include "include/ceph_features.h"
 
 class MFSMapUser : public Message {
- public:
+public:
+  typedef boost::intrusive_ptr<MFSMapUser> ref;
+  typedef boost::intrusive_ptr<MFSMapUser const> const_ref;
+  using factory = MessageFactory<MFSMapUser>;
+  friend factory;
+
   epoch_t epoch;
 
   version_t get_epoch() const { return epoch; }

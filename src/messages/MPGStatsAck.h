@@ -19,6 +19,11 @@
 
 class MPGStatsAck : public Message {
 public:
+  typedef boost::intrusive_ptr<MPGStatsAck> ref;
+  typedef boost::intrusive_ptr<MPGStatsAck const> const_ref;
+  using factory = MessageFactory<MPGStatsAck>;
+  friend factory;
+
   map<pg_t,pair<version_t,epoch_t> > pg_stat;
   
   MPGStatsAck() : Message(MSG_PGSTATSACK) {}

@@ -214,22 +214,18 @@ public:
 
 template<class T>
 class MessageDencoderImpl : public Dencoder {
-  T *m_object;
-  list<T*> m_list;
+  typename T::ref m_object;
+  list<typename T::ref> m_list;
 
 public:
-  MessageDencoderImpl() {
-    m_object = new T;
-  }
-  ~MessageDencoderImpl() override {
-    m_object->put();
-  }
+  MessageDencoderImpl() : m_object(T::factory::build()) {}
+  ~MessageDencoderImpl() override {}
 
   string decode(bufferlist bl, uint64_t seek) override {
     auto p = bl.cbegin();
     p.seek(seek);
     try {
-      Message *n = decode_message(g_ceph_context, 0, p);
+      Message::ref n(decode_message(g_ceph_context, 0, p), false);
       if (!n)
 	throw std::runtime_error("failed to decode");
       if (n->get_type() != m_object->get_type()) {
@@ -237,8 +233,7 @@ public:
 	ss << "decoded type " << n->get_type() << " instead of expected " << m_object->get_type();
 	throw std::runtime_error(ss.str());
       }
-      m_object->put();
-      m_object = static_cast<T *>(n);
+      m_object = boost::static_pointer_cast<typename T::ref::element_type, std::remove_reference<decltype(n)>::type::element_type>(n);
     }
     catch (buffer::error& e) {
       return e.what();
@@ -253,7 +248,7 @@ public:
 
   void encode(bufferlist& out, uint64_t features) override {
     out.clear();
-    encode_message(m_object, features, out);
+    encode_message(m_object.get(), features, out);
   }
 
   void dump(ceph::Formatter *f) override {
@@ -271,7 +266,6 @@ public:
       i = m_list.size();
     if ((i == 0) || (i > m_list.size()))
       return "invalid id for generated object";
-    m_object->put();
     m_object = *(std::next(m_list.begin(), i-1));
     return string();
   }

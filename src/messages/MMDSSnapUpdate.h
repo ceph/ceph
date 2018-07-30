@@ -18,12 +18,17 @@
 #include "msg/Message.h"
 
 class MMDSSnapUpdate : public Message {
+public:
+  typedef boost::intrusive_ptr<MMDSSnapUpdate> ref;
+  typedef boost::intrusive_ptr<MMDSSnapUpdate const> const_ref;
+  using factory = MessageFactory<MMDSSnapUpdate>;
+  friend factory;
+private:
+
   inodeno_t ino;
   __s16 snap_op;
 
 public:
-  typedef boost::intrusive_ptr<MMDSSnapUpdate> ref;
-  typedef boost::intrusive_ptr<MMDSSnapUpdate const> const_ref;
   inodeno_t get_ino() const { return ino; }
   int get_snap_op() const { return snap_op; }
 

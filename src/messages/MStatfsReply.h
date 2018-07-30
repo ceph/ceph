@@ -18,6 +18,11 @@
 
 class MStatfsReply : public Message {
 public:
+  typedef boost::intrusive_ptr<MStatfsReply> ref;
+  typedef boost::intrusive_ptr<MStatfsReply const> const_ref;
+  using factory = MessageFactory<MStatfsReply>;
+  friend factory;
+
   struct ceph_mon_statfs_reply h{};
 
   MStatfsReply() : Message(CEPH_MSG_STATFS_REPLY) {}

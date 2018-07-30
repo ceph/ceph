@@ -64,7 +64,12 @@
  */
 
 class MDiscoverReply : public Message {
-
+public:
+  typedef boost::intrusive_ptr<MDiscoverReply> ref;
+  typedef boost::intrusive_ptr<MDiscoverReply const> const_ref;
+  using factory = MessageFactory<MDiscoverReply>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 2;
 
   // info about original request
@@ -83,8 +88,6 @@ class MDiscoverReply : public Message {
   mds_rank_t dir_auth_hint = 0;
 
  public:
-  typedef boost::intrusive_ptr<MDiscoverReply> ref;
-  typedef boost::intrusive_ptr<MDiscoverReply const> const_ref;
   __u8 starts_with = 0;
   bufferlist trace;
 

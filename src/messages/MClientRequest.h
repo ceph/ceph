@@ -49,12 +49,16 @@
 // metadata ops.
 
 class MClientRequest : public Message {
+public:
+  typedef boost::intrusive_ptr<MClientRequest> ref;
+  typedef boost::intrusive_ptr<MClientRequest const> const_ref;
+  using factory = MessageFactory<MClientRequest>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 1;
 
 public:
-  typedef boost::intrusive_ptr<MClientRequest> ref;
-  typedef boost::intrusive_ptr<MClientRequest const> const_ref;
   mutable struct ceph_mds_request_head head; /* XXX HACK! */
   utime_t stamp;
 

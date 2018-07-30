@@ -8,6 +8,11 @@
 
 class MOSDPGCreated : public PaxosServiceMessage {
 public:
+  typedef boost::intrusive_ptr<MOSDPGCreated> ref;
+  typedef boost::intrusive_ptr<MOSDPGCreated const> const_ref;
+  using factory = MessageFactory<MOSDPGCreated>;
+  friend factory;
+
   pg_t pgid;
   MOSDPGCreated()
     : PaxosServiceMessage(MSG_OSD_PG_CREATED, 0)

@@ -15,8 +15,13 @@
 #ifndef CEPH_MTIMECHECK_H
 #define CEPH_MTIMECHECK_H
 
-struct MTimeCheck : public Message
-{
+class MTimeCheck : public Message {
+public:
+  typedef boost::intrusive_ptr<MTimeCheck> ref;
+  typedef boost::intrusive_ptr<MTimeCheck const> const_ref;
+  using factory = MessageFactory<MTimeCheck>;
+  friend factory;
+
   static const int HEAD_VERSION = 1;
 
   enum {

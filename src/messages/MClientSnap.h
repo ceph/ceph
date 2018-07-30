@@ -17,9 +17,12 @@
 
 #include "msg/Message.h"
 
-struct MClientSnap : public Message {
+class MClientSnap : public Message {
+public:
   typedef boost::intrusive_ptr<MClientSnap> ref;
   typedef boost::intrusive_ptr<MClientSnap const> const_ref;
+  using factory = MessageFactory<MClientSnap>;
+  friend factory;
 
   ceph_mds_snap_head head;
   bufferlist bl;

@@ -19,11 +19,16 @@
 
 
 class MClientCapRelease : public Message {
+public:
+  typedef boost::intrusive_ptr<MClientCapRelease> ref;
+  typedef boost::intrusive_ptr<MClientCapRelease const> const_ref;
+  using factory = MessageFactory<MClientCapRelease>;
+  friend factory;
+
+private:
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
  public:
-  typedef boost::intrusive_ptr<MClientCapRelease> ref;
-  typedef boost::intrusive_ptr<MClientCapRelease const> const_ref;
 
   struct ceph_mds_cap_release head;
   vector<ceph_mds_cap_item> caps;

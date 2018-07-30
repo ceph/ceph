@@ -23,6 +23,13 @@
  */
 class MMgrConfigure : public Message
 {
+public:
+  typedef boost::intrusive_ptr<MMgrConfigure> ref;
+  typedef boost::intrusive_ptr<MMgrConfigure const> const_ref;
+  using factory = MessageFactory<MMgrConfigure>;
+  friend factory;
+private:
+
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 

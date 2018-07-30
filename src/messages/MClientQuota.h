@@ -3,7 +3,13 @@
 
 #include "msg/Message.h"
 
-struct MClientQuota : public Message {
+class MClientQuota : public Message {
+public:
+  typedef boost::intrusive_ptr<MClientQuota> ref;
+  typedef boost::intrusive_ptr<MClientQuota const> const_ref;
+  using factory = MessageFactory<MClientQuota>;
+  friend factory;
+
   inodeno_t ino;
   nest_info_t rstat;
   quota_info_t quota;

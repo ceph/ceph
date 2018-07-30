@@ -21,14 +21,18 @@
 #include "msg/Message.h"
 
 class MDentryLink : public Message {
+public:
+  typedef boost::intrusive_ptr<MDentryLink> ref;
+  typedef boost::intrusive_ptr<MDentryLink const> const_ref;
+  using factory = MessageFactory<MDentryLink>;
+  friend factory;
+private:
   dirfrag_t subtree;
   dirfrag_t dirfrag;
   string dn;
   bool is_primary = false;
 
  public:
-  typedef boost::intrusive_ptr<MDentryLink> ref;
-  typedef boost::intrusive_ptr<MDentryLink const> const_ref;
   dirfrag_t get_subtree() const { return subtree; }
   dirfrag_t get_dirfrag() const { return dirfrag; }
   const string& get_dn() const { return dn; }

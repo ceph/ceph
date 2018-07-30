@@ -31,7 +31,12 @@
  */
 
 class MOSDOpReply : public Message {
-
+public:
+  typedef boost::intrusive_ptr<MOSDOpReply> ref;
+  typedef boost::intrusive_ptr<MOSDOpReply const> const_ref;
+  using factory = MessageFactory<MOSDOpReply>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 8;
   static const int COMPAT_VERSION = 2;
 

@@ -21,7 +21,12 @@
 
 
 class MOSDPGRemove : public Message {
-
+public:
+  typedef boost::intrusive_ptr<MOSDPGRemove> ref;
+  typedef boost::intrusive_ptr<MOSDPGRemove const> const_ref;
+  using factory = MessageFactory<MOSDPGRemove>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 3;
 

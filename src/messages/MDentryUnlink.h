@@ -21,12 +21,17 @@
 #include "msg/Message.h"
 
 class MDentryUnlink : public Message {
+public:
+  typedef boost::intrusive_ptr<MDentryUnlink> ref;
+  typedef boost::intrusive_ptr<MDentryUnlink const> const_ref;
+  using factory = MessageFactory<MDentryUnlink>;
+  friend factory;
+private:
+
   dirfrag_t dirfrag;
   string dn;
 
  public:
-  typedef boost::intrusive_ptr<MDentryUnlink> ref;
-  typedef boost::intrusive_ptr<MDentryUnlink const> const_ref;
   dirfrag_t get_dirfrag() const { return dirfrag; }
   const string& get_dn() const { return dn; }
 

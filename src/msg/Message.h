@@ -519,4 +519,13 @@ extern void encode_message(Message *m, uint64_t features, bufferlist& bl);
 extern Message *decode_message(CephContext *cct, int crcflags,
                                bufferlist::const_iterator& bl);
 
+template <class MessageType>
+class MessageFactory {
+public:
+template<typename... Args>
+  static typename MessageType::ref build(Args&&... args) {
+    return typename MessageType::ref(new MessageType(std::forward<Args>(args)...), false);
+  }
+};
+
 #endif

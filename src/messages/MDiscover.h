@@ -23,6 +23,13 @@
 
 
 class MDiscover : public Message {
+public:
+  typedef boost::intrusive_ptr<MDiscover> ref;
+  typedef boost::intrusive_ptr<MDiscover const> const_ref;
+  using factory = MessageFactory<MDiscover>;
+  friend factory;
+private:
+
   inodeno_t       base_ino;          // 1 -> root
   frag_t          base_dir_frag;
 
@@ -33,8 +40,6 @@ class MDiscover : public Message {
   bool want_xlocked = false;
 
  public:
-  typedef boost::intrusive_ptr<MDiscover> ref;
-  typedef boost::intrusive_ptr<MDiscover const> const_ref;
   inodeno_t get_base_ino() const { return base_ino; }
   frag_t    get_base_dir_frag() const { return base_dir_frag; }
   snapid_t  get_snapid() const { return snapid; }

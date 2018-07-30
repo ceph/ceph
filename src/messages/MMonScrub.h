@@ -16,8 +16,13 @@
 #include "msg/Message.h"
 #include "mon/mon_types.h"
 
-class MMonScrub : public Message
-{
+class MMonScrub : public Message {
+public:
+  typedef boost::intrusive_ptr<MMonScrub> ref;
+  typedef boost::intrusive_ptr<MMonScrub const> const_ref;
+  using factory = MessageFactory<MMonScrub>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 2;
 

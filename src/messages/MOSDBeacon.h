@@ -5,6 +5,11 @@
 
 class MOSDBeacon : public PaxosServiceMessage {
 public:
+  typedef boost::intrusive_ptr<MOSDBeacon> ref;
+  typedef boost::intrusive_ptr<MOSDBeacon const> const_ref;
+  using factory = MessageFactory<MOSDBeacon>;
+  friend factory;
+
   std::vector<pg_t> pgs;
   epoch_t min_last_epoch_clean = 0;
 

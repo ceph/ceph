@@ -19,11 +19,15 @@
 #include "include/types.h"
 
 class MExportDirCancel : public Message {
+public:
+  typedef boost::intrusive_ptr<MExportDirCancel> ref;
+  typedef boost::intrusive_ptr<MExportDirCancel const> const_ref;
+  using factory = MessageFactory<MExportDirCancel>;
+  friend factory;
+private:
   dirfrag_t dirfrag;
 
  public:
-  typedef boost::intrusive_ptr<MExportDirCancel> ref;
-  typedef boost::intrusive_ptr<MExportDirCancel const> const_ref;
   dirfrag_t get_dirfrag() const { return dirfrag; }
 
   MExportDirCancel() : Message(MSG_MDS_EXPORTDIRCANCEL) {}

@@ -9,6 +9,11 @@
 
 class MOSDPeeringOp : public Message {
 public:
+  typedef boost::intrusive_ptr<MOSDPeeringOp> ref;
+  typedef boost::intrusive_ptr<MOSDPeeringOp const> const_ref;
+  using factory = MessageFactory<MOSDPeeringOp>;
+  friend factory;
+
   MOSDPeeringOp(int t, int version, int compat_version)
     : Message(t, version, compat_version) {}
 

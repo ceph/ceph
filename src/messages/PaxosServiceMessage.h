@@ -5,7 +5,12 @@
 #include "mon/Session.h"
 
 class PaxosServiceMessage : public Message {
- public:
+public:
+  typedef boost::intrusive_ptr<PaxosServiceMessage> ref;
+  typedef boost::intrusive_ptr<PaxosServiceMessage const> const_ref;
+  using factory = MessageFactory<PaxosServiceMessage>;
+  friend factory;
+
   version_t version;
   __s16 deprecated_session_mon;
   uint64_t deprecated_session_mon_tid;

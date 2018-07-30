@@ -19,6 +19,12 @@
 #include "osd/ECMsgTypes.h"
 
 class MOSDECSubOpRead : public MOSDFastDispatchOp {
+public:
+  typedef boost::intrusive_ptr<MOSDECSubOpRead> ref;
+  typedef boost::intrusive_ptr<MOSDECSubOpRead const> const_ref;
+  using factory = MessageFactory<MOSDECSubOpRead>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 

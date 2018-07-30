@@ -6,7 +6,13 @@
 
 #include "MOSDFastDispatchOp.h"
 
-struct MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
+class MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
+public:
+  typedef boost::intrusive_ptr<MOSDPGRecoveryDeleteReply> ref;
+  typedef boost::intrusive_ptr<MOSDPGRecoveryDeleteReply const> const_ref;
+  using factory = MessageFactory<MOSDPGRecoveryDeleteReply>;
+  friend factory;
+
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 

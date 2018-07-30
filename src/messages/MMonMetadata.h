@@ -20,6 +20,11 @@
 
 class MMonMetadata : public Message {
 public:
+  typedef boost::intrusive_ptr<MMonMetadata> ref;
+  typedef boost::intrusive_ptr<MMonMetadata const> const_ref;
+  using factory = MessageFactory<MMonMetadata>;
+  friend factory;
+
   Metadata data;
 
 private:

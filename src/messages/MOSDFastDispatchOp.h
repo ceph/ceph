@@ -9,6 +9,11 @@
 
 class MOSDFastDispatchOp : public Message {
 public:
+  typedef boost::intrusive_ptr<MOSDFastDispatchOp> ref;
+  typedef boost::intrusive_ptr<MOSDFastDispatchOp const> const_ref;
+  using factory = MessageFactory<MOSDFastDispatchOp>;
+  friend factory;
+
   virtual epoch_t get_map_epoch() const = 0;
   virtual epoch_t get_min_epoch() const {
     return get_map_epoch();

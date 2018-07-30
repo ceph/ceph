@@ -19,13 +19,17 @@
 #include "include/types.h"
 
 class MExportDirDiscover : public Message {
+public:
+  typedef boost::intrusive_ptr<MExportDirDiscover> ref;
+  typedef boost::intrusive_ptr<MExportDirDiscover const> const_ref;
+  using factory = MessageFactory<MExportDirDiscover>;
+  friend factory;
+private:
   mds_rank_t from = -1;
   dirfrag_t dirfrag;
   filepath path;
 
  public:
-  typedef boost::intrusive_ptr<MExportDirDiscover> ref;
-  typedef boost::intrusive_ptr<MExportDirDiscover const> const_ref;
   mds_rank_t get_source_mds() const { return from; }
   inodeno_t get_ino() const { return dirfrag.ino; }
   dirfrag_t get_dirfrag() const { return dirfrag; }

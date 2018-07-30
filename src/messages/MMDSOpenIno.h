@@ -17,10 +17,13 @@
 
 #include "msg/Message.h"
 
-struct MMDSOpenIno : public Message {
+class MMDSOpenIno : public Message {
 public:
   typedef boost::intrusive_ptr<MMDSOpenIno> ref;
   typedef boost::intrusive_ptr<MMDSOpenIno const> const_ref;
+  using factory = MessageFactory<MMDSOpenIno>;
+  friend factory;
+
   inodeno_t ino;
   vector<inode_backpointer_t> ancestors;
 

@@ -21,7 +21,12 @@
 #include "include/ceph_features.h"
 
 class MOSDMap : public Message {
-
+public:
+  typedef boost::intrusive_ptr<MOSDMap> ref;
+  typedef boost::intrusive_ptr<MOSDMap const> const_ref;
+  using factory = MessageFactory<MOSDMap>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 3;
 

@@ -7,6 +7,13 @@
 
 class MMgrClose : public Message
 {
+public:
+  typedef boost::intrusive_ptr<MMgrClose> ref;
+  typedef boost::intrusive_ptr<MMgrClose const> const_ref;
+  using factory = MessageFactory<MMgrClose>;
+  friend factory;
+private:
+
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 

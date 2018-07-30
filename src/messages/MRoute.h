@@ -20,7 +20,12 @@
 #include "msg/Message.h"
 #include "include/encoding.h"
 
-struct MRoute : public Message {
+class MRoute : public Message {
+public:
+  typedef boost::intrusive_ptr<MRoute> ref;
+  typedef boost::intrusive_ptr<MRoute const> const_ref;
+  using factory = MessageFactory<MRoute>;
+  friend factory;
 
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 3;

@@ -20,6 +20,11 @@
 
 class MGetPoolStats : public PaxosServiceMessage {
 public:
+  typedef boost::intrusive_ptr<MGetPoolStats> ref;
+  typedef boost::intrusive_ptr<MGetPoolStats const> const_ref;
+  using factory = MessageFactory<MGetPoolStats>;
+  friend factory;
+
   uuid_d fsid;
   list<string> pools;
 

@@ -7,8 +7,13 @@
 #include "messages/PaxosServiceMessage.h"
 #include "mon/health_check.h"
 
-struct MMonHealthChecks : public PaxosServiceMessage
-{
+class MMonHealthChecks : public PaxosServiceMessage {
+public:
+  typedef boost::intrusive_ptr<MMonHealthChecks> ref;
+  typedef boost::intrusive_ptr<MMonHealthChecks const> const_ref;
+  using factory = MessageFactory<MMonHealthChecks>;
+  friend factory;
+
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 

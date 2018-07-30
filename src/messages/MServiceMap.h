@@ -8,6 +8,11 @@
 
 class MServiceMap : public Message {
 public:
+  typedef boost::intrusive_ptr<MServiceMap> ref;
+  typedef boost::intrusive_ptr<MServiceMap const> const_ref;
+  using factory = MessageFactory<MServiceMap>;
+  friend factory;
+
   ServiceMap service_map;
 
   MServiceMap() : Message(MSG_SERVICE_MAP) { }

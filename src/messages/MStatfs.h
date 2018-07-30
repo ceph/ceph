@@ -20,7 +20,12 @@
 #include "messages/PaxosServiceMessage.h"
 
 class MStatfs : public PaxosServiceMessage {
-
+public:
+  typedef boost::intrusive_ptr<MStatfs> ref;
+  typedef boost::intrusive_ptr<MStatfs const> const_ref;
+  using factory = MessageFactory<MStatfs>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 

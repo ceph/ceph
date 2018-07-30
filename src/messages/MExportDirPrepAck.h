@@ -19,12 +19,16 @@
 #include "include/types.h"
 
 class MExportDirPrepAck : public Message {
+public:
+  typedef boost::intrusive_ptr<MExportDirPrepAck> ref;
+  typedef boost::intrusive_ptr<MExportDirPrepAck const> const_ref;
+  using factory = MessageFactory<MExportDirPrepAck>;
+  friend factory;
+private:
   dirfrag_t dirfrag;
   bool success = false;
 
  public:
-  typedef boost::intrusive_ptr<MExportDirPrepAck> ref;
-  typedef boost::intrusive_ptr<MExportDirPrepAck const> const_ref;
   dirfrag_t get_dirfrag() const { return dirfrag; }
 
   MExportDirPrepAck() {}

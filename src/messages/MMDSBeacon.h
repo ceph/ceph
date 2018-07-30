@@ -180,6 +180,12 @@ WRITE_CLASS_ENCODER(MDSHealth)
 
 
 class MMDSBeacon : public PaxosServiceMessage {
+public:
+  typedef boost::intrusive_ptr<MMDSBeacon> ref;
+  typedef boost::intrusive_ptr<MMDSBeacon const> const_ref;
+  using factory = MessageFactory<MMDSBeacon>;
+  friend factory;
+private:
 
   static const int HEAD_VERSION = 7;
   static const int COMPAT_VERSION = 6;
@@ -205,9 +211,6 @@ class MMDSBeacon : public PaxosServiceMessage {
   uint64_t mds_features;
 
  public:
-  typedef boost::intrusive_ptr<MMDSBeacon> ref;
-  typedef boost::intrusive_ptr<MMDSBeacon const> const_ref;
-
   MMDSBeacon()
     : PaxosServiceMessage(MSG_MDS_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
     global_id(0), state(MDSMap::STATE_NULL), standby_for_rank(MDS_RANK_NONE),

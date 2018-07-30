@@ -254,16 +254,18 @@ struct InodeStat {
 
 
 class MClientReply : public Message {
-  // reply data
 public:
   typedef boost::intrusive_ptr<MClientReply> ref;
   typedef boost::intrusive_ptr<MClientReply const> const_ref;
+  using factory = MessageFactory<MClientReply>;
+  friend factory;
+
+  // reply data
   struct ceph_mds_reply_head head {};
   bufferlist trace_bl;
   bufferlist extra_bl;
   bufferlist snapbl;
 
- public:
   int get_op() const { return head.op; }
 
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }

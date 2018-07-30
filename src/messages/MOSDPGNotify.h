@@ -24,7 +24,12 @@
  */
 
 class MOSDPGNotify : public Message {
-
+public:
+  typedef boost::intrusive_ptr<MOSDPGNotify> ref;
+  typedef boost::intrusive_ptr<MOSDPGNotify const> const_ref;
+  using factory = MessageFactory<MOSDPGNotify>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 6;
 

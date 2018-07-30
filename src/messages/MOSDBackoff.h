@@ -21,6 +21,11 @@
 
 class MOSDBackoff : public MOSDFastDispatchOp {
 public:
+  typedef boost::intrusive_ptr<MOSDBackoff> ref;
+  typedef boost::intrusive_ptr<MOSDBackoff const> const_ref;
+  using factory = MessageFactory<MOSDBackoff>;
+  friend factory;
+
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 

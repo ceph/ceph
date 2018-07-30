@@ -21,7 +21,12 @@
 #include "MCommand.h"
 
 class MCommandReply : public Message {
- public:
+public:
+  typedef boost::intrusive_ptr<MCommandReply> ref;
+  typedef boost::intrusive_ptr<MCommandReply const> const_ref;
+  using factory = MessageFactory<MCommandReply>;
+  friend factory;
+
   errorcode32_t r;
   string rs;
   

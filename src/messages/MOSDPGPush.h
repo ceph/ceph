@@ -18,6 +18,12 @@
 #include "MOSDFastDispatchOp.h"
 
 class MOSDPGPush : public MOSDFastDispatchOp {
+public:
+  typedef boost::intrusive_ptr<MOSDPGPush> ref;
+  typedef boost::intrusive_ptr<MOSDPGPush const> const_ref;
+  using factory = MessageFactory<MOSDPGPush>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 2;
 

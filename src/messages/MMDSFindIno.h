@@ -22,6 +22,9 @@ class MMDSFindIno : public Message {
 public:
   typedef boost::intrusive_ptr<MMDSFindIno> ref;
   typedef boost::intrusive_ptr<MMDSFindIno const> const_ref;
+  using factory = MessageFactory<MMDSFindIno>;
+  friend factory;
+
   ceph_tid_t tid {0};
   inodeno_t ino;
 

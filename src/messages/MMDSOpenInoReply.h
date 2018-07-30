@@ -21,6 +21,8 @@ class MMDSOpenInoReply : public Message {
 public:
   typedef boost::intrusive_ptr<MMDSOpenInoReply> ref;
   typedef boost::intrusive_ptr<MMDSOpenInoReply const> const_ref;
+  using factory = MessageFactory<MMDSOpenInoReply>;
+  friend factory;
 
   inodeno_t ino;
   vector<inode_backpointer_t> ancestors;

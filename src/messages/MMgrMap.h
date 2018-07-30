@@ -20,6 +20,12 @@
 #include "mon/MgrMap.h"
 
 class MMgrMap : public Message {
+public:
+  typedef boost::intrusive_ptr<MMgrMap> ref;
+  typedef boost::intrusive_ptr<MMgrMap const> const_ref;
+  using factory = MessageFactory<MMgrMap>;
+  friend factory;
+
 protected:
   MgrMap map;
 

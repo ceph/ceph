@@ -19,12 +19,16 @@
 #include "msg/Message.h"
 
 class MInodeFileCaps : public Message {
+public:
+  typedef boost::intrusive_ptr<MInodeFileCaps> ref;
+  typedef boost::intrusive_ptr<MInodeFileCaps const> const_ref;
+  using factory = MessageFactory<MInodeFileCaps>;
+  friend factory;
+private:
   inodeno_t ino;
   __u32     caps = 0;
 
  public:
-  typedef boost::intrusive_ptr<MInodeFileCaps> ref;
-  typedef boost::intrusive_ptr<MInodeFileCaps const> const_ref;
 
   inodeno_t get_ino() const { return ino; }
   int       get_caps() const { return caps; }

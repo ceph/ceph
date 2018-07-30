@@ -22,6 +22,9 @@ class MDirUpdate : public Message {
 public:
   typedef boost::intrusive_ptr<MDirUpdate> ref;
   typedef boost::intrusive_ptr<MDirUpdate const> const_ref;
+  using factory = MessageFactory<MDirUpdate>;
+  friend factory;
+
   MDirUpdate() : Message(MSG_MDS_DIRUPDATE) {}
   MDirUpdate(mds_rank_t f,
 	     dirfrag_t dirfrag,

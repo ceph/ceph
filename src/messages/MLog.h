@@ -22,6 +22,11 @@
 
 class MLog : public PaxosServiceMessage {
 public:
+  typedef boost::intrusive_ptr<MLog> ref;
+  typedef boost::intrusive_ptr<MLog const> const_ref;
+  using factory = MessageFactory<MLog>;
+  friend factory;
+
   uuid_d fsid;
   std::deque<LogEntry> entries;
   

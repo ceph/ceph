@@ -20,6 +20,12 @@
 
 
 class MWatchNotify : public Message {
+public:
+  typedef boost::intrusive_ptr<MWatchNotify> ref;
+  typedef boost::intrusive_ptr<MWatchNotify const> const_ref;
+  using factory = MessageFactory<MWatchNotify>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 

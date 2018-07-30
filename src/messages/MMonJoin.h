@@ -21,7 +21,12 @@
 using std::vector;
 
 class MMonJoin : public PaxosServiceMessage {
- public:
+public:
+  typedef boost::intrusive_ptr<MMonJoin> ref;
+  typedef boost::intrusive_ptr<MMonJoin const> const_ref;
+  using factory = MessageFactory<MMonJoin>;
+  friend factory;
+
   uuid_d fsid;
   string name;
   entity_addr_t addr;

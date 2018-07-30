@@ -29,7 +29,12 @@ struct ceph_mon_subscribe_item_old {
 WRITE_RAW_ENCODER(ceph_mon_subscribe_item_old)
 
 
-struct MMonSubscribe : public Message {
+class MMonSubscribe : public Message {
+public:
+  typedef boost::intrusive_ptr<MMonSubscribe> ref;
+  typedef boost::intrusive_ptr<MMonSubscribe const> const_ref;
+  using factory = MessageFactory<MMonSubscribe>;
+  friend factory;
 
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;

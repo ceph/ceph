@@ -21,6 +21,11 @@
 
 class MMonMap : public Message {
 public:
+  typedef boost::intrusive_ptr<MMonMap> ref;
+  typedef boost::intrusive_ptr<MMonMap const> const_ref;
+  using factory = MessageFactory<MMonMap>;
+  friend factory;
+
   bufferlist monmapbl;
 
   MMonMap() : Message(CEPH_MSG_MON_MAP) { }

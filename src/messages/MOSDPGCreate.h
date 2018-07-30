@@ -23,7 +23,12 @@
  * PGCreate - instruct an OSD to create a pg, if it doesn't already exist
  */
 
-struct MOSDPGCreate : public Message {
+class MOSDPGCreate : public Message {
+public:
+  typedef boost::intrusive_ptr<MOSDPGCreate> ref;
+  typedef boost::intrusive_ptr<MOSDPGCreate const> const_ref;
+  using factory = MessageFactory<MOSDPGCreate>;
+  friend factory;
 
   const static int HEAD_VERSION = 3;
   const static int COMPAT_VERSION = 3;

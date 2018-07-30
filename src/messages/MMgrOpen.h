@@ -19,6 +19,13 @@
 
 class MMgrOpen : public Message
 {
+public:
+  typedef boost::intrusive_ptr<MMgrOpen> ref;
+  typedef boost::intrusive_ptr<MMgrOpen const> const_ref;
+  using factory = MessageFactory<MMgrOpen>;
+  friend factory;
+private:
+
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 

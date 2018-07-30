@@ -20,6 +20,13 @@
 #include "include/types.h"
 
 class MMonGetOSDMap : public PaxosServiceMessage {
+public:
+  typedef boost::intrusive_ptr<MMonGetOSDMap> ref;
+  typedef boost::intrusive_ptr<MMonGetOSDMap const> const_ref;
+  using factory = MessageFactory<MMonGetOSDMap>;
+  friend factory;
+private:
+
   epoch_t full_first, full_last;
   epoch_t inc_first, inc_last;
 

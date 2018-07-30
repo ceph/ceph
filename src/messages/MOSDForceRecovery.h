@@ -31,7 +31,12 @@ static const int OFR_BACKFILL = 2;
 // cancel priority boost, requeue if necessary
 static const int OFR_CANCEL = 4;
 
-struct MOSDForceRecovery : public Message {
+class MOSDForceRecovery : public Message {
+public:
+  typedef boost::intrusive_ptr<MOSDForceRecovery> ref;
+  typedef boost::intrusive_ptr<MOSDForceRecovery const> const_ref;
+  using factory = MessageFactory<MOSDForceRecovery>;
+  friend factory;
 
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 2;

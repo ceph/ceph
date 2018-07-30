@@ -24,7 +24,12 @@
 using std::map;
 
 class MMDSLoadTargets : public PaxosServiceMessage {
- public:
+public:
+  typedef boost::intrusive_ptr<MMDSLoadTargets> ref;
+  typedef boost::intrusive_ptr<MMDSLoadTargets const> const_ref;
+  using factory = MessageFactory<MMDSLoadTargets>;
+  friend factory;
+
   mds_gid_t global_id;
   set<mds_rank_t> targets;
 

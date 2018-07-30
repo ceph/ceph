@@ -22,6 +22,9 @@ class MMDSFindInoReply : public Message {
 public:
   typedef boost::intrusive_ptr<MMDSFindInoReply> ref;
   typedef boost::intrusive_ptr<MMDSFindInoReply const> const_ref;
+  using factory = MessageFactory<MMDSFindInoReply>;
+  friend factory;
+
   ceph_tid_t tid = 0;
   filepath path;
 

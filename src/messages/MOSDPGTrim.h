@@ -19,7 +19,12 @@
 #include "messages/MOSDPeeringOp.h"
 
 class MOSDPGTrim : public MOSDPeeringOp {
-
+public:
+  typedef boost::intrusive_ptr<MOSDPGTrim> ref;
+  typedef boost::intrusive_ptr<MOSDPGTrim const> const_ref;
+  using factory = MessageFactory<MOSDPGTrim>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 2;
 

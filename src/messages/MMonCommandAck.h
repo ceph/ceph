@@ -18,7 +18,12 @@
 #include "messages/PaxosServiceMessage.h"
 
 class MMonCommandAck : public PaxosServiceMessage {
- public:
+public:
+  typedef boost::intrusive_ptr<MMonCommandAck> ref;
+  typedef boost::intrusive_ptr<MMonCommandAck const> const_ref;
+  using factory = MessageFactory<MMonCommandAck>;
+  friend factory;
+
   vector<string> cmd;
   errorcode32_t r;
   string rs;

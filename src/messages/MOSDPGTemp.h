@@ -20,7 +20,12 @@
 #include "messages/PaxosServiceMessage.h"
 
 class MOSDPGTemp : public PaxosServiceMessage {
- public:
+public:
+  typedef boost::intrusive_ptr<MOSDPGTemp> ref;
+  typedef boost::intrusive_ptr<MOSDPGTemp const> const_ref;
+  using factory = MessageFactory<MOSDPGTemp>;
+  friend factory;
+
   epoch_t map_epoch = 0;
   map<pg_t, vector<int32_t> > pg_temp;
   bool forced = false;

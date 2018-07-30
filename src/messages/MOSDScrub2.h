@@ -9,7 +9,12 @@
  * instruct an OSD to scrub some or all pg(s)
  */
 
-struct MOSDScrub2 : public Message {
+class MOSDScrub2 : public Message {
+public:
+  typedef boost::intrusive_ptr<MOSDScrub2> ref;
+  typedef boost::intrusive_ptr<MOSDScrub2 const> const_ref;
+  using factory = MessageFactory<MOSDScrub2>;
+  friend factory;
 
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;

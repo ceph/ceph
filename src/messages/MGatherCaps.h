@@ -8,6 +8,9 @@ class MGatherCaps : public Message {
 public:
   typedef boost::intrusive_ptr<MGatherCaps> ref;
   typedef boost::intrusive_ptr<MGatherCaps const> const_ref;
+  using factory = MessageFactory<MGatherCaps>;
+  friend factory;
+
 
   inodeno_t ino;
 

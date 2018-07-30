@@ -19,13 +19,17 @@
 #include "include/ceph_features.h"
 
 class MClientCaps : public Message {
+public:
+  typedef boost::intrusive_ptr<MClientCaps> ref;
+  typedef boost::intrusive_ptr<MClientCaps const> const_ref;
+  using factory = MessageFactory<MClientCaps>;
+  friend factory;
+private:
+
   static const int HEAD_VERSION = 11;
   static const int COMPAT_VERSION = 1;
 
  public:
-  typedef boost::intrusive_ptr<MClientCaps> ref;
-  typedef boost::intrusive_ptr<MClientCaps const> const_ref;
-
   static const unsigned FLAG_SYNC		= (1<<0);
   static const unsigned FLAG_NO_CAPSNAP		= (1<<1); // unused
   static const unsigned FLAG_PENDING_CAPSNAP	= (1<<2);

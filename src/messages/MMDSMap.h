@@ -21,12 +21,16 @@
 #include "include/ceph_features.h"
 
 class MMDSMap : public Message {
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
 public:
   typedef boost::intrusive_ptr<MMDSMap> ref;
   typedef boost::intrusive_ptr<MMDSMap const> const_ref;
+  using factory = MessageFactory<MMDSMap>;
+  friend factory;
+private:
 
+  static const int HEAD_VERSION = 1;
+  static const int COMPAT_VERSION = 1;
+public:
   uuid_d fsid;
   epoch_t epoch = 0;
   bufferlist encoded;

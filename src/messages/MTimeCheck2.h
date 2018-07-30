@@ -14,8 +14,13 @@
 
 #pragma once
 
-struct MTimeCheck2 : public Message
-{
+class MTimeCheck2 : public Message {
+public:
+  typedef boost::intrusive_ptr<MTimeCheck2> ref;
+  typedef boost::intrusive_ptr<MTimeCheck2 const> const_ref;
+  using factory = MessageFactory<MTimeCheck2>;
+  friend factory;
+
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 

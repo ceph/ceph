@@ -19,7 +19,12 @@
 #include "MOSDFastDispatchOp.h"
 
 class MOSDPGUpdateLogMissing : public MOSDFastDispatchOp {
-
+public:
+  typedef boost::intrusive_ptr<MOSDPGUpdateLogMissing> ref;
+  typedef boost::intrusive_ptr<MOSDPGUpdateLogMissing const> const_ref;
+  using factory = MessageFactory<MOSDPGUpdateLogMissing>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 

@@ -21,12 +21,15 @@
 
 
 class MClientReconnect : public Message {
-
-  const static int HEAD_VERSION = 3;
-
 public:
   typedef boost::intrusive_ptr<MClientReconnect> ref;
   typedef boost::intrusive_ptr<MClientReconnect const> const_ref;
+  using factory = MessageFactory<MClientReconnect>;
+  friend factory;
+private:
+  const static int HEAD_VERSION = 3;
+
+public:
   map<inodeno_t, cap_reconnect_t>  caps;   // only head inodes
   vector<ceph_mds_snaprealm_reconnect> realms;
 

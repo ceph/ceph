@@ -18,7 +18,12 @@
 #include "MOSDFastDispatchOp.h"
 
 class MOSDPGScan : public MOSDFastDispatchOp {
-
+public:
+  typedef boost::intrusive_ptr<MOSDPGScan> ref;
+  typedef boost::intrusive_ptr<MOSDPGScan const> const_ref;
+  using factory = MessageFactory<MOSDPGScan>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 2;
 

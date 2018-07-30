@@ -18,13 +18,17 @@
 #include "msg/Message.h"
 
 class MMDSFragmentNotify : public Message {
+public:
+  typedef boost::intrusive_ptr<MMDSFragmentNotify> ref;
+  typedef boost::intrusive_ptr<MMDSFragmentNotify const> const_ref;
+  using factory = MessageFactory<MMDSFragmentNotify>;
+  friend factory;
+private:
   inodeno_t ino;
   frag_t basefrag;
   int8_t bits = 0;
 
  public:
-  typedef boost::intrusive_ptr<MMDSFragmentNotify> ref;
-  typedef boost::intrusive_ptr<MMDSFragmentNotify const> const_ref;
   inodeno_t get_ino() const { return ino; }
   frag_t get_basefrag() const { return basefrag; }
   int get_bits() const { return bits; }

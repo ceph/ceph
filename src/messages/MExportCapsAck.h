@@ -20,9 +20,12 @@
 
 
 class MExportCapsAck : public Message {
- public:  
+public:  
   typedef boost::intrusive_ptr<MExportCapsAck> ref;
   typedef boost::intrusive_ptr<MExportCapsAck const> const_ref;
+  using factory = MessageFactory<MExportCapsAck>;
+  friend factory;
+
   inodeno_t ino;
   bufferlist cap_bl;
 

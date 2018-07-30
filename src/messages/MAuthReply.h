@@ -18,7 +18,13 @@
 #include "msg/Message.h"
 #include "common/errno.h"
 
-struct MAuthReply : public Message {
+class MAuthReply : public Message {
+public:
+  typedef boost::intrusive_ptr<MAuthReply> ref;
+  typedef boost::intrusive_ptr<MAuthReply const> const_ref;
+  using factory = MessageFactory<MAuthReply>;
+  friend factory;
+
   __u32 protocol;
   errorcode32_t result;
   uint64_t global_id;      // if zero, meaningless
