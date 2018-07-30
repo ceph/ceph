@@ -4,5 +4,6 @@ export enum Components {
   rbd = 'RBD',
   pool = 'Pool',
   osd = 'OSD',
+  role = 'Role',
   user = 'User'
 }

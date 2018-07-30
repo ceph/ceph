@@ -6,12 +6,11 @@ import { ToastModule } from 'ng2-toastr';
 import { TabsModule } from 'ngx-bootstrap';
 
 import { SharedModule } from '../../../shared/shared.module';
-import { UserTabsComponent } from '../user-tabs/user-tabs.component';
-import { UserListComponent } from './user-list.component';
+import { UserTabsComponent } from './user-tabs.component';
 
-describe('UserListComponent', () => {
-  let component: UserListComponent;
-  let fixture: ComponentFixture<UserListComponent>;
+describe('UserTabsComponent', () => {
+  let component: UserTabsComponent;
+  let fixture: ComponentFixture<UserTabsComponent>;
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
@@ -22,12 +21,12 @@ describe('UserListComponent', () => {
         RouterTestingModule,
         HttpClientTestingModule
       ],
-      declarations: [UserListComponent, UserTabsComponent]
+      declarations: [UserTabsComponent]
     }).compileComponents();
   }));
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(UserListComponent);
+    fixture = TestBed.createComponent(UserTabsComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

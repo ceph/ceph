@@ -75,7 +75,7 @@ describe('UserFormComponent', () => {
 
   describe('create mode', () => {
     beforeEach(() => {
-      setUrl('/users/add');
+      setUrl('/user-management/users/add');
       component.ngOnInit();
     });
 
@@ -128,7 +128,7 @@ describe('UserFormComponent', () => {
       expect(userReq.request.method).toBe('POST');
       expect(userReq.request.body).toEqual(user);
       userReq.flush({});
-      expect(router.navigate).toHaveBeenCalledWith(['/users']);
+      expect(router.navigate).toHaveBeenCalledWith(['/user-management/users']);
     });
   });
 
@@ -167,7 +167,7 @@ describe('UserFormComponent', () => {
     beforeEach(() => {
       spyOn(userService, 'get').and.callFake(() => of(user));
       spyOn(TestBed.get(RoleService), 'list').and.callFake(() => of(roles));
-      setUrl('/users/edit/user1');
+      setUrl('/user-management/users/edit/user1');
       component.ngOnInit();
       const req = httpTesting.expectOne('api/role');
       expect(req.request.method).toBe('GET');
@@ -240,7 +240,7 @@ describe('UserFormComponent', () => {
         roles: ['administrator']
       });
       userReq.flush({});
-      expect(router.navigate).toHaveBeenCalledWith(['/users']);
+      expect(router.navigate).toHaveBeenCalledWith(['/user-management/users']);
     });
   });
 });

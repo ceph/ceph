@@ -1,0 +1,120 @@
+<div class="col-sm-12 col-lg-6">
+  <form name="roleForm"
+        class="form-horizontal"
+        #formDir="ngForm"
+        [formGroup]="roleForm"
+        novalidate>
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 class="panel-title">
+          <span i18n>{mode, select, editing {Edit} other {Add}}</span> Role
+        </h3>
+      </div>
+      <div class="panel-body">
+
+        <!-- Name -->
+        <div class="form-group"
+             [ngClass]="{'has-error': roleForm.showError('name', formDir)}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="name">Name
+            <span class="required"
+                  *ngIf="mode !== roleFormMode.editing"></span>
+          </label>
+          <div class="col-sm-9">
+            <input class="form-control"
+                   type="text"
+                   i18n-placeholder
+                   placeholder="Name..."
+                   id="name"
+                   name="name"
+                   formControlName="name"
+                   autofocus>
+            <span i18n
+                  class="help-block"
+                  *ngIf="roleForm.showError('name', formDir, 'required')">
+              This field is required.
+            </span>
+            <span i18n
+                  class="help-block"
+                  *ngIf="roleForm.showError('name', formDir, 'notUnique')">
+              The chosen name is already in use.
+            </span>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div class="form-group"
+             [ngClass]="{'has-error': roleForm.showError('description', formDir)}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="name">Description
+          </label>
+          <div class="col-sm-9">
+            <input class="form-control"
+                   type="text"
+                   i18n-placeholder
+                   placeholder="Description..."
+                   id="description"
+                   name="description"
+                   formControlName="description">
+          </div>
+        </div>
+
+        <!-- Permissions -->
+        <div class="form-group">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="name">Permissions
+          </label>
+          <div class="col-sm-9">
+            <table class="table table-bordered table-hover">
+              <thead>
+              <tr>
+                <th></th>
+                <th class="text-center">Read</th>
+                <th class="text-center">Create</th>
+                <th class="text-center">Update</th>
+                <th class="text-center">Delete</th>
+              </tr>
+              </thead>
+              <tbody>
+              <tr *ngFor="let scope of scopes">
+                <td i18n
+                    class="bold col-sm-3">
+                  {{ scope }}
+                </td>
+                <td class="col-sm-2 text-center clickable"
+                    *ngFor="let column of ['read', 'create', 'update', 'delete']">
+                  <div class="checkbox checkbox-primary">
+                    <input type="checkbox"
+                           [checked]="roleForm.getValue('scopes_permissions')[scope] && roleForm.getValue('scopes_permissions')[scope].indexOf(column) !== -1"
+                           (change)="hadlePermissionClick(scope, column)">
+                    <label></label>
+                  </div>
+                </td>
+              </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+      <div class="panel-footer">
+        <div class="button-group text-right">
+          <cd-submit-button [form]="formDir"
+                            type="button"
+                            (submitAction)="submit()">
+            <span i18n>{mode, select, editing {Update} other {Create}}</span> Role
+          </cd-submit-button>
+          <button i18n
+                  type="button"
+                  class="btn btn-sm btn-default"
+                  routerLink="/user-management/users/roles">
+            Back
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>

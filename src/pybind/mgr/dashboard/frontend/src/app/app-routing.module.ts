@@ -20,6 +20,8 @@ import { RgwDaemonListComponent } from './ceph/rgw/rgw-daemon-list/rgw-daemon-li
 import { RgwUserFormComponent } from './ceph/rgw/rgw-user-form/rgw-user-form.component';
 import { RgwUserListComponent } from './ceph/rgw/rgw-user-list/rgw-user-list.component';
 import { LoginComponent } from './core/auth/login/login.component';
+import { RoleFormComponent } from './core/auth/role-form/role-form.component';
+import { RoleListComponent } from './core/auth/role-list/role-list.component';
 import { UserFormComponent } from './core/auth/user-form/user-form.component';
 import { UserListComponent } from './core/auth/user-list/user-list.component';
 import { ForbiddenComponent } from './core/forbidden/forbidden.component';
@@ -177,16 +179,36 @@ const routes: Routes = [
       }
     ]
   },
-  // Administration
+  // Dashboard Settings
   {
-    path: 'users',
+    path: 'user-management',
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
-    data: { breadcrumbs: 'Administration/Users' },
+    data: { breadcrumbs: 'User management', path: null },
     children: [
-      { path: '', component: UserListComponent },
-      { path: 'add', component: UserFormComponent, data: { breadcrumbs: 'Add' } },
-      { path: 'edit/:username', component: UserFormComponent, data: { breadcrumbs: 'Edit' } }
+      {
+        path: '',
+        redirectTo: 'users',
+        pathMatch: 'full'
+      },
+      {
+        path: 'users',
+        data: { breadcrumbs: 'Users' },
+        children: [
+          { path: '', component: UserListComponent },
+          { path: 'add', component: UserFormComponent, data: { breadcrumbs: 'Add' } },
+          { path: 'edit/:username', component: UserFormComponent, data: { breadcrumbs: 'Edit' } }
+        ]
+      },
+      {
+        path: 'roles',
+        data: { breadcrumbs: 'Roles' },
+        children: [
+          { path: '', component: RoleListComponent },
+          { path: 'add', component: RoleFormComponent, data: { breadcrumbs: 'Add' } },
+          { path: 'edit/:name', component: RoleFormComponent, data: { breadcrumbs: 'Edit' } }
+        ]
+      }
     ]
   },
   // System
