@@ -228,6 +228,11 @@ public:
     load_avg.hit(ceph_clock_now(), load_avg_rate);
   }
 
+  double get_session_uptime() const {
+    chrono::duration<double> uptime = clock::now() - birth_time;
+    return uptime.count();
+  }
+
   time get_birth_time() const {
     return birth_time;
   }
