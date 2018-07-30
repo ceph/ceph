@@ -360,7 +360,7 @@ public:
   const pg_missing_tracker_t &get_local_missing() const override {
     return pg_log.get_missing();
   }
-  const PGLog &get_log() const override {
+  PGLog &get_log() override {
     return pg_log;
   }
   void add_local_next_event(const pg_log_entry_t& e) override {
@@ -430,6 +430,12 @@ public:
   bool should_send_op(
     pg_shard_t peer,
     const hobject_t &hoid) override;
+
+  void op_set_check(
+    const hobject_t &hoid,
+    set<pg_shard_t> &should_send,
+    set<pg_shard_t> &missing,
+    set<pg_shard_t> &degraded_modify_set) override ; 
 
   bool pg_is_undersized() const override {
     return is_undersized();

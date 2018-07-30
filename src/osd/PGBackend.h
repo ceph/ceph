@@ -203,7 +203,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        }
      }
 
-     virtual const PGLog &get_log() const = 0;
+     virtual PGLog &get_log() = 0;
      virtual bool pgb_is_primary() const = 0;
      virtual OSDMapRef pgb_get_osdmap() const = 0;
      virtual const pg_info_t &get_info() const = 0;
@@ -225,6 +225,12 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual bool should_send_op(
        pg_shard_t peer,
        const hobject_t &hoid) = 0;
+
+     virtual void op_set_check(
+       const hobject_t &hoid,
+       set<pg_shard_t> &should_send,
+       set<pg_shard_t> &missing,
+       set<pg_shard_t> &degraded_modify_set) = 0;
 
      virtual bool pg_is_undersized() const = 0;
 

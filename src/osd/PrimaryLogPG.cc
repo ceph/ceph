@@ -582,6 +582,46 @@ bool PrimaryLogPG::should_send_op(
   return should_send;
 }
 
+void PrimaryLogPG::op_set_check(
+  const hobject_t& hoid,
+  set<pg_shard_t>& should_send,
+  set<pg_shard_t>& missing,
+  set<pg_shard_t>& degraded_modify_set)
+{
+
+  for (set<pg_shard_t>::iterator i = actingset.begin();
+       i != actingset.end();
+       ++i) {
+    pg_shard_t peer = *i;
+    auto peer_missing_entry = peer_missing.find(peer);
+    if (peer_missing_entry != peer_missing.end() &&
+        peer_missing_entry->second.get_items().count(hoid)) {
+      missing.insert(peer); 
+    }
+  }
+
+  for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
+       i != acting_recovery_backfill.end();
+       ++i) {   
+    pg_shard_t peer = *i;
+    if (peer == get_primary() ||
+	hoid.pool != (int64_t)info.pgid.pool() ||
+	hoid <= last_backfill_started ||
+	hoid <= peer_info[peer].last_backfill) 
+      should_send.insert(peer);
+  }
+
+  for (set<pg_shard_t>::iterator i = should_send.begin();
+       i != should_send.end();
+       ++i) {
+    pg_shard_t peer = *i;
+    auto peer_missing_entry = peer_missing.find(peer);
+    if (peer_missing_entry == peer_missing.end() ||
+	!peer_missing_entry->second.get_items().count(hoid)) {
+      degraded_modify_set.insert(peer);
+    }
+  }
+}
 
 ConnectionRef PrimaryLogPG::get_con_osd_cluster(
   int peer, epoch_t from_epoch)

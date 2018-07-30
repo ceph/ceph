@@ -3695,6 +3695,9 @@ inline ostream& operator<<(ostream& out, const pg_log_t& log)
  */
 struct pg_missing_item {
   eversion_t need, have;
+  set<pg_shard_t> holders;
+  map<eversion_t, set<pg_shard_t>> prior_holders;
+
   enum missing_flags_t {
     FLAG_NONE = 0,
     FLAG_DELETE = 1,
@@ -3834,6 +3837,10 @@ class pg_missing_set : public pg_missing_const_i {
   map<version_t, hobject_t> rmissing;  // v -> oid
   ChangeTracker<TrackChanges> tracker;
 
+  using dset = set<pg_shard_t>;
+  map<dset, weak_ptr<dset>> degraded_sets;
+  map<hobject_t, shared_ptr<dset>> degraded_objects;
+
 public:
   pg_missing_set() = default;
 
@@ -3925,6 +3932,33 @@ public:
     tracker.changed(e.soid);
   }
 
+  // forward
+  void revise_need(hobject_t oid, eversion_t need, bool is_delete, set<pg_shard_t> degraded_modify_set) {
+    assert(missing.count(oid));
+    rmissing.erase(missing[oid].need.version);
+    rmissing[need.version] = oid;
+    missing[oid].need = need;            
+    missing[oid].set_delete(is_delete);
+
+    if (degraded_modify_set != missing[oid].holders) {
+      missing[oid].prior_holders.insert(make_pair(need, degraded_modify_set));
+      missing[oid].holders = degraded_modify_set;
+      
+      shared_ptr<set<pg_shard_t>> sp;
+      auto it = degraded_sets.find(degraded_modify_set);
+      if (it == degraded_sets.end() || !(sp = it->second.lock())) {
+	sp = make_shared<set<pg_shard_t>>(degraded_modify_set);
+	degraded_sets[degraded_modify_set] = sp;
+      } else {
+	auto sp = degraded_sets[degraded_modify_set].lock();
+      }
+      degraded_objects[oid] = sp;
+    }
+
+    tracker.changed(oid);
+  }
+
+  // rewind
   void revise_need(hobject_t oid, eversion_t need, bool is_delete) {
     if (missing.count(oid)) {
       rmissing.erase(missing[oid].need.version);
@@ -3934,6 +3968,30 @@ public:
       missing[oid] = item(need, eversion_t(), is_delete);
     }
     rmissing[need.version] = oid;
+
+    map<eversion_t, set<pg_shard_t>> &prior_holders = missing[oid].prior_holders;
+    set<pg_shard_t> &holders = missing[oid].holders;
+
+    auto itup = prior_holders.upper_bound(need);
+    if (itup == prior_holders.begin()) {
+      holders.clear();  
+      prior_holders.clear();
+      degraded_objects.erase(oid);
+    } else if (itup != prior_holders.end()) {
+      --itup;
+      holders = itup->second;
+      prior_holders.erase(++itup, prior_holders.end());
+
+      shared_ptr<set<pg_shard_t>> sp;
+      auto it = degraded_sets.find(holders);
+      if (it == degraded_sets.end() || !(sp = it->second.lock())) {
+        sp = make_shared<set<pg_shard_t>>(holders);
+        degraded_sets[holders] = sp;
+      } else {
+        auto sp = degraded_sets[holders].lock();
+      }
+      degraded_objects[oid] = sp;
+    }
 
     tracker.changed(oid);
   }

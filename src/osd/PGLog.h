@@ -663,6 +663,10 @@ public:
 
   const pg_missing_tracker_t& get_missing() const { return missing; }
 
+  void revise_need(hobject_t oid, eversion_t need, bool is_delete, set<pg_shard_t> degraded_modify_set) {
+    missing.revise_need(oid, need, is_delete, degraded_modify_set);
+  }
+
   void missing_add(const hobject_t& oid, eversion_t need, eversion_t have, bool is_delete=false) {
     missing.add(oid, need, have, is_delete);
   }
