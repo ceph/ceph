@@ -12,8 +12,11 @@ def stop(unit):
     process.run(['systemctl', 'stop', unit])
 
 
-def enable(unit):
-    process.run(['systemctl', 'enable', unit])
+def enable(unit, runtime=False):
+    if runtime:
+        process.run(['systemctl', 'enable', '--runtime', unit])
+    else:
+        process.run(['systemctl', 'enable', unit])
 
 
 def disable(unit):
@@ -41,7 +44,7 @@ def stop_osd(id_):
 
 
 def enable_osd(id_):
-    return enable(osd_unit % id_)
+    return enable(osd_unit % id_, runtime=True)
 
 
 def disable_osd(id_):
