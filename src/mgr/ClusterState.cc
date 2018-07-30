@@ -78,12 +78,22 @@ void ClusterState::ingest_pgstats(MPGStats *stats)
 
     // In case we're hearing about a PG that according to last
     // OSDMap update should not exist
-    if (existing_pools.count(pgid.pool()) == 0) {
+    auto r = existing_pools.find(pgid.pool());
+    if (r == existing_pools.end()) {
       dout(15) << " got " << pgid
 	       << " reported at " << pg_stats.reported_epoch << ":"
                << pg_stats.reported_seq
                << " state " << pg_state_string(pg_stats.state)
                << " but pool not in " << existing_pools
+               << dendl;
+      continue;
+    }
+    if (pgid.ps() >= r->second) {
+      dout(15) << " got " << pgid
+	       << " reported at " << pg_stats.reported_epoch << ":"
+               << pg_stats.reported_seq
+               << " state " << pg_state_string(pg_stats.state)
+               << " but > pg_num " << r->second
                << dendl;
       continue;
     }
@@ -94,7 +104,7 @@ void ClusterState::ingest_pgstats(MPGStats *stats)
 	q->second.get_version_pair() > pg_stats.get_version_pair()) {
       dout(15) << " had " << pgid << " from "
 	       << q->second.reported_epoch << ":"
-               << q->second.reported_seq << dendl;
+	       << q->second.reported_seq << dendl;
       continue;
     }
 
@@ -137,7 +147,7 @@ void ClusterState::notify_osdmap(const OSDMap &osd_map)
   // in synchrony with this OSDMap.
   existing_pools.clear();
   for (auto& p : osd_map.get_pools()) {
-    existing_pools.insert(p.first);
+    existing_pools[p.first] = p.second.get_pg_num();
   }
 
   // brute force this for now (don't bother being clever by only
