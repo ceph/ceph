@@ -43,6 +43,7 @@ public:
   bool did_assim() const { return b_did_assim; }
   void mark_assim() { b_did_assim = true; }
 
+protected:
   MExportDirPrep() {
     b_did_assim = false;
   }
@@ -51,7 +52,6 @@ public:
     dirfrag(df), b_did_assim(false) {
     set_tid(tid);
   }
-private:
   ~MExportDirPrep() override {}
 
 public:

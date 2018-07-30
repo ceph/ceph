@@ -37,13 +37,13 @@ private:
   const list<dirfrag_t>& get_bounds() const { return bounds; }
   list<dirfrag_t>& get_bounds() { return bounds; }
 
+protected:
   MExportDirNotify() {}
   MExportDirNotify(dirfrag_t i, uint64_t tid, bool a, pair<__s32,__s32> oa, pair<__s32,__s32> na) :
     Message(MSG_MDS_EXPORTDIRNOTIFY),
     base(i), ack(a), old_auth(oa), new_auth(na) {
     set_tid(tid);
   }
-private:
   ~MExportDirNotify() override {}
 
 public:

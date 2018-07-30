@@ -281,6 +281,7 @@ public:
 
   bool is_safe() const { return head.safe; }
 
+protected:
   MClientReply() : Message(CEPH_MSG_CLIENT_REPLY) {}
   MClientReply(const MClientRequest &req, int result = 0) :
     Message(CEPH_MSG_CLIENT_REPLY) {
@@ -290,7 +291,6 @@ public:
     head.result = result;
     head.safe = 1;
   }
-private:
   ~MClientReply() override {}
 
 public:

@@ -30,12 +30,12 @@ private:
  public:
   dirfrag_t get_dirfrag() const { return dirfrag; }
 
+protected:
   MExportDirCancel() : Message(MSG_MDS_EXPORTDIRCANCEL) {}
   MExportDirCancel(dirfrag_t df, uint64_t tid) :
     Message(MSG_MDS_EXPORTDIRCANCEL), dirfrag(df) {
     set_tid(tid);
   }
-private:
   ~MExportDirCancel() override {}
 
 public:

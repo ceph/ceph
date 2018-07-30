@@ -27,6 +27,7 @@ public:
   inodeno_t ino;
   vector<inode_backpointer_t> ancestors;
 
+protected:
   MMDSOpenIno() : Message(MSG_MDS_OPENINO) {}
   MMDSOpenIno(ceph_tid_t t, inodeno_t i, vector<inode_backpointer_t>* pa) :
     Message(MSG_MDS_OPENINO), ino(i) {
@@ -34,7 +35,9 @@ public:
     if (pa)
       ancestors = *pa;
   }
+  ~MMDSOpenIno() override {}
 
+public:
   const char *get_type_name() const override { return "openino"; }
   void print(ostream &out) const override {
     out << "openino(" << header.tid << " " << ino << " " << ancestors << ")";

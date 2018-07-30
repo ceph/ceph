@@ -113,7 +113,7 @@ private:
 
   void set_base_dir_frag(frag_t df) { base_dir_frag = df; }
 
-  // cons
+protected:
   MDiscoverReply() : Message(MSG_MDS_DISCOVERREPLY, HEAD_VERSION) { }
   MDiscoverReply(const MDiscover &dis) :
     Message(MSG_MDS_DISCOVERREPLY, HEAD_VERSION),
@@ -145,7 +145,6 @@ private:
   {
     header.tid = 0;
   }
-private:
   ~MDiscoverReply() override {}
 
 public:

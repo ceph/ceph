@@ -14,9 +14,9 @@ public:
 
   inodeno_t ino;
 
+protected:
   MGatherCaps() :
     Message(MSG_MDS_GATHERCAPS) {}
-private:
   ~MGatherCaps() override {}
 
 public:

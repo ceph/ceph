@@ -40,6 +40,7 @@ private:
 
   bufferlist bl;
 
+protected:
   MDentryLink() :
     Message(MSG_MDS_DENTRYLINK) { }
   MDentryLink(dirfrag_t r, dirfrag_t df, std::string_view n, bool p) :
@@ -48,7 +49,6 @@ private:
     dirfrag(df),
     dn(n),
     is_primary(p) {}
-private:
   ~MDentryLink() override {}
 
 public:

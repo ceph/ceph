@@ -40,6 +40,7 @@ public:
   int get_max_caps() const { return head.max_caps; }
   int get_max_leases() const { return head.max_leases; }
 
+protected:
   MClientSession() : Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) { }
   MClientSession(int o, version_t s=0) : 
     Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
@@ -54,7 +55,6 @@ public:
     head.seq = 0;
     st.encode_timeval(&head.stamp);
   }
-private:
   ~MClientSession() override {}
 
 public:

@@ -33,13 +33,13 @@ private:
   dirfrag_t get_dirfrag() const { return dirfrag; }
   bool is_success() const { return success; }
 
+protected:
   MExportDirDiscoverAck() : Message(MSG_MDS_EXPORTDIRDISCOVERACK) {}
   MExportDirDiscoverAck(dirfrag_t df, uint64_t tid, bool s=true) :
     Message(MSG_MDS_EXPORTDIRDISCOVERACK),
     dirfrag(df), success(s) {
     set_tid(tid);
   }
-private:
   ~MExportDirDiscoverAck() override {}
 
 public:

@@ -31,12 +31,12 @@ public:
   vector<inodeno_t> split_inos;
   vector<inodeno_t> split_realms;
 
+protected:
   MClientSnap(int o=0) : 
     Message(CEPH_MSG_CLIENT_SNAP) {
     memset(&head, 0, sizeof(head));
     head.op = o;
   }
-private:
   ~MClientSnap() override {}
 
 public:  

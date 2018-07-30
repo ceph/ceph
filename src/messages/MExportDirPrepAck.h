@@ -31,12 +31,12 @@ private:
  public:
   dirfrag_t get_dirfrag() const { return dirfrag; }
 
+protected:
   MExportDirPrepAck() {}
   MExportDirPrepAck(dirfrag_t df, bool s, uint64_t tid) :
     Message(MSG_MDS_EXPORTDIRPREPACK), dirfrag(df), success(s) {
     set_tid(tid);
   }
-private:
   ~MExportDirPrepAck() override {}
 
 public:  

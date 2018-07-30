@@ -208,13 +208,13 @@ void Beacon::_send()
 
   assert(want_state != MDSMap::STATE_NULL);
   
-  MMDSBeacon::ref beacon(new MMDSBeacon(
+  auto beacon = MMDSBeacon::factory::build(
       monc->get_fsid(), mds_gid_t(monc->get_global_id()),
       name,
       epoch,
       want_state,
       last_seq,
-      CEPH_FEATURES_SUPPORTED_DEFAULT), false);
+      CEPH_FEATURES_SUPPORTED_DEFAULT);
 
   beacon->set_standby_for_rank(standby_for_rank);
   beacon->set_standby_for_name(standby_for_name);

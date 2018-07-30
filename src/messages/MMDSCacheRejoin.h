@@ -217,13 +217,13 @@ private:
   map<dirfrag_t, map<string_snap_t, list<slave_reqid> > > authpinned_dentries;
   map<dirfrag_t, map<string_snap_t, slave_reqid> > xlocked_dentries;
   
+protected:
   MMDSCacheRejoin() :
     Message(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
     op(0) {}
   MMDSCacheRejoin(int o) : 
     Message(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
     op(o) {}
-private:
   ~MMDSCacheRejoin() override {}
 
 public:

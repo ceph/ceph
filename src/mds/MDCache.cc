@@ -2039,14 +2039,14 @@ update:
     cap->last_rsize = i->rstat.rsize();
     cap->last_rbytes = i->rstat.rbytes;
 
-    MClientQuota *msg = new MClientQuota();
+    auto msg = MClientQuota::factory::build();
     msg->ino = in->ino();
     msg->rstat = i->rstat;
     msg->quota = i->quota;
     mds->send_message_client_counted(msg, session->get_connection());
   }
   for (const auto &it : in->get_replicas()) {
-    MGatherCaps *msg = new MGatherCaps;
+    auto msg = MGatherCaps::factory::build();
     msg->ino = in->ino();
     mds->send_message_mds(msg, it.first);
   }
@@ -2476,7 +2476,7 @@ void MDCache::_logged_slave_commit(mds_rank_t from, metareqid_t reqid)
   dout(10) << "_logged_slave_commit from mds." << from << " " << reqid << dendl;
   
   // send a message
-  MMDSSlaveRequest *req = new MMDSSlaveRequest(reqid, 0, MMDSSlaveRequest::OP_COMMITTED);
+  auto req = MMDSSlaveRequest::factory::build(reqid, 0, MMDSSlaveRequest::OP_COMMITTED);
   mds->send_message_mds(req, from);
 }
 
@@ -2737,7 +2737,7 @@ void MDCache::send_slave_resolves()
     for (map<mds_rank_t, map<metareqid_t, MDSlaveUpdate*> >::iterator p = uncommitted_slave_updates.begin();
 	 p != uncommitted_slave_updates.end();
 	 ++p) {
-      resolves[p->first].reset(new MMDSResolve, false);
+      resolves[p->first] = MMDSResolve::factory::build();
       for (map<metareqid_t, MDSlaveUpdate*>::iterator q = p->second.begin();
 	   q != p->second.end();
 	   ++q) {
@@ -2761,7 +2761,7 @@ void MDCache::send_slave_resolves()
       if (resolve_set.count(master) || is_ambiguous_slave_update(p->first, master)) {
 	dout(10) << " including uncommitted " << *mdr << dendl;
 	if (!resolves.count(master))
-	  resolves[master].reset(new MMDSResolve, false);
+	  resolves[master] = MMDSResolve::factory::build();
 	if (!mdr->committing &&
 	    mdr->has_more() && mdr->more()->is_inode_exporter) {
 	  // re-send cap exports
@@ -2805,7 +2805,7 @@ void MDCache::send_subtree_resolves()
     if (*p == mds->get_nodeid())
       continue;
     if (mds->is_resolve() || mds->mdsmap->is_resolve(*p))
-      resolves[*p].reset(new MMDSResolve, false);
+      resolves[*p] = MMDSResolve::factory::build();
   }
 
   map<dirfrag_t, vector<dirfrag_t> > my_subtrees;
@@ -3185,7 +3185,7 @@ void MDCache::handle_resolve(const MMDSResolve::const_ref &m)
       }
     }
 
-    MMDSResolveAck::ref ack(new MMDSResolveAck, false);
+    auto ack = MMDSResolveAck::factory::build();
     for (const auto &p : m->slave_requests) {
       if (uncommitted_masters.count(p.first)) {  //mds->sessionmap.have_completed_request(p.first)) {
 	// COMMIT
@@ -3990,9 +3990,9 @@ void MDCache::rejoin_send_rejoins()
     if (*p == mds->get_nodeid())  continue;  // nothing to myself!
     if (rejoin_sent.count(*p)) continue;     // already sent a rejoin to this node!
     if (mds->is_rejoin())
-      rejoins[*p].reset(new MMDSCacheRejoin(MMDSCacheRejoin::OP_WEAK), false);
+      rejoins[*p] = MMDSCacheRejoin::factory::build(MMDSCacheRejoin::OP_WEAK);
     else if (mds->mdsmap->is_rejoin(*p))
-      rejoins[*p].reset(new MMDSCacheRejoin(MMDSCacheRejoin::OP_STRONG), false);
+      rejoins[*p] = MMDSCacheRejoin::factory::build(MMDSCacheRejoin::OP_STRONG);
   }
 
   if (mds->is_rejoin()) {
@@ -4342,7 +4342,7 @@ void MDCache::handle_cache_rejoin_weak(const MMDSCacheRejoin::const_ref &weak)
   if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
     survivor = true;
     dout(10) << "i am a surivivor, and will ack immediately" << dendl;
-    ack.reset(new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK), false);
+    ack = MMDSCacheRejoin::factory::build(MMDSCacheRejoin::OP_ACK);
 
     map<inodeno_t,map<client_t,Capability::Import> > imported_caps;
 
@@ -5126,7 +5126,7 @@ void MDCache::handle_cache_rejoin_ack(const MMDSCacheRejoin::const_ref &ack)
       }
 
       // mark client caps stale.
-      MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0,
+      auto m = MClientCaps::factory::build(CEPH_CAP_OP_EXPORT, p->first, 0,
 				       r->second.capinfo.cap_id, 0,
                                        mds->get_osd_epoch_barrier());
       m->set_cap_peer(q->second.cap_id, q->second.issue_seq, q->second.mseq,
@@ -5564,7 +5564,7 @@ void MDCache::prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t i
     snap = it->second;
     snap->head.op = CEPH_SNAP_OP_SPLIT;
   } else {
-    snap.reset(new MClientSnap(CEPH_SNAP_OP_SPLIT), false);
+    snap = MClientSnap::factory::build(CEPH_SNAP_OP_SPLIT);
     splits.emplace(std::piecewise_construct, std::forward_as_tuple(client), std::forward_as_tuple(snap));
     snap->head.split = realm->inode->ino();
     snap->bl = realm->get_snap_trace();
@@ -5596,7 +5596,7 @@ void MDCache::prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm,
     assert(!p.second->empty());
     auto em = splits.emplace(std::piecewise_construct, std::forward_as_tuple(p.first), std::forward_as_tuple());
     if (em.second) {
-      MClientSnap::ref update(new MClientSnap(CEPH_SNAP_OP_SPLIT), false);
+      auto update = MClientSnap::factory::build(CEPH_SNAP_OP_SPLIT);
       update->head.split = parent_realm->inode->ino();
       update->split_inos = split_inos;
       update->split_realms = split_realms;
@@ -5712,7 +5712,7 @@ void MDCache::export_remaining_imported_caps()
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
       if (session) {
 	// mark client caps stale.
-	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0, mds->get_osd_epoch_barrier());
+	auto stale = MClientCaps::factory::build(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0, mds->get_osd_epoch_barrier());
 	stale->set_cap_peer(0, 0, 0, -1, 0);
 	mds->send_message_client_counted(stale, q->first);
       }
@@ -5787,12 +5787,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
     cap->set_last_issue();
     cap->set_last_issue_stamp(ceph_clock_now());
     cap->clear_new();
-    MClientCaps *reap = new MClientCaps(CEPH_CAP_OP_IMPORT,
-					in->ino(),
-					realm->inode->ino(),
-					cap->get_cap_id(), cap->get_last_seq(),
-					cap->pending(), cap->wanted(), 0,
-					cap->get_mseq(), mds->get_osd_epoch_barrier());
+    auto reap = MClientCaps::factory::build(CEPH_CAP_OP_IMPORT, in->ino(), realm->inode->ino(), cap->get_cap_id(), cap->get_last_seq(), cap->pending(), cap->wanted(), 0, cap->get_mseq(), mds->get_osd_epoch_barrier());
     in->encode_cap_message(reap, cap);
     reap->snapbl = realm->get_snap_trace();
     reap->set_cap_peer(p_cap_id, p_seq, p_mseq, peer, p_flags);
@@ -5988,7 +5983,7 @@ void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snap
   if (seq < realm->get_newest_seq()) {
     dout(10) << "finish_snaprealm_reconnect client." << client << " has old seq " << seq << " < " 
 	     << realm->get_newest_seq() << " on " << *realm << dendl;
-    MClientSnap *snap = new MClientSnap(CEPH_SNAP_OP_UPDATE);
+    auto snap = MClientSnap::factory::build(CEPH_SNAP_OP_UPDATE);
     snap->bl = realm->get_snap_trace();
     for (const auto& child : realm->open_children)
       snap->split_realms.push_back(child->inode->ino());
@@ -6037,13 +6032,13 @@ void MDCache::rejoin_send_acks()
   rejoin_unlinked_inodes.clear();
   
   // send acks to everyone in the recovery set
-  map<mds_rank_t,MMDSCacheRejoin*> acks;
+  map<mds_rank_t,MMDSCacheRejoin::ref> acks;
   for (set<mds_rank_t>::iterator p = recovery_set.begin();
        p != recovery_set.end();
        ++p) {
     if (rejoin_ack_sent.count(*p))
       continue;
-    acks[*p] = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
+    acks[*p] = MMDSCacheRejoin::factory::build(MMDSCacheRejoin::OP_ACK);
   }
 
   rejoin_ack_sent = recovery_set;
@@ -6665,7 +6660,7 @@ bool MDCache::trim(uint64_t count)
 
     auto em = expiremap.emplace(std::piecewise_construct, std::forward_as_tuple(rank), std::forward_as_tuple());
     if (em.second) {
-      em.first->second.reset(new MCacheExpire(mds->get_nodeid()), false);
+      em.first->second = MCacheExpire::factory::build(mds->get_nodeid());
     }
 
     dout(20) << __func__ << ": try expiring " << *mdsdir_in << " for stopping mds." << mds <<  dendl;
@@ -6790,7 +6785,7 @@ bool MDCache::trim_dentry(CDentry *dn, expiremap& expiremap)
       assert(a != mds->get_nodeid());
       auto em = expiremap.emplace(std::piecewise_construct, std::forward_as_tuple(a), std::forward_as_tuple());
       if (em.second)
-	em.first->second.reset(new MCacheExpire(mds->get_nodeid()), false); /* new */
+	em.first->second = MCacheExpire::factory::build(mds->get_nodeid());
       em.first->second->add_dentry(con->dirfrag(), dir->dirfrag(), dn->get_name(), dn->last, dn->get_replica_nonce());
     }
   }
@@ -6846,7 +6841,7 @@ void MDCache::trim_dirfrag(CDir *dir, CDir *con, expiremap& expiremap)
       assert(a != mds->get_nodeid());
       auto em = expiremap.emplace(std::piecewise_construct, std::forward_as_tuple(a), std::forward_as_tuple());
       if (em.second)
-	em.first->second.reset(new MCacheExpire(mds->get_nodeid()), false); /* new */
+	em.first->second = MCacheExpire::factory::build(mds->get_nodeid()); /* new */
       em.first->second->add_dir(condf, dir->dirfrag(), dir->replica_nonce);
     }
   }
@@ -6915,7 +6910,7 @@ bool MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, expiremap& expirema
       assert(a != mds->get_nodeid());
       auto em = expiremap.emplace(std::piecewise_construct, std::forward_as_tuple(a), std::forward_as_tuple());
       if (em.second)
-	em.first->second.reset(new MCacheExpire(mds->get_nodeid()), false); /* new */
+	em.first->second = MCacheExpire::factory::build(mds->get_nodeid()); /* new */
       em.first->second->add_inode(df, in->vino(), in->get_replica_nonce());
     }
   }
@@ -7284,7 +7279,7 @@ void MDCache::handle_cache_expire(const MCacheExpire::const_ref &m)
 
         auto em = delayed_expire[parent_dir].emplace(std::piecewise_construct, std::forward_as_tuple(from), std::forward_as_tuple());
         if (em.second)
-	  em.first->second.reset(new MCacheExpire(from), false); /* new */
+	  em.first->second = MCacheExpire::factory::build(from); /* new */
 
 	// merge these expires into it
 	em.first->second->add_realm(p.first, p.second);
@@ -8774,7 +8769,7 @@ void MDCache::do_open_ino_peer(inodeno_t ino, open_ino_info_t& info)
     // got backtrace from peer or backtrace just fetched
     if (info.discover || !info.fetch_backtrace)
       pa = &info.ancestors;
-    mds->send_message_mds(new MMDSOpenIno(info.tid, ino, pa), peer);
+    mds->send_message_mds(MMDSOpenIno::factory::build(info.tid, ino, pa), peer);
     if (mds->logger)
       mds->logger->inc(l_mds_openino_peer_discover);
   }
@@ -8794,7 +8789,7 @@ void MDCache::handle_open_ino(const MMDSOpenIno::const_ref &m, int err)
   CInode *in = get_inode(ino);
   if (in) {
     dout(10) << " have " << *in << dendl;
-    reply.reset(new MMDSOpenInoReply(m->get_tid(), ino, mds_rank_t(0)), false);
+    reply = MMDSOpenInoReply::factory::build(m->get_tid(), ino, mds_rank_t(0));
     if (in->is_auth()) {
       touch_inode(in);
       while (1) {
@@ -8810,13 +8805,13 @@ void MDCache::handle_open_ino(const MMDSOpenIno::const_ref &m, int err)
       reply->hint = in->authority().first;
     }
   } else if (err < 0) {
-    reply.reset(new MMDSOpenInoReply(m->get_tid(), ino, MDS_RANK_NONE, err), false);
+    reply = MMDSOpenInoReply::factory::build(m->get_tid(), ino, MDS_RANK_NONE, err);
   } else {
     mds_rank_t hint = MDS_RANK_NONE;
     int ret = open_ino_traverse_dir(ino, m, m->ancestors, false, false, &hint);
     if (ret > 0)
       return;
-    reply.reset(new MMDSOpenInoReply(m->get_tid(), ino, hint, ret), false);
+    reply = MMDSOpenInoReply::factory::build(m->get_tid(), ino, hint, ret);
   }
   m->get_connection()->send_message2(reply); /* FIXME, why not send_client? */
 }
@@ -8990,7 +8985,7 @@ void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
     }
   } else {
     fip.checking = m;
-    mds->send_message_mds(new MMDSFindIno(fip.tid, fip.ino), m);
+    mds->send_message_mds(MMDSFindIno::factory::build(fip.tid, fip.ino), m);
   }
 }
 
@@ -9001,13 +8996,13 @@ void MDCache::handle_find_ino(const MMDSFindIno::const_ref &m)
   }
 
   dout(10) << "handle_find_ino " << *m << dendl;
-  MMDSFindInoReply *r = new MMDSFindInoReply(m->tid);
+  auto r = MMDSFindInoReply::factory::build(m->tid);
   CInode *in = get_inode(m->ino);
   if (in) {
     in->make_path(r->path);
     dout(10) << " have " << r->path << " " << *in << dendl;
   }
-  m->get_connection()->send_message(r);
+  m->get_connection()->send_message2(r);
 }
 
 
@@ -9275,7 +9270,7 @@ void MDCache::request_drop_foreign_locks(MDRequestRef& mdr)
   for (set<mds_rank_t>::iterator p = mdr->more()->slaves.begin();
        p != mdr->more()->slaves.end();
        ++p) {
-    MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+    auto r = MMDSSlaveRequest::factory::build(mdr->reqid, mdr->attempt,
 					       MMDSSlaveRequest::OP_FINISH);
 
     if (mdr->killed && !mdr->committing) {
@@ -9455,7 +9450,7 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
 
         auto em = updates.emplace(std::piecewise_construct, std::forward_as_tuple(client), std::forward_as_tuple());
         if (em.second) {
-          MClientSnap::ref update(new MClientSnap(CEPH_SNAP_OP_SPLIT), false);
+          auto update = MClientSnap::factory::build(CEPH_SNAP_OP_SPLIT);
 	  update->head.split = in->ino();
 	  update->split_inos = split_inos;
 	  update->split_realms = split_realms;
@@ -9539,7 +9534,7 @@ void MDCache::send_snap_update(CInode *in, version_t stid, int snap_op)
     in->encode_snap(snap_blob);
 
     for (auto p : mds_set) {
-      MMDSSnapUpdate::ref m(new MMDSSnapUpdate(in->ino(), stid, snap_op), false);
+      auto m = MMDSSnapUpdate::factory::build(in->ino(), stid, snap_op);
       m->snap_blob = snap_blob;
       mds->send_message_mds(m, p);
     }
@@ -9597,7 +9592,7 @@ void MDCache::notify_global_snaprealm_update(int snap_op)
   for (auto &session : sessions) {
     if (!session->is_open() && !session->is_stale())
       continue;
-    MClientSnap *update = new MClientSnap(snap_op);
+    auto update = MClientSnap::factory::build(snap_op);
     update->head.split = global_snaprealm->inode->ino();
     update->bl = global_snaprealm->get_snap_trace();
     mds->send_message_client_counted(update, session);
@@ -9673,7 +9668,7 @@ void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Conte
 
 void MDCache::_send_discover(discover_info_t& d)
 {
-  MDiscover::ref dis(new MDiscover(d.ino, d.frag, d.snap, d.want_path, d.want_base_dir, d.want_xlocked), false);
+  auto dis = MDiscover::factory::build(d.ino, d.frag, d.snap, d.want_path, d.want_base_dir, d.want_xlocked);
   dis->set_tid(d.tid);
   mds->send_message_mds(dis, d.mds);
 }
@@ -9865,7 +9860,7 @@ void MDCache::handle_discover(const MDiscover::const_ref &dis)
 
 
   CInode *cur = 0;
-  MDiscoverReply::ref reply(new MDiscoverReply(*dis), false);
+  auto reply = MDiscoverReply::factory::build(*dis);
 
   snapid_t snapid = dis->get_snapid();
 
@@ -10474,13 +10469,7 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
     for (const auto &r : dir->dir_rep_by) {
       s.insert(r);
     }
-    mds->send_message_mds(new MDirUpdate(mds->get_nodeid(),
-					 dir->dirfrag(),
-					 dir->dir_rep,
-					 s,
-					 path,
-					 bcast),
-			  *it);
+    mds->send_message_mds(MDirUpdate::factory::build(mds->get_nodeid(), dir->dirfrag(), dir->dir_rep, s, path, bcast), *it);
   }
 
   return 0;
@@ -10549,8 +10538,7 @@ void MDCache::send_dentry_link(CDentry *dn, MDRequestRef& mdr)
 	 rejoin_gather.count(p.first)))
       continue;
     CDentry::linkage_t *dnl = dn->get_linkage();
-    MDentryLink *m = new MDentryLink(subtree->dirfrag(), dn->get_dir()->dirfrag(),
-				     dn->get_name(), dnl->is_primary());
+    auto m = MDentryLink::factory::build(subtree->dirfrag(), dn->get_dir()->dirfrag(), dn->get_name(), dnl->is_primary());
     if (dnl->is_primary()) {
       dout(10) << "  primary " << *dnl->get_inode() << dendl;
       replicate_inode(dnl->get_inode(), p.first, m->bl,
@@ -10637,7 +10625,7 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& md
 	 rejoin_gather.count(*it)))
       continue;
 
-    MDentryUnlink *unlink = new MDentryUnlink(dn->get_dir()->dirfrag(), dn->get_name());
+    auto unlink = MDentryUnlink::factory::build(dn->get_dir()->dirfrag(), dn->get_name());
     if (straydn) {
       replicate_stray(straydn, *it, unlink->straybl);
       unlink->snapbl = snapbl;
@@ -11489,7 +11477,7 @@ void MDCache::_fragment_stored(MDRequestRef& mdr)
 	 rejoin_gather.count(p.first)))
       continue;
 
-    MMDSFragmentNotify *notify = new MMDSFragmentNotify(basedirfrag, info.bits);
+    auto notify = MMDSFragmentNotify::factory::build(basedirfrag, info.bits);
 
     // freshly replicate new dirs to peers
     for (list<CDir*>::iterator q = info.resultfrags.begin();

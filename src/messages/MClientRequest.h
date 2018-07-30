@@ -91,7 +91,7 @@ public:
   /* XXX HACK */
   mutable bool queued_for_replay = false;
 
- public:
+protected:
   // cons
   MClientRequest()
     : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
@@ -100,7 +100,6 @@ public:
     memset(&head, 0, sizeof(head));
     head.op = op;
   }
-private:
   ~MClientRequest() override {}
 
 public:

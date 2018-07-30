@@ -28,9 +28,12 @@ public:
   ceph_tid_t tid = 0;
   filepath path;
 
+protected:
   MMDSFindInoReply() : Message(MSG_MDS_FINDINOREPLY) {}
   MMDSFindInoReply(ceph_tid_t t) : Message(MSG_MDS_FINDINOREPLY), tid(t) {}
+  ~MMDSFindInoReply() override {}
 
+public:
   const char *get_type_name() const override { return "findinoreply"; }
   void print(ostream &out) const override {
     out << "findinoreply(" << tid << " " << path << ")";

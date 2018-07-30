@@ -14,11 +14,11 @@ public:
   nest_info_t rstat;
   quota_info_t quota;
 
+protected:
   MClientQuota() :
     Message(CEPH_MSG_CLIENT_QUOTA),
     ino(0)
   {}
-private:
   ~MClientQuota() override {}
 
 public:

@@ -37,6 +37,7 @@ public:
   snapid_t get_first() const { return snapid_t(h.first); }
   snapid_t get_last() const { return snapid_t(h.last); }
 
+protected:
   MClientLease() : Message(CEPH_MSG_CLIENT_LEASE) {}
   MClientLease(const MClientLease& m) :
     Message(CEPH_MSG_CLIENT_LEASE),
@@ -63,7 +64,6 @@ public:
     h.last = sl;
     h.duration_ms = 0;
   }
-private:
   ~MClientLease() override {}
 
 public:

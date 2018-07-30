@@ -30,12 +30,12 @@ public:
   vector<dirfrag_t> bounds;
   bufferlist client_map;
 
+protected:
   MExportDir() : Message(MSG_MDS_EXPORTDIR) {}
   MExportDir(dirfrag_t df, uint64_t tid) :
     Message(MSG_MDS_EXPORTDIR), dirfrag(df) {
     set_tid(tid);
   }
-private:
   ~MExportDir() override {}
 
 public:

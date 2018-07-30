@@ -35,11 +35,11 @@ private:
 
   bufferlist basebl;
 
+protected:
   MMDSFragmentNotify() : Message(MSG_MDS_FRAGMENTNOTIFY) {}
   MMDSFragmentNotify(dirfrag_t df, int b) :
 	Message(MSG_MDS_FRAGMENTNOTIFY),
     ino(df.ino), basefrag(df.frag), bits(b) { }
-private:
   ~MMDSFragmentNotify() override {}
 
 public:  

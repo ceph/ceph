@@ -38,13 +38,13 @@ private:
   const map<mds_rank_t, float>& get_import_map() const { return import_map; }
   map<mds_rank_t, float>& get_import_map() { return import_map; }
 
+protected:
   MHeartbeat() : Message(MSG_MDS_HEARTBEAT), load(DecayRate()) {}
   MHeartbeat(mds_load_t& load, int beat)
     : Message(MSG_MDS_HEARTBEAT),
       load(load) {
     this->beat = beat;
   }
-private:
   ~MHeartbeat() override {}
 
 public:

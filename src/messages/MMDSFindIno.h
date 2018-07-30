@@ -28,9 +28,12 @@ public:
   ceph_tid_t tid {0};
   inodeno_t ino;
 
+protected:
   MMDSFindIno() : Message(MSG_MDS_FINDINO) {}
   MMDSFindIno(ceph_tid_t t, inodeno_t i) : Message(MSG_MDS_FINDINO), tid(t), ino(i) {}
+  ~MMDSFindIno() override {}
 
+public:
   const char *get_type_name() const override { return "findino"; }
   void print(ostream &out) const override {
     out << "findino(" << tid << " " << ino << ")";
