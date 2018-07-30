@@ -442,16 +442,14 @@ public:
    *
    * @return 0 on success, or -errno on failure.
    */
-  virtual int send_message(Message *m, const entity_inst_t& dest) = 0;
+  virtual int send_message(Message *m, const entity_inst_t& dest) {
+    return send_to(m, dest.name.type(), entity_addrvec_t(dest.addr));
+  }
 
   virtual int send_to(
     Message *m,
     int type,
-    const entity_addrvec_t& addr) {
-    // temporary
-    return send_message(m, entity_inst_t(entity_name_t(type, -1),
-					 addr.legacy_addr()));
-  }
+    const entity_addrvec_t& addr) = 0;
   int send_to_mon(
     Message *m, const entity_addrvec_t& addrs) {
     return send_to(m, CEPH_ENTITY_TYPE_MON, addrs);
