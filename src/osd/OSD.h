@@ -100,6 +100,7 @@ enum {
   l_osd_op_rw_lat_outb_hist,
   l_osd_op_rw_process_lat,
   l_osd_op_rw_prepare_lat,
+  l_osd_op_queue_size,
 
   l_osd_op_before_queue_op_lat,
   l_osd_op_before_dequeue_op_lat,
