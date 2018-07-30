@@ -1289,7 +1289,8 @@ bool DaemonServer::handle_command(MCommand *m)
 	      prefix == "osd purge")) {
       string sure;
       if (!cmd_getval(cct, cmdctx->cmdmap, "sure", sure) ||
-	  sure != "--force") {
+	  (sure != "--force" &&
+	   sure != "--yes-i-really-mean-it" /* for backward compat */)) {
 	ss << "\nYou can proceed by passing --force, but be warned that this will likely mean real, permanent data loss.";
       } else {
 	r = 0;
