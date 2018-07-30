@@ -210,6 +210,26 @@ class TestSingleReport(object):
         assert result['0'][0]['path'] == '/dev/VolGroup/lv'
         assert result['0'][0]['devices'] == ['/dev/sda1', '/dev/sdb1']
 
+    def test_report_a_ceph_lv_with_multiple_pvs_of_same_name(self, pvolumes, monkeypatch):
+        tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
+        lv = api.Volume(
+            lv_name='lv', vg_name='VolGroup',
+            lv_uuid='aaaa', lv_path='/dev/VolGroup/lv', lv_tags=tags
+        )
+        monkeypatch.setattr(api, 'get_lv_from_argument', lambda device: None)
+        monkeypatch.setattr(api, 'get_lv', lambda vg_name: lv)
+        FooPVolume = api.PVolume(vg_name="vg", pv_name='/dev/sda', pv_uuid="0000", pv_tags={}, lv_uuid="aaaa")
+        BarPVolume = api.PVolume(vg_name="vg", pv_name='/dev/sda', pv_uuid="0000", pv_tags={})
+        pvolumes.append(FooPVolume)
+        pvolumes.append(BarPVolume)
+        monkeypatch.setattr(api, 'PVolumes', lambda: pvolumes)
+        listing = lvm.listing.List([])
+        result = listing.single_report('/dev/sda')
+        assert result['0'][0]['name'] == 'lv'
+        assert result['0'][0]['lv_tags'] == tags
+        assert result['0'][0]['path'] == '/dev/VolGroup/lv'
+        assert len(result) == 1
+
     def test_report_a_ceph_lv_with_no_matching_devices(self, volumes, monkeypatch):
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
         lv = api.Volume(
