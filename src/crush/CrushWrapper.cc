@@ -891,7 +891,7 @@ void CrushWrapper::get_children_of_type(int id,
 int CrushWrapper::get_rule_failure_domain(int rule_id)
 {
   crush_rule *rule = get_rule(rule_id);
-  if (IS_ERR(rule)) {
+  if (IS_ERR(rule) || !rule) {
     return -ENOENT;
   }
   int type = 0; // default to osd-level
