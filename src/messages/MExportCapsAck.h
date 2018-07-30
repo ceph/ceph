@@ -22,6 +22,7 @@
 class MExportCapsAck : public Message {
  public:  
   inodeno_t ino;
+  bufferlist cap_bl;
 
   MExportCapsAck() :
     Message(MSG_MDS_EXPORTCAPSACK) {}
@@ -38,12 +39,13 @@ public:
 
   void encode_payload(uint64_t features) override {
     ::encode(ino, payload);
+    ::encode(cap_bl, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.begin();
     ::decode(ino, p);
+    ::decode(cap_bl, p);
   }
-
 };
 
 #endif
