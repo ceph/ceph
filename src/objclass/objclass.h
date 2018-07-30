@@ -160,6 +160,8 @@ extern uint64_t cls_get_client_features(cls_method_context_t hctx);
 /* helpers */
 extern void cls_cxx_subop_version(cls_method_context_t hctx, string *s);
 
+extern int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq);
+
 /* These are also defined in rados.h and librados.h. Keep them in sync! */
 #define CEPH_OSD_TMAP_HDR 'h'
 #define CEPH_OSD_TMAP_SET 's'

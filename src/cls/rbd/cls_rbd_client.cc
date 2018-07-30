@@ -1591,6 +1591,99 @@ namespace librbd {
       return 0;
     }
 
+    int migration_set(librados::IoCtx *ioctx, const std::string &oid,
+                      const cls::rbd::MigrationSpec &migration_spec) {
+      librados::ObjectWriteOperation op;
+      migration_set(&op, migration_spec);
+      return ioctx->operate(oid, &op);
+    }
+
+    void migration_set(librados::ObjectWriteOperation *op,
+                       const cls::rbd::MigrationSpec &migration_spec) {
+      bufferlist bl;
+      encode(migration_spec, bl);
+      op->exec("rbd", "migration_set", bl);
+    }
+
+    int migration_set_state(librados::IoCtx *ioctx, const std::string &oid,
+                            cls::rbd::MigrationState state,
+                            const std::string &description) {
+      librados::ObjectWriteOperation op;
+      migration_set_state(&op, state, description);
+      return ioctx->operate(oid, &op);
+    }
+
+    void migration_set_state(librados::ObjectWriteOperation *op,
+                             cls::rbd::MigrationState state,
+                             const std::string &description) {
+      bufferlist bl;
+      encode(state, bl);
+      encode(description, bl);
+      op->exec("rbd", "migration_set_state", bl);
+    }
+
+    void migration_get_start(librados::ObjectReadOperation *op) {
+      bufferlist bl;
+      op->exec("rbd", "migration_get", bl);
+    }
+
+    int migration_get_finish(bufferlist::const_iterator *it,
+                             cls::rbd::MigrationSpec *migration_spec) {
+      try {
+	decode(*migration_spec, *it);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int migration_get(librados::IoCtx *ioctx, const std::string &oid,
+                      cls::rbd::MigrationSpec *migration_spec) {
+      librados::ObjectReadOperation op;
+      migration_get_start(&op);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+	return r;
+      }
+
+      auto iter = out_bl.cbegin();
+      r = migration_get_finish(&iter, migration_spec);
+      if (r < 0) {
+	return r;
+      }
+      return 0;
+    }
+
+    int migration_remove(librados::IoCtx *ioctx, const std::string &oid) {
+      librados::ObjectWriteOperation op;
+      migration_remove(&op);
+      return ioctx->operate(oid, &op);
+    }
+
+    void migration_remove(librados::ObjectWriteOperation *op) {
+      bufferlist bl;
+      op->exec("rbd", "migration_remove", bl);
+    }
+
+    int assert_snapc_seq(librados::IoCtx *ioctx, const std::string &oid,
+                         uint64_t snapc_seq,
+                         cls::rbd::AssertSnapcSeqState state) {
+      librados::ObjectWriteOperation op;
+      assert_snapc_seq(&op, snapc_seq, state);
+      return ioctx->operate(oid, &op);
+    }
+
+    void assert_snapc_seq(librados::ObjectWriteOperation *op,
+                          uint64_t snapc_seq,
+                          cls::rbd::AssertSnapcSeqState state) {
+      bufferlist bl;
+      encode(snapc_seq, bl);
+      encode(state, bl);
+      op->exec("rbd", "assert_snapc_seq", bl);
+    }
+
     void mirror_uuid_get_start(librados::ObjectReadOperation *op) {
       bufferlist bl;
       op->exec("rbd", "mirror_uuid_get", bl);

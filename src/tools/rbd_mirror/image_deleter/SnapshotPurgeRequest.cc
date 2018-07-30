@@ -42,7 +42,7 @@ void SnapshotPurgeRequest<I>::open_image() {
   Context *ctx = create_context_callback<
     SnapshotPurgeRequest<I>, &SnapshotPurgeRequest<I>::handle_open_image>(
       this);
-  m_image_ctx->state->open(true, ctx);
+  m_image_ctx->state->open(librbd::OPEN_FLAG_SKIP_OPEN_PARENT, ctx);
 }
 
 template <typename I>

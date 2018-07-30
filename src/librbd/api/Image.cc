@@ -248,38 +248,13 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
     // TODO support clone v2 parent namespaces
     parent_io_ctx.set_namespace(dest_md_ctx.get_namespace());
 
-    ImageCtx *src_parent_image_ctx =
-      new ImageCtx("", parent_spec.image_id, nullptr, parent_io_ctx, false);
-    r = src_parent_image_ctx->state->open(true);
-    if (r < 0) {
-      if (r != -ENOENT) {
-        lderr(cct) << "failed to open source parent image: "
-                   << cpp_strerror(r) << dendl;
-      }
-      return r;
-    }
-
-    C_SaferCond cond;
-    src_parent_image_ctx->state->snap_set(parent_spec.snap_id, &cond);
-    r = cond.wait();
-    if (r < 0) {
-      if (r != -ENOENT) {
-        lderr(cct) << "failed to set snapshot: " << cpp_strerror(r) << dendl;
-      }
-      return r;
-    }
-
     C_SaferCond ctx;
     std::string dest_id = util::generate_image_id(dest_md_ctx);
     auto *req = image::CloneRequest<I>::create(
-      src_parent_image_ctx, dest_md_ctx, destname, dest_id, opts,
-      "", "", src->op_work_queue, &ctx);
+      parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id, dest_md_ctx,
+      destname, dest_id, opts, "", "", src->op_work_queue, &ctx);
     req->send();
     r = ctx.wait();
-    int close_r = src_parent_image_ctx->state->close();
-    if (r == 0 && close_r < 0) {
-      r = close_r;
-    }
   }
   if (r < 0) {
     lderr(cct) << "header creation failed" << dendl;
@@ -287,9 +262,9 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
   }
   opts.set(RBD_IMAGE_OPTION_ORDER, static_cast<uint64_t>(order));
 
-  ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL,
+  ImageCtx *dest = new librbd::ImageCtx(destname, "", nullptr,
                                         dest_md_ctx, false);
-  r = dest->state->open(false);
+  r = dest->state->open(0);
   if (r < 0) {
     lderr(cct) << "failed to read newly created header" << dendl;
     return r;
