@@ -43,7 +43,7 @@ protected:
 
   MgrMap mgr_map;
 
-  set<int64_t> existing_pools; ///< pools that exist, as of PGMap epoch
+  map<int64_t,unsigned> existing_pools; ///< pools that exist, and pg_num, as of PGMap epoch
   PGMap pg_map;
   PGMap::Incremental pending_inc;
 
