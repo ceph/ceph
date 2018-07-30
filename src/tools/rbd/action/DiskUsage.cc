@@ -110,6 +110,8 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
   uint64_t used_size = 0;
   uint64_t total_prov = 0;
   uint64_t total_used = 0;
+  uint64_t snap_id = CEPH_NOSNAP;
+  uint64_t from_id = CEPH_NOSNAP;
   bool found = false;
   std::sort(names.begin(), names.end());
   for (std::vector<string>::const_iterator name = names.begin();
@@ -161,10 +163,42 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
                     snap_list.end());
 
     bool found_from_snap = (from_snapname == nullptr);
+    bool found_snap = (snapname == nullptr);
+    bool found_from = (from_snapname == nullptr);
     std::string last_snap_name;
     std::sort(snap_list.begin(), snap_list.end(),
               boost::bind(&librbd::snap_info_t::id, _1) <
                 boost::bind(&librbd::snap_info_t::id, _2));
+    if (!found_snap || !found_from) {
+      for (auto &snap_info : snap_list) {
+        if (!found_snap && snap_info.name == snapname) {
+          snap_id = snap_info.id;
+          found_snap = true;
+        }
+        if (!found_from && snap_info.name == from_snapname) {
+          from_id = snap_info.id;
+          found_from = true;
+        }
+        if (found_snap && found_from) {
+          break;
+        }
+      }
+    }
+    if ((snapname != nullptr && snap_id == CEPH_NOSNAP) ||
+        (from_snapname != nullptr && from_id == CEPH_NOSNAP)) {
+      std::cerr << "specified snapshot is not found." << std::endl;
+      return -ENOENT;
+    }
+    if (snap_id != CEPH_NOSNAP && from_id != CEPH_NOSNAP) {
+      if (from_id == snap_id) {
+        // no diskusage.
+        return 0;
+      }
+      if (from_id >= snap_id) {
+        return -EINVAL;
+      }
+    }
+
     for (std::vector<librbd::snap_info_t>::const_iterator snap =
          snap_list.begin(); snap != snap_list.end(); ++snap) {
       librbd::Image snap_image;
@@ -227,7 +261,7 @@ out:
     }
     f->close_section();
     f->flush(std::cout);
-  } else {
+  } else if (!names.empty()) {
     if (count > 1) {
       tbl << "<TOTAL>"
           << stringify(byte_u_t(total_prov))
