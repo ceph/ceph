@@ -231,6 +231,11 @@ public:
     load_avg.adjust();
   }
 
+  double get_session_uptime() const {
+    chrono::duration<double> uptime = clock::now() - birth_time;
+    return uptime.count();
+  }
+
   time get_birth_time() const {
     return birth_time;
   }

@@ -2228,6 +2228,7 @@ void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f)
     if (s->is_open() || s->is_stale()) {
       f->dump_unsigned("request_load_avg", s->get_load_avg());
     }
+    f->dump_float("uptime", s->get_session_uptime());
     f->dump_int("replay_requests", is_clientreplay() ? s->get_request_count() : 0);
     f->dump_unsigned("completed_requests", s->get_num_completed_requests());
     f->dump_bool("reconnecting", server->waiting_for_reconnect(p.first.num()));
