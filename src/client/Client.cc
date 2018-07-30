@@ -9711,6 +9711,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
 {
   Mutex::Locker l(client_lock);
   tout(cct) << "statfs" << std::endl;
+  unsigned long int total_files_on_fs;
 
   if (unmounting)
     return -ENOTCONN;
@@ -9727,6 +9728,8 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
 
   client_lock.Unlock();
   int rval = cond.wait();
+  assert(root);
+  total_files_on_fs = root->rstat.rfiles + root->rstat.rsubdirs;
   client_lock.Lock();
 
   if (rval < 0) {
@@ -9748,8 +9751,8 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   const int CEPH_BLOCK_SHIFT = 22;
   stbuf->f_frsize = 1 << CEPH_BLOCK_SHIFT;
   stbuf->f_bsize = 1 << CEPH_BLOCK_SHIFT;
-  stbuf->f_files = stats.num_objects;
-  stbuf->f_ffree = -1;
+  stbuf->f_files = total_files_on_fs;
+  stbuf->f_ffree = 0;
   stbuf->f_favail = -1;
   stbuf->f_fsid = -1;       // ??
   stbuf->f_flag = 0;        // ??
