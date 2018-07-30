@@ -10,7 +10,13 @@
  * PGCreate2 - instruct an OSD to create some pgs
  */
 
-struct MOSDPGCreate2 : public Message {
+class MOSDPGCreate2 : public Message {
+public:
+  typedef boost::intrusive_ptr<MOSDPGCreate2> ref;
+  typedef boost::intrusive_ptr<MOSDPGCreate2 const> const_ref;
+  using factory = MessageFactory<MOSDPGCreate2>;
+  friend factory;
+
   const static int HEAD_VERSION = 1;
   const static int COMPAT_VERSION = 1;
 

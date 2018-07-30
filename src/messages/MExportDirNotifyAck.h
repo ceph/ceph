@@ -18,12 +18,16 @@
 #include "msg/Message.h"
 
 class MExportDirNotifyAck : public Message {
+public:
+  typedef boost::intrusive_ptr<MExportDirNotifyAck>ref;
+  typedef boost::intrusive_ptr<MExportDirNotifyAck const> const_ref;
+  using factory = MessageFactory<MExportDirNotifyAck>;
+  friend factory;
+private:
   dirfrag_t dirfrag;
   pair<__s32,__s32> new_auth;
 
  public:
-  typedef boost::intrusive_ptr<MExportDirNotifyAck>ref;
-  typedef boost::intrusive_ptr<MExportDirNotifyAck const> const_ref;
   dirfrag_t get_dirfrag() const { return dirfrag; }
   pair<__s32,__s32> get_new_auth() const { return new_auth; }
   

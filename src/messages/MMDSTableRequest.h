@@ -20,9 +20,11 @@
 #include "mds/mds_table_types.h"
 
 class MMDSTableRequest : public Message {
- public:
+public:
   typedef boost::intrusive_ptr<MMDSTableRequest> ref;
   typedef boost::intrusive_ptr<MMDSTableRequest const> const_ref;
+  using factory = MessageFactory<MMDSTableRequest>;
+  friend factory;
 
   __u16 table = 0;
   __s16 op = 0;

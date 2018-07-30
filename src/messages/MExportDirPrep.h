@@ -20,10 +20,14 @@
 #include "include/types.h"
 
 class MExportDirPrep : public Message {
-  dirfrag_t dirfrag;
- public:
+public:
   typedef boost::intrusive_ptr<MExportDirPrep> ref;
   typedef boost::intrusive_ptr<MExportDirPrep const> const_ref;
+  using factory = MessageFactory<MExportDirPrep>;
+  friend factory;
+private:
+  dirfrag_t dirfrag;
+ public:
   bufferlist basedir;
   list<dirfrag_t> bounds;
   list<bufferlist> traces;

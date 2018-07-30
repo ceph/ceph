@@ -21,7 +21,12 @@
 #include "osd/osd_types.h"
 
 class MOSDBoot : public PaxosServiceMessage {
-
+public:
+  typedef boost::intrusive_ptr<MOSDBoot> ref;
+  typedef boost::intrusive_ptr<MOSDBoot const> const_ref;
+  using factory = MessageFactory<MOSDBoot>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 6;
 

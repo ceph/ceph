@@ -10,7 +10,12 @@
  * instruct non-primary to remove some objects during recovery
  */
 
-struct MOSDPGRecoveryDelete : public MOSDFastDispatchOp {
+class MOSDPGRecoveryDelete : public MOSDFastDispatchOp {
+public:
+  typedef boost::intrusive_ptr<MOSDPGRecoveryDelete> ref;
+  typedef boost::intrusive_ptr<MOSDPGRecoveryDelete const> const_ref;
+  using factory = MessageFactory<MOSDPGRecoveryDelete>;
+  friend factory;
 
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;

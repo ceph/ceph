@@ -20,6 +20,11 @@
 
 class MPGStats : public PaxosServiceMessage {
 public:
+  typedef boost::intrusive_ptr<MPGStats> ref;
+  typedef boost::intrusive_ptr<MPGStats const> const_ref;
+  using factory = MessageFactory<MPGStats>;
+  friend factory;
+
   uuid_d fsid;
   map<pg_t,pg_stat_t> pg_stat;
   osd_stat_t osd_stat;

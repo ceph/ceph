@@ -19,6 +19,11 @@
 
 class MPoolOpReply : public PaxosServiceMessage {
 public:
+  typedef boost::intrusive_ptr<MPoolOpReply> ref;
+  typedef boost::intrusive_ptr<MPoolOpReply const> const_ref;
+  using factory = MessageFactory<MPoolOpReply>;
+  friend factory;
+
   uuid_d fsid;
   __u32 replyCode = 0;
   epoch_t epoch = 0;

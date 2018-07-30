@@ -18,6 +18,12 @@
 #include "MOSDFastDispatchOp.h"
 
 class MOSDPGBackfill : public MOSDFastDispatchOp {
+public:
+  typedef boost::intrusive_ptr<MOSDPGBackfill> ref;
+  typedef boost::intrusive_ptr<MOSDPGBackfill const> const_ref;
+  using factory = MessageFactory<MOSDPGBackfill>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 3;
 public:

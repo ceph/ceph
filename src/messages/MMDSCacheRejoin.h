@@ -28,14 +28,17 @@
 // sent from replica to auth
 
 class MMDSCacheRejoin : public Message {
+public:
+  typedef boost::intrusive_ptr<MMDSCacheRejoin> ref;
+  typedef boost::intrusive_ptr<MMDSCacheRejoin const> const_ref;
+  using factory = MessageFactory<MMDSCacheRejoin>;
+  friend factory;
+private:
 
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
  public:
-  typedef boost::intrusive_ptr<MMDSCacheRejoin> ref;
-  typedef boost::intrusive_ptr<MMDSCacheRejoin const> const_ref;
-
   static const int OP_WEAK    = 1;  // replica -> auth, i exist, + maybe open files.
   static const int OP_STRONG  = 2;  // replica -> auth, i exist, + open files and lock state.
   static const int OP_ACK     = 3;  // auth -> replica, here is your lock state.

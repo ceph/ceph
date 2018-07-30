@@ -21,9 +21,12 @@
 
 
 class MMDSResolveAck : public Message {
- public:
+public:
   typedef boost::intrusive_ptr<MMDSResolveAck> ref;
   typedef boost::intrusive_ptr<MMDSResolveAck const> const_ref;
+  using factory = MessageFactory<MMDSResolveAck>;
+  friend factory;
+
   map<metareqid_t, bufferlist> commit;
   vector<metareqid_t> abort;
 

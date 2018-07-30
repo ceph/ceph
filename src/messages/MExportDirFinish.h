@@ -18,12 +18,16 @@
 #include "msg/Message.h"
 
 class MExportDirFinish : public Message {
+public:
+  typedef boost::intrusive_ptr<MExportDirFinish> ref;
+  typedef boost::intrusive_ptr<MExportDirFinish const> const_ref;
+  using factory = MessageFactory<MExportDirFinish>;
+  friend factory;
+private:
   dirfrag_t dirfrag;
   bool last;
 
  public:
-  typedef boost::intrusive_ptr<MExportDirFinish> ref;
-  typedef boost::intrusive_ptr<MExportDirFinish const> const_ref;
   dirfrag_t get_dirfrag() const { return dirfrag; }
   bool is_last() const { return last; }
   

@@ -18,14 +18,18 @@
 #include "msg/Message.h"
 
 class MExportDirNotify : public Message {
+public:
+  typedef boost::intrusive_ptr<MExportDirNotify> ref;
+  typedef boost::intrusive_ptr<MExportDirNotify const> const_ref;
+  using factory = MessageFactory<MExportDirNotify>;
+  friend factory;
+private:
   dirfrag_t base;
   bool ack;
   pair<__s32,__s32> old_auth, new_auth;
   list<dirfrag_t> bounds;  // bounds; these dirs are _not_ included (tho the dirfragdes are)
 
  public:
-  typedef boost::intrusive_ptr<MExportDirNotify> ref;
-  typedef boost::intrusive_ptr<MExportDirNotify const> const_ref;
   dirfrag_t get_dirfrag() const { return base; }
   pair<__s32,__s32> get_old_auth() const { return old_auth; }
   pair<__s32,__s32> get_new_auth() const { return new_auth; }

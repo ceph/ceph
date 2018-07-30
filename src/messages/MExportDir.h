@@ -20,9 +20,11 @@
 
 
 class MExportDir : public Message {
- public:  
+public:
   typedef boost::intrusive_ptr<MExportDir>ref;
   typedef boost::intrusive_ptr<MExportDir const> const_ref;
+  using factory = MessageFactory<MExportDir>;
+  friend factory;
   dirfrag_t dirfrag;
   bufferlist export_data;
   vector<dirfrag_t> bounds;

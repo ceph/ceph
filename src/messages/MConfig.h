@@ -5,7 +5,13 @@
 
 #include "msg/Message.h"
 
-struct MConfig : public Message {
+class MConfig : public Message {
+public:
+  typedef boost::intrusive_ptr<MConfig> ref;
+  typedef boost::intrusive_ptr<MConfig const> const_ref;
+  using factory = MessageFactory<MConfig>;
+  friend factory;
+
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 

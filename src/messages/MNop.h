@@ -24,6 +24,11 @@
  */
 class MNop : public Message {
 public:
+  typedef boost::intrusive_ptr<MNop> ref;
+  typedef boost::intrusive_ptr<MNop const> const_ref;
+  using factory = MessageFactory<MNop>;
+  friend factory;
+
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 

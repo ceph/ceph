@@ -22,6 +22,11 @@
 
 class MMonProbe : public Message {
 public:
+  typedef boost::intrusive_ptr<MMonProbe> ref;
+  typedef boost::intrusive_ptr<MMonProbe const> const_ref;
+  using factory = MessageFactory<MMonProbe>;
+  friend factory;
+
   static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 5;
 

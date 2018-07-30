@@ -24,6 +24,11 @@
  */
 class MMgrDigest : public Message {
 public:
+  typedef boost::intrusive_ptr<MMgrDigest> ref;
+  typedef boost::intrusive_ptr<MMgrDigest const> const_ref;
+  using factory = MessageFactory<MMgrDigest>;
+  friend factory;
+
   bufferlist mon_status_json;
   bufferlist health_json;
 

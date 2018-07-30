@@ -17,7 +17,13 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-struct MAuth : public PaxosServiceMessage {
+class MAuth : public PaxosServiceMessage {
+public:
+  typedef boost::intrusive_ptr<MAuth> ref;
+  typedef boost::intrusive_ptr<MAuth const> const_ref;
+  using factory = MessageFactory<MAuth>;
+  friend factory;
+
   __u32 protocol;
   bufferlist auth_payload;
   epoch_t monmap_epoch;

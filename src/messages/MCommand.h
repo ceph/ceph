@@ -20,9 +20,11 @@
 #include "msg/Message.h"
 
 class MCommand : public Message {
- public:
+public:
   typedef boost::intrusive_ptr<MCommand> ref;
   typedef boost::intrusive_ptr<MCommand const> const_ref;
+  using factory = MessageFactory<MCommand>;
+  friend factory;
 
   uuid_d fsid;
   std::vector<string> cmd;

@@ -21,13 +21,17 @@
 #include "common/DecayCounter.h"
 
 class MHeartbeat : public Message {
+public:
+  typedef boost::intrusive_ptr<MHeartbeat> ref;
+  typedef boost::intrusive_ptr<MHeartbeat const> const_ref;
+  using factory = MessageFactory<MHeartbeat>;
+  friend factory;
+private:
   mds_load_t load;
   __s32        beat = 0;
   map<mds_rank_t, float> import_map;
 
  public:
-  typedef boost::intrusive_ptr<MHeartbeat> ref;
-  typedef boost::intrusive_ptr<MHeartbeat const> const_ref;
   const mds_load_t& get_load() const { return load; }
   int get_beat() const { return beat; }
 

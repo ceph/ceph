@@ -21,7 +21,12 @@
 #include "mon/health_check.h"
 
 class MMonMgrReport : public PaxosServiceMessage {
-
+public:
+  typedef boost::intrusive_ptr<MMonMgrReport> ref;
+  typedef boost::intrusive_ptr<MMonMgrReport const> const_ref;
+  using factory = MessageFactory<MMonMgrReport>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 

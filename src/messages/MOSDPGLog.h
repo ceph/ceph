@@ -19,7 +19,12 @@
 #include "messages/MOSDPeeringOp.h"
 
 class MOSDPGLog : public MOSDPeeringOp {
-
+public:
+  typedef boost::intrusive_ptr<MOSDPGLog> ref;
+  typedef boost::intrusive_ptr<MOSDPGLog const> const_ref;
+  using factory = MessageFactory<MOSDPGLog>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 5;
 

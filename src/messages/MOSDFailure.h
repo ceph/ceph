@@ -20,7 +20,12 @@
 
 
 class MOSDFailure : public PaxosServiceMessage {
-
+public:
+  typedef boost::intrusive_ptr<MOSDFailure> ref;
+  typedef boost::intrusive_ptr<MOSDFailure const> const_ref;
+  using factory = MessageFactory<MOSDFailure>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 4;
 

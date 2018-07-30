@@ -22,6 +22,9 @@ class MExportDirAck : public Message {
 public:
   typedef boost::intrusive_ptr<MExportDirAck> ref;
   typedef boost::intrusive_ptr<MExportDirAck const> const_ref;
+  using factory = MessageFactory<MExportDirAck>;
+  friend factory;
+
   dirfrag_t dirfrag;
   bufferlist imported_caps;
 

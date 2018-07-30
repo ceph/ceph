@@ -21,7 +21,13 @@
 #include "mon/mon_types.h"
 
 class MMonElection : public Message {
+public:
+  typedef boost::intrusive_ptr<MMonElection> ref;
+  typedef boost::intrusive_ptr<MMonElection const> const_ref;
+  using factory = MessageFactory<MMonElection>;
+  friend factory;
 
+private:
   static const int HEAD_VERSION = 7;
   static const int COMPAT_VERSION = 5;
 

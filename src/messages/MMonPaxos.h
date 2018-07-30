@@ -21,7 +21,12 @@
 #include "include/ceph_features.h"
 
 class MMonPaxos : public Message {
-
+public:
+  typedef boost::intrusive_ptr<MMonPaxos> ref;
+  typedef boost::intrusive_ptr<MMonPaxos const> const_ref;
+  using factory = MessageFactory<MMonPaxos>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 3;
 

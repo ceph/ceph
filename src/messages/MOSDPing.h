@@ -33,7 +33,12 @@
 
 
 class MOSDPing : public Message {
-
+public:
+  typedef boost::intrusive_ptr<MOSDPing> ref;
+  typedef boost::intrusive_ptr<MOSDPing const> const_ref;
+  using factory = MessageFactory<MOSDPing>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 4;
 

@@ -25,7 +25,12 @@
  * back.
  */
 class MMonGetVersionReply : public Message {
-
+public:
+  typedef boost::intrusive_ptr<MMonGetVersionReply> ref;
+  typedef boost::intrusive_ptr<MMonGetVersionReply const> const_ref;
+  using factory = MessageFactory<MMonGetVersionReply>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 2;
 
 public:

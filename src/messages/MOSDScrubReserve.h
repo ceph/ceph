@@ -18,6 +18,12 @@
 #include "MOSDFastDispatchOp.h"
 
 class MOSDScrubReserve : public MOSDFastDispatchOp {
+public:
+  typedef boost::intrusive_ptr<MOSDScrubReserve> ref;
+  typedef boost::intrusive_ptr<MOSDScrubReserve const> const_ref;
+  using factory = MessageFactory<MOSDScrubReserve>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 public:

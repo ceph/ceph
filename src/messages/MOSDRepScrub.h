@@ -22,7 +22,12 @@
  * instruct an OSD initiate a replica scrub on a specific PG
  */
 
-struct MOSDRepScrub : public MOSDFastDispatchOp {
+class MOSDRepScrub : public MOSDFastDispatchOp {
+public:
+  typedef boost::intrusive_ptr<MOSDRepScrub> ref;
+  typedef boost::intrusive_ptr<MOSDRepScrub const> const_ref;
+  using factory = MessageFactory<MOSDRepScrub>;
+  friend factory;
 
   static const int HEAD_VERSION = 9;
   static const int COMPAT_VERSION = 6;

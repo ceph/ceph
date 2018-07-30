@@ -27,6 +27,11 @@
  */
 class MMonGetVersion : public Message {
 public:
+  typedef boost::intrusive_ptr<MMonGetVersion> ref;
+  typedef boost::intrusive_ptr<MMonGetVersion const> const_ref;
+  using factory = MessageFactory<MMonGetVersion>;
+  friend factory;
+
   MMonGetVersion() : Message(CEPH_MSG_MON_GET_VERSION) {}
 
   const char *get_type_name() const override {

@@ -19,6 +19,12 @@
 #include "msg/Message.h"
 
 class MGenericMessage : public Message {
+public:
+  typedef boost::intrusive_ptr<MGenericMessage> ref;
+  typedef boost::intrusive_ptr<MGenericMessage const> const_ref;
+  using factory = MessageFactory<MGenericMessage>;
+  friend factory;
+private:
   char tname[20];
   //long pcid;
 

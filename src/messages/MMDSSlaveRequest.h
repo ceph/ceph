@@ -20,9 +20,12 @@
 #include "mds/mdstypes.h"
 
 class MMDSSlaveRequest : public Message {
- public:
+public:
   typedef boost::intrusive_ptr<MMDSSlaveRequest> ref;
   typedef boost::intrusive_ptr<MMDSSlaveRequest const> const_ref;
+  using factory = MessageFactory<MMDSSlaveRequest>;
+  friend factory;
+
   static const int OP_XLOCK =       1;
   static const int OP_XLOCKACK =   -1;
   static const int OP_UNXLOCK =     2;

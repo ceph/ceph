@@ -19,7 +19,12 @@
 
 
 class MPoolOp : public PaxosServiceMessage {
-
+public:
+  typedef boost::intrusive_ptr<MPoolOp> ref;
+  typedef boost::intrusive_ptr<MPoolOp const> const_ref;
+  using factory = MessageFactory<MPoolOp>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 2;
 

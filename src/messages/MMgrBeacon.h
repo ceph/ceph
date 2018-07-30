@@ -23,6 +23,12 @@
 
 
 class MMgrBeacon : public PaxosServiceMessage {
+public:
+  typedef boost::intrusive_ptr<MMgrBeacon> ref;
+  typedef boost::intrusive_ptr<MMgrBeacon const> const_ref;
+  using factory = MessageFactory<MMgrBeacon>;
+  friend factory;
+private:
 
   static const int HEAD_VERSION = 8;
   static const int COMPAT_VERSION = 8;

@@ -20,6 +20,12 @@
 #include "osd/osd_types.h"
 
 class MOSDPGInfo : public Message {
+public:
+  typedef boost::intrusive_ptr<MOSDPGInfo> ref;
+  typedef boost::intrusive_ptr<MOSDPGInfo const> const_ref;
+  using factory = MessageFactory<MOSDPGInfo>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 5;
 

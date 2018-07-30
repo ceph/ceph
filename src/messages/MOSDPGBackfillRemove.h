@@ -21,7 +21,12 @@
  * instruct non-primary to remove some objects during backfill
  */
 
-struct MOSDPGBackfillRemove : public MOSDFastDispatchOp {
+class MOSDPGBackfillRemove : public MOSDFastDispatchOp {
+public:
+  typedef boost::intrusive_ptr<MOSDPGBackfillRemove> ref;
+  typedef boost::intrusive_ptr<MOSDPGBackfillRemove const> const_ref;
+  using factory = MessageFactory<MOSDPGBackfillRemove>;
+  friend factory;
 
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;

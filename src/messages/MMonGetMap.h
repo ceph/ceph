@@ -20,7 +20,12 @@
 #include "include/types.h"
 
 class MMonGetMap : public Message {
- public:
+public:
+  typedef boost::intrusive_ptr<MMonGetMap> ref;
+  typedef boost::intrusive_ptr<MMonGetMap const> const_ref;
+  using factory = MessageFactory<MMonGetMap>;
+  friend factory;
+
   MMonGetMap() : Message(CEPH_MSG_MON_GET_MAP) { }
 private:
   ~MMonGetMap() override {}

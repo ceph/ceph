@@ -24,7 +24,13 @@
 #include "include/encoding.h"
 #include "include/stringify.h"
 
-struct MForward : public Message {
+class MForward : public Message {
+public:
+  typedef boost::intrusive_ptr<MForward> ref;
+  typedef boost::intrusive_ptr<MForward const> const_ref;
+  using factory = MessageFactory<MForward>;
+  friend factory;
+
   uint64_t tid;
   uint8_t client_type;
   entity_addrvec_t client_addrs;

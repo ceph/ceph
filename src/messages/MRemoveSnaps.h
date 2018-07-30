@@ -17,7 +17,13 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-struct MRemoveSnaps : public PaxosServiceMessage {
+class MRemoveSnaps : public PaxosServiceMessage {
+public:
+  typedef boost::intrusive_ptr<MRemoveSnaps> ref;
+  typedef boost::intrusive_ptr<MRemoveSnaps const> const_ref;
+  using factory = MessageFactory<MRemoveSnaps>;
+  friend factory;
+
   map<int, vector<snapid_t> > snaps;
   
   MRemoveSnaps() : 

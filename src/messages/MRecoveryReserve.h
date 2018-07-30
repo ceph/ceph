@@ -19,6 +19,12 @@
 #include "messages/MOSDPeeringOp.h"
 
 class MRecoveryReserve : public MOSDPeeringOp {
+public:
+  typedef boost::intrusive_ptr<MRecoveryReserve> ref;
+  typedef boost::intrusive_ptr<MRecoveryReserve const> const_ref;
+  using factory = MessageFactory<MRecoveryReserve>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 2;
 public:

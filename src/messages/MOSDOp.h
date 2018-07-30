@@ -32,7 +32,12 @@
 class OSD;
 
 class MOSDOp : public MOSDFastDispatchOp {
-
+public:
+  typedef boost::intrusive_ptr<MOSDOp> ref;
+  typedef boost::intrusive_ptr<MOSDOp const> const_ref;
+  using factory = MessageFactory<MOSDOp>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 8;
   static const int COMPAT_VERSION = 3;
 

@@ -17,7 +17,13 @@
 
 #include "msg/Message.h"
 
-struct MMonSubscribeAck : public Message {
+class MMonSubscribeAck : public Message {
+public:
+  typedef boost::intrusive_ptr<MMonSubscribeAck> ref;
+  typedef boost::intrusive_ptr<MMonSubscribeAck const> const_ref;
+  using factory = MessageFactory<MMonSubscribeAck>;
+  friend factory;
+
   __u32 interval;
   uuid_d fsid;
   

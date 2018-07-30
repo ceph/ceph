@@ -29,8 +29,11 @@ struct xio_reg_mem {};
 typedef void (*mdata_hook_func)(struct xio_reg_mem *mp);
 
 class MDataPing : public Message {
-
- public:
+public:
+  typedef boost::intrusive_ptr<MDataPing> ref;
+  typedef boost::intrusive_ptr<MDataPing const> const_ref;
+  using factory = MessageFactory<MDataPing>;
+  friend factory;
 
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;

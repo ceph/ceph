@@ -19,7 +19,12 @@
 #include "msg/Message.h"
 
 class MPing : public Message {
- public:
+public:
+  typedef boost::intrusive_ptr<MPing> ref;
+  typedef boost::intrusive_ptr<MPing const> const_ref;
+  using factory = MessageFactory<MPing>;
+  friend factory;
+
   MPing() : Message(CEPH_MSG_PING) {}
 private:
   ~MPing() override {}

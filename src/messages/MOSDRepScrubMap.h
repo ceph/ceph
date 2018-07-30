@@ -21,7 +21,12 @@
  * pass a ScrubMap from a shard back to the primary
  */
 
-struct MOSDRepScrubMap : public MOSDFastDispatchOp {
+class MOSDRepScrubMap : public MOSDFastDispatchOp {
+public:
+  typedef boost::intrusive_ptr<MOSDRepScrubMap> ref;
+  typedef boost::intrusive_ptr<MOSDRepScrubMap const> const_ref;
+  using factory = MessageFactory<MOSDRepScrubMap>;
+  friend factory;
 
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;

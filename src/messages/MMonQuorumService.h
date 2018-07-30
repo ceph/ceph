@@ -16,8 +16,13 @@
 
 #include "msg/Message.h"
 
-struct MMonQuorumService : public Message
-{
+class MMonQuorumService : public Message {
+public:
+  typedef boost::intrusive_ptr<MMonQuorumService> ref;
+  typedef boost::intrusive_ptr<MMonQuorumService const> const_ref;
+  using factory = MessageFactory<MMonQuorumService>;
+  friend factory;
+
   epoch_t epoch;
   version_t round;
 

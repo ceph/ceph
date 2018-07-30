@@ -29,6 +29,12 @@
  */
 
 class MOSDRepOpReply : public MOSDFastDispatchOp {
+public:
+  typedef boost::intrusive_ptr<MOSDRepOpReply> ref;
+  typedef boost::intrusive_ptr<MOSDRepOpReply const> const_ref;
+  using factory = MessageFactory<MOSDRepOpReply>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 public:

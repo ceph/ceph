@@ -23,7 +23,12 @@
  */
 
 class MOSDRepOp : public MOSDFastDispatchOp {
-
+public:
+  typedef boost::intrusive_ptr<MOSDRepOp> ref;
+  typedef boost::intrusive_ptr<MOSDRepOp const> const_ref;
+  using factory = MessageFactory<MOSDRepOp>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 

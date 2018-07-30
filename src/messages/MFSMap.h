@@ -21,7 +21,12 @@
 #include "include/ceph_features.h"
 
 class MFSMap : public Message {
- public:
+public:
+  typedef boost::intrusive_ptr<MFSMap> ref;
+  typedef boost::intrusive_ptr<MFSMap const> const_ref;
+  using factory = MessageFactory<MFSMap>;
+  friend factory;
+
   epoch_t epoch;
   bufferlist encoded;
 

@@ -15,8 +15,13 @@
 
 #include "msg/Message.h"
 
-class MMonSync : public Message
-{
+class MMonSync : public Message {
+public:
+  typedef boost::intrusive_ptr<MMonSync> ref;
+  typedef boost::intrusive_ptr<MMonSync const> const_ref;
+  using factory = MessageFactory<MMonSync>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 2;
 

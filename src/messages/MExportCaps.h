@@ -20,11 +20,15 @@
 
 
 class MExportCaps : public Message {
+public:
+  typedef boost::intrusive_ptr<MExportCaps> ref;
+  typedef boost::intrusive_ptr<MExportCaps const> const_ref;
+  using factory = MessageFactory<MExportCaps>;
+  friend factory;
+private:
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
  public:  
-  typedef boost::intrusive_ptr<MExportCaps> ref;
-  typedef boost::intrusive_ptr<MExportCaps const> const_ref;
   inodeno_t ino;
   bufferlist cap_bl;
   map<client_t,entity_inst_t> client_map;

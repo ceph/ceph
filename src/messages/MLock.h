@@ -21,6 +21,12 @@
 #include "mds/SimpleLock.h"
 
 class MLock : public Message {
+public:
+  typedef boost::intrusive_ptr<MLock> ref;
+  typedef boost::intrusive_ptr<MLock const> const_ref;
+  using factory = MessageFactory<MLock>;
+  friend factory;
+private:
   int32_t     action = 0;  // action type
   mds_rank_t  asker = 0;  // who is initiating this request
   metareqid_t reqid;  // for remote lock requests
@@ -31,9 +37,6 @@ class MLock : public Message {
   bufferlist lockdata;  // and possibly some data
   
 public:
-  typedef boost::intrusive_ptr<MLock> ref;
-  typedef boost::intrusive_ptr<MLock const> const_ref;
-
   bufferlist& get_data() { return lockdata; }
   const bufferlist& get_data() const { return lockdata; }
   int get_asker() const { return asker; }
@@ -43,7 +46,7 @@ public:
   int get_lock_type() const { return lock_type; }
   const MDSCacheObjectInfo &get_object_info() const { return object_info; }
   MDSCacheObjectInfo &get_object_info() { return object_info; }
-  
+
   MLock() : Message(MSG_MDS_LOCK) {}
   MLock(int ac, mds_rank_t as) :
     Message(MSG_MDS_LOCK),

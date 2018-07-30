@@ -18,8 +18,13 @@
 #include "messages/MMonQuorumService.h"
 #include "mon/mon_types.h"
 
-struct MMonHealth : public MMonQuorumService
-{
+class MMonHealth : public MMonQuorumService {
+public:
+  typedef boost::intrusive_ptr<MMonHealth> ref;
+  typedef boost::intrusive_ptr<MMonHealth const> const_ref;
+  using factory = MessageFactory<MMonHealth>;
+  friend factory;
+
   static const int HEAD_VERSION = 1;
 
   int service_type = 0;

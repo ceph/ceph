@@ -17,6 +17,11 @@
 
 class MLogAck : public Message {
 public:
+  typedef boost::intrusive_ptr<MLogAck> ref;
+  typedef boost::intrusive_ptr<MLogAck const> const_ref;
+  using factory = MessageFactory<MLogAck>;
+  friend factory;
+
   uuid_d fsid;
   version_t last = 0;
   std::string channel;

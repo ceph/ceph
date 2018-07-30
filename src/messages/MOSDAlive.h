@@ -20,7 +20,12 @@
 #include "messages/PaxosServiceMessage.h"
 
 class MOSDAlive : public PaxosServiceMessage {
- public:
+public:
+  typedef boost::intrusive_ptr<MOSDAlive> ref;
+  typedef boost::intrusive_ptr<MOSDAlive const> const_ref;
+  using factory = MessageFactory<MOSDAlive>;
+  friend factory;
+
   epoch_t want = 0;
 
   MOSDAlive(epoch_t h, epoch_t w) : PaxosServiceMessage(MSG_OSD_ALIVE, h), want(w) { }

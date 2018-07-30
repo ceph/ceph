@@ -12,7 +12,12 @@
 // for now name it for its sole application.
 
 class MOSDFull : public PaxosServiceMessage {
- public:
+public:
+  typedef boost::intrusive_ptr<MOSDFull> ref;
+  typedef boost::intrusive_ptr<MOSDFull const> const_ref;
+  using factory = MessageFactory<MOSDFull>;
+  friend factory;
+
   epoch_t map_epoch = 0;
   uint32_t state = 0;
 

@@ -24,6 +24,8 @@ class MClientLease : public Message {
 public:
   typedef boost::intrusive_ptr<MClientLease> ref;
   typedef boost::intrusive_ptr<MClientLease const> const_ref;
+  using factory = MessageFactory<MClientLease>;
+  friend factory;
 
   struct ceph_mds_lease h;
   std::string dname;

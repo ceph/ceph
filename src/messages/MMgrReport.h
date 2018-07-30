@@ -72,6 +72,13 @@ WRITE_CLASS_ENCODER(PerfCounterType)
 
 class MMgrReport : public Message
 {
+public:
+  typedef boost::intrusive_ptr<MMgrReport> ref;
+  typedef boost::intrusive_ptr<MMgrReport const> const_ref;
+  using factory = MessageFactory<MMgrReport>;
+  friend factory;
+private:
+
   static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 1;
 
