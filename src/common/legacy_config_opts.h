@@ -175,6 +175,10 @@ OPTION(ms_async_rdma_dscp, OPT_INT)            // in RoCE, this means DSCP
 OPTION(ms_async_rdma_cm, OPT_BOOL)
 OPTION(ms_async_rdma_type, OPT_STR)
 
+// when there are enough accept failures, indicating there are unrecoverable failures,
+// just do ceph_abort() . Here we make it configurable.
+OPTION(ms_max_accept_failures, OPT_INT)
+
 OPTION(ms_dpdk_port_id, OPT_INT)
 SAFE_OPTION(ms_dpdk_coremask, OPT_STR)        // it is modified in unittest so that use SAFE_OPTION to declare 
 OPTION(ms_dpdk_memory_channel, OPT_STR)
