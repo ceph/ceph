@@ -134,7 +134,8 @@ spdk_enabled=0 #disable SPDK by default
 pci_id=""
 
 with_mgr_dashboard=true
-if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]]; then
+if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
+   [[ "$(get_cmake_variable WITH_RBD)" != "ON" ]]; then
   echo "ceph-mgr dashboard not built - disabling."
   with_mgr_dashboard=false
 fi
