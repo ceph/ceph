@@ -653,12 +653,12 @@ start_mon() {
 		local count=0
 		for f in $MONS
 		do
-			str="$str --add $f $IP:$(($CEPH_PORT+$count))"
+			str="$str --add $f msgr2:$IP:$(($CEPH_PORT+$count))"
 			wconf <<EOF
 [mon.$f]
         host = $HOSTNAME
         mon data = $CEPH_DEV_DIR/mon.$f
-        mon addr = $IP:$(($CEPH_PORT+$count))
+        mon addr = msgr2:$IP:$(($CEPH_PORT+$count))
 EOF
 			count=$(($count + 1))
 		done
