@@ -29,6 +29,7 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
+#include "common/HeartbeatMap.h"
 
 #include "msg/SimplePolicyMessenger.h"
 #include "msg/DispatchQueue.h"
@@ -48,6 +49,8 @@ class Processor {
   NetHandler net;
   Worker *worker;
   vector<ServerSocket> listen_sockets;
+  unsigned accept_error_num = 0;
+  heartbeat_handle_d *hb = nullptr;
   EventCallbackRef listen_handler;
 
   class C_processor_accept;
@@ -62,6 +65,7 @@ class Processor {
 	   entity_addrvec_t* bound_addrs);
   void start();
   void accept();
+  void set_hb(int idx);
 };
 
 /*
@@ -118,6 +122,7 @@ public:
   int bind(const entity_addr_t& bind_addr) override;
   int rebind(const set<int>& avoid_ports) override;
   int client_bind(const entity_addr_t& bind_addr) override;
+  void add_heartbeat_check() override;
 
   int bindv(const entity_addrvec_t& bind_addrs) override;
 

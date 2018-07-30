@@ -775,3 +775,8 @@ void SimpleMessenger::init_local_connection()
   local_connection->set_features(CEPH_FEATURES_ALL);
   ms_deliver_handle_fast_connect(local_connection.get());
 }
+
+void SimpleMessenger::add_heartbeat_check()
+{
+  accepter.set_hb();
+}

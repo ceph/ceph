@@ -194,6 +194,12 @@ void Processor::accept()
 	} else if (r == -EMFILE || r == -ENFILE) {
 	  lderr(msgr->cct) << __func__ << " open file descriptions limit reached sd = " << listen_socket.fd()
 			   << " errno " << r << " " << cpp_strerror(r) << dendl;
+	  if (++accept_error_num > msgr->cct->_conf->ms_accept_error_nums) {
+	    if (hb) {
+	      lderr(msgr->cct) << "Proccessor accept  has encountered enough error numbers, reset heartbeat timeout." << dendl;
+	      msgr->cct->get_heartbeat_map()->reset_timeout(hb, 0, 0);
+	    }
+	  }
 	  break;
 	} else if (r == -ECONNABORTED) {
 	  ldout(msgr->cct, 0) << __func__ << " it was closed because of rst arrived sd = " << listen_socket.fd()
@@ -201,7 +207,13 @@ void Processor::accept()
 	  continue;
 	} else {
 	  lderr(msgr->cct) << __func__ << " no incoming connection?"
-			   << " errno " << r << " " << cpp_strerror(r) << dendl;
+                          << " errno " << r << " " << cpp_strerror(r) << dendl;
+	  if (++accept_error_num > msgr->cct->_conf->ms_accept_error_nums) {
+	    if (hb) {
+	      lderr(msgr->cct) << "Processor accept has encountered enough error numbers, reset heartbeat timeout." << dendl;
+	      msgr->cct->get_heartbeat_map()->reset_timeout(hb, 0, 0);
+	    }
+	  }
 	  break;
 	}
       }
@@ -221,8 +233,20 @@ void Processor::stop()
 	}
       }
     }, false);
+  
+  if (hb) {
+    msgr->cct->get_heartbeat_map()->remove_worker(hb);
+  }
 }
 
+void Processor::set_hb(int idx)
+{
+  if (!hb) {
+    std::stringstream ss;
+    ss << "Processor " << idx;
+    hb = msgr->cct->get_heartbeat_map()->add_worker(ss.str(), pthread_self());
+  }
+}
 
 struct StackSingleton {
   CephContext *cct;
@@ -843,4 +867,12 @@ int AsyncMessenger::reap_dead()
   }
 
   return num;
+}
+
+void AsyncMessenger::add_heartbeat_check()
+{   
+  unsigned idx = 0;
+  for (auto &&p : processors) {
+    p->set_hb(idx++);
+  }
 }

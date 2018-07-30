@@ -1099,6 +1099,14 @@ std::vector<Option> get_global_options() {
     Option("ms_async_rdma_dscp", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(96)
     .set_description(""),
+    
+    Option("ms_simple_accepter_sleep_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("sleep times which allow the heartbeat mechanism to take effect."),
+
+    Option("ms_accept_error_nums", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(4)
+    .set_description("error numbers before triggering heartbeat mechanism "),
 
     Option("ms_async_rdma_cm", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)

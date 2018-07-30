@@ -16,6 +16,7 @@
 #define CEPH_MSG_ACCEPTER_H
 
 #include "common/Thread.h"
+#include "common/HeartbeatMap.h"
 
 class SimpleMessenger;
 struct entity_addr_t;
@@ -31,6 +32,7 @@ class Accepter : public Thread {
   uint64_t nonce;
   int shutdown_rd_fd;
   int shutdown_wr_fd;
+  heartbeat_handle_d *hb = nullptr;
   int create_selfpipe(int *pipe_rd, int *pipe_wr);
 
 public:
@@ -44,6 +46,7 @@ public:
   int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
   int rebind(const set<int>& avoid_port);
   int start();
+  void set_hb();
 };
 
 

@@ -2570,6 +2570,7 @@ int OSD::init()
   create_logger();
 
   // i'm ready!
+  client_messenger->add_heartbeat_check();
   client_messenger->add_dispatcher_head(this);
   cluster_messenger->add_dispatcher_head(this);
 

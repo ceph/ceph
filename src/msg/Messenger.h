@@ -407,6 +407,12 @@ public:
    */
   virtual int shutdown() { started = false; return 0; }
   /**
+   * Add the accepter to heartbeat check
+   * if accepter fails to receive any new connections, 
+   * suicide the osd thread.
+   */
+  virtual void add_heartbeat_check() {}
+  /**
    * @} // Startup/Shutdown
    */
 

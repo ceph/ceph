@@ -118,6 +118,7 @@ public:
   int bind(const entity_addr_t& bind_addr) override;
   int rebind(const set<int>& avoid_ports) override;
   int client_bind(const entity_addr_t& bind_addr) override;
+  void add_heartbeat_check() override;
 
   /** @} Configuration functions */
 
