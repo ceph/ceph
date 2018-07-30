@@ -57,11 +57,12 @@ export class SummaryService {
    * which is updated once every 5 seconds or when a new task is created.
    *
    * @param {(summary: any) => void} call
+   * @param {(error: any) => void} error
    * @returns {Subscription}
    * @memberof SummaryService
    */
-  subscribe(call: (summary: any) => void): Subscription {
-    return this.summaryData$.subscribe(call);
+  subscribe(call: (summary: any) => void, error?: (error: any) => void): Subscription {
+    return this.summaryData$.subscribe(call, error);
   }
 
   /**
