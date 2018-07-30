@@ -151,8 +151,7 @@ class Module(MgrModule):
                 "osd_stats",
                 "health",
                 "mon_status",
-                "mgr_map",
-                "ec_profiles"
+                "mgr_map"
                 ]
         for obj in objects:
             assert self.get(obj) is not None
