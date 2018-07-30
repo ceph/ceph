@@ -4068,7 +4068,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("filestore_merge_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(10)
+    .set_default(-10)
     .set_description(""),
 
     Option("filestore_split_multiple", Option::TYPE_INT, Option::LEVEL_ADVANCED)
