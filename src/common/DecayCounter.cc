@@ -38,6 +38,7 @@ void DecayCounter::decode(const utime_t &t, bufferlist::iterator &p)
   ::decode(val, p);
   ::decode(delta, p);
   ::decode(vel, p);
+  last_decay = t;
   DECODE_FINISH(p);
 }
 
