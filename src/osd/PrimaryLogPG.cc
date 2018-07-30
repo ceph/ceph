@@ -1642,19 +1642,30 @@ void PrimaryLogPG::calc_trim_to()
 	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
       return;
     }
-    list<pg_log_entry_t>::const_iterator it = pg_log.get_log().log.begin();
-    eversion_t new_trim_to;
-    for (size_t i = 0; i < num_to_trim; ++i) {
-      new_trim_to = it->version;
-      ++it;
-      if (new_trim_to >= limit) {
-	new_trim_to = limit;
-        dout(10) << "calc_trim_to trimming to limit: " << limit << dendl;
-	break;
+    auto it = pg_log.get_log().log.begin(); // oldest log entry
+    auto rit = pg_log.get_log().log.rbegin();
+    eversion_t by_n_to_keep; // start from tail
+    eversion_t by_n_to_trim = eversion_t::max(); // start from head
+    for (size_t i = 0; it != pg_log.get_log().log.end(); ++it, ++rit) {
+      i++;
+      if (i > target && by_n_to_keep == eversion_t()) {
+        by_n_to_keep = rit->version;
+      }
+      if (i >= num_to_trim && by_n_to_trim == eversion_t::max()) {
+        by_n_to_trim = it->version;
+      }
+      if (by_n_to_keep != eversion_t() &&
+          by_n_to_trim != eversion_t::max()) {
+        break;
       }
     }
-    dout(10) << "calc_trim_to " << pg_trim_to << " -> " << new_trim_to << dendl;
-    pg_trim_to = new_trim_to;
+
+    if (by_n_to_keep == eversion_t()) {
+      return;
+    }
+
+    pg_trim_to = std::min({by_n_to_keep, by_n_to_trim, limit});
+    dout(10) << __func__ << " pg_trim_to now " << pg_trim_to << dendl;
     assert(pg_trim_to <= pg_log.get_head());
   }
 }
