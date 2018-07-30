@@ -181,6 +181,26 @@ static void usage()
   generic_server_usage();
 }
 
+entity_addrvec_t make_mon_addrs(entity_addr_t a)
+{
+  entity_addrvec_t addrs;
+  if (a.get_port() == 0) {
+    a.set_type(entity_addr_t::TYPE_MSGR2);
+    a.set_port(CEPH_MON_PORT_IANA);
+    addrs.v.push_back(a);
+    a.set_type(entity_addr_t::TYPE_LEGACY);
+    a.set_port(CEPH_MON_PORT_LEGACY);
+    addrs.v.push_back(a);
+  } else if (a.get_port() == CEPH_MON_PORT_LEGACY) {
+    a.set_type(entity_addr_t::TYPE_LEGACY);
+    addrs.v.push_back(a);
+  } else {
+    a.set_type(entity_addr_t::TYPE_MSGR2);
+    addrs.v.push_back(a);
+  }
+  return addrs;
+}
+
 int main(int argc, const char **argv)
 {
   int err;
@@ -619,40 +639,37 @@ int main(int argc, const char **argv)
   }
 
   // this is what i will bind to
-  entity_addr_t ipaddr;
+  entity_addrvec_t ipaddrs;
 
   if (monmap.contains(g_conf()->name.get_id())) {
-    ipaddr = monmap.get_addr(g_conf()->name.get_id());
+    ipaddrs = monmap.get_addrs(g_conf()->name.get_id());
 
     // print helpful warning if the conf file doesn't match
-    entity_addr_t conf_addr;
     std::vector <std::string> my_sections;
     g_conf().get_my_sections(my_sections);
     std::string mon_addr_str;
     if (g_conf().get_val_from_conf_file(my_sections, "mon addr",
 				       mon_addr_str, true) == 0) {
+      entity_addr_t conf_addr;
       if (conf_addr.parse(mon_addr_str.c_str())) {
-        if (conf_addr.get_port() == 0)
-          conf_addr.set_port(CEPH_MON_PORT_LEGACY);
-        if (ipaddr != conf_addr) {
-	  derr << "WARNING: 'mon addr' config option " << conf_addr
+	entity_addrvec_t conf_addrs = make_mon_addrs(conf_addr);
+        if (ipaddrs != conf_addrs) {
+	  derr << "WARNING: 'mon addr' config option " << conf_addrs
 	       << " does not match monmap file" << std::endl
 	       << "         continuing with monmap configuration" << dendl;
         }
       } else
-          derr << "WARNING: invalid 'mon addr' config option" << std::endl
-               << "         continuing with monmap configuration" << dendl;
+	derr << "WARNING: invalid 'mon addr' config option" << std::endl
+	     << "         continuing with monmap configuration" << dendl;
     }
   } else {
     dout(0) << g_conf()->name << " does not exist in monmap, will attempt to join an existing cluster" << dendl;
 
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
     if (!g_conf()->public_addr.is_blank_ip()) {
-      ipaddr = g_conf()->public_addr;
-      if (ipaddr.get_port() == 0)
-	ipaddr.set_port(CEPH_MON_PORT_LEGACY);
+      ipaddrs = make_mon_addrs(g_conf()->public_addr);
       dout(0) << "using public_addr " << g_conf()->public_addr << " -> "
-	      << ipaddr << dendl;
+	      << ipaddrs << dendl;
     } else {
       MonMap tmpmap;
       ostringstream oss;
@@ -665,10 +682,10 @@ int main(int argc, const char **argv)
 	prefork.exit(1);
       }
       if (tmpmap.contains(g_conf()->name.get_id())) {
-	ipaddr = tmpmap.get_addr(g_conf()->name.get_id());
+	ipaddrs = tmpmap.get_addrs(g_conf()->name.get_id());
       } else {
-	derr << "no public_addr or public_network specified, and " << g_conf()->name
-	     << " not present in monmap or ceph.conf" << dendl;
+	derr << "no public_addr or public_network specified, and "
+	     << g_conf()->name << " not present in monmap or ceph.conf" << dendl;
 	prefork.exit(1);
       }
     }
@@ -713,36 +730,31 @@ int main(int argc, const char **argv)
   msgr->set_policy_throttlers(entity_name_t::TYPE_MDS, daemon_throttler,
 				     NULL);
 
-  entity_addr_t bind_addr = ipaddr;
-  entity_addr_t public_addr = ipaddr;
+  entity_addrvec_t bind_addrs = ipaddrs;
+  entity_addrvec_t public_addrs = ipaddrs;
 
   // check if the public_bind_addr option is set
   if (!g_conf()->public_bind_addr.is_blank_ip()) {
-    bind_addr = g_conf()->public_bind_addr;
-
-    // set the default port if not already set
-    if (bind_addr.get_port() == 0) {
-      bind_addr.set_port(CEPH_MON_PORT_LEGACY);
-    }
+    bind_addrs = make_mon_addrs(g_conf()->public_bind_addr);
   }
 
   dout(0) << "starting " << g_conf()->name << " rank " << rank
-       << " at public addr " << public_addr
-       << " at bind addr " << bind_addr
-       << " mon_data " << g_conf()->mon_data
-       << " fsid " << monmap.get_fsid()
-       << dendl;
+	  << " at public addrs " << public_addrs
+	  << " at bind addrs " << bind_addrs
+	  << " mon_data " << g_conf()->mon_data
+	  << " fsid " << monmap.get_fsid()
+	  << dendl;
 
-  err = msgr->bind(bind_addr);
+  err = msgr->bindv(bind_addrs);
   if (err < 0) {
-    derr << "unable to bind monitor to " << bind_addr << dendl;
+    derr << "unable to bind monitor to " << bind_addrs << dendl;
     prefork.exit(1);
   }
 
   // if the public and bind addr are different set the msgr addr
   // to the public one, now that the bind is complete.
-  if (public_addr != bind_addr) {
-    msgr->set_addrs(entity_addrvec_t(public_addr));
+  if (public_addrs != bind_addrs) {
+    msgr->set_addrs(public_addrs);
   }
 
   Messenger *mgr_msgr = Messenger::create(g_ceph_context, public_msgr_type,
@@ -754,10 +766,10 @@ int main(int argc, const char **argv)
   }
 
   dout(0) << "starting " << g_conf()->name << " rank " << rank
-       << " at " << ipaddr
-       << " mon_data " << g_conf()->mon_data
-       << " fsid " << monmap.get_fsid()
-       << dendl;
+	  << " at " << public_addrs
+	  << " mon_data " << g_conf()->mon_data
+	  << " fsid " << monmap.get_fsid()
+	  << dendl;
 
   // start monitor
   mon = new Monitor(g_ceph_context, g_conf()->name.get_id(), store,
