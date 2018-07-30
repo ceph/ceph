@@ -59,6 +59,9 @@ class Role(object):
             raise ScopeNotInRole(scope, self.name)
         del self.scopes_permissions[scope]
 
+    def reset_scope_permissions(self):
+        self.scopes_permissions = {}
+
     def authorize(self, scope, permissions):
         if scope in self.scopes_permissions:
             role_perms = self.scopes_permissions[scope]
