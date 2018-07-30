@@ -38,13 +38,13 @@ private:
   bufferlist straybl;
   bufferlist snapbl;
 
+protected:
   MDentryUnlink() :
     Message(MSG_MDS_DENTRYUNLINK) { }
   MDentryUnlink(dirfrag_t df, std::string_view n) :
     Message(MSG_MDS_DENTRYUNLINK),
     dirfrag(df),
     dn(n) {}
-private:
   ~MDentryUnlink() override {}
 
 public:

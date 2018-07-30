@@ -17,7 +17,6 @@
 
 #include <string_view>
 
-#include "messages/MClientCaps.h"
 #include "messages/MClientReconnect.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientRequest.h"

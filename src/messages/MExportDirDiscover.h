@@ -37,6 +37,7 @@ private:
 
   bool started;
 
+protected:
   MExportDirDiscover() :     
     Message(MSG_MDS_EXPORTDIRDISCOVER),
     started(false) { }
@@ -45,7 +46,6 @@ private:
     from(f), dirfrag(df), path(p), started(false) {
     set_tid(tid);
   }
-private:
   ~MExportDirDiscover() override {}
 
 public:

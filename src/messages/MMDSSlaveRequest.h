@@ -160,14 +160,12 @@ public:
   const bufferlist& get_lock_data() const { return inode_export; }
   bufferlist& get_lock_data() { return inode_export; }
 
-
-  // ----
+protected:
   MMDSSlaveRequest() : Message(MSG_MDS_SLAVE_REQUEST) { }
   MMDSSlaveRequest(metareqid_t ri, __u32 att, int o) : 
     Message(MSG_MDS_SLAVE_REQUEST),
     reqid(ri), attempt(att), op(o), flags(0), lock_type(0),
     inode_export_v(0), srcdn_auth(MDS_RANK_NONE) { }
-private:
   ~MMDSSlaveRequest() override {}
 
 public:

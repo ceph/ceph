@@ -29,7 +29,7 @@ private:
   int32_t num_fwd;
   bool client_must_resend;
 
- public:
+protected:
   MClientRequestForward()
     : Message(CEPH_MSG_CLIENT_REQUEST_FORWARD),
       dest_mds(-1), num_fwd(-1), client_must_resend(false) {}
@@ -39,7 +39,6 @@ private:
     assert(client_must_resend);
     header.tid = t;
   }
-private:
   ~MClientRequestForward() override {}
 
 public:

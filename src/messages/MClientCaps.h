@@ -131,6 +131,7 @@ private:
 
   void clear_dirty() { head.dirty = 0; }
 
+protected:
   MClientCaps()
     : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION) {}
   MClientCaps(int op,
@@ -170,10 +171,10 @@ private:
     head.migrate_seq = mseq;
     memset(&peer, 0, sizeof(peer));
   }
+  ~MClientCaps() override {}
+
 private:
   file_layout_t layout;
-
-  ~MClientCaps() override {}
 
 public:
   const char *get_type_name() const override { return "Cfcap";}

@@ -52,6 +52,7 @@ private:
   
   void set_base_dir_frag(frag_t f) { base_dir_frag = f; }
 
+protected:
   MDiscover() : Message(MSG_MDS_DISCOVER) { }
   MDiscover(inodeno_t base_ino_,
 	    frag_t base_frag_,
@@ -66,7 +67,6 @@ private:
     want(want_path_),
     want_base_dir(want_base_dir_),
     want_xlocked(discover_xlocks_) { }
-private:
   ~MDiscover() override {}
 
 public:

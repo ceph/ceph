@@ -376,7 +376,8 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
       MDSMap null_map;
       null_map.epoch = fsmap.epoch;
       null_map.compat = fsmap.compat;
-      mon->send_reply(op, new MMDSMap(mon->monmap->fsid, null_map));
+      auto m = MMDSMap::factory::build(mon->monmap->fsid, null_map);
+      mon->send_reply(op, m.detach());
       return true;
     } else {
       return false;  // not booted yet.
@@ -450,10 +451,12 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   // note time and reply
   assert(effective_epoch > 0);
   _note_beacon(m);
-  mon->send_reply(op,
-		  new MMDSBeacon(mon->monmap->fsid, m->get_global_id(), m->get_name(),
-				 effective_epoch, state, seq,
-				 CEPH_FEATURES_SUPPORTED_DEFAULT));
+  {
+    auto beacon = MMDSBeacon::factory::build(mon->monmap->fsid,
+        m->get_global_id(), m->get_name(), effective_epoch,
+        state, seq, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    mon->send_reply(op, beacon.detach());
+  }
   return true;
 
  ignore:
@@ -718,11 +721,11 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       last_beacon.erase(gid);
 
       // Respond to MDS, so that it knows it can continue to shut down
-      mon->send_reply(op,
-		      new MMDSBeacon(
+      auto beacon = MMDSBeacon::factory::build(
 			mon->monmap->fsid, m->get_global_id(),
 			m->get_name(), pending.get_epoch(), state, seq,
-			CEPH_FEATURES_SUPPORTED_DEFAULT));
+			CEPH_FEATURES_SUPPORTED_DEFAULT);
+      mon->send_reply(op, beacon.detach());
     } else if (state == MDSMap::STATE_DNE) {
       if (!mon->osdmon()->is_writeable()) {
         dout(1) << __func__ << ": DNE from rank " << info.rank
@@ -736,11 +739,10 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       request_proposal(mon->osdmon());
 
       // Respond to MDS, so that it knows it can continue to shut down
-      mon->send_reply(op,
-		      new MMDSBeacon(
-			mon->monmap->fsid, m->get_global_id(),
-			m->get_name(), pending.get_epoch(), state, seq,
-			CEPH_FEATURES_SUPPORTED_DEFAULT));
+      auto beacon = MMDSBeacon::factory::build(mon->monmap->fsid,
+          m->get_global_id(), m->get_name(), pending.get_epoch(), state, seq,
+          CEPH_FEATURES_SUPPORTED_DEFAULT);
+      mon->send_reply(op, beacon.detach());
     } else if (info.state == MDSMap::STATE_STANDBY && state != info.state) {
       // Standby daemons should never modify their own
       // state.  Reject any attempts to do so.
@@ -826,15 +828,13 @@ void MDSMonitor::_updated(MonOpRequestRef op)
     MDSMap null_map;
     null_map.epoch = fsmap.epoch;
     null_map.compat = fsmap.compat;
-    mon->send_reply(op, new MMDSMap(mon->monmap->fsid, null_map));
+    auto m = MMDSMap::factory::build(mon->monmap->fsid, null_map);
+    mon->send_reply(op, m.detach());
   } else {
-    mon->send_reply(op, new MMDSBeacon(mon->monmap->fsid,
-				       m->get_global_id(),
-				       m->get_name(),
-				       fsmap.get_epoch(),
-				       m->get_state(),
-				       m->get_seq(),
-				       CEPH_FEATURES_SUPPORTED_DEFAULT));
+    auto beacon = MMDSBeacon::factory::build(mon->monmap->fsid,
+        m->get_global_id(), m->get_name(), fsmap.get_epoch(),
+        m->get_state(), m->get_seq(), CEPH_FEATURES_SUPPORTED_DEFAULT);
+    mon->send_reply(op, beacon.detach());
   }
 }
 
@@ -1570,9 +1570,9 @@ void MDSMonitor::check_sub(Subscription *sub)
     if (sub->next > mds_map->epoch) {
       return;
     }
-    auto msg = new MMDSMap(mon->monmap->fsid, *mds_map);
+    auto msg = MMDSMap::factory::build(mon->monmap->fsid, *mds_map);
 
-    sub->session->con->send_message(msg);
+    sub->session->con->send_message(msg.detach());
     if (sub->onetime) {
       mon->session_map.remove_sub(sub);
     } else {

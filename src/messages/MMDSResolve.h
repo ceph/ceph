@@ -70,8 +70,8 @@ public:
 
   list<table_client> table_clients;
 
+protected:
   MMDSResolve() : Message(MSG_MDS_RESOLVE) {}
-private:
   ~MMDSResolve() override {}
 
 public:

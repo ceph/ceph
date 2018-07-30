@@ -47,6 +47,7 @@ public:
   const MDSCacheObjectInfo &get_object_info() const { return object_info; }
   MDSCacheObjectInfo &get_object_info() { return object_info; }
 
+protected:
   MLock() : Message(MSG_MDS_LOCK) {}
   MLock(int ac, mds_rank_t as) :
     Message(MSG_MDS_LOCK),
@@ -64,7 +65,6 @@ public:
     lock->get_parent()->set_object_info(object_info);
     lockdata.claim(bl);
   }
-private:
   ~MLock() override {}
   
 public:

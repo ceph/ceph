@@ -70,11 +70,11 @@ public:
 
   int get_from() const { return from; }
 
+protected:
   MCacheExpire() : Message(MSG_MDS_CACHEEXPIRE), from(-1) {}
   MCacheExpire(int f) : 
     Message(MSG_MDS_CACHEEXPIRE),
     from(f) { }
-private:
   ~MCacheExpire() override {}
 
 public:

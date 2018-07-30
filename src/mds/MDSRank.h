@@ -371,40 +371,12 @@ class MDSRank {
     double get_dispatch_queue_max_age(utime_t now) const;
 
     void send_message_mds(const Message::ref& m, mds_rank_t mds);
-    void send_message_mds(Message* m, mds_rank_t mds) {
-      Message::ref mr(m, false);
-      send_message_mds(mr, mds);
-    }
     void forward_message_mds(const MClientRequest::const_ref& req, mds_rank_t mds);
-
     void send_message_client_counted(const Message::ref& m, client_t client);
-    void send_message_client_counted(Message* m, client_t client) {
-      Message::ref mr(m, false);
-      send_message_client_counted(mr, client);
-    }
-
     void send_message_client_counted(const Message::ref& m, Session* session);
-    void send_message_client_counted(Message* m, Session* session) {
-      Message::ref mr(m, false);
-      send_message_client_counted(mr, session);
-    }
-
     void send_message_client_counted(const Message::ref& m, const ConnectionRef& connection);
-    void send_message_client_counted(Message* m, const ConnectionRef& connection) {
-      Message::ref mr(m, false);
-      send_message_client_counted(mr, connection);
-    }
-
     void send_message_client(const Message::ref& m, Session* session);
-    void send_message_client(Message* m, Session* session) {
-      Message::ref mr(m, false);
-      send_message_client(mr, session);
-    }
-
     void send_message(const Message::ref& m, const ConnectionRef& c);
-    void send_message(Message* m, const ConnectionRef& c) {
-      send_message(m, c);
-    }
 
     void wait_for_active_peer(mds_rank_t who, MDSInternalContextBase *c) { 
       waiting_for_active_peer[who].push_back(c);

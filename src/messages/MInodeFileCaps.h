@@ -33,13 +33,13 @@ private:
   inodeno_t get_ino() const { return ino; }
   int       get_caps() const { return caps; }
 
+protected:
   MInodeFileCaps() : Message(MSG_MDS_INODEFILECAPS) {}
   MInodeFileCaps(inodeno_t ino, int caps) :
     Message(MSG_MDS_INODEFILECAPS) {
     this->ino = ino;
     this->caps = caps;
   }
-private:
   ~MInodeFileCaps() override {}
 
 public:

@@ -29,11 +29,11 @@ public:
   inodeno_t ino;
   bufferlist cap_bl;
 
+protected:
   MExportCapsAck() :
     Message(MSG_MDS_EXPORTCAPSACK) {}
   MExportCapsAck(inodeno_t i) :
     Message(MSG_MDS_EXPORTCAPSACK), ino(i) {}
-private:
   ~MExportCapsAck() override {}
 
 public:

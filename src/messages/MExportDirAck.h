@@ -30,12 +30,12 @@ public:
 
   dirfrag_t get_dirfrag() const { return dirfrag; }
   
+protected:
   MExportDirAck() : Message(MSG_MDS_EXPORTDIRACK) {}
   MExportDirAck(dirfrag_t df, uint64_t tid) :
     Message(MSG_MDS_EXPORTDIRACK), dirfrag(df) {
     set_tid(tid);
   }
-private:
   ~MExportDirAck() override {}
 
 public:

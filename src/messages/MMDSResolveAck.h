@@ -30,8 +30,8 @@ public:
   map<metareqid_t, bufferlist> commit;
   vector<metareqid_t> abort;
 
+protected:
   MMDSResolveAck() : Message(MSG_MDS_RESOLVEACK) {}
-private:
   ~MMDSResolveAck() override {}
 
 public:
