@@ -143,6 +143,31 @@ class TestGetPV(object):
         monkeypatch.setattr(api, 'PVolumes', lambda: pvolumes)
         assert api.get_pv(pv_uuid='0000') == FooPVolume
 
+    def test_multiple_pvs_is_matched_by_uuid(self, pvolumes, monkeypatch):
+        FooPVolume = api.PVolume(vg_name="vg", pv_name='/dev/sda', pv_uuid="0000", pv_tags={}, lv_uuid="0000000")
+        BarPVolume = api.PVolume(vg_name="vg", pv_name='/dev/sda', pv_uuid="0000", pv_tags={})
+        pvolumes.append(FooPVolume)
+        pvolumes.append(BarPVolume)
+        monkeypatch.setattr(api, 'PVolumes', lambda: pvolumes)
+        assert api.get_pv(pv_uuid='0000') == FooPVolume
+
+    def test_multiple_pvs_is_matched_by_name(self, pvolumes, monkeypatch):
+        FooPVolume = api.PVolume(vg_name="vg", pv_name='/dev/sda', pv_uuid="0000", pv_tags={}, lv_uuid="0000000")
+        BarPVolume = api.PVolume(vg_name="vg", pv_name='/dev/sda', pv_uuid="0000", pv_tags={})
+        pvolumes.append(FooPVolume)
+        pvolumes.append(BarPVolume)
+        monkeypatch.setattr(api, 'PVolumes', lambda: pvolumes)
+        assert api.get_pv(pv_name='/dev/sda') == FooPVolume
+
+    def test_multiple_pvs_is_matched_by_tags(self, pvolumes, monkeypatch):
+        FooPVolume = api.PVolume(vg_name="vg1", pv_name='/dev/sdc', pv_uuid="1000", pv_tags="ceph.foo=bar", lv_uuid="0000000")
+        BarPVolume = api.PVolume(vg_name="vg", pv_name='/dev/sda', pv_uuid="0000", pv_tags="ceph.foo=bar")
+        pvolumes.append(FooPVolume)
+        pvolumes.append(BarPVolume)
+        monkeypatch.setattr(api, 'PVolumes', lambda: pvolumes)
+        with pytest.raises(exceptions.MultiplePVsError):
+            api.get_pv(pv_tags={"ceph.foo": "bar"})
+
     def test_single_pv_is_matched_by_uuid(self, pvolumes, monkeypatch):
         FooPVolume = api.PVolume(
             pv_name='/dev/vg/foo',
