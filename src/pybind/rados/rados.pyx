@@ -3442,14 +3442,13 @@ returned %d, but should return zero on success." % (self.name, ret))
             ReadOp _read_op = read_op
             rados_omap_iter_t iter_addr = NULL
             int _max_return = max_return
-            int prval = 0
 
         with nogil:
             rados_read_op_omap_get_vals2(_read_op.read_op, _start_after, _filter_prefix,
-                                         _max_return, &iter_addr, NULL, &prval)
+                                         _max_return, &iter_addr, NULL, NULL)
         it = OmapIterator(self)
         it.ctx = iter_addr
-        return it, int(prval)
+        return it, 0   # 0 is meaningless; there for backward-compat
 
     @requires(('read_op', ReadOp), ('start_after', str_type), ('max_return', int))
     def get_omap_keys(self, read_op, start_after, max_return):
@@ -3469,14 +3468,13 @@ returned %d, but should return zero on success." % (self.name, ret))
             ReadOp _read_op = read_op
             rados_omap_iter_t iter_addr = NULL
             int _max_return = max_return
-            int prval = 0
 
         with nogil:
             rados_read_op_omap_get_keys2(_read_op.read_op, _start_after,
-                                         _max_return, &iter_addr, NULL, &prval)
+                                         _max_return, &iter_addr, NULL, NULL)
         it = OmapIterator(self)
         it.ctx = iter_addr
-        return it, int(prval)
+        return it, 0   # 0 is meaningless; there for backward-compat
 
     @requires(('read_op', ReadOp), ('keys', tuple))
     def get_omap_vals_by_keys(self, read_op, keys):
@@ -3494,16 +3492,15 @@ returned %d, but should return zero on success." % (self.name, ret))
             rados_omap_iter_t iter_addr
             char **_keys = to_bytes_array(keys)
             size_t key_num = len(keys)
-            int prval = 0
 
         try:
             with nogil:
                 rados_read_op_omap_get_vals_by_keys(_read_op.read_op,
                                                     <const char**>_keys,
-                                                    key_num, &iter_addr,  &prval)
+                                                    key_num, &iter_addr, NULL)
             it = OmapIterator(self)
             it.ctx = iter_addr
-            return it, int(prval)
+            return it, 0   # 0 is meaningless; there for backward-compat
         finally:
             free(_keys)
 
