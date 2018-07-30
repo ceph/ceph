@@ -227,7 +227,7 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
   smsgr->add_dispatcher_head(pinger);
   smsgr->start();
 
-  ConnectionRef con = smsgr->get_connection(monmap.get_inst(new_mon_id));
+  ConnectionRef con = smsgr->connect_to_mon(monmap.get_addrs(new_mon_id));
   ldout(cct, 10) << __func__ << " ping mon." << new_mon_id
                  << " " << con->get_peer_addr() << dendl;
   con->send_message(new MPing);
@@ -665,7 +665,7 @@ void MonClient::_reopen_session(int rank)
 MonConnection& MonClient::_add_conn(unsigned rank, uint64_t global_id)
 {
   auto peer = monmap.get_addr(rank);
-  auto conn = messenger->get_connection(monmap.get_inst(rank));
+  auto conn = messenger->connect_to_mon(monmap.get_addrs(rank));
   MonConnection mc(cct, conn, global_id);
   auto inserted = pending_cons.insert(make_pair(peer, move(mc)));
   ldout(cct, 10) << "picked mon." << monmap.get_name(rank)
