@@ -3,6 +3,7 @@ from os import O_NONBLOCK, read
 import subprocess
 from select import select
 from ceph_volume import terminal
+from ceph_volume.util import as_bytes
 
 import logging
 
@@ -52,7 +53,10 @@ def log_descriptors(reads, process, terminal_logging):
     for descriptor in reads:
         descriptor_name = descriptor_names[descriptor]
         try:
-            log_output(descriptor_name, read(descriptor, 1024), terminal_logging, True)
+            message = read(descriptor, 1024)
+            if not isinstance(message, str):
+                message = message.decode('utf-8')
+            log_output(descriptor_name, message, terminal_logging, True)
         except (IOError, OSError):
             # nothing else to log
             pass
@@ -196,8 +200,9 @@ def call(command, **kw):
         close_fds=True,
         **kw
     )
+
     if stdin:
-        stdout_stream, stderr_stream = process.communicate(stdin)
+        stdout_stream, stderr_stream = process.communicate(as_bytes(stdin))
     else:
         stdout_stream = process.stdout.read()
         stderr_stream = process.stderr.read()
