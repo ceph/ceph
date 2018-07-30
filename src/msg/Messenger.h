@@ -484,14 +484,14 @@ public:
    *
    * @param dest The entity to get a connection for.
    */
-  virtual ConnectionRef get_connection(const entity_inst_t& dest) = 0;
+  virtual ConnectionRef get_connection(const entity_inst_t& dest) {
+    // temporary
+    return connect_to(dest.name.type(),
+		      entity_addrvec_t(dest.addr));
+  }
 
   virtual ConnectionRef connect_to(
-    int type, const entity_addrvec_t& dest) {
-    // temporary
-    return get_connection(entity_inst_t(entity_name_t(type, -1),
-					dest.legacy_addr()));
-  }
+    int type, const entity_addrvec_t& dest) = 0;
   ConnectionRef connect_to_mon(const entity_addrvec_t& dest) {
     return connect_to(CEPH_ENTITY_TYPE_MON, dest);
   }
