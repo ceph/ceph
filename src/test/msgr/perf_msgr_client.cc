@@ -139,8 +139,8 @@ class MessengerClient {
       Messenger *msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(0), "client", getpid()+i, 0);
       msgr->set_default_policy(Messenger::Policy::lossless_client(0));
       msgr->start();
-      entity_inst_t inst(entity_name_t::OSD(0), addr);
-      ConnectionRef conn = msgr->get_connection(inst);
+      entity_addrvec_t addrs(addr);
+      ConnectionRef conn = msgr->connect_to_osd(addrs);
       ClientThread *t = new ClientThread(msgr, c, conn, msg_len, ops, think_time_us);
       msgrs.push_back(msgr);
       clients.push_back(t);
