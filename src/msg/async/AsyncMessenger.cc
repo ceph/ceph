@@ -581,20 +581,20 @@ AsyncConnectionRef AsyncMessenger::create_connect(
   return conn;
 }
 
-ConnectionRef AsyncMessenger::get_connection(const entity_inst_t& dest)
+ConnectionRef AsyncMessenger::connect_to(int type, const entity_addrvec_t& addrs)
 {
   Mutex::Locker l(lock);
-  if (my_addrs->legacy_addr() == dest.addr) {
+  if (*my_addrs == addrs) {
     // local
     return local_connection;
   }
 
-  AsyncConnectionRef conn = _lookup_conn(entity_addrvec_t(dest.addr));
+  AsyncConnectionRef conn = _lookup_conn(addrs);
   if (conn) {
-    ldout(cct, 10) << __func__ << " " << dest << " existing " << conn << dendl;
+    ldout(cct, 10) << __func__ << " " << addrs << " existing " << conn << dendl;
   } else {
-    conn = create_connect(entity_addrvec_t(dest.addr), dest.name.type());
-    ldout(cct, 10) << __func__ << " " << dest << " new " << conn << dendl;
+    conn = create_connect(addrs, type);
+    ldout(cct, 10) << __func__ << " " << addrs << " new " << conn << dendl;
   }
 
   return conn;

@@ -440,22 +440,23 @@ bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
 				      challenge);
 }
 
-ConnectionRef SimpleMessenger::get_connection(const entity_inst_t& dest)
+ConnectionRef SimpleMessenger::connect_to(int type,
+					  const entity_addrvec_t& addrs)
 {
   Mutex::Locker l(lock);
-  if (my_addr == dest.addr) {
+  if (my_addr == addrs.front()) {
     // local
     return local_connection;
   }
 
   // remote
   while (true) {
-    Pipe *pipe = _lookup_pipe(dest.addr);
+    Pipe *pipe = _lookup_pipe(addrs.front());
     if (pipe) {
-      ldout(cct, 10) << "get_connection " << dest << " existing " << pipe << dendl;
+      ldout(cct, 10) << "get_connection " << addrs << " existing " << pipe << dendl;
     } else {
-      pipe = connect_rank(dest.addr, dest.name.type(), NULL, NULL);
-      ldout(cct, 10) << "get_connection " << dest << " new " << pipe << dendl;
+      pipe = connect_rank(addrs.front(), type, NULL, NULL);
+      ldout(cct, 10) << "get_connection " << addrs << " new " << pipe << dendl;
     }
     Mutex::Locker l(pipe->pipe_lock);
     if (pipe->connection_state)
