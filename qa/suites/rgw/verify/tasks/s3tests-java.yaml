@@ -1,0 +1,3 @@
+tasks:
+- s3tests-java:
+    client.0:
