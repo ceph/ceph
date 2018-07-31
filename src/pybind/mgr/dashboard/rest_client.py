@@ -439,8 +439,11 @@ class RestClient(object):
                     logger.error("%s REST API failed %s, SSL error.",
                                  self.client_name, method.upper())
                 else:
-                    match = re.match(r'.*: \[Errno (-?\d+)\] (.+)',
-                                     ex.args[0].reason.args[0])
+                    try:
+                        match = re.match(r'.*: \[Errno (-?\d+)\] (.+)',
+                                         ex.args[0].reason.args[0])
+                    except AttributeError:
+                        match = False
                     if match:
                         errno = match.group(1)
                         strerror = match.group(2)
