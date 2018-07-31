@@ -505,7 +505,7 @@ namespace librbd {
     void mirror_image_map_remove(librados::ObjectWriteOperation *op,
                                  const std::string &global_image_id);
 
-    // Consistency groups functions
+    // Groups functions
     int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
                        const std::string &start, uint64_t max_return,
                        map<string, string> *groups);
