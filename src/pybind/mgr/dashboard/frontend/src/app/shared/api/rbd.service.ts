@@ -95,4 +95,12 @@ export class RbdService {
       observe: 'response'
     });
   }
+
+  moveTrash(poolName, rbdName, delay) {
+    return this.http.post(
+      `api/block/image/${poolName}/${rbdName}/move_trash`,
+      { delay: delay },
+      { observe: 'response' }
+    );
+  }
 }

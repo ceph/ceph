@@ -20,6 +20,7 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { RbdParentModel } from '../rbd-form/rbd-parent.model';
+import { RbdTrashMoveModalComponent } from '../rbd-trash-move-modal/rbd-trash-move-modal.component';
 import { RbdModel } from './rbd-model';
 
 @Component({
@@ -115,7 +116,22 @@ export class RbdListComponent implements OnInit {
       click: () => this.flattenRbdModal(),
       name: 'Flatten'
     };
-    this.tableActions = [addAction, editAction, copyAction, flattenAction, deleteAction];
+    const moveAction: CdTableAction = {
+      permission: 'delete',
+      disable: (selection: CdTableSelection) =>
+        !selection.hasSingleSelection || selection.first().cdExecuting,
+      icon: 'fa-trash-o',
+      click: () => this.trashRbdModal(),
+      name: 'Move to Trash'
+    };
+    this.tableActions = [
+      addAction,
+      editAction,
+      copyAction,
+      flattenAction,
+      deleteAction,
+      moveAction
+    ];
   }
 
   ngOnInit() {
@@ -228,7 +244,8 @@ export class RbdListComponent implements OnInit {
       'rbd/create',
       'rbd/delete',
       'rbd/edit',
-      'rbd/flatten'
+      'rbd/flatten',
+      'rbd/trash/move'
     ].includes(task.name);
   }
 
@@ -253,6 +270,15 @@ export class RbdListComponent implements OnInit {
           })
       }
     });
+  }
+
+  trashRbdModal() {
+    const initialState = {
+      metaType: 'RBD',
+      poolName: this.selection.first().pool_name,
+      imageName: this.selection.first().name
+    };
+    this.modalRef = this.modalService.show(RbdTrashMoveModalComponent, { initialState });
   }
 
   flattenRbd(poolName, imageName) {
