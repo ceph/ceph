@@ -2888,7 +2888,6 @@ protected:
     bool transaction_applied = true,
     bool async = false);
   bool check_log_for_corruption(ObjectStore *store);
-  void trim_log();
 
   std::string get_corrupt_pg_log_name() const;
 
