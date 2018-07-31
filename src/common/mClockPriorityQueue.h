@@ -204,7 +204,7 @@ namespace ceph {
 	f->dump_int("size", size);
 	f->dump_int("num_keys", q.size());
       }
-    };
+    }; // class SubQueue
 
     using SubQueues = std::map<priority_t, SubQueue>;
 
@@ -347,7 +347,9 @@ namespace ceph {
     }
 
     void dump(ceph::Formatter *f) const override final {
-      f->open_array_section("high_queues");
+      f->dump_int("size", length());
+
+      f->open_object_section("high_queues");
       for (typename SubQueues::const_iterator p = high_queue.begin();
 	   p != high_queue.end();
 	   ++p) {
@@ -366,6 +368,6 @@ namespace ceph {
       f->dump_int("size", queue.request_count());
       f->close_section();
     } // dump
-  };
+  }; // class mClockQueue
 
 } // namespace ceph

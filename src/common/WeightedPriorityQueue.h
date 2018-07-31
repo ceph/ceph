@@ -191,7 +191,8 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
           f->dump_int("first_item_cost", next->get_cost());
         }
       }
-    };
+    }; // class SubQueue
+
     class Queue {
       typedef bi::rbtree<SubQueue> SubQueues;
       typedef typename SubQueues::iterator Sit;
@@ -279,6 +280,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	  }
 	}
 	void dump(ceph::Formatter *f) const {
+	  f->dump_int("size", size);
 	  for (typename SubQueues::const_iterator i = queues.begin();
 	        i != queues.end(); ++i) {
 	    f->dump_int("total_priority", total_prio);
@@ -330,10 +332,13 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       return normal.pop();
     }
     void dump(ceph::Formatter *f) const override {
-      f->open_array_section("high_queues");
+      f->dump_int("size", length());
+
+      f->open_object_section("high_queues");
       strict.dump(f);
       f->close_section();
-      f->open_array_section("queues");
+
+      f->open_object_section("queues");
       normal.dump(f);
       f->close_section();
     }
