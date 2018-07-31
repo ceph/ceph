@@ -1878,11 +1878,9 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     pg_log_t::filter_log(pgid, curmap, g_ceph_context->_conf->osd_hit_set_namespace,
       ms.log, newlog, reject);
     if (debug) {
-      for (list<pg_log_entry_t>::iterator i = newlog.log.begin();
-           i != newlog.log.end(); ++i)
+      for (auto i = newlog.log.begin(); i != newlog.log.end(); ++i)
         cerr << "Keeping log entry " << *i << std::endl;
-      for (list<pg_log_entry_t>::iterator i = reject.log.begin();
-           i != reject.log.end(); ++i)
+      for (auto i = reject.log.begin(); i != reject.log.end(); ++i)
         cerr << "Skipping log entry " << *i << std::endl;
     }
 

@@ -3517,20 +3517,21 @@ public:
 
   pg_log_t() = default;
   pg_log_t(const eversion_t &last_update,
-	   const eversion_t &log_tail,
-	   const eversion_t &can_rollback_to,
-	   const eversion_t &rollback_info_trimmed_to,
-	   mempool::osd_pglog::list<pg_log_entry_t> &&entries,
-	   mempool::osd_pglog::list<pg_log_dup_t> &&dup_entries)
+           const eversion_t &log_tail,
+           const eversion_t &can_rollback_to,
+           const eversion_t &rollback_info_trimmed_to,
+           mempool::osd_pglog::list<pg_log_entry_t> &&entries,
+           mempool::osd_pglog::list<pg_log_dup_t> &&dup_entries)
     : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
       rollback_info_trimmed_to(rollback_info_trimmed_to),
       log(std::move(entries)), dups(std::move(dup_entries)) {}
+
   pg_log_t(const eversion_t &last_update,
-	   const eversion_t &log_tail,
-	   const eversion_t &can_rollback_to,
-	   const eversion_t &rollback_info_trimmed_to,
-	   const std::list<pg_log_entry_t> &entries,
-	   const std::list<pg_log_dup_t> &dup_entries)
+           const eversion_t &log_tail,
+           const eversion_t &can_rollback_to,
+           const eversion_t &rollback_info_trimmed_to,
+           const std::list<pg_log_entry_t> &entries,
+           const std::list<pg_log_dup_t> &dup_entries)
     : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
       rollback_info_trimmed_to(rollback_info_trimmed_to) {
     for (auto &&entry: entries) {
@@ -3590,13 +3591,13 @@ public:
   mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
     assert(newhead >= tail);
 
-    mempool::osd_pglog::list<pg_log_entry_t>::iterator p = log.end();
+    auto p = log.end();
     mempool::osd_pglog::list<pg_log_entry_t> divergent;
     while (true) {
       if (p == log.begin()) {
 	// yikes, the whole thing is divergent!
-	using std::swap;
-	swap(divergent, log);
+        divergent.insert(divergent.begin(), log.begin(), log.end());
+        log.clear();
 	break;
       }
       --p;
@@ -3610,7 +3611,8 @@ public:
 	 * lower_bound, we it is divergent.
 	 */
 	++p;
-	divergent.splice(divergent.begin(), log, p, log.end());
+        divergent.insert(divergent.begin(), p, log.end());
+        log.erase(p, log.end());
 	break;
       }
       assert(p->version > newhead);

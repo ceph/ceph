@@ -16,6 +16,7 @@
 #define _CEPH_INCLUDE_MEMPOOL_H
 
 #include <cstddef>
+#include <deque>
 #include <map>
 #include <unordered_map>
 #include <set>
@@ -429,6 +430,9 @@ public:
                                                                         \
     template<typename v>						\
     using list = std::list<v,pool_allocator<v>>;			\
+                                                                        \
+    template<typename v>                                                \
+    using deque = std::deque<v,pool_allocator<v>>;                      \
                                                                         \
     template<typename v>						\
     using vector = std::vector<v,pool_allocator<v>>;			\

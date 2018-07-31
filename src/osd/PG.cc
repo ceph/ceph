@@ -1994,7 +1994,7 @@ void PG::activate(ObjectStore::Transaction& t,
 
       // update local version of peer's missing list!
       if (m && pi.last_backfill != hobject_t()) {
-        for (list<pg_log_entry_t>::iterator p = m->log.log.begin();
+        for (auto p = m->log.log.begin();
              p != m->log.log.end();
              ++p) {
 	  if (p->soid <= pi.last_backfill &&
@@ -5006,8 +5006,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  }
 	}
 	if (scrubber.subset_last_update == eversion_t()) {
-	  for (list<pg_log_entry_t>::const_reverse_iterator p =
-		 pg_log.get_log().log.rbegin();
+	  for (auto p = pg_log.get_log().log.rbegin();
 	       p != pg_log.get_log().log.rend();
 	       ++p) {
 	    if (p->soid >= scrubber.start &&
