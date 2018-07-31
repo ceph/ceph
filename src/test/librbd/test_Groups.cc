@@ -207,6 +207,20 @@ TEST_F(TestGroup, add_snapshot)
   const char *group_name = "snap_group";
   const char *snap_name = "snap_snapshot";
 
+  const char orig_data[] = "orig data";
+  const char test_data[] = "test data";
+  char read_data[10];
+
+  rbd_image_t image;
+  ASSERT_EQ(0, rbd_open(ioctx, m_image_name.c_str(), &image, NULL));
+  BOOST_SCOPE_EXIT(image) {
+    EXPECT_EQ(0, rbd_close(image));
+  } BOOST_SCOPE_EXIT_END;
+
+  ASSERT_EQ(10, rbd_write(image, 0, 10, orig_data));
+  ASSERT_EQ(10, rbd_read(image, 0, 10, read_data));
+  ASSERT_EQ(0, memcmp(orig_data, read_data, 10));
+
   ASSERT_EQ(0, rbd_group_create(ioctx, group_name));
 
   ASSERT_EQ(0, rbd_group_image_add(ioctx, group_name, ioctx,
@@ -226,6 +240,14 @@ TEST_F(TestGroup, add_snapshot)
                                    &num_snaps));
 
   ASSERT_STREQ(snap_name, snaps[0].name);
+
+  ASSERT_EQ(10, rbd_write(image, 11, 10, test_data));
+  ASSERT_EQ(10, rbd_read(image, 11, 10, read_data));
+  ASSERT_EQ(0, memcmp(test_data, read_data, 10));
+
+  ASSERT_EQ(0, rbd_group_snap_rollback(ioctx, group_name, snap_name));
+  ASSERT_EQ(10, rbd_read(image, 0, 10, read_data));
+  ASSERT_EQ(0, memcmp(orig_data, read_data, 10));
 
   ASSERT_EQ(0, rbd_group_snap_list_cleanup(snaps, sizeof(rbd_group_snap_info_t),
                                            num_snaps));
@@ -255,6 +277,15 @@ TEST_F(TestGroup, add_snapshotPP)
   ASSERT_EQ(0, rbd.group_image_add(ioctx, group_name, ioctx,
                                    m_image_name.c_str()));
 
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, m_image_name.c_str(), NULL));
+  bufferlist expect_bl;
+  bufferlist read_bl;
+  expect_bl.append(std::string(512, '1'));
+  ASSERT_EQ((ssize_t)expect_bl.length(), image.write(0, expect_bl.length(), expect_bl));
+  ASSERT_EQ(512, image.read(0, 512, read_bl));
+  ASSERT_TRUE(expect_bl.contents_equal(read_bl));
+
   ASSERT_EQ(0, rbd.group_snap_create(ioctx, group_name, snap_name));
 
   std::vector<librbd::group_snap_info_t> snaps;
@@ -263,6 +294,21 @@ TEST_F(TestGroup, add_snapshotPP)
   ASSERT_EQ(1U, snaps.size());
 
   ASSERT_EQ(snap_name, snaps[0].name);
+
+  bufferlist write_bl;
+  write_bl.append(std::string(1024, '2'));
+  ASSERT_EQ(1024, image.write(513, write_bl.length(), write_bl));
+
+  read_bl.clear();
+  ASSERT_EQ(1024, image.read(513, 1024, read_bl));
+  ASSERT_TRUE(write_bl.contents_equal(read_bl));
+
+  ASSERT_EQ(0, rbd.group_snap_rollback(ioctx, group_name, snap_name));
+
+  ASSERT_EQ(512, image.read(0, 512, read_bl));
+  ASSERT_TRUE(expect_bl.contents_equal(read_bl));
+
+  ASSERT_EQ(0, image.close());
 
   ASSERT_EQ(0, rbd.group_snap_remove(ioctx, group_name, snap_name));
 
