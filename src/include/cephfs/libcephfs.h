@@ -1738,6 +1738,9 @@ int ceph_set_deleg_timeout(struct ceph_mount_info *cmount, uint32_t timeout);
  */
 int ceph_ll_delegation(struct ceph_mount_info *cmount, Fh *fh,
 		       unsigned int cmd, ceph_deleg_cb_t cb, void *priv);
+
+mode_t ceph_umask(struct ceph_mount_info *cmount, mode_t mode);
+
 #ifdef __cplusplus
 }
 #endif

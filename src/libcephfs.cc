@@ -34,9 +34,13 @@
 
 #include "include/cephfs/libcephfs.h"
 
+#define DEFAULT_UMASK 002
+
+static mode_t umask_cb(void *);
 
 struct ceph_mount_info
 {
+  mode_t umask = DEFAULT_UMASK;
 public:
   explicit ceph_mount_info(CephContext *cct_)
     : default_perms(),
@@ -106,6 +110,13 @@ public:
     ret = client->init();
     if (ret)
       goto fail;
+
+    {
+      client_callback_args args = {};
+      args.handle = this;
+      args.umask_cb = umask_cb;
+      client->ll_register_callbacks(&args);
+    }
 
     default_perms = Client::pick_my_perms(cct);
     inited = true;
@@ -192,6 +203,12 @@ public:
     return mounted;
   }
 
+  mode_t set_umask(mode_t umask)
+  {
+    this->umask = umask;
+    return umask;
+  }
+
   int conf_read_file(const char *path_list)
   {
     int ret = cct->_conf.parse_config_files(path_list, nullptr, 0);
@@ -267,6 +284,11 @@ private:
   CephContext *cct;
   std::string cwd;
 };
+
+static mode_t umask_cb(void *handle)
+{
+  return ((struct ceph_mount_info *)handle)->umask;
+}
 
 static void do_out_buffer(bufferlist& outbl, char **outbuf, size_t *outbuflen)
 {
@@ -388,6 +410,11 @@ extern "C" uint64_t ceph_get_instance_id(struct ceph_mount_info *cmount)
 extern "C" int ceph_conf_read_file(struct ceph_mount_info *cmount, const char *path)
 {
   return cmount->conf_read_file(path);
+}
+
+extern "C" mode_t ceph_umask(struct ceph_mount_info *cmount, mode_t mode)
+{
+  return cmount->set_umask(mode);
 }
 
 extern "C" int ceph_conf_parse_argv(struct ceph_mount_info *cmount, int argc,
