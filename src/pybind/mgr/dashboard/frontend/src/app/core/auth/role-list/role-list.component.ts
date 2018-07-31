@@ -56,7 +56,7 @@ export class RoleListComponent implements OnInit {
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: 'fa-trash-o',
+      icon: 'fa-times',
       disable: () => !this.selection.hasSingleSelection || this.selection.first().system,
       click: () => this.deleteRoleModal(),
       name: 'Delete'
