@@ -249,7 +249,7 @@ class MDSRank {
     } progress_thread;
 
     list<Message*> waiting_for_nolaggy;
-    MDSInternalContextBase::vec finished_queue;
+    MDSInternalContextBase::que finished_queue;
     // Dispatch, retry, queues
     int dispatch_depth;
     void inc_dispatch_depth() { ++dispatch_depth; }
@@ -304,7 +304,7 @@ class MDSRank {
     void queue_waiters(MDSInternalContextBase::vec& ls) {
       MDSInternalContextBase::vec v;
       v.swap(ls);
-      finished_queue.insert(finished_queue.end(), v.begin(), v.end());
+      std::copy(v.begin(), v.end(), std::back_inserter(finished_queue));
       progress_thread.signal();
     }
 
@@ -407,7 +407,7 @@ class MDSRank {
       waiting_for_mdsmap[e].push_back(c);
     }
     void enqueue_replay(MDSInternalContextBase *c) {
-      replay_queue.push(c);
+      replay_queue.push_back(c);
     }
 
     bool queue_one_replay();

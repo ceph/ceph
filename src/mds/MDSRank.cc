@@ -818,14 +818,15 @@ void MDSRank::_advance_queues()
 {
   assert(mds_lock.is_locked_by_me());
 
-  while (!finished_queue.empty()) {
+  if (!finished_queue.empty()) {
     dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
-    dout(10) << finished_queue << dendl;
-    decltype(finished_queue) ls;
-    ls.swap(finished_queue);
-    for (auto& c : ls) {
-      dout(10) << " finish " << c << dendl;
-      c->complete(0);
+    while (!finished_queue.empty()) {
+      auto fin = finished_queue.front();
+      finished_queue.pop_front();
+
+      dout(10) << " finish " << fin << dendl;
+      fin->complete(0);
+
       heartbeat_reset();
     }
   }
@@ -1535,7 +1536,7 @@ bool MDSRank::queue_one_replay()
     return false;
   }
   queue_waiter(replay_queue.front());
-  replay_queue.pop();
+  replay_queue.pop_front();
   return true;
 }
 
