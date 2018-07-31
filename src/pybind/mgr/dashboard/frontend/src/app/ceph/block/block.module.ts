@@ -4,6 +4,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
 import { BsDropdownModule, ModalModule, TabsModule, TooltipModule } from 'ngx-bootstrap';
+import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
 
 import { SharedModule } from '../../shared/shared.module';
@@ -15,9 +16,14 @@ import { RbdFormComponent } from './rbd-form/rbd-form.component';
 import { RbdListComponent } from './rbd-list/rbd-list.component';
 import { RbdSnapshotFormComponent } from './rbd-snapshot-form/rbd-snapshot-form.component';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list/rbd-snapshot-list.component';
+import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal/rbd-trash-move-modal.component';
 
 @NgModule({
-  entryComponents: [RbdDetailsComponent, RbdSnapshotFormComponent],
+  entryComponents: [
+    RbdDetailsComponent,
+    RbdSnapshotFormComponent,
+    RbdTrashMoveModalComponent
+  ],
   imports: [
     CommonModule,
     FormsModule,
@@ -25,6 +31,7 @@ import { RbdSnapshotListComponent } from './rbd-snapshot-list/rbd-snapshot-list.
     TabsModule.forRoot(),
     ProgressbarModule.forRoot(),
     BsDropdownModule.forRoot(),
+    BsDatepickerModule.forRoot(),
     TooltipModule.forRoot(),
     ModalModule.forRoot(),
     SharedModule,
@@ -38,7 +45,8 @@ import { RbdSnapshotListComponent } from './rbd-snapshot-list/rbd-snapshot-list.
     RbdDetailsComponent,
     RbdFormComponent,
     RbdSnapshotListComponent,
-    RbdSnapshotFormComponent
+    RbdSnapshotFormComponent,
+    RbdTrashMoveModalComponent
   ]
 })
 export class BlockModule {}

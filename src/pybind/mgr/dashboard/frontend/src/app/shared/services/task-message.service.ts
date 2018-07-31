@@ -126,6 +126,13 @@ export class TaskMessageService {
     'rbd/snap/rollback': new TaskMessage(
       new TaskMessageOperation('Rolling back', 'rollback', 'Rolled back'),
       this.rbd.snapshot
+    ),
+    'rbd/trash/move': new TaskMessage(
+      new TaskMessageOperation('Moving', 'move', 'Moved'),
+      (metadata) => `image '${metadata.pool_name}/${metadata.image_name}' to trash`,
+      () => ({
+        2: `Could not find image.`
+      })
     )
   };
 

@@ -208,7 +208,7 @@ describe('RbdListComponent', () => {
         permissionHelper.testScenarios(scenario));
 
       it('shows all actions', () => {
-        expect(tableActions.tableActions.length).toBe(5);
+        expect(tableActions.tableActions.length).toBe(6);
         expect(tableActions.tableActions).toEqual(component.tableActions);
       });
     });
@@ -221,8 +221,9 @@ describe('RbdListComponent', () => {
       it(`shows 'Edit' for single selection else 'Add' as main action`, () =>
         permissionHelper.testScenarios(scenario));
 
-      it(`shows all actions except for 'Delete'`, () => {
+      it(`shows all actions except for 'Delete' and 'Move'`, () => {
         expect(tableActions.tableActions.length).toBe(4);
+        component.tableActions.pop();
         component.tableActions.pop();
         expect(tableActions.tableActions).toEqual(component.tableActions);
       });
@@ -238,12 +239,13 @@ describe('RbdListComponent', () => {
         permissionHelper.testScenarios(scenario);
       });
 
-      it(`shows 'Add', 'Copy' and 'Delete' action`, () => {
-        expect(tableActions.tableActions.length).toBe(3);
+      it(`shows 'Add', 'Copy', 'Delete' and 'Move' action`, () => {
+        expect(tableActions.tableActions.length).toBe(4);
         expect(tableActions.tableActions).toEqual([
           component.tableActions[0],
           component.tableActions[2],
-          component.tableActions[4]
+          component.tableActions[4],
+          component.tableActions[5]
         ]);
       });
     });
@@ -258,12 +260,13 @@ describe('RbdListComponent', () => {
         permissionHelper.testScenarios(scenario);
       });
 
-      it(`shows 'Edit', 'Flatten' and 'Delete' action`, () => {
-        expect(tableActions.tableActions.length).toBe(3);
+      it(`shows 'Edit', 'Flatten', 'Delete' and 'Move' action`, () => {
+        expect(tableActions.tableActions.length).toBe(4);
         expect(tableActions.tableActions).toEqual([
           component.tableActions[1],
           component.tableActions[3],
-          component.tableActions[4]
+          component.tableActions[4],
+          component.tableActions[5]
         ]);
       });
     });
@@ -317,9 +320,12 @@ describe('RbdListComponent', () => {
         permissionHelper.testScenarios(scenario);
       });
 
-      it(`shows only 'Delete' action`, () => {
-        expect(tableActions.tableActions.length).toBe(1);
-        expect(tableActions.tableActions).toEqual([component.tableActions[4]]);
+      it(`shows 'Delete' and 'Move' actions`, () => {
+        expect(tableActions.tableActions.length).toBe(2);
+        expect(tableActions.tableActions).toEqual([
+          component.tableActions[4],
+          component.tableActions[5]
+        ]);
       });
     });
 
