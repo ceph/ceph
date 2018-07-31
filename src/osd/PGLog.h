@@ -85,7 +85,7 @@ public:
     mutable ceph::unordered_map<osd_reqid_t,pg_log_dup_t*> dup_index;
 
     // recovery pointers
-    list<pg_log_entry_t>::iterator complete_to; // not inclusive of referenced item
+    deque<pg_log_entry_t>::iterator complete_to; // not inclusive of referenced item
     version_t last_requested = 0;               // last object requested by primary
 
     //
@@ -98,7 +98,7 @@ public:
      * It's a reverse_iterator because rend() is a natural representation for
      * tail, and rbegin() works nicely for head.
      */
-    mempool::osd_pglog::list<pg_log_entry_t>::reverse_iterator
+    mempool::osd_pglog::deque<pg_log_entry_t>::reverse_iterator
       rollback_info_trimmed_to_riter;
 
     template <typename F>
@@ -326,9 +326,7 @@ public:
       }
       if (objects.count(oid) == 0)
 	return;
-      for (list<pg_log_entry_t>::const_reverse_iterator i = log.rbegin();
-           i != log.rend();
-           ++i) {
+      for (auto i = log.rbegin(); i != log.rend(); ++i) {
 	if (i->soid == oid) {
 	  if (i->reqid_is_indexed())
 	    pls->push_back(make_pair(i->reqid, i->user_version));
@@ -368,9 +366,7 @@ public:
 	PGLOG_INDEXED_EXTRA_CALLER_OPS;
 
       if (to_index & any_log_entry_index) {
-	for (list<pg_log_entry_t>::const_iterator i = log.begin();
-	     i != log.end();
-	     ++i) {
+	for (auto i = log.begin(); i != log.end(); ++i) {
 	  if (to_index & PGLOG_INDEXED_OBJECTS) {
 	    if (i->object_is_indexed()) {
 	      objects[i->soid] = const_cast<pg_log_entry_t*>(&(*i));
@@ -1374,9 +1370,7 @@ public:
 	set<hobject_t> did;
 	set<hobject_t> checked;
 	set<hobject_t> skipped;
-	for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
-	     i != log.log.rend();
-	     ++i) {
+	for (auto i = log.log.rbegin(); i != log.log.rend(); ++i) {
 	  if (!debug_verify_stored_missing && i->version <= info.last_complete) break;
 	  if (i->soid > info.last_backfill)
 	    continue;

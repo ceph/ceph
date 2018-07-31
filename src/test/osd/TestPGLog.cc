@@ -186,7 +186,7 @@ public:
 	divinfo.last_complete = divinfo.last_update;
       } else {
 	eversion_t fmissing = init.get_items().at(init.get_rmissing().begin()->second).need;
-	for (list<pg_log_entry_t>::const_iterator i = fulldiv.log.begin();
+	for (auto i = fulldiv.log.begin();
 	     i != fulldiv.log.end();
 	     ++i) {
 	  if (i->version < fmissing)
@@ -2165,8 +2165,7 @@ TEST_F(PGLogTest, filter_log_1) {
 
     // Make sure all internal entries are retained
     int count = 0;
-    for (list<pg_log_entry_t>::iterator i = log.log.begin();
-         i != log.log.end(); ++i) {
+    for (auto i = log.log.begin(); i != log.log.end(); ++i) {
       if (i->soid.nspace == hit_set_namespace) count++;
     }
     EXPECT_EQ(count, num_internal);

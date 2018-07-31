@@ -4115,9 +4115,7 @@ void pg_log_t::filter_log(spg_t import_pgid, const OSDMap &curmap,
   out.log.clear();
   reject.log.clear();
 
-  for (list<pg_log_entry_t>::const_iterator i = in.log.begin();
-       i != in.log.end(); ++i) {
-
+  for (auto i = in.log.begin(); i != in.log.end(); ++i) {
     // Reject pg log entries for temporary objects
     if (i->soid.is_temp()) {
       reject.log.push_back(*i);
@@ -4178,9 +4176,7 @@ void pg_log_t::decode(bufferlist::const_iterator &bl, int64_t pool)
 
   // handle hobject_t format change
   if (struct_v < 4) {
-    for (list<pg_log_entry_t>::iterator i = log.begin();
-	 i != log.end();
-	 ++i) {
+    for (auto i = log.begin(); i != log.end(); ++i) {
       if (!i->soid.is_max() && i->soid.pool == -1)
 	i->soid.pool = pool;
     }
@@ -4192,7 +4188,7 @@ void pg_log_t::dump(Formatter *f) const
   f->dump_stream("head") << head;
   f->dump_stream("tail") << tail;
   f->open_array_section("log");
-  for (list<pg_log_entry_t>::const_iterator p = log.begin(); p != log.end(); ++p) {
+  for (auto p = log.begin(); p != log.end(); ++p) {
     f->open_object_section("entry");
     p->dump(f);
     f->close_section();
@@ -4226,9 +4222,7 @@ void pg_log_t::copy_after(const pg_log_t &other, eversion_t v)
   can_rollback_to = other.can_rollback_to;
   head = other.head;
   tail = other.tail;
-  for (list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
-       i != other.log.rend();
-       ++i) {
+  for (auto i = other.log.rbegin(); i != other.log.rend(); ++i) {
     assert(i->version > other.tail);
     if (i->version <= v) {
       // make tail accurate.
@@ -4242,7 +4236,7 @@ void pg_log_t::copy_after(const pg_log_t &other, eversion_t v)
 void pg_log_t::copy_range(const pg_log_t &other, eversion_t from, eversion_t to)
 {
   can_rollback_to = other.can_rollback_to;
-  list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
+  auto i = other.log.rbegin();
   assert(i != other.log.rend());
   while (i->version > to) {
     ++i;
@@ -4265,9 +4259,7 @@ void pg_log_t::copy_up_to(const pg_log_t &other, int max)
   int n = 0;
   head = other.head;
   tail = other.tail;
-  for (list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
-       i != other.log.rend();
-       ++i) {
+  for (auto i = other.log.rbegin(); i != other.log.rend(); ++i) {
     if (n++ >= max) {
       tail = i->version;
       break;
@@ -4279,9 +4271,7 @@ void pg_log_t::copy_up_to(const pg_log_t &other, int max)
 ostream& pg_log_t::print(ostream& out) const
 {
   out << *this << std::endl;
-  for (list<pg_log_entry_t>::const_iterator p = log.begin();
-       p != log.end();
-       ++p)
+  for (auto p = log.begin(); p != log.end(); ++p)
     out << *p << std::endl;
   for (const auto& entry : dups) {
     out << " dup entry: " << entry << std::endl;

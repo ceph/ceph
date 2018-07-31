@@ -3513,12 +3513,21 @@ protected:
 
 public:
   // the actual log
-  mempool::osd_pglog::list<pg_log_entry_t> log;
+  mempool::osd_pglog::deque<pg_log_entry_t> log;
 
   // entries just for dup op detection ordered oldest to newest
-  mempool::osd_pglog::list<pg_log_dup_t> dups;
+  mempool::osd_pglog::deque<pg_log_dup_t> dups;
 
   pg_log_t() = default;
+  pg_log_t(const eversion_t &last_update,
+           const eversion_t &log_tail,
+           const eversion_t &can_rollback_to,
+           const eversion_t &rollback_info_trimmed_to,
+           mempool::osd_pglog::deque<pg_log_entry_t> &&entries,
+           mempool::osd_pglog::deque<pg_log_dup_t> &&dup_entries)
+    : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
+      rollback_info_trimmed_to(rollback_info_trimmed_to),
+      log(std::move(entries)), dups(std::move(dup_entries)) {}
   pg_log_t(const eversion_t &last_update,
 	   const eversion_t &log_tail,
 	   const eversion_t &can_rollback_to,
@@ -3526,8 +3535,14 @@ public:
 	   mempool::osd_pglog::list<pg_log_entry_t> &&entries,
 	   mempool::osd_pglog::list<pg_log_dup_t> &&dup_entries)
     : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
-      rollback_info_trimmed_to(rollback_info_trimmed_to),
-      log(std::move(entries)), dups(std::move(dup_entries)) {}
+      rollback_info_trimmed_to(rollback_info_trimmed_to) {
+        for (auto &&entry: entries) {
+          log.push_back(entry);
+        }
+        for (auto &&entry: dup_entries) {
+          dups.push_back(entry);
+        }
+      }
   pg_log_t(const eversion_t &last_update,
 	   const eversion_t &log_tail,
 	   const eversion_t &can_rollback_to,
@@ -3560,7 +3575,7 @@ public:
 
 
   pg_log_t split_out_child(pg_t child_pgid, unsigned split_bits) {
-    mempool::osd_pglog::list<pg_log_entry_t> oldlog, childlog;
+    mempool::osd_pglog::deque<pg_log_entry_t> oldlog, childlog;
     oldlog.swap(log);
 
     eversion_t old_tail;
@@ -3593,13 +3608,16 @@ public:
   mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
     assert(newhead >= tail);
 
-    mempool::osd_pglog::list<pg_log_entry_t>::iterator p = log.end();
+    auto p = log.end();
     mempool::osd_pglog::list<pg_log_entry_t> divergent;
+    bool do_splice = false;
     while (true) {
       if (p == log.begin()) {
 	// yikes, the whole thing is divergent!
-	using std::swap;
-	swap(divergent, log);
+        for (auto &&e: log) {
+          divergent.push_back(e);
+        }
+        log.clear();
 	break;
       }
       --p;
@@ -3613,10 +3631,16 @@ public:
 	 * lower_bound, we it is divergent.
 	 */
 	++p;
-	divergent.splice(divergent.begin(), log, p, log.end());
+        do_splice = true;
 	break;
       }
       assert(p->version > newhead);
+    }
+    if (do_splice) {
+      while (p != log.end()) {
+        divergent.push_back(*p);
+        log.erase(p++);
+      }
     }
     head = newhead;
 

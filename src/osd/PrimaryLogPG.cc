@@ -1625,36 +1625,31 @@ void PrimaryLogPG::calc_trim_to()
 		 PG_STATE_BACKFILL_TOOFULL)) {
     target = cct->_conf->osd_max_pg_log_entries;
   }
-  // limit pg log trimming up to the head of the log
-  eversion_t limit = pg_log.get_head();
-  dout(10) << __func__ << " limit = " << limit << dendl;
 
+  eversion_t limit = std::min(
+    min_last_complete_ondisk,
+    pg_log.get_can_rollback_to());
+  auto log_size = pg_log.get_log().log.size();
   if (limit != eversion_t() &&
       limit != pg_trim_to &&
-      pg_log.get_log().approx_size() > target) {
-    dout(10) << __func__ << " approx pg log length =  "
-             << pg_log.get_log().approx_size() << dendl;
-    size_t num_to_trim = std::min(pg_log.get_log().approx_size() - target,
+      log_size > target) {
+    size_t num_to_trim = std::min(log_size - target,
 				  cct->_conf->osd_pg_log_trim_max);
-    dout(10) << __func__ << " num_to_trim =  " << num_to_trim << dendl;
     if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
 	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
       return;
     }
-    list<pg_log_entry_t>::const_iterator it = pg_log.get_log().log.begin();
-    eversion_t new_trim_to;
-    for (size_t i = 0; i < num_to_trim; ++i) {
-      new_trim_to = it->version;
-      ++it;
-      if (new_trim_to >= limit) {
-	new_trim_to = limit;
-        dout(10) << "calc_trim_to trimming to limit: " << limit << dendl;
-	break;
-      }
+    auto it = pg_log.get_log().log.begin();
+    std::advance(it, num_to_trim);
+    eversion_t new_trim_to = it->version;
+    if (new_trim_to > limit) {
+      new_trim_to = limit;
+      dout(10) << "calc_trim_to trimming to min_last_complete_ondisk" << dendl;
     }
     dout(10) << "calc_trim_to " << pg_trim_to << " -> " << new_trim_to << dendl;
     pg_trim_to = new_trim_to;
     assert(pg_trim_to <= pg_log.get_head());
+    assert(pg_trim_to <= min_last_complete_ondisk);
   }
 }
 
@@ -10570,7 +10565,9 @@ void PrimaryLogPG::submit_log_entries(
 	    peer.shard, pg_whoami.shard,
 	    info.last_update.epoch,
 	    info, last_peering_reset);
-	  m->log.log = entries;
+          for (auto &e: entries) {
+	    m->log.log.push_back(e);
+          }
 	  m->log.tail = old_last_update;
 	  m->log.head = info.last_update;
 	  osd->send_message_osd_cluster(
@@ -13342,7 +13339,7 @@ void PrimaryLogPG::check_local()
 
   // just scan the log.
   set<hobject_t> did;
-  for (list<pg_log_entry_t>::const_reverse_iterator p = pg_log.get_log().log.rbegin();
+  for (auto p = pg_log.get_log().log.rbegin();
        p != pg_log.get_log().log.rend();
        ++p) {
     if (did.count(p->soid))
@@ -13538,7 +13535,7 @@ bool PrimaryLogPG::hit_set_apply_log()
   }
 
   dout(20) << __func__ << " " << to << " .. " << info.last_update << dendl;
-  list<pg_log_entry_t>::const_reverse_iterator p = pg_log.get_log().log.rbegin();
+  auto p = pg_log.get_log().log.rbegin();
   while (p != pg_log.get_log().log.rend() && p->version > to)
     ++p;
   while (p != pg_log.get_log().log.rend() && p->version > from) {
