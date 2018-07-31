@@ -50,7 +50,7 @@ export class RbdSnapshotActionsModel {
   };
   deleteSnap: CdTableAction = {
     permission: 'delete',
-    icon: 'fa-trash-o',
+    icon: 'fa-times',
     disable: (selection: CdTableSelection) =>
       selection.hasSingleSelection && !selection.first().is_protected,
     name: 'Delete'

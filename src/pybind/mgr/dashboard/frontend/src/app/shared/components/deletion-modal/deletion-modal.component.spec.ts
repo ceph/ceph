@@ -20,7 +20,7 @@ export class MockModule {}
     <button type="button"
         class="btn btn-sm btn-primary"
         (click)="openCtrlDriven()">
-      <i class="fa fa-fw fa-trash"></i>Deletion Ctrl-Test
+      <i class="fa fa-fw fa-times"></i>Deletion Ctrl-Test
       <ng-template #ctrlDescription>
         The spinner is handled by the controller if you have use the modal as ViewChild in order to
         use it's functions to stop the spinner or close the dialog.
@@ -30,7 +30,7 @@ export class MockModule {}
     <button type="button"
             class="btn btn-sm btn-primary"
             (click)="openModalDriven()">
-      <i class="fa fa-fw fa-trash"></i>Deletion Modal-Test
+      <i class="fa fa-fw fa-times"></i>Deletion Modal-Test
       <ng-template #modalDescription>
         The spinner is handled by the modal if your given deletion function returns a Observable.
       </ng-template>

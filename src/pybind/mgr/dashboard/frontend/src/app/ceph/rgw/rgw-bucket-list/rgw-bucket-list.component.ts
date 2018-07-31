@@ -62,7 +62,7 @@ export class RgwBucketListComponent {
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: 'fa-trash-o',
+      icon: 'fa-times',
       click: () => this.deleteAction(),
       name: 'Delete'
     };
