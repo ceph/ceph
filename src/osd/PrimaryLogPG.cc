@@ -1629,25 +1629,22 @@ void PrimaryLogPG::calc_trim_to()
   eversion_t limit = std::min(
     min_last_complete_ondisk,
     pg_log.get_can_rollback_to());
+  auto log_size = pg_log.get_log().log.size();
   if (limit != eversion_t() &&
       limit != pg_trim_to &&
-      pg_log.get_log().approx_size() > target) {
-    size_t num_to_trim = std::min(pg_log.get_log().approx_size() - target,
+      log_size > target) {
+    size_t num_to_trim = std::min(log_size - target,
 				  cct->_conf->osd_pg_log_trim_max);
     if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
 	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
       return;
     }
     auto it = pg_log.get_log().log.begin();
-    eversion_t new_trim_to;
-    for (size_t i = 0; i < num_to_trim; ++i) {
-      new_trim_to = it->version;
-      ++it;
-      if (new_trim_to > limit) {
-	new_trim_to = limit;
-	dout(10) << "calc_trim_to trimming to min_last_complete_ondisk" << dendl;
-	break;
-      }
+    std::advance(it, num_to_trim);
+    eversion_t new_trim_to = it->version;
+    if (new_trim_to > limit) {
+      new_trim_to = limit;
+      dout(10) << "calc_trim_to trimming to min_last_complete_ondisk" << dendl;
     }
     dout(10) << "calc_trim_to " << pg_trim_to << " -> " << new_trim_to << dendl;
     pg_trim_to = new_trim_to;
