@@ -24,10 +24,13 @@ DEFAULTS = {
     'self_heal': str(True),
 }
 
-health_messages = {
-    'DEVICE_HEALTH': '%d device(s) expected to fail soon',
-    'DEVICE_HEALTH_IN_USE': '%d daemons(s) expected to fail soon and still contain data',
-    'DEVICE_HEALTH_TOOMANY': 'Too many daemons are expected to fail soon',
+DEVICE_HEALTH = 'DEVICE_HEALTH'
+DEVICE_HEALTH_IN_USE = 'DEVICE_HEALTH_IN_USE'
+DEVICE_HEALTH_TOOMANY = 'DEVICE_HEALTH_TOOMANY'
+HEALTH_MESSAGES = {
+    DEVICE_HEALTH: '%d device(s) expected to fail soon',
+    DEVICE_HEALTH_IN_USE: '%d daemons(s) expected to fail soon and still contain data',
+    DEVICE_HEALTH_TOOMANY: 'Too many daemons are expected to fail soon',
 }
 
 class Module(MgrModule):
@@ -329,8 +332,8 @@ class Module(MgrModule):
         warn_threshold_td = timedelta(seconds=int(self.warn_threshold))
         checks = {}
         health_warnings = {
-            'DEVICE_HEALTH': [],
-            'DEVICE_HEALTH_IN_USE': [],
+            DEVICE_HEALTH: [],
+            DEVICE_HEALTH_IN_USE: [],
             }
         devs = self.get("devices")
         osds_in = {}
@@ -369,7 +372,7 @@ class Module(MgrModule):
                 # of SCSI multipath
                 device_locations = map(lambda x: x['host'] + ':' + x['dev'],
                                        dev['location'])
-                health_warnings['DEVICE_HEALTH'].append(
+                health_warnings[DEVICE_HEALTH].append(
                     '%s (%s); daemons %s; life expectancy between %s and %s'
                     % (dev['devid'],
                        ','.join(device_locations),
@@ -385,7 +388,7 @@ class Module(MgrModule):
         for _id in osds_out.iterkeys():
             num_pgs = self.get_osd_num_pgs(_id)
             if num_pgs > 0:
-                health_warnings['DEVICE_HEALTH_IN_USE'].append(
+                health_warnings[DEVICE_HEALTH_IN_USE].append(
                     'osd.%s is marked out '
                     'but still has %s PG(s)' %
                     (_id, num_pgs))
@@ -403,9 +406,9 @@ class Module(MgrModule):
                 ratio = float(num_in - did - 1) / float(num_osds)
                 if ratio < min_in_ratio:
                     final_ratio = float(num_in - num_bad) / float(num_osds)
-                    checks['DEVICE_HEALTH_TOOMANY'] = {
+                    checks[DEVICE_HEALTH_TOOMANY] = {
                         'severity': 'warning',
-                        'summary': health_messages['DEVICE_HEALTH_TOOMANY'],
+                        'summary': HEALTH_MESSAGES[DEVICE_HEALTH_TOOMANY],
                         'detail': [
                             '%d OSDs with failing device(s) would bring "in" ratio to %f < mon_osd_min_in_ratio %f' % (num_bad - did, final_ratio, min_in_ratio)
                         ]
@@ -420,7 +423,7 @@ class Module(MgrModule):
             if n:
                 checks[warning] = {
                     'severity': 'warning',
-                    'summary': health_messages[warning] % n,
+                    'summary': HEALTH_MESSAGES[warning] % n,
                     'detail': ls,
                 }
         self.set_health_checks(checks)
