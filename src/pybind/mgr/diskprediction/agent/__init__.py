@@ -1,85 +1,18 @@
 from __future__ import absolute_import
 
-
-from requests.auth import HTTPBasicAuth
-
 from ..common import timeout, TimeoutError
-from ..common.restapi import RestAPI, gen_configuration
-
-
-
-class Command(object):
-    def __init__(self, *args, **kwargs):
-        self.host = kwargs.get('host')
-        self.dbname = kwargs.get('dbname', )
-        self.port = kwargs.get('port')
-        self.auth = None
-        conf = gen_configuration(**kwargs)
-        self._obj_sender = RestAPI(conf)
-        user = kwargs.get('user')
-        password = kwargs.get('password')
-        if user and password:
-            self.auth = HTTPBasicAuth(user, password)
-
-    def __nonzero__(self):
-        if self._obj_sender:
-            return True
-        else:
-            return False
-
-    def _base_url(self):
-        return "https://{0}:{1}".format(self.host, self.port)
-
-    def _send_cmd(self, method, url, **kwargs):
-        return self._obj_sender.send_data(
-            method=method, url=url, verify=False, **kwargs)
-
-    def test_connection(self):
-        result = self._obj_sender.test_connection()
-        if result.status_code == 200:
-            return True
-        else:
-            return False
-
-    def send_info(self, *args, **kwargs):
-        kwargs['auth'] = self.auth
-        kwargs['headers'] = \
-            {"Content-Type": "application/x-www-form-urlencoded"}
-        url = "{0}/write?db={1}".format(self._base_url(), self.dbname)
-        return self._send_cmd('POST', url=url, **kwargs)
-
-    def query_info(self, sql):
-        kwargs = {
-            'auth': self.auth,
-            'headers': {"Accept": "application/json"},
-            'params': {'db': self.dbname, 'q': sql, 'epoch': 'ns'}
-        }
-        url = "{0}/query".format(self._base_url())
-        return self._send_cmd('GET', url=url, **kwargs)
-
-    def create_database(self):
-        kwargs = {
-            'auth': self.auth,
-            'headers': {"Content-Type": "application/x-www-form-urlencoded"}
-        }
-        url = "{0}/query?q=CREATE DATABASE {1}".format(
-            self._base_url(), self.dbname)
-        return self._send_cmd('POST', url=url, **kwargs)
 
 
 class BaseAgent(object):
 
     measurement = ''
 
-    def __init__(self, ceph_conext, obj_sender, timeout=30):
+    def __init__(self, mgr_module, obj_sender, timeout=30):
         self.data = []
-        self._command = None
-        if obj_sender and isinstance(obj_sender, Command):
-            self._command = obj_sender
-        else:
-            raise TypeError
-        self._logger = ceph_conext.log
-        self._ceph_context = ceph_conext
+        self._client = None
+        self._client = obj_sender
+        self._logger = mgr_module.log
+        self._module_inst = mgr_module
         self._timeout = timeout
 
     def run(self):
@@ -87,11 +20,10 @@ class BaseAgent(object):
             self._collect_data()
             self._run()
         except TimeoutError:
-            self._logger.error(
-                "%s failed to execute %s task" % (__name__, self.measurement))
+            self._logger.error('%s failed to execute %s task' % (__name__, self.measurement))
 
     def __nonzero__(self):
-        if not self._ceph_context and not self._command:
+        if not self._module_inst and not self._client:
             return False
         else:
             return True

@@ -23,7 +23,7 @@ def timeout(seconds=10, error_message=os.strerror(errno.ETIME)):
             raise TimeoutError(error_message)
 
         def wrapper(*args, **kwargs):
-            if hasattr(args[0], "_timeout") is not None:
+            if hasattr(args[0], '_timeout') is not None:
                 seconds = args[0]._timeout
             signal.signal(signal.SIGALRM, _handle_timeout)
             signal.alarm(seconds)
@@ -36,3 +36,14 @@ def timeout(seconds=10, error_message=os.strerror(errno.ETIME)):
         return wraps(func)(wrapper)
 
     return decorator
+
+
+def get_human_readable(size, precision=2):
+    suffixes = ['B', 'KB', 'MB', 'GB', 'TB']
+    suffix_index = 0
+    while size > 1000 and suffix_index < 4:
+        # increment the index of the suffix
+        suffix_index += 1
+        # apply the division
+        size = size/1000.0
+    return '%.*d %s' % (precision, size, suffixes[suffix_index])

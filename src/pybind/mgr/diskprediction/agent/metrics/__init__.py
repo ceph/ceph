@@ -4,28 +4,26 @@ import time
 
 from .. import BaseAgent
 
+AGENT_VERSION = '1.0.0'
+
+
+class MetricsField(object):
+    def __init__(self):
+        self.tags = {}
+        self.fields = {}
+        self.timestamp = None
+
+    def __str__(self):
+        return str({
+            'tags': self.tags,
+            'fields': self.fields,
+            'timestamp': self.timestamp
+        })
+
 
 class MetricsAgent(BaseAgent):
 
-    def check_database(self):
-        try:
-            resp = self._command.show_database()
-            data = resp.json()
-            if resp.status_code >= 200 and resp.status_code < 300:
-                rc = data.get('results', [])
-                if rc:
-                    series = rc[0].get('series', [])
-                    if series:
-                        values = series[0].get('values', [])
-                        if self._command.dbname not in values:
-                            self._command.create_database()
-                        return True
-            return False
-        except Exception as e:
-            self._logger.error(str(e))
-            return False
-
-    def show_summary(self, status_info):
+    def log_summary(self, status_info):
         try:
             if status_info:
                 measurement = status_info['measurement']
@@ -33,15 +31,12 @@ class MetricsAgent(BaseAgent):
                 failure_count = status_info['failure_count']
                 total_count = success_count + failure_count
                 display_string = \
-                    "%s agent stats in total count: %s, success count: %s, failure count: %s."
+                    '%s agent stats in total count: %s, success count: %s, failure count: %s.'
                 self._logger.info(
                     display_string % (measurement, total_count, success_count, failure_count)
                 )
         except Exception as e:
             self._logger.error(str(e))
-
-    def query_info(self, sql):
-        return self._command.query_info(sql)
 
     def _run(self):
         collect_data = self.data
@@ -58,43 +53,43 @@ class MetricsAgent(BaseAgent):
                 tag_list = []
                 field_list = []
                 for name in dp_data.tags:
-                    tag = '%s=%s' % (name, dp_data.tags[name])
+                    tag = '{}={}'.format(name, dp_data.tags[name])
                     tag_list.append(tag)
                 for name in dp_data.fields:
                     if dp_data.fields[name] is None:
                         continue
                     if isinstance(dp_data.fields[name], str):
-                        field = '%s=\"%s\"' % (name, dp_data.fields[name])
+                        field = '{}=\"{}\"'.format(name, dp_data.fields[name])
                     elif isinstance(dp_data.fields[name], bool):
-                        field = '%s=%s' % (name, str(dp_data.fields[name]).lower())
+                        field = '{}={}'.format(name, str(dp_data.fields[name]).lower())
                     elif (isinstance(dp_data.fields[name], int) or
                           isinstance(dp_data.fields[name], long)):
-                        field = '%s=%si' % (name, dp_data.fields[name])
+                        field = '{}={}i'.format(name, dp_data.fields[name])
                     else:
-                        field = '%s=%s' % (name, dp_data.fields[name])
+                        field = '{}={}'.format(name, dp_data.fields[name])
                     field_list.append(field)
-                data = "%s,%s %s %s" % (
+                data = '{},{} {} {}'.format(
                     measurement,
                     ','.join(tag_list),
                     ','.join(field_list),
                     int(time.time() * 1000 * 1000 * 1000))
                 try:
-                    resp = self._command.send_info(data=data, measurement=measurement)
+                    resp = self._client.send_info(data=data, measurement=measurement)
                     status_code = resp.status_code
-                    if status_code >= 200 and status_code < 300:
+                    if 200 <= status_code < 300:
                         self._logger.debug(
-                            "%s send diskprediction api success(ret: %s)"
+                            '%s send diskprediction api success(ret: %s)'
                             % (measurement, status_code))
                         status_info['success_count'] += 1
                     else:
                         self._logger.error(
-                            "return code: %s, content: %s" % (status_code, resp.content))
+                            'return code: %s, content: %s, data: %s' % (status_code, resp.content, data))
                         status_info['failure_count'] += 1
                 except Exception as e:
                     status_info['failure_count'] += 1
                     self._logger.error(str(e))
             # show summary info
-            self.show_summary(status_info)
+            self.log_summary(status_info)
             # write sub_agent buffer
             total_count = status_info['success_count'] + status_info['failure_count']
             if total_count:

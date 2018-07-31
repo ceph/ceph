@@ -2,24 +2,60 @@ from __future__ import absolute_import
 
 import socket
 
-from . import MetricsAgent
-from ...common.db import DB_API
-from ...models.metrics.dp import Ceph_Cluster
+from . import MetricsAgent, MetricsField
+from ...common.clusterdata import ClusterAPI
 
 
-class CephCluster_Agent(MetricsAgent):
+class CephCluster(MetricsField):
+    """ Ceph cluster structure """
+    measurement = 'ceph_cluster'
+
+    def __init__(self):
+        super(CephCluster, self).__init__()
+        self.tags['cluster_id'] = None
+        self.fields['agenthost'] = None
+        self.tags['agenthost_domain_id'] = None
+        self.fields['cluster_health'] = ''
+        self.fields['num_mon'] = None
+        self.fields['num_mon_quorum'] = None
+        self.fields['num_osd'] = None
+        self.fields['num_osd_up'] = None
+        self.fields['num_osd_in'] = None
+        self.fields['osd_epoch'] = None
+        self.fields['osd_bytes'] = None
+        self.fields['osd_bytes_used'] = None
+        self.fields['osd_bytes_avail'] = None
+        self.fields['num_pool'] = None
+        self.fields['num_pg'] = None
+        self.fields['num_pg_active_clean'] = None
+        self.fields['num_pg_active'] = None
+        self.fields['num_pg_peering'] = None
+        self.fields['num_object'] = None
+        self.fields['num_object_degraded'] = None
+        self.fields['num_object_misplaced'] = None
+        self.fields['num_object_unfound'] = None
+        self.fields['num_bytes'] = None
+        self.fields['num_mds_up'] = None
+        self.fields['num_mds_in'] = None
+        self.fields['num_mds_failed'] = None
+        self.fields['mds_epoch'] = None
+
+
+class CephClusterAgent(MetricsAgent):
     measurement = 'ceph_cluster'
 
     def _collect_data(self):
         # process data and save to 'self.data'
-        obj_api = DB_API(self._ceph_context)
+        obj_api = ClusterAPI(self._module_inst)
         cluster_id = obj_api.get_cluster_id()
 
-        c_data = Ceph_Cluster()
+        c_data = CephCluster()
+        cluster_state = obj_api.get_health_status()
         c_data.tags['cluster_id'] = cluster_id
+        c_data.fields['cluster_health'] = cluster_state
         c_data.fields['agenthost'] = socket.gethostname()
         c_data.tags['agenthost_domain_id'] = \
-            "%s_%s" % (cluster_id, c_data.fields['agenthost'])
+            '%s_%s' % (cluster_id, c_data.fields['agenthost'])
         c_data.fields['osd_epoch'] = obj_api.get_osd_epoch()
         c_data.fields['num_mon'] = len(obj_api.get_mons())
         c_data.fields['num_mon_quorum'] = \

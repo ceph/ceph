@@ -2,16 +2,35 @@ from __future__ import absolute_import
 
 import socket
 
-from . import MetricsAgent
-from ...common.db import DB_API
-from ...models.metrics.dp import SAI_Host
+from . import AGENT_VERSION, MetricsAgent, MetricsField
+from ...common.clusterdata import ClusterAPI
 
 
-class SAI_HostAgent(MetricsAgent):
+class SAIHostFields(MetricsField):
+    """ SAI Host structure """
+    measurement = 'sai_host'
+
+    def __init__(self):
+        super(SAIHostFields, self).__init__()
+        self.tags['domain_id'] = None
+        self.fields['agenthost'] = None
+        self.tags['agenthost_domain_id'] = None
+        self.fields['cluster_domain_id'] = None
+        self.fields['name'] = None
+        self.fields['host_ip'] = None
+        self.fields['host_ipv6'] = None
+        self.fields['host_uuid'] = None
+        self.fields['os_type'] = str('ceph')
+        self.fields['os_name'] = None
+        self.fields['os_version'] = None
+        self.fields['agent_version'] = str(AGENT_VERSION)
+
+
+class SAIHostAgent(MetricsAgent):
     measurement = 'sai_host'
 
     def _collect_data(self):
-        db = DB_API(self._ceph_context)
+        db = ClusterAPI(self._module_inst)
         cluster_id = db.get_cluster_id()
 
         hosts = set()
@@ -24,18 +43,18 @@ class SAI_HostAgent(MetricsAgent):
             osd_addr = _data['public_addr'].split(':')[0]
             osd_metadata = db.get_osd_metadata(osd_id)
             if osd_metadata:
-                osd_host = osd_metadata.get("hostname", "None")
+                osd_host = osd_metadata.get('hostname', 'None')
                 if osd_host not in hosts:
-                    data = SAI_Host()
+                    data = SAIHostFields()
                     data.fields['agenthost'] = str(socket.gethostname())
                     data.tags['agenthost_domain_id'] = \
-                        str("%s_%s" % (cluster_id, data.fields['agenthost']))
+                        str('%s_%s' % (cluster_id, data.fields['agenthost']))
                     data.tags['domain_id'] = \
-                        str("%s_%s" % (cluster_id, osd_host))
+                        str('%s_%s' % (cluster_id, osd_host))
                     data.fields['cluster_domain_id'] = str(cluster_id)
                     data.fields['host_ip'] = osd_addr
                     data.fields['host_uuid'] = \
-                        str("%s_%s" % (cluster_id, osd_host))
+                        str('%s_%s' % (cluster_id, osd_host))
                     data.fields['os_name'] = \
                         osd_metadata.get('ceph_release', '')
                     data.fields['os_version'] = \
@@ -49,16 +68,16 @@ class SAI_HostAgent(MetricsAgent):
             mon_host = _data['name']
             mon_addr = _data['public_addr'].split(':')[0]
             if mon_host not in hosts:
-                data = SAI_Host()
+                data = SAIHostFields()
                 data.fields['agenthost'] = str(socket.gethostname())
                 data.tags['agenthost_domain_id'] = \
-                    str("%s_%s" % (cluster_id, data.fields['agenthost']))
+                    str('%s_%s' % (cluster_id, data.fields['agenthost']))
                 data.tags['domain_id'] = \
-                    str("%s_%s" % (cluster_id, mon_host))
+                    str('%s_%s' % (cluster_id, mon_host))
                 data.fields['cluster_domain_id'] = str(cluster_id)
                 data.fields['host_ip'] = mon_addr
                 data.fields['host_uuid'] = \
-                    str("%s_%s" % (cluster_id, mon_host))
+                    str('%s_%s' % (cluster_id, mon_host))
                 data.fields['name'] = mon_host
                 hosts.add((mon_host, mon_addr))
                 self.data.append(data)
@@ -71,16 +90,16 @@ class SAI_HostAgent(MetricsAgent):
                 mds_addr = mds_data.get('addr').split(':')[0]
                 mds_host = mds_data.get('name')
                 if mds_host not in hosts:
-                    data = SAI_Host()
+                    data = SAIHostFields()
                     data.fields['agenthost'] = str(socket.gethostname())
                     data.tags['agenthost_domain_id'] = \
-                        str("%s_%s" % (cluster_id, data.fields['agenthost']))
+                        str('%s_%s' % (cluster_id, data.fields['agenthost']))
                     data.tags['domain_id'] = \
-                        str("%s_%s" % (cluster_id, mds_host))
+                        str('%s_%s' % (cluster_id, mds_host))
                     data.fields['cluster_domain_id'] = str(cluster_id)
                     data.fields['host_ip'] = mds_addr
                     data.fields['host_uuid'] = \
-                        str("%s_%s" % (cluster_id, mds_host))
+                        str('%s_%s' % (cluster_id, mds_host))
                     data.fields['name'] = mds_host
                     hosts.add((mds_host, mds_addr))
                     self.data.append(data)

@@ -11,15 +11,15 @@ from mgr_module import CommandResult
 
 
 RBD_FEATURES_NAME_MAPPING = {
-    rbd.RBD_FEATURE_LAYERING: "layering",
-    rbd.RBD_FEATURE_STRIPINGV2: "striping",
-    rbd.RBD_FEATURE_EXCLUSIVE_LOCK: "exclusive-lock",
-    rbd.RBD_FEATURE_OBJECT_MAP: "object-map",
-    rbd.RBD_FEATURE_FAST_DIFF: "fast-diff",
-    rbd.RBD_FEATURE_DEEP_FLATTEN: "deep-flatten",
-    rbd.RBD_FEATURE_JOURNALING: "journaling",
-    rbd.RBD_FEATURE_DATA_POOL: "data-pool",
-    rbd.RBD_FEATURE_OPERATIONS: "operations",
+    rbd.RBD_FEATURE_LAYERING: 'layering',
+    rbd.RBD_FEATURE_STRIPINGV2: 'striping',
+    rbd.RBD_FEATURE_EXCLUSIVE_LOCK: 'exclusive-lock',
+    rbd.RBD_FEATURE_OBJECT_MAP: 'object-map',
+    rbd.RBD_FEATURE_FAST_DIFF: 'fast-diff',
+    rbd.RBD_FEATURE_DEEP_FLATTEN: 'deep-flatten',
+    rbd.RBD_FEATURE_JOURNALING: 'journaling',
+    rbd.RBD_FEATURE_DATA_POOL: 'data-pool',
+    rbd.RBD_FEATURE_OPERATIONS: 'operations',
 }
 
 
@@ -33,14 +33,15 @@ def differentiate(data1, data2):
     return (data2[1] - data1[1]) / float(data2[0] - data1[0])
 
 
-class DB_API(object):
+class ClusterAPI(object):
     def __init__(self, module_obj):
         self.module = module_obj
 
-    def _format_bitmask(self, features):
+    @staticmethod
+    def format_bitmask(features):
         """
         Formats the bitmask:
-        >>> _format_bitmask(45)
+        >>> format_bitmask(45)
         ['deep-flatten', 'exclusive-lock', 'layering', 'object-map']
         """
         names = [val for key, val in RBD_FEATURES_NAME_MAPPING.items()
@@ -79,7 +80,7 @@ class DB_API(object):
             assert r == 0
 
         ioctx = self.module.rados.open_ioctx(pool_name)
-        return (ioctx)
+        return ioctx
 
     @classmethod
     def _rbd_disk_usage(cls, image, snaps, whole_object=True):
@@ -111,12 +112,12 @@ class DB_API(object):
             stat['pool_name'] = pool_name
             features = img.features()
             stat['features'] = features
-            stat['features_name'] = self._format_bitmask(features)
+            stat['features_name'] = self.format_bitmask(features)
 
             # the following keys are deprecated
             del stat['parent_pool']
             del stat['parent_name']
-            stat['timestamp'] = "{}Z".format(img.create_timestamp()
+            stat['timestamp'] = '{}Z'.format(img.create_timestamp()
                                              .isoformat())
             stat['stripe_count'] = img.stripe_count()
             stat['stripe_unit'] = img.stripe_unit()
@@ -134,7 +135,7 @@ class DB_API(object):
             # snapshots
             stat['snapshots'] = []
             for snap in img.list_snaps():
-                snap['timestamp'] = "{}Z".format(
+                snap['timestamp'] = '{}Z'.format(
                     img.get_snap_timestamp(snap['id']).isoformat())
                 snap['is_protected'] = img.is_protected_snap(snap['name'])
                 snap['used_bytes'] = None
@@ -195,7 +196,7 @@ class DB_API(object):
         return self.module.get('df').get('stats', {})
 
     def get_object_pg_info(self, pool_name, object_name):
-        result = CommandResult("")
+        result = CommandResult('')
         data_jaon = {}
         self.module.send_command(
             result, 'mon', '', json.dumps({
@@ -209,10 +210,10 @@ class DB_API(object):
             if outb:
                 data_jaon = json.loads(outb)
             else:
-                self.module.log.error("unable to get %s pg info" % pool_name)
+                self.module.log.error('unable to get %s pg info' % pool_name)
         except Exception as e:
             self.module.log.error(
-                "unable to get %s pg, error: %s" % (pool_name, str(e)))
+                'unable to get %s pg, error: %s' % (pool_name, str(e)))
         return data_jaon
 
     def get_rbd_info(self, pool_name, image_name):
@@ -320,6 +321,13 @@ class DB_API(object):
         health = json.loads(self.module.get('health')['json'])
         return health.get('status')
 
+    def get_health_checks(self):
+        health = json.loads(self.module.get('health')['json'])
+        if health.get('checks'):
+            return json.dumps(health.get('checks'))
+        else:
+            return ''
+
     def get_mons(self):
         return self.module.get('mon_map').get('mons', [])
 
@@ -328,67 +336,63 @@ class DB_API(object):
         return mon_status
 
     def get_osd_smart(self, osd_id, device_id=None):
-        result = CommandResult("")
-        data_jaon = {}
-        if str(osd_id).isdigit():
-            osd_name = "osd.%s" % osd_id
-        else:
-            osd_name = osd_id
-        if osd_name[0:4] != 'osd.':
-            raise Exception('not a valid <osd.NNN> id or number')
-
-        if device_id:
-            self.module.send_command(result, 'osd', str(osd_name[4:]), json.dumps({
-                'prefix': 'smart',
-                'format': 'json',
-                'devid': device_id,
-            }), '')
-        else:
-            self.module.send_command(result, 'osd', str(osd_name[4:]), json.dumps({
-                'prefix': 'smart',
-                'format': 'json',
-            }), '')
-        ret, outb, outs = result.wait()
-        try:
-            data_jaon = json.loads(outb)
-        except Exception as e:
-            self.module.log.error("error: %s" % str(e))
-        return data_jaon
+        osd_devices = []
+        osd_smart = {}
+        devices = self.module.get('devices')
+        for dev in devices.get('devices', []):
+            osd = ""
+            daemons = dev.get('daemons', [])
+            for daemon in daemons:
+                if daemon[4:] != str(osd_id):
+                    continue
+                osd = daemon
+            if not osd:
+                continue
+            if dev.get('devid'):
+                osd_devices.append(dev.get('devid'))
+        for dev_id in osd_devices:
+            if device_id and dev_id != device_id:
+                continue
+            smart_data = self.get_device_health(dev_id)
+            if smart_data and smart_data.values():
+                dev_smart = smart_data.values()[0]
+                if dev_smart:
+                    osd_smart[dev_id] = dev_smart
+        return osd_smart
 
     def get_device_health(self, device_id):
         res = {}
         try:
             with self._open_connection() as ioctx:
                 with rados.ReadOpCtx() as op:
-                    iter, ret = ioctx.get_omap_vals(op, "", '', 500)
+                    iter, ret = ioctx.get_omap_vals(op, '', '', 500)
                     assert ret == 0
                     try:
                         ioctx.operate_read_op(op, device_id)
                         for key, value in list(iter):
+                            v = None
                             try:
                                 v = json.loads(value)
-                            except:
-                                self.log.error(
+                            except ValueError:
+                                self.module.log.error(
                                     'unable to parse value for %s: "%s"' % (key, value))
-                                pass
                             res[key] = v
-                    except:
+                    except IOError:
                         pass
-        except:
+        except IOError:
             return {}
         return res
 
     def get_osd_hostname(self, osd_id):
-        result = ""
+        result = ''
         osd_metadata = self.get_osd_metadata(osd_id)
         if osd_metadata:
-            osd_host = osd_metadata.get("hostname", "None")
+            osd_host = osd_metadata.get('hostname', 'None')
             result = osd_host
         return result
 
     def get_osd_device_id(self, osd_id):
         result = {}
-        osdid = None
         if not str(osd_id).isdigit():
             if str(osd_id)[0:4] == 'osd.':
                 osdid = osd_id[4:]
@@ -396,18 +400,20 @@ class DB_API(object):
                 raise Exception('not a valid <osd.NNN> id or number')
         else:
             osdid = osd_id
-        osd_metadata = self.get_osd_metadata(osd_id)
+        osd_metadata = self.get_osd_metadata(osdid)
         if osd_metadata:
-            osd_device_ids = osd_metadata.get("device_ids", "")
+            osd_device_ids = osd_metadata.get('device_ids', '')
             if osd_device_ids:
                 result = {}
-                for osd_device_id in osd_device_ids.split(","):
-                    if str(osd_device_id).split('=') >= 2:
+                for osd_device_id in osd_device_ids.split(','):
+                    dev_name = ''
+                    if len(str(osd_device_id).split('=')) >= 2:
                         dev_name = osd_device_id.split('=')[0]
                         dev_id = osd_device_id.split('=')[1]
                     else:
                         dev_id = osd_device_id
-                    result[dev_name] = {'dev_id': dev_id}
+                    if dev_name:
+                        result[dev_name] = {'dev_id': dev_id}
         return result
 
     def get_file_systems(self):
@@ -423,7 +429,7 @@ class DB_API(object):
         return self.module.get(data_name)
 
     def set_device_life_expectancy(self, device_id, from_date, to_date=None):
-        result = CommandResult("")
+        result = CommandResult('')
 
         if to_date is None:
             self.module.send_command(result, 'mon', '', json.dumps({
@@ -441,11 +447,11 @@ class DB_API(object):
         ret, outb, outs = result.wait()
         if ret != 0:
             self.module.log.error(
-                "failed to set device life expectancy, %s" % outs)
+                'failed to set device life expectancy, %s' % outs)
         return ret
 
     def reset_device_life_expectancy(self, device_id):
-        result = CommandResult("")
+        result = CommandResult('')
         self.module.send_command(result, 'mon', '', json.dumps({
             'prefix': 'device rm-life-expectancy',
             'devid': device_id
@@ -453,7 +459,7 @@ class DB_API(object):
         ret, outb, outs = result.wait()
         if ret != 0:
             self.module.log.error(
-                "failed to reset device life expectancy, %s" % outs)
+                'failed to reset device life expectancy, %s' % outs)
         return ret
 
     def get_server(self, hostname):

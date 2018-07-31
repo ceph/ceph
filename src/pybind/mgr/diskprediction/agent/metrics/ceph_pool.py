@@ -2,29 +2,45 @@ from __future__ import absolute_import
 
 import socket
 
-from . import MetricsAgent
-from ...common.db import DB_API
-from ...models.metrics.dp import Ceph_Pool
+from . import MetricsAgent, MetricsField
+from ...common.clusterdata import ClusterAPI
 
 
-class CephPool_Agent(MetricsAgent):
+class CephPool(MetricsField):
+    """ Ceph pool structure """
+    measurement = 'ceph_pool'
+
+    def __init__(self):
+        super(CephPool, self).__init__()
+        self.tags['cluster_id'] = None
+        self.tags['pool_id'] = None
+        self.fields['agenthost'] = None
+        self.tags['agenthost_domain_id'] = None
+        self.fields['bytes_used'] = None
+        self.fields['max_avail'] = None
+        self.fields['objects'] = None
+        self.fields['wr_bytes'] = None
+        self.fields['dirty'] = None
+        self.fields['rd_bytes'] = None
+        self.fields['raw_bytes_used'] = None
+
+
+class CephPoolAgent(MetricsAgent):
     measurement = 'ceph_pool'
 
     def _collect_data(self):
         # process data and save to 'self.data'
-        obj_api = DB_API(self._ceph_context)
+        obj_api = ClusterAPI(self._module_inst)
         df_data = obj_api.get('df')
         cluster_id = obj_api.get_cluster_id()
-        for pool in df_data.get("pools", []):
-            d_pool = Ceph_Pool()
-            p_name = pool.get("name")
-            p_id = pool.get("id")
+        for pool in df_data.get('pools', []):
+            d_pool = CephPool()
+            p_id = pool.get('id')
             d_pool.tags['cluster_id'] = cluster_id
             d_pool.tags['pool_id'] = p_id
             d_pool.fields['agenthost'] = socket.gethostname()
             d_pool.tags['agenthost_domain_id'] = \
-                "%s_%s" % (cluster_id, d_pool.fields['agenthost'])
-            d_pool.fields['pool_name'] = p_name
+                '%s_%s' % (cluster_id, d_pool.fields['agenthost'])
             d_pool.fields['bytes_used'] = \
                 pool.get('stats', {}).get('bytes_used', 0)
             d_pool.fields['max_avail'] = \

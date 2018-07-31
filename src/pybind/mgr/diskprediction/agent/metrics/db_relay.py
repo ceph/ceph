@@ -2,37 +2,105 @@ from __future__ import absolute_import
 
 import socket
 
-from . import MetricsAgent
+from . import MetricsAgent, MetricsField
+from ...common import get_human_readable
+from ...common.clusterdata import ClusterAPI
 from ...common.cypher import CypherOP, NodeInfo
-from ...common.db import DB_API
-from ...models.metrics.dp import DB_Relay
-from ...models.relation.mgrdp import MGRDpCeph, MGRDpMon, MGRDpOsd, \
-    MGRDpMds, MGRDpPG, MGRDpDisk, MGRDpRBD
 
 
-def get_human_readable(size, precision=2):
-    suffixes = ['B', 'KB', 'MB', 'GB', 'TB']
-    suffix_index = 0
-    while size > 1024 and suffix_index < 4:
-        # increment the index of the suffix
-        suffix_index += 1
-        # apply the division
-        size = size/1000.0
-    return "%.*d %s" % (precision, size, suffixes[suffix_index])
+class BaseDP(object):
+    """ basic diskprediction structure """
+    _fields = []
+
+    def __init__(self, *args, **kwargs):
+        if len(args) > len(self._fields):
+            raise TypeError('Expected {} arguments'.format(len(self._fields)))
+
+        for name, value in zip(self._fields, args):
+            setattr(self, name, value)
+
+        for name in self._fields[len(args):]:
+            setattr(self, name, kwargs.pop(name))
+
+        if kwargs:
+            raise TypeError('Invalid argument(s): {}'.format(','.join(kwargs)))
 
 
-class DB_RelayAgent(MetricsAgent):
+class MGRDpCeph(BaseDP):
+    _fields = [
+        'fsid', 'health', 'max_osd', 'size',
+        'avail_size', 'raw_used', 'raw_used_percent'
+    ]
+
+
+class MGRDpHost(BaseDP):
+    _fields = ['fsid', 'host', 'ipaddr']
+
+
+class MGRDpMon(BaseDP):
+    _fields = ['fsid', 'host', 'ipaddr']
+
+
+class MGRDpOsd(BaseDP):
+    _fields = [
+        'fsid', 'host', '_id', 'uuid', 'up', '_in', 'weight', 'public_addr',
+        'cluster_addr', 'heartbeat_back_addr', 'heartbeat_front_addr',
+        'state', 'backend_filestore_dev_node', 'backend_filestore_partition_path',
+        'ceph_release', 'devices', 'osd_data', 'osd_journal', 'rotational'
+    ]
+
+
+class MGRDpMds(BaseDP):
+    _fields = ['fsid', 'host', 'ipaddr']
+
+
+class MGRDpPool(BaseDP):
+    _fields = [
+        'fsid', 'size', 'pool_name', 'pool_id', 'type', 'min_size',
+        'pg_num', 'pgp_num', 'created_time', 'used', 'pgids'
+    ]
+
+
+class MGRDpRBD(BaseDP):
+    _fields = ['fsid', '_id', 'name', 'pool_name', 'size', 'pgids']
+
+
+class MGRDpPG(BaseDP):
+    _fields = [
+        'fsid', 'pgid', 'up_osds', 'acting_osds', 'state',
+        'objects', 'degraded', 'misplaced', 'unfound'
+    ]
+
+
+class MGRDpDisk(BaseDP):
+    _fields = ['host_domain_id', 'model', 'size']
+
+
+class DBRelay(MetricsField):
+    """ DB Relay structure """
+    measurement = 'db_relay'
+
+    def __init__(self):
+        super(DBRelay, self).__init__()
+        self.fields['agenthost'] = None
+        self.tags['agenthost_domain_id'] = None
+        self.tags['dc_tag'] = 'na'
+        self.tags['host'] = None
+        self.fields['cmd'] = None
+
+
+class DBRelayAgent(MetricsAgent):
     measurement = 'db_relay'
 
     def __init__(self, *args, **kwargs):
-        super(DB_RelayAgent, self).__init__(*args, **kwargs)
+        super(DBRelayAgent, self).__init__(*args, **kwargs)
         self._cluster_node = self._get_cluster_node()
         self._cluster_id = self._cluster_node.domain_id
         self._host_nodes = dict()
         self._osd_nodes = dict()
 
     def _get_cluster_node(self):
-        db = DB_API(self._ceph_context)
+        db = ClusterAPI(self._module_inst)
         cluster_id = db.get_cluster_id()
         dp_cluster = MGRDpCeph(
             fsid=cluster_id,
@@ -57,7 +125,7 @@ class DB_RelayAgent(MetricsAgent):
         cluster_id = self._cluster_id
         cluster_node = self._cluster_node
 
-        db = DB_API(self._ceph_context)
+        db = ClusterAPI(self._module_inst)
 
         hosts = set()
 
@@ -94,13 +162,13 @@ class DB_RelayAgent(MetricsAgent):
 
         # create node relation
         for tp in hosts:
-            data = DB_Relay()
+            data = DBRelay()
             host = tp[0]
             self._host_nodes[host] = None
 
             host_node = NodeInfo(
                 label='VMHost',
-                domain_id="{}_{}".format(cluster_id, host),
+                domain_id='{}_{}'.format(cluster_id, host),
                 name=host,
                 meta={}
             )
@@ -114,7 +182,7 @@ class DB_RelayAgent(MetricsAgent):
             cluster_host = socket.gethostname()
             data.fields['agenthost'] = cluster_host
             data.tags['agenthost_domain_id'] = \
-                str("%s_%s" % (cluster_id, data.fields['agenthost']))
+                str('%s_%s' % (cluster_id, data.fields['agenthost']))
             data.tags['host'] = cluster_host
             data.fields['cmd'] = str(cypher_cmd)
             self._host_nodes[host] = host_node
@@ -123,7 +191,7 @@ class DB_RelayAgent(MetricsAgent):
     def _host_contains_mon(self):
         cluster_id = self._cluster_id
 
-        db = DB_API(self._ceph_context)
+        db = ClusterAPI(self._module_inst)
         mons = db.get_mons()
         for mon in mons:
             mon_name = mon.get('name', '')
@@ -133,7 +201,7 @@ class DB_RelayAgent(MetricsAgent):
                     continue
 
                 host_node = self._host_nodes[hostname]
-                data = DB_Relay()
+                data = DBRelay()
                 dp_mon = MGRDpMon(
                     fsid=cluster_id,
                     host=mon_name,
@@ -143,7 +211,7 @@ class DB_RelayAgent(MetricsAgent):
                 # create mon node
                 mon_node = NodeInfo(
                     label='CephMon',
-                    domain_id="{}.mon.{}".format(cluster_id, mon_name),
+                    domain_id='{}.mon.{}'.format(cluster_id, mon_name),
                     name=mon_name,
                     meta=dp_mon.__dict__
                 )
@@ -157,7 +225,7 @@ class DB_RelayAgent(MetricsAgent):
                 cluster_host = socket.gethostname()
                 data.fields['agenthost'] = cluster_host
                 data.tags['agenthost_domain_id'] = \
-                    str("%s_%s" % (cluster_id, data.fields['agenthost']))
+                    str('%s_%s' % (cluster_id, data.fields['agenthost']))
                 data.tags['host'] = cluster_host
                 data.fields['cmd'] = str(cypher_cmd)
                 self.data.append(data)
@@ -165,7 +233,7 @@ class DB_RelayAgent(MetricsAgent):
     def _host_contains_osd(self):
         cluster_id = self._cluster_id
 
-        db = DB_API(self._ceph_context)
+        db = ClusterAPI(self._module_inst)
         osd_data = db.get_osd_data()
         osd_journal = db.get_osd_journal()
         for _data in db.get_osds():
@@ -183,7 +251,7 @@ class DB_RelayAgent(MetricsAgent):
             osd_state = _data['state']
             osd_metadata = db.get_osd_metadata(osd_id)
             if osd_metadata:
-                data = DB_Relay()
+                data = DBRelay()
                 osd_host = osd_metadata['hostname']
                 osd_ceph_version = osd_metadata['ceph_version']
                 osd_rotational = osd_metadata['rotational']
@@ -242,7 +310,7 @@ class DB_RelayAgent(MetricsAgent):
                     # create osd node
                     osd_node = NodeInfo(
                         label='CephOsd',
-                        domain_id="{}.osd.{}".format(cluster_id, osd_id),
+                        domain_id='{}.osd.{}'.format(cluster_id, osd_id),
                         name='OSD.{}'.format(osd_id),
                         meta=dp_osd.__dict__
                     )
@@ -255,7 +323,7 @@ class DB_RelayAgent(MetricsAgent):
                     cluster_host = socket.gethostname()
                     data.fields['agenthost'] = cluster_host
                     data.tags['agenthost_domain_id'] = \
-                        str("%s_%s" % (cluster_id, data.fields['agenthost']))
+                        str('%s_%s' % (cluster_id, data.fields['agenthost']))
                     data.tags['host'] = cluster_host
                     data.fields['cmd'] = str(cypher_cmd)
                     self._osd_nodes[str(osd_id)] = osd_node
@@ -264,7 +332,7 @@ class DB_RelayAgent(MetricsAgent):
     def _host_contains_mds(self):
         cluster_id = self._cluster_id
 
-        db = DB_API(self._ceph_context)
+        db = ClusterAPI(self._module_inst)
         file_systems = db.get_file_systems()
 
         for _data in file_systems:
@@ -279,7 +347,7 @@ class DB_RelayAgent(MetricsAgent):
                     if hostname != mds_host:
                         continue
 
-                    data = DB_Relay()
+                    data = DBRelay()
                     host_node = self._host_nodes[hostname]
                     dp_mds = MGRDpMds(
                         fsid=cluster_id,
@@ -290,7 +358,7 @@ class DB_RelayAgent(MetricsAgent):
                     # create osd node
                     mds_node = NodeInfo(
                         label='CephMds',
-                        domain_id="{}.mds.{}".format(cluster_id, mds_gid),
+                        domain_id='{}.mds.{}'.format(cluster_id, mds_gid),
                         name='MDS.{}'.format(mds_gid),
                         meta=dp_mds.__dict__
                     )
@@ -303,14 +371,14 @@ class DB_RelayAgent(MetricsAgent):
                     cluster_host = socket.gethostname()
                     data.fields['agenthost'] = cluster_host
                     data.tags['agenthost_domain_id'] = \
-                        str("%s_%s" % (cluster_id, data.fields['agenthost']))
+                        str('%s_%s' % (cluster_id, data.fields['agenthost']))
                     data.tags['host'] = cluster_host
                     data.fields['cmd'] = str(cypher_cmd)
                     self.data.append(data)
 
     def _osd_contains_pg(self):
         cluster_id = self._cluster_id
-        db = DB_API(self._ceph_context)
+        db = ClusterAPI(self._module_inst)
 
         pg_stats = db.get_pg_stats()
         for osd_data in db.get_osds():
@@ -331,7 +399,7 @@ class DB_RelayAgent(MetricsAgent):
                     if str(osd_id) not in self._osd_nodes:
                         continue
                     osd_node = self._osd_nodes[str(osd_id)]
-                    data = DB_Relay()
+                    data = DBRelay()
                     dp_pg = MGRDpPG(
                         fsid=cluster_id,
                         pgid=pgid,
@@ -347,7 +415,7 @@ class DB_RelayAgent(MetricsAgent):
                     # create pg node
                     pg_node = NodeInfo(
                         label='CephPG',
-                        domain_id="{}.pg.{}".format(cluster_id, pgid),
+                        domain_id='{}.pg.{}'.format(cluster_id, pgid),
                         name='PG.{}'.format(pgid),
                         meta=dp_pg.__dict__
                     )
@@ -361,14 +429,14 @@ class DB_RelayAgent(MetricsAgent):
                     cluster_host = socket.gethostname()
                     data.fields['agenthost'] = cluster_host
                     data.tags['agenthost_domain_id'] = \
-                        str("%s_%s" % (cluster_id, data.fields['agenthost']))
+                        str('%s_%s' % (cluster_id, data.fields['agenthost']))
                     data.tags['host'] = cluster_host
                     data.fields['cmd'] = str(cypher_cmd)
                     self.data.append(data)
 
     def _osd_contains_disk(self):
         cluster_id = self._cluster_id
-        db = DB_API(self._ceph_context)
+        db = ClusterAPI(self._module_inst)
 
         osd_metadata = db.get_osd_metadata()
         for osd_id in osd_metadata:
@@ -382,15 +450,15 @@ class DB_RelayAgent(MetricsAgent):
             hostname = db.get_osd_hostname(osd_id)
             osd_node = self._osd_nodes[str(osd_id)]
             for dev_name, s_val in osds_smart.iteritems():
-                data = DB_Relay()
-                serial_number = s_val.get("serial_number")
-                wwn = s_val.get("wwn", {})
+                data = DBRelay()
+                serial_number = s_val.get('serial_number')
+                wwn = s_val.get('wwn', {})
                 wwpn = ''
                 if wwn:
                     wwpn = '%06X%X' % (wwn.get('oui', 0), wwn.get('id', 0))
                     for k in wwn.keys():
                         if k in ['naa', 't10', 'eui', 'iqn']:
-                            wwpn = ("%X%s" % (wwn[k], wwpn)).lower()
+                            wwpn = ('%X%s' % (wwn[k], wwpn)).lower()
                             break
 
                 if wwpn:
@@ -408,7 +476,7 @@ class DB_RelayAgent(MetricsAgent):
                 except ValueError:
                     user_capacity = 0
                 dp_disk = MGRDpDisk(
-                    host_domain_id= "{}_{}".format(cluster_id, hostname),
+                    host_domain_id='{}_{}'.format(cluster_id, hostname),
                     model=s_val.get('model_name', ''),
                     size=get_human_readable(
                         int(user_capacity), 0)
@@ -431,16 +499,16 @@ class DB_RelayAgent(MetricsAgent):
                 cluster_host = socket.gethostname()
                 data.fields['agenthost'] = cluster_host
                 data.tags['agenthost_domain_id'] = \
-                    str("%s_%s" % (cluster_id, data.fields['agenthost']))
+                    str('%s_%s' % (cluster_id, data.fields['agenthost']))
                 data.tags['host'] = cluster_host
                 data.fields['cmd'] = str(cypher_cmd)
                 self.data.append(data)
 
                 # host node and disk node relationship
-                data = DB_Relay()
+                data = DBRelay()
                 host_node = NodeInfo(
                     label='VMHost',
-                    domain_id="{}_{}".format(cluster_id, hostname),
+                    domain_id='{}_{}'.format(cluster_id, hostname),
                     name=hostname,
                     meta={}
                 )
@@ -453,7 +521,7 @@ class DB_RelayAgent(MetricsAgent):
                 )
                 data.fields['agenthost'] = cluster_host
                 data.tags['agenthost_domain_id'] = \
-                    str("%s_%s" % (cluster_id, data.fields['agenthost']))
+                    str('%s_%s' % (cluster_id, data.fields['agenthost']))
                 data.tags['host'] = cluster_host
                 data.fields['cmd'] = str(cypher_cmd)
                 self.data.append(data)
@@ -461,7 +529,7 @@ class DB_RelayAgent(MetricsAgent):
 
     def _rbd_contains_pg(self):
         cluster_id = self._cluster_id
-        db = DB_API(self._ceph_context)
+        db = ClusterAPI(self._module_inst)
 
         pg_stats = db.get_pg_stats()
         pools = db.get_osd_pools()
@@ -482,7 +550,7 @@ class DB_RelayAgent(MetricsAgent):
                         pgids.append(pgid)
 
                 # RBD info
-                dp_rbd=MGRDpRBD(
+                dp_rbd = MGRDpRBD(
                     fsid=cluster_id,
                     _id=rbd_id,
                     name=image_name,
@@ -492,9 +560,9 @@ class DB_RelayAgent(MetricsAgent):
                 )
 
                 # create rbd node
-                rbd_node=NodeInfo(
+                rbd_node = NodeInfo(
                     label='CephRBD',
-                    domain_id="{}.rbd.{}".format(cluster_id, image_name),
+                    domain_id='{}.rbd.{}'.format(cluster_id, image_name),
                     name=image_name,
                     meta=dp_rbd.__dict__
                 )
@@ -513,7 +581,7 @@ class DB_RelayAgent(MetricsAgent):
                     num_objects_misplaced = stat_sum.get('num_objects_misplaced')
                     num_objects_unfound = stat_sum.get('num_objects_unfound')
 
-                    data = DB_Relay()
+                    data = DBRelay()
                     dp_pg = MGRDpPG(
                         fsid=cluster_id,
                         pgid=pgid,
@@ -529,7 +597,7 @@ class DB_RelayAgent(MetricsAgent):
                     # create pg node
                     pg_node = NodeInfo(
                         label='CephPG',
-                        domain_id="{}.pg.{}".format(cluster_id, pgid),
+                        domain_id='{}.pg.{}'.format(cluster_id, pgid),
                         name='PG.{}'.format(pgid),
                         meta=dp_pg.__dict__
                     )
@@ -543,13 +611,13 @@ class DB_RelayAgent(MetricsAgent):
                     cluster_host = socket.gethostname()
                     data.fields['agenthost'] = cluster_host
                     data.tags['agenthost_domain_id'] = \
-                        str("%s_%s" % (cluster_id, data.fields['agenthost']))
+                        str('%s_%s' % (cluster_id, data.fields['agenthost']))
                     data.tags['host'] = cluster_host
                     data.fields['cmd'] = str(cypher_cmd)
                     self.data.append(data)
 
     def _collect_data(self):
-        if not self._ceph_context:
+        if not self._module_inst:
             return
 
         self._cluster_contains_host()

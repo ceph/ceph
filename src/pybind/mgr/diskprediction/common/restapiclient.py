@@ -11,7 +11,7 @@ SUPPORTED_METHOD = ['GET', 'POST']
 class DummyResonse:
     def __init__(self):
         self.json = {}
-        self.content = "DummyResponse"
+        self.content = 'DummyResponse'
         self.status_code = BAD_REQUEST
 
 
@@ -21,23 +21,25 @@ def gen_configuration(**kwargs):
         'user': kwargs.get('user'),
         'password': kwargs.get('password'),
         'port': kwargs.get('port', 8086),
-        'dbname': 'telegraf'}
+        'dbname': 'telegraf',
+        'mgr_inst': kwargs.get('mgr_inst', None)}
     return configuration
 
 
-class RestAPI:
+class RestApiClient:
 
     def __init__(self, configuration):
         self.auth = None
         self.url = None
+        self.host = configuration.get('host')
+        self.port = configuration.get('port')
+        self.dbname = configuration.get('dbname')
         if configuration.get('user') and configuration.get('password'):
             self.auth = HTTPBasicAuth(
                 configuration.get('user'),
                 configuration.get('password'))
-        if configuration.get('host') and configuration.get('port'):
-            self.url = "https://{0}:{1}".format(
-                configuration.get('host'),
-                configuration.get('port'))
+        if self.host and self.port:
+            self.url = self._base_url()
 
     def __nonzero__(self):
         if self.auth and self.url:
@@ -45,17 +47,37 @@ class RestAPI:
         else:
             return False
 
+    def _base_url(self):
+        return 'https://{}:{}'.format(self.host, self.port)
+
     def test_connection(self):
         kwargs = {
             'auth': self.auth,
             'params': {
-                "q": "SHOW DATABASES"},
-            'headers': {"Accept": "application/json"}
+                'q': 'SHOW DATABASES'},
+            'headers': {'Accept': 'application/json'}
         }
-        url = "{0}/query".format(self.url)
+        url = '{0}/query'.format(self.url)
         return self.send_data('GET', url=url, verify=False, **kwargs)
 
-    def send_data(self, method, url=None, verify=None, **kwargs):
+    def send_info(self, *args, **kwargs):
+        kwargs['auth'] = self.auth
+        kwargs['headers'] = \
+            {'Content-Type': 'application/x-www-form-urlencoded'}
+        url = '{}/write?db={}'.format(self._base_url(), self.dbname)
+        return self.send_data('POST', url=url, **kwargs)
+
+    def query_info(self, sql):
+        kwargs = {
+            'auth': self.auth,
+            'headers': {'Accept': 'application/json'},
+            'params': {'db': self.dbname, 'q': sql, 'epoch': 'ns'}
+        }
+        url = '{0}/query'.format(self._base_url())
+        return self.send_data('GET', url=url, **kwargs)
+
+    @staticmethod
+    def send_data(method, url=None, verify=None, **kwargs):
         if method.upper() not in SUPPORTED_METHOD:
             return None
 
