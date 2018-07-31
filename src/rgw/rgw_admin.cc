@@ -137,6 +137,7 @@ void usage()
   cout << "  bucket sync disable        disable bucket sync\n";
   cout << "  bucket sync enable         enable bucket sync\n";
   cout << "  bucket radoslist           list rados objects backing bucket's objects\n";
+  cout << "  bucket recalc-stats        recalculate bucket stats\n";
   cout << "  bi get                     retrieve bucket index object entries\n";
   cout << "  bi put                     store bucket index object entries\n";
   cout << "  bi list                    list raw bucket index entries\n";
@@ -600,6 +601,7 @@ enum class OPT {
   BUCKET_RESHARD,
   BUCKET_CHOWN,
   BUCKET_RADOS_LIST,
+  BUCKET_RECALC_STATS,
   POLICY,
   POOL_ADD,
   POOL_RM,
@@ -798,6 +800,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket chown", OPT::BUCKET_CHOWN },
   { "bucket radoslist", OPT::BUCKET_RADOS_LIST },
   { "bucket rados list", OPT::BUCKET_RADOS_LIST },
+  { "bucket recalc-stats", OPT::BUCKET_RECALC_STATS },
   { "policy", OPT::POLICY },
   { "pool add", OPT::POOL_ADD },
   { "pool rm", OPT::POOL_RM },
@@ -7068,6 +7071,129 @@ next:
       return ret;
     }
   } // OPT_RESHARD_CANCEL
+
+  if (opt_cmd == OPT::BUCKET_RECALC_STATS) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return -EINVAL;
+    }
+
+    rgw_bucket bucket;
+    RGWBucketInfo bucket_info;
+    map<string, bufferlist> attrs;
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    cout << "tenant: " << bucket_info.bucket.tenant << std::endl;
+    cout << "bucket name: " << bucket_info.bucket.name << std::endl;
+    cout << "bucket instance id: " << bucket_info.bucket.bucket_id << std::endl;
+
+    /* update bucket info  -- in progress*/
+    list<rgw_cls_bi_entry> entries;
+
+    if (max_entries < 0) {
+      max_entries = 1000;
+    }
+
+    if (verbose) {
+      formatter->open_array_section("entries");
+    }
+
+    uint64_t total_entries = 0;
+
+    int num_source_shards =
+      bucket_info.layout.current_index.layout.normal.num_shards > 0 ?
+      bucket_info.layout.current_index.layout.normal.num_shards :
+      1;
+    string marker;
+    map<RGWObjCategory, rgw_bucket_category_stats> stats;
+
+    for (int i = 0; i < num_source_shards; ++i) {
+      RGWRados::BucketShard bs(store->getRados());
+      int ret = bs.init(bucket, i, bucket_info.layout.current_index, nullptr /* no RGWBucketInfo */);
+      if (ret < 0) {
+	cerr << "bs.init() returned ret=" << ret << std::endl;
+	return ret;
+      }
+      bool is_truncated = true;
+      marker.clear();
+      while (is_truncated) {
+	entries.clear();
+	ret = store->getRados()->bi_list(bucket_info, i, string(), marker, max_entries, &entries, &is_truncated);
+	if (ret < 0 && ret != -ENOENT) {
+	  derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
+	  return -ret;
+	}
+
+	list<rgw_cls_bi_entry>::iterator iter;
+	for (iter = entries.begin(); iter != entries.end(); ++iter) {
+	  rgw_cls_bi_entry& entry = *iter;
+
+	  if (verbose) {
+	    formatter->open_object_section("entry");
+	    encode_json("shard_id", i, formatter);
+	    encode_json("num_entry", total_entries, formatter);
+	    encode_json("entry", entry, formatter);
+	  }
+	  total_entries++;
+
+	  if (entry.type == BIIndexType::Plain) {
+	    librados::ObjectWriteOperation op;
+	    rgw_bucket_dir_entry dir_entry;
+	    auto bi_iter = entry.data.cbegin();
+	    decode(dir_entry, bi_iter);
+	    if (dir_entry.meta.accounted_size == 0 && dir_entry.meta.size != 0) {
+	      rgw_obj obj(bucket,dir_entry.key.name);
+	      obj.key.set_instance(dir_entry.key.instance);
+	      cout << "Fixing entry accounted_size for " << dir_entry.key << std::endl;
+	      dir_entry.meta.accounted_size = dir_entry.meta.size;
+	      bufferlist bl;
+	      ::encode(dir_entry, bl);
+	      entry.data = bl;
+	      encode_json("entry", entry, formatter);
+	      formatter->flush(cout);
+	      store->getRados()->bi_put(op, bs, entry);
+	      ret = bs.bucket_obj.operate(&op, null_yield);
+	      if (ret != 0) {
+		cerr << " Error in bi_put operate " << ret << std::endl;
+		return ret;
+	      }
+	    }
+	  }
+
+	  cls_rgw_obj_key cls_key;
+	  RGWObjCategory category;
+	  rgw_bucket_category_stats entry_stats;
+	  bool account = entry.get_info(&cls_key, &category, &entry_stats);
+
+	  if (account) {
+	    rgw_bucket_category_stats& target = stats[category];
+	    target.num_entries += entry_stats.num_entries;
+	    target.total_size += entry_stats.total_size;
+	    target.total_size_rounded += entry_stats.total_size_rounded;
+	  }
+
+	  marker = entry.idx;
+
+	  if (verbose) {
+	    formatter->close_section();
+	    formatter->flush(cout);
+	  }
+	}
+      }
+
+      cout << "updating stats " << std::endl;
+      librados::ObjectWriteOperation op;
+      cls_rgw_bucket_update_stats(op, true, stats);
+      ret = bs.bucket_obj.operate(&op, null_yield);
+      if (ret != 0) {
+	return ret;
+      }
+    }
+  }
 
   if (opt_cmd == OPT::OBJECT_UNLINK) {
     RGWBucketInfo bucket_info;
