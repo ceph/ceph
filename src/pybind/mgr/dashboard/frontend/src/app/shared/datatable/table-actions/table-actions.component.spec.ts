@@ -64,7 +64,7 @@ describe('TableActionsComponent', () => {
     };
     deleteAction = {
       permission: 'delete',
-      icon: 'fa-trash-o',
+      icon: 'fa-times',
       buttonCondition: (selection: CdTableSelection) => selection.hasSelection,
       disable: (selection: CdTableSelection) =>
         !selection.hasSelection || selection.first().cdExecuting,
