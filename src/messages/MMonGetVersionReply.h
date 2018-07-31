@@ -24,17 +24,14 @@
  * MMonGetVersion. The latest version of the requested thing is sent
  * back.
  */
-class MMonGetVersionReply : public Message {
+class MMonGetVersionReply : public MessageInstance<MMonGetVersionReply> {
 public:
-  typedef boost::intrusive_ptr<MMonGetVersionReply> ref;
-  typedef boost::intrusive_ptr<MMonGetVersionReply const> const_ref;
-  using factory = MessageFactory<MMonGetVersionReply>;
   friend factory;
 private:
   static const int HEAD_VERSION = 2;
 
 public:
-  MMonGetVersionReply() : Message(CEPH_MSG_MON_GET_VERSION_REPLY, HEAD_VERSION) { }
+  MMonGetVersionReply() : MessageInstance(CEPH_MSG_MON_GET_VERSION_REPLY, HEAD_VERSION) { }
 
   const char *get_type_name() const override {
     return "mon_get_version_reply";

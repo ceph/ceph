@@ -7,15 +7,11 @@
 #include "osd/osd_types.h"
 #include "osd/PGPeeringEvent.h"
 
-class MOSDPeeringOp : public Message {
+class MOSDPeeringOp : public MessageSubType<MOSDPeeringOp> {
 public:
-  typedef boost::intrusive_ptr<MOSDPeeringOp> ref;
-  typedef boost::intrusive_ptr<MOSDPeeringOp const> const_ref;
-  using factory = MessageFactory<MOSDPeeringOp>;
-  friend factory;
 
-  MOSDPeeringOp(int t, int version, int compat_version)
-    : Message(t, version, compat_version) {}
+template<typename... Args>
+  MOSDPeeringOp(Args&&... args) : MessageSubType(std::forward<Args>(args)...) {}
 
   void print(ostream& out) const override final {
     out << get_type_name() << "("

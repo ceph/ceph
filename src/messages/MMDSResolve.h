@@ -19,11 +19,8 @@
 
 #include "include/types.h"
 
-class MMDSResolve : public Message {
+class MMDSResolve : public MessageInstance<MMDSResolve> {
 public:
-  typedef boost::intrusive_ptr<MMDSResolve> ref;
-  typedef boost::intrusive_ptr<MMDSResolve const> const_ref;
-  using factory = MessageFactory<MMDSResolve>;
   friend factory;
 
   map<dirfrag_t, vector<dirfrag_t> > subtrees;
@@ -71,7 +68,7 @@ public:
   list<table_client> table_clients;
 
 protected:
-  MMDSResolve() : Message(MSG_MDS_RESOLVE) {}
+  MMDSResolve() : MessageInstance(MSG_MDS_RESOLVE) {}
   ~MMDSResolve() override {}
 
 public:

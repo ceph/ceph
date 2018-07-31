@@ -20,11 +20,8 @@
 #include "mds/FSMap.h"
 #include "include/ceph_features.h"
 
-class MFSMap : public Message {
+class MFSMap : public MessageInstance<MFSMap> {
 public:
-  typedef boost::intrusive_ptr<MFSMap> ref;
-  typedef boost::intrusive_ptr<MFSMap const> const_ref;
-  using factory = MessageFactory<MFSMap>;
   friend factory;
 
   epoch_t epoch;
@@ -34,9 +31,9 @@ public:
   const FSMap & get_fsmap() {return fsmap;}
 
   MFSMap() : 
-    Message(CEPH_MSG_FS_MAP), epoch(0) {}
+    MessageInstance(CEPH_MSG_FS_MAP), epoch(0) {}
   MFSMap(const uuid_d &f, const FSMap &fsmap_) :
-    Message(CEPH_MSG_FS_MAP), epoch(fsmap_.get_epoch())
+    MessageInstance(CEPH_MSG_FS_MAP), epoch(fsmap_.get_epoch())
   {
     fsmap = fsmap_;
   }

@@ -528,4 +528,28 @@ template<typename... Args>
   }
 };
 
+template<class T, class M = Message>
+class MessageSubType : public M {
+public:
+  typedef boost::intrusive_ptr<T> ref;
+  typedef boost::intrusive_ptr<T const> const_ref;
+
+protected:
+template<typename... Args>
+  MessageSubType(Args&&... args) : M(std::forward<Args>(args)...) {}
+  virtual ~MessageSubType() override {}
+};
+
+
+template<class T, class M = Message>
+class MessageInstance : public MessageSubType<T, M> {
+public:
+  using factory = MessageFactory<T>;
+
+protected:
+template<typename... Args>
+  MessageInstance(Args&&... args) : MessageSubType<T,M>(std::forward<Args>(args)...) {}
+  virtual ~MessageInstance() override {}
+};
+
 #endif

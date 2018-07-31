@@ -18,11 +18,8 @@
 #include "messages/MMonQuorumService.h"
 #include "mon/mon_types.h"
 
-class MMonHealth : public MMonQuorumService {
+class MMonHealth : public MessageInstance<MMonHealth, MMonQuorumService> {
 public:
-  typedef boost::intrusive_ptr<MMonHealth> ref;
-  typedef boost::intrusive_ptr<MMonHealth const> const_ref;
-  using factory = MessageFactory<MMonHealth>;
   friend factory;
 
   static const int HEAD_VERSION = 1;
@@ -33,7 +30,7 @@ public:
   // service specific data
   DataStats data_stats;
 
-  MMonHealth() : MMonQuorumService(MSG_MON_HEALTH, HEAD_VERSION) { }
+  MMonHealth() : MessageInstance(MSG_MON_HEALTH, HEAD_VERSION) { }
 
 private:
   ~MMonHealth() override { }

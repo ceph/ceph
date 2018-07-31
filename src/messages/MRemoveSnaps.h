@@ -17,20 +17,17 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MRemoveSnaps : public PaxosServiceMessage {
+class MRemoveSnaps : public MessageInstance<MRemoveSnaps, PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<MRemoveSnaps> ref;
-  typedef boost::intrusive_ptr<MRemoveSnaps const> const_ref;
-  using factory = MessageFactory<MRemoveSnaps>;
   friend factory;
 
   map<int, vector<snapid_t> > snaps;
   
 protected:
   MRemoveSnaps() : 
-    PaxosServiceMessage(MSG_REMOVE_SNAPS, 0) { }
+    MessageInstance(MSG_REMOVE_SNAPS, 0) { }
   MRemoveSnaps(map<int, vector<snapid_t> >& s) : 
-    PaxosServiceMessage(MSG_REMOVE_SNAPS, 0) {
+    MessageInstance(MSG_REMOVE_SNAPS, 0) {
     snaps.swap(s);
   }
   ~MRemoveSnaps() override {}

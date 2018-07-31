@@ -20,11 +20,8 @@
 #include "msg/Message.h"
 #include "common/DecayCounter.h"
 
-class MHeartbeat : public Message {
+class MHeartbeat : public MessageInstance<MHeartbeat> {
 public:
-  typedef boost::intrusive_ptr<MHeartbeat> ref;
-  typedef boost::intrusive_ptr<MHeartbeat const> const_ref;
-  using factory = MessageFactory<MHeartbeat>;
   friend factory;
 private:
   mds_load_t load;
@@ -39,9 +36,9 @@ private:
   map<mds_rank_t, float>& get_import_map() { return import_map; }
 
 protected:
-  MHeartbeat() : Message(MSG_MDS_HEARTBEAT), load(DecayRate()) {}
+  MHeartbeat() : MessageInstance(MSG_MDS_HEARTBEAT), load(DecayRate()) {}
   MHeartbeat(mds_load_t& load, int beat)
-    : Message(MSG_MDS_HEARTBEAT),
+    : MessageInstance(MSG_MDS_HEARTBEAT),
       load(load) {
     this->beat = beat;
   }

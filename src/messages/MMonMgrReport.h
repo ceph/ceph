@@ -20,11 +20,8 @@
 #include "include/health.h"
 #include "mon/health_check.h"
 
-class MMonMgrReport : public PaxosServiceMessage {
+class MMonMgrReport : public MessageInstance<MMonMgrReport, PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<MMonMgrReport> ref;
-  typedef boost::intrusive_ptr<MMonMgrReport const> const_ref;
-  using factory = MessageFactory<MMonMgrReport>;
   friend factory;
 private:
   static const int HEAD_VERSION = 1;
@@ -36,7 +33,7 @@ public:
   bufferlist service_map_bl;  // encoded ServiceMap
 
   MMonMgrReport()
-    : PaxosServiceMessage(MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION)
   {}
 private:
   ~MMonMgrReport() override {}

@@ -19,11 +19,8 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MOSDPGTemp : public PaxosServiceMessage {
+class MOSDPGTemp : public MessageInstance<MOSDPGTemp, PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<MOSDPGTemp> ref;
-  typedef boost::intrusive_ptr<MOSDPGTemp const> const_ref;
-  using factory = MessageFactory<MOSDPGTemp>;
   friend factory;
 
   epoch_t map_epoch = 0;
@@ -31,7 +28,7 @@ public:
   bool forced = false;
 
   MOSDPGTemp(epoch_t e)
-    : PaxosServiceMessage(MSG_OSD_PGTEMP, e, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PGTEMP, e, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(e)
   {}
   MOSDPGTemp()

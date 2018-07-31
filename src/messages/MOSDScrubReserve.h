@@ -17,11 +17,8 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDScrubReserve : public MOSDFastDispatchOp {
+class MOSDScrubReserve : public MessageInstance<MOSDScrubReserve, MOSDFastDispatchOp> {
 public:
-  typedef boost::intrusive_ptr<MOSDScrubReserve> ref;
-  typedef boost::intrusive_ptr<MOSDScrubReserve const> const_ref;
-  using factory = MessageFactory<MOSDScrubReserve>;
   friend factory;
 private:
   static const int HEAD_VERSION = 1;
@@ -46,13 +43,13 @@ public:
   }
 
   MOSDScrubReserve()
-    : MOSDFastDispatchOp(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0), type(-1) {}
   MOSDScrubReserve(spg_t pgid,
 		   epoch_t map_epoch,
 		   int type,
 		   pg_shard_t from)
-    : MOSDFastDispatchOp(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid), map_epoch(map_epoch),
       type(type), from(from) {}
 

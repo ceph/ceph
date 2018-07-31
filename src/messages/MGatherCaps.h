@@ -4,11 +4,8 @@
 #include "msg/Message.h"
 
 
-class MGatherCaps : public Message {
+class MGatherCaps : public MessageInstance<MGatherCaps> {
 public:
-  typedef boost::intrusive_ptr<MGatherCaps> ref;
-  typedef boost::intrusive_ptr<MGatherCaps const> const_ref;
-  using factory = MessageFactory<MGatherCaps>;
   friend factory;
 
 
@@ -16,7 +13,7 @@ public:
 
 protected:
   MGatherCaps() :
-    Message(MSG_MDS_GATHERCAPS) {}
+    MessageInstance(MSG_MDS_GATHERCAPS) {}
   ~MGatherCaps() override {}
 
 public:

@@ -19,11 +19,8 @@
 #include "msg/Message.h"
 
 
-class MExportCaps : public Message {
+class MExportCaps : public MessageInstance<MExportCaps> {
 public:
-  typedef boost::intrusive_ptr<MExportCaps> ref;
-  typedef boost::intrusive_ptr<MExportCaps const> const_ref;
-  using factory = MessageFactory<MExportCaps>;
   friend factory;
 private:
   static const int HEAD_VERSION = 2;
@@ -36,7 +33,7 @@ private:
 
 protected:
   MExportCaps() :
-    Message(MSG_MDS_EXPORTCAPS, HEAD_VERSION, COMPAT_VERSION) {}
+    MessageInstance(MSG_MDS_EXPORTCAPS, HEAD_VERSION, COMPAT_VERSION) {}
   ~MExportCaps() override {}
 
 public:

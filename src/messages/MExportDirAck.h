@@ -18,11 +18,8 @@
 #include "MExportDir.h"
 #include "msg/Message.h"
 
-class MExportDirAck : public Message {
+class MExportDirAck : public MessageInstance<MExportDirAck> {
 public:
-  typedef boost::intrusive_ptr<MExportDirAck> ref;
-  typedef boost::intrusive_ptr<MExportDirAck const> const_ref;
-  using factory = MessageFactory<MExportDirAck>;
   friend factory;
 
   dirfrag_t dirfrag;
@@ -31,9 +28,9 @@ public:
   dirfrag_t get_dirfrag() const { return dirfrag; }
   
 protected:
-  MExportDirAck() : Message(MSG_MDS_EXPORTDIRACK) {}
+  MExportDirAck() : MessageInstance(MSG_MDS_EXPORTDIRACK) {}
   MExportDirAck(dirfrag_t df, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRACK), dirfrag(df) {
+    MessageInstance(MSG_MDS_EXPORTDIRACK), dirfrag(df) {
     set_tid(tid);
   }
   ~MExportDirAck() override {}

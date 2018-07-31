@@ -11,11 +11,8 @@
 // future this message could be generalized to other state bits, but
 // for now name it for its sole application.
 
-class MOSDFull : public PaxosServiceMessage {
+class MOSDFull : public MessageInstance<MOSDFull, PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<MOSDFull> ref;
-  typedef boost::intrusive_ptr<MOSDFull const> const_ref;
-  using factory = MessageFactory<MOSDFull>;
   friend factory;
 
   epoch_t map_epoch = 0;
@@ -26,9 +23,9 @@ private:
 
 public:
   MOSDFull(epoch_t e, unsigned s)
-    : PaxosServiceMessage(MSG_OSD_FULL, e), map_epoch(e), state(s) { }
+    : MessageInstance(MSG_OSD_FULL, e), map_epoch(e), state(s) { }
   MOSDFull()
-    : PaxosServiceMessage(MSG_OSD_FULL, 0) {}
+    : MessageInstance(MSG_OSD_FULL, 0) {}
 
 public:
   void encode_payload(uint64_t features) {

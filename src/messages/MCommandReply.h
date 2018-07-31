@@ -20,24 +20,21 @@
 #include "msg/Message.h"
 #include "MCommand.h"
 
-class MCommandReply : public Message {
+class MCommandReply : public MessageInstance<MCommandReply> {
 public:
-  typedef boost::intrusive_ptr<MCommandReply> ref;
-  typedef boost::intrusive_ptr<MCommandReply const> const_ref;
-  using factory = MessageFactory<MCommandReply>;
   friend factory;
 
   errorcode32_t r;
   string rs;
   
   MCommandReply()
-    : Message(MSG_COMMAND_REPLY) {}
+    : MessageInstance(MSG_COMMAND_REPLY) {}
   MCommandReply(MCommand *m, int _r)
-    : Message(MSG_COMMAND_REPLY), r(_r) {
+    : MessageInstance(MSG_COMMAND_REPLY), r(_r) {
     header.tid = m->get_tid();
   }
   MCommandReply(int _r, std::string_view s)
-    : Message(MSG_COMMAND_REPLY),
+    : MessageInstance(MSG_COMMAND_REPLY),
       r(_r), rs(s) { }
 private:
   ~MCommandReply() override {}

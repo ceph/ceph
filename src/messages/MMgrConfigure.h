@@ -21,12 +21,8 @@
  * This message is sent from ceph-mgr to MgrClient, instructing it
  * it about what data to send back to ceph-mgr at what frequency.
  */
-class MMgrConfigure : public Message
-{
+class MMgrConfigure : public MessageInstance<MMgrConfigure> {
 public:
-  typedef boost::intrusive_ptr<MMgrConfigure> ref;
-  typedef boost::intrusive_ptr<MMgrConfigure const> const_ref;
-  using factory = MessageFactory<MMgrConfigure>;
   friend factory;
 private:
 
@@ -61,7 +57,7 @@ public:
   }
 
   MMgrConfigure()
-    : Message(MSG_MGR_CONFIGURE, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_MGR_CONFIGURE, HEAD_VERSION, COMPAT_VERSION)
   {}
 };
 

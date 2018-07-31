@@ -17,11 +17,8 @@
 
 #include "msg/Message.h"
 
-class MMDSSnapUpdate : public Message {
+class MMDSSnapUpdate : public MessageInstance<MMDSSnapUpdate> {
 public:
-  typedef boost::intrusive_ptr<MMDSSnapUpdate> ref;
-  typedef boost::intrusive_ptr<MMDSSnapUpdate const> const_ref;
-  using factory = MessageFactory<MMDSSnapUpdate>;
   friend factory;
 private:
 
@@ -35,9 +32,9 @@ public:
   bufferlist snap_blob;
 
 protected:
-  MMDSSnapUpdate() : Message(MSG_MDS_SNAPUPDATE) {}
+  MMDSSnapUpdate() : MessageInstance(MSG_MDS_SNAPUPDATE) {}
   MMDSSnapUpdate(inodeno_t i, version_t tid, int op) :
-    Message(MSG_MDS_SNAPUPDATE), ino(i), snap_op(op) {
+    MessageInstance(MSG_MDS_SNAPUPDATE), ino(i), snap_op(op) {
       set_tid(tid);
     }
   ~MMDSSnapUpdate() override {}

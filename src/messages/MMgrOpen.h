@@ -17,12 +17,8 @@
 
 #include "msg/Message.h"
 
-class MMgrOpen : public Message
-{
+class MMgrOpen : public MessageInstance<MMgrOpen> {
 public:
-  typedef boost::intrusive_ptr<MMgrOpen> ref;
-  typedef boost::intrusive_ptr<MMgrOpen const> const_ref;
-  using factory = MessageFactory<MMgrOpen>;
   friend factory;
 private:
 
@@ -91,7 +87,7 @@ public:
   }
 
   MMgrOpen()
-    : Message(MSG_MGR_OPEN, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_MGR_OPEN, HEAD_VERSION, COMPAT_VERSION)
   {}
 };
 

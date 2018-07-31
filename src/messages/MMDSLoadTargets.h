@@ -23,20 +23,17 @@
 #include <map>
 using std::map;
 
-class MMDSLoadTargets : public PaxosServiceMessage {
+class MMDSLoadTargets : public MessageInstance<MMDSLoadTargets, PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<MMDSLoadTargets> ref;
-  typedef boost::intrusive_ptr<MMDSLoadTargets const> const_ref;
-  using factory = MessageFactory<MMDSLoadTargets>;
   friend factory;
 
   mds_gid_t global_id;
   set<mds_rank_t> targets;
 
 protected:
-  MMDSLoadTargets() : PaxosServiceMessage(MSG_MDS_OFFLOAD_TARGETS, 0) {}
+  MMDSLoadTargets() : MessageInstance(MSG_MDS_OFFLOAD_TARGETS, 0) {}
   MMDSLoadTargets(mds_gid_t g, set<mds_rank_t>& mds_targets) :
-    PaxosServiceMessage(MSG_MDS_OFFLOAD_TARGETS, 0),
+    MessageInstance(MSG_MDS_OFFLOAD_TARGETS, 0),
     global_id(g), targets(mds_targets) {}
   ~MMDSLoadTargets() override {}
 

@@ -17,11 +17,8 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MAuth : public PaxosServiceMessage {
+class MAuth : public MessageInstance<MAuth, PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<MAuth> ref;
-  typedef boost::intrusive_ptr<MAuth const> const_ref;
-  using factory = MessageFactory<MAuth>;
   friend factory;
 
   __u32 protocol;
@@ -30,7 +27,7 @@ public:
 
   /* if protocol == 0, then auth_payload is a set<__u32> listing protocols the client supports */
 
-  MAuth() : PaxosServiceMessage(CEPH_MSG_AUTH, 0), protocol(0), monmap_epoch(0) { }
+  MAuth() : MessageInstance(CEPH_MSG_AUTH, 0), protocol(0), monmap_epoch(0) { }
 private:
   ~MAuth() override {}
 

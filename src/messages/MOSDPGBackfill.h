@@ -17,11 +17,8 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGBackfill : public MOSDFastDispatchOp {
+class MOSDPGBackfill : public MessageInstance<MOSDPGBackfill, MOSDFastDispatchOp> {
 public:
-  typedef boost::intrusive_ptr<MOSDPGBackfill> ref;
-  typedef boost::intrusive_ptr<MOSDPGBackfill const> const_ref;
-  using factory = MessageFactory<MOSDPGBackfill>;
   friend factory;
 private:
   static const int HEAD_VERSION = 3;
@@ -94,9 +91,9 @@ public:
   }
 
   MOSDPGBackfill()
-    : MOSDFastDispatchOp(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGBackfill(__u32 o, epoch_t e, epoch_t qe, spg_t p)
-    : MOSDFastDispatchOp(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION),
       op(o),
       map_epoch(e), query_epoch(e),
       pgid(p) {}

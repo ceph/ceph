@@ -18,19 +18,16 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 
-class MMDSFindInoReply : public Message {
+class MMDSFindInoReply : public MessageInstance<MMDSFindInoReply> {
 public:
-  typedef boost::intrusive_ptr<MMDSFindInoReply> ref;
-  typedef boost::intrusive_ptr<MMDSFindInoReply const> const_ref;
-  using factory = MessageFactory<MMDSFindInoReply>;
   friend factory;
 
   ceph_tid_t tid = 0;
   filepath path;
 
 protected:
-  MMDSFindInoReply() : Message(MSG_MDS_FINDINOREPLY) {}
-  MMDSFindInoReply(ceph_tid_t t) : Message(MSG_MDS_FINDINOREPLY), tid(t) {}
+  MMDSFindInoReply() : MessageInstance(MSG_MDS_FINDINOREPLY) {}
+  MMDSFindInoReply(ceph_tid_t t) : MessageInstance(MSG_MDS_FINDINOREPLY), tid(t) {}
   ~MMDSFindInoReply() override {}
 
 public:

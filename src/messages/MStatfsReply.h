@@ -16,17 +16,14 @@
 #ifndef CEPH_MSTATFSREPLY_H
 #define CEPH_MSTATFSREPLY_H
 
-class MStatfsReply : public Message {
+class MStatfsReply : public MessageInstance<MStatfsReply> {
 public:
-  typedef boost::intrusive_ptr<MStatfsReply> ref;
-  typedef boost::intrusive_ptr<MStatfsReply const> const_ref;
-  using factory = MessageFactory<MStatfsReply>;
   friend factory;
 
   struct ceph_mon_statfs_reply h{};
 
-  MStatfsReply() : Message(CEPH_MSG_STATFS_REPLY) {}
-  MStatfsReply(uuid_d &f, ceph_tid_t t, epoch_t epoch) : Message(CEPH_MSG_STATFS_REPLY) {
+  MStatfsReply() : MessageInstance(CEPH_MSG_STATFS_REPLY) {}
+  MStatfsReply(uuid_d &f, ceph_tid_t t, epoch_t epoch) : MessageInstance(CEPH_MSG_STATFS_REPLY) {
     memcpy(&h.fsid, f.bytes(), sizeof(h.fsid));
     header.tid = t;
     h.version = epoch;

@@ -253,11 +253,8 @@ struct InodeStat {
 };
 
 
-class MClientReply : public Message {
+class MClientReply : public MessageInstance<MClientReply> {
 public:
-  typedef boost::intrusive_ptr<MClientReply> ref;
-  typedef boost::intrusive_ptr<MClientReply const> const_ref;
-  using factory = MessageFactory<MClientReply>;
   friend factory;
 
   // reply data
@@ -282,9 +279,9 @@ public:
   bool is_safe() const { return head.safe; }
 
 protected:
-  MClientReply() : Message(CEPH_MSG_CLIENT_REPLY) {}
+  MClientReply() : MessageInstance(CEPH_MSG_CLIENT_REPLY) {}
   MClientReply(const MClientRequest &req, int result = 0) :
-    Message(CEPH_MSG_CLIENT_REPLY) {
+    MessageInstance(CEPH_MSG_CLIENT_REPLY) {
     memset(&head, 0, sizeof(head));
     header.tid = req.get_tid();
     head.op = req.get_op();

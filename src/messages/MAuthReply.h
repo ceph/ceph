@@ -18,11 +18,8 @@
 #include "msg/Message.h"
 #include "common/errno.h"
 
-class MAuthReply : public Message {
+class MAuthReply : public MessageInstance<MAuthReply> {
 public:
-  typedef boost::intrusive_ptr<MAuthReply> ref;
-  typedef boost::intrusive_ptr<MAuthReply const> const_ref;
-  using factory = MessageFactory<MAuthReply>;
   friend factory;
 
   __u32 protocol;
@@ -31,9 +28,9 @@ public:
   string result_msg;
   bufferlist result_bl;
 
-  MAuthReply() : Message(CEPH_MSG_AUTH_REPLY), protocol(0), result(0), global_id(0) {}
+  MAuthReply() : MessageInstance(CEPH_MSG_AUTH_REPLY), protocol(0), result(0), global_id(0) {}
   MAuthReply(__u32 p, bufferlist *bl = NULL, int r = 0, uint64_t gid=0, const char *msg = "") :
-    Message(CEPH_MSG_AUTH_REPLY),
+    MessageInstance(CEPH_MSG_AUTH_REPLY),
     protocol(p), result(r), global_id(gid),
     result_msg(msg) {
     if (bl)

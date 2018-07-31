@@ -18,11 +18,8 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirDiscover : public Message {
+class MExportDirDiscover : public MessageInstance<MExportDirDiscover> {
 public:
-  typedef boost::intrusive_ptr<MExportDirDiscover> ref;
-  typedef boost::intrusive_ptr<MExportDirDiscover const> const_ref;
-  using factory = MessageFactory<MExportDirDiscover>;
   friend factory;
 private:
   mds_rank_t from = -1;
@@ -39,10 +36,10 @@ private:
 
 protected:
   MExportDirDiscover() :     
-    Message(MSG_MDS_EXPORTDIRDISCOVER),
+    MessageInstance(MSG_MDS_EXPORTDIRDISCOVER),
     started(false) { }
   MExportDirDiscover(dirfrag_t df, filepath& p, mds_rank_t f, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRDISCOVER),
+    MessageInstance(MSG_MDS_EXPORTDIRDISCOVER),
     from(f), dirfrag(df), path(p), started(false) {
     set_tid(tid);
   }

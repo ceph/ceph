@@ -18,11 +18,8 @@
 
 #include "msg/Message.h"
 
-class MDirUpdate : public Message {
+class MDirUpdate : public MessageInstance<MDirUpdate> {
 public:
-  typedef boost::intrusive_ptr<MDirUpdate> ref;
-  typedef boost::intrusive_ptr<MDirUpdate const> const_ref;
-  using factory = MessageFactory<MDirUpdate>;
   friend factory;
 
   mds_rank_t get_source_mds() const { return from_mds; }
@@ -62,19 +59,19 @@ public:
 
 protected:
   ~MDirUpdate() {}
-  MDirUpdate() : Message(MSG_MDS_DIRUPDATE) {}
+  MDirUpdate() : MessageInstance(MSG_MDS_DIRUPDATE) {}
   MDirUpdate(mds_rank_t f,
 	     dirfrag_t dirfrag,
              int dir_rep,
              const std::set<int32_t>& dir_rep_by,
              filepath& path,
              bool discover = false) :
-    Message(MSG_MDS_DIRUPDATE), from_mds(f), dirfrag(dirfrag),
+    MessageInstance(MSG_MDS_DIRUPDATE), from_mds(f), dirfrag(dirfrag),
     dir_rep(dir_rep), dir_rep_by(dir_rep_by), path(path) {
     this->discover = discover ? 5 : 0;
   }
   MDirUpdate(const MDirUpdate& m)
-  : Message(MSG_MDS_DIRUPDATE),
+  : MessageInstance(MSG_MDS_DIRUPDATE),
     from_mds(m.from_mds),
     dirfrag(m.dirfrag),
     dir_rep(m.dir_rep),

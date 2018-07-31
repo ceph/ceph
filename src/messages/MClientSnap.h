@@ -17,11 +17,8 @@
 
 #include "msg/Message.h"
 
-class MClientSnap : public Message {
+class MClientSnap : public MessageInstance<MClientSnap> {
 public:
-  typedef boost::intrusive_ptr<MClientSnap> ref;
-  typedef boost::intrusive_ptr<MClientSnap const> const_ref;
-  using factory = MessageFactory<MClientSnap>;
   friend factory;
 
   ceph_mds_snap_head head;
@@ -33,7 +30,7 @@ public:
 
 protected:
   MClientSnap(int o=0) : 
-    Message(CEPH_MSG_CLIENT_SNAP) {
+    MessageInstance(CEPH_MSG_CLIENT_SNAP) {
     memset(&head, 0, sizeof(head));
     head.op = o;
   }

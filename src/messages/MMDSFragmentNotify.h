@@ -17,11 +17,8 @@
 
 #include "msg/Message.h"
 
-class MMDSFragmentNotify : public Message {
+class MMDSFragmentNotify : public MessageInstance<MMDSFragmentNotify> {
 public:
-  typedef boost::intrusive_ptr<MMDSFragmentNotify> ref;
-  typedef boost::intrusive_ptr<MMDSFragmentNotify const> const_ref;
-  using factory = MessageFactory<MMDSFragmentNotify>;
   friend factory;
 private:
   inodeno_t ino;
@@ -36,9 +33,9 @@ private:
   bufferlist basebl;
 
 protected:
-  MMDSFragmentNotify() : Message(MSG_MDS_FRAGMENTNOTIFY) {}
+  MMDSFragmentNotify() : MessageInstance(MSG_MDS_FRAGMENTNOTIFY) {}
   MMDSFragmentNotify(dirfrag_t df, int b) :
-	Message(MSG_MDS_FRAGMENTNOTIFY),
+ MessageInstance(MSG_MDS_FRAGMENTNOTIFY),
     ino(df.ino), basefrag(df.frag), bits(b) { }
   ~MMDSFragmentNotify() override {}
 

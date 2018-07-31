@@ -18,11 +18,8 @@
 
 #include "msg/Message.h"
 
-class MInodeFileCaps : public Message {
+class MInodeFileCaps : public MessageInstance<MInodeFileCaps> {
 public:
-  typedef boost::intrusive_ptr<MInodeFileCaps> ref;
-  typedef boost::intrusive_ptr<MInodeFileCaps const> const_ref;
-  using factory = MessageFactory<MInodeFileCaps>;
   friend factory;
 private:
   inodeno_t ino;
@@ -34,9 +31,9 @@ private:
   int       get_caps() const { return caps; }
 
 protected:
-  MInodeFileCaps() : Message(MSG_MDS_INODEFILECAPS) {}
+  MInodeFileCaps() : MessageInstance(MSG_MDS_INODEFILECAPS) {}
   MInodeFileCaps(inodeno_t ino, int caps) :
-    Message(MSG_MDS_INODEFILECAPS) {
+    MessageInstance(MSG_MDS_INODEFILECAPS) {
     this->ino = ino;
     this->caps = caps;
   }

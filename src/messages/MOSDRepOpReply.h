@@ -28,11 +28,8 @@
  *
  */
 
-class MOSDRepOpReply : public MOSDFastDispatchOp {
+class MOSDRepOpReply : public MessageInstance<MOSDRepOpReply, MOSDFastDispatchOp> {
 public:
-  typedef boost::intrusive_ptr<MOSDRepOpReply> ref;
-  typedef boost::intrusive_ptr<MOSDRepOpReply const> const_ref;
-  using factory = MessageFactory<MOSDRepOpReply>;
   friend factory;
 private:
   static const int HEAD_VERSION = 2;
@@ -122,7 +119,7 @@ public:
   MOSDRepOpReply(
     const MOSDRepOp *req, pg_shard_t from, int result_, epoch_t e, epoch_t mine,
     int at) :
-    MOSDFastDispatchOp(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
     map_epoch(e),
     min_epoch(mine),
     reqid(req->reqid),
@@ -134,7 +131,7 @@ public:
     set_tid(req->get_tid());
   }
   MOSDRepOpReply() 
-    : MOSDFastDispatchOp(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0),
       min_epoch(0),
       ack_type(0), result(0),

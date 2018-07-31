@@ -20,18 +20,15 @@
 #include "include/types.h"
 
 
-class MMDSResolveAck : public Message {
+class MMDSResolveAck : public MessageInstance<MMDSResolveAck> {
 public:
-  typedef boost::intrusive_ptr<MMDSResolveAck> ref;
-  typedef boost::intrusive_ptr<MMDSResolveAck const> const_ref;
-  using factory = MessageFactory<MMDSResolveAck>;
   friend factory;
 
   map<metareqid_t, bufferlist> commit;
   vector<metareqid_t> abort;
 
 protected:
-  MMDSResolveAck() : Message(MSG_MDS_RESOLVEACK) {}
+  MMDSResolveAck() : MessageInstance(MSG_MDS_RESOLVEACK) {}
   ~MMDSResolveAck() override {}
 
 public:

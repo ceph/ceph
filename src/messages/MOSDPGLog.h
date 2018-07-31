@@ -18,11 +18,8 @@
 
 #include "messages/MOSDPeeringOp.h"
 
-class MOSDPGLog : public MOSDPeeringOp {
+class MOSDPGLog : public MessageInstance<MOSDPGLog, MOSDPeeringOp> {
 public:
-  typedef boost::intrusive_ptr<MOSDPGLog> ref;
-  typedef boost::intrusive_ptr<MOSDPGLog const> const_ref;
-  using factory = MessageFactory<MOSDPGLog>;
   friend factory;
 private:
   static const int HEAD_VERSION = 5;
@@ -71,12 +68,12 @@ public:
 	false));
   }
 
-  MOSDPGLog() : MOSDPeeringOp(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION) {
+  MOSDPGLog() : MessageInstance(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION) {
     set_priority(CEPH_MSG_PRIO_HIGH); 
   }
   MOSDPGLog(shard_id_t to, shard_id_t from,
 	    version_t mv, pg_info_t& i, epoch_t query_epoch)
-    : MOSDPeeringOp(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION),
       epoch(mv), query_epoch(query_epoch),
       to(to), from(from),
       info(i)  {

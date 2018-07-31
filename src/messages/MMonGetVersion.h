@@ -25,14 +25,11 @@
  * can be used to determine whether a pool actually does not exist, or
  * if it may have been created but the map was not received yet.
  */
-class MMonGetVersion : public Message {
+class MMonGetVersion : public MessageInstance<MMonGetVersion> {
 public:
-  typedef boost::intrusive_ptr<MMonGetVersion> ref;
-  typedef boost::intrusive_ptr<MMonGetVersion const> const_ref;
-  using factory = MessageFactory<MMonGetVersion>;
   friend factory;
 
-  MMonGetVersion() : Message(CEPH_MSG_MON_GET_VERSION) {}
+  MMonGetVersion() : MessageInstance(CEPH_MSG_MON_GET_VERSION) {}
 
   const char *get_type_name() const override {
     return "mon_get_version";

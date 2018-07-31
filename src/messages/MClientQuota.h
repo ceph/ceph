@@ -3,11 +3,8 @@
 
 #include "msg/Message.h"
 
-class MClientQuota : public Message {
+class MClientQuota : public MessageInstance<MClientQuota> {
 public:
-  typedef boost::intrusive_ptr<MClientQuota> ref;
-  typedef boost::intrusive_ptr<MClientQuota const> const_ref;
-  using factory = MessageFactory<MClientQuota>;
   friend factory;
 
   inodeno_t ino;
@@ -16,7 +13,7 @@ public:
 
 protected:
   MClientQuota() :
-    Message(CEPH_MSG_CLIENT_QUOTA),
+    MessageInstance(CEPH_MSG_CLIENT_QUOTA),
     ino(0)
   {}
   ~MClientQuota() override {}

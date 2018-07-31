@@ -20,11 +20,8 @@
 #include "mon/MonMap.h"
 #include "mon/mon_types.h"
 
-class MMonElection : public Message {
+class MMonElection : public MessageInstance<MMonElection> {
 public:
-  typedef boost::intrusive_ptr<MMonElection> ref;
-  typedef boost::intrusive_ptr<MMonElection const> const_ref;
-  using factory = MessageFactory<MMonElection>;
   friend factory;
 
 private:
@@ -56,14 +53,14 @@ public:
   bufferlist sharing_bl;
   map<string,string> metadata;
   
-  MMonElection() : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
+  MMonElection() : MessageInstance(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
     op(0), epoch(0),
     quorum_features(0),
     mon_features(0)
   { }
 
   MMonElection(int o, epoch_t e, MonMap *m)
-    : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
       fsid(m->fsid), op(o), epoch(e),
       quorum_features(0),
       mon_features(0)

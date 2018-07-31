@@ -20,11 +20,8 @@
 
 #include "msg/Message.h"
 
-class MDentryLink : public Message {
+class MDentryLink : public MessageInstance<MDentryLink> {
 public:
-  typedef boost::intrusive_ptr<MDentryLink> ref;
-  typedef boost::intrusive_ptr<MDentryLink const> const_ref;
-  using factory = MessageFactory<MDentryLink>;
   friend factory;
 private:
   dirfrag_t subtree;
@@ -42,9 +39,9 @@ private:
 
 protected:
   MDentryLink() :
-    Message(MSG_MDS_DENTRYLINK) { }
+    MessageInstance(MSG_MDS_DENTRYLINK) { }
   MDentryLink(dirfrag_t r, dirfrag_t df, std::string_view n, bool p) :
-    Message(MSG_MDS_DENTRYLINK),
+    MessageInstance(MSG_MDS_DENTRYLINK),
     subtree(r),
     dirfrag(df),
     dn(n),

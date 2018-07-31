@@ -18,11 +18,8 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGUpdateLogMissing : public MOSDFastDispatchOp {
+class MOSDPGUpdateLogMissing : public MessageInstance<MOSDPGUpdateLogMissing, MOSDFastDispatchOp> {
 public:
-  typedef boost::intrusive_ptr<MOSDPGUpdateLogMissing> ref;
-  typedef boost::intrusive_ptr<MOSDPGUpdateLogMissing const> const_ref;
-  using factory = MessageFactory<MOSDPGUpdateLogMissing>;
   friend factory;
 private:
   static const int HEAD_VERSION = 3;
@@ -55,7 +52,7 @@ public:
   }
 
   MOSDPGUpdateLogMissing()
-    : MOSDFastDispatchOp(MSG_OSD_PG_UPDATE_LOG_MISSING, HEAD_VERSION,
+    : MessageInstance(MSG_OSD_PG_UPDATE_LOG_MISSING, HEAD_VERSION,
 			 COMPAT_VERSION) { }
   MOSDPGUpdateLogMissing(
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
@@ -66,7 +63,7 @@ public:
     ceph_tid_t rep_tid,
     eversion_t pg_trim_to,
     eversion_t pg_roll_forward_to)
-    : MOSDFastDispatchOp(MSG_OSD_PG_UPDATE_LOG_MISSING, HEAD_VERSION,
+    : MessageInstance(MSG_OSD_PG_UPDATE_LOG_MISSING, HEAD_VERSION,
 			 COMPAT_VERSION),
       map_epoch(epoch),
       min_epoch(min_epoch),

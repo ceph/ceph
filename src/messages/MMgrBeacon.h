@@ -22,11 +22,8 @@
 #include "include/types.h"
 
 
-class MMgrBeacon : public PaxosServiceMessage {
+class MMgrBeacon : public MessageInstance<MMgrBeacon, PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<MMgrBeacon> ref;
-  typedef boost::intrusive_ptr<MMgrBeacon const> const_ref;
-  using factory = MessageFactory<MMgrBeacon>;
   friend factory;
 private:
 
@@ -53,7 +50,7 @@ protected:
 
 public:
   MMgrBeacon()
-    : PaxosServiceMessage(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
       gid(0), available(false)
   {
   }
@@ -62,7 +59,7 @@ public:
              entity_addrvec_t server_addrs_, bool available_,
 	     std::vector<MgrMap::ModuleInfo>&& modules_,
 	     map<string,string>&& metadata_)
-    : PaxosServiceMessage(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
       gid(gid_), server_addrs(server_addrs_), available(available_), name(name_),
       fsid(fsid_), modules(std::move(modules_)), metadata(std::move(metadata_))
   {

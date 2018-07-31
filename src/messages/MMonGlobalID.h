@@ -17,15 +17,12 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MMonGlobalID : public PaxosServiceMessage {
+class MMonGlobalID : public MessageInstance<MMonGlobalID, PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<MMonGlobalID> ref;
-  typedef boost::intrusive_ptr<MMonGlobalID const> const_ref;
-  using factory = MessageFactory<MMonGlobalID>;
   friend factory;
 
   uint64_t old_max_id;
-  MMonGlobalID() : PaxosServiceMessage(MSG_MON_GLOBAL_ID, 0), old_max_id(0) { }
+  MMonGlobalID() : MessageInstance(MSG_MON_GLOBAL_ID, 0), old_max_id(0) { }
 private:
   ~MMonGlobalID() override {}
 

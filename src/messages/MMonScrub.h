@@ -16,11 +16,8 @@
 #include "msg/Message.h"
 #include "mon/mon_types.h"
 
-class MMonScrub : public Message {
+class MMonScrub : public MessageInstance<MMonScrub> {
 public:
-  typedef boost::intrusive_ptr<MMonScrub> ref;
-  typedef boost::intrusive_ptr<MMonScrub const> const_ref;
-  using factory = MessageFactory<MMonScrub>;
   friend factory;
 private:
   static const int HEAD_VERSION = 2;
@@ -47,12 +44,12 @@ public:
   pair<string,string> key;
 
   MMonScrub()
-    : Message(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       num_keys(-1)
   { }
 
   MMonScrub(op_type_t op, version_t v, int32_t num_keys)
-    : Message(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       op(op), version(v), num_keys(num_keys)
   { }
 

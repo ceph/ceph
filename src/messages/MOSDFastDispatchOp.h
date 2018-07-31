@@ -7,21 +7,17 @@
 #include "msg/Message.h"
 #include "osd/osd_types.h"
 
-class MOSDFastDispatchOp : public Message {
+class MOSDFastDispatchOp : public MessageSubType<MOSDFastDispatchOp> {
 public:
-  typedef boost::intrusive_ptr<MOSDFastDispatchOp> ref;
-  typedef boost::intrusive_ptr<MOSDFastDispatchOp const> const_ref;
-  using factory = MessageFactory<MOSDFastDispatchOp>;
-  friend factory;
+
+template<typename... Args>
+  MOSDFastDispatchOp(Args&&... args) : MessageSubType(std::forward<Args>(args)...) {}
 
   virtual epoch_t get_map_epoch() const = 0;
   virtual epoch_t get_min_epoch() const {
     return get_map_epoch();
   }
   virtual spg_t get_spg() const = 0;
-
-  MOSDFastDispatchOp(int t, int version, int compat_version)
-    : Message(t, version, compat_version) {}
 };
 
 #endif

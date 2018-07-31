@@ -19,11 +19,8 @@
 #include "msg/Message.h"
 #include "mon/MgrMap.h"
 
-class MMgrMap : public Message {
+class MMgrMap : public MessageInstance<MMgrMap> {
 public:
-  typedef boost::intrusive_ptr<MMgrMap> ref;
-  typedef boost::intrusive_ptr<MMgrMap const> const_ref;
-  using factory = MessageFactory<MMgrMap>;
   friend factory;
 
 protected:
@@ -33,9 +30,9 @@ public:
   const MgrMap & get_map() {return map;}
 
   MMgrMap() : 
-    Message(MSG_MGR_MAP) {}
+    MessageInstance(MSG_MGR_MAP) {}
   MMgrMap(const MgrMap &map_) :
-    Message(MSG_MGR_MAP), map(map_)
+    MessageInstance(MSG_MGR_MAP), map(map_)
   {
   }
 

@@ -17,11 +17,8 @@
 
 #include "common/errno.h"
 
-class MPoolOpReply : public PaxosServiceMessage {
+class MPoolOpReply : public MessageInstance<MPoolOpReply, PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<MPoolOpReply> ref;
-  typedef boost::intrusive_ptr<MPoolOpReply const> const_ref;
-  using factory = MessageFactory<MPoolOpReply>;
   friend factory;
 
   uuid_d fsid;
@@ -29,10 +26,10 @@ public:
   epoch_t epoch = 0;
   bufferlist response_data;
 
-  MPoolOpReply() : PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, 0)
+  MPoolOpReply() : MessageInstance(CEPH_MSG_POOLOP_REPLY, 0)
   {}
   MPoolOpReply( uuid_d& f, ceph_tid_t t, int rc, int e, version_t v) :
-    PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v),
+    MessageInstance(CEPH_MSG_POOLOP_REPLY, v),
     fsid(f),
     replyCode(rc),
     epoch(e) {
@@ -40,7 +37,7 @@ public:
   }
   MPoolOpReply( uuid_d& f, ceph_tid_t t, int rc, int e, version_t v,
 		bufferlist *blp) :
-    PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v),
+    MessageInstance(CEPH_MSG_POOLOP_REPLY, v),
     fsid(f),
     replyCode(rc),
     epoch(e) {

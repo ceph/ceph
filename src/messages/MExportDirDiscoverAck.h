@@ -18,11 +18,8 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirDiscoverAck : public Message {
+class MExportDirDiscoverAck : public MessageInstance<MExportDirDiscoverAck> {
 public:
-  typedef boost::intrusive_ptr<MExportDirDiscoverAck> ref;
-  typedef boost::intrusive_ptr<MExportDirDiscoverAck const> const_ref;
-  using factory = MessageFactory<MExportDirDiscoverAck>;
   friend factory;
 private:
   dirfrag_t dirfrag;
@@ -34,9 +31,9 @@ private:
   bool is_success() const { return success; }
 
 protected:
-  MExportDirDiscoverAck() : Message(MSG_MDS_EXPORTDIRDISCOVERACK) {}
+  MExportDirDiscoverAck() : MessageInstance(MSG_MDS_EXPORTDIRDISCOVERACK) {}
   MExportDirDiscoverAck(dirfrag_t df, uint64_t tid, bool s=true) :
-    Message(MSG_MDS_EXPORTDIRDISCOVERACK),
+    MessageInstance(MSG_MDS_EXPORTDIRDISCOVERACK),
     dirfrag(df), success(s) {
     set_tid(tid);
   }

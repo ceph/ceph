@@ -19,11 +19,8 @@
 #include "msg/Message.h"
 
 
-class MExportCapsAck : public Message {
+class MExportCapsAck : public MessageInstance<MExportCapsAck> {
 public:  
-  typedef boost::intrusive_ptr<MExportCapsAck> ref;
-  typedef boost::intrusive_ptr<MExportCapsAck const> const_ref;
-  using factory = MessageFactory<MExportCapsAck>;
   friend factory;
 
   inodeno_t ino;
@@ -31,9 +28,9 @@ public:
 
 protected:
   MExportCapsAck() :
-    Message(MSG_MDS_EXPORTCAPSACK) {}
+    MessageInstance(MSG_MDS_EXPORTCAPSACK) {}
   MExportCapsAck(inodeno_t i) :
-    Message(MSG_MDS_EXPORTCAPSACK), ino(i) {}
+    MessageInstance(MSG_MDS_EXPORTCAPSACK), ino(i) {}
   ~MExportCapsAck() override {}
 
 public:

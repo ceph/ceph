@@ -17,11 +17,8 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGScan : public MOSDFastDispatchOp {
+class MOSDPGScan : public MessageInstance<MOSDPGScan, MOSDFastDispatchOp> {
 public:
-  typedef boost::intrusive_ptr<MOSDPGScan> ref;
-  typedef boost::intrusive_ptr<MOSDPGScan const> const_ref;
-  using factory = MessageFactory<MOSDPGScan>;
   friend factory;
 private:
   static const int HEAD_VERSION = 2;
@@ -93,10 +90,10 @@ public:
   }
 
   MOSDPGScan()
-    : MOSDFastDispatchOp(MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance(MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGScan(__u32 o, pg_shard_t from,
 	     epoch_t e, epoch_t qe, spg_t p, hobject_t be, hobject_t en)
-    : MOSDFastDispatchOp(MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION),
       op(o),
       map_epoch(e), query_epoch(qe),
       from(from),
