@@ -233,33 +233,55 @@ mds_load_t MDBalancer::get_load(utime_t now)
   }
 
   uint64_t num_requests = mds->get_num_requests();
-  bool new_req_rate = false;
-  if (last_get_load != utime_t() &&
-      now > last_get_load &&
-      num_requests >= last_num_requests) {
-    utime_t el = now;
-    el -= last_get_load;
-    if (el.sec() >= 1) {
-      load.req_rate = (num_requests - last_num_requests) / (double)el;
-      new_req_rate = true;
+
+  uint64_t cpu_time = 1;
+  {
+    string stat_path = PROCPREFIX "/proc/self/stat";
+    ifstream stat_file(stat_path);
+    if (stat_file.is_open()) {
+      vector<string> stat_vec(std::istream_iterator<string>{stat_file},
+			      std::istream_iterator<string>());
+      if (stat_vec.size() >= 15) {
+	// utime + stime
+	cpu_time = strtoll(stat_vec[13].c_str(), nullptr, 10) +
+		   strtoll(stat_vec[14].c_str(), nullptr, 10);
+      } else {
+	derr << "input file '" << stat_path << "' not resolvable" << dendl_impl;
+      }
+    } else {
+      derr << "input file '" << stat_path << "' not found" << dendl_impl;
     }
   }
-  if (!new_req_rate) {
-    auto p = mds_load.find(mds->get_nodeid());
-    if (p != mds_load.end())
-      load.req_rate = p->second.req_rate;
-  }
-  last_get_load = now;
-  last_num_requests = num_requests;
 
   load.queue_len = messenger->get_dispatch_queue_len();
 
-  ifstream cpu(PROCPREFIX "/proc/loadavg");
-  if (cpu.is_open())
-    cpu >> load.cpu_load_avg;
-  else
-    derr << "input file " PROCPREFIX "'/proc/loadavg' not found" << dendl_impl;
-  
+  bool update_last = true;
+  if (last_get_load != utime_t() &&
+      now > last_get_load) {
+    utime_t el = now;
+    el -= last_get_load;
+    if (el.sec() >= 1) {
+      if (num_requests > last_num_requests)
+	load.req_rate = (num_requests - last_num_requests) / (double)el;
+      if (cpu_time > last_cpu_time)
+	load.cpu_load_avg = (cpu_time - last_cpu_time) / (double)el;
+    } else {
+      auto p = mds_load.find(mds->get_nodeid());
+      if (p != mds_load.end()) {
+	load.req_rate = p->second.req_rate;
+	load.cpu_load_avg = p->second.cpu_load_avg;
+      }
+      if (num_requests >= last_num_requests && cpu_time >= last_cpu_time)
+	update_last = false;
+    }
+  }
+
+  if (update_last) {
+    last_num_requests = num_requests;
+    last_cpu_time = cpu_time;
+    last_get_load = now;
+  }
+
   dout(15) << "get_load " << load << dendl;
   return load;
 }
