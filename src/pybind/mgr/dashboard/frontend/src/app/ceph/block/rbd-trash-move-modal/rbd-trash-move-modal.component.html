@@ -1,0 +1,60 @@
+<cd-modal>
+  <ng-container i18n
+                class="modal-title">Move an image to trash</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="moveForm"
+          class="form"
+          #formDir="ngForm"
+          [formGroup]="moveForm"
+          novalidate>
+      <div class="modal-body">
+        <p>
+          <ng-container i18n>To move</ng-container>&nbsp;
+          <kbd>{{ poolName }}/{{ imageName }}</kbd>&nbsp;
+          <ng-container i18n>to trash, click</ng-container>&nbsp;
+          <kbd i18n>Move Image</kbd>.&nbsp;
+          <ng-container i18n>Optionally, you can pick an expiration date.</ng-container>
+        </p>
+
+        <div class="form-group"
+             [ngClass]="{'has-error': moveForm.showError('expiresAt', formDir)}">
+          <label for="expires"
+                 i18n>Protection expires at</label>
+          <input type="text"
+                 placeholder="NOT PROTECTED"
+                 i18n-placeholder
+                 class="form-control"
+                 [minDate]="minDate"
+                 [bsConfig]="bsConfig"
+                 formControlName="expiresAt"
+                 bsDatepicker>
+          <span i18n
+                class="help-block"
+                *ngIf="moveForm.showError('expiresAt', formDir, 'format')">
+            Wrong date format. Please use "YYYY-MM-DD HH:mm:ss".
+          </span>
+          <span i18n
+                class="help-block"
+                *ngIf="moveForm.showError('expiresAt', formDir, 'expired')">
+            Protection has already expired. Please pick a future date or leave it empty.
+          </span>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="button-group text-right">
+          <cd-submit-button i18n
+                            [form]="moveForm"
+                            (submitAction)="moveImage()">
+            Move Image
+          </cd-submit-button>
+          <button i18n
+                  type="button"
+                  class="btn btn-sm btn-default"
+                  (click)="modalRef.hide()">Cancel</button>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>
