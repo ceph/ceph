@@ -212,7 +212,7 @@ class Module(MgrModule):
                 data = self.extract_smart_features(raw_data)
                 self.put_device_metrics(ioctx, device, data)
         ioctx.close()
-        return (0, "", "")
+        return 0, "", ""
 
     def scrape_all(self):
         osdmap = self.get("osd_map")
@@ -233,7 +233,7 @@ class Module(MgrModule):
                 self.put_device_metrics(ioctx, device, data)
 
         ioctx.close()
-        return (0, "", "")
+        return 0, "", ""
 
     def scrape_device(self, devid):
         r = self.get("device " + devid)
@@ -252,7 +252,7 @@ class Module(MgrModule):
                 data = self.extract_smart_features(raw_data)
                 self.put_device_metrics(ioctx, device, data)
         ioctx.close()
-        return (0, "", "")
+        return 0, "", ""
 
     def do_scrape_osd(self, osd_id, ioctx, devid=''):
         self.log.debug('do_scrape_osd osd.%d' % osd_id)
@@ -323,7 +323,7 @@ class Module(MgrModule):
                     res[key] = v
             except:
                 pass
-        return (0, json.dumps(res, indent=4), '')
+        return 0, json.dumps(res, indent=4), ''
 
     def check_health(self):
         self.log.info('Check health')
@@ -428,7 +428,7 @@ class Module(MgrModule):
                     'detail': ls,
                 }
         self.set_health_checks(checks)
-        return (0,"","")
+        return 0, "", ""
 
     def is_osd_in(self, osdmap, osd_id):
         for osd in osdmap['osds']:
