@@ -5,11 +5,8 @@
 
 #include "msg/Message.h"
 
-class MConfig : public Message {
+class MConfig : public MessageInstance<MConfig> {
 public:
-  typedef boost::intrusive_ptr<MConfig> ref;
-  typedef boost::intrusive_ptr<MConfig const> const_ref;
-  using factory = MessageFactory<MConfig>;
   friend factory;
 
   static const int HEAD_VERSION = 1;
@@ -17,9 +14,9 @@ public:
 
   map<string,string> config;
 
-  MConfig() : Message(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
+  MConfig() : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
   MConfig(const map<string,string>& c)
-    : Message(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
       config(c) {}
 
   const char *get_type_name() const override {

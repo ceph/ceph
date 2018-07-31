@@ -5,11 +5,8 @@
 
 #include "msg/Message.h"
 
-class MGetConfig : public Message {
+class MGetConfig : public MessageInstance<MGetConfig> {
 public:
-  typedef boost::intrusive_ptr<MGetConfig> ref;
-  typedef boost::intrusive_ptr<MGetConfig const> const_ref;
-  using factory = MessageFactory<MGetConfig>;
   friend factory;
 
   static const int HEAD_VERSION = 1;
@@ -19,9 +16,9 @@ public:
   string host;      ///< our hostname
   string device_class;
 
-  MGetConfig() : Message(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
+  MGetConfig() : MessageInstance(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
   MGetConfig(const EntityName& n, const string& h)
-    : Message(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION),
       name(n),
       host(h) {}
 

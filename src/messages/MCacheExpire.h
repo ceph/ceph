@@ -21,11 +21,8 @@
 
 #include "mds/mdstypes.h"
 
-class MCacheExpire : public Message {
+class MCacheExpire : public MessageInstance<MCacheExpire> {
 public:
-  typedef boost::intrusive_ptr<MCacheExpire> ref;
-  typedef boost::intrusive_ptr<MCacheExpire const> const_ref;
-  using factory = MessageFactory<MCacheExpire>;
   friend factory;
 private:
   __s32 from;
@@ -71,9 +68,9 @@ public:
   int get_from() const { return from; }
 
 protected:
-  MCacheExpire() : Message(MSG_MDS_CACHEEXPIRE), from(-1) {}
+  MCacheExpire() : MessageInstance(MSG_MDS_CACHEEXPIRE), from(-1) {}
   MCacheExpire(int f) : 
-    Message(MSG_MDS_CACHEEXPIRE),
+    MessageInstance(MSG_MDS_CACHEEXPIRE),
     from(f) { }
   ~MCacheExpire() override {}
 

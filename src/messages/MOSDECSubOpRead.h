@@ -18,11 +18,8 @@
 #include "MOSDFastDispatchOp.h"
 #include "osd/ECMsgTypes.h"
 
-class MOSDECSubOpRead : public MOSDFastDispatchOp {
+class MOSDECSubOpRead : public MessageInstance<MOSDECSubOpRead, MOSDFastDispatchOp> {
 public:
-  typedef boost::intrusive_ptr<MOSDECSubOpRead> ref;
-  typedef boost::intrusive_ptr<MOSDECSubOpRead const> const_ref;
-  using factory = MessageFactory<MOSDECSubOpRead>;
   friend factory;
 private:
   static const int HEAD_VERSION = 3;
@@ -47,7 +44,7 @@ public:
   }
 
   MOSDECSubOpRead()
-    : MOSDFastDispatchOp(MSG_OSD_EC_READ, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_OSD_EC_READ, HEAD_VERSION, COMPAT_VERSION)
     {}
 
   void decode_payload() override {

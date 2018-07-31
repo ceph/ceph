@@ -16,23 +16,15 @@
 
 #include "msg/Message.h"
 
-class MMonQuorumService : public Message {
+class MMonQuorumService : public MessageSubType<MMonQuorumService> {
 public:
-  typedef boost::intrusive_ptr<MMonQuorumService> ref;
-  typedef boost::intrusive_ptr<MMonQuorumService const> const_ref;
-  using factory = MessageFactory<MMonQuorumService>;
-  friend factory;
-
-  epoch_t epoch;
-  version_t round;
-
-  MMonQuorumService(int type, int head=1, int compat=1) :
-    Message(type, head, compat),
-    epoch(0),
-    round(0)
-  { }
+  epoch_t epoch = 0;
+  version_t round = 0;
 
 protected:
+template<typename... Args>
+  MMonQuorumService(Args&&... args) : MessageSubType(std::forward<Args>(args)...) {}
+
   ~MMonQuorumService() override { }
 
 public:

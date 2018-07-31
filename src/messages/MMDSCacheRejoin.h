@@ -27,11 +27,8 @@
 
 // sent from replica to auth
 
-class MMDSCacheRejoin : public Message {
+class MMDSCacheRejoin : public MessageInstance<MMDSCacheRejoin> {
 public:
-  typedef boost::intrusive_ptr<MMDSCacheRejoin> ref;
-  typedef boost::intrusive_ptr<MMDSCacheRejoin const> const_ref;
-  using factory = MessageFactory<MMDSCacheRejoin>;
   friend factory;
 private:
 
@@ -219,10 +216,10 @@ private:
   
 protected:
   MMDSCacheRejoin() :
-    Message(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
     op(0) {}
   MMDSCacheRejoin(int o) : 
-    Message(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
     op(o) {}
   ~MMDSCacheRejoin() override {}
 

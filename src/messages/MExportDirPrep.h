@@ -19,11 +19,8 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirPrep : public Message {
+class MExportDirPrep : public MessageInstance<MExportDirPrep> {
 public:
-  typedef boost::intrusive_ptr<MExportDirPrep> ref;
-  typedef boost::intrusive_ptr<MExportDirPrep const> const_ref;
-  using factory = MessageFactory<MExportDirPrep>;
   friend factory;
 private:
   dirfrag_t dirfrag;
@@ -48,7 +45,7 @@ protected:
     b_did_assim = false;
   }
   MExportDirPrep(dirfrag_t df, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRPREP),
+    MessageInstance(MSG_MDS_EXPORTDIRPREP),
     dirfrag(df), b_did_assim(false) {
     set_tid(tid);
   }

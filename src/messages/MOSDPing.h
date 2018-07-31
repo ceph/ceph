@@ -32,11 +32,8 @@
 #include "osd/osd_types.h"
 
 
-class MOSDPing : public Message {
+class MOSDPing : public MessageInstance<MOSDPing> {
 public:
-  typedef boost::intrusive_ptr<MOSDPing> ref;
-  typedef boost::intrusive_ptr<MOSDPing const> const_ref;
-  using factory = MessageFactory<MOSDPing>;
   friend factory;
 private:
   static const int HEAD_VERSION = 4;
@@ -70,11 +67,11 @@ private:
   uint32_t min_message_size;
 
   MOSDPing(const uuid_d& f, epoch_t e, __u8 o, utime_t s, uint32_t min_message)
-    : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION),
       fsid(f), map_epoch(e), op(o), stamp(s), min_message_size(min_message)
   { }
   MOSDPing()
-    : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION), min_message_size(0)
+    : MessageInstance(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION), min_message_size(0)
   {}
 private:
   ~MOSDPing() override {}

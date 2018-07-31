@@ -29,11 +29,8 @@ struct ceph_mon_subscribe_item_old {
 WRITE_RAW_ENCODER(ceph_mon_subscribe_item_old)
 
 
-class MMonSubscribe : public Message {
+class MMonSubscribe : public MessageInstance<MMonSubscribe> {
 public:
-  typedef boost::intrusive_ptr<MMonSubscribe> ref;
-  typedef boost::intrusive_ptr<MMonSubscribe const> const_ref;
-  using factory = MessageFactory<MMonSubscribe>;
   friend factory;
 
   static const int HEAD_VERSION = 3;
@@ -42,7 +39,7 @@ public:
   string hostname;
   map<string, ceph_mon_subscribe_item> what;
   
-  MMonSubscribe() : Message(CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION, COMPAT_VERSION) { }
+  MMonSubscribe() : MessageInstance(CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION, COMPAT_VERSION) { }
 private:
   ~MMonSubscribe() override {}
 

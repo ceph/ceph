@@ -20,11 +20,8 @@
 #include "mds/MDSMap.h"
 #include "include/ceph_features.h"
 
-class MMDSMap : public Message {
+class MMDSMap : public MessageInstance<MMDSMap> {
 public:
-  typedef boost::intrusive_ptr<MMDSMap> ref;
-  typedef boost::intrusive_ptr<MMDSMap const> const_ref;
-  using factory = MessageFactory<MMDSMap>;
   friend factory;
 private:
 
@@ -40,9 +37,9 @@ public:
 
 protected:
   MMDSMap() : 
-    Message(CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION) {}
+    MessageInstance(CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION) {}
   MMDSMap(const uuid_d &f, const MDSMap &mm) :
-    Message(CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION),
     fsid(f) {
     epoch = mm.get_epoch();
     mm.encode(encoded, -1);  // we will reencode with fewer features as necessary

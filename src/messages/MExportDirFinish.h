@@ -17,11 +17,8 @@
 
 #include "msg/Message.h"
 
-class MExportDirFinish : public Message {
+class MExportDirFinish : public MessageInstance<MExportDirFinish> {
 public:
-  typedef boost::intrusive_ptr<MExportDirFinish> ref;
-  typedef boost::intrusive_ptr<MExportDirFinish const> const_ref;
-  using factory = MessageFactory<MExportDirFinish>;
   friend factory;
 private:
   dirfrag_t dirfrag;
@@ -34,7 +31,7 @@ private:
 protected:
   MExportDirFinish() : last(false) {}
   MExportDirFinish(dirfrag_t df, bool l, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRFINISH), dirfrag(df), last(l) {
+    MessageInstance(MSG_MDS_EXPORTDIRFINISH), dirfrag(df), last(l) {
     set_tid(tid);
   }
   ~MExportDirFinish() override {}

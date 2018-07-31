@@ -18,11 +18,8 @@
 #include "msg/Message.h"
 
 
-class MClientCapRelease : public Message {
+class MClientCapRelease : public MessageInstance<MClientCapRelease> {
 public:
-  typedef boost::intrusive_ptr<MClientCapRelease> ref;
-  typedef boost::intrusive_ptr<MClientCapRelease const> const_ref;
-  using factory = MessageFactory<MClientCapRelease>;
   friend factory;
 
 private:
@@ -38,7 +35,7 @@ private:
   epoch_t osd_epoch_barrier;
 
   MClientCapRelease() : 
-    Message(CEPH_MSG_CLIENT_CAPRELEASE, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(CEPH_MSG_CLIENT_CAPRELEASE, HEAD_VERSION, COMPAT_VERSION),
     osd_epoch_barrier(0)
   {
     memset(&head, 0, sizeof(head));

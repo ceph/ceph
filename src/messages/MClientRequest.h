@@ -48,11 +48,8 @@
 
 // metadata ops.
 
-class MClientRequest : public Message {
+class MClientRequest : public MessageInstance<MClientRequest> {
 public:
-  typedef boost::intrusive_ptr<MClientRequest> ref;
-  typedef boost::intrusive_ptr<MClientRequest const> const_ref;
-  using factory = MessageFactory<MClientRequest>;
   friend factory;
 private:
   static const int HEAD_VERSION = 4;
@@ -94,9 +91,9 @@ public:
 protected:
   // cons
   MClientRequest()
-    : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
   MClientRequest(int op)
-    : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
+    : MessageInstance(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = op;
   }

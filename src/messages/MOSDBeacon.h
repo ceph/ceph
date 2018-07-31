@@ -3,21 +3,18 @@
 
 #pragma once
 
-class MOSDBeacon : public PaxosServiceMessage {
+class MOSDBeacon : public MessageInstance<MOSDBeacon, PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<MOSDBeacon> ref;
-  typedef boost::intrusive_ptr<MOSDBeacon const> const_ref;
-  using factory = MessageFactory<MOSDBeacon>;
   friend factory;
 
   std::vector<pg_t> pgs;
   epoch_t min_last_epoch_clean = 0;
 
   MOSDBeacon()
-    : PaxosServiceMessage(MSG_OSD_BEACON, 0)
+    : MessageInstance(MSG_OSD_BEACON, 0)
   {}
   MOSDBeacon(epoch_t e, epoch_t min_lec)
-    : PaxosServiceMessage(MSG_OSD_BEACON, e),
+    : MessageInstance(MSG_OSD_BEACON, e),
       min_last_epoch_clean(min_lec)
   {}
   void encode_payload(uint64_t features) override {

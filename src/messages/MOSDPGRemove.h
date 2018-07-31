@@ -20,11 +20,8 @@
 #include "msg/Message.h"
 
 
-class MOSDPGRemove : public Message {
+class MOSDPGRemove : public MessageInstance<MOSDPGRemove> {
 public:
-  typedef boost::intrusive_ptr<MOSDPGRemove> ref;
-  typedef boost::intrusive_ptr<MOSDPGRemove const> const_ref;
-  using factory = MessageFactory<MOSDPGRemove>;
   friend factory;
 private:
   static const int HEAD_VERSION = 3;
@@ -38,9 +35,9 @@ private:
   epoch_t get_epoch() const { return epoch; }
 
   MOSDPGRemove() :
-    Message(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {}
+    MessageInstance(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGRemove(epoch_t e, vector<spg_t>& l) :
-    Message(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {
+    MessageInstance(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {
     this->epoch = e;
     pg_list.swap(l);
   }

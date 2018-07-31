@@ -18,11 +18,8 @@
 #include "MOSDFastDispatchOp.h"
 #include "osd/ECMsgTypes.h"
 
-class MOSDECSubOpWrite : public MOSDFastDispatchOp {
+class MOSDECSubOpWrite : public MessageInstance<MOSDECSubOpWrite, MOSDFastDispatchOp> {
 public:
-  typedef boost::intrusive_ptr<MOSDECSubOpWrite> ref;
-  typedef boost::intrusive_ptr<MOSDECSubOpWrite const> const_ref;
-  using factory = MessageFactory<MOSDECSubOpWrite>;
   friend factory;
 private:
   static const int HEAD_VERSION = 2;
@@ -47,10 +44,10 @@ public:
   }
 
   MOSDECSubOpWrite()
-    : MOSDFastDispatchOp(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION)
     {}
   MOSDECSubOpWrite(ECSubWrite &in_op)
-    : MOSDFastDispatchOp(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION) {
+    : MessageInstance(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION) {
     op.claim(in_op);
   }
 

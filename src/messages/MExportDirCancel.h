@@ -18,11 +18,8 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirCancel : public Message {
+class MExportDirCancel : public MessageInstance<MExportDirCancel> {
 public:
-  typedef boost::intrusive_ptr<MExportDirCancel> ref;
-  typedef boost::intrusive_ptr<MExportDirCancel const> const_ref;
-  using factory = MessageFactory<MExportDirCancel>;
   friend factory;
 private:
   dirfrag_t dirfrag;
@@ -31,9 +28,9 @@ private:
   dirfrag_t get_dirfrag() const { return dirfrag; }
 
 protected:
-  MExportDirCancel() : Message(MSG_MDS_EXPORTDIRCANCEL) {}
+  MExportDirCancel() : MessageInstance(MSG_MDS_EXPORTDIRCANCEL) {}
   MExportDirCancel(dirfrag_t df, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRCANCEL), dirfrag(df) {
+    MessageInstance(MSG_MDS_EXPORTDIRCANCEL), dirfrag(df) {
     set_tid(tid);
   }
   ~MExportDirCancel() override {}

@@ -5,12 +5,8 @@
 
 #include "msg/Message.h"
 
-class MMgrClose : public Message
-{
+class MMgrClose : public MessageInstance<MMgrClose> {
 public:
-  typedef boost::intrusive_ptr<MMgrClose> ref;
-  typedef boost::intrusive_ptr<MMgrClose const> const_ref;
-  using factory = MessageFactory<MMgrClose>;
   friend factory;
 private:
 
@@ -47,6 +43,6 @@ public:
   }
 
   MMgrClose()
-    : Message(MSG_MGR_CLOSE, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_MGR_CLOSE, HEAD_VERSION, COMPAT_VERSION)
   {}
 };

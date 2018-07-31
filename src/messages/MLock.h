@@ -20,11 +20,8 @@
 #include "mds/locks.h"
 #include "mds/SimpleLock.h"
 
-class MLock : public Message {
+class MLock : public MessageInstance<MLock> {
 public:
-  typedef boost::intrusive_ptr<MLock> ref;
-  typedef boost::intrusive_ptr<MLock const> const_ref;
-  using factory = MessageFactory<MLock>;
   friend factory;
 private:
   int32_t     action = 0;  // action type
@@ -48,19 +45,19 @@ public:
   MDSCacheObjectInfo &get_object_info() { return object_info; }
 
 protected:
-  MLock() : Message(MSG_MDS_LOCK) {}
+  MLock() : MessageInstance(MSG_MDS_LOCK) {}
   MLock(int ac, mds_rank_t as) :
-    Message(MSG_MDS_LOCK),
+    MessageInstance(MSG_MDS_LOCK),
     action(ac), asker(as),
     lock_type(0) { }
   MLock(SimpleLock *lock, int ac, mds_rank_t as) :
-    Message(MSG_MDS_LOCK),
+    MessageInstance(MSG_MDS_LOCK),
     action(ac), asker(as),
     lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
   }
   MLock(SimpleLock *lock, int ac, mds_rank_t as, bufferlist& bl) :
-    Message(MSG_MDS_LOCK),
+    MessageInstance(MSG_MDS_LOCK),
     action(ac), asker(as), lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
     lockdata.claim(bl);

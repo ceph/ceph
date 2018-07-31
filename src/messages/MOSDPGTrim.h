@@ -18,11 +18,8 @@
 #include "msg/Message.h"
 #include "messages/MOSDPeeringOp.h"
 
-class MOSDPGTrim : public MOSDPeeringOp {
+class MOSDPGTrim : public MessageInstance<MOSDPGTrim, MOSDPeeringOp> {
 public:
-  typedef boost::intrusive_ptr<MOSDPGTrim> ref;
-  typedef boost::intrusive_ptr<MOSDPGTrim const> const_ref;
-  using factory = MessageFactory<MOSDPGTrim>;
   friend factory;
 private:
   static const int HEAD_VERSION = 2;
@@ -50,9 +47,9 @@ public:
       MTrim(epoch, get_source().num(), pgid.shard, trim_to));
   }
 
-  MOSDPGTrim() : MOSDPeeringOp(MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDPGTrim() : MessageInstance(MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGTrim(version_t mv, spg_t p, eversion_t tt) :
-    MOSDPeeringOp(MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION),
     epoch(mv), pgid(p), trim_to(tt) { }
 private:
   ~MOSDPGTrim() override {}

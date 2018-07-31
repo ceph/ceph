@@ -20,11 +20,8 @@
 
 #include "msg/Message.h"
 
-class MDentryUnlink : public Message {
+class MDentryUnlink : public MessageInstance<MDentryUnlink> {
 public:
-  typedef boost::intrusive_ptr<MDentryUnlink> ref;
-  typedef boost::intrusive_ptr<MDentryUnlink const> const_ref;
-  using factory = MessageFactory<MDentryUnlink>;
   friend factory;
 private:
 
@@ -40,9 +37,9 @@ private:
 
 protected:
   MDentryUnlink() :
-    Message(MSG_MDS_DENTRYUNLINK) { }
+    MessageInstance(MSG_MDS_DENTRYUNLINK) { }
   MDentryUnlink(dirfrag_t df, std::string_view n) :
-    Message(MSG_MDS_DENTRYUNLINK),
+    MessageInstance(MSG_MDS_DENTRYUNLINK),
     dirfrag(df),
     dn(n) {}
   ~MDentryUnlink() override {}

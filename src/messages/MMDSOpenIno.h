@@ -17,20 +17,17 @@
 
 #include "msg/Message.h"
 
-class MMDSOpenIno : public Message {
+class MMDSOpenIno : public MessageInstance<MMDSOpenIno> {
 public:
-  typedef boost::intrusive_ptr<MMDSOpenIno> ref;
-  typedef boost::intrusive_ptr<MMDSOpenIno const> const_ref;
-  using factory = MessageFactory<MMDSOpenIno>;
   friend factory;
 
   inodeno_t ino;
   vector<inode_backpointer_t> ancestors;
 
 protected:
-  MMDSOpenIno() : Message(MSG_MDS_OPENINO) {}
+  MMDSOpenIno() : MessageInstance(MSG_MDS_OPENINO) {}
   MMDSOpenIno(ceph_tid_t t, inodeno_t i, vector<inode_backpointer_t>* pa) :
-    Message(MSG_MDS_OPENINO), ino(i) {
+    MessageInstance(MSG_MDS_OPENINO), ino(i) {
     header.tid = t;
     if (pa)
       ancestors = *pa;

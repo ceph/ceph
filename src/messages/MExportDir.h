@@ -19,11 +19,8 @@
 #include "msg/Message.h"
 
 
-class MExportDir : public Message {
+class MExportDir : public MessageInstance<MExportDir> {
 public:
-  typedef boost::intrusive_ptr<MExportDir>ref;
-  typedef boost::intrusive_ptr<MExportDir const> const_ref;
-  using factory = MessageFactory<MExportDir>;
   friend factory;
   dirfrag_t dirfrag;
   bufferlist export_data;
@@ -31,9 +28,9 @@ public:
   bufferlist client_map;
 
 protected:
-  MExportDir() : Message(MSG_MDS_EXPORTDIR) {}
+  MExportDir() : MessageInstance(MSG_MDS_EXPORTDIR) {}
   MExportDir(dirfrag_t df, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIR), dirfrag(df) {
+    MessageInstance(MSG_MDS_EXPORTDIR), dirfrag(df) {
     set_tid(tid);
   }
   ~MExportDir() override {}

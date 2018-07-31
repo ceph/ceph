@@ -18,11 +18,8 @@
 #include "msg/Message.h"
 #include "include/ceph_features.h"
 
-class MClientCaps : public Message {
+class MClientCaps : public MessageInstance<MClientCaps> {
 public:
-  typedef boost::intrusive_ptr<MClientCaps> ref;
-  typedef boost::intrusive_ptr<MClientCaps const> const_ref;
-  using factory = MessageFactory<MClientCaps>;
   friend factory;
 private:
 
@@ -133,7 +130,7 @@ private:
 
 protected:
   MClientCaps()
-    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION) {}
   MClientCaps(int op,
 	      inodeno_t ino,
 	      inodeno_t realm,
@@ -144,7 +141,7 @@ protected:
 	      int dirty,
 	      int mseq,
               epoch_t oeb)
-    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
       osd_epoch_barrier(oeb) {
     memset(&head, 0, sizeof(head));
     head.op = op;
@@ -161,7 +158,7 @@ protected:
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,
 	      uint64_t id, int mseq, epoch_t oeb)
-    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
       osd_epoch_barrier(oeb) {
     memset(&head, 0, sizeof(head));
     head.op = op;

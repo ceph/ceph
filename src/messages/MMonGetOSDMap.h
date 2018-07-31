@@ -19,11 +19,8 @@
 
 #include "include/types.h"
 
-class MMonGetOSDMap : public PaxosServiceMessage {
+class MMonGetOSDMap : public MessageInstance<MMonGetOSDMap, PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<MMonGetOSDMap> ref;
-  typedef boost::intrusive_ptr<MMonGetOSDMap const> const_ref;
-  using factory = MessageFactory<MMonGetOSDMap>;
   friend factory;
 private:
 
@@ -32,7 +29,7 @@ private:
 
 public:
   MMonGetOSDMap()
-    : PaxosServiceMessage(CEPH_MSG_MON_GET_OSDMAP, 0),
+    : MessageInstance(CEPH_MSG_MON_GET_OSDMAP, 0),
       full_first(0),
       full_last(0),
       inc_first(0),

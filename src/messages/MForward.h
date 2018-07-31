@@ -24,11 +24,8 @@
 #include "include/encoding.h"
 #include "include/stringify.h"
 
-class MForward : public Message {
+class MForward : public MessageInstance<MForward> {
 public:
-  typedef boost::intrusive_ptr<MForward> ref;
-  typedef boost::intrusive_ptr<MForward const> const_ref;
-  using factory = MessageFactory<MForward>;
   friend factory;
 
   uint64_t tid;
@@ -45,11 +42,11 @@ public:
   static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 4;
 
-  MForward() : Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
+  MForward() : MessageInstance(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
                tid(0), con_features(0), msg(NULL) {}
   //the message needs to have caps filled in!
   MForward(uint64_t t, PaxosServiceMessage *m, uint64_t feat) :
-    Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
     tid(t), msg(NULL) {
     client_type = m->get_source().type();
     client_addrs = m->get_source_addrs();
@@ -64,7 +61,7 @@ public:
   }
   MForward(uint64_t t, PaxosServiceMessage *m, uint64_t feat,
            const MonCap& caps) :
-    Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
     tid(t), client_caps(caps), msg(NULL) {
     client_type = m->get_source().type();
     client_addrs = m->get_source_addrs();

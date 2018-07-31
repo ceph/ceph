@@ -4,13 +4,8 @@
 #include "msg/Message.h"
 #include "mon/Session.h"
 
-class PaxosServiceMessage : public Message {
+class PaxosServiceMessage : public MessageSubType<PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<PaxosServiceMessage> ref;
-  typedef boost::intrusive_ptr<PaxosServiceMessage const> const_ref;
-  using factory = MessageFactory<PaxosServiceMessage>;
-  friend factory;
-
   version_t version;
   __s16 deprecated_session_mon;
   uint64_t deprecated_session_mon_tid;
@@ -20,15 +15,15 @@ public:
   epoch_t rx_election_epoch;
   
   PaxosServiceMessage()
-    : Message(MSG_PAXOS),
+    : MessageSubType(MSG_PAXOS),
       version(0), deprecated_session_mon(-1), deprecated_session_mon_tid(0),
       rx_election_epoch(0) { }
   PaxosServiceMessage(int type, version_t v, int enc_version=1, int compat_enc_version=0)
-    : Message(type, enc_version, compat_enc_version),
+    : MessageSubType(type, enc_version, compat_enc_version),
       version(v), deprecated_session_mon(-1), deprecated_session_mon_tid(0),
       rx_election_epoch(0)  { }
  protected:
-  ~PaxosServiceMessage() override {}
+  virtual ~PaxosServiceMessage() override {}
 
  public:
   void paxos_encode() {

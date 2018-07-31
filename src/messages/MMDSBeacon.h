@@ -179,11 +179,8 @@ struct MDSHealth
 WRITE_CLASS_ENCODER(MDSHealth)
 
 
-class MMDSBeacon : public PaxosServiceMessage {
+class MMDSBeacon : public MessageInstance<MMDSBeacon, PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<MMDSBeacon> ref;
-  typedef boost::intrusive_ptr<MMDSBeacon const> const_ref;
-  using factory = MessageFactory<MMDSBeacon>;
   friend factory;
 private:
 
@@ -212,14 +209,14 @@ private:
 
 protected:
   MMDSBeacon()
-    : PaxosServiceMessage(MSG_MDS_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_MDS_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
     global_id(0), state(MDSMap::STATE_NULL), standby_for_rank(MDS_RANK_NONE),
     standby_for_fscid(FS_CLUSTER_ID_NONE), standby_replay(false),
     mds_features(0) {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
   MMDSBeacon(const uuid_d &f, mds_gid_t g, const string& n, epoch_t les, MDSMap::DaemonState st, version_t se, uint64_t feat) :
-    PaxosServiceMessage(MSG_MDS_BEACON, les, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_MDS_BEACON, les, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), global_id(g), name(n), state(st), seq(se),
     standby_for_rank(MDS_RANK_NONE), standby_for_fscid(FS_CLUSTER_ID_NONE),
     standby_replay(false), mds_features(feat) {

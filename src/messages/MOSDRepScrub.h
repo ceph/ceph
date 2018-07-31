@@ -22,11 +22,8 @@
  * instruct an OSD initiate a replica scrub on a specific PG
  */
 
-class MOSDRepScrub : public MOSDFastDispatchOp {
+class MOSDRepScrub : public MessageInstance<MOSDRepScrub, MOSDFastDispatchOp> {
 public:
-  typedef boost::intrusive_ptr<MOSDRepScrub> ref;
-  typedef boost::intrusive_ptr<MOSDRepScrub const> const_ref;
-  using factory = MessageFactory<MOSDRepScrub>;
   friend factory;
 
   static const int HEAD_VERSION = 9;
@@ -55,14 +52,14 @@ public:
   }
 
   MOSDRepScrub()
-    : MOSDFastDispatchOp(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       chunky(false),
       deep(false) { }
 
   MOSDRepScrub(spg_t pgid, eversion_t scrub_to, epoch_t map_epoch, epoch_t min_epoch,
                hobject_t start, hobject_t end, bool deep,
 	       bool preemption, int prio, bool highprio)
-    : MOSDFastDispatchOp(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid),
       scrub_to(scrub_to),
       map_epoch(map_epoch),

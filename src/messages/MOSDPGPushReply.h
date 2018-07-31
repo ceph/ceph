@@ -17,11 +17,8 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGPushReply : public MOSDFastDispatchOp {
+class MOSDPGPushReply : public MessageInstance<MOSDPGPushReply, MOSDFastDispatchOp> {
 public:
-  typedef boost::intrusive_ptr<MOSDPGPushReply> ref;
-  typedef boost::intrusive_ptr<MOSDPGPushReply const> const_ref;
-  using factory = MessageFactory<MOSDPGPushReply>;
   friend factory;
 private:
   static const int HEAD_VERSION = 3;
@@ -45,7 +42,7 @@ public:
   }
 
   MOSDPGPushReply()
-    : MOSDFastDispatchOp(MSG_OSD_PG_PUSH_REPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_PUSH_REPLY, HEAD_VERSION, COMPAT_VERSION),
       cost(0)
     {}
 

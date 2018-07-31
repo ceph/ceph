@@ -19,11 +19,8 @@
 #include "msg/Message.h"
 #include "mds/mds_table_types.h"
 
-class MMDSTableRequest : public Message {
+class MMDSTableRequest : public MessageInstance<MMDSTableRequest> {
 public:
-  typedef boost::intrusive_ptr<MMDSTableRequest> ref;
-  typedef boost::intrusive_ptr<MMDSTableRequest const> const_ref;
-  using factory = MessageFactory<MMDSTableRequest>;
   friend factory;
 
   __u16 table = 0;
@@ -32,9 +29,9 @@ public:
   bufferlist bl;
 
 protected:
-  MMDSTableRequest() : Message(MSG_MDS_TABLE_REQUEST) {}
+  MMDSTableRequest() : MessageInstance(MSG_MDS_TABLE_REQUEST) {}
   MMDSTableRequest(int tab, int o, uint64_t r, version_t v=0) : 
-    Message(MSG_MDS_TABLE_REQUEST),
+    MessageInstance(MSG_MDS_TABLE_REQUEST),
     table(tab), op(o), reqid(r) {
     set_tid(v);
   }

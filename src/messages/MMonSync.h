@@ -15,11 +15,8 @@
 
 #include "msg/Message.h"
 
-class MMonSync : public Message {
+class MMonSync : public MessageInstance<MMonSync> {
 public:
-  typedef boost::intrusive_ptr<MMonSync> ref;
-  typedef boost::intrusive_ptr<MMonSync const> const_ref;
-  using factory = MessageFactory<MMonSync>;
   friend factory;
 private:
   static const int HEAD_VERSION = 2;
@@ -66,11 +63,11 @@ public:
   entity_inst_t reply_to;
 
   MMonSync()
-    : Message(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION)
   { }
 
   MMonSync(uint32_t op, uint64_t c = 0)
-    : Message(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION),
       op(op),
       cookie(c),
       last_committed(0)

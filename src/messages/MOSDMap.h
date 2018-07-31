@@ -20,11 +20,8 @@
 #include "osd/OSDMap.h"
 #include "include/ceph_features.h"
 
-class MOSDMap : public Message {
+class MOSDMap : public MessageInstance<MOSDMap> {
 public:
-  typedef boost::intrusive_ptr<MOSDMap> ref;
-  typedef boost::intrusive_ptr<MOSDMap const> const_ref;
-  using factory = MessageFactory<MOSDMap>;
   friend factory;
 private:
   static const int HEAD_VERSION = 4;
@@ -68,9 +65,9 @@ private:
   }
 
 
-  MOSDMap() : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION) { }
+  MOSDMap() : MessageInstance(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDMap(const uuid_d &f, const uint64_t features)
-    : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION),
       fsid(f), encode_features(features),
       oldest_map(0), newest_map(0) { }
 private:

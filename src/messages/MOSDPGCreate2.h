@@ -10,11 +10,8 @@
  * PGCreate2 - instruct an OSD to create some pgs
  */
 
-class MOSDPGCreate2 : public Message {
+class MOSDPGCreate2 : public MessageInstance<MOSDPGCreate2> {
 public:
-  typedef boost::intrusive_ptr<MOSDPGCreate2> ref;
-  typedef boost::intrusive_ptr<MOSDPGCreate2 const> const_ref;
-  using factory = MessageFactory<MOSDPGCreate2>;
   friend factory;
 
   const static int HEAD_VERSION = 1;
@@ -24,9 +21,9 @@ public:
   map<spg_t,pair<epoch_t,utime_t>> pgs;
 
   MOSDPGCreate2()
-    : Message(MSG_OSD_PG_CREATE2, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance(MSG_OSD_PG_CREATE2, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGCreate2(epoch_t e)
-    : Message(MSG_OSD_PG_CREATE2, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_CREATE2, HEAD_VERSION, COMPAT_VERSION),
       epoch(e) { }
 private:
   ~MOSDPGCreate2() override {}

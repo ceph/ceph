@@ -17,11 +17,8 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGPull : public MOSDFastDispatchOp {
+class MOSDPGPull : public MessageInstance<MOSDPGPull, MOSDFastDispatchOp> {
 public:
-  typedef boost::intrusive_ptr<MOSDPGPull> ref;
-  typedef boost::intrusive_ptr<MOSDPGPull const> const_ref;
-  using factory = MessageFactory<MOSDPGPull>;
   friend factory;
 private:
   static const int HEAD_VERSION = 3;
@@ -53,7 +50,7 @@ public:
   }
 
   MOSDPGPull()
-    : MOSDFastDispatchOp(MSG_OSD_PG_PULL, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_PULL, HEAD_VERSION, COMPAT_VERSION),
       cost(0)
     {}
 

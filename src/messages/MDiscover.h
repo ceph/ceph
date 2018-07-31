@@ -22,11 +22,8 @@
 #include <string>
 
 
-class MDiscover : public Message {
+class MDiscover : public MessageInstance<MDiscover> {
 public:
-  typedef boost::intrusive_ptr<MDiscover> ref;
-  typedef boost::intrusive_ptr<MDiscover const> const_ref;
-  using factory = MessageFactory<MDiscover>;
   friend factory;
 private:
 
@@ -53,14 +50,14 @@ private:
   void set_base_dir_frag(frag_t f) { base_dir_frag = f; }
 
 protected:
-  MDiscover() : Message(MSG_MDS_DISCOVER) { }
+  MDiscover() : MessageInstance(MSG_MDS_DISCOVER) { }
   MDiscover(inodeno_t base_ino_,
 	    frag_t base_frag_,
 	    snapid_t s,
             filepath& want_path_,
             bool want_base_dir_ = true,
 	    bool discover_xlocks_ = false) :
-    Message(MSG_MDS_DISCOVER),
+    MessageInstance(MSG_MDS_DISCOVER),
     base_ino(base_ino_),
     base_dir_frag(base_frag_),
     snapid(s),

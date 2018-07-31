@@ -9,11 +9,8 @@
  * instruct an OSD to scrub some or all pg(s)
  */
 
-class MOSDScrub2 : public Message {
+class MOSDScrub2 : public MessageInstance<MOSDScrub2> {
 public:
-  typedef boost::intrusive_ptr<MOSDScrub2> ref;
-  typedef boost::intrusive_ptr<MOSDScrub2 const> const_ref;
-  using factory = MessageFactory<MOSDScrub2>;
   friend factory;
 
   static const int HEAD_VERSION = 1;
@@ -25,9 +22,9 @@ public:
   bool repair = false;
   bool deep = false;
 
-  MOSDScrub2() : Message(MSG_OSD_SCRUB2, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDScrub2() : MessageInstance(MSG_OSD_SCRUB2, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDScrub2(const uuid_d& f, epoch_t e, vector<spg_t>& pgs, bool r, bool d) :
-    Message(MSG_OSD_SCRUB2, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_OSD_SCRUB2, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), epoch(e), scrub_pgs(pgs), repair(r), deep(d) {}
 private:
   ~MOSDScrub2() override {}

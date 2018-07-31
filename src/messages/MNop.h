@@ -22,11 +22,8 @@
 /*
  * A message with no (remote) effect.
  */
-class MNop : public Message {
+class MNop : public MessageInstance<MNop> {
 public:
-  typedef boost::intrusive_ptr<MNop> ref;
-  typedef boost::intrusive_ptr<MNop const> const_ref;
-  using factory = MessageFactory<MNop>;
   friend factory;
 
   static const int HEAD_VERSION = 1;
@@ -35,7 +32,7 @@ public:
   __u32 tag; // ignored tag value
 
   MNop()
-    : Message(MSG_NOP, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_NOP, HEAD_VERSION, COMPAT_VERSION)
     {}
 
   ~MNop() {}

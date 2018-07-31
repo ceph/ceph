@@ -19,11 +19,8 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 
-class MMDSSlaveRequest : public Message {
+class MMDSSlaveRequest : public MessageInstance<MMDSSlaveRequest> {
 public:
-  typedef boost::intrusive_ptr<MMDSSlaveRequest> ref;
-  typedef boost::intrusive_ptr<MMDSSlaveRequest const> const_ref;
-  using factory = MessageFactory<MMDSSlaveRequest>;
   friend factory;
 
   static const int OP_XLOCK =       1;
@@ -161,9 +158,9 @@ public:
   bufferlist& get_lock_data() { return inode_export; }
 
 protected:
-  MMDSSlaveRequest() : Message(MSG_MDS_SLAVE_REQUEST) { }
+  MMDSSlaveRequest() : MessageInstance(MSG_MDS_SLAVE_REQUEST) { }
   MMDSSlaveRequest(metareqid_t ri, __u32 att, int o) : 
-    Message(MSG_MDS_SLAVE_REQUEST),
+    MessageInstance(MSG_MDS_SLAVE_REQUEST),
     reqid(ri), attempt(att), op(o), flags(0), lock_type(0),
     inode_export_v(0), srcdn_auth(MDS_RANK_NONE) { }
   ~MMDSSlaveRequest() override {}

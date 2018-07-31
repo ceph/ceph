@@ -6,11 +6,8 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
+class MOSDPGRecoveryDeleteReply : public MessageInstance<MOSDPGRecoveryDeleteReply, MOSDFastDispatchOp> {
 public:
-  typedef boost::intrusive_ptr<MOSDPGRecoveryDeleteReply> ref;
-  typedef boost::intrusive_ptr<MOSDPGRecoveryDeleteReply const> const_ref;
-  using factory = MessageFactory<MOSDPGRecoveryDeleteReply>;
   friend factory;
 
   static const int HEAD_VERSION = 2;
@@ -32,7 +29,7 @@ public:
   }
 
   MOSDPGRecoveryDeleteReply()
-    : MOSDFastDispatchOp(MSG_OSD_PG_RECOVERY_DELETE_REPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_RECOVERY_DELETE_REPLY, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0), min_epoch(0)
     {}
 

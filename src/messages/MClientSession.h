@@ -18,11 +18,8 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 
-class MClientSession : public Message {
+class MClientSession : public MessageInstance<MClientSession> {
 public:
-  typedef boost::intrusive_ptr<MClientSession> ref;
-  typedef boost::intrusive_ptr<MClientSession const> const_ref;
-  using factory = MessageFactory<MClientSession>;
   friend factory;
 private:
   static const int HEAD_VERSION = 3;
@@ -41,15 +38,15 @@ public:
   int get_max_leases() const { return head.max_leases; }
 
 protected:
-  MClientSession() : Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) { }
+  MClientSession() : MessageInstance(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) { }
   MClientSession(int o, version_t s=0) : 
-    Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
+    MessageInstance(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = s;
   }
   MClientSession(int o, utime_t st) : 
-    Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
+    MessageInstance(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = 0;

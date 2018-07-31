@@ -17,11 +17,8 @@
 
 #include "msg/Message.h"
 
-class MMDSOpenInoReply : public Message {
+class MMDSOpenInoReply : public MessageInstance<MMDSOpenInoReply> {
 public:
-  typedef boost::intrusive_ptr<MMDSOpenInoReply> ref;
-  typedef boost::intrusive_ptr<MMDSOpenInoReply const> const_ref;
-  using factory = MessageFactory<MMDSOpenInoReply>;
   friend factory;
 
   inodeno_t ino;
@@ -30,9 +27,9 @@ public:
   int32_t error;
 
 protected:
-  MMDSOpenInoReply() : Message(MSG_MDS_OPENINOREPLY), error(0) {}
+  MMDSOpenInoReply() : MessageInstance(MSG_MDS_OPENINOREPLY), error(0) {}
   MMDSOpenInoReply(ceph_tid_t t, inodeno_t i, mds_rank_t h=MDS_RANK_NONE, int e=0) :
-    Message(MSG_MDS_OPENINOREPLY), ino(i), hint(h), error(e) {
+    MessageInstance(MSG_MDS_OPENINOREPLY), ino(i), hint(h), error(e) {
     header.tid = t;
   }
 

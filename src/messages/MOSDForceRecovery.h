@@ -31,11 +31,8 @@ static const int OFR_BACKFILL = 2;
 // cancel priority boost, requeue if necessary
 static const int OFR_CANCEL = 4;
 
-class MOSDForceRecovery : public Message {
+class MOSDForceRecovery : public MessageInstance<MOSDForceRecovery> {
 public:
-  typedef boost::intrusive_ptr<MOSDForceRecovery> ref;
-  typedef boost::intrusive_ptr<MOSDForceRecovery const> const_ref;
-  using factory = MessageFactory<MOSDForceRecovery>;
   friend factory;
 
   static const int HEAD_VERSION = 2;
@@ -45,12 +42,12 @@ public:
   vector<spg_t> forced_pgs;
   uint8_t options = 0;
 
-  MOSDForceRecovery() : Message(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDForceRecovery() : MessageInstance(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDForceRecovery(const uuid_d& f, char opts) :
-    Message(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), options(opts) {}
   MOSDForceRecovery(const uuid_d& f, vector<spg_t>& pgs, char opts) :
-    Message(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), forced_pgs(pgs), options(opts) {}
 private:
   ~MOSDForceRecovery() {}

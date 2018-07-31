@@ -18,19 +18,16 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 
-class MMDSFindIno : public Message {
+class MMDSFindIno : public MessageInstance<MMDSFindIno> {
 public:
-  typedef boost::intrusive_ptr<MMDSFindIno> ref;
-  typedef boost::intrusive_ptr<MMDSFindIno const> const_ref;
-  using factory = MessageFactory<MMDSFindIno>;
   friend factory;
 
   ceph_tid_t tid {0};
   inodeno_t ino;
 
 protected:
-  MMDSFindIno() : Message(MSG_MDS_FINDINO) {}
-  MMDSFindIno(ceph_tid_t t, inodeno_t i) : Message(MSG_MDS_FINDINO), tid(t), ino(i) {}
+  MMDSFindIno() : MessageInstance(MSG_MDS_FINDINO) {}
+  MMDSFindIno(ceph_tid_t t, inodeno_t i) : MessageInstance(MSG_MDS_FINDINO), tid(t), ino(i) {}
   ~MMDSFindIno() override {}
 
 public:

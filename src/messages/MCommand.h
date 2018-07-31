@@ -19,20 +19,17 @@
 
 #include "msg/Message.h"
 
-class MCommand : public Message {
+class MCommand : public MessageInstance<MCommand> {
 public:
-  typedef boost::intrusive_ptr<MCommand> ref;
-  typedef boost::intrusive_ptr<MCommand const> const_ref;
-  using factory = MessageFactory<MCommand>;
   friend factory;
 
   uuid_d fsid;
   std::vector<string> cmd;
 
   MCommand()
-    : Message(MSG_COMMAND) {}
+    : MessageInstance(MSG_COMMAND) {}
   MCommand(const uuid_d &f)
-    : Message(MSG_COMMAND),
+    : MessageInstance(MSG_COMMAND),
       fsid(f) { }
 
 private:

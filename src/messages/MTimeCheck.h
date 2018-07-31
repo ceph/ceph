@@ -15,11 +15,8 @@
 #ifndef CEPH_MTIMECHECK_H
 #define CEPH_MTIMECHECK_H
 
-class MTimeCheck : public Message {
+class MTimeCheck : public MessageInstance<MTimeCheck> {
 public:
-  typedef boost::intrusive_ptr<MTimeCheck> ref;
-  typedef boost::intrusive_ptr<MTimeCheck const> const_ref;
-  using factory = MessageFactory<MTimeCheck>;
   friend factory;
 
   static const int HEAD_VERSION = 1;
@@ -38,9 +35,9 @@ public:
   map<entity_inst_t, double> skews;
   map<entity_inst_t, double> latencies;
 
-  MTimeCheck() : Message(MSG_TIMECHECK, HEAD_VERSION) { }
+  MTimeCheck() : MessageInstance(MSG_TIMECHECK, HEAD_VERSION) { }
   MTimeCheck(int op) :
-    Message(MSG_TIMECHECK, HEAD_VERSION),
+    MessageInstance(MSG_TIMECHECK, HEAD_VERSION),
     op(op)
   { }
 

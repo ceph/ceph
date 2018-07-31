@@ -18,11 +18,8 @@
 #include "msg/Message.h"
 #include "messages/MOSDPeeringOp.h"
 
-class MBackfillReserve : public MOSDPeeringOp {
+class MBackfillReserve : public MessageInstance<MBackfillReserve, MOSDPeeringOp> {
 public:
-  typedef boost::intrusive_ptr<MBackfillReserve> ref;
-  typedef boost::intrusive_ptr<MBackfillReserve const> const_ref;
-  using factory = MessageFactory<MBackfillReserve>;
   friend factory;
 private:
   static const int HEAD_VERSION = 4;
@@ -95,12 +92,12 @@ public:
   }
 
   MBackfillReserve()
-    : MOSDPeeringOp(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       query_epoch(0), type(-1), priority(-1) {}
   MBackfillReserve(int type,
 		   spg_t pgid,
 		   epoch_t query_epoch, unsigned prio = -1)
-    : MOSDPeeringOp(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid), query_epoch(query_epoch),
       type(type), priority(prio) {}
 

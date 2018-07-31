@@ -20,11 +20,8 @@
 #include "mon/mon_types.h"
 #include "include/ceph_features.h"
 
-class MMonPaxos : public Message {
+class MMonPaxos : public MessageInstance<MMonPaxos> {
 public:
-  typedef boost::intrusive_ptr<MMonPaxos> ref;
-  typedef boost::intrusive_ptr<MMonPaxos const> const_ref;
-  using factory = MessageFactory<MMonPaxos>;
   friend factory;
 private:
   static const int HEAD_VERSION = 4;
@@ -70,9 +67,9 @@ private:
 
   bufferlist feature_map;
 
-  MMonPaxos() : Message(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION) { }
+  MMonPaxos() : MessageInstance(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION) { }
   MMonPaxos(epoch_t e, int o, utime_t now) : 
-    Message(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION),
     epoch(e),
     op(o),
     first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0),

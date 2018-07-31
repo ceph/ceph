@@ -17,11 +17,8 @@
 
 #include "msg/Message.h"
 
-class MExportDirNotify : public Message {
+class MExportDirNotify : public MessageInstance<MExportDirNotify> {
 public:
-  typedef boost::intrusive_ptr<MExportDirNotify> ref;
-  typedef boost::intrusive_ptr<MExportDirNotify const> const_ref;
-  using factory = MessageFactory<MExportDirNotify>;
   friend factory;
 private:
   dirfrag_t base;
@@ -40,7 +37,7 @@ private:
 protected:
   MExportDirNotify() {}
   MExportDirNotify(dirfrag_t i, uint64_t tid, bool a, pair<__s32,__s32> oa, pair<__s32,__s32> na) :
-    Message(MSG_MDS_EXPORTDIRNOTIFY),
+    MessageInstance(MSG_MDS_EXPORTDIRNOTIFY),
     base(i), ack(a), old_auth(oa), new_auth(na) {
     set_tid(tid);
   }

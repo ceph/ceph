@@ -18,11 +18,8 @@
 #include "osd/osd_types.h"
 #include "messages/PaxosServiceMessage.h"
 
-class MPGStats : public PaxosServiceMessage {
+class MPGStats : public MessageInstance<MPGStats, PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<MPGStats> ref;
-  typedef boost::intrusive_ptr<MPGStats const> const_ref;
-  using factory = MessageFactory<MPGStats>;
   friend factory;
 
   uuid_d fsid;
@@ -31,9 +28,9 @@ public:
   epoch_t epoch = 0;
   utime_t had_map_for;
   
-  MPGStats() : PaxosServiceMessage(MSG_PGSTATS, 0) {}
+  MPGStats() : MessageInstance(MSG_PGSTATS, 0) {}
   MPGStats(const uuid_d& f, epoch_t e, utime_t had)
-    : PaxosServiceMessage(MSG_PGSTATS, 0),
+    : MessageInstance(MSG_PGSTATS, 0),
       fsid(f),
       epoch(e),
       had_map_for(had)

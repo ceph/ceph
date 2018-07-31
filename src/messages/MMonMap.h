@@ -19,17 +19,14 @@
 #include "msg/Message.h"
 #include "mon/MonMap.h"
 
-class MMonMap : public Message {
+class MMonMap : public MessageInstance<MMonMap> {
 public:
-  typedef boost::intrusive_ptr<MMonMap> ref;
-  typedef boost::intrusive_ptr<MMonMap const> const_ref;
-  using factory = MessageFactory<MMonMap>;
   friend factory;
 
   bufferlist monmapbl;
 
-  MMonMap() : Message(CEPH_MSG_MON_MAP) { }
-  explicit MMonMap(bufferlist &bl) : Message(CEPH_MSG_MON_MAP) { 
+  MMonMap() : MessageInstance(CEPH_MSG_MON_MAP) { }
+  explicit MMonMap(bufferlist &bl) : MessageInstance(CEPH_MSG_MON_MAP) { 
     monmapbl.claim(bl);
   }
 private:

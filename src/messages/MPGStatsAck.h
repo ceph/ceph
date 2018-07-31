@@ -17,16 +17,13 @@
 
 #include "osd/osd_types.h"
 
-class MPGStatsAck : public Message {
+class MPGStatsAck : public MessageInstance<MPGStatsAck> {
 public:
-  typedef boost::intrusive_ptr<MPGStatsAck> ref;
-  typedef boost::intrusive_ptr<MPGStatsAck const> const_ref;
-  using factory = MessageFactory<MPGStatsAck>;
   friend factory;
 
   map<pg_t,pair<version_t,epoch_t> > pg_stat;
   
-  MPGStatsAck() : Message(MSG_PGSTATSACK) {}
+  MPGStatsAck() : MessageInstance(MSG_PGSTATSACK) {}
 
 private:
   ~MPGStatsAck() override {}

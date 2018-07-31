@@ -63,11 +63,8 @@
  * 
  */
 
-class MDiscoverReply : public Message {
+class MDiscoverReply : public MessageInstance<MDiscoverReply> {
 public:
-  typedef boost::intrusive_ptr<MDiscoverReply> ref;
-  typedef boost::intrusive_ptr<MDiscoverReply const> const_ref;
-  using factory = MessageFactory<MDiscoverReply>;
   friend factory;
 private:
   static const int HEAD_VERSION = 2;
@@ -114,9 +111,9 @@ private:
   void set_base_dir_frag(frag_t df) { base_dir_frag = df; }
 
 protected:
-  MDiscoverReply() : Message(MSG_MDS_DISCOVERREPLY, HEAD_VERSION) { }
+  MDiscoverReply() : MessageInstance(MSG_MDS_DISCOVERREPLY, HEAD_VERSION) { }
   MDiscoverReply(const MDiscover &dis) :
-    Message(MSG_MDS_DISCOVERREPLY, HEAD_VERSION),
+    MessageInstance(MSG_MDS_DISCOVERREPLY, HEAD_VERSION),
     base_ino(dis.get_base_ino()),
     base_dir_frag(dis.get_base_dir_frag()),
     wanted_base_dir(dis.wants_base_dir()),
@@ -131,7 +128,7 @@ protected:
     header.tid = dis.get_tid();
   }
   MDiscoverReply(dirfrag_t df) :
-    Message(MSG_MDS_DISCOVERREPLY, HEAD_VERSION),
+    MessageInstance(MSG_MDS_DISCOVERREPLY, HEAD_VERSION),
     base_ino(df.ino),
     base_dir_frag(df.frag),
     wanted_base_dir(false),

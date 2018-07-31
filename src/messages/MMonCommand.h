@@ -20,19 +20,16 @@
 #include <vector>
 #include <string>
 
-class MMonCommand : public PaxosServiceMessage {
+class MMonCommand : public MessageInstance<MMonCommand, PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<MMonCommand> ref;
-  typedef boost::intrusive_ptr<MMonCommand const> const_ref;
-  using factory = MessageFactory<MMonCommand>;
   friend factory;
 
   uuid_d fsid;
   std::vector<std::string> cmd;
 
-  MMonCommand() : PaxosServiceMessage(MSG_MON_COMMAND, 0) {}
+  MMonCommand() : MessageInstance(MSG_MON_COMMAND, 0) {}
   MMonCommand(const uuid_d &f)
-    : PaxosServiceMessage(MSG_MON_COMMAND, 0),
+    : MessageInstance(MSG_MON_COMMAND, 0),
       fsid(f)
   { }
 

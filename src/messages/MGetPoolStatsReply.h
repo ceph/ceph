@@ -16,19 +16,16 @@
 #ifndef CEPH_MGETPOOLSTATSREPLY_H
 #define CEPH_MGETPOOLSTATSREPLY_H
 
-class MGetPoolStatsReply : public PaxosServiceMessage {
+class MGetPoolStatsReply : public MessageInstance<MGetPoolStatsReply, PaxosServiceMessage> {
 public:
-  typedef boost::intrusive_ptr<MGetPoolStatsReply> ref;
-  typedef boost::intrusive_ptr<MGetPoolStatsReply const> const_ref;
-  using factory = MessageFactory<MGetPoolStatsReply>;
   friend factory;
 
   uuid_d fsid;
   map<string,pool_stat_t> pool_stats;
 
-  MGetPoolStatsReply() : PaxosServiceMessage(MSG_GETPOOLSTATSREPLY, 0) {}
+  MGetPoolStatsReply() : MessageInstance(MSG_GETPOOLSTATSREPLY, 0) {}
   MGetPoolStatsReply(uuid_d& f, ceph_tid_t t, version_t v) :
-    PaxosServiceMessage(MSG_GETPOOLSTATSREPLY, v),
+    MessageInstance(MSG_GETPOOLSTATSREPLY, v),
     fsid(f) {
     set_tid(t);
   }
