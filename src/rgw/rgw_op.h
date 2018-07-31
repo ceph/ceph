@@ -25,6 +25,7 @@
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 #include <boost/function.hpp>
+#include <boost/container/flat_map.hpp>
 
 #include "common/armor.h"
 #include "common/mime.h"
@@ -2129,9 +2130,38 @@ inline void complete_etag(MD5& hash, string *etag)
   *etag = etag_buf_str;
 } /* complete_etag */
 
+using boost::container::flat_map;
+
+class RGWGetAttrs : public RGWOp {
+public:
+    using get_attrs_t = flat_map<std::string, std::optional<buffer::list>>;
+protected:
+  get_attrs_t attrs;
+
+public:
+  RGWGetAttrs()
+  {}
+
+  virtual ~RGWGetAttrs() {}
+
+  void emplace_key(std::string&& key) {
+    attrs.emplace(std::move(key), std::nullopt);
+  }
+
+  int verify_permission(optional_yield y);
+  void pre_exec();
+  void execute(optional_yield y);
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const char* name() const { return "get_attrs"; }
+  virtual RGWOpType get_type() { return RGW_OP_GET_ATTRS; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+}; /* RGWGetAttrs */
+
 class RGWSetAttrs : public RGWOp {
 protected:
-  map<string, buffer::list> attrs;
+  map<std::string, buffer::list> attrs;
 
 public:
   RGWSetAttrs() {}
@@ -2151,6 +2181,31 @@ public:
   RGWOpType get_type() override { return RGW_OP_SET_ATTRS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
+
+class RGWRMAttrs : public RGWOp {
+protected:
+  rgw::sal::RGWAttrs attrs;
+
+public:
+  RGWRMAttrs()
+  {}
+
+  virtual ~RGWRMAttrs() {}
+
+  void emplace_key(std::string&& key) {
+    attrs.emplace(std::move(key), buffer::list());
+  }
+
+  int verify_permission(optional_yield y);
+  void pre_exec();
+  void execute(optional_yield y);
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const char* name() const { return "rm_attrs"; }
+  virtual RGWOpType get_type() { return RGW_OP_DELETE_ATTRS; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
+}; /* RGWRMAttrs */
 
 class RGWGetObjLayout : public RGWOp {
 protected:
