@@ -89,14 +89,6 @@ def volumes(monkeypatch):
 
 
 @pytest.fixture
-def pvolumes(monkeypatch):
-    monkeypatch.setattr(process, 'call', lambda x: ('', '', 0))
-    pvolumes = api.PVolumes()
-    pvolumes._purge()
-    return pvolumes
-
-
-@pytest.fixture
 def volume_groups(monkeypatch):
     monkeypatch.setattr(process, 'call', lambda x: ('', '', 0))
     vgs = api.VolumeGroups()

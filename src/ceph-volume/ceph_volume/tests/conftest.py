@@ -118,6 +118,14 @@ def volume_groups(monkeypatch):
 
 
 @pytest.fixture
+def pvolumes(monkeypatch):
+    monkeypatch.setattr('ceph_volume.process.call', lambda x: ('', '', 0))
+    pvolumes = lvm_api.PVolumes()
+    pvolumes._purge()
+    return pvolumes
+
+
+@pytest.fixture
 def is_root(monkeypatch):
     """
     Patch ``os.getuid()`` so that ceph-volume's decorators that ensure a user
