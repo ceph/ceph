@@ -8035,7 +8035,6 @@ struct C_FinishSplits : public Context {
 void OSD::_finish_splits(set<PGRef>& pgs)
 {
   dout(10) << __func__ << " " << pgs << dendl;
-  Mutex::Locker l(osd_lock);
   if (is_stopping())
     return;
   PG::RecoveryCtx rctx = create_context();
