@@ -8,7 +8,6 @@ import json
 import logging
 import threading
 from collections import defaultdict
-import rados
 
 
 class CPlusPlusHandler(logging.Handler):
@@ -238,9 +237,6 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         self._perf_schema_cache = None
 
-        # Keep a librados instance for those that need it.
-        self._rados = None
-
     def __del__(self):
         unconfigure_logger(self, self.module_name)
 
@@ -294,8 +290,7 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         :return: None
         """
-        if self._rados:
-            self._rados.shutdown()
+        pass
 
     def get(self, data_name):
         """
@@ -633,19 +628,3 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
 
         return self._ceph_have_mon_connection()
-
-    @property
-    def rados(self):
-        """
-        A librados instance to be shared by any classes within
-        this mgr module that want one.
-        """
-        if self._rados:
-            return self._rados
-
-        ctx_capsule = self.get_context()
-        self._rados = rados.Rados(context=ctx_capsule)
-        self._rados.connect()
-
-        return self._rados
-    

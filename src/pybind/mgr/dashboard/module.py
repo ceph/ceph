@@ -33,6 +33,7 @@ from mgr_module import MgrModule, MgrStandbyModule, CommandResult
 from types import OsdMap, NotFound, Config, FsMap, MonMap, \
     PgSummary, Health, MonStatus
 
+import rados
 import rbd_iscsi
 import rbd_mirroring
 from rbd_ls import RbdLs, RbdPoolLs
@@ -131,6 +132,9 @@ class Module(MgrModule):
         self.log_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
         self.audit_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
 
+        # Keep a librados instance for those that need it.
+        self._rados = None
+
         # Stateful instances of RbdLs, hold cached results.  Key to dict
         # is pool name.
         self.rbd_ls = {}
@@ -155,6 +159,21 @@ class Module(MgrModule):
 
         # A prefix for all URLs to use the dashboard with a reverse http proxy
         self.url_prefix = ''
+
+    @property
+    def rados(self):
+        """
+        A librados instance to be shared by any classes within
+        this mgr module that want one.
+        """
+        if self._rados:
+            return self._rados
+
+        ctx_capsule = self.get_context()
+        self._rados = rados.Rados(context=ctx_capsule)
+        self._rados.connect()
+
+        return self._rados
 
     def update_pool_stats(self):
         df = global_instance().get("df")
@@ -230,6 +249,10 @@ class Module(MgrModule):
         cherrypy.engine.exit()
         log.info("Stopped server")
 
+        log.info("Stopping librados...")
+        if self._rados:
+            self._rados.shutdown()
+        log.info("Stopped librados.")
 
     def get_latest(self, daemon_type, daemon_name, stat):
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
