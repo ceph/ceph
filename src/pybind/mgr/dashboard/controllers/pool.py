@@ -76,11 +76,11 @@ class Pool(RESTController):
         return CephService.send_command('mon', 'osd pool delete', pool=pool_name, pool2=pool_name,
                                         sure='--yes-i-really-really-mean-it')
 
-    @pool_task('set', ['{pool_name}'])
+    @pool_task('edit', ['{pool_name}'])
     def set(self, pool_name, flags=None, application_metadata=None, **kwargs):
         self._set_pool_values(pool_name, application_metadata, flags, True, kwargs)
 
-    @pool_task('create', ['{pool}'])
+    @pool_task('create', {'pool_name': '{pool}'})
     @handle_send_command_error('pool')
     def create(self, pool, pg_num, pool_type, erasure_code_profile=None, flags=None,
                application_metadata=None, rule_name=None, **kwargs):
