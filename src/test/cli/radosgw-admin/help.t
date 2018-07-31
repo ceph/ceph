@@ -258,6 +258,8 @@
      --min-rewrite-size        min object size for bucket rewrite (default 4M)
      --max-rewrite-size        max object size for bucket rewrite (default ULLONG_MAX)
      --min-rewrite-stripe-size min stripe size for object rewrite (default 0)
+     --trim-delay-ms           time interval in msec to limit the frequency of sync error log entries trimming operations,
+                               the trimming process will sleep the specified msec for every 1000 entries trimmed
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
