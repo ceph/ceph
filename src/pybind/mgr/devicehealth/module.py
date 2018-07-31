@@ -6,6 +6,7 @@ Device health monitoring
 import errno
 import json
 from mgr_module import MgrModule, CommandResult
+import operator
 import rados
 from threading import Event
 from datetime import datetime, timedelta, date, time
@@ -14,10 +15,22 @@ from six import iteritems
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
 DEFAULTS = {
-    'enable_monitoring': True,
+    'enable_monitoring': str(True),
     'scrape_frequency': str(86400),
     'retention_period': str(86400*14),
     'pool_name': 'device_health_metrics',
+    'mark_out_threshold': str(86400*14),
+    'warn_threshold': str(86400*14*2),
+    'self_heal': str(True),
+}
+
+DEVICE_HEALTH = 'DEVICE_HEALTH'
+DEVICE_HEALTH_IN_USE = 'DEVICE_HEALTH_IN_USE'
+DEVICE_HEALTH_TOOMANY = 'DEVICE_HEALTH_TOOMANY'
+HEALTH_MESSAGES = {
+    DEVICE_HEALTH: '%d device(s) expected to fail soon',
+    DEVICE_HEALTH_IN_USE: '%d daemons(s) expected to fail soon and still contain data',
+    DEVICE_HEALTH_TOOMANY: 'Too many daemons are expected to fail soon',
 }
 
 class Module(MgrModule):
@@ -26,6 +39,9 @@ class Module(MgrModule):
         { 'name': 'scrape_frequency' },
         { 'name': 'pool_name' },
         { 'name': 'retention_period' },
+        { 'name': 'mark_out_threshold' },
+        { 'name': 'warn_threshold' },
+        { 'name': 'self_heal' },
     ]
 
     COMMANDS = [
@@ -51,16 +67,19 @@ class Module(MgrModule):
             "desc": "Show stored device metrics for the device",
             "perm": "r"
         },
+        {
+            "cmd": "device check-health",
+            "desc": "Check life expectancy of devices",
+            "perm": "rw",
+        },
     ]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
 
         # options
-        self.enable_monitoring = DEFAULTS['enable_monitoring']
-        self.scrape_frequency = DEFAULTS['scrape_frequency']
-        self.retention_period = DEFAULTS['retention_period']
-        self.pool_name = DEFAULTS['pool_name']
+        for k, v in DEFAULTS.iteritems():
+            setattr(self, k, v)
 
         # other
         self.run = True
@@ -93,6 +112,8 @@ class Module(MgrModule):
             return self.scrape_all();
         elif cmd['prefix'] == 'device show-health-metrics':
             return self.show_device_metrics(cmd['devid'], cmd.get('sample'))
+        elif cmd['prefix'] == 'device check-health':
+            return self.check_health()
         else:
             # mgr should respect our self.COMMANDS and not call us for
             # any prefix we don't advertise
@@ -141,8 +162,7 @@ class Module(MgrModule):
             if not self.enable_monitoring:
                 continue
             self.log.debug('Running')
-
-            # WRITE ME
+            self.check_health()
 
     def shutdown(self):
         self.log.info('Stopping')
@@ -191,7 +211,7 @@ class Module(MgrModule):
                 data = self.extract_smart_features(raw_data)
                 self.put_device_metrics(ioctx, device, data)
         ioctx.close()
-        return (0, "", "")
+        return 0, "", ""
 
     def scrape_all(self):
         osdmap = self.get("osd_map")
@@ -212,7 +232,7 @@ class Module(MgrModule):
                 self.put_device_metrics(ioctx, device, data)
 
         ioctx.close()
-        return (0, "", "")
+        return 0, "", ""
 
     def scrape_device(self, devid):
         r = self.get("device " + devid)
@@ -231,7 +251,7 @@ class Module(MgrModule):
                 data = self.extract_smart_features(raw_data)
                 self.put_device_metrics(ioctx, device, data)
         ioctx.close()
-        return (0, "", "")
+        return 0, "", ""
 
     def do_scrape_osd(self, osd_id, ioctx, devid=''):
         self.log.debug('do_scrape_osd osd.%d' % osd_id)
@@ -302,7 +322,150 @@ class Module(MgrModule):
                     res[key] = v
             except:
                 pass
-        return (0, json.dumps(res, indent=4), '')
+        return 0, json.dumps(res, indent=4), ''
+
+    def check_health(self):
+        self.log.info('Check health')
+        config = self.get('config')
+        min_in_ratio = float(config.get('mon_osd_min_in_ratio'))
+        mark_out_threshold_td = timedelta(seconds=int(self.mark_out_threshold))
+        warn_threshold_td = timedelta(seconds=int(self.warn_threshold))
+        checks = {}
+        health_warnings = {
+            DEVICE_HEALTH: [],
+            DEVICE_HEALTH_IN_USE: [],
+            }
+        devs = self.get("devices")
+        osds_in = {}
+        osds_out = {}
+        now = datetime.now()
+        osdmap = self.get("osd_map")
+        assert osdmap is not None
+        for dev in devs['devices']:
+            devid = dev['devid']
+            if 'life_expectancy_min' not in dev:
+                continue
+            # life_expectancy_(min/max) is in the format of:
+            # '%Y-%m-%d %H:%M:%S.%f', e.g.:
+            # '2019-01-20 21:12:12.000000'
+            life_expectancy_min = datetime.strptime(
+                dev['life_expectancy_min'],
+                '%Y-%m-%d %H:%M:%S.%f')
+            self.log.debug('device %s expectancy min %s', dev,
+                           life_expectancy_min)
+
+            if life_expectancy_min - now <= mark_out_threshold_td:
+                if self.self_heal:
+                    # dev['daemons'] == ["osd.0","osd.1","osd.2"]
+                    if dev['daemons']:
+                        osds = [x for x in dev['daemons']
+                                if x.startswith('osd.')]
+                        osd_ids = map(lambda x: x[4:], osds)
+                        for _id in osd_ids:
+                            if self.is_osd_in(osdmap, _id):
+                                osds_in[_id] = life_expectancy_min
+                            else:
+                                osds_out[_id] = 1
+
+            if life_expectancy_min - now <= warn_threshold_td:
+                # device can appear in more than one location in case
+                # of SCSI multipath
+                device_locations = map(lambda x: x['host'] + ':' + x['dev'],
+                                       dev['location'])
+                health_warnings[DEVICE_HEALTH].append(
+                    '%s (%s); daemons %s; life expectancy between %s and %s'
+                    % (dev['devid'],
+                       ','.join(device_locations),
+                       ','.join(dev.get('daemons', ['none'])),
+                       dev['life_expectancy_min'],
+                       dev.get('life_expectancy_max', 'unknown')))
+                # TODO: by default, dev['life_expectancy_max'] == '0.000000',
+                # so dev.get('life_expectancy_max', 'unknown')
+                # above should be altered.
+
+        # OSD might be marked 'out' (which means it has no
+        # data), however PGs are still attached to it.
+        for _id in osds_out.iterkeys():
+            num_pgs = self.get_osd_num_pgs(_id)
+            if num_pgs > 0:
+                health_warnings[DEVICE_HEALTH_IN_USE].append(
+                    'osd.%s is marked out '
+                    'but still has %s PG(s)' %
+                    (_id, num_pgs))
+        if osds_in:
+            self.log.debug('osds_in %s' % osds_in)
+            # calculate target in ratio
+            num_osds = len(osdmap['osds'])
+            num_in = len([x for x in osdmap['osds'] if x['in']])
+            num_bad = len(osds_in)
+            # sort with next-to-fail first
+            bad_osds = sorted(osds_in.items(), key=operator.itemgetter(1))
+            did = 0
+            to_mark_out = []
+            for osd_id, when in bad_osds:
+                ratio = float(num_in - did - 1) / float(num_osds)
+                if ratio < min_in_ratio:
+                    final_ratio = float(num_in - num_bad) / float(num_osds)
+                    checks[DEVICE_HEALTH_TOOMANY] = {
+                        'severity': 'warning',
+                        'summary': HEALTH_MESSAGES[DEVICE_HEALTH_TOOMANY],
+                        'detail': [
+                            '%d OSDs with failing device(s) would bring "in" ratio to %f < mon_osd_min_in_ratio %f' % (num_bad - did, final_ratio, min_in_ratio)
+                        ]
+                    }
+                    break
+                to_mark_out.append(osd_id)
+                did += 1
+            if to_mark_out:
+                self.mark_out_etc(to_mark_out)
+        for warning, ls in health_warnings.iteritems():
+            n = len(ls)
+            if n:
+                checks[warning] = {
+                    'severity': 'warning',
+                    'summary': HEALTH_MESSAGES[warning] % n,
+                    'detail': ls,
+                }
+        self.set_health_checks(checks)
+        return 0, "", ""
+
+    def is_osd_in(self, osdmap, osd_id):
+        for osd in osdmap['osds']:
+            if str(osd_id) == str(osd['osd']):
+                return bool(osd['in'])
+        return False
+
+    def get_osd_num_pgs(self, osd_id):
+        stats = self.get('osd_stats')
+        assert stats is not None
+        for stat in stats['osd_stats']:
+            if str(osd_id) == str(stat['osd']):
+                return stat['num_pgs']
+        return -1
+
+    def mark_out_etc(self, osd_ids):
+        self.log.info('Marking out OSDs: %s' % osd_ids)
+        result = CommandResult('')
+        self.send_command(result, 'mon', '', json.dumps({
+            'prefix': 'osd out',
+            'format': 'json',
+            'ids': osd_ids,
+        }), '')
+        r, outb, outs = result.wait()
+        if r != 0:
+            self.log.warn('Could not mark OSD %s out. r: [%s], outb: [%s], outs: [%s]' % (osd_ids, r, outb, outs))
+        for osd_id in osd_ids:
+            result = CommandResult('')
+            self.send_command(result, 'mon', '', json.dumps({
+                'prefix': 'osd primary-affinity',
+                'format': 'json',
+                'id': int(osd_id),
+                'weight': 0.0,
+            }), '')
+            r, outb, outs = result.wait()
+            if r != 0:
+                self.log.warn('Could not set osd.%s primary-affinity, r: [%s], outs: [%s]' % (osd_id, r, outb, outs))
+
 
     def extract_smart_features(self, raw):
         # FIXME: extract and normalize raw smartctl --json output and
