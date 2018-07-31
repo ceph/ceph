@@ -1,4 +1,6 @@
 
+.. _kubernetes-dev:
+
 =======================================
 Hacking on Ceph in Kubernetes with Rook
 =======================================
