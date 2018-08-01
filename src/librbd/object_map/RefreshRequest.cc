@@ -169,7 +169,7 @@ void RefreshRequest<I>::send_invalidate() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_invalidate>(this);
   InvalidateRequest<I> *req = InvalidateRequest<I>::create(
-    m_image_ctx, m_snap_id, false, ctx);
+    m_image_ctx, m_snap_id, true, ctx);
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
@@ -199,7 +199,7 @@ void RefreshRequest<I>::send_resize_invalidate() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_resize_invalidate>(this);
   InvalidateRequest<I> *req = InvalidateRequest<I>::create(
-    m_image_ctx, m_snap_id, false, ctx);
+    m_image_ctx, m_snap_id, true, ctx);
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
