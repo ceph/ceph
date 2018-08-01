@@ -6,15 +6,18 @@ import { ActivatedRoute, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
+import { BsModalService } from 'ngx-bootstrap/modal';
 import { of } from 'rxjs';
 
 import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
 import { NotFoundComponent } from '../../../core/not-found/not-found.component';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
+import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { SelectBadgesComponent } from '../../../shared/components/select-badges/select-badges.component';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CrushRule } from '../../../shared/models/crush-rule';
+import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
 import { Permission } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
@@ -30,6 +33,7 @@ describe('PoolFormComponent', () => {
   let poolService: PoolService;
   let form: CdFormGroup;
   let router: Router;
+  let ecpService: ErasureCodeProfileService;
 
   const setPgNum = (pgs): AbstractControl => {
     formHelper.setValue('poolType', 'erasure');
@@ -108,7 +112,9 @@ describe('PoolFormComponent', () => {
       crush_rules_replicated: [],
       crush_rules_erasure: []
     };
-    component.ecProfiles = [];
+    const ecp1 = new ErasureCodeProfile();
+    ecp1.name = 'ecp1';
+    component.ecProfiles = [ecp1];
     form = component.form;
     formHelper = new FormHelper(form);
   };
@@ -134,7 +140,7 @@ describe('PoolFormComponent', () => {
     setUpPoolComponent();
     poolService = TestBed.get(PoolService);
     spyOn(poolService, 'getInfo').and.callFake(() => [component.info]);
-    const ecpService = TestBed.get(ErasureCodeProfileService);
+    ecpService = TestBed.get(ErasureCodeProfileService);
     spyOn(ecpService, 'list').and.callFake(() => [component.ecProfiles]);
     router = TestBed.get(Router);
     spyOn(router, 'navigate').and.stub();
@@ -724,6 +730,73 @@ describe('PoolFormComponent', () => {
         testPgKeyUp('ArrowDown', 64);
         testPgKeyUp('-', 32);
         testPgKeyUp('-', 16);
+      });
+    });
+  });
+
+  describe('erasure code profile', () => {
+    const setSelectedEcp = (name: string) => {
+      formHelper.setValue('erasureProfile', { name: name });
+    };
+
+    beforeEach(() => {
+      formHelper.setValue('poolType', 'erasure');
+      fixture.detectChanges();
+    });
+
+    it('should not show info per default', () => {
+      formHelper.expectElementVisible(fixture, '#erasureProfile', true);
+      formHelper.expectElementVisible(fixture, '#ecp-info-block', false);
+    });
+
+    it('should show info if the info button is clicked', () => {
+      const infoButton = fixture.debugElement.query(By.css('#ecp-info-button'));
+      infoButton.triggerEventHandler('click', null);
+      expect(component.data.erasureInfo).toBeTruthy();
+      fixture.detectChanges();
+      expect(infoButton.classes['active']).toBeTruthy();
+      formHelper.expectIdElementsVisible(fixture, ['erasureProfile', 'ecp-info-block'], true);
+    });
+
+    describe('ecp deletion', () => {
+      let taskWrapper: TaskWrapperService;
+      let deletion: CriticalConfirmationModalComponent;
+
+      const callDeletion = () => {
+        component.deleteErasureCodeProfile();
+        deletion.submitActionObservable();
+      };
+
+      const testPoolDeletion = (name) => {
+        setSelectedEcp(name);
+        callDeletion();
+        expect(ecpService.delete).toHaveBeenCalledWith(name);
+        expect(taskWrapper.wrapTaskAroundCall).toHaveBeenCalledWith({
+          task: {
+            name: 'ecp/delete',
+            metadata: {
+              name: name
+            }
+          },
+          call: undefined // because of stub
+        });
+      };
+
+      beforeEach(() => {
+        spyOn(TestBed.get(BsModalService), 'show').and.callFake((deletionClass, config) => {
+          deletion = Object.assign(new deletionClass(), config.initialState);
+          return {
+            content: deletion
+          };
+        });
+        spyOn(ecpService, 'delete').and.stub();
+        taskWrapper = TestBed.get(TaskWrapperService);
+        spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
+      });
+
+      it('should delete two different erasure code profiles', () => {
+        testPoolDeletion('someEcpName');
+        testPoolDeletion('aDifferentEcpName');
       });
     });
   });

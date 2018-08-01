@@ -230,30 +230,64 @@
               Erasure code profile
             </label>
             <div class="col-sm-9">
-              <select class="form-control"
-                      id="erasureProfile"
-                      name="erasureProfile"
-                      formControlName="erasureProfile">
-                <option *ngIf="!ecProfiles"
-                        ngValue=""
-                        i18n>
-                  Loading...
-                </option>
-                <option *ngIf="ecProfiles && ecProfiles.length === 0"
-                        i18n
-                        [ngValue]="null">
-                  -- No erasure code profile available --
-                </option>
-                <option *ngIf="ecProfiles && ecProfiles.length > 0"
-                        i18n
-                        [ngValue]="null">
-                  -- Select an erasure code profile --
-                </option>
-                <option *ngFor="let ecp of ecProfiles"
-                        [ngValue]="ecp">
-                  {{ ecp.name }}
-                </option>
-              </select>
+              <div class="input-group">
+                <select class="form-control"
+                        id="erasureProfile"
+                        name="erasureProfile"
+                        formControlName="erasureProfile">
+                  <option *ngIf="!ecProfiles"
+                          ngValue=""
+                          i18n>
+                    Loading...
+                  </option>
+                  <option *ngIf="ecProfiles && ecProfiles.length === 0"
+                          i18n
+                          [ngValue]="null">
+                    -- No erasure code profile available --
+                  </option>
+                  <option *ngIf="ecProfiles && ecProfiles.length > 0"
+                          i18n
+                          [ngValue]="null">
+                    -- Select an erasure code profile --
+                  </option>
+                  <option *ngFor="let ecp of ecProfiles"
+                          [ngValue]="ecp">
+                    {{ ecp.name }}
+                  </option>
+                </select>
+                <span class="input-group-btn">
+                  <button class="btn btn-default"
+                          [ngClass]="{'active': data.erasureInfo}"
+                          id="ecp-info-button"
+                          type="button"
+                          (click)="data.erasureInfo = !data.erasureInfo">
+                    <i class="fa fa-question-circle"
+                       aria-hidden="true"></i>
+                  </button>
+                  <button class="btn btn-default"
+                          type="button"
+                          [disabled]="editing"
+                          (click)="addErasureCodeProfile()">
+                    <i class="fa fa-plus"
+                       aria-hidden="true"></i>
+                  </button>
+                  <button class="btn btn-default"
+                          type="button"
+                          (click)="deleteErasureCodeProfile()"
+                          [disabled]="editing || ecProfiles.length < 1">
+                    <i class="fa fa-trash-o"
+                       aria-hidden="true"></i>
+                  </button>
+                </span>
+              </div>
+              <span class="help-block"
+                    id="ecp-info-block"
+                    *ngIf="data.erasureInfo && form.getValue('erasureProfile')">
+                <cd-table-key-value [renderObjects]="true"
+                                    [data]="form.getValue('erasureProfile')"
+                                    [autoReload]="false">
+                </cd-table-key-value>
+              </span>
             </div>
           </div>
 

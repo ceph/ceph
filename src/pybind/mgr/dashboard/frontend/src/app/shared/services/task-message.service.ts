@@ -76,6 +76,7 @@ export class TaskMessageService {
   };
 
   messages = {
+    // Pool tasks
     'pool/create': new TaskMessage(this.commonOperations.create, this.pool, (metadata) => ({
       '17': `Name is already used by ${this.pool(metadata)}.`
     })),
@@ -83,6 +84,12 @@ export class TaskMessageService {
       '17': `Name is already used by ${this.pool(metadata)}.`
     })),
     'pool/delete': new TaskMessage(this.commonOperations.delete, this.pool),
+    // Erasure code profile tasks
+    'ecp/create': new TaskMessage(this.commonOperations.create, this.ecp, (metadata) => ({
+      '17': `Name is already used by ${this.ecp(metadata)}.`
+    })),
+    'ecp/delete': new TaskMessage(this.commonOperations.delete, this.ecp),
+    // RBD tasks
     'rbd/create': new TaskMessage(this.commonOperations.create, this.rbd.default, (metadata) => ({
       '17': `Name is already used by ${this.rbd.default(metadata)}.`
     })),
@@ -111,6 +118,7 @@ export class TaskMessageService {
       new TaskMessageOperation('Flattening', 'flatten', 'Flattened'),
       this.rbd.default
     ),
+    // RBD snapshot tasks
     'rbd/snap/create': new TaskMessage(
       this.commonOperations.create,
       this.rbd.snapshot,
@@ -136,6 +144,7 @@ export class TaskMessageService {
       new TaskMessageOperation('Rolling back', 'rollback', 'Rolled back'),
       this.rbd.snapshot
     ),
+    // RBD trash tasks
     'rbd/trash/move': new TaskMessage(
       new TaskMessageOperation('Moving', 'move', 'Moved'),
       (metadata) => `image '${metadata.pool_name}/${metadata.image_name}' to trash`,
@@ -170,6 +179,10 @@ export class TaskMessageService {
 
   pool(metadata) {
     return `pool '${metadata.pool_name}'`;
+  }
+
+  ecp(metadata) {
+    return `erasure code profile '${metadata.name}'`;
   }
 
   _getTaskTitle(task: Task) {
