@@ -93,6 +93,7 @@ static void file_values_parse(const map<string, string>& kvm, FILE *fp, map<stri
 
 static bool os_release_parse(map<string, string> *m, CephContext *cct)
 {
+#if defined(__linux__)
   static const map<string, string> kvm = {
     { "distro", "ID=" },
     { "distro_description", "PRETTY_NAME=" },
@@ -109,6 +110,15 @@ static bool os_release_parse(map<string, string> *m, CephContext *cct)
   file_values_parse(kvm, fp, m, cct);
 
   fclose(fp);
+#elif defined(__FreeBSD__)
+  struct utsname u;
+  int r = uname(&u);
+  if (!r) {
+     m->insert(std::make_pair("distro", u.sysname));
+     m->insert(std::make_pair("distro_description", u.version));
+     m->insert(std::make_pair("distro_version", u.release));
+  }
+#endif
 
   return true;
 }

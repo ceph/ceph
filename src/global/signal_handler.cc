@@ -207,8 +207,8 @@ static void handle_fatal_signal(int signum)
 	  jf.dump_string("utsname_version", u.version);
 	  jf.dump_string("utsname_machine", u.machine);
 	}
-
-	// os-releaes
+#if defined(__linux__)
+	// os-release
 	int in = ::open("/etc/os-release", O_RDONLY);
 	if (in >= 0) {
 	  char buf[4096];
@@ -231,6 +231,7 @@ static void handle_fatal_signal(int signum)
 	  }
 	  ::close(in);
 	}
+#endif
 
 	// assert?
 	if (g_assert_condition) {
