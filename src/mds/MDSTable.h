@@ -19,9 +19,9 @@
 #include "mds_table_types.h"
 #include "include/buffer_fwd.h"
 
+#include "MDSContext.h"
+
 class MDSRank;
-class Context;
-class MDSInternalContextBase;
 
 class MDSTable {
 public:
@@ -41,7 +41,7 @@ protected:
   
   version_t version, committing_version, committed_version, projected_version;
   
-  map<version_t, list<MDSInternalContextBase*> > waitfor_save;
+  map<version_t, MDSInternalContextBase::vec > waitfor_save;
   
 public:
   MDSTable(MDSRank *m, const char *n, bool is_per_mds) :

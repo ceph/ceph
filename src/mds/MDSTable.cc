@@ -104,13 +104,15 @@ void MDSTable::save_2(int r, version_t v)
   dout(10) << "save_2 v " << v << dendl;
   committed_version = v;
   
-  list<MDSInternalContextBase*> ls;
+  MDSInternalContextBase::vec ls;
   while (!waitfor_save.empty()) {
-    if (waitfor_save.begin()->first > v) break;
-    ls.splice(ls.end(), waitfor_save.begin()->second);
-    waitfor_save.erase(waitfor_save.begin());
+    auto it = waitfor_save.begin();
+    if (it->first > v) break;
+    auto& v = it->second;
+    ls.insert(ls.end(), v.begin(), v.end());
+    waitfor_save.erase(it);
   }
-  finish_contexts(g_ceph_context, ls,0);
+  finish_contexts(g_ceph_context, ls, 0);
 }
 
 

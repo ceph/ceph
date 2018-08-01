@@ -905,7 +905,7 @@ void CDir::steal_dentry(CDentry *dn)
   dn->dir = this;
 }
 
-void CDir::prepare_old_fragment(map<string_snap_t, std::list<MDSInternalContextBase*> >& dentry_waiters, bool replay)
+void CDir::prepare_old_fragment(map<string_snap_t, MDSInternalContextBase::vec >& dentry_waiters, bool replay)
 {
   // auth_pin old fragment for duration so that any auth_pinning
   // during the dentry migration doesn't trigger side effects
@@ -933,7 +933,7 @@ void CDir::prepare_new_fragment(bool replay)
   inode->add_dirfrag(this);
 }
 
-void CDir::finish_old_fragment(list<MDSInternalContextBase*>& waiters, bool replay)
+void CDir::finish_old_fragment(MDSInternalContextBase::vec& waiters, bool replay)
 {
   // take waiters _before_ unfreeze...
   if (!replay) {
@@ -985,7 +985,7 @@ void CDir::init_fragment_pins()
     get(PIN_SUBTREE);
 }
 
-void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay)
+void CDir::split(int bits, list<CDir*>& subs, MDSInternalContextBase::vec& waiters, bool replay)
 {
   dout(10) << "split by " << bits << " bits on " << *this << dendl;
 
@@ -1009,7 +1009,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
     fragstatdiff.add_delta(fnode.accounted_fragstat, fnode.fragstat);
   dout(10) << " rstatdiff " << rstatdiff << " fragstatdiff " << fragstatdiff << dendl;
 
-  map<string_snap_t, std::list<MDSInternalContextBase*> > dentry_waiters;
+  map<string_snap_t, MDSInternalContextBase::vec > dentry_waiters;
   prepare_old_fragment(dentry_waiters, replay);
 
   // create subfrag dirs
@@ -1086,7 +1086,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
   finish_old_fragment(waiters, replay);
 }
 
-void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay)
+void CDir::merge(list<CDir*>& subs, MDSInternalContextBase::vec& waiters, bool replay)
 {
   dout(10) << "merge " << subs << dendl;
 
@@ -1108,7 +1108,7 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
   version_t rstat_version = inode->get_projected_inode()->rstat.version;
   version_t dirstat_version = inode->get_projected_inode()->dirstat.version;
 
-  map<string_snap_t, std::list<MDSInternalContextBase*> > dentry_waiters;
+  map<string_snap_t, MDSInternalContextBase::vec > dentry_waiters;
 
   for (auto dir : subs) {
     dout(10) << " subfrag " << dir->get_frag() << " " << *dir << dendl;
@@ -1264,7 +1264,7 @@ void CDir::add_dentry_waiter(std::string_view dname, snapid_t snapid, MDSInterna
 }
 
 void CDir::take_dentry_waiting(std::string_view dname, snapid_t first, snapid_t last,
-			       list<MDSInternalContextBase*>& ls)
+			       MDSInternalContextBase::vec& ls)
 {
   if (waiting_on_dentry.empty())
     return;
@@ -1288,7 +1288,7 @@ void CDir::take_dentry_waiting(std::string_view dname, snapid_t first, snapid_t 
     put(PIN_DNWAITER);
 }
 
-void CDir::take_sub_waiting(list<MDSInternalContextBase*>& ls)
+void CDir::take_sub_waiting(MDSInternalContextBase::vec& ls)
 {
   dout(10) << __func__ << dendl;
   if (!waiting_on_dentry.empty()) {
@@ -1337,7 +1337,7 @@ void CDir::add_waiter(uint64_t tag, MDSInternalContextBase *c)
 
 
 /* NOTE: this checks dentry waiters too */
-void CDir::take_waiting(uint64_t mask, list<MDSInternalContextBase*>& ls)
+void CDir::take_waiting(uint64_t mask, MDSInternalContextBase::vec& ls)
 {
   if ((mask & WAIT_DENTRY) && !waiting_on_dentry.empty()) {
     // take all dentry waiters
@@ -1361,7 +1361,7 @@ void CDir::finish_waiting(uint64_t mask, int result)
 {
   dout(11) << __func__ << " mask " << hex << mask << dec << " result " << result << " on " << *this << dendl;
 
-  list<MDSInternalContextBase*> finished;
+  MDSInternalContextBase::vec finished;
   take_waiting(mask, finished);
   if (result < 0)
     finish_contexts(g_ceph_context, finished, result);
@@ -1442,7 +1442,7 @@ void CDir::mark_new(LogSegment *ls)
   ls->new_dirfrags.push_back(&item_new);
   state_clear(STATE_CREATING);
 
-  list<MDSInternalContextBase*> waiters;
+  MDSInternalContextBase::vec waiters;
   take_waiting(CDir::WAIT_CREATED, waiters);
   cache->mds->queue_waiters(waiters);
 }
@@ -2465,7 +2465,7 @@ void CDir::_committed(int r, version_t v)
       _commit(it->first, -1);
       break;
     }
-    std::list<MDSInternalContextBase*> t;
+    MDSInternalContextBase::vec t;
     for (const auto &waiter : it->second)
       t.push_back(waiter);
     cache->mds->queue_waiters(t);
@@ -2698,7 +2698,7 @@ void CDir::set_dir_auth(const mds_authority_t &a)
 
   // newly single auth?
   if (was_ambiguous && dir_auth.second == CDIR_AUTH_UNKNOWN) {
-    list<MDSInternalContextBase*> ls;
+    MDSInternalContextBase::vec ls;
     take_waiting(WAIT_SINGLEAUTH, ls);
     cache->mds->queue_waiters(ls);
   }

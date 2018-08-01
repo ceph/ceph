@@ -19,8 +19,8 @@
 
 #include "MDSTableClient.h"
 #include "snap.h"
+#include "MDSContext.h"
 
-class MDSInternalContextBase;
 class MDSRank;
 class LogSegment;
 
@@ -33,7 +33,7 @@ class SnapClient : public MDSTableClient {
 
   set<version_t> committing_tids;
 
-  map<version_t, std::list<MDSInternalContextBase*> > waiting_for_version;
+  map<version_t, MDSInternalContextBase::vec > waiting_for_version;
 
   uint64_t sync_reqid;
   bool synced;
