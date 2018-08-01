@@ -630,15 +630,6 @@ bool PGBackend::be_compare_scrub_objects(
   bool has_snapset)
 {
   enum { CLEAN, FOUND_ERROR } error = CLEAN;
-  if (candidate.stat_error) {
-    assert(shard_result.has_stat_error());
-    error = FOUND_ERROR;
-    errorstream << "candidate had a stat error";
-  }
-  if (candidate.read_error || candidate.ec_hash_mismatch || candidate.ec_size_mismatch) {
-    error = FOUND_ERROR;
-    errorstream << "candidate had a read error";
-  }
   if (auth.digest_present && candidate.digest_present) {
     if (auth.digest != candidate.digest) {
       if (error != CLEAN)
@@ -823,7 +814,9 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   const map<pg_shard_t,ScrubMap*> &maps,
   object_info_t *auth_oi,
   map<pg_shard_t, shard_info_wrapper> &shard_map,
-  bool &digest_match)
+  bool &digest_match,
+  spg_t pgid,
+  ostream &errorstream)
 {
   eversion_t auth_version;
   bool auth_prio = false;
@@ -844,27 +837,37 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   digest_match = true;
   for (auto &l : shards) {
     bool oi_prio = false;
+    ostringstream shard_errorstream;
+    bool error = false;
     map<pg_shard_t, ScrubMap *>::const_iterator j = maps.find(l);
     map<hobject_t, ScrubMap::object>::iterator i =
       j->second->objects.find(obj);
     if (i == j->second->objects.end()) {
       continue;
     }
-    string error_string;
     auto& shard_info = shard_map[j->first];
     if (j->first == get_parent()->whoami_shard())
       shard_info.primary = true;
     if (i->second.read_error) {
       shard_info.set_read_error();
-      error_string += " read_error";
+      if (error)
+        shard_errorstream << ", ";
+      error = true;
+      shard_errorstream << "candidate had a read error";
     }
     if (i->second.ec_hash_mismatch) {
       shard_info.set_ec_hash_mismatch();
-      error_string += " ec_hash_mismatch";
+      if (error)
+        shard_errorstream << ", ";
+      error = true;
+      shard_errorstream << "candidate had an ec hash mismatch";
     }
     if (i->second.ec_size_mismatch) {
       shard_info.set_ec_size_mismatch();
-      error_string += " ec_size_mismatch";
+      if (error)
+        shard_errorstream << ", ";
+      error = true;
+      shard_errorstream << "candidate had an ec size mismatch";
     }
 
     object_info_t oi;
@@ -875,7 +878,10 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 
     if (i->second.stat_error) {
       shard_info.set_stat_error();
-      error_string += " stat_error";
+      if (error)
+        shard_errorstream << ", ";
+      error = true;
+      shard_errorstream << "candidate had a stat error";
       // With stat_error no further checking
       // We don't need to also see a missing_object_info_attr
       goto out;
@@ -886,7 +892,10 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       k = i->second.attrs.find(SS_ATTR);
       if (k == i->second.attrs.end()) {
 	shard_info.set_snapset_missing();
-	error_string += " snapset_missing";
+        if (error)
+          shard_errorstream << ", ";
+        error = true;
+        shard_errorstream << "candidate had a missing snapset key";
       } else {
         ss_bl.push_back(k->second);
         try {
@@ -895,7 +904,10 @@ map<pg_shard_t, ScrubMap *>::const_iterator
         } catch (...) {
 	  // invalid snapset, probably corrupt
 	  shard_info.set_snapset_corrupted();
-	  error_string += " snapset_corrupted";
+          if (error)
+            shard_errorstream << ", ";
+          error = true;
+          shard_errorstream << "candidate had a corrupt snapset";
         }
       }
     }
@@ -905,7 +917,10 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       k = i->second.attrs.find(ECUtil::get_hinfo_key());
       if (k == i->second.attrs.end()) {
 	shard_info.set_hinfo_missing();
-	error_string += " hinfo_key_missing";
+        if (error)
+          shard_errorstream << ", ";
+        error = true;
+        shard_errorstream << "candidate had a missing hinfo key";
       } else {
 	hk_bl.push_back(k->second);
         try {
@@ -914,7 +929,10 @@ map<pg_shard_t, ScrubMap *>::const_iterator
         } catch (...) {
 	  // invalid snapset, probably corrupt
 	  shard_info.set_hinfo_corrupted();
-	  error_string += " hinfo_corrupted";
+          if (error)
+            shard_errorstream << ", ";
+          error = true;
+          shard_errorstream << "candidate had a corrupt hinfo";
         }
       }
     }
@@ -923,7 +941,10 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     if (k == i->second.attrs.end()) {
       // no object info on object, probably corrupt
       shard_info.set_info_missing();
-      error_string += " info_missing";
+      if (error)
+        shard_errorstream << ", ";
+      error = true;
+      shard_errorstream << "candidate had a missing info key";
       goto out;
     }
     bl.push_back(k->second);
@@ -933,7 +954,10 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     } catch (...) {
       // invalid object info, probably corrupt
       shard_info.set_info_corrupted();
-      error_string += " info_corrupted";
+      if (error)
+        shard_errorstream << ", ";
+      error = true;
+      shard_errorstream << "candidate had a corrupt info";
       goto out;
     }
 
@@ -941,9 +965,12 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     assert(oi.soid == obj);
 
     if (i->second.size != be_get_ondisk_size(oi.size)) {
-      dout(5) << __func__ << " size " << i->second.size << " oi size " << oi.size << dendl;
       shard_info.set_obj_size_info_mismatch();
-      error_string += " obj_size_info_mismatch";
+      if (error)
+        shard_errorstream << ", ";
+      error = true;
+      shard_errorstream << "candidate size " << i->second.size << " info size "
+			<< oi.size << " mismatch";
     }
 
     // digest_match will only be true if computed digests are the same
@@ -980,13 +1007,9 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     }
 
 out:
-    // Check error_string because some errors already generated messages
-    if (error_string != "") {
-      dout(10) << __func__ << ": error(s) osd " << j->first
-	       << " for obj " << obj
-	       << "," << error_string
-	       << dendl;
-    }
+    if (error)
+        errorstream << pgid.pgid << " shard " << l << ": soid " << obj
+		    << " " << shard_errorstream.str() << "\n";
     // Keep scanning other shards
   }
   dout(10) << __func__ << ": selecting osd " << auth->first
@@ -1024,7 +1047,8 @@ void PGBackend::be_compare_scrubmaps(
 
     bool digest_match;
     map<pg_shard_t, ScrubMap *>::const_iterator auth =
-      be_select_auth_object(*k, maps, &auth_oi, shard_map, digest_match);
+      be_select_auth_object(*k, maps, &auth_oi, shard_map, digest_match,
+			    pgid, errorstream);
 
     list<pg_shard_t> auth_list;
     set<pg_shard_t> object_errors;
