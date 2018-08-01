@@ -13,12 +13,7 @@ function(do_build_rocksdb)
     list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER})
   endif()
 
-  # libsnappy is a C++ library, we need to force rocksdb to link against
-  # libsnappy statically.
   list(APPEND ROCKSDB_CMAKE_ARGS -DWITH_SNAPPY=${SNAPPY_FOUND})
-  if(SNAPPY_FOUND AND WITH_STATIC_LIBSTDCXX)
-    list(APPEND ROCKSDB_CMAKE_ARGS -DWITH_SNAPPY_STATIC_LIB=ON)
-  endif()
   list(APPEND ROCKSDB_CMAKE_ARGS -DWITH_LZ4=${LZ4_FOUND})
   list(APPEND ROCKSDB_CMAKE_ARGS -DWITH_ZLIB=${ZLIB_FOUND})
   list(APPEND ROCKSDB_CMAKE_ARGS -DPORTABLE=ON)
