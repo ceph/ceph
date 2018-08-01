@@ -141,8 +141,30 @@ struct rgw_pubsub_topic_subs {
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_topic_subs)
 
+struct rgw_pubsub_topic_filter {
+  rgw_pubsub_topic topic;
+  set<string, ltstr_nocase> events;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(topic, bl);
+    encode(events, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(topic, bl);
+    decode(events, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(rgw_pubsub_topic_filter)
+
 struct rgw_pubsub_bucket_topics {
-  map<string, rgw_pubsub_topic> topics;
+  map<string, rgw_pubsub_topic_filter> topics;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -234,7 +256,7 @@ public:
     }
 
     int get_topics(rgw_pubsub_bucket_topics *result);
-    int create_notification(const string& topic_name);
+    int create_notification(const string& topic_name, const set<string, ltstr_nocase>& events);
     int remove_notification(const string& topic_name);
   };
 

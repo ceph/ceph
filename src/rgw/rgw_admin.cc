@@ -2871,6 +2871,7 @@ int main(int argc, const char **argv)
   string sub_dest_bucket;
   string sub_push_endpoint;
   string event_id;
+  set<string, ltstr_nocase> event_types;
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -3204,6 +3205,8 @@ int main(int argc, const char **argv)
       sub_push_endpoint = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--event-id", (char*)NULL)) {
       event_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--event-type", "--event-types", (char*)NULL)) {
+      get_str_set(val, ",", event_types);
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -7935,7 +7938,7 @@ next:
     }
 
     auto b = ups.get_bucket(bucket_info.bucket);
-    ret = b->create_notification(topic_name);
+    ret = b->create_notification(topic_name, event_types);
     if (ret < 0) {
       cerr << "ERROR: could not publish bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;

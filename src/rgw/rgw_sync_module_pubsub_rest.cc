@@ -637,6 +637,8 @@ class RGWPSCreateNotifOp : public RGWOp {
 protected:
   std::unique_ptr<RGWUserPubSub> ups;
   string topic_name;
+  set<string, ltstr_nocase> events;
+
   string bucket_name;
   RGWBucketInfo bucket_info;
 
@@ -683,7 +685,7 @@ void RGWPSCreateNotifOp::execute()
 
   ups = make_unique<RGWUserPubSub>(store, s->owner.get_id());
   auto b = ups->get_bucket(bucket_info.bucket);
-  op_ret = b->create_notification(topic_name);
+  op_ret = b->create_notification(topic_name, events);
   if (op_ret < 0) {
     ldout(s->cct, 20) << "failed to create notification, ret=" << op_ret << dendl;
     return;
@@ -700,6 +702,11 @@ public:
     if (!exists) {
       ldout(s->cct, 20) << "param 'topic' not provided" << dendl;
       return -EINVAL;
+    }
+
+    string events_str = s->info.args.get("events", &exists);
+    if (exists) {
+      get_str_set(events_str, ",", events);
     }
     return notif_bucket_path(s->object.name, &bucket_name);
   }
