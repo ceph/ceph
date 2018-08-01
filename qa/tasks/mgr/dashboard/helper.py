@@ -312,6 +312,9 @@ class DashboardTestCase(MgrTestCase):
         except _ValError as e:
             self.assertEqual(data, str(e))
 
+    def assertSchemaBody(self, schema):
+        self.assertSchema(self.jsonBody(), schema)
+
     def assertBody(self, body):
         self.assertEqual(self._resp.text, body)
 
@@ -400,7 +403,7 @@ class _ValError(Exception):
 def _validate_json(val, schema, path=[]):
     """
     >>> d = {'a': 1, 'b': 'x', 'c': range(10)}
-    ... ds = JObj({'a': JLeaf(int), 'b': JLeaf(str), 'c': JList(JLeaf(int))})
+    ... ds = JObj({'a': int, 'b': str, 'c': JList(int)})
     ... _validate_json(d, ds)
     True
     """
@@ -415,6 +418,8 @@ def _validate_json(val, schema, path=[]):
             raise _ValError('val not of type {}'.format(schema.typ), path)
         return True
     if isinstance(schema, JList):
+        if not isinstance(val, list):
+            raise _ValError('val="{}" is not a list'.format(val), path)
         return all(_validate_json(e, schema.elem_typ, path + [i]) for i, e in enumerate(val))
     if isinstance(schema, JTuple):
         return all(_validate_json(val[i], typ, path + [i])
@@ -424,6 +429,8 @@ def _validate_json(val, schema, path=[]):
             return True
         elif val is None:
             raise _ValError('val is None', path)
+        if not hasattr(val, 'keys'):
+            raise _ValError('val="{}" is not a dict'.format(val), path)
         missing_keys = set(schema.sub_elems.keys()).difference(set(val.keys()))
         if missing_keys:
             raise _ValError('missing keys: {}'.format(missing_keys), path)
@@ -434,5 +441,7 @@ def _validate_json(val, schema, path=[]):
             _validate_json(val[sub_elem_name], sub_elem, path + [sub_elem_name])
             for sub_elem_name, sub_elem in schema.sub_elems.items()
         )
+    if schema in [str, int, float, bool, six.string_types]:
+        return _validate_json(val, JLeaf(schema), path)
 
     assert False, str(path)
