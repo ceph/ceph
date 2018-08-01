@@ -624,7 +624,8 @@ bool PGBackend::be_compare_scrub_objects(
   const ScrubMap::object &candidate,
   shard_info_wrapper &shard_result,
   inconsistent_obj_wrapper &obj_result,
-  ostream &errorstream)
+  ostream &errorstream,
+  bool has_snapset)
 {
   enum { CLEAN, FOUND_ERROR } error = CLEAN;
   if (candidate.stat_error) {
@@ -684,6 +685,67 @@ bool PGBackend::be_compare_scrub_objects(
   }
   if (candidate.stat_error)
     return error == FOUND_ERROR;
+  if (!shard_result.has_info_missing()
+      && !shard_result.has_info_corrupted()) {
+    bufferlist can_bl, auth_bl;
+    auto can_attr = candidate.attrs.find(OI_ATTR);
+    auto auth_attr = auth.attrs.find(OI_ATTR);
+
+    assert(auth_attr != auth.attrs.end());
+    assert(can_attr != candidate.attrs.end());
+
+    can_bl.push_back(can_attr->second);
+    auth_bl.push_back(auth_attr->second);
+    if (!can_bl.contents_equal(auth_bl)) {
+      if (error != CLEAN)
+        errorstream << ", ";
+      error = FOUND_ERROR;
+      obj_result.set_object_info_inconsistency();
+      errorstream << "object info inconsistent ";
+    }
+  }
+  if (has_snapset) {
+    if (!shard_result.has_snapset_missing()
+        && !shard_result.has_snapset_corrupted()) {
+      bufferlist can_bl, auth_bl;
+      auto can_attr = candidate.attrs.find(SS_ATTR);
+      auto auth_attr = auth.attrs.find(SS_ATTR);
+
+      assert(auth_attr != auth.attrs.end());
+      assert(can_attr != candidate.attrs.end());
+
+      can_bl.push_back(can_attr->second);
+      auth_bl.push_back(auth_attr->second);
+      if (!can_bl.contents_equal(auth_bl)) {
+	  if (error != CLEAN)
+	    errorstream << ", ";
+	  error = FOUND_ERROR;
+	  obj_result.set_snapset_inconsistency();
+	  errorstream << "snapset inconsistent ";
+      }
+    }
+  }
+  if (parent->get_pool().is_erasure()) {
+    if (!shard_result.has_hinfo_missing()
+        && !shard_result.has_hinfo_corrupted()) {
+      bufferlist can_bl, auth_bl;
+      auto can_hi = candidate.attrs.find(ECUtil::get_hinfo_key());
+      auto auth_hi = auth.attrs.find(ECUtil::get_hinfo_key());
+
+      assert(auth_hi != auth.attrs.end());
+      assert(can_hi != candidate.attrs.end());
+
+      can_bl.push_back(can_hi->second);
+      auth_bl.push_back(auth_hi->second);
+      if (!can_bl.contents_equal(auth_bl)) {
+        if (error != CLEAN)
+	  errorstream << ", ";
+	error = FOUND_ERROR;
+	obj_result.set_hinfo_inconsistency();
+	errorstream << "hinfo inconsistent ";
+      }
+    }
+  }
   uint64_t oi_size = be_get_ondisk_size(auth_oi.size);
   if (oi_size != candidate.size) {
     if (error != CLEAN)
@@ -759,12 +821,10 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   const map<pg_shard_t,ScrubMap*> &maps,
   object_info_t *auth_oi,
   map<pg_shard_t, shard_info_wrapper> &shard_map,
-  inconsistent_obj_wrapper &object_error,
   bool &digest_match)
 {
   eversion_t auth_version;
   bool auth_prio = false;
-  bufferlist first_oi_bl, first_ss_bl, first_hk_bl;
 
   // Create list of shards with primary first so it will be auth copy all
   // other things being equal.
@@ -831,12 +891,6 @@ map<pg_shard_t, ScrubMap *>::const_iterator
         try {
 	  bufferlist::iterator bliter = ss_bl.begin();
 	  decode(ss, bliter);
-	  if (first_ss_bl.length() == 0) {
-	    first_ss_bl.append(ss_bl);
-	  } else if (!object_error.has_snapset_inconsistency() && !ss_bl.contents_equal(first_ss_bl)) {
-	    object_error.set_snapset_inconsistency();
-	    error_string += " snapset_inconsistency";
-	  }
         } catch (...) {
 	  // invalid snapset, probably corrupt
 	  shard_info.set_snapset_corrupted();
@@ -856,12 +910,6 @@ map<pg_shard_t, ScrubMap *>::const_iterator
         try {
 	  bufferlist::iterator bliter = hk_bl.begin();
 	  decode(hi, bliter);
-	  if (first_hk_bl.length() == 0) {
-	    first_hk_bl.append(hk_bl);
-	  } else if (!object_error.has_hinfo_inconsistency() && !hk_bl.contents_equal(first_hk_bl)) {
-	    object_error.set_hinfo_inconsistency();
-	    error_string += " hinfo_inconsistency";
-	  }
         } catch (...) {
 	  // invalid snapset, probably corrupt
 	  shard_info.set_hinfo_corrupted();
@@ -890,13 +938,6 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 
     // This is automatically corrected in PG::_repair_oinfo_oid()
     assert(oi.soid == obj);
-
-    if (first_oi_bl.length() == 0) {
-      first_oi_bl.append(bl);
-    } else if (!object_error.has_object_info_inconsistency() && !bl.contents_equal(first_oi_bl)) {
-      object_error.set_object_info_inconsistency();
-      error_string += " object_info_inconsistency";
-    }
 
     if (i->second.size != be_get_ondisk_size(oi.size)) {
       dout(5) << __func__ << " size " << i->second.size << " oi size " << oi.size << dendl;
@@ -982,8 +1023,7 @@ void PGBackend::be_compare_scrubmaps(
 
     bool digest_match;
     map<pg_shard_t, ScrubMap *>::const_iterator auth =
-      be_select_auth_object(*k, maps, &auth_oi, shard_map, object_error,
-                            digest_match);
+      be_select_auth_object(*k, maps, &auth_oi, shard_map, digest_match);
 
     list<pg_shard_t> auth_list;
     set<pg_shard_t> object_errors;
@@ -1019,7 +1059,8 @@ void PGBackend::be_compare_scrubmaps(
 				   j->second->objects[*k],
 				   shard_map[j->first],
 				   object_error,
-				   ss);
+				   ss,
+				   k->has_snapset());
 
 	dout(20) << __func__ << (repair ? " repair " : " ") << (parent->get_pool().is_replicated() ? "replicated " : "")
 	  << (j == auth ? "auth " : "") << "shards " << shard_map.size() << (digest_match ? " digest_match " : " ")
@@ -1056,12 +1097,11 @@ void PGBackend::be_compare_scrubmaps(
 	  if (found)
 	    errorstream << pgid << " shard " << j->first << ": soid " << *k
 		      << " " << ss.str() << "\n";
-	} else if (object_error.errors != 0) {
+	} else if (found) {
 	  // Track possible shard to use as authoritative, if needed
 	  // There are errors, without identifying the shard
 	  object_errors.insert(j->first);
-	  if (found)
-	    errorstream << pgid << " : soid " << *k << " " << ss.str() << "\n";
+	  errorstream << pgid << " : soid " << *k << " " << ss.str() << "\n";
 	} else {
 	  // XXX: The auth shard might get here that we don't know
 	  // that it has the "correct" data.
