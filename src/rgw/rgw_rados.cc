@@ -3109,6 +3109,9 @@ class RGWMetaNotifier : public RGWRadosThread {
   uint64_t interval_msec() override {
     return cct->_conf->rgw_md_notify_interval_msec;
   }
+  void stop_process() override {
+    notify_mgr.stop();
+  }
 public:
   RGWMetaNotifier(RGWRados *_store, RGWMetadataLog* log)
     : RGWRadosThread(_store, "meta-notifier"), notify_mgr(_store), log(log) {}
@@ -3140,6 +3143,9 @@ class RGWDataNotifier : public RGWRadosThread {
 
   uint64_t interval_msec() override {
     return cct->_conf->get_val<int64_t>("rgw_data_notify_interval_msec");
+  }
+  void stop_process() override {
+    notify_mgr.stop();
   }
 public:
   RGWDataNotifier(RGWRados *_store) : RGWRadosThread(_store, "data-notifier"), notify_mgr(_store) {}
