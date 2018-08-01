@@ -1093,7 +1093,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     assert(dir);
 
     // dirstat
-    DirStat dst(p);
+    DirStat dst(p, features);
     __u32 numdn;
     __u16 flags;
     decode(numdn, p);
@@ -1299,7 +1299,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 
   if (reply->head.is_dentry) {
     dirst.decode(p, features);
-    dst.decode(p);
+    dst.decode(p, features);
     decode(dname, p);
     decode(dlease, p);
   }

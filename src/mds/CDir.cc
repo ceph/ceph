@@ -2590,6 +2590,20 @@ void CDir::abort_import()
   pop_auth_subtree.zero();
 }
 
+void CDir::encode_dirstat(bufferlist& bl, const session_info_t& info, const DirStat& ds) {
+  if (info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
+    ENCODE_START(1, 1, bl);
+    encode(ds.frag, bl);
+    encode(ds.auth, bl);
+    encode(ds.dist, bl);
+    ENCODE_FINISH(bl);
+  }
+  else {
+    encode(ds.frag, bl);
+    encode(ds.auth, bl);
+    encode(ds.dist, bl);
+  }
+}
 
 /********************************
  * AUTHORITY
@@ -2703,7 +2717,6 @@ void CDir::set_dir_auth(const mds_authority_t &a)
     cache->mds->queue_waiters(ls);
   }
 }
-
 
 /*****************************************
  * AUTH PINS and FREEZING
