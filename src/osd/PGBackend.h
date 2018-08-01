@@ -577,7 +577,9 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const map<pg_shard_t,ScrubMap*> &maps,
      object_info_t *auth_oi,
      map<pg_shard_t, shard_info_wrapper> &shard_map,
-     bool &digest_match);
+     bool &digest_match,
+     spg_t pgid,
+     ostream &errorstream);
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
      const set<hobject_t> &master_set,
