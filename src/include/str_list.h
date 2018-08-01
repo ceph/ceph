@@ -86,12 +86,21 @@ extern void get_str_set(const std::string& str,
  * @param [in] delims characters used to split **str**
  * @param [out] str_list Set modified containing str after it has been split
 **/
-extern void get_str_set(const std::string& str,
-                        const char *delims,
-			std::set<std::string>& str_list);
+template<class Compare = std::less<std::string> >
+void get_str_set(const std::string& str,
+                 const char *delims,
+                 std::set<std::string, Compare>& str_list)
+{
+  str_list.clear();
+  for_each_substr(str, delims, [&str_list] (auto token) {
+                  str_list.emplace(token.begin(), token.end());
+                  });
+}
 
 std::set<std::string> get_str_set(const std::string& str,
                                   const char *delims = ";,= \t");
+
+
 
 /**
  * Return a String containing the vector **v** joined with **sep**
