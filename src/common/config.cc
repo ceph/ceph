@@ -297,10 +297,11 @@ int md_config_t::set_mon_vals(CephContext *cct,
       lderr(cct) << __func__ << " failed to set " << i.first << " = "
 		 << i.second << ": " << err << dendl;
       ignored_mon_values.emplace(i);
-    } else if (r == 0) {
+    } else if (r == ConfigValues::SET_NO_CHANGE ||
+	       r == ConfigValues::SET_NO_EFFECT) {
       ldout(cct,20) << __func__ << " " << i.first << " = " << i.second
 		    << " (no change)" << dendl;
-    } else if (r == 1) {
+    } else if (r == ConfigValues::SET_HAVE_EFFECT) {
       ldout(cct,10) << __func__ << " " << i.first << " = " << i.second << dendl;
     } else {
       ceph_abort();
@@ -1285,17 +1286,16 @@ int md_config_t::_set_val(
   auto result = values.set_value(opt.name, std::move(new_value), level);
   switch (result) {
   case ConfigValues::SET_NO_CHANGE:
-    return 0;
+    break;
   case ConfigValues::SET_NO_EFFECT:
     values_bl.clear();
-    return 0;
+    break;
   case ConfigValues::SET_HAVE_EFFECT:
-    // fallthrough
-  default:
     values_bl.clear();
     _refresh(values, opt);
-    return 1;
+    break;
   }
+  return result;
 }
 
 void md_config_t::_refresh(ConfigValues& values, const Option& opt)

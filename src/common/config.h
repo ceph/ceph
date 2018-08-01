@@ -288,6 +288,8 @@ private:
 		       std::vector<const char*>& args,
 		       std::ostream *oss);
 
+  // @returns negative number for an error, otherwise a
+  //          @c ConfigValues::set_value_result_t is returned.
   int _set_val(
     ConfigValues& values,
     const ConfigTracker& tracker,
