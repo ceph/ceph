@@ -1164,7 +1164,7 @@ struct session_info_t {
   EntityName auth_name;
 
   client_t get_client() const { return client_t(inst.name.num()); }
-  bool has_feature(size_t bit) { return client_metadata.features.test(bit); }
+  bool has_feature(size_t bit) const { return client_metadata.features.test(bit); }
   const entity_name_t& get_source() const { return inst.name; }
 
   void clear_meta() {
