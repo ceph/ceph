@@ -71,7 +71,7 @@ namespace crimson {
 	}
       };
 
-      QueueRef pq(new Queue(client_info_f, false));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
       ReqParams req_params(1,1);
 
       // Disable coredumps
@@ -89,6 +89,11 @@ namespace crimson {
 				"proportion.*max_tag") <<
 	"we should fail if a client tries to generate a reservation tag "
 	"where reservation and proportion are both 0";
+
+      EXPECT_DEATH_IF_SUPPORTED(Queue(client_info_f, AtLimit::Reject),
+				"Assertion.*Reject.*Delayed") <<
+	"we should fail if a client tries to construct a queue with both "
+        "DelayedTagCalc and AtLimit::Reject";
     }
 
 
@@ -116,7 +121,7 @@ namespace crimson {
 	       std::chrono::seconds(3),
 	       std::chrono::seconds(5),
 	       std::chrono::seconds(2),
-	       false);
+	       AtLimit::Wait);
 
       auto lock_pq = [&](std::function<void()> code) {
 	test_locked(pq.data_mtx, code);
@@ -153,7 +158,7 @@ namespace crimson {
 
       Request req;
       dmc::ReqParams req_params(1, 1);
-      pq.add_request_time(req, client, req_params, dmc::get_time());
+      EXPECT_EQ(0, pq.add_request_time(req, client, req_params, dmc::get_time()));
 
       std::this_thread::sleep_for(std::chrono::seconds(1));
 
@@ -304,22 +309,22 @@ namespace crimson {
 	return &info1;
       };
 
-      Queue pq(client_info_f, true);
+      Queue pq(client_info_f, AtLimit::Allow);
 
       EXPECT_EQ(0u, pq.client_count());
       EXPECT_EQ(0u, pq.request_count());
 
       ReqParams req_params(1,1);
 
-      pq.add_request(MyReq(1), client1, req_params);
-      pq.add_request(MyReq(11), client1, req_params);
-      pq.add_request(MyReq(2), client2, req_params);
-      pq.add_request(MyReq(0), client2, req_params);
-      pq.add_request(MyReq(13), client2, req_params);
-      pq.add_request(MyReq(2), client2, req_params);
-      pq.add_request(MyReq(13), client2, req_params);
-      pq.add_request(MyReq(98), client2, req_params);
-      pq.add_request(MyReq(44), client1, req_params);
+      EXPECT_EQ(0, pq.add_request(MyReq(1), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(11), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(0), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(13), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(13), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(98), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(44), client1, req_params));
 
       EXPECT_EQ(2u, pq.client_count());
       EXPECT_EQ(9u, pq.request_count());
@@ -373,19 +378,19 @@ namespace crimson {
 	return &info1;
       };
 
-      Queue pq(client_info_f, true);
+      Queue pq(client_info_f, AtLimit::Allow);
 
       EXPECT_EQ(0u, pq.client_count());
       EXPECT_EQ(0u, pq.request_count());
 
       ReqParams req_params(1,1);
 
-      pq.add_request(MyReq(1), client1, req_params);
-      pq.add_request(MyReq(2), client1, req_params);
-      pq.add_request(MyReq(3), client1, req_params);
-      pq.add_request(MyReq(4), client1, req_params);
-      pq.add_request(MyReq(5), client1, req_params);
-      pq.add_request(MyReq(6), client1, req_params);
+      EXPECT_EQ(0, pq.add_request(MyReq(1), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(3), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(4), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(5), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(6), client1, req_params));
 
       EXPECT_EQ(1u, pq.client_count());
       EXPECT_EQ(6u, pq.request_count());
@@ -456,19 +461,19 @@ namespace crimson {
 	return &info1;
       };
 
-      Queue pq(client_info_f, true);
+      Queue pq(client_info_f, AtLimit::Allow);
 
       EXPECT_EQ(0u, pq.client_count());
       EXPECT_EQ(0u, pq.request_count());
 
       ReqParams req_params(1,1);
 
-      pq.add_request(MyReq(1), client1, req_params);
-      pq.add_request(MyReq(2), client1, req_params);
-      pq.add_request(MyReq(3), client1, req_params);
-      pq.add_request(MyReq(4), client1, req_params);
-      pq.add_request(MyReq(5), client1, req_params);
-      pq.add_request(MyReq(6), client1, req_params);
+      EXPECT_EQ(0, pq.add_request(MyReq(1), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(3), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(4), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(5), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(6), client1, req_params));
 
       EXPECT_EQ(1u, pq.client_count());
       EXPECT_EQ(6u, pq.request_count());
@@ -539,22 +544,22 @@ namespace crimson {
 	return &info1;
       };
 
-      Queue pq(client_info_f, true);
+      Queue pq(client_info_f, AtLimit::Allow);
 
       EXPECT_EQ(0u, pq.client_count());
       EXPECT_EQ(0u, pq.request_count());
 
       ReqParams req_params(1,1);
 
-      pq.add_request(MyReq(1), client1, req_params);
-      pq.add_request(MyReq(11), client1, req_params);
-      pq.add_request(MyReq(2), client2, req_params);
-      pq.add_request(MyReq(0), client2, req_params);
-      pq.add_request(MyReq(13), client2, req_params);
-      pq.add_request(MyReq(2), client2, req_params);
-      pq.add_request(MyReq(13), client2, req_params);
-      pq.add_request(MyReq(98), client2, req_params);
-      pq.add_request(MyReq(44), client1, req_params);
+      EXPECT_EQ(0, pq.add_request(MyReq(1), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(11), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(0), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(13), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(13), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(98), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(44), client1, req_params));
 
       EXPECT_EQ(2u, pq.client_count());
       EXPECT_EQ(9u, pq.request_count());
@@ -613,15 +618,15 @@ namespace crimson {
 	}
       };
 
-      pq = QueueRef(new Queue(client_info_f, false));
+      pq = QueueRef(new Queue(client_info_f, AtLimit::Wait));
 
       ReqParams req_params(1,1);
 
       auto now = dmc::get_time();
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request(Request{}, client1, req_params);
-	pq->add_request(Request{}, client2, req_params);
+	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
 	now += 0.0001;
       }
 
@@ -666,7 +671,7 @@ namespace crimson {
 	}
       };
 
-      QueueRef pq(new Queue(client_info_f, false));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
 
       ReqParams req_params(1,1);
 
@@ -674,8 +679,8 @@ namespace crimson {
       auto old_time = dmc::get_time() - 100.0;
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request_time(Request{}, client1, req_params, old_time);
-	pq->add_request_time(Request{}, client2, req_params, old_time);
+	EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, old_time));
+	EXPECT_EQ(0, pq->add_request_time(Request{}, client2, req_params, old_time));
 	old_time += 0.001;
       }
 
@@ -723,15 +728,15 @@ namespace crimson {
 	}
       };
 
-      pq = QueueRef(new Queue(client_info_f, false));
+      pq = QueueRef(new Queue(client_info_f, AtLimit::Wait));
 
       ReqParams req_params(1,1);
 
       auto now = dmc::get_time();
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request(Request{}, client1, req_params);
-	pq->add_request(Request{}, client2, req_params);
+	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
 	now += 0.0001;
       }
 
@@ -764,8 +769,8 @@ namespace crimson {
       now = dmc::get_time();
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request(Request{}, client1, req_params);
-	pq->add_request(Request{}, client2, req_params);
+	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
 	now += 0.0001;
       }
 
@@ -820,15 +825,15 @@ namespace crimson {
 	}
       };
 
-      pq = QueueRef(new Queue(client_info_f, false));
+      pq = QueueRef(new Queue(client_info_f, AtLimit::Wait));
 
       ReqParams req_params(1,1);
 
       auto now = dmc::get_time();
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request(Request{}, client1, req_params);
-	pq->add_request(Request{}, client2, req_params);
+	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
 	now += 0.0001;
       }
 
@@ -860,8 +865,8 @@ namespace crimson {
       now = dmc::get_time();
 
       for (int i = 0; i < 6; ++i) {
-	pq->add_request(Request{}, client1, req_params);
-	pq->add_request(Request{}, client2, req_params);
+	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
 	now += 0.0001;
       }
 
@@ -909,7 +914,7 @@ namespace crimson {
 	}
       };
 
-      QueueRef pq(new Queue(client_info_f, false));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
 
       ReqParams req_params(0, 0);
 
@@ -918,8 +923,8 @@ namespace crimson {
 
       // add six requests; for same client reservations spaced one apart
       for (int i = 0; i < 3; ++i) {
-	pq->add_request_time(Request{}, client1, req_params, start_time);
-	pq->add_request_time(Request{}, client2, req_params, start_time);
+	EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, start_time));
+	EXPECT_EQ(0, pq->add_request_time(Request{}, client2, req_params, start_time));
       }
 
       Queue::PullReq pr = pq->pull_request(start_time + 0.5);
@@ -964,7 +969,7 @@ namespace crimson {
 	return &info;
       };
 
-      QueueRef pq(new Queue(client_info_f, false));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
 
       // Request req;
       ReqParams req_params(1,1);
@@ -991,14 +996,14 @@ namespace crimson {
 	return &info;
       };
 
-      QueueRef pq(new Queue(client_info_f, false));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
 
       ReqParams req_params(1,1);
 
       // make sure all times are well before now
       auto now = dmc::get_time();
 
-      pq->add_request_time(Request{}, client1, req_params, now + 100);
+      EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, now + 100));
       Queue::PullReq pr = pq->pull_request(now);
 
       EXPECT_EQ(Queue::NextReqType::future, pr.type);
@@ -1022,14 +1027,14 @@ namespace crimson {
 	return &info;
       };
 
-      QueueRef pq(new Queue(client_info_f, true));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Allow));
 
       ReqParams req_params(1,1);
 
       // make sure all times are well before now
       auto now = dmc::get_time();
 
-      pq->add_request_time(Request{}, client1, req_params, now + 100);
+      EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, now + 100));
       Queue::PullReq pr = pq->pull_request(now);
 
       EXPECT_EQ(Queue::NextReqType::returning, pr.type);
@@ -1053,14 +1058,14 @@ namespace crimson {
 	return &info;
       };
 
-      QueueRef pq(new Queue(client_info_f, true));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Allow));
 
       ReqParams req_params(1,1);
 
       // make sure all times are well before now
       auto now = dmc::get_time();
 
-      pq->add_request_time(Request{}, client1, req_params, now + 100);
+      EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, now + 100));
       Queue::PullReq pr = pq->pull_request(now);
 
       EXPECT_EQ(Queue::NextReqType::returning, pr.type);
@@ -1068,5 +1073,68 @@ namespace crimson {
       auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
       EXPECT_EQ(client1, retn.client);
     }
+
+
+    TEST(dmclock_server_pull, pull_reject_at_limit) {
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId, Request, false>;
+      using MyReqRef = typename Queue::RequestRef;
+
+      ClientId client1 = 52;
+      ClientId client2 = 53;
+
+      dmc::ClientInfo info(0.0, 1.0, 1.0);
+
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info;
+      };
+
+      Queue pq(client_info_f, AtLimit::Reject);
+
+      {
+        // success at 1 request per second
+        EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{1}));
+        EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{2}));
+        EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{3}));
+        // request too soon
+        EXPECT_EQ(EAGAIN, pq.add_request_time({}, client1, {}, Time{3.9}));
+        // previous rejected request counts against limit
+        EXPECT_EQ(EAGAIN, pq.add_request_time({}, client1, {}, Time{4}));
+        EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{6}));
+      }
+      {
+        auto r1 = MyReqRef{new Request};
+        ASSERT_EQ(0, pq.add_request(std::move(r1), client2, {}, Time{1}));
+        EXPECT_EQ(nullptr, r1); // add_request takes r1 on success
+        auto r2 = MyReqRef{new Request};
+        ASSERT_EQ(EAGAIN, pq.add_request(std::move(r2), client2, {}, Time{1}));
+        EXPECT_NE(nullptr, r2); // add_request does not take r2 on failure
+      }
+    }
+
+
+    TEST(dmclock_server_pull, pull_reject_threshold) {
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId, Request, false>;
+
+      ClientId client1 = 52;
+
+      dmc::ClientInfo info(0.0, 1.0, 1.0);
+
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info;
+      };
+
+      // allow up to 3 seconds worth of limit before rejecting
+      Queue pq(client_info_f, RejectThreshold{3.0});
+
+      EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{1})); // at limit=1
+      EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{1})); // 1 over
+      EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{1})); // 2 over
+      EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{1})); // 3 over
+      EXPECT_EQ(EAGAIN, pq.add_request_time({}, client1, {}, Time{1})); // reject
+      EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{3})); // 3 over
+    }
+
   } // namespace dmclock
 } // namespace crimson

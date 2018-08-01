@@ -65,6 +65,27 @@ namespace crimson {
       std::numeric_limits<double>::lowest();
     constexpr uint tag_modulo = 1000000;
 
+    enum class AtLimit {
+      // requests are delayed until the limit is restored
+      Wait,
+      // requests are allowed to exceed their limit, if all other reservations
+      // are met and below their limits
+      Allow,
+      // if an incoming request would exceed its limit, add_request() will
+      // reject it with EAGAIN instead of adding it to the queue. cannot be used
+      // with DelayedTagCalc, because add_request() needs an accurate tag
+      Reject,
+    };
+
+    // when AtLimit::Reject is used, only start rejecting requests once their
+    // limit is above this threshold. requests under this threshold are
+    // enqueued and processed like AtLimit::Wait
+    using RejectThreshold = Time;
+
+    // the AtLimit constructor parameter can either accept AtLimit or a value
+    // for RejectThreshold (which implies AtLimit::Reject)
+    using AtLimitParam = boost::variant<AtLimit, RejectThreshold>;
+
     struct ClientInfo {
       double reservation;  // minimum
       double weight;       // proportional
@@ -359,10 +380,8 @@ namespace crimson {
 	  last_tick = _tick;
 	}
 
-	inline void add_request(const RequestTag& tag,
-				const C&          client_id,
-				RequestRef&&      request) {
-	  requests.emplace_back(ClientReq(tag, client_id, std::move(request)));
+	inline void add_request(const RequestTag& tag, RequestRef&& request) {
+	  requests.emplace_back(tag, client, std::move(request));
 	}
 
 	inline const ClientReq& next_request() const {
@@ -746,10 +765,9 @@ namespace crimson {
 				    true>,
 		      B> ready_heap;
 
-      // if all reservations are met and all other requestes are under
-      // limit, this will allow the request next in terms of
-      // proportion to still get issued
-      bool             allow_limit_break;
+      AtLimit          at_limit;
+      RejectThreshold  reject_threshold = 0;
+
       double           anticipation_timeout;
 
       std::atomic_bool finishing;
@@ -771,6 +789,13 @@ namespace crimson {
 
       std::unique_ptr<RunEvery> cleaning_job;
 
+      // helper function to return the value of a variant if it matches the
+      // given type T, or a default value of T otherwise
+      template <typename T, typename Variant>
+      static T get_or_default(const Variant& param, T default_value) {
+	const T *p = boost::get<T>(&param);
+	return p ? *p : default_value;
+      }
 
       // COMMON constructor that others feed into; we can accept three
       // different variations of durations
@@ -779,10 +804,11 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _idle_age,
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
-			bool _allow_limit_break,
+			AtLimitParam at_limit_param,
 			double _anticipation_timeout) :
 	client_info_f(_client_info_f),
-	allow_limit_break(_allow_limit_break),
+	at_limit(get_or_default<AtLimit>(at_limit_param, AtLimit::Reject)),
+	reject_threshold(get_or_default<RejectThreshold>(at_limit_param, 0)),
 	anticipation_timeout(_anticipation_timeout),
 	finishing(false),
 	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
@@ -791,6 +817,8 @@ namespace crimson {
       {
 	assert(_erase_age >= _idle_age);
 	assert(_check_time < _idle_age);
+	// AtLimit::Reject depends on ImmediateTagCalc
+	assert(at_limit != AtLimit::Reject || !IsDelayed);
 	cleaning_job =
 	  std::unique_ptr<RunEvery>(
 	    new RunEvery(check_time,
@@ -842,37 +870,33 @@ namespace crimson {
 	return tag;
       }
 
-      // data_mtx must be held by caller
-      void do_add_request(RequestRef&& request,
-			  const C& client_id,
-			  const ReqParams& req_params,
-			  const Time time,
-			  const Cost cost = 1u) {
+      // data_mtx must be held by caller. returns 0 on success. when using
+      // AtLimit::Reject, requests that would exceed their limit are rejected
+      // with EAGAIN, and the queue will not take ownership of the given
+      // 'request' argument
+      int do_add_request(RequestRef&& request,
+			 const C& client_id,
+			 const ReqParams& req_params,
+			 const Time time,
+			 const Cost cost = 1u) {
 	++tick;
 
-	// this pointer will help us create a reference to a shared
-	// pointer, no matter which of two codepaths we take
-	ClientRec* temp_client;
-
-	auto client_it = client_map.find(client_id);
-	if (client_map.end() != client_it) {
-	  temp_client = &(*client_it->second); // address of obj of shared_ptr
-	} else {
+        auto insert = client_map.emplace(client_id, ClientRecRef{});
+        if (insert.second) {
+          // new client entry
 	  const ClientInfo* info = client_info_f(client_id);
-	  ClientRecRef client_rec =
-	    std::make_shared<ClientRec>(client_id, info, tick);
+	  auto client_rec = std::make_shared<ClientRec>(client_id, info, tick);
 	  resv_heap.push(client_rec);
 #if USE_PROP_HEAP
 	  prop_heap.push(client_rec);
 #endif
 	  limit_heap.push(client_rec);
 	  ready_heap.push(client_rec);
-	  client_map[client_id] = client_rec;
-	  temp_client = &(*client_rec); // address of obj of shared_ptr
+	  insert.first->second = std::move(client_rec);
 	}
 
 	// for convenience, we'll create a reference to the shared pointer
-	ClientRec& client = *temp_client;
+	ClientRec& client = *insert.first->second;
 
 	if (client.idle) {
 	  // We need to do an adjustment so that idle clients compete
@@ -926,7 +950,13 @@ namespace crimson {
 
 	RequestTag tag = initial_tag(TagCalc{}, client, req_params, time, cost);
 
-	client.add_request(tag, client.client, std::move(request));
+	if (at_limit == AtLimit::Reject &&
+            tag.limit > time + reject_threshold) {
+	  // if the client is over its limit, reject it here
+	  return EAGAIN;
+	}
+
+	client.add_request(tag, std::move(request));
 	if (1 == client.requests.size()) {
 	  // NB: can the following 4 calls to adjust be changed
 	  // promote? Can adding a request ever demote a client in the
@@ -948,7 +978,8 @@ namespace crimson {
 #if USE_PROP_HEAP
 	prop_heap.adjust(client);
 #endif
-      } // add_request
+	return 0;
+      } // do_add_request
 
       // data_mtx must be held by caller
       void update_next_tag(DelayedTagCalc delayed, ClientRec& top,
@@ -1079,7 +1110,7 @@ namespace crimson {
 	// proportion/weight, and if we allow limit break, try to
 	// schedule something with the lowest proportion tag or
 	// alternatively lowest reservation tag.
-	if (allow_limit_break) {
+	if (at_limit == AtLimit::Allow) {
 	  if (readys.has_request() &&
 	      readys.next_request().tag.proportion < max_tag) {
 	    return NextReq(HeapId::ready);
@@ -1227,11 +1258,11 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _idle_age,
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
-			bool _allow_limit_break = false,
+			AtLimitParam at_limit_param = AtLimit::Wait,
 			double _anticipation_timeout = 0.0) :
 	super(_client_info_f,
 	      _idle_age, _erase_age, _check_time,
-	      _allow_limit_break, _anticipation_timeout)
+	      at_limit_param, _anticipation_timeout)
       {
 	// empty
       }
@@ -1239,91 +1270,92 @@ namespace crimson {
 
       // pull convenience constructor
       PullPriorityQueue(typename super::ClientInfoFunc _client_info_f,
-			bool _allow_limit_break = false,
+			AtLimitParam at_limit_param = AtLimit::Wait,
 			double _anticipation_timeout = 0.0) :
 	PullPriorityQueue(_client_info_f,
 			  std::chrono::minutes(10),
 			  std::chrono::minutes(15),
 			  std::chrono::minutes(6),
-			  _allow_limit_break,
+			  at_limit_param,
 			  _anticipation_timeout)
       {
 	// empty
       }
 
 
-      inline void add_request(R&& request,
-			      const C& client_id,
-			      const ReqParams& req_params,
-			      const Cost cost = 1u) {
-	add_request(typename super::RequestRef(new R(std::move(request))),
-		    client_id,
-		    req_params,
-		    get_time(),
-		    cost);
+      int add_request(R&& request,
+		      const C& client_id,
+		      const ReqParams& req_params,
+		      const Cost cost = 1u) {
+	return add_request(typename super::RequestRef(new R(std::move(request))),
+			   client_id,
+			   req_params,
+			   get_time(),
+			   cost);
       }
 
 
-      inline void add_request(R&& request,
-			      const C& client_id,
-			      const Cost cost = 1u) {
+      int add_request(R&& request,
+		      const C& client_id,
+		      const Cost cost = 1u) {
 	static const ReqParams null_req_params;
-	add_request(typename super::RequestRef(new R(std::move(request))),
-		    client_id,
-		    null_req_params,
-		    get_time(),
-		    cost);
+	return add_request(typename super::RequestRef(new R(std::move(request))),
+			   client_id,
+			   null_req_params,
+			   get_time(),
+			   cost);
       }
 
 
-      inline void add_request_time(R&& request,
-				   const C& client_id,
-				   const ReqParams& req_params,
-				   const Time time,
-				   const Cost cost = 1u) {
-	add_request(typename super::RequestRef(new R(std::move(request))),
-		    client_id,
-		    req_params,
-		    time,
-		    cost);
+      int add_request_time(R&& request,
+			   const C& client_id,
+			   const ReqParams& req_params,
+			   const Time time,
+			   const Cost cost = 1u) {
+	return add_request(typename super::RequestRef(new R(std::move(request))),
+			   client_id,
+			   req_params,
+			   time,
+			   cost);
       }
 
 
-      inline void add_request(typename super::RequestRef&& request,
-			      const C& client_id,
-			      const ReqParams& req_params,
-			      const Cost cost = 1u) {
-	add_request(request, req_params, client_id, get_time(), cost);
+      int add_request(typename super::RequestRef&& request,
+		      const C& client_id,
+		      const ReqParams& req_params,
+		      const Cost cost = 1u) {
+	return add_request(request, req_params, client_id, get_time(), cost);
       }
 
 
-      inline void add_request(typename super::RequestRef&& request,
-			      const C& client_id,
-			      const Cost cost = 1u) {
+      int add_request(typename super::RequestRef&& request,
+		      const C& client_id,
+		      const Cost cost = 1u) {
 	static const ReqParams null_req_params;
-	add_request(request, null_req_params, client_id, get_time(), cost);
+	return add_request(request, null_req_params, client_id, get_time(), cost);
       }
 
 
       // this does the work; the versions above provide alternate interfaces
-      void add_request(typename super::RequestRef&& request,
-		       const C& client_id,
-		       const ReqParams& req_params,
-		       const Time time,
-		       const Cost cost = 1u) {
+      int add_request(typename super::RequestRef&& request,
+		      const C& client_id,
+		      const ReqParams& req_params,
+		      const Time time,
+		      const Cost cost = 1u) {
 	typename super::DataGuard g(this->data_mtx);
 #ifdef PROFILE
 	add_request_timer.start();
 #endif
-	super::do_add_request(std::move(request),
-			      client_id,
-			      req_params,
-			      time,
-			      cost);
+	int r = super::do_add_request(std::move(request),
+				      client_id,
+				      req_params,
+				      time,
+				      cost);
 	// no call to schedule_request for pull version
 #ifdef PROFILE
 	add_request_timer.stop();
 #endif
+	return r;
       }
 
 
@@ -1458,11 +1490,11 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _idle_age,
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
-			bool _allow_limit_break = false,
+			AtLimitParam at_limit_param = AtLimit::Wait,
 			double anticipation_timeout = 0.0) :
 	super(_client_info_f,
 	      _idle_age, _erase_age, _check_time,
-	      _allow_limit_break, anticipation_timeout)
+	      at_limit_param, anticipation_timeout)
       {
 	can_handle_f = _can_handle_f;
 	handle_f = _handle_f;
@@ -1474,7 +1506,7 @@ namespace crimson {
       PushPriorityQueue(typename super::ClientInfoFunc _client_info_f,
 			CanHandleRequestFunc _can_handle_f,
 			HandleRequestFunc _handle_f,
-			bool _allow_limit_break = false,
+			AtLimitParam at_limit_param = AtLimit::Wait,
 			double _anticipation_timeout = 0.0) :
 	PushPriorityQueue(_client_info_f,
 			  _can_handle_f,
@@ -1482,7 +1514,7 @@ namespace crimson {
 			  std::chrono::minutes(10),
 			  std::chrono::minutes(15),
 			  std::chrono::minutes(6),
-			  _allow_limit_break,
+			  at_limit_param,
 			  _anticipation_timeout)
       {
 	// empty
@@ -1497,57 +1529,60 @@ namespace crimson {
 
     public:
 
-      inline void add_request(R&& request,
-			      const C& client_id,
-			      const ReqParams& req_params,
-			      const Cost cost = 1u) {
-	add_request(typename super::RequestRef(new R(std::move(request))),
-		    client_id,
-		    req_params,
-		    get_time(),
-		    cost);
+      int add_request(R&& request,
+		      const C& client_id,
+		      const ReqParams& req_params,
+		      const Cost cost = 1u) {
+	return add_request(typename super::RequestRef(new R(std::move(request))),
+			   client_id,
+			   req_params,
+			   get_time(),
+			   cost);
       }
 
 
-      inline void add_request(typename super::RequestRef&& request,
-			      const C& client_id,
-			      const ReqParams& req_params,
-			      const Cost cost = 1u) {
-	add_request(request, req_params, client_id, get_time(), cost);
+      int add_request(typename super::RequestRef&& request,
+		      const C& client_id,
+		      const ReqParams& req_params,
+		      const Cost cost = 1u) {
+	return add_request(request, req_params, client_id, get_time(), cost);
       }
 
 
-      inline void add_request_time(const R& request,
-				   const C& client_id,
-				   const ReqParams& req_params,
-				   const Time time,
-				   const Cost cost = 1u) {
-	add_request(typename super::RequestRef(new R(request)),
-		    client_id,
-		    req_params,
-		    time,
-		    cost);
+      int add_request_time(const R& request,
+			   const C& client_id,
+			   const ReqParams& req_params,
+			   const Time time,
+			   const Cost cost = 1u) {
+	return add_request(typename super::RequestRef(new R(request)),
+			   client_id,
+			   req_params,
+			   time,
+			   cost);
       }
 
 
-      void add_request(typename super::RequestRef&& request,
-		       const C& client_id,
-		       const ReqParams& req_params,
-		       const Time time,
-		       const Cost cost = 1u) {
+      int add_request(typename super::RequestRef&& request,
+		      const C& client_id,
+		      const ReqParams& req_params,
+		      const Time time,
+		      const Cost cost = 1u) {
 	typename super::DataGuard g(this->data_mtx);
 #ifdef PROFILE
 	add_request_timer.start();
 #endif
-	super::do_add_request(std::move(request),
-			      client_id,
-			      req_params,
-			      time,
-			      cost);
-	schedule_request();
+	int r = super::do_add_request(std::move(request),
+				      client_id,
+				      req_params,
+				      time,
+				      cost);
+        if (r == 0) {
+	  schedule_request();
+        }
 #ifdef PROFILE
 	add_request_timer.stop();
 #endif
+	return r;
       }
 
 
