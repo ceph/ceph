@@ -198,15 +198,17 @@ def get_package_list(ctx, config):
         debs = filter(lambda p: not p.endswith('-dbg'), debs)
         rpms = filter(lambda p: not p.endswith('-debuginfo'), rpms)
 
-    excluded_packages = config.get('exclude_packages', list())
-    if excluded_packages:
+    def exclude(pkgs, exclude_list):
+        return list(set(pkgs).difference(set(exclude_list)))
+
+    excluded_packages = config.get('exclude_packages', [])
+    if isinstance(excluded_packages, dict):
         log.debug("Excluding packages: {}".format(excluded_packages))
-
-        def exclude(pkgs):
-            return list(set(pkgs).difference(set(excluded_packages)))
-
-        debs = exclude(debs)
-        rpms = exclude(rpms)
+        debs = exclude(debs, excluded_packages.get('deb', []))
+        rpms = exclude(rpms, excluded_packages.get('rpm', []))
+    else:
+        debs = exclude(debs, excluded_packages)
+        rpms = exclude(rpms, excluded_packages)
 
     package_list = dict(deb=debs, rpm=rpms)
     log.debug("Package list is: {}".format(package_list))
