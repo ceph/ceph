@@ -51,7 +51,7 @@ void PGLog::IndexedLog::trim(
   eversion_t *write_from_dups)
 {
   assert(s <= can_rollback_to);
-  generic_dout(20) << " complete_to " << complete_to->version << dendl;
+  lgeneric_subdout(cct, osd, 20) << " complete_to " << complete_to->version << dendl;
 
   auto earliest_dup_version =
     log.rbegin()->version.version < cct->_conf->osd_pg_log_dups_tracked
@@ -62,17 +62,17 @@ void PGLog::IndexedLog::trim(
     const pg_log_entry_t &e = *log.begin();
     if (e.version > s)
       break;
-    generic_dout(20) << "trim " << e << dendl;
+    lgeneric_subdout(cct, osd, 20) << "trim " << e << dendl;
     if (trimmed)
       trimmed->emplace(e.version);
 
     unindex(e);         // remove from index,
 
     // add to dup list
-    generic_dout(20) << "earliest_dup_version = " << earliest_dup_version << dendl;
+    lgeneric_subdout(cct, osd, 20) << "earliest_dup_version = " << earliest_dup_version << dendl;
     if (e.version.version >= earliest_dup_version) {
       if (write_from_dups != nullptr && *write_from_dups > e.version) {
-	generic_dout(20) << "updating write_from_dups from " << *write_from_dups << " to " << e.version << dendl;
+	lgeneric_subdout(cct, osd, 20) << "updating write_from_dups from " << *write_from_dups << " to " << e.version << dendl;
 	*write_from_dups = e.version;
       }
       dups.push_back(pg_log_dup_t(e));
@@ -99,7 +99,7 @@ void PGLog::IndexedLog::trim(
 
     // reset complete_to to the beginning of the log
     if (reset_complete_to) {
-      generic_dout(0) << " moving complete_to " << " to "
+      lgeneric_subdout(cct, osd, 20) << " moving complete_to " << " to "
                       << log.begin()->version << dendl;
       complete_to = log.begin();
     }
@@ -109,7 +109,7 @@ void PGLog::IndexedLog::trim(
     const auto& e = *dups.begin();
     if (e.version.version >= earliest_dup_version)
       break;
-    generic_dout(20) << "trim dup " << e << dendl;
+    lgeneric_subdout(cct, osd, 20) << "trim dup " << e << dendl;
     if (trimmed_dups)
       trimmed_dups->insert(e.get_key_name());
     unindex(e);
