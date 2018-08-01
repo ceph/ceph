@@ -1,5 +1,5 @@
-13.2.1 Mimic
-============
+v13.2.1 Mimic
+=============
 
 This is the first bugfix release of the Mimic v13.2.x long term stable release
 series. This release contains many fixes across all components of Ceph,
@@ -157,8 +157,8 @@ Changelog
 * tests: tests: make test_ceph_argparse.py pass on py3-only systems (`issue#24825 <http://tracker.ceph.com/issues/24825>`_, `issue#24816 <http://tracker.ceph.com/issues/24816>`_, `pr#22988 <https://github.com/ceph/ceph/pull/22988>`_, Nathan Cutler)
 * tests: upgrade/luminous-x: whitelist REQUEST_SLOW for rados_mon_thrash (`issue#25056 <http://tracker.ceph.com/issues/25056>`_, `issue#25051 <http://tracker.ceph.com/issues/25051>`_, `pr#23164 <https://github.com/ceph/ceph/pull/23164>`_, Nathan Cutler)
 
-13.2.0 Mimic
-============
+v13.2.0 Mimic
+=============
 
 This is the first stable release of Mimic, the next long term release series.
 
