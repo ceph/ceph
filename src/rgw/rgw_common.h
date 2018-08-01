@@ -317,8 +317,7 @@ class NameVal
 };
 
 /** Stores the XML arguments associated with the HTTP request in req_state*/
-class RGWHTTPArgs
-{
+class RGWHTTPArgs {
   string str, empty_str;
   map<string, string> val_map;
   map<string, string> sys_val_map;
@@ -377,7 +376,7 @@ class RGWHTTPArgs
   const string& get_str() {
     return str;
   }
-};
+}; // RGWHTTPArgs
 
 const char *rgw_conf_get(const map<string, string, ltstr_nocase>& conf_map, const char *name, const char *def_val);
 int rgw_conf_get_int(const map<string, string, ltstr_nocase>& conf_map, const char *name, int def_val);
@@ -1187,8 +1186,7 @@ inline ostream& operator<<(ostream& out, const RGWBucketIndexType &index_type)
   }
 }
 
-struct RGWBucketInfo
-{
+struct RGWBucketInfo {
   enum BIShardsHashType {
     MOD = 0
   };

@@ -644,7 +644,7 @@ public:
   const string name() override { return "list_buckets"; }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKETS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
-};
+}; // class RGWListBuckets
 
 class RGWGetUsage : public RGWOp {
 protected:
@@ -708,6 +708,7 @@ protected:
 
   int default_max;
   bool is_truncated;
+  bool allow_unordered;
 
   int shard_id;
 
@@ -715,7 +716,8 @@ protected:
 
 public:
   RGWListBucket() : list_versions(false), max(0),
-                    default_max(0), is_truncated(false), shard_id(-1) {}
+                    default_max(0), is_truncated(false),
+		    allow_unordered(false), shard_id(-1) {}
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;

@@ -649,12 +649,18 @@ int RGWListBucket_ObjStore_S3::get_params()
     marker.name = s->info.args.get("key-marker");
     marker.instance = s->info.args.get("version-id-marker");
   }
+
+  // non-standard
+  s->info.args.get_bool("allow-unordered", &allow_unordered, false);
+
+  delimiter = s->info.args.get("delimiter");
+
   max_keys = s->info.args.get("max-keys");
   op_ret = parse_max_keys();
   if (op_ret < 0) {
     return op_ret;
   }
-  delimiter = s->info.args.get("delimiter");
+
   encoding_type = s->info.args.get("encoding-type");
   if (s->system_request) {
     s->info.args.get_bool("objs-container", &objs_container, false);
@@ -670,6 +676,7 @@ int RGWListBucket_ObjStore_S3::get_params()
       shard_id = s->bucket_instance_shard_id;
     }
   }
+
   return 0;
 }
 

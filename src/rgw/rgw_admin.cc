@@ -5801,9 +5801,11 @@ next:
     formatter->open_array_section("objects");
     while (is_truncated) {
       map<string, rgw_bucket_dir_entry> result;
-      int r = store->cls_bucket_list(bucket_info, RGW_NO_SHARD, marker, prefix, 1000, true,
-                                     result, &is_truncated, &marker,
-                                     bucket_object_check_filter);
+      int r =
+	store->cls_bucket_list_ordered(bucket_info, RGW_NO_SHARD, marker,
+				       prefix, 1000, true,
+				       result, &is_truncated, &marker,
+				       bucket_object_check_filter);
 
       if (r < 0 && r != -ENOENT) {
         cerr << "ERROR: failed operation r=" << r << std::endl;

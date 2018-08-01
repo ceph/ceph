@@ -413,8 +413,7 @@ struct rgw_cls_list_op
 };
 WRITE_CLASS_ENCODER(rgw_cls_list_op)
 
-struct rgw_cls_list_ret
-{
+struct rgw_cls_list_ret {
   rgw_bucket_dir dir;
   bool is_truncated;
 
