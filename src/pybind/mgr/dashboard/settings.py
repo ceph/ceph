@@ -19,6 +19,7 @@ class Options(object):
         GRAFANA_API_PORT = (3000, int)
     """
     ENABLE_BROWSABLE_API = (True, bool)
+    REST_REQUESTS_TIMEOUT = (45, int)
 
     # RGW settings
     RGW_API_HOST = ('', str)
