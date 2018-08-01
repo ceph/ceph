@@ -781,40 +781,34 @@ void RGWListBucket_ObjStore_S3::send_response()
     send_versioned_response();
     return;
   }
+	
+  bool encode_response = false;
+  if (strcasecmp(encoding_type.c_str(), "url") == 0) {
+    s->formatter->dump_string("EncodingType", "url");
+    encode_response = true;
+  }
 
   s->formatter->open_object_section_in_ns("ListBucketResult", XMLNS_AWS_S3);
   if (!s->bucket_tenant.empty())
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   s->formatter->dump_string("Name", s->bucket_name);
-  s->formatter->dump_string("Prefix", prefix);
-  s->formatter->dump_string("Marker", marker.name);
+  s->formatter->dump_string("Prefix", (encode_response ? url_encode(prefix) : prefix));
+  s->formatter->dump_string("Marker", (encode_response ? url_encode(marker.name) : marker.name));
   if (is_truncated && !next_marker.empty())
-    s->formatter->dump_string("NextMarker", next_marker.name);
+    s->formatter->dump_string("NextMarker", (encode_response ? url_encode(next_marker.name) : next_marker.name));
   s->formatter->dump_int("MaxKeys", max);
   if (!delimiter.empty())
-    s->formatter->dump_string("Delimiter", delimiter);
+    s->formatter->dump_string("Delimiter", (encode_response ? url_encode(delimiter) : delimiter));
 
   s->formatter->dump_string("IsTruncated", (max && is_truncated ? "true"
 					    : "false"));
-
-  bool encode_key = false;
-  if (strcasecmp(encoding_type.c_str(), "url") == 0) {
-    s->formatter->dump_string("EncodingType", "url");
-    encode_key = true;
-  }
 
   if (op_ret >= 0) {
     vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       rgw_obj_key key(iter->key);
       s->formatter->open_array_section("Contents");
-      if (encode_key) {
-	string key_name;
-	url_encode(key.name, key_name);
-	s->formatter->dump_string("Key", key_name);
-      } else {
-	s->formatter->dump_string("Key", key.name);
-      }
+      s->formatter->dump_string("Key", (encode_response ? url_encode(key.name) : key.name));
       dump_time(s, "LastModified", &iter->meta.mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
       s->formatter->dump_int("Size", iter->meta.accounted_size);
