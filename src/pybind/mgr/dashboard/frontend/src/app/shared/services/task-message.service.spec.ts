@@ -90,6 +90,27 @@ describe('TaskManagerMessageService', () => {
       });
     });
 
+    describe('erasure code profile tasks', () => {
+      beforeEach(() => {
+        const metadata = {
+          name: 'someEcpName'
+        };
+        defaultMsg = `erasure code profile '${metadata.name}'`;
+        finishedTask.metadata = metadata;
+      });
+
+      it('tests ecp/create messages', () => {
+        finishedTask.name = 'ecp/create';
+        testCreate(defaultMsg);
+        testErrorCode(17, `Name is already used by ${defaultMsg}.`);
+      });
+
+      it('tests ecp/delete messages', () => {
+        finishedTask.name = 'ecp/delete';
+        testDelete(defaultMsg);
+      });
+    });
+
     describe('rbd tasks', () => {
       let metadata;
       let childMsg: string;
