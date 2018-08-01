@@ -1658,13 +1658,6 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
   }
 }
 
-
-void Server::encode_empty_dirstat(bufferlist& bl)
-{
-  static DirStat empty;
-  empty.encode(bl);
-}
-
 void Server::encode_infinite_lease(bufferlist& bl)
 {
   LeaseStat e;
@@ -1739,7 +1732,13 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
     if (dir->is_complete())
       dir->verify_fragstat();
 #endif
-    dir->encode_dirstat(bl, whoami);
+    DirStat ds;
+    ds.frag = dir->get_frag();
+    ds.auth = dir->get_dir_auth().first;
+    if (dir->is_auth())
+      dir->get_dist_spec(ds.dist, whoami);
+
+    dir->encode_dirstat(bl, session->info, ds);
     dout(20) << "set_trace_dist added dir  " << *dir << dendl;
 
     encode(dn->get_name(), bl);
@@ -3971,7 +3970,13 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 
   // start final blob
   bufferlist dirbl;
-  dir->encode_dirstat(dirbl, mds->get_nodeid());
+  DirStat ds;
+  ds.frag = dir->get_frag();
+  ds.auth = dir->get_dir_auth().first;
+  if (dir->is_auth())
+    dir->get_dist_spec(ds.dist, mds->get_nodeid());
+
+  dir->encode_dirstat(dirbl, mdr->session->info, ds);
 
   // count bytes available.
   //  this isn't perfect, but we should capture the main variable/unbounded size items!
@@ -9132,8 +9137,10 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
   if (!offset_str.empty())
     last_snapid = realm->resolve_snapname(offset_str, diri->ino());
 
+  //Empty DirStat
   bufferlist dirbl;
-  encode_empty_dirstat(dirbl);
+  static DirStat empty;
+  CDir::encode_dirstat(dirbl, mdr->session->info, empty);
 
   max_bytes -= dirbl.length() - sizeof(__u32) + sizeof(__u8) * 2;
 

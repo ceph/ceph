@@ -79,21 +79,24 @@ struct DirStat {
   set<__s32> dist;
   
   DirStat() : auth(CDIR_AUTH_PARENT) {}
-  DirStat(bufferlist::const_iterator& p) {
-    decode(p);
+  DirStat(bufferlist::const_iterator& p, const uint64_t features) {
+    decode(p, features);
   }
 
-  void encode(bufferlist& bl) {
-    using ceph::encode;
-    encode(frag, bl);
-    encode(auth, bl);
-    encode(dist, bl);
-  }
-  void decode(bufferlist::const_iterator& p) {
+  void decode(bufferlist::const_iterator& p, const uint64_t features) {
     using ceph::decode;
-    decode(frag, p);
-    decode(auth, p);
-    decode(dist, p);
+    if (features == (uint64_t)-1) {
+      DECODE_START(1, p);
+      decode(frag, p);
+      decode(auth, p);
+      decode(dist, p);
+      DECODE_FINISH(p);
+    }
+    else {
+      decode(frag, p);
+      decode(auth, p);
+      decode(dist, p);
+    }
   }
 
   // see CDir::encode_dirstat for encoder.
