@@ -1658,27 +1658,6 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
   }
 }
 
-void Server::encode_infinite_lease(bufferlist& bl)
-{
-  LeaseStat e;
-  e.seq = 0;
-  e.mask = -1;
-  e.duration_ms = -1;
-  encode(e, bl);
-  dout(20) << "encode_infinite_lease " << e << dendl;
-}
-
-void Server::encode_null_lease(bufferlist& bl)
-{
-  LeaseStat e;
-  e.seq = 0;
-  e.mask = 0;
-  e.duration_ms = 0;
-  encode(e, bl);
-  dout(20) << "encode_null_lease " << e << dendl;
-}
-
-
 /*
  * pass inode OR dentry (not both, or we may get confused)
  *
@@ -1744,8 +1723,11 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
     encode(dn->get_name(), bl);
     if (snapid == CEPH_NOSNAP)
       mds->locker->issue_client_lease(dn, client, bl, now, session);
-    else
-      encode_null_lease(bl);
+    else {
+      //null lease
+      LeaseStat e;
+      mds->locker->encode_lease(bl, session->info, e);
+    }
     dout(20) << "set_trace_dist added dn   " << snapid << " " << *dn << dendl;
   } else
     reply->head.is_dentry = 0;
@@ -9162,7 +9144,10 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
       break;
 
     encode(snap_name, dnbl);
-    encode_infinite_lease(dnbl);
+    //infinite lease
+    LeaseStat e(-1, -1, 0);
+    mds->locker->encode_lease(dnbl, mdr->session->info, e);
+    dout(20) << "encode_infinite_lease" << dendl;
 
     int r = diri->encode_inodestat(dnbl, mdr->session, realm, p->first, max_bytes - (int)dnbl.length());
     if (r < 0) {
