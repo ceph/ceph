@@ -3246,7 +3246,6 @@ public:
 	}));
   }
   void iterate_mayberw_back_to(
-    bool ec_pool,
     epoch_t les,
     std::function<void(epoch_t, const set<pg_shard_t> &)> &&f) const override {
     for (auto i = intervals.rbegin(); i != intervals.rend(); ++i) {
