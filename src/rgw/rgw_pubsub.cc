@@ -21,6 +21,12 @@ void rgw_pubsub_topic::dump(Formatter *f) const
   encode_json("name", name, f);
 }
 
+void rgw_pubsub_topic_filter::dump(Formatter *f) const
+{
+  encode_json("topic", topic, f);
+  encode_json("events", events, f);
+}
+
 void rgw_pubsub_topic_subs::dump(Formatter *f) const
 {
   encode_json("topic", topic, f);
@@ -140,7 +146,7 @@ int RGWUserPubSub::get_topic(const string& name, rgw_pubsub_topic_subs *result)
 }
 
 
-int RGWUserPubSub::Bucket::create_notification(const string& topic_name)
+int RGWUserPubSub::Bucket::create_notification(const string& topic_name, const set<string, ltstr_nocase>& events)
 {
   rgw_pubsub_topic_subs user_topic_info;
   RGWRados *store = ps->store;
@@ -160,7 +166,9 @@ int RGWUserPubSub::Bucket::create_notification(const string& topic_name)
     return ret;
   }
 
-  bucket_topics.topics[topic_name] = user_topic_info.topic;
+  auto& topic_filter = bucket_topics.topics[topic_name];
+  topic_filter.topic = user_topic_info.topic;
+  topic_filter.events = events;
 
   ret = write_topics(bucket_topics, &objv_tracker);
   if (ret < 0) {

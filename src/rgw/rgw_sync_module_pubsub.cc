@@ -307,23 +307,28 @@ struct PSConfig {
 };
 
 enum RGWPubSubEventType {
-  EVENT_UNKNOWN        = 0,
+  UNKNOWN_EVENT        = 0,
   OBJECT_CREATE        = 1,
   OBJECT_DELETE        = 2,
   DELETE_MARKER_CREATE = 3,
 };
 
-static const char *event_name(const RGWPubSubEventType& val)
+#define EVENT_NAME_OBJECT_CREATE               "OBJECT_CREATE"
+#define EVENT_NAME_OBJECT_DELETE               "OBJECT_DELETE"
+#define EVENT_NAME_OBJECT_DELETE_MARKER_CREATE "DELETE_MARKER_CREATE"
+#define EVENT_NAME_UNKNOWN                    "UNKNOWN_EVENT"
+
+static const char *get_event_name(const RGWPubSubEventType& val)
 {
   switch (val) {
     case OBJECT_CREATE:
-      return "OBJECT_CREATE";
+      return EVENT_NAME_OBJECT_CREATE;
     case OBJECT_DELETE:
-      return "OBJECT_DELETE";
+      return EVENT_NAME_OBJECT_DELETE;
     case DELETE_MARKER_CREATE:
-      return "DELETE_MARKER_CREATE";
+      return EVENT_NAME_OBJECT_DELETE_MARKER_CREATE;
     default:
-      return "EVENT_UNKNOWN";
+      return "EVENT_NAME_UNKNOWN";
   };
 }
 
@@ -385,12 +390,12 @@ static void make_event_ref(CephContext *cct, const rgw_bucket& bucket,
                        const rgw_obj_key& key,
                        const ceph::real_time& mtime,
                        const std::vector<std::pair<std::string, std::string> > *attrs,
-                       RGWPubSubEventType event_type,
+                       const string& event_name,
                        EventRef *event) {
   *event = std::make_shared<rgw_pubsub_event>();
 
   EventRef& e = *event;
-  e->event = event_name(event_type);
+  e->event = event_name;
   e->source = bucket.name + "/" + key.name;
   e->timestamp = real_clock::now();
 
@@ -986,6 +991,7 @@ class RGWPSFindBucketTopicsCR : public RGWCoroutine {
   rgw_user owner;
   rgw_bucket bucket;
   rgw_obj_key key;
+  string event_name;
 
   RGWUserPubSub ups;
 
@@ -1000,12 +1006,14 @@ public:
                       const rgw_user& _owner,
                       const rgw_bucket& _bucket,
                       const rgw_obj_key& _key,
+                      const string& _event_name,
                       TopicsRef *_topics) : RGWCoroutine(_sync_env->cct),
                                                           sync_env(_sync_env),
                                                           env(_env),
                                                           owner(_owner),
                                                           bucket(_bucket),
                                                           key(_key),
+                                                          event_name(_event_name),
                                                           ups(_sync_env->store, owner),
                                                           topics(_topics) {
     *topics = std::make_shared<vector<PSTopicConfigRef> >();
@@ -1042,7 +1050,12 @@ public:
       }
 
       for (auto& titer : bucket_topics.topics) {
-        auto& info = titer.second;
+        auto& topic_filter = titer.second;
+        auto& info = topic_filter.topic;
+        if (!topic_filter.events.empty() &&
+            topic_filter.events.find(event_name) == topic_filter.events.end()) {
+          continue;
+        }
         shared_ptr<PSTopicConfig> tc = std::make_shared<PSTopicConfig>();
         tc->name = info.name;
         tc->subs = user_topics.topics[info.name].subs;
@@ -1160,7 +1173,7 @@ public:
         make_event_ref(sync_env->cct,
                        bucket_info.bucket, key,
                        mtime, &attrs,
-                       OBJECT_CREATE, &event);
+                       EVENT_NAME_OBJECT_CREATE, &event);
       }
 
       yield call(new RGWPSHandleObjEvent(sync_env, env, bucket_info.owner, event, topics));
@@ -1216,7 +1229,10 @@ public:
 
   int operate() override {
     reenter(this) {
-      yield call(new RGWPSFindBucketTopicsCR(sync_env, env, bucket_info.owner, bucket_info.bucket, key, &topics));
+      yield call(new RGWPSFindBucketTopicsCR(sync_env, env, bucket_info.owner,
+                                             bucket_info.bucket, key,
+                                             EVENT_NAME_OBJECT_CREATE,
+                                             &topics));
       if (retcode < 0) {
         ldout(sync_env->cct, 0) << "ERROR: RGWPSFindBucketTopicsCR returned ret=" << retcode << dendl;
         return set_cr_error(retcode);
@@ -1242,7 +1258,7 @@ class RGWPSGenericObjEventCBCR : public RGWCoroutine {
   rgw_bucket bucket;
   rgw_obj_key key;
   ceph::real_time mtime;
-  RGWPubSubEventType event_type;
+  string event_name;
   EventRef event;
   TopicsRef topics;
 public:
@@ -1255,12 +1271,12 @@ public:
                                                              owner(_bucket_info.owner),
                                                              bucket(_bucket_info.bucket),
                                                              key(_key),
-                                                             mtime(_mtime), event_type(_event_type) {}
+                                                             mtime(_mtime), event_name(get_event_name(_event_type)) {}
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 10) << ": remove remote obj: z=" << sync_env->source_zone
                                << " b=" << bucket << " k=" << key << " mtime=" << mtime << dendl;
-      yield call(new RGWPSFindBucketTopicsCR(sync_env, env, owner, bucket, key, &topics));
+      yield call(new RGWPSFindBucketTopicsCR(sync_env, env, owner, bucket, key, event_name, &topics));
       if (retcode < 0) {
         ldout(sync_env->cct, 0) << "ERROR: RGWPSFindBucketTopicsCR returned ret=" << retcode << dendl;
         return set_cr_error(retcode);
@@ -1273,7 +1289,7 @@ public:
         make_event_ref(sync_env->cct,
                        bucket, key,
                        mtime, nullptr,
-                       event_type, &event);
+                       event_name, &event);
       }
 
       yield call(new RGWPSHandleObjEvent(sync_env, env, owner, event, topics));
