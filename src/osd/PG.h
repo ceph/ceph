@@ -786,7 +786,11 @@ protected:
       if (p != missing_loc.end()) {
 	_dec_count(p->second);
 	p->second.erase(location);
-	_inc_count(p->second);
+        if (p->second.empty()) {
+          missing_loc.erase(p);
+        } else {
+          _inc_count(p->second);
+        }
       }
     }
 
@@ -1418,13 +1422,8 @@ protected:
     pg_shard_t fromosd,
     RecoveryCtx*);
 
-  void check_for_lost_objects();
-  void forget_lost_objects();
-
   void discover_all_missing(std::map<int, map<spg_t,pg_query_t> > &query_map);
   
-  void trim_write_ahead();
-
   map<pg_shard_t, pg_info_t>::const_iterator find_best_info(
     const map<pg_shard_t, pg_info_t> &infos,
     bool restrict_to_up_acting,

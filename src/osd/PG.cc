@@ -3295,8 +3295,6 @@ void PG::init(
 	   << dendl;
 
   set_role(role);
-  acting = newacting;
-  up = newup;
   init_primary_up_acting(
     newup,
     newacting,
