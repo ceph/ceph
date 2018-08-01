@@ -1,8 +1,9 @@
 CephFS Snapshots
 ================
 
-CephFS supports snapshots, generally created by invoking mkdir against the
-(hidden, special) .snap directory.
+CephFS supports snapshots, generally created by invoking mkdir within the
+``.snap`` directory. Note this is a hidden, special directory, not visible
+during a directory listing.
 
 Overview
 -----------
@@ -44,9 +45,15 @@ on existing filesystems, use command below.
 
        $ ceph fs set <fs_name> allow_new_snaps true
 
+When snapshots are enabled, all directories in CephFS will have a special
+``.snap`` directory. (You may configure a different name with the ``client
+snapdir`` setting if you wish.)
 
-To make a snapshot on directory "/1/2/3/", the client invokes "mkdir" on
-"/1/2/3/.snap" directory. This is transmitted to the MDS Server as a
+To create a CephFS snapshot, create a subdirectory under
+``.snap`` with a name of your choice. For example, to create a snapshot on
+directory "/1/2/3/", invoke ``mkdir /1/2/3/.snap/my-snapshot-name`` .
+
+This is transmitted to the MDS Server as a
 CEPH_MDS_OP_MKSNAP-tagged `MClientRequest`, and initially handled in
 Server::handle_client_mksnap(). It allocates a `snapid` from the `SnapServer`,
 projects a new inode with the new SnapRealm, and commits it to the MDLog as
