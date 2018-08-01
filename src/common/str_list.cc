@@ -75,10 +75,3 @@ void get_str_set(const string& str, set<string>& str_set)
   const char *delims = ";,= \t";
   get_str_set(str, delims, str_set);
 }
-
-set<string> get_str_set(const string& str, const char *delims)
-{
-  set<string> result;
-  get_str_set(str, delims, result);
-  return result;
-}
