@@ -21,7 +21,7 @@ if test $(id -u) != 0 ; then
 fi
 export LC_ALL=C # the following is vulnerable to i18n
 
-ARCH=`uname -m`
+ARCH=$(uname -m)
 
 function install_seastar_deps {
     if [ $WITH_SEASTAR ]; then
@@ -135,7 +135,7 @@ EOF
     fi
 }
 
-if [ x`uname`x = xFreeBSDx ]; then
+if [ x$(uname)x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
         devel/babeltrace \
         devel/git \
