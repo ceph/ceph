@@ -164,11 +164,11 @@ else
 
 	backports=""
 	control="debian/control"
-        case $(lsb_release -sc) in
-            squeeze|wheezy)
+        case "$VERSION" in
+            *squeeze*|*wheezy*)
 		control="/tmp/control.$$"
 		grep -v babeltrace debian/control > $control
-                backports="-t $(lsb_release -sc)-backports"
+                backports="-t $codename-backports"
                 ;;
         esac
 
@@ -187,30 +187,28 @@ else
             builddepcmd="dnf -y builddep --allowerasing"
         fi
         echo "Using $yumdnf to install dependencies"
-	if [ $(lsb_release -si) = CentOS -a $(uname -m) = aarch64 ]; then
+	if [ "$ID" = "centos" -a $(uname -m) = aarch64 ]; then
 	    $SUDO yum-config-manager --disable centos-sclo-sclo || true
 	    $SUDO yum-config-manager --disable centos-sclo-rh || true
 	    $SUDO yum remove centos-release-scl || true
 	fi
 
-        $SUDO $yumdnf install -y redhat-lsb-core
-        case $(lsb_release -si) in
-            Fedora)
+        case $ID in
+            fedora)
                 if test $yumdnf = yum; then
                     $SUDO $yumdnf install -y yum-utils
                 fi
                 ;;
-            CentOS|RedHatEnterpriseServer|VirtuozzoLinux)
+            centos|rhel|ol|virtuozzo)
                 $SUDO yum install -y yum-utils
-                MAJOR_VERSION=$(lsb_release -rs | cut -f1 -d.)
-                if test $(lsb_release -si) = RedHatEnterpriseServer ; then
-                    $SUDO yum-config-manager --enable rhel-$MAJOR_VERSION-server-optional-rpms
+                if test $ID = rhel ; then
+                    $SUDO yum-config-manager --enable rhel-$VERSION_ID-server-optional-rpms
                 fi
-                $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$MAJOR_VERSION/x86_64/
+                $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$VERSION_ID/x86_64/
                 $SUDO yum install --nogpgcheck -y epel-release
-                $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
+                $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$VERSION_ID
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
-                if test $(lsb_release -si) = CentOS -a $MAJOR_VERSION = 7 ; then
+                if test $ID = centos -a $VERSION_ID = 7 ; then
                     $SUDO yum-config-manager --enable cr
 		    case $(uname -m) in
 			x86_64)
@@ -224,10 +222,10 @@ else
 			    dts_ver=7
 			    ;;
 		    esac
-                elif test $(lsb_release -si) = RedHatEnterpriseServer -a $MAJOR_VERSION = 7 ; then
+                elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable rhel-server-rhscl-7-rpms
                     dts_ver=7
-                elif test $(lsb_release -si) = VirtuozzoLinux -a $MAJOR_VERSION = 7 ; then
+                elif test $ID = virtuozzo -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable cr
                 fi
                 ;;
@@ -243,7 +241,7 @@ else
     opensuse*|suse|sles)
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
-        $SUDO $zypp_install lsb-release systemd-rpm-macros
+        $SUDO $zypp_install systemd-rpm-macros
         munge_ceph_spec_in $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
