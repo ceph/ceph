@@ -2048,6 +2048,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   map_lock("OSD::map_lock"),
   last_pg_create_epoch(0),
   mon_report_lock("OSD::mon_report_lock"),
+  boot_finisher(cct),
   up_thru_wanted(0),
   requested_full_first(0),
   requested_full_last(0),
@@ -2526,6 +2527,8 @@ int OSD::init()
   tick_timer_without_osd_lock.init();
   service.recovery_request_timer.init();
   service.sleep_timer.init();
+
+  boot_finisher.start();
 
   // mount.
   dout(2) << "init " << dev_path
@@ -3495,8 +3498,11 @@ int OSD::shutdown()
   dout(10) << "stopping agent" << dendl;
   service.agent_stop();
 
+  boot_finisher.wait_for_empty();
+
   osd_lock.Lock();
 
+  boot_finisher.stop();
   reset_heartbeat_peers();
 
   tick_timer.shutdown();
@@ -5523,7 +5529,27 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
     send_full_update();
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() + cct->_conf->osd_map_message_max > newest) {
-    _send_boot();
+
+    // wait for pgs to fully catch up in a different thread, since
+    // this thread might be required for splitting and merging PGs to
+    // make progress.
+    boot_finisher.queue(
+      new FunctionContext(
+	[this](int r) {
+	  Mutex::Locker l(osd_lock);
+	  if (is_preboot()) {
+	    dout(10) << __func__ << " waiting for peering work to drain"
+		     << dendl;
+	    osd_lock.Unlock();
+	    for (auto shard : shards) {
+	      shard->wait_min_pg_epoch(osdmap->get_epoch());
+	    }
+	    osd_lock.Lock();
+	  }
+	  if (is_preboot()) {
+	    _send_boot();
+	  }
+	}));
     return;
   }
 
@@ -7925,12 +7951,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
   if (is_active() || is_waiting_for_healthy())
     maybe_update_heartbeat_peers();
 
-  if (!is_active()) {
-    dout(10) << " not yet active; waiting for peering work to drain" << dendl;
-    for (auto shard : shards) {
-      shard->wait_min_pg_epoch(last);
-    }
-  } else {
+  if (is_active()) {
     activate_map();
   }
 
