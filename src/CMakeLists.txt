@@ -439,10 +439,6 @@ if(HAVE_QATZIP)
   list(APPEND ceph_common_deps ${QATZIP_LIBRARIES})
 endif()
 
-if(HAVE_ARMV8_CRC)
-  list(APPEND ceph_common_deps common_crc_aarch64)
-endif()
-
 if(WITH_DPDK)
   list(APPEND ceph_common_deps common_async_dpdk)
 endif()
