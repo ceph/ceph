@@ -23,14 +23,8 @@ export LC_ALL=C # the following is vulnerable to i18n
 
 ARCH=`uname -m`
 
-if [ -n "$WITH_SEASTAR" ]; then
-    with_seastar=true
-else
-    with_seastar=false
-fi
-
 function install_seastar_deps {
-    if $with_seastar; then
+    if [ $WITH_SEASTAR ]; then
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y \
               ragel libc-ares-dev libhwloc-dev libnuma-dev libpciaccess-dev \
               libcrypto++-dev libgnutls28-dev libsctp-dev libprotobuf-dev \
@@ -46,7 +40,7 @@ function munge_ceph_spec_in {
     else
         sed -i -e 's/%bcond_without python2/%bcond_with python2/g' $OUTFILE
     fi
-    if $with_seastar; then
+    if [ $WITH_SEASTAR ]; then
         sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
     fi
 }
