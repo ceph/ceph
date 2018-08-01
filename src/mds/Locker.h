@@ -45,6 +45,7 @@ class LocalLock;
 #include "SimpleLock.h"
 #include "MDSContext.h"
 #include "Mutation.h"
+#include "messages/MClientReply.h"
 
 class Locker {
 private:
@@ -287,6 +288,7 @@ public:
 
   void issue_client_lease(CDentry *dn, client_t client, bufferlist &bl, utime_t now, Session *session);
   void revoke_client_leases(SimpleLock *lock);
+  static void encode_lease(bufferlist& bl, const session_info_t& info, const LeaseStat& ls);
 };
 
 

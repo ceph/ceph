@@ -52,21 +52,24 @@ struct LeaseStat {
   __u32 seq;
 
   LeaseStat() : mask(0), duration_ms(0), seq(0) {}
+  LeaseStat(__u16 msk, __u32 dur, __u32 sq) : mask{msk}, duration_ms{dur}, seq{sq} {}
 
-  void encode(bufferlist &bl) const {
-    using ceph::encode;
-    encode(mask, bl);
-    encode(duration_ms, bl);
-    encode(seq, bl);
-  }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(bufferlist::const_iterator &bl, const uint64_t features) {
     using ceph::decode;
-    decode(mask, bl);
-    decode(duration_ms, bl);
-    decode(seq, bl);
+    if (features == (uint64_t)-1) {
+      DECODE_START(1, bl);
+      decode(mask, bl);
+      decode(duration_ms, bl);
+      decode(seq, bl);
+      DECODE_FINISH(bl);
+    }
+    else {
+      decode(mask, bl);
+      decode(duration_ms, bl);
+      decode(seq, bl);
+    }
   }
 };
-WRITE_CLASS_ENCODER(LeaseStat)
 
 inline ostream& operator<<(ostream& out, const LeaseStat& l) {
   return out << "lease(mask " << l.mask << " dur " << l.duration_ms << ")";
