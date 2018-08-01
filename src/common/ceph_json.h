@@ -385,11 +385,12 @@ static void encode_json(const char *name, const std::deque<T>& l, ceph::Formatte
     encode_json("obj", *iter, f);
   }
   f->close_section();
-}template<class T>
-static void encode_json(const char *name, const std::set<T>& l, ceph::Formatter *f)
+}
+template<class T, class Compare = std::less<T> >
+static void encode_json(const char *name, const std::set<T, Compare>& l, ceph::Formatter *f)
 {
   f->open_array_section(name);
-  for (typename std::set<T>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
+  for (typename std::set<T, Compare>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
     encode_json("obj", *iter, f);
   }
   f->close_section();
