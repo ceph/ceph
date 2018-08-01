@@ -1148,7 +1148,9 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
 {
   // split/merge
   if (g_conf->mds_bal_frag && bal_fragment_interval > 0 &&
-      dir->is_auth() && !dir->inode->is_base()) {  // not root/base (for now at least)
+      dir->is_auth() &&
+      !dir->inode->is_base() &&  // not root/base (for now at least)
+      !dir->inode->is_stray()) { // not straydir
 
     // split
     if (g_conf->mds_bal_split_size > 0 &&
