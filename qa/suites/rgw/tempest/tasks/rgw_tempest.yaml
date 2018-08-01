@@ -28,7 +28,7 @@ tasks:
           description: Swift Service
 - rgw:
     client.0:
-      valgrind: [--tool=memcheck]
+      valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
       frontend_prefix: /swift
       use-keystone-role: client.0
 - tempest:
