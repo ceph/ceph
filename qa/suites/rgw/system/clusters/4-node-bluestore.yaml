@@ -1,0 +1,33 @@
+overrides:
+  ceph_ansible:
+    vars:
+      ceph_stable: true
+      ceph_origin: distro
+      ceph_stable_rh_storage: true
+      ceph_repository: rhcs
+      ceph_stable_release: luminous
+      osd_scenario: collocated
+      journal_size: 1024
+      osd_auto_discovery: false
+      osd_objectstore: bluestore
+      ceph_test: true
+      ceph_conf_overrides:
+        global:
+          osd_default_pool_size: 3
+          osd_pool_default_pg_num: 8
+          osd_pool_default_pgp_num: 8
+          osd crush chooseleaf type: 0
+roles:
+- - mgr.x
+- - mon.a
+  - osd.0
+  - osd.1
+  - osd.2
+- - osd.3
+  - osd.4
+  - osd.5
+- - osd.6
+  - osd.7
+  - osd.8
+- - rgw.0
+  - client.0
