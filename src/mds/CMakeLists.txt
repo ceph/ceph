@@ -44,4 +44,4 @@ set(mds_srcs
   ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
 add_library(mds STATIC ${mds_srcs})
 target_link_libraries(mds PRIVATE
-  heap_profiler cpu_profiler ${ALLOC_LIBS} osdc liblua)
+  heap_profiler cpu_profiler osdc liblua)
