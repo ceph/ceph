@@ -1947,6 +1947,7 @@ protected:
   // == monitor interaction ==
   Mutex mon_report_lock;
   utime_t last_mon_report;
+  Finisher boot_finisher;
 
   // -- boot --
   void start_boot();
