@@ -18,10 +18,11 @@
 #include "mdstypes.h"
 #include "Anchor.h"
 
+#include "MDSContext.h"
+
 class CDir;
 class CInode;
 class MDSRank;
-class MDSInternalContextBase;
 
 class OpenFileTable
 {
@@ -104,7 +105,7 @@ protected:
   std::vector<std::map<std::string, bufferlist> > loaded_journals;
   map<inodeno_t, RecoveredAnchor> loaded_anchor_map;
   set<dirfrag_t> loaded_dirfrags;
-  list<MDSInternalContextBase*> waiting_for_load;
+  MDSInternalContextBase::vec waiting_for_load;
   bool load_done = false;
 
   void _reset_states() {
@@ -129,7 +130,7 @@ protected:
   };
   unsigned prefetch_state = 0;
   unsigned num_opening_inodes = 0;
-  list<MDSInternalContextBase*> waiting_for_prefetch;
+  MDSInternalContextBase::vec waiting_for_prefetch;
   void _open_ino_finish(inodeno_t ino, int r);
   void _prefetch_inodes();
   void _prefetch_dirfrags();

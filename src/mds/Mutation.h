@@ -20,6 +20,7 @@
 #include "include/filepath.h"
 
 #include "MDSCacheObject.h"
+#include "MDSContext.h"
 
 #include "SimpleLock.h"
 #include "Capability.h"
@@ -262,7 +263,7 @@ struct MDRequestImpl : public MutationImpl {
     Context *slave_commit;
     bufferlist rollback_bl;
 
-    list<MDSInternalContextBase*> waiting_for_finish;
+    MDSInternalContextBase::vec waiting_for_finish;
 
     // export & fragment
     CDir* export_dir;

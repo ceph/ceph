@@ -3128,7 +3128,7 @@ void MDCache::handle_mds_recovery(mds_rank_t who)
   static const uint64_t i_mask = CInode::WAIT_ANY_MASK & ~CInode::WAIT_DIR;
   static const uint64_t d_mask = CDir::WAIT_ANY_MASK & ~CDir::WAIT_DENTRY;
 
-  list<MDSInternalContextBase*> waiters;
+  MDSInternalContextBase::vec waiters;
 
   // wake up any waiters in their subtrees
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
@@ -5813,7 +5813,7 @@ void MDCache::export_remaining_imported_caps()
     mds->heartbeat_reset();
   }
 
-  for (map<inodeno_t, list<MDSInternalContextBase*> >::iterator p = cap_reconnect_waiters.begin();
+  for (map<inodeno_t, MDSInternalContextBase::vec >::iterator p = cap_reconnect_waiters.begin();
        p != cap_reconnect_waiters.end();
        ++p)
     mds->queue_waiters(p->second);
@@ -5853,7 +5853,7 @@ void MDCache::try_reconnect_cap(CInode *in, Session *session)
       dout(15) << " chose lock states on " << *in << dendl;
     }
 
-    map<inodeno_t, list<MDSInternalContextBase*> >::iterator it =
+    map<inodeno_t, MDSInternalContextBase::vec >::iterator it =
       cap_reconnect_waiters.find(in->ino());
     if (it != cap_reconnect_waiters.end()) {
       mds->queue_waiters(it->second);
@@ -6563,7 +6563,7 @@ void MDCache::truncate_inode_logged(CInode *in, MutationRef& mut)
   in->put(CInode::PIN_TRUNCATING);
   in->auth_unpin(this);
 
-  list<MDSInternalContextBase*> waiters;
+  MDSInternalContextBase::vec waiters;
   in->take_waiting(CInode::WAIT_TRUNC, waiters);
   mds->queue_waiters(waiters);
 }
@@ -8812,7 +8812,7 @@ void MDCache::open_ino_finish(inodeno_t ino, open_ino_info_t& info, int ret)
 {
   dout(10) << "open_ino_finish ino " << ino << " ret " << ret << dendl;
 
-  list<MDSInternalContextBase*> waiters;
+  MDSInternalContextBase::vec waiters;
   waiters.swap(info.waiters);
   opening_inodes.erase(ino);
   finish_contexts(g_ceph_context, waiters, ret);
@@ -9887,7 +9887,7 @@ void MDCache::discover_path(CInode *base,
     base->add_waiter(CInode::WAIT_SINGLEAUTH, onfinish);
     return;
   } else if (from == mds->get_nodeid()) {
-    list<MDSInternalContextBase*> finished;
+    MDSInternalContextBase::vec finished;
     base->take_waiting(CInode::WAIT_DIR, finished);
     mds->queue_waiters(finished);
     return;
@@ -9942,7 +9942,7 @@ void MDCache::discover_path(CDir *base,
     base->add_waiter(CDir::WAIT_SINGLEAUTH, onfinish);
     return;
   } else if (from == mds->get_nodeid()) {
-    list<MDSInternalContextBase*> finished;
+    MDSInternalContextBase::vec finished;
     base->take_sub_waiting(finished);
     mds->queue_waiters(finished);
     return;
@@ -10299,7 +10299,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   if (m->is_flag_error_dn()) 
     dout(7) << " flag error, dentry = " << m->get_error_dentry() << dendl;
 
-  list<MDSInternalContextBase*> finished, error;
+  MDSInternalContextBase::vec finished, error;
   mds_rank_t from = mds_rank_t(m->get_source().num());
 
   // starting point
@@ -10467,7 +10467,7 @@ void MDCache::replicate_inode(CInode *in, mds_rank_t to, bufferlist& bl,
 }
 
 CDir *MDCache::add_replica_dir(bufferlist::const_iterator& p, CInode *diri, mds_rank_t from,
-			       list<MDSInternalContextBase*>& finished)
+			       MDSInternalContextBase::vec& finished)
 {
   dirfrag_t df;
   decode(df, p);
@@ -10508,7 +10508,7 @@ CDir *MDCache::add_replica_dir(bufferlist::const_iterator& p, CInode *diri, mds_
   return dir;
 }
 
-CDentry *MDCache::add_replica_dentry(bufferlist::const_iterator& p, CDir *dir, list<MDSInternalContextBase*>& finished)
+CDentry *MDCache::add_replica_dentry(bufferlist::const_iterator& p, CDir *dir, MDSInternalContextBase::vec& finished)
 {
   string name;
   snapid_t last;
@@ -10532,7 +10532,7 @@ CDentry *MDCache::add_replica_dentry(bufferlist::const_iterator& p, CDir *dir, l
   return dn;
 }
 
-CInode *MDCache::add_replica_inode(bufferlist::const_iterator& p, CDentry *dn, list<MDSInternalContextBase*>& finished)
+CInode *MDCache::add_replica_inode(bufferlist::const_iterator& p, CDentry *dn, MDSInternalContextBase::vec& finished)
 {
   inodeno_t ino;
   snapid_t last;
@@ -10579,7 +10579,7 @@ void MDCache::replicate_stray(CDentry *straydn, mds_rank_t who, bufferlist& bl)
    
 CDentry *MDCache::add_replica_stray(bufferlist &bl, mds_rank_t from)
 {
-  list<MDSInternalContextBase*> finished;
+  MDSInternalContextBase::vec finished;
   auto p = bl.cbegin();
 
   CInode *mdsin = add_replica_inode(p, NULL, finished);
@@ -10744,7 +10744,7 @@ void MDCache::handle_dentry_link(MDentryLink *m)
   }
 
   auto p = m->bl.cbegin();
-  list<MDSInternalContextBase*> finished;
+  MDSInternalContextBase::vec finished;
   if (dn) {
     if (m->get_is_primary()) {
       // primary link.
@@ -10898,7 +10898,7 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
  */
 void MDCache::adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
 				   list<CDir*>& resultfrags, 
-				   list<MDSInternalContextBase*>& waiters,
+				   MDSInternalContextBase::vec& waiters,
 				   bool replay)
 {
   dout(10) << "adjust_dir_fragments " << basefrag << " " << bits 
@@ -10919,7 +10919,7 @@ CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg, bool replay)
   dout(10) << "force_dir_fragment " << fg << " on " << *diri << dendl;
 
   list<CDir*> src, result;
-  list<MDSInternalContextBase*> waiters;
+  MDSInternalContextBase::vec waiters;
 
   // split a parent?
   frag_t parent = diri->dirfragtree.get_branch_or_leaf(fg);
@@ -10964,7 +10964,7 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 				   list<CDir*>& srcfrags,
 				   frag_t basefrag, int bits,
 				   list<CDir*>& resultfrags, 
-				   list<MDSInternalContextBase*>& waiters,
+				   MDSInternalContextBase::vec& waiters,
 				   bool replay)
 {
   dout(10) << "adjust_dir_fragments " << basefrag << " bits " << bits
@@ -11546,7 +11546,7 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
   }
 
   // refragment
-  list<MDSInternalContextBase*> waiters;
+  MDSInternalContextBase::vec waiters;
   adjust_dir_fragments(diri, info.dirs, basedirfrag.frag, info.bits,
 		       info.resultfrags, waiters, false);
   if (g_conf()->mds_debug_frag)
@@ -11790,7 +11790,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
 */
 
     // refragment
-    list<MDSInternalContextBase*> waiters;
+    MDSInternalContextBase::vec waiters;
     list<CDir*> resultfrags;
     adjust_dir_fragments(diri, base, bits, resultfrags, waiters, false);
     if (g_conf()->mds_debug_frag)
@@ -11895,7 +11895,7 @@ void MDCache::rollback_uncommitted_fragments()
     list<CDir*> resultfrags;
     if (uf.old_frags.empty()) {
       // created by old format EFragment
-      list<MDSInternalContextBase*> waiters;
+      MDSInternalContextBase::vec waiters;
       adjust_dir_fragments(diri, p->first.frag, -uf.bits, resultfrags, waiters, true);
     } else {
       auto bp = uf.rollback.cbegin();

@@ -41,6 +41,7 @@ enum {
 #include "include/types.h"
 #include "include/Context.h"
 
+#include "MDSContext.h"
 #include "common/Thread.h"
 #include "common/Cond.h"
 
@@ -99,7 +100,7 @@ protected:
   friend class ReplayThread;
   friend class C_MDL_Replay;
 
-  list<MDSInternalContextBase*> waitfor_replay;
+  MDSInternalContextBase::vec waitfor_replay;
 
   void _replay();         // old way
   void _replay_thread();  // new way

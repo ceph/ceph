@@ -29,6 +29,7 @@
 #include "include/filepath.h"
 
 #include "MDSCacheObject.h"
+#include "MDSContext.h"
 #include "SimpleLock.h"
 #include "LocalLock.h"
 #include "ScrubHeader.h"

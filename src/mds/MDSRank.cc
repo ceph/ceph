@@ -821,13 +821,11 @@ void MDSRank::_advance_queues()
   while (!finished_queue.empty()) {
     dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
     dout(10) << finished_queue << dendl;
-    list<MDSInternalContextBase*> ls;
+    decltype(finished_queue) ls;
     ls.swap(finished_queue);
-    while (!ls.empty()) {
-      dout(10) << " finish " << ls.front() << dendl;
-      ls.front()->complete(0);
-      ls.pop_front();
-
+    for (auto& c : ls) {
+      dout(10) << " finish " << c << dendl;
+      c->complete(0);
       heartbeat_reset();
     }
   }
@@ -1537,7 +1535,7 @@ bool MDSRank::queue_one_replay()
     return false;
   }
   queue_waiter(replay_queue.front());
-  replay_queue.pop_front();
+  replay_queue.pop();
   return true;
 }
 
@@ -1943,9 +1941,9 @@ void MDSRankDispatcher::handle_mds_map(
   }
 
   {
-    map<epoch_t,list<MDSInternalContextBase*> >::iterator p = waiting_for_mdsmap.begin();
+    map<epoch_t,MDSInternalContextBase::vec >::iterator p = waiting_for_mdsmap.begin();
     while (p != waiting_for_mdsmap.end() && p->first <= mdsmap->get_epoch()) {
-      list<MDSInternalContextBase*> ls;
+      MDSInternalContextBase::vec ls;
       ls.swap(p->second);
       waiting_for_mdsmap.erase(p++);
       finish_contexts(g_ceph_context, ls);

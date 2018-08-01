@@ -30,6 +30,7 @@
 #include "include/compact_set.h"
 
 #include "MDSCacheObject.h"
+#include "MDSContext.h"
 #include "flock.h"
 
 #include "CDentry.h"
@@ -720,7 +721,7 @@ public:
   void set_ambiguous_auth() {
     state_set(STATE_AMBIGUOUSAUTH);
   }
-  void clear_ambiguous_auth(std::list<MDSInternalContextBase*>& finished);
+  void clear_ambiguous_auth(MDSInternalContextBase::vec& finished);
   void clear_ambiguous_auth();
 
   inodeno_t ino() const { return inode.ino; }
@@ -828,15 +829,15 @@ public:
 
   // -- waiting --
 protected:
-  mempool::mds_co::compact_map<frag_t, std::list<MDSInternalContextBase*> > waiting_on_dir;
+  mempool::mds_co::compact_map<frag_t, MDSInternalContextBase::vec > waiting_on_dir;
 public:
   void add_dir_waiter(frag_t fg, MDSInternalContextBase *c);
-  void take_dir_waiting(frag_t fg, std::list<MDSInternalContextBase*>& ls);
+  void take_dir_waiting(frag_t fg, MDSInternalContextBase::vec& ls);
   bool is_waiting_for_dir(frag_t fg) {
     return waiting_on_dir.count(fg);
   }
   void add_waiter(uint64_t tag, MDSInternalContextBase *c) override;
-  void take_waiting(uint64_t tag, std::list<MDSInternalContextBase*>& ls) override;
+  void take_waiting(uint64_t tag, MDSInternalContextBase::vec& ls) override;
 
   // -- encode/decode helpers --
   void _encode_base(bufferlist& bl, uint64_t features);
@@ -846,7 +847,7 @@ public:
   void _encode_locks_state_for_replica(bufferlist& bl, bool need_recover);
   void _encode_locks_state_for_rejoin(bufferlist& bl, int rep);
   void _decode_locks_state(bufferlist::const_iterator& p, bool is_new);
-  void _decode_locks_rejoin(bufferlist::const_iterator& p, std::list<MDSInternalContextBase*>& waiters,
+  void _decode_locks_rejoin(bufferlist::const_iterator& p, MDSInternalContextBase::vec& waiters,
 			    std::list<SimpleLock*>& eval_locks, bool survivor);
 
   // -- import/export --
@@ -1046,7 +1047,7 @@ public:
   /* Freeze the inode. auth_pin_allowance lets the caller account for any
    * auth_pins it is itself holding/responsible for. */
   bool freeze_inode(int auth_pin_allowance=0);
-  void unfreeze_inode(std::list<MDSInternalContextBase*>& finished);
+  void unfreeze_inode(MDSInternalContextBase::vec& finished);
   void unfreeze_inode();
 
   void freeze_auth_pin();

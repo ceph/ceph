@@ -33,6 +33,7 @@ struct MDRequestImpl;
 
 #include "CInode.h"
 #include "Capability.h"
+#include "MDSContext.h"
 #include "msg/Message.h"
 
 enum {
@@ -201,7 +202,7 @@ public:
   // -- caps --
 private:
   version_t cap_push_seq;        // cap push seq #
-  map<version_t, list<MDSInternalContextBase*> > waitfor_flush; // flush session messages
+  map<version_t, MDSInternalContextBase::vec > waitfor_flush; // flush session messages
 
 public:
   xlist<Capability*> caps;     // inodes with caps; front=most recently used
@@ -216,12 +217,14 @@ public:
     waitfor_flush[get_push_seq()].push_back(c);
     return get_push_seq();
   }
-  void finish_flush(version_t seq, list<MDSInternalContextBase*>& ls) {
+  void finish_flush(version_t seq, MDSInternalContextBase::vec& ls) {
     while (!waitfor_flush.empty()) {
-      if (waitfor_flush.begin()->first > seq)
+      auto it = waitfor_flush.begin();
+      if (it->first > seq)
 	break;
-      ls.splice(ls.end(), waitfor_flush.begin()->second);
-      waitfor_flush.erase(waitfor_flush.begin());
+      auto& v = it->second;
+      ls.insert(ls.end(), v.begin(), v.end());
+      waitfor_flush.erase(it);
     }
   }
 
@@ -447,7 +450,7 @@ protected:
 public:
   map<int,xlist<Session*>* > by_state;
   uint64_t set_state(Session *session, int state);
-  map<version_t, list<MDSInternalContextBase*> > commit_waiters;
+  map<version_t, MDSInternalContextBase::vec > commit_waiters;
 
   explicit SessionMap(MDSRank *m) : mds(m),
 		       projected(0), committing(0), committed(0),
@@ -595,7 +598,7 @@ public:
 
   // -- loading, saving --
   inodeno_t ino;
-  list<MDSInternalContextBase*> waiting_for_load;
+  MDSInternalContextBase::vec waiting_for_load;
 
   object_t get_object_name() const;
 

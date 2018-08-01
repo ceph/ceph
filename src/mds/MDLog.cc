@@ -874,11 +874,7 @@ void MDLog::_expired(LogSegment *ls)
     expired_events += ls->num_events;
 
     // Trigger all waiters
-    for (std::list<MDSInternalContextBase*>::iterator i = ls->expiry_waiters.begin();
-        i != ls->expiry_waiters.end(); ++i) {
-      (*i)->complete(0);
-    }
-    ls->expiry_waiters.clear();
+    finish_contexts(g_ceph_context, ls->expiry_waiters);
     
     logger->inc(l_mdl_evex, ls->num_events);
     logger->inc(l_mdl_segex);
