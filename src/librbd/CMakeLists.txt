@@ -157,6 +157,10 @@ if(HAVE_UDEV)
   target_link_libraries(librbd PRIVATE
     udev)
 endif()
+if(WITH_STATIC_LIBSTDCXX)
+  target_link_libraries(librbd INTERFACE
+    "-static-libstdc++ -static-libgcc")
+endif()
 if(ENABLE_SHARED)
   set_target_properties(librbd PROPERTIES
     OUTPUT_NAME rbd
