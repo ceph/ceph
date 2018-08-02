@@ -25,8 +25,6 @@ foreach(c ${components})
     set_target_properties(dpdk::${c} PROPERTIES
       INTERFACE_INCLUDE_DIRECTORIES "${DPDK_INCLUDE_DIR}"
       IMPORTED_LOCATION "${DPDK_rte_${c}_LIBRARY}")
-    target_compile_options(dpdk::${c} INTERFACE
-      "-march=native")
     list(APPEND DPDK_LIBRARIES dpdk::${c})
   endif()
 endforeach()
