@@ -214,7 +214,7 @@ class Module(MgrModule):
         {
             "cmd": "restful list-keys",
             "desc": "List all API keys",
-            "perm": "rw"
+            "perm": "r"
         },
         {
             "cmd": "restful create-self-signed-cert",
