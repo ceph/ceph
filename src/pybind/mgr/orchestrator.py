@@ -2,62 +2,7 @@
 """
 ceph-mgr orchestrator interface
 
-This is a DRAFT for discussion.
-
-Goal: enable UI workflows for cluster service management
-      (such as creating OSDs, in addition to stateless services)
-      using common concepts that are implemented by
-      diverse backends such as Rook, DeepSea, ceph-ansible
-
-Concepts:
-    "Stateful service": a daemon that uses local storage, such as OSD or mon.
-    "Stateless service": a daemon that doesn't use any local storage, such
-                         as an MDS, RGW, nfs-ganesha, iSCSI gateway.
-    "Label": arbitrary string tags that may be applied by administrators
-             to nodes.  Typically administrators use labels to indicate
-             which nodes should run which kinds of service.  Labels are
-             advisory (from human input) and do not guarantee that nodes
-             have particular physical capabilities.
-    "Drive group": collection of block devices with common/shared OSD
-                   formatting (typically one or more SSDs acting as
-                   journals/dbs for a group of HDDs).
-    "Placement": choice of which node is used to run a service.
-
-Design choices:
-    1. The orchestrator is to be the source of truth for
-       all the physical information, and will be queried directly
-       as needed (i.e. no in-Ceph database of hardware etc).
-    2. The orchestrator handles placement of collections of stateless
-       services.
-    3. The orchestrator accepts explicit placement of individual stateful
-       services, and optionally also accepts label-based automatic placement.
-       (i.e. it *must* support "create OSD at host1:/dev/sdb", and it *may*
-        support "create OSDs on nodes with label=ceph-osd")
-    4. Bootstrapping nodes and connecting them to the orchestrator's
-       infrastructure is out of scope: this interface operates only
-       on nodes that are already visible to the orchestrator.
-    5. Methods all run in background, returning an instance of WriteCompletion
-       or ReadCompletion, to be polled by the caller using the wait() method
-
-Optional features:
-    1. Extensions to OSDs, such as block-level encryption.  See OsdSpec.extended
-    2. Label-based placement of OSDs.  If an orchestrator does not support
-       a labelling concept then only explicit per-node placement will work.
-    3. Explicit placement of stateless services.  Some orchestrators
-       may only support a basic round-robin placement of stateless services,
-       in which case they would also enable users to do explicit placement
-       for
-
-Excluded functionality:
-    1. No support for multipathed drives: all block devices are to be
-       reported from one node only.
-    2. No networking inventory or configuration.  Network configuration
-       is not Ceph-specific functionality, and by the time ceph-mgr
-       starts, we know that some external entity has already taken
-       care of at least the public network configuration.  This does
-       not preclude orchestrators implementing smart networking functionality
-       internally, it just isn't exposed up into ceph-mgr.
-    3. No OSD configuration outside the scope of Drive Group rules.
+Please see the ceph-mgr module developer's guide for more information.
 """
 
 
@@ -157,6 +102,13 @@ class Orchestrator(object):
     while you scan hosts every time.
     """
 
+    def is_orchestrator_module(self):
+        """
+        Enable other modules to interrogate this module to discover
+        whether it's usable as an orchestrator module.
+        """
+        return True
+
     def wait(self, completions):
         """
         Given a list of Completion instances, progress any which are
@@ -172,7 +124,11 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def get_inventory(self, node_filter=None):
-        # Return list of InventoryHost
+        """
+
+        :param node_filter:
+        :return: list of InventoryNode
+        """
         raise NotImplementedError()
 
     def describe_service(self, service_type, service_id):
@@ -184,25 +140,6 @@ class Orchestrator(object):
 
         When viewing a CephFS filesystem in the dashboard, we would use this
         to display the pods being currently run for MDS daemons.
-        """
-        raise NotImplementedError()
-
-    def add_mon(self, node_name):
-        """
-        We operate on a node rather than a particular device: it is
-        assumed/expected that proper SSD storage is already available
-        and accessible in /var.
-
-        :param node_name:
-        :return:
-        """
-        raise NotImplementedError()
-
-    def remove_mon(self, node_name):
-        """
-
-        :param node_name:
-        :return:
         """
         raise NotImplementedError()
 
@@ -246,6 +183,25 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def remove_stateless_service(self, service_type, id_):
+        raise NotImplementedError()
+
+    def add_mon(self, node_name):
+        """
+        We operate on a node rather than a particular device: it is
+        assumed/expected that proper SSD storage is already available
+        and accessible in /var.
+
+        :param node_name:
+        :return:
+        """
+        raise NotImplementedError()
+
+    def remove_mon(self, node_name):
+        """
+
+        :param node_name:
+        :return:
+        """
         raise NotImplementedError()
 
     def upgrade_start(self, upgrade_spec):
@@ -441,7 +397,7 @@ class InventoryFilter(object):
         self.nodes = None  # Optional: get info about certain named nodes only
 
 
-class InventoryBlockDevice(object):
+class InventoryDevice(object):
     """
     When fetching inventory, block devices are reported in this format.
 
@@ -475,4 +431,4 @@ class InventoryNode(object):
     def __init__(self, name, devices):
         assert isinstance(devices, list)
         self.name = name  # unique within cluster.  For example a hostname.
-        self.devices = devices  # list of InventoryBlockDevice
+        self.devices = devices  # list of InventoryDevice
