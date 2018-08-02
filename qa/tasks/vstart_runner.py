@@ -540,15 +540,13 @@ class LocalFuseMount(FuseMount):
 
         self.gather_mount_info()
 
-    def _run_python(self, pyscript):
+    def _run_python(self, pyscript, py_version='python'):
         """
         Override this to remove the daemon-helper prefix that is used otherwise
         to make the process killable.
         """
-        return self.client_remote.run(args=[
-            'python', '-c', pyscript
-        ], wait=False)
-
+        return self.client_remote.run(args=[py_version, '-c', pyscript],
+                                      wait=False)
 
 class LocalCephManager(CephManager):
     def __init__(self):
