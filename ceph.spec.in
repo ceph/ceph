@@ -178,9 +178,7 @@ BuildRequires:	socat
 %endif
 %if 0%{with seastar}
 BuildRequires:  c-ares-devel
-BuildRequires:  cryptopp-devel
 BuildRequires:  gnutls-devel
-BuildRequires:  fmt-devel
 BuildRequires:  hwloc-devel
 BuildRequires:  libpciaccess-devel
 BuildRequires:  lksctp-tools-devel
@@ -286,11 +284,13 @@ BuildRequires:  redhat-rpm-config
 %if 0%{with seastar}
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:  cryptopp-devel
+BuildRequires:  fmt-devel
 BuildRequires:  numactl-devel
 BuildRequires:  protobuf-compiler
 %endif
 %if 0%{?suse_version}
 BuildRequires:  libcryptopp-devel
+BuildRequires:  libfmt-devel
 BuildRequires:  libnuma-devel
 %endif
 %endif
