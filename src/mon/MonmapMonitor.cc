@@ -201,7 +201,14 @@ bool MonmapMonitor::preprocess_query(MonOpRequestRef op)
   switch (m->get_type()) {
     // READs
   case MSG_MON_COMMAND:
-    return preprocess_command(op);
+    try {
+      return preprocess_command(op);
+    }
+    catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
   case MSG_MON_JOIN:
     return preprocess_join(op);
   default:
@@ -405,7 +412,14 @@ bool MonmapMonitor::prepare_update(MonOpRequestRef op)
   
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return prepare_command(op);
+    try {
+      return prepare_command(op);
+    }
+    catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
   case MSG_MON_JOIN:
     return prepare_join(op);
   default:

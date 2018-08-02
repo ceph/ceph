@@ -220,7 +220,15 @@ bool MgrMonitor::preprocess_query(MonOpRequestRef op)
     case MSG_MGR_BEACON:
       return preprocess_beacon(op);
     case MSG_MON_COMMAND:
-      return preprocess_command(op);
+      try {
+	return preprocess_command(op);
+      }
+      catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
+
     default:
       mon->no_reply(op);
       derr << "Unhandled message type " << m->get_type() << dendl;
@@ -236,7 +244,14 @@ bool MgrMonitor::prepare_update(MonOpRequestRef op)
       return prepare_beacon(op);
 
     case MSG_MON_COMMAND:
-      return prepare_command(op);
+      try {
+	return prepare_command(op);
+      }
+      catch (const bad_cmd_get& e) {
+	bufferlist bl;
+	mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+	return true;
+      }
 
     default:
       mon->no_reply(op);
