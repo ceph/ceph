@@ -510,6 +510,7 @@ int MgrClient::service_daemon_update_status(
 
 void MgrClient::update_daemon_health(std::vector<DaemonHealthMetric>&& metrics)
 {
+  Mutex::Locker l(lock);
   daemon_health_metrics = std::move(metrics);
 }
 
