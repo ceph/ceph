@@ -382,14 +382,11 @@ endif()
 option(WITH_DPDK "Enable DPDK messaging" OFF)
 if(WITH_DPDK)
   find_package(dpdk)
-  set(HAVE_DPDK ${DPDK_FOUND})
-  if(NOT TARGET dpdk-ext)
-    find_package(dpdk)
-    if(NOT DPDK_FOUND)
-      include(BuildDPDK)
-      build_dpdk()
-    endif()
+  if(NOT DPDK_FOUND AND NOT TARGET dpdk-ext)
+    include(BuildDPDK)
+    build_dpdk()
   endif()
+  set(HAVE_DPDK TRUE)
 endif()
 
 option(WITH_BLKIN "Use blkin to emit LTTng tracepoints for Zipkin" OFF)
@@ -655,18 +652,6 @@ include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
 find_package(Threads REQUIRED)
 
-execute_process(
-  COMMAND ./librarytest.sh ${CMAKE_CXX_COMPILER} ${CMAKE_CXX_FLAGS}
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-  OUTPUT_VARIABLE CXX_STDLIB
-  )
-
-if(CXX_STDLIB STREQUAL "libstdc++" OR CXX_STDLIB STREQUAL "libc++")
-  message(STATUS "We are using ${CXX_STDLIB}.")
-else()
-  message(FATAL_ERROR
-    "Unable to determine C++ standard library, got ${CXX_STDLIB}.")
-endif()
 
 option(WITH_SELINUX "build SELinux policy" OFF)
 if(WITH_SELINUX)
