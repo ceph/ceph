@@ -1,4 +1,4 @@
-find_package(PkgConfig)
+find_package(PkgConfig QUIET)
 
 pkg_search_module(PC_cares
   libcares)
@@ -13,10 +13,9 @@ find_library(c-ares_LIBRARY
 
 set(c-ares_VERSION ${PC_cares_VERSION})
 
-include (FindPackageHandleStandardArgs)
+include(FindPackageHandleStandardArgs)
 
 find_package_handle_standard_args(c-ares
-  FOUND_VAR c-ares_FOUND
   REQUIRED_VARS
     c-ares_INCLUDE_DIR
     c-ares_LIBRARY
