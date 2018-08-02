@@ -79,6 +79,34 @@ We added 2 npm scripts to help run these tools:
 - ``npm run lint``, will check frontend files against all linters
 - ``npm run fix``, will try to fix all the detected linting errors
 
+Writing Unit Tests
+~~~~~~~~~~~~~~~~~~
+
+To write unit tests most efficient we have a small collection of tools,
+we use within test suites.
+
+Those tools can be found under
+``src/pybind/mgr/dashboard/frontend/src/testing/``, especially take
+a look at ``unit-test-helper.ts``.
+
+There you will be able to find:
+
+``configureTestBed`` that replaces the initial ``TestBed``
+methods. It takes the same arguments as ``TestBed.configureTestingModule``.
+Using it will run your tests a lot faster in development, as it doesn't
+recreate everything from scratch on every test. To use the default behaviour
+pass ``true`` as the second argument.
+
+``PermissionHelper`` to help determine if
+the correct actions are shown based on the current permissions and selection
+in a list.
+
+``FormHelper`` which makes testing a form a lot easier
+with a few simple methods. It allows you to set a control or multiple
+controls, expect if a control is valid or has an error or just do both with
+one method. Additional you can expect a template element or multiple elements
+to be visible in the rendered template.
+
 Running Unit Tests
 ~~~~~~~~~~~~~~~~~~
 
