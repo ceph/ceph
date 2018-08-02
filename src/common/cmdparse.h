@@ -46,6 +46,16 @@ void handle_bad_get(CephContext *cct, const std::string& k, const char *name);
 
 std::string cmd_vartype_stringify(const cmd_vartype& v);
 
+struct bad_cmd_get : public std::exception {
+  std::string desc;
+  bad_cmd_get(const std::string& f, const cmdmap_t& cmdmap) {
+    desc = "bad or missing field '" + f + "'";
+  }
+  const char *what() const throw() override {
+    return desc.c_str();
+  }
+};
+
 template <typename T>
 bool
 cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k, T& val)
