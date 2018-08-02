@@ -66,7 +66,10 @@ function TEST_recover_unexpected() {
     objectstore_tool $dir $osd "$JSON" set-bytes $dir/data || return 1
     objectstore_tool $dir $osd "$JSON" set-attr _ $dir/_ || return 1
 
-    sleep 5
+    wait_for_osd up 0 || return 1
+    wait_for_osd up 1 || return 1
+    wait_for_osd up 2 || return 1
+    wait_for_clean || return 1
 
     ceph pg repair 1.0 || return 1
 
@@ -75,9 +78,9 @@ function TEST_recover_unexpected() {
     ceph log last
 
     # make sure osds are still up
-    timeout 60 ceph tell osd.0 version || return 1
-    timeout 60 ceph tell osd.1 version || return 1
-    timeout 60 ceph tell osd.2 version || return 1
+    ceph osd dump | grep 'osd.0 up' || return 1
+    ceph osd dump | grep 'osd.1 up' || return 1
+    ceph osd dump | grep 'osd.2 up' || return 1
 }
 
 
