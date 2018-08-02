@@ -74,6 +74,9 @@ def activate_filestore(lvs, no_systemd=False):
         # enable the ceph-volume unit for this OSD
         systemctl.enable_volume(osd_id, osd_fsid, 'lvm')
 
+        # enable the OSD
+        systemctl.enable_osd(osd_id)
+
         # start the OSD
         systemctl.start_osd(osd_id)
     terminal.success("ceph-volume lvm activate successful for osd ID: %s" % osd_id)
@@ -178,6 +181,9 @@ def activate_bluestore(lvs, no_systemd=False):
     if no_systemd is False:
         # enable the ceph-volume unit for this OSD
         systemctl.enable_volume(osd_id, osd_fsid, 'lvm')
+
+        # enable the OSD
+        systemctl.enable_osd(osd_id)
 
         # start the OSD
         systemctl.start_osd(osd_id)
