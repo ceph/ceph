@@ -7281,6 +7281,10 @@ std::vector<Option> get_mds_client_options() {
     .set_description("set the directory size as the number of file bytes recursively used")
     .set_long_description("This option enables a CephFS feature that stores the recursive directory size (the bytes used by files in the directory and its descendents) in the st_size field of the stat structure."),
 
+    Option("client_force_lazyio", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
     // note: the max amount of "in flight" dirty data is roughly (max - target)
     Option("fuse_use_invalidate_cb", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)

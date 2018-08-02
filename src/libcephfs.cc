@@ -1014,6 +1014,12 @@ extern "C" int ceph_fallocate(struct ceph_mount_info *cmount, int fd, int mode,
   return cmount->get_client()->fallocate(fd, mode, offset, length);
 }
 
+extern "C" int ceph_lazyio(class ceph_mount_info *cmount,
+                           int fd, int enable)
+{
+  return (cmount->get_client()->lazyio(fd, enable));
+}
+
 extern "C" int ceph_sync_fs(struct ceph_mount_info *cmount)
 {
   if (!cmount->is_mounted())
@@ -1802,6 +1808,12 @@ extern "C" int ceph_ll_setlk(struct ceph_mount_info *cmount,
 			     int sleep)
 {
   return (cmount->get_client()->ll_setlk(fh, fl, owner, sleep));
+}
+
+extern "C" int ceph_ll_lazyio(class ceph_mount_info *cmount,
+			      Fh *fh, int enable)
+{
+  return (cmount->get_client()->ll_lazyio(fh, enable));
 }
 
 extern "C" int ceph_ll_delegation(struct ceph_mount_info *cmount, Fh *fh,

@@ -3360,6 +3360,35 @@ static bool is_max_size_approaching(Inode *in)
   return false;
 }
 
+static int adjust_caps_used_for_lazyio(int used, int issued, int implemented)
+{
+  if (!(used & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER)))
+    return used;
+  if (!(implemented & CEPH_CAP_FILE_LAZYIO))
+    return used;
+
+  if (issued & CEPH_CAP_FILE_LAZYIO) {
+    if (!(issued & CEPH_CAP_FILE_CACHE)) {
+      used &= ~CEPH_CAP_FILE_CACHE;
+      used |= CEPH_CAP_FILE_LAZYIO;
+    }
+    if (!(issued & CEPH_CAP_FILE_BUFFER)) {
+      used &= ~CEPH_CAP_FILE_BUFFER;
+      used |= CEPH_CAP_FILE_LAZYIO;
+    }
+  } else {
+    if (!(implemented & CEPH_CAP_FILE_CACHE)) {
+      used &= ~CEPH_CAP_FILE_CACHE;
+      used |= CEPH_CAP_FILE_LAZYIO;
+    }
+    if (!(implemented & CEPH_CAP_FILE_BUFFER)) {
+      used &= ~CEPH_CAP_FILE_BUFFER;
+      used |= CEPH_CAP_FILE_LAZYIO;
+    }
+  }
+  return used;
+}
+
 /**
  * check_caps
  *
@@ -3386,6 +3415,9 @@ void Client::check_caps(Inode *in, unsigned flags)
   int issued = in->caps_issued(&implemented);
   int revoking = implemented & ~issued;
 
+  int orig_used = used;
+  used = adjust_caps_used_for_lazyio(used, issued, implemented);
+
   int retain = wanted | used | CEPH_CAP_PIN;
   if (!unmounting) {
     if (wanted)
@@ -3408,10 +3440,10 @@ void Client::check_caps(Inode *in, unsigned flags)
   if (in->caps.empty())
     return;   // guard if at end of func
 
-  if ((revoking & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO)) &&
-      (used & CEPH_CAP_FILE_CACHE) && !(used & CEPH_CAP_FILE_BUFFER)) {
+  if (!(orig_used & CEPH_CAP_FILE_BUFFER) &&
+      (revoking & used & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO))) {
     if (_release(in))
-      used &= ~CEPH_CAP_FILE_CACHE;
+      used &= ~(CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO);
   }
 
   if (!in->cap_snaps.empty())
@@ -5135,10 +5167,11 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     else if (revoked & ceph_deleg_caps_for_type(CEPH_DELEGATION_WR))
       in->recall_deleg(true);
 
-    if ((used & revoked & CEPH_CAP_FILE_BUFFER) &&
+    used = adjust_caps_used_for_lazyio(used, cap->issued, cap->implemented);
+    if ((used & revoked & (CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO)) &&
 	!_flush(in, new C_Client_FlushComplete(this, in))) {
       // waitin' for flush
-    } else if (revoked & CEPH_CAP_FILE_CACHE) {
+    } else if (used & revoked & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO)) {
       if (_release(in))
 	check = true;
     } else {
@@ -8596,9 +8629,11 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
   }
 
   // use normalized flags to generate cmode
-  int cmode = ceph_flags_to_mode(ceph_flags_sys2wire(flags));
-  if (cmode < 0)
-    return -EINVAL;
+  int cflags = ceph_flags_sys2wire(flags);
+  if (cct->_conf.get_val<bool>("client_force_lazyio"))
+    cflags |= CEPH_O_LAZY;
+
+  int cmode = ceph_flags_to_mode(cflags);
   int want = ceph_caps_for_mode(cmode);
   int result = 0;
 
@@ -8613,7 +8648,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
     filepath path;
     in->make_nosnap_relative_path(path);
     req->set_filepath(path);
-    req->head.args.open.flags = ceph_flags_sys2wire(flags & ~O_CREAT);
+    req->head.args.open.flags = cflags & ~CEPH_O_CREAT;
     req->head.args.open.mode = mode;
     req->head.args.open.pool = -1;
     if (cct->_conf->client_debug_getattr_caps)
@@ -8898,7 +8933,7 @@ int Client::preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset)
 
 int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 {
-  int have = 0;
+  int want, have = 0;
   bool movepos = false;
   std::unique_ptr<C_SaferCond> onuninline;
   int64_t r = 0;
@@ -8925,13 +8960,16 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   }
 
 retry:
-  have = 0;
-  r = get_caps(in, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE, &have, -1);
+  if (f->mode & CEPH_FILE_MODE_LAZY)
+    want = CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO;
+  else
+    want = CEPH_CAP_FILE_CACHE;
+  r = get_caps(in, CEPH_CAP_FILE_RD, want, &have, -1);
   if (r < 0) {
     goto done;
   }
   if (f->flags & O_DIRECT)
-    have &= ~CEPH_CAP_FILE_CACHE;
+    have &= ~(CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO);
 
   if (in->inline_version < CEPH_INLINE_NONE) {
     if (!(have & CEPH_CAP_FILE_CACHE)) {
@@ -8962,7 +9000,8 @@ retry:
   }
 
   if (!conf->client_debug_force_sync_read &&
-      (conf->client_oc && (have & CEPH_CAP_FILE_CACHE))) {
+      conf->client_oc &&
+      (have & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO))) {
 
     if (f->flags & O_RSYNC) {
       _flush_range(in, offset, size);
@@ -9350,9 +9389,12 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   utime_t lat;
   uint64_t totalwritten;
-  int have;
-  int r = get_caps(in, CEPH_CAP_FILE_WR|CEPH_CAP_AUTH_SHARED,
-		    CEPH_CAP_FILE_BUFFER, &have, endoff);
+  int want, have;
+  if (f->mode & CEPH_FILE_MODE_LAZY)
+    want = CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO;
+  else
+    want = CEPH_CAP_FILE_BUFFER;
+  int r = get_caps(in, CEPH_CAP_FILE_WR|CEPH_CAP_AUTH_SHARED, want, &have, endoff);
   if (r < 0)
     return r;
 
@@ -9369,7 +9411,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   }
 
   if (f->flags & O_DIRECT)
-    have &= ~CEPH_CAP_FILE_BUFFER;
+    have &= ~(CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO);
 
   ldout(cct, 10) << " snaprealm " << *in->snaprealm << dendl;
 
@@ -9403,7 +9445,8 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     }
   }
 
-  if (cct->_conf->client_oc && (have & CEPH_CAP_FILE_BUFFER)) {
+  if (cct->_conf->client_oc &&
+      (have & (CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO))) {
     // do buffered write
     if (!in->oset.dirty_or_tx)
       get_cap_ref(in, CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER);
@@ -10277,6 +10320,48 @@ int64_t Client::drop_caches()
   return objectcacher->release_all();
 }
 
+int Client::_lazyio(Fh *fh, int enable)
+{
+  Inode *in = fh->inode.get();
+  ldout(cct, 20) << __func__ << " " << *in << " " << !!enable << dendl;
+
+  if (!!(fh->mode & CEPH_FILE_MODE_LAZY) == !!enable)
+    return 0;
+
+  int orig_mode = fh->mode;
+  if (enable) {
+    fh->mode |= CEPH_FILE_MODE_LAZY;
+    in->get_open_ref(fh->mode);
+    in->put_open_ref(orig_mode);
+    check_caps(in, CHECK_CAPS_NODELAY);
+  } else {
+    fh->mode &= ~CEPH_FILE_MODE_LAZY;
+    in->get_open_ref(fh->mode);
+    in->put_open_ref(orig_mode);
+    check_caps(in, 0);
+  }
+
+  return 0;
+}
+
+int Client::lazyio(int fd, int enable)
+{
+  Mutex::Locker l(client_lock);
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+
+  return _lazyio(f, enable);
+}
+
+int Client::ll_lazyio(Fh *fh, int enable)
+{
+  Mutex::Locker lock(client_lock);
+  ldout(cct, 3) << __func__ << " " << fh << " " << fh->inode->ino << " " << !!enable << dendl;
+  tout(cct) << __func__ << std::endl;
+
+  return _lazyio(fh, enable);
+}
 
 int Client::lazyio_propogate(int fd, loff_t offset, size_t count)
 {
@@ -11882,9 +11967,11 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   }
 
   // use normalized flags to generate cmode
-  int cmode = ceph_flags_to_mode(ceph_flags_sys2wire(flags));
-  if (cmode < 0)
-    return -EINVAL;
+  int cflags = ceph_flags_sys2wire(flags);
+  if (cct->_conf.get_val<bool>("client_force_lazyio"))
+    cflags |= CEPH_O_LAZY;
+
+  int cmode = ceph_flags_to_mode(cflags);
 
   int64_t pool_id = -1;
   if (data_pool && *data_pool) {
@@ -11903,7 +11990,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   path.push_dentry(name);
   req->set_filepath(path);
   req->set_inode(dir);
-  req->head.args.open.flags = ceph_flags_sys2wire(flags | O_CREAT);
+  req->head.args.open.flags = cflags | CEPH_O_CREAT;
 
   req->head.args.open.stripe_unit = stripe_unit;
   req->head.args.open.stripe_count = stripe_count;
