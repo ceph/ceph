@@ -99,15 +99,10 @@ function run() {
     BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     test "$BUILD_MAKEOPTS" && echo "make will run with option(s) $BUILD_MAKEOPTS"
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
-
-    if type python2 > /dev/null 2>&1 ; then
-        # gtest-parallel requires Python 2
-        CMAKE_PYTHON_OPTS="-DWITH_GTEST_PARALLEL=ON"
-    else
-        CMAKE_PYTHON_OPTS="-DWITH_PYTHON2=OFF -DWITH_PYTHON3=ON -DMGR_PYTHON_VERSION=3 -DWITH_GTEST_PARALLEL=OFF"
+    if ! type python2 > /dev/null 2>&1 ; then
+        CMAKE_PYTHON_OPTS="-DWITH_PYTHON2=OFF -DWITH_PYTHON3=ON -DMGR_PYTHON_VERSION=3"
     fi
-
-    CMAKE_BUILD_OPTS="-DWITH_FIO=ON -DWITH_SEASTAR=ON"
+    CMAKE_BUILD_OPTS="-DWITH_GTEST_PARALLEL=ON -DWITH_FIO=ON -DWITH_SEASTAR=ON"
 
     cat <<EOM
 Note that the binaries produced by this script do not contain correct time

@@ -35,7 +35,7 @@ if(WITH_GTEST_PARALLEL)
     BUILD_COMMAND ""
     INSTALL_COMMAND "")
   add_dependencies(tests gtest-parallel_ext)
-  find_package(PythonInterp 2.7 REQUIRED)
+  find_package(PythonInterp REQUIRED)
   set(GTEST_PARALLEL_COMMAND
     ${PYTHON_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
 endif()
