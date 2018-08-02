@@ -1650,6 +1650,8 @@ void MDSRankDispatcher::handle_mds_map(
   if (g_conf->mds_dump_cache_on_map)
     mdcache->dump_cache();
 
+  cluster_degraded = mdsmap->is_degraded();
+
   // mdsmap and oldmap can be discontinuous. failover might happen in the missing mdsmap.
   // the 'restart' set tracks ranks that have restarted since the old mdsmap
   set<mds_rank_t> restart;
@@ -1786,7 +1788,6 @@ void MDSRankDispatcher::handle_mds_map(
     }
   }
 
-  cluster_degraded = mdsmap->is_degraded();
   if (oldmap->is_degraded() && !cluster_degraded && state >= MDSMap::STATE_ACTIVE) {
     dout(1) << "cluster recovered." << dendl;
     auto it = waiting_for_active_peer.find(MDS_RANK_NONE);
