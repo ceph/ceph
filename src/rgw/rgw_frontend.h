@@ -20,6 +20,11 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+namespace rgw::dmclock {
+  class ClientConfig;
+  class ClientCounters;
+}
+
 class RGWFrontendConfig {
   std::string config;
   std::multimap<std::string, std::string> config_map;
@@ -97,6 +102,7 @@ class RGWCivetWebFrontend : public RGWFrontend {
   struct mg_context* ctx;
   RGWMongooseEnv env;
 
+  std::unique_ptr<rgw::dmclock::SyncScheduler> scheduler;
   void set_conf_default(std::multimap<std::string, std::string>& m,
                         const std::string& key,
 			const std::string& def_val) {
@@ -107,11 +113,10 @@ class RGWCivetWebFrontend : public RGWFrontend {
 
 public:
   RGWCivetWebFrontend(RGWProcessEnv& env,
-                      RGWFrontendConfig* conf)
-    : conf(conf),
-      ctx(nullptr),
-      env(env) {
-  }
+                      RGWFrontendConfig *conf,
+                      CephContext *cct,
+                      rgw::dmclock::ClientCounters& dmclock_counters,
+                      rgw::dmclock::ClientConfig& dmclock_clients);
 
   int init() override {
     return 0;
