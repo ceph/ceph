@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap';
@@ -23,7 +24,8 @@ describe('RbdSnapshotFormComponent', () => {
       HttpClientTestingModule,
       ServicesModule,
       ApiModule,
-      ToastModule.forRoot()
+      ToastModule.forRoot(),
+      RouterTestingModule
     ],
     declarations: [RbdSnapshotFormComponent],
     providers: [BsModalRef, BsModalService, AuthStorageService]

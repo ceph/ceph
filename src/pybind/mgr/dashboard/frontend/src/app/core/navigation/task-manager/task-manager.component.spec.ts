@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { PopoverModule } from 'ngx-bootstrap';
 
@@ -18,7 +19,7 @@ describe('TaskManagerComponent', () => {
   };
 
   configureTestBed({
-    imports: [SharedModule, PopoverModule.forRoot(), HttpClientTestingModule],
+    imports: [SharedModule, PopoverModule.forRoot(), HttpClientTestingModule, RouterTestingModule],
     declarations: [TaskManagerComponent]
   });
 
