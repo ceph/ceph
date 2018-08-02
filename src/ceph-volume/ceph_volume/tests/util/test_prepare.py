@@ -145,6 +145,7 @@ class TestOsdMkfsFilestore(object):
 
     @pytest.mark.parametrize('flag', mkfs_filestore_flags)
     def test_keyring_is_used(self, fake_call, monkeypatch, flag):
+        monkeypatch.setattr(prepare, '__release__', 'mimic')
         monkeypatch.setattr(system, 'chown', lambda path: True)
         prepare.osd_mkfs_filestore(1, 'asdf', keyring='secret')
         assert flag in fake_call.calls[0]['args'][0]
