@@ -63,12 +63,12 @@ class Module(MgrModule):
             {
                 "cmd": "mgr self-test remote",
                 "desc": "Test inter-module calls",
-                "perm": "r"
+                "perm": "rw"
             },
             {
                 "cmd": "mgr self-test module name=module,type=CephString",
                 "desc": "Run another module's self_test() method",
-                "perm": "r"
+                "perm": "rw"
             },
             ]
 
