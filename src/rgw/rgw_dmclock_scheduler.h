@@ -69,10 +69,11 @@ struct SyncRequest : public Request {
   std::mutex& req_mtx;
   std::condition_variable& req_cv;
   ReqState& req_state;
+  GetClientCounters& counters;
   explicit SyncRequest(client_id _id, Time started, Cost cost,
 		       std::mutex& mtx, std::condition_variable& _cv,
-		       ReqState& _state):
-    Request{_id, started, cost}, req_mtx(mtx), req_cv(_cv), req_state(_state) {};
+		       ReqState& _state, GetClientCounters& counters):
+    Request{_id, started, cost}, req_mtx(mtx), req_cv(_cv), req_state(_state), counters(counters) {};
 };
 
 class SyncScheduler {
@@ -91,6 +92,8 @@ public:
 
   void cancel(const client_id& client);
 
+  static void handle_request_cb(const client_id& c, std::unique_ptr<SyncRequest> req,
+				PhaseType phase, Cost cost);
 private:
   static constexpr bool IsDelayed = false;
   using Queue = crimson::dmclock::PushPriorityQueue<client_id, SyncRequest, IsDelayed>;

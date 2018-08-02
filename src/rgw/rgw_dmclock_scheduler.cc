@@ -179,7 +179,7 @@ int SyncScheduler::add_request(const client_id& client, const ReqParams& params,
   std::mutex req_mtx;
   std::condition_variable req_cv;
   ReqState rstate {ReqState::Wait};
-  auto req = SyncRequest{client, time, cost, req_mtx, req_cv, rstate};
+  auto req = SyncRequest{client, time, cost, req_mtx, req_cv, rstate, counters};
   int r = queue.add_request_time(req, client, params, time, cost);
   if (r == 0) {
     if (auto c = counters(client)) {
@@ -204,6 +204,32 @@ int SyncScheduler::add_request(const client_id& client, const ReqParams& params,
   }
   return r;
 }
+
+void SyncScheduler::handle_request_cb(const client_id &c,
+				      std::unique_ptr<SyncRequest> req,
+				      PhaseType phase, Cost cost)
+{
+  { std::lock_guard<std::mutex> lg(req->req_mtx);
+    req->req_state = ReqState::Ready;
+    req->req_cv.notify_one();
+  }
+
+  if (auto ctr = req->counters(c)) {
+    auto lat = Clock::from_double(get_time()) - Clock::from_double(req->started);
+    if (phase == PhaseType::reservation){
+      ctr->tinc(queue_counters::l_res_latency, lat);
+      ctr->inc(queue_counters::l_res);
+      if (cost) ctr->inc(queue_counters::l_res_cost);
+    } else if (phase == PhaseType::priority){
+      ctr->tinc(queue_counters::l_prio_latency, lat);
+      ctr->inc(queue_counters::l_prio);
+      if (cost) ctr->inc(queue_counters::l_prio_cost);
+    }
+    ctr->dec(queue_counters::l_qlen);
+    if (cost) ctr->dec(queue_counters::l_cost);
+  }
+}
+
 
 void SyncScheduler::cancel(const client_id& client)
 {

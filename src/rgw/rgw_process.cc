@@ -60,6 +60,26 @@ static int wait_for_dmclock(rgw::dmclock::AsyncScheduler *scheduler,
   return 0;
 }
 
+static int wait_for_dmclock(rgw::dmclock::SyncScheduler *scheduler,
+			    req_state *s, RGWOp *op)
+{
+  const auto client = op->dmclock_client();
+  const auto cost = op->dmclock_cost();
+  ldout(s->cct, 10) << "waiting on dmclock client="
+		    << static_cast<int>(client) << " cost=" << cost << "..." << dendl;
+
+  int r = scheduler->add_request(client, {},
+				 req_state::Clock::to_double(s->time), cost);
+
+  if (r != 0){
+    ldout(s->cct, 0) << "Scheduling with dmclock failed with r=" << r << dendl;
+    if (r == EAGAIN)
+      r = -ERR_RATE_LIMITED;
+  }
+
+  return r;
+}
+
 int rgw_process_authenticated(RGWHandler_REST * const handler,
                               RGWOp *& op,
                               RGWRequest * const req,
@@ -153,6 +173,7 @@ int process_request(RGWRados* const store,
                     OpsLogSocket* const olog,
                     optional_yield_context yield,
                     rgw::dmclock::AsyncScheduler *scheduler,
+		    rgw::dmclock::SyncScheduler *sscheduler,
                     int* http_ret)
 {
   int ret = client_io->init(g_ceph_context);
@@ -224,6 +245,13 @@ int process_request(RGWRados* const store,
     dmclock_scoped_completer.scheduler = scheduler;
   }
 
+  if (sscheduler) {
+    ret = wait_for_dmclock(sscheduler, s, op);
+    if (ret < 0) {
+      abort_early(s, op, ret, handler);
+      goto done;
+    }
+  }
   req->op = op;
   dout(10) << "op=" << typeid(*op).name() << dendl;
 

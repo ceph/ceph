@@ -437,11 +437,11 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-#if defined(WITH_RADOSGW_BEAST_FRONTEND)
-  boost::asio::io_context iocontext;
   namespace dmc = rgw::dmclock;
   auto dmclock_clients = dmc::ClientConfig{cct.get()};
   auto dmclock_counters = dmc::ClientCounters{cct.get()};
+#if defined(WITH_RADOSGW_BEAST_FRONTEND)
+  boost::asio::io_context iocontext;
   auto dmclock_scheduler = dmc::AsyncScheduler(cct.get(), iocontext,
                                           std::ref(dmclock_counters),
                                           &dmclock_clients,
@@ -473,8 +473,9 @@ int main(int argc, const char **argv)
       config->get_val("prefix", "", &uri_prefix);
 
       RGWProcessEnv env = { store, &rest, olog, 0, uri_prefix, auth_registry };
+      //TODO: move all of scheduler initializations to frontends?
 
-      fe = new RGWCivetWebFrontend(env, config);
+      fe = new RGWCivetWebFrontend(env, config, cct.get(), dmclock_counters, dmclock_clients);
     }
     else if (framework == "loadgen") {
       int port;
