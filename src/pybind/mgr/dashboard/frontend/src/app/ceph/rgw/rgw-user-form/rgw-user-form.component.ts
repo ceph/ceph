@@ -4,7 +4,13 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap';
-import { forkJoin as observableForkJoin, Observable } from 'rxjs';
+import {
+  forkJoin as observableForkJoin,
+  Observable,
+  of as observableOf,
+  timer as observableTimer
+} from 'rxjs';
+import { map, switchMapTo, take } from 'rxjs/operators';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
@@ -274,25 +280,31 @@ export class RgwUserFormComponent implements OnInit {
 
   /**
    * Validate the username.
+   * @param {number|Date} dueTime The delay time to wait before the
+   *   API call is executed. This is useful to prevent API calls on
+   *   every keystroke. Defaults to 500.
    */
-  userIdValidator(): AsyncValidatorFn {
+  userIdValidator(dueTime = 500): AsyncValidatorFn {
     const rgwUserService = this.rgwUserService;
-    return (control: AbstractControl): Promise<ValidationErrors | null> => {
-      return new Promise((resolve) => {
-        // Exit immediately if user has not interacted with the control yet
-        // or the control value is empty.
-        if (control.pristine || control.value === '') {
-          resolve(null);
-          return;
-        }
-        rgwUserService.exists(control.value).subscribe((resp: boolean) => {
+    return (control: AbstractControl): Observable<ValidationErrors | null> => {
+      // Exit immediately if user has not interacted with the control yet
+      // or the control value is empty.
+      if (control.pristine || control.value === '') {
+        return observableOf(null);
+      }
+      // Forgot previous requests if a new one arrives within the specified
+      // delay time.
+      return observableTimer(dueTime).pipe(
+        switchMapTo(rgwUserService.exists(control.value)),
+        map((resp: boolean) => {
           if (!resp) {
-            resolve(null);
+            return null;
           } else {
-            resolve({ userIdExists: true });
+            return { userIdExists: true };
           }
-        });
-      });
+        }),
+        take(1)
+      );
     };
   }
 
