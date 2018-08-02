@@ -5439,8 +5439,8 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     int r = pgbackend->objects_read_sync(
       soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
     // whole object?  can we verify the checksum?
-    if (!skip_data_digest &&
-	r >= 0 && op.extent.length == oi.size && oi.is_data_digest()) {
+    if (!skip_data_digest && r >= 0 && op.extent.offset == 0 &&
+        (uint64_t)r == oi.size && oi.is_data_digest()) {
       uint32_t crc = osd_op.outdata.crc32c(-1);
       if (oi.data_digest != crc) {
         osd->clog->error() << info.pgid << std::hex
