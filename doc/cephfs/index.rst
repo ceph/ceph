@@ -74,6 +74,7 @@ authentication keyring.
 	Mount CephFS <kernel>
 	Mount CephFS as FUSE <fuse>
 	Mount CephFS in fstab <fstab>
+	Use the CephFS Shell <cephfs-shell>
 	Manpage ceph-fuse <../../man/8/ceph-fuse>
 	Manpage mount.ceph <../../man/8/mount.ceph>
 	Manpage mount.fuse.ceph <../../man/8/mount.fuse.ceph>
