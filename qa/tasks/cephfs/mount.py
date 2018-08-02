@@ -144,13 +144,14 @@ class CephFSMount(object):
             'sudo', 'rm', '-f', os.path.join(self.mountpoint, filename)
         ])
 
-    def _run_python(self, pyscript):
-        return self.client_remote.run(args=[
-            'sudo', 'adjust-ulimits', 'daemon-helper', 'kill', 'python', '-c', pyscript
-        ], wait=False, stdin=run.PIPE, stdout=StringIO())
+    def _run_python(self, pyscript, py_version='python'):
+        return self.client_remote.run(
+               args=['sudo', 'adjust-ulimits', 'daemon-helper', 'kill',
+                     py_version, '-c', pyscript], wait=False, stdin=run.PIPE,
+               stdout=StringIO())
 
-    def run_python(self, pyscript):
-        p = self._run_python(pyscript)
+    def run_python(self, pyscript, py_version='python'):
+        p = self._run_python(pyscript, py_version)
         p.wait()
         return p.stdout.getvalue().strip()
 
