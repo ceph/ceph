@@ -239,7 +239,7 @@ void MDCache::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("mds_cache_size"))
     cache_inode_limit = g_conf().get_val<int64_t>("mds_cache_size");
   if (changed.count("mds_cache_memory_limit"))
-    cache_memory_limit = g_conf().get_val<uint64_t>("mds_cache_memory_limit");
+    cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
   if (changed.count("mds_cache_reservation"))
     cache_reservation = g_conf().get_val<double>("mds_cache_reservation");
   if (changed.count("mds_health_cache_threshold"))
