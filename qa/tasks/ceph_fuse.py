@@ -7,6 +7,8 @@ import logging
 
 from teuthology import misc as teuthology
 from cephfs.fuse_mount import FuseMount
+from tasks.cephfs.filesystem import MDSCluster
+from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 
@@ -102,6 +104,14 @@ def task(ctx, config):
 
     all_mounts = getattr(ctx, 'mounts', {})
     mounted_by_me = {}
+
+    log.info('Wait for MDS to reach steady state...')
+    mds_cluster = MDSCluster(ctx)
+    status = mds_cluster.status()
+    for filesystem in status.get_filesystems():
+        fs = Filesystem(ctx, fscid=filesystem['id']) 
+        fs.wait_for_daemons()
+    log.info('Ready to start ceph-fuse...')
 
     # Construct any new FuseMount instances
     for id_, remote in clients:
