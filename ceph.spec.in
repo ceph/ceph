@@ -284,13 +284,11 @@ BuildRequires:  redhat-rpm-config
 %if 0%{with seastar}
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:  cryptopp-devel
-BuildRequires:  fmt-devel
 BuildRequires:  numactl-devel
 BuildRequires:  protobuf-compiler
 %endif
 %if 0%{?suse_version}
 BuildRequires:  libcryptopp-devel
-BuildRequires:  libfmt-devel
 BuildRequires:  libnuma-devel
 %endif
 %endif
