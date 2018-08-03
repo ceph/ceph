@@ -191,7 +191,8 @@ bool MDSAuthCaps::is_capable(std::string_view inode_path,
 			     uid_t caller_uid, gid_t caller_gid,
 			     const vector<uint64_t> *caller_gid_list,
 			     unsigned mask,
-			     uid_t new_uid, gid_t new_gid) const
+			     uid_t new_uid, gid_t new_gid,
+			     const entity_addr_t& addr) const
 {
   if (cct)
     ldout(cct, 10) << __func__ << " inode(path /" << inode_path
