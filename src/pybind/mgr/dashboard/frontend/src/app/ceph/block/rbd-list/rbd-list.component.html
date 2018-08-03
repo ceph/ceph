@@ -1,13 +1,3 @@
-<nav aria-label="breadcrumb">
-  <ol class="breadcrumb">
-    <li i18n
-        class="breadcrumb-item">Block</li>
-    <li i18n
-        class="breadcrumb-item active"
-        aria-current="page">Images</li>
-  </ol>
-</nav>
-
 <cd-view-cache *ngFor="let viewCacheStatus of viewCacheStatusList"
                [status]="viewCacheStatus.status"
                [statusFor]="viewCacheStatus.statusFor"></cd-view-cache>
@@ -26,14 +16,14 @@
       <button type="button"
               class="btn btn-sm btn-primary"
               *ngIf="permission.create && (!permission.update || !selection.hasSingleSelection)"
-              routerLink="/rbd/add">
+              routerLink="/block/rbd/add">
         <i class="fa fa-fw fa-plus"></i><span i18n>Add</span>
       </button>
       <button type="button"
               class="btn btn-sm btn-primary"
               *ngIf="permission.update && (!permission.create || permission.create && selection.hasSingleSelection)"
               [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}"
-              routerLink="/rbd/edit/{{ selection.first()?.pool_name | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
+              routerLink="/block/rbd/edit/{{ selection.first()?.pool_name | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
         <i class="fa fa-fw fa-pencil"></i>
         <span i18n>Edit</span>
       </button>
@@ -57,7 +47,7 @@
         <li role="menuitem"
             *ngIf="permission.create">
           <a class="dropdown-item"
-             routerLink="/rbd/add">
+             routerLink="/block/rbd/add">
             <i class="fa fa-fw fa-plus"></i>
             <span i18n>Add</span>
           </a>
@@ -66,7 +56,7 @@
             *ngIf="permission.update"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
           <a class="dropdown-item"
-             routerLink="/rbd/edit/{{ selection.first()?.pool_name | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
+             routerLink="/block/rbd/edit/{{ selection.first()?.pool_name | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
             <i class="fa fa-fw fa-pencil"></i>
             <span i18n>Edit</span>
           </a>
@@ -75,7 +65,7 @@
             *ngIf="permission.create"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
           <a class="dropdown-item"
-             routerLink="/rbd/copy/{{ selection.first()?.pool_name | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
+             routerLink="/block/rbd/copy/{{ selection.first()?.pool_name | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
             <i class="fa fa-fw fa-copy"></i>
             <span i18n>Copy</span>
           </a>

@@ -73,7 +73,7 @@
             *ngIf="permission.create"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
           <a class="dropdown-item"
-             routerLink="/rbd/clone/{{ poolName | encodeUri }}/{{ rbdName | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
+             routerLink="/block/rbd/clone/{{ poolName | encodeUri }}/{{ rbdName | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
             <i class="fa fa-fw fa-clone"></i>
             <span i18n>Clone</span>
           </a>
@@ -82,7 +82,7 @@
             *ngIf="permission.create"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
           <a class="dropdown-item"
-             routerLink="/rbd/copy/{{ poolName | encodeUri }}/{{ rbdName | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
+             routerLink="/block/rbd/copy/{{ poolName | encodeUri }}/{{ rbdName | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
             <i class="fa fa-fw fa-copy"></i>
             <span i18n>Copy</span>
           </a>
