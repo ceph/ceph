@@ -10640,8 +10640,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return true;
     }
 
-  } else if (prefix == "osd destroy" ||
-	     prefix == "osd purge" ||
+  } else if (prefix == "osd destroy-actual" ||
+	     prefix == "osd purge-actual" ||
 	     prefix == "osd purge-new") {
     /* Destroying an OSD means that we don't expect to further make use of
      * the OSDs data (which may even become unreadable after this operation),
@@ -10665,24 +10665,30 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     int64_t id;
     if (!cmd_getval(cct, cmdmap, "id", id)) {
-      ss << "unable to parse osd id value '"
-         << cmd_vartype_stringify(cmdmap.at("id")) << "";
+      auto p = cmdmap.find("id");
+      if (p == cmdmap.end()) {
+	ss << "no osd id specified";
+      } else {
+	ss << "unable to parse osd id value '"
+	   << cmd_vartype_stringify(cmdmap.at("id")) << "";
+      }
       err = -EINVAL;
       goto reply;
     }
 
-    bool is_destroy = (prefix == "osd destroy");
+    bool is_destroy = (prefix == "osd destroy-actual");
     if (!is_destroy) {
-      assert("osd purge" == prefix ||
+      assert("osd purge-actual" == prefix ||
 	     "osd purge-new" == prefix);
     }
 
     string sure;
     if (!cmd_getval(cct, cmdmap, "sure", sure) ||
         sure != "--yes-i-really-mean-it") {
-      ss << "Are you SURE? This will mean real, permanent data loss, as well "
-         << "as cephx and lockbox keys. Pass --yes-i-really-mean-it if you "
-         << "really do.";
+      ss << "Are you SURE?  Did you verify with 'ceph osd safe-to-destroy'?  "
+	 << "This will mean real, permanent data loss, as well "
+         << "as deletion of cephx and lockbox keys. "
+	 << "Pass --yes-i-really-mean-it if you really do.";
       err = -EPERM;
       goto reply;
     } else if (!osdmap.exists(id)) {

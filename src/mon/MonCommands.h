@@ -114,6 +114,7 @@
  *  MGR       - command goes to ceph-mgr (for luminous+)
  *  POLL      - command is intended to be called periodically by the
  *              client (see iostat)
+ *  HIDDEN    - command is hidden (no reported by help etc)
  *
  * A command should always be first considered DEPRECATED before being
  * considered OBSOLETE, giving due consideration to users and conforming
@@ -774,11 +775,12 @@ COMMAND("osd in " \
 	"set osd(s) <id> [<id>...] in, "
         "can use <any|all> to automatically set all previously out osds in", \
         "osd", "rw", "cli,rest")
-COMMAND("osd rm " \
+COMMAND_WITH_FLAG("osd rm " \
 	"name=ids,type=CephString,n=N", \
 	"remove osd(s) <id> [<id>...], "
         "or use <any|all> to remove all osds", \
-        "osd", "rw", "cli,rest")
+	"osd", "rw", "cli,rest",
+	FLAG(DEPRECATED))
 COMMAND("osd add-noup " \
         "name=ids,type=CephString,n=N", \
         "mark osd(s) <id> [<id>...] as noup, " \
@@ -869,25 +871,25 @@ COMMAND("osd primary-affinity " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
 	"adjust osd primary-affinity from 0.0 <= <weight> <= 1.0", \
 	"osd", "rw", "cli,rest")
-COMMAND("osd destroy " \
+COMMAND_WITH_FLAG("osd destroy-actual "	    \
         "name=id,type=CephOsdName " \
         "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
         "mark osd as being destroyed. Keeps the ID intact (allowing reuse), " \
         "but removes cephx keys, config-key data and lockbox keys, "\
         "rendering data permanently unreadable.", \
-        "osd", "rw", "cli,rest")
+		  "osd", "rw", "cli,rest", FLAG(HIDDEN))
 COMMAND("osd purge-new " \
         "name=id,type=CephOsdName " \
         "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
         "purge all traces of an OSD that was partially created but never " \
 	"started", \
         "osd", "rw", "cli,rest")
-COMMAND("osd purge " \
+COMMAND_WITH_FLAG("osd purge-actual " \
         "name=id,type=CephOsdName " \
         "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
         "purge all osd data from the monitors. Combines `osd destroy`, " \
         "`osd rm`, and `osd crush rm`.", \
-        "osd", "rw", "cli,rest")
+		  "osd", "rw", "cli,rest", FLAG(HIDDEN))
 COMMAND("osd lost " \
 	"name=id,type=CephOsdName " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
