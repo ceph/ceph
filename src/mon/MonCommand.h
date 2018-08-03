@@ -31,6 +31,7 @@ struct MonCommand {
   static const uint64_t FLAG_DEPRECATED = 1 << 2;
   static const uint64_t FLAG_MGR        = 1 << 3;
   static const uint64_t FLAG_POLL       = 1 << 4;
+  static const uint64_t FLAG_HIDDEN     = 1 << 5;
 
   bool has_flag(uint64_t flag) const { return (flags & flag) != 0; }
   void set_flag(uint64_t flag) { flags |= flag; }
@@ -89,6 +90,10 @@ struct MonCommand {
 
   bool is_mgr() const {
     return has_flag(MonCommand::FLAG_MGR);
+  }
+
+  bool is_hidden() const {
+    return has_flag(MonCommand::FLAG_HIDDEN);
   }
 
   static void encode_array(const MonCommand *cmds, int size, bufferlist &bl) {

@@ -2977,7 +2977,9 @@ void Monitor::handle_command(MonOpRequestRef op)
         paxos_service[PAXOS_MGR].get())->get_command_descs();
 
     for (auto& c : leader_mon_commands) {
-      commands.push_back(c);
+      if (!c.is_hidden()) {
+	commands.push_back(c);
+      }
     }
 
     format_command_descriptions(commands, f, &rdata);
