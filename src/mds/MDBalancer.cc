@@ -874,9 +874,9 @@ void MDBalancer::try_rebalance(balance_state_t& state)
     mds_rank_t target = it.first;
     double amount = it.second;
 
-    if (amount / target_load < .2)
-      continue;
     if (amount < MIN_OFFLOAD)
+      continue;
+    if (amount * 10 * state.targets.size() < target_load)
       continue;
 
     dout(5) << "want to send " << amount << " to mds." << target
