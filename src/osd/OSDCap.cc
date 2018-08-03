@@ -20,6 +20,7 @@
 #include "OSDCap.h"
 #include "common/config.h"
 #include "common/debug.h"
+#include "include/ipaddr.h"
 
 using std::ostream;
 using std::vector;
@@ -170,6 +171,12 @@ ostream& operator<<(ostream& out, const OSDCapGrant& g)
   return out;
 }
 
+void OSDCapGrant::set_network(const string& n)
+{
+  network = n;
+  network_valid = ::parse_network(n.c_str(), &network_parsed, &network_prefix);
+}
+
 bool OSDCapGrant::allow_all() const
 {
   if (profile.is_valid()) {
@@ -194,6 +201,15 @@ bool OSDCapGrant::is_capable(
   std::vector<bool>* class_allowed) const
 {
   osd_rwxa_t allow = 0;
+
+  if (network.size() &&
+      (!network_valid ||
+       !network_contains(network_parsed,
+			 network_prefix,
+			 addr))) {
+    return false;
+  }
+
   if (profile.is_valid()) {
     return std::any_of(profile_grants.cbegin(), profile_grants.cend(),
                        [&](const OSDCapGrant& grant) {
