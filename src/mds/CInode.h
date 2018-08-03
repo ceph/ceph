@@ -505,6 +505,11 @@ public:
   // -- cache infrastructure --
 private:
   mempool::mds_co::compact_map<frag_t,CDir*> dirfrags; // cached dir fragments under this Inode
+
+  //for the purpose of quickly determining whether there's a subtree root or exporting dir
+  int num_subtree_roots = 0;
+  int num_exporting_dirs = 0;
+
   int stickydir_ref = 0;
   scrub_info_t *scrub_infop = nullptr;
 
@@ -674,6 +679,8 @@ public:
     clear_file_locks();
     assert(num_projected_xattrs == 0);
     assert(num_projected_srnodes == 0);
+    assert(num_subtree_roots == 0);
+    assert(num_exporting_dirs == 0);
   }
   
 
