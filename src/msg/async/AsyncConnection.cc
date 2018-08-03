@@ -879,6 +879,9 @@ ssize_t AsyncConnection::_process_connection()
         SocketOptions opts;
         opts.priority = async_msgr->get_socket_priority();
         opts.connect_bind_addr = msgr->get_myaddr();
+        ldout(async_msgr->cct, 25) << __func__ << " new connection from "
+                                   << msgr->get_myaddr() << " to "
+                                   << get_peer_addr() << dendl;
         r = worker->connect(get_peer_addr(), opts, &cs);
         if (r < 0)
           goto fail;
@@ -912,12 +915,20 @@ ssize_t AsyncConnection::_process_connection()
         bl.append(CEPH_BANNER, strlen(CEPH_BANNER));
         r = try_send(bl);
         if (r == 0) {
-          state = STATE_CONNECTING_WAIT_BANNER_AND_IDENTIFY;
+          if (msgr2) {
+            state = STATE_CONNECTING_WAIT_MSGR2_BANNER;
+          } else {
+            state = STATE_CONNECTING_WAIT_BANNER_AND_IDENTIFY;
+          }
           ldout(async_msgr->cct, 10) << __func__ << " connect write banner done: "
                                      << get_peer_addr() << dendl;
         } else if (r > 0) {
           state = STATE_WAIT_SEND;
-          state_after_send = STATE_CONNECTING_WAIT_BANNER_AND_IDENTIFY;
+          if (msgr2) {
+            state_after_send = STATE_CONNECTING_WAIT_MSGR2_BANNER;
+          } else {
+            state_after_send = STATE_CONNECTING_WAIT_BANNER_AND_IDENTIFY;
+          }
           ldout(async_msgr->cct, 10) << __func__ << " connect wait for write banner: "
                                << get_peer_addr() << dendl;
         } else {
@@ -994,7 +1005,149 @@ ssize_t AsyncConnection::_process_connection()
           return 0;
         }
 
-        encode(async_msgr->get_myaddrs().legacy_addr(), myaddrbl, 0); // legacy
+        if (msgr2) {
+          encode(async_msgr->get_myaddrs().size(), myaddrbl, 0);
+          for (auto &addr : async_msgr->get_myaddrs().v) {
+            encode(addr, myaddrbl, 0);
+          }
+        } else {
+          encode(async_msgr->get_myaddrs().legacy_addr(), myaddrbl, 0); // legacy
+        }
+        r = try_send(myaddrbl);
+        if (r == 0) {
+          state = STATE_CONNECTING_SEND_CONNECT_MSG;
+          ldout(async_msgr->cct, 10) << __func__ << " connect sent my addr "
+				     << async_msgr->get_myaddrs().legacy_addr()
+				     << dendl;
+        } else if (r > 0) {
+          state = STATE_WAIT_SEND;
+          state_after_send = STATE_CONNECTING_SEND_CONNECT_MSG;
+          ldout(async_msgr->cct, 10) << __func__ << " connect send my addr done: "
+				     << async_msgr->get_myaddrs().legacy_addr()
+				     << dendl;
+        } else {
+          ldout(async_msgr->cct, 2) << __func__ << " connect couldn't write my addr, "
+              << cpp_strerror(r) << dendl;
+          goto fail;
+        }
+
+        break;
+      }
+
+    case STATE_CONNECTING_WAIT_MSGR2_BANNER:
+      {
+        r = read_until(strlen(CEPH_BANNER) + sizeof(unsigned), state_buffer);
+        if (r < 0) {
+          ldout(async_msgr->cct, 1) << __func__ << " read msgr2 banner and addr count failed" << dendl;
+          goto fail;
+        } else if (r > 0) {
+          break;
+        }
+
+        if (memcmp(state_buffer, CEPH_BANNER, strlen(CEPH_BANNER))) {
+          ldout(async_msgr->cct, 0) << __func__ << " connect protocol error (bad banner) on peer "
+                                    << get_peer_addr() << dendl;
+          goto fail;
+        }
+
+        state = STATE_CONNECTING_WAIT_MSGR2_ADDRS_AND_IDENTIFY;
+        break;
+      }
+
+    case STATE_CONNECTING_WAIT_MSGR2_ADDRS_AND_IDENTIFY:
+      {
+        bufferlist myaddrbl;
+        bufferlist addr_bl;
+        entity_addrvec_t paddrs;
+        entity_addr_t peer_addr_for_me;
+        unsigned banner_len = strlen(CEPH_BANNER);
+        unsigned addr_count = *(unsigned *)(state_buffer+banner_len);
+        unsigned need_len = sizeof(ceph_entity_addr) * (addr_count+1);
+
+        r = read_until(need_len, state_buffer);
+        if (r < 0) {
+          ldout(async_msgr->cct, 1) << __func__ << " read addrs failed" << dendl;
+          goto fail;
+        } else if (r > 0) {
+          break;
+        }
+
+        ldout(async_msgr->cct, 10) << __func__ << " server has " << addr_count << " addresses" << dendl;
+
+        bufferlist bl;
+        bl.append(state_buffer, need_len);
+        auto p = bl.cbegin();
+        try {
+          for (unsigned i=0; i < addr_count; i++) {
+            entity_addr_t paddr;
+            decode(paddr, p);
+            paddrs.v.push_back(paddr);
+          }
+          decode(peer_addr_for_me, p);
+        } catch (const buffer::error& e) {
+          lderr(async_msgr->cct) << __func__ <<  " decode peer addr failed " << dendl;
+          goto fail;
+	      }
+
+        ldout(async_msgr->cct, 20) << __func__ <<  " connect read peer addr "
+                             << paddrs << " on socket " << cs.fd() << dendl;
+
+
+        entity_addr_t peer_addr;
+        if (msgr2) {
+          peer_addr = peer_addrs.msgr2_addr();
+        } else {
+          peer_addr = peer_addrs.legacy_addr();
+        }
+
+        bool found = false;
+        for (auto &paddr : paddrs.v) {
+          if (peer_addr != paddr) {
+            if (paddr.probably_equals(peer_addr)) {
+              ldout(async_msgr->cct, 0) << __func__ <<  " connect claims to be " << paddr
+                                        << " not " << peer_addr
+                                        << " - presumably this is the same node!" << dendl;
+              found = true;
+              break;
+            }
+          }
+        }
+        if (!found) {
+          ldout(async_msgr->cct, 10) << __func__ << " connect claims to be "
+                                      << paddrs << " not " << peer_addrs << dendl;
+          goto fail;
+        }
+
+        ldout(async_msgr->cct, 20) << __func__ << " connect peer addr for me is " << peer_addr_for_me << dendl;
+        lock.unlock();
+        async_msgr->learned_addr(peer_addr_for_me);
+        if (async_msgr->cct->_conf->ms_inject_internal_delays
+            && async_msgr->cct->_conf->ms_inject_socket_failures) {
+          if (rand() % async_msgr->cct->_conf->ms_inject_socket_failures == 0) {
+            ldout(msgr->cct, 10) << __func__ << " sleep for "
+                                 << async_msgr->cct->_conf->ms_inject_internal_delays << dendl;
+            utime_t t;
+            t.set_from_double(async_msgr->cct->_conf->ms_inject_internal_delays);
+            t.sleep();
+          }
+        }
+
+        lock.lock();
+        if (state != STATE_CONNECTING_WAIT_MSGR2_ADDRS_AND_IDENTIFY) {
+          ldout(async_msgr->cct, 1) << __func__ << " state changed while learned_addr, mark_down or "
+                                    << " replacing must be happened just now" << dendl;
+          return 0;
+        }
+
+        if (msgr2) {
+          ldout(async_msgr->cct, 25) << "encoding myaddrs: " << async_msgr->get_myaddrs() << dendl;
+          encode(async_msgr->get_myaddrs().size(), myaddrbl, 0);
+          for (auto &addr : async_msgr->get_myaddrs().v) {
+            encode(addr, myaddrbl, 0);
+          }
+        } else {
+          encode(async_msgr->get_myaddrs().legacy_addr(), myaddrbl, 0); // legacy
+        }
         r = try_send(myaddrbl);
         if (r == 0) {
           state = STATE_CONNECTING_SEND_CONNECT_MSG;
@@ -1220,20 +1373,38 @@ ssize_t AsyncConnection::_process_connection()
 
         bl.append(CEPH_BANNER, strlen(CEPH_BANNER));
 
-	auto legacy = async_msgr->get_myaddrs().legacy_addr();
-        encode(legacy, bl, 0); // legacy
-        port = legacy.get_port();
+        if (msgr2) {
+          encode(async_msgr->get_myaddrs().size(), bl, 0);
+          ldout(async_msgr->cct, 25) << "encoding myaddrs: " << async_msgr->get_myaddrs() << dendl;
+          for (auto &addr : async_msgr->get_myaddrs().v) {
+            encode(addr, bl, 0);
+          }
+          port = async_msgr->get_myaddrs().msgr2_addr().get_port();
+        } else {
+          auto legacy = async_msgr->get_myaddrs().legacy_addr();
+          encode(legacy, bl, 0); // legacy
+          port = legacy.get_port();
+        }
+
         encode(socket_addr, bl, 0); // legacy
         ldout(async_msgr->cct, 1) << __func__ << " sd=" << cs.fd() << " " << socket_addr << dendl;
 
         r = try_send(bl);
         if (r == 0) {
-          state = STATE_ACCEPTING_WAIT_BANNER_ADDR;
+          if (msgr2) {
+            state = STATE_ACCEPTING_WAIT_MSGR2_BANNER;
+          } else {
+            state = STATE_ACCEPTING_WAIT_BANNER_ADDR;
+          }
           ldout(async_msgr->cct, 10) << __func__ << " write banner and addr done: "
             << get_peer_addr() << dendl;
         } else if (r > 0) {
           state = STATE_WAIT_SEND;
-          state_after_send = STATE_ACCEPTING_WAIT_BANNER_ADDR;
+          if (msgr2) {
+            state_after_send = STATE_ACCEPTING_WAIT_MSGR2_BANNER;
+          } else {
+            state_after_send = STATE_ACCEPTING_WAIT_BANNER_ADDR;
+          }
           ldout(async_msgr->cct, 10) << __func__ << " wait for write banner and addr: "
                               << get_peer_addr() << dendl;
         } else {
@@ -1281,6 +1452,82 @@ ssize_t AsyncConnection::_process_connection()
         }
         set_peer_addr(peer_addr);  // so that connection_state gets set up
 	target_addr = peer_addr;
+        state = STATE_ACCEPTING_WAIT_CONNECT_MSG;
+        break;
+      }
+
+    case STATE_ACCEPTING_WAIT_MSGR2_BANNER:
+      {
+        r = read_until(strlen(CEPH_BANNER) + sizeof(unsigned), state_buffer);
+        if (r < 0) {
+          ldout(async_msgr->cct, 1) << __func__ << " read peer msgr2 banner and addr count failed" << dendl;
+          goto fail;
+        } else if (r > 0) {
+          break;
+        }
+
+        if (memcmp(state_buffer, CEPH_BANNER, strlen(CEPH_BANNER))) {
+          ldout(async_msgr->cct, 1) << __func__ << " accept peer sent bad banner '" << state_buffer
+                                    << "' (should be '" << CEPH_BANNER << "')" << dendl;
+          goto fail;
+        }
+
+        state = STATE_ACCEPTING_WAIT_MSGR2_ADDRS;
+        break;
+      }
+
+    case STATE_ACCEPTING_WAIT_MSGR2_ADDRS:
+      {
+
+        bufferlist addr_bl;
+        entity_addrvec_t peer_addrs;
+        unsigned banner_len = strlen(CEPH_BANNER);
+        unsigned addr_count = *(unsigned *)(state_buffer+banner_len);
+        unsigned need_len = sizeof(ceph_entity_addr) * addr_count;
+
+        r = read_until(need_len, state_buffer);
+        if (r < 0) {
+          ldout(async_msgr->cct, 1) << __func__ << " read peer addrs failed" << dendl;
+          goto fail;
+        } else if (r > 0) {
+          break;
+        }
+
+        ldout(async_msgr->cct, 10) << __func__ << " peer has " << addr_count << " addresses" << dendl;
+
+        addr_bl.append(state_buffer+strlen(CEPH_BANNER)+sizeof(unsigned), need_len);
+        try {
+          auto ti = addr_bl.cbegin();
+          for (unsigned i=0; i < addr_count; i++) {
+            entity_addr_t peer_addr;
+            decode(peer_addr, ti);
+            peer_addrs.v.push_back(peer_addr);
+          }
+        } catch (const buffer::error& e) {
+	        lderr(async_msgr->cct) << __func__ <<  " decode peer_addrs failed " << dendl;
+          goto fail;
+	      }
+
+        ldout(async_msgr->cct, 10) << __func__ << " accept peer addrs is " << peer_addrs << dendl;
+        if (peer_addrs.size() == 1) { // not sure how to generalize when size > 1
+          entity_addr_t peer_addr = peer_addrs.front();
+          if (peer_addr.is_blank_ip()) {
+            // peer apparently doesn't know what ip they have; figure it out for them.
+            int port = peer_addr.get_port();
+            peer_addr.u = socket_addr.u;
+            peer_addr.set_port(port);
+            ldout(async_msgr->cct, 0) << __func__ << " accept peer addr is really " << peer_addr
+                              << " (socket is " << socket_addr << ")" << dendl;
+            peer_addrs.v[0] = peer_addr;
+          }
+        }
+
+        set_peer_addrs(peer_addrs);  // so that connection_state gets set up
+        if (msgr2) {
+          target_addr = peer_addrs.msgr2_addr();
+        } else {
+          target_addr = peer_addrs.legacy_addr();
+        }
         state = STATE_ACCEPTING_WAIT_CONNECT_MSG;
         break;
       }

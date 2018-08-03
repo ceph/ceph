@@ -61,9 +61,11 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
  public:
   Messenger *server_msgr;
   Messenger *client_msgr;
+  string type;
 
   MessengerTest(): server_msgr(NULL), client_msgr(NULL) {}
   void SetUp() override {
+    type = GetParam();
     lderr(g_ceph_context) << __func__ << " start set up " << GetParam() << dendl;
     server_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid(), 0);
     client_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::CLIENT(-1), "client", getpid(), 0);
@@ -254,6 +256,98 @@ TEST_P(MessengerTest, SimpleTest) {
 
   conn = client_msgr->connect_to(server_msgr->get_mytype(),
 				 server_msgr->get_myaddrs());
+  {
+    m = new MPing();
+    ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
+    while (!cli_dispatcher.got_new)
+      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+    cli_dispatcher.got_new = false;
+  }
+  ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
+
+  // 3. test markdown connection
+  conn->mark_down();
+  ASSERT_FALSE(conn->is_connected());
+
+  // 4. test failed connection
+  server_msgr->shutdown();
+  server_msgr->wait();
+
+  m = new MPing();
+  conn->send_message(m);
+  CHECK_AND_WAIT_TRUE(!conn->is_connected());
+  ASSERT_FALSE(conn->is_connected());
+
+  // 5. loopback connection
+  srv_dispatcher.loopback = true;
+  conn = client_msgr->get_loopback_connection();
+  {
+    m = new MPing();
+    ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
+    while (!cli_dispatcher.got_new)
+      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+    cli_dispatcher.got_new = false;
+  }
+  srv_dispatcher.loopback = false;
+  ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
+  client_msgr->shutdown();
+  client_msgr->wait();
+  server_msgr->shutdown();
+  server_msgr->wait();
+}
+
+TEST_P(MessengerTest, SimpleMsgr2Test) {
+  if (type == "simple") {  // skip msgr2 tests for simple messenger
+    return;
+  }
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  entity_addr_t legacy_addr;
+  legacy_addr.parse("127.0.0.1");
+  entity_addr_t msgr2_addr;
+  msgr2_addr.parse("msgr2:127.0.0.1");
+  entity_addrvec_t bind_addrs;
+  bind_addrs.v.push_back(legacy_addr);
+  bind_addrs.v.push_back(msgr2_addr);
+  server_msgr->bindv(bind_addrs);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  // 1. simple round trip
+  MPing *m = new MPing();
+  ConnectionRef conn = client_msgr->get_connection(entity_inst_t(
+      entity_name_t(server_msgr->get_mytype(), -1),
+      server_msgr->get_myaddrs().legacy_addr()));
+  {
+    ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
+    while (!cli_dispatcher.got_new)
+      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+    cli_dispatcher.got_new = false;
+  }
+  ASSERT_TRUE(conn->is_connected());
+  ASSERT_EQ(1, static_cast<Session*>(conn->get_priv().get())->get_count());
+  ASSERT_TRUE(conn->peer_is_osd());
+
+  // 2. test rebind port and connect to msgr2 port
+  set<int> avoid_ports;
+  for (int i = 0; i < 10 ; i++) {
+    for (auto a : server_msgr->get_myaddrs().v) {
+      avoid_ports.insert(a.get_port() + i);
+    }
+  }
+  server_msgr->rebind(avoid_ports);
+  for (auto a : server_msgr->get_myaddrs().v) {
+    ASSERT_TRUE(avoid_ports.count(a.get_port()) == 0);
+  }
+
+  conn = client_msgr->get_connection(entity_inst_t(
+      entity_name_t(server_msgr->get_mytype(), -1),
+      server_msgr->get_myaddrs().msgr2_addr()));
   {
     m = new MPing();
     ASSERT_EQ(conn->send_message(m), 0);

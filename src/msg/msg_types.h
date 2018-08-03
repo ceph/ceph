@@ -548,6 +548,14 @@ struct entity_addrvec_t {
     }
     return entity_addr_t();
   }
+  entity_addr_t msgr2_addr() const {
+    for (auto& a : v) {
+      if (a.type == entity_addr_t::TYPE_MSGR2) {
+        return a;
+      }
+    }
+    return entity_addr_t();
+  }
   entity_addr_t front() const {
     if (!v.empty()) {
       return v.front();
