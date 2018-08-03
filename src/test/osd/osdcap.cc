@@ -1338,3 +1338,16 @@ TEST(OSDCap, AllowProfile) {
                               {{"rbd", "other function", true, true, true}}, addr));
 }
 
+TEST(OSDCap, network) {
+  entity_addr_t a, b, c;
+  a.parse("10.1.2.3");
+  b.parse("192.168.2.3");
+  c.parse("192.167.2.3");
+
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow * network 192.168.0.0/16, allow * network 10.0.0.0/8", NULL));
+
+  ASSERT_TRUE(cap.is_capable("foo", "", 0, {}, "asdf", true, true, {{"cls", "", true, true, true}}, a));
+  ASSERT_TRUE(cap.is_capable("foo", "", 0, {}, "asdf", true, true, {{"cls", "", true, true, true}}, b));
+  ASSERT_FALSE(cap.is_capable("foo", "", 0, {}, "asdf", true, true, {{"cls", "", true, true, true}}, c));
+}
