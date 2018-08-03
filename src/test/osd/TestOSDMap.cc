@@ -612,6 +612,20 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
           break;
         }
       }
+      {
+        // Check we can handle a negative pg_upmap value
+        vector<int32_t> new_pg_upmap;
+        new_pg_upmap.push_back(up[0]);
+        new_pg_upmap.push_back(-823648512);
+        OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+        pending_inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
+            new_pg_upmap.begin(), new_pg_upmap.end());
+        osdmap.apply_incremental(pending_inc);
+        vector<int> new_up;
+        int new_up_primary;
+        // crucial call - _apply_upmap should ignore the negative value
+        osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
+      }
       ASSERT_NE(-1, replaced_by);
       // generate a new pg_upmap item and apply
       vector<int32_t> new_pg_upmap;
@@ -702,6 +716,23 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
       candidate_children.erase(will_choose);
       ASSERT_TRUE(!candidate_children.empty());
       up_after_out = new_up; // needed for verification..
+    }
+    {
+      // Make sure we can handle a negative pg_upmap_item
+      int victim = up[0];
+      int replaced_by = -823648512;
+      vector<pair<int32_t,int32_t>> new_pg_upmap_items;
+      new_pg_upmap_items.push_back(make_pair(victim, replaced_by));
+      // apply
+      OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+      pending_inc.new_pg_upmap_items[pgid] =
+        mempool::osdmap::vector<pair<int32_t,int32_t>>(
+        new_pg_upmap_items.begin(), new_pg_upmap_items.end());
+      osdmap.apply_incremental(pending_inc);
+      vector<int> new_up;
+      int new_up_primary;
+      // crucial call - _apply_upmap should ignore the negative value
+      osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
     }
     {
       // STEP-2: generating a new pg_upmap_items entry by
