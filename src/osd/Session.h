@@ -132,6 +132,7 @@ struct Session : public RefCountedObject {
   OSDCap caps;
   int64_t auid;
   ConnectionRef con;
+  entity_addr_t socket_addr;
   WatchConState wstate;
 
   Mutex session_dispatch_lock;
@@ -149,14 +150,19 @@ struct Session : public RefCountedObject {
 
   std::atomic<uint64_t> backoff_seq = {0};
 
-  explicit Session(CephContext *cct) :
+  explicit Session(CephContext *cct, Connection *con_) :
     RefCountedObject(cct),
-    auid(-1), con(0),
+    auid(-1), con(con_),
+    socket_addr(con_->get_peer_socket_addr()),
     wstate(cct),
     session_dispatch_lock("Session::session_dispatch_lock"),
     last_sent_epoch(0), received_map_epoch(0),
     backoff_lock("Session::backoff_lock")
     {}
+
+  entity_addr_t& get_peer_socket_addr() {
+    return socket_addr;
+  }
 
   void ack_backoff(
     CephContext *cct,

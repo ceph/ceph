@@ -5159,9 +5159,8 @@ void OSD::ms_handle_fast_connect(Connection *con)
     auto priv = con->get_priv();
     auto s = static_cast<Session*>(priv.get());
     if (!s) {
-      s = new Session{cct};
+      s = new Session{cct, con};
       con->set_priv(RefCountedPtr{s, false});
-      s->con = con;
       dout(10) << " new session (outgoing) " << s << " con=" << s->con
           << " addr=" << s->con->get_peer_addr() << dendl;
       // we don't connect to clients
@@ -5178,9 +5177,8 @@ void OSD::ms_handle_fast_accept(Connection *con)
     auto priv = con->get_priv();
     auto s = static_cast<Session*>(priv.get());
     if (!s) {
-      s = new Session{cct};
+      s = new Session{cct, con};
       con->set_priv(RefCountedPtr{s, false});
-      s->con = con;
       dout(10) << "new session (incoming)" << s << " con=" << con
           << " addr=" << con->get_peer_addr()
           << " must have raced with connect" << dendl;
@@ -6625,9 +6623,8 @@ bool OSD::ms_verify_authorizer(
     auto priv = con->get_priv();
     auto s = static_cast<Session*>(priv.get());
     if (!s) {
-      s = new Session{cct};
+      s = new Session{cct, con};
       con->set_priv(RefCountedPtr{s, false});
-      s->con = con;
       dout(10) << " new session " << s << " con=" << s->con
 	       << " addr=" << con->get_peer_addr() << dendl;
     }
