@@ -7,6 +7,7 @@ export class PasswordButtonDirective implements OnInit {
   private inputElement: any;
   private iElement: any;
 
+  // tslint:disable-next-line:no-input-rename
   @Input('cdPasswordButton') private cdPasswordButton: string;
 
   constructor(private el: ElementRef, private renderer: Renderer2) { }
