@@ -286,6 +286,14 @@ describe('DeletionModalComponent', () => {
         testValidation(false, undefined, false);
         testValidation(true, undefined, false);
       });
+
+      it('should test regex pattern', () => {
+        component.pattern = 'a+b';
+        changeValue('ab');
+        testValidation(false, 'pattern', true);
+        changeValue('a+b');
+        testValidation(false, 'pattern', false);
+      });
     });
 
     describe('deletion call', () => {
