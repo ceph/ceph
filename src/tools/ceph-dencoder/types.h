@@ -361,6 +361,9 @@ TYPE(RGWAccessControlList)
 TYPE(ACLOwner)
 TYPE(RGWAccessControlPolicy)
 
+#include "rgw/rgw_basic_types.h"
+TYPE(rgw_user)
+
 #include "rgw/rgw_cache.h"
 TYPE(ObjectMetaInfo)
 TYPE(ObjectCacheInfo)
@@ -436,6 +439,9 @@ TYPE(cls_user_get_header_op)
 TYPE(cls_user_get_header_ret)
 TYPE(cls_user_complete_stats_sync_op)
 
+#include "cls/version/cls_version_types.h"
+TYPE(obj_version)
+
 #include "cls/journal/cls_journal_types.h"
 TYPE(cls::journal::ObjectPosition)
 TYPE(cls::journal::ObjectSetPosition)
@@ -449,6 +455,7 @@ TYPE(RGWUserInfo)
 TYPE(rgw_bucket)
 TYPE(RGWBucketInfo)
 TYPE(RGWBucketEnt)
+TYPE(RGWBucketEntryPoint)
 TYPE(RGWUploadPartInfo)
 TYPE(rgw_obj)
 
