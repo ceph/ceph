@@ -189,9 +189,9 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
     return false;
   }
 
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
   string key;
-  cmd_getval(g_ceph_context, cmdmap, "key", key);
+  cmd_getval_throws(g_ceph_context, cmdmap, "key", key);
 
   if (prefix == "config-key get") {
     ret = store_get(key, rdata);
@@ -212,7 +212,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 
     bufferlist data;
     string val;
-    if (cmd_getval(g_ceph_context, cmdmap, "val", val)) {
+    if (cmd_getval_throws(g_ceph_context, cmdmap, "val", val)) {
       // they specified a value in the command instead of a file
       data.append(val);
     } else if (cmd->get_data_len() > 0) {
