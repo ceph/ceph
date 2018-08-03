@@ -1,10 +1,3 @@
-<nav aria-label="breadcrumb">
-  <ol class="breadcrumb">
-    <li class="breadcrumb-item">Cluster</li>
-    <li class="breadcrumb-item active"
-        aria-current="page">Configuration Documentation</li>
-  </ol>
-</nav>
 <cd-table [data]="data | filter:filters"
           (fetchData)="getConfigurationList($event)"
           [columns]="columns"

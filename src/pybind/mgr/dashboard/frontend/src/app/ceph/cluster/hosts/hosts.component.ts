@@ -17,6 +17,7 @@ export class HostsComponent implements OnInit {
   columns: Array<CdTableColumn> = [];
   hosts: Array<object> = [];
   isLoadingHosts = false;
+  cdParams = { fromLink: '/hosts' };
 
   @ViewChild('servicesTpl') public servicesTpl: TemplateRef<any>;
 
