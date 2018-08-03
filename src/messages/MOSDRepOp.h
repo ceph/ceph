@@ -63,6 +63,8 @@ public:
   /// non-empty if this transaction involves a hit_set history update
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
 
+  set<pg_shard_t> degraded_modify_set;
+
   epoch_t get_map_epoch() const override {
     return map_epoch;
   }
@@ -109,6 +111,7 @@ public:
     decode(from, p);
     decode(updated_hit_set_history, p);
     decode(pg_roll_forward_to, p);
+    decode(degraded_modify_set, p);
     final_decode_needed = false;
   }
 
@@ -136,6 +139,7 @@ public:
     encode(from, payload);
     encode(updated_hit_set_history, payload);
     encode(pg_roll_forward_to, payload);
+    encode(degraded_modify_set, payload);
   }
 
   MOSDRepOp()

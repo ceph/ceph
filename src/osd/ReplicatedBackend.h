@@ -381,7 +381,9 @@ private:
     boost::optional<pg_hit_set_history_t> &hset_history,
     ObjectStore::Transaction &op_t,
     pg_shard_t peer,
-    const pg_info_t &pinfo);
+    const pg_info_t &pinfo,
+    bool should_send,
+    set<pg_shard_t> degraded_modify_set);
   void issue_op(
     const hobject_t &soid,
     const eversion_t &at_version,

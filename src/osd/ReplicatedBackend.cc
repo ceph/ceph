@@ -895,7 +895,9 @@ Message * ReplicatedBackend::generate_subop(
   boost::optional<pg_hit_set_history_t> &hset_hist,
   ObjectStore::Transaction &op_t,
   pg_shard_t peer,
-  const pg_info_t &pinfo)
+  const pg_info_t &pinfo,
+  bool should_send,
+  set<pg_shard_t> degraded_modify_set)
 {
   int acks_wanted = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
   // forward the write/update/whatever
@@ -908,13 +910,15 @@ Message * ReplicatedBackend::generate_subop(
     tid, at_version);
 
   // ship resulting transaction, log entries, and pg_stats
-  if (!parent->should_send_op(peer, soid)) {
+  if (!should_send) {
     ObjectStore::Transaction t;
     encode(t, wr->get_data());
   } else {
     encode(op_t, wr->get_data());
     wr->get_header().data_off = op_t.get_data_alignment();
   }
+  
+  wr->degraded_modify_set = degraded_modify_set;
 
   wr->logbl = log_entries;
 
@@ -960,6 +964,11 @@ void ReplicatedBackend::issue_op(
     bufferlist logs;
     encode(log_entries, logs);
 
+    set<pg_shard_t> should_send_set;
+    set<pg_shard_t> missing_set;
+    set<pg_shard_t> degraded_modify_set;
+    get_parent()->op_set_check(soid, should_send_set, missing_set, degraded_modify_set);
+
     for (const auto& shard : get_parent()->get_acting_recovery_backfill_shards()) {
       if (shard == parent->whoami_shard()) continue;
       const pg_info_t &pinfo = parent->get_shard_info().find(shard)->second;
@@ -978,7 +987,10 @@ void ReplicatedBackend::issue_op(
 	  hset_hist,
 	  op_t,
 	  shard,
-	  pinfo);
+	  pinfo,
+          should_send_set.count(shard)? true:false,
+	  missing_set.count(shard)?
+       	    degraded_modify_set : set<pg_shard_t>());
       if (op->op && op->op->pg_trace)
 	wr->trace.init("replicated op", nullptr, &op->op->pg_trace);
       get_parent()->send_message_osd_cluster(
@@ -1060,9 +1072,13 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
     async = true;
     dout(30) << __func__ << " is_missing " << pmissing.is_missing(soid) << dendl;
     for (auto &&e: log) {
-      dout(30) << " add_next_event entry " << e << dendl;
-      get_parent()->add_local_next_event(e);
-      dout(30) << " entry is_delete " << e.is_delete() << dendl;
+      if (m->degraded_modify_set.empty()) {
+	dout(30) << " add_next_event entry " << e << dendl;
+	get_parent()->add_local_next_event(e);
+	dout(30) << " entry is_delete " << e.is_delete() << dendl;
+      } else {
+	get_parent()->get_log().revise_need(soid, e.version, e.is_delete(), m->degraded_modify_set);
+      }
     }
   }
 
