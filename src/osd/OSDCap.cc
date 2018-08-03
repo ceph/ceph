@@ -245,13 +245,17 @@ bool OSDCapGrant::allow_all() const
   return (match.is_match_all() && spec.allow_all());
 }
 
-bool OSDCapGrant::is_capable(const string& pool_name, const string& ns,
-                             int64_t pool_auid,
-			     const OSDCapPoolTag::app_map_t& application_metadata,
-			     const string& object,
-                             bool op_may_read, bool op_may_write,
-                             const std::vector<OpRequest::ClassInfo>& classes,
-                             std::vector<bool>* class_allowed) const
+bool OSDCapGrant::is_capable(
+  const string& pool_name,
+  const string& ns,
+  int64_t pool_auid,
+  const OSDCapPoolTag::app_map_t& application_metadata,
+  const string& object,
+  bool op_may_read,
+  bool op_may_write,
+  const std::vector<OpRequest::ClassInfo>& classes,
+  const entity_addr_t& addr,
+  std::vector<bool>* class_allowed) const
 {
   osd_rwxa_t allow = 0;
   if (profile.is_valid()) {
@@ -260,7 +264,7 @@ bool OSDCapGrant::is_capable(const string& pool_name, const string& ns,
 			   return grant.is_capable(pool_name, ns, pool_auid,
 						   application_metadata,
 						   object, op_may_read,
-						   op_may_write, classes,
+						   op_may_write, classes, addr,
 						   class_allowed);
 		       });
   } else {
@@ -367,12 +371,13 @@ bool OSDCap::is_capable(const string& pool_name, const string& ns,
 			const OSDCapPoolTag::app_map_t& application_metadata,
 			const string& object,
                         bool op_may_read, bool op_may_write,
-			const std::vector<OpRequest::ClassInfo>& classes) const
+			const std::vector<OpRequest::ClassInfo>& classes,
+			const entity_addr_t& addr) const
 {
   std::vector<bool> class_allowed(classes.size(), false);
   for (auto &grant : grants) {
     if (grant.is_capable(pool_name, ns, pool_auid, application_metadata,
-			 object, op_may_read, op_may_write, classes,
+			 object, op_may_read, op_may_write, classes, addr,
 			 &class_allowed)) {
       return true;
     }
