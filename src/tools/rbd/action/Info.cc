@@ -159,11 +159,11 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
     f->dump_int("format", (old_format ? 1 : 2));
   } else {
     std::cout << "rbd image '" << (imgname.empty() ? imgid : imgname) << "':\n"
-              << "\tsize " << prettybyte_t(info.size) << " in "
+              << "\tsize " << byte_u_t(info.size) << " in "
               << info.num_objs << " objects"
               << std::endl
               << "\torder " << info.order
-              << " (" << prettybyte_t(info.obj_size) << " objects)"
+              << " (" << si_u_t(info.obj_size) << " objects)"
               << std::endl;
     if (!data_pool.empty()) {
       std::cout << "\tdata_pool: " << data_pool << std::endl;
@@ -234,7 +234,7 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
         std::cout << " (trash " << parent_id << ")";
       }
       std::cout << std::endl;
-      std::cout << "\toverlap: " << prettybyte_t(overlap) << std::endl;
+      std::cout << "\toverlap: " << byte_u_t(overlap) << std::endl;
     }
   }
 
@@ -244,7 +244,7 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
       f->dump_unsigned("stripe_unit", image.get_stripe_unit());
       f->dump_unsigned("stripe_count", image.get_stripe_count());
     } else {
-      std::cout << "\tstripe unit: " << prettybyte_t(image.get_stripe_unit())
+      std::cout << "\tstripe unit: " << byte_u_t(image.get_stripe_unit())
                 << std::endl
                 << "\tstripe count: " << image.get_stripe_count() << std::endl;
     }

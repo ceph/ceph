@@ -723,8 +723,8 @@ static int do_map(int argc, const char *argv[], Config *cfg)
 
   if (info.size > ULONG_MAX) {
     r = -EFBIG;
-    cerr << "rbd-nbd: image is too large (" << prettybyte_t(info.size)
-         << ", max is " << prettybyte_t(ULONG_MAX) << ")" << std::endl;
+    cerr << "rbd-nbd: image is too large (" << byte_u_t(info.size)
+         << ", max is " << byte_u_t(ULONG_MAX) << ")" << std::endl;
     goto close_nbd;
   }
 

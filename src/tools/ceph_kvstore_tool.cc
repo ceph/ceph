@@ -252,7 +252,7 @@ class StoreTool
 
       utime_t cur_duration = ceph_clock_now() - started_at;
       std::cout << "ts = " << cur_duration << "s, copied " << total_keys
-                << " keys so far (" << stringify(si_t(total_size)) << ")"
+                << " keys so far (" << stringify(si_u_t(total_size)) << ")"
                 << std::endl;
 
     } while (it->valid());
@@ -262,7 +262,7 @@ class StoreTool
     std::cout << "summary:" << std::endl;
     std::cout << "  copied " << total_keys << " keys" << std::endl;
     std::cout << "  used " << total_txs << " transactions" << std::endl;
-    std::cout << "  total size " << stringify(si_t(total_size)) << std::endl;
+    std::cout << "  total size " << stringify(si_u_t(total_size)) << std::endl;
     std::cout << "  from '" << store_path << "' to '" << other_path << "'"
               << std::endl;
     std::cout << "  duration " << time_taken << " seconds" << std::endl;
@@ -436,7 +436,7 @@ int main(int argc, const char *argv[])
       return 1;
     }
     std::cout << "(" << url_escape(prefix) << "," << url_escape(key)
-              << ") size " << si_t(bl.length()) << std::endl;
+              << ") size " << si_u_t(bl.length()) << std::endl;
 
   } else if (cmd == "set") {
     if (argc < 8) {

@@ -401,7 +401,7 @@ void WorkloadGenerator::do_stats()
   dout(0) << __func__
 	  << " written: " << m_stats_total_written
 	  << " duration: " << duration << " sec"
-	  << " bandwidth: " << prettybyte_t(throughput) << "/s"
+	  << " bandwidth: " << byte_u_t(throughput) << "/s"
 	  << " iops: " << tx_throughput << "/s"
 	  << dendl;
 

@@ -470,7 +470,7 @@ int main(int argc, const char **argv)
     if (stats.avail_percent <= g_conf->mon_data_avail_crit) {
       derr << "error: monitor data filesystem reached concerning levels of"
            << " available storage space (available: "
-           << stats.avail_percent << "% " << prettybyte_t(stats.byte_avail)
+           << stats.avail_percent << "% " << byte_u_t(stats.byte_avail)
            << ")\nyou may adjust 'mon data avail crit' to a lower value"
            << " to make this go away (default: " << g_conf->mon_data_avail_crit
            << "%)\n" << dendl;

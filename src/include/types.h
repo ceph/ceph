@@ -313,96 +313,87 @@ inline ostream& operator<<(ostream& out, const client_t& c) {
 
 // --
 
-struct prettybyte_t {
-  uint64_t v;
-  // cppcheck-suppress noExplicitConstructor
-  prettybyte_t(uint64_t _v) : v(_v) {}
-};
+namespace {
+  inline ostream& format_u(ostream& out, const uint64_t v, const uint64_t n,
+      const int index, const uint64_t mult, const char* u)
+  {
+    char buffer[32];
 
-inline ostream& operator<<(ostream& out, const prettybyte_t& b)
-{
-  uint64_t bump_after = 100;
-  if (b.v > bump_after << 60)
-    return out << (b.v >> 60) << " EB";    
-  if (b.v > bump_after << 50)
-    return out << (b.v >> 50) << " PB";    
-  if (b.v > bump_after << 40)
-    return out << (b.v >> 40) << " TB";    
-  if (b.v > bump_after << 30)
-    return out << (b.v >> 30) << " GB";    
-  if (b.v > bump_after << 20)
-    return out << (b.v >> 20) << " MB";    
-  if (b.v > bump_after << 10)
-    return out << (b.v >> 10) << " kB";
-  return out << b.v << " bytes";
+    if (index == 0) {
+      (void) snprintf(buffer, sizeof(buffer), "%" PRId64 "%s", n, u);
+    } else if ((v % mult) == 0) {
+      // If this is an even multiple of the base, always display
+      // without any decimal fraction.
+      (void) snprintf(buffer, sizeof(buffer), "%" PRId64 "%s", n, u);
+    } else {
+      // We want to choose a precision that reflects the best choice
+      // for fitting in 5 characters.  This can get rather tricky when
+      // we have numbers that are very close to an order of magnitude.
+      // For example, when displaying 10239 (which is really 9.999K),
+      // we want only a single place of precision for 10.0K.  We could
+      // develop some complex heuristics for this, but it's much
+      // easier just to try each combination in turn.
+      int i;
+      for (i = 2; i >= 0; i--) {
+        if (snprintf(buffer, sizeof(buffer), "%.*f%s", i,
+          static_cast<double>(v) / mult, u) <= 7)
+          break;
+      }
+    }
+
+    return out << buffer;
+  }
 }
 
-struct si_t {
+/*
+ * Use this struct to pretty print values that should be formatted with a
+ * decimal unit prefix (the classic SI units). No actual unit will be added.
+ */
+struct si_u_t {
   uint64_t v;
-  // cppcheck-suppress noExplicitConstructor
-  si_t(uint64_t _v) : v(_v) {}
+  explicit si_u_t(uint64_t _v) : v(_v) {};
 };
 
-inline ostream& operator<<(ostream& out, const si_t& b)
+inline ostream& operator<<(ostream& out, const si_u_t& b)
 {
-  uint64_t bump_after = 100;
-  if (b.v > bump_after << 60)
-    return out << (b.v >> 60) << "E";
-  if (b.v > bump_after << 50)
-    return out << (b.v >> 50) << "P";
-  if (b.v > bump_after << 40)
-    return out << (b.v >> 40) << "T";
-  if (b.v > bump_after << 30)
-    return out << (b.v >> 30) << "G";
-  if (b.v > bump_after << 20)
-    return out << (b.v >> 20) << "M";
-  if (b.v > bump_after << 10)
-    return out << (b.v >> 10) << "k";
-  return out << b.v;
+  uint64_t n = b.v;
+  int index = 0;
+  uint64_t mult = 1;
+  const char* u[] = {"", "k", "M", "G", "T", "P", "E"};
+
+  while (n >= 1000 && index < 7) {
+    n /= 1000;
+    index++;
+    mult *= 1000;
+  }
+
+  return format_u(out, b.v, n, index, mult, u[index]);
 }
 
-struct pretty_si_t {
+/*
+ * Use this struct to pretty print values that should be formatted with a
+ * binary unit prefix (IEC units). Since binary unit prefixes are to be used for
+ * "multiples of units in data processing, data transmission, and digital
+ * information" (so bits and bytes) and so far bits are not printed, the unit
+ * "B" for "byte" is added besides the multiplier.
+ */
+struct byte_u_t {
   uint64_t v;
-  // cppcheck-suppress noExplicitConstructor
-  pretty_si_t(uint64_t _v) : v(_v) {}
+  explicit byte_u_t(uint64_t _v) : v(_v) {};
 };
 
-inline ostream& operator<<(ostream& out, const pretty_si_t& b)
+inline ostream& operator<<(ostream& out, const byte_u_t& b)
 {
-  uint64_t bump_after = 100;
-  if (b.v > bump_after << 60)
-    return out << (b.v >> 60) << " E";
-  if (b.v > bump_after << 50)
-    return out << (b.v >> 50) << " P";
-  if (b.v > bump_after << 40)
-    return out << (b.v >> 40) << " T";
-  if (b.v > bump_after << 30)
-    return out << (b.v >> 30) << " G";
-  if (b.v > bump_after << 20)
-    return out << (b.v >> 20) << " M";
-  if (b.v > bump_after << 10)
-    return out << (b.v >> 10) << " k";
-  return out << b.v << " ";
-}
+  uint64_t n = b.v;
+  int index = 0;
+  const char* u[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"};
 
-struct kb_t {
-  uint64_t v;
-  // cppcheck-suppress noExplicitConstructor
-  kb_t(uint64_t _v) : v(_v) {}
-};
+  while (n >= 1024 && index < 7) {
+    n /= 1024;
+    index++;
+  }
 
-inline ostream& operator<<(ostream& out, const kb_t& kb)
-{
-  uint64_t bump_after = 100;
-  if (kb.v > bump_after << 40)
-    return out << (kb.v >> 40) << " PB";    
-  if (kb.v > bump_after << 30)
-    return out << (kb.v >> 30) << " TB";    
-  if (kb.v > bump_after << 20)
-    return out << (kb.v >> 20) << " GB";    
-  if (kb.v > bump_after << 10)
-    return out << (kb.v >> 10) << " MB";
-  return out << kb.v << " kB";
+  return format_u(out, b.v, n, index, 1ULL << (10 * index), u[index]);
 }
 
 inline ostream& operator<<(ostream& out, const ceph_mon_subscribe_item& i)

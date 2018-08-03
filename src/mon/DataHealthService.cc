@@ -91,8 +91,8 @@ void DataHealthService::get_health(
         health_detail.append("; ");
       stringstream ss;
       ss << "store is getting too big! "
-         << prettybyte_t(stats.store_stats.bytes_total)
-         << " >= " << prettybyte_t(g_conf->mon_data_size_warn);
+         << byte_u_t(stats.store_stats.bytes_total)
+         << " >= " << byte_u_t(g_conf->mon_data_size_warn);
       health_detail.append(ss.str());
     }
 
@@ -134,9 +134,9 @@ int DataHealthService::update_stats()
     return err;
   }
   dout(0) << __func__ << " avail " << ours.fs_stats.avail_percent << "%"
-          << " total " << prettybyte_t(ours.fs_stats.byte_total)
-          << ", used " << prettybyte_t(ours.fs_stats.byte_used)
-          << ", avail " << prettybyte_t(ours.fs_stats.byte_avail) << dendl;
+          << " total " << byte_u_t(ours.fs_stats.byte_total)
+          << ", used " << byte_u_t(ours.fs_stats.byte_used)
+          << ", avail " << byte_u_t(ours.fs_stats.byte_avail) << dendl;
   ours.last_update = ceph_clock_now();
 
   return update_store_stats(ours);

@@ -78,7 +78,7 @@ static int do_show_journal_info(librados::Rados& rados, librados::IoCtx& io_ctx,
     std::cout << "\theader_oid: " << header_oid << std::endl;
     std::cout << "\tobject_oid_prefix: " << object_oid_prefix << std::endl;
     std::cout << "\torder: " << static_cast<int>(order) << " ("
-	      << prettybyte_t(1ull << order) << " objects)"<< std::endl;
+	      << si_u_t(1ull << order) << " objects)"<< std::endl;
     std::cout << "\tsplay_width: " << static_cast<int>(splay_width) << std::endl;
     if (!object_pool_name.empty()) {
       std::cout << "\tobject_pool: " << object_pool_name << std::endl;

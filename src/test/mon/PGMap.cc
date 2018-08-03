@@ -171,23 +171,23 @@ TEST(pgmap, dump_object_stat_sum_0)
   pool.type = pg_pool_t::TYPE_REPLICATED;
   PGMap::dump_object_stat_sum(tbl, nullptr, sum, avail,
                                   pool.get_size(), verbose, &pool);  
-  ASSERT_EQ(stringify(si_t(sum.num_bytes)), tbl.get(0, 0));
+  ASSERT_EQ(stringify(byte_u_t(sum.num_bytes)), tbl.get(0, 0));
   float copies_rate =
     (static_cast<float>(sum.num_object_copies - sum.num_objects_degraded) /
      sum.num_object_copies);
   float used_bytes = sum.num_bytes * copies_rate * pool.get_size();
   float used_percent = used_bytes / (used_bytes + avail) * 100;
   unsigned col = 0;
-  ASSERT_EQ(stringify(si_t(sum.num_bytes)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(sum.num_bytes)), tbl.get(0, col++));
   ASSERT_EQ(percentify(used_percent), tbl.get(0, col++));
-  ASSERT_EQ(stringify(si_t(avail/pool.size)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(avail/pool.size)), tbl.get(0, col++));
   ASSERT_EQ(stringify(sum.num_objects), tbl.get(0, col++));
-  ASSERT_EQ(stringify(si_t(sum.num_objects_dirty)), tbl.get(0, col++));
-  ASSERT_EQ(stringify(si_t(sum.num_rd)), tbl.get(0, col++));
-  ASSERT_EQ(stringify(si_t(sum.num_wr)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(si_u_t(sum.num_objects_dirty)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(sum.num_rd)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(sum.num_wr)), tbl.get(0, col++));
   // we can use pool.size for raw_used_rate if it is a replica pool
   uint64_t raw_bytes_used = sum.num_bytes * pool.get_size() * copies_rate;
-  ASSERT_EQ(stringify(si_t(raw_bytes_used)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(raw_bytes_used)), tbl.get(0, col++));
 }
 
 // with table, without formatter, verbose = true, empty, avail > 0
@@ -206,16 +206,16 @@ TEST(pgmap, dump_object_stat_sum_1)
   pool.type = pg_pool_t::TYPE_REPLICATED;
   PGMap::dump_object_stat_sum(tbl, nullptr, sum, avail,
                                   pool.get_size(), verbose, &pool);  
-  ASSERT_EQ(stringify(si_t(0)), tbl.get(0, 0));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, 0));
   unsigned col = 0;
-  ASSERT_EQ(stringify(si_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(percentify(0), tbl.get(0, col++));
-  ASSERT_EQ(stringify(si_t(avail/pool.size)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(avail/pool.size)), tbl.get(0, col++));
   ASSERT_EQ(stringify(0), tbl.get(0, col++));
-  ASSERT_EQ(stringify(si_t(0)), tbl.get(0, col++));
-  ASSERT_EQ(stringify(si_t(0)), tbl.get(0, col++));
-  ASSERT_EQ(stringify(si_t(0)), tbl.get(0, col++));
-  ASSERT_EQ(stringify(si_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(si_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
 }
 
 // with table, without formatter, verbose = false, empty, avail = 0
@@ -235,10 +235,10 @@ TEST(pgmap, dump_object_stat_sum_2)
 
   PGMap::dump_object_stat_sum(tbl, nullptr, sum, avail,
                                   pool.get_size(), verbose, &pool);  
-  ASSERT_EQ(stringify(si_t(0)), tbl.get(0, 0));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, 0));
   unsigned col = 0;
-  ASSERT_EQ(stringify(si_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(percentify(0), tbl.get(0, col++));
-  ASSERT_EQ(stringify(si_t(avail/pool.size)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(avail/pool.size)), tbl.get(0, col++));
   ASSERT_EQ(stringify(0), tbl.get(0, col++));
 }

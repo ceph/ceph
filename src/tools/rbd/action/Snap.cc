@@ -57,7 +57,7 @@ int do_list_snaps(librbd::Image& image, Formatter *f)
       f->dump_string("timestamp", tt_str);
       f->close_section();
     } else {
-      t << s->id << s->name << stringify(prettybyte_t(s->size)) << tt_str
+      t << s->id << s->name << stringify(byte_u_t(s->size)) << tt_str
         << TextTable::endrow;
     }
   }

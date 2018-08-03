@@ -239,27 +239,58 @@ function test_mon_injectargs_SI()
   # We only aim at testing the units are parsed accordingly
   # and don't intend to test whether the options being set
   # actually expect SI units to be passed.
-  # Keep in mind that all integer based options (i.e., INT,
-  # LONG, U32, U64) will accept SI unit modifiers.
+  # Keep in mind that all integer based options that are not based on bytes
+  # (i.e., INT, LONG, U32, U64) will accept SI unit modifiers and be parsed to
+  # base 10.
   initial_value=$(get_config_value_or_die "mon.a" "mon_pg_warn_min_objects")
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects 10
   expect_config_value "mon.a" "mon_pg_warn_min_objects" 10
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects 10K
-  expect_config_value "mon.a" "mon_pg_warn_min_objects" 10240
+  expect_config_value "mon.a" "mon_pg_warn_min_objects" 10000
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects 1G
-  expect_config_value "mon.a" "mon_pg_warn_min_objects" 1073741824
+  expect_config_value "mon.a" "mon_pg_warn_min_objects" 1000000000
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects 10F > $TMPFILE || true
   check_response "'10F': (22) Invalid argument"
   # now test with injectargs
   ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10'
   expect_config_value "mon.a" "mon_pg_warn_min_objects" 10
   ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10K'
-  expect_config_value "mon.a" "mon_pg_warn_min_objects" 10240
+  expect_config_value "mon.a" "mon_pg_warn_min_objects" 10000
   ceph tell mon.a injectargs '--mon_pg_warn_min_objects 1G'
-  expect_config_value "mon.a" "mon_pg_warn_min_objects" 1073741824
+  expect_config_value "mon.a" "mon_pg_warn_min_objects" 1000000000
   expect_false ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10F'
   expect_false ceph tell mon.a injectargs '--mon_globalid_prealloc -1'
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects $initial_value
+}
+
+function test_mon_injectargs_IEC()
+{
+  # Test IEC units during injectargs and 'config set'
+  # We only aim at testing the units are parsed accordingly
+  # and don't intend to test whether the options being set
+  # actually expect IEC units to be passed.
+  # Keep in mind that all integer based options that are based on bytes
+  # (i.e., INT, LONG, U32, U64) will accept IEC unit modifiers, as well as SI
+  # unit modifiers (for backwards compatibility and convinience) and be parsed
+  # to base 2.
+  initial_value=$(get_config_value_or_die "mon.a" "mon_data_size_warn")
+  $SUDO ceph daemon mon.a config set mon_data_size_warn 15000000000
+  expect_config_value "mon.a" "mon_data_size_warn" 15000000000
+  $SUDO ceph daemon mon.a config set mon_data_size_warn 15G
+  expect_config_value "mon.a" "mon_data_size_warn" 16106127360
+  $SUDO ceph daemon mon.a config set mon_data_size_warn 16Gi
+  expect_config_value "mon.a" "mon_data_size_warn" 17179869184
+  $SUDO ceph daemon mon.a config set mon_data_size_warn 10F > $TMPFILE || true
+  check_response "'10F': (22) Invalid argument"
+  # now test with injectargs
+  ceph tell mon.a injectargs '--mon_data_size_warn 15000000000'
+  expect_config_value "mon.a" "mon_data_size_warn" 15000000000
+  ceph tell mon.a injectargs '--mon_data_size_warn 15G'
+  expect_config_value "mon.a" "mon_data_size_warn" 16106127360
+  ceph tell mon.a injectargs '--mon_data_size_warn 16Gi'
+  expect_config_value "mon.a" "mon_data_size_warn" 17179869184
+  expect_false ceph tell mon.a injectargs '--mon_data_size_warn 10F'
+  $SUDO ceph daemon mon.a config set mon_data_size_warn $initial_value
 }
 
 function test_tiering_agent()
@@ -1731,17 +1762,34 @@ function test_mon_osd_pool_quota()
   ceph osd pool set-quota tmp-quota-pool max_bytes 10
   ceph osd pool set-quota tmp-quota-pool max_objects 10M
   #
-  # get quotas
-  #
-  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10B'
-  ceph osd pool get-quota tmp-quota-pool | grep 'max objects.*10240k objects'
-  #
   # get quotas in json-pretty format
   #
   ceph osd pool get-quota tmp-quota-pool --format=json-pretty | \
-    grep '"quota_max_objects":.*10485760'
+    grep '"quota_max_objects":.*10000000'
   ceph osd pool get-quota tmp-quota-pool --format=json-pretty | \
     grep '"quota_max_bytes":.*10'
+  #
+  # get quotas
+  #
+  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10B'
+  ceph osd pool get-quota tmp-quota-pool | grep 'max objects.*10M objects'
+  #
+  # set valid quotas with unit prefix
+  #
+  ceph osd pool set-quota tmp-quota-pool max_bytes 10K
+  #
+  # get quotas
+  #
+  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10Ki'
+  #
+  # set valid quotas with unit prefix
+  #
+  ceph osd pool set-quota tmp-quota-pool max_bytes 10Ki
+  #
+  # get quotas
+  #
+  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10Ki'
+  #
   #
   # reset pool quotas
   #

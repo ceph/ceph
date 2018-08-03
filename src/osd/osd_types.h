@@ -957,9 +957,9 @@ inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
 
 
 inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
-  return out << "osd_stat(" << kb_t(s.kb_used) << " used, "
-	     << kb_t(s.kb_avail) << " avail, "
-	     << kb_t(s.kb) << " total, "
+  return out << "osd_stat(" << byte_u_t(s.kb_used << 10) << " used, "
+	     << byte_u_t(s.kb_avail << 10) << " avail, "
+	     << byte_u_t(s.kb << 10) << " total, "
 	     << "peers " << s.hb_peers
 	     << " op hist " << s.op_queue_age_hist.h
 	     << ")";

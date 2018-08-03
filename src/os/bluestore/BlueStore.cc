@@ -802,15 +802,15 @@ void BlueStore::Cache::trim(
   target_buffer = min(target_bytes - target_meta, target_buffer);
 
   if (current <= target_bytes) {
-    dout(10) << __func__
-	     << " shard target " << pretty_si_t(target_bytes)
+    dout(30) << __func__
+	     << " shard target " << byte_u_t(target_bytes)
 	     << " meta/data ratios " << target_meta_ratio
 	     << " + " << target_data_ratio << " ("
-	     << pretty_si_t(target_meta) << " + "
-	     << pretty_si_t(target_buffer) << "), "
-	     << " current " << pretty_si_t(current) << " ("
-	     << pretty_si_t(current_meta) << " + "
-	     << pretty_si_t(current_buffer) << ")"
+	     << byte_u_t(target_meta) << " + "
+	     << byte_u_t(target_buffer) << "), "
+	     << " current " << byte_u_t(current) << " ("
+	     << byte_u_t(current_meta) << " + "
+	     << byte_u_t(current_buffer) << ")"
 	     << dendl;
     return;
   }
@@ -831,17 +831,17 @@ void BlueStore::Cache::trim(
   uint64_t max_meta = current_meta - free_meta;
   uint64_t max_onodes = max_meta / bytes_per_onode;
 
-  dout(10) << __func__
-	   << " shard target " << pretty_si_t(target_bytes)
+  dout(20) << __func__
+	   << " shard target " << byte_u_t(target_bytes)
 	   << " ratio " << target_meta_ratio << " ("
-	   << pretty_si_t(target_meta) << " + "
-	   << pretty_si_t(target_buffer) << "), "
-	   << " current " << pretty_si_t(current) << " ("
-	   << pretty_si_t(current_meta) << " + "
-	   << pretty_si_t(current_buffer) << "),"
-	   << " need_to_free " << pretty_si_t(need_to_free) << " ("
-	   << pretty_si_t(free_meta) << " + "
-	   << pretty_si_t(free_buffer) << ")"
+	   << byte_u_t(target_meta) << " + "
+	   << byte_u_t(target_buffer) << "), "
+	   << " current " << byte_u_t(current) << " ("
+	   << byte_u_t(current_meta) << " + "
+	   << byte_u_t(current_buffer) << "),"
+	   << " need_to_free " << byte_u_t(need_to_free) << " ("
+	   << byte_u_t(free_meta) << " + "
+	   << byte_u_t(free_buffer) << ")"
 	   << " -> max " << max_onodes << " onodes + "
 	   << max_buffer << " buffer"
 	   << dendl;
@@ -1137,7 +1137,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     }
 
     if (evicted > 0) {
-      dout(20) << __func__ << " evicted " << prettybyte_t(evicted)
+      dout(20) << __func__ << " evicted " << byte_u_t(evicted)
                << " from warm_in list, done evicting warm_in buffers"
                << dendl;
     }
@@ -1163,7 +1163,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     }
 
     if (evicted > 0) {
-      dout(20) << __func__ << " evicted " << prettybyte_t(evicted)
+      dout(20) << __func__ << " evicted " << byte_u_t(evicted)
                << " from hot list, done evicting hot buffers"
                << dendl;
     }
@@ -4356,7 +4356,7 @@ int BlueStore::_open_alloc()
     bytes += length;
   }
   fm->enumerate_reset();
-  dout(1) << __func__ << " loaded " << pretty_si_t(bytes)
+  dout(1) << __func__ << " loaded " << byte_u_t(bytes)
 	  << " in " << num << " extents"
 	  << dendl;
 
@@ -4893,9 +4893,9 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
   float bluefs_ratio = (float)bluefs_free / (float)total_free;
 
   dout(10) << __func__
-	   << " bluefs " << pretty_si_t(bluefs_free)
+	   << " bluefs " << byte_u_t(bluefs_free)
 	   << " free (" << bluefs_free_ratio
-	   << ") bluestore " << pretty_si_t(my_free)
+	   << ") bluestore " << byte_u_t(my_free)
 	   << " free (" << my_free_ratio
 	   << "), bluefs_ratio " << bluefs_ratio
 	   << dendl;
@@ -4906,14 +4906,14 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     gift = cct->_conf->bluestore_bluefs_gift_ratio * total_free;
     dout(10) << __func__ << " bluefs_ratio " << bluefs_ratio
 	     << " < min_ratio " << cct->_conf->bluestore_bluefs_min_ratio
-	     << ", should gift " << pretty_si_t(gift) << dendl;
+	     << ", should gift " << byte_u_t(gift) << dendl;
   } else if (bluefs_ratio > cct->_conf->bluestore_bluefs_max_ratio) {
     reclaim = cct->_conf->bluestore_bluefs_reclaim_ratio * total_free;
     if (bluefs_total - reclaim < cct->_conf->bluestore_bluefs_min)
       reclaim = bluefs_total - cct->_conf->bluestore_bluefs_min;
     dout(10) << __func__ << " bluefs_ratio " << bluefs_ratio
 	     << " > max_ratio " << cct->_conf->bluestore_bluefs_max_ratio
-	     << ", should reclaim " << pretty_si_t(reclaim) << dendl;
+	     << ", should reclaim " << byte_u_t(reclaim) << dendl;
   }
 
   // don't take over too much of the freespace
@@ -4923,7 +4923,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     uint64_t g = cct->_conf->bluestore_bluefs_min - bluefs_total;
     dout(10) << __func__ << " bluefs_total " << bluefs_total
 	     << " < min " << cct->_conf->bluestore_bluefs_min
-	     << ", should gift " << pretty_si_t(g) << dendl;
+	     << ", should gift " << byte_u_t(g) << dendl;
     if (g > gift)
       gift = g;
     reclaim = 0;
@@ -4934,7 +4934,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     uint64_t g = min_free - bluefs_free;
     dout(10) << __func__ << " bluefs_free " << bluefs_total
 	     << " < min " << min_free
-	     << ", should gift " << pretty_si_t(g) << dendl;
+	     << ", should gift " << byte_u_t(g) << dendl;
     if (g > gift)
       gift = g;
     reclaim = 0;
@@ -4947,7 +4947,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     // hard cap to fit into 32 bits
     gift = MIN(gift, 1ull<<31);
     dout(10) << __func__ << " gifting " << gift
-	     << " (" << pretty_si_t(gift) << ")" << dendl;
+	     << " (" << byte_u_t(gift) << ")" << dendl;
 
     // fixme: just do one allocation to start...
     int r = alloc->reserve(gift);
@@ -4989,7 +4989,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     // hard cap to fit into 32 bits
     reclaim = MIN(reclaim, 1ull<<31);
     dout(10) << __func__ << " reclaiming " << reclaim
-	     << " (" << pretty_si_t(reclaim) << ")" << dendl;
+	     << " (" << byte_u_t(reclaim) << ")" << dendl;
 
     while (reclaim > 0) {
       // NOTE: this will block and do IO.
@@ -5141,7 +5141,7 @@ int BlueStore::_setup_block_symlink_or_file(
 	  }
 	}
 	dout(1) << __func__ << " resized " << name << " file to "
-		<< pretty_si_t(size) << "B" << dendl;
+		<< byte_u_t(size) << dendl;
       }
       VOID_TEMP_FAILURE_RETRY(::close(fd));
     } else {

@@ -226,9 +226,9 @@ bool HealthMonitor::check_member_health()
   stats.store_stats.bytes_misc = extra["misc"];
   stats.last_update = ceph_clock_now();
   dout(10) << __func__ << " avail " << stats.fs_stats.avail_percent << "%"
-	   << " total " << prettybyte_t(stats.fs_stats.byte_total)
-	   << ", used " << prettybyte_t(stats.fs_stats.byte_used)
-	   << ", avail " << prettybyte_t(stats.fs_stats.byte_avail) << dendl;
+	   << " total " << byte_u_t(stats.fs_stats.byte_total)
+	   << ", used " << byte_u_t(stats.fs_stats.byte_used)
+	   << ", avail " << byte_u_t(stats.fs_stats.byte_avail) << dendl;
 
   // MON_DISK_{LOW,CRIT,BIG}
   health_check_map_t next;
@@ -252,9 +252,9 @@ bool HealthMonitor::check_member_health()
     ss << "mon%plurals% %names% %isorare% using a lot of disk space";
     auto& d = next.add("MON_DISK_BIG", HEALTH_WARN, ss.str());
     ss2 << "mon." << mon->name << " is "
-	<< prettybyte_t(stats.store_stats.bytes_total)
+	<< byte_u_t(stats.store_stats.bytes_total)
 	<< " >= mon_data_size_warn ("
-	<< prettybyte_t(g_conf->mon_data_size_warn) << ")";
+	<< byte_u_t(g_conf->mon_data_size_warn) << ")";
     d.detail.push_back(ss2.str());
   }
 

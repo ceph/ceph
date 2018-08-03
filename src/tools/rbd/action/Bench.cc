@@ -40,7 +40,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   const std::string &s = po::validators::get_single_string(values);
 
   std::string parse_error;
-  uint64_t size = strict_sistrtoll(s.c_str(), &parse_error);
+  uint64_t size = strict_iecstrtoll(s.c_str(), &parse_error);
   if (!parse_error.empty()) {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }
@@ -191,8 +191,8 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   uint64_t size = 0;
   image.size(&size);
   if (io_size > size) {
-    std::cerr << "rbd: io-size " << prettybyte_t(io_size) << " "
-              << "larger than image size " << prettybyte_t(size) << std::endl;
+    std::cerr << "rbd: io-size " << byte_u_t(io_size) << " "
+              << "larger than image size " << byte_u_t(size) << std::endl;
     return -EINVAL;
   }
 
