@@ -145,16 +145,16 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     return true;
   }
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval_throws(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
 
   bufferlist odata;
   if (prefix == "config help") {
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "key", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "key", name);
     const Option *opt = g_conf->find_option(name);
     if (!opt) {
       ss << "configuration option '" << name << "' not recognized";
@@ -222,7 +222,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     }
   } else if (prefix == "config get") {
     string who, name;
-    cmd_getval(g_ceph_context, cmdmap, "who", who);
+    cmd_getval_throws(g_ceph_context, cmdmap, "who", who);
 
     EntityName entity;
     if (!entity.from_str(who)) {
@@ -253,7 +253,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       device_class,
       &config, &src);
 
-    if (cmd_getval(g_ceph_context, cmdmap, "key", name)) {
+    if (cmd_getval_throws(g_ceph_context, cmdmap, "key", name)) {
       // get a single value
       auto p = config.find(name);
       if (p != config.end()) {
@@ -319,7 +319,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     }
   } else if (prefix == "config log") {
     int64_t num = 10;
-    cmd_getval(g_ceph_context, cmdmap, "num", num);
+    cmd_getval_throws(g_ceph_context, cmdmap, "num", num);
     ostringstream ds;
     if (f) {
       f->open_array_section("changesets");
@@ -400,16 +400,16 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
   }
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
   bufferlist odata;
 
   if (prefix == "config set" ||
       prefix == "config rm") {
     string who;
     string name, value;
-    cmd_getval(g_ceph_context, cmdmap, "who", who);
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
-    cmd_getval(g_ceph_context, cmdmap, "value", value);
+    cmd_getval_throws(g_ceph_context, cmdmap, "who", who);
+    cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "value", value);
 
     if (prefix == "config set") {
       if (name.substr(0, 4) != "mgr/") {
@@ -458,7 +458,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     goto update;
   } else if (prefix == "config reset") {
     int64_t num;
-    if (!cmd_getval(g_ceph_context, cmdmap, "num", num)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "num", num)) {
       err = -EINVAL;
       ss << "must specify what to revert to";
       goto reply;

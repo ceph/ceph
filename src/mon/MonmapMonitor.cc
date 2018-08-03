@@ -245,7 +245,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
   }
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
 
   MonSession *session = m->get_session();
   if (!session) {
@@ -254,7 +254,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
   }
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval_throws(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "mon stat") {
@@ -271,7 +271,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
 
     epoch_t epoch;
     int64_t epochnum;
-    cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum, (int64_t)0);
+    cmd_getval_throws(g_ceph_context, cmdmap, "epoch", epochnum, (int64_t)0);
     epoch = epochnum;
 
     MonMap *p = mon->monmap;
@@ -324,7 +324,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
    
     bool list_with_value = false;
     string with_value;
-    if (cmd_getval(g_ceph_context, cmdmap, "with_value", with_value) &&
+    if (cmd_getval_throws(g_ceph_context, cmdmap, "with_value", with_value) &&
         with_value == "--with-value") {
       list_with_value = true;
     }
@@ -444,7 +444,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
   }
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
 
   MonSession *session = m->get_session();
   if (!session) {
@@ -505,9 +505,9 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
   bool propose = false;
   if (prefix == "mon add") {
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
     string addrstr;
-    cmd_getval(g_ceph_context, cmdmap, "addr", addrstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "addr", addrstr);
     entity_addr_t addr;
     bufferlist rdata;
 
@@ -575,7 +575,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
   } else if (prefix == "mon remove" ||
              prefix == "mon rm") {
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
     if (!monmap.contains(name)) {
       err = 0;
       ss << "mon." << name << " does not exist or has already been removed";
@@ -641,7 +641,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
      * 'mon flag set/unset'.
      */
     string feature_name;
-    if (!cmd_getval(g_ceph_context, cmdmap, "feature_name", feature_name)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "feature_name", feature_name)) {
       ss << "missing required feature name";
       err = -EINVAL;
       goto reply;
@@ -656,7 +656,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     }
 
     string sure;
-    if (!cmd_getval(g_ceph_context, cmdmap, "sure", sure) ||
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "sure", sure) ||
         sure != "--yes-i-really-mean-it") {
       ss << "please specify '--yes-i-really-mean-it' if you "
          << "really, **really** want to set feature '"
@@ -690,7 +690,6 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
             << "persistent = " << pending_map.persistent_features
             // output optional nevertheless, for auditing purposes.
             << ", optional = " << pending_map.optional_features << dendl;
-    
   } else {
     ss << "unknown command " << prefix;
     err = -EINVAL;
