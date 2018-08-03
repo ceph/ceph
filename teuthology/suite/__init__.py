@@ -111,7 +111,10 @@ def get_rerun_filters(name, statuses):
 
 def get_rerun_conf(conf):
     reporter = ResultsReporter()
-    subset, seed = reporter.get_rerun_conf(conf.rerun)
+    try:
+        subset, seed = reporter.get_rerun_conf(conf.rerun)
+    except IOError:
+        return None, None
     if seed is None:
         return conf.subset, conf.seed
     if conf.seed < 0:
