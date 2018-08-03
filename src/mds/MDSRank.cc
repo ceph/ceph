@@ -914,7 +914,7 @@ Session *MDSRank::get_session(Message *m)
         imported_session->info.auth_name = session->info.auth_name;
         //assert(session->info.auth_name == imported_session->info.auth_name);
         assert(session->info.inst == imported_session->info.inst);
-        imported_session->connection = session->connection;
+        imported_session->set_connection(session->connection);
         // send out any queued messages
         while (!session->preopen_out_queue.empty()) {
           imported_session->connection->send_message(session->preopen_out_queue.front());

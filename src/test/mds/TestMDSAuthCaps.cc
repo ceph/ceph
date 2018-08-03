@@ -44,6 +44,8 @@ const char *parse_good[] = {
   "allow r ; allow * uid=1",
   "allow r ; allow * uid=1",
   "allow r uid=1 gids=1,2,3, allow * uid=2",
+  "allow r network 1.2.3.4/8",
+  "allow rw path=/foo uid=1 gids=1,2,3 network 2.3.4.5/16",
   0
 };
 
@@ -270,4 +272,18 @@ TEST(MDSAuthCaps, OutputParsed) {
     ASSERT_TRUE(cap.parse(g_ceph_context, test_values[i].input, &cout));
     ASSERT_EQ(test_values[i].output, stringify(cap));
   }
+}
+
+TEST(MDSAuthCaps, network) {
+  entity_addr_t a, b, c;
+  a.parse("10.1.2.3");
+  b.parse("192.168.2.3");
+  c.parse("192.167.2.3");
+
+  MDSAuthCaps cap;
+  ASSERT_TRUE(cap.parse(g_ceph_context, "allow * network 192.168.0.0/16, allow * network 10.0.0.0/8", NULL));
+
+  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, a));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, b));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0, c));
 }
