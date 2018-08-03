@@ -6672,17 +6672,12 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   int64_t n = 0;
   double f = 0;
   int64_t uf = 0;  // micro-f
-  if (!cmd_getval(cct, cmdmap, "val", val)) {
-    // wasn't a string; maybe an older mon forwarded json with an int?
-    if (!cmd_getval(cct, cmdmap, "val", n))
-      return -EINVAL;  // no value!
-  } else {
-    // we got a string.  see if it contains an int.
-    n = strict_strtoll(val.c_str(), 10, &interr);
-    // or a float
-    f = strict_strtod(val.c_str(), &floaterr);
-    uf = llrintl(f * (double)1000000.0);
-  }
+  cmd_getval(cct, cmdmap, "val", val);
+
+  // parse string as both int and float; different fields use different types.
+  n = strict_strtoll(val.c_str(), 10, &interr);
+  f = strict_strtod(val.c_str(), &floaterr);
+  uf = llrintl(f * (double)1000000.0);
 
   if (!p.is_tier() &&
       (var == "hit_set_type" || var == "hit_set_period" ||
