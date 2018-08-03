@@ -80,6 +80,12 @@ const char *parse_good[] = {
   "allow rwx tag application key= value",
   "allow rwx tag application key  =   value",
   "allow all tag application all=all",
+  "allow rwx network 127.0.0.1/8",
+  "allow rwx network ::1/128",
+  "allow rwx network [ff::1]/128",
+  "profile foo network 127.0.0.1/8",
+  "allow rwx namespace foo tag cephfs data =cephfs_a network 127.0.0.1/8",
+  "allow pool foo rwx network 1.2.3.4/24",
   0
 };
 
@@ -911,10 +917,12 @@ TEST(OSDCap, OutputParsed)
      "osdcap[grant(app application key key val value rwx)]"},
     {"allow rwx namespace ns* tag application key=value",
      "osdcap[grant(namespace ns* app application key key val value rwx)]"},
-	 {"allow all",
-	  "osdcap[grant(*)]"},
-	 {"allow rwx tag application all=all",
-	  "osdcap[grant(app application key * val * rwx)]"}
+    {"allow all",
+     "osdcap[grant(*)]"},
+    {"allow rwx tag application all=all",
+     "osdcap[grant(app application key * val * rwx)]"},
+    {"allow rwx network 1.2.3.4/24",
+     "osdcap[grant(rwx network 1.2.3.4/24)]"},
   };
 
   size_t num_tests = sizeof(test_values) / sizeof(*test_values);

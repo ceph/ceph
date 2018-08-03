@@ -226,6 +226,9 @@ ostream& operator<<(ostream& out, const OSDCapGrant& g)
   } else {
     out << g.match << g.spec;
   }
+  if (g.network.size()) {
+    out << " network " << g.network;
+  }
   out << ")";
   return out;
 }
@@ -405,9 +408,10 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
     equoted_string %=
       lexeme['"' >> *(char_ - '"') >> '"'] |
       lexeme['\'' >> *(char_ - '\'') >> '\''];
-    unquoted_word %= +char_("a-zA-Z0-9_.-");
+    unquoted_word %= +char_("a-zA-Z0-9_./-");
     str %= quoted_string | unquoted_word;
     estr %= equoted_string | unquoted_word;
+    network_str %= +char_("/.:a-fA-F0-9][");
 
     spaces = +ascii::space;
 
@@ -461,9 +465,14 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
 
     // grant := allow match capspec
     grant = (*ascii::blank >>
-	     ((lit("allow") >> capspec >> match)  [_val = phoenix::construct<OSDCapGrant>(_2, _1)] |
-	      (lit("allow") >> match >> capspec)  [_val = phoenix::construct<OSDCapGrant>(_1, _2)] |
-              (profile)                           [_val = phoenix::construct<OSDCapGrant>(_1)]
+	     ((lit("allow") >> capspec >> match >>
+	       -(spaces >> lit("network") >> spaces >> network_str))
+	       [_val = phoenix::construct<OSDCapGrant>(_2, _1, _3)] |
+	      (lit("allow") >> match >> capspec >>
+	       -(spaces >> lit("network") >> spaces >> network_str))
+	       [_val = phoenix::construct<OSDCapGrant>(_1, _2, _3)] |
+              (profile >> -(spaces >> lit("network") >> spaces >> network_str))
+	       [_val = phoenix::construct<OSDCapGrant>(_1, _2)]
              ) >> *ascii::blank);
     // osdcap := grant [grant ...]
     grants %= (grant % (lit(';') | lit(',')));
@@ -473,7 +482,7 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
   qi::rule<Iterator, unsigned()> rwxa;
   qi::rule<Iterator, string()> quoted_string, equoted_string;
   qi::rule<Iterator, string()> unquoted_word;
-  qi::rule<Iterator, string()> str, estr;
+  qi::rule<Iterator, string()> str, estr, network_str;
   qi::rule<Iterator, string()> wildcard;
   qi::rule<Iterator, int()> auid;
   qi::rule<Iterator, string()> class_name;

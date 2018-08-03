@@ -185,14 +185,26 @@ struct OSDCapGrant {
   OSDCapMatch match;
   OSDCapSpec spec;
   OSDCapProfile profile;
+  string network;
 
   // explicit grants that a profile grant expands to; populated as
   // needed by expand_profile() and cached here.
   std::list<OSDCapGrant> profile_grants;
 
   OSDCapGrant() {}
-  OSDCapGrant(const OSDCapMatch& m, const OSDCapSpec& s) : match(m), spec(s) {}
-  explicit OSDCapGrant(const OSDCapProfile& profile) : profile(profile) {
+  OSDCapGrant(const OSDCapMatch& m, const OSDCapSpec& s,
+	      boost::optional<string> n = {})
+    : match(m), spec(s) {
+    if (n) {
+      network = *n;
+    }
+  }
+  explicit OSDCapGrant(const OSDCapProfile& profile,
+		       boost::optional<string> n = {})
+    : profile(profile) {
+    if (n) {
+      network = *n;
+    }
     expand_profile();
   }
 
