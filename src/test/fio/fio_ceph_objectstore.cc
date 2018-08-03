@@ -46,8 +46,9 @@ struct Options {
     pglog_dup_omap_len_high,
     _fastinfo_omap_len_low,
     _fastinfo_omap_len_high;
-  bool simulate_pglog;
-  bool single_pool_mode;
+  unsigned simulate_pglog;
+  unsigned single_pool_mode;
+  unsigned preallocate_files;
 };
 
 template <class Func> // void Func(fio_option&)
@@ -134,6 +135,14 @@ static std::vector<fio_option> ceph_options{
     o.help   = "Enables the mode when all jobs run against the same pool";
     o.off1   = offsetof(Options, single_pool_mode);
     o.def    = "0";
+  }),
+  make_option([] (fio_option& o) {
+    o.name   = "preallocate_files";
+    o.lname  = "preallocate files on init";
+    o.type   = FIO_OPT_BOOL;
+    o.help   = "Enables/disables file preallocation (touch and resize) on init";
+    o.off1   = offsetof(Options, preallocate_files);
+    o.def    = "1";
   }),
   {} // fio expects a 'null'-terminated list
 };
@@ -431,6 +440,7 @@ Job::Job(Engine* engine, const thread_data* td)
   ObjectStore::Transaction t;
 
   // create an object for each file in the job
+  objects.reserve(td->o.nr_files);
   for (uint32_t i = 0; i < td->o.nr_files; i++) {
     auto f = td->files[i];
     f->real_file_size = file_size;
@@ -440,13 +450,15 @@ Job::Job(Engine* engine, const thread_data* td)
     auto& coll = (*colls)[i % colls->size()];
 
     objects.emplace_back(f->file_name, coll);
-    auto& oid = objects.back().oid;
-    t.touch(coll.cid, oid);
-    t.truncate(coll.cid, oid, file_size);
-    int r = engine->os->queue_transaction(coll.ch, std::move(t));
-    if (r) {
-      engine->deref();
-      throw std::system_error(r, std::system_category(), "job init");
+    if (o->preallocate_files) {
+      auto& oid = objects.back().oid;
+      t.touch(coll.cid, oid);
+      t.truncate(coll.cid, oid, file_size);
+      int r = engine->os->queue_transaction(coll.ch, std::move(t));
+      if (r) {
+        engine->deref();
+        throw std::system_error(r, std::system_category(), "job init");
+      }
     }
   }
 }
