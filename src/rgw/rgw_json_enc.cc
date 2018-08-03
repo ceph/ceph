@@ -1561,3 +1561,8 @@ void RGWOrphanSearchState::dump(Formatter *f) const
   encode_json("stage", stage, f);
   f->close_section();
 }
+
+void rgw_user::dump(Formatter *f) const
+{
+  ::encode_json("user", *this, f);
+}

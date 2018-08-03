@@ -47,6 +47,7 @@ struct obj_version {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(list<obj_version*>& o);
 };
 WRITE_CLASS_ENCODER(obj_version)
 
