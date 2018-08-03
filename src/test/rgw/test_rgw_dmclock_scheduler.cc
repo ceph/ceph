@@ -39,7 +39,7 @@ TEST(Queue, AsyncRequest)
 {
   boost::asio::io_context context;
   ClientCounters counters(g_ceph_context);
-  Scheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
+  AsyncScheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
                   [] (client_id client) -> ClientInfo* {
       static ClientInfo clients[] = {
         {1, 1, 1}, // admin: satisfy by reservation
@@ -91,7 +91,7 @@ TEST(Queue, RateLimit)
 {
   boost::asio::io_context context;
   ClientCounters counters(g_ceph_context);
-  Scheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
+  AsyncScheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
                   [] (client_id client) -> ClientInfo* {
       static ClientInfo clients[] = {
         {1, 1, 1}, // admin
@@ -152,7 +152,7 @@ TEST(Queue, Cancel)
 {
   boost::asio::io_context context;
   ClientCounters counters(g_ceph_context);
-  Scheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
+  AsyncScheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
                   [] (client_id client) -> ClientInfo* {
       static ClientInfo info{0, 1, 1};
       return &info;
@@ -200,7 +200,7 @@ TEST(Queue, CancelClient)
 {
   boost::asio::io_context context;
   ClientCounters counters(g_ceph_context);
-  Scheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
+  AsyncScheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
                   [] (client_id client) -> ClientInfo* {
       static ClientInfo info{0, 1, 1};
       return &info;
@@ -256,7 +256,7 @@ TEST(Queue, CancelOnDestructor)
 
   ClientCounters counters(g_ceph_context);
   {
-    Scheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
+    AsyncScheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
                     [] (client_id client) -> ClientInfo* {
         static ClientInfo info{0, 1, 1};
         return &info;
@@ -306,7 +306,7 @@ TEST(Queue, CrossExecutorRequest)
 {
   boost::asio::io_context queue_context;
   ClientCounters counters(g_ceph_context);
-  Scheduler queue(g_ceph_context, queue_context, std::ref(counters), nullptr,
+  AsyncScheduler queue(g_ceph_context, queue_context, std::ref(counters), nullptr,
                   [] (client_id client) -> ClientInfo* {
       static ClientInfo info{0, 1, 1};
       return &info;
@@ -362,7 +362,7 @@ TEST(Queue, SpawnAsyncRequest)
 
   boost::asio::spawn(context, [&] (boost::asio::yield_context yield) {
     ClientCounters counters(g_ceph_context);
-    Scheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
+    AsyncScheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
                     [] (client_id client) -> ClientInfo* {
         static ClientInfo clients[] = {
           {1, 1, 1}, // admin: satisfy by reservation
