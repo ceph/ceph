@@ -33,9 +33,3 @@ foreach(flavor ${jerasure_legacy_flavors})
   install(TARGETS ${plugin_name} DESTINATION ${erasure_plugin_dir})
   add_dependencies(ec_shec ${plugin_name})
 endforeach()
-
-if(WITH_EMBEDDED)
-  # note we rely on the fact this will always be statically linked with jerasure
-  add_library(cephd_ec_shec STATIC ${shec_utils_srcs})
-  set_target_properties(cephd_ec_shec PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMBEDDED)
-endif()

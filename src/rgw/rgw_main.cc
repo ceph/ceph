@@ -184,11 +184,7 @@ static RGWRESTMgr *rest_filter(RGWRados *store, int dialect, RGWRESTMgr *orig)
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
-#ifdef BUILDING_FOR_EMBEDDED
-extern "C" int cephd_rgw(int argc, const char **argv)
-#else
 int main(int argc, const char **argv)
-#endif
 {
   // dout() messages will be sent to stderr, but FCGX wants messages on stdout
   // Redirect stderr to stdout.

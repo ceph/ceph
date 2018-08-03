@@ -11,7 +11,6 @@
 extern "C" {
 #endif
 
-#ifndef BUILDING_FOR_EMBEDDED
 #define CLS_VER(maj,min) \
 int __cls_ver__## maj ## _ ##min = 0; \
 int __cls_ver_maj = maj; \
@@ -22,12 +21,6 @@ int __cls_name__## name = 0; \
 const char *__cls_name = #name;
 #define CLS_INIT(name) \
 void CEPH_CLS_API __cls_init()
-#else
-#define CLS_VER(maj,min)
-#define CLS_NAME(name)
-#define CLS_INIT(name) \
-void CEPH_CLS_API name##_cls_init()
-#endif
 
 #define CLS_METHOD_RD       0x1 /// method executes read operations
 #define CLS_METHOD_WR       0x2 /// method executes write operations

@@ -181,12 +181,7 @@ static void usage()
   generic_server_usage();
 }
 
-#ifdef BUILDING_FOR_EMBEDDED
-void cephd_preload_embedded_plugins();
-extern "C" int cephd_mon(int argc, const char **argv)
-#else
 int main(int argc, const char **argv)
-#endif
 {
   int err;
 
@@ -505,12 +500,8 @@ int main(int argc, const char **argv)
     }
     common_init_finish(g_ceph_context);
     global_init_chdir(g_ceph_context);
-#ifndef BUILDING_FOR_EMBEDDED
     if (global_init_preload_erasure_code(g_ceph_context) < 0)
       prefork.exit(1);
-#else
-    cephd_preload_embedded_plugins();
-#endif
   }
 
   MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);

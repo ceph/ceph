@@ -136,9 +136,6 @@
 /* ibverbs experimental conditional compilation */
 #cmakedefine HAVE_IBV_EXP
 
-/* define if embedded enabled */
-#cmakedefine WITH_EMBEDDED
-
 /* define if cephfs enabled */
 #cmakedefine WITH_CEPHFS
 
