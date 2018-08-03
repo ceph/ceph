@@ -556,9 +556,14 @@ bool PG::search_for_missing(
     from, oinfo, omissing, ctx->handle);
   if (found_missing && num_unfound_before != missing_loc.num_unfound())
     publish_stats_to_osd();
+  // avoid doing this if the peer is empty.  This is abit of paranoia
+  // to avoid doing something rash if add_source_info() above
+  // incorrectly decided we found something new. (if the peer has
+  // last_update=0'0 that's impossible.)
   if (found_missing &&
       (get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
-       CEPH_FEATURE_OSD_ERASURE_CODES)) {
+       CEPH_FEATURE_OSD_ERASURE_CODES) &&
+      oinfo.last_update != eversion_t()) {
     pg_info_t tinfo(oinfo);
     tinfo.pgid.shard = pg_whoami.shard;
     (*(ctx->info_map))[from.osd].push_back(
@@ -636,7 +641,6 @@ bool PG::MissingLoc::add_source_info(
     if (p->second.is_delete()) {
       ldout(pg->cct, 10) << __func__ << " " << soid
 			 << " delete, ignoring source" << dendl;
-      found_missing = true;
       continue;
     }
     if (oinfo.last_update < need) {
