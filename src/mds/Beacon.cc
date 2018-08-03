@@ -351,7 +351,8 @@ void Beacon::notify_health(MDSRank const *mds)
   // CLIENT_CAPS messages.
   {
     std::list<client_t> late_clients;
-    mds->locker->get_late_revoking_clients(&late_clients);
+    mds->locker->get_late_revoking_clients(&late_clients,
+                                           mds->mdsmap->get_session_timeout());
     std::list<MDSHealthMetric> late_cap_metrics;
 
     for (std::list<client_t>::iterator i = late_clients.begin(); i != late_clients.end(); ++i) {

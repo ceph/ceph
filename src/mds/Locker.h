@@ -188,8 +188,10 @@ public:
 
   void remove_client_cap(CInode *in, client_t client);
 
-  void get_late_revoking_clients(std::list<client_t> *result) const;
-  bool any_late_revoking_caps(xlist<Capability*> const &revoking) const;
+  void get_late_revoking_clients(std::list<client_t> *result, double timeout) const;
+
+private:
+  bool any_late_revoking_caps(xlist<Capability*> const &revoking, double timeout) const;
 
 protected:
   bool _need_flush_mdlog(CInode *in, int wanted_caps);
