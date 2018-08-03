@@ -1,19 +1,3 @@
-<nav aria-label="breadcrumb">
-  <ol class="breadcrumb">
-    <li class="breadcrumb-item"
-        i18n>Object Gateway</li>
-    <li class="breadcrumb-item">
-      <a routerLink="/rgw/bucket"
-         i18n>Buckets</a>
-    </li>
-    <li class="breadcrumb-item active"
-        aria-current="page"
-        i18n>
-      {editing, select, 1 {Edit} other {Add}}
-    </li>
-  </ol>
-</nav>
-
 <cd-loading-panel *ngIf="editing && loading && !error"
                   i18n>
   Loading bucket data...
