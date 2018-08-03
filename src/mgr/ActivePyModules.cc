@@ -362,13 +362,6 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       mgr_map.dump(&f);
     });
     return f.get();
-  } else if (what == "ec_profiles") {
-    PyFormatter f;
-    cluster_state.with_osdmap([&f, &what](const OSDMap &osdmap){
-      const auto &profiles = osdmap.get_erasure_code_profiles();
-      osdmap.dump_erasure_code_profiles(profiles, &f);
-    });
-    return f.get();
   } else {
     derr << "Python module requested unknown data '" << what << "'" << dendl;
     Py_RETURN_NONE;
