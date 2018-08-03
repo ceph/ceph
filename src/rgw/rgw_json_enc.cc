@@ -1747,3 +1747,8 @@ void RGWCompressionInfo::dump(Formatter *f) const
   f->dump_unsigned("orig_size", orig_size);
   ::encode_json("blocks", blocks, f);
 }
+
+void rgw_user::dump(Formatter *f) const
+{
+  ::encode_json("user", *this, f);
+}

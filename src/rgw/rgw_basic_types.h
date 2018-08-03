@@ -104,6 +104,8 @@ struct rgw_user {
     }
     return (id < rhs.id);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_user*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_user)
 
