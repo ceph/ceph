@@ -30,7 +30,7 @@
                  name="confirmation"
                  id="confirmation"
                  [placeholder]="pattern"
-                 [pattern]="pattern"
+                 [pattern]="escapeRegExp(pattern)"
                  autocomplete="off"
                  (keyup)="updateConfirmation($event)"
                  formControlName="confirmation"
