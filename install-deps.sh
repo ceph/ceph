@@ -80,17 +80,15 @@ function ensure_min_npm_version {
   NODE_VER_MAJOR=`node -v | sed 's/v\(\w\+\).*/\1/g'`
   NODE_VER_MINOR=`node -v | sed 's/v\w\+\.\(\w\+\).*/\1/g'`
 
-  # The minimum node version required is 4.8.0 so that we can use yarn below
+  # The minimum node version required is 6.0.0 so that we can use yarn below
   UPDATE_NODE=false
-  if [ $NODE_VER_MAJOR -lt 4 ]; then
-    UPDATE_NODE=true
-  elif [ $NODE_VER_MAJOR -eq 4 ] && [ $NODE_VER_MINOR -lt 8 ]; then
+  if [ $NODE_VER_MAJOR -lt 6 ]; then
     UPDATE_NODE=true
   fi
   if $UPDATE_NODE; then
     $SUDO npm install -g n
-    # installs nodejs version 4.8.0
-    $SUDO n 4.8.0
+    # installs nodejs version 6.0.0
+    $SUDO n 6.0.0
     $SUDO npm uninstall -g n
     hash -d node > /dev/null 2>&1 || true
   fi
