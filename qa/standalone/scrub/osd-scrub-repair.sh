@@ -512,6 +512,7 @@ function TEST_corrupt_scrub_replicated() {
     done
 
     local pg=$(get_pg $poolname ROBJ0)
+    local primary=$(get_primary $poolname ROBJ0)
 
     # Compute an old omap digest and save oi
     CEPH_ARGS='' ceph daemon $(get_asok_path osd.0) \
@@ -641,6 +642,39 @@ function TEST_corrupt_scrub_replicated() {
     inject_eio rep data $poolname ROBJ13 $dir 0 || return 1 # shard 0 of [1, 0], osd.1
 
     pg_scrub $pg
+
+    ERRORS=0
+    declare -a s_err_strings
+    err_strings[0]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:30259878:::ROBJ15:head candidate had a missing info key"
+    err_strings[1]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 : soid 3:33aca486:::ROBJ18:head object info inconsistent "
+    err_strings[2]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:5c7b2c47:::ROBJ16:head candidate had a corrupt snapset"
+    err_strings[3]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:5c7b2c47:::ROBJ16:head candidate had a missing snapset key"
+    err_strings[4]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 soid 3:5c7b2c47:::ROBJ16:head: failed to pick suitable object info"
+    err_strings[5]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 : soid 3:86586531:::ROBJ8:head attr value mismatch '_key1-ROBJ8', attr name mismatch '_key3-ROBJ8', attr name mismatch '_key2-ROBJ8'"
+    err_strings[6]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:bc819597:::ROBJ12:head candidate had a stat error"
+    err_strings[7]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:c0c86b1d:::ROBJ14:head candidate had a missing info key"
+    err_strings[8]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:c0c86b1d:::ROBJ14:head candidate had a corrupt info"
+    err_strings[9]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 soid 3:c0c86b1d:::ROBJ14:head: failed to pick suitable object info"
+    err_strings[10]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:ce3f1d6a:::ROBJ1:head candidate size 9 info size 7 mismatch"
+    err_strings[11]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:ce3f1d6a:::ROBJ1:head size 9 != size 7 from auth oi 3:ce3f1d6a:::ROBJ1:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od f5fba2c6 alloc_hint [[]0 0 0[]][)], size 9 != size 7 from shard 0"
+    err_strings[12]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:d60617f9:::ROBJ13:head candidate had a stat error"
+    err_strings[13]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1 missing 3:f2a5b2a4:::ROBJ3:head"
+    err_strings[14]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:ffdb2004:::ROBJ9:head candidate size 1 info size 7 mismatch"
+    err_strings[15]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:ffdb2004:::ROBJ9:head object info inconsistent "
+    err_strings[16]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 3:c0c86b1d:::ROBJ14:head no '_' attr"
+    err_strings[17]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 3:5c7b2c47:::ROBJ16:head can't decode 'snapset' attr buffer::malformed_input: void SnapSet::decode(ceph::buffer::list::const_iterator&) no longer understand old encoding version 3 < 97"
+    err_strings[18]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub stat mismatch, got 18/18 objects, 0/0 clones, 17/18 dirty, 17/18 omap, 0/0 pinned, 0/0 hit_set_archive, 0/0 whiteouts, 113/120 bytes, 0/0 manifest objects, 0/0 hit_set_archive bytes."
+    err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 1 missing, 7 inconsistent objects"
+    err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 17 errors"
+
+    for err_string in "${err_strings[@]}"
+    do
+        if ! grep -q "$err_string" $dir/osd.${primary}.log
+        then
+            echo "Missing log message '$err_string'"
+            ERRORS=$(expr $ERRORS + 1)
+        fi
+    done
 
     rados list-inconsistent-pg $poolname > $dir/json || return 1
     # Check pg count
@@ -1502,6 +1536,56 @@ EOF
     inject_eio rep mdata $poolname ROBJ13 $dir 1 || return 1 # shard 1 of [1, 0], osd.0
     inject_eio rep data $poolname ROBJ13 $dir 0 || return 1 # shard 0 of [1, 0], osd.1
     pg_deep_scrub $pg
+
+    err_strings=()
+    err_strings[0]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:30259878:::ROBJ15:head candidate had a missing info key"
+    err_strings[1]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:33aca486:::ROBJ18:head data_digest 0xbd89c912 != data_digest 0x2ddbf8f5 from auth oi 3:33aca486:::ROBJ18:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 54 dd 2ddbf8f5 od ddc3680f alloc_hint [[]0 0 255[]][)], object info inconsistent "
+    err_strings[2]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:33aca486:::ROBJ18:head data_digest 0xbd89c912 != data_digest 0x2ddbf8f5 from auth oi 3:33aca486:::ROBJ18:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 54 dd 2ddbf8f5 od ddc3680f alloc_hint [[]0 0 255[]][)]"
+    err_strings[3]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 soid 3:33aca486:::ROBJ18:head: failed to pick suitable auth object"
+    err_strings[4]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:5c7b2c47:::ROBJ16:head candidate had a corrupt snapset"
+    err_strings[5]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:5c7b2c47:::ROBJ16:head candidate had a missing snapset key"
+    err_strings[6]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 soid 3:5c7b2c47:::ROBJ16:head: failed to pick suitable object info"
+    err_strings[7]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 : soid 3:86586531:::ROBJ8:head attr value mismatch '_key1-ROBJ8', attr name mismatch '_key3-ROBJ8', attr name mismatch '_key2-ROBJ8'"
+    err_strings[8]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:87abbf36:::ROBJ11:head candidate had a read error"
+    err_strings[9]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:8aa5320e:::ROBJ17:head data_digest 0x5af0c3ef != data_digest 0x2ddbf8f5 from auth oi 3:8aa5320e:::ROBJ17:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 51 dd 2ddbf8f5 od e9572720 alloc_hint [[]0 0 0[]][)]"
+    err_strings[10]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:8aa5320e:::ROBJ17:head data_digest 0x5af0c3ef != data_digest 0x2ddbf8f5 from auth oi 3:8aa5320e:::ROBJ17:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 51 dd 2ddbf8f5 od e9572720 alloc_hint [[]0 0 0[]][)]"
+    err_strings[11]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 soid 3:8aa5320e:::ROBJ17:head: failed to pick suitable auth object"
+    err_strings[12]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 : soid 3:8b55fa4b:::ROBJ7:head omap_digest 0xefced57a != omap_digest 0x6a73cc07 from shard 1"
+    err_strings[13]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:8b55fa4b:::ROBJ7:head omap_digest 0x6a73cc07 != omap_digest 0xefced57a from auth oi 3:8b55fa4b:::ROBJ7:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 21 dd 2ddbf8f5 od efced57a alloc_hint [[]0 0 0[]][)]"
+    err_strings[14]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:a53c12e8:::ROBJ6:head omap_digest 0x689ee887 != omap_digest 0x179c919f from shard 1, omap_digest 0x689ee887 != omap_digest 0x179c919f from auth oi 3:a53c12e8:::ROBJ6:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 18 dd 2ddbf8f5 od 179c919f alloc_hint [[]0 0 0[]][)]"
+    err_strings[15]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:b1f19cbd:::ROBJ10:head omap_digest 0xa8dd5adc != omap_digest 0xc2025a24 from auth oi 3:b1f19cbd:::ROBJ10:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 30 dd 2ddbf8f5 od c2025a24 alloc_hint [[]0 0 0[]][)]"
+    err_strings[16]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:b1f19cbd:::ROBJ10:head omap_digest 0xa8dd5adc != omap_digest 0xc2025a24 from auth oi 3:b1f19cbd:::ROBJ10:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 30 dd 2ddbf8f5 od c2025a24 alloc_hint [[]0 0 0[]][)]"
+    err_strings[17]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 soid 3:b1f19cbd:::ROBJ10:head: failed to pick suitable auth object"
+    err_strings[18]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:bc819597:::ROBJ12:head candidate had a stat error"
+    err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:c0c86b1d:::ROBJ14:head candidate had a missing info key"
+    err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:c0c86b1d:::ROBJ14:head candidate had a corrupt info"
+    err_strings[21]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 soid 3:c0c86b1d:::ROBJ14:head: failed to pick suitable object info"
+    err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:ce3f1d6a:::ROBJ1:head candidate size 9 info size 7 mismatch"
+    err_strings[23]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:ce3f1d6a:::ROBJ1:head data_digest 0x2d4a11c2 != data_digest 0x2ddbf8f5 from shard 0, data_digest 0x2d4a11c2 != data_digest 0x2ddbf8f5 from auth oi 3:ce3f1d6a:::ROBJ1:head[(][0-9]*'[0-9]* osd.1.0:65 dirty|omap|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od f5fba2c6 alloc_hint [[]0 0 0[]][)], size 9 != size 7 from auth oi 3:ce3f1d6a:::ROBJ1:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od f5fba2c6 alloc_hint [[]0 0 0[]][)], size 9 != size 7 from shard 0"
+    err_strings[24]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:d60617f9:::ROBJ13:head candidate had a read error"
+    err_strings[25]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:d60617f9:::ROBJ13:head candidate had a stat error"
+    err_strings[26]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 soid 3:d60617f9:::ROBJ13:head: failed to pick suitable object info"
+    err_strings[27]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:e97ce31e:::ROBJ2:head data_digest 0x578a4830 != data_digest 0x2ddbf8f5 from shard 1, data_digest 0x578a4830 != data_digest 0x2ddbf8f5 from auth oi 3:e97ce31e:::ROBJ2:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 6 dd 2ddbf8f5 od f8e11918 alloc_hint [[]0 0 0[]][)]"
+    err_strings[28]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1 missing 3:f2a5b2a4:::ROBJ3:head"
+    err_strings[29]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:f4981d31:::ROBJ4:head omap_digest 0xd7178dfe != omap_digest 0xe2d46ea4 from shard 1, omap_digest 0xd7178dfe != omap_digest 0xe2d46ea4 from auth oi 3:f4981d31:::ROBJ4:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 12 dd 2ddbf8f5 od e2d46ea4 alloc_hint [[]0 0 0[]][)]"
+    err_strings[30]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 : soid 3:f4bfd4d1:::ROBJ5:head omap_digest 0x1a862a41 != omap_digest 0x6cac8f6 from shard 1"
+    err_strings[31]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1: soid 3:f4bfd4d1:::ROBJ5:head omap_digest 0x6cac8f6 != omap_digest 0x1a862a41 from auth oi 3:f4bfd4d1:::ROBJ5:head[(][0-9]*'[0-9]* osd.1.0:[0-9]* dirty|omap|data_digest|omap_digest s 7 uv 15 dd 2ddbf8f5 od 1a862a41 alloc_hint [[]0 0 0[]][)]"
+    err_strings[32]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:ffdb2004:::ROBJ9:head candidate size 3 info size 7 mismatch"
+    err_strings[33]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0: soid 3:ffdb2004:::ROBJ9:head object info inconsistent "
+    err_strings[34]="log_channel[(]cluster[)] log [[]ERR[]] : deep-scrub [0-9]*[.]0 3:c0c86b1d:::ROBJ14:head no '_' attr"
+    err_strings[35]="log_channel[(]cluster[)] log [[]ERR[]] : deep-scrub [0-9]*[.]0 3:5c7b2c47:::ROBJ16:head can't decode 'snapset' attr buffer::malformed_input: void SnapSet::decode[(]ceph::buffer::list::const_iterator&[)] no longer understand old encoding version 3 < 97"
+    err_strings[36]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 deep-scrub stat mismatch, got 18/18 objects, 0/0 clones, 17/18 dirty, 17/18 omap, 0/0 pinned, 0/0 hit_set_archive, 0/0 whiteouts, 115/116 bytes, 0/0 manifest objects, 0/0 hit_set_archive bytes."
+    err_strings[37]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 deep-scrub 1 missing, 11 inconsistent objects"
+    err_strings[38]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 deep-scrub 35 errors"
+
+    for err_string in "${err_strings[@]}"
+    do
+        if ! grep -q "$err_string" $dir/osd.${primary}.log
+        then
+            echo "Missing log message '$err_string'"
+            ERRORS=$(expr $ERRORS + 1)
+        fi
+    done
 
     rados list-inconsistent-pg $poolname > $dir/json || return 1
     # Check pg count
@@ -2915,6 +2999,12 @@ EOF
     rm -f $dir/new.ROBJ17 $dir/robj17.out || return 1
     diff -q $dir/new.ROBJ18 $dir/robj18.out || return 1
     rm -f $dir/new.ROBJ18 $dir/robj18.out || return 1
+
+    if [ $ERRORS != "0" ];
+    then
+        echo "TEST FAILED WITH $ERRORS ERRORS"
+        return 1
+    fi
 
     rados rmpool $poolname $poolname --yes-i-really-really-mean-it
     teardown $dir || return 1
@@ -5207,6 +5297,7 @@ function TEST_corrupt_snapset_scrub_rep() {
     done
 
     local pg=$(get_pg $poolname ROBJ0)
+    local primary=$(get_primary $poolname ROBJ0)
 
     rados -p $poolname mksnap snap1
     echo -n head_of_snapshot_data > $dir/change
@@ -5434,6 +5525,30 @@ EOF
     if test "$LOCALRUN" = "yes" && which jsonschema > /dev/null;
     then
       jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-obj.json || return 1
+    fi
+
+    ERRORS=0
+    declare -a err_strings
+    err_strings[0]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 : soid [0-9]*:.*:::ROBJ1:head snapset inconsistent"
+    err_strings[1]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 : soid [0-9]*:.*:::ROBJ2:head snapset inconsistent"
+    err_strings[2]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*:.*:::ROBJ1:1 is an unexpected clone"
+    err_strings[3]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub stat mismatch, got 3/4 objects, 1/2 clones, 3/4 dirty, 3/4 omap, 0/0 pinned, 0/0 hit_set_archive, 0/0 whiteouts, 49/56 bytes, 0/0 manifest objects, 0/0 hit_set_archive bytes."
+    err_strings[4]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 0 missing, 2 inconsistent objects"
+    err_strings[5]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 4 errors"
+
+    for err_string in "${err_strings[@]}"
+    do
+        if ! grep -q "$err_string" $dir/osd.${primary}.log
+        then
+            echo "Missing log message '$err_string'"
+            ERRORS=$(expr $ERRORS + 1)
+        fi
+    done
+
+    if [ $ERRORS != "0" ];
+    then
+        echo "TEST FAILED WITH $ERRORS ERRORS"
+        return 1
     fi
 
     rados rmpool $poolname $poolname --yes-i-really-really-mean-it
