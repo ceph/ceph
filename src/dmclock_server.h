@@ -1218,7 +1218,7 @@ namespace crimson {
     }; // class PriorityQueueBase
 
 
-    template<typename C, typename R, bool IsDelayed=true, bool U1=false, uint B=2>
+    template<typename C, typename R, bool IsDelayed=false, bool U1=false, uint B=2>
     class PullPriorityQueue : public PriorityQueueBase<C,R,IsDelayed,U1,B> {
       using super = PriorityQueueBase<C,R,IsDelayed,U1,B>;
 
@@ -1443,7 +1443,7 @@ namespace crimson {
 
 
     // PUSH version
-    template<typename C, typename R, bool IsDelayed=true, bool U1=false, uint B=2>
+    template<typename C, typename R, bool IsDelayed=false, bool U1=false, uint B=2>
     class PushPriorityQueue : public PriorityQueueBase<C,R,IsDelayed,U1,B> {
 
     protected:
