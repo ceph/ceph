@@ -7428,6 +7428,35 @@ void OSD::trim_maps(epoch_t oldest, int nreceived, bool skip_maps)
 
 void OSD::handle_osd_map(MOSDMap *m)
 {
+  // wait for pgs to catch up
+  {
+    // we extend the map cache pins to accomodate pgs slow to consume maps
+    // for some period, until we hit the max_lag_factor bound, at which point
+    // we block here to stop injesting more maps than they are able to keep
+    // up with.
+    epoch_t max_lag = cct->_conf->osd_map_cache_size *
+      m_osd_pg_epoch_max_lag_factor;
+    ceph_assert(max_lag > 0);
+    if (osdmap->get_epoch() > max_lag) {
+      epoch_t need = osdmap->get_epoch() - max_lag;
+      dout(10) << __func__ << " waiting for pgs to catch up (need " << need
+	       << " max_lag " << max_lag << ")" << dendl;
+      osd_lock.Unlock();
+      for (auto shard : shards) {
+	epoch_t min = shard->get_min_pg_epoch();
+	if (need > min) {
+	  dout(10) << __func__ << " waiting for pgs to consume " << need
+		   << " (shard " << shard->shard_id << " min " << min
+		   << ", map cache is " << cct->_conf->osd_map_cache_size
+		   << ", max_lag_factor " << m_osd_pg_epoch_max_lag_factor
+		   << ")" << dendl;
+	  shard->wait_min_pg_epoch(need);
+	}
+      }
+      osd_lock.Lock();
+    }
+  }
+
   ceph_assert(osd_lock.is_locked());
   // Keep a ref in the list until we get the newly received map written
   // onto disk. This is important because as long as the refs are alive,
@@ -7508,31 +7537,6 @@ void OSD::handle_osd_map(MOSDMap *m)
       return;
     }
     skip_maps = true;
-  }
-
-  // wait for pgs to catch up
-  {
-    // we extend the map cache pins to accomodate pgs slow to consume maps
-    // for some period, until we hit the max_lag_factor bound, at which point
-    // we block here to stop injesting more maps than they are able to keep
-    // up with.
-    epoch_t max_lag = cct->_conf->osd_map_cache_size *
-      m_osd_pg_epoch_max_lag_factor;
-    ceph_assert(max_lag > 0);
-    if (osdmap->get_epoch() > max_lag) {
-      epoch_t need = osdmap->get_epoch() - max_lag;
-      for (auto shard : shards) {
-	epoch_t min = shard->get_min_pg_epoch();
-	if (need > min) {
-	  dout(10) << __func__ << " waiting for pgs to consume " << need
-		   << " (shard " << shard->shard_id << " min " << min
-		   << ", map cache is " << cct->_conf->osd_map_cache_size
-		   << ", max_lag_factor " << m_osd_pg_epoch_max_lag_factor
-		   << ")" << dendl;
-	  shard->wait_min_pg_epoch(need);
-	}
-      }
-    }
   }
 
   ObjectStore::Transaction t;
