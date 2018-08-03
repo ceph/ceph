@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { cdEncode } from '../decorators/cd-encode';
+import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
 
 @cdEncode
 @Injectable()
@@ -44,7 +44,7 @@ export class RbdService {
     return this.http.get('api/block/image/default_features');
   }
 
-  createSnapshot(poolName, rbdName, snapshotName) {
+  createSnapshot(poolName, rbdName, @cdEncodeNot snapshotName) {
     const request = {
       snapshot_name: snapshotName
     };
@@ -53,7 +53,7 @@ export class RbdService {
     });
   }
 
-  renameSnapshot(poolName, rbdName, snapshotName, newSnapshotName) {
+  renameSnapshot(poolName, rbdName, snapshotName, @cdEncodeNot newSnapshotName) {
     const request = {
       new_snap_name: newSnapshotName
     };
@@ -62,7 +62,7 @@ export class RbdService {
     });
   }
 
-  protectSnapshot(poolName, rbdName, snapshotName, isProtected) {
+  protectSnapshot(poolName, rbdName, snapshotName, @cdEncodeNot isProtected) {
     const request = {
       is_protected: isProtected
     };
