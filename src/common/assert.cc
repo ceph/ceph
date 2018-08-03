@@ -33,8 +33,9 @@ namespace ceph {
     g_assert_context = cct;
   }
 
-  void __ceph_assert_fail(const char *assertion, const char *file, int line,
-			  const char *func)
+  [[gnu::cold]] void __ceph_assert_fail(const char *assertion,
+					const char *file, int line,
+					const char *func)
   {
     g_assert_condition = assertion;
     g_assert_file = file;
@@ -73,13 +74,15 @@ namespace ceph {
     abort();
   }
 
-  void __ceph_assert_fail(const assert_data &ctx)
+  [[gnu::cold]] void __ceph_assert_fail(const assert_data &ctx)
   {
     __ceph_assert_fail(ctx.assertion, ctx.file, ctx.line, ctx.function);
   }
 
-  void __ceph_assertf_fail(const char *assertion, const char *file, int line,
-			   const char *func, const char* msg, ...)
+  [[gnu::cold]] void __ceph_assertf_fail(const char *assertion,
+					 const char *file, int line,
+					 const char *func, const char* msg,
+					 ...)
   {
     ostringstream tss;
     tss << ceph_clock_now();
@@ -154,8 +157,9 @@ namespace ceph {
     abort();
   }
 
-  void __ceph_assert_warn(const char *assertion, const char *file,
-			  int line, const char *func)
+  [[gnu::cold]] void __ceph_assert_warn(const char *assertion,
+					const char *file,
+					int line, const char *func)
   {
     char buf[8096];
     snprintf(buf, sizeof(buf),
