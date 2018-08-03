@@ -3733,6 +3733,23 @@ void BlueStore::_set_blob_size()
            << std::dec << dendl;
 }
 
+void BlueStore::_set_finisher_num()
+{
+  if (cct->_conf->bluestore_shard_finishers) {
+    if (cct->_conf->osd_op_num_shards) {
+      m_finisher_num = cct->_conf->osd_op_num_shards;
+    } else {
+      assert(bdev);
+      if (bdev->is_rotational()) {
+	m_finisher_num = cct->_conf->osd_op_num_shards_hdd;
+      } else {
+	m_finisher_num = cct->_conf->osd_op_num_shards_ssd;
+      }
+    }
+  }
+  assert(m_finisher_num != 0);
+}
+
 int BlueStore::_set_cache_sizes()
 {
   assert(bdev);
@@ -7724,6 +7741,8 @@ int BlueStore::_open_super_meta()
   _set_compression();
   _set_blob_size();
 
+  _set_finisher_num();
+
   return 0;
 }
 
@@ -8354,21 +8373,6 @@ void BlueStore::_osr_unregister_all()
 void BlueStore::_kv_start()
 {
   dout(10) << __func__ << dendl;
-
-  if (cct->_conf->bluestore_shard_finishers) {
-    if (cct->_conf->osd_op_num_shards) {
-      m_finisher_num = cct->_conf->osd_op_num_shards;
-    } else {
-      assert(bdev);
-      if (bdev->is_rotational()) {
-        m_finisher_num = cct->_conf->osd_op_num_shards_hdd;
-      } else {
-        m_finisher_num = cct->_conf->osd_op_num_shards_ssd;
-      }
-    }
-  }
-
-  assert(m_finisher_num != 0);
 
   for (int i = 0; i < m_finisher_num; ++i) {
     ostringstream oss;

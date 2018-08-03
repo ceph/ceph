@@ -1970,6 +1970,7 @@ private:
   void _close_fsid();
   void _set_alloc_sizes();
   void _set_blob_size();
+  void _set_finisher_num();
 
   int _open_bdev(bool create);
   void _close_bdev();
