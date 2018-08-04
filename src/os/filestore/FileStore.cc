@@ -5753,12 +5753,12 @@ int FileStore::_merge_collection(const coll_t& cid,
 
   if (!collection_exists(cid)) {
     dout(2) << __FUNC__ << ": " << cid << " DNE" << dendl;
-    assert(replaying);
+    ceph_assert(replaying);
     return 0;
   }
   if (!collection_exists(dest)) {
     dout(2) << __FUNC__ << ": " << dest << " DNE" << dendl;
-    assert(replaying);
+    ceph_assert(replaying);
     return 0;
   }
 
@@ -5766,19 +5766,79 @@ int FileStore::_merge_collection(const coll_t& cid,
   if (_check_replay_guard(cid, spos) > 0)
     _collection_set_bits(dest, bits);
 
-  // move everything
   spg_t pgid;
   bool is_pg = dest.is_pg(&pgid);
-  assert(is_pg);
-  r = _split_collection(cid, bits, pgid.pgid.ps(), dest, spos);
-  if (r < 0)
-    return r;
+  ceph_assert(is_pg);
 
-  // temp too!
-  r = _split_collection(cid.get_temp(), bits, pgid.pgid.ps(), dest.get_temp(),
-			spos);
-  if (r < 0)
-    return r;
+  {
+    int dstcmp = _check_replay_guard(dest, spos);
+    if (dstcmp < 0)
+      return 0;
+
+    int srccmp = _check_replay_guard(cid, spos);
+    if (srccmp < 0)
+      return 0;
+
+    _set_global_replay_guard(cid, spos);
+    _set_replay_guard(cid, spos, true);
+    _set_replay_guard(dest, spos, true);
+
+    Index from;
+    r = get_index(cid, &from);
+
+    Index to;
+    if (!r)
+      r = get_index(dest, &to);
+
+    if (!r) {
+      ceph_assert(from.index);
+      RWLock::WLocker l1((from.index)->access_lock);
+
+      ceph_assert(to.index);
+      RWLock::WLocker l2((to.index)->access_lock);
+
+      r = from->merge(bits, to.index);
+    }
+
+    _close_replay_guard(cid, spos);
+    _close_replay_guard(dest, spos);
+  }
+
+  // temp too
+  {
+    int dstcmp = _check_replay_guard(dest.get_temp(), spos);
+    if (dstcmp < 0)
+      return 0;
+
+    int srccmp = _check_replay_guard(cid.get_temp(), spos);
+    if (srccmp < 0)
+      return 0;
+
+    _set_global_replay_guard(cid.get_temp(), spos);
+    _set_replay_guard(cid.get_temp(), spos, true);
+    _set_replay_guard(dest.get_temp(), spos, true);
+
+    Index from;
+    r = get_index(cid.get_temp(), &from);
+
+    Index to;
+    if (!r)
+      r = get_index(dest.get_temp(), &to);
+
+    if (!r) {
+      ceph_assert(from.index);
+      RWLock::WLocker l1((from.index)->access_lock);
+
+      ceph_assert(to.index);
+      RWLock::WLocker l2((to.index)->access_lock);
+
+      r = from->merge(bits, to.index);
+    }
+
+    _close_replay_guard(cid.get_temp(), spos);
+    _close_replay_guard(dest.get_temp(), spos);
+
+  }
 
   // remove source
   if (_check_replay_guard(cid, spos) > 0)
@@ -5802,7 +5862,7 @@ int FileStore::_merge_collection(const coll_t& cid,
 	if (!i->match(bits, pgid.pgid.ps())) {
 	  dout(20) << __FUNC__ << ": " << *i << " does not belong in "
 		   << cid << dendl;
-	  assert(i->match(bits, pgid.pgid.ps()));
+	  ceph_assert(i->match(bits, pgid.pgid.ps()));
 	}
       }
       objects.clear();

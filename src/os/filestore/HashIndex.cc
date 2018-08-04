@@ -292,12 +292,128 @@ int HashIndex::col_split_level(
   return 0;
 }
 
+int HashIndex::_merge(
+  uint32_t bits,
+  CollectionIndex* dest) {
+  dout(20) << __func__ << " bits " << bits << dendl;
+  ceph_assert(collection_version() == dest->collection_version());
+
+  vector<string> emptypath;
+
+  // pre-split to common/target level so that any shared prefix DIR_?
+  // directories already exist at the destination.  Since each
+  // directory is a nibble (4 bits),
+  unsigned shared = bits / 4;
+  dout(20) << __func__ << " pre-splitting to shared level " << shared << dendl;
+  if (shared) {
+    split_dirs(emptypath, shared);
+    ((HashIndex*)dest)->split_dirs(emptypath, shared);
+  }
+
+  // now merge the contents
+  _merge_dirs(*this, *(HashIndex*)dest, emptypath);
+
+  return 0;
+}
+
+int HashIndex::_merge_dirs(
+  HashIndex& from,
+  HashIndex& to,
+  const vector<string>& path)
+{
+  dout(20) << __func__ << " path " << path << dendl;
+  int r;
+
+  vector<string> src_subs, dst_subs;
+  r = from.list_subdirs(path, &src_subs);
+  if (r < 0) {
+    lgeneric_subdout(g_ceph_context,filestore,20) << __func__
+						  << " r " << r << " from "
+						  << "from.list_subdirs"
+						  << dendl;
+    return r;
+  }
+  r = to.list_subdirs(path, &dst_subs);
+  if (r < 0) {
+    lgeneric_subdout(g_ceph_context,filestore,20) << __func__
+						  << " r " << r << " from "
+						  << "to.list_subdirs"
+						  << dendl;
+    return r;
+  }
+
+  for (auto& i : src_subs) {
+    if (std::find(dst_subs.begin(), dst_subs.end(), i) == dst_subs.end()) {
+      // move it
+      r = move_subdir(from, to, path, i);
+      if (r < 0) {
+	lgeneric_subdout(g_ceph_context,filestore,20) << __func__
+						      << " r " << r << " from "
+						      << "move_subdir(...,"
+						      << path << "," << i << ")"
+						      << dendl;
+	return r;
+      }
+    } else {
+      // common, recurse!
+      vector<string> nested = path;
+      nested.push_back(i);
+      r = _merge_dirs(from, to, nested);
+      if (r < 0) {
+	lgeneric_subdout(g_ceph_context,filestore,20) << __func__
+						      << " r " << r << " from "
+						      << "rec _merge_dirs"
+						      << dendl;
+	return r;
+      }
+
+      // now remove it
+      r = remove_path(nested);
+      if (r < 0) {
+	lgeneric_subdout(g_ceph_context,filestore,20) << __func__
+						      << " r " << r << " from "
+						      << "remove_path "
+						      << nested
+						      << dendl;
+	return r;
+      }
+    }
+  }
+
+  // objects
+  map<string, ghobject_t> objects;
+  r = from.list_objects(path, 0, 0, &objects);
+  if (r < 0) {
+    lgeneric_subdout(g_ceph_context,filestore,20) << __func__
+						  << " r " << r << " from "
+						  << "from.list_objects"
+						  << dendl;
+    return r;
+  }
+
+  for (auto& i : objects) {
+    r = move_object(from, to, path, i);
+    if (r < 0) {
+      lgeneric_subdout(g_ceph_context,filestore,20) << __func__
+						    << " r " << r << " from "
+						    << "move_object(...,"
+						    << path << "," << i << ")"
+						    << dendl;
+      return r;
+    }
+  }
+
+  return 0;
+}
+
+
 int HashIndex::_split(
   uint32_t match,
   uint32_t bits,
   CollectionIndex* dest) {
   ceph_assert(collection_version() == dest->collection_version());
   unsigned mkdirred = 0;
+
   return col_split_level(
     *this,
     *static_cast<HashIndex*>(dest),
