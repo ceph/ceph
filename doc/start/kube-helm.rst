@@ -40,7 +40,7 @@ Add ceph-helm to Helm local repos
 Configure your Ceph cluster
 ===========================
 
-Create a ``ceph-overrides.yaml`` that will contain your Ceph configuration. This file may exist anywhere, but for this docuiment will be assumed to reside in the user's home directory.::
+Create a ``ceph-overrides.yaml`` that will contain your Ceph configuration. This file may exist anywhere, but for this document will be assumed to reside in the user's home directory.::
 
     $ cat ~/ceph-overrides.yaml
     network:
