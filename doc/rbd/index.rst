@@ -63,10 +63,10 @@ devices simultaneously.
 
 	APIs <api/index>
 
-.. _RBD Caching: ../rbd-config-ref/
-.. _kernel modules: ../rbd-ko/
-.. _QEMU: ../qemu-rbd/
-.. _OpenStack: ../rbd-openstack
-.. _CloudStack: ../rbd-cloudstack
-.. _Ceph RADOS Gateway: ../../radosgw/
-.. _CephFS filesystem: ../../cephfs/
+.. _RBD Caching: ../rbd/rbd-config-ref/
+.. _kernel modules: ../rbd/rbd-ko/
+.. _QEMU: ../rbd/qemu-rbd/
+.. _OpenStack: ../rbd/rbd-openstack
+.. _CloudStack: ../rbd/rbd-cloudstack
+.. _Ceph RADOS Gateway: ../../doc/radosgw/
+.. _CephFS filesystem: ../../doc/cephfs/
