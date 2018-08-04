@@ -226,6 +226,8 @@ void usage()
   cout << "   --start-date=<date>       start date in the format yyyy-mm-dd\n";
   cout << "   --end-date=<date>         end date in the format yyyy-mm-dd\n";
   cout << "   --bucket-id=<bucket-id>   bucket id\n";
+  cout << "   --bucket-new-name=<bucket>\n";
+  cout << "                             for bucket link: optional new name\n";
   cout << "   --shard-id=<shard-id>     optional for: \n";
   cout << "                               mdlog list\n";
   cout << "                               data sync status\n";
@@ -2557,6 +2559,7 @@ int main(int argc, const char **argv)
   bool set_temp_url_key = false;
   map<int, string> temp_url_keys;
   string bucket_id;
+  string new_bucket_name;
   Formatter *formatter = NULL;
   int purge_data = false;
   int pretty_format = false;
@@ -2819,6 +2822,8 @@ int main(int argc, const char **argv)
         usage();
 	assert(false);
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--bucket-new-name", (char*)NULL)) {
+      new_bucket_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--categories", (char*)NULL)) {
@@ -5230,6 +5235,7 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT_BUCKET_LINK) {
     bucket_op.set_bucket_id(bucket_id);
+    bucket_op.set_new_bucket_name(new_bucket_name);
     string err;
     int r = RGWBucketAdminOp::link(store, bucket_op, &err);
     if (r < 0) {
