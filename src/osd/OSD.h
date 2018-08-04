@@ -1509,7 +1509,7 @@ private:
     utime_t last_rx_back;   ///< last time we got a ping reply on the back side
     epoch_t epoch;      ///< most recent epoch we wanted this peer
     /// number of connections we send and receive heartbeat pings/replies
-    const static int HEARTBEAT_MAX_CONN = 2;
+    static constexpr int HEARTBEAT_MAX_CONN = 2;
     /// history of inflight pings, arranging by timestamp we sent
     /// send time -> deadline -> remaining replies
     map<utime_t, pair<utime_t, int>> ping_history;
