@@ -76,7 +76,7 @@ def _package_overrides(pkgs, os):
     for pkg in pkgs:
         if is_rhel:
             if pkg.startswith('python3-') or pkg == 'python3':
-                pkg = pkg.replace('3', '34', count=1)
+                pkg = pkg.replace('3', '34', 1)
         result.append(pkg)
     return result
 
