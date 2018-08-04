@@ -304,7 +304,7 @@ void Log::_log_safe_write(const char* what, size_t write_len)
 {
   if (m_fd < 0)
     return;
-  int r = safe_write(m_fd, m_log_buf, m_log_buf_pos);
+  int r = safe_write(m_fd, what, write_len);
   if (r != m_fd_last_error) {
     if (r < 0)
       cerr << "problem writing to " << m_log_file
@@ -319,23 +319,6 @@ void Log::_flush_logbuf()
   if (m_log_buf_pos) {
     _log_safe_write(m_log_buf, m_log_buf_pos);
     m_log_buf_pos = 0;
-  }
-}
-
-// write part of "what" directly to disk, copy remaining part to m_log_buf
-// for later coalescing
-void Log::_write_and_copy(char* what, size_t len)
-{
-  size_t write_len = len - (len & (MAX_LOG_BUF - 1));
-  if (write_len) {
-    _log_safe_write(what, write_len);
-    what += write_len;
-  }
-
-  write_len = len - write_len;
-  if (write_len) {
-     maybe_inline_memcpy((void*)m_log_buf, (void*)what, write_len, 32);
-     m_log_buf_pos = write_len;
   }
 }
 
@@ -362,7 +345,7 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
       // this flushes the existing buffers if either line is longer
       // than our buffer, or buffer is too full to fit it
       if (m_log_buf_pos + line_size >= MAX_LOG_BUF) {
-          _flush_logbuf();
+	_flush_logbuf();
       }
       if (need_dynamic) {
         line = new char[line_size];
@@ -377,11 +360,7 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 			(unsigned long)e->m_thread, e->m_prio);
 
       line_used += e->snprintf(line + line_used, line_size - line_used - 1);
-      if (line_used > line_size - 1) { //paranoid check, buf was declared
-				   //to hold everything
-        line_used = line_size - 1;
-        line[line_used] = 0;
-      }
+      assert(line_used < line_size - 1);
 
       if (do_syslog) {
         syslog(LOG_USER|LOG_INFO, "%s", line);
@@ -392,16 +371,20 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
       }
 
       if (do_fd) {
-        line[line_used] = '\n';
-        if (need_dynamic) {
-          _write_and_copy(line, line_used + 1);
-        }
+	line[line_used] = '\n';
+	if (need_dynamic) {
+	  _log_safe_write(line, line_used + 1);
+	  m_log_buf_pos = 0;
+	} else {
+	  m_log_buf_pos += line_used + 1;
+	}
+      } else {
+	m_log_buf_pos = 0;
       }
 
-      if (need_dynamic)
+      if (need_dynamic) {
         delete[] line;
-
-      m_log_buf_pos += line_used + 1;
+      }
     }
 
     if (do_graylog2 && m_graylog) {
