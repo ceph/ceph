@@ -224,6 +224,7 @@ struct RGWBucketAdminOpState {
   std::string bucket_name;
   std::string bucket_id;
   std::string object_name;
+  std::string new_bucket_name;
 
   bool list_buckets;
   bool stat_buckets;
@@ -253,6 +254,9 @@ struct RGWBucketAdminOpState {
   }
   void set_object(std::string& object_str) {
     object_name = object_str;
+  }
+  void set_new_bucket_name(std::string& new_bucket_str) {
+    new_bucket_name = new_bucket_str;
   }
   void set_quota(RGWQuotaInfo& value) {
     quota = value;

@@ -543,6 +543,12 @@ Options
 
    Specify the bucket id.
 
+.. option:: --bucket-new-name=[tenant-id/]<bucket>
+
+   Optional for `bucket link`; use to rename a bucket.
+        When using implicit tenants, prefix the name
+        with the desired tenant-id.
+
 .. option:: --shard-id=<shard-id>
 
 	Optional for mdlog list, data sync status. Required for ``mdlog trim``.
