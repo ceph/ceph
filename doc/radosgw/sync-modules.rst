@@ -94,3 +94,4 @@ Now start the radosgw in the zone
 .. _`elasticsearch sync module`: ../elastic-sync-module
 .. _`elasticsearch`: ../elastic-sync-module
 .. _`cloud sync module`: ../cloud-sync-module
+.. _`pubsub module`: ../pubsub-module
