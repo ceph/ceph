@@ -62,7 +62,6 @@ class Log : private Thread
   void *entry() override;
 
   void _log_safe_write(const char* what, size_t write_len);
-  void _write_and_copy(char* what, size_t len);
   void _flush_logbuf();
   void _flush(EntryQueue *q, EntryQueue *requeue, bool crash);
 
