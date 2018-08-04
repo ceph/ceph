@@ -1,3 +1,5 @@
 tasks:
   - install:
+      extra_packages:
+        - python3-cephfs
   - ceph:
