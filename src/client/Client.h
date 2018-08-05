@@ -743,30 +743,9 @@ public:
 
   xlist<Inode*> &get_dirty_list() { return dirty_list; }
 
-  client_switch_interrupt_callback_t switch_interrupt_cb = nullptr;
-  client_remount_callback_t remount_cb = nullptr;
-  client_ino_callback_t ino_invalidate_cb = nullptr;
-  client_dentry_callback_t dentry_invalidate_cb = nullptr;
-  client_umask_callback_t umask_cb = nullptr;
-  void *callback_handle = nullptr;
-  bool can_invalidate_dentries = false;
-
-  CommandHook m_command_hook;
-
   SafeTimer timer;
 
-  Finisher async_ino_invalidator;
-  Finisher async_dentry_invalidator;
-  Finisher interrupt_finisher;
-  Finisher remount_finisher;
-  Finisher objecter_finisher;
-
-  Context *tick_event = nullptr;
-  utime_t last_cap_renew;
-
   std::unique_ptr<PerfCounters> logger;
-
-  // cluster descriptors
   std::unique_ptr<MDSMap> mdsmap;
 
 
@@ -774,6 +753,9 @@ protected:
   /* Flags for check_caps() */
   static const unsigned CHECK_CAPS_NODELAY = 0x1;
   static const unsigned CHECK_CAPS_SYNCHRONOUS = 0x2;
+
+
+  bool is_initialized() const { return initialized; }
 
   void check_caps(Inode *in, unsigned flags);
 
@@ -974,60 +956,11 @@ protected:
   Inode*                 root_ancestor = nullptr;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
-  // dirty_list keeps all the dirty inodes before flushing.
-  xlist<Inode*> delayed_list, dirty_list;
-  int num_flushing_caps = 0;
-  ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
-  std::map<std::string, std::string> metadata;
-
-  // trace generation
-  ofstream traceout;
-
-  Cond mount_cond, sync_cond;
-
-  std::map<std::pair<int64_t,std::string>, int> pool_perms;
-  list<Cond*> waiting_for_pool_perm;
-
   InodeRef cwd;
-
-  // mds requests
-  ceph_tid_t last_tid = 0;
-  ceph_tid_t oldest_tid = 0; // oldest incomplete mds request, excluding setfilelock requests
-  map<ceph_tid_t, MetaRequest*> mds_requests;
-
-  // cap flushing
-  ceph_tid_t last_flush_tid = 1;
-
-  // file handles, etc.
-  interval_set<int> free_fd_set;  // unused fds
-  ceph::unordered_map<int, Fh*> fd_map;
-  set<Fh*> ll_unclosed_fh_set;
-  ceph::unordered_set<dir_result_t*> opened_dirs;
-  
-  bool   initialized = false;
-  bool   mounted = false;
-  bool   unmounting = false;
-  bool   blacklisted = false;
-
-  // When an MDS has sent us a REJECT, remember that and don't
-  // contact it again.  Remember which inst rejected us, so that
-  // when we talk to another inst with the same rank we can
-  // try again.
-  std::map<mds_rank_t, entity_addrvec_t> rejected_by_mds;
-
-  int local_osd = -ENXIO;
-  epoch_t local_osd_epoch = 0;
-
-  int unsafe_sync_write = 0;
 
   std::unique_ptr<Filer>             filer;
   std::unique_ptr<ObjectCacher>      objectcacher;
   std::unique_ptr<WritebackHandler>  writeback_handler;
-
-  ceph::unordered_map<vinodeno_t, Inode*> inode_map;
-  ceph::unordered_map<ino_t, vinodeno_t> faked_ino_map;
-  interval_set<ino_t> free_faked_inos;
-  ino_t last_used_faked_ino;
 
   Messenger *messenger;
   MonClient *monclient;
@@ -1035,29 +968,8 @@ protected:
 
   client_t whoami;
 
-  int user_id, group_id;
-  int acl_type = NO_ACL;
-
-  epoch_t cap_epoch_barrier = 0;
-
-  // mds sessions
-  map<mds_rank_t, MetaSession> mds_sessions;  // mds -> push seq
-  list<Cond*> waiting_for_mdsmap;
-
-  // FSMap, for when using mds_command
-  list<Cond*> waiting_for_fsmap;
-  std::unique_ptr<FSMap> fsmap;
-  std::unique_ptr<FSMapUser> fsmap_user;
-
-  // MDS command state
-  CommandTable<MDSCommandOp> command_table;
-
-  bool _use_faked_inos;
 
 private:
-  /* Flags for VXattr */
-  static const unsigned VXATTR_RSTAT = 0x1;
-
   struct C_Readahead : public Context {
     C_Readahead(Client *c, Fh *f);
     ~C_Readahead() override;
@@ -1089,6 +1001,15 @@ private:
     MAY_WRITE = 2,
     MAY_READ = 4,
   };
+
+
+  /* Flags for VXattr */
+  static const unsigned VXATTR_RSTAT = 0x1;
+
+  static const VXattr _dir_vxattrs[];
+  static const VXattr _file_vxattrs[];
+
+
 
   void fill_dirent(struct dirent *de, const char *name, int type, uint64_t ino, loff_t next_off);
 
@@ -1262,12 +1183,97 @@ private:
   int _lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
   bool _ll_forget(Inode *in, int count);
 
-  static const VXattr _dir_vxattrs[];
-  static const VXattr _file_vxattrs[];
 
   uint32_t deleg_timeout = 0;
   size_t _file_vxattrs_name_size;
   size_t _dir_vxattrs_name_size;
+
+  client_switch_interrupt_callback_t switch_interrupt_cb = nullptr;
+  client_remount_callback_t remount_cb = nullptr;
+  client_ino_callback_t ino_invalidate_cb = nullptr;
+  client_dentry_callback_t dentry_invalidate_cb = nullptr;
+  client_umask_callback_t umask_cb = nullptr;
+  void *callback_handle = nullptr;
+  bool can_invalidate_dentries = false;
+
+  Finisher async_ino_invalidator;
+  Finisher async_dentry_invalidator;
+  Finisher interrupt_finisher;
+  Finisher remount_finisher;
+  Finisher objecter_finisher;
+
+  Context *tick_event = nullptr;
+  utime_t last_cap_renew;
+
+  CommandHook m_command_hook;
+
+  int user_id, group_id;
+  int acl_type = NO_ACL;
+
+  epoch_t cap_epoch_barrier = 0;
+
+  // mds sessions
+  map<mds_rank_t, MetaSession> mds_sessions;  // mds -> push seq
+  list<Cond*> waiting_for_mdsmap;
+
+  // FSMap, for when using mds_command
+  list<Cond*> waiting_for_fsmap;
+  std::unique_ptr<FSMap> fsmap;
+  std::unique_ptr<FSMapUser> fsmap_user;
+
+  // MDS command state
+  CommandTable<MDSCommandOp> command_table;
+
+  bool _use_faked_inos;
+
+  // file handles, etc.
+  interval_set<int> free_fd_set;  // unused fds
+  ceph::unordered_map<int, Fh*> fd_map;
+  set<Fh*> ll_unclosed_fh_set;
+  ceph::unordered_set<dir_result_t*> opened_dirs;
+
+  bool   initialized = false;
+  bool   mounted = false;
+  bool   unmounting = false;
+  bool   blacklisted = false;
+
+  ceph::unordered_map<vinodeno_t, Inode*> inode_map;
+  ceph::unordered_map<ino_t, vinodeno_t> faked_ino_map;
+  interval_set<ino_t> free_faked_inos;
+  ino_t last_used_faked_ino;
+
+  // When an MDS has sent us a REJECT, remember that and don't
+  // contact it again.  Remember which inst rejected us, so that
+  // when we talk to another inst with the same rank we can
+  // try again.
+  std::map<mds_rank_t, entity_addrvec_t> rejected_by_mds;
+
+  int local_osd = -ENXIO;
+  epoch_t local_osd_epoch = 0;
+
+  int unsafe_sync_write = 0;
+
+  // mds requests
+  ceph_tid_t last_tid = 0;
+  ceph_tid_t oldest_tid = 0; // oldest incomplete mds request, excluding setfilelock requests
+  map<ceph_tid_t, MetaRequest*> mds_requests;
+
+  // cap flushing
+  ceph_tid_t last_flush_tid = 1;
+
+  // dirty_list keeps all the dirty inodes before flushing.
+  xlist<Inode*> delayed_list, dirty_list;
+  int num_flushing_caps = 0;
+  ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
+  std::map<std::string, std::string> metadata;
+
+  // trace generation
+  ofstream traceout;
+
+  Cond mount_cond, sync_cond;
+
+  std::map<std::pair<int64_t,std::string>, int> pool_perms;
+  list<Cond*> waiting_for_pool_perm;
 };
 
 /**

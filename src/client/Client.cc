@@ -230,18 +230,18 @@ vinodeno_t Client::map_faked_ino(ino_t ino)
 
 Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   : Dispatcher(m->cct),
-    m_command_hook(this),
     timer(m->cct, client_lock),
+    client_lock("Client::client_lock"),
+    messenger(m),
+    monclient(mc),
+    objecter(objecter_),
+    whoami(mc->get_global_id()),
     async_ino_invalidator(m->cct),
     async_dentry_invalidator(m->cct),
     interrupt_finisher(m->cct),
     remount_finisher(m->cct),
     objecter_finisher(m->cct),
-    client_lock("Client::client_lock"),
-    messenger(m),
-    monclient(mc),
-    objecter(objecter_),
-    whoami(mc->get_global_id())
+    m_command_hook(this)
 {
   _reset_faked_inos();
 
@@ -14227,7 +14227,7 @@ int StandaloneClient::init()
   objecter->init();
 
   client_lock.Lock();
-  assert(!initialized);
+  assert(!is_initialized());
 
   messenger->add_dispatcher_tail(objecter);
   messenger->add_dispatcher_tail(this);
