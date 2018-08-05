@@ -334,79 +334,80 @@ void PerfCounters::reset()
   }
 }
 
-void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
+void ceph_perf_counters_dump_formatted_generic(
+  PerfCountersCollectionable& pc,
+  Formatter *f, bool schema,
     bool histograms, const std::string &counter)
 {
-  f->open_object_section(m_name.c_str());
+  f->open_object_section(pc.get_name().c_str());
   
-  for (perf_counter_data_vec_t::const_iterator d = m_data.begin();
-       d != m_data.end(); ++d) {
-    if (!counter.empty() && counter != d->name) {
+  for (const perf_counter_meta_t& m : pc) {
+    if (!counter.empty() && counter != m.name) {
       // Optionally filter on counter name
       continue;
     }
 
     // Switch between normal and histogram view
-    bool is_histogram = (d->type & PERFCOUNTER_HISTOGRAM) != 0;
+    bool is_histogram = (m.type & PERFCOUNTER_HISTOGRAM) != 0;
     if (is_histogram != histograms) {
       continue;
     }
 
     if (schema) {
-      f->open_object_section(d->name);
+      f->open_object_section(m.name);
       // we probably should not have exposed this raw field (with bit
       // values), but existing plugins rely on it so we're stuck with
       // it.
-      f->dump_int("type", d->type);
+      f->dump_int("type", m.type);
 
-      if (d->type & PERFCOUNTER_COUNTER) {
+      if (m.type & PERFCOUNTER_COUNTER) {
 	f->dump_string("metric_type", "counter");
       } else {
 	f->dump_string("metric_type", "gauge");
       }
 
-      if (d->type & PERFCOUNTER_LONGRUNAVG) {
-	if (d->type & PERFCOUNTER_TIME) {
+      if (m.type & PERFCOUNTER_LONGRUNAVG) {
+	if (m.type & PERFCOUNTER_TIME) {
 	  f->dump_string("value_type", "real-integer-pair");
 	} else {
 	  f->dump_string("value_type", "integer-integer-pair");
 	}
-      } else if (d->type & PERFCOUNTER_HISTOGRAM) {
-	if (d->type & PERFCOUNTER_TIME) {
+      } else if (m.type & PERFCOUNTER_HISTOGRAM) {
+	if (m.type & PERFCOUNTER_TIME) {
 	  f->dump_string("value_type", "real-2d-histogram");
 	} else {
 	  f->dump_string("value_type", "integer-2d-histogram");
 	}
       } else {
-	if (d->type & PERFCOUNTER_TIME) {
+	if (m.type & PERFCOUNTER_TIME) {
 	  f->dump_string("value_type", "real");
 	} else {
 	  f->dump_string("value_type", "integer");
 	}
       }
 
-      f->dump_string("description", d->description ? d->description : "");
-      if (d->nick != NULL) {
-        f->dump_string("nick", d->nick);
+      f->dump_string("description", m.description ? m.description : "");
+      if (m.nick != NULL) {
+        f->dump_string("nick", m.nick);
       } else {
         f->dump_string("nick", "");
       }
-      f->dump_int("priority", get_adjusted_priority(d->prio));
+      f->dump_int("priority", pc.get_adjusted_priority(m.prio));
       
-      if (d->unit == UNIT_NONE) {
+      if (m.unit == UNIT_NONE) {
 	f->dump_string("units", "none"); 
-      } else if (d->unit == UNIT_BYTES) {
+      } else if (m.unit == UNIT_BYTES) {
 	f->dump_string("units", "bytes");
       }
       f->close_section();
     } else {
-      if (d->type & PERFCOUNTER_LONGRUNAVG) {
-	f->open_object_section(d->name);
-	pair<uint64_t,uint64_t> a = read_avg(*d);
-	if (d->type & PERFCOUNTER_U64) {
+      if (m.type & PERFCOUNTER_LONGRUNAVG) {
+	f->open_object_section(m.name);
+	pair<uint64_t,uint64_t> a = pc.read_avg(m);
+	if (m.type & PERFCOUNTER_U64) {
 	  f->dump_unsigned("avgcount", a.second);
 	  f->dump_unsigned("sum", a.first);
-	} else if (d->type & PERFCOUNTER_TIME) {
+	} else if (m.type & PERFCOUNTER_TIME) {
 	  f->dump_unsigned("avgcount", a.second);
 	  f->dump_format_unquoted("sum", "%" PRId64 ".%09" PRId64,
 				  a.first / 1000000000ull,
@@ -425,18 +426,18 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
 	  ceph_abort();
 	}
 	f->close_section();
-      } else if (d->type & PERFCOUNTER_HISTOGRAM) {
-        ceph_assert(d->type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
-        ceph_assert(d->histogram);
-        f->open_object_section(d->name);
-        d->histogram->dump_formatted(f);
+      } else if (m.type & PERFCOUNTER_HISTOGRAM) {
+        ceph_assert(m.type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
+        ceph_assert(pc.get_histogram(m));
+        f->open_object_section(m.name);
+        pc.get_histogram(m)->dump_formatted(f);
         f->close_section();
       } else {
-	uint64_t v = d->u64;
-	if (d->type & PERFCOUNTER_U64) {
-	  f->dump_unsigned(d->name, v);
-	} else if (d->type & PERFCOUNTER_TIME) {
-	  f->dump_format_unquoted(d->name, "%" PRId64 ".%09" PRId64,
+	uint64_t v = pc.get_u64(m);
+	if (m.type & PERFCOUNTER_U64) {
+	  f->dump_unsigned(m.name, v);
+	} else if (m.type & PERFCOUNTER_TIME) {
+	  f->dump_format_unquoted(m.name, "%" PRId64 ".%09" PRId64,
 				  v / 1000000000ull,
 				  v % 1000000000ull);
 	} else {

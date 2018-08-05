@@ -234,6 +234,13 @@ private:
   int prio_default = 0;
 };
 
+void ceph_perf_counters_dump_formatted_generic(
+  PerfCountersCollectionable& pc,
+  Formatter *f,
+  bool schema,
+  bool histograms,
+  const std::string &counter);
+
 /*
  * A PerfCounters object is usually associated with a single subsystem.
  * It contains counters which we modify to track performance and throughput
@@ -421,7 +428,10 @@ private:
   PerfCounters(const PerfCounters &rhs);
   PerfCounters& operator=(const PerfCounters &rhs);
   void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
-                              const std::string &counter = "") override;
+                              const std::string &counter = "") override {
+    ceph_perf_counters_dump_formatted_generic(*this, f, schema,
+					      histograms, counter);
+  }
 
   typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
 
@@ -822,6 +832,8 @@ public:
 private:
   void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
                               const std::string &counter = "") override {
+    ceph_perf_counters_dump_formatted_generic(*this, f, schema,
+					      histograms, counter);
   }
 };
 
