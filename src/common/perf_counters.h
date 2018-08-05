@@ -132,6 +132,8 @@ public:
   virtual std::uint64_t get_avgcount2(const perf_counter_meta_t& meta) const = 0;
   virtual std::pair<std::uint64_t,std::uint64_t>
   read_avg(const perf_counter_meta_t& meta) const = 0;
+  virtual PerfHistogram<>*
+  get_histogram(const perf_counter_meta_t& meta) const = 0;
 
   virtual void dump_formatted(
     ceph::Formatter* f,
@@ -376,6 +378,15 @@ public:
     assert(iter != std::end(m_data));
     return iter->read_avg();
   }
+  PerfHistogram<>*
+  get_histogram(const perf_counter_meta_t& meta) const override final {
+    const auto iter = std::find_if(std::begin(m_data), std::end(m_data),
+      [&meta](const auto& v) {
+	return std::addressof(v) == std::addressof(meta);
+      });
+    assert(iter != std::end(m_data));
+    return iter->histogram.get();
+  }
 
   void reset() override;
   void dump_formatted(ceph::Formatter *f, bool schema,
@@ -565,6 +576,7 @@ class perf_counters_t {
 
   union perf_counter_atomic_any_data_t {
     std::atomic_uint64_t val;
+    PerfHistogram<>* histogram;
   };
 
   struct alignas(CACHE_LINE_SIZE_) thread_group_t
@@ -749,6 +761,17 @@ public:
   std::pair<std::uint64_t,std::uint64_t> read_avg(
     const perf_counter_meta_t& meta) const override final {
     return std::make_pair(get_u64(meta), get_avgcount(meta));
+  }
+  PerfHistogram<>*
+  get_histogram(const perf_counter_meta_t& meta) const override final {
+    const auto iter = std::find_if(std::begin(m_meta), std::end(m_meta),
+      [&meta](const auto& v) {
+	return std::addressof(v) == std::addressof(meta);
+      });
+    assert(iter != std::end(m_meta));
+
+    const std::size_t idx = std::distance(std::begin(m_meta), iter);
+    return atomic_perf_counters[idx].histogram;
   }
 
 #if 0
