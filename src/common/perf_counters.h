@@ -130,6 +130,8 @@ public:
   virtual std::uint64_t get_u64(const perf_counter_meta_t& meta) const = 0;
   virtual std::uint64_t get_avgcount(const perf_counter_meta_t& meta) const = 0;
   virtual std::uint64_t get_avgcount2(const perf_counter_meta_t& meta) const = 0;
+  virtual std::pair<std::uint64_t,std::uint64_t>
+  read_avg(const perf_counter_meta_t& meta) const = 0;
 
   virtual void dump_formatted(
     ceph::Formatter* f,
@@ -294,7 +296,7 @@ public:
     // read <sum, count> safely by making sure the post- and pre-count
     // are identical; in other words the whole loop needs to be run
     // without any intervening calls to inc, set, or tinc.
-    pair<uint64_t,uint64_t> read_avg() const {
+    pair<uint64_t,std::uint64_t> read_avg() const {
       uint64_t sum, count;
       do {
 	count = avgcount;
@@ -363,6 +365,16 @@ public:
       });
     assert(iter != std::end(m_data));
     return iter->avgcount2;
+  }
+  // TODO: refactor of getters is really needed
+  std::pair<std::uint64_t,std::uint64_t> read_avg(
+    const perf_counter_meta_t& meta) const override final {
+    auto iter = std::find_if(std::begin(m_data), std::end(m_data),
+      [&meta](const auto& v) {
+	return std::addressof(v) == std::addressof(meta);
+      });
+    assert(iter != std::end(m_data));
+    return iter->read_avg();
   }
 
   void reset() override;
@@ -733,6 +745,10 @@ public:
   }
   std::uint64_t get_avgcount2(const perf_counter_meta_t& meta) const override final {
     return get_avgcount(meta);
+  }
+  std::pair<std::uint64_t,std::uint64_t> read_avg(
+    const perf_counter_meta_t& meta) const override final {
+    return std::make_pair(get_u64(meta), get_avgcount(meta));
   }
 
 #if 0

@@ -319,7 +319,7 @@ pair<uint64_t, uint64_t> PerfCounters::get_tavg_ns(int idx) const
     return make_pair(0, 0);
   if (!(data.type & PERFCOUNTER_LONGRUNAVG))
     return make_pair(0, 0);
-  pair<uint64_t,uint64_t> a = data.read_avg();
+  pair<uint64_t,uint64_t> a = read_avg(data);
   return make_pair(a.second, a.first);
 }
 
@@ -402,7 +402,7 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
     } else {
       if (d->type & PERFCOUNTER_LONGRUNAVG) {
 	f->open_object_section(d->name);
-	pair<uint64_t,uint64_t> a = d->read_avg();
+	pair<uint64_t,uint64_t> a = read_avg(*d);
 	if (d->type & PERFCOUNTER_U64) {
 	  f->dump_unsigned("avgcount", a.second);
 	  f->dump_unsigned("sum", a.first);
