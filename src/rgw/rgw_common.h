@@ -219,6 +219,7 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_ENCRYPTION_ALGORITHM                 2214
 #define ERR_INVALID_CORS_RULES_ERROR                     2215
 #define ERR_NO_CORS_FOUND        2216
+#define ERR_INVALID_WEBSITE_ROUTING_RULES_ERROR          2217
 
 #define ERR_BUSY_RESHARDING      2300
 #define ERR_NO_SUCH_ENTITY       2301
