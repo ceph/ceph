@@ -1,7 +1,7 @@
 
 CXX?=g++
 CXX_FLAGS?=-std=c++11 -Wall -Wextra -Werror -g
-CXX_LIBS?=-lboost_system -lrados -lradosstriper
+CXX_LIBS?=-lrados -lradosstriper
 CXX_INC?=$(LOCAL_LIBRADOS_INC)
 CXX_CC=$(CXX) $(CXX_FLAGS) $(CXX_INC) $(LOCAL_LIBRADOS) $(CXX_LIBS)
 
