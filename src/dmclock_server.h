@@ -325,6 +325,18 @@ namespace crimson {
 	}
       }; // class ClientReq
 
+      struct RequestMeta {
+        C          client_id;
+        RequestTag tag;
+
+        RequestMeta(const C&  _client_id, const RequestTag& _tag) :
+          client_id(_client_id),
+          tag(_tag)
+        {
+          // empty
+        }
+      };
+
     public:
 
       // NOTE: ClientRec is in the "public" section for compatibility
@@ -1017,7 +1029,7 @@ namespace crimson {
       // data_mtx should be held when called; top of heap should have
       // a ready request
       template<typename C1, IndIntruHeapData ClientRec::*C2, typename C3>
-      void pop_process_request(IndIntruHeap<C1, ClientRec, C2, C3, B>& heap,
+      RequestTag pop_process_request(IndIntruHeap<C1, ClientRec, C2, C3, B>& heap,
 			       std::function<void(const C& client,
 						  const Cost cost,
 						  RequestRef& request)> process) {
@@ -1042,37 +1054,45 @@ namespace crimson {
 
 	// process
 	process(top.client, request_cost, request);
+
+	return tag;
       } // pop_process_request
 
 
       // data_mtx must be held by caller
-      void reduce_reservation_tags(DelayedTagCalc delayed, ClientRec& client) {
+      void reduce_reservation_tags(DelayedTagCalc delayed, ClientRec& client,
+                                   const RequestTag& tag) {
 	if (!client.requests.empty()) {
 	  // only maintain a tag for the first request
 	  auto& r = client.requests.front();
-	  r.tag.reservation -= client.info->reservation_inv;
+	  r.tag.reservation -=
+	    client.info->reservation_inv * std::max(uint32_t(1), tag.rho);
 	}
       }
 
       // data_mtx should be held when called
-      void reduce_reservation_tags(ImmediateTagCalc imm, ClientRec& client) {
+      void reduce_reservation_tags(ImmediateTagCalc imm, ClientRec& client,
+                                   const RequestTag& tag) {
+        double res_offset =
+          client.info->reservation_inv * std::max(uint32_t(1), tag.rho);
 	for (auto& r : client.requests) {
-	  r.tag.reservation -= client.info->reservation_inv;
+	  r.tag.reservation -= res_offset;
 	}
       }
 
       // data_mtx should be held when called
-      void reduce_reservation_tags(const C& client_id) {
+      void reduce_reservation_tags(const C& client_id, const RequestTag& tag) {
 	auto client_it = client_map.find(client_id);
 
 	// means the client was cleaned from map; should never happen
 	// as long as cleaning times are long enough
 	assert(client_map.end() != client_it);
 	ClientRec& client = *client_it->second;
-	reduce_reservation_tags(TagCalc{}, client);
+	reduce_reservation_tags(TagCalc{}, client, tag);
 
 	// don't forget to update previous tag
-	client.prev_tag.reservation -= client.info->reservation_inv;
+	client.prev_tag.reservation -=
+	  client.info->reservation_inv * std::max(uint32_t(1), tag.rho);
 	resv_heap.promote(client);
       }
 
@@ -1415,17 +1435,18 @@ namespace crimson {
 
 	switch(next.heap_id) {
 	case super::HeapId::reservation:
-	  super::pop_process_request(this->resv_heap,
+	  (void) super::pop_process_request(this->resv_heap,
 				     process_f(result,
 					       PhaseType::reservation));
 	  ++this->reserv_sched_count;
 	  break;
 	case super::HeapId::ready:
-	  super::pop_process_request(this->ready_heap,
+	  {
+	    auto tag = super::pop_process_request(this->ready_heap,
 				     process_f(result, PhaseType::priority));
-	  { // need to use retn temporarily
+	    // need to use retn temporarily
 	    auto& retn = boost::get<typename PullReq::Retn>(result.data);
-	    super::reduce_reservation_tags(retn.client);
+	    super::reduce_reservation_tags(retn.client, tag);
 	  }
 	  ++this->prop_sched_count;
 	  break;
@@ -1623,10 +1644,11 @@ namespace crimson {
 	       IndIntruHeapData super::ClientRec::*C2,
 	       typename C3,
 	       uint B4>
-      C submit_top_request(IndIntruHeap<C1,typename super::ClientRec,C2,C3,B4>& heap,
-			   PhaseType phase) {
+      typename super::RequestMeta
+      submit_top_request(IndIntruHeap<C1,typename super::ClientRec,C2,C3,B4>& heap,
+			 PhaseType phase) {
 	C client_result;
-	super::pop_process_request(heap,
+	RequestTag tag = super::pop_process_request(heap,
 				   [this, phase, &client_result]
 				   (const C& client,
 				    const Cost request_cost,
@@ -1634,13 +1656,13 @@ namespace crimson {
 				     client_result = client;
 				     handle_f(client, std::move(request), phase, request_cost);
 				   });
-	return client_result;
+	typename super::RequestMeta req(client_result, tag);
+	return req;
       }
 
 
       // data_mtx should be held when called
       void submit_request(typename super::HeapId heap_id) {
-	C client;
 	switch(heap_id) {
 	case super::HeapId::reservation:
 	  // don't need to note client
@@ -1650,8 +1672,10 @@ namespace crimson {
 	  ++this->reserv_sched_count;
 	  break;
 	case super::HeapId::ready:
-	  client = submit_top_request(this->ready_heap, PhaseType::priority);
-	  super::reduce_reservation_tags(client);
+	  {
+	    auto req = submit_top_request(this->ready_heap, PhaseType::priority);
+	    super::reduce_reservation_tags(req.client_id, req.tag);
+	  }
 	  ++this->prop_sched_count;
 	  break;
 	default:
