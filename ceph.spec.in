@@ -142,6 +142,7 @@ BuildRequires:	python
 BuildRequires:	python-devel
 BuildRequires:	python-nose
 BuildRequires:	python-requests
+BuildRequires:	python-six
 BuildRequires:	python-virtualenv
 BuildRequires:	snappy-devel
 BuildRequires:	udev
@@ -322,6 +323,7 @@ Summary:        Ceph Manager Daemon
 Group:          System/Filesystems
 %endif
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
+Requires:       python-six
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python-cherrypy
 Requires:       python-jinja2
