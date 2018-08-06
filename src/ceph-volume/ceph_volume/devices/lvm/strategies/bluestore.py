@@ -1,5 +1,6 @@
 from __future__ import print_function
 import json
+from uuid import uuid4
 from ceph_volume.util import disk
 from ceph_volume.api import lvm
 from . import validators
@@ -124,11 +125,16 @@ class SingleType(object):
             lvs = lvm.create_lvs(create['vg'], parts=create['parts'], name_prefix='osd-data')
             vg_name = create['vg'].name
             for lv in lvs:
-                # FIXME: no support for dmcrypt, crush class, etc...
-                Create([
-                    '--bluestore',
-                    '--data', "%s/%s" % (vg_name, lv.name),
-                ]).main()
+                command = ['--bluestore', '--data']
+                command.append('%s/%s' % (vg_name, lv.name))
+                if self.args.dmcrypt:
+                    command.append('--dmcrypt')
+                if self.args.no_systemd:
+                    command.append('--no-systemd')
+                if self.args.crush_device_class:
+                    command.extend(['--crush-device-class', self.args.crush_device_class])
+
+                Create(command).main()
 
 
 class MixedType(object):
@@ -229,15 +235,21 @@ class MixedType(object):
         # create the data lvs, and create the OSD with the matching block.db lvs from before
         for osd in self.computed['osds']:
             vg = lvm.create_vg(osd['data']['path'])
-            from uuid import uuid4
             data_lv = lvm.create_lv('osd-data-%s' % str(uuid4()), vg.name)
             db_lv = db_lvs.pop()
-            # FIXME: no support for dmcrypt, crush class, etc...
-            Create([
+            command = [
                 '--bluestore',
                 '--data', "%s/%s" % (data_lv.vg_name, data_lv.name),
                 '--block.db', '%s/%s' % (db_lv.vg_name, db_lv.name)
-            ]).main()
+            ]
+            if self.args.dmcrypt:
+                command.append('--dmcrypt')
+            if self.args.no_systemd:
+                command.append('--no-systemd')
+            if self.args.crush_device_class:
+                command.extend(['--crush-device-class', self.args.crush_device_class])
+
+            Create(command).main()
 
     def validate(self):
         """
