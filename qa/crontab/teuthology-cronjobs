@@ -1,6 +1,6 @@
 PATH=/home/teuthology/src/teuthology_master/virtualenv/bin:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 MAILTO="ceph-infra@redhat.com;yweinste@redhat.com"
-CEPH_QA_EMAIL="ceph-qa@ceph.com"
+CEPH_QA_EMAIL="ceph-qa@lists.ceph.com"
 
 ### !!!!!!!!!!!!!!!!!!!!!!!!!!
 ## THIS CRONTAB MUST NOT BE EDITED MANUALLY !!!!
