@@ -21,16 +21,10 @@ if test $(id -u) != 0 ; then
 fi
 export LC_ALL=C # the following is vulnerable to i18n
 
-ARCH=`uname -m`
-
-if [ -n "$WITH_SEASTAR" ]; then
-    with_seastar=true
-else
-    with_seastar=false
-fi
+ARCH=$(uname -m)
 
 function install_seastar_deps {
-    if $with_seastar; then
+    if [ $WITH_SEASTAR ]; then
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y \
               ragel libc-ares-dev libhwloc-dev libnuma-dev libpciaccess-dev \
               libcrypto++-dev libgnutls28-dev libsctp-dev libprotobuf-dev \
@@ -46,27 +40,26 @@ function munge_ceph_spec_in {
     else
         sed -i -e 's/%bcond_without python2/%bcond_with python2/g' $OUTFILE
     fi
-    if $with_seastar; then
+    if [ $WITH_SEASTAR ]; then
         sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
     fi
 }
 
-function ensure_decent_gcc_on_deb {
+function ensure_decent_gcc_on_ubuntu {
     # point gcc to the one offered by g++-7 if the used one is not
     # new enough
     local old=$(gcc -dumpversion)
     local new=$1
+    local codename=$2
     if dpkg --compare-versions $old ge 7.0; then
 	return
     fi
 
-    local dist=$(lsb_release --short --codename)
-
     if [ ! -f /usr/bin/g++-${new} ]; then
 	$SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
-deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $dist main
-deb [arch=amd64] http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $dist main
-deb [arch=amd64,i386] http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $dist main
+deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $codename main
+deb [arch=amd64] http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $codename main
+deb [arch=amd64,i386] http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $codename main
 EOF
 	# import PPA's signing key into APT's keyring
 	cat << ENDOFKEY | $SUDO apt-key add -
@@ -88,7 +81,7 @@ ENDOFKEY
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-7
     fi
 
-    case $dist in
+    case $codename in
         trusty)
             old=4.8;;
         xenial)
@@ -141,7 +134,7 @@ EOF
     fi
 }
 
-if [ x`uname`x = xFreeBSDx ]; then
+if [ x$(uname)x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
         devel/babeltrace \
         devel/git \
@@ -197,11 +190,14 @@ else
     case $ID in
     debian|ubuntu|devuan)
         echo "Using apt-get to install dependencies"
-        $SUDO apt-get install -y lsb-release devscripts equivs
+        $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
         case "$VERSION" in
-            *Trusty*|*Xenial*)
-                ensure_decent_gcc_on_deb 7
+            *Trusty*)
+                ensure_decent_gcc_on_ubuntu 7 trusty
+                ;;
+            *Xenial*)
+                ensure_decent_gcc_on_ubuntu 7 xenial
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -215,11 +211,11 @@ else
 
 	backports=""
 	control="debian/control"
-        case $(lsb_release -sc) in
-            squeeze|wheezy)
+        case "$VERSION" in
+            *squeeze*|*wheezy*)
 		control="/tmp/control.$$"
 		grep -v babeltrace debian/control > $control
-                backports="-t $(lsb_release -sc)-backports"
+                backports="-t $codename-backports"
                 ;;
         esac
 
@@ -239,30 +235,28 @@ else
             builddepcmd="dnf -y builddep --allowerasing"
         fi
         echo "Using $yumdnf to install dependencies"
-	if [ $(lsb_release -si) = CentOS -a $(uname -m) = aarch64 ]; then
+	if [ "$ID" = "centos" -a $(uname -m) = aarch64 ]; then
 	    $SUDO yum-config-manager --disable centos-sclo-sclo || true
 	    $SUDO yum-config-manager --disable centos-sclo-rh || true
 	    $SUDO yum remove centos-release-scl || true
 	fi
 
-        $SUDO $yumdnf install -y redhat-lsb-core
-        case $(lsb_release -si) in
-            Fedora)
+        case $ID in
+            fedora)
                 if test $yumdnf = yum; then
                     $SUDO $yumdnf install -y yum-utils
                 fi
                 ;;
-            CentOS|RedHatEnterpriseServer|VirtuozzoLinux)
+            centos|rhel|ol|virtuozzo)
                 $SUDO yum install -y yum-utils
-                MAJOR_VERSION=$(lsb_release -rs | cut -f1 -d.)
-                if test $(lsb_release -si) = RedHatEnterpriseServer ; then
-                    $SUDO yum-config-manager --enable rhel-$MAJOR_VERSION-server-optional-rpms
+                if test $ID = rhel ; then
+                    $SUDO yum-config-manager --enable rhel-$VERSION_ID-server-optional-rpms
                 fi
-                $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$MAJOR_VERSION/x86_64/
+                $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$VERSION_ID/x86_64/
                 $SUDO yum install --nogpgcheck -y epel-release
-                $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
+                $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$VERSION_ID
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
-                if test $(lsb_release -si) = CentOS -a $MAJOR_VERSION = 7 ; then
+                if test $ID = centos -a $VERSION_ID = 7 ; then
                     $SUDO yum-config-manager --enable cr
 		    case $(uname -m) in
 			x86_64)
@@ -276,10 +270,10 @@ else
 			    dts_ver=7
 			    ;;
 		    esac
-                elif test $(lsb_release -si) = RedHatEnterpriseServer -a $MAJOR_VERSION = 7 ; then
+                elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable rhel-server-rhscl-7-rpms
                     dts_ver=7
-                elif test $(lsb_release -si) = VirtuozzoLinux -a $MAJOR_VERSION = 7 ; then
+                elif test $ID = virtuozzo -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable cr
                 fi
                 ;;
@@ -295,7 +289,7 @@ else
     opensuse*|suse|sles)
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
-        $SUDO $zypp_install lsb-release systemd-rpm-macros
+        $SUDO $zypp_install systemd-rpm-macros
         munge_ceph_spec_in $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
