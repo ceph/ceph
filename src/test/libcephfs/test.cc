@@ -2147,3 +2147,41 @@ TEST(LibCephFS, TestFutimens) {
   ceph_close(cmount, fd);
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, OperationsOnDotDot) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char c_dir[1024], c_dir_dot[1024], c_dir_dotdot[1024];
+  char c_non_existent_dir[1024], c_non_existent_dirs[1024];
+  char c_temp[1024];
+
+  pid_t mypid = getpid();
+  sprintf(c_dir, "/oodd_dir_%d", mypid);
+  sprintf(c_dir_dot, "/%s/.", c_dir);
+  sprintf(c_dir_dotdot, "/%s/..", c_dir);
+  sprintf(c_non_existent_dir, "/%s/../oodd_nonexistent/..", c_dir);
+  sprintf(c_non_existent_dirs,
+          "/%s/../ood_nonexistent1_%d/oodd_nonexistent2_%d", c_dir, mypid, mypid);
+  sprintf(c_temp, "/oodd_temp_%d", mypid);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, c_dir, 0777));
+  ASSERT_EQ(-EEXIST, ceph_mkdir(cmount, c_dir_dot, 0777));
+  ASSERT_EQ(-EEXIST, ceph_mkdir(cmount, c_dir_dotdot, 0777));
+  ASSERT_EQ(0, ceph_mkdirs(cmount, c_non_existent_dirs, 0777));
+
+  ASSERT_EQ(-ENOTEMPTY, ceph_rmdir(cmount, c_dir_dot));
+  ASSERT_EQ(-ENOTEMPTY, ceph_rmdir(cmount, c_dir_dotdot));
+  // non existent directory should return -ENOENT
+  ASSERT_EQ(-ENOENT, ceph_rmdir(cmount, c_non_existent_dir));
+
+  ASSERT_EQ(-EBUSY, ceph_rename(cmount, c_dir_dot, c_temp));
+  ASSERT_EQ(0, ceph_chdir(cmount, c_dir));
+  ASSERT_EQ(0, ceph_mkdir(cmount, c_temp, 0777));
+  ASSERT_EQ(-EBUSY, ceph_rename(cmount, c_temp, ".."));
+
+  ceph_shutdown(cmount);
+}
