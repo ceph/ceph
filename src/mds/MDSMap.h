@@ -439,12 +439,11 @@ public:
 	s.insert(p.second.rank);
   }
 
-  void
-  get_clientreplay_or_active_or_stopping_mds_set(std::set<mds_rank_t>& s) const {
+  void get_mds_set_lower_bound(std::set<mds_rank_t>& s, DaemonState first) const {
     for (std::map<mds_gid_t, mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p)
-      if (p->second.state >= STATE_CLIENTREPLAY && p->second.state <= STATE_STOPPING)
+      if (p->second.state >= first && p->second.state <= STATE_STOPPING)
 	s.insert(p->second.rank);
   }
   void get_mds_set(std::set<mds_rank_t>& s, DaemonState state) const {

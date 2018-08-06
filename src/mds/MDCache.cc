@@ -8660,9 +8660,10 @@ void MDCache::do_open_ino_peer(inodeno_t ino, open_ino_info_t& info)
 {
   set<mds_rank_t> all, active;
   mds->mdsmap->get_mds_set(all);
-  mds->mdsmap->get_clientreplay_or_active_or_stopping_mds_set(active);
   if (mds->get_state() == MDSMap::STATE_REJOIN)
-    mds->mdsmap->get_mds_set(active, MDSMap::STATE_REJOIN);
+    mds->mdsmap->get_mds_set_lower_bound(active, MDSMap::STATE_REJOIN);
+  else
+    mds->mdsmap->get_mds_set_lower_bound(active, MDSMap::STATE_CLIENTREPLAY);
 
   dout(10) << "do_open_ino_peer " << ino << " active " << active
 	   << " all " << all << " checked " << info.checked << dendl;
@@ -8874,7 +8875,7 @@ void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
 {
   set<mds_rank_t> all, active;
   mds->mdsmap->get_mds_set(all);
-  mds->mdsmap->get_clientreplay_or_active_or_stopping_mds_set(active);
+  mds->mdsmap->get_mds_set_lower_bound(active, MDSMap::STATE_CLIENTREPLAY);
 
   dout(10) << "_do_find_ino_peer " << fip.tid << " " << fip.ino
 	   << " active " << active << " all " << all

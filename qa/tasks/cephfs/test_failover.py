@@ -1,3 +1,5 @@
+import time
+import signal
 import json
 import logging
 from unittest import case, SkipTest
@@ -133,8 +135,59 @@ class TestFailover(CephFSTestCase):
         self.fs.mon_manager.raw_cluster_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', '0')
         self.wait_for_health_clear(timeout=30)
 
+    def test_discontinuous_mdsmap(self):
+        """
+        That discontinuous mdsmap does not affect failover.
+        See http://tracker.ceph.com/issues/24856.
+        """
+        mds_ids = sorted(self.mds_cluster.mds_ids)
+        mds_a, mds_b = mds_ids[0:2]
+        # Assign mds to fixed ranks. To prevent standby mds from replacing frozen mds
+        rank = 0;
+        for mds_id in mds_ids:
+            self.set_conf("mds.{0}".format(mds_id), "mds_standby_for_rank", str(rank))
+            rank += 1
+        self.mds_cluster.mds_restart()
+        self.fs.wait_for_daemons()
 
+        self.fs.set_max_mds(2)
+        self.fs.wait_for_state('up:active', rank=1)
 
+        # Drop 'export prep' message, make import stay in 'discovered' state
+        self.fs.mds_asok(['config', 'set', 'mds_inject_migrator_message_loss', '82'], mds_id=mds_b)
+
+        self.mount_a.run_shell(["mkdir", "a"])
+        self.mount_a.setfattr("a", "ceph.dir.pin", "1")
+        self.mount_a.umount_wait()
+
+        # Should be long enough for start the export
+        time.sleep(30)
+
+        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
+        monc_timeout = float(self.fs.get_config("mon_client_ping_timeout", service_type="mds"))
+
+        # Freeze mds_b
+        self.mds_cluster.mds_signal(mds_b, signal.SIGSTOP)
+        self.wait_until_true(
+            lambda: "laggy_since" in self.fs.mon_manager.get_mds_status(mds_b),
+            timeout=grace * 2
+        )
+
+        self.mds_cluster.mds_restart(mds_a)
+        self.fs.wait_for_state('up:resolve', rank=0, timeout=30)
+
+        # Make sure of mds_b's monitor connection gets reset
+        time.sleep(monc_timeout * 2)
+
+        # Unfreeze mds_b, it will get discontinuous mdsmap
+        self.mds_cluster.mds_signal(mds_b, signal.SIGCONT)
+        self.wait_until_true(
+            lambda: "laggy_since" not in self.fs.mon_manager.get_mds_status(mds_b),
+            timeout=grace * 2
+        )
+
+        # Check if mds_b sends 'resolve' message to mds_a. If not, mds_a can't become active
+        self.fs.wait_for_state('up:active', rank=0, timeout=30)
 
 class TestStandbyReplay(CephFSTestCase):
     MDSS_REQUIRED = 4
