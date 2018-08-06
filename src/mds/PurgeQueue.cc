@@ -28,9 +28,22 @@ static ostream& _prefix(std::ostream *_dout, mds_rank_t rank) {
   return *_dout << "mds." << rank << ".purge_queue ";
 }
 
+const std::map<std::string_view, PurgeItem::Action> PurgeItem::actions = {
+  {"NONE", PurgeItem::NONE},
+  {"PURGE_FILE", PurgeItem::PURGE_FILE},
+  {"TRUNCATE_FILE", PurgeItem::TRUNCATE_FILE},
+  {"PURGE_DIR", PurgeItem::PURGE_DIR}
+};
+
 void PurgeItem::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
+  encode(stamp, bl);
+  encode(pad_size, bl);
+  uint8_t static const pad = 0xff;
+  for (unsigned int i = 0; i<pad_size; i++) {
+    encode(pad, bl);
+  }
   encode((uint8_t)action, bl);
   encode(ino, bl);
   encode(size, bl);
@@ -44,6 +57,9 @@ void PurgeItem::encode(bufferlist &bl) const
 void PurgeItem::decode(bufferlist::const_iterator &p)
 {
   DECODE_START(1, p);
+  decode(stamp, p);
+  decode(pad_size, p);
+  p.advance(pad_size);
   decode((uint8_t&)action, p);
   decode(ino, p);
   decode(size, p);
@@ -648,5 +664,17 @@ bool PurgeQueue::drain(
   *in_flight_count = in_flight.size();
 
   return false;
+}
+
+std::string PurgeItem::get_type_str() const
+{
+  switch(action) {
+  case PurgeItem::NONE: return "NONE";
+  case PurgeItem::PURGE_FILE: return "PURGE_FILE";
+  case PurgeItem::PURGE_DIR: return "PURGE_DIR";
+  case PurgeItem::TRUNCATE_FILE: return "TRUNCATE_FILE";
+  default:
+    return "UNKNOWN";
+  }
 }
 
