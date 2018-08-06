@@ -85,6 +85,8 @@ private:
   bool reconnect_evicting;  // true if I am waiting for evictions to complete
                             // before proceeding to reconnect_gather_finish
 
+  double cap_revoke_eviction_timeout = 0;
+
   friend class MDSContinuation;
   friend class ServerContext;
   friend class ServerLogContext;
@@ -306,6 +308,10 @@ public:
   void do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr, bool finish_mdr=false);
   void _rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentry *srcdn, version_t srcdnpv,
 			       CDentry *destdn, CDentry *staydn, bool finish_mdr);
+
+  void evict_cap_revoke_non_responders();
+  void handle_conf_change(const struct md_config_t *,
+                          const std::set <std::string> &changed);
 
 private:
   void reply_client_request(MDRequestRef& mdr, MClientReply *reply);
