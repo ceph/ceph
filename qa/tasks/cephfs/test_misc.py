@@ -2,11 +2,13 @@
 from unittest import SkipTest
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
 import errno
 import time
 import json
+import logging
 
+log = logging.getLogger(__name__)
 
 class TestMisc(CephFSTestCase):
     CLIENTS_REQUIRED = 2
@@ -128,6 +130,60 @@ class TestMisc(CephFSTestCase):
         time.sleep(session_autoclose * 1.5)
         ls_data = self.fs.mds_asok(['session', 'ls'])
         self.assert_session_count(1, ls_data)
+
+    def test_cap_revoke_nonresponder(self):
+        """
+        Check that a client is evicted if it has not responded to cap revoke
+        request for configured number of seconds.
+        """
+        session_timeout = self.fs.get_var("session_timeout")
+        eviction_timeout = session_timeout / 2.0
+
+        self.fs.mds_asok(['config', 'set', 'mds_cap_revoke_eviction_timeout',
+                          str(eviction_timeout)])
+
+        cap_holder = self.mount_a.open_background()
+
+        # Wait for the file to be visible from another client, indicating
+        # that mount_a has completed its network ops
+        self.mount_b.wait_for_visible()
+
+        # Simulate client death
+        self.mount_a.kill()
+
+        try:
+            # The waiter should get stuck waiting for the capability
+            # held on the MDS by the now-dead client A
+            cap_waiter = self.mount_b.write_background()
+
+            a = time.time()
+            time.sleep(eviction_timeout)
+            cap_waiter.wait()
+            b = time.time()
+            cap_waited = b - a
+            log.info("cap_waiter waited {0}s".format(cap_waited))
+
+            # check if the cap is transferred before session timeout kicked in.
+            # this is a good enough check to ensure that the client got evicted
+            # by the cap auto evicter rather than transitioning to stale state
+            # and then getting evicted.
+            self.assertLess(cap_waited, session_timeout,
+                            "Capability handover took {0}, expected less than {1}".format(
+                                cap_waited, session_timeout
+                            ))
+
+            self.assertTrue(self.mount_a.is_blacklisted())
+            cap_holder.stdin.close()
+            try:
+                cap_holder.wait()
+            except (CommandFailedError, ConnectionLostError):
+                # We killed it (and possibly its node), so it raises an error
+                pass
+        finally:
+            self.mount_a.kill_cleanup()
+
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
 
     def test_filtered_df(self):
         pool_name = self.fs.get_data_pool_name()
