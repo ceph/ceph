@@ -366,16 +366,24 @@ public:
     if (f) {
       dump(f);
     } else {
+      utime_t now = ceph_clock_now();
       if (get_active_gid() != 0) {
 	*ss << get_active_name();
         if (!available) {
           // If the daemon hasn't gone active yet, indicate that.
-          *ss << "(active, starting)";
+          *ss << "(active, starting";
         } else {
-          *ss << "(active)";
+          *ss << "(active";
         }
+	if (active_change) {
+	  *ss << ", since " << utimespan_str(now - active_change);
+	}
+	*ss << ")";
       } else {
 	*ss << "no daemons active";
+	if (active_change) {
+	  *ss << " (since " << utimespan_str(now - active_change) << ")";
+	}
       }
       if (standbys.size()) {
 	*ss << ", standbys: ";
