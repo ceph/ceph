@@ -1,5 +1,6 @@
 from datetime import datetime
 from threading import Event
+from itertools import chain
 import json
 import errno
 import six
@@ -91,6 +92,10 @@ class Module(MgrModule):
         else:
             return False, "influxdb python module not found"
 
+    @staticmethod
+    def get_timestamp():
+        return datetime.utcnow().isoformat() + 'Z'
+
     def get_latest(self, daemon_type, daemon_name, stat):
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
         if data:
@@ -103,7 +108,7 @@ class Module(MgrModule):
         data = []
         pool_info = {}
 
-        now = datetime.utcnow().isoformat() + 'Z'
+        now = self.get_timestamp()
 
         df_types = [
             'bytes_used',
@@ -140,7 +145,7 @@ class Module(MgrModule):
         return data, pool_info
 
     def get_pg_summary(self, pool_info):
-        time = datetime.utcnow().isoformat() + 'Z'
+        time = self.get_timestamp()
         pg_sum = self.get('pg_summary')
         osd_sum = pg_sum['by_osd']
         pool_sum = pg_sum['by_pool']
@@ -181,11 +186,8 @@ class Module(MgrModule):
                 data.append(point_2)
         return data 
 
-
     def get_daemon_stats(self):
-        data = []
-
-        now = datetime.utcnow().isoformat() + 'Z'
+        now = self.get_timestamp()
 
         for daemon, counters in six.iteritems(self.get_all_perf_counters()):
             svc_type, svc_id = daemon.split(".", 1)
@@ -197,7 +199,7 @@ class Module(MgrModule):
 
                 value = counter_info['value']
 
-                data.append({
+                yield {
                     "measurement": "ceph_daemon_stats",
                     "tags": {
                         "ceph_daemon": daemon,
@@ -209,9 +211,7 @@ class Module(MgrModule):
                     "fields": {
                         "value": value
                     }
-                })
-
-        return data
+                }
 
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():
@@ -283,9 +283,12 @@ class Module(MgrModule):
         # db can not be created
         try:
             df_stats, pools = self.get_df_stats()
-            client.write_points(df_stats, 'ms')
-            client.write_points(self.get_daemon_stats(), 'ms')
-            client.write_points(self.get_pg_summary(pools))
+            points = chain(
+                df_stats,
+                self.get_daemon_stats(),
+                self.get_pg_summary(pools)
+            )
+            client.write_points(points, 'ms')
             self.set_health_checks(dict())
         except ConnectionError as e:
             self.log.exception("Failed to connect to Influx host %s:%d",
