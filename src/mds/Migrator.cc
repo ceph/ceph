@@ -2593,6 +2593,15 @@ void Migrator::import_remove_pins(CDir *dir, set<CDir*>& bounds)
   }
 }
 
+class C_MDC_QueueContexts : public MigratorContext {
+public:
+  MDSInternalContextBase::vec contexts;
+  C_MDC_QueueContexts(Migrator *m) : MigratorContext(m) {}
+  void finish(int r) override {
+    // execute contexts immediately after 'this' context
+    get_mds()->queue_waiters_front(contexts);
+  }
+};
 
 /*
  * note: this does teh full work of reversing and import and cleaning up
@@ -2620,7 +2629,7 @@ void Migrator::import_reverse(CDir *dir)
 
   cache->adjust_subtree_auth(dir, stat.peer);
 
-  auto fin = new C_ContextsBase<MDSInternalContextBase, MDSInternalContextGather, MDSInternalContextBase::vec>(g_ceph_context);
+  auto fin = new C_MDC_QueueContexts(this);
   if (!dir->get_inode()->is_auth() &&
       !dir->get_inode()->has_subtree_root_dirfrag(mds->get_nodeid())) {
     dir->get_inode()->clear_scatter_dirty();
