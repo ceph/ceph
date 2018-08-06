@@ -6995,6 +6995,10 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_inject_migrator_session_race", Option::TYPE_BOOL, Option::LEVEL_DEV)
      .set_default(false),
+
+    Option("mds_cap_revoke_eviction_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+     .set_default(0)
+     .set_description("number of seconds after which clients which have not responded to cap revoke messages by the MDS are evicted."),
   });
 }
 

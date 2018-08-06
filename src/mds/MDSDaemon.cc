@@ -389,6 +389,7 @@ const char** MDSDaemon::get_tracked_conf_keys() const
     "mds_inject_migrator_session_race",
     "host",
     "fsid",
+    "mds_cap_revoke_eviction_timeout",
     NULL
   };
   return KEYS;
