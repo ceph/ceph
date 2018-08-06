@@ -182,7 +182,7 @@ struct InodeStat {
     if (features & CEPH_FEATURE_MDS_QUOTA)
       ::decode(quota, p);
     else
-      memset(&quota, 0, sizeof(quota));
+      quota = quota_info_t{};
 
     if ((features & CEPH_FEATURE_FS_FILE_LAYOUT_V2))
       ::decode(layout.pool_ns, p);
