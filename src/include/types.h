@@ -363,11 +363,11 @@ namespace {
     char buffer[32];
 
     if (index == 0) {
-      (void) snprintf(buffer, sizeof(buffer), "%" PRId64 " %s", n, u);
+      (void) snprintf(buffer, sizeof(buffer), "%" PRId64 "%s", n, u);
     } else if ((v % mult) == 0) {
       // If this is an even multiple of the base, always display
       // without any decimal fraction.
-      (void) snprintf(buffer, sizeof(buffer), "%" PRId64 " %s", n, u);
+      (void) snprintf(buffer, sizeof(buffer), "%" PRId64 "%s", n, u);
     } else {
       // We want to choose a precision that reflects the best choice
       // for fitting in 5 characters.  This can get rather tricky when
@@ -378,7 +378,7 @@ namespace {
       // easier just to try each combination in turn.
       int i;
       for (i = 2; i >= 0; i--) {
-        if (snprintf(buffer, sizeof(buffer), "%.*f %s", i,
+        if (snprintf(buffer, sizeof(buffer), "%.*f%s", i,
           static_cast<double>(v) / mult, u) <= 7)
           break;
       }
@@ -402,7 +402,7 @@ inline ostream& operator<<(ostream& out, const si_u_t& b)
   uint64_t n = b.v;
   int index = 0;
   uint64_t mult = 1;
-  const char* u[] = {"", "k", "M", "G", "T", "P", "E"};
+  const char* u[] = {"", " k", " M", " G", " T", " P", " E"};
 
   while (n >= 1000 && index < 7) {
     n /= 1000;
@@ -429,7 +429,7 @@ inline ostream& operator<<(ostream& out, const byte_u_t& b)
 {
   uint64_t n = b.v;
   int index = 0;
-  const char* u[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"};
+  const char* u[] = {" B", " KiB", " MiB", " GiB", " TiB", " PiB", " EiB"};
 
   while (n >= 1024 && index < 7) {
     n /= 1024;
