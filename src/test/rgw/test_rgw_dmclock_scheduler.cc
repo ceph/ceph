@@ -87,6 +87,45 @@ TEST(Queue, AsyncRequest)
   EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_cancel));
 }
 
+TEST(Queue, SyncRequest)
+{
+  ClientCounters counters(g_ceph_context);
+  auto client_info_f = [] (client_id client) -> ClientInfo* {
+                         static ClientInfo clients[] = {
+                                                        {1, 1, 1}, //admin: satisfy by reservation
+                                                        {0, 1, 1}, //auth: satisfy by priority
+                         };
+                         return &clients[static_cast<size_t>(client)];
+                       };
+  std::atomic <bool> ready = false;
+  auto server_ready_f = [&ready]() -> bool { return ready.load();};
+
+  SyncScheduler queue(g_ceph_context, std::ref(counters),
+		      client_info_f, server_ready_f,
+		      std::ref(SyncScheduler::handle_request_cb)
+		      );
+
+
+  auto now = get_time();
+  ready = true;
+  queue.add_request(client_id::admin, {}, now, 1);
+  queue.add_request(client_id::auth, {}, now, 1);
+
+  // We can't see the queue at length 1 as the queue len is decremented as the
+  //request is processed
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_res));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_prio));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_limit));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_cancel));
+
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_res));
+  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_prio));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_limit));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_cancel));
+}
+
 TEST(Queue, RateLimit)
 {
   boost::asio::io_context context;
