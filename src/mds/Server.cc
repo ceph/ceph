@@ -178,6 +178,9 @@ void Server::create_logger()
   plb.add_time_avg(l_mdss_req_renamesnap_latency, "req_renamesnap_latency",
                    "Request type rename snapshot latency");
 
+  plb.add_u64_counter(l_mdss_cap_revoke_eviction, "cap_revoke_eviction",
+                      "Cap Revoke Client Eviction", "cre", PerfCountersBuilder::PRIO_INTERESTING);
+
   plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
   plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request",
                       "Client requests dispatched");
@@ -817,8 +820,12 @@ void Server::evict_cap_revoke_non_responders() {
             << client << dendl;
 
     std::stringstream ss;
-    mds->evict_client(client.v, false, g_conf->mds_session_blacklist_on_evict,
-                      ss, nullptr);
+    bool evicted = mds->evict_client(client.v, false,
+                                     g_conf->mds_session_blacklist_on_evict,
+                                     ss, nullptr);
+    if (evicted && logger) {
+      logger->inc(l_mdss_cap_revoke_eviction);
+    }
   }
 }
 
