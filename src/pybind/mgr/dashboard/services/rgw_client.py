@@ -171,12 +171,13 @@ class RgwClient(RestClient):
         port = port if port else RgwClient._port
         admin_path = admin_path if admin_path else RgwClient._ADMIN_PATH
         ssl = ssl if ssl else RgwClient._ssl
+        ssl_verify = Settings.RGW_API_SSL_VERIFY
 
         self.service_url = build_url(host=host, port=port)
         self.admin_path = admin_path
 
         s3auth = S3Auth(access_key, secret_key, service_url=self.service_url)
-        super(RgwClient, self).__init__(host, port, 'RGW', ssl, s3auth)
+        super(RgwClient, self).__init__(host, port, 'RGW', ssl, s3auth, ssl_verify=ssl_verify)
 
         # If user ID is not set, then try to get it via the RGW Admin Ops API.
         self.userid = userid if userid else self._get_user_id(self.admin_path)
