@@ -409,6 +409,7 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
 	    << pending_map.active_name << ")" << dendl;
     pending_map.active_gid = m->get_gid();
     pending_map.active_name = m->get_name();
+    pending_map.active_change = ceph_clock_now();
     pending_map.available_modules = m->get_available_modules();
     encode(m->get_metadata(), pending_metadata[m->get_name()]);
     pending_metadata_rm.erase(m->get_name());
@@ -666,6 +667,7 @@ bool MgrMonitor::promote_standby()
     pending_map.active_name = pending_map.standbys.at(replacement_gid).name;
     pending_map.available = false;
     pending_map.active_addrs = entity_addrvec_t();
+    pending_map.active_change = ceph_clock_now();
 
     drop_standby(replacement_gid, false);
 
@@ -685,6 +687,7 @@ void MgrMonitor::drop_active()
   pending_metadata.erase(pending_map.active_name);
   pending_map.active_name = "";
   pending_map.active_gid = 0;
+  pending_map.active_change = ceph_clock_now();
   pending_map.available = false;
   pending_map.active_addrs = entity_addrvec_t();
   pending_map.services.clear();
