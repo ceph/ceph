@@ -106,8 +106,30 @@ class Orchestrator(object):
         """
         Enable other modules to interrogate this module to discover
         whether it's usable as an orchestrator module.
+
+        Subclasses do not need to override this.
         """
         return True
+
+    def available(self):
+        """
+        Report whether we can talk to the orchestrator.  This is the
+        place to give the user a meaningful message if the orchestrator
+        isn't running or can't be contacted.
+
+        This method may be called frequently (e.g. every page load
+        to conditionally display a warning banner), so make sure it's
+        not too expensive.  It's okay to give a slightly stale status
+        (e.g. based on a periodic background ping of the orchestrator)
+        if that's necessary to make this method fast.
+
+        Do not override this method if you don't have a meaningful
+        status to return: the default None, None return value is used
+        to indicate that a module is unable to indicate its availability.
+
+        @return two-tuple of boolean, string
+        """
+        return None, None
 
     def wait(self, completions):
         """

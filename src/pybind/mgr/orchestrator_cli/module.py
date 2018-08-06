@@ -40,6 +40,11 @@ class OrchestratorCli(MgrModule):
             "desc": "Select orchestrator module backend",
             "perm": "rw"
         },
+        {
+            "cmd": "orchestrator status",
+            "desc": "Report configured backend and its status",
+            "perm": "r"
+        }
     ]
 
     def _select_orchestrator(self):
@@ -222,6 +227,24 @@ class OrchestratorCli(MgrModule):
             module_name
         )
 
+    def _status(self):
+        try:
+            avail, why = self._oremote("available")
+        except NoOrchestrator:
+            return 0, "No orchestrator configured (try " \
+                      "`ceph orchestrator set backend`)", ""
+
+        if avail is None:
+            # The module does not report its availability
+            return 0, "Backend: {0}".format(
+                self._select_orchestrator()), ""
+        else:
+            return 0, "Backend: {0}\nAvailable: {1}{2}".format(
+                self._select_orchestrator(),
+                avail,
+                " ({0})".format(why) if not avail else ""
+            ), ""
+
     def handle_command(self, inbuf, cmd):
         try:
             return self._handle_command(inbuf, cmd)
@@ -239,7 +262,9 @@ class OrchestratorCli(MgrModule):
             return self._service_status(cmd)
         elif cmd['prefix'] == "orchestrator service add":
             return self._service_add(cmd)
-        if cmd['prefix'] == "orchestrator set backend":
+        elif cmd['prefix'] == "orchestrator set backend":
             return self._set_backend(cmd)
+        elif cmd['prefix'] == "orchestrator status":
+            return self._status()
         else:
             raise NotImplementedError()

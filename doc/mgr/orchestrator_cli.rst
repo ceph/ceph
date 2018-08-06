@@ -26,6 +26,13 @@ For example, to enable the Rook orchestrator module and use it with the CLI:
     ceph orchestrator set backend rook
 
 
+You can then check backend is properly configured:
+
+::
+
+    ceph orchestrator status
+
+
 Usage
 =====
 

@@ -9,6 +9,7 @@ import orchestrator
 
 try:
     from kubernetes import client, config
+    from kubernetes.client.rest import ApiException
 
     kubernetes_imported = True
 except ImportError:
@@ -180,7 +181,20 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         if kubernetes_imported:
             return True, ""
         else:
-            return False, "kubernetes module not found"
+            return False, "Kubernetes module not found"
+
+    def available(self):
+        if not kubernetes_imported:
+            return False, "Kubernetes module not found"
+        elif not self._in_cluster():
+            return False, "ceph-mgr not running in Rook cluster"
+
+        try:
+            self.k8s.list_namespaced_pod(self.rook_cluster.cluster_name)
+        except ApiException:
+            return False, "Cannot reach Kubernetes API"
+        else:
+            return True, ""
 
     def __init__(self, *args, **kwargs):
         super(RookOrchestrator, self).__init__(*args, **kwargs)
@@ -204,12 +218,21 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._initialized.wait()
         return self._rook_cluster
 
+    def _in_cluster(self):
+        """
+        Check if we appear to be running inside a Kubernetes/Rook
+        cluster
+
+        :return: bool
+        """
+        return 'ROOK_CLUSTER_NAME' in os.environ
+
     def serve(self):
         # For deployed clusters, we should always be running inside
         # a Rook cluster.  For development convenience, also support
         # running outside (reading ~/.kube config)
-        in_cluster = 'ROOK_CLUSTER_NAME' in os.environ
-        if in_cluster:
+
+        if self._in_cluster():
             config.load_incluster_config()
             cluster_name = os.environ['ROOK_CLUSTER_NAME']
         else:
