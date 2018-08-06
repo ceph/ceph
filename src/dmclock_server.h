@@ -129,17 +129,21 @@ namespace crimson {
       double   reservation;
       double   proportion;
       double   limit;
+      uint32_t delta;
+      uint32_t rho;
       Cost     cost;
       bool     ready; // true when within limit
       Time     arrival;
 
       RequestTag(const RequestTag& prev_tag,
 		 const ClientInfo& client,
-		 const uint32_t delta,
-		 const uint32_t rho,
+		 const uint32_t _delta,
+		 const uint32_t _rho,
 		 const Time time,
 		 const Cost _cost = 1u,
 		 const double anticipation_timeout = 0.0) :
+	delta(_delta),
+	rho(_rho),
 	cost(_cost),
 	ready(false),
 	arrival(time)
@@ -183,10 +187,14 @@ namespace crimson {
 
       RequestTag(const double _res, const double _prop, const double _lim,
 		 const Time _arrival,
+		 const uint32_t _delta = 0,
+		 const uint32_t _rho = 0,
 		 const Cost _cost = 1u) :
 	reservation(_res),
 	proportion(_prop),
 	limit(_lim),
+	delta(_delta),
+	rho(_rho),
 	cost(_cost),
 	ready(false),
 	arrival(_arrival)
@@ -199,6 +207,8 @@ namespace crimson {
 	reservation(other.reservation),
 	proportion(other.proportion),
 	limit(other.limit),
+	delta(other.delta),
+	rho(other.rho),
 	cost(other.cost),
 	ready(other.ready),
 	arrival(other.arrival)
