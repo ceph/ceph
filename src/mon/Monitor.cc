@@ -1107,6 +1107,7 @@ void Monitor::_reset()
   scrub_event_cancel();
 
   leader_since = utime_t();
+  quorum_since = {};
   if (!quorum.empty()) {
     exited_quorum = ceph_clock_now();
   }
@@ -1972,6 +1973,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   ceph_assert(is_electing());
   state = STATE_LEADER;
   leader_since = ceph_clock_now();
+  quorum_since = mono_clock::now();
   leader = rank;
   quorum = active;
   quorum_con_features = features;
@@ -2050,6 +2052,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
 {
   state = STATE_PEON;
   leader_since = utime_t();
+  quorum_since = mono_clock::now();
   leader = l;
   quorum = q;
   outside_quorum.clear();
@@ -2293,6 +2296,10 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
 
   f->dump_string("quorum_leader_name", quorum.empty() ? string() : monmap->get_name(*quorum.begin()));
 
+  if (!quorum.empty()) {
+    f->dump_stream("quorum_age") << (mono_clock::now() - quorum_since);
+  }
+
   f->open_object_section("monmap");
   monmap->dump(f);
   f->close_section(); // monmap
@@ -2323,8 +2330,11 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
   for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p) {
     f->dump_int("mon", *p);
   }
-
   f->close_section(); // quorum
+
+  if (!quorum.empty()) {
+    f->dump_stream("quorum_age") << (mono_clock::now() - quorum_since);
+  }
 
   f->open_object_section("features");
   f->dump_stream("required_con") << required_features;
@@ -2729,6 +2739,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
   if (f)
     f->open_object_section("status");
 
+  mono_clock::time_point now = mono_clock::now();
   if (f) {
     f->dump_stream("fsid") << monmap->get_fsid();
     get_health_status(false, f, nullptr);
@@ -2742,6 +2753,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
       for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
 	f->dump_string("id", monmap->get_name(*p));
       f->close_section();
+      f->dump_stream("quorum_age") << (now - quorum_since);
     }
     f->open_object_section("monmap");
     monmap->dump(f);
@@ -2781,7 +2793,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
       const auto quorum_names = get_quorum_names();
       const auto mon_count = monmap->mon_info.size();
       ss << "    mon: " << spacing << mon_count << " daemons, quorum "
-	 << quorum_names;
+	 << quorum_names << " (age " << timespan_str(now - quorum_since) << ")";
       if (quorum_names.size() != mon_count) {
 	std::list<std::string> out_of_q;
 	for (size_t i = 0; i < monmap->ranks.size(); ++i) {
