@@ -168,7 +168,7 @@ int JournalTool::main(std::vector<const char*> &argv)
       r = main_journal(argv);
     } else if (mode == std::string("header")) {
       r = main_header(argv);
-    } else if (type == std::string("mdlog") && mode == std::string("event")) {
+    } else if (mode == std::string("event")) {
       r = main_event(argv);
     } else {
       cerr << "Bad command '" << mode << "'" << std::endl;
@@ -246,7 +246,7 @@ int JournalTool::main_journal(std::vector<const char*> &argv)
  */
 int JournalTool::main_header(std::vector<const char*> &argv)
 {
-  JournalFilter filter;
+  JournalFilter filter(type);
   JournalScanner js(input, rank, type, filter);
   int r = js.scan(false);
   if (r < 0) {
@@ -349,6 +349,11 @@ int JournalTool::main_event(std::vector<const char*> &argv)
     return -EINVAL;
   }
 
+  if (command == "recover_dentries" && type != "mdlog") {
+    derr << "journaler for " << type << " can't do \"recover_dentries\"." << dendl;
+    return -EINVAL;
+  }
+
   if (arg == argv.end()) {
     derr << "Incomplete command line" << dendl;
     return -EINVAL;
@@ -356,7 +361,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
 
   // Parse filter options
   // ====================
-  JournalFilter filter;
+  JournalFilter filter(type);
   r = filter.parse_args(argv, arg);
   if (r) {
     return r;
@@ -539,7 +544,7 @@ int JournalTool::journal_inspect()
 {
   int r;
 
-  JournalFilter filter;
+  JournalFilter filter(type);
   JournalScanner js(input, rank, type, filter);
   r = js.scan();
   if (r) {
@@ -1043,7 +1048,13 @@ int JournalTool::erase_region(JournalScanner const &js, uint64_t const pos, uint
   // is needed inside the ENoOp to make up the difference.
   bufferlist tmp;
   ENoOp enoop(0);
-  enoop.encode_with_header(tmp, CEPH_FEATURES_SUPPORTED_DEFAULT);
+  PurgeItem pi;
+
+  if (type == "mdlog") {
+    enoop.encode_with_header(tmp, CEPH_FEATURES_SUPPORTED_DEFAULT);
+  } else if (type == "purge_queue") {
+    pi.encode(tmp);
+  }
 
   dout(4) << "erase_region " << pos << " len=" << length << dendl;
 
@@ -1056,12 +1067,16 @@ int JournalTool::erase_region(JournalScanner const &js, uint64_t const pos, uint
     return -EINVAL;
   }
 
-  // Serialize an ENoOp with the correct amount of padding
-  enoop = ENoOp(padding);
   bufferlist entry;
-  enoop.encode_with_header(entry, CEPH_FEATURES_SUPPORTED_DEFAULT);
+  if (type == "mdlog") {
+    // Serialize an ENoOp with the correct amount of padding
+    enoop = ENoOp(padding);
+    enoop.encode_with_header(entry, CEPH_FEATURES_SUPPORTED_DEFAULT);
+  } else if (type == "purge_queue") {
+    pi.pad_size = padding;
+    pi.encode(entry);
+  }
   JournalStream stream(JOURNAL_FORMAT_RESILIENT);
-
   // Serialize region of log stream
   bufferlist log_data;
   stream.write(entry, &log_data, pos);
