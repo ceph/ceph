@@ -63,13 +63,13 @@ int ObjectCacheStore::do_promote(std::string pool_name, std::string object_name)
     m_cache_table.emplace(cache_file_name, PROMOTING);
   }
 
-  librados::bufferlist read_buf;      
+  librados::bufferlist* read_buf = new librados::bufferlist();
   int object_size = 4096*1024; //TODO(): read config from image metadata
 
   //TODO(): async promote
   ret = promote_object(ioctx, object_name, read_buf, object_size);
   if (ret == -ENOENT) {
-    read_buf.append(std::string(object_size, '0'));
+    read_buf->append(std::string(object_size, '0'));
     ret = 0;
   }
 
@@ -81,7 +81,7 @@ int ObjectCacheStore::do_promote(std::string pool_name, std::string object_name)
   // persistent to cache
   librbd::cache::SyncFile cache_file(m_cct, cache_file_name);
   cache_file.open();
-  ret = cache_file.write_object_to_file(read_buf, object_size);
+  ret = cache_file.write_object_to_file(*read_buf, object_size);
   
   assert(m_cache_table.find(cache_file_name) != m_cache_table.end()); 
 
@@ -132,12 +132,12 @@ int ObjectCacheStore::lock_cache(std::string vol_name) {
   return 0;
 }
 
-int ObjectCacheStore::promote_object(librados::IoCtx* ioctx, std::string object_name, librados::bufferlist read_buf, uint64_t read_len) {
+int ObjectCacheStore::promote_object(librados::IoCtx* ioctx, std::string object_name, librados::bufferlist* read_buf, uint64_t read_len) {
   int ret;
 
   librados::AioCompletion* read_completion = librados::Rados::aio_create_completion(); 
 
-  ret = ioctx->aio_read(object_name, read_completion, &read_buf, read_len, 0);
+  ret = ioctx->aio_read(object_name, read_completion, read_buf, read_len, 0);
   if(ret < 0) {
     lderr(m_cct) << "fail to read from rados" << dendl;
     return ret;

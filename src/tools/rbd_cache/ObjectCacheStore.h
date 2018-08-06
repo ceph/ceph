@@ -45,7 +45,7 @@ class ObjectCacheStore
     int do_promote(std::string pool_name, std::string object_name);
 
     int promote_object(librados::IoCtx*, std::string object_name,
-                       librados::bufferlist read_buf,
+                       librados::bufferlist* read_buf,
                        uint64_t length);
 
     enum {
