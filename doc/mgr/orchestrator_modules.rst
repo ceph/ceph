@@ -156,3 +156,9 @@ Upgrades
 .. automethod:: Orchestrator.upgrade_status
 .. autoclass:: UpgradeSpec
 .. autoclass:: UpgradeStatusSpec
+
+Utility
+-------
+
+.. automethod:: Orchestrator.available
+
