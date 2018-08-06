@@ -578,14 +578,27 @@ static constexpr std::size_t CACHE_LINE_SIZE_ { 64 };
 static constexpr std::size_t EXPECTED_THREAD_NUM { 32 };
 
 template <const perf_counter_meta_t&... P>
-class perf_counters_t {
+class perf_counters_t : public PerfCountersCollectionable {
   union perf_counter_any_data_t {
+    struct val_with_counter_t {
+      std::uint32_t val;
+      std::uint32_t cnt;
+    };
+
+    // for plain u64 counter
     std::uint64_t val;
-    // other types
+
+    // for longrunavg. Typically there will be no locked operation nor memory
+    // barrier on the main path
+    std::atomic<val_with_counter_t> val_with_counter;
   };
 
   union perf_counter_atomic_any_data_t {
     std::atomic_uint64_t val;
+    struct {
+      std::atomic_uint64_t val;
+      std::atomic_uint64_t cnt;
+    } val_with_counter;
     PerfHistogram<>* histogram;
   };
 
@@ -670,9 +683,33 @@ public:
     perf_counter_any_data_t* const threaded_counters = \
       _get_threaded_counters(idx);
     if (likely(threaded_counters != nullptr)) {
-      threaded_counters->val += count;
+      if constexpr (pcid.type & PERFCOUNTER_LONGRUNAVG) {
+	auto val_n_cnt = \
+	  threaded_counters->val_with_counter.load(std::memory_order_relaxed);
+
+	std::uint64_t val64;
+	std::uint64_t cnt64;
+
+	if (unlikely(__builtin_uadd_overflow(val_n_cnt.val, count, &val64) ||
+		     __builtin_uadd_overflow(val_n_cnt.cnt, 1, &cnt64))) {
+	  atomic_perf_counters[idx].val_with_counter.val += val64;
+	  atomic_perf_counters[idx].val_with_counter.cnt += cnt64;
+	  threaded_counters->val_with_counter.store({ 0, 0 },
+		std::memory_order_relaxed);
+	} else {
+	  threaded_counters->val_with_counter.store({ val64, cnt64 },
+		std::memory_order_relaxed);
+	}
+      } else {
+	threaded_counters->val += count;
+      }
     } else {
-      atomic_perf_counters[idx].val += count;
+      if constexpr (pcid.type & PERFCOUNTER_LONGRUNAVG) {
+	atomic_perf_counters[idx].val_with_counter.val += amount;
+	atomic_perf_counters[idx].val_with_counter.cnt += 1;
+      } else {
+	atomic_perf_counters[idx].val += amount;
+      }
     }
   }
 
