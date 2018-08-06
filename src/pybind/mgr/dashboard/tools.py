@@ -12,6 +12,8 @@ import fnmatch
 import time
 import threading
 import socket
+
+from cherrypy.process.wspbus import states
 from six.moves import urllib
 import cherrypy
 
@@ -764,3 +766,31 @@ def str_to_bool(val):
     if isinstance(val, bool):
         return val
     return bool(strtobool(val))
+
+
+def restart_if_running():
+    """Restarts ceph-mgr iff CherryPy is serving."""
+
+    def threaded(target):
+        def inner(*args, **kwargs):
+            from threading import Thread
+            t = Thread(target=target, args=args, kwargs=kwargs)
+            t.start()
+            return t
+
+        return inner
+
+    @threaded
+    def restart_mgr():
+        import os, time
+        time.sleep(10)  # force asynchronous.
+        try:
+            exe = os.readlink('/proc/self/exe')
+            with open('/proc/self/cmdline') as f:
+                cmdline = f.read().split('\x00')[:-1]
+            os.execv(exe, cmdline)
+        except Exception:
+            logger.exception('execv() failed')
+
+    if cherrypy.engine.state in (states.STARTING, states.STARTED):
+        return restart_mgr()

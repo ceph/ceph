@@ -60,7 +60,7 @@ if 'COVERAGE_ENABLED' in os.environ:
 from . import logger, mgr
 from .controllers import generate_routes, json_error_page
 from .tools import SessionExpireAtBrowserCloseTool, NotificationQueue, \
-                   RequestLoggingTool, TaskManager
+                   RequestLoggingTool, TaskManager, restart_if_running
 from .services.auth import AuthManager, AuthManagerTool
 from .services.access_control import ACCESS_CONTROL_COMMANDS, \
                                      handle_access_control_command
@@ -230,6 +230,16 @@ class Module(MgrModule, SSLCherryPyConfig):
             "desc": "Create self signed certificate",
             "perm": "w"
         },
+        {
+            "cmd": "dashboard set-crt",
+            "desc": "Set certificate. Usage: ceph dashboard set-crt -i <file>",
+            "perm": "w"
+        },
+        {
+            "cmd": "dashboard set-key",
+            "desc": "Set certificate. Usage: ceph dashboard set-key -i <file>",
+            "perm": "w"
+        },
     ]
     COMMANDS.extend(options_command_list())
     COMMANDS.extend(ACCESS_CONTROL_COMMANDS)
@@ -333,7 +343,12 @@ class Module(MgrModule, SSLCherryPyConfig):
             return 0, 'Session expiration timeout updated', ''
         elif cmd['prefix'] == 'dashboard create-self-signed-cert':
             self.create_self_signed_cert()
+            restart_if_running()
             return 0, 'Self-signed certificate created', ''
+        elif cmd['prefix'] in ('dashboard set-crt', 'dashboard set-key'):
+            self.set_store(cmd['prefix'][-3:], inbuf)
+            restart_if_running()
+            return 0, '{} saved.'.format(cmd['prefix'][-3:]), ''
 
         return (-errno.EINVAL, '', 'Command not found \'{0}\''
                 .format(cmd['prefix']))
