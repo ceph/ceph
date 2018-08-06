@@ -5147,6 +5147,11 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
 void Server::handle_client_mkdir(MDRequestRef& mdr)
 {
   MClientRequest *req = mdr->client_request;
+  if (req->get_filepath().is_last_dot_or_dotdot()) {
+    respond_to_request(mdr, -EEXIST);
+    return;
+  }
+
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
   if (!dn) return;
@@ -5846,20 +5851,25 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   bool rmdir = false;
   if (req->get_op() == CEPH_MDS_OP_RMDIR) rmdir = true;
 
-  if (req->get_filepath().depth() == 0) {
+  const filepath& refpath = req->get_filepath();
+  if (refpath.depth() == 0) {
     respond_to_request(mdr, -EINVAL);
     return;
-  }    
+  }
+  if (refpath.is_last_dot_or_dotdot()) {
+    respond_to_request(mdr, -ENOTEMPTY);
+    return;
+  }
 
   // traverse to path
   vector<CDentry*> trace;
   CInode *in;
-  int r = mdcache->path_traverse(mdr, NULL, NULL, req->get_filepath(), &trace, &in, MDS_TRAVERSE_FORWARD);
+  int r = mdcache->path_traverse(mdr, NULL, NULL, refpath, &trace, &in, MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
   if (r < 0) {
     if (r == -ESTALE) {
       dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
-      mdcache->find_ino_peers(req->get_filepath().get_ino(), new C_MDS_TryFindInode(this, mdr));
+      mdcache->find_ino_peers(refpath.get_ino(), new C_MDS_TryFindInode(this, mdr));
       return;
     }
     respond_to_request(mdr, r);
@@ -6559,6 +6569,11 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     respond_to_request(mdr, -EINVAL);
     return;
   }
+  if (srcpath.is_last_dot_or_dotdot() || destpath.is_last_dot_or_dotdot()) {
+    respond_to_request(mdr, -EBUSY);
+    return;
+  }
+
   boost::string_view destname = destpath.last_dentry();
 
   vector<CDentry*>& srctrace = mdr->dn[1];
