@@ -99,7 +99,12 @@ public:
         boost::asio::transfer_exactly(544),
         [this, result](const boost::system::error_code& err, size_t cb) {
         if (!err) {
-            *result = true;
+	    rbdsc_req_type_t *io_ctx = (rbdsc_req_type_t*)(buffer_);
+            if (io_ctx->type == RBDSC_READ_REPLY) {
+	      *result = true;
+            } else {
+	      *result = false;
+            }
             cv.notify_one();
             m_client_process_msg(std::string(buffer_, cb));
         } else {

@@ -10,7 +10,7 @@
 #define RBDSC_REGISTER_REPLY   0X14
 #define RBDSC_READ_REPLY       0X15
 #define RBDSC_LOOKUP_REPLY     0X16
-#define RBDSC_READ_RADOS       0X16
+#define RBDSC_READ_RADOS       0X17
 
 namespace rbd {
 namespace cache {
