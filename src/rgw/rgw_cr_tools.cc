@@ -1,3 +1,5 @@
+#include "common/errno.h"
+
 #include "rgw_cr_tools.h"
 #include "rgw_bucket.h"
 #include "rgw_user.h"
