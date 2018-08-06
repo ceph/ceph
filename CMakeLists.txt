@@ -314,6 +314,10 @@ if(WITH_LZ4)
 endif(WITH_LZ4)
 
 #if allocator is set on command line make sure it matches below strings
+set(ALLOCATOR "" CACHE STRING
+  "specify memory allocator to use. currently tcmalloc, tcmalloc_minimal, \
+jemalloc, and libc is supported. if not specified, will try to find tcmalloc, \
+and then jemalloc. If neither of then is found. use the one in libc.")
 if(ALLOCATOR)
   if(${ALLOCATOR} MATCHES "tcmalloc(_minimal)?")
     if(GPERFTOOLS_USE_STATIC_LIBS)
