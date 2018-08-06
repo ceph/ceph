@@ -1,5 +1,6 @@
 from __future__ import print_function
 import json
+from uuid import uuid4
 from ceph_volume.util import disk
 from ceph_volume.api import lvm
 from . import validators
@@ -234,7 +235,6 @@ class MixedType(object):
         # create the data lvs, and create the OSD with the matching block.db lvs from before
         for osd in self.computed['osds']:
             vg = lvm.create_vg(osd['data']['path'])
-            from uuid import uuid4
             data_lv = lvm.create_lv('osd-data-%s' % str(uuid4()), vg.name)
             db_lv = db_lvs.pop()
             command = [
