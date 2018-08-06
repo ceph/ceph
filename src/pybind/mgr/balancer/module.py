@@ -280,7 +280,7 @@ class Module(MgrModule):
         {
             "cmd": "balancer execute name=plan,type=CephString",
             "desc": "Execute an optimization plan",
-            "perm": "r",
+            "perm": "rw",
         },
     ]
     active = False
