@@ -91,12 +91,13 @@ class ServerConfigException(Exception):
     pass
 
 
-class SSLCherryPyConfig(object):
+class CherryPyConfig(object):
     """
     Class for common server configuration done by both active and
     standby module, especially setting up SSL.
     """
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+        super(CherryPyConfig, self).__init__(*args, **kwargs)
         self._stopping = threading.Event()
         self._url_prefix = ""
 
@@ -104,7 +105,11 @@ class SSLCherryPyConfig(object):
         self.pkey_tmp = None
 
     def shutdown(self):
+        logger.info("Stopping engine...")
+        super(CherryPyConfig, self).shutdown()
         self._stopping.set()
+        logger.info("Stopped engine...")
+
 
     @property
     def url_prefix(self):
@@ -213,7 +218,7 @@ class SSLCherryPyConfig(object):
                 return uri
 
 
-class Module(MgrModule, SSLCherryPyConfig):
+class Module(CherryPyConfig, MgrModule):
     """
     dashboard module entrypoint
     """
@@ -259,12 +264,8 @@ class Module(MgrModule, SSLCherryPyConfig):
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
-        SSLCherryPyConfig.__init__(self)
 
         mgr.init(self)
-
-        self._stopping = threading.Event()
-        self.shutdown_event = threading.Event()
 
     @classmethod
     def can_run(cls):
@@ -316,20 +317,14 @@ class Module(MgrModule, SSLCherryPyConfig):
         TaskManager.init()
         logger.info('Engine started.')
         # wait for the shutdown event
-        self.shutdown_event.wait()
-        self.shutdown_event.clear()
+        self._stopping.wait()
+        self._stopping.clear()
         NotificationQueue.stop()
         cherrypy.engine.stop()
         if 'COVERAGE_ENABLED' in os.environ:
             _cov.stop()
             _cov.save()
         logger.info('Engine stopped')
-
-    def shutdown(self):
-        super(Module, self).shutdown()
-        SSLCherryPyConfig.shutdown(self)
-        logger.info('Stopping engine...')
-        self.shutdown_event.set()
 
     def handle_command(self, inbuf, cmd):
         res = handle_option_command(cmd)
@@ -379,11 +374,9 @@ class Module(MgrModule, SSLCherryPyConfig):
         NotificationQueue.new_notification(notify_type, notify_id)
 
 
-class StandbyModule(MgrStandbyModule, SSLCherryPyConfig):
+class StandbyModule(CherryPyConfig, MgrStandbyModule):
     def __init__(self, *args, **kwargs):
         super(StandbyModule, self).__init__(*args, **kwargs)
-        SSLCherryPyConfig.__init__(self)
-        self.shutdown_event = threading.Event()
 
         # We can set the global mgr instance to ourselves even though
         # we're just a standby, because it's enough for logging.
@@ -428,14 +421,7 @@ class StandbyModule(MgrStandbyModule, SSLCherryPyConfig):
         cherrypy.engine.start()
         self.log.info("Engine started...")
         # Wait for shutdown event
-        self.shutdown_event.wait()
-        self.shutdown_event.clear()
+        self._stopping.wait()
+        self._stopping.clear()
         cherrypy.engine.stop()
         self.log.info("Engine stopped.")
-
-    def shutdown(self):
-        SSLCherryPyConfig.shutdown(self)
-
-        self.log.info("Stopping engine...")
-        self.shutdown_event.set()
-        self.log.info("Stopped engine...")
