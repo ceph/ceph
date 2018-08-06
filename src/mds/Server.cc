@@ -107,6 +107,8 @@ void Server::create_logger()
   plb.add_u64_counter(l_mdss_handle_client_session,
                       "handle_client_session", "Client session messages", "hcs",
                       PerfCountersBuilder::PRIO_INTERESTING);
+  plb.add_u64_counter(l_mdss_cap_revoke_eviction, "cap_revoke_eviction",
+                      "Cap Revoke Client Eviction", "cre", PerfCountersBuilder::PRIO_INTERESTING);
 
   // fop latencies are useful
   plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
@@ -842,8 +844,12 @@ void Server::evict_cap_revoke_non_responders() {
             << client << dendl;
 
     std::stringstream ss;
-    mds->evict_client(client.v, false, g_conf()->mds_session_blacklist_on_evict,
-                      ss, nullptr);
+    bool evicted = mds->evict_client(client.v, false,
+                                     g_conf()->mds_session_blacklist_on_evict,
+                                     ss, nullptr);
+    if (evicted && logger) {
+      logger->inc(l_mdss_cap_revoke_eviction);
+    }
   }
 }
 

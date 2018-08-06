@@ -71,6 +71,7 @@ enum {
   l_mdss_req_setxattr_latency,
   l_mdss_req_symlink_latency,
   l_mdss_req_unlink_latency,
+  l_mdss_cap_revoke_eviction,
   l_mdss_last,
 };
 
