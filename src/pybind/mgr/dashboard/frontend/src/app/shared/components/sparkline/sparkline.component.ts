@@ -2,6 +2,7 @@ import { Component, ElementRef, OnChanges, OnInit, SimpleChanges, ViewChild } fr
 import { Input } from '@angular/core';
 
 import { ChartTooltip } from '../../../shared/models/chart-tooltip';
+import { DimlessBinaryPipe } from '../../pipes/dimless-binary.pipe';
 
 @Component({
   selector: 'cd-sparkline',
@@ -18,6 +19,8 @@ export class SparklineComponent implements OnInit, OnChanges {
     height: '30px',
     width: '100px'
   };
+  @Input()
+  isBinary: boolean;
 
   public colors: Array<any> = [
     {
@@ -48,7 +51,16 @@ export class SparklineComponent implements OnInit, OnChanges {
       enabled: false,
       mode: 'index',
       intersect: false,
-      custom: undefined
+      custom: undefined,
+      callbacks: {
+        label: (tooltipItem) => {
+          if (this.isBinary) {
+            return this.dimlessBinaryPipe.transform(tooltipItem.yLabel);
+          } else {
+            return tooltipItem.yLabel;
+          }
+        }
+      }
     },
     scales: {
       yAxes: [
@@ -72,7 +84,7 @@ export class SparklineComponent implements OnInit, OnChanges {
 
   public labels: Array<any> = [];
 
-  constructor() {}
+  constructor(private dimlessBinaryPipe: DimlessBinaryPipe) {}
 
   ngOnInit() {
     const getStyleTop = (tooltip, positionY) => {
