@@ -118,6 +118,8 @@ void Server::create_logger()
       "Client session messages", "hcs", PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request", "Client requests dispatched");
   plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request", "Server requests dispatched");
+  plb.add_u64_counter(l_mdss_cap_revoke_eviction, "cap_revoke_eviction",
+                      "Cap Revoke Client Eviction", "cre", PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_time_avg(l_mdss_req_lookuphash_latency, "req_lookuphash_latency",
       "Request type lookup hash of inode latency");
   plb.add_time_avg(l_mdss_req_lookupino_latency, "req_lookupino_latency",
@@ -852,8 +854,12 @@ void Server::evict_cap_revoke_non_responders() {
             << client << dendl;
 
     std::stringstream ss;
-    mds->evict_client(client.v, false, g_conf->mds_session_blacklist_on_evict,
-                      ss, nullptr);
+    bool evicted = mds->evict_client(client.v, false,
+                                     g_conf->mds_session_blacklist_on_evict,
+                                     ss, nullptr);
+    if (evicted && logger) {
+      logger->inc(l_mdss_cap_revoke_eviction);
+    }
   }
 }
 
