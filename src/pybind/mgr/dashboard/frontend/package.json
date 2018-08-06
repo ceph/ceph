@@ -35,15 +35,15 @@
     "testURL": "http://localhost/"
   },
   "dependencies": {
-    "@angular/animations": "6.0.6",
-    "@angular/common": "6.0.6",
-    "@angular/compiler": "6.0.6",
-    "@angular/core": "6.0.6",
-    "@angular/forms": "6.0.6",
-    "@angular/http": "6.0.6",
-    "@angular/platform-browser": "6.0.6",
-    "@angular/platform-browser-dynamic": "6.0.6",
-    "@angular/router": "6.0.6",
+    "@angular/animations": "6.1.1",
+    "@angular/common": "6.1.1",
+    "@angular/compiler": "6.1.1",
+    "@angular/core": "6.1.1",
+    "@angular/forms": "6.1.1",
+    "@angular/http": "6.1.1",
+    "@angular/platform-browser": "6.1.1",
+    "@angular/platform-browser-dynamic": "6.1.1",
+    "@angular/router": "6.1.1",
     "@swimlane/ngx-datatable": "13.1.0",
     "@types/lodash": "4.14.116",
     "awesome-bootstrap-checkbox": "0.3.7",
@@ -61,10 +61,10 @@
     "zone.js": "0.8.26"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "0.6.8",
-    "@angular/cli": "6.0.8",
-    "@angular/compiler-cli": "6.0.6",
-    "@angular/language-service": "6.0.6",
+    "@angular-devkit/build-angular": "0.7.2",
+    "@angular/cli": "6.1.2",
+    "@angular/compiler-cli": "6.1.1",
+    "@angular/language-service": "6.1.1",
     "@types/jasmine": "2.8.8",
     "@types/jasminewd2": "2.0.3",
     "@types/jest": "23.3.1",
@@ -78,8 +78,8 @@
     "jest-preset-angular": "6.0.0",
     "prettier": "1.13.7",
     "protractor": "5.4.0",
-    "ts-node": "5.0.1",
+    "ts-node": "7.0.0",
     "tslint": "5.11.0",
-    "typescript": "2.7.2"
+    "typescript": "2.9.2"
   }
 }
