@@ -208,16 +208,29 @@ is getting near its full ratio. The ``mon osd full ratio`` defaults to
 ``0.95``, or 95% of capacity before it stops clients from writing data.
 The ``mon osd backfillfull ratio`` defaults to ``0.90``, or 90 % of
 capacity when it blocks backfills from starting. The
-``mon osd nearfull ratio`` defaults to ``0.85``, or 85% of capacity
+OSD nearfull ratio defaults to ``0.85``, or 85% of capacity
 when it generates a health warning.
+
+Changing it can be done using:
+
+::
+
+    ceph osd set-nearfull-ratio <float[0.0-1.0]>
+
 
 Full cluster issues usually arise when testing how Ceph handles an OSD
 failure on a small cluster. When one node has a high percentage of the
 cluster's data, the cluster can easily eclipse its nearfull and full ratio
 immediately. If you are testing how Ceph reacts to OSD failures on a small
 cluster, you should leave ample free disk space and consider temporarily
-lowering the ``mon osd full ratio``, ``mon osd backfillfull ratio``  and
-``mon osd nearfull ratio``.
+lowering the OSD ``full ratio``, OSD ``backfillfull ratio``  and
+OSD ``nearfull ratio`` using these commands:
+
+::
+
+    ceph osd set-nearfull-ratio <float[0.0-1.0]>
+    ceph osd set-full-ratio <float[0.0-1.0]>
+    ceph osd set-backfillfull-ratio <float[0.0-1.0]>
 
 Full ``ceph-osds`` will be reported by ``ceph health``::
 
