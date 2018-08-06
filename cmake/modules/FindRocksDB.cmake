@@ -26,10 +26,22 @@ if(ROCKSDB_INCLUDE_DIR AND EXISTS "${ROCKSDB_INCLUDE_DIR}/rocksdb/version.h")
 endif()
 
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(rocksdb
+find_package_handle_standard_args(RocksDB
   REQUIRED_VARS ROCKSDB_LIBRARIES ROCKSDB_INCLUDE_DIR
   VERSION_VAR ROCKSDB_VERSION_STRING)
 
 mark_as_advanced(
   ROCKSDB_INCLUDE_DIR
   ROCKSDB_LIBRARIES)
+
+if(RocksDB_FOUND)
+  if(NOT TARGET RocksDB::RocksDB)
+    add_library(RocksDB::RocksDB UNKNOWN IMPORTED)
+    set_target_properties(RocksDB::RocksDB PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${ROCKSDB_INCLUDE_DIR}"
+      IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
+      IMPORTED_LOCATION "${ROCKSDB_LIBRARY}"
+      VERSION "${ROCKSDB_VERSION_STRING}")
+  endif()
+endif()
+
