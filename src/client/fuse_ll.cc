@@ -1123,7 +1123,7 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     char strsplice[65];
     newargv[newargc++] = "-o";
     newargv[newargc++] = strsplice;
-    sprintf(strsplice, "max_write=%" PRIu64, fuse_max_write);
+    sprintf(strsplice, "max_write=%zu", (size_t)fuse_max_write);
     newargv[newargc++] = strsplice;
   }
   if (fuse_atomic_o_trunc) {
