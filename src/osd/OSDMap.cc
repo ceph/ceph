@@ -1641,18 +1641,17 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
 }
 
 void OSDMap::clean_temps(CephContext *cct,
-			 const OSDMap& osdmap, Incremental *pending_inc)
+			 const OSDMap& oldmap,
+			 const OSDMap& tmpmap,
+			 Incremental *pending_inc)
 {
   ldout(cct, 10) << __func__ << dendl;
-  OSDMap tmpmap;
-  tmpmap.deepish_copy_from(osdmap);
-  tmpmap.apply_incremental(*pending_inc);
 
   for (auto pg : *tmpmap.pg_temp) {
     // if pool does not exist, remove any existing pg_temps associated with
     // it.  we don't care about pg_temps on the pending_inc either; if there
     // are new_pg_temp entries on the pending, clear them out just as well.
-    if (!osdmap.have_pg_pool(pg.first.pool())) {
+    if (!tmpmap.have_pg_pool(pg.first.pool())) {
       ldout(cct, 10) << __func__ << " removing pg_temp " << pg.first
 		     << " for nonexistent pool " << pg.first.pool() << dendl;
       pending_inc->new_pg_temp[pg.first].clear();
@@ -1679,7 +1678,7 @@ void OSDMap::clean_temps(CephContext *cct,
     if (raw_up == pg.second) {
       ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
 		     << pg.second << " that matches raw_up mapping" << dendl;
-      if (osdmap.pg_temp->count(pg.first))
+      if (oldmap.pg_temp->count(pg.first))
 	pending_inc->new_pg_temp[pg.first].clear();
       else
 	pending_inc->new_pg_temp.erase(pg.first);
@@ -1704,7 +1703,7 @@ void OSDMap::clean_temps(CephContext *cct,
       ldout(cct, 10) << __func__ << "  removing primary_temp "
 		     << pgid << " -> " << real_primary
 		     << " (unnecessary/redundant)" << dendl;
-      if (osdmap.primary_temp->count(pgid))
+      if (oldmap.primary_temp->count(pgid))
 	pending_inc->new_primary_temp[pgid] = -1;
       else
 	pending_inc->new_primary_temp.erase(pgid);
@@ -1713,13 +1712,11 @@ void OSDMap::clean_temps(CephContext *cct,
 }
 
 void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
-                                    const OSDMap& osdmap,
+                                    const OSDMap& oldmap,
+				    const OSDMap& tmpmap,
                                     Incremental *pending_inc)
 {
   ldout(cct, 10) << __func__ << dendl;
-  OSDMap tmpmap;
-  tmpmap.deepish_copy_from(osdmap);
-  tmpmap.apply_incremental(*pending_inc);
   set<pg_t> to_check;
   set<pg_t> to_cancel;
   map<int, map<int, float>> rule_weight_map;
@@ -1814,10 +1811,10 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
                        << dendl;
         pending_inc->new_pg_upmap.erase(it);
       }
-      if (osdmap.pg_upmap.count(pg)) {
+      if (oldmap.pg_upmap.count(pg)) {
         ldout(cct, 10) << __func__ << " cancel invalid pg_upmap entry "
-                       << osdmap.pg_upmap.find(pg)->first << "->"
-                       << osdmap.pg_upmap.find(pg)->second
+                       << oldmap.pg_upmap.find(pg)->first << "->"
+                       << oldmap.pg_upmap.find(pg)->second
                        << dendl;
         pending_inc->old_pg_upmap.insert(pg);
       }
@@ -1831,11 +1828,11 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
                        << dendl;
         pending_inc->new_pg_upmap_items.erase(it);
       }
-      if (osdmap.pg_upmap_items.count(pg)) {
+      if (oldmap.pg_upmap_items.count(pg)) {
         ldout(cct, 10) << __func__ << " cancel invalid "
                        << "pg_upmap_items entry "
-                       << osdmap.pg_upmap_items.find(pg)->first << "->"
-                       << osdmap.pg_upmap_items.find(pg)->second
+                       << oldmap.pg_upmap_items.find(pg)->first << "->"
+                       << oldmap.pg_upmap_items.find(pg)->second
                        << dendl;
         pending_inc->old_pg_upmap_items.insert(pg);
       }
