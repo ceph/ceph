@@ -18,7 +18,8 @@ export class HostsComponent implements OnInit {
   hosts: Array<object> = [];
   isLoadingHosts = false;
 
-  @ViewChild('servicesTpl') public servicesTpl: TemplateRef<any>;
+  @ViewChild('servicesTpl')
+  public servicesTpl: TemplateRef<any>;
 
   constructor(
     private authStorageService: AuthStorageService,

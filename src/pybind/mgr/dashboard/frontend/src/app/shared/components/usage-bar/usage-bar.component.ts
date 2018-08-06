@@ -6,8 +6,10 @@ import { Component, Input, OnChanges } from '@angular/core';
   styleUrls: ['./usage-bar.component.scss']
 })
 export class UsageBarComponent implements OnChanges {
-  @Input() totalBytes: number;
-  @Input() usedBytes: number;
+  @Input()
+  totalBytes: number;
+  @Input()
+  usedBytes: number;
 
   usedPercentage: number;
   freePercentage: number;

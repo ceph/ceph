@@ -26,14 +26,21 @@ import { RbdSnapshotModel } from './rbd-snapshot.model';
   styleUrls: ['./rbd-snapshot-list.component.scss']
 })
 export class RbdSnapshotListComponent implements OnInit, OnChanges {
-  @Input() snapshots: RbdSnapshotModel[] = [];
-  @Input() poolName: string;
-  @Input() rbdName: string;
-  @Input() executingTasks: ExecutingTask[] = [];
+  @Input()
+  snapshots: RbdSnapshotModel[] = [];
+  @Input()
+  poolName: string;
+  @Input()
+  rbdName: string;
+  @Input()
+  executingTasks: ExecutingTask[] = [];
 
-  @ViewChild('nameTpl') nameTpl: TemplateRef<any>;
-  @ViewChild('protectTpl') protectTpl: TemplateRef<any>;
-  @ViewChild('rollbackTpl') rollbackTpl: TemplateRef<any>;
+  @ViewChild('nameTpl')
+  nameTpl: TemplateRef<any>;
+  @ViewChild('protectTpl')
+  protectTpl: TemplateRef<any>;
+  @ViewChild('rollbackTpl')
+  rollbackTpl: TemplateRef<any>;
 
   permission: Permission;
 

@@ -7,9 +7,12 @@ import { Input } from '@angular/core';
   styleUrls: ['./select-badges.component.scss']
 })
 export class SelectBadgesComponent implements OnChanges {
-  @Input() data: Array<string> = [];
-  @Input() options: Array<SelectBadgesOption> = [];
-  @Input() emptyMessage = 'There are no items.';
+  @Input()
+  data: Array<string> = [];
+  @Input()
+  options: Array<SelectBadgesOption> = [];
+  @Input()
+  emptyMessage = 'There are no items.';
 
   constructor() {}
 

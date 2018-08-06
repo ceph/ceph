@@ -9,7 +9,8 @@ import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
   styleUrls: ['./cephfs-clients.component.scss']
 })
 export class CephfsClientsComponent implements OnInit {
-  @Input() id: number;
+  @Input()
+  id: number;
 
   clients: any;
   viewCacheStatus: ViewCacheStatus;

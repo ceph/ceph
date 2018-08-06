@@ -10,10 +10,14 @@ import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.p
   styleUrls: ['./mirroring.component.scss']
 })
 export class MirroringComponent implements OnInit {
-  @ViewChild('healthTmpl') healthTmpl: TemplateRef<any>;
-  @ViewChild('stateTmpl') stateTmpl: TemplateRef<any>;
-  @ViewChild('syncTmpl') syncTmpl: TemplateRef<any>;
-  @ViewChild('progressTmpl') progressTmpl: TemplateRef<any>;
+  @ViewChild('healthTmpl')
+  healthTmpl: TemplateRef<any>;
+  @ViewChild('stateTmpl')
+  stateTmpl: TemplateRef<any>;
+  @ViewChild('syncTmpl')
+  syncTmpl: TemplateRef<any>;
+  @ViewChild('progressTmpl')
+  progressTmpl: TemplateRef<any>;
 
   contentData: any;
 

@@ -21,12 +21,16 @@ import { CdTableColumn } from '../../models/cd-table-column';
 export class TableKeyValueComponent implements OnInit, OnChanges {
   columns: Array<CdTableColumn> = [];
 
-  @Input() data: any;
-  @Input() autoReload: any = 5000;
+  @Input()
+  data: any;
+  @Input()
+  autoReload: any = 5000;
 
-  @Input() renderObjects = false;
+  @Input()
+  renderObjects = false;
   // Only used if objects are rendered
-  @Input() appendParentKey = true;
+  @Input()
+  appendParentKey = true;
 
   tableData: {
     key: string;
@@ -36,7 +40,8 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
   /**
    * The function that will be called to update the input data.
    */
-  @Output() fetchData = new EventEmitter();
+  @Output()
+  fetchData = new EventEmitter();
 
   constructor() {}
 
