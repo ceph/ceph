@@ -698,6 +698,12 @@ public:
 	ovec.insert(ovec.end(), i->second.begin(), i->second.end());
       }
     }
+
+    void send_notify(pg_shard_t to,
+		     const pg_notify_t &info, const PastIntervals &pi) {
+      assert(notify_list);
+      (*notify_list)[to.osd].push_back(make_pair(info, pi));
+    }
   };
 
 
@@ -1751,8 +1757,7 @@ protected:
       void send_notify(pg_shard_t to,
 		       const pg_notify_t &info, const PastIntervals &pi) {
 	assert(state->rctx);
-	assert(state->rctx->notify_list);
-	(*state->rctx->notify_list)[to.osd].push_back(make_pair(info, pi));
+	state->rctx->send_notify(to, info, pi);
       }
     };
     friend class RecoveryMachine;
@@ -2615,7 +2620,7 @@ public:
   void fulfill_info(pg_shard_t from, const pg_query_t &query,
 		    pair<pg_shard_t, pg_info_t> &notify_info);
   void fulfill_log(pg_shard_t from, const pg_query_t &query, epoch_t query_epoch);
-
+  void fulfill_query(const MQuery& q, RecoveryCtx *rctx);
   void check_full_transition(OSDMapRef lastmap, OSDMapRef osdmap);
 
   bool should_restart_peering(
