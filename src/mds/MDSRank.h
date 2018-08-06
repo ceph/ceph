@@ -34,6 +34,7 @@
 #include "MDLog.h"
 #include "MDSContext.h"
 #include "PurgeQueue.h"
+#include "Server.h"
 #include "osdc/Journaler.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
@@ -104,7 +105,6 @@ namespace ceph {
   struct heartbeat_handle_d;
 }
 
-class Server;
 class Locker;
 class MDCache;
 class MDLog;
@@ -226,6 +226,7 @@ class MDSRank {
                             const std::set <std::string> &changed)
     {
       sessionmap.handle_conf_change(conf, changed);
+      server->handle_conf_change(conf, changed);
       mdcache->handle_conf_change(conf, changed, *mdsmap);
       purge_queue.handle_conf_change(conf, changed, *mdsmap);
     }

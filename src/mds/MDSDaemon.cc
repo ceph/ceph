@@ -361,6 +361,7 @@ const char** MDSDaemon::get_tracked_conf_keys() const
     "host",
     "fsid",
     "mds_request_load_average_decay_rate",
+    "mds_cap_revoke_eviction_timeout",
     NULL
   };
   return KEYS;

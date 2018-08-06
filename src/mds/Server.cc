@@ -826,6 +826,36 @@ void Server::find_idle_sessions()
   }
 }
 
+void Server::evict_cap_revoke_non_responders() {
+  if (!cap_revoke_eviction_timeout) {
+    return;
+  }
+
+  std::list<client_t> to_evict;
+  mds->locker->get_late_revoking_clients(&to_evict, cap_revoke_eviction_timeout);
+
+  for (auto const &client: to_evict) {
+    mds->clog->warn() << "client id " << client << " has not responded to"
+                      << " cap revoke by MDS for over " << cap_revoke_eviction_timeout
+                      << " seconds, evicting";
+    dout(1) << __func__ << ": evicting cap revoke non-responder client id "
+            << client << dendl;
+
+    std::stringstream ss;
+    mds->evict_client(client.v, false, g_conf()->mds_session_blacklist_on_evict,
+                      ss, nullptr);
+  }
+}
+
+void Server::handle_conf_change(const ConfigProxy& conf,
+                                const std::set <std::string> &changed) {
+  if (changed.count("mds_cap_revoke_eviction_timeout")) {
+    cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
+    dout(20) << __func__ << " cap revoke eviction timeout changed to "
+            << cap_revoke_eviction_timeout << dendl;
+  }
+}
+
 /*
  * XXX bump in the interface here, not using an MDSInternalContextBase here
  * because all the callers right now happen to use a SaferCond

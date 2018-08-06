@@ -28,7 +28,6 @@
 #include "MDBalancer.h"
 #include "Migrator.h"
 #include "Locker.h"
-#include "Server.h"
 #include "InoTable.h"
 #include "mon/MonClient.h"
 #include "common/HeartbeatMap.h"
@@ -321,6 +320,7 @@ void MDSRankDispatcher::tick()
   // ...
   if (is_clientreplay() || is_active() || is_stopping()) {
     server->find_idle_sessions();
+    server->evict_cap_revoke_non_responders();
     locker->tick();
   }
 
