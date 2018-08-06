@@ -1675,9 +1675,19 @@ void OSDMap::clean_temps(CephContext *cct,
     vector<int> raw_up;
     int primary;
     tmpmap.pg_to_raw_up(pg.first, &raw_up, &primary);
+    bool remove = false;
     if (raw_up == pg.second) {
       ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
 		     << pg.second << " that matches raw_up mapping" << dendl;
+      remove = true;
+    }
+    // oversized pg_temp?
+    if (pg.second.size() > tmpmap.get_pg_pool(pg.first.pool())->get_size()) {
+      ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
+		     << pg.second << " exceeds pool size" << dendl;
+      remove = true;
+    }
+    if (remove) {
       if (oldmap.pg_temp->count(pg.first))
 	pending_inc->new_pg_temp[pg.first].clear();
       else
