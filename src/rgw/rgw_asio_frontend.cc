@@ -20,6 +20,8 @@
 #include <boost/asio/ssl.hpp>
 #endif
 
+#include "rgw_dmclock_scheduler.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 namespace {
@@ -226,13 +228,13 @@ class ConnectionList {
 class AsioFrontend {
   RGWProcessEnv env;
   RGWFrontendConfig* conf;
-  boost::asio::io_context& context;
+  boost::asio::io_context context;
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   boost::optional<ssl::context> ssl_context;
   int init_ssl();
 #endif
   SharedMutex pause_mutex;
-  rgw::dmclock::AsyncScheduler *scheduler;
+  std::unique_ptr<rgw::dmclock::AsyncScheduler> scheduler;
 
   struct Listener {
     tcp::endpoint endpoint;
@@ -260,12 +262,16 @@ class AsioFrontend {
 
  public:
   AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf,
-               boost::asio::io_context& context,
-               rgw::dmclock::AsyncScheduler *scheduler)
-    : env(env), conf(conf), context(context),
-      pause_mutex(context.get_executor()),
-      scheduler(scheduler)
-  {}
+               rgw::dmclock::ClientCounters& dmclock_counters,
+               rgw::dmclock::ClientConfig& dmclock_clients)
+    : env(env), conf(conf), pause_mutex(context.get_executor())
+  {
+    scheduler.reset(new rgw::dmclock::AsyncScheduler(ctx(), context,
+						     std::ref(dmclock_counters),
+						     &dmclock_clients,
+						     std::ref(dmclock_clients),
+						     rgw::dmclock::AtLimit::Reject));
+  }
 
   int init();
   int run();
@@ -532,7 +538,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         }
         buffer.consume(bytes);
         handle_connection(env, stream, buffer, true, pause_mutex,
-                          scheduler, ec, yield);
+                          scheduler.get(), ec, yield);
         if (!ec) {
           // ssl shutdown (ignoring errors)
           stream.async_shutdown(yield[ec]);
@@ -550,7 +556,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         boost::beast::flat_buffer buffer;
         boost::system::error_code ec;
         handle_connection(env, s, buffer, false, pause_mutex,
-                          scheduler, ec, yield);
+                          scheduler.get(), ec, yield);
         s.shutdown(tcp::socket::shutdown_both, ec);
       });
   }
@@ -654,16 +660,16 @@ void AsioFrontend::unpause(RGWRados* const store,
 class RGWAsioFrontend::Impl : public AsioFrontend {
  public:
   Impl(const RGWProcessEnv& env, RGWFrontendConfig* conf,
-       boost::asio::io_context& context,
-       rgw::dmclock::AsyncScheduler *scheduler)
-    : AsioFrontend(env, conf, context, scheduler) {}
+       rgw::dmclock::ClientCounters& dmclock_counters,
+       rgw::dmclock::ClientConfig& dmclock_clients)
+    : AsioFrontend(env, conf, dmclock_counters, dmclock_clients) {}
 };
 
 RGWAsioFrontend::RGWAsioFrontend(const RGWProcessEnv& env,
                                  RGWFrontendConfig* conf,
-                                 boost::asio::io_context& context,
-                                 rgw::dmclock::AsyncScheduler *scheduler)
-  : impl(new Impl(env, conf, context, scheduler))
+                                 rgw::dmclock::ClientCounters& dmclock_counters,
+                                 rgw::dmclock::ClientConfig& dmclock_clients)
+  : impl(new Impl(env, conf, dmclock_counters, dmclock_clients))
 {
 }
 
