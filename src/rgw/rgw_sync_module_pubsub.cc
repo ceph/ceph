@@ -1215,13 +1215,13 @@ public:
 class RGWPSHandleRemoteObjCBCR : public RGWStatRemoteObjCBCR {
   RGWDataSyncEnv *sync_env;
   PSEnvRef env;
-  uint64_t versioned_epoch;
+  std::optional<uint64_t> versioned_epoch;
   EventRef event;
   TopicsRef topics;
 public:
   RGWPSHandleRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
                           RGWBucketInfo& _bucket_info, rgw_obj_key& _key,
-                          PSEnvRef _env, uint64_t _versioned_epoch,
+                          PSEnvRef _env, std::optional<uint64_t> _versioned_epoch,
                           TopicsRef& _topics) : RGWStatRemoteObjCBCR(_sync_env, _bucket_info, _key),
                                                                       sync_env(_sync_env),
                                                                       env(_env),
@@ -1260,12 +1260,12 @@ public:
 
 class RGWPSHandleRemoteObjCR : public RGWCallStatRemoteObjCR {
   PSEnvRef env;
-  uint64_t versioned_epoch;
+  std::optional<uint64_t> versioned_epoch;
   TopicsRef topics;
 public:
   RGWPSHandleRemoteObjCR(RGWDataSyncEnv *_sync_env,
                         RGWBucketInfo& _bucket_info, rgw_obj_key& _key,
-                        PSEnvRef _env, uint64_t _versioned_epoch,
+                        PSEnvRef _env, std::optional<uint64_t> _versioned_epoch,
                         TopicsRef& _topics) : RGWCallStatRemoteObjCR(_sync_env, _bucket_info, _key),
                                                            env(_env), versioned_epoch(_versioned_epoch),
                                                            topics(_topics) {
@@ -1284,12 +1284,12 @@ class RGWPSHandleObjCreateCR : public RGWCoroutine {
   RGWBucketInfo bucket_info;
   rgw_obj_key key;
   PSEnvRef env;
-  uint64_t versioned_epoch;
+  std::optional<uint64_t> versioned_epoch;
   TopicsRef topics;
 public:
   RGWPSHandleObjCreateCR(RGWDataSyncEnv *_sync_env,
                        RGWBucketInfo& _bucket_info, rgw_obj_key& _key,
-                       PSEnvRef _env, uint64_t _versioned_epoch) : RGWCoroutine(_sync_env->cct),
+                       PSEnvRef _env, std::optional<uint64_t> _versioned_epoch) : RGWCoroutine(_sync_env->cct),
                                                                    sync_env(_sync_env),
                                                                    bucket_info(_bucket_info),
                                                                    key(_key),
@@ -1393,8 +1393,8 @@ public:
     ldout(sync_env->cct, 5) << conf->id << ": start" << dendl;
     return new RGWPSInitEnvCBCR(sync_env, env);
   }
-  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
-    ldout(sync_env->cct, 10) << conf->id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
+  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override {
+    ldout(sync_env->cct, 10) << conf->id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
     return new RGWPSHandleObjCreateCR(sync_env, bucket_info, key, env, versioned_epoch);
   }
   RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
