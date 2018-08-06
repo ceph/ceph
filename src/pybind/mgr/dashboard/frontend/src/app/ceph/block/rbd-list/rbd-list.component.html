@@ -22,7 +22,7 @@
       <button type="button"
               class="btn btn-sm btn-primary"
               *ngIf="permission.update && (!permission.create || permission.create && selection.hasSingleSelection)"
-              [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}"
+              [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().cdExecuting}"
               routerLink="/block/rbd/edit/{{ selection.first()?.pool_name | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
         <i class="fa fa-fw fa-pencil"></i>
         <span i18n>Edit</span>
@@ -30,7 +30,7 @@
       <button type="button"
               class="btn btn-sm btn-primary"
               *ngIf="permission.delete && !permission.update && !permission.create"
-              [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}"
+              [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().cdExecuting}"
               (click)="deleteRbdModal()">
         <i class="fa fa-fw fa-trash-o"></i><span i18n>Delete</span>
       </button>
@@ -54,7 +54,7 @@
         </li>
         <li role="menuitem"
             *ngIf="permission.update"
-            [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
+            [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().cdExecuting}">
           <a class="dropdown-item"
              routerLink="/block/rbd/edit/{{ selection.first()?.pool_name | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
             <i class="fa fa-fw fa-pencil"></i>
@@ -63,7 +63,7 @@
         </li>
         <li role="menuitem"
             *ngIf="permission.create"
-            [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
+            [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().cdExecuting}">
           <a class="dropdown-item"
              routerLink="/block/rbd/copy/{{ selection.first()?.pool_name | encodeUri }}/{{ selection.first()?.name | encodeUri }}">
             <i class="fa fa-fw fa-copy"></i>
@@ -72,7 +72,7 @@
         </li>
         <li role="menuitem"
             *ngIf="permission.update"
-            [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing || !selection.first().parent}">
+            [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().cdExecuting || !selection.first().parent}">
           <a class="dropdown-item"
              (click)="flattenRbdModal()">
             <i class="fa fa-fw fa-chain-broken"></i>
@@ -81,7 +81,7 @@
         </li>
         <li role="menuitem"
             *ngIf="permission.delete"
-            [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
+            [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().cdExecuting}">
           <a class="dropdown-item"
              (click)="deleteRbdModal()">
             <i class="fa fa-fw fa-trash-o"></i>
