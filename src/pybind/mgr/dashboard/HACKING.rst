@@ -16,7 +16,7 @@ Prerequisites
 ~~~~~~~~~~~~~
 
  * Node 8.9.0 or higher
- * NPM 5.5.1 or higher
+ * NPM 5.7.0 or higher
 
 nodeenv:
   During Ceph's build we create a virtualenv with ``node`` and ``npm``
