@@ -5335,7 +5335,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       if (p->quota_max_objects == 0)
         rs << "N/A";
       else
-        rs << si_u_t(p->quota_max_objects) << " objects";
+        rs << si_u_t(p->quota_max_objects) << "objects";
       rs << "\n"
          << "  max bytes  : ";
       if (p->quota_max_bytes == 0)
