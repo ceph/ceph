@@ -14,12 +14,12 @@ namespace cache {
 
 ObjectCacheStore::ObjectCacheStore(CephContext *cct, ContextWQ* work_queue)
       : m_cct(cct), m_work_queue(work_queue),
-        m_cache_table_lock("rbd::cache::ObjectCacheStore"),
         m_rados(new librados::Rados()) {
+  m_policy = new SimplePolicy(4096, 0.9); // TODO
 }
 
 ObjectCacheStore::~ObjectCacheStore() {
-
+  delete m_policy;
 }
 
 int ObjectCacheStore::init(bool reset) {
@@ -43,6 +43,7 @@ int ObjectCacheStore::do_promote(std::string pool_name, std::string object_name)
   int ret = 0;
   std::string cache_file_name =  pool_name + object_name;
 
+  //TODO(): lock on ioctx map
   if (m_ioctxs.find(pool_name) == m_ioctxs.end()) {
     librados::IoCtx* io_ctx = new librados::IoCtx();
     ret = m_rados->ioctx_create(pool_name.c_str(), *io_ctx);
@@ -58,10 +59,8 @@ int ObjectCacheStore::do_promote(std::string pool_name, std::string object_name)
   librados::IoCtx* ioctx = m_ioctxs[pool_name]; 
 
   //promoting: update metadata 
-  {
-    Mutex::Locker locker(m_cache_table_lock);
-    m_cache_table.emplace(cache_file_name, PROMOTING);
-  }
+  m_policy->update_status(cache_file_name, PROMOTING);
+  assert(PROMOTING == m_policy->get_status(cache_file_name));
 
   librados::bufferlist* read_buf = new librados::bufferlist();
   int object_size = 4096*1024; //TODO(): read config from image metadata
@@ -83,41 +82,59 @@ int ObjectCacheStore::do_promote(std::string pool_name, std::string object_name)
   cache_file.open();
   ret = cache_file.write_object_to_file(*read_buf, object_size);
   
-  assert(m_cache_table.find(cache_file_name) != m_cache_table.end()); 
-
   // update metadata
-  {
-    Mutex::Locker locker(m_cache_table_lock);
-    m_cache_table.emplace(cache_file_name, PROMOTED);
-  }
+  assert(PROMOTING == m_policy->get_status(cache_file_name));
+  m_policy->update_status(cache_file_name, PROMOTED);
+  assert(PROMOTED == m_policy->get_status(cache_file_name));
 
   return ret;
 
 }
  
+// return -1, client need to read data from cluster.
+// return 0,  client directly read data from cache.
 int ObjectCacheStore::lookup_object(std::string pool_name, std::string object_name) {
 
   std::string cache_file_name =  pool_name + object_name;
-  {
-    Mutex::Locker locker(m_cache_table_lock);
 
-    auto it = m_cache_table.find(cache_file_name);
-    if (it != m_cache_table.end()) {
+  // TODO lookup and return status;
 
-      if (it->second == PROMOTING) {
-        return -1;
-      } else if (it->second == PROMOTED) {
-        return 0;
-      } else {
-        assert(0);
-      }
-    }
+  CACHESTATUS ret;
+  ret = m_policy->lookup_object(cache_file_name);
+
+  switch(ret) {
+    case NONE:
+      return do_promote(pool_name, object_name);
+    case PROMOTING:
+      return -1;
+    case PROMOTED:
+      return 0;
+    default:
+      return -1;
   }
-
-  int ret = do_promote(pool_name, object_name);
-
-  return ret;
 }
+
+void ObjectCacheStore::evict_thread_body() {
+  int ret;
+  while(m_evict_go) {
+    std::string temp_cache_file;
+
+    ret = m_policy->evict_object(temp_cache_file);
+    if(ret == 0) {
+      continue;
+    }
+
+    // TODO
+    // delete temp_cache_file file.
+
+    assert(EVICTING == m_policy->get_status(temp_cache_file));
+
+    m_policy->update_status(temp_cache_file, EVICTED);
+
+    assert(NONE == m_policy->get_status(temp_cache_file));
+  }
+}
+
 
 int ObjectCacheStore::shutdown() {
   m_rados->shutdown();

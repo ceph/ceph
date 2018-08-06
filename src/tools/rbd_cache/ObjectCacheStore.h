@@ -13,6 +13,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/cache/SharedPersistentObjectCacherFile.h"
+#include "SimplePolicy.hpp"
 
 using librados::Rados;
 using librados::IoCtx;
@@ -39,6 +40,8 @@ class ObjectCacheStore
 
     int lock_cache(std::string vol_name);
 
+    void evict_thread_body();
+
   private:
     int _evict_object();
 
@@ -48,21 +51,18 @@ class ObjectCacheStore
                        librados::bufferlist* read_buf,
                        uint64_t length);
 
-    enum {
-      PROMOTING = 0, 
-      PROMOTED, 
-    };
-
     CephContext *m_cct;
     ContextWQ* m_work_queue;
-    Mutex m_cache_table_lock;
     RadosRef m_rados;
 
-    std::map<std::string, uint8_t> m_cache_table;
 
     std::map<std::string, librados::IoCtx*> m_ioctxs;
 
     librbd::cache::SyncFile *m_cache_file;
+
+    Policy* m_policy;
+
+    bool m_evict_go;
 };
 
 } // namespace rbd
