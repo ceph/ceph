@@ -23,7 +23,7 @@ namespace cache {
 
 SyncFile::SyncFile(CephContext *cct, const std::string &name)
   : cct(cct) {
-  m_name = cct->_conf->get_val<std::string>("rbd_shared_cache_path") + "/rbd_cache." + name;
+  m_name = cct->_conf.get_val<std::string>("rbd_shared_cache_path") + "/rbd_cache." + name;
   ldout(cct, 20) << "file path=" << m_name << dendl;
 }
 

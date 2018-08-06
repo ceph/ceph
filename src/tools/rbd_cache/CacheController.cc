@@ -20,7 +20,7 @@ public:
     : ThreadPool(cct, "librbd::cache::thread_pool", "tp_librbd_cache", 32,
                  "pcache_threads"),
       op_work_queue(new ContextWQ("librbd::pcache_op_work_queue",
-                    cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
+                    cct->_conf.get_val<int64_t>("rbd_op_thread_timeout"),
                     this)) {
     start();
   }

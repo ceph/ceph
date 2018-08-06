@@ -46,7 +46,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (g_conf->daemonize) {
+  if (g_conf()->daemonize) {
     global_init_daemonize(g_ceph_context);
   }
   g_ceph_context->enable_perf_counter();
@@ -62,7 +62,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, cmd_args);
 
   // disable unnecessary librbd cache
-  g_ceph_context->_conf->set_val_or_die("rbd_cache", "false");
+  g_ceph_context->_conf.set_val_or_die("rbd_cache", "false");
 
   cachectl = new rbd::cache::CacheController(g_ceph_context, cmd_args);
   int r = cachectl->init();
