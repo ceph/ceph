@@ -15,6 +15,7 @@ overrides:
     - 'attr name mistmatch'
     - 'deep-scrub 1 missing, 0 inconsistent objects'
     - 'failed to pick suitable auth object'
+    - 'candidate size [0-9]+ info size [0-9]+ mismatch'
     - overall HEALTH_
     - \(OSDMAP_FLAGS\)
     - \(OSD_

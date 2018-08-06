@@ -348,6 +348,7 @@ def task(ctx, config):
         - attr name mistmatch
         - deep-scrub 1 missing, 0 inconsistent objects
         - failed to pick suitable auth object
+        - candidate size [0-9]+ info size [0-9]+ mismatch
       conf:
         osd:
           osd deep scrub update digest min age: 0
