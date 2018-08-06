@@ -760,7 +760,74 @@ public:
     return aggregate;
   }
 
-  // helper structures, not for hot paths
+  template<const perf_counter_meta_t& pcid>
+  void tinc(const utime_t amt) {
+    static_assert(perf_counters_t::count<pcid, P...>() == 1);
+    static_assert(pcid.type & PERFCOUNTER_TIME);
+
+    constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
+    perf_counter_any_data_t* const threaded_counters = \
+      _get_threaded_counters(idx);
+    if (likely(threaded_counters != nullptr)) {
+      if constexpr (pcid.type & PERFCOUNTER_LONGRUNAVG) {
+	auto val_n_cnt = \
+	  threaded_counters->val_with_counter.load(std::memory_order_relaxed);
+
+	if (unlikely(__builtin_uadd_overflow(val_n_cnt.val, amt.to_nsec(),
+					     &val_n_cnt.val) ||
+		     __builtin_uadd_overflow(val_n_cnt.cnt, 1,
+					     &val_n_cnt.cnt)))
+	{
+	  atomic_perf_counters[idx].val_with_counter.val += val_n_cnt.val + std::numeric_limits<std::uint32_t>::max();
+	  atomic_perf_counters[idx].val_with_counter.cnt += val_n_cnt.cnt + std::numeric_limits<std::uint32_t>::max();
+	  threaded_counters->val_with_counter.store({ 0, 0 },
+		std::memory_order_relaxed);
+	} else {
+	  threaded_counters->val_with_counter.store(val_n_cnt,
+		std::memory_order_relaxed);
+	}
+      } else {
+	threaded_counters->val += amt.to_nsec();
+      }
+    } else {
+      atomic_perf_counters[idx].val += amt.to_nsec();
+;
+    }
+  }
+
+  template<const perf_counter_meta_t& pcid>
+  void tinc(const ceph::timespan amt) {
+    static_assert(perf_counters_t::count<pcid, P...>() == 1);
+    static_assert(pcid.type & PERFCOUNTER_TIME);
+
+    constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
+    perf_counter_any_data_t* const threaded_counters = \
+      _get_threaded_counters(idx);
+    if (likely(threaded_counters != nullptr)) {
+      if constexpr (pcid.type & PERFCOUNTER_LONGRUNAVG) {
+	auto val_n_cnt = \
+	  threaded_counters->val_with_counter.load(std::memory_order_relaxed);
+
+	if (unlikely(__builtin_uadd_overflow(val_n_cnt.val, amt.count(), &val_n_cnt.val) ||
+		     __builtin_uadd_overflow(val_n_cnt.cnt, 1, &val_n_cnt.cnt))) {
+	  atomic_perf_counters[idx].val_with_counter.val += val_n_cnt.val + std::numeric_limits<std::uint32_t>::max();
+	  atomic_perf_counters[idx].val_with_counter.cnt += val_n_cnt.cnt + std::numeric_limits<std::uint32_t>::max();
+	  threaded_counters->val_with_counter.store({ 0, 0 },
+		std::memory_order_relaxed);
+	} else {
+	  threaded_counters->val_with_counter.store(val_n_cnt,
+		std::memory_order_relaxed);
+	}
+      } else {
+	threaded_counters->val += amt.count();
+      }
+    } else {
+      atomic_perf_counters[idx].val += amt.count();
+;
+    }
+  }
+
+  // helper structures, NOT for hot paths
   static constexpr std::array<perf_counter_meta_t,
 			      sizeof...(P)> m_meta {
     P...
