@@ -50,11 +50,13 @@ For example, a typical configuration might look like this:
     
 Additional optional configuration settings are:
 
-:interval: Time between reports to InfluxDB.  Default 5 seconds.
+:interval: Time between reports to InfluxDB.  Default 30 seconds.
 :database: InfluxDB database name.  Default "ceph".  You will need to create this database and grant write privileges to the configured username or the username must have admin privileges to create it.  
 :port: InfluxDB server port.  Default 8086
 :ssl: Use https connection for InfluxDB server. Use "true" or "false". Default false
 :verify_ssl: Verify https cert for InfluxDB server. Use "true" or "false". Default true
+:threads: How many worker threads should be spawned for sending data to InfluxDB. Default is 5
+:batch_size: How big batches of data points should be when sending to InfluxDB. Default is 5000
 
 ---------
 Debugging 
