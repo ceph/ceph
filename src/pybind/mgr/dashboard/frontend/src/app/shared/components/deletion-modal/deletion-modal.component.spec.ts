@@ -36,8 +36,10 @@ export class MockModule {}
   `
 })
 class MockComponent {
-  @ViewChild('ctrlDescription') ctrlDescription: TemplateRef<any>;
-  @ViewChild('modalDescription') modalDescription: TemplateRef<any>;
+  @ViewChild('ctrlDescription')
+  ctrlDescription: TemplateRef<any>;
+  @ViewChild('modalDescription')
+  modalDescription: TemplateRef<any>;
   someData = [1, 2, 3, 4, 5];
   finished: number[];
   ctrlRef: BsModalRef;

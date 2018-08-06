@@ -19,9 +19,12 @@ import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.compo
   styleUrls: ['./osd-list.component.scss']
 })
 export class OsdListComponent implements OnInit {
-  @ViewChild('statusColor') statusColor: TemplateRef<any>;
-  @ViewChild('osdUsageTpl') osdUsageTpl: TemplateRef<any>;
-  @ViewChild(TableComponent) tableComponent: TableComponent;
+  @ViewChild('statusColor')
+  statusColor: TemplateRef<any>;
+  @ViewChild('osdUsageTpl')
+  osdUsageTpl: TemplateRef<any>;
+  @ViewChild(TableComponent)
+  tableComponent: TableComponent;
 
   permission: Permission;
   bsModalRef: BsModalRef;

@@ -10,7 +10,8 @@ import { CephfsListComponent } from './cephfs-list.component';
 
 @Component({ selector: 'cd-cephfs-detail', template: '' })
 class CephfsDetailStubComponent {
-  @Input() selection: CdTableSelection;
+  @Input()
+  selection: CdTableSelection;
 }
 
 describe('CephfsListComponent', () => {
