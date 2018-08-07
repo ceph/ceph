@@ -1899,6 +1899,10 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
     if (ret < 0 && ret != -ENOENT)
       return -EINVAL;
 
+    if (ret == -ENOENT) {
+      continue;
+    }
+
     if (cur_disk_bl.length()) {
       bufferlist::iterator cur_disk_iter = cur_disk_bl.begin();
       try {
@@ -1953,18 +1957,6 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
         }
         break;
       case CEPH_RGW_UPDATE:
-	if (!cur_disk.exists) {
-	  // this update would only have been sent by the rgw client
-	  // if the rgw_bucket_dir_entry existed, however between that
-	  // check and now the entry has diappeared, so we were likely
-	  // in the midst of a delete op, and we will not recreate the
-	  // entry
-	  CLS_LOG(10,
-		  "CEPH_RGW_UPDATE not applied because rgw_bucket_dir_entry"
-		  " no longer exists\n");
-	  break;
-	}
-
         CLS_LOG(10, "CEPH_RGW_UPDATE name=%s instance=%s total_entries: %" PRId64 " -> %" PRId64 "\n",
                 cur_change.key.name.c_str(), cur_change.key.instance.c_str(), stats.num_entries, stats.num_entries + 1);
 
