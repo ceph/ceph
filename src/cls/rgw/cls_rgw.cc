@@ -3320,8 +3320,11 @@ static int gc_iterate_entries(cls_method_context_t hctx, const string& marker, b
 
     CLS_LOG(10, "gc_iterate_entries key=%s\n", key.c_str());
 
-    if (!end_key.empty() && key.compare(end_key) >= 0)
+    if (!end_key.empty() && key.compare(end_key) >= 0) {
+      if (truncated)
+        *truncated = false;
       return 0;
+    }
 
     if (!key_in_index(key, GC_OBJ_TIME_INDEX))
       return 0;
