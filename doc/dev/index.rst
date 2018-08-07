@@ -206,7 +206,7 @@ See :doc:`/dev/quick_guide`.
 Kubernetes/Rook development cluster
 -----------------------------------
 
-See :doc:`/dev/kubernetes`.
+See :ref:`kubernetes-dev`
 
 Backporting
 -----------
