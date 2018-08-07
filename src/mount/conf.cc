@@ -6,6 +6,7 @@
 #include <cstring>
 #include <map>
 
+#include "common/async/context_pool.h"
 #include "common/ceph_context.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -40,7 +41,8 @@ extern "C" void mount_ceph_get_config_info(const char *config_file,
   conf.parse_env(cct->get_module_type()); // environment variables override
   conf.apply_changes(nullptr);
 
-  MonClient monc = MonClient(cct.get());
+  ceph::async::io_context_pool ioc(1);
+  MonClient monc = MonClient(cct.get(), ioc);
   err = monc.build_initial_monmap();
   if (err)
     goto scrape_keyring;
