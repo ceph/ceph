@@ -1,6 +1,14 @@
 
-ceph-mgr plugin author guide
-============================
+
+.. _mgr-module-dev:
+
+ceph-mgr module developer's guide
+=================================
+
+.. warning::
+
+    This is developer documentation, describing Ceph internals that
+    are only relevant to people writing ceph-mgr modules.
 
 Creating a plugin
 -----------------
@@ -17,6 +25,12 @@ The most important methods to override are:
   take action when new cluster data is available.
 * a ``handle_command`` member function if your module
   exposes CLI commands.
+
+Some modules interface with external orchestrators to deploy
+Ceph services.  These also inherit from ``Orchestrator``, which adds
+additional methods to the base ``MgrModule`` class.  See
+:ref:`Orchestrator modules <orchestrator-modules>` for more on
+creating these modules.
 
 Installing a plugin
 -------------------
