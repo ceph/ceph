@@ -52,6 +52,61 @@ PerfCountersRef build(CephContext *cct, const std::string& name);
 using GetClientCounters = std::function<PerfCounters*(client_id)>;
 
 namespace async = ceph::async;
+struct Request {
+  client_id client;
+  Time started;
+  Cost cost;
+};
+
+enum class ReqState {
+  Wait,
+  Ready,
+  Cancelled
+};
+// For a blocking SyncRequest we hold a reference to a cv and the caller must
+// ensure the lifetime
+struct SyncRequest : public Request {
+  std::mutex& req_mtx;
+  std::condition_variable& req_cv;
+  ReqState& req_state;
+  explicit SyncRequest(client_id _id, Time started, Cost cost,
+		       std::mutex& mtx, std::condition_variable& _cv,
+		       ReqState& _state):
+    Request{_id, started, cost}, req_mtx(mtx), req_cv(_cv), req_state(_state) {};
+};
+
+class SyncScheduler {
+public:
+  template <typename ...Args>
+  SyncScheduler(CephContext *cct, GetClientCounters&& counters,
+		Args&& ...args);
+  ~SyncScheduler();
+
+  // submit a blocking request for dmclock scheduling, this function waits until
+  // the request is ready.
+  int add_request(const client_id& client, const ReqParams& params,
+		    const Time& time, Cost cost);
+
+  void cancel();
+
+  void cancel(const client_id& client);
+
+private:
+  static constexpr bool IsDelayed = false;
+  using Queue = crimson::dmclock::PushPriorityQueue<client_id, SyncRequest, IsDelayed>;
+  using RequestRef = typename Queue::RequestRef;
+  using Clock = ceph::coarse_real_clock;
+
+  Queue queue;
+  CephContext const *cct;
+  GetClientCounters counters; //< provides per-client perf counters
+};
+
+template <typename ...Args>
+SyncScheduler::SyncScheduler(CephContext *cct, GetClientCounters&& counters,
+			     Args&& ...args):
+  queue(std::forward<Args>(args)...), cct(cct), counters(std::move(counters))
+{}
 
 /*
  * A dmclock request scheduling service for use with boost::asio.
@@ -98,12 +153,6 @@ class AsyncScheduler : public md_config_obs_t {
                           const std::set<std::string>& changed) override;
 
  private:
-  struct Request {
-    client_id client;
-    Time started;
-    Cost cost;
-  };
-
   static constexpr bool IsDelayed = false;
   using Queue = crimson::dmclock::PullPriorityQueue<client_id, Request, IsDelayed>;
   using RequestRef = typename Queue::RequestRef;
