@@ -22,6 +22,7 @@
 #include "common/EventTrace.h"
 #include "include/random.h"
 #include "OSD.h"
+#include "PrimaryLogPG.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -105,7 +106,8 @@ ReplicatedBackend::ReplicatedBackend(
   ObjectStore::CollectionHandle &c,
   ObjectStore *store,
   CephContext *cct) :
-  PGBackend(cct, pg, store, coll, c) {}
+  PGBackend(cct, pg, store, coll, c),
+  _in_process_lock("ReplicatedBackend::_in_process_lock") {}
 
 void ReplicatedBackend::run_recovery_op(
   PGBackend::RecoveryHandle *_h,
@@ -182,6 +184,22 @@ bool ReplicatedBackend::can_handle_while_inactive(OpRequestRef op)
   }
 }
 
+bool ReplicatedBackend::handle_message_no_lock(OpRequestRef op)
+{
+  bool can_handle = true;
+  switch (op->get_req()->get_type()) {
+    case MSG_OSD_REPOPREPLY: {
+      dout(20) << __func__ << " can op lock tid: " << op->get_req()->get_tid() << dendl;
+      do_repop_reply(op);
+      break; 
+    }
+    default:
+      can_handle = false;
+      break;
+  }
+  return can_handle;
+}
+
 bool ReplicatedBackend::_handle_message(
   OpRequestRef op
   )
@@ -202,11 +220,6 @@ bool ReplicatedBackend::_handle_message(
 
   case MSG_OSD_REPOP: {
     do_repop(op);
-    return true;
-  }
-
-  case MSG_OSD_REPOPREPLY: {
-    do_repop_reply(op);
     return true;
   }
 
@@ -236,11 +249,13 @@ void ReplicatedBackend::clear_recovery_state()
 void ReplicatedBackend::on_change()
 {
   dout(10) << __func__ << dendl;
+  _in_process_lock.Lock();
   for (auto& op : in_progress_ops) {
     delete op.second->on_commit;
     op.second->on_commit = nullptr;
   }
   in_progress_ops.clear();
+  _in_process_lock.Unlock();
   clear_recovery_state();
 }
 
@@ -452,6 +467,7 @@ void ReplicatedBackend::submit_transaction(
   assert(added.size() <= 1);
   assert(removed.size() <= 1);
 
+  _in_process_lock.Lock();
   auto insert_res = in_progress_ops.insert(
     make_pair(
       tid,
@@ -462,10 +478,13 @@ void ReplicatedBackend::submit_transaction(
     );
   assert(insert_res.second);
   InProgressOp &op = *insert_res.first->second;
+  _in_process_lock.Unlock();
 
   op.waiting_for_commit.insert(
     parent->get_acting_recovery_backfill_shards().begin(),
     parent->get_acting_recovery_backfill_shards().end());
+  op.pending_commit_num = parent->get_acting_recovery_backfill_shards().size();
+  op.shard = get_parent()->whoami_shard();
 
   issue_op(
     soid,
@@ -491,10 +510,7 @@ void ReplicatedBackend::submit_transaction(
     at_version,
     true,
     op_t);
-  
-  op_t.register_on_commit(
-    parent->bless_context(
-      new C_OSD_OnOpCommit(this, &op)));
+  op_t.register_on_commit(new C_OSD_OnOpCommit(this, &op));
 
   vector<ObjectStore::Transaction> tls;
   tls.push_back(std::move(op_t));
@@ -521,14 +537,27 @@ void ReplicatedBackend::op_commit(
     op->op->pg_trace.event("op commit");
   }
 
-  op->waiting_for_commit.erase(get_parent()->whoami_shard());
-
-  if (op->waiting_for_commit.empty()) {
+  assert(op->pending_commit_num > 0);
+  if (--op->pending_commit_num == 0) {
+    get_parent()->pg_lock();
+    op->waiting_for_commit.clear();
     op->on_commit->complete(0);
     op->on_commit = 0;
-    assert(!op->on_commit);
+    update_peer_last_complete_ondisk(*op);
+    get_parent()->pg_unlock();
+
+    _in_process_lock.Lock();
     in_progress_ops.erase(op->tid);
+    _in_process_lock.Unlock();
   }
+}
+
+void ReplicatedBackend::update_peer_last_complete_ondisk(InProgressOp &ip_op)
+{
+  for (auto &&iter: ip_op.peer_last_complete_ondisk) {
+    get_parent()->update_peer_last_complete_ondisk(iter.first, iter.second);
+  }
+  ip_op.peer_last_complete_ondisk.clear();
 }
 
 void ReplicatedBackend::do_repop_reply(OpRequestRef op)
@@ -543,49 +572,60 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
   ceph_tid_t rep_tid = r->get_tid();
   pg_shard_t from = r->from;
 
+  _in_process_lock.Lock();
   auto iter = in_progress_ops.find(rep_tid);
-  if (iter != in_progress_ops.end()) {
-    InProgressOp &ip_op = *iter->second;
-    const MOSDOp *m = NULL;
-    if (ip_op.op)
-      m = static_cast<const MOSDOp *>(ip_op.op->get_req());
+  if (iter == in_progress_ops.end()) {
+    _in_process_lock.Unlock();
+    return;
+  }
 
-    if (m)
-      dout(7) << __func__ << ": tid " << ip_op.tid << " op " //<< *m
-	      << " ack_type " << (int)r->ack_type
-	      << " from " << from
-	      << dendl;
-    else
-      dout(7) << __func__ << ": tid " << ip_op.tid << " (no op) "
-	      << " ack_type " << (int)r->ack_type
-	      << " from " << from
-	      << dendl;
+  InProgressOp &ip_op = *iter->second;
+  ip_op.peer_last_complete_ondisk[from] = r->get_last_complete_ondisk();
+  _in_process_lock.Unlock();
 
-    // oh, good.
+  const MOSDOp *m = NULL;
+  if (ip_op.op)
+    m = static_cast<const MOSDOp *>(ip_op.op->get_req());
 
-    if (r->ack_type & CEPH_OSD_FLAG_ONDISK) {
-      assert(ip_op.waiting_for_commit.count(from));
-      ip_op.waiting_for_commit.erase(from);
-      if (ip_op.op) {
-        ostringstream ss;
-        ss << "sub_op_commit_rec from " << from;
-	ip_op.op->mark_event_string(ss.str());
-	ip_op.op->pg_trace.event("sub_op_commit_rec");
-      }
+  if (m)
+    dout(7) << __func__ << ": tid " << ip_op.tid << " op " //<< *m
+          << " ack_type " << (int)r->ack_type
+          << " from " << from
+          << dendl;
+  else
+    dout(7) << __func__ << ": tid " << ip_op.tid << " (no op) "
+          << " ack_type " << (int)r->ack_type
+          << " from " << from
+          << dendl;
+
+  // oh, good.
+  __s32 unfinish = -1;
+  if (r->ack_type & CEPH_OSD_FLAG_ONDISK) {
+    assert(ip_op.waiting_for_commit.count(from));
+    //ip_op.waiting_for_commit.erase(from);
+    unfinish = --ip_op.pending_commit_num;
+    if (ip_op.op) {
+      ostringstream ss;
+      ss << "sub_op_commit_rec from " << from;
+      ip_op.op->mark_event_string(ss.str());
+      ip_op.op->pg_trace.event("sub_op_commit_rec");
     } else {
       // legacy peer; ignore
     }
+  }
 
-    parent->update_peer_last_complete_ondisk(
-      from,
-      r->get_last_complete_ondisk());
+  if (0 == unfinish && ip_op.on_commit) {
+    get_parent()->pg_lock();
+    ip_op.waiting_for_commit.clear();
+    ip_op.on_commit->complete(0);
+    ip_op.on_commit = 0;
 
-    if (ip_op.waiting_for_commit.empty() &&
-        ip_op.on_commit) {
-      ip_op.on_commit->complete(0);
-      ip_op.on_commit = 0;
-      in_progress_ops.erase(iter);
-    }
+    update_peer_last_complete_ondisk(ip_op);
+    get_parent()->pg_unlock();
+
+    _in_process_lock.Lock();
+    in_progress_ops.erase(iter);
+    _in_process_lock.Unlock();
   }
 }
 
@@ -1018,6 +1058,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   rm->ackerosd = ackerosd;
   rm->last_complete = get_info().last_complete;
   rm->epoch_started = get_osdmap()->get_epoch();
+  rm->shard = parent->whoami_shard();
 
   assert(m->logbl.length());
   // shipped transaction and log entries
@@ -1076,9 +1117,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
     rm->localt,
     async);
 
-  rm->opt.register_on_commit(
-    parent->bless_context(
-      new C_OSD_RepModifyCommit(this, rm)));
+  rm->opt.register_on_commit(new C_OSD_RepModifyCommit(this, rm));
   vector<ObjectStore::Transaction> tls;
   tls.reserve(2);
   tls.push_back(std::move(rm->localt));
@@ -1092,7 +1131,6 @@ void ReplicatedBackend::repop_commit(RepModifyRef rm)
 {
   rm->op->mark_commit_sent();
   rm->op->pg_trace.event("sup_op_commit");
-  rm->committed = true;
 
   // send commit.
   const MOSDRepOp *m = static_cast<const MOSDRepOp*>(rm->op->get_req());
@@ -1100,19 +1138,22 @@ void ReplicatedBackend::repop_commit(RepModifyRef rm)
   dout(10) << __func__ << " on op " << *m
 	   << ", sending commit to osd." << rm->ackerosd
 	   << dendl;
-  assert(get_osdmap()->is_up(rm->ackerosd));
 
+  get_parent()->pg_lock();
+  assert(get_osdmap()->is_up(rm->ackerosd));
+  epoch_t from_epoch = get_osdmap()->get_epoch();
+  get_parent()->pg_unlock();
   get_parent()->update_last_complete_ondisk(rm->last_complete);
 
   MOSDRepOpReply *reply = new MOSDRepOpReply(
     m,
     get_parent()->whoami_shard(),
-    0, get_osdmap()->get_epoch(), m->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
+    0, from_epoch, m->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
   reply->set_last_complete_ondisk(rm->last_complete);
   reply->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
   reply->trace = rm->op->pg_trace;
   get_parent()->send_message_osd_cluster(
-    rm->ackerosd, reply, get_osdmap()->get_epoch());
+    rm->ackerosd, reply, from_epoch);
 
   log_subop_stats(get_parent()->get_logger(), rm->op, l_osd_sop_w);
 }
