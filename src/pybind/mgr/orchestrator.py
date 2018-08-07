@@ -127,7 +127,7 @@ class Orchestrator(object):
         status to return: the default None, None return value is used
         to indicate that a module is unable to indicate its availability.
 
-        @return two-tuple of boolean, string
+        :return: two-tuple of boolean, string
         """
         return None, None
 
@@ -175,7 +175,6 @@ class Orchestrator(object):
         compression/encryption, etc).
 
         :param osd_spec: OsdCreationSpec
-        :return:
         """
         raise NotImplementedError()
 
