@@ -137,10 +137,10 @@ public:
    * @defgroup Messaging
    * @{
    */
-  int send_message(Message *m, const entity_inst_t& dest) override {
+  int send_to(Message *m, int type, const entity_addrvec_t& addrs) override {
     Mutex::Locker l(lock);
 
-    return _send_message(m, dest);
+    return _send_to(m, type, addrs);
   }
 
   /** @} // Messaging */
@@ -149,7 +149,8 @@ public:
    * @defgroup Connection Management
    * @{
    */
-  ConnectionRef get_connection(const entity_inst_t& dest) override;
+  ConnectionRef connect_to(int type,
+			   const entity_addrvec_t& addrs) override;
   ConnectionRef get_loopback_connection() override;
   void mark_down(const entity_addr_t& addr) override {
     mark_down_addrs(entity_addrvec_t(addr));
@@ -213,9 +214,9 @@ private:
    * just drop silently under failure.
    */
   void submit_message(Message *m, AsyncConnectionRef con,
-                      const entity_addr_t& dest_addr, int dest_type);
+                      const entity_addrvec_t& dest_addrs, int dest_type);
 
-  int _send_message(Message *m, const entity_inst_t& dest);
+  int _send_to(Message *m, int type, const entity_addrvec_t& addrs);
   void _finish_bind(const entity_addrvec_t& bind_addrs,
 		    const entity_addrvec_t& listen_addrs);
 

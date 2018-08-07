@@ -138,6 +138,14 @@ public:
   int send_message(Message *m, const entity_inst_t& dest) override {
     return _send_message(m, dest);
   }
+  int send_to(
+    Message *m,
+    int type,
+    const entity_addrvec_t& addr) override {
+    // temporary
+    return send_message(m, entity_inst_t(entity_name_t(type, -1),
+					 addr.legacy_addr()));
+  }
 
   int send_message(Message *m, Connection *con) {
     return _send_message(m, con);
@@ -149,7 +157,7 @@ public:
    * @defgroup Connection Management
    * @{
    */
-  ConnectionRef get_connection(const entity_inst_t& dest) override;
+  ConnectionRef connect_to(int type, const entity_addrvec_t& addrs) override;
   ConnectionRef get_loopback_connection() override;
   int send_keepalive(Connection *con);
   void mark_down(const entity_addr_t& addr) override;

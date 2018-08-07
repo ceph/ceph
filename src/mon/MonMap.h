@@ -291,6 +291,13 @@ public:
     return true;
   }
 
+  entity_addrvec_t get_addrs(const string& n) const {
+    return entity_addrvec_t(get_addr(n));
+  }
+  entity_addrvec_t get_addrs(unsigned m) const {
+    return entity_addrvec_t(get_addr(m));
+  }
+
   const entity_addr_t& get_addr(const string& n) const {
     assert(mon_info.count(n));
     map<string,mon_info_t>::const_iterator p = mon_info.find(n);
@@ -303,19 +310,6 @@ public:
   void set_addr(const string& n, const entity_addr_t& a) {
     assert(mon_info.count(n));
     mon_info[n].public_addr = a;
-  }
-  entity_inst_t get_inst(const string& n) {
-    assert(mon_info.count(n));
-    int m = get_rank(n);
-    assert(m >= 0); // vector can't take negative indicies
-    return get_inst(m);
-  }
-  entity_inst_t get_inst(unsigned m) const {
-    assert(m < ranks.size());
-    entity_inst_t i;
-    i.addr = get_addr(m);
-    i.name = entity_name_t::MON(m);
-    return i;
   }
 
   void encode(bufferlist& blist, uint64_t con_features) const;
