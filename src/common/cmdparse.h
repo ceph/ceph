@@ -46,9 +46,19 @@ void handle_bad_get(CephContext *cct, const std::string& k, const char *name);
 
 std::string cmd_vartype_stringify(const cmd_vartype& v);
 
+struct bad_cmd_get : public std::exception {
+  std::string desc;
+  bad_cmd_get(const std::string& f, const cmdmap_t& cmdmap) {
+    desc = "bad or missing field '" + f + "'";
+  }
+  const char *what() const throw() override {
+    return desc.c_str();
+  }
+};
+
 template <typename T>
-bool
-cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k, T& val)
+bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k,
+		T& val)
 {
   if (cmdmap.count(k)) {
     try {
@@ -61,14 +71,47 @@ cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k, T& va
   return false;
 }
 
+template <typename T>
+bool cmd_getval_throws(CephContext *cct, const cmdmap_t& cmdmap,
+		       const std::string& k, T& val)
+{
+  if (cmdmap.count(k)) {
+    try {
+      val = boost::get<T>(cmdmap.find(k)->second);
+      return true;
+    } catch (boost::bad_get&) {
+      throw bad_cmd_get(k, cmdmap);
+    }
+  }
+  return false;
+}
+
 // with default
 
 template <typename T>
-void
-cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k, T& val, const T& defval)
+void cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k,
+		T& val, const T& defval)
 {
   if (!cmd_getval(cct, cmdmap, k, val))
     val = defval;
+}
+
+template <typename T>
+bool cmd_getval_throws(
+  CephContext *cct, const cmdmap_t& cmdmap, const std::string& k,
+  T& val, const T& defval)
+{
+  if (cmdmap.count(k)) {
+    try {
+      val = boost::get<T>(cmdmap.find(k)->second);
+      return true;
+    } catch (boost::bad_get&) {
+      throw bad_cmd_get(k, cmdmap);
+    }
+  } else {
+    val = defval;
+    return true;
+  }
 }
 
 template <typename T>
