@@ -286,7 +286,14 @@ bool MDSMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_beacon(op);
     
   case MSG_MON_COMMAND:
-    return preprocess_command(op);
+    try {
+      return preprocess_command(op);
+    }
+    catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
 
   case MSG_MDS_OFFLOAD_TARGETS:
     return preprocess_offload_targets(op);
@@ -497,7 +504,14 @@ bool MDSMonitor::prepare_update(MonOpRequestRef op)
     return prepare_beacon(op);
 
   case MSG_MON_COMMAND:
-    return prepare_command(op);
+    try {
+      return prepare_command(op);
+    }
+    catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
 
   case MSG_MDS_OFFLOAD_TARGETS:
     return prepare_offload_targets(op);
