@@ -214,7 +214,7 @@ void PGMapDigest::print_summary(Formatter *f, ostream *out) const
   } else {
     *out << "    pools:   " << pg_pool_sum.size() << " pools, "
          << num_pg << " pgs\n";
-    *out << "    objects: " << si_u_t(pg_sum.stats.sum.num_objects) << " objects, "
+    *out << "    objects: " << si_u_t(pg_sum.stats.sum.num_objects) << "objects, "
          << byte_u_t(pg_sum.stats.sum.num_bytes) << "\n";
     *out << "    usage:   "
          << byte_u_t(osd_sum.kb_used << 10) << " used, "
@@ -605,7 +605,7 @@ void PGMapDigest::cache_io_rate_summary(Formatter *f, ostream *out,
     } else {
       if (have_output)
 	*out << ", ";
-      *out << si_u_t(pos_delta.stats.sum.num_flush_mode_low) << "PG(s) flushing";
+      *out << si_u_t(pos_delta.stats.sum.num_flush_mode_low) << "PGs flushing";
       have_output = true;
     }
   }
@@ -615,7 +615,7 @@ void PGMapDigest::cache_io_rate_summary(Formatter *f, ostream *out,
     } else {
       if (have_output)
 	*out << ", ";
-      *out << si_u_t(pos_delta.stats.sum.num_flush_mode_high) << "PG(s) flushing (high)";
+      *out << si_u_t(pos_delta.stats.sum.num_flush_mode_high) << "PGs flushing (high)";
       have_output = true;
     }
   }
@@ -625,7 +625,7 @@ void PGMapDigest::cache_io_rate_summary(Formatter *f, ostream *out,
     } else {
       if (have_output)
 	*out << ", ";
-      *out << si_u_t(pos_delta.stats.sum.num_evict_mode_some) << "PG(s) evicting";
+      *out << si_u_t(pos_delta.stats.sum.num_evict_mode_some) << "PGs evicting";
       have_output = true;
     }
   }
@@ -635,7 +635,7 @@ void PGMapDigest::cache_io_rate_summary(Formatter *f, ostream *out,
     } else {
       if (have_output)
 	*out << ", ";
-      *out << si_u_t(pos_delta.stats.sum.num_evict_mode_full) << "PG(s) evicting (full)";
+      *out << si_u_t(pos_delta.stats.sum.num_evict_mode_full) << "PGs evicting (full)";
     }
   }
 }
@@ -2493,9 +2493,8 @@ void PGMap::get_health_checks(
 	  p.second.target_max_objects * (ratio / 1000000.0)) {
 	ostringstream ss;
 	ss << "cache pool '" << name << "' with "
-	   << si_u_t(st.stats.sum.num_objects)
-	   << " objects at/near target max "
-	   << si_u_t(p.second.target_max_objects) << " objects";
+	   << si_u_t(st.stats.sum.num_objects) << "objects at/near target max "
+	   << si_u_t(p.second.target_max_objects) << "objects";
 	detail.push_back(ss.str());
 	nearfull = true;
       }

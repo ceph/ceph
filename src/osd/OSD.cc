@@ -6116,7 +6116,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       ds << "bench: wrote " << byte_u_t(count)
 	 << " in blocks of " << byte_u_t(bsize) << " in "
 	 << elapsed << " sec at " << byte_u_t(rate) << "/sec "
-	 << si_u_t(iops) << " IOPS";
+	 << si_u_t(iops) << "IOPS";
     }
   }
 
