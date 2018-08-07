@@ -1948,7 +1948,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
 
   i = opts.find("pgid");
-  boost::optional<pg_t> pgid(i != opts.end(), std::move(pg_t()));
+  boost::optional<pg_t> pgid(i != opts.end(), pg_t());
   if (pgid && (!pgid->parse(i->second.c_str()) || (pool_name && rados.pool_lookup(pool_name) != pgid->pool()))) {
     cerr << "invalid pgid" << std::endl;
     ret = -1;
