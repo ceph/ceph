@@ -152,7 +152,7 @@ class AsyncScheduler : public md_config_obs_t {
   void cancel(const client_id& client);
 
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string>& changed) override;
 
  private:
@@ -191,13 +191,13 @@ AsyncScheduler::AsyncScheduler(CephContext *cct, boost::asio::io_context& contex
   : queue(std::forward<Args>(args)...),
     timer(context), cct(cct), observer(observer),
     counters(std::move(counters)),
-    max_requests(cct->_conf->get_val<int64_t>("rgw_max_concurrent_requests"))
+    max_requests(cct->_conf.get_val<int64_t>("rgw_max_concurrent_requests"))
 {
   if (max_requests <= 0) {
     max_requests = std::numeric_limits<int64_t>::max();
   }
   if (observer) {
-    cct->_conf->add_observer(this);
+    cct->_conf.add_observer(this);
   }
 }
 
