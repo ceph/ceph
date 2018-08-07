@@ -93,4 +93,8 @@ export class DeletionModalComponent implements OnInit {
   stopLoadingSpinner() {
     this.deletionForm.setErrors({ cdSubmitButton: true });
   }
+
+  escapeRegExp(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
 }
