@@ -84,7 +84,7 @@ class CommandResult(object):
     """
     Use with MgrModule.send_command
     """
-    def __init__(self, tag):
+    def __init__(self, tag=None):
         self.ev = threading.Event()
         self.outs = ""
         self.outb = ""
@@ -92,7 +92,7 @@ class CommandResult(object):
 
         # This is just a convenience for notifications from
         # C++ land, to avoid passing addresses around in messages.
-        self.tag = tag
+        self.tag = tag if tag else ""
 
     def complete(self, r, outb, outs):
         self.r = r
