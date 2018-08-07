@@ -1,5 +1,5 @@
 import { NgModule } from '@angular/core';
-import { RouterModule, Routes } from '@angular/router';
+import { ActivatedRouteSnapshot, RouterModule, Routes } from '@angular/router';
 
 import { IscsiComponent } from './ceph/block/iscsi/iscsi.component';
 import { MirroringComponent } from './ceph/block/mirroring/mirroring.component';
@@ -24,103 +24,181 @@ import { UserFormComponent } from './core/auth/user-form/user-form.component';
 import { UserListComponent } from './core/auth/user-list/user-list.component';
 import { ForbiddenComponent } from './core/forbidden/forbidden.component';
 import { NotFoundComponent } from './core/not-found/not-found.component';
+import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
 import { ModuleStatusGuardService } from './shared/services/module-status-guard.service';
 
+export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
+  resolve(route: ActivatedRouteSnapshot) {
+    const result: IBreadcrumb[] = [];
+
+    const fromPath = route.queryParams.fromLink || null;
+    let fromText = '';
+    switch (fromPath) {
+      case '/monitor':
+        fromText = 'Monitors';
+        break;
+      case '/hosts':
+        fromText = 'Hosts';
+        break;
+    }
+    result.push({ text: 'Cluster', path: null });
+    result.push({ text: fromText, path: fromPath });
+    result.push({ text: 'Performance Counters', path: '' });
+
+    return result;
+  }
+}
+
 const routes: Routes = [
+  // Dashboard
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: 'dashboard', component: DashboardComponent, canActivate: [AuthGuardService] },
-  { path: 'hosts', component: HostsComponent, canActivate: [AuthGuardService] },
-  { path: 'login', component: LoginComponent },
-  { path: 'hosts', component: HostsComponent, canActivate: [AuthGuardService] },
-  { path: 'rgw/501/:message', component: Rgw501Component, canActivate: [AuthGuardService] },
+  // Cluster
   {
-    path: 'rgw',
-    canActivateChild: [ModuleStatusGuardService],
-    data: {
-      moduleStatusGuardConfig: {
-        apiPath: 'rgw',
-        redirectTo: 'rgw/501'
-      }
-    },
-    children: [
-      {
-        path: 'daemon',
-        component: RgwDaemonListComponent,
-        canActivate: [AuthGuardService]
-      },
-      {
-        path: 'user',
-        component: RgwUserListComponent,
-        canActivate: [AuthGuardService]
-      },
-      {
-        path: 'user/add',
-        component: RgwUserFormComponent,
-        canActivate: [AuthGuardService]
-      },
-      {
-        path: 'user/edit/:uid',
-        component: RgwUserFormComponent,
-        canActivate: [AuthGuardService]
-      },
-      {
-        path: 'bucket',
-        component: RgwBucketListComponent,
-        canActivate: [AuthGuardService]
-      },
-      {
-        path: 'bucket/add',
-        component: RgwBucketFormComponent,
-        canActivate: [AuthGuardService]
-      },
-      {
-        path: 'bucket/edit/:bucket',
-        component: RgwBucketFormComponent,
-        canActivate: [AuthGuardService]
-      }
-    ]
-  },
-  { path: 'block/iscsi', component: IscsiComponent, canActivate: [AuthGuardService] },
-  { path: 'block/rbd', component: RbdListComponent, canActivate: [AuthGuardService] },
-  { path: 'rbd/add', component: RbdFormComponent, canActivate: [AuthGuardService] },
-  { path: 'rbd/edit/:pool/:name', component: RbdFormComponent, canActivate: [AuthGuardService] },
-  { path: 'pool', component: PoolListComponent, canActivate: [AuthGuardService] },
-  {
-    path: 'rbd/clone/:pool/:name/:snap',
-    component: RbdFormComponent,
-    canActivate: [AuthGuardService]
+    path: 'hosts',
+    component: HostsComponent,
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'Cluster/Hosts' }
   },
   {
-    path: 'rbd/copy/:pool/:name',
-    component: RbdFormComponent,
-    canActivate: [AuthGuardService]
+    path: 'monitor',
+    component: MonitorComponent,
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'Cluster/Monitors' }
   },
   {
-    path: 'rbd/copy/:pool/:name/:snap',
-    component: RbdFormComponent,
-    canActivate: [AuthGuardService]
+    path: 'osd',
+    component: OsdListComponent,
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'Cluster/OSDs' }
+  },
+  {
+    path: 'configuration',
+    component: ConfigurationComponent,
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'Cluster/Configuration Documentation' }
   },
   {
     path: 'perf_counters/:type/:id',
     component: PerformanceCounterComponent,
-    canActivate: [AuthGuardService]
+    canActivate: [AuthGuardService],
+    data: {
+      breadcrumbs: PerformanceCounterBreadcrumbsResolver
+    }
   },
-  { path: 'monitor', component: MonitorComponent, canActivate: [AuthGuardService] },
-  { path: 'cephfs', component: CephfsListComponent, canActivate: [AuthGuardService] },
-  { path: 'configuration', component: ConfigurationComponent, canActivate: [AuthGuardService] },
-  { path: 'mirroring', component: MirroringComponent, canActivate: [AuthGuardService] },
-  { path: 'users', component: UserListComponent, canActivate: [AuthGuardService] },
-  { path: 'users/add', component: UserFormComponent, canActivate: [AuthGuardService] },
-  { path: 'users/edit/:username', component: UserFormComponent, canActivate: [AuthGuardService] },
+  // Pools
+  {
+    path: 'pool',
+    component: PoolListComponent,
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'Pools' }
+  },
+  // Block
+  {
+    path: 'block',
+    canActivateChild: [AuthGuardService],
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: true, text: 'Block', path: null },
+    children: [
+      {
+        path: 'rbd',
+        data: { breadcrumbs: 'Images' },
+        children: [
+          { path: '', component: RbdListComponent },
+          { path: 'add', component: RbdFormComponent, data: { breadcrumbs: 'Add' } },
+          { path: 'edit/:pool/:name', component: RbdFormComponent, data: { breadcrumbs: 'Edit' } },
+          {
+            path: 'clone/:pool/:name/:snap',
+            component: RbdFormComponent,
+            data: { breadcrumbs: 'Clone' }
+          },
+          { path: 'copy/:pool/:name', component: RbdFormComponent, data: { breadcrumbs: 'Copy' } },
+          {
+            path: 'copy/:pool/:name/:snap',
+            component: RbdFormComponent,
+            data: { breadcrumbs: 'Copy' }
+          }
+        ]
+      },
+      {
+        path: 'mirroring',
+        component: MirroringComponent,
+        data: { breadcrumbs: 'Mirroring' }
+      },
+      { path: 'iscsi', component: IscsiComponent, data: { breadcrumbs: 'iSCSI' } }
+    ]
+  },
+  // Filesystems
+  {
+    path: 'cephfs',
+    component: CephfsListComponent,
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'Filesystems' }
+  },
+  // Object Gateway
+  {
+    path: 'rgw/501/:message',
+    component: Rgw501Component,
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'Object Gateway' }
+  },
+  {
+    path: 'rgw',
+    canActivateChild: [ModuleStatusGuardService, AuthGuardService],
+    data: {
+      moduleStatusGuardConfig: {
+        apiPath: 'rgw',
+        redirectTo: 'rgw/501'
+      },
+      breadcrumbs: true,
+      text: 'Object Gateway',
+      path: null
+    },
+    children: [
+      { path: 'daemon', component: RgwDaemonListComponent, data: { breadcrumbs: 'Daemons' } },
+      {
+        path: 'user',
+        data: { breadcrumbs: 'Users' },
+        children: [
+          { path: '', component: RgwUserListComponent },
+          { path: 'add', component: RgwUserFormComponent, data: { breadcrumbs: 'Add' } },
+          { path: 'edit/:uid', component: RgwUserFormComponent, data: { breadcrumbs: 'Edit' } }
+        ]
+      },
+      {
+        path: 'bucket',
+        data: { breadcrumbs: 'Buckets' },
+        children: [
+          { path: '', component: RgwBucketListComponent },
+          { path: 'add', component: RgwBucketFormComponent, data: { breadcrumbs: 'Add' } },
+          { path: 'edit/:bucket', component: RgwBucketFormComponent, data: { breadcrumbs: 'Edit' } }
+        ]
+      }
+    ]
+  },
+  // Administration
+  {
+    path: 'users',
+    canActivate: [AuthGuardService],
+    canActivateChild: [AuthGuardService],
+    data: { breadcrumbs: 'Administration/Users' },
+    children: [
+      { path: '', component: UserListComponent },
+      { path: 'add', component: UserFormComponent, data: { breadcrumbs: 'Add' } },
+      { path: 'edit/:username', component: UserFormComponent, data: { breadcrumbs: 'Edit' } }
+    ]
+  },
+  // System
+  { path: 'login', component: LoginComponent },
   { path: '403', component: ForbiddenComponent },
   { path: '404', component: NotFoundComponent },
-  { path: 'osd', component: OsdListComponent, canActivate: [AuthGuardService] },
   { path: '**', redirectTo: '/404' }
 ];
 
 @NgModule({
   imports: [RouterModule.forRoot(routes, { useHash: true })],
-  exports: [RouterModule]
+  exports: [RouterModule],
+  providers: [PerformanceCounterBreadcrumbsResolver]
 })
 export class AppRoutingModule {}

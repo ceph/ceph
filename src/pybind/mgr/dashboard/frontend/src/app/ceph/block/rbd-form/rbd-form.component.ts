@@ -191,13 +191,13 @@ export class RbdFormComponent implements OnInit {
   }
 
   ngOnInit() {
-    if (this.router.url.startsWith('/rbd/edit')) {
+    if (this.router.url.startsWith('/block/rbd/edit')) {
       this.mode = this.rbdFormMode.editing;
       this.disableForEdit();
-    } else if (this.router.url.startsWith('/rbd/clone')) {
+    } else if (this.router.url.startsWith('/block/rbd/clone')) {
       this.mode = this.rbdFormMode.cloning;
       this.disableForClone();
-    } else if (this.router.url.startsWith('/rbd/copy')) {
+    } else if (this.router.url.startsWith('/block/rbd/copy')) {
       this.mode = this.rbdFormMode.copying;
       this.disableForCopy();
     }
