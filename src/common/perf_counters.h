@@ -268,6 +268,15 @@ void ceph_perf_counters_dump_formatted_generic(
  */
 class PerfCounters : public PerfCountersCollectionable
 {
+  auto _meta2iter(const perf_counter_meta_t& meta) const {
+    const auto iter = std::find_if(std::begin(m_data), std::end(m_data),
+      [&meta](const auto& v) {
+	return v == meta;
+      });
+    assert(iter != std::end(m_data));
+    return iter;
+  }
+
 public:
   /** Represents a PerfCounters data element. */
   struct perf_counter_data_any_d : ::perf_counter_meta_t {
@@ -351,48 +360,24 @@ public:
   const iterator end() const override final {
     return { &m_data.back() + 1 };
   }
+
   std::uint64_t get_u64(const perf_counter_meta_t& meta) const override final {
-    const auto iter = std::find_if(std::begin(m_data), std::end(m_data),
-      [&meta](const auto& v) {
-	return std::addressof(v) == std::addressof(meta);
-      });
-    assert(iter != std::end(m_data));
-    return iter->u64;
+    return _meta2iter(meta)->u64;
   }
   std::uint64_t get_avgcount(const perf_counter_meta_t& meta) const override final {
-    const auto iter = std::find_if(std::begin(m_data), std::end(m_data),
-      [&meta](const auto& v) {
-	return std::addressof(v) == std::addressof(meta);
-      });
-    assert(iter != std::end(m_data));
-    return iter->avgcount;
+    return _meta2iter(meta)->avgcount;
   }
   std::uint64_t get_avgcount2(const perf_counter_meta_t& meta) const override final {
-    const auto iter = std::find_if(std::begin(m_data), std::end(m_data),
-      [&meta](const auto& v) {
-	return std::addressof(v) == std::addressof(meta);
-      });
-    assert(iter != std::end(m_data));
-    return iter->avgcount2;
+    return _meta2iter(meta)->avgcount2;
   }
   // TODO: refactor of getters is really needed
   std::pair<std::uint64_t,std::uint64_t> read_avg(
     const perf_counter_meta_t& meta) const override final {
-    auto iter = std::find_if(std::begin(m_data), std::end(m_data),
-      [&meta](const auto& v) {
-	return std::addressof(v) == std::addressof(meta);
-      });
-    assert(iter != std::end(m_data));
-    return iter->read_avg();
+    return _meta2iter(meta)->read_avg();
   }
   PerfHistogram<>*
   get_histogram(const perf_counter_meta_t& meta) const override final {
-    const auto iter = std::find_if(std::begin(m_data), std::end(m_data),
-      [&meta](const auto& v) {
-	return std::addressof(v) == std::addressof(meta);
-      });
-    assert(iter != std::end(m_data));
-    return iter->histogram.get();
+    return _meta2iter(meta)->histogram.get();
   }
 
   void reset() override;
