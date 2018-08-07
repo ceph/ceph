@@ -12328,8 +12328,8 @@ size_t BlueStoreRepairer::StoreSpaceTracker::filter_out(
   assert(!was_filtered_out);
   assert(collections_bfs.size() == objects_bfs.size());
 
-  size_t prev_pos = 0;
-  size_t npos = collections_bfs.size();
+  uint64_t prev_pos = 0;
+  uint64_t npos = collections_bfs.size();
 
   bloom_vector collections_reduced;
   bloom_vector objects_reduced;
@@ -12338,8 +12338,8 @@ size_t BlueStoreRepairer::StoreSpaceTracker::filter_out(
     if (e.second == 0) {
       continue;
     }
-    size_t pos = max(e.first / granularity, prev_pos);
-    size_t end_pos = 1 + (e.first + e.second - 1) / granularity;
+    uint64_t pos = max(e.first / granularity, prev_pos);
+    uint64_t end_pos = 1 + (e.first + e.second - 1) / granularity;
     while (pos != npos && pos < end_pos)  {
         assert( collections_bfs[pos].element_count() ==
           objects_bfs[pos].element_count());

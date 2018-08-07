@@ -826,8 +826,8 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
 	     << " modified " << p->second.modified
 	     << " [" << p->second.start << "-" << p->second.end << ")"
 	     << dendl;
-    int n = std::min(max - pending_creatings.pgs.size(),
-		p->second.end - p->second.start);
+    int64_t n = std::min<int64_t>(max - pending_creatings.pgs.size(),
+				  p->second.end - p->second.start);
     ps_t first = p->second.start;
     ps_t end = first + n;
     for (ps_t ps = first; ps < end; ++ps) {

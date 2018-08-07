@@ -1634,8 +1634,8 @@ void PrimaryLogPG::calc_trim_to()
       pg_log.get_log().approx_size() > target) {
     dout(10) << __func__ << " approx pg log length =  "
              << pg_log.get_log().approx_size() << dendl;
-    size_t num_to_trim = std::min(pg_log.get_log().approx_size() - target,
-				  cct->_conf->osd_pg_log_trim_max);
+    uint64_t num_to_trim = std::min<uint64_t>(pg_log.get_log().approx_size() - target,
+                                              cct->_conf->osd_pg_log_trim_max);
     dout(10) << __func__ << " num_to_trim =  " << num_to_trim << dendl;
     if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
 	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
@@ -1643,7 +1643,7 @@ void PrimaryLogPG::calc_trim_to()
     }
     list<pg_log_entry_t>::const_iterator it = pg_log.get_log().log.begin();
     eversion_t new_trim_to;
-    for (size_t i = 0; i < num_to_trim; ++i) {
+    for (uint64_t i = 0; i < num_to_trim; ++i) {
       new_trim_to = it->version;
       ++it;
       if (new_trim_to >= limit) {
