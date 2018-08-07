@@ -336,9 +336,9 @@ Engine::Engine(thread_data* td)
 
   // create the ObjectStore
   os.reset(ObjectStore::create(g_ceph_context,
-                               g_conf()->osd_objectstore,
-                               g_conf()->osd_data,
-                               g_conf()->osd_journal));
+                               g_conf().get_val<std::string>("osd objectstore"),
+                               g_conf().get_val<std::string>("osd data"),
+                               g_conf().get_val<std::string>("osd journal")));
   if (!os)
     throw std::runtime_error("bad objectstore type " + g_conf()->osd_objectstore);
 
