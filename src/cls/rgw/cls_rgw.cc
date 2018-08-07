@@ -2656,7 +2656,9 @@ static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marke
       if (ret < 0)
         return ret;
       i++;
-
+    }
+    if (iter == keys.end()) {
+      break;
     }
     --iter;
     start_key = iter->first;
