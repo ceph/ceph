@@ -127,7 +127,7 @@ public:
   MergeOperatorLinker(const std::shared_ptr<KeyValueDB::MergeOperator> &o) : mop(o) {}
 
   const char *Name() const override {
-    return mop->name().c_str();
+    return mop->name();
   }
 
   bool Merge(const rocksdb::Slice& key,
