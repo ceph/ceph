@@ -3563,9 +3563,8 @@ void RGWPutObj::execute()
   }
 
   if (!placement_type.empty()) {
-    buffer::list tmp;
-    tmp.append(placement_type.c_str());
-    tmp.append('\0');
+    bufferlist tmp;
+    tmp.append(placement_type.c_str(), placement_type.length());
     emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
   }
 
@@ -3842,9 +3841,8 @@ void RGWPutObj::execute()
                                  (placement_type.empty() ? nullptr : &placement_type));
   } else {
     if (!processor->get_placement_type().empty()) {
-      buffer::list tmp;
-      tmp.append(processor->get_placement_type().c_str());
-      tmp.append('\0');
+      bufferlist tmp;
+      tmp.append(processor->get_placement_type().c_str(), processor->get_placement_type().length());
       emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
     }
     op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
@@ -4061,9 +4059,8 @@ void RGWPostObj::execute()
     emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
     if (!placement_type.empty()) {
-      buffer::list tmp;
-      tmp.append(placement_type.c_str());
-      tmp.append('\0');
+      bufferlist tmp;
+      tmp.append(placement_type.c_str(), placement_type.length());
       emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
     }
 
@@ -4811,9 +4808,8 @@ void RGWCopyObj::execute()
   /* Store the placement type */
   if (!placement_type.empty()) {
     attrs.erase(RGW_ATTR_PLACEMENT_TYPE);
-    buffer::list tmp;
-    tmp.append(placement_type.c_str());
-    tmp.append('\0');
+    bufferlist tmp;
+    tmp.append(placement_type.c_str(), placement_type.length());
     emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
   }
 
@@ -5486,9 +5482,8 @@ void RGWInitMultipart::execute()
   }
 
   if (!placement_type.empty()) {
-    buffer::list tmp;
-    tmp.append(placement_type.c_str());
-    tmp.append('\0');
+    bufferlist tmp;
+    tmp.append(placement_type.c_str(), placement_type.length());
     attrs[RGW_ATTR_PLACEMENT_TYPE] = tmp;
   }
 
