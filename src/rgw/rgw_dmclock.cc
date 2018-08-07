@@ -49,28 +49,28 @@ const char** ClientConfig::get_tracked_conf_keys() const
   return keys;
 }
 
-void ClientConfig::update(const md_config_t *conf)
+void ClientConfig::update(const ConfigProxy& conf)
 {
   clients.clear();
   static_assert(0 == static_cast<int>(client_id::admin));
-  clients.emplace_back(conf->get_val<double>("rgw_dmclock_admin_res"),
-                       conf->get_val<double>("rgw_dmclock_admin_wgt"),
-                       conf->get_val<double>("rgw_dmclock_admin_lim"));
+  clients.emplace_back(conf.get_val<double>("rgw_dmclock_admin_res"),
+                       conf.get_val<double>("rgw_dmclock_admin_wgt"),
+                       conf.get_val<double>("rgw_dmclock_admin_lim"));
   static_assert(1 == static_cast<int>(client_id::auth));
-  clients.emplace_back(conf->get_val<double>("rgw_dmclock_auth_res"),
-                       conf->get_val<double>("rgw_dmclock_auth_wgt"),
-                       conf->get_val<double>("rgw_dmclock_auth_lim"));
+  clients.emplace_back(conf.get_val<double>("rgw_dmclock_auth_res"),
+                       conf.get_val<double>("rgw_dmclock_auth_wgt"),
+                       conf.get_val<double>("rgw_dmclock_auth_lim"));
   static_assert(2 == static_cast<int>(client_id::data));
-  clients.emplace_back(conf->get_val<double>("rgw_dmclock_data_res"),
-                       conf->get_val<double>("rgw_dmclock_data_wgt"),
-                       conf->get_val<double>("rgw_dmclock_data_lim"));
+  clients.emplace_back(conf.get_val<double>("rgw_dmclock_data_res"),
+                       conf.get_val<double>("rgw_dmclock_data_wgt"),
+                       conf.get_val<double>("rgw_dmclock_data_lim"));
   static_assert(3 == static_cast<int>(client_id::metadata));
-  clients.emplace_back(conf->get_val<double>("rgw_dmclock_metadata_res"),
-                       conf->get_val<double>("rgw_dmclock_metadata_wgt"),
-                       conf->get_val<double>("rgw_dmclock_metadata_lim"));
+  clients.emplace_back(conf.get_val<double>("rgw_dmclock_metadata_res"),
+                       conf.get_val<double>("rgw_dmclock_metadata_wgt"),
+                       conf.get_val<double>("rgw_dmclock_metadata_lim"));
 }
 
-void ClientConfig::handle_conf_change(const md_config_t *conf,
+void ClientConfig::handle_conf_change(const ConfigProxy& conf,
                                       const std::set<std::string>& changed)
 {
   update(conf);

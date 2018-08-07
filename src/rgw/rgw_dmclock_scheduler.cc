@@ -20,7 +20,7 @@ AsyncScheduler::~AsyncScheduler()
 {
   cancel();
   if (observer) {
-    cct->_conf->remove_observer(this);
+    cct->_conf.remove_observer(this);
   }
 }
 
@@ -33,14 +33,14 @@ const char** AsyncScheduler::get_tracked_conf_keys() const
   return keys;
 }
 
-void AsyncScheduler::handle_conf_change(const md_config_t *conf,
-                                   const std::set<std::string>& changed)
+void AsyncScheduler::handle_conf_change(const ConfigProxy& conf,
+					const std::set<std::string>& changed)
 {
   if (observer) {
     observer->handle_conf_change(conf, changed);
   }
   if (changed.count("rgw_max_concurrent_requests")) {
-    auto new_max = conf->get_val<int64_t>("rgw_max_concurrent_requests");
+    auto new_max = conf.get_val<int64_t>("rgw_max_concurrent_requests");
     max_requests = new_max > 0 ? new_max : std::numeric_limits<int64_t>::max();
   }
   queue.update_client_infos();
