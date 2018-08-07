@@ -313,6 +313,9 @@ struct RGWZonePlacementInfo {
 
     return storage_class->data_pool.get_value_or(no_pool);
   }
+  const rgw_pool& get_standard_data_pool() const {
+    return get_data_pool(RGW_STORAGE_CLASS_STANDARD);
+  }
 
   const string& get_compression_type(const string& sc) const {
     const RGWZoneStorageClass *storage_class;
