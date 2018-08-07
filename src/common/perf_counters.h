@@ -545,6 +545,13 @@ namespace ceph {
 
 using perf_counter_meta_t = ::perf_counter_meta_t;
 
+// for passing extra arguments for pert counter's construction phase that aren't
+// needed later. In such case making them part of the meta_t structure would be
+// only waste of memory.
+// Typical client of this bit is histogram-typed counters. It's being used to
+// describe i.e. axis.
+template <const perf_counter_meta_t& pcid> struct perf_counter_traits_t {};
+
 static constexpr auto PERFCOUNTER_U64_CTR = \
   static_cast<enum perfcounter_type_d>(PERFCOUNTER_U64 | PERFCOUNTER_COUNTER);
 static constexpr auto PERFCOUNTER_U64_SETABLE = \
@@ -646,6 +653,22 @@ class perf_counters_t : public PerfCountersCollectionable {
     }
   }
 
+  template<const perf_counter_meta_t& H,
+	   const perf_counter_meta_t&... T>
+  constexpr void init_histograms() {
+    if constexpr (H.type == (PERFCOUNTER_HISTOGRAM |
+			     PERFCOUNTER_COUNTER | PERFCOUNTER_U64)) {
+      constexpr std::size_t idx = perf_counters_t::index_of<H, P...>();
+      atomic_perf_counters[idx].histogram = \
+	new PerfHistogram<>(perf_counter_traits_t<H>::x_axis_params,
+			    perf_counter_traits_t<H>::y_axis_params);
+    }
+
+    if constexpr (sizeof...(T)) {
+      return init_histograms<T...>();
+    }
+  }
+
   template<const perf_counter_meta_t& pcid>
   void _inc(const std::size_t amount = 1) {
     static_assert(perf_counters_t::count<pcid, P...>() == 1);
@@ -705,6 +728,17 @@ public:
       memset(&perf_counters, 0, sizeof(perf_counters));
     }
     memset(&atomic_perf_counters, 0, sizeof(atomic_perf_counters));
+    init_histograms<P...>();
+  }
+
+  ~perf_counters_t()
+  {
+    for (std::size_t idx = 0; idx < std::size(m_meta); idx++) {
+      if (m_meta[idx].type == (PERFCOUNTER_HISTOGRAM |
+			       PERFCOUNTER_COUNTER | PERFCOUNTER_U64)) {
+	delete atomic_perf_counters[idx].histogram;
+      }
+    }
   }
 
   template<const perf_counter_meta_t& pcid>
@@ -772,6 +806,15 @@ public:
     return _inc<pcid>(amt.count());
   }
 
+  template<const perf_counter_meta_t& pcid>
+  void hinc(const std::int64_t x, const std::int64_t y) {
+    static_assert(pcid.type == (PERFCOUNTER_HISTOGRAM |
+				PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
+    constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
+    assert(atomic_perf_counters[idx].histogram);
+    return atomic_perf_counters[idx].histogram->inc(x, y);
+  }
+
   // helper structures, NOT for hot paths
   static constexpr std::array<perf_counter_meta_t,
 			      sizeof...(P)> m_meta {
@@ -834,7 +877,7 @@ public:
   get_histogram(const perf_counter_meta_t& meta) const override final {
     const auto iter = std::find_if(std::begin(m_meta), std::end(m_meta),
       [&meta](const auto& v) {
-	return std::addressof(v) == std::addressof(meta);
+	return v == meta;
       });
     assert(iter != std::end(m_meta));
 
@@ -857,6 +900,8 @@ public:
       if (meta.type != PERFCOUNTER_U64) {
 	atomic_perf_counters[idx].val_with_counter.val -= get_u64(meta);
 	atomic_perf_counters[idx].val_with_counter.cnt -= get_avgcount(meta);
+      } else if (meta.type & PERFCOUNTER_HISTOGRAM) {
+	atomic_perf_counters[idx].histogram->reset();
       }
     }
   }
