@@ -351,7 +351,7 @@ int take_min_status(CephContext *cct, Iter first, Iter last,
   status->clear();
   // The initialisation below is required to silence a false positive
   // -Wmaybe-uninitialized warning
-  boost::optional<size_t> num_shards = boost::make_optional(false, 0UL);
+  boost::optional<uint64_t> num_shards = boost::make_optional(false, uint64_t());
   for (auto peer = first; peer != last; ++peer) {
     const size_t peer_shards = peer->size();
     if (!num_shards) {
