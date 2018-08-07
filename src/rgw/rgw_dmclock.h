@@ -42,7 +42,7 @@ using crimson::dmclock::get_time;
 class ClientConfig : public md_config_obs_t {
   std::vector<ClientInfo> clients;
 
-  void update(const md_config_t *conf);
+  void update(const ConfigProxy &conf);
 
  public:
   ClientConfig(CephContext *cct);
@@ -50,7 +50,7 @@ class ClientConfig : public md_config_obs_t {
   ClientInfo* operator()(client_id client);
 
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string>& changed) override;
 };
 
