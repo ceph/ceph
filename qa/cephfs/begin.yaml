@@ -2,4 +2,8 @@ tasks:
   - install:
       extra_packages:
         - python3-cephfs
+      # For kernel_untar_build workunit
+      extra_system_packages:
+        deb: ['bison', 'flex', 'libelf-dev', 'libssl-dev']
+        rpm: ['bison', 'flex', 'elfutils-libelf-devel', 'openssl-devel']
   - ceph:
