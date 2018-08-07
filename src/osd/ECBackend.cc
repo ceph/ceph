@@ -197,6 +197,7 @@ ECBackend::ECBackend(
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
   : PGBackend(cct, pg, store, coll, ch),
+    _in_process_lock("ECBackend::_in_process_lock"),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
   assert((ec_impl->get_data_chunk_count() *
@@ -750,6 +751,23 @@ bool ECBackend::can_handle_while_inactive(
   return false;
 }
 
+bool ECBackend::handle_message_no_lock(OpRequestRef _op)
+{
+  bool can_handle = true;
+  switch (_op->get_req()->get_type()) {
+    case MSG_OSD_EC_WRITE_REPLY: {
+      dout(10) << __func__ << ": " << *_op->get_req() << dendl;
+      const MOSDECSubOpWriteReply *op = static_cast<const MOSDECSubOpWriteReply*>(_op->get_req());
+      handle_sub_write_reply(op->op.from, op->op, _op->pg_trace);
+      break; 
+    }
+    default:
+      can_handle = false;
+      break;
+  }
+  return can_handle;
+}
+
 bool ECBackend::_handle_message(
   OpRequestRef _op)
 {
@@ -764,12 +782,6 @@ bool ECBackend::_handle_message(
       _op->get_nonconst_req());
     parent->maybe_preempt_replica_scrub(op->op.soid);
     handle_sub_write(op->op.from, _op, op->op, _op->pg_trace);
-    return true;
-  }
-  case MSG_OSD_EC_WRITE_REPLY: {
-    const MOSDECSubOpWriteReply *op = static_cast<const MOSDECSubOpWriteReply*>(
-      _op->get_req());
-    handle_sub_write_reply(op->op.from, op->op, _op->pg_trace);
     return true;
   }
   case MSG_OSD_EC_READ: {
@@ -826,54 +838,35 @@ bool ECBackend::_handle_message(
 struct SubWriteCommitted : public Context {
   ECBackend *pg;
   OpRequestRef msg;
-  ceph_tid_t tid;
-  eversion_t version;
-  eversion_t last_complete;
   const ZTracer::Trace trace;
+  ECSubWriteReply primary_reply;
+  MOSDECSubOpWriteReply *sub_reply;
+  bool is_primary;
   SubWriteCommitted(
     ECBackend *pg,
     OpRequestRef msg,
-    ceph_tid_t tid,
-    eversion_t version,
-    eversion_t last_complete,
-    const ZTracer::Trace &trace)
-    : pg(pg), msg(msg), tid(tid),
-      version(version), last_complete(last_complete), trace(trace) {}
+    const ZTracer::Trace &trace,
+    bool is_primary)
+    : pg(pg), msg(msg), trace(trace), is_primary(is_primary) {}
+
   void finish(int) override {
     if (msg)
       msg->mark_event("sub_op_committed");
-    pg->sub_write_committed(tid, version, last_complete, trace);
+    pg->sub_write_committed(trace, is_primary, &primary_reply, sub_reply);
   }
 };
 void ECBackend::sub_write_committed(
-  ceph_tid_t tid, eversion_t version, eversion_t last_complete,
-  const ZTracer::Trace &trace) {
-  if (get_parent()->pgb_is_primary()) {
-    ECSubWriteReply reply;
-    reply.tid = tid;
-    reply.last_complete = last_complete;
-    reply.committed = true;
-    reply.applied = true;
-    reply.from = get_parent()->whoami_shard();
-    handle_sub_write_reply(
-      get_parent()->whoami_shard(),
-      reply, trace);
+  const ZTracer::Trace &trace, bool is_primary,
+  ECSubWriteReply *reply, MOSDECSubOpWriteReply *r) {
+  if (is_primary) {
+    reply->committed = true;
+    handle_sub_write_reply(reply->from, *reply, trace);
   } else {
-    get_parent()->update_last_complete_ondisk(last_complete);
-    MOSDECSubOpWriteReply *r = new MOSDECSubOpWriteReply;
-    r->pgid = get_parent()->primary_spg_t();
-    r->map_epoch = get_parent()->get_epoch();
-    r->min_epoch = get_parent()->get_interval_start_epoch();
-    r->op.tid = tid;
-    r->op.last_complete = last_complete;
+    get_parent()->update_last_complete_ondisk(r->op.last_complete);
     r->op.committed = true;
-    r->op.applied = true;
-    r->op.from = get_parent()->whoami_shard();
-    r->set_priority(CEPH_MSG_PRIO_HIGH);
     r->trace = trace;
     r->trace.event("sending sub op commit");
-    get_parent()->send_message_osd_cluster(
-      get_parent()->primary_shard().osd, r, get_parent()->get_epoch());
+    get_parent()->send_message_osd_cluster(get_parent()->primary_shard().osd, r, r->map_epoch);
   }
 }
 
@@ -934,12 +927,25 @@ void ECBackend::handle_sub_write(
       ec_impl->get_data_chunk_count())
     op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
-  localt.register_on_commit(
-    get_parent()->bless_context(
-      new SubWriteCommitted(
-	this, msg, op.tid,
-	op.at_version,
-	get_parent()->get_info().last_complete, trace)));
+  SubWriteCommitted *sub_commit = new SubWriteCommitted(
+    this, msg, trace, get_parent()->pgb_is_primary());
+  if (get_parent()->pgb_is_primary()) {
+    sub_commit->primary_reply.tid = op.tid;
+    sub_commit->primary_reply.last_complete = get_parent()->get_info().last_complete;
+    sub_commit->primary_reply.from = get_parent()->whoami_shard();
+  } else {
+    sub_commit->sub_reply = new MOSDECSubOpWriteReply;
+    sub_commit->sub_reply->pgid = get_parent()->primary_spg_t();
+    sub_commit->sub_reply->map_epoch = get_parent()->get_epoch();
+    sub_commit->sub_reply->min_epoch = get_parent()->get_interval_start_epoch();
+    sub_commit->sub_reply->op.last_complete = get_parent()->get_info().last_complete;
+    sub_commit->sub_reply->op.from = get_parent()->whoami_shard();
+    sub_commit->sub_reply->op.tid = op.tid;
+    sub_commit->sub_reply->set_priority(CEPH_MSG_PRIO_HIGH);
+  }
+
+  localt.register_on_commit(sub_commit);
+
   vector<ObjectStore::Transaction> tls;
   tls.reserve(2);
   tls.push_back(std::move(op.t));
@@ -1078,32 +1084,43 @@ void ECBackend::handle_sub_write_reply(
   const ECSubWriteReply &op,
   const ZTracer::Trace &trace)
 {
+  _in_process_lock.Lock();
   map<ceph_tid_t, Op>::iterator i = tid_to_op_map.find(op.tid);
   assert(i != tid_to_op_map.end());
+  ECBackend::Op *ip_op = &i->second;
+  if (op.committed && (from != get_parent()->whoami_shard())) {
+    ip_op->peer_last_complete_ondisk[from] = op.last_complete;
+  }
+  _in_process_lock.Unlock();
+
   if (op.committed) {
     trace.event("sub write committed");
-    assert(i->second.pending_commit.count(from));
-    i->second.pending_commit.erase(from);
-    if (from != get_parent()->whoami_shard()) {
-      get_parent()->update_peer_last_complete_ondisk(from, op.last_complete);
+    assert(ip_op->pending_commit.count(from));
+    assert(ip_op->pending_commit_num > 0);
+
+    if (--ip_op->pending_commit_num == 0) {
+      dout(10) << __func__ << " Calling on_all_commit on " << *ip_op << dendl;
+  
+      get_parent()->pg_lock();
+      if (ip_op->on_all_commit) {
+        ip_op->on_all_commit->complete(0);
+        ip_op->on_all_commit = 0;
+      }
+      ip_op->trace.event("ec write all committed");
+      ip_op->pending_commit.clear();
+      update_peer_last_complete_ondisk(ip_op);
+      check_ops();
+      get_parent()->pg_unlock();
     }
   }
-  if (op.applied) {
-    trace.event("sub write applied");
-    assert(i->second.pending_apply.count(from));
-    i->second.pending_apply.erase(from);
-  }
+}
 
-  if (i->second.pending_commit.empty() &&
-      i->second.on_all_commit &&
-      // also wait for apply, to preserve ordering with luminous peers.
-      i->second.pending_apply.empty()) {
-    dout(10) << __func__ << " Calling on_all_commit on " << i->second << dendl;
-    i->second.on_all_commit->complete(0);
-    i->second.on_all_commit = 0;
-    i->second.trace.event("ec write all committed");
+void ECBackend::update_peer_last_complete_ondisk(ECBackend::Op *ip_op)
+{
+  for (auto &&iter: ip_op->peer_last_complete_ondisk) {
+    get_parent()->update_peer_last_complete_ondisk(iter.first, iter.second);
   }
-  check_ops();
+  ip_op->peer_last_complete_ondisk.clear();
 }
 
 void ECBackend::handle_sub_read_reply(
@@ -1380,10 +1397,12 @@ void ECBackend::on_change()
   waiting_reads.clear();
   waiting_state.clear();
   waiting_commit.clear();
+  _in_process_lock.Lock();
   for (auto &&op: tid_to_op_map) {
     cache.release_write_pin(op.second.pin);
   }
   tid_to_op_map.clear();
+  _in_process_lock.Unlock();
 
   for (map<ceph_tid_t, ReadOp>::iterator i = tid_to_read_map.begin();
        i != tid_to_read_map.end();
@@ -1445,8 +1464,10 @@ void ECBackend::submit_transaction(
   OpRequestRef client_op
   )
 {
+  _in_process_lock.Lock();
   assert(!tid_to_op_map.count(tid));
   Op *op = &(tid_to_op_map[tid]);
+  _in_process_lock.Unlock();
   op->hoid = hoid;
   op->delta_stats = delta_stats;
   op->version = at_version;
@@ -1978,8 +1999,9 @@ bool ECBackend::try_reads_to_commit()
 	 get_parent()->get_acting_recovery_backfill_shards().begin();
        i != get_parent()->get_acting_recovery_backfill_shards().end();
        ++i) {
-    op->pending_apply.insert(*i);
+    //op->pending_apply.insert(*i);
     op->pending_commit.insert(*i);
+    op->pending_commit_num++;
     map<shard_id_t, ObjectStore::Transaction>::iterator iter =
       trans.find(i->shard);
     assert(iter != trans.end());
@@ -2017,6 +2039,7 @@ bool ECBackend::try_reads_to_commit()
       local_write_op.claim(sop);
     } else {
       MOSDECSubOpWrite *r = new MOSDECSubOpWrite(sop);
+      r->set_tid(op->tid);
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
       r->map_epoch = get_parent()->get_epoch();
       r->min_epoch = get_parent()->get_interval_start_epoch();
@@ -2065,7 +2088,9 @@ bool ECBackend::try_finish_rmw()
 	waiting_commit.empty()) {
       // submit a dummy transaction to kick the rollforward
       auto tid = get_parent()->get_tid();
+      _in_process_lock.Lock();
       Op *nop = &(tid_to_op_map[tid]);
+      _in_process_lock.Unlock();
       nop->hoid = op->hoid;
       nop->trim_to = op->trim_to;
       nop->roll_forward_to = op->version;
@@ -2078,7 +2103,9 @@ bool ECBackend::try_finish_rmw()
   if (op->using_cache) {
     cache.release_write_pin(op->pin);
   }
+  _in_process_lock.Lock();
   tid_to_op_map.erase(op->tid);
+  _in_process_lock.Unlock();
 
   if (waiting_reads.empty() &&
       waiting_commit.empty()) {

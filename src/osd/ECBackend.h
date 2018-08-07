@@ -24,6 +24,7 @@
 #include "ECUtil.h"
 #include "ECTransaction.h"
 #include "ExtentCache.h"
+#include "messages/MOSDECSubOpWriteReply.h"
 
 //forward declaration
 struct ECSubWrite;
@@ -55,28 +56,24 @@ public:
   bool can_handle_while_inactive(
     OpRequestRef op
     ) override;
-  friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
   void sub_write_committed(
-    ceph_tid_t tid,
-    eversion_t version,
-    eversion_t last_complete,
-    const ZTracer::Trace &trace);
+    const ZTracer::Trace &trace, bool is_primary, 
+    ECSubWriteReply *reply, MOSDECSubOpWriteReply *r);
   void handle_sub_write(
     pg_shard_t from,
     OpRequestRef msg,
     ECSubWrite &op,
     const ZTracer::Trace &trace
     );
+  void handle_sub_write_reply(
+    pg_shard_t from,
+    const ECSubWriteReply &op,
+    const ZTracer::Trace &trace);
   void handle_sub_read(
     pg_shard_t from,
     const ECSubRead &op,
     ECSubReadReply *reply,
-    const ZTracer::Trace &trace
-    );
-  void handle_sub_write_reply(
-    pg_shard_t from,
-    const ECSubWriteReply &op,
     const ZTracer::Trace &trace
     );
   void handle_sub_read_reply(
@@ -488,8 +485,11 @@ public:
       return !remote_read.empty() && remote_read_result.empty();
     }
 
+    map<pg_shard_t,eversion_t> peer_last_complete_ondisk;
+
     /// In progress write state.
     set<pg_shard_t> pending_commit;
+    std::atomic<unsigned> pending_commit_num = { 0 };
     // we need pending_apply for pre-mimic peers so that we don't issue a
     // read on a remote shard before it has applied a previous write.  We can
     // remove this after nautilus.
@@ -514,6 +514,7 @@ public:
   friend ostream &operator<<(ostream &lhs, const Op &rhs);
 
   ExtentCache cache;
+  Mutex _in_process_lock;
   map<ceph_tid_t, Op> tid_to_op_map; /// Owns Op structure
 
   /**
@@ -568,6 +569,9 @@ public:
   bool try_reads_to_commit();
   bool try_finish_rmw();
   void check_ops();
+
+  void update_peer_last_complete_ondisk(ECBackend::Op *ip_op);
+  bool handle_message_no_lock(OpRequestRef _op);
 
   ErasureCodeInterfaceRef ec_impl;
 

@@ -21,8 +21,13 @@ void PGOpItem::run(
   PGRef& pg,
   ThreadPool::TPHandle &handle)
 {
-  osd->dequeue_op(pg, op, handle);
-  pg->unlock();
+  if (osd->can_no_lock(op)) {
+    pg->unlock();
+    osd->dequeue_op(pg, op, handle);
+  } else {
+    osd->dequeue_op(pg, op, handle);
+    pg->unlock();
+  }
 }
 
 void PGPeeringItem::run(

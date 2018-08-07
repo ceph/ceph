@@ -62,6 +62,9 @@ public:
   bool _handle_message(
     OpRequestRef op
     ) override;
+  bool handle_message_no_lock(
+    OpRequestRef op
+    );
 
   void on_change() override;
   void clear_recovery_state() override;
@@ -328,9 +331,12 @@ private:
   struct InProgressOp : public RefCountedObject {
     ceph_tid_t tid;
     set<pg_shard_t> waiting_for_commit;
+    std::atomic<unsigned> pending_commit_num = { 0 };
     Context *on_commit;
     OpRequestRef op;
     eversion_t v;
+    pg_shard_t shard;
+    map<pg_shard_t,eversion_t> peer_last_complete_ondisk;
     InProgressOp(
       ceph_tid_t tid, Context *on_commit,
       OpRequestRef op, eversion_t v)
@@ -343,8 +349,10 @@ private:
   };
   typedef boost::intrusive_ptr<InProgressOp> InProgressOpRef;
   map<ceph_tid_t, InProgressOpRef> in_progress_ops;
+  Mutex _in_process_lock;
 public:
   friend class C_OSD_OnOpCommit;
+  friend class C_OSD_OnOpReply;
 
   void call_write_ordered(std::function<void(void)> &&cb) override {
     // ReplicatedBackend submits writes inline in submit_transaction, so
@@ -398,6 +406,7 @@ private:
   void op_commit(InProgressOpRef& op);
   void do_repop_reply(OpRequestRef op);
   void do_repop(OpRequestRef op);
+  void update_peer_last_complete_ondisk(InProgressOp &ip_op);
 
   struct RepModify {
     OpRequestRef op;
@@ -407,7 +416,7 @@ private:
     epoch_t epoch_started;
 
     ObjectStore::Transaction opt, localt;
-    
+    pg_shard_t shard;
     RepModify() : committed(false), ackerosd(-1),
 		  epoch_started(0) {}
   };
