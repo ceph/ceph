@@ -65,7 +65,6 @@ class JournalScanner
     io(io_),
     rank(rank_),
     type(type_),
-    filter(type_),
     is_mdlog(false),
     pointer_present(false),
     pointer_valid(false),
@@ -90,10 +89,8 @@ class JournalScanner
   class EventRecord {
     public:
     EventRecord() : log_event(NULL), raw_size(0) {}
-    EventRecord(LogEvent *le, uint32_t rs) : log_event(le), pi(NULL), raw_size(rs) {}
-    EventRecord(PurgeItem* p, uint32_t rs) : log_event(NULL), pi(p), raw_size(rs) {}
+    EventRecord(LogEvent *le, uint32_t rs) : log_event(le), raw_size(rs) {}
     LogEvent *log_event;
-    PurgeItem *pi;
     uint32_t raw_size;  //< Size from start offset including all encoding overhead
   };
 
