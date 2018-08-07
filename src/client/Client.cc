@@ -44,6 +44,7 @@
 
 #include "common/config.h"
 #include "common/version.h"
+#include "common/async/waiter.h"
 
 #include "mon/MonClient.h"
 
@@ -123,6 +124,8 @@
 #endif
 
 #define DEBUG_GETATTR_CAPS (CEPH_CAP_XATTR_SHARED)
+
+namespace bs = boost::system;
 
 void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 {
@@ -5657,22 +5660,22 @@ int Client::authenticate()
 
 int Client::fetch_fsmap(bool user)
 {
-  int r;
   // Retrieve FSMap to enable looking up daemon addresses.  We need FSMap
   // rather than MDSMap because no one MDSMap contains all the daemons, and
   // a `tell` can address any daemon.
   version_t fsmap_latest;
+  boost::system::error_code ec;
   do {
-    C_SaferCond cond;
-    monclient->get_version("fsmap", &fsmap_latest, NULL, &cond);
+    ceph::async::waiter<bs::error_code, version_t, version_t> w;
+    monclient->get_version("fsmap", w);
     client_lock.unlock();
-    r = cond.wait();
+    std::tie(ec, fsmap_latest, std::ignore) = w.wait();
     client_lock.lock();
-  } while (r == -EAGAIN);
+  } while (ec == boost::system::errc::resource_unavailable_try_again);
 
-  if (r < 0) {
-    lderr(cct) << "Failed to learn FSMap version: " << cpp_strerror(r) << dendl;
-    return r;
+  if (ec) {
+    lderr(cct) << "Failed to learn FSMap version: " << ec << dendl;
+    return ceph::from_error_code(ec);
   }
 
   ldout(cct, 10) << __func__ << " learned FSMap version " << fsmap_latest << dendl;
@@ -14571,7 +14574,7 @@ mds_rank_t Client::_get_random_up_mds() const
 
 
 StandaloneClient::StandaloneClient(Messenger *m, MonClient *mc)
-    : Client(m, mc, new Objecter(m->cct, m, mc, NULL, 0, 0))
+  : Client(m, mc, new Objecter(m->cct, m, mc, nullptr, 0, 0))
 {
   monclient->set_messenger(m);
   objecter->set_client_incarnation(0);

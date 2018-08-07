@@ -19,6 +19,7 @@
 
 #include "msg/Dispatcher.h"
 
+#include "common/async/context_pool.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "common/AsyncReserver.h"
@@ -523,6 +524,7 @@ public:
   }
 
   // -- Objecter, for tiering reads/writes from/to other OSDs --
+  ceph::async::io_context_pool& poolctx;
   std::unique_ptr<Objecter> objecter;
   int m_objecter_finishers;
   std::vector<std::unique_ptr<Finisher>> objecter_finishers;
@@ -913,7 +915,7 @@ public:
   void dump_live_pgids();
 #endif
 
-  explicit OSDService(OSD *osd);
+  explicit OSDService(OSD *osd, ceph::async::io_context_pool& poolctx);
   ~OSDService() = default;
 };
 
@@ -1838,7 +1840,7 @@ protected:
 
   void send_full_update();
   
-  friend struct C_OSD_GetVersion;
+  friend struct CB_OSD_GetVersion;
 
   // -- alive --
   epoch_t up_thru_wanted;
@@ -2012,7 +2014,8 @@ private:
       Messenger *hb_front_server,
       Messenger *hb_back_server,
       Messenger *osdc_messenger,
-      MonClient *mc, const std::string &dev, const std::string &jdev);
+      MonClient *mc, const std::string &dev, const std::string &jdev,
+      ceph::async::io_context_pool& poolctx);
   ~OSD() override;
 
   // static bits

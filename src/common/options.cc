@@ -5303,13 +5303,24 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description("Override 60 second periods for testing only"),
 
+    Option("librados_thread_count", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(2)
+    .set_min(1)
+    .set_description("Size of thread pool for Objecter")
+    .add_tag("client"),
+
+    Option("osd_asio_thread_count", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(2)
+    .set_min(1)
+    .set_description("Size of thread pool for ASIO completions")
+    .add_tag("osd"),
+
     // ----------------------------
     // Crimson specific options
 
     Option("crimson_osd_obc_lru_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)
     .set_description("Number of obcs to cache")
-
   });
 }
 
@@ -8126,6 +8137,12 @@ std::vector<Option> get_mds_options() {
      .set_flag(Option::FLAG_RUNTIME)
      .set_description("max snapshots per directory")
      .set_long_description("maximum number of snapshots that can be created per directory"),
+
+    Option("mds_asio_thread_count", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(2)
+    .set_min(1)
+    .set_description("Size of thread pool for ASIO completions")
+    .add_tag("mds")
   });
 }
 
@@ -8363,6 +8380,12 @@ std::vector<Option> get_mds_client_options() {
     Option("debug_allow_any_pool_priority", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Allow any pool priority to be set to test conversion to new range"),
+
+    Option("client_asio_thread_count", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(2)
+    .set_min(1)
+    .set_description("Size of thread pool for ASIO completions")
+    .add_tag("client")
   });
 }
 

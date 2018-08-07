@@ -20,10 +20,9 @@
 #include <map>
 #include <boost/intrusive_ptr.hpp>
 #include "include/ceph_assert.h"
+#include "common/ceph_context.h"
 #include "common/code_environment.h"
 #include "common/common_init.h"
-
-class CephContext;
 
 /*
  * global_init is the first initialization function that
@@ -39,9 +38,6 @@ global_init(
   int flags,
   const char *data_dir_option = 0,
   bool run_pre_init = true);
-
-void intrusive_ptr_add_ref(CephContext* cct);
-void intrusive_ptr_release(CephContext* cct);
 
 // just the first half; enough to get config parsed but doesn't start up the
 // cct or log.
