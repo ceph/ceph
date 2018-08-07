@@ -2890,9 +2890,10 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
   if (r > 0)
     return NULL; // delayed
   if (r < 0) {  // error
-    if (r == -ENOENT && n == 0 && mdr->dn[n].size()) {
-      if (!no_lookup)
-	mdr->tracedn = mdr->dn[n][mdr->dn[n].size()-1];
+    if (r == -ENOENT && n == 0 && !mdr->dn[n].empty()) {
+      if (!no_lookup) {
+        mdr->tracedn = mdr->dn[n].back();
+      }
       respond_to_request(mdr, r);
     } else if (r == -ESTALE) {
       dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
@@ -6176,7 +6177,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     return;
   }
 
-  CDentry *dn = trace[trace.size()-1];
+  CDentry *dn = trace.back();
   assert(dn);
   if (!dn->is_auth()) {
     mdcache->request_forward(mdr, dn->authority().first);
@@ -6231,9 +6232,9 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
 
   // lock
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-
-  for (int i=0; i<(int)trace.size()-1; i++)
+  for (int i=0; i<(int)trace.size()-1; i++) {
     rdlocks.insert(&trace[i]->lock);
+  }
   xlocks.insert(&dn->lock);
   wrlocks.insert(&diri->filelock);
   wrlocks.insert(&diri->nestlock);
@@ -6556,7 +6557,7 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
     return;
   }
   assert(r == 0);
-  CDentry *dn = trace[trace.size()-1];
+  CDentry *dn = trace.back();
   dout(10) << " dn " << *dn << dendl;
   mdr->pin(dn);
 
@@ -6963,7 +6964,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 
   }
   assert(!srctrace.empty());
-  CDentry *srcdn = srctrace[srctrace.size()-1];
+  CDentry *srcdn = srctrace.back();
   dout(10) << " srcdn " << *srcdn << dendl;
   if (srcdn->last != CEPH_NOSNAP) {
     respond_to_request(mdr, -EROFS);
@@ -8117,7 +8118,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   }
   assert(r == 0);  // we shouldn't get an error here!
       
-  CDentry *destdn = trace[trace.size()-1];
+  CDentry *destdn = trace.back();
   CDentry::linkage_t *destdnl = destdn->get_projected_linkage();
   dout(10) << " destdn " << *destdn << dendl;
   mdr->pin(destdn);
@@ -8133,7 +8134,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   // srcpath must not point to a null dentry
   assert(srci != nullptr);
       
-  CDentry *srcdn = trace[trace.size()-1];
+  CDentry *srcdn = trace.back();
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
   dout(10) << " srcdn " << *srcdn << dendl;
   mdr->pin(srcdn);
