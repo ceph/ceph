@@ -32,7 +32,7 @@ class SocketFactoryBase
  public:
   virtual ~SocketFactoryBase() = default;
 
-  virtual future<> bind_accept() {
+  virtual seastar::future<> bind_accept() {
     return this->container().invoke_on_all([] (auto& factory) {
       entity_addr_t addr;
       addr.parse(server_addr, nullptr);
@@ -77,7 +77,7 @@ class SocketFactoryBase
     });
   }
 
-  future<> shutdown() {
+  seastar::future<> shutdown() {
     return this->container().invoke_on_all([] (auto& factory) {
       if (factory.listener) {
         factory.listener.value().abort_accept();
@@ -86,22 +86,22 @@ class SocketFactoryBase
     });
   }
 
-  future<> stop() { return seastar::now(); }
+  seastar::future<> stop() { return seastar::now(); }
 
-  static future<SocketFRef> connect() {
+  static seastar::future<SocketFRef> connect() {
     entity_addr_t addr;
     addr.parse(server_addr, nullptr);
     return Socket::connect(addr);
   }
 
  protected:
-  virtual future<> handle_server_socket(SocketFRef&& socket) = 0;
+  virtual seastar::future<> handle_server_socket(SocketFRef&& socket) = 0;
 };
 
 class AcceptTest final
     : public SocketFactoryBase<AcceptTest> {
  public:
-  future<> handle_server_socket(SocketFRef&& socket) override {
+  seastar::future<> handle_server_socket(SocketFRef&& socket) override {
     return seastar::sleep(100ms
     ).then([socket = std::move(socket)] () mutable {
       return socket->close()
@@ -110,7 +110,7 @@ class AcceptTest final
   }
 };
 
-future<> test_refused() {
+seastar::future<> test_refused() {
   logger.info("test_refused()...");
   return AcceptTest::connect().discard_result(
   ).then([] {
@@ -127,7 +127,7 @@ future<> test_refused() {
   });
 }
 
-future<> test_bind_same() {
+seastar::future<> test_bind_same() {
   logger.info("test_bind_same()...");
   return crimson::net::create_sharded<AcceptTest>().then(
     [] (AcceptTest* factory) {
@@ -157,7 +157,7 @@ future<> test_bind_same() {
   });
 }
 
-future<> test_accept() {
+seastar::future<> test_accept() {
   logger.info("test_accept()");
   return crimson::net::create_sharded<AcceptTest>(
   ).then([] (AcceptTest* factory) {
@@ -187,25 +187,25 @@ class SocketFactory final
   const seastar::shard_id target_shard;
   seastar::promise<SocketFRef> socket_promise;
 
-  future<> bind_accept() override {
+  seastar::future<> bind_accept() override {
     return SocketFactoryBase<SocketFactory>::bind_accept();
   }
 
-  future<SocketFRef> get_accepted() {
+  seastar::future<SocketFRef> get_accepted() {
     return socket_promise.get_future();
   }
 
  public:
   SocketFactory(seastar::shard_id shard) : target_shard{shard} {}
 
-  future<> handle_server_socket(SocketFRef&& socket) override {
+  seastar::future<> handle_server_socket(SocketFRef&& socket) override {
     return container().invoke_on(target_shard,
         [socket = std::move(socket)] (auto& factory) mutable {
       factory.socket_promise.set_value(std::move(socket));
     });
   }
 
-  static future<tuple<SocketFRef, SocketFRef>> get_sockets() {
+static seastar::future<tuple<SocketFRef, SocketFRef>> get_sockets() {
     return crimson::net::create_sharded<SocketFactory>(seastar::engine().cpu_id()
     ).then([] (SocketFactory* factory) {
       return factory->bind_accept().then([factory] {
@@ -241,7 +241,7 @@ class Connection {
     data[DATA_SIZE - 1] = DATA_TAIL;
   }
 
-  future<> dispatch_write(unsigned round = 0, bool force_shut = false) {
+  seastar::future<> dispatch_write(unsigned round = 0, bool force_shut = false) {
     return seastar::repeat([this, round, force_shut] {
       if (round != 0 && round <= write_count) {
         return seastar::futurize_apply([this, force_shut] {
@@ -265,7 +265,7 @@ class Connection {
     });
   }
 
-  future<> dispatch_write_unbounded() {
+  seastar::future<> dispatch_write_unbounded() {
     return dispatch_write(
     ).then([] {
       ceph_abort();
@@ -282,7 +282,7 @@ class Connection {
     });
   }
 
-  future<> dispatch_read(unsigned round = 0, bool force_shut = false) {
+  seastar::future<> dispatch_read(unsigned round = 0, bool force_shut = false) {
     return seastar::repeat([this, round, force_shut] {
       if (round != 0 && round <= read_count) {
         return seastar::futurize_apply([this, force_shut] {
@@ -318,7 +318,7 @@ class Connection {
     });
   }
 
-  future<> dispatch_read_unbounded() {
+  seastar::future<> dispatch_read_unbounded() {
     return dispatch_read(
     ).then([] {
       ceph_abort();
@@ -339,12 +339,12 @@ class Connection {
     socket->shutdown();
   }
 
-  future<> close() {
+  seastar::future<> close() {
     return socket->close();
   }
 
  public:
-  static future<> dispatch_rw_bounded(SocketFRef&& socket, bool is_client,
+  static seastar::future<> dispatch_rw_bounded(SocketFRef&& socket, bool is_client,
                                       unsigned round, bool force_shut = false) {
     return seastar::smp::submit_to(is_client ? 0 : 1,
         [socket = std::move(socket), round, force_shut] () mutable {
@@ -365,7 +365,7 @@ class Connection {
     });
   }
 
-  static future<> dispatch_rw_unbounded(SocketFRef&& socket, bool is_client,
+  static seastar::future<> dispatch_rw_unbounded(SocketFRef&& socket, bool is_client,
                                         bool preemptive_shut = false) {
     return seastar::smp::submit_to(is_client ? 0 : 1,
         [socket = std::move(socket), preemptive_shut, is_client] () mutable {
@@ -393,7 +393,7 @@ class Connection {
   }
 };
 
-future<> test_read_write() {
+seastar::future<> test_read_write() {
   logger.info("test_read_write()...");
   return SocketFactory::get_sockets().then([] (auto sockets) {
     auto [client_socket, server_socket] = std::move(sockets);
@@ -407,7 +407,7 @@ future<> test_read_write() {
   });
 }
 
-future<> test_unexpected_down() {
+seastar::future<> test_unexpected_down() {
   logger.info("test_unexpected_down()...");
   return SocketFactory::get_sockets().then([] (auto sockets) {
     auto [client_socket, server_socket] = std::move(sockets);
@@ -421,7 +421,7 @@ future<> test_unexpected_down() {
   });
 }
 
-future<> test_shutdown_propagated() {
+seastar::future<> test_shutdown_propagated() {
   logger.info("test_shutdown_propagated()...");
   return SocketFactory::get_sockets().then([] (auto sockets) {
     auto [client_socket, server_socket] = std::move(sockets);
@@ -437,7 +437,7 @@ future<> test_shutdown_propagated() {
   });
 }
 
-future<> test_preemptive_down() {
+seastar::future<> test_preemptive_down() {
   logger.info("test_preemptive_down()...");
   return SocketFactory::get_sockets().then([] (auto sockets) {
     auto [client_socket, server_socket] = std::move(sockets);

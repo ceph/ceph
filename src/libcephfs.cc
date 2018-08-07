@@ -20,6 +20,7 @@
 #include "auth/Crypto.h"
 #include "client/Client.h"
 #include "librados/RadosClient.h"
+#include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
@@ -36,6 +37,7 @@
 #define DEFAULT_UMASK 002
 
 static mode_t umask_cb(void *);
+ceph::async::io_context_pool icp;
 
 struct ceph_mount_info
 {
@@ -83,8 +85,9 @@ public:
       cct->_log->start();
     }
 
+    icp.start(cct->_conf.get_val<std::uint64_t>("client_asio_thread_count"));
     {
-      MonClient mc_bootstrap(cct);
+      MonClient mc_bootstrap(cct, icp);
       ret = mc_bootstrap.get_monmap_and_config();
       if (ret < 0)
 	return ret;
@@ -93,7 +96,7 @@ public:
     common_init_finish(cct);
 
     //monmap
-    monclient = new MonClient(cct);
+    monclient = new MonClient(cct, icp);
     ret = -CEPHFS_ERROR_MON_MAP_BUILD; //defined in libcephfs.h;
     if (monclient->build_initial_monmap() < 0)
       goto fail;
@@ -202,6 +205,7 @@ public:
       delete messenger;
       messenger = nullptr;
     }
+    icp.stop();
     if (monclient) {
       delete monclient;
       monclient = nullptr;

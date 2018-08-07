@@ -25,6 +25,8 @@
 #include <typeinfo>
 #include <typeindex>
 
+#include <boost/intrusive_ptr.hpp>
+
 #include "include/any.h"
 
 #include "common/cmdparse.h"
@@ -362,5 +364,16 @@ private:
   friend class CephContextObs;
 };
 #endif	// WITH_SEASTAR
+
+inline void intrusive_ptr_add_ref(CephContext* cct)
+{
+  cct->get();
+}
+
+inline void intrusive_ptr_release(CephContext* cct)
+{
+  cct->put();
+}
+
 
 #endif
