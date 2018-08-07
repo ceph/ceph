@@ -2,7 +2,9 @@
 
 failed=false
 cd $CEPH_ROOT/src/pybind/mgr/dashboard/frontend
-.  $CEPH_ROOT/build/src/pybind/mgr/dashboard/node-env/bin/activate
+if [ `uname` != "FreeBSD" ]; then
+  .  $CEPH_ROOT/build/src/pybind/mgr/dashboard/node-env/bin/activate
+fi
 
 # Build
 npm run build -- --prod --progress=false || failed=true
@@ -34,7 +36,9 @@ if [ $? -gt 0 ]; then
   echo -e "\nTry running 'npm run prettier' to fix linting errors."
 fi
 
-deactivate
+if [ `uname` != "FreeBSD" ]; then
+  deactivate
+fi 
 
 if [ "$failed" = "true" ]; then
   exit 1
