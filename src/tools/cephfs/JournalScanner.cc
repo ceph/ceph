@@ -301,15 +301,10 @@ int JournalScanner::scan_events()
             valid_entry = false;
           }
         } else if (type == "purge_queue"){
-           PurgeItem* pi = new PurgeItem();
+           PurgeItem pi;
            try {
              auto q = le_bl.cbegin();
-             pi->decode(q);
-	     if (filter.apply(read_offset, *pi)) {
-	       events[read_offset] = EventRecord(pi, consumed);
-	     } else {
-	       delete pi;
-	     }
+             ::decode(pi, q);
            } catch (const buffer::error &err) {
              valid_entry = false;
            }
@@ -352,10 +347,7 @@ JournalScanner::~JournalScanner()
   }
   dout(4) << events.size() << " events" << dendl;
   for (EventMap::iterator i = events.begin(); i != events.end(); ++i) {
-    if (i->second.log_event)
-      delete i->second.log_event;
-    else if (i->second.pi)
-      delete i->second.pi;
+    delete i->second.log_event;
   }
   events.clear();
 }
