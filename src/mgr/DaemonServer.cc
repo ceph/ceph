@@ -365,6 +365,8 @@ void DaemonServer::tick()
 // fire after all modules have had a chance to set their health checks.
 void DaemonServer::schedule_tick_locked(double delay_sec)
 {
+  assert(lock.is_locked_by_me());
+
   if (tick_event) {
     timer.cancel_event(tick_event);
     tick_event = nullptr;
