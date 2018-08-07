@@ -61,28 +61,6 @@ download_boost() {
     rm -rf src/boost
 }
 
-download_gperftools() {
-    version=$1
-    shift
-    sha256=$1
-    shift
-    dname=gperftools-$version
-    fname=$dname.tar.gz
-    url=https://github.com/gperftools/gperftools/releases/download/$dname/$fname
-
-    if ! wget -c --no-verbose -O $fname $url; then
-        echo "Download of $url failed"
-        exit 1
-    elif [ $(sha256sum $fname | awk '{print $1}') != $sha256 ]; then
-        echo "Error: failed to download gperftools: SHA256 mismatch."
-        exit 1
-    fi
-    tar xzf $fname -C src
-    mv src/$dname src/gperftools
-    tar cf ${outfile}.gperftools.tar ${outfile}/src/gperftools
-    rm -rf src/gperftools
-}
-
 _python_autoselect() {
   python_command=
   for interpreter in python2.7 python3 ; do
@@ -158,11 +136,9 @@ download_boost $boost_version 2684c972994ee57fc5632e03bf044746f6eb45d4920c343937
                https://dl.bintray.com/boostorg/release/$boost_version/source \
                https://downloads.sourceforge.net/project/boost/boost/$boost_version \
                https://download.ceph.com/qa
-download_gperftools 2.7 1ee8c8699a0eff6b6a203e59b43330536b22bbcbe6448f54c7091e5efb0763c9
 build_dashboard_frontend
 tar --concatenate -f $outfile.all.tar $outfile.version.tar
 tar --concatenate -f $outfile.all.tar $outfile.boost.tar
-tar --concatenate -f $outfile.all.tar $outfile.gperftools.tar
 tar --concatenate -f $outfile.all.tar $outfile.tar
 tar --concatenate -f $outfile.all.tar dashboard_frontend.tar
 mv $outfile.all.tar $outfile.tar
