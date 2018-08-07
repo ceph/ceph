@@ -1901,7 +1901,7 @@ void FileJournal::wrap_read_bl(
     int r = safe_read_exact(fd, bp.c_str(), len);
     if (r) {
       derr << "FileJournal::wrap_read_bl: safe_read_exact " << pos << "~" << len << " returned "
-	   << r << dendl;
+	   << cpp_strerror(r) << dendl;
       ceph_abort();
     }
     bl->push_back(std::move(bp));
