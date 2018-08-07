@@ -661,47 +661,45 @@ class perf_counters_t : public PerfCountersCollectionable {
     }
   }
 
-public:
-  perf_counters_t(std::string name)
-    : name(std::move(name))
-  {
-    // iterate over all thread slots
-    for (auto& perf_counters : threaded_perf_counters) {
-      memset(&perf_counters, 0, sizeof(perf_counters));
-    }
-
-    memset(&atomic_perf_counters, 0, sizeof(atomic_perf_counters));
-  }
-
   template<const perf_counter_meta_t& pcid>
-  void inc(const std::size_t count = 1) {
+  void _inc(const std::size_t amount = 1) {
     static_assert(perf_counters_t::count<pcid, P...>() == 1);
-    static_assert(pcid.type & PERFCOUNTER_U64);
     static_assert(0 == (pcid.type & PERFCOUNTER_SETABLE));
 
     constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
     perf_counter_any_data_t* const threaded_counters = \
       _get_threaded_counters(idx);
+
     if (likely(threaded_counters != nullptr)) {
       if constexpr (pcid.type & PERFCOUNTER_LONGRUNAVG) {
+        // we are operating on the memory atomically with very weak ordering
+	// requirements. As the struct consists just two 32 bit unsigned
+	// integers, on most platforms this will be a plain load.
 	auto val_n_cnt = \
 	  threaded_counters->val_with_counter.load(std::memory_order_relaxed);
 
-	std::uint64_t val64;
-	std::uint64_t cnt64;
+	const bool val_overflowed = \
+	  __builtin_uadd_overflow(val_n_cnt.val, amount, &val_n_cnt.val);
+	const bool cnt_overflowed = \
+	  __builtin_uadd_overflow(val_n_cnt.cnt, 1, &val_n_cnt.cnt);
 
-	if (unlikely(__builtin_uadd_overflow(val_n_cnt.val, count, &val64) ||
-		     __builtin_uadd_overflow(val_n_cnt.cnt, 1, &cnt64))) {
-	  atomic_perf_counters[idx].val_with_counter.val += val64;
-	  atomic_perf_counters[idx].val_with_counter.cnt += cnt64;
+	if (unlikely(val_overflowed || cnt_overflowed)) {
+	  atomic_perf_counters[idx].val_with_counter.val += \
+	    val_n_cnt.val + std::numeric_limits<decltype(val_n_cnt.val)>::max();
+	  atomic_perf_counters[idx].val_with_counter.cnt += \
+	    val_n_cnt.cnt + std::numeric_limits<decltype(val_n_cnt.cnt)>::max();
 	  threaded_counters->val_with_counter.store({ 0, 0 },
-		std::memory_order_relaxed);
+						    std::memory_order_relaxed);
 	} else {
-	  threaded_counters->val_with_counter.store({ val64, cnt64 },
-		std::memory_order_relaxed);
+	  // there is no compare-and-exchange. This slot belongs to the current
+	  // thread and we don't expect any other writer, so employing costly
+	  // synchronization would be pointless. On x86 this will be translated
+	  // into plain store without MFENCE.
+	  threaded_counters->val_with_counter.store(val_n_cnt,
+						    std::memory_order_relaxed);
 	}
       } else {
-	threaded_counters->val += count;
+	threaded_counters->val += amount;
       }
     } else {
       if constexpr (pcid.type & PERFCOUNTER_LONGRUNAVG) {
@@ -711,6 +709,23 @@ public:
 	atomic_perf_counters[idx].val += amount;
       }
     }
+  }
+
+public:
+  perf_counters_t(std::string name)
+    : name(std::move(name))
+  {
+    // iterate over all thread slots
+    for (auto& perf_counters : threaded_perf_counters) {
+      memset(&perf_counters, 0, sizeof(perf_counters));
+    }
+    memset(&atomic_perf_counters, 0, sizeof(atomic_perf_counters));
+  }
+
+  template<const perf_counter_meta_t& pcid>
+  void inc(const std::size_t count = 1) {
+    static_assert(pcid.type & PERFCOUNTER_U64);
+    return _inc<pcid>(count);
   }
 
   template<const perf_counter_meta_t& pcid>
@@ -762,69 +777,14 @@ public:
 
   template<const perf_counter_meta_t& pcid>
   void tinc(const utime_t amt) {
-    static_assert(perf_counters_t::count<pcid, P...>() == 1);
     static_assert(pcid.type & PERFCOUNTER_TIME);
-
-    constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
-    perf_counter_any_data_t* const threaded_counters = \
-      _get_threaded_counters(idx);
-    if (likely(threaded_counters != nullptr)) {
-      if constexpr (pcid.type & PERFCOUNTER_LONGRUNAVG) {
-	auto val_n_cnt = \
-	  threaded_counters->val_with_counter.load(std::memory_order_relaxed);
-
-	if (unlikely(__builtin_uadd_overflow(val_n_cnt.val, amt.to_nsec(),
-					     &val_n_cnt.val) ||
-		     __builtin_uadd_overflow(val_n_cnt.cnt, 1,
-					     &val_n_cnt.cnt)))
-	{
-	  atomic_perf_counters[idx].val_with_counter.val += val_n_cnt.val + std::numeric_limits<std::uint32_t>::max();
-	  atomic_perf_counters[idx].val_with_counter.cnt += val_n_cnt.cnt + std::numeric_limits<std::uint32_t>::max();
-	  threaded_counters->val_with_counter.store({ 0, 0 },
-		std::memory_order_relaxed);
-	} else {
-	  threaded_counters->val_with_counter.store(val_n_cnt,
-		std::memory_order_relaxed);
-	}
-      } else {
-	threaded_counters->val += amt.to_nsec();
-      }
-    } else {
-      atomic_perf_counters[idx].val += amt.to_nsec();
-;
-    }
+    return _inc<pcid>(amt.to_nsec());
   }
 
   template<const perf_counter_meta_t& pcid>
   void tinc(const ceph::timespan amt) {
-    static_assert(perf_counters_t::count<pcid, P...>() == 1);
     static_assert(pcid.type & PERFCOUNTER_TIME);
-
-    constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
-    perf_counter_any_data_t* const threaded_counters = \
-      _get_threaded_counters(idx);
-    if (likely(threaded_counters != nullptr)) {
-      if constexpr (pcid.type & PERFCOUNTER_LONGRUNAVG) {
-	auto val_n_cnt = \
-	  threaded_counters->val_with_counter.load(std::memory_order_relaxed);
-
-	if (unlikely(__builtin_uadd_overflow(val_n_cnt.val, amt.count(), &val_n_cnt.val) ||
-		     __builtin_uadd_overflow(val_n_cnt.cnt, 1, &val_n_cnt.cnt))) {
-	  atomic_perf_counters[idx].val_with_counter.val += val_n_cnt.val + std::numeric_limits<std::uint32_t>::max();
-	  atomic_perf_counters[idx].val_with_counter.cnt += val_n_cnt.cnt + std::numeric_limits<std::uint32_t>::max();
-	  threaded_counters->val_with_counter.store({ 0, 0 },
-		std::memory_order_relaxed);
-	} else {
-	  threaded_counters->val_with_counter.store(val_n_cnt,
-		std::memory_order_relaxed);
-	}
-      } else {
-	threaded_counters->val += amt.count();
-      }
-    } else {
-      atomic_perf_counters[idx].val += amt.count();
-;
-    }
+    return _inc<pcid>(amt.count());
   }
 
   // helper structures, NOT for hot paths
