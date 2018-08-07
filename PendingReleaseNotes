@@ -36,3 +36,16 @@
 * The ``osd_heartbeat_addr`` option has been removed as it served no
   (good) purpose: the OSD should always check heartbeats on both the
   public and cluster networks.
+
+
+
+
+
+
+
+Upgrading from Luminous
+-----------------------
+
+* During the upgrade from luminous to nautilus, it will not be possible to create
+  a new OSD using a luminous ceph-osd daemon after the monitors have been
+  upgraded to nautilus.
