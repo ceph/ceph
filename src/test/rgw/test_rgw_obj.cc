@@ -200,7 +200,7 @@ TEST(TestRGWObj, obj_to_raw) {
   for (auto name : { "myobj", "_myobj", "_myobj_"}) {
     for (auto inst : { "", "inst"}) {
       for (auto ns : { "", "ns"}) {
-        test_obj_to_raw(env, b, name, inst, ns, env.zonegroup.default_placement);
+        test_obj_to_raw(env, b, name, inst, ns, env.zonegroup.default_placement.name);
         test_obj_to_raw(env, eb, name, inst, ns, string());
       }
     }
