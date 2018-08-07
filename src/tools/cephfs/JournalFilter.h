@@ -17,7 +17,6 @@
 
 #include "mds/mdstypes.h"
 #include "mds/LogEvent.h"
-#include "mds/PurgeQueue.h"
 
 /**
  * A set of conditions for narrowing down a search through the journal
@@ -40,11 +39,6 @@ class JournalFilter
   /* Filtering by type */
   LogEvent::EventType event_type;
 
-  std::string type;
-
-  /* Filtering by PurgeItem::Action */
-  PurgeItem::Action purge_action;
-
   /* Filtering by dirfrag */
   dirfrag_t frag;
   std::string frag_dentry;  //< optional, filter dentry name within fragment
@@ -53,17 +47,14 @@ class JournalFilter
   entity_name_t client_name;
 
   public:
-  JournalFilter(std::string t) :
+  JournalFilter() : 
     range_start(0),
     range_end(-1),
     inode(0),
-    event_type(0),
-    type(t),
-    purge_action(PurgeItem::NONE) {}
+    event_type(0) {}
 
   bool get_range(uint64_t &start, uint64_t &end) const;
   bool apply(uint64_t pos, LogEvent &le) const;
-  bool apply(uint64_t pos, PurgeItem &pi) const;
   int parse_args(
     std::vector<const char*> &argv, 
     std::vector<const char*>::iterator &arg);
