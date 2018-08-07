@@ -1805,7 +1805,7 @@ bool DaemonServer::handle_command(MCommand *m)
       f->open_array_section("devices");
       for (auto& devid : devids) {
 	daemon_state.with_device(
-	  devid, [&f, &host] (const DeviceState& dev) {
+	  devid, [&f] (const DeviceState& dev) {
 	    f->dump_object("device", dev);
 	  });
       }
