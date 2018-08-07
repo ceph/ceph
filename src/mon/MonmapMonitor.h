@@ -29,7 +29,6 @@
 #include "MonMap.h"
 #include "MonitorDBStore.h"
 
-class MMonGetMap;
 class MMonMap;
 class MMonCommand;
 class MMonJoin;
