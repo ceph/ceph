@@ -1,7 +1,35 @@
 <ng-template #popTemplate>
+  <ng-container *ngIf="customBadges">
+    <form name="form"
+          #formDir="ngForm"
+          [formGroup]="form"
+          novalidate>
+      <div [ngClass]="{'has-error': form.showError('customBadge', formDir)}">
+        <input type="text"
+               formControlName="customBadge"
+               i18n-placeholder
+               [placeholder]="customBadgeMessage"
+               (keyup)="$event.keyCode == 13 ? addCustomOption(customBadge) : null"
+               class="form-control text-center"/>
+        <ng-container *ngFor="let error of Object.keys(errorMessages.custom.validation)">
+          <span
+            i18n
+            class="help-block text-center"
+            *ngIf="form.showError('customBadge', formDir) && customBadge.hasError(error)">
+            {{ errorMessages.custom.validation[error] }}
+          </span>
+        </ng-container>
+        <span i18n
+              class="help-block text-center"
+              *ngIf="form.showError('customBadge', formDir) && customBadge.hasError('duplicate')">
+          {{ errorMessages.custom.duplicate }}
+        </span>
+      </div>
+    </form>
+  </ng-container>
   <div *ngFor="let option of options"
        class="select-menu-item"
-       (click)="selectOption(option)">
+       (click)="triggerSelection(option)">
     <div class="select-menu-item-icon">
       <i class="fa fa-check" aria-hidden="true"
          *ngIf="option.selected"></i>
@@ -9,12 +37,19 @@
     </div>
     <div class="select-menu-item-content">
       {{ option.name }}
-      <br>
-      <small class="text-muted">
-        {{ option.description }}&nbsp;
-      </small>
+      <ng-container *ngIf="option.description">
+        <br>
+        <small class="text-muted">
+          {{ option.description }}&nbsp;
+        </small>
+      </ng-container>
     </div>
   </div>
+  <span i18n
+        class="help-block text-center"
+        *ngIf="data.length === selectionLimit">
+          {{ errorMessages.selectionLimit }}
+  </span>
 </ng-template>
 
 <a  class="margin-right-sm select-menu-edit"
@@ -27,7 +62,7 @@
 <span class="text-muted"
       *ngIf="data.length === 0"
       i18n>
-  {{ emptyMessage }}
+  {{ errorMessages.empty }}
 </span>
 <span *ngFor="let dataItem of data">
   <span class="badge badge-pill badge-primary margin-right-sm">
