@@ -134,6 +134,13 @@ public:
 
   virtual ConnectionRef get_connection(const entity_inst_t& dest);
 
+  // compat hack
+  ConnectionRef connect_to(
+    int type, const entity_addrvec_t& dest) override {
+    return get_connection(entity_inst_t(entity_name_t(type, -1),
+					dest.legacy_addr()));
+  }
+
   virtual ConnectionRef get_loopback_connection();
 
   void unregister_xcon(XioConnection *xcon);
