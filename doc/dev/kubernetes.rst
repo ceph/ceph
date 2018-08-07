@@ -5,7 +5,7 @@
 Hacking on Ceph in Kubernetes with Rook
 =======================================
 
-.. warning:
+.. warning::
 
     This is *not* official user documentation for setting up production
     Ceph clusters with Kubernetes.  It is aimed at developers who want
@@ -67,7 +67,7 @@ Make sure you check how much it's costing you before you spin up a big cluster!
 ===========================
 
 Ideally, run this somewhere accessible from both your workstation and your
-kubernetes cluster (i.e. so that "docker push/pull" just works everywhere).
+kubernetes cluster (i.e. so that ``docker push/pull`` just works everywhere).
 This is likely to be the same host you're using as your kubernetes master.
 
 1. Install the ``docker-distribution`` package.
@@ -83,7 +83,7 @@ This is likely to be the same host you're using as your kubernetes master.
 3. Build Rook
 =============
 
-.. info:
+.. note::
 
     Work within your $GOPATH -- here we assume it's ~/go
 
@@ -151,7 +151,7 @@ binaries:
 
     build$ REPO=<host>:<port> sh ../src/script/kubejacker/kubejacker.sh
 
-.. info:
+.. note::
 
     You can also set ``BASEIMAGE`` to control that Rook image used
     as the base -- by default this is set to any "ceph-amd64" image.
@@ -166,7 +166,7 @@ build, and the Ceph build too.
 5. Run a Rook cluster
 =====================
 
-.. info:
+.. note::
 
     This is just some basic instructions: the Rook documentation
     is much more expansive, at https://github.com/rook/rook/tree/master/Documentation
