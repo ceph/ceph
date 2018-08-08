@@ -46,7 +46,7 @@
 
 #include "include/assert.h"
 #include "rgw_role.h"
-#include "rgw_sts.h"
+#include "rgw_rest_sts.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -2958,6 +2958,11 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
     if (action.compare("DeleteRolePolicy") == 0)
       return new RGWDeleteRolePolicy;
   }
+  if (this->isSTSenabled) {
+    RGWHandler_REST_STS sts_handler(auth_registry);
+    sts_handler.init(store, s, s->cio);
+    return sts_handler.get_op(store);
+  }
   return NULL;
 }
 
@@ -3424,7 +3429,7 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
     }
   } else {
     if (s->init_state.url_bucket.empty()) {
-      handler = new RGWHandler_REST_Service_S3(auth_registry);
+      handler = new RGWHandler_REST_Service_S3(auth_registry, enable_sts);
     } else if (s->object.empty()) {
       handler = new RGWHandler_REST_Bucket_S3(auth_registry);
     } else {
