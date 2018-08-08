@@ -2,8 +2,8 @@
 Installation (Kubernetes + Helm)
 ================================
 
-The ceph-helm_ project enables you to deploy Ceph in a Kubernetes environement.
-This documentation assumes a Kubernetes environement is available.
+The ceph-helm_ project enables you to deploy Ceph in a Kubernetes environment.
+This documentation assumes a Kubernetes environment is available.
 
 Current limitations
 ===================
