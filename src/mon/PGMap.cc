@@ -1120,7 +1120,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     pg_sum_delta.stats.add(d.stats);
     auto smooth_intervals =
       cct ? cct->_conf.get_val<uint64_t>("mon_stat_smooth_intervals") : 1;
-    if (pg_sum_deltas.size() > smooth_intervals) {
+    while (pg_sum_deltas.size() > smooth_intervals) {
       pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
       stamp_delta -= pg_sum_deltas.front().second;
       pg_sum_deltas.pop_front();
@@ -1962,7 +1962,7 @@ void PGMap::update_delta(
     result_pool_delta->stats.add(d.stats);
   }
   size_t s = cct ? cct->_conf.get_val<uint64_t>("mon_stat_smooth_intervals") : 1;
-  if (delta_avg_list->size() > s) {
+  while (delta_avg_list->size() > s) {
     result_pool_delta->stats.sub(delta_avg_list->front().first.stats);
     *result_ts_delta -= delta_avg_list->front().second;
     delta_avg_list->pop_front();
