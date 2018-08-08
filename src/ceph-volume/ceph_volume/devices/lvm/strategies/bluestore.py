@@ -27,7 +27,7 @@ class SingleType(object):
 
     def report_pretty(self):
         string = ""
-        string += templates.osd_header.format(
+        string += templates.total_osds.format(
             total_osds=len(self.hdds) or len(self.ssds) * 2
         )
         string += templates.osd_component_titles
@@ -135,7 +135,7 @@ class MixedType(object):
         db_size = str(disk.Size(b=(vg_extents['sizes'])))
 
         string = ""
-        string += templates.osd_header.format(
+        string += templates.ssd_volume_group.format(
             targets='block.db',
             total_lv_size=str(self.total_ssd_size),
             total_lvs=vg_extents['parts'],
@@ -241,7 +241,7 @@ class MixedType(object):
         # the minimum alllowed for block.db
         self.total_ssd_size = disk.Size(b=0)
         for ssd in self.ssds:
-            self.total_ssd_size + disk.Size(b=ssd['size'])
+            self.total_ssd_size += disk.Size(b=ssd['size'])
 
         self.block_db_size = self.total_ssd_size / self.db_lvs
         self.vg_extents = lvm.sizing(self.total_ssd_size.b, parts=self.db_lvs)
