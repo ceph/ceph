@@ -55,7 +55,7 @@ class Module(MgrModule):
                         "pool": pool_name,
                         'rule': pool_name,
                         "pool_type": 'replicated',
-                        'pg_num': str(pg_num),
+                        'pg_num': int(pg_num),
                     }), "")
                     r, outb, outs = result.wait()
 
