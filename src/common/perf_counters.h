@@ -772,6 +772,25 @@ public:
   }
 
   template<const perf_counter_meta_t& pcid>
+  void dec(const std::size_t amount = 1) {
+    static_assert(pcid.type & PERFCOUNTER_U64);
+    static_assert(0 == (pcid.type & PERFCOUNTER_SETABLE));
+    // don't touching the logic of the original PerfCounters
+    static_assert(0 == (pcid.type & PERFCOUNTER_LONGRUNAVG));
+    static_assert(perf_counters_t::count<pcid, P...>() == 1);
+
+    constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
+    perf_counter_any_data_t* const threaded_counters = \
+      _get_threaded_counters(idx);
+
+    if (likely(threaded_counters != nullptr)) {
+      threaded_counters->val -= amount;
+    } else {
+      atomic_perf_counters[idx].val -= amount;
+    }
+  }
+
+  template<const perf_counter_meta_t& pcid>
   void set(const std::uint64_t amount) {
     static_assert(perf_counters_t::count<pcid, P...>() == 1);
     static_assert(pcid.type & PERFCOUNTER_SETABLE);

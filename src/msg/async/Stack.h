@@ -21,6 +21,7 @@
 #include "common/perf_counters.h"
 #include "msg/msg_types.h"
 #include "msg/async/Event.h"
+#include "msg/async/MsgrPerfCounters.h"
 
 class Worker;
 class ConnectedSocketImpl {
@@ -186,23 +187,6 @@ class ServerSocket {
 
 class NetworkStack;
 
-enum {
-  l_msgr_first = 94000,
-  l_msgr_recv_messages,
-  l_msgr_send_messages,
-  l_msgr_recv_bytes,
-  l_msgr_send_bytes,
-  l_msgr_created_connections,
-  l_msgr_active_connections,
-
-  l_msgr_running_total_time,
-  l_msgr_running_send_time,
-  l_msgr_running_recv_time,
-  l_msgr_running_fast_dispatch_time,
-
-  l_msgr_last,
-};
-
 class Worker {
   std::mutex init_lock;
   std::condition_variable init_cond;
@@ -212,7 +196,7 @@ class Worker {
   bool done = false;
 
   CephContext *cct;
-  PerfCounters *perf_logger;
+  msgr_perf_counters_t perf_logger;
   unsigned id;
 
   std::atomic_uint references;
@@ -222,32 +206,15 @@ class Worker {
   Worker& operator=(const Worker&) = delete;
 
   Worker(CephContext *c, unsigned i)
-    : cct(c), perf_logger(NULL), id(i), references(0), center(c) {
-    char name[128];
-    sprintf(name, "AsyncMessenger::Worker-%u", id);
-    // initialize perf_logger
-    PerfCountersBuilder plb(cct, name, l_msgr_first, l_msgr_last);
-
-    plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
-    plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
-    plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes", NULL, 0, unit_t(UNIT_BYTES));
-    plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network sent bytes", NULL, 0, unit_t(UNIT_BYTES));
-    plb.add_u64_counter(l_msgr_active_connections, "msgr_active_connections", "Active connection number");
-    plb.add_u64_counter(l_msgr_created_connections, "msgr_created_connections", "Created connection number");
-
-    plb.add_time(l_msgr_running_total_time, "msgr_running_total_time", "The total time of thread running");
-    plb.add_time(l_msgr_running_send_time, "msgr_running_send_time", "The total time of message sending");
-    plb.add_time(l_msgr_running_recv_time, "msgr_running_recv_time", "The total time of message receiving");
-    plb.add_time(l_msgr_running_fast_dispatch_time, "msgr_running_fast_dispatch_time", "The total time of fast dispatch");
-
-    perf_logger = plb.create_perf_counters();
-    cct->get_perfcounters_collection()->add(perf_logger);
+    : cct(c),
+      perf_logger("AsyncMessenger::Worker-" + std::to_string(id)),
+      id(i),
+      references(0),
+      center(c) {
+    cct->get_perfcounters_collection()->add(&perf_logger);
   }
   virtual ~Worker() {
-    if (perf_logger) {
-      cct->get_perfcounters_collection()->remove(perf_logger);
-      delete perf_logger;
-    }
+    cct->get_perfcounters_collection()->remove(&perf_logger);
   }
 
   virtual int listen(entity_addr_t &addr,
@@ -257,7 +224,7 @@ class Worker {
   virtual void destroy() {}
 
   virtual void initialize() {}
-  PerfCounters *get_perf_counter() { return perf_logger; }
+  msgr_perf_counters_t& get_perf_counter() { return perf_logger; }
   void release_worker() {
     int oldref = references.fetch_sub(1);
     ceph_assert(oldref > 0);

@@ -587,7 +587,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(
   conn->connect(addrs, type, target);
   ceph_assert(!conns.count(addrs));
   conns[addrs] = conn;
-  w->get_perf_counter()->inc(l_msgr_active_connections);
+  w->get_perf_counter().inc<l_msgr_active_connections>();
 
   return conn;
 }
@@ -747,7 +747,7 @@ void AsyncMessenger::shutdown_connections(bool queue_reset)
     AsyncConnectionRef p = it->second;
     ldout(cct, 5) << __func__ << " mark down " << it->first << " " << p << dendl;
     conns.erase(it);
-    p->get_perf_counter()->dec(l_msgr_active_connections);
+    p->get_perf_counter().dec<l_msgr_active_connections>();
     p->stop(queue_reset);
   }
 

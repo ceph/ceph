@@ -372,7 +372,7 @@ void ProtocolV1::write_event() {
       }
     }
 
-    connection->logger->tinc(l_msgr_running_send_time,
+    connection->logger->tinc<l_msgr_running_send_time>(
                              ceph::mono_clock::now() - start);
     if (r < 0) {
       ldout(cct, 1) << __func__ << " send msg failed" << dendl;
@@ -993,14 +993,13 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
 
   state = OPENED;
 
-  connection->logger->inc(l_msgr_recv_messages);
-  connection->logger->inc(
-      l_msgr_recv_bytes,
+  connection->logger->inc<l_msgr_recv_messages>();
+  connection->logger->inc<l_msgr_recv_bytes>(
       cur_msg_size + sizeof(ceph_msg_header) + sizeof(ceph_msg_footer));
 
   messenger->ms_fast_preprocess(message);
   auto fast_dispatch_time = ceph::mono_clock::now();
-  connection->logger->tinc(l_msgr_running_recv_time,
+  connection->logger->tinc<l_msgr_running_recv_time>(
                            fast_dispatch_time - connection->recv_start_time);
   if (connection->delay_state) {
     double delay_period = 0;
@@ -1016,7 +1015,7 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
     connection->lock.unlock();
     connection->dispatch_queue->fast_dispatch(message);
     connection->recv_start_time = ceph::mono_clock::now();
-    connection->logger->tinc(l_msgr_running_fast_dispatch_time,
+    connection->logger->tinc<l_msgr_running_fast_dispatch_time>(
                              connection->recv_start_time - fast_dispatch_time);
     connection->lock.lock();
   } else {
@@ -1149,8 +1148,8 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
     ldout(cct, 1) << __func__ << " error sending " << m << ", "
                   << cpp_strerror(rc) << dendl;
   } else {
-    connection->logger->inc(
-        l_msgr_send_bytes, total_send_size - connection->outcoming_bl.length());
+    connection->logger->inc<l_msgr_send_bytes>(
+      total_send_size - connection->outcoming_bl.length());
     ldout(cct, 10) << __func__ << " sending " << m
                    << (rc ? " continuely." : " done.") << dendl;
   }
@@ -2231,7 +2230,7 @@ CtPtr ProtocolV1::replace(AsyncConnectionRef existing,
               existing->cs = std::move(cs);
               existing->worker->references--;
               new_worker->references++;
-              existing->logger = new_worker->get_perf_counter();
+              existing->logger = &new_worker->get_perf_counter();
               existing->worker = new_worker;
               existing->center = new_center;
               if (existing->delay_state)

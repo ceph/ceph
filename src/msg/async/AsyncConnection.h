@@ -35,6 +35,7 @@
 
 #include "Event.h"
 #include "Stack.h"
+#include "MsgrPerfCounters.h"
 
 class AsyncMessenger;
 class DispatchQueue;
@@ -157,7 +158,7 @@ class AsyncConnection : public Connection {
 
   AsyncMessenger *async_msgr;
   uint64_t conn_id;
-  PerfCounters *logger;
+  msgr_perf_counters_t* logger{nullptr};
   int state;
   ConnectedSocket cs;
   int port;
@@ -216,8 +217,8 @@ class AsyncConnection : public Connection {
   void local_deliver();
   void stop(bool queue_reset);
   void cleanup();
-  PerfCounters *get_perf_counter() {
-    return logger;
+  msgr_perf_counters_t& get_perf_counter() {
+    return *logger;
   }
 
   friend class Protocol;

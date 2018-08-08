@@ -111,7 +111,7 @@ class C_tick_wakeup : public EventCallback {
 AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
                                  Worker *w, bool m2, bool local)
   : Connection(cct, m), delay_state(NULL), async_msgr(m), conn_id(q->get_id()),
-    logger(w->get_perf_counter()),
+    logger(&w->get_perf_counter()),
     state(STATE_NONE), port(-1),
     dispatch_queue(q), recv_buf(NULL),
     recv_max_prefetch(std::max<int64_t>(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
@@ -133,7 +133,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
   } else {
     protocol = std::unique_ptr<Protocol>(new ProtocolV1(this));
   }
-  logger->inc(l_msgr_created_connections);
+  logger->inc<l_msgr_created_connections>();
 }
 
 AsyncConnection::~AsyncConnection()
@@ -396,7 +396,7 @@ void AsyncConnection::process() {
           center->create_file_event(cs.fd(), EVENT_WRITABLE,
                                     read_handler);
         }
-        logger->tinc(l_msgr_running_recv_time,
+        logger->tinc<l_msgr_running_recv_time>(
                ceph::mono_clock::now() - recv_start_time);
         return;
       }
@@ -432,7 +432,7 @@ void AsyncConnection::process() {
 
   protocol->read_event();
 
-  logger->tinc(l_msgr_running_recv_time,
+  logger->tinc<l_msgr_running_recv_time>(
                ceph::mono_clock::now() - recv_start_time);
 }
 
@@ -515,7 +515,7 @@ int AsyncConnection::send_message(Message *m)
 
   // we don't want to consider local message here, it's too lightweight which
   // may disturb users
-  logger->inc(l_msgr_send_messages);
+  logger->inc<l_msgr_send_messages>();
 
   protocol->send_message(m);
   return 0;

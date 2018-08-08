@@ -315,7 +315,7 @@ private:
     // lazy delete, see "deleted_conns"
     Mutex::Locker l(deleted_lock);
     if (deleted_conns.erase(p->second)) {
-      p->second->get_perf_counter()->dec(l_msgr_active_connections);
+      p->second->get_perf_counter().dec<l_msgr_active_connections>();
       conns.erase(p);
       return NULL;
     }
@@ -360,14 +360,14 @@ public:
       // If conn already in, we will return 0
       Mutex::Locker l(deleted_lock);
       if (deleted_conns.erase(existing)) {
-        existing->get_perf_counter()->dec(l_msgr_active_connections);
+        existing->get_perf_counter().dec<l_msgr_active_connections>();
         conns.erase(it);
       } else if (conn != existing) {
         return -1;
       }
     }
     conns[conn->peer_addrs] = conn;
-    conn->get_perf_counter()->inc(l_msgr_active_connections);
+    conn->get_perf_counter().inc<l_msgr_active_connections>();
     accepting_conns.erase(conn);
     return 0;
   }

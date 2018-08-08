@@ -56,7 +56,7 @@ std::function<void ()> NetworkStack::add_thread(unsigned i)
                          << cpp_strerror(errno) << dendl;
           // TODO do something?
         }
-        w->perf_logger->tinc(l_msgr_running_total_time, dur);
+        w->perf_logger.tinc<l_msgr_running_total_time>(dur);
       }
       w->reset();
       w->destroy();
