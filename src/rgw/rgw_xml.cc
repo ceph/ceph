@@ -239,6 +239,8 @@ bool RGWXMLParser::parse(const char *_buf, int len, int done)
 	      XML_ErrorString(XML_GetErrorCode(p)));
     success = false;
   }
+  if (unallocated_objs.size() > 0)
+    success = false;
 
   return success;
 }
