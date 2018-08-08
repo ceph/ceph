@@ -100,9 +100,6 @@ User-visible PG States
 *replay*
   the PG is waiting for clients to replay operations after an OSD crashed
 
-*splitting*
-  the PG is being split into multiple PGs (not functional as of 2012-02)
-
 *scrubbing*
   the PG is being checked for inconsistencies
 
