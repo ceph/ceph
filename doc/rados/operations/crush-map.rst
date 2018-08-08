@@ -154,19 +154,19 @@ leaves, interior nodes with non-device types, and a root node of type
 .. ditaa::
 
                         +-----------------+
-                        | {o}root default |
+                        |{o}root default  |
                         +--------+--------+
                                  |
                  +---------------+---------------+
                  |                               |
-         +-------+-------+                 +-----+-------+
-         | {o}host foo   |                 | {o}host bar |
-         +-------+-------+                 +-----+-------+
+          +------+------+                 +------+------+
+          |{o}host foo  |                 |{o}host bar  |
+          +------+------+                 +------+------+
                  |                               |
          +-------+-------+               +-------+-------+
          |               |               |               |
    +-----+-----+   +-----+-----+   +-----+-----+   +-----+-----+
-   |  osd.0    |   |   osd.1   |   |   osd.2   |   |   osd.3   |
+   |   osd.0   |   |   osd.1   |   |   osd.2   |   |   osd.3   |
    +-----------+   +-----------+   +-----------+   +-----------+
 
 Each node (device or bucket) in the hierarchy has a *weight*
@@ -279,7 +279,7 @@ There are two types of weight sets supported:
  #. A **per-pool** weight set is more flexible in that it allows
     placement to be optimized for each data pool.  Additionally,
     weights can be adjusted for each position of placement, allowing
-    the optimizer to correct for a suble skew of data toward devices
+    the optimizer to correct for a subtle skew of data toward devices
     with small weights relative to their peers (and effect that is
     usually only apparently in very large clusters but which can cause
     balancing problems).
@@ -903,7 +903,7 @@ A few important points
    effectively grandfathered in, and will misbehave if they do not
    support the new feature.
  * If the CRUSH tunables are set to non-legacy values and then later
-   changed back to the defult values, ``ceph-osd`` daemons will not be
+   changed back to the default values, ``ceph-osd`` daemons will not be
    required to support the feature.  However, the OSD peering process
    requires examining and understanding old maps.  Therefore, you
    should not run old versions of the ``ceph-osd`` daemon
