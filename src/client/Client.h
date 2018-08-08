@@ -292,7 +292,7 @@ public:
   }
 
   int mount(const std::string &mount_root, const UserPerm& perms,
-	    bool require_mds=false);
+	    bool require_mds=false, const std::string &fs_name="");
   void unmount();
   void abort_conn();
 
