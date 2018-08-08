@@ -1261,60 +1261,27 @@ Subcommand ``ls`` lists pg with specific pool, osd, state
 
 Usage::
 
-	ceph pg ls {<int>} {active|clean|down|replay|splitting|
-	scrubbing|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale| remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized [active|clean|down|replay|splitting|
-	scrubbing|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale|remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized...]}
+	ceph pg ls {<int>} {<pg-state> [<pg-state>...]}
 
 Subcommand ``ls-by-osd`` lists pg on osd [osd]
 
 Usage::
 
 	ceph pg ls-by-osd <osdname (id|osd.id)> {<int>}
-	{active|clean|down|replay|splitting|
-	scrubbing|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale| remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized [active|clean|down|replay|splitting|
-	scrubbing|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale|remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized...]}
+	{<pg-state> [<pg-state>...]}
 
 Subcommand ``ls-by-pool`` lists pg with pool = [poolname]
 
 Usage::
 
-	ceph pg ls-by-pool <poolstr> {<int>} {active|
-	clean|down|replay|splitting|
-	scrubbing|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale| remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized [active|clean|down|replay|splitting|
-	scrubbing|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale|remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized...]}
+	ceph pg ls-by-pool <poolstr> {<int>} {<pg-state> [<pg-state>...]}
 
 Subcommand ``ls-by-primary`` lists pg with primary = [osd]
 
 Usage::
 
 	ceph pg ls-by-primary <osdname (id|osd.id)> {<int>}
-	{active|clean|down|replay|splitting|
-	scrubbing|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale| remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized [active|clean|down|replay|splitting|
-	scrubbing|degraded|inconsistent|peering|repair|
-	recovery|backfill_wait|incomplete|stale|remapped|
-	deep_scrub|backfill|backfill_toofull|recovery_wait|
-	undersized...]}
+	{<pg-state> [<pg-state>...]}
 
 Subcommand ``map`` shows mapping of pg to osds.
 
