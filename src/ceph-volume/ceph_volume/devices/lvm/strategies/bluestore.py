@@ -135,15 +135,10 @@ class MixedType(object):
         db_size = str(disk.Size(b=(vg_extents['sizes'])))
 
         string = ""
-        string += templates.ssd_volume_group.format(
-            targets='block.db',
-            total_lv_size=str(self.total_ssd_size),
-            total_lvs=vg_extents['parts'],
-            block_lv_size=db_size,
-            block_db_devices=', '.join([ssd['path'] for ssd in self.ssds]),
-            lv_size=str(disk.Size(b=(vg_extents['sizes']))),
+        string += templates.total_osds.format(
             total_osds=len(self.hdds)
         )
+
         string += templates.ssd_volume_group.format(
             target='block.db',
             total_lv_size=str(self.total_ssd_size),
