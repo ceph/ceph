@@ -973,6 +973,13 @@ public:
     return -1;
   }
 
+
+  void get_random_up_osds_by_subtree(int n,     // whoami
+                                     string &subtree,
+                                     int limit, // how many
+                                     set<int> skip,
+                                     set<int> *want) const;
+
   /**
    * get feature bits required by the current structure
    *
