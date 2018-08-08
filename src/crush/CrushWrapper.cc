@@ -891,7 +891,7 @@ void CrushWrapper::get_children_of_type(int id,
 int CrushWrapper::get_rule_failure_domain(int rule_id)
 {
   crush_rule *rule = get_rule(rule_id);
-  if (IS_ERR(rule)) {
+  if (IS_ERR(rule) || !rule) {
     return -ENOENT;
   }
   int type = 0; // default to osd-level
@@ -905,6 +905,18 @@ int CrushWrapper::get_rule_failure_domain(int rule_id)
     }
   }
   return type;
+}
+
+int CrushWrapper::get_top_failure_domain()
+{
+  int max_type = 0; // default to osd-level
+  for (unsigned i = 0; i < crush->max_rules; i++) {
+    int type = get_rule_failure_domain(i);
+    if (type > max_type) {
+      max_type = type;
+    }
+  }
+  return max_type;
 }
 
 int CrushWrapper::_get_leaves(int id, list<int> *leaves) const

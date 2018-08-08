@@ -5185,3 +5185,144 @@ int OSDMap::parse_osd_id_list(const vector<string>& ls, set<int> *out,
   }
   return 0;
 }
+
+void OSDMap::get_random_up_osds_by_failure_domain(int n,     // whoami
+                                                  int limit, // how many
+                                                  set<int> skip,
+                                                  set<int> *out) const {
+  int failure_domain = crush->get_top_failure_domain();
+  if (failure_domain < 1)
+    failure_domain = 1; // promote to host-level
+  auto loc = crush->get_full_location(n);
+  string my_host_name = "unknown";
+  auto it = loc.find(crush->get_type_name(1));
+  if (it != loc.end())
+    my_host_name = it->second;
+  string my_failure_domain_name = "unknown";
+  it = loc.find(crush->get_type_name(failure_domain));
+  if (it != loc.end())
+    my_failure_domain_name = it->second;
+
+  skip.insert(n); // skip myself
+  // classify
+  // *preferred* traces osds from different failure domains
+  // *secondary* traces osds from same failure domain but different hosts
+  // *last* traces osds from same failure domain and same host
+  map<string, map<string, set<int>>> preferred;
+  map<string, set<int>> secondary;
+  vector<int> last;
+  for (int o = 0; o < max_osd; o++) {
+    if (!is_up(o) || skip.count(o))
+      continue;
+    loc = crush->get_full_location(o);
+    string host_name = "unknown";
+    it = loc.find(crush->get_type_name(1));
+    if (it != loc.end())
+      host_name = it->second;
+    string failure_domain_name = "unknown";
+    it = loc.find(crush->get_type_name(failure_domain));
+    if (it != loc.end())
+      failure_domain_name = it->second;
+    if (failure_domain_name == my_failure_domain_name) {
+      if (host_name != my_host_name)
+        secondary[host_name].insert(o);
+      else
+        last.push_back(o);
+    } else
+      preferred[failure_domain_name][host_name].insert(o);
+  }
+  map<string, vector<int>> preferred_list;
+  for (auto &p: preferred) {
+    int num = 0;
+    auto &l = preferred_list[p.first];
+    for (auto &q: p.second)
+      num += q.second.size();
+    l.reserve(num);
+    while (num > 0) {
+      for (auto &q: p.second) {
+        auto &o = q.second;
+        if (o.empty())
+          continue;
+        auto it = o.begin();
+        l.push_back(*it);
+        o.erase(it);
+        --num;
+      }
+    }
+  }
+  vector<int> candidates;
+  // *preferred* first
+  {
+    // use whoami as seed to randomized arrange osds,
+    // so we don't end up choosing same osds for different inputs
+    int index = preferred_list.size() ? (n % preferred_list.size()) : 0;
+    int num = 0;
+    for (auto &p: preferred_list)
+      num += p.second.size();
+    candidates.reserve(num);
+    bool begin = false;
+    int c = 0;
+    while (num > 0) {
+      for (auto &p: preferred_list) {
+        if (c == index)
+          begin = true;
+        c++;
+        if (!begin)
+          continue;
+        auto &o = p.second;
+        if (o.empty())
+          continue;
+        auto it = o.begin();
+        candidates.push_back(*it);
+        o.erase(it);
+        --num;
+      }
+    }
+  }
+  // then *secondary*
+  {
+    int index = secondary.size() ? (n % secondary.size()) : 0;
+    int num = 0;
+    for (auto &p: secondary)
+      num += p.second.size();
+    candidates.reserve(candidates.size() + num + last.size());
+    bool begin = false;
+    int c = 0;
+    while (num > 0) {
+      for (auto &p: secondary) {
+        if (c == index)
+          begin = true;
+        c++;
+        if (!begin)
+          continue;
+        auto &o = p.second;
+        if (o.empty())
+          continue;
+        auto it = o.begin();
+        candidates.push_back(*it);
+        o.erase(it);
+        --num;
+      }
+    }
+  }
+  // *last* too, in case we fail to collect enough candidates above
+  {
+    int index = last.size() ? (n % last.size()) : 0;
+    auto it = last.begin();
+    std::advance(it, index);
+    candidates.insert(candidates.end(), it, last.end());
+    candidates.insert(candidates.end(), last.begin(), it);
+  }
+  if ((int)candidates.size() <= limit) {
+    // all
+    for (auto i : candidates)
+      out->insert(i);
+  } else {
+    for (auto i : candidates) {
+      if (limit <= 0)
+        break;
+      out->insert(i);
+      limit--;
+    }
+  }
+}
