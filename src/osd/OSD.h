@@ -74,10 +74,6 @@
 enum {
   l_osd_first = 10000,
   l_osd_op_wip,
-  l_osd_op_prepare_lat,
-  l_osd_op_r_prepare_lat,
-  l_osd_op_w_prepare_lat,
-  l_osd_op_rw_prepare_lat,
 
   l_osd_op_before_queue_op_lat,
   l_osd_op_before_dequeue_op_lat,
@@ -219,6 +215,20 @@ static constexpr PerfHistogramCommon::axis_config_d op_hist_y_axis_config{
   32,                              ///< Enough to cover requests larger than GB
 };
 
+PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_prepare_lat, "op_prepare_latency",
+  "Latency of client operations (excluding queue time and wait for finished)");
+
+PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_r_prepare_lat, "op_r_prepare_latency",
+  "Latency of read operations (excluding queue time and wait for finished)");
+
+PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_w_prepare_lat, "op_w_prepare_latency",
+  "Latency of write operations (excluding queue time and wait for finished)");
+
+PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_rw_prepare_lat, "op_rw_prepare_latency",
+  "Latency of read-modify-write operations (excluding queue time and wait "
+  "for finished)");
+
+
 PERF_COUNTERS_ADD_U64_COUNTER(l_osd_op, "op", "Client operations",
   "ops", PerfCountersBuilder::PRIO_CRITICAL);
 
@@ -295,6 +305,7 @@ PERF_COUNTERS_ADD_U64_COUNTER_HIST(l_osd_op_rw_lat_outb_hist,
 PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_rw_process_lat, "op_rw_process_latency",
   "Latency of read-modify-write operation (excluding queue time)");
 
+
 PERF_COUNTERS_ADD_U64_COUNTER(l_osd_object_ctx_cache_hit,
   "object_ctx_cache_hit", "Object context cache hits");
 PERF_COUNTERS_ADD_U64_COUNTER(l_osd_object_ctx_cache_total,
@@ -325,7 +336,12 @@ using osd_perf_counters_t = ceph::perf_counters_t<
   l_osd_op_rw_lat_inb_hist,
   l_osd_op_rw_lat_outb_hist,
   l_osd_object_ctx_cache_hit,
-  l_osd_object_ctx_cache_total>;
+  l_osd_object_ctx_cache_total,
+
+  l_osd_op_prepare_lat,
+  l_osd_op_r_prepare_lat,
+  l_osd_op_w_prepare_lat,
+  l_osd_op_rw_prepare_lat>;
 
 class Messenger;
 class Message;

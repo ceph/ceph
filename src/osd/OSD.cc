@@ -3190,22 +3190,6 @@ void OSD::create_logger()
     l_osd_op_wip, "op_wip",
     "Replication operations currently being processed (primary)");
 
-  osd_plb.add_time_avg(
-    l_osd_op_prepare_lat, "op_prepare_latency",
-    "Latency of client operations (excluding queue time and wait for finished)");
-
-  osd_plb.add_time_avg(
-    l_osd_op_r_prepare_lat, "op_r_prepare_latency",
-    "Latency of read operations (excluding queue time and wait for finished)");
-
-  osd_plb.add_time_avg(
-    l_osd_op_w_prepare_lat, "op_w_prepare_latency",
-    "Latency of write operations (excluding queue time and wait for finished)");
-
-  osd_plb.add_time_avg(
-    l_osd_op_rw_prepare_lat, "op_rw_prepare_latency",
-    "Latency of read-modify-write operations (excluding queue time and wait for finished)");
-
   // Now we move on to some more obscure stats, revert to assuming things
   // are low priority unless otherwise specified.
   osd_plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);

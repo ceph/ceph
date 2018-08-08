@@ -2389,13 +2389,13 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   execute_ctx(ctx);
   utime_t prepare_latency = ceph_clock_now();
   prepare_latency -= op->get_dequeued_time();
-  osd->logger->tinc(l_osd_op_prepare_lat, prepare_latency);
+  osd->new_logger.tinc<l_osd_op_prepare_lat>(prepare_latency);
   if (op->may_read() && op->may_write()) {
-    osd->logger->tinc(l_osd_op_rw_prepare_lat, prepare_latency);
+    osd->new_logger.tinc<l_osd_op_rw_prepare_lat>(prepare_latency);
   } else if (op->may_read()) {
-    osd->logger->tinc(l_osd_op_r_prepare_lat, prepare_latency);
+    osd->new_logger.tinc<l_osd_op_r_prepare_lat>(prepare_latency);
   } else if (op->may_write() || op->may_cache()) {
-    osd->logger->tinc(l_osd_op_w_prepare_lat, prepare_latency);
+    osd->new_logger.tinc<l_osd_op_w_prepare_lat>(prepare_latency);
   }
 
   // force recovery of the oldest missing object if too many logs
