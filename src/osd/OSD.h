@@ -75,9 +75,6 @@ enum {
   l_osd_first = 10000,
   l_osd_op_wip,
 
-  l_osd_op_before_queue_op_lat,
-  l_osd_op_before_dequeue_op_lat,
-
   l_osd_sop,
   l_osd_sop_inb,
   l_osd_sop_lat,
@@ -215,6 +212,17 @@ static constexpr PerfHistogramCommon::axis_config_d op_hist_y_axis_config{
   32,                              ///< Enough to cover requests larger than GB
 };
 
+// client io before queue op_wq latency
+PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_before_queue_op_lat,
+  "op_before_queue_op_lat",
+  "Latency of IO before calling queue(before really queue into ShardedOpWq)");
+
+// client io before dequeue_op latency
+PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_before_dequeue_op_lat,
+  "op_before_dequeue_op_lat",
+  "Latency of IO before calling dequeue_op(already dequeued and get PG lock)");
+
+
 PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_prepare_lat, "op_prepare_latency",
   "Latency of client operations (excluding queue time and wait for finished)");
 
@@ -313,6 +321,9 @@ PERF_COUNTERS_ADD_U64_COUNTER(l_osd_object_ctx_cache_total,
 
 
 using osd_perf_counters_t = ceph::perf_counters_t<
+  l_osd_op_before_queue_op_lat,
+  l_osd_op_before_dequeue_op_lat,
+
   l_osd_op,
   l_osd_op_inb,
   l_osd_op_outb,

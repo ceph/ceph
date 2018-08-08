@@ -3194,11 +3194,6 @@ void OSD::create_logger()
   // are low priority unless otherwise specified.
   osd_plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
 
-  osd_plb.add_time_avg(l_osd_op_before_queue_op_lat, "op_before_queue_op_lat",
-    "Latency of IO before calling queue(before really queue into ShardedOpWq)"); // client io before queue op_wq latency
-  osd_plb.add_time_avg(l_osd_op_before_dequeue_op_lat, "op_before_dequeue_op_lat",
-    "Latency of IO before calling dequeue_op(already dequeued and get PG lock)"); // client io before dequeue_op latency
-
   osd_plb.add_u64_counter(
     l_osd_sop, "subop", "Suboperations");
   osd_plb.add_u64_counter(
@@ -9191,7 +9186,7 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch)
   op->osd_trace.keyval("priority", priority);
   op->osd_trace.keyval("cost", cost);
   op->mark_queued_for_pg();
-  logger->tinc(l_osd_op_before_queue_op_lat, latency);
+  new_logger.tinc<l_osd_op_before_queue_op_lat>(latency);
   op_shardedwq.queue(
     OpQueueItem(
       unique_ptr<OpQueueItem::OpQueueable>(new PGOpItem(pg, std::move(op))),
@@ -9243,7 +9238,7 @@ void OSD::dequeue_op(
 	   << " " << *(op->get_req())
 	   << " pg " << *pg << dendl;
 
-  logger->tinc(l_osd_op_before_dequeue_op_lat, latency);
+  new_logger.tinc<l_osd_op_before_dequeue_op_lat>(latency);
 
   auto priv = op->get_req()->get_connection()->get_priv();
   if (auto session = static_cast<Session *>(priv.get()); session) {
