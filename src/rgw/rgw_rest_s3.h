@@ -498,7 +498,7 @@ public:
 
 class RGWHandler_REST_S3 : public RGWHandler_REST {
   friend class RGWRESTMgr_S3;
-
+protected:
   const rgw::auth::StrategyRegistry& auth_registry;
 public:
   static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
@@ -520,6 +520,7 @@ public:
 
 class RGWHandler_REST_Service_S3 : public RGWHandler_REST_S3 {
 protected:
+    bool isSTSenabled;
     bool is_usage_op() {
     return s->info.args.exists("usage");
   }
@@ -527,7 +528,9 @@ protected:
   RGWOp *op_head() override;
   RGWOp *op_post() override;
 public:
-  using RGWHandler_REST_S3::RGWHandler_REST_S3;
+   RGWHandler_REST_Service_S3(const rgw::auth::StrategyRegistry& auth_registry,
+                              bool isSTSenabled) :
+      RGWHandler_REST_S3(auth_registry), isSTSenabled(isSTSenabled) {}
   ~RGWHandler_REST_Service_S3() override = default;
 };
 
@@ -591,9 +594,11 @@ public:
 class RGWRESTMgr_S3 : public RGWRESTMgr {
 private:
   bool enable_s3website;
+  bool enable_sts;
 public:
-  explicit RGWRESTMgr_S3(bool enable_s3website = false)
-    : enable_s3website(enable_s3website) {
+  explicit RGWRESTMgr_S3(bool enable_s3website = false, bool enable_sts = false)
+    : enable_s3website(enable_s3website),
+      enable_sts(enable_sts) {
   }
 
   ~RGWRESTMgr_S3() override = default;
