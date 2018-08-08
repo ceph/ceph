@@ -6523,6 +6523,10 @@ static std::vector<Option> get_rbd_options() {
     .set_default("/tmp")
     .set_description("shared ssd caching data dir"),
 
+    Option("rbd_shared_cache_entries", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(4096)
+    .set_description("shared ssd caching data entries"),
+
     Option("rbd_non_blocking_aio", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("process AIO ops from a dispatch thread to prevent blocking"),

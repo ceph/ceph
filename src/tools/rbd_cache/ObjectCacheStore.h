@@ -15,6 +15,7 @@
 #include "librbd/cache/SharedPersistentObjectCacherFile.h"
 #include "SimplePolicy.hpp"
 
+
 using librados::Rados;
 using librados::IoCtx;
 
@@ -40,10 +41,9 @@ class ObjectCacheStore
 
     int lock_cache(std::string vol_name);
 
-    void evict_thread_body();
-
   private:
-    int _evict_object();
+    void evict_thread_body();
+    int evict_objects();
 
     int do_promote(std::string pool_name, std::string object_name);
 
@@ -61,8 +61,8 @@ class ObjectCacheStore
     librbd::cache::SyncFile *m_cache_file;
 
     Policy* m_policy;
-
-    bool m_evict_go;
+    std::thread* evict_thd;
+    bool m_evict_go = false;
 };
 
 } // namespace rbd

@@ -90,7 +90,8 @@ public:
         }
     });
     std::unique_lock<std::mutex> lk(m);
-    cv.wait(lk);
+    //cv.wait(lk);
+    cv.wait_for(lk, std::chrono::milliseconds(100));
     return 0;
   }
 
