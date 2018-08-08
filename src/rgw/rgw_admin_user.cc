@@ -85,4 +85,30 @@ extern "C" {
     return 0;
   }
 
+  int rgw_admin_remove_user(librgw_admin_user_t librgw_admin_user, const char *uid, const bool purge_data)
+  {
+    RGWUserAdminOpState user_op;
+    rgw_user user_id;
+    user_id.from_str(uid);
+    user_op.set_user_id(user_id);
+    user_op.set_purge_data(purge_data);
+
+    RGWUser user;
+    int ret = 0;
+    ret = user.init(rgw_lib_admin.get_store(), user_op);
+    if (ret < 0) {
+      cerr << "user.init failed: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    std::string err_msg;
+    RGWUserInfo info;
+    ret = user.remove(user_op, &err_msg);
+    if (ret < 0) {
+      cerr << "could not remove user: " << err_msg << std::endl;
+      return -ret;
+    }
+
+    return 0;
+  }
 }

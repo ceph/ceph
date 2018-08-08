@@ -57,6 +57,12 @@ TEST(RGWLibAdmin, INFO) {
   ASSERT_EQ(ret, 0);
 }
 
+TEST(RGWLibAdmin, REMOVE) {
+  bool purge_data = true;
+  int ret = rgw_admin_remove_user(rgw, uid.c_str(), purge_data);
+  ASSERT_EQ(ret, 0);
+}
+
 TEST(RGWLibAdmin, SHUTDOWN) {
   librgw_admin_user_shutdown(rgw);
 }

@@ -56,6 +56,12 @@ int rgw_admin_create_user(librgw_admin_user_t rgw_admin_user, const char *uid,
  */
 int rgw_admin_user_info(librgw_admin_user_t rgw_admin_user,const char * uid, rgw_user_info* user_info);
 
+/*
+ * remove rgw user
+ */
+int rgw_admin_remove_user(librgw_admin_user_t rgw_admin_user,const char * uid, const bool purge_data);
+
+
 #ifdef __cplusplus
 }
 #endif
