@@ -5974,9 +5974,10 @@ uint64_t FileStore::estimate_objects_overhead(uint64_t num_objects)
   return res;
 }
 
-int FileStore::apply_layout_settings(const coll_t &cid)
+int FileStore::apply_layout_settings(const coll_t &cid, int target_level)
 {
-  dout(20) << __FUNC__ << ": " << cid << dendl;
+  dout(20) << __FUNC__ << ": " << cid << " target level: " 
+           << target_level << dendl;
   Index index;
   int r = get_index(cid, &index);
   if (r < 0) {
@@ -5985,7 +5986,7 @@ int FileStore::apply_layout_settings(const coll_t &cid)
     return r;
   }
 
-  return index->apply_layout_settings();
+  return index->apply_layout_settings(target_level);
 }
 
 
