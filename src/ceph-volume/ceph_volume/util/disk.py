@@ -484,31 +484,31 @@ class Size(object):
 
     def __add__(self, other):
         if isinstance(other, Size):
-            self._b = self._b + other._b
-            return self
+            _b = self._b + other._b
+            return Size(b=_b)
         raise TypeError('Cannot add "Size" object with int')
 
     def __sub__(self, other):
         if isinstance(other, Size):
-            self._b = self._b - other._b
-            return self
+            _b = self._b - other._b
+            return Size(b=_b)
         raise TypeError('Cannot subtract "Size" object from int')
 
     def __mul__(self, other):
         if isinstance(other, Size):
             raise TypeError('Cannot multiply with "Size" object')
-        self._b = self._b * other
-        return self
+        _b = self._b * other
+        return Size(b=_b)
 
     def __truediv__(self, other):
         if isinstance(other, Size):
-            raise TypeError('Cannot divide by "Size" object')
+            return self._b / other._b
         self._b = self._b / other
         return self
 
     def __div__(self, other):
         if isinstance(other, Size):
-            raise TypeError('Cannot divide by "Size" object')
+            return self._b / other._b
         self._b = self._b / other
         return self
 
