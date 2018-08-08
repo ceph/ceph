@@ -3,7 +3,7 @@ import { Component, OnInit } from '@angular/core';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { SummaryService } from '../../../shared/services/summary.service';
-import { TaskManagerMessageService } from '../../../shared/services/task-manager-message.service';
+import { TaskMessageService } from '../../../shared/services/task-message.service';
 
 @Component({
   selector: 'cd-task-manager',
@@ -18,7 +18,7 @@ export class TaskManagerComponent implements OnInit {
 
   constructor(
     private summaryService: SummaryService,
-    private taskMessageManager: TaskManagerMessageService
+    private taskMessageService: TaskMessageService
   ) {}
 
   ngOnInit() {
@@ -33,14 +33,14 @@ export class TaskManagerComponent implements OnInit {
 
   _handleTasks(executingTasks: ExecutingTask[], finishedTasks: FinishedTask[]) {
     for (const excutingTask of executingTasks) {
-      excutingTask.description = this.taskMessageManager.getRunningTitle(excutingTask);
+      excutingTask.description = this.taskMessageService.getRunningTitle(excutingTask);
     }
     for (const finishedTask of finishedTasks) {
       if (finishedTask.success === false) {
-        finishedTask.description = this.taskMessageManager.getErrorTitle(finishedTask);
-        finishedTask.errorMessage = this.taskMessageManager.getErrorMessage(finishedTask);
+        finishedTask.description = this.taskMessageService.getErrorTitle(finishedTask);
+        finishedTask.errorMessage = this.taskMessageService.getErrorMessage(finishedTask);
       } else {
-        finishedTask.description = this.taskMessageManager.getSuccessTitle(finishedTask);
+        finishedTask.description = this.taskMessageService.getSuccessTitle(finishedTask);
       }
     }
     this.executingTasks = executingTasks;

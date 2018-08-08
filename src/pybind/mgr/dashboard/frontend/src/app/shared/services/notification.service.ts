@@ -8,7 +8,7 @@ import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotification } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
 import { ServicesModule } from './services.module';
-import { TaskManagerMessageService } from './task-manager-message.service';
+import { TaskMessageService } from './task-message.service';
 
 @Injectable({
   providedIn: ServicesModule
@@ -22,10 +22,7 @@ export class NotificationService {
 
   KEY = 'cdNotifications';
 
-  constructor(
-    public toastr: ToastsManager,
-    private taskManagerMessageService: TaskManagerMessageService
-  ) {
+  constructor(public toastr: ToastsManager, private taskMessageService: TaskMessageService) {
     const stringNotifications = localStorage.getItem(this.KEY);
     let notifications: CdNotification[] = [];
 
@@ -97,15 +94,12 @@ export class NotificationService {
 
   notifyTask(finishedTask: FinishedTask, success: boolean = true) {
     if (finishedTask.success && success) {
-      this.show(
-        NotificationType.success,
-        this.taskManagerMessageService.getSuccessTitle(finishedTask)
-      );
+      this.show(NotificationType.success, this.taskMessageService.getSuccessTitle(finishedTask));
     } else {
       this.show(
         NotificationType.error,
-        this.taskManagerMessageService.getErrorTitle(finishedTask),
-        this.taskManagerMessageService.getErrorMessage(finishedTask)
+        this.taskMessageService.getErrorTitle(finishedTask),
+        this.taskMessageService.getErrorMessage(finishedTask)
       );
     }
   }

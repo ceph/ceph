@@ -17,7 +17,7 @@ export class TaskMessageOperation {
   }
 }
 
-class TaskManagerMessage {
+class TaskMessage {
   operation: TaskMessageOperation;
   involves: (object) => string;
   errors: (metadata) => object;
@@ -48,8 +48,8 @@ class TaskManagerMessage {
 @Injectable({
   providedIn: ServicesModule
 })
-export class TaskManagerMessageService {
-  defaultMessage = new TaskManagerMessage(
+export class TaskMessageService {
+  defaultMessage = new TaskMessage(
     new TaskMessageOperation('Executing', 'execute', 'Executed'),
     (metadata) => {
       return (metadata && (Components[metadata.component] || metadata.component)) || 'unknown task';
@@ -74,28 +74,16 @@ export class TaskManagerMessageService {
   };
 
   messages = {
-    'rbd/create': new TaskManagerMessage(
-      this.commonOperations.create,
-      this.rbd.default,
-      (metadata) => ({
-        '17': `Name is already used by ${this.rbd.default(metadata)}.`
-      })
-    ),
-    'rbd/edit': new TaskManagerMessage(
-      this.commonOperations.update,
-      this.rbd.default,
-      (metadata) => ({
-        '17': `Name is already used by ${this.rbd.default(metadata)}.`
-      })
-    ),
-    'rbd/delete': new TaskManagerMessage(
-      this.commonOperations.delete,
-      this.rbd.default,
-      (metadata) => ({
-        '39': `${this.rbd.default(metadata)} contains snapshots.`
-      })
-    ),
-    'rbd/clone': new TaskManagerMessage(
+    'rbd/create': new TaskMessage(this.commonOperations.create, this.rbd.default, (metadata) => ({
+      '17': `Name is already used by ${this.rbd.default(metadata)}.`
+    })),
+    'rbd/edit': new TaskMessage(this.commonOperations.update, this.rbd.default, (metadata) => ({
+      '17': `Name is already used by ${this.rbd.default(metadata)}.`
+    })),
+    'rbd/delete': new TaskMessage(this.commonOperations.delete, this.rbd.default, (metadata) => ({
+      '39': `${this.rbd.default(metadata)} contains snapshots.`
+    })),
+    'rbd/clone': new TaskMessage(
       new TaskMessageOperation('Cloning', 'clone', 'Cloned'),
       this.rbd.child,
       (metadata) => ({
@@ -103,39 +91,39 @@ export class TaskManagerMessageService {
         '22': `Snapshot of ${this.rbd.child(metadata)} must be protected.`
       })
     ),
-    'rbd/copy': new TaskManagerMessage(
+    'rbd/copy': new TaskMessage(
       new TaskMessageOperation('Copying', 'copy', 'Copied'),
       this.rbd.destination,
       (metadata) => ({
         '17': `Name is already used by ${this.rbd.destination(metadata)}.`
       })
     ),
-    'rbd/flatten': new TaskManagerMessage(
+    'rbd/flatten': new TaskMessage(
       new TaskMessageOperation('Flattening', 'flatten', 'Flattened'),
       this.rbd.default
     ),
-    'rbd/snap/create': new TaskManagerMessage(
+    'rbd/snap/create': new TaskMessage(
       this.commonOperations.create,
       this.rbd.snapshot,
       (metadata) => ({
         '17': `Name is already used by ${this.rbd.snapshot(metadata)}.`
       })
     ),
-    'rbd/snap/edit': new TaskManagerMessage(
+    'rbd/snap/edit': new TaskMessage(
       this.commonOperations.update,
       this.rbd.snapshot,
       (metadata) => ({
         '16': `Cannot unprotect ${this.rbd.snapshot(metadata)} because it contains child images.`
       })
     ),
-    'rbd/snap/delete': new TaskManagerMessage(
+    'rbd/snap/delete': new TaskMessage(
       this.commonOperations.delete,
       this.rbd.snapshot,
       (metadata) => ({
         '16': `Cannot delete ${this.rbd.snapshot(metadata)} because it's protected.`
       })
     ),
-    'rbd/snap/rollback': new TaskManagerMessage(
+    'rbd/snap/rollback': new TaskMessage(
       new TaskMessageOperation('Rolling back', 'rollback', 'Rolled back'),
       this.rbd.snapshot
     )
