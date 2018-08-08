@@ -2,14 +2,14 @@ import * as _ from 'lodash';
 
 import { FinishedTask } from '../models/finished-task';
 import { TaskException } from '../models/task-exception';
-import { TaskManagerMessageService, TaskMessageOperation } from './task-manager-message.service';
+import { TaskMessageOperation, TaskMessageService } from './task-message.service';
 
 describe('TaskManagerMessageService', () => {
-  let service: TaskManagerMessageService;
+  let service: TaskMessageService;
   let finishedTask: FinishedTask;
 
   beforeEach(() => {
-    service = new TaskManagerMessageService();
+    service = new TaskMessageService();
     finishedTask = new FinishedTask();
   });
 

@@ -9,8 +9,8 @@ import { FinishedTask } from '../models/finished-task';
 import { NotificationService } from './notification.service';
 import { ServicesModule } from './services.module';
 import { SummaryService } from './summary.service';
-import { TaskManagerMessageService } from './task-manager-message.service';
 import { TaskManagerService } from './task-manager.service';
+import { TaskMessageService } from './task-message.service';
 
 @Injectable({
   providedIn: ServicesModule
@@ -19,7 +19,7 @@ export class TaskWrapperService {
   constructor(
     private notificationService: NotificationService,
     private summaryService: SummaryService,
-    private taskManagerMessageService: TaskManagerMessageService,
+    private taskMessageService: TaskMessageService,
     private taskManagerService: TaskManagerService
   ) {}
 
@@ -50,8 +50,7 @@ export class TaskWrapperService {
   _handleExecutingTasks(task: FinishedTask) {
     this.notificationService.show(
       NotificationType.info,
-      this.taskManagerMessageService.getRunningTitle(task),
-      this.taskManagerMessageService.getErrorTitle(task)
+      this.taskMessageService.getRunningTitle(task)
     );
 
     const executingTask = new ExecutingTask(task.name, task.metadata);
