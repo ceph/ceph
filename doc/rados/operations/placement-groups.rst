@@ -11,7 +11,7 @@ When creating a new pool with::
 
         ceph osd pool create {pool-name} pg_num
 
-it is mandatory to choose the value of ``pg_num`` because it cannot be
+it is mandatory to choose the value of ``pg_num`` because it cannot (currently) be
 calculated automatically. Here are a few values commonly used:
 
 - Less than 5 OSDs set ``pg_num`` to 128
@@ -274,7 +274,7 @@ designed your Ceph cluster to maximize `data durability`_,
 `object distribution`_ and minimize `resource usage`_.
 
 The result should be **rounded up to the nearest power of two.**
-Rounding up is optional, but recommended for CRUSH to evenly balance
+Rounding up is optional, but recommended for CRUSH to more evenly balance
 the number of objects among placement groups.
 
 As an example, for a cluster with 200 OSDs and a pool size of 3
@@ -324,8 +324,8 @@ placement groups for placement, execute the following::
 
         ceph osd pool set {pool-name} pgp_num {pgp_num}
 
-Conversely, when decreasing the number of PGs, ``pgp_num`` must first
-be lowered before ``pg_num`` can be reduced.  (Note that support for reducing ``pg_num`` was first added in Mimic 13.2.z.)
+When decreasing the number of PGs, ``pgp_num`` is adjusted
+automatically for you.
 
 Get the Number of Placement Groups
 ==================================
