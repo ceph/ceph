@@ -5443,7 +5443,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
       }
     }
     if (r == -EIO) {
-      r = rep_repair_primary_object(soid, ctx->op);
+      r = rep_repair_primary_object(soid, ctx);
     }
     if (r >= 0)
       op.extent.length = r;
@@ -5537,7 +5537,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       r = pgbackend->objects_read_sync(soid, miter->first, miter->second,
 				       op.flags, &tmpbl);
       if (r == -EIO) {
-        r = rep_repair_primary_object(soid, ctx->op);
+        r = rep_repair_primary_object(soid, ctx);
       }
       if (r < 0) {
 	return r;
@@ -5584,7 +5584,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
           << " full-object read crc 0x" << crc
           << " != expected 0x" << oi.data_digest
           << std::dec << " on " << soid;
-        r = rep_repair_primary_object(soid, ctx->op);
+        r = rep_repair_primary_object(soid, ctx);
 	if (r < 0) {
 	  return r;
 	}
@@ -15007,8 +15007,9 @@ bool PrimaryLogPG::check_osdmap_full(const set<pg_shard_t> &missing_on)
     return osd->check_osdmap_full(missing_on);
 }
 
-int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpRequestRef op)
+int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ctx)
 {
+  OpRequestRef op = ctx->op;
   // Only supports replicated pools
   assert(!pool.info.is_erasure());
   assert(is_primary());
@@ -15022,23 +15023,8 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpRequestRef 
   }
 
   assert(!pg_log.get_missing().is_missing(soid));
-  bufferlist bv;
-  object_info_t oi;
-  eversion_t v;
-  int r = get_pgbackend()->objects_get_attr(soid, OI_ATTR, &bv);
-  if (r < 0) {
-    // Leave v and try to repair without a version, getting attr failed
-    dout(0) << __func__ << ": Need version of replica, objects_get_attr failed: "
-	    << soid << " error=" << r << dendl;
-  } else try {
-    auto bliter = bv.cbegin();
-    decode(oi, bliter);
-    v = oi.version;
-  } catch (...) {
-    // Leave v as default constructed. This will fail when sent to older OSDs, but
-    // not much worse than failing here.
-    dout(0) << __func__ << ": Need version of replica, bad object_info_t: " << soid << dendl;
-  }
+  auto& oi = ctx->new_obs.oi;
+  eversion_t v = oi.version;
 
   missing_loc.add_missing(soid, v, eversion_t());
   if (primary_error(soid, v)) {

@@ -1839,7 +1839,7 @@ public:
   bool maybe_preempt_replica_scrub(const hobject_t& oid) override {
     return write_blocked_by_scrub(oid);
   }
-  int rep_repair_primary_object(const hobject_t& soid, OpRequestRef op);
+  int rep_repair_primary_object(const hobject_t& soid, OpContext *ctx);
 
   // attr cache handling
   void setattr_maybe_cache(
