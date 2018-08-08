@@ -244,6 +244,23 @@ int ceph_create_from_rados(struct ceph_mount_info **cmount, rados_t cluster);
  */
 int ceph_init(struct ceph_mount_info *cmount);
 
+/**
+ * Optionally set which filesystem to mount, before calling mount.
+ *
+ * An error will be returned if this libcephfs instance is already
+ * mounted. This function is an alternative to setting the global
+ * client_mds_namespace setting.  Using this function enables multiple
+ * libcephfs instances in the same process to mount different filesystems.
+ *
+ * The filesystem name is *not* validated in this function.  That happens
+ * during mount(), where an ENOENT error will result if a non-existent
+ * filesystem was specified here.
+ *
+ * @param cmount the mount info handle
+ * @returns 0 on success, negative error code on failure
+ */
+int ceph_select_filesystem(struct ceph_mount_info *cmount, const char *fs_name);
+
 
 /**
  * Perform a mount using the path for the root of the mount.
