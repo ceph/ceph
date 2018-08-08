@@ -4104,33 +4104,33 @@ void PrimaryLogPG::log_op_stats(const OpRequest& op,
   const utime_t latency = now - m->get_recv_stamp();
   const utime_t process_latency = now - op.get_dequeued_time();
 
-  osd->logger->inc(l_osd_op);
+  osd->new_logger.inc<l_osd_op>();
 
-  osd->logger->inc(l_osd_op_outb, outb);
-  osd->logger->inc(l_osd_op_inb, inb);
-  osd->logger->tinc(l_osd_op_lat, latency);
-  osd->logger->tinc(l_osd_op_process_lat, process_latency);
+  osd->new_logger.inc<l_osd_op_outb>(outb);
+  osd->new_logger.inc<l_osd_op_inb>(inb);
+  osd->new_logger.tinc<l_osd_op_lat>(latency);
+  osd->new_logger.tinc<l_osd_op_process_lat>(process_latency);
 
   if (op.may_read() && op.may_write()) {
-    osd->logger->inc(l_osd_op_rw);
-    osd->logger->inc(l_osd_op_rw_inb, inb);
-    osd->logger->inc(l_osd_op_rw_outb, outb);
-    osd->logger->tinc(l_osd_op_rw_lat, latency);
-    osd->logger->hinc(l_osd_op_rw_lat_inb_hist, latency.to_nsec(), inb);
-    osd->logger->hinc(l_osd_op_rw_lat_outb_hist, latency.to_nsec(), outb);
-    osd->logger->tinc(l_osd_op_rw_process_lat, process_latency);
+    osd->new_logger.inc<l_osd_op_rw>();
+    osd->new_logger.inc<l_osd_op_rw_inb>(inb);
+    osd->new_logger.inc<l_osd_op_rw_outb>(outb);
+    osd->new_logger.tinc<l_osd_op_rw_lat>(latency);
+    osd->new_logger.hinc<l_osd_op_rw_lat_inb_hist>(latency.to_nsec(), inb);
+    osd->new_logger.hinc<l_osd_op_rw_lat_outb_hist>(latency.to_nsec(), outb);
+    osd->new_logger.tinc<l_osd_op_rw_process_lat>(process_latency);
   } else if (op.may_read()) {
-    osd->logger->inc(l_osd_op_r);
-    osd->logger->inc(l_osd_op_r_outb, outb);
-    osd->logger->tinc(l_osd_op_r_lat, latency);
-    osd->logger->hinc(l_osd_op_r_lat_outb_hist, latency.to_nsec(), outb);
-    osd->logger->tinc(l_osd_op_r_process_lat, process_latency);
+    osd->new_logger.inc<l_osd_op_r>();
+    osd->new_logger.inc<l_osd_op_r_outb>(outb);
+    osd->new_logger.tinc<l_osd_op_r_lat>(latency);
+    osd->new_logger.hinc<l_osd_op_r_lat_outb_hist>(latency.to_nsec(), outb);
+    osd->new_logger.tinc<l_osd_op_r_process_lat>(process_latency);
   } else if (op.may_write() || op.may_cache()) {
-    osd->logger->inc(l_osd_op_w);
-    osd->logger->inc(l_osd_op_w_inb, inb);
-    osd->logger->tinc(l_osd_op_w_lat, latency);
-    osd->logger->hinc(l_osd_op_w_lat_inb_hist, latency.to_nsec(), inb);
-    osd->logger->tinc(l_osd_op_w_process_lat, process_latency);
+    osd->new_logger.inc<l_osd_op_w>();
+    osd->new_logger.inc<l_osd_op_w_inb>(inb);
+    osd->new_logger.tinc<l_osd_op_w_lat>(latency);
+    osd->new_logger.hinc<l_osd_op_w_lat_inb_hist>(latency.to_nsec(), inb);
+    osd->new_logger.tinc<l_osd_op_w_process_lat>(process_latency);
   } else {
     ceph_abort();
   }

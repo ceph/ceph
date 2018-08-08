@@ -216,6 +216,7 @@ OSDService::OSDService(OSD *osd) :
   pg_recovery_stats(osd->pg_recovery_stats),
   cluster_messenger(osd->cluster_messenger),
   client_messenger(osd->client_messenger),
+  new_logger(osd->new_logger),
   logger(osd->logger),
   recoverystate_perf(osd->recoverystate_perf),
   monc(osd->monc),
@@ -2059,6 +2060,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   objecter_messenger(osdc_messenger),
   monc(mc),
   mgrc(cct_, client_messenger),
+  new_logger("osd"),
   logger(NULL),
   recoverystate_perf(NULL),
   store(store_),
@@ -2111,6 +2113,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     &command_tp),
   service(this)
 {
+  cct->get_perfcounters_collection()->add(&new_logger);
+
   monc->set_messenger(client_messenger);
   op_tracker.set_complaint_and_threshold(cct->_conf->osd_op_complaint_time,
                                          cct->_conf->osd_op_log_threshold);
@@ -2147,6 +2151,7 @@ OSD::~OSD()
   delete authorize_handler_cluster_registry;
   delete authorize_handler_service_registry;
   delete class_handler;
+  cct->get_perfcounters_collection()->remove(&new_logger);
   cct->get_perfcounters_collection()->remove(recoverystate_perf);
   cct->get_perfcounters_collection()->remove(logger);
   delete recoverystate_perf;
@@ -3178,111 +3183,25 @@ void OSD::create_logger()
 
   PerfCountersBuilder osd_plb(cct, "osd", l_osd_first, l_osd_last);
 
-  // Latency axis configuration for op histograms, values are in nanoseconds
-  PerfHistogramCommon::axis_config_d op_hist_x_axis_config{
-    "Latency (usec)",
-    PerfHistogramCommon::SCALE_LOG2, ///< Latency in logarithmic scale
-    0,                               ///< Start at 0
-    100000,                          ///< Quantization unit is 100usec
-    32,                              ///< Enough to cover much longer than slow requests
-  };
-
-  // Op size axis configuration for op histograms, values are in bytes
-  PerfHistogramCommon::axis_config_d op_hist_y_axis_config{
-    "Request size (bytes)",
-    PerfHistogramCommon::SCALE_LOG2, ///< Request size in logarithmic scale
-    0,                               ///< Start at 0
-    512,                             ///< Quantization unit is 512 bytes
-    32,                              ///< Enough to cover requests larger than GB
-  };
-
-
   // All the basic OSD operation stats are to be considered useful
   osd_plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
 
   osd_plb.add_u64(
     l_osd_op_wip, "op_wip",
     "Replication operations currently being processed (primary)");
-  osd_plb.add_u64_counter(
-    l_osd_op, "op",
-    "Client operations",
-    "ops", PerfCountersBuilder::PRIO_CRITICAL);
-  osd_plb.add_u64_counter(
-    l_osd_op_inb,   "op_in_bytes",
-    "Client operations total write size",
-    "wr", PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
-  osd_plb.add_u64_counter(
-    l_osd_op_outb,  "op_out_bytes",
-    "Client operations total read size",
-    "rd", PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
-  osd_plb.add_time_avg(
-    l_osd_op_lat,   "op_latency",
-    "Latency of client operations (including queue time)",
-    "l", 9);
-  osd_plb.add_time_avg(
-    l_osd_op_process_lat, "op_process_latency",
-    "Latency of client operations (excluding queue time)");
+
   osd_plb.add_time_avg(
     l_osd_op_prepare_lat, "op_prepare_latency",
     "Latency of client operations (excluding queue time and wait for finished)");
 
-  osd_plb.add_u64_counter(
-    l_osd_op_r, "op_r", "Client read operations");
-  osd_plb.add_u64_counter(
-    l_osd_op_r_outb, "op_r_out_bytes", "Client data read", NULL, PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
-  osd_plb.add_time_avg(
-    l_osd_op_r_lat, "op_r_latency",
-    "Latency of read operation (including queue time)");
-  osd_plb.add_u64_counter_histogram(
-    l_osd_op_r_lat_outb_hist, "op_r_latency_out_bytes_histogram",
-    op_hist_x_axis_config, op_hist_y_axis_config,
-    "Histogram of operation latency (including queue time) + data read");
-  osd_plb.add_time_avg(
-    l_osd_op_r_process_lat, "op_r_process_latency",
-    "Latency of read operation (excluding queue time)");
   osd_plb.add_time_avg(
     l_osd_op_r_prepare_lat, "op_r_prepare_latency",
     "Latency of read operations (excluding queue time and wait for finished)");
-  osd_plb.add_u64_counter(
-    l_osd_op_w, "op_w", "Client write operations");
-  osd_plb.add_u64_counter(
-    l_osd_op_w_inb, "op_w_in_bytes", "Client data written");
-  osd_plb.add_time_avg(
-    l_osd_op_w_lat,  "op_w_latency",
-    "Latency of write operation (including queue time)");
-  osd_plb.add_u64_counter_histogram(
-    l_osd_op_w_lat_inb_hist, "op_w_latency_in_bytes_histogram",
-    op_hist_x_axis_config, op_hist_y_axis_config,
-    "Histogram of operation latency (including queue time) + data written");
-  osd_plb.add_time_avg(
-    l_osd_op_w_process_lat, "op_w_process_latency",
-    "Latency of write operation (excluding queue time)");
+
   osd_plb.add_time_avg(
     l_osd_op_w_prepare_lat, "op_w_prepare_latency",
     "Latency of write operations (excluding queue time and wait for finished)");
-  osd_plb.add_u64_counter(
-    l_osd_op_rw, "op_rw",
-    "Client read-modify-write operations");
-  osd_plb.add_u64_counter(
-    l_osd_op_rw_inb, "op_rw_in_bytes",
-    "Client read-modify-write operations write in", NULL, PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
-  osd_plb.add_u64_counter(
-    l_osd_op_rw_outb,"op_rw_out_bytes",
-    "Client read-modify-write operations read out ", NULL, PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
-  osd_plb.add_time_avg(
-    l_osd_op_rw_lat, "op_rw_latency",
-    "Latency of read-modify-write operation (including queue time)");
-  osd_plb.add_u64_counter_histogram(
-    l_osd_op_rw_lat_inb_hist, "op_rw_latency_in_bytes_histogram",
-    op_hist_x_axis_config, op_hist_y_axis_config,
-    "Histogram of rw operation latency (including queue time) + data written");
-  osd_plb.add_u64_counter_histogram(
-    l_osd_op_rw_lat_outb_hist, "op_rw_latency_out_bytes_histogram",
-    op_hist_x_axis_config, op_hist_y_axis_config,
-    "Histogram of rw operation latency (including queue time) + data read");
-  osd_plb.add_time_avg(
-    l_osd_op_rw_process_lat, "op_rw_process_latency",
-    "Latency of read-modify-write operation (excluding queue time)");
+
   osd_plb.add_time_avg(
     l_osd_op_rw_prepare_lat, "op_rw_prepare_latency",
     "Latency of read-modify-write operations (excluding queue time and wait for finished)");

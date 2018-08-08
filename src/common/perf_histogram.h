@@ -36,8 +36,8 @@ public:
     int64_t m_min = 0;
     int64_t m_quant_size = 0;
     int32_t m_buckets = 0;
-    axis_config_d() = default;
-    axis_config_d(const char* name,
+    constexpr axis_config_d() = default;
+    constexpr axis_config_d(const char* name,
 		  scale_type_d scale_type,
 		  int64_t min,
 		  int64_t quant_size,

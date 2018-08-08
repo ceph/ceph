@@ -74,31 +74,9 @@
 enum {
   l_osd_first = 10000,
   l_osd_op_wip,
-  l_osd_op,
-  l_osd_op_inb,
-  l_osd_op_outb,
-  l_osd_op_lat,
-  l_osd_op_process_lat,
   l_osd_op_prepare_lat,
-  l_osd_op_r,
-  l_osd_op_r_outb,
-  l_osd_op_r_lat,
-  l_osd_op_r_lat_outb_hist,
-  l_osd_op_r_process_lat,
   l_osd_op_r_prepare_lat,
-  l_osd_op_w,
-  l_osd_op_w_inb,
-  l_osd_op_w_lat,
-  l_osd_op_w_lat_inb_hist,
-  l_osd_op_w_process_lat,
   l_osd_op_w_prepare_lat,
-  l_osd_op_rw,
-  l_osd_op_rw_inb,
-  l_osd_op_rw_outb,
-  l_osd_op_rw_lat,
-  l_osd_op_rw_lat_inb_hist,
-  l_osd_op_rw_lat_outb_hist,
-  l_osd_op_rw_process_lat,
   l_osd_op_rw_prepare_lat,
 
   l_osd_op_before_queue_op_lat,
@@ -226,6 +204,126 @@ enum {
   rs_last,
 };
 
+// Latency axis configuration for op histograms, values are in nanoseconds
+static constexpr PerfHistogramCommon::axis_config_d op_hist_x_axis_config{
+  "Latency (usec)",
+  PerfHistogramCommon::SCALE_LOG2, ///< Latency in logarithmic scale
+  0,                               ///< Start at 0
+  100000,                          ///< Quantization unit is 100usec
+  32,                              ///< Enough to cover much longer than slow requests
+};
+
+// Op size axis configuration for op histograms, values are in bytes
+static constexpr PerfHistogramCommon::axis_config_d op_hist_y_axis_config{
+  "Request size (bytes)",
+  PerfHistogramCommon::SCALE_LOG2, ///< Request size in logarithmic scale
+  0,                               ///< Start at 0
+  512,                             ///< Quantization unit is 512 bytes
+  32,                              ///< Enough to cover requests larger than GB
+};
+
+PERF_COUNTERS_ADD_U64_COUNTER(l_osd_op, "op", "Client operations",
+  "ops", PerfCountersBuilder::PRIO_CRITICAL);
+
+PERF_COUNTERS_ADD_U64_COUNTER(l_osd_op_inb, "op_in_bytes",
+  "Client operations total write size", "wr",
+  PerfCountersBuilder::PRIO_INTERESTING, UNIT_BYTES);
+
+PERF_COUNTERS_ADD_U64_COUNTER(l_osd_op_outb, "op_out_bytes",
+  "Client operations total read size", "rd",
+  PerfCountersBuilder::PRIO_INTERESTING, UNIT_BYTES);
+
+PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_lat, "op_latency",
+  "Latency of client operations (including queue time)", "l", 9);
+
+PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_process_lat, "op_process_latency",
+  "Latency of client operations (excluding queue time)");
+
+PERF_COUNTERS_ADD_U64_COUNTER(l_osd_op_rw, "op_rw",
+  "Client read-modify-write operations");
+
+PERF_COUNTERS_ADD_U64_COUNTER(l_osd_op_rw_inb, "op_rw_in_bytes",
+  "Client read-modify-write operations write in", nullptr,
+  PerfCountersBuilder::PRIO_USEFUL, UNIT_BYTES);
+
+PERF_COUNTERS_ADD_U64_COUNTER(l_osd_op_rw_outb, "op_rw_out_bytes",
+  "Client read-modify-write operations read out ", nullptr,
+  PerfCountersBuilder::PRIO_USEFUL, UNIT_BYTES);
+
+PERF_COUNTERS_ADD_U64_COUNTER(l_osd_op_r, "op_r", "Client read operations");
+
+PERF_COUNTERS_ADD_U64_COUNTER(l_osd_op_r_outb, "op_r_out_bytes",
+  "Client data read", nullptr, PerfCountersBuilder::PRIO_USEFUL, UNIT_BYTES);
+
+PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_r_lat, "op_r_latency",
+  "Latency of read operation (including queue time)");
+
+PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_r_process_lat, "op_r_process_latency",
+  "Latency of read operation (excluding queue time)");
+
+PERF_COUNTERS_ADD_U64_COUNTER_HIST(l_osd_op_r_lat_outb_hist,
+  "op_r_latency_out_bytes_histogram",
+  op_hist_x_axis_config, op_hist_y_axis_config,
+  "Histogram of operation latency (including queue time) + data read");
+
+PERF_COUNTERS_ADD_U64_COUNTER(l_osd_op_w, "op_w", "Client write operations");
+
+PERF_COUNTERS_ADD_U64_COUNTER(l_osd_op_w_inb, "op_w_in_bytes",
+  "Client data written");
+
+PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_w_lat, "op_w_latency",
+  "Latency of write operation (including queue time)");
+
+PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_w_process_lat, "op_w_process_latency",
+  "Latency of write operation (excluding queue time)");
+
+PERF_COUNTERS_ADD_U64_COUNTER_HIST(l_osd_op_w_lat_inb_hist,
+  "op_w_latency_in_bytes_histogram",
+  op_hist_x_axis_config, op_hist_y_axis_config,
+  "Histogram of operation latency (including queue time) + data written");
+
+PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_rw_lat, "op_rw_latency",
+  "Latency of read-modify-write operation (including queue time)");
+
+PERF_COUNTERS_ADD_U64_COUNTER_HIST(l_osd_op_rw_lat_inb_hist,
+  "op_rw_latency_in_bytes_histogram",
+  op_hist_x_axis_config, op_hist_y_axis_config,
+  "Histogram of rw operation latency (including queue time) + data written");
+
+PERF_COUNTERS_ADD_U64_COUNTER_HIST(l_osd_op_rw_lat_outb_hist,
+  "op_rw_latency_out_bytes_histogram",
+  op_hist_x_axis_config, op_hist_y_axis_config,
+  "Histogram of rw operation latency (including queue time) + data read");
+
+
+
+PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_rw_process_lat, "op_rw_process_latency",
+  "Latency of read-modify-write operation (excluding queue time)");
+
+using osd_perf_counters_t = ceph::perf_counters_t<
+  l_osd_op,
+  l_osd_op_inb,
+  l_osd_op_outb,
+  l_osd_op_lat,
+  l_osd_op_process_lat,
+  l_osd_op_r,
+  l_osd_op_r_outb,
+  l_osd_op_r_lat,
+  l_osd_op_r_process_lat,
+  l_osd_op_r_lat_outb_hist,
+  l_osd_op_w,
+  l_osd_op_w_inb,
+  l_osd_op_w_lat,
+  l_osd_op_w_process_lat,
+  l_osd_op_w_lat_inb_hist,
+  l_osd_op_rw,
+  l_osd_op_rw_inb,
+  l_osd_op_rw_outb,
+  l_osd_op_rw_lat,
+  l_osd_op_rw_process_lat,
+  l_osd_op_rw_lat_inb_hist,
+  l_osd_op_rw_lat_outb_hist>;
+
 class Messenger;
 class Message;
 class MonClient;
@@ -272,6 +370,7 @@ private:
   Messenger *&cluster_messenger;
   Messenger *&client_messenger;
 public:
+  osd_perf_counters_t& new_logger;
   PerfCounters *&logger;
   PerfCounters *&recoverystate_perf;
   MonClient   *&monc;
@@ -1280,6 +1379,7 @@ protected:
   Messenger   *objecter_messenger;
   MonClient   *monc; // check the "monc helpers" list before accessing directly
   MgrClient   mgrc;
+  osd_perf_counters_t new_logger;
   PerfCounters      *logger;
   PerfCounters      *recoverystate_perf;
   ObjectStore *store;

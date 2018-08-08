@@ -556,15 +556,41 @@ static constexpr auto PERFCOUNTER_U64_CTR = \
   static_cast<enum perfcounter_type_d>(PERFCOUNTER_U64 | PERFCOUNTER_COUNTER);
 static constexpr auto PERFCOUNTER_U64_SETABLE = \
   static_cast<enum perfcounter_type_d>(PERFCOUNTER_U64 | PERFCOUNTER_SETABLE);
+static constexpr auto PERFCOUNTER_TIME_AVG = \
+  static_cast<enum perfcounter_type_d>(
+    PERFCOUNTER_TIME | PERFCOUNTER_LONGRUNAVG);
+static constexpr auto PERFCOUNTER_U64_HIST = \
+  static_cast<enum perfcounter_type_d>(
+    PERFCOUNTER_U64 | PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER);
 
-#define PERF_COUNTERS_ADD_U64_COUNTER(id, name, desc)	\
-  static constexpr perf_counter_meta_t id {		\
-    PERFCOUNTER_U64_CTR, name, desc			\
+// add_u64_counter
+#define PERF_COUNTERS_ADD_U64_COUNTER(id, name, desc, ...)	\
+  static constexpr perf_counter_meta_t id {			\
+    PERFCOUNTER_U64_CTR, name, desc, __VA_ARGS__		\
+  }
+
+// add_time_avg
+#define PERF_COUNTERS_ADD_TIME_AVG(id, name, desc, ...)		\
+  static constexpr perf_counter_meta_t id {			\
+   PERFCOUNTER_TIME_AVG, name, desc, __VA_ARGS__		\
   }
 #define PERF_COUNTERS_ADD_U64_SETABLE(id, name, desc, ...)	\
   static constexpr perf_counter_meta_t id {			\
     PERFCOUNTER_U64_SETABLE, name, desc, __VA_ARGS__		\
   }
+
+// add_u64_counter_histogram
+#define PERF_COUNTERS_ADD_U64_COUNTER_HIST(id, name, xcfg, ycfg, desc, ...) \
+  static constexpr perf_counter_meta_t id {			\
+    PERFCOUNTER_U64_HIST, name, desc, __VA_ARGS__		\
+  };								\
+  namespace ceph {						\
+  template <> struct perf_counter_traits_t<id> {		\
+    static constexpr PerfHistogramCommon::axis_config_d x_axis_params {xcfg};	\
+    static constexpr PerfHistogramCommon::axis_config_d y_axis_params {ycfg};	\
+  };								\
+  }
+
 
 static constexpr std::size_t CACHE_LINE_SIZE_ { 64 };
 static constexpr std::size_t EXPECTED_THREAD_NUM { 32 };
@@ -656,12 +682,11 @@ class perf_counters_t : public PerfCountersCollectionable {
   template<const perf_counter_meta_t& H,
 	   const perf_counter_meta_t&... T>
   constexpr void init_histograms() {
-    if constexpr (H.type == (PERFCOUNTER_HISTOGRAM |
-			     PERFCOUNTER_COUNTER | PERFCOUNTER_U64)) {
+    if constexpr (H.type == PERFCOUNTER_U64_HIST) {
       constexpr std::size_t idx = perf_counters_t::index_of<H, P...>();
       atomic_perf_counters[idx].histogram = \
-	new PerfHistogram<>(perf_counter_traits_t<H>::x_axis_params,
-			    perf_counter_traits_t<H>::y_axis_params);
+	new PerfHistogram<>({ perf_counter_traits_t<H>::x_axis_params,
+			    perf_counter_traits_t<H>::y_axis_params });
     }
 
     if constexpr (sizeof...(T)) {
@@ -734,8 +759,7 @@ public:
   ~perf_counters_t()
   {
     for (std::size_t idx = 0; idx < std::size(m_meta); idx++) {
-      if (m_meta[idx].type == (PERFCOUNTER_HISTOGRAM |
-			       PERFCOUNTER_COUNTER | PERFCOUNTER_U64)) {
+      if (m_meta[idx].type == PERFCOUNTER_U64_HIST) {
 	delete atomic_perf_counters[idx].histogram;
       }
     }
@@ -808,11 +832,10 @@ public:
 
   template<const perf_counter_meta_t& pcid>
   void hinc(const std::int64_t x, const std::int64_t y) {
-    static_assert(pcid.type == (PERFCOUNTER_HISTOGRAM |
-				PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
+    static_assert(pcid.type == PERFCOUNTER_U64_HIST);
     constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
     assert(atomic_perf_counters[idx].histogram);
-    return atomic_perf_counters[idx].histogram->inc(x, y);
+    atomic_perf_counters[idx].histogram->inc(x, y);
   }
 
   // helper structures, NOT for hot paths
