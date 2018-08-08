@@ -5710,7 +5710,7 @@ void Client::handle_command_reply(MCommandReply *m)
 // MOUNT
 
 int Client::mount(const std::string &mount_root, const UserPerm& perms,
-		  bool require_mds)
+		  bool require_mds, const std::string &fs_name)
 {
   Mutex::Locker lock(client_lock);
 
@@ -5727,15 +5727,22 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
     return r;
   }
 
+  std::string resolved_fs_name;
+  if (fs_name.empty()) {
+    resolved_fs_name = cct->_conf.get_val<std::string>("client_mds_namespace");
+  } else {
+    resolved_fs_name = fs_name;
+  }
+
   std::string want = "mdsmap";
-  const auto &mds_ns = cct->_conf->client_mds_namespace;
-  if (!mds_ns.empty()) {
+  if (!resolved_fs_name.empty()) {
     r = fetch_fsmap(true);
     if (r < 0)
       return r;
-    fs_cluster_id_t cid = fsmap_user->get_fs_cid(mds_ns);
-    if (cid == FS_CLUSTER_ID_NONE)
+    fs_cluster_id_t cid = fsmap_user->get_fs_cid(resolved_fs_name);
+    if (cid == FS_CLUSTER_ID_NONE) {
       return -ENOENT;
+    }
 
     std::ostringstream oss;
     oss << want << "." << cid;
