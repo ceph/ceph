@@ -27,10 +27,10 @@ class SingleType(object):
 
     def report_pretty(self):
         string = ""
-        string += templates.osd_header.format(
+        string += templates.total_osds.format(
             total_osds=len(self.hdds) or len(self.ssds) * 2
         )
-        string += templates.osd_component
+        string += templates.osd_component_titles
 
         for osd in self.computed['osds']:
             string += templates.osd_header
@@ -76,11 +76,11 @@ class SingleType(object):
             osd = {'data': {}, 'journal': {}}
             osd['data']['path'] = device['path']
             osd['data']['size'] = data_size.b
-            osd['data']['percentage'] = round(data_percentage.b)
-            osd['data']['human_readable_size'] = str(data_size / 100)
+            osd['data']['percentage'] = int(data_percentage)
+            osd['data']['human_readable_size'] = str(data_size)
             osd['journal']['path'] = device['path']
             osd['journal']['size'] = journal_size.b
-            osd['journal']['percentage'] = round(100 - data_percentage.b)
+            osd['journal']['percentage'] = int(100 - data_percentage)
             osd['journal']['human_readable_size'] = str(journal_size)
             osds.append(osd)
 
