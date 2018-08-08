@@ -739,7 +739,7 @@ public:
   int get_children(int id, list<int> *children) const;
   void get_children_of_type(int id,
                             int type,
-			    set<int> *children,
+			    vector<int> *children,
 			    bool exclude_shadow = true) const;
 
   /**

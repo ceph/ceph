@@ -860,13 +860,13 @@ int CrushWrapper::get_children(int id, list<int> *children) const
 
 void CrushWrapper::get_children_of_type(int id,
                                         int type,
-					set<int> *children,
+					vector<int> *children,
 					bool exclude_shadow) const
 {
   if (id >= 0) {
     if (type == 0) {
       // want leaf?
-      children->insert(id);
+      children->push_back(id);
     }
     return;
   }
@@ -879,7 +879,7 @@ void CrushWrapper::get_children_of_type(int id,
     return;
   } else if (b->type == type) {
     if (!is_shadow_item(b->id) || !exclude_shadow) {
-      children->insert(b->id);
+      children->push_back(b->id);
     }
     return;
   }
@@ -1510,7 +1510,7 @@ int CrushWrapper::get_parent_of_type(int item, int type, int rule) const
   set<int> roots;
   find_takes_by_rule(rule, &roots);
   for (auto root : roots) {
-    set<int> candidates;
+    vector<int> candidates;
     get_children_of_type(root, type, &candidates, false);
     for (auto candidate : candidates) {
       if (subtree_contains(candidate, item)) {
