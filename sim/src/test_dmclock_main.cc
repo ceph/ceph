@@ -193,7 +193,7 @@ int main(int argc, char* argv[]) {
     return new test::DmcQueue(client_info_f,
 			      can_f,
 			      handle_f,
-			      server_soft_limit,
+			      server_soft_limit ? dmc::AtLimit::Allow : dmc::AtLimit::Wait,
 			      anticipation_timeout);
   };
 
