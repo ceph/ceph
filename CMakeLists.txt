@@ -314,6 +314,10 @@ if(WITH_LZ4)
 endif(WITH_LZ4)
 
 #if allocator is set on command line make sure it matches below strings
+set(ALLOCATOR "" CACHE STRING
+  "specify memory allocator to use. currently tcmalloc, tcmalloc_minimal, \
+jemalloc, and libc is supported. if not specified, will try to find tcmalloc, \
+and then jemalloc. If neither of then is found. use the one in libc.")
 if(ALLOCATOR)
   if(${ALLOCATOR} MATCHES "tcmalloc(_minimal)?")
     find_package(gperftools REQUIRED)
@@ -581,7 +585,7 @@ endif()
 # Rocksdb
 option(WITH_SYSTEM_ROCKSDB "require and build with system rocksdb" OFF)
 if (WITH_SYSTEM_ROCKSDB)
-  find_package(rocksdb 5.8 REQUIRED)
+  find_package(RocksDB 5.8 REQUIRED)
 endif()
 
 option(WITH_SEASTAR "Build seastar components")
