@@ -1524,6 +1524,19 @@ int CrushWrapper::get_parent_of_type(int item, int type, int rule) const
   return 0; // not found
 }
 
+void CrushWrapper::get_subtree_of_type(int type, vector<int> *subtrees)
+{
+  set<int> roots;
+  find_roots(&roots);
+  for (auto r: roots) {
+    crush_bucket *b = get_bucket(r);
+    if (IS_ERR(b))
+      continue;
+    get_children_of_type(b->id, type, subtrees);
+  }
+}
+
+
 int CrushWrapper::rename_class(const string& srcname, const string& dstname)
 {
   auto i = class_rname.find(srcname);
