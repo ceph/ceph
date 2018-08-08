@@ -7,7 +7,7 @@ import { configureTestBed } from '../../../testing/unit-test-helper';
 import { NotificationType } from '../enum/notification-type.enum';
 import { FinishedTask } from '../models/finished-task';
 import { NotificationService } from './notification.service';
-import { TaskManagerMessageService } from './task-manager-message.service';
+import { TaskMessageService } from './task-message.service';
 
 describe('NotificationService', () => {
   let notificationService: NotificationService;
@@ -20,7 +20,7 @@ describe('NotificationService', () => {
   configureTestBed({
     providers: [
       NotificationService,
-      TaskManagerMessageService,
+      TaskMessageService,
       { provide: ToastsManager, useValue: toastFakeService }
     ]
   });
