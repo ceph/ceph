@@ -386,6 +386,11 @@ class TestSizeOperations(object):
         base += disk.Size(gb=1)
         assert base.gb == 1.25
 
+    def test_self_addition_does_not_alter_state(self):
+        base = disk.Size(mb=256)
+        base + disk.Size(gb=1)
+        assert base.mb == 256
+
     def test_addition_with_non_size_objects(self):
         with pytest.raises(TypeError):
             disk.Size(mb=100) + 4
@@ -394,6 +399,11 @@ class TestSizeOperations(object):
         base = disk.Size(gb=1)
         base -= disk.Size(mb=256)
         assert base.mb == 768
+
+    def test_self_subtraction_does_not_alter_state(self):
+        base = disk.Size(gb=1)
+        base - disk.Size(mb=256)
+        assert base.gb == 1
 
     def test_subtraction_with_size_objects(self):
         result = disk.Size(gb=1) - disk.Size(mb=256)
