@@ -205,6 +205,7 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("log", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("mds", MON_CAP_R | MON_CAP_W));
+    profile_grants.push_back(MonCapGrant("fs", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("auth", MON_CAP_R | MON_CAP_X));
     profile_grants.push_back(MonCapGrant("config-key", MON_CAP_R | MON_CAP_W));
