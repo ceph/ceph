@@ -152,9 +152,6 @@ enum {
   l_osd_agent_flush,
   l_osd_agent_evict,
 
-  l_osd_object_ctx_cache_hit,
-  l_osd_object_ctx_cache_total,
-
   l_osd_op_cache_hit,
   l_osd_tier_flush_lat,
   l_osd_tier_promote_lat,
@@ -295,10 +292,14 @@ PERF_COUNTERS_ADD_U64_COUNTER_HIST(l_osd_op_rw_lat_outb_hist,
   op_hist_x_axis_config, op_hist_y_axis_config,
   "Histogram of rw operation latency (including queue time) + data read");
 
-
-
 PERF_COUNTERS_ADD_TIME_AVG(l_osd_op_rw_process_lat, "op_rw_process_latency",
   "Latency of read-modify-write operation (excluding queue time)");
+
+PERF_COUNTERS_ADD_U64_COUNTER(l_osd_object_ctx_cache_hit,
+  "object_ctx_cache_hit", "Object context cache hits");
+PERF_COUNTERS_ADD_U64_COUNTER(l_osd_object_ctx_cache_total,
+  "object_ctx_cache_total", "Object context cache lookups");
+
 
 using osd_perf_counters_t = ceph::perf_counters_t<
   l_osd_op,
@@ -322,7 +323,9 @@ using osd_perf_counters_t = ceph::perf_counters_t<
   l_osd_op_rw_lat,
   l_osd_op_rw_process_lat,
   l_osd_op_rw_lat_inb_hist,
-  l_osd_op_rw_lat_outb_hist>;
+  l_osd_op_rw_lat_outb_hist,
+  l_osd_object_ctx_cache_hit,
+  l_osd_object_ctx_cache_total>;
 
 class Messenger;
 class Message;

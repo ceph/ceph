@@ -10899,9 +10899,9 @@ ObjectContextRef PrimaryLogPG::get_object_context(
       it_objects->second->op ==
       pg_log_entry_t::LOST_REVERT));
   ObjectContextRef obc = object_contexts.lookup(soid);
-  osd->logger->inc(l_osd_object_ctx_cache_total);
+  osd->new_logger.inc<l_osd_object_ctx_cache_total>();
   if (obc) {
-    osd->logger->inc(l_osd_object_ctx_cache_hit);
+    osd->new_logger.inc<l_osd_object_ctx_cache_hit>();
     dout(10) << __func__ << ": found obc in cache: " << obc
 	     << dendl;
   } else {
