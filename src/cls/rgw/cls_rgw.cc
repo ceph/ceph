@@ -3268,8 +3268,12 @@ static int gc_iterate_entries(cls_method_context_t hctx, const string& marker, b
       if (max_entries && (i >= max_entries)) {
         if (truncated)
           *truncated = true;
-        --iter;
-        key_iter = iter->first;
+        if (iter == keys.begin()) {
+          key_iter = start_key;
+        } else {
+          --iter;
+          key_iter = iter->first;
+        }
         return 0;
       }
 
