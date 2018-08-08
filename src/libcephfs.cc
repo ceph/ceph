@@ -127,6 +127,16 @@ public:
     return ret;
   }
 
+  int select_filesystem(const std::string &fs_name_)
+  {
+    if (mounted) {
+      return -EISCONN;
+    }
+
+    fs_name = fs_name_;
+    return 0;
+  }
+
   int mount(const std::string &mount_root, const UserPerm& perms)
   {
     int ret;
@@ -141,7 +151,7 @@ public:
       }
     }
 
-    ret = client->mount(mount_root, perms);
+    ret = client->mount(mount_root, perms, false, fs_name);
     if (ret) {
       shutdown();
       return ret;
@@ -283,6 +293,7 @@ private:
   Messenger *messenger;
   CephContext *cct;
   std::string cwd;
+  std::string fs_name;
 };
 
 static mode_t umask_cb(void *handle)
@@ -492,6 +503,16 @@ out:
 extern "C" int ceph_init(struct ceph_mount_info *cmount)
 {
   return cmount->init();
+}
+
+extern "C" int ceph_select_filesystem(struct ceph_mount_info *cmount,
+                                      const char *fs_name)
+{
+  if (fs_name == nullptr) {
+    return -EINVAL;
+  }
+
+  return cmount->select_filesystem(fs_name);
 }
 
 extern "C" int ceph_mount(struct ceph_mount_info *cmount, const char *root)
