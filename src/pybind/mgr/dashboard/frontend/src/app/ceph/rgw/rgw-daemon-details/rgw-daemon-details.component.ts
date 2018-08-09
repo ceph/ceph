@@ -14,7 +14,8 @@ export class RgwDaemonDetailsComponent implements OnChanges {
   metadata: any;
   serviceId = '';
 
-  @Input() selection: CdTableSelection;
+  @Input()
+  selection: CdTableSelection;
 
   constructor(private rgwDaemonService: RgwDaemonService) {}
 

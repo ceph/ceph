@@ -11,7 +11,8 @@ import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
   styleUrls: ['./osd-details.component.scss']
 })
 export class OsdDetailsComponent implements OnChanges {
-  @Input() selection: CdTableSelection;
+  @Input()
+  selection: CdTableSelection;
 
   osd: any;
 
