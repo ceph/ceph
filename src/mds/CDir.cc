@@ -2978,6 +2978,23 @@ bool CDir::is_frozen_tree() const
   }
 }
 
+CDir *CDir::get_freezing_tree_root()
+{
+  if (num_freezing_trees == 0)
+    return nullptr;
+  CDir *dir = this;
+  while (true) {
+    if (dir->is_freezing_tree_root())
+      return dir;
+    if (dir->is_subtree_root())
+      return nullptr;
+    if (dir->inode->parent)
+      dir = dir->inode->parent->dir;
+    else
+      return nullptr;
+  }
+}
+
 CDir *CDir::get_frozen_tree_root() 
 {
   assert(is_frozen());
