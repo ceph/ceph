@@ -380,6 +380,8 @@ class TestSizeOperations(object):
     def test_assignment_addition_with_size_objects(self):
         result = disk.Size(mb=256) + disk.Size(gb=1)
         assert result.gb == 1.25
+        assert result.gb.as_int() == 1
+        assert result.gb.as_float() == 1.25
 
     def test_self_addition_with_size_objects(self):
         base = disk.Size(mb=256)
@@ -421,6 +423,7 @@ class TestSizeOperations(object):
         base = disk.Size(gb=1)
         result = base * 2
         assert result.gb == 2
+        assert result.gb.as_int() == 2
 
     def test_division_with_size_objects(self):
         result = disk.Size(gb=1) / disk.Size(mb=1)
@@ -430,6 +433,7 @@ class TestSizeOperations(object):
         base = disk.Size(gb=1)
         base / 2
         assert base.mb == 512
+        assert base.mb.as_int() == 512
 
 
 class TestSizeAttributes(object):
