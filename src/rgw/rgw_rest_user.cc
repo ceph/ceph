@@ -156,7 +156,7 @@ void RGWOp_User_Create::execute()
   }
 
   if (s->cct->_conf->rgw_bucket_default_quota_max_size >= 0) {
-    bucket_quota.max_size_kb = s->cct->_conf->rgw_bucket_default_quota_max_size;
+    bucket_quota.max_size = s->cct->_conf->rgw_bucket_default_quota_max_size;
     bucket_quota.enabled = true;
   }
 
@@ -166,7 +166,7 @@ void RGWOp_User_Create::execute()
   }
 
   if (s->cct->_conf->rgw_user_default_quota_max_size >= 0) {
-    user_quota.max_size_kb = s->cct->_conf->rgw_user_default_quota_max_size;
+    user_quota.max_size = s->cct->_conf->rgw_user_default_quota_max_size;
     user_quota.enabled = true;
   }
 

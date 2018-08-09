@@ -1949,7 +1949,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
       user_info.bucket_quota.enabled = true;
     }
     if (cct->_conf->rgw_bucket_default_quota_max_size >= 0) {
-      user_info.bucket_quota.max_size_kb = cct->_conf->rgw_bucket_default_quota_max_size;
+      user_info.bucket_quota.max_size = cct->_conf->rgw_bucket_default_quota_max_size;
       user_info.bucket_quota.enabled = true;
     }
   }
@@ -1970,7 +1970,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
       user_info.user_quota.enabled = true;
     }
     if (cct->_conf->rgw_user_default_quota_max_size >= 0) {
-      user_info.user_quota.max_size_kb = cct->_conf->rgw_user_default_quota_max_size;
+      user_info.user_quota.max_size = cct->_conf->rgw_user_default_quota_max_size;
       user_info.user_quota.enabled = true;
     }
   }
