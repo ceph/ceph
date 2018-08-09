@@ -298,12 +298,6 @@ set(GMOCK_INCLUDE_DIRS
 set(GTEST_INCLUDE_DIRS
   "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include/gtest")
 
-include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/src")
-include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
-
-# needed for source files that friend unit tests (e.g., using FRIEND_TEST)
-include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include")
-
 if(WITH_SEASTAR)
   find_package(fmt 4.0.0 QUIET)
   if(NOT fmt_FOUND)
@@ -542,16 +536,19 @@ add_subdirectory(erasure-code)
 # Support/Tools
 if(WITH_TESTS)
   add_subdirectory(googletest/googlemock)
+endif()
+
+# dmClock (after gmock)
+add_subdirectory(dmclock)
+
+# Support/Tools
+if(WITH_TESTS)
   add_subdirectory(test)
-endif(WITH_TESTS)
+endif()
 
 add_subdirectory(compressor)
 
 add_subdirectory(tools)
-
-# dmClock (after gmock)
-
-add_subdirectory(dmclock/src)
 
 option(WITH_DMCLOCK_TESTS
   "enable the build of dmclock-tests and dmclock-data-struct tests binaries"
