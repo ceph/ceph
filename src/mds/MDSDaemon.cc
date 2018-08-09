@@ -584,7 +584,7 @@ void MDSDaemon::send_command_reply(MCommand *m, MDSRank *mds_rank,
     // This session only existed to issue commands, so terminate it
     // as soon as we can.
     assert(session->is_closed());
-    session->connection->mark_disposable();
+    session->get_connection()->mark_disposable();
   }
   priv.reset();
 
@@ -1362,7 +1362,8 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
         mds_rank->kick_waiters_for_any_client_connection();
       }
     } else {
-      dout(10) << " existing session " << s << " for " << s->info.inst << " existing con " << s->connection
+      dout(10) << " existing session " << s << " for " << s->info.inst
+	       << " existing con " << s->get_connection()
 	       << ", new/authorizing con " << con << dendl;
       con->set_priv(RefCountedPtr{s});
 
@@ -1424,8 +1425,9 @@ void MDSDaemon::ms_handle_accept(Connection *con)
   auto s = static_cast<Session *>(priv.get());
   dout(10) << "ms_handle_accept " << con->get_peer_addr() << " con " << con << " session " << s << dendl;
   if (s) {
-    if (s->connection != con) {
-      dout(10) << " session connection " << s->connection << " -> " << con << dendl;
+    if (s->get_connection() != con) {
+      dout(10) << " session connection " << s->get_connection()
+	       << " -> " << con << dendl;
       s->set_connection(con);
 
       // send out any queued messages

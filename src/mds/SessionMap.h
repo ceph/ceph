@@ -138,7 +138,9 @@ public:
 
   MDSAuthCaps auth_caps;
 
+protected:
   ConnectionRef connection;
+public:
   entity_addr_t socket_addr;
   xlist<Session*>::item item_session_list;
 
@@ -352,6 +354,9 @@ public:
   void set_connection(Connection *con) {
     connection = con;
     socket_addr = con->get_peer_socket_addr();
+  }
+  const ConnectionRef& get_connection() const {
+    return connection;
   }
 
   void clear() {
