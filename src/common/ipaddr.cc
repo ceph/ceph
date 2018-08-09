@@ -10,6 +10,7 @@
 #endif
 
 #include "include/ipaddr.h"
+#include "msg/msg_types.h"
 
 void netmask_ipv4(const struct in_addr *addr,
 			 unsigned int prefix_len,
@@ -163,4 +164,17 @@ bool parse_network(const char *s, struct sockaddr_storage *network, unsigned int
   }
 
   return false;
+}
+
+bool parse_network(const char *s,
+		   entity_addr_t *network,
+		   unsigned int *prefix_len)
+{
+  sockaddr_storage ss;
+  bool ret = parse_network(s, &ss, prefix_len);
+  if (ret) {
+    network->set_type(entity_addr_t::TYPE_LEGACY);
+    network->set_sockaddr((sockaddr *)&ss);
+  }
+  return ret;
 }
