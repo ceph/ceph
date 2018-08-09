@@ -7960,8 +7960,12 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
   mdr->apply();
 
   // update subtree map?
-  if (destdnl->is_primary() && in->is_dir()) 
+  if (destdnl->is_primary() && in->is_dir()) {
     mdcache->adjust_subtree_after_rename(in, srcdn->get_dir(), true);
+
+    if (destdn->is_auth())
+      mdcache->migrator->adjust_export_after_rename(in, srcdn->get_dir());
+  }
 
   if (straydn && oldin->is_dir())
     mdcache->adjust_subtree_after_rename(oldin, destdn->get_dir(), true);
