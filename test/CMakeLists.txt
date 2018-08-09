@@ -1,6 +1,5 @@
-INCLUDE (CheckIncludeFiles)
-CHECK_INCLUDE_FILES("sys/prctl.h" HAVE_SYS_PRCTL_H)
-CONFIGURE_FILE(dmtest-config.h.in dmtest-config.h)
+include(CheckIncludeFileCXX)
+check_include_file_cxx("sys/prctl.h" HAVE_SYS_PRCTL_H)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(../src)
@@ -20,6 +19,9 @@ set_source_files_properties(${core_srcs} ${test_srcs}
   )
 
 add_executable(dmclock-tests ${test_srcs} ${support_srcs})
+if(HAVE_SYS_PRCTL_H)
+  target_compile_definitions(dmclock-tests PRIVATE "HAVE_SYS_PRCTL_H")
+endif()
 target_include_directories(dmclock-tests PRIVATE SYSTEM "${GTEST_INCLUDE_DIRS}")
 
 if (TARGET gtest AND TARGET gtest_main)
