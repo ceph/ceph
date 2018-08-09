@@ -542,6 +542,42 @@ TEST(CommonIPAddr, ParseNetwork_IPv6_9000)
   ASSERT_EQ(0, memcmp(want.sin6_addr.s6_addr, network.sin6_addr.s6_addr, sizeof(network.sin6_addr.s6_addr)));
 }
 
+TEST(CommonIPAddr, network_contains)
+{
+  entity_addr_t network, addr;
+  unsigned int prefix;
+  bool ok;
+
+  ok = parse_network("2001:1234:5678:90ab::dead:beef/32", &network, &prefix);
+  ASSERT_TRUE(ok);
+  ASSERT_EQ(32U, prefix);
+  ok = addr.parse("2001:1234:5678:90ab::dead:beef", nullptr);
+  ASSERT_TRUE(ok);
+  ASSERT_TRUE(network_contains(network, prefix, addr));
+  ok = addr.parse("2001:1334:5678:90ab::dead:beef", nullptr);
+  ASSERT_TRUE(ok);
+  ASSERT_FALSE(network_contains(network, prefix, addr));
+  ok = addr.parse("127.0.0.1", nullptr);
+  ASSERT_TRUE(ok);
+  ASSERT_FALSE(network_contains(network, prefix, addr));
+
+  ok = parse_network("10.1.2.3/16", &network, &prefix);
+  ASSERT_TRUE(ok);
+  ASSERT_EQ(16U, prefix);
+  ok = addr.parse("2001:1234:5678:90ab::dead:beef", nullptr);
+  ASSERT_TRUE(ok);
+  ASSERT_FALSE(network_contains(network, prefix, addr));
+  ok = addr.parse("1.2.3.4", nullptr);
+  ASSERT_TRUE(ok);
+  ASSERT_FALSE(network_contains(network, prefix, addr));
+  ok = addr.parse("10.1.22.44", nullptr);
+  ASSERT_TRUE(ok);
+  ASSERT_TRUE(network_contains(network, prefix, addr));
+  ok = addr.parse("10.2.22.44", nullptr);
+  ASSERT_TRUE(ok);
+  ASSERT_FALSE(network_contains(network, prefix, addr));
+}
+
 TEST(pick_address, find_ip_in_subnet_list)
 {
   struct ifaddrs one, two, three;
