@@ -5031,7 +5031,7 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_enable_lc_threads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description("Enables the lifecycle maintenance thread. This is required on at least on rgw for each zone.")
+    .set_description("Enables the lifecycle maintenance thread. This is required on at least one rgw for each zone.")
     .set_long_description(
         "The lifecycle maintenance thread is responsible for lifecycle related maintenance "
         "work. The thread itself can be disabled, but in order for lifecycle to work "
