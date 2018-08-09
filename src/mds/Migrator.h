@@ -120,8 +120,6 @@ protected:
     set<mds_rank_t> warning_ack_waiting;
     set<mds_rank_t> notify_ack_waiting;
     map<inodeno_t,map<client_t,Capability::Import> > peer_imported;
-    set<CDir*> residual_dirs;
-
     MutationRef mut;
     // for freeze tree deadlock detection
     utime_t last_cum_auth_pins_change;
@@ -153,7 +151,6 @@ protected:
 
   void handle_export_discover_ack(MExportDirDiscoverAck *m);
   void export_frozen(CDir *dir, uint64_t tid);
-  void check_export_size(CDir *dir, export_state_t& stat, set<client_t> &client_set);
   void handle_export_prep_ack(MExportDirPrepAck *m);
   void export_sessions_flushed(CDir *dir, uint64_t tid);
   void export_go(CDir *dir);
@@ -302,7 +299,9 @@ public:
     export_queue.clear();
   }
   
+  void maybe_split_export(CDir* dir, vector<pair<CDir*, size_t> >& results);
   void get_export_lock_set(CDir *dir, set<SimpleLock*>& locks);
+  void get_export_client_set(CDir *dir, set<client_t> &client_set);
   void get_export_client_set(CInode *in, set<client_t> &client_set);
 
   void encode_export_inode(CInode *in, bufferlist& bl, 
