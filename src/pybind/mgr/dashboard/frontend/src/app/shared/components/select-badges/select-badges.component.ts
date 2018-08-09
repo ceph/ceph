@@ -1,8 +1,10 @@
-import { Component, OnChanges, OnInit } from '@angular/core';
-import { Input } from '@angular/core';
+import { Component, Input, OnChanges, OnInit } from '@angular/core';
 import { FormControl, ValidatorFn } from '@angular/forms';
+
+import * as _ from 'lodash';
+
 import { CdFormGroup } from '../../forms/cd-form-group';
-import { CdValidators } from '../../forms/cd-validators';
+import { SelectBadgesMessages } from './select-badges-messages.model';
 import { SelectBadgesOption } from './select-badges-option.model';
 
 @Component({
@@ -11,45 +13,38 @@ import { SelectBadgesOption } from './select-badges-option.model';
   styleUrls: ['./select-badges.component.scss']
 })
 export class SelectBadgesComponent implements OnInit, OnChanges {
-  @Input() data: Array<string> = [];
-  @Input() options: Array<SelectBadgesOption> = [];
   @Input()
-  errorMessages = {
-    empty: 'There are no items.',
-    selectionLimit: 'Selection limit reached',
-    custom: {
-      validation: {},
-      duplicate: 'Already exits'
-    }
-  };
-  @Input() selectionLimit: number;
-  @Input() customBadges = false;
-  @Input() customBadgeValidators: ValidatorFn[] = [];
-  @Input() customBadgeMessage = 'Use custom tag';
+  data: Array<string> = [];
+  @Input()
+  options: Array<SelectBadgesOption> = [];
+  @Input()
+  messages = new SelectBadgesMessages({});
+  @Input()
+  selectionLimit: number;
+  @Input()
+  customBadges = false;
+  @Input()
+  customBadgeValidators: ValidatorFn[] = [];
   form: CdFormGroup;
-  customBadge: FormControl;
+  filter: FormControl;
   Object = Object;
+  filteredOptions: Array<SelectBadgesOption> = [];
 
   constructor() {}
 
   ngOnInit() {
-    if (this.customBadges) {
-      this.initCustomBadges();
-    }
+    this.initFilter();
     if (this.data.length > 0) {
       this.initMissingOptions();
     }
+    this.options = _.sortBy(this.options, ['name']);
+    this.updateOptions();
   }
 
-  private initCustomBadges() {
-    this.customBadgeValidators.push(
-      CdValidators.custom(
-        'duplicate',
-        (badge) => this.options && this.options.some((option) => option.name === badge)
-      )
-    );
-    this.customBadge = new FormControl('', { validators: this.customBadgeValidators });
-    this.form = new CdFormGroup({ customBadge: this.customBadge });
+  private initFilter() {
+    this.filter = new FormControl('', { validators: this.customBadgeValidators });
+    this.form = new CdFormGroup({ filter: this.filter });
+    this.filteredOptions = [...this.options];
   }
 
   private initMissingOptions() {
@@ -61,10 +56,11 @@ export class SelectBadgesComponent implements OnInit, OnChanges {
 
   private addOption(name: string) {
     this.options.push(new SelectBadgesOption(false, name, ''));
-    this.triggerSelection(this.options[this.options.length - 1]);
+    this.options = _.sortBy(this.options, ['name']);
+    this.triggerSelection(this.options.find((option) => option.name === name));
   }
 
-  private triggerSelection(option: SelectBadgesOption) {
+  triggerSelection(option: SelectBadgesOption) {
     if (
       !option ||
       (this.selectionLimit && !option.selected && this.data.length >= this.selectionLimit)
@@ -82,6 +78,11 @@ export class SelectBadgesComponent implements OnInit, OnChanges {
         this.data.push(option.name);
       }
     });
+    this.updateFilter();
+  }
+
+  updateFilter() {
+    this.filteredOptions = this.options.filter((option) => option.name.includes(this.filter.value));
   }
 
   private forceOptionsToReflectData() {
@@ -99,12 +100,35 @@ export class SelectBadgesComponent implements OnInit, OnChanges {
     this.forceOptionsToReflectData();
   }
 
+  selectOption() {
+    if (this.filteredOptions.length === 0) {
+      this.addCustomOption();
+    } else {
+      this.triggerSelection(this.filteredOptions[0]);
+      this.resetFilter();
+    }
+  }
+
   addCustomOption() {
-    if (this.customBadge.invalid || this.customBadge.value.length === 0) {
+    if (!this.isCreatable()) {
       return;
     }
-    this.addOption(this.customBadge.value);
-    this.customBadge.setValue('');
+    this.addOption(this.filter.value);
+    this.resetFilter();
+  }
+
+  isCreatable() {
+    return (
+      this.customBadges &&
+      this.filter.valid &&
+      this.filter.value.length > 0 &&
+      this.filteredOptions.every((option) => option.name !== this.filter.value)
+    );
+  }
+
+  private resetFilter() {
+    this.filter.setValue('');
+    this.updateFilter();
   }
 
   removeItem(item: string) {
