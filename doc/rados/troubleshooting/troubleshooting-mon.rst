@@ -200,7 +200,7 @@ What if the state is ``probing``?
   multi-monitor cluster, the monitors will stay in this state until they
   find enough monitors to form a quorum -- this means that if you have 2 out
   of 3 monitors down, the one remaining monitor will stay in this state
-  indefinitively until you bring one of the other monitors up.
+  indefinitely until you bring one of the other monitors up.
 
   If you have a quorum, however, the monitor should be able to find the
   remaining monitors pretty fast, as long as they can be reached. If your
@@ -337,7 +337,7 @@ Can I increase the maximum tolerated clock skew?
   This value is configurable via the ``mon-clock-drift-allowed`` option, and
   although you *CAN* it doesn't mean you *SHOULD*. The clock skew mechanism
   is in place because clock skewed monitor may not properly behave. We, as
-  developers and QA afficcionados, are comfortable with the current default
+  developers and QA aficionados, are comfortable with the current default
   value, as it will alert the user before the monitors get out hand. Changing
   this value without testing it first may cause unforeseen effects on the
   stability of the monitors and overall cluster healthiness, although there is
@@ -402,7 +402,7 @@ or::
 Recovery using healthy monitor(s)
 ---------------------------------
 
-If there is any survivers, we can always `replace`_ the corrupted one with a
+If there is any survivors, we can always `replace`_ the corrupted one with a
 new one. And after booting up, the new joiner will sync up with a healthy
 peer, and once it is fully sync'ed, it will be able to serve the clients.
 
@@ -527,7 +527,7 @@ You have quorum
 
         ceph tell mon.* config set debug_mon 10/10
 
-No quourm
+No quorum
 
   Use the monitor's admin socket and directly adjust the configuration
   options::

@@ -15,7 +15,7 @@ Synopsis
 Description
 ===========
 
-:program:`ceph-kvstore-tool` is a kvstore manipulation tool. It allows users to manipule
+:program:`ceph-kvstore-tool` is a kvstore manipulation tool. It allows users to manipulate
 leveldb/rocksdb's data (like OSD's omap) offline.
 
 Commands

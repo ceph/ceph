@@ -59,7 +59,7 @@ Current implementation works on ZFS pools
 * Some cache and log (ZIL) can be attached.
   Please note that this is different from the Ceph journals. Cache and log are
   totally transparent for Ceph, and help the filesystem to keep the system
-  consistant and help performance.
+  consistent and help performance.
   Assuming that ada2 is an SSD::
 
     gpart create -s GPT ada2
