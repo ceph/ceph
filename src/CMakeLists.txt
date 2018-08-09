@@ -283,9 +283,6 @@ add_subdirectory(json_spirit)
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
-include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/src")
-include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
-
 if(WITH_SEASTAR)
   find_package(fmt 4.0.0 QUIET)
   if(NOT fmt_FOUND)
@@ -493,9 +490,6 @@ endif()
 add_subdirectory(kv)
 add_subdirectory(os)
 
-set(cls_references_files objclass/class_api.cc)
-add_library(cls_references_objs OBJECT ${cls_references_files})
-
 add_subdirectory(osd)
 
 set(ceph_osd_srcs
@@ -538,27 +532,26 @@ if(WITH_TESTS)
     add_library(GTest::GTest ALIAS gtest)
     add_library(GTest::Main ALIAS gtest_main)
   endif()
-
-  add_subdirectory(test)
 endif(WITH_TESTS)
 
-add_subdirectory(compressor)
-
-add_subdirectory(tools)
-
 # dmClock (after gmock)
-
-add_subdirectory(dmclock/src)
-
 option(WITH_DMCLOCK_TESTS
   "enable the build of dmclock-tests and dmclock-data-struct tests binaries"
   OFF)
 if(WITH_TESTS AND WITH_DMCLOCK_TESTS)
   # note: add_test is not being called, so dmclock tests aren't part
   # of ceph tests
-  add_subdirectory(dmclock/test)
-  add_subdirectory(dmclock/support/test)
-endif(WITH_TESTS AND WITH_DMCLOCK_TESTS)
+  set(dmclock_TEST ON CACHE BOOL "" FORCE)
+endif()
+add_subdirectory(dmclock)
+
+add_subdirectory(compressor)
+
+add_subdirectory(tools)
+
+if(WITH_TESTS)
+  add_subdirectory(test)
+endif()
 
 add_subdirectory(crypto)
 
