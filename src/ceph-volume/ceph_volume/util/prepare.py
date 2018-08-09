@@ -7,10 +7,11 @@ the single-call helper
 import os
 import logging
 import json
-from ceph_volume import process, conf, __release__
-from ceph_volume.util import system, constants
+from ceph_volume import process, conf, __release__, terminal
+from ceph_volume.util import system, constants, str_to_int, disk
 
 logger = logging.getLogger(__name__)
+mlogger = terminal.MultiLogger(__name__)
 
 
 def create_key():
@@ -45,6 +46,28 @@ def write_keyring(osd_id, secret, keyring_name='keyring', name=None):
             '--add-key', secret
         ])
     system.chown(osd_keyring)
+
+
+def get_journal_size(lv_format=True):
+    """
+    Helper to retrieve the size (defined in megabytes in ceph.conf) to create
+    the journal logical volume, it "translates" the string into a float value,
+    then converts that into gigabytes, and finally (optionally) it formats it
+    back as a string so that it can be used for creating the LV.
+
+    :param lv_format: Return a string to be used for ``lv_create``. A 5 GB size
+    would result in '5G', otherwise it will return a ``Size`` object.
+    """
+    conf_journal_size = conf.ceph.get_safe('osd', 'osd_journal_size', '5120')
+    logger.debug('osd_journal_size set to %s' % conf_journal_size)
+    journal_size = disk.Size(mb=str_to_int(conf_journal_size))
+
+    if journal_size < disk.Size(gb=2):
+        mlogger.error('Refusing to continue with configured size for journal')
+        raise RuntimeError('journal sizes must be larger than 2GB, detected: %s' % journal_size)
+    if lv_format:
+        return '%sG' % journal_size.gb.as_int()
+    return journal_size
 
 
 def create_id(fsid, json_secrets, osd_id=None):
