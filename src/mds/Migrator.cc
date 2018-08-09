@@ -1126,6 +1126,7 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
 
     it->second.last_cum_auth_pins_change = ceph_clock_now();
     it->second.approx_size = results.front().second;
+    it->second.orig_size = it->second.approx_size;
     total_exporting_size += it->second.approx_size;
 
     // start the freeze, but hold it up with an auth_pin.
@@ -1174,6 +1175,95 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
 
   // cancel the original one
   export_try_cancel(dir);
+}
+
+void Migrator::restart_export_dir(CDir *dir, uint64_t tid)
+{
+  auto it = export_state.find(dir);
+  if (it == export_state.end() || it->second.tid != tid)
+    return;
+  if (it->second.state != EXPORT_DISCOVERING &&
+      it->second.state != EXPORT_FREEZING)
+    return;
+
+  dout(7) << "restart_export_dir " << *dir << dendl;
+
+  std::shared_ptr<export_base_t> parent;
+  parent.swap(it->second.parent);
+  if (!parent)
+     export_queue.emplace_front(dir->dirfrag(), it->second.peer);
+
+  export_try_cancel(dir);
+
+  if (parent)
+    child_export_finish(parent, true);
+}
+
+class C_MDC_RestartExportDir : public MigratorContext {
+  CDir *dir;
+  uint64_t tid;
+public:
+  C_MDC_RestartExportDir(Migrator *m, CDir *d, uint64_t t) :
+    MigratorContext(m), dir(d), tid(t) {}
+  void finish(int r) override {
+    mig->restart_export_dir(dir, tid);
+  }
+};
+
+bool Migrator::adjust_export_size(export_state_t &stat, CDir *dir)
+{
+  if (dir->state_test(CDir::STATE_EXPORTING) ||
+      dir->is_freezing_dir() || dir->is_frozen_dir())
+    return false;
+
+  if (stat.approx_size >= max_export_size &&
+      stat.approx_size >= stat.orig_size * 2)
+    return false;
+
+  vector<pair<CDir*, size_t> > results;
+  maybe_split_export(dir, max_export_size, true, results);
+  if (results.size() == 1 && results.front().first == dir) {
+    auto size = results.front().second;
+    stat.approx_size += size;
+    total_exporting_size += size;
+    return true;
+  }
+
+  return false;
+}
+
+void Migrator::adjust_export_after_rename(CInode* diri, CDir *olddir)
+{
+  CDir *newdir = diri->get_parent_dir();
+  if (newdir == olddir)
+    return;
+
+  CDir *freezing_dir = newdir->get_freezing_tree_root();
+  CDir *old_freezing_dir = olddir->get_freezing_tree_root();
+  if (!freezing_dir || freezing_dir == old_freezing_dir)
+    return;
+
+  dout(7) << "adjust_export_after_rename " << *diri << dendl;
+
+  auto &stat = export_state.at(freezing_dir);
+  assert(stat.state == EXPORT_DISCOVERING ||
+         stat.state == EXPORT_FREEZING);
+
+  if (g_conf->mds_thrash_exports) {
+    if (rand() % 3 == 0) {
+      mds->queue_waiter_front(new C_MDC_RestartExportDir(this, freezing_dir, stat.tid));
+      return;
+    }
+  }
+
+  vector<CDir*> ls;
+  diri->get_nested_dirfrags(ls);
+  for (auto d : ls) {
+    if (!adjust_export_size(stat, d)) {
+      mds->queue_waiter_front(new C_MDC_RestartExportDir(this, freezing_dir, stat.tid));
+      return;
+    }
+  }
 }
 
 void Migrator::child_export_finish(std::shared_ptr<export_base_t>& parent, bool success)
