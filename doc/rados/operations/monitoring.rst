@@ -128,7 +128,7 @@ log.
 Monitoring Health Checks
 ========================
 
-Ceph continously runs various *health checks* against its own status.  When
+Ceph continuously runs various *health checks* against its own status.  When
 a health check fails, this is reflected in the output of ``ceph status`` (or
 ``ceph health``).  In addition, messages are sent to the cluster log to
 indicate when a check fails, and when the cluster recovers.

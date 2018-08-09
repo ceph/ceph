@@ -120,7 +120,7 @@ pools; it only runs simulations by mapping values in the range
 
 .. option:: --show-utilization
 
-   Displays the expected and actual utilisation for each device, for
+   Displays the expected and actual utilization for each device, for
    each number of replicas. For instance::
 
      device 0: stored : 951      expected : 853.333

@@ -2,8 +2,8 @@
 Installation (Kubernetes + Helm)
 ================================
 
-The ceph-helm_ project enables you to deploy Ceph in a Kubernetes environement.
-This documentation assumes a Kubernetes environement is available.
+The ceph-helm_ project enables you to deploy Ceph in a Kubernetes environment.
+This documentation assumes a Kubernetes environment is available.
 
 Current limitations
 ===================
@@ -157,7 +157,7 @@ Run the helm install command to deploy Ceph::
     NAME     TYPE
     ceph-rbd  ceph.com/rbd
 
-The output from helm install shows us the different types of ressources that will be deployed.
+The output from helm install shows us the different types of resources that will be deployed.
 
 A StorageClass named ``ceph-rbd`` of type ``ceph.com/rbd`` will be created with ``ceph-rbd-provisioner`` Pods. These
 will allow a RBD to be automatically provisioned upon creation of a PVC. RBDs will also be formatted when mapped for the first
