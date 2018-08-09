@@ -3103,7 +3103,7 @@ void Migrator::finish_import_inode_caps(CInode *in, mds_rank_t peer, bool auth_c
     // For non-auth caps, ask exporter mds to send cap export messages to
     // clients who haven't opened sessions. The cap export messages will
     // make clients open sessions.
-    if (auth_cap || session->connection == nullptr) {
+    if (auth_cap || !session->get_connection()) {
       Capability::Import& im = import_map[it.first];
       im.cap_id = cap->get_cap_id();
       im.mseq = auth_cap ? it.second.mseq : cap->get_mseq();

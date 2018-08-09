@@ -511,8 +511,8 @@ void Server::flush_client_sessions(set<client_t>& client_set, MDSGatherBuilder& 
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
     assert(session);
     if (!session->is_open() ||
-	!session->connection.get() ||
-	!session->connection->has_feature(CEPH_FEATURE_EXPORT_PEER))
+	!session->get_connection() ||
+	!session->get_connection()->has_feature(CEPH_FEATURE_EXPORT_PEER))
       continue;
     version_t seq = session->wait_for_flush(gather.new_sub());
     mds->send_message_client(new MClientSession(CEPH_SESSION_FLUSHMSG, seq), session);
@@ -551,13 +551,13 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     assert(session->is_opening());
     mds->sessionmap.set_state(session, Session::STATE_OPEN);
     mds->sessionmap.touch_session(session);
-    assert(session->connection != NULL);
+    assert(session->get_connection());
     MClientSession *reply = new MClientSession(CEPH_SESSION_OPEN);
     if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
       reply->supported_features = supported_features;
-    session->connection->send_message(reply);
+    session->get_connection()->send_message(reply);
     if (mdcache->is_readonly())
-      session->connection->send_message(new MClientSession(CEPH_SESSION_FORCE_RO));
+      session->get_connection()->send_message(new MClientSession(CEPH_SESSION_FORCE_RO));
   } else if (session->is_closing() ||
 	     session->is_killing()) {
     // kill any lingering capabilities, leases, requests
@@ -590,10 +590,10 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       // ms_handle_remote_reset() and realize they had in fact closed.
       // do this *before* sending the message to avoid a possible
       // race.
-      if (session->connection != NULL) {
+      if (session->get_connection()) {
         // Conditional because terminate_sessions will indiscrimately
         // put sessions in CLOSING whether they ever had a conn or not.
-        session->connection->mark_disposable();
+        session->get_connection()->mark_disposable();
       }
 
       // reset session
@@ -603,9 +603,9 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       mds->sessionmap.remove_session(session);
     } else if (session->is_killing()) {
       // destroy session, close connection
-      if (session->connection != NULL) {
-	session->connection->mark_down();
-	session->connection->set_priv(NULL);
+      if (session->get_connection()) {
+	session->get_connection()->mark_down();
+	session->get_connection()->set_priv(NULL);
       }
       mds->sessionmap.remove_session(session);
     } else {
@@ -1103,18 +1103,18 @@ void Server::infer_supported_features(Session *session, client_metadata_t& clien
     // user space client
     if (it->second.compare(0, 16, "ceph version 12.") == 0)
       supported = CEPHFS_FEATURE_LUMINOUS;
-    else if (session->connection->has_feature(CEPH_FEATURE_FS_CHANGE_ATTR))
+    else if (session->get_connection()->has_feature(CEPH_FEATURE_FS_CHANGE_ATTR))
       supported = CEPHFS_FEATURE_KRAKEN;
   } else {
     it = client_metadata.find("kernel_version");
     if (it != client_metadata.end()) {
       // kernel client
-      if (session->connection->has_feature(CEPH_FEATURE_NEW_OSDOP_ENCODING))
+      if (session->get_connection()->has_feature(CEPH_FEATURE_NEW_OSDOP_ENCODING))
 	supported = CEPHFS_FEATURE_LUMINOUS;
     }
   }
   if (supported == -1 &&
-      session->connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2))
+      session->get_connection()->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2))
     supported = CEPHFS_FEATURE_JEWEL;
 
   if (supported >= 0) {
@@ -2834,7 +2834,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   }
 
   if (!mds->mdsmap->get_inline_data_enabled() ||
-      !mdr->session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA))
+      !mdr->session->get_connection()->has_feature(CEPH_FEATURE_MDS_INLINE_DATA))
     in->inode.inline_data.version = CEPH_INLINE_NONE;
 
   mdcache->add_inode(in);  // add
@@ -3516,7 +3516,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   }
 
   if (cur->inode.inline_data.version != CEPH_INLINE_NONE &&
-      !mdr->session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
+      !mdr->session->get_connection()->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
     dout(7) << "old client cannot open inline data file " << *cur << dendl;
     respond_to_request(mdr, -EPERM);
     return;

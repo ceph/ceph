@@ -1682,7 +1682,7 @@ void ESession::replay(MDSRank *mds)
     } else {
       session = mds->sessionmap.get_session(client_inst.name);
       if (session) { // there always should be a session, but there's a bug
-	if (session->connection == NULL) {
+	if (session->get_connection() == NULL) {
 	  dout(10) << " removed session " << session->info.inst << dendl;
 	  mds->sessionmap.remove_session(session);
           session = NULL;
