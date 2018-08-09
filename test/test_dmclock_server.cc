@@ -50,7 +50,7 @@ namespace crimson {
 
     TEST(dmclock_server, bad_tag_deathtest) {
       using ClientId = int;
-      using Queue = dmc::PullPriorityQueue<ClientId,Request>;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request,true>;
       using QueueRef = std::unique_ptr<Queue>;
 
       ClientId client1 = 17;
