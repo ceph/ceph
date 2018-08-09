@@ -1,34 +1,28 @@
 <ng-template #popTemplate>
-  <ng-container *ngIf="customBadges">
-    <form name="form"
-          #formDir="ngForm"
-          [formGroup]="form"
-          novalidate>
-      <div [ngClass]="{'has-error': form.showError('customBadge', formDir)}">
-        <input type="text"
-               formControlName="customBadge"
-               i18n-placeholder
-               [placeholder]="customBadgeMessage"
-               (keyup)="$event.keyCode == 13 ? addCustomOption(customBadge) : null"
-               class="form-control text-center"/>
-        <ng-container *ngFor="let error of Object.keys(errorMessages.custom.validation)">
-          <span
-            i18n
-            class="help-block text-center"
-            *ngIf="form.showError('customBadge', formDir) && customBadge.hasError(error)">
-            {{ errorMessages.custom.validation[error] }}
-          </span>
-        </ng-container>
-        <span i18n
-              class="help-block text-center"
-              *ngIf="form.showError('customBadge', formDir) && customBadge.hasError('duplicate')">
-          {{ errorMessages.custom.duplicate }}
+  <form name="form"
+        #formDir="ngForm"
+        [formGroup]="form"
+        novalidate>
+    <div [ngClass]="{'has-error': form.showError('filter', formDir)}">
+      <input type="text"
+             formControlName="filter"
+             i18n-placeholder
+             [placeholder]="messages.filter"
+             (keyup)="$event.keyCode == 13 ? selectOption() : updateFilter()"
+             class="form-control text-center"/>
+      <ng-container *ngFor="let error of Object.keys(messages.customValidations)">
+        <span
+          i18n
+          class="help-block text-center"
+          *ngIf="form.showError('filter', formDir) && filter.hasError(error)">
+          {{ messages.customValidations[error] }}
         </span>
-      </div>
-    </form>
-  </ng-container>
-  <div *ngFor="let option of options"
+      </ng-container>
+    </div>
+  </form>
+  <div *ngFor="let option of filteredOptions"
        class="select-menu-item"
+       [class.disabled]="data.length === selectionLimit && !option.selected"
        (click)="triggerSelection(option)">
     <div class="select-menu-item-icon">
       <i class="fa fa-check" aria-hidden="true"
@@ -45,11 +39,26 @@
       </ng-container>
     </div>
   </div>
-  <span i18n
-        class="help-block text-center"
-        *ngIf="data.length === selectionLimit">
-          {{ errorMessages.selectionLimit }}
-  </span>
+  <div *ngIf="isCreatable()"
+       class="select-menu-item"
+       (click)="addCustomOption(filter.value)">
+    <div class="select-menu-item-icon">
+      <i class="fa fa-tag" aria-hidden="true"></i>
+      &nbsp;
+    </div>
+    <div class="select-menu-item-content">
+      {{ messages.add }} '{{ filter.value }}'
+    </div>
+  </div>
+  <div class="has-warning"
+       *ngIf="data.length === selectionLimit">
+    <span i18n
+          class="help-block text-center text-warning"
+          [tooltip]="messages.selectionLimit.tooltip"
+          *ngIf="data.length === selectionLimit">
+            {{ messages.selectionLimit.text }}
+    </span>
+  </div>
 </ng-template>
 
 <a  class="margin-right-sm select-menu-edit"
@@ -62,7 +71,7 @@
 <span class="text-muted"
       *ngIf="data.length === 0"
       i18n>
-  {{ errorMessages.empty }}
+  {{ messages.empty }}
 </span>
 <span *ngFor="let dataItem of data">
   <span class="badge badge-pill badge-primary margin-right-sm">

@@ -1,8 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ReactiveFormsModule, Validators } from '@angular/forms';
 
-import { PopoverModule } from 'ngx-bootstrap';
+import { PopoverModule, TooltipModule } from 'ngx-bootstrap';
 
-import { FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SelectBadgesOption } from './select-badges-option.model';
 import { SelectBadgesComponent } from './select-badges.component';
@@ -11,9 +11,15 @@ describe('SelectBadgesComponent', () => {
   let component: SelectBadgesComponent;
   let fixture: ComponentFixture<SelectBadgesComponent>;
 
+  const selectOption = (filter: string) => {
+    component.filter.setValue(filter);
+    component.updateFilter();
+    component.selectOption();
+  };
+
   configureTestBed({
     declarations: [SelectBadgesComponent],
-    imports: [PopoverModule.forRoot(), FormsModule, ReactiveFormsModule]
+    imports: [PopoverModule.forRoot(), TooltipModule, ReactiveFormsModule]
   });
 
   beforeEach(() => {
@@ -61,6 +67,40 @@ describe('SelectBadgesComponent', () => {
     expect(component.data).toEqual(['option1']);
   });
 
+  describe('filter values', () => {
+    beforeEach(() => {
+      component.ngOnInit();
+    });
+
+    it('shows all options with no value set', () => {
+      expect(component.filteredOptions).toEqual(component.options);
+    });
+
+    it('shows one option that it filtered for', () => {
+      component.filter.setValue('2');
+      component.updateFilter();
+      expect(component.filteredOptions).toEqual([component.options[1]]);
+    });
+
+    it('shows all options after selecting something', () => {
+      component.filter.setValue('2');
+      component.updateFilter();
+      component.selectOption();
+      expect(component.filteredOptions).toEqual(component.options);
+    });
+
+    it('is not able to create by default with no value set', () => {
+      component.updateFilter();
+      expect(component.isCreatable()).toBeFalsy();
+    });
+
+    it('is not able to create by default with a value set', () => {
+      component.filter.setValue('2');
+      component.updateFilter();
+      expect(component.isCreatable()).toBeFalsy();
+    });
+  });
+
   describe('automatically add selected options if not in options array', () => {
     beforeEach(() => {
       component.data = ['option1', 'option4'];
@@ -102,36 +142,98 @@ describe('SelectBadgesComponent', () => {
     });
   });
 
+  describe('sorted array and options', () => {
+    beforeEach(() => {
+      component.customBadges = true;
+      component.customBadgeValidators = [Validators.pattern('[A-Za-z0-9_]+')];
+      component.data = ['c', 'b'];
+      component.options = [
+        new SelectBadgesOption(true, 'd', ''),
+        new SelectBadgesOption(true, 'a', '')
+      ];
+      component.ngOnInit();
+    });
+
+    it('has a sorted selection', () => {
+      expect(component.data).toEqual(['a', 'b', 'c', 'd']);
+    });
+
+    it('has a sorted options', () => {
+      const sortedOptions = [
+        new SelectBadgesOption(true, 'a', ''),
+        new SelectBadgesOption(true, 'b', ''),
+        new SelectBadgesOption(true, 'c', ''),
+        new SelectBadgesOption(true, 'd', '')
+      ];
+      expect(component.options).toEqual(sortedOptions);
+    });
+
+    it('has a sorted selection after adding an item', () => {
+      selectOption('block');
+      expect(component.data).toEqual(['a', 'b', 'block', 'c', 'd']);
+    });
+
+    it('has a sorted options after adding an item', () => {
+      selectOption('block');
+      const sortedOptions = [
+        new SelectBadgesOption(true, 'a', ''),
+        new SelectBadgesOption(true, 'b', ''),
+        new SelectBadgesOption(true, 'block', ''),
+        new SelectBadgesOption(true, 'c', ''),
+        new SelectBadgesOption(true, 'd', '')
+      ];
+      expect(component.options).toEqual(sortedOptions);
+    });
+  });
+
   describe('with custom options', () => {
     beforeEach(() => {
       component.customBadges = true;
       component.customBadgeValidators = [Validators.pattern('[A-Za-z0-9_]+')];
       component.ngOnInit();
-      component.customBadge.setValue('customOption');
-      component.addCustomOption();
+    });
+
+    it('is not able to create with no value set', () => {
+      component.updateFilter();
+      expect(component.isCreatable()).toBeFalsy();
+    });
+
+    it('is able to create with a valid value set', () => {
+      component.filter.setValue('2');
+      component.updateFilter();
+      expect(component.isCreatable()).toBeTruthy();
+    });
+
+    it('is not able to create with a value set that already exist', () => {
+      component.filter.setValue('option2');
+      component.updateFilter();
+      expect(component.isCreatable()).toBeFalsy();
     });
 
     it('adds custom option', () => {
-      expect(component.options[3]).toEqual({
+      selectOption('customOption');
+      expect(component.options[0]).toEqual({
         name: 'customOption',
         description: '',
         selected: true
       });
+      expect(component.options.length).toBe(4);
       expect(component.data).toEqual(['customOption']);
     });
 
     it('will not add an option that did not pass the validation', () => {
-      component.customBadge.setValue(' this does not pass ');
-      component.addCustomOption();
-      expect(component.options.length).toBe(4);
-      expect(component.data).toEqual(['customOption']);
-      expect(component.customBadge.invalid).toBeTruthy();
+      selectOption(' this does not pass ');
+      expect(component.options.length).toBe(3);
+      expect(component.data).toEqual([]);
+      expect(component.filter.invalid).toBeTruthy();
     });
 
     it('removes custom item selection by name', () => {
+      selectOption('customOption');
       component.removeItem('customOption');
       expect(component.data).toEqual([]);
-      expect(component.options[3]).toEqual({
+      expect(component.options.length).toBe(4);
+      expect(component.options[0]).toEqual({
         name: 'customOption',
         description: '',
         selected: false
@@ -139,18 +241,19 @@ describe('SelectBadgesComponent', () => {
     });
 
     it('will not add an option that is already there', () => {
-      component.customBadge.setValue('option2');
-      component.addCustomOption();
-      expect(component.options.length).toBe(4);
-      expect(component.data).toEqual(['customOption']);
+      selectOption('option2');
+      expect(component.options.length).toBe(3);
+      expect(component.data).toEqual(['option2']);
     });
 
     it('will not add an option twice after each other', () => {
-      component.customBadge.setValue('onlyOnce');
-      component.addCustomOption();
-      component.addCustomOption();
-      expect(component.data).toEqual(['customOption', 'onlyOnce']);
-      expect(component.options.length).toBe(5);
+      selectOption('onlyOnce');
+      expect(component.data).toEqual(['onlyOnce']);
+      selectOption('onlyOnce');
+      expect(component.data).toEqual([]);
+      selectOption('onlyOnce');
+      expect(component.data).toEqual(['onlyOnce']);
+      expect(component.options.length).toBe(4);
     });
   });
 
