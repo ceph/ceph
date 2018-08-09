@@ -402,6 +402,12 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
     bbt_opts.block_cache = rocksdb::NewClockCache(
       block_cache_size,
       g_conf()->rocksdb_cache_shard_bits);
+    if (!bbt_opts.block_cache) {
+      derr << "rocksdb_cache_type '" << g_conf()->rocksdb_cache_type
+           << "' chosen, but RocksDB not compiled with LibTBB. "
+           << dendl;
+      return -EINVAL;
+    }
   } else {
     derr << "unrecognized rocksdb_cache_type '" << g_conf()->rocksdb_cache_type
       << "'" << dendl;
