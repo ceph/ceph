@@ -2103,7 +2103,7 @@ public:
   }
 
   int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
-          real_time mtime, JSONObj *obj, sync_type_t sync_type) override {
+          real_time mtime, JSONObj *obj, sync_type_t sync_type, bool meta_sync) override {
     RGWBucketEntryPoint be, old_be;
     try {
       decode_json_obj(be, obj);
@@ -2268,7 +2268,7 @@ public:
   }
 
   int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
-          real_time mtime, JSONObj *obj, sync_type_t sync_type) override {
+          real_time mtime, JSONObj *obj, sync_type_t sync_type, bool meta_sync) override {
     RGWBucketCompleteInfo bci, old_bci;
     try {
       decode_json_obj(bci, obj);
@@ -2304,10 +2304,21 @@ public:
         return ret;
       }
       bci.info.index_type = rule_info.index_type;
+      if (meta_sync) {
+        bci.attrs.erase(RGW_ATTR_LC);
+      }
     } else {
       /* existing bucket, keep its placement */
       bci.info.bucket.explicit_placement = old_bci.info.bucket.explicit_placement;
       bci.info.placement_rule = old_bci.info.placement_rule;
+      if (meta_sync) {
+        //keep lifecycle attr
+        if (old_bci.attrs.find(RGW_ATTR_LC) != old_bci.attrs.end()) {
+          bci.attrs[RGW_ATTR_LC] = old_bci.attrs[RGW_ATTR_LC];
+        } else {
+          bci.attrs.erase(RGW_ATTR_LC);
+        }
+      }
     }
 
     if (exists && old_bci.info.datasync_flag_enabled() != bci.info.datasync_flag_enabled()) {

@@ -1062,7 +1062,7 @@ class RGWAsyncMetaStoreEntry : public RGWAsyncRadosRequest {
   bufferlist bl;
 protected:
   int _send_request() override {
-    int ret = store->meta_mgr->put(raw_key, bl, RGWMetadataHandler::APPLY_ALWAYS);
+    int ret = store->meta_mgr->put(raw_key, bl, RGWMetadataHandler::APPLY_ALWAYS, nullptr, true);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't store key: " << raw_key << " ret=" << ret << dendl;
       return ret;
