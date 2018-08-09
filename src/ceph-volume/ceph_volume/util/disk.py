@@ -331,6 +331,12 @@ class BaseFloatUnit(float):
             suffix=self.__class__.__name__.split('Float')[-1]
         )
 
+    def as_int(self):
+        return int(self.real)
+
+    def as_float(self):
+        return self.real
+
 
 class FloatB(BaseFloatUnit):
     pass
