@@ -105,19 +105,6 @@ class FsNewHandler : public FileSystemCommandHandler
       return -ENOENT;
     }
 
-    string force_str;
-    cmd_getval_throws(g_ceph_context,cmdmap, "force", force_str);
-    bool force = (force_str == "--force");
-    const pool_stat_t *stat = mon->mgrstatmon()->get_pool_stat(metadata);
-    if (stat) {
-      int64_t metadata_num_objects = stat->stats.sum.num_objects;
-      if (!force && metadata_num_objects > 0) {
-	ss << "pool '" << metadata_name
-	   << "' already contains some objects. Use an empty pool instead.";
-	return -EINVAL;
-      }
-    }
-
     string data_name;
     cmd_getval_throws(g_ceph_context, cmdmap, "data", data_name);
     int64_t data = mon->osdmon()->osdmap.lookup_pg_pool_name(data_name);
@@ -149,6 +136,19 @@ class FsNewHandler : public FileSystemCommandHandler
       } else {
         ss << "filesystem already exists with name '" << fs_name << "'";
         return -EINVAL;
+      }
+    }
+
+    string force_str;
+    cmd_getval_throws(g_ceph_context,cmdmap, "force", force_str);
+    bool force = (force_str == "--force");
+    const pool_stat_t *stat = mon->mgrstatmon()->get_pool_stat(metadata);
+    if (stat) {
+      int64_t metadata_num_objects = stat->stats.sum.num_objects;
+      if (!force && metadata_num_objects > 0) {
+	ss << "pool '" << metadata_name
+	   << "' already contains some objects. Use an empty pool instead.";
+	return -EINVAL;
       }
     }
 
