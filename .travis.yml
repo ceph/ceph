@@ -1,6 +1,6 @@
 language: cpp
 cache: ccache
-dist: trusty
+dist: xenial
 sudo: false
 branches:
   only:
