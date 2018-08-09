@@ -2,6 +2,7 @@
 #include <boost/format.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
+#include <boost/tokenizer.hpp>
 
 #include "include/assert.h"
 #include "ceph_ver.h"
@@ -172,6 +173,25 @@ void RGWSTSAssumeRole::execute()
 
 RGWOp *RGWHandler_REST_STS::op_post()
 {
+  char buf[256];
+  recv_body(s, buf, s->content_length);
+  ldout(s->cct, 0) << "Content of POST: " << buf << dendl;
+  string post_body = buf;
+
+  if (post_body.find("Action") != string::npos) {
+    boost::char_separator<char> sep("&");
+    boost::tokenizer<boost::char_separator<char>> tokens(post_body, sep);
+    for (const auto& t : tokens) {
+      auto pos = t.find("=");
+      if (pos != string::npos) {
+         std::string key = t.substr(0, pos);
+         std::string value = t.substr(pos + 1, t.size() - 1);
+         ldout(s->cct, 0) << "Key: " << key << "Value: " << value << dendl;
+         s->info.args.append(key, value);
+       }
+     }
+  }
+
   if (s->info.args.exists("Action"))    {
     string action = s->info.args.get("Action");
     if (action == "AssumeRole") {
@@ -180,6 +200,7 @@ RGWOp *RGWHandler_REST_STS::op_post()
       return new RGWSTSGetSessionToken;
     }
   }
+
   return nullptr;
 }
 
