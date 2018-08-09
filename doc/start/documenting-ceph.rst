@@ -10,7 +10,7 @@ instructions will help the Ceph project immensely.
 
 The Ceph documentation source resides in the ``ceph/doc`` directory of the Ceph
 repository, and Python Sphinx renders the source into HTML and manpages. The
-http://ceph.com/docs link currenly displays the  ``master`` branch by default,
+http://ceph.com/docs link currently displays the  ``master`` branch by default,
 but you may view documentation for older branches (e.g., ``argonaut``) or future
 branches (e.g., ``next``) as well as work-in-progress branches by substituting
 ``master`` with the branch name you prefer.
@@ -188,7 +188,7 @@ To build the documentation on Debian/Ubuntu, Fedora, or CentOS/RHEL, execute::
 
 	admin/build-doc
 
-To scan for the reachablity of external links, execute::
+To scan for the reachability of external links, execute::
 
 	admin/build-doc linkcheck
 

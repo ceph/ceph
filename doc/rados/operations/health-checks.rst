@@ -286,7 +286,7 @@ DEVICE_HEALTH_IN_USE
 ____________________
 
 One or more devices is expected to fail soon and has been marked "out"
-of the cluster based on ``mgr/devicehalth/mark_out_threshold``, but it
+of the cluster based on ``mgr/devicehealth/mark_out_threshold``, but it
 is still participating in one more PGs.  This may be because it was
 only recently marked "out" and data is still migrating, or because data
 cannot be migrated off for some reason (e.g., the cluster is nearly
@@ -335,7 +335,7 @@ Detailed information about which PGs are affected is available from::
   ceph health detail
 
 In most cases the root cause is that one or more OSDs is currently
-down; see the dicussion for ``OSD_DOWN`` above.
+down; see the discussion for ``OSD_DOWN`` above.
 
 The state of specific problematic PGs can be queried with::
 
@@ -392,7 +392,7 @@ OSD_SCRUB_ERRORS
 ________________
 
 Recent OSD scrubs have uncovered inconsistencies. This error is generally
-paired with *PG_DAMANGED* (see above).
+paired with *PG_DAMAGED* (see above).
 
 See :doc:`pg-repair` for more information.
 
@@ -419,7 +419,7 @@ ___________
 
 The number of PGs in use in the cluster is below the configurable
 threshold of ``mon_pg_warn_min_per_osd`` PGs per OSD.  This can lead
-to suboptimizal distribution and balance of data across the OSDs in
+to suboptimal distribution and balance of data across the OSDs in
 the cluster, and similar reduce overall performance.
 
 This may be an expected condition if data pools have not yet been

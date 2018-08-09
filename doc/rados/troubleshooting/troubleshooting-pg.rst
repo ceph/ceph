@@ -569,7 +569,7 @@ rule needs, ``--rule`` is the value of the ``ruleset`` field
 displayed by ``ceph osd crush rule dump``.  The test will try mapping
 one million values (i.e. the range defined by ``[--min-x,--max-x]``)
 and must display at least one bad mapping. If it outputs nothing it
-means all mappings are successfull and you can stop right there: the
+means all mappings are successful and you can stop right there: the
 problem is elsewhere.
 
 The CRUSH rule can be edited by decompiling the crush map::

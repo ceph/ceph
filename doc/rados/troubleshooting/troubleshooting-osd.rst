@@ -381,7 +381,7 @@ Currently, we recommend deploying clusters with XFS.
 
 We recommend against using btrfs or ext4.  The btrfs filesystem has
 many attractive features, but bugs in the filesystem may lead to
-performance issues and suprious ENOSPC errors.  We do not recommend
+performance issues and spurious ENOSPC errors.  We do not recommend
 ext4 because xattr size limitations break our support for long object
 names (needed for RGW).
 
@@ -477,7 +477,7 @@ Events from the OSD after stuff has been given to local disk
 - op_applied: The op has been write()'en to the backing FS (ie, applied in
   memory but not flushed out to disk) on the primary
 - sub_op_applied: op_applied, but for a replica's "subop"
-- sub_op_committed: op_commited, but for a replica's subop (only for EC pools)
+- sub_op_committed: op_committed, but for a replica's subop (only for EC pools)
 - sub_op_commit_rec/sub_op_apply_rec from <X>: the primary marks this when it
   hears about the above, but for a particular replica <X>
 - commit_sent: we sent a reply back to the client (or primary OSD, for sub ops)
