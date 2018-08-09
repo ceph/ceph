@@ -178,3 +178,40 @@ bool parse_network(const char *s,
   }
   return ret;
 }
+
+bool network_contains(
+  const struct entity_addr_t& network,
+  unsigned int prefix_len,
+  const struct entity_addr_t& addr)
+{
+  if (addr.get_family() != network.get_family()) {
+    return false;
+  }
+  switch (network.get_family()) {
+  case AF_INET:
+    {
+      struct in_addr a, b;
+      netmask_ipv4(
+	&((const sockaddr_in*)network.get_sockaddr())->sin_addr, prefix_len, &a);
+      netmask_ipv4(
+	&((const sockaddr_in*)addr.get_sockaddr())->sin_addr, prefix_len, &b);
+      if (memcmp(&a, &b, sizeof(a)) == 0) {
+	return true;
+      }
+    }
+    break;
+  case AF_INET6:
+    {
+      struct in6_addr a, b;
+      netmask_ipv6(
+	&((const sockaddr_in6*)network.get_sockaddr())->sin6_addr, prefix_len, &a);
+      netmask_ipv6(
+	&((const sockaddr_in6*)addr.get_sockaddr())->sin6_addr, prefix_len, &b);
+      if (memcmp(&a, &b, sizeof(a)) == 0) {
+	return true;
+      }
+    }
+    break;
+  }
+  return false;
+}
