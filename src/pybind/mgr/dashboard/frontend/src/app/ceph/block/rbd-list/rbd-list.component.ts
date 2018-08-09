@@ -29,11 +29,16 @@ import { RbdModel } from './rbd-model';
   styleUrls: ['./rbd-list.component.scss']
 })
 export class RbdListComponent implements OnInit, OnDestroy {
-  @ViewChild(TableComponent) table: TableComponent;
-  @ViewChild('usageTpl') usageTpl: TemplateRef<any>;
-  @ViewChild('parentTpl') parentTpl: TemplateRef<any>;
-  @ViewChild('nameTpl') nameTpl: TemplateRef<any>;
-  @ViewChild('flattenTpl') flattenTpl: TemplateRef<any>;
+  @ViewChild(TableComponent)
+  table: TableComponent;
+  @ViewChild('usageTpl')
+  usageTpl: TemplateRef<any>;
+  @ViewChild('parentTpl')
+  parentTpl: TemplateRef<any>;
+  @ViewChild('nameTpl')
+  nameTpl: TemplateRef<any>;
+  @ViewChild('flattenTpl')
+  flattenTpl: TemplateRef<any>;
 
   permission: Permission;
   images: any;

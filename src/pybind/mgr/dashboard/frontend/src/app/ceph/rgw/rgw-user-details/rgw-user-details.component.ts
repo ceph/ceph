@@ -17,10 +17,13 @@ import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-u
   styleUrls: ['./rgw-user-details.component.scss']
 })
 export class RgwUserDetailsComponent implements OnChanges, OnInit {
-  @ViewChild('accessKeyTpl') public accessKeyTpl: TemplateRef<any>;
-  @ViewChild('secretKeyTpl') public secretKeyTpl: TemplateRef<any>;
+  @ViewChild('accessKeyTpl')
+  public accessKeyTpl: TemplateRef<any>;
+  @ViewChild('secretKeyTpl')
+  public secretKeyTpl: TemplateRef<any>;
 
-  @Input() selection: CdTableSelection;
+  @Input()
+  selection: CdTableSelection;
 
   // Details tab
   user: any;

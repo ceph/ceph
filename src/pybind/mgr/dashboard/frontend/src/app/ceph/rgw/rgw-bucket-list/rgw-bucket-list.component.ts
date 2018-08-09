@@ -18,7 +18,8 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
   styleUrls: ['./rgw-bucket-list.component.scss']
 })
 export class RgwBucketListComponent {
-  @ViewChild(TableComponent) table: TableComponent;
+  @ViewChild(TableComponent)
+  table: TableComponent;
 
   permission: Permission;
   columns: CdTableColumn[] = [];

@@ -13,10 +13,13 @@ import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
   styleUrls: ['./cephfs-detail.component.scss']
 })
 export class CephfsDetailComponent implements OnChanges, OnInit {
-  @ViewChild('poolUsageTpl') poolUsageTpl: TemplateRef<any>;
-  @ViewChild('activityTmpl') activityTmpl: TemplateRef<any>;
+  @ViewChild('poolUsageTpl')
+  poolUsageTpl: TemplateRef<any>;
+  @ViewChild('activityTmpl')
+  activityTmpl: TemplateRef<any>;
 
-  @Input() selection: CdTableSelection;
+  @Input()
+  selection: CdTableSelection;
 
   selectedItem: any;
 

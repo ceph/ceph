@@ -13,12 +13,14 @@ import { CephfsDetailComponent } from './cephfs-detail.component';
 
 @Component({ selector: 'cd-cephfs-chart', template: '' })
 class CephfsChartStubComponent {
-  @Input() mdsCounter: any;
+  @Input()
+  mdsCounter: any;
 }
 
 @Component({ selector: 'cd-cephfs-clients', template: '' })
 class CephfsClientsStubComponent {
-  @Input() mdsCounter: any;
+  @Input()
+  mdsCounter: any;
 }
 
 describe('CephfsDetailComponent', () => {

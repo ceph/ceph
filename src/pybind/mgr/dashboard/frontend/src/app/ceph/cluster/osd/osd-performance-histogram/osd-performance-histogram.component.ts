@@ -8,7 +8,8 @@ import * as _ from 'lodash';
   styleUrls: ['./osd-performance-histogram.component.scss']
 })
 export class OsdPerformanceHistogramComponent implements OnChanges {
-  @Input() histogram: any;
+  @Input()
+  histogram: any;
   valuesStyle: any;
   last = {};
 

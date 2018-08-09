@@ -74,8 +74,10 @@ export class ConfigurationComponent implements OnInit {
     create: 'Option only affects daemon creation.'
   };
 
-  @ViewChild('confValTpl') public confValTpl: TemplateRef<any>;
-  @ViewChild('confFlagTpl') public confFlagTpl: TemplateRef<any>;
+  @ViewChild('confValTpl')
+  public confValTpl: TemplateRef<any>;
+  @ViewChild('confFlagTpl')
+  public confFlagTpl: TemplateRef<any>;
 
   constructor(private configurationService: ConfigurationService) {}
 
