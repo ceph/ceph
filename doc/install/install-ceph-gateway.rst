@@ -617,4 +617,4 @@ The output should be::
  my-new-bucket
 
 .. _Preflight:  ../../start/quick-start-preflight
-.. _RadosGW frontends site: http://docs.ceph.com/docs/master/radosgw/frontends/
+.. _RadosGW frontends site: ../../radosgw/frontends
