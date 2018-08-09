@@ -1237,7 +1237,8 @@ public:
 
 protected:
 
-  static const double OSD_TICK_INTERVAL; // tick interval for tick_timer and tick_timer_without_osd_lock
+  const double OSD_TICK_INTERVAL = { 1.0 };
+  double get_tick_interval() const;
 
   AuthAuthorizeHandlerRegistry *authorize_handler_cluster_registry;
   AuthAuthorizeHandlerRegistry *authorize_handler_service_registry;
