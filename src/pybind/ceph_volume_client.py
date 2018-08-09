@@ -243,13 +243,29 @@ class CephFSVolumeClient(object):
     DEFAULT_VOL_PREFIX = "/volumes"
     DEFAULT_NS_PREFIX = "fsvolumens_"
 
-    def __init__(self, auth_id, conf_path, cluster_name, volume_prefix=None, pool_ns_prefix=None):
+    def __init__(self, auth_id=None, conf_path=None, cluster_name=None,
+                 volume_prefix=None, pool_ns_prefix=None, rados=None):
+        """
+        Either set all three of ``auth_id``, ``conf_path`` and
+        ``cluster_name`` (rados constructed on connect), or
+        set ``rados`` (existing rados instance).
+        """
         self.fs = None
-        self.rados = None
         self.connected = False
+
         self.conf_path = conf_path
         self.cluster_name = cluster_name
         self.auth_id = auth_id
+
+        self.rados = rados
+        if self.rados:
+            # Using an externally owned rados, so we won't tear it down
+            # on disconnect
+            self.own_rados = False
+        else:
+            # self.rados will be constructed in connect
+            self.own_rados = True
+
         self.volume_prefix = volume_prefix if volume_prefix else self.DEFAULT_VOL_PREFIX
         self.pool_ns_prefix = pool_ns_prefix if pool_ns_prefix else self.DEFAULT_NS_PREFIX
         # For flock'ing in cephfs, I want a unique ID to distinguish me
@@ -448,25 +464,7 @@ class CephFSVolumeClient(object):
             group_id
         )
 
-    def connect(self, premount_evict = None):
-        """
-
-        :param premount_evict: Optional auth_id to evict before mounting the filesystem: callers
-                               may want to use this to specify their own auth ID if they expect
-                               to be a unique instance and don't want to wait for caps to time
-                               out after failure of another instance of themselves.
-        """
-        log.debug("Connecting to RADOS with config {0}...".format(self.conf_path))
-        self.rados = rados.Rados(
-            name="client.{0}".format(self.auth_id),
-            clustername=self.cluster_name,
-            conffile=self.conf_path,
-            conf={}
-        )
-        self.rados.connect()
-
-        log.debug("Connection to RADOS complete")
-
+    def _connect(self, premount_evict):
         log.debug("Connecting to cephfs...")
         self.fs = cephfs.LibCephFS(rados_inst=self.rados)
         log.debug("CephFS initializing...")
@@ -482,6 +480,28 @@ class CephFSVolumeClient(object):
         # Recover from partial auth updates due to a previous
         # crash.
         self.recover()
+
+    def connect(self, premount_evict = None):
+        """
+
+        :param premount_evict: Optional auth_id to evict before mounting the filesystem: callers
+                               may want to use this to specify their own auth ID if they expect
+                               to be a unique instance and don't want to wait for caps to time
+                               out after failure of another instance of themselves.
+        """
+        if self.own_rados:
+            log.debug("Configuring to RADOS with config {0}...".format(self.conf_path))
+            self.rados = rados.Rados(
+                name="client.{0}".format(self.auth_id),
+                clustername=self.cluster_name,
+                conffile=self.conf_path,
+                conf={}
+            )
+            if self.rados.state != "connected":
+                log.debug("Connecting to RADOS...")
+                self.rados.connect()
+                log.debug("Connection to RADOS complete")
+        self._connect(premount_evict)
 
     def get_mon_addrs(self):
         log.info("get_mon_addrs")
@@ -501,11 +521,18 @@ class CephFSVolumeClient(object):
             self.fs = None
             log.debug("Disconnecting cephfs complete")
 
-        if self.rados:
+        if self.rados and self.own_rados:
             log.debug("Disconnecting rados...")
             self.rados.shutdown()
             self.rados = None
             log.debug("Disconnecting rados complete")
+
+    def __enter__(self):
+        self.connect()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.disconnect()
 
     def __del__(self):
         self.disconnect()
