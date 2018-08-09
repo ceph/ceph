@@ -53,7 +53,7 @@ class SAIAgent(MetricsAgent):
             c_data.tags['agenthost_domain_id'] = \
                 str('%s_%s' % (cluster_id, c_data.fields['agenthost']))
             c_data.fields['heartbeat_interval'] = \
-                obj_api.get_configuration('diskprediction_upload_metrics_interval')
+                int(obj_api.get_configuration('diskprediction_upload_metrics_interval'))
             c_data.fields['host_ip'] = str(mgr_meta.get('addr', '127.0.0.1'))
             c_data.fields['host_name'] = str(socket.gethostname())
             if obj_api.module.status in [DP_MGR_STAT_WARNING, DP_MGR_STAT_FAILED]:

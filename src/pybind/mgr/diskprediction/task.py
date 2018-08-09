@@ -14,7 +14,6 @@ from .agent.metrics.sai_disk_smart import SAIDiskSmartAgent
 from .agent.metrics.sai_host import SAIHostAgent
 from .agent.predict.prediction import PredictionAgent
 from .common import DP_MGR_STAT_FAILED, DP_MGR_STAT_OK, DP_MGR_STAT_WARNING
-from .common.restapiclient import RestApiClient, gen_configuration
 
 
 class AgentRunner(Thread):
@@ -40,9 +39,7 @@ class AgentRunner(Thread):
         self.exit = False
         self.event = Event()
         self.task_interval = \
-            self._module_inst.get_configuration(self.interval_key)
-        self.cluster_domain_id = \
-            self._module_inst.get_configuration('diskprediction_cluster_domain_id')
+            int(self._module_inst.get_configuration(self.interval_key))
 
     def terminate(self):
         self.exit = True
@@ -65,24 +62,31 @@ class AgentRunner(Thread):
     def run_agents(self):
         try:
             self._log.debug('run_agents %s' % self.task_name)
-            conf = gen_configuration(
-                host=self._module_inst.get_configuration('diskprediction_server'),
-                user=self._module_inst.get_configuration('diskprediction_user'),
-                password=self._module_inst.get_configuration(
-                    'diskprediction_password'),
-                port=self._module_inst.get_configuration('diskprediction_port'),
-                dbname=self._module_inst.get_configuration(
-                    'diskprediction_database'),
-                mgr_inst=self._module_inst)
-            self._obj_sender = RestApiClient(conf)
+            model = self._module_inst.get_configuration('diskprediction_config_mode')
+            if model.lower() == 'cloud':
+                # from .common.restapiclient import RestApiClient, gen_configuration
+                from .common.grpcclient import GRPcClient, gen_configuration
+                conf = gen_configuration(
+                    host=self._module_inst.get_configuration('diskprediction_server'),
+                    user=self._module_inst.get_configuration('diskprediction_user'),
+                    password=self._module_inst.get_configuration(
+                        'diskprediction_password'),
+                    port=self._module_inst.get_configuration('diskprediction_port'),
+                    cert_context=self._module_inst.get_configuration('diskprediction_cert_context'),
+                    mgr_inst=self._module_inst)
+                self._obj_sender = GRPcClient(conf)
+            else:
+                from .common.localpredictor import LocalPredictor, gen_configuration
+                conf = gen_configuration(mgr_inst=self._module_inst)
+                self._obj_sender = LocalPredictor(conf)
             if not self._obj_sender:
                 self._log.error('invalid diskprediction sender')
                 self._module_inst.status = DP_MGR_STAT_FAILED
                 return
             if self._obj_sender.test_connection():
+                self._module_inst.status = DP_MGR_STAT_OK
                 self._log.debug('succeed to test connection')
                 self._run()
-                self._module_inst.status = DP_MGR_STAT_OK
             else:
                 self._log.error('failed to test connection')
                 self._module_inst.status = DP_MGR_STAT_FAILED
@@ -94,16 +98,28 @@ class AgentRunner(Thread):
     def _run(self):
         self._log.debug('%s run' % self.task_name)
         for agent in self.agents:
-            try:
-                obj_agent = agent(
-                    self._module_inst, self._obj_sender,
-                    self._agent_timeout)
-                obj_agent.run()
-            except Exception as e:
-                self._module_inst.status = DP_MGR_STAT_WARNING
-                self._log.warning(
-                    'failed to execute %s, %s' % (agent.measurement, str(e)))
-                continue
+            retry_count = 3
+            while retry_count:
+                retry_count -= 1
+                try:
+                    obj_agent = agent(
+                        self._module_inst, self._obj_sender,
+                        self._agent_timeout)
+                    obj_agent.run()
+                    break
+                except Exception as e:
+                    if str(e).find('configuring') >= 0:
+                        self._log.warning(
+                            'failed to execute {}, {}, retry again.'.format(
+                                agent.measurement, str(e)))
+                        time.sleep(1)
+                        continue
+                    else:
+                        self._module_inst.status = DP_MGR_STAT_WARNING
+                        self._log.warning(
+                            'failed to execute {}, {}'.format(
+                                agent.measurement, ';'.join(str(e).split('\n\t'))))
+                        break
 
 
 class MetricsRunner(AgentRunner):
@@ -127,4 +143,3 @@ class SmartRunner(AgentRunner):
     task_name = 'Smart data Agent'
     interval_key = 'diskprediction_upload_smart_interval'
     agents = [SAIDiskSmartAgent]
-

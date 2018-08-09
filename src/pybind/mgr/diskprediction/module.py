@@ -7,13 +7,14 @@ from datetime import datetime
 import errno
 import json
 from mgr_module import MgrModule
+import os
 from threading import Event
 
 from .common import DP_MGR_STAT_ENABLED, DP_MGR_STAT_DISABLED
 from .task import MetricsRunner, PredictionRunner, SmartRunner
 
 
-DP_AGENTS = [MetricsRunner, PredictionRunner, SmartRunner]
+DP_AGENTS = [MetricsRunner, SmartRunner, PredictionRunner]
 
 
 class Module(MgrModule):
@@ -21,55 +22,47 @@ class Module(MgrModule):
     OPTIONS = [
         {
             'name': 'diskprediction_config_mode',
-            'default': 'cloud'
+            'default': 'local'
         },
         {
             'name': 'diskprediction_server',
-            'default': None
+            'default': 'api.federator.ai'
         },
         {
             'name': 'diskprediction_port',
-            'default': 8086
-        },
-        {
-            'name': 'diskprediction_database',
-            'default': 'telegraf'
+            'default': '31400'
         },
         {
             'name': 'diskprediction_user',
-            'default': None
+            'default': ''
         },
         {
             'name': 'diskprediction_password',
-            'default': None
-        },
-        {
-            'name': 'diskprediction_cluster_domain_id',
-            'default': None
+            'default': ''
         },
         {
             'name': 'diskprediction_upload_metrics_interval',
-            'default': 600
+            'default': '600'
         },
         {
             'name': 'diskprediction_upload_smart_interval',
-            'default': 43200
+            'default': '43200'
         },
         {
             'name': 'diskprediction_retrieve_prediction_interval',
-            'default': 43200
+            'default': '43200'
         },
         {
-            'name': 'diskprediction_cert_path',
+            'name': 'diskprediction_cert_context',
             'default': ''
         },
         {
             'name': 'diskprediction_ssl_target_name_override',
-            'default': 'localhost'
+            'default': 'api.federator.ai'
         },
         {
             'name': 'diskprediction_default_authority',
-            'default': 'localhost'
+            'default': 'api.federator.ai'
         }
     ]
 
@@ -77,7 +70,13 @@ class Module(MgrModule):
         {
             'cmd': 'diskprediction config-mode '
                    'name=mode,type=CephString,req=true',
-            'desc': 'config disk prediction mode [\"cloud\"|\"onpremise\"|\"local\"]',
+            'desc': 'config disk prediction mode [\"cloud\"|\"local\"]',
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'diskprediction config-cert '
+                   'name=certpath,type=CephString,req=true',
+            'desc': 'provide ssl connection certification file path',
             'perm': 'rw'
         },
         {
@@ -90,7 +89,7 @@ class Module(MgrModule):
                    'name=server,type=CephString,req=true '
                    'name=user,type=CephString,req=true '
                    'name=password,type=CephString,req=true '
-                   'name=port,type=CephInt,req=false ',
+                   'name=port,type=CephString,req=false ',
             'desc': 'Configure Disk Prediction service',
             'perm': 'rw'
         },
@@ -124,11 +123,6 @@ class Module(MgrModule):
             'cmd': 'diskprediction status',
             'desc': 'Check diskprediction status',
             'perm': 'r'
-        },
-        {
-            'cmd': 'diskprediction test-api',
-            'desc': 'Check diskprediction status',
-            'perm': 'r'
         }
     ]
 
@@ -137,10 +131,11 @@ class Module(MgrModule):
         self.status = DP_MGR_STAT_DISABLED
         self.shutdown_event = Event()
         self._agents = []
-        self._activate_cloud = False
+        self._activated_cloud = False
+        self._activated_local = False
         self._prediction_result = {}
+        self.history_smart = {}
         self.config = dict()
-        self.show_module_config
 
     @property
     def config_keys(self):
@@ -155,11 +150,9 @@ class Module(MgrModule):
                       'diskprediction_upload_metrics_interval',
                       'diskprediction_upload_smart_interval',
                       'diskprediction_retrieve_prediction_interval']:
-            try:
-                value = int(value)
-            except (ValueError, TypeError):
-                raise RuntimeError('invalid {0} configured. Please specify '
-                                   'a valid integer'.format(option))
+            if not str(value).isdigit():
+                raise RuntimeError('invalid {} configured. Please specify '
+                                   'a valid integer {}'.format(option, value))
 
         self.log.debug('Setting in-memory config option %s to: %s', option,
                        value)
@@ -177,39 +170,34 @@ class Module(MgrModule):
 
     def _config_mode(self, inbuf, cmd):
         str_mode = cmd.get('mode', 'cloud')
-        if str_mode.lower() not in ['cloud', 'onpremise', 'local']:
-            return -errno.EINVAL, 'invalid configuration, enable=[cloud|onpremise|local]', ''
+        if str_mode.lower() not in ['cloud', 'local']:
+            return -errno.EINVAL, '', 'invalid configuration, enable=[cloud|local]'
         try:
             self.set_config('diskprediction_config_mode', str_mode)
             return (0,
                     'success to config disk prediction mode: %s'
                     % str_mode.lower(), 0)
         except Exception as e:
-            return -errno.EINVAL, str(e), ''
+            return -errno.EINVAL, '', str(e)
 
     def _self_test(self, inbuf, cmd):
         from .test.test_agents import test_agents
         test_agents(self)
         return 0, 'self-test completed', ''
 
-    def _test_api(self, inbuf, cmd):
-        from .common.clusterdata import ClusterAPI
-        devinfo = ClusterAPI(self).get_device_health('WDC_WD1003FBYX-18Y7B0_WD-WCAW32140123')
-        devinfo.values()
-        # devinfo = self.get('devices')
-        self.log.error("devices: %s" % devinfo)
-        return 0, 'test-api completed', ''
-
-
-    def _set_cert_path(self, inbuf, cmd):
-        str_cert_path = cmd.get('cert_path', '')
-        try:
-            self.set_config('diskprediction_cert_path', str_cert_path)
-            return (0,
-                    'success to config ssl certification file path %s'
-                    % str_cert_path, 0)
-        except Exception as e:
-            return -errno.EINVAL, str(e), ''
+    def _config_cert(self, inbuf, cmd):
+        trusted_certs = ''
+        str_cert_path = cmd.get('certpath', '')
+        if os.path.exists(str_cert_path):
+            with open(str_cert_path, 'rb') as f:
+                trusted_certs = f.read()
+            self.set_config_option(
+                'diskprediction_cert_context', trusted_certs)
+            for _agent in self._agents:
+                _agent.event.set()
+            return 0, 'succeed to config ssl certification', ''
+        else:
+            return -errno.EINVAL, '', 'certification file not existed'
 
     def _set_ssl_target_name(self, inbuf, cmd):
         str_ssl_target = cmd.get('ssl_target_name', '')
@@ -218,7 +206,7 @@ class Module(MgrModule):
             return (0,
                     'success to config ssl target name', 0)
         except Exception as e:
-            return -errno.EINVAL, str(e), ''
+            return -errno.EINVAL, '', str(e)
 
     def _set_ssl_default_authority(self, inbuf, cmd):
         str_ssl_authority = cmd.get('ssl_authority', '')
@@ -227,10 +215,9 @@ class Module(MgrModule):
             return (0,
                     'success to config ssl default authority', 0)
         except Exception as e:
-            return -errno.EINVAL, str(e), ''
+            return -errno.EINVAL, '', str(e)
 
     def _get_predicted_status(self, inbuf, cmd):
-        osd_data = dict()
         physical_data = dict()
         try:
             if not self._prediction_result:
@@ -259,11 +246,13 @@ class Module(MgrModule):
                 msg = 'device %s predicted data not ready' % cmd['dev_id']
         except Exception as e:
             if str(e).find('No such file') >= 0:
-                msg = 'unable to get device {} predicted data'.format(cmd['dev_id'])
+                msg = 'unable to get device {} predicted data'.format(
+                    cmd['dev_id'])
             else:
-                msg = 'unable to get osd {} predicted data, {}' % (cmd['dev_id'], str(e))
+                msg = 'unable to get osd {} predicted data, {}'.format(
+                    cmd['dev_id'], str(e))
             self.log.error(msg)
-            return -errno.EINVAL, msg, ''
+            return -errno.EINVAL, '', msg
         return 0, msg, ''
 
     def _config_set(self, inbuf, cmd):
@@ -310,7 +299,7 @@ class Module(MgrModule):
                 for avg in avgs:
                     if avg.lower() == 'diskprediction':
                         continue
-                    if '=' in avg or ',' in avg:
+                    if '=' in avg or ',' in avg or not avg:
                         continue
                     fun_name += '_%s' % avg.replace('-', '_')
                 if fun_name:
@@ -318,7 +307,7 @@ class Module(MgrModule):
                         self, fun_name)
                     if fun:
                         return fun(inbuf, cmd)
-        return -errno.EINVAL, 'cmd not found', ''
+        return -errno.EINVAL, '', 'cmd not found'
 
     def show_module_config(self):
         self.fsid = self.get('mon_map')['fsid']
@@ -332,19 +321,28 @@ class Module(MgrModule):
         self.status = DP_MGR_STAT_ENABLED
 
         while True:
-            if self.get_configuration('diskprediction_config_mode').lower() in ['cloud', 'onpremise']:
+            if self.get_configuration('diskprediction_config_mode').lower() == 'cloud':
                 enable_cloud = True
-            if enable_cloud and not self._activate_cloud:
+            else:
+                enable_cloud = False
+            # Enable cloud mode prediction process
+            if enable_cloud and not self._activated_cloud:
+                if self._activated_local:
+                    self.stop_disk_prediction()
                 self.start_cloud_disk_prediction()
-            elif not enable_cloud and self._activate_cloud:
-                self.stop_cloud_disk_prediction()
+            # Enable local mode prediction process
+            elif not enable_cloud and not self._activated_local:
+                if self._activated_cloud:
+                    self.stop_disk_prediction()
+                self.start_local_disk_prediction()
+
             self.shutdown_event.wait(5)
             if self.shutdown_event.is_set():
                 break
-        self.stop_cloud_disk_prediction()
+        self.stop_disk_prediction()
 
     def start_cloud_disk_prediction(self):
-        assert not self._activate_cloud
+        assert not self._activated_cloud
         for dp_agent in DP_AGENTS:
             obj_agent = dp_agent(self)
             if obj_agent:
@@ -352,19 +350,32 @@ class Module(MgrModule):
             else:
                 raise Exception('failed to start task %s' % obj_agent.task_name)
             self._agents.append(obj_agent)
-        self._activate_cloud = True
+        self._activated_cloud = True
         self.log.info('start cloud disk prediction')
 
-    def stop_cloud_disk_prediction(self):
-        assert self._activate_cloud
+    def start_local_disk_prediction(self):
+        assert not self._activated_local
+        for dp_agent in [SmartRunner, PredictionRunner]:
+            obj_agent = dp_agent(self)
+            if obj_agent:
+                obj_agent.start()
+            else:
+                raise Exception('failed to start task %s' % obj_agent.task_name)
+            self._agents.append(obj_agent)
+        self._activated_local = True
+        self.log.info('start local model disk prediction')
+
+    def stop_disk_prediction(self):
+        assert self._activated_local or self._activated_cloud
         self.status = DP_MGR_STAT_DISABLED
         while self._agents:
             dp_agent = self._agents.pop()
             dp_agent.terminate()
             dp_agent.join(5)
             del dp_agent
-        self._activate_cloud = False
-        self.log.info('stop cloud disk prediction')
+        self._activated_local = False
+        self._activated_cloud = False
+        self.log.info('stop disk prediction')
 
     def shutdown(self):
         self.shutdown_event.set()

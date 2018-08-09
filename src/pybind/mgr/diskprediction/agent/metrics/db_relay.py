@@ -44,9 +44,9 @@ class MGRDpMon(BaseDP):
 class MGRDpOsd(BaseDP):
     _fields = [
         'fsid', 'host', '_id', 'uuid', 'up', '_in', 'weight', 'public_addr',
-        'cluster_addr', 'heartbeat_back_addr', 'heartbeat_front_addr',
-        'state', 'backend_filestore_dev_node', 'backend_filestore_partition_path',
-        'ceph_release', 'devices', 'osd_data', 'osd_journal', 'rotational'
+        'cluster_addr', 'state', 'backend_filestore_dev_node',
+        'backend_filestore_partition_path', 'ceph_release', 'devices',
+        'osd_data', 'osd_journal', 'rotational'
     ]
 
 
@@ -246,8 +246,6 @@ class DBRelayAgent(MetricsAgent):
             osd_weight = _data['weight']
             osd_public_addr = _data['public_addr']
             osd_cluster_addr = _data['cluster_addr']
-            osd_heartbeat_back_addr = _data['heartbeat_back_addr']
-            osd_heartbeat_front_addr = _data['heartbeat_front_addr']
             osd_state = _data['state']
             osd_metadata = db.get_osd_metadata(osd_id)
             if osd_metadata:
@@ -296,8 +294,6 @@ class DBRelayAgent(MetricsAgent):
                         weight=osd_weight,
                         public_addr=osd_public_addr,
                         cluster_addr=osd_cluster_addr,
-                        heartbeat_back_addr=osd_heartbeat_back_addr,
-                        heartbeat_front_addr=osd_heartbeat_front_addr,
                         state=','.join(osd_state),
                         backend_filestore_dev_node=osd_dev_node,
                         backend_filestore_partition_path=osd_dev_path,

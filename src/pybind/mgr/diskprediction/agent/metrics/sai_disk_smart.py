@@ -1,6 +1,9 @@
 from __future__ import absolute_import
 
+import datetime
+import _strptime
 import socket
+import time
 
 from . import AGENT_VERSION, MetricsAgent, MetricsField
 from ...common.clusterdata import ClusterAPI
@@ -45,9 +48,13 @@ class SAIDiskSmartAgent(MetricsAgent):
                     osds_smart = obj_api.get_device_health(dev_info['dev_id'])
                     if not osds_smart:
                         continue
-                    for dev_identify, s_val in osds_smart.iteritems():
+                    # Always pass through last smart data record
+                    o_key = sorted(osds_smart.iterkeys(), reverse=True)[0]
+                    if o_key:
+                        s_date = o_key
+                        s_val = osds_smart[s_date]
                         smart_data = SAIDiskSmartFields()
-                        smart_data.tags['disk_name'] = str(dev_identify)
+                        smart_data.tags['disk_name'] = str(dev_name)
                         smart_data.fields['cluster_domain_id'] = str(cluster_id)
                         smart_data.tags['host_domain_id'] = \
                             str('%s_%s'
@@ -83,21 +90,21 @@ class SAIDiskSmartAgent(MetricsAgent):
                                     wwpn = ('%X%s' % (wwn[k], wwpn)).lower()
                                     break
                         if wwpn:
-                            smart_data.tags['disk_domain_id'] = str(dev_identify)
+                            smart_data.tags['disk_domain_id'] = str(dev_info['dev_id'])
                             smart_data.tags['disk_wwn'] = str(wwpn)
                             if serial_number:
                                 smart_data.fields['serial_number'] = str(serial_number)
                             else:
                                 smart_data.fields['serial_number'] = str(wwpn)
                         elif serial_number:
-                            smart_data.tags['disk_domain_id'] = str(dev_identify)
+                            smart_data.tags['disk_domain_id'] = str(dev_info['dev_id'])
                             smart_data.fields['serial_number'] = str(serial_number)
                             if wwpn:
                                 smart_data.tags['disk_wwn'] = str(wwpn)
                             else:
                                 smart_data.tags['disk_wwn'] = str(serial_number)
                         else:
-                            smart_data.tags['disk_domain_id'] = str(dev_identify)
+                            smart_data.tags['disk_domain_id'] = str(dev_info['dev_id'])
                             smart_data.tags['disk_wwn'] = str(dev_name)
                             smart_data.fields['serial_number'] = str(dev_name)
                         smart_data.tags['primary_key'] = \
@@ -105,4 +112,7 @@ class SAIDiskSmartAgent(MetricsAgent):
                                 % (cluster_id,
                                    smart_data.tags['host_domain_id'],
                                    smart_data.tags['disk_domain_id']))
+                        smart_data.timestamp = \
+                            time.mktime(datetime.datetime.strptime(
+                                s_date, '%Y%m%d-%H%M%S').timetuple())
                         self.data.append(smart_data)

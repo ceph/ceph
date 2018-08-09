@@ -20,7 +20,8 @@ class BaseAgent(object):
             self._collect_data()
             self._run()
         except TimeoutError:
-            self._logger.error('%s failed to execute %s task' % (__name__, self.measurement))
+            self._logger.error('{} failed to execute {} task'.format(
+                __name__, self.measurement))
 
     def __nonzero__(self):
         if not self._module_inst and not self._client:

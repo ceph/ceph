@@ -25,9 +25,9 @@ RBD_FEATURES_NAME_MAPPING = {
 
 def differentiate(data1, data2):
     """
-    >>> times = [0, 2]
-    >>> values = [100, 101]
-    >>> differentiate(*zip(times, values))
+    # >>> times = [0, 2]
+    # >>> values = [100, 101]
+    # >>> differentiate(*zip(times, values))
     0.5
     """
     return (data2[1] - data1[1]) / float(data2[0] - data1[0])
@@ -41,7 +41,7 @@ class ClusterAPI(object):
     def format_bitmask(features):
         """
         Formats the bitmask:
-        >>> format_bitmask(45)
+        # >>> format_bitmask(45)
         ['deep-flatten', 'exclusive-lock', 'layering', 'object-map']
         """
         names = [val for key, val in RBD_FEATURES_NAME_MAPPING.items()
@@ -324,7 +324,14 @@ class ClusterAPI(object):
     def get_health_checks(self):
         health = json.loads(self.module.get('health')['json'])
         if health.get('checks'):
-            return json.dumps(health.get('checks'))
+            message = ''
+            checks = health['checks']
+            for key in checks.keys():
+                if message:
+                    message += ";"
+                if checks[key].get('summary', {}).get('message', ""):
+                    message += checks[key]['summary']['message']
+            return message
         else:
             return ''
 
@@ -351,11 +358,14 @@ class ClusterAPI(object):
             if dev.get('devid'):
                 osd_devices.append(dev.get('devid'))
         for dev_id in osd_devices:
+            o_key = ''
             if device_id and dev_id != device_id:
                 continue
             smart_data = self.get_device_health(dev_id)
-            if smart_data and smart_data.values():
-                dev_smart = smart_data.values()[0]
+            if smart_data:
+                o_key = sorted(smart_data.iterkeys(), reverse=True)[0]
+            if o_key and smart_data and smart_data.values():
+                dev_smart = smart_data[o_key]
                 if dev_smart:
                     osd_smart[dev_id] = dev_smart
         return osd_smart
@@ -379,6 +389,9 @@ class ClusterAPI(object):
                             res[key] = v
                     except IOError:
                         pass
+                    except OSError as e:
+                        self.module.log.error(
+                            'unable to get device {} health, {}'.format(device_id, str(e)))
         except IOError:
             return {}
         return res

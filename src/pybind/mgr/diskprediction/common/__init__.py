@@ -1,7 +1,7 @@
 from __future__ import absolute_import
-
 import errno
 from functools import wraps
+from httplib import BAD_REQUEST
 import os
 import signal
 
@@ -11,6 +11,16 @@ DP_MGR_STAT_WARNING = 'WARNING'
 DP_MGR_STAT_FAILED = 'FAILED'
 DP_MGR_STAT_DISABLED = 'DISABLED'
 DP_MGR_STAT_ENABLED = 'ENABLED'
+
+
+class DummyResonse:
+    def __init__(self):
+        self.resp_json = dict()
+        self.content = 'DummyResponse'
+        self.status_code = BAD_REQUEST
+
+    def json(self):
+        return self.resp_json
 
 
 class TimeoutError(Exception):

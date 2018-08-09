@@ -1,11 +1,9 @@
 from __future__ import absolute_import
-
 import datetime
-import time
 
 from .. import BaseAgent
+from ...common import DP_MGR_STAT_FAILED, DP_MGR_STAT_OK
 from ...common.clusterdata import ClusterAPI
-
 
 PREDICTION_FILE = '/var/tmp/disk_prediction.json'
 
@@ -46,41 +44,18 @@ class PredictionAgent(BaseAgent):
 
     def _parse_prediction_data(self, host_domain_id, disk_domain_id):
         result = {}
-
-        sql = 'SELECT * FROM "%s" WHERE (%s) ORDER BY time DESC LIMIT 1'
-        where = 'host_domain_id=\'%s\' AND disk_domain_id=\'%s\'' % (host_domain_id, disk_domain_id)
         try:
             query_info = self._client.query_info(
-                sql % (self.__class__.measurement, where))
+                host_domain_id, disk_domain_id, 'sai_disk_prediction')
             status_code = query_info.status_code
             if status_code == 200:
-                resp = query_info.json()
-                rc = resp.get('results', [])
-                if rc:
-                    series = rc[0].get('series', [])
-                    if series:
-                        values = series[0].get('values', [])
-                        if not values:
-                            return result
-
-                        disk_id_idx = 0
-                        columns = series[0].get('columns', [])
-                        for _idx, _val in enumerate(columns):
-                            if _val == 'disk_domain_id':
-                                disk_id_idx = _idx
-
-                        if not disk_id_idx:
-                            return result
-
-                        for item in values:
-                            # get prediction key and value from server.
-                            for name, value in zip(columns, item):
-                                # process prediction data
-                                result[name] = value
+                result = query_info.json()
+                self._module_inst.status = DP_MGR_STAT_OK
             else:
                 resp = query_info.json()
                 if resp.get('error'):
                     self._logger.error(str(resp['error']))
+                    self._module_inst.status = DP_MGR_STAT_FAILED
         except Exception as e:
             self._logger.error(str(e))
         return result
@@ -105,7 +80,6 @@ class PredictionAgent(BaseAgent):
         osds = obj_api.get_osds()
         for osd in osds:
             osd_id = osd.get('osd')
-            osd_uuid = osd.get('uuid')
             if osd_id is None:
                 continue
             if not osd.get('in'):
@@ -230,9 +204,13 @@ class PredictionAgent(BaseAgent):
                             to_date = self._convert_timestamp(predicted, life_expectancy_day_max)
 
                         obj_api.set_device_life_expectancy(dev_id, from_date, to_date)
-                        self._logger.info('succeed to set device %s life expectancy from: %s, to: %s' % (dev_id, from_date, to_date))
+                        self._logger.info(
+                            'succeed to set device {} life expectancy from: {}, to: {}'.format(
+                                dev_id, from_date, to_date))
                     except Exception as e:
-                        self._logger.error('failed to set device %s life expectancy from: %s, to: %s, %s' % (dev_id, from_date, to_date, str(e)))
+                        self._logger.error(
+                            'failed to set device {} life expectancy from: {}, to: {}, {}'.format(
+                                dev_id, from_date, to_date, str(e)))
                 else:
                     if dev_id:
                         obj_api.reset_device_life_expectancy(dev_id)

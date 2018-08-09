@@ -2,10 +2,9 @@
 DiskPrediction plugin
 =====================
 
-Disk Prediction plugin is used to collect disk information from Ceph cluster and
-send these data to Disk prediction server. Anohter the plugin also receive the physical 
-devices healthy prediction data and use the Ceph device command to write the life expectancy 
-date.
+Disk prediction plugin supports two modes: cloud mode and local mode. In cloud mode, disk and Cepth operating status information are collected from Ceph cluster and sent to DiskPrediction server in cloud. DiskPrediction server analyzes the data and provides the prediction result of disk health state for Ceph clusters. 
+Local mode does not require a DiskPrediction server in cloud. It uses internal predictor module in the plugin to provide a lite prediction result of disk health state.  
+Based on the prediction result,  DiskPrediction plugin reports back the life expectancy days information of disks to Ceph clusters by Ceph device commands. 
 
 
 Enabling
@@ -18,11 +17,27 @@ environment:
 
     ceph mgr module enable diskprediction
 
-Connection settings
--------------------
 
-Run the following command to set up connection between Ceph system and
-DiskPrediction server.
+Select the plugin use mode:
+
+::
+
+    ceph diskprediction config-mode <local/cloud>
+
+
+Local Mode
+----------
+
+The Ceph diskprediction plugin uses internal predictor module to provide the device health prediction. It leverages the device health plugin to collect disk health metrics. The local predictor module requires at least six days data of device health metrics to provide the prediction. 
+
+
+Cloud Mode Connection settings
+------------------------------
+
+Registration of a new user is required in Cloud mode. The URL for new user registration is http://federator-ai-homepage.s3-website-us-west-2.amazonaws.com/#/. 
+DiskPrediction server and account information will be provided after registration is done. 
+Run the following command to set up connection between Ceph system  
+and DiskPrediction server.
 
 ::
 

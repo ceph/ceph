@@ -52,7 +52,7 @@ class CephClusterAgent(MetricsAgent):
         c_data = CephCluster()
         cluster_state = obj_api.get_health_status()
         c_data.tags['cluster_id'] = cluster_id
-        c_data.fields['cluster_health'] = cluster_state
+        c_data.fields['cluster_health'] = str(cluster_state)
         c_data.fields['agenthost'] = socket.gethostname()
         c_data.tags['agenthost_domain_id'] = \
             '%s_%s' % (cluster_id, c_data.fields['agenthost'])
