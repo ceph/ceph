@@ -43,3 +43,4 @@ sensible.
     Devicehealth plugin <devicehealth>
     Orchestrator CLI plugin <orchestrator_cli>
     Rook plugin <rook>
+    Insights plugin <insights>
