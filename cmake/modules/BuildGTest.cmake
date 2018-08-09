@@ -19,7 +19,7 @@ macro(_build_gtest gtest_root)
 
   ExternalProject_Get_Property(googletest binary_dir)
   set(GTEST_LIBRARY_PATH ${binary_dir}/${CMAKE_FIND_LIBRARY_PREFIXES}gtest.a)
-  set(GTEST_LIBRARY gtest)
+  set(GTEST_LIBRARY GTest::GTest)
   add_library(${GTEST_LIBRARY} STATIC IMPORTED)
   set_target_properties(${GTEST_LIBRARY} PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${GTEST_INCLUDE_DIRS}"
@@ -30,7 +30,7 @@ macro(_build_gtest gtest_root)
   set(GTEST_LIBRARIES ${GTEST_LIBRARY})
 
   set(GTEST_MAIN_LIBRARY_PATH ${binary_dir}/${CMAKE_FIND_LIBRARY_PREFIXES}gtest_main.a)
-  set(GTEST_MAIN_LIBRARY gtest_main)
+  set(GTEST_MAIN_LIBRARY GTest::Main)
   add_library(${GTEST_MAIN_LIBRARY} STATIC IMPORTED)
   set_target_properties(${GTEST_MAIN_LIBRARY} PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${GTEST_INCLUDE_DIRS}"
@@ -39,7 +39,7 @@ macro(_build_gtest gtest_root)
   add_dependencies(${GTEST_MAIN_LIBRARY} googletest)
 
   set(GMOCK_LIBRARY_PATH ${binary_dir}/${CMAKE_FIND_LIBRARY_PREFIXES}gmock.a)
-  set(GMOCK_LIBRARY gmock)
+  set(GMOCK_LIBRARY GMock::GMock)
   add_library(${GMOCK_LIBRARY} STATIC IMPORTED)
   set_target_properties(${GMOCK_LIBRARY} PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${GMOCK_INCLUDE_DIRS}"
@@ -49,7 +49,7 @@ macro(_build_gtest gtest_root)
   add_dependencies(${GMOCK_LIBRARY} googletest)
 
   set(GMOCK_MAIN_LIBRARY_PATH ${binary_dir}/${CMAKE_FIND_LIBRARY_PREFIXES}gmock_main.a)
-  set(GMOCK_MAIN_LIBRARY gmock_main)
+  set(GMOCK_MAIN_LIBRARY GMock::Main)
   add_library(${GMOCK_MAIN_LIBRARY} STATIC IMPORTED)
   set_target_properties(${GMOCK_MAIN_LIBRARY} PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${GMOCK_INCLUDE_DIRS}"

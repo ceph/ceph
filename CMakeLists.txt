@@ -1,9 +1,8 @@
-cmake_minimum_required(VERSION 2.8.11)
+cmake_minimum_required(VERSION 3.5.1)
+
+project(dmclock CXX)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake/modules")
-
-set(CMAKE_CXX_FLAGS
-  "${CMAKE_CXX_FLAGS} -std=c++11 -Wno-write-strings -Wall -pthread")
 
 if (NOT(TARGET gtest AND TARGET gtest_main))
   if (NOT GTEST_FOUND)
@@ -17,6 +16,11 @@ endif()
 if (NOT(BOOST_FOUND))
   find_package(Boost REQUIRED)
 endif()
+
+find_package(Threads)
+
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_subdirectory(src)
 add_subdirectory(sim)
