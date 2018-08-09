@@ -1027,7 +1027,7 @@ Description: Python 3 libraries for the Ceph libcephfs library
  This package contains the debugging symbols for python3-cephfs.
 
 Package: python-ceph-argparse
-Architecture: linux-any
+Architecture: all
 Section: python
 Depends: ${misc:Depends},
          ${python:Depends},
@@ -1042,7 +1042,7 @@ Description: Python 2 utility libraries for Ceph CLI
  Ceph CLI as well as the RESTful interface.
 
 Package: python3-ceph-argparse
-Architecture: linux-any
+Architecture: all
 Section: python
 Depends: ${misc:Depends},
          ${python3:Depends},
