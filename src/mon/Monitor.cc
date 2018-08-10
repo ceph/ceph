@@ -2385,6 +2385,70 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
   }
 }
 
+void Monitor::print_mon_status(ostream& ss)
+{
+  Formatter *f = Formatter::create("table");
+
+  f->dump_string("name", name);
+  f->dump_int("rank", rank);
+  f->dump_string("state", get_state_name());
+  f->dump_int("election_epoch", get_epoch());
+  f->flush(ss);
+
+  ss << "\n \nquorum:\n" 
+     << "  quorum: " << quorum << "\n" 
+     << "  name:   " << get_quorum_names();
+
+  ss << "\n \nfeatures:\n"
+     << "  required_con: " << required_features << "\n"
+     << "  required_mon: ";
+  mon_feature_t req_mon_features = get_required_mon_features();
+  req_mon_features.print(ss);
+
+  ss << "\n  quorum_con:   " << quorum_con_features << "\n"
+     << "  quorum_mon:   "; 
+  quorum_mon_features.print(ss);
+
+  ss << "\n \noutside_quorum:\n";
+  for (set<string>::iterator p = outside_quorum.begin(); p != outside_quorum.end(); ++p)
+    ss << "  " << *p << "\n";
+
+  ss << "\n \nextra_probe_peers:\n";
+  for (set<entity_addr_t>::iterator p = extra_probe_peers.begin();
+       p != extra_probe_peers.end();
+       ++p)
+    ss << "  " << *p << "\n";
+
+  ss << "\n \nsync_provider:\n";
+  for (map<uint64_t,SyncProvider>::const_iterator p = sync_providers.begin();
+       p != sync_providers.end();
+       ++p) {
+    f->dump_unsigned("cookie", p->second.cookie);
+    f->dump_stream("entity") << p->second.entity;
+    f->dump_stream("timeout") << p->second.timeout;
+    f->dump_unsigned("last_committed", p->second.last_committed);
+    f->dump_stream("last_key") << p->second.last_key;
+  }
+  f->flush(ss);
+
+  if (is_synchronizing()) {
+    ss << "\n \nsync_provider:\n"
+       << "  sync_provider: " << sync_provider
+       << "  sync_cookie:   " << sync_cookie
+       << "  sync_start_version" << sync_start_version << "\n";
+  }
+
+  if (g_conf()->mon_sync_provider_kill_at > 0)
+    ss << "\n \nprovider_kill_at: " << g_conf()->mon_sync_provider_kill_at;
+  if (g_conf()->mon_sync_requester_kill_at > 0)
+    ss << "\n \nrequester_kill_at" << g_conf()->mon_sync_requester_kill_at;
+
+  ss << "\n \nmonmap:\n";
+  monmap->print(ss);
+
+  delete f;
+}
+
 
 // health status to clog
 
@@ -3153,7 +3217,8 @@ void Monitor::handle_command(MonOpRequestRef op)
       prefix != "mon sync force" &&
       prefix != "mon metadata" &&
       prefix != "mon versions" &&
-      prefix != "mon count-metadata") {
+      prefix != "mon count-metadata" &&
+      prefix != "mon status") {
     monmon()->dispatch(op);
     return;
   }
@@ -3605,6 +3670,11 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->close_section();
     f->close_section();
     f->flush(rdata);
+    rs = "";
+    r = 0;
+  } else if (prefix == "mon status") {
+    print_mon_status(ds);
+    rdata.append(ds);
     rs = "";
     r = 0;
   }
