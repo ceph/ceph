@@ -7,10 +7,10 @@
 
 class RGWS_RADOS : public RGWService
 {
+  std::vector<std::string> get_deps();
 public:
   RGWS_RADOS(CephContext *cct) : RGWService(cct, "rados") {}
 
-  std::vector<std::string> deps();
   int create_instance(JSONFormattable& conf, RGWServiceInstanceRef *instance);
 };
 
