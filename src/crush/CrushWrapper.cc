@@ -860,13 +860,13 @@ int CrushWrapper::get_children(int id, list<int> *children) const
 
 void CrushWrapper::get_children_of_type(int id,
                                         int type,
-					set<int> *children,
+					vector<int> *children,
 					bool exclude_shadow) const
 {
   if (id >= 0) {
     if (type == 0) {
       // want leaf?
-      children->insert(id);
+      children->push_back(id);
     }
     return;
   }
@@ -879,7 +879,7 @@ void CrushWrapper::get_children_of_type(int id,
     return;
   } else if (b->type == type) {
     if (!is_shadow_item(b->id) || !exclude_shadow) {
-      children->insert(b->id);
+      children->push_back(b->id);
     }
     return;
   }
@@ -891,7 +891,7 @@ void CrushWrapper::get_children_of_type(int id,
 int CrushWrapper::get_rule_failure_domain(int rule_id)
 {
   crush_rule *rule = get_rule(rule_id);
-  if (IS_ERR(rule)) {
+  if (IS_ERR(rule) || !rule) {
     return -ENOENT;
   }
   int type = 0; // default to osd-level
@@ -1510,7 +1510,7 @@ int CrushWrapper::get_parent_of_type(int item, int type, int rule) const
   set<int> roots;
   find_takes_by_rule(rule, &roots);
   for (auto root : roots) {
-    set<int> candidates;
+    vector<int> candidates;
     get_children_of_type(root, type, &candidates, false);
     for (auto candidate : candidates) {
       if (subtree_contains(candidate, item)) {
@@ -1523,6 +1523,19 @@ int CrushWrapper::get_parent_of_type(int item, int type, int rule) const
   }
   return 0; // not found
 }
+
+void CrushWrapper::get_subtree_of_type(int type, vector<int> *subtrees)
+{
+  set<int> roots;
+  find_roots(&roots);
+  for (auto r: roots) {
+    crush_bucket *b = get_bucket(r);
+    if (IS_ERR(b))
+      continue;
+    get_children_of_type(b->id, type, subtrees);
+  }
+}
+
 
 int CrushWrapper::rename_class(const string& srcname, const string& dstname)
 {
