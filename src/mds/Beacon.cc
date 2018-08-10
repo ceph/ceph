@@ -79,12 +79,24 @@ void Beacon::shutdown()
   timer.shutdown();
 }
 
+bool Beacon::ms_can_fast_dispatch(const Message *m) const
+{
+  return m->get_type() == MSG_MDS_BEACON;
+}
+
+void Beacon::ms_fast_dispatch(Message *m)
+{
+  bool handled = ms_dispatch(m);
+  assert(handled);
+}
 
 bool Beacon::ms_dispatch(Message *m)
 {
   if (m->get_type() == MSG_MDS_BEACON) {
     if (m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
       handle_mds_beacon(static_cast<MMDSBeacon*>(m));
+    } else {
+      m->put();
     }
     return true;
   }
