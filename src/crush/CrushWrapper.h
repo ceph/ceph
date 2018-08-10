@@ -739,8 +739,12 @@ public:
   int get_children(int id, list<int> *children) const;
   void get_children_of_type(int id,
                             int type,
-			    set<int> *children,
+			    vector<int> *children,
 			    bool exclude_shadow = true) const;
+  /**
+   * enumerate all subtrees by type
+   */
+  void get_subtree_of_type(int type, vector<int> *subtrees);
 
   /**
     * get failure-domain type of a specific crush rule
