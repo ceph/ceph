@@ -35,7 +35,6 @@ public:
   const std::string& type() {
     return svc_type;
   }
-  virtual std::vector<std::string> deps() = 0;
   virtual int create_instance(JSONFormattable& conf, RGWServiceInstanceRef *instance) = 0;
 };
 
@@ -52,11 +51,14 @@ protected:
   string svc_instance;
   uint64_t svc_id{0};
 
+  virtual std::vector<std::string> get_deps() {
+    return vector<std::string>();
+  }
+  virtual int init(JSONFormattable& conf) = 0;
 public:
   RGWServiceInstance(RGWService *svc, CephContext *_cct) : cct(_cct) {}
 
   virtual ~RGWServiceInstance();
-  virtual int init(JSONFormattable& conf) = 0;
 
   string get_title() {
     return svc->type() + ":" + svc_instance;

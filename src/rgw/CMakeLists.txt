@@ -40,6 +40,7 @@ endfunction()
 
 set(librgw_common_srcs
   services/svc_rados.cc
+  services/svc_zone.cc
   rgw_service.cc
   rgw_acl.cc
   rgw_acl_s3.cc
