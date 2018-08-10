@@ -5199,7 +5199,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   }
 
   if (check)
-    check_caps(in, 0);
+    check_caps(in, CHECK_CAPS_NODELAY);
 
   // wake up waiters
   if (new_caps)
