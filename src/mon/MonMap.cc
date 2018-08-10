@@ -414,50 +414,40 @@ void MonMap::set_initial_members(CephContext *cct,
   calc_legacy_ranks();
 }
 
-
-int MonMap::build_initial(CephContext *cct, ostream& errout)
+int MonMap::init_with_monmap(const std::string& monmap, std::ostream& errout)
 {
-  const auto& conf = cct->_conf;
-  // file?
-  const auto monmap = conf.get_val<std::string>("monmap");
-  if (!monmap.empty()) {
-    int r;
-    try {
-      r = read(monmap.c_str());
-    }
-    catch (const buffer::error &e) {
-      r = -EINVAL;
-    }
-    if (r >= 0)
-      return 0;
-    errout << "unable to read/decode monmap from " << monmap
-	 << ": " << cpp_strerror(-r) << std::endl;
+  int r;
+  try {
+    r = read(monmap.c_str());
+  } catch (buffer::error&) {
+    r = -EINVAL;
+  }
+  if (r >= 0)
+    return 0;
+  errout << "unable to read/decode monmap from " << monmap
+         << ": " << cpp_strerror(-r) << std::endl;
+  return r;
+}
+
+int MonMap::init_with_mon_host(const std::string& mon_host,
+                               std::ostream& errout)
+{
+  int r = build_from_host_list(mon_host, "noname-");
+  if (r < 0) {
+    errout << "unable to parse addrs in '" << mon_host << "'"
+           << std::endl;
     return r;
   }
+  created = ceph_clock_now();
+  last_changed = created;
+  calc_legacy_ranks();
+  return 0;
+}
 
-  // fsid from conf?
-  const auto new_fsid = conf.get_val<uuid_d>("fsid");
-  if (!new_fsid.is_zero()) {
-    fsid = new_fsid;
-  }
-
-  // -m foo?
-  const auto mon_host = conf.get_val<std::string>("mon_host");
-  if (!mon_host.empty()) {
-    int r = build_from_host_list(mon_host, "noname-");
-    if (r < 0) {
-      errout << "unable to parse addrs in '" << mon_host << "'"
-             << std::endl;
-      return r;
-    }
-    created = ceph_clock_now();
-    last_changed = created;
-    calc_legacy_ranks();
-    return 0;
-  }
-
-  // What monitors are in the config file?
-  std::vector <std::string> sections;
+int MonMap::init_with_config_file(const ConfigProxy& conf,
+                                  std::ostream& errout)
+{
+  std::vector<std::string> sections;
   int ret = conf.get_all_sections(sections);
   if (ret) {
     errout << "Unable to find any monitors in the configuration "
@@ -465,46 +455,44 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
 	 << ret << std::endl;
     return -ENOENT;
   }
-  std::vector <std::string> mon_names;
-  for (std::vector <std::string>::const_iterator s = sections.begin();
-       s != sections.end(); ++s) {
-    if ((s->substr(0, 4) == "mon.") && (s->size() > 4)) {
-      mon_names.push_back(s->substr(4));
+  std::vector<std::string> mon_names;
+  for (const auto& section : sections) {
+    if (section.substr(0, 4) == "mon." && section.size() > 4) {
+      mon_names.push_back(section.substr(4));
     }
   }
 
   // Find an address for each monitor in the config file.
-  for (std::vector <std::string>::const_iterator m = mon_names.begin();
-       m != mon_names.end(); ++m) {
-    std::vector <std::string> sections;
+  for (const auto& mon_name : mon_names) {
+    std::vector<std::string> sections;
     std::string m_name("mon");
     m_name += ".";
-    m_name += *m;
+    m_name += mon_name;
     sections.push_back(m_name);
     sections.push_back("mon");
     sections.push_back("global");
     std::string val;
     int res = conf.get_val_from_conf_file(sections, "mon addr", val, true);
     if (res) {
-      errout << "failed to get an address for mon." << *m << ": error "
-	   << res << std::endl;
+      errout << "failed to get an address for mon." << mon_name
+             << ": error " << res << std::endl;
       continue;
     }
     entity_addr_t addr;
     if (!addr.parse(val.c_str())) {
-      errout << "unable to parse address for mon." << *m
-	   << ": addr='" << val << "'" << std::endl;
+      errout << "unable to parse address for mon." << mon_name
+             << ": addr='" << val << "'" << std::endl;
       continue;
     }
-    if (addr.get_port() == 0)
+    if (addr.get_port() == 0) {
       addr.set_port(CEPH_MON_PORT_LEGACY);
-
+    }
     uint16_t priority = 0;
     if (!conf.get_val_from_conf_file(sections, "mon priority", val, false)) {
       try {
         priority = std::stoul(val);
       } catch (std::logic_error&) {
-        errout << "unable to parse priority for mon." << *m
+        errout << "unable to parse priority for mon." << mon_name
                << ": priority='" << val << "'" << std::endl;
         continue;
       }
@@ -512,39 +500,77 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
     // the make sure this mon isn't already in the map
     if (contains(addr))
       remove(get_name(addr));
-    if (contains(*m))
-      remove(*m);
+    if (contains(mon_name))
+      remove(mon_name);
 
-    add(mon_info_t{*m, addr, priority});
+    add(mon_info_t{mon_name, addr, priority});
+  }
+  return 0;
+}
+
+int MonMap::init_with_dns_srv(CephContext* cct,
+                              std::string srv_name,
+                              std::ostream& errout)
+{
+  string domain;
+  // check if domain is also provided and extract it from srv_name
+  size_t idx = srv_name.find("_");
+  if (idx != string::npos) {
+    domain = srv_name.substr(idx + 1);
+    srv_name = srv_name.substr(0, idx);
   }
 
+  map<string, DNSResolver::Record> records;
+  if (DNSResolver::get_instance()->resolve_srv_hosts(cct, srv_name,
+        DNSResolver::SRV_Protocol::TCP, domain, &records) != 0) {
+
+    errout << "unable to get monitor info from DNS SRV with service name: "
+           << "ceph-mon" << std::endl;
+    return -1;
+  } else {
+    for (const auto& record : records) {
+      add(mon_info_t{record.first,
+            record.second.addr,
+            record.second.priority});
+    }
+    return 0;
+  }
+}
+
+int MonMap::build_initial(CephContext *cct, ostream& errout)
+{
+  const auto& conf = cct->_conf;
+  // file?
+  if (const auto monmap = conf.get_val<std::string>("monmap");
+      !monmap.empty()) {
+    return init_with_monmap(monmap, errout);
+  }
+
+  // fsid from conf?
+  if (const auto new_fsid = conf.get_val<uuid_d>("fsid");
+      !new_fsid.is_zero()) {
+    fsid = new_fsid;
+  }
+  // -m foo?
+  if (const auto mon_host = conf.get_val<std::string>("mon_host");
+      !mon_host.empty()) {
+    if (auto ret = init_with_mon_host(mon_host, errout); ret < 0) {
+      return ret;
+    }
+  }
+  if (size() == 0) {
+    // What monitors are in the config file?
+    if (auto ret = init_with_config_file(conf, errout); ret < 0) {
+      return ret;
+    }
+  }
   if (size() == 0) {
     // no info found from conf options lets try use DNS SRV records
     string srv_name = conf.get_val<std::string>("mon_dns_srv_name");
-    string domain;
-    // check if domain is also provided and extract it from srv_name
-    size_t idx = srv_name.find("_");
-    if (idx != string::npos) {
-      domain = srv_name.substr(idx + 1);
-      srv_name = srv_name.substr(0, idx);
-    }
-
-    map<string, DNSResolver::Record> records;
-    if (DNSResolver::get_instance()->resolve_srv_hosts(cct, srv_name,
-        DNSResolver::SRV_Protocol::TCP, domain, &records) != 0) {
-
-      errout << "unable to get monitor info from DNS SRV with service name: " << 
-	   "ceph-mon" << std::endl;
-    }
-    else {
-      for (const auto& record : records) {
-        add(mon_info_t{record.first,
-                       record.second.addr,
-                       record.second.priority});
-      }
+    if (auto ret = init_with_dns_srv(cct, srv_name, errout); ret < 0) {
+      return -ENOENT;
     }
   }
-
   if (size() == 0) {
     errout << "no monitors specified to connect to." << std::endl;
     return -ENOENT;

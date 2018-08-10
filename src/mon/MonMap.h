@@ -376,6 +376,12 @@ public:
   void dump(ceph::Formatter *f) const;
 
   static void generate_test_instances(list<MonMap*>& o);
+private:
+  int init_with_monmap(const std::string& monmap, std::ostream& errout);
+  int init_with_mon_host(const std::string& mon_host, std::ostream& errout);
+  int init_with_config_file(const ConfigProxy& conf, std::ostream& errout);
+  int init_with_dns_srv(CephContext* cct, std::string srv_name,
+			std::ostream& errout);
 };
 WRITE_CLASS_ENCODER_FEATURES(MonMap)
 
