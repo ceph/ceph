@@ -613,26 +613,6 @@ function test_auth()
   # script mode
   echo 'auth del client.xx' | ceph
   expect_false ceph auth get client.xx
-
-  #
-  # get / set auid
-  #
-  local auid=444
-  ceph-authtool --create-keyring --name client.TEST --gen-key --set-uid $auid TEST-keyring
-  expect_false ceph auth import --in-file TEST-keyring
-  rm TEST-keyring
-  ceph-authtool --create-keyring --name client.TEST --gen-key --cap mon "allow r" --set-uid $auid TEST-keyring
-  ceph auth import --in-file TEST-keyring
-  rm TEST-keyring
-  ceph auth get client.TEST > $TMPFILE
-  check_response "auid = $auid"
-  ceph --format json-pretty auth get client.TEST > $TMPFILE
-  check_response '"auid": '$auid
-  ceph auth ls > $TMPFILE
-  check_response "auid: $auid"
-  ceph --format json-pretty auth ls > $TMPFILE
-  check_response '"auid": '$auid
-  ceph auth del client.TEST
 }
 
 function test_auth_profiles()
@@ -1982,12 +1962,6 @@ function test_mon_osd_pool_set()
   check_response 'not change the size'
   set -e
   ceph osd pool get pool_erasure erasure_code_profile
-
-  auid=5555
-  ceph osd pool set $TEST_POOL_GETSET auid $auid
-  ceph osd pool get $TEST_POOL_GETSET auid | grep $auid
-  ceph --format=xml osd pool get $TEST_POOL_GETSET auid | grep $auid
-  ceph osd pool set $TEST_POOL_GETSET auid 0
 
   for flag in nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
       ceph osd pool set $TEST_POOL_GETSET $flag false
