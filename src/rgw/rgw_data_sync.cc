@@ -1337,13 +1337,19 @@ public:
           } else {
             // fetch remote and write locally
             yield spawn(new RGWDataSyncSingleEntryCR(sync_env, *iter, *iter, marker_tracker, error_repo, false, tn), false);
-            if (retcode < 0) {
-              lease_cr->go_down();
-              drain_all();
-              return set_cr_error(retcode);
-            }
           }
           sync_marker.marker = *iter;
+
+          while ((int)num_spawned() > spawn_window) {
+            set_status() << "num_spawned() > spawn_window";
+            yield wait_for_child();
+            int ret;
+            while (collect(&ret, lease_stack.get())) {
+              if (ret < 0) {
+                tn->log(10, "a sync operation returned error");
+              }
+            }
+          }
         }
       } while (omapkeys->more);
       omapkeys.reset();
