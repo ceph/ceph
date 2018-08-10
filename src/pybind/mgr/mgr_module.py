@@ -2,8 +2,10 @@
 import ceph_module  # noqa
 
 import logging
+import json
 import six
 import threading
+import time
 from collections import defaultdict
 import rados
 
@@ -557,6 +559,28 @@ class MgrModule(ceph_module.BaseMgrModule):
         :return: dict, or None if the service is not found
         """
         return self._ceph_get_daemon_status(svc_type, svc_id)
+
+    def mon_command(self, cmd_dict):
+        """
+        Helper for modules that do simple, synchronous mon command
+        execution.
+
+        See send_command for general case.
+
+        :return: status int, out std, err str
+        """
+
+        t1 = time.time()
+        result = CommandResult()
+        self.send_command(result, "mon", "", json.dumps(cmd_dict), "")
+        r = result.wait()
+        t2 = time.time()
+
+        self.log.debug("mon_command: '{0}' -> {1} in {2:.3f}s".format(
+            cmd_dict['prefix'], r[0], t2 - t1
+        ))
+
+        return r
 
     def send_command(self, *args, **kwargs):
         """
