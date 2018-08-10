@@ -1292,6 +1292,7 @@ OPTION(rgw_host, OPT_STR)  // host for radosgw, can be an IP, default is 0.0.0.0
 OPTION(rgw_port, OPT_STR)  // port to listen, format as "8080" "5000", if not specified, rgw will not run external fcgi
 OPTION(rgw_dns_name, OPT_STR) // hostname suffix on buckets
 OPTION(rgw_dns_s3website_name, OPT_STR) // hostname suffix on buckets for s3-website endpoint
+OPTION(rgw_service_provider_name, OPT_STR) //service provider name which is contained in http response headers
 OPTION(rgw_content_length_compat, OPT_BOOL) // Check both HTTP_CONTENT_LENGTH and CONTENT_LENGTH in fcgi env
 OPTION(rgw_lifecycle_work_time, OPT_STR) //job process lc  at 00:00-06:00s
 OPTION(rgw_lc_lock_max_time, OPT_INT)  // total run time for a single lc processor work

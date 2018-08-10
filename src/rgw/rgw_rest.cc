@@ -631,6 +631,7 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
   if (content_type) {
     dump_header(s, "Content-Type", content_type);
   }
+  dump_header_if_nonempty(s, "Server", g_conf()->rgw_service_provider_name);
 
   try {
     RESTFUL_IO(s)->complete_header();
