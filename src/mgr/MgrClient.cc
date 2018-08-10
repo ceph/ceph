@@ -465,5 +465,6 @@ int MgrClient::service_daemon_update_status(
 
 void MgrClient::update_osd_health(std::vector<OSDHealthMetric>&& metrics)
 {
+  Mutex::Locker l(lock);
   osd_health_metrics = std::move(metrics);
 }
