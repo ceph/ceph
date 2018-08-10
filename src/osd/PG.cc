@@ -2901,6 +2901,11 @@ void PG::cancel_recovery()
 
 void PG::purge_strays()
 {
+  if (is_premerge()) {
+    dout(10) << "purge_strays " << stray_set << " but premerge, doing nothing"
+	     << dendl;
+    return;
+  }
   dout(10) << "purge_strays " << stray_set << dendl;
   
   bool removed = false;
