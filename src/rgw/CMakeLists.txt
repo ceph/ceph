@@ -285,6 +285,9 @@ set(librgw_admin_user_srcs
 add_library(rgw_admin_user SHARED
     ${librgw_admin_user_srcs}
     $<TARGET_OBJECTS:rgw_common>)
+
+add_dependencies(rgw_admin_user civetweb_h)
+
 target_link_libraries(rgw_admin_user PRIVATE
   librados
   cls_rgw_client
@@ -298,7 +301,9 @@ target_link_libraries(rgw_admin_user PRIVATE
   cls_user_client
   global
   ${CURL_LIBRARIES}
-  ${EXPAT_LIBRARIES})
+  ${EXPAT_LIBRARIES}
+  ${OPENLDAP_LIBRARIES}
+  )
 set_target_properties(rgw_admin_user PROPERTIES OUTPUT_NAME rgw_admin_user VERSION 1.0.0
   SOVERSION 0)
 install(TARGETS rgw_admin_user DESTINATION ${CMAKE_INSTALL_LIBDIR})
