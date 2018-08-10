@@ -2796,8 +2796,6 @@ void CInode::close_snaprealm(bool nojoin)
     snaprealm->close_parents();
     if (snaprealm->parent) {
       snaprealm->parent->open_children.erase(snaprealm);
-      //if (!nojoin)
-      //snaprealm->parent->join(snaprealm);
     }
     delete snaprealm;
     snaprealm = 0;
@@ -3263,13 +3261,11 @@ int CInode::get_caps_wanted(int *ploner, int *pother, int shift, int mask) const
       else
 	other |= t;	
     }
-    //cout << " get_caps_wanted client " << it->first << " " << cap_string(it->second.wanted()) << endl;
   }
   if (is_auth())
     for (const auto &p : mds_caps_wanted) {
       w |= p.second;
       other |= p.second;
-      //cout << " get_caps_wanted mds " << it->first << " " << cap_string(it->second) << endl;
     }
   if (ploner) *ploner = (loner >> shift) & mask;
   if (pother) *pother = (other >> shift) & mask;
@@ -3290,7 +3286,6 @@ bool CInode::issued_caps_need_gather(SimpleLock *lock)
 
 void CInode::replicate_relax_locks()
 {
-  //dout(10) << " relaxing locks on " << *this << dendl;
   assert(is_auth());
   assert(!is_replicated());
   
@@ -3383,7 +3378,6 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   Capability *cap = get_client_cap(client);
   bool pfile = filelock.is_xlocked_by_client(client) || get_loner() == client;
-  //(cap && (cap->issued() & CEPH_CAP_FILE_EXCL));
   bool pauth = authlock.is_xlocked_by_client(client) || get_loner() == client;
   bool plink = linklock.is_xlocked_by_client(client) || get_loner() == client;
   bool pxattr = xattrlock.is_xlocked_by_client(client) || get_loner() == client;

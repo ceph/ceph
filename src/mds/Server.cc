@@ -1713,8 +1713,6 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
 
   dout(20) << "set_trace_dist snapid " << snapid << dendl;
 
-  //assert((bool)dn == (bool)dentry_wanted);  // not true for snapshot lookups
-
   // realm
   if (snapid == CEPH_NOSNAP) {
     SnapRealm *realm;
@@ -2688,13 +2686,6 @@ CDentry* Server::prepare_null_dentry(MDRequestRef& mdr, CDir *dir, std::string_v
   // does it already exist?
   CDentry *dn = dir->lookup(dname);
   if (dn) {
-    /*
-    if (dn->lock.is_xlocked_by_other(mdr)) {
-      dout(10) << "waiting on xlocked dentry " << *dn << dendl;
-      dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
-      return 0;
-    }
-    */
     if (!dn->get_linkage(client, mdr)->is_null()) {
       // name already exists
       dout(10) << "dentry " << dname << " exists in " << *dir << dendl;
@@ -3515,12 +3506,6 @@ void Server::handle_client_open(MDRequestRef& mdr)
 	   << ", need_auth = " << need_auth
 	   << dendl;
   
-  // regular file?
-  /*if (!cur->inode.is_file() && !cur->inode.is_dir()) {
-    dout(7) << "not a file or dir " << *cur << dendl;
-    respond_to_request(mdr, -ENXIO);                 // FIXME what error do we want?
-    return;
-    }*/
   if ((flags & CEPH_O_DIRECTORY) && !cur->inode.is_dir() && !cur->inode.is_symlink()) {
     dout(7) << "specified O_DIRECTORY on non-directory " << *cur << dendl;
     respond_to_request(mdr, -EINVAL);
@@ -5898,7 +5883,6 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
 
   mdr->auth_pin(targeti);
 
-  //ceph_abort();  // test hack: make sure master can handle a slave that fails to prepare...
   assert(g_conf()->mds_kill_link_at != 5);
 
   // journal it
@@ -7254,22 +7238,6 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     return;
   }
 
-  /* project_snaprealm_past_parent() will do this job
-   *
-  // moving between snaprealms?
-  if (srcdnl->is_primary() && srci->is_multiversion() && !srci->snaprealm) {
-    SnapRealm *srcrealm = srci->find_snaprealm();
-    SnapRealm *destrealm = destdn->get_dir()->inode->find_snaprealm();
-    if (srcrealm != destrealm &&
-	(srcrealm->get_newest_seq() + 1 > srcdn->first ||
-	 destrealm->get_newest_seq() + 1 > srcdn->first)) {
-      dout(10) << " renaming between snaprealms, creating snaprealm for " << *srci << dendl;
-      mdcache->snaprealm_create(mdr, srci);
-      return;
-    }
-  }
-  */
-
   assert(g_conf()->mds_kill_rename_at != 1);
 
   // -- open all srcdn inode frags, if any --
@@ -8401,7 +8369,6 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
   }
 
   CDentry::linkage_t *srcdnl = srcdn->get_linkage();
-  //CDentry::linkage_t *straydnl = straydn ? straydn->get_linkage() : 0;
 
   // export srci?
   if (srcdn->is_auth() && srcdnl->is_primary()) {

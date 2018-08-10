@@ -1723,7 +1723,6 @@ typedef std::pair<mds_rank_t, mds_rank_t> mds_authority_t;
 #define CDIR_AUTH_UNKNOWN  mds_rank_t(-2)
 #define CDIR_AUTH_DEFAULT  mds_authority_t(CDIR_AUTH_PARENT, CDIR_AUTH_UNKNOWN)
 #define CDIR_AUTH_UNDEF    mds_authority_t(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN)
-//#define CDIR_AUTH_ROOTINODE pair<int,int>( 0, -2)
 
 class MDSCacheObjectInfo {
 public:
