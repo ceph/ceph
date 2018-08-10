@@ -39,6 +39,8 @@ function(gperf_generate input output)
 endfunction()
 
 set(librgw_common_srcs
+  services/svc_rados.cc
+  rgw_service.cc
   rgw_acl.cc
   rgw_acl_s3.cc
   rgw_acl_swift.cc
@@ -116,6 +118,8 @@ set(librgw_common_srcs
   rgw_rest_sts.cc)
 
 add_library(rgw_common OBJECT ${librgw_common_srcs})
+
+target_include_directories(rgw_common SYSTEM PUBLIC "services")
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
