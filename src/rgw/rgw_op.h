@@ -312,7 +312,8 @@ public:
     RGWAccessControlPolicy * const bucket_acl,
     const boost::optional<rgw::IAM::Policy>& bucket_policy,
     const off_t start_ofs,
-    const off_t end_ofs);
+    const off_t end_ofs,
+    bool swift_slo);
   int handle_user_manifest(const char *prefix);
   int handle_slo_manifest(bufferlist& bl);
 
@@ -1055,7 +1056,6 @@ public:
 
   virtual RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart);
   void dispose_processor(RGWPutObjDataProcessor *processor);
-
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;

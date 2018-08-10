@@ -1145,7 +1145,8 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
                                        RGWAccessControlPolicy * const bucket_acl,
                                        const boost::optional<Policy>& bucket_policy,
                                        const off_t start_ofs,
-                                       const off_t end_ofs)
+                                       const off_t end_ofs,
+                                       bool swift_slo)
 {
   ldpp_dout(this, 20) << "user manifest obj=" << ent.key.name
       << "[" << ent.key.instance << "]" << dendl;
@@ -1173,7 +1174,10 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   RGWRados::Object op_target(store, s->bucket_info, obj_ctx, part);
   RGWRados::Object::Read read_op(&op_target);
 
-  read_op.conds.if_match = ent.meta.etag.c_str();
+  if (!swift_slo) {
+    /* SLO etag is optional */
+    read_op.conds.if_match = ent.meta.etag.c_str();
+  }
   read_op.params.attrs = &attrs;
   read_op.params.obj_size = &obj_size;
 
@@ -1255,7 +1259,8 @@ static int iterate_user_manifest_parts(CephContext * const cct,
                                                  const boost::optional<Policy>& bucket_policy,
                                                  off_t start_ofs,
                                                  off_t end_ofs,
-                                                 void *param),
+                                                 void *param,
+                                                 bool swift_slo),
                                        void * const cb_param)
 {
   rgw_bucket& bucket = pbucket_info->bucket;
@@ -1309,7 +1314,8 @@ static int iterate_user_manifest_parts(CephContext * const cct,
         len_count += end_ofs - start_ofs;
 
         if (cb) {
-          r = cb(bucket, ent, bucket_acl, bucket_policy, start_ofs, end_ofs, cb_param);
+          r = cb(bucket, ent, bucket_acl, bucket_policy, start_ofs, end_ofs,
+		 cb_param, false /* swift_slo */);
           if (r < 0) {
             return r;
           }
@@ -1354,7 +1360,8 @@ static int iterate_slo_parts(CephContext *cct,
                                        const boost::optional<Policy>& bucket_policy,
                                        off_t start_ofs,
                                        off_t end_ofs,
-                                       void *param),
+                                       void *param,
+                                       bool swift_slo),
                              void *cb_param)
 {
   bool found_start = false, found_end = false;
@@ -1404,7 +1411,7 @@ static int iterate_slo_parts(CephContext *cct,
         int r = cb(part.bucket, ent, part.bucket_acl,
 		   (part.bucket_policy ?
 		    boost::optional<Policy>(*part.bucket_policy) : none),
-		   start_ofs, end_ofs, cb_param);
+		   start_ofs, end_ofs, cb_param, true /* swift_slo */);
 	if (r < 0)
           return r;
       }
@@ -1422,10 +1429,12 @@ static int get_obj_user_manifest_iterate_cb(rgw_bucket& bucket,
                                             const boost::optional<Policy>& bucket_policy,
                                             const off_t start_ofs,
                                             const off_t end_ofs,
-                                            void * const param)
+                                            void * const param,
+                                            bool swift_slo = false)
 {
   RGWGetObj *op = static_cast<RGWGetObj *>(param);
-  return op->read_user_manifest_part(bucket, ent, bucket_acl, bucket_policy, start_ofs, end_ofs);
+  return op->read_user_manifest_part(
+    bucket, ent, bucket_acl, bucket_policy, start_ofs, end_ofs, swift_slo);
 }
 
 int RGWGetObj::handle_user_manifest(const char *prefix)
@@ -1636,7 +1645,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 
     slo_parts[total_len] = part;
     total_len += part.size;
-  }
+  } /* foreach entry */
 
   complete_etag(etag_sum, &lo_etag);
 
