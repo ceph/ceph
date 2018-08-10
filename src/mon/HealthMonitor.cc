@@ -298,9 +298,12 @@ bool HealthMonitor::check_member_health()
     quorum_checks[mon->rank] = next;
     changed = true;
   } else {
-    // tell the leader
-    mon->messenger->send_message(new MMonHealthChecks(next),
-                                 mon->monmap->get_inst(mon->get_leader()));
+    // tell the leader, but only if the quorum is luminous
+    if (mon->quorum_mon_features.contains_all(
+	  ceph::features::mon::FEATURE_LUMINOUS)) {
+      mon->messenger->send_message(new MMonHealthChecks(next),
+				   mon->monmap->get_inst(mon->get_leader()));
+    }
   }
 
   return changed;
