@@ -150,6 +150,12 @@
     reshard cancel             cancel resharding a bucket
     sync error list            list sync error
     sync error trim            trim sync error
+    mfa create                 create a new MFA TOTP token
+    mfa list                   list MFA TOTP tokens
+    mfa get                    show MFA TOTP token
+    mfa remove                 delete MFA TOTP token
+    mfa check                  check MFA TOTP token
+    mfa resync                 re-sync MFA TOTP token
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
@@ -284,6 +290,13 @@
      --policy-name             name of the policy document
      --policy-doc              permission policy document
      --path-prefix             path prefix for filtering roles
+  
+  MFA options:
+     --totp-serial             a string that represents the ID of a TOTP token
+     --totp-seed               the secret seed that is used to calculate the TOTP
+     --totp-seconds            the time resolution that is being used for TOTP generation
+     --totp-window             the number of TOTP tokens that are checked before and after the current token when validating token
+     --totp-pin                the valid value of a TOTP token at a certain time
   
     --conf/-c FILE    read configuration from the given configuration file
     --id ID           set ID portion of my name
