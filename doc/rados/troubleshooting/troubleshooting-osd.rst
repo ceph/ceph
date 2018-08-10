@@ -458,8 +458,7 @@ Events from the OSD as it prepares operations:
   can proceed (e.g. a new OSDMap; for its object target to scrub; for the PG to
   finish peering; all as specified in the message).
 - ``started``: The op has been accepted as something the OSD should do and 
-  is now being performed. The op may have failed previously due to security/permission checks, 
-  out-of-date local state, etc.
+  is now being performed.
 - ``waiting for subops from``: The op has been sent to replica OSDs.
 
 Events from the FileStore:
@@ -474,8 +473,7 @@ Events from the OSD after stuff has been given to local disk:
 
 - ``op_commit``: The op has been committed (i.e. written to journal) by the
   primary OSD.
-- ``op_applied``: The op has been written to the backing FS (i.e. applied in
-  memory but not flushed out to disk) on the primary.
+- ``op_applied``: The op has been `write()'en <https://www.freebsd.org/cgi/man.cgi?write(2)>`_ to the backing FS (i.e.   applied in memory but not flushed out to disk) on the primary.
 - ``sub_op_applied``: ``op_applied``, but for a replica's "subop".
 - ``sub_op_committed``: ``op_commit``, but for a replica's subop (only for EC pools).
 - ``sub_op_commit_rec/sub_op_apply_rec from <X>``: The primary marks this when it
