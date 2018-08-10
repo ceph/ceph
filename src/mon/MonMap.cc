@@ -1,3 +1,4 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 
 #include "MonMap.h"
 
@@ -320,30 +321,38 @@ void MonMap::dump(Formatter *f) const
 }
 
 
-int MonMap::build_from_host_list(std::string hostlist, const std::string &prefix)
+int MonMap::init_with_ips(const std::string& ips,
+			  const std::string &prefix)
 {
   vector<entity_addr_t> addrs;
-  if (parse_ip_port_vec(hostlist.c_str(), addrs)) {
-    if (addrs.empty())
-      return -ENOENT;
-    for (unsigned i=0; i<addrs.size(); i++) {
-      char n[2];
-      n[0] = 'a' + i;
-      n[1] = 0;
-      if (addrs[i].get_port() == 0)
-	addrs[i].set_port(CEPH_MON_PORT_LEGACY);
-      string name = prefix;
-      name += n;
-      if (!contains(addrs[i]))
-	add(name, addrs[i]);
-    }
-    return 0;
+  if (!parse_ip_port_vec(ips.c_str(), addrs)) {
+    return -EINVAL;
   }
+  if (addrs.empty())
+    return -ENOENT;
+  for (unsigned i=0; i<addrs.size(); i++) {
+    char n[2];
+    n[0] = 'a' + i;
+    n[1] = 0;
+    if (addrs[i].get_port() == 0)
+      addrs[i].set_port(CEPH_MON_PORT_LEGACY);
+    string name = prefix;
+    name += n;
+    if (!contains(addrs[i]))
+      add(name, addrs[i]);
+  }
+  return 0;
+}
 
+int MonMap::init_with_hosts(const std::string& hostlist,
+			    const std::string& prefix)
+{
   // maybe they passed us a DNS-resolvable name
   char *hosts = resolve_addrs(hostlist.c_str());
   if (!hosts)
     return -EINVAL;
+
+  vector<entity_addr_t> addrs;
   bool success = parse_ip_port_vec(hosts, addrs);
   free(hosts);
   if (!success)
@@ -427,21 +436,6 @@ int MonMap::init_with_monmap(const std::string& monmap, std::ostream& errout)
   errout << "unable to read/decode monmap from " << monmap
          << ": " << cpp_strerror(-r) << std::endl;
   return r;
-}
-
-int MonMap::init_with_mon_host(const std::string& mon_host,
-                               std::ostream& errout)
-{
-  int r = build_from_host_list(mon_host, "noname-");
-  if (r < 0) {
-    errout << "unable to parse addrs in '" << mon_host << "'"
-           << std::endl;
-    return r;
-  }
-  created = ceph_clock_now();
-  last_changed = created;
-  calc_legacy_ranks();
-  return 0;
 }
 
 int MonMap::init_with_config_file(const ConfigProxy& conf,
@@ -554,7 +548,13 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
   // -m foo?
   if (const auto mon_host = conf.get_val<std::string>("mon_host");
       !mon_host.empty()) {
-    if (auto ret = init_with_mon_host(mon_host, errout); ret < 0) {
+    auto ret = init_with_ips(mon_host, "noname-");
+    if (ret == -EINVAL) {
+      ret = init_with_hosts(mon_host, "noname-");
+    }
+    if (ret < 0) {
+      errout << "unable to parse addrs in '" << mon_host << "'"
+	     << std::endl;
       return ret;
     }
   }
