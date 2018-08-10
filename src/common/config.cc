@@ -609,6 +609,8 @@ int md_config_t::parse_argv(ConfigValues& values,
       }
     }
   }
+  // meta expands could have modified anything.  Copy it all out again.
+  update_legacy_vals(values);
   return 0;
 }
 
