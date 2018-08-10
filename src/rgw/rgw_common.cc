@@ -915,6 +915,7 @@ void RGWHTTPArgs::append(const string& name, const string& val)
 
   if ((name.compare("acl") == 0) ||
       (name.compare("cors") == 0) ||
+      (name.compare("notification") == 0) ||
       (name.compare("location") == 0) ||
       (name.compare("logging") == 0) ||
       (name.compare("usage") == 0) ||
