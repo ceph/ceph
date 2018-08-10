@@ -35,7 +35,7 @@ struct XorMergeOperator : public KeyValueDB::MergeOperator {
   }
   // We use each operator name and each prefix to construct the
   // overall RocksDB operator name for consistency check at open time.
-  string name() const override {
+  const char *name() const override {
     return "bitwise_xor";
   }
 };
