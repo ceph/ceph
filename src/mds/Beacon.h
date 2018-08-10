@@ -48,6 +48,9 @@ public:
   void init(MDSMap const *mdsmap);
   void shutdown();
 
+  bool ms_can_fast_dispatch_any() const override { return true; }
+  bool ms_can_fast_dispatch(const Message *m) const override;
+  void ms_fast_dispatch(Message *m) override;
   bool ms_dispatch(Message *m) override;
   void ms_handle_connect(Connection *c) override {}
   bool ms_handle_reset(Connection *c) override {return false;}
