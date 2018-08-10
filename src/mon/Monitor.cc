@@ -276,7 +276,11 @@ void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
     << "cmd='" << command << "' args=" << args << ": dispatch";
 
   if (command == "mon_status") {
-    get_mon_status(f.get(), ss);
+    if (format == "plain") {
+      get_mon_status(f.get(), ss, true);
+    } else {
+      get_mon_status(f.get(), ss, false);
+    }
     if (f)
       f->flush(ss);
   } else if (command == "quorum_status") {
@@ -2303,84 +2307,147 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
     delete f;
 }
 
-void Monitor::get_mon_status(Formatter *f, ostream& ss)
+void Monitor::get_mon_status(Formatter *f, ostream& ss, bool plain)
 {
   bool free_formatter = false;
 
-  if (!f) {
+  if (!f && !plain) {
     // louzy/lazy hack: default to json if no formatter has been defined
     f = new JSONFormatter();
     free_formatter = true;
   }
 
-  f->open_object_section("mon_status");
-  f->dump_string("name", name);
-  f->dump_int("rank", rank);
-  f->dump_string("state", get_state_name());
-  f->dump_int("election_epoch", get_epoch());
+  if (f) {
+    f->open_object_section("mon_status");
+    f->dump_string("name", name);
+    f->dump_int("rank", rank);
+    f->dump_string("state", get_state_name());
+    f->dump_int("election_epoch", get_epoch());
 
-  f->open_array_section("quorum");
-  for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p) {
-    f->dump_int("mon", *p);
-  }
+    f->open_array_section("quorum");
+    for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p) {
+      f->dump_int("mon", *p);
+    }
 
-  f->close_section(); // quorum
+    f->close_section(); // quorum
 
-  f->open_object_section("features");
-  f->dump_stream("required_con") << required_features;
-  mon_feature_t req_mon_features = get_required_mon_features();
-  req_mon_features.dump(f, "required_mon");
-  f->dump_stream("quorum_con") << quorum_con_features;
-  quorum_mon_features.dump(f, "quorum_mon");
-  f->close_section(); // features
+    f->open_object_section("features");
+    f->dump_stream("required_con") << required_features;
+    mon_feature_t req_mon_features = get_required_mon_features();
+    req_mon_features.dump(f, "required_mon");
+    f->dump_stream("quorum_con") << quorum_con_features;
+    quorum_mon_features.dump(f, "quorum_mon");
+    f->close_section(); // features
 
-  f->open_array_section("outside_quorum");
-  for (set<string>::iterator p = outside_quorum.begin(); p != outside_quorum.end(); ++p)
-    f->dump_string("mon", *p);
-  f->close_section(); // outside_quorum
+    f->open_array_section("outside_quorum");
+    for (set<string>::iterator p = outside_quorum.begin(); p != outside_quorum.end(); ++p)
+      f->dump_string("mon", *p);
+    f->close_section(); // outside_quorum
 
-  f->open_array_section("extra_probe_peers");
-  for (set<entity_addr_t>::iterator p = extra_probe_peers.begin();
-       p != extra_probe_peers.end();
-       ++p)
-    f->dump_stream("peer") << *p;
-  f->close_section(); // extra_probe_peers
+    f->open_array_section("extra_probe_peers");
+    for (set<entity_addr_t>::iterator p = extra_probe_peers.begin();
+         p != extra_probe_peers.end();
+         ++p)
+      f->dump_stream("peer") << *p;
+    f->close_section(); // extra_probe_peers
 
-  f->open_array_section("sync_provider");
-  for (map<uint64_t,SyncProvider>::const_iterator p = sync_providers.begin();
-       p != sync_providers.end();
-       ++p) {
-    f->dump_unsigned("cookie", p->second.cookie);
-    f->dump_stream("entity") << p->second.entity;
-    f->dump_stream("timeout") << p->second.timeout;
-    f->dump_unsigned("last_committed", p->second.last_committed);
-    f->dump_stream("last_key") << p->second.last_key;
-  }
-  f->close_section();
-
-  if (is_synchronizing()) {
-    f->open_object_section("sync");
-    f->dump_stream("sync_provider") << sync_provider;
-    f->dump_unsigned("sync_cookie", sync_cookie);
-    f->dump_unsigned("sync_start_version", sync_start_version);
+    f->open_array_section("sync_provider");
+    for (map<uint64_t,SyncProvider>::const_iterator p = sync_providers.begin();
+         p != sync_providers.end();
+         ++p) {
+      f->dump_unsigned("cookie", p->second.cookie);
+      f->dump_stream("entity") << p->second.entity;
+      f->dump_stream("timeout") << p->second.timeout;
+      f->dump_unsigned("last_committed", p->second.last_committed);
+      f->dump_stream("last_key") << p->second.last_key;
+    }
     f->close_section();
-  }
 
-  if (g_conf()->mon_sync_provider_kill_at > 0)
-    f->dump_int("provider_kill_at", g_conf()->mon_sync_provider_kill_at);
-  if (g_conf()->mon_sync_requester_kill_at > 0)
-    f->dump_int("requester_kill_at", g_conf()->mon_sync_requester_kill_at);
+    if (is_synchronizing()) {
+      f->open_object_section("sync");
+      f->dump_stream("sync_provider") << sync_provider;
+      f->dump_unsigned("sync_cookie", sync_cookie);
+      f->dump_unsigned("sync_start_version", sync_start_version);
+      f->close_section();
+    }
 
-  f->open_object_section("monmap");
-  monmap->dump(f);
-  f->close_section();
+    if (g_conf()->mon_sync_provider_kill_at > 0)
+      f->dump_int("provider_kill_at", g_conf()->mon_sync_provider_kill_at);
+    if (g_conf()->mon_sync_requester_kill_at > 0)
+      f->dump_int("requester_kill_at", g_conf()->mon_sync_requester_kill_at);
 
-  f->dump_object("feature_map", session_map.feature_map);
-  f->close_section(); // mon_status
+    f->open_object_section("monmap");
+    monmap->dump(f);
+    f->close_section();
 
-  if (free_formatter) {
-    // flush formatter to ss and delete it iff we created the formatter
+    f->dump_object("feature_map", session_map.feature_map);
+    f->close_section(); // mon_status
+
+    if (free_formatter) {
+      // flush formatter to ss and delete it iff we created the formatter
+      f->flush(ss);
+      delete f;
+    }
+  } else {
+    Formatter *f = Formatter::create("table");
+
+    f->dump_string("name", name);
+    f->dump_int("rank", rank);
+    f->dump_string("state", get_state_name());
+    f->dump_int("election_epoch", get_epoch());
     f->flush(ss);
+
+    ss << "\n \nquorum:\n" 
+       << "  quorum: " << quorum << "\n" 
+       << "  name:   " << get_quorum_names();
+
+    ss << "\n \nfeatures:\n"
+       << "  required_con: " << required_features << "\n"
+       << "  required_mon: ";
+    mon_feature_t req_mon_features = get_required_mon_features();
+    req_mon_features.print(ss);
+
+    ss << "\n  quorum_con:   " << quorum_con_features << "\n"
+       << "  quorum_mon:   "; 
+    quorum_mon_features.print(ss);
+
+    ss << "\n \noutside_quorum:\n";
+    for (set<string>::iterator p = outside_quorum.begin(); p != outside_quorum.end(); ++p)
+      ss << "  " << *p << "\n";
+
+    ss << "\n \nextra_probe_peers:\n";
+    for (set<entity_addr_t>::iterator p = extra_probe_peers.begin();
+         p != extra_probe_peers.end();
+         ++p)
+      ss << "  " << *p << "\n";
+
+    ss << "\n \nsync_provider:\n";
+    for (map<uint64_t,SyncProvider>::const_iterator p = sync_providers.begin();
+         p != sync_providers.end();
+         ++p) {
+      f->dump_unsigned("cookie", p->second.cookie);
+      f->dump_stream("entity") << p->second.entity;
+      f->dump_stream("timeout") << p->second.timeout;
+      f->dump_unsigned("last_committed", p->second.last_committed);
+      f->dump_stream("last_key") << p->second.last_key;
+    }
+    f->flush(ss);
+
+    if (is_synchronizing()) {
+      ss << "\n \nsync_provider:\n"
+         << "  sync_provider: " << sync_provider
+         << "  sync_cookie:   " << sync_cookie
+         << "  sync_start_version" << sync_start_version << "\n";
+    }
+
+    if (g_conf()->mon_sync_provider_kill_at > 0)
+      ss << "\n \nprovider_kill_at: " << g_conf()->mon_sync_provider_kill_at;
+    if (g_conf()->mon_sync_requester_kill_at > 0)
+      ss << "\n \nrequester_kill_at" << g_conf()->mon_sync_requester_kill_at;
+
+    ss << "\n \nmonmap:\n";
+    monmap->print(ss);
+
     delete f;
   }
 }
@@ -2994,7 +3061,7 @@ void Monitor::handle_command(MonOpRequestRef op)
   dout(0) << "handle_command " << *m << dendl;
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  bool got = cmd_getval_throws(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   get_str_vec(prefix, fullcmd);
@@ -3153,7 +3220,8 @@ void Monitor::handle_command(MonOpRequestRef op)
       prefix != "mon sync force" &&
       prefix != "mon metadata" &&
       prefix != "mon versions" &&
-      prefix != "mon count-metadata") {
+      prefix != "mon count-metadata" &&
+      prefix != "mon status") {
     monmon()->dispatch(op);
     return;
   }
@@ -3483,7 +3551,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     rs = "";
     r = 0;
   } else if (prefix == "mon_status") {
-    get_mon_status(f.get(), ds);
+    get_mon_status(f.get(), ds, got);
     if (f)
       f->flush(ds);
     rdata.append(ds);
@@ -3605,6 +3673,13 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->close_section();
     f->close_section();
     f->flush(rdata);
+    rs = "";
+    r = 0;
+  } else if (prefix == "mon status") {
+    get_mon_status(f.get(), ds, true);
+    if (f)
+      f->flush(ds);
+    rdata.append(ds);
     rs = "";
     r = 0;
   }

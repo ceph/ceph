@@ -276,6 +276,7 @@ COMMAND("mon versions",
 COMMAND("versions",
 	"check running versions of ceph daemons",
 	"mon", "r", "cli,rest")
+COMMAND("mon status", "print status of monitors", "mon", "r", "cli,rest")
 
 
 

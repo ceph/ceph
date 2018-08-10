@@ -110,7 +110,7 @@ bool cmd_getval_throws(
     }
   } else {
     val = defval;
-    return true;
+    return false;
   }
 }
 
