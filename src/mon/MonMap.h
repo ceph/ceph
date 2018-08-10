@@ -343,17 +343,6 @@ public:
   int build_initial(CephContext *cct, ostream& errout);
 
   /**
-   * build a monmap from a list of hosts or ips
-   *
-   * Resolve dns as needed.  Give mons dummy names.
-   *
-   * @param hosts  list of hosts, space or comma separated
-   * @param prefix prefix to prepend to generated mon names
-   * @return 0 for success, -errno on error
-   */
-  int build_from_host_list(std::string hosts, const std::string &prefix);
-
-  /**
    * filter monmap given a set of initial members.
    *
    * Remove mons that aren't in the initial_members list.  Add missing
@@ -378,6 +367,28 @@ public:
   static void generate_test_instances(list<MonMap*>& o);
 private:
   int init_with_monmap(const std::string& monmap, std::ostream& errout);
+  /**
+   * build a monmap from a list of ips
+   *
+   * Give mons dummy names.
+   *
+   * @param hosts  list of ips, space or comma separated
+   * @param prefix prefix to prepend to generated mon names
+   * @return 0 for success, -errno on error
+   */
+  int init_with_ips(const std::string& ips,
+			 const std::string &prefix);
+  /**
+   * build a monmap from a list of hostnames
+   *
+   * Give mons dummy names.
+   *
+   * @param hosts  list of ips, space or comma separated
+   * @param prefix prefix to prepend to generated mon names
+   * @return 0 for success, -errno on error
+   */
+  int init_with_hosts(const std::string& hostlist,
+			 const std::string& prefix);
   int init_with_mon_host(const std::string& mon_host, std::ostream& errout);
   int init_with_config_file(const ConfigProxy& conf, std::ostream& errout);
   int init_with_dns_srv(CephContext* cct, std::string srv_name,
