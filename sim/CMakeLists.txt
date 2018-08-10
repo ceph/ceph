@@ -1,3 +1,5 @@
+set(K_WAY_HEAP "" CACHE STRING "K_WAY_HEAP")
+
 if(K_WAY_HEAP)
   if(K_WAY_HEAP LESS 2)
     message(FATAL_ERROR "K_WAY_HEAP value should be at least 2")

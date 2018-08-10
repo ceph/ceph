@@ -15,7 +15,6 @@
 
 // essentially the same as ceph's PrCtl.h, copied into the dmclock library
 
-#include <dmtest-config.h>
 #ifdef HAVE_SYS_PRCTL_H
 #include <iostream>
 #include <sys/prctl.h>
