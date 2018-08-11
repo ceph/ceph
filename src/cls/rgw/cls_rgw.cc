@@ -3317,7 +3317,7 @@ static int gc_iterate_entries(cls_method_context_t hctx, const string& marker, b
     get_time_key(now, &now_str);
     prepend_index_prefix(now_str, GC_OBJ_TIME_INDEX, &end_key);
 
-    CLS_LOG(0, "gc_iterate_entries end_key=%s\n", end_key.c_str());
+    CLS_LOG(10, "gc_iterate_entries end_key=%s\n", end_key.c_str());
   }
 
   string filter;
