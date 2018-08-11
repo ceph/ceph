@@ -111,6 +111,7 @@ target_link_libraries(crimson-common
 set(crimson_auth_srcs
   auth/KeyRing.cc)
 set(crimson_mon_srcs
+  mon/MonClient.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonMap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonSub.cc)
 set(crimson_net_srcs
