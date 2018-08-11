@@ -12157,11 +12157,8 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
     break;
 
   case POOL_OP_AUID_CHANGE:
-    if (pp.auid != m->auid) {
-      pp.auid = m->auid;
-      changed = true;
-    }
-    break;
+    _pool_op_reply(op, -EOPNOTSUPP, osdmap.get_epoch());
+    return false;
 
   default:
     ceph_abort();
