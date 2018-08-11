@@ -569,7 +569,6 @@ def cluster(ctx, config):
             'ceph-authtool',
             '--gen-key',
             '--name=client.admin',
-            '--set-uid=0',
             '--cap', 'mon', 'allow *',
             '--cap', 'osd', 'allow *',
             '--cap', 'mds', 'allow *',
