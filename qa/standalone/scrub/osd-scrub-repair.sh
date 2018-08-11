@@ -3006,7 +3006,7 @@ EOF
         return 1
     fi
 
-    rados rmpool $poolname $poolname --yes-i-really-really-mean-it
+    ceph osd pool rm $poolname $poolname --yes-i-really-really-mean-it
     teardown $dir || return 1
 }
 
@@ -5166,7 +5166,7 @@ EOF
       jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-obj.json || return 1
     fi
 
-    rados rmpool $poolname $poolname --yes-i-really-really-mean-it
+    ceph osd pool rm $poolname $poolname --yes-i-really-really-mean-it
     teardown $dir || return 1
 }
 
@@ -5551,7 +5551,7 @@ EOF
         return 1
     fi
 
-    rados rmpool $poolname $poolname --yes-i-really-really-mean-it
+    ceph osd pool rm $poolname $poolname --yes-i-really-really-mean-it
     teardown $dir || return 1
 }
 

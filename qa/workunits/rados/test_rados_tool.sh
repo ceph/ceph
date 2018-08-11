@@ -88,7 +88,7 @@ run_expect_nosignal "$RADOS_TOOL" --snapid "0" ls
 run_expect_nosignal "$RADOS_TOOL" --object_locator "asdf" ls
 run_expect_nosignal "$RADOS_TOOL" --namespace "asdf" ls
 
-run_expect_succ "$RADOS_TOOL" mkpool "$POOL"
+run_expect_succ "$CEPH_TOOL" osd pool create "$POOL" 8
 run_expect_succ "$CEPH_TOOL" osd erasure-code-profile set myprofile k=2 m=1 stripe_unit=2K crush-failure-domain=osd --force
 run_expect_succ "$CEPH_TOOL" osd pool create "$POOL_EC" 100 100 erasure myprofile
 
@@ -112,11 +112,11 @@ run_expect_succ "$RADOS_TOOL" -p "$POOL" setomapheader foo2 "foo2.header"
 run_expect_succ "$RADOS_TOOL" -p "$POOL" export "$TDIR/expc"
 
 # make sure that --create works
-run "$RADOS_TOOL" rmpool "$POOL" "$POOL" --yes-i-really-really-mean-it
+run "$CEPH_TOOL" osd pool rm "$POOL" "$POOL" --yes-i-really-really-mean-it
 run_expect_succ "$RADOS_TOOL" -p "$POOL" --create import "$TDIR/expa"
 
 # make sure that lack of --create fails
-run_expect_succ "$RADOS_TOOL" rmpool "$POOL" "$POOL" --yes-i-really-really-mean-it
+run_expect_succ "$CEPH_TOOL" osd pool rm "$POOL" "$POOL" --yes-i-really-really-mean-it
 run_expect_fail "$RADOS_TOOL" -p "$POOL" import "$TDIR/expa"
 
 run_expect_succ "$RADOS_TOOL" -p "$POOL" --create import "$TDIR/expa"
@@ -153,10 +153,10 @@ VAL=`"$RADOS_TOOL" -p "$POOL" getxattr foo "rados.toothbrush"`
 [ "${VAL}" = "toothbrush" ] || die "Invalid attribute after second import"
 
 # test copy pool
-run "$RADOS_TOOL" rmpool "$POOL" "$POOL" --yes-i-really-really-mean-it
-run "$RADOS_TOOL" rmpool "$POOL_CP_TARGET" "$POOL_CP_TARGET" --yes-i-really-really-mean-it
-run_expect_succ "$RADOS_TOOL" mkpool "$POOL"
-run_expect_succ "$RADOS_TOOL" mkpool "$POOL_CP_TARGET"
+run "$CEPH_TOOL" osd pool rm "$POOL" "$POOL" --yes-i-really-really-mean-it
+run "$CEPH_TOOL" osd pool rm "$POOL_CP_TARGET" "$POOL_CP_TARGET" --yes-i-really-really-mean-it
+run_expect_succ "$CEPH_TOOL" osd pool create "$POOL" 8
+run_expect_succ "$CEPH_TOOL" osd pool create "$POOL_CP_TARGET" 8
 
 # create src files
 mkdir -p "$TDIR/dir_cp_src"
@@ -236,10 +236,8 @@ run_expect_fail "$RADOS_TOOL" ls --pool "$POOL" --snapid="$snapid"k
 run_expect_succ "$RADOS_TOOL" truncate f.1 0 --pool "$POOL"
 run_expect_fail "$RADOS_TOOL" truncate f.1 0k --pool "$POOL"
 
-run "$RADOS_TOOL" rmpool delete_me_mkpool_test delete_me_mkpool_test --yes-i-really-really-mean-it
-run_expect_succ "$RADOS_TOOL" mkpool delete_me_mkpool_test 0 0
-run_expect_fail "$RADOS_TOOL" mkpool delete_me_mkpool_test2 0k 0
-run_expect_fail "$RADOS_TOOL" mkpool delete_me_mkpool_test3 0 0k
+run "$CEPH_TOOL" osd pool rm delete_me_mkpool_test delete_me_mkpool_test --yes-i-really-really-mean-it
+run_expect_succ "$CEPH_TOOL" osd pool create delete_me_mkpool_test 1
 
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 write
 run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 1k write
@@ -354,7 +352,7 @@ test_rmobj() {
 	sleep 2
     done
     $RADOS_TOOL -p $p rm $OBJ --force-full
-    $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool rm $p $p --yes-i-really-really-mean-it
     rm $V1
 }
 
@@ -396,7 +394,7 @@ test_ls() {
         die "Created $TOTAL objects but saw $CHECK"
     fi
 
-    $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool rm $p $p --yes-i-really-really-mean-it
 }
 
 test_cleanup() {
@@ -458,7 +456,7 @@ test_cleanup() {
     run_expect_succ $RADOS_TOOL -p $p cleanup --prefix benchmark_data_otherhost
     set -e
 
-    $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool rm $p $p --yes-i-really-really-mean-it
 }
 
 function test_append()

@@ -72,11 +72,7 @@ void usage(ostream& out)
 "usage: rados [options] [commands]\n"
 "POOL COMMANDS\n"
 "   lspools                          list pools\n"
-"   mkpool <pool-name> [123[ 4]]     create pool <pool-name>'\n"
-"                                    [with auid 123[and using crush rule 4]]\n"
 "   cppool <pool-name> <dest-pool>   copy content of a pool\n"
-"   rmpool <pool-name> [<pool-name> --yes-i-really-really-mean-it]\n"
-"                                    remove pool <pool-name>'\n"
 "   purge <pool-name> --yes-i-really-really-mean-it\n"
 "                                    remove all objects from pool <pool-name> without removing it\n"
 "   df                               show per-pool and total usage\n"
@@ -3024,38 +3020,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ret = 0;
   }
 
-  else if (strcmp(nargs[0], "mkpool") == 0) {
-    int auid = 0;
-    __u8 crush_rule = 0;
-    if (nargs.size() < 2)
-      usage_exit();
-    if (nargs.size() > 2) {
-      char* endptr = NULL;
-      auid = strtol(nargs[2], &endptr, 10);
-      if (*endptr) {
-	cerr << "Invalid value for auid: '" << nargs[2] << "'" << std::endl;
-	ret = -EINVAL;
-	goto out;
-      }
-      cerr << "setting auid:" << auid << std::endl;
-      if (nargs.size() > 3) {
-	crush_rule = (__u8)strtol(nargs[3], &endptr, 10);
-	if (*endptr) {
-	  cerr << "Invalid value for crush-rule: '" << nargs[3] << "'" << std::endl;
-	  ret = -EINVAL;
-	  goto out;
-	}
-	cerr << "using crush rule " << (int)crush_rule << std::endl;
-      }
-    }
-    ret = rados.pool_create_with_rule(nargs[1], crush_rule);
-    if (ret < 0) {
-      cerr << "error creating pool " << nargs[1] << ": "
-	   << cpp_strerror(ret) << std::endl;
-      goto out;
-    }
-    cout << "successfully created pool " << nargs[1] << std::endl;
-  }
   else if (strcmp(nargs[0], "cppool") == 0) {
     bool force = nargs.size() == 4 && !strcmp(nargs[3], "--yes-i-really-mean-it");
     if (nargs.size() != 3 && !(nargs.size() == 4 && force))
@@ -3091,30 +3055,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
     cout << "successfully copied pool " << nargs[1] << std::endl;
-  }
-  else if (strcmp(nargs[0], "rmpool") == 0) {
-    if (nargs.size() < 2)
-      usage_exit();
-    if (nargs.size() < 4 ||
-	strcmp(nargs[1], nargs[2]) != 0 ||
-	strcmp(nargs[3], "--yes-i-really-really-mean-it") != 0) {
-      cerr << "WARNING:\n"
-	   << "  This will PERMANENTLY DESTROY an entire pool of objects with no way back.\n"
-	   << "  To confirm, pass the pool to remove twice, followed by\n"
-	   << "  --yes-i-really-really-mean-it" << std::endl;
-      ret = -1;
-      goto out;
-    }
-    ret = rados.pool_delete(nargs[1]);
-    if (ret >= 0) {
-      cout << "successfully deleted pool " << nargs[1] << std::endl;
-    } else {
-      cerr << "pool " << nargs[1] << " could not be removed" << std::endl;
-      if (ret == -EPERM) {
-	cerr << "Check your monitor configuration - `mon allow pool delete` is set to false by default,"
-	     << " change it to true to allow deletion of pools" << std::endl;
-      }
-    }
   }
   else if (strcmp(nargs[0], "purge") == 0) {
     if (nargs.size() < 2)
