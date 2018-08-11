@@ -1,3 +1,5 @@
+set(crimson_mon_srcs
+  mon/MonMap.cc)
 set(crimson_net_srcs
   net/Dispatcher.cc
   net/Errors.cc
@@ -9,6 +11,7 @@ set(crimson_thread_srcs
 set(crimson_common_srcs
   common/config_proxy.cc)
 add_library(crimson STATIC
+  ${crimson_mon_srcs}
   ${crimson_common_srcs}
   ${crimson_net_srcs}
   ${crimson_thread_srcs}

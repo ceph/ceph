@@ -365,7 +365,7 @@ public:
   void dump(ceph::Formatter *f) const;
 
   static void generate_test_instances(list<MonMap*>& o);
-private:
+protected:
   int init_with_monmap(const std::string& monmap, std::ostream& errout);
   /**
    * build a monmap from a list of ips
