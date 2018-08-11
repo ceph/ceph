@@ -1277,15 +1277,14 @@ public:
             int ret;
             while (collect(&ret, lease_stack.get())) {
               if (ret < 0) {
-                tn->log(10, "a sync operation returned error");
+                ldout(cct, 10) << "a sync operation returned error" << dendl;
               }
             }
           }
         }
       } while ((int)entries.size() == max_entries);
 
-      lease_cr->go_down();
-      drain_all();
+      drain_all_but_stack(lease_stack.get());
 
       yield {
         /* update marker to reflect we're done with full sync */
@@ -1300,25 +1299,33 @@ public:
       if (retcode < 0) {
         ldout(sync_env->cct, 0) << "ERROR: failed to set sync marker: retcode=" << retcode << dendl;
         lease_cr->go_down();
+        drain_all();
         return set_cr_error(retcode);
       }
+      // keep lease and transition to incremental_sync()
     }
     return 0;
   }
 
   int incremental_sync() {
     reenter(&incremental_cr) {
-      yield init_lease_cr();
-      while (!lease_cr->is_locked()) {
-        if (lease_cr->is_done()) {
-          ldout(cct, 5) << "lease cr failed, done early " << dendl;
-          set_status("lease lock failed, early abort");
-          return set_cr_error(lease_cr->get_ret_status());
+      ldout(cct, 10) << "start incremental sync" << dendl;
+      if (lease_cr) {
+        ldout(cct, 10) << "lease already held from full sync" << dendl;
+      } else {
+        yield init_lease_cr();
+        while (!lease_cr->is_locked()) {
+          if (lease_cr->is_done()) {
+            ldout(cct, 5) << "lease cr failed, done early " << dendl;
+            set_status("lease lock failed, early abort");
+            return set_cr_error(lease_cr->get_ret_status());
+          }
+          set_sleeping(true);
+          yield;
         }
-        set_sleeping(true);
-        yield;
+        set_status("lease acquired");
+        ldout(cct, 10) << "took lease" << dendl;
       }
-      set_status("lease acquired");
       error_repo = new RGWOmapAppend(sync_env->async_rados, sync_env->store,
                                      rgw_raw_obj(pool, error_oid),
                                      1 /* no buffer */);
