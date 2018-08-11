@@ -1027,7 +1027,7 @@ Description: Python 3 libraries for the Ceph libcephfs library
  This package contains the debugging symbols for python3-cephfs.
 
 Package: python-ceph-argparse
-Architecture: linux-any
+Architecture: all
 Section: python
 Depends: ${misc:Depends},
          ${python:Depends},
@@ -1042,7 +1042,7 @@ Description: Python 2 utility libraries for Ceph CLI
  Ceph CLI as well as the RESTful interface.
 
 Package: python3-ceph-argparse
-Architecture: linux-any
+Architecture: all
 Section: python
 Depends: ${misc:Depends},
          ${python3:Depends},
@@ -1078,3 +1078,16 @@ Depends: librados-dev (= ${binary:Version}) ${misc:Depends},
 Description: RADOS object class development kit.
  .
  This package contains development files needed for building RADOS object class plugins.
+
+Package: cephfs-shell
+Architecture: all
+Depends: ${misc:Depends}
+         ${python3:Depends}
+Description: interactive shell for the Ceph distributed file system
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is an interactive tool that
+ allows accessing a Ceph file system without mounting it by providing
+ a nice pseudo-shell which works like an FTP client.
+ .
+ This package contains a CLI for interacting with the CephFS.
