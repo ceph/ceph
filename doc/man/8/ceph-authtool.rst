@@ -17,7 +17,6 @@ Synopsis
   [ --gen-print-key ]
   [ --import-keyring *otherkeyringfile* ]
   [ -n | --name *entityname* ]
-  [ -u | --set-uid *auid* ]
   [ -a | --add-key *base64_key* ]
   [ --cap *subsystem* *capability* ]
   [ --caps *capfile* ]
@@ -71,10 +70,6 @@ Options
 .. option:: -n, --name *name*
 
    specify entityname to operate on
-
-.. option:: -u, --set-uid *auid*
-
-   sets the auid (authenticated user id) for the specified entityname
 
 .. option:: -a, --add-key *base64_key*
 
