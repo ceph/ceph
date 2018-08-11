@@ -720,7 +720,7 @@ int librados::RadosClient::pool_create(string& name, unsigned long long auid,
   Cond cond;
   bool done;
   Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &reply);
-  reply = objecter->create_pool(name, onfinish, auid, crush_rule);
+  reply = objecter->create_pool(name, onfinish, crush_rule);
 
   if (reply < 0) {
     delete onfinish;
@@ -742,7 +742,7 @@ int librados::RadosClient::pool_create_async(string& name, PoolAsyncCompletionIm
     return r;
 
   Context *onfinish = new C_PoolAsync_Safe(c);
-  r = objecter->create_pool(name, onfinish, auid, crush_rule);
+  r = objecter->create_pool(name, onfinish, crush_rule);
   if (r < 0) {
     delete onfinish;
   }

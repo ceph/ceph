@@ -3927,7 +3927,7 @@ int Objecter::delete_selfmanaged_snap(int64_t pool, snapid_t snap,
   return 0;
 }
 
-int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
+int Objecter::create_pool(string& name, Context *onfinish,
 			  int crush_rule)
 {
   unique_lock wl(rwlock);
@@ -3945,7 +3945,6 @@ int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_CREATE;
   pool_ops[op->tid] = op;
-  op->auid = auid;
   op->crush_rule = crush_rule;
 
   pool_op_submit(op);
