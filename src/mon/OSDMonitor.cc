@@ -5952,16 +5952,10 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   stringstream ss;
   string rule_name;
   int ret = 0;
-  if (m->auid)
-    ret =  prepare_new_pool(m->name, m->auid, m->crush_rule, rule_name,
-			    0, 0,
-                            erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
-  else
-    ret = prepare_new_pool(m->name, session->auid, m->crush_rule, rule_name,
-			    0, 0,
-                            erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
+  ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
+			 0, 0,
+			 erasure_code_profile,
+			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
 
   if (ret < 0) {
     dout(10) << __func__ << " got " << ret << " " << ss.str() << dendl;
@@ -6460,7 +6454,6 @@ int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
 
 /**
  * @param name The name of the new pool
- * @param auid The auid of the pool owner. Can be -1
  * @param crush_rule The crush rule to use. If <0, will use the system default
  * @param crush_rule_name The crush rule to use, if crush_rulset <0
  * @param pg_num The pg_num to use. If set to 0, will use the system default
@@ -6473,7 +6466,7 @@ int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
  *
  * @return 0 on success, negative errno on failure.
  */
-int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
+int OSDMonitor::prepare_new_pool(string& name,
 				 int crush_rule,
 				 const string &crush_rule_name,
                                  unsigned pg_num, unsigned pgp_num,
@@ -6609,7 +6602,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   pi->set_pg_num(pg_num);
   pi->set_pgp_num(pgp_num);
   pi->last_change = pending_inc.epoch;
-  pi->auid = auid;
+  pi->auid = 0;
   if (pool_type == pg_pool_t::TYPE_ERASURE) {
       pi->erasure_code_profile = erasure_code_profile;
   } else {
@@ -11170,7 +11163,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     else if (fast_read_param > 0)
       fast_read = FAST_READ_ON;
     
-    err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
+    err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
 			   pg_num, pgp_num,
