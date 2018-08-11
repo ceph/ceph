@@ -4605,18 +4605,18 @@ static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
 }
 
 struct chunk_info_t {
-  enum {
+  typedef enum {
     FLAG_DIRTY = 1, 
     FLAG_MISSING = 2,
     FLAG_HAS_REFERENCE = 4,
     FLAG_HAS_FINGERPRINT = 8,
-  };
+  } cflag_t;
   uint32_t offset;
   uint32_t length;
   hobject_t oid;
-  uint32_t flags;   // FLAG_*
+  cflag_t flags;   // FLAG_*
 
-  chunk_info_t() : offset(0), length(0), flags(0) { }
+  chunk_info_t() : offset(0), length(0), flags((cflag_t)0) { }
 
   static string get_flag_string(uint64_t flags) {
     string r;
@@ -4635,6 +4635,33 @@ struct chunk_info_t {
     if (r.length())
       return r.substr(1);
     return r;
+  }
+  bool test_flag(cflag_t f) const {
+    return (flags & f) == f;
+  }
+  void set_flag(cflag_t f) {
+    flags = (cflag_t)(flags | f);
+  }
+  void set_flags(cflag_t f) {
+    flags = f;
+  }
+  void clear_flag(cflag_t f) {
+    flags = (cflag_t)(flags & ~f);
+  }
+  void clear_flags() {
+    flags = (cflag_t)0;
+  }
+  bool is_dirty() const {
+    return test_flag(FLAG_DIRTY);
+  }
+  bool is_missing() const {
+    return test_flag(FLAG_MISSING);
+  }
+  bool has_reference() const {
+    return test_flag(FLAG_HAS_REFERENCE);
+  }
+  bool has_fingerprint() const {
+    return test_flag(FLAG_HAS_FINGERPRINT);
   }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &bl);
