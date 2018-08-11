@@ -81,7 +81,6 @@ void usage(ostream& out)
 "                                    remove all objects from pool <pool-name> without removing it\n"
 "   df                               show per-pool and total usage\n"
 "   ls                               list objects in pool\n\n"
-"   chown 123                        change the pool owner to auid 123\n"
 "\n"
 "POOL SNAP COMMANDS\n"
 "   lssnap                           list snaps\n"
@@ -2446,24 +2445,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     if (!stdout)
       delete outstream;
-  }
-  else if (strcmp(nargs[0], "chown") == 0) {
-    if (!pool_name || nargs.size() < 2)
-      usage_exit();
-
-    char* endptr = NULL;
-    uint64_t new_auid = strtol(nargs[1], &endptr, 10);
-    if (*endptr) {
-      cerr << "Invalid value for new-auid: '" << nargs[1] << "'" << std::endl;
-      ret = -1;
-      goto out;
-    }
-    ret = io_ctx.set_auid(new_auid);
-    if (ret < 0) {
-      cerr << "error changing auid on pool " << io_ctx.get_pool_name() << ':'
-	   << cpp_strerror(ret) << std::endl;
-    } else cerr << "changed auid on pool " << io_ctx.get_pool_name()
-		<< " to " << new_auid << std::endl;
   }
   else if (strcmp(nargs[0], "mapext") == 0) {
     if (!pool_name || nargs.size() < 2)

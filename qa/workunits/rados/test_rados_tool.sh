@@ -233,9 +233,6 @@ snapid=$("$RADOS_TOOL" lssnap --pool "$POOL" | grep snap1 | cut -f1)
 run_expect_succ "$RADOS_TOOL" ls --pool "$POOL" --snapid="$snapid"
 run_expect_fail "$RADOS_TOOL" ls --pool "$POOL" --snapid="$snapid"k
 
-run_expect_succ "$RADOS_TOOL" chown 1 --pool "$POOL"
-run_expect_fail "$RADOS_TOOL" chown 1k --pool "$POOL"
-
 run_expect_succ "$RADOS_TOOL" truncate f.1 0 --pool "$POOL"
 run_expect_fail "$RADOS_TOOL" truncate f.1 0k --pool "$POOL"
 
