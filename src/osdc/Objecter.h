@@ -1597,14 +1597,13 @@ public:
     Context *onfinish;
     uint64_t ontimeout;
     int pool_op;
-    uint64_t auid;
     int16_t crush_rule;
     snapid_t snapid;
     bufferlist *blp;
 
     ceph::coarse_mono_time last_submit;
     PoolOp() : tid(0), pool(0), onfinish(NULL), ontimeout(0), pool_op(0),
-	       auid(0), crush_rule(0), snapid(0), blp(NULL) {}
+	       crush_rule(0), snapid(0), blp(NULL) {}
   };
 
   // -- osd commands --
