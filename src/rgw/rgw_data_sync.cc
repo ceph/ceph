@@ -1354,10 +1354,9 @@ public:
       } while (omapkeys->more);
       omapkeys.reset();
 
-      tn->unset_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
+      drain_all_but_stack(lease_stack.get());
 
-      lease_cr->go_down();
-      drain_all();
+      tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 
       yield {
         /* update marker to reflect we're done with full sync */
@@ -1371,8 +1370,11 @@ public:
       }
       if (retcode < 0) {
         tn->log(0, SSTR("ERROR: failed to set sync marker: retcode=" << retcode));
+        lease_cr->go_down();
+        drain_all();
         return set_cr_error(retcode);
       }
+      // keep lease and transition to incremental_sync()
     }
     return 0;
   }
@@ -1380,18 +1382,22 @@ public:
   int incremental_sync() {
     reenter(&incremental_cr) {
       tn->log(10, "start incremental sync");
-      yield init_lease_cr();
-      while (!lease_cr->is_locked()) {
-        if (lease_cr->is_done()) {
-          tn->log(5, "failed to take lease");
-          set_status("lease lock failed, early abort");
-          return set_cr_error(lease_cr->get_ret_status());
+      if (lease_cr) {
+        tn->log(10, "lease already held from full sync");
+      } else {
+        yield init_lease_cr();
+        while (!lease_cr->is_locked()) {
+          if (lease_cr->is_done()) {
+            tn->log(5, "failed to take lease");
+            set_status("lease lock failed, early abort");
+            return set_cr_error(lease_cr->get_ret_status());
+          }
+          set_sleeping(true);
+          yield;
         }
-        set_sleeping(true);
-        yield;
+        set_status("lease acquired");
+        tn->log(10, "took lease");
       }
-      set_status("lease acquired");
-      tn->log(10, "took lease");
       error_repo = new RGWOmapAppend(sync_env->async_rados, sync_env->store,
                                      rgw_raw_obj(pool, error_oid),
                                      1 /* no buffer */);
