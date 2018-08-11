@@ -2473,7 +2473,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
       }
       
       for (auto& p : obc->obs.oi.manifest.chunk_map) {
-	if (p.second.flags == chunk_info_t::FLAG_MISSING) {
+	if (p.second.is_missing()) {
 	  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
 	  const object_locator_t oloc = m->get_object_locator();
 	  promote_object(obc, obc->obs.oi.soid, oloc, op, NULL);
@@ -2483,7 +2483,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
 
       bool all_dirty = true;
       for (auto& p : obc->obs.oi.manifest.chunk_map) {
-	if (p.second.flags != chunk_info_t::FLAG_DIRTY) {
+	if (!p.second.is_dirty()) {
 	  all_dirty = false;
 	}
       }
@@ -2579,7 +2579,7 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
   map<uint64_t, chunk_info_t>::iterator iter = manifest.chunk_map.find(start_offset); 
   ceph_assert(iter != manifest.chunk_map.end());
   for (;iter != manifest.chunk_map.end(); ++iter) {
-    if (iter->second.flags == chunk_info_t::FLAG_DIRTY) {
+    if (iter->second.is_dirty()) {
       last_offset = iter->first;
       max_copy_size += iter->second.length;
     }
@@ -2590,7 +2590,7 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
 
   iter = manifest.chunk_map.find(start_offset);
   for (;iter != manifest.chunk_map.end(); ++iter) {
-    if (iter->second.flags != chunk_info_t::FLAG_DIRTY) {
+    if (!iter->second.is_dirty()) {
       continue;
     }
     uint64_t tgt_length = iter->second.length;
@@ -2652,7 +2652,7 @@ void PrimaryLogPG::finish_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
       obc->obs.oi.manifest.chunk_map.find(last_offset); 
   ceph_assert(iter != obc->obs.oi.manifest.chunk_map.end());
   for (;iter != obc->obs.oi.manifest.chunk_map.end(); ++iter) {
-    if (iter->second.flags == chunk_info_t::FLAG_DIRTY && last_offset < iter->first) {
+    if (iter->second.is_dirty() && last_offset < iter->first) {
       do_manifest_flush(p->second->op, obc, p->second, iter->first, p->second->blocking);
       return;
     }
@@ -3558,7 +3558,7 @@ bool PrimaryLogPG::can_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc)
 	/* requested chunks exist in chunk_map ? */
 	for (auto &p : obc->obs.oi.manifest.chunk_map) {
 	  if (p.first <= cursor && p.first + p.second.length > cursor) {
-	    if (p.second.flags != chunk_info_t::FLAG_MISSING) {
+	    if (!p.second.is_missing()) {
 	      return false;
 	    }
 	    if (p.second.length >= remain) {
@@ -6590,7 +6590,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    ctx->register_on_commit(
 	      [oi, ctx, this](){
 	      for (auto p : oi.manifest.chunk_map) {
-		if (p.second.flags & chunk_info_t::FLAG_HAS_REFERENCE) {
+		if (p.second.has_reference()) {
 		  object_locator_t target_oloc(p.second.oid);
 		  refcount_manifest(ctx->obc, target_oloc, p.second.oid, 
 				    SnapContext(), false, NULL, p.first);
@@ -6916,7 +6916,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 
 	  chunk_info_t chunk_info;
-	  chunk_info.flags = chunk_info_t::FLAG_MISSING;
+	  chunk_info.set_flag(chunk_info_t::FLAG_MISSING);
 	  chunk_info.oid = target;
 	  chunk_info.offset = tgt_offset;
 	  chunk_info.length= src_length;
@@ -6926,11 +6926,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  oi.set_flag(object_info_t::FLAG_MANIFEST);
 	  oi.manifest.type = object_manifest_t::TYPE_CHUNKED;
 	  if (!has_reference && need_reference) {
-	    oi.manifest.chunk_map[src_offset].flags |=
-	      chunk_info_t::FLAG_HAS_REFERENCE;
+	    oi.manifest.chunk_map[src_offset].set_flag(chunk_info_t::FLAG_HAS_REFERENCE);
 	  }
 	  if (need_reference && pool.info.get_fingerprint_type() != pg_pool_t::TYPE_FINGERPRINT_NONE) {
-	    oi.manifest.chunk_map[src_offset].flags |= chunk_info_t::FLAG_HAS_FINGERPRINT;
+	    oi.manifest.chunk_map[src_offset].set_flag(chunk_info_t::FLAG_HAS_FINGERPRINT);
 	  }
 	  ctx->modify = true;
 
@@ -8134,7 +8133,8 @@ void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
     for (auto &p : oi.manifest.chunk_map) {
       if ((p.first <= offset && p.first + p.second.length > offset) ||
 	  (p.first > offset && p.first <= offset + length)) {
-	p.second.flags = chunk_info_t::FLAG_DIRTY;
+	p.second.clear_flag(chunk_info_t::FLAG_MISSING);
+	p.second.set_flag(chunk_info_t::FLAG_DIRTY);
       }
     }
   }
@@ -9244,7 +9244,8 @@ void PrimaryLogPG::process_copy_chunk_manifest(hobject_t oid, ceph_tid_t tid, in
 	      << " length: " << sub_chunk.outdata.length() << dendl;
       write_update_size_and_usage(ctx->delta_stats, obs.oi, ctx->modified_ranges,
 				  p.second->cursor.data_offset, sub_chunk.outdata.length());
-      obs.oi.manifest.chunk_map[p.second->cursor.data_offset].flags = 0; // clean
+      obs.oi.manifest.chunk_map[p.second->cursor.data_offset].clear_flag(chunk_info_t::FLAG_DIRTY); 
+      obs.oi.manifest.chunk_map[p.second->cursor.data_offset].clear_flag(chunk_info_t::FLAG_MISSING); 
       sub_chunk.outdata.clear();
     }
     obs.oi.clear_data_digest();
@@ -10147,14 +10148,16 @@ int PrimaryLogPG::try_flush_mark_clean(FlushOpRef fop)
 				     0);
       ctx->new_obs.oi.new_object();
       for (auto &p : ctx->new_obs.oi.manifest.chunk_map) {
-	p.second.flags = chunk_info_t::FLAG_MISSING;
+	p.second.clear_flag(chunk_info_t::FLAG_DIRTY);
+	p.second.set_flag(chunk_info_t::FLAG_MISSING);
       }
     } else {
       for (auto &p : ctx->new_obs.oi.manifest.chunk_map) {
-	if (p.second.flags == chunk_info_t::FLAG_DIRTY) {
+	if (p.second.is_dirty()) {
 	  dout(20) << __func__ << " offset: " << p.second.offset 
 		  << " length: " << p.second.length << dendl;
-	  p.second.flags = 0; // CLEAN
+	  p.second.clear_flag(chunk_info_t::FLAG_DIRTY);
+	  p.second.clear_flag(chunk_info_t::FLAG_MISSING); // CLEAN
 	}
       }
     }

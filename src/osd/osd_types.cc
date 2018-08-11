@@ -4972,7 +4972,8 @@ void chunk_info_t::encode(bufferlist& bl) const
   encode(offset, bl);
   encode(length, bl);
   encode(oid, bl);
-  encode(flags, bl);
+  __u32 _flags = flags;
+  encode(_flags, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -4982,7 +4983,9 @@ void chunk_info_t::decode(bufferlist::const_iterator& bl)
   decode(offset, bl);
   decode(length, bl);
   decode(oid, bl);
-  decode(flags, bl);
+  __u32 _flags;
+  decode(_flags, bl);
+  flags = (cflag_t)_flags;
   DECODE_FINISH(bl);
 }
 
