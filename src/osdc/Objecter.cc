@@ -4007,7 +4007,7 @@ void Objecter::_pool_op_submit(PoolOp *op)
   ldout(cct, 10) << "pool_op_submit " << op->tid << dendl;
   MPoolOp *m = new MPoolOp(monc->get_fsid(), op->tid, op->pool,
 			   op->name, op->pool_op,
-			   op->auid, last_seen_osdmap_version);
+			   last_seen_osdmap_version);
   if (op->snapid) m->snapid = op->snapid;
   if (op->crush_rule) m->crush_rule = op->crush_rule;
   monc->send_mon_message(m);
@@ -4613,7 +4613,6 @@ void Objecter::dump_pool_ops(Formatter *fmt) const
     fmt->dump_int("pool", op->pool);
     fmt->dump_string("name", op->name);
     fmt->dump_int("operation_type", op->pool_op);
-    fmt->dump_unsigned("auid", op->auid);
     fmt->dump_unsigned("crush_rule", op->crush_rule);
     fmt->dump_stream("snapid") << op->snapid;
     fmt->dump_stream("last_sent") << op->last_submit;
