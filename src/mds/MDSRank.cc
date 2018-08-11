@@ -292,7 +292,7 @@ void MDSRankDispatcher::tick()
   heartbeat_reset();
 
   if (beacon.is_laggy()) {
-    dout(5) << "tick bailing out since we seem laggy" << dendl;
+    dout(1) << "skipping upkeep work because connection to Monitors appears laggy" << dendl;
     return;
   }
 
@@ -593,10 +593,10 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
   }
 
   if (beacon.is_laggy()) {
-    dout(10) << " laggy, deferring " << *m << dendl;
+    dout(5) << " laggy, deferring " << *m << dendl;
     waiting_for_nolaggy.push_back(m);
   } else if (new_msg && !waiting_for_nolaggy.empty()) {
-    dout(10) << " there are deferred messages, deferring " << *m << dendl;
+    dout(5) << " there are deferred messages, deferring " << *m << dendl;
     waiting_for_nolaggy.push_back(m);
   } else {
     if (!handle_deferrable_message(m)) {
