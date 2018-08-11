@@ -239,11 +239,11 @@ they exist.
 
 ::
 
-    # rados rmpool default.rgw.control default.rgw.control --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.data.root default.rgw.data.root --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.gc default.rgw.gc --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.log default.rgw.log --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.users.uid default.rgw.users.uid --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.control default.rgw.control --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.data.root default.rgw.data.root --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.gc default.rgw.gc --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.log default.rgw.log --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.users.uid default.rgw.users.uid --yes-i-really-really-mean-it
 
 Create a System User
 --------------------
@@ -419,11 +419,11 @@ needed.
 
 ::
 
-    # rados rmpool default.rgw.control default.rgw.control --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.data.root default.rgw.data.root --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.gc default.rgw.gc --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.log default.rgw.log --yes-i-really-really-mean-it
-    # rados rmpool default.rgw.users.uid default.rgw.users.uid --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.control default.rgw.control --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.data.root default.rgw.data.root --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.gc default.rgw.gc --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.log default.rgw.log --yes-i-really-really-mean-it
+    # ceph osd pool rm default.rgw.users.uid default.rgw.users.uid --yes-i-really-really-mean-it
 
 Update the Ceph Configuration File
 ----------------------------------
@@ -1310,11 +1310,11 @@ with the deleted zone’s name.
 
 ::
 
-    # rados rmpool <del-zone>.rgw.control <del-zone>.rgw.control --yes-i-really-really-mean-it
-    # rados rmpool <del-zone>.rgw.data.root <del-zone>.rgw.data.root --yes-i-really-really-mean-it
-    # rados rmpool <del-zone>.rgw.gc <del-zone>.rgw.gc --yes-i-really-really-mean-it
-    # rados rmpool <del-zone>.rgw.log <del-zone>.rgw.log --yes-i-really-really-mean-it
-    # rados rmpool <del-zone>.rgw.users.uid <del-zone>.rgw.users.uid --yes-i-really-really-mean-it
+    # ceph osd pool rm <del-zone>.rgw.control <del-zone>.rgw.control --yes-i-really-really-mean-it
+    # ceph osd pool rm <del-zone>.rgw.data.root <del-zone>.rgw.data.root --yes-i-really-really-mean-it
+    # ceph osd pool rm <del-zone>.rgw.gc <del-zone>.rgw.gc --yes-i-really-really-mean-it
+    # ceph osd pool rm <del-zone>.rgw.log <del-zone>.rgw.log --yes-i-really-really-mean-it
+    # ceph osd pool rm <del-zone>.rgw.users.uid <del-zone>.rgw.users.uid --yes-i-really-really-mean-it
 
 Modify a Zone
 ~~~~~~~~~~~~~
