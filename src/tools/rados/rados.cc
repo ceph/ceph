@@ -2125,7 +2125,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
 
   if (create_pool) {
-    ret = rados.pool_create(pool_name, 0, 0);
+    ret = rados.pool_create(pool_name);
     if (ret < 0) {
       cerr << "error creating pool " << pool_name << ": "
 	   << cpp_strerror(ret) << std::endl;
@@ -3067,7 +3067,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	cerr << "using crush rule " << (int)crush_rule << std::endl;
       }
     }
-    ret = rados.pool_create(nargs[1], auid, crush_rule);
+    ret = rados.pool_create_with_rule(nargs[1], crush_rule);
     if (ret < 0) {
       cerr << "error creating pool " << nargs[1] << ": "
 	   << cpp_strerror(ret) << std::endl;

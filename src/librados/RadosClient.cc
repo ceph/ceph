@@ -170,24 +170,6 @@ int librados::RadosClient::pool_required_alignment2(int64_t pool_id,
     });
 }
 
-int librados::RadosClient::pool_get_auid(uint64_t pool_id,
-					 unsigned long long *auid)
-{
-  int r = wait_for_osdmap();
-  if (r < 0)
-    return r;
-  objecter->with_osdmap([&](const OSDMap& o) {
-      const pg_pool_t *pg = o.get_pg_pool(pool_id);
-      if (!pg) {
-	r = -ENOENT;
-      } else {
-	r = 0;
-	*auid = pg->auid;
-      }
-    });
-  return r;
-}
-
 int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s, bool wait_latest_map)
 {
   int r = wait_for_osdmap();
@@ -704,7 +686,7 @@ bool librados::RadosClient::put() {
   return (refcnt == 0);
 }
  
-int librados::RadosClient::pool_create(string& name, unsigned long long auid,
+int librados::RadosClient::pool_create(string& name,
 				       int16_t crush_rule)
 {
   if (!name.length())
@@ -733,8 +715,8 @@ int librados::RadosClient::pool_create(string& name, unsigned long long auid,
   return reply;
 }
 
-int librados::RadosClient::pool_create_async(string& name, PoolAsyncCompletionImpl *c,
-					     unsigned long long auid,
+int librados::RadosClient::pool_create_async(string& name,
+					     PoolAsyncCompletionImpl *c,
 					     int16_t crush_rule)
 {
   int r = wait_for_osdmap();

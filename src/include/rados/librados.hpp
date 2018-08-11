@@ -1337,11 +1337,13 @@ namespace librados
       __attribute__ ((deprecated));
     int pool_create(const char *name, uint64_t auid, uint8_t crush_rule)
       __attribute__ ((deprecated));
+    int pool_create_with_rule(const char *name, uint8_t crush_rule);
     int pool_create_async(const char *name, PoolAsyncCompletion *c);
     int pool_create_async(const char *name, uint64_t auid, PoolAsyncCompletion *c)
       __attribute__ ((deprecated));
     int pool_create_async(const char *name, uint64_t auid, uint8_t crush_rule, PoolAsyncCompletion *c)
       __attribute__ ((deprecated));
+    int pool_create_with_rule_async(const char *name, uint8_t crush_rule, PoolAsyncCompletion *c);
     int pool_get_base_tier(int64_t pool, int64_t* base_tier);
     int pool_delete(const char *name);
     int pool_delete_async(const char *name, PoolAsyncCompletion *c);

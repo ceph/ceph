@@ -500,32 +500,6 @@ void librados::IoCtxImpl::aio_selfmanaged_snap_remove(uint64_t snapid,
   objecter->delete_selfmanaged_snap(poolid, snapid, onfinish);
 }
 
-int librados::IoCtxImpl::pool_change_auid(unsigned long long auid)
-{
-  int reply;
-
-  Mutex mylock("IoCtxImpl::pool_change_auid::mylock");
-  Cond cond;
-  bool done;
-  objecter->change_pool_auid(poolid,
-			     new C_SafeCond(&mylock, &cond, &done, &reply),
-			     auid);
-
-  mylock.Lock();
-  while (!done) cond.Wait(mylock);
-  mylock.Unlock();
-  return reply;
-}
-
-int librados::IoCtxImpl::pool_change_auid_async(unsigned long long auid,
-						  PoolAsyncCompletionImpl *c)
-{
-  objecter->change_pool_auid(poolid,
-			     new C_PoolAsync_Safe(c),
-			     auid);
-  return 0;
-}
-
 int librados::IoCtxImpl::snap_list(vector<uint64_t> *snaps)
 {
   return objecter->pool_snap_list(poolid, snaps);
