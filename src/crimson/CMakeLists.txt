@@ -108,6 +108,9 @@ target_link_libraries(crimson-common
     Boost::random
     ${NSS_LIBRARIES} ${NSPR_LIBRARIES} ${OPENSSL_LIBRARIES})
 
+set(crimson_mon_srcs
+  ${PROJECT_SOURCE_DIR}/src/mon/MonMap.cc
+  ${PROJECT_SOURCE_DIR}/src/mon/MonSub.cc)
 set(crimson_net_srcs
   net/Dispatcher.cc
   net/Errors.cc
@@ -117,6 +120,7 @@ set(crimson_thread_srcs
   thread/ThreadPool.cc
   thread/Throttle.cc)
 add_library(crimson STATIC
+  ${crimson_mon_srcs}
   ${crimson_net_srcs}
   ${crimson_thread_srcs}
   ${CMAKE_SOURCE_DIR}/src/common/buffer_seastar.cc)

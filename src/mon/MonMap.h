@@ -15,6 +15,9 @@
 #ifndef CEPH_MONMAP_H
 #define CEPH_MONMAP_H
 
+#ifdef WITH_SEASTAR
+#include <seastar/core/future.hh>
+#endif
 
 #include "common/config_fwd.h"
 
@@ -24,6 +27,12 @@
 #include "mon/mon_types.h"
 #include "msg/Message.h"
 
+
+#ifdef WITH_SEASTAR
+namespace ceph::common {
+  class ConfigProxy;
+}
+#endif
 
 namespace ceph {
   class Formatter;
@@ -343,8 +352,11 @@ public:
    * @param cct context (and associated config)
    * @param errout ostream to send error messages too
    */
+#ifdef WITH_SEASTAR
+  seastar::future<> build_initial(const ceph::common::ConfigProxy& conf);
+#else
   int build_initial(CephContext *cct, ostream& errout);
-
+#endif
   /**
    * filter monmap given a set of initial members.
    *
@@ -368,8 +380,7 @@ public:
   void dump(ceph::Formatter *f) const;
 
   static void generate_test_instances(list<MonMap*>& o);
-private:
-  int init_with_monmap(const std::string& monmap, std::ostream& errout);
+protected:
   /**
    * build a monmap from a list of ips
    *
@@ -392,10 +403,20 @@ private:
    */
   int init_with_hosts(const std::string& hostlist,
 			 const std::string& prefix);
-  int init_with_mon_host(const std::string& mon_host, std::ostream& errout);
   int init_with_config_file(const ConfigProxy& conf, std::ostream& errout);
+#if WITH_SEASTAR
+  seastar::future<> read_monmap(const std::string& monmap);
+  /// try to build monmap with different settings, like
+  /// mon_host, mon* sections, and mon_dns_srv_name
+  seastar::future<> build_monmap(const ceph::common::ConfigProxy& conf);
+  /// initialize monmap by resolving given service name
+  seastar::future<> init_with_dns_srv(const std::string& name);
+#else
+  /// read from encoded monmap file
+  int init_with_monmap(const std::string& monmap, std::ostream& errout);
   int init_with_dns_srv(CephContext* cct, std::string srv_name,
 			std::ostream& errout);
+#endif
 };
 WRITE_CLASS_ENCODER_FEATURES(MonMap)
 
