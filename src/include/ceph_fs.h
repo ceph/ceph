@@ -183,7 +183,7 @@ struct ceph_mon_poolop {
 	struct ceph_fsid fsid;
 	__le32 pool;
 	__le32 op;
-	__le64 auid;
+	__le64 auid;  // obsolete
 	__le64 snapid;
 	__le32 name_len;
 } __attribute__ ((packed));

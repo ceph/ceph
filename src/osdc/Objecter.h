@@ -2938,7 +2938,6 @@ public:
 		  int crush_rule=-1);
   int delete_pool(int64_t pool, Context *onfinish);
   int delete_pool(const string& name, Context *onfinish);
-  int change_pool_auid(int64_t pool, Context *onfinish, uint64_t auid);
 
   void handle_pool_op_reply(MPoolOpReply *m);
   int pool_op_cancel(ceph_tid_t tid, int r);
