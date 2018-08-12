@@ -85,10 +85,6 @@ ostream& operator<<(ostream &out, const OSDCapPoolTag &pt)
 
 ostream& operator<<(ostream& out, const OSDCapMatch& m)
 {
-  if (m.auid != -1LL) {
-    out << "auid " << m.auid << " ";
-  }
-
   if (!m.pool_namespace.pool_name.empty() || m.pool_namespace.nspace) {
     out << m.pool_namespace;
   }
@@ -193,9 +189,7 @@ bool OSDCapMatch::is_match(const string& pn, const string& ns,
 
 bool OSDCapMatch::is_match_all() const
 {
-  if (auid >= 0) {
-    return false;
-  } else if (!pool_namespace.is_match_all()) {
+if (!pool_namespace.is_match_all()) {
     return false;
   } else if (!pool_tag.is_match_all()) {
     return false;
@@ -338,9 +332,9 @@ void OSDCapGrant::expand_profile()
 
   if (profile.name == "rbd") {
     // RBD read-write grant
-    profile_grants.emplace_back(OSDCapMatch({}, "rbd_children"),
+    profile_grants.emplace_back(OSDCapMatch(string(), "rbd_children"),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_CLS_R)));
-    profile_grants.emplace_back(OSDCapMatch({}, "rbd_mirroring"),
+    profile_grants.emplace_back(OSDCapMatch(string(), "rbd_mirroring"),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_CLS_R)));
     profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_R |
@@ -437,8 +431,7 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
 	       >> (lit('=') | spaces)
 	       >> estr >> -char_('*'));
 
-    // match := [pool[=]<poolname> [namespace[=]<namespace>] | auid <123>] [object_prefix <prefix>]
-    auid %= (spaces >> lit("auid") >> spaces >> int_);
+    // match := [pool[=]<poolname> [namespace[=]<namespace>]] [object_prefix <prefix>]
     object_prefix %= -(spaces >> lit("object_prefix") >> spaces >> str);
     pooltag %= (spaces >> lit("tag")
 		>> spaces >> str // application
@@ -448,7 +441,6 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
     match = (
       pooltag                                 [_val = phoenix::construct<OSDCapMatch>(_1)] |
       (nspace >> pooltag)                     [_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
-      (auid >> object_prefix)                 [_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
       (pool_name >> nspace >> object_prefix)  [_val = phoenix::construct<OSDCapMatch>(_1, _2, _3)] |
       (pool_name >> object_prefix)            [_val = phoenix::construct<OSDCapMatch>(_1, _2)]
     );
@@ -499,7 +491,6 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
   qi::rule<Iterator, string()> unquoted_word;
   qi::rule<Iterator, string()> str, estr, network_str;
   qi::rule<Iterator, string()> wildcard;
-  qi::rule<Iterator, int()> auid;
   qi::rule<Iterator, string()> class_name;
   qi::rule<Iterator, string()> method_name;
   qi::rule<Iterator, OSDCapSpec()> capspec;

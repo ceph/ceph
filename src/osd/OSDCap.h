@@ -119,8 +119,6 @@ ostream& operator<<(ostream& out, const OSDCapPoolTag& pt);
 
 struct OSDCapMatch {
   typedef std::map<std::string, std::map<std::string, std::string> > app_map_t;
-  // auid and pool_name/nspace are mutually exclusive
-  int64_t auid = CEPH_AUTH_UID_DEFAULT;
   OSDCapPoolNamespace pool_namespace;
   OSDCapPoolTag pool_tag;
   std::string object_prefix;
@@ -135,8 +133,6 @@ struct OSDCapMatch {
   OSDCapMatch(const std::string& pl, const std::string& ns,
               const std::string& pre)
     : pool_namespace(pl, ns), object_prefix(pre) {}
-  OSDCapMatch(uint64_t auid, const std::string& pre)
-    : auid(auid), object_prefix(pre) {}
   OSDCapMatch(const std::string& dummy, const std::string& app,
 	      const std::string& key, const std::string& val)
     : pool_tag(app, key, val) {}
@@ -148,7 +144,6 @@ struct OSDCapMatch {
    *
    * @param pool_name pool name
    * @param nspace_name namespace name
-   * @param pool_auid pool's auid
    * @param object object name
    * @return true if we match, false otherwise
    */

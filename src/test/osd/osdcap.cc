@@ -34,12 +34,10 @@ const char *parse_good[] = {
   "allow pool taco object_prefix obj_with_underscores_and_no_quotes wx",
   "allow rwx pool 'weird name'",
   "allow rwx pool \"weird name with ''s\"",
-  "allow rwx auid 123",
   "allow rwx pool foo, allow r pool bar",
   "allow rwx pool foo ; allow r pool bar",
   "allow rwx pool foo ;allow r pool bar",
   "allow rwx pool foo; allow r pool bar",
-  "allow auid 123 rwx",
   "allow pool foo rwx, allow pool bar r",
   "allow pool foo.froo.foo rwx, allow pool bar r",
   "allow pool foo rwx ; allow pool bar r",
@@ -61,7 +59,6 @@ const char *parse_good[] = {
   "  allow     pool foo rwx; allow pool bar r  ",
   " allow wx pool taco",
   "\tallow\nwx\tpool \n taco\t",
-  "allow r   pool    foo    object_prefix   blah   ;   allow   w   auid  5",
   "allow class-read object_prefix rbd_children, allow pool libvirt-pool-test rwx",
   "allow class-read object_prefix rbd-children, allow pool libvirt_pool_test rwx",
   "allow pool foo namespace nfoo rwx, allow pool bar namespace=nbar r",
@@ -122,6 +119,9 @@ const char *parse_bad[] = {
   "allow rwx auid 123 namespace asdf",
   "allow wwx pool ''",
   "allow rwx tag application key value",
+  "allow rwx auid 123",
+  "allow auid 123 rwx",
+  "allow r   pool    foo    object_prefix   blah   ;   allow   w   auid  5",
   0
 };
 
