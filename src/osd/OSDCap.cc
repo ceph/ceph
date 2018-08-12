@@ -535,8 +535,8 @@ bool OSDCap::parse(const string& str, ostream *err)
   grants.clear();
 
   if (err)
-    *err << "osdcap parse failed, stopped at '" << std::string(iter, end)
-	 << "' of '" << str << "'\n";
+    *err << "osd capability parse failed, stopped at '" << std::string(iter, end)
+	 << "' of '" << str << "'";
 
   return false; 
 }
