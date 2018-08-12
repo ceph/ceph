@@ -121,6 +121,17 @@ private:
 
   /* validate mon/osd/mds caps; fail on unrecognized service/type */
   bool valid_caps(const string& type, const string& caps, ostream *out);
+  bool valid_caps(const string& type, const bufferlist& bl, ostream *out) {
+    auto p = bl.begin();
+    string v;
+    try {
+      decode(v, p);
+    } catch (buffer::error& e) {
+      *out << "corrupt capability encoding";
+      return false;
+    }
+    return valid_caps(type, v, out);
+  }
   bool valid_caps(const vector<string>& caps, ostream *out);
 
   void on_active() override;
