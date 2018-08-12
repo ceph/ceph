@@ -175,14 +175,10 @@ bool OSDCapPoolTag::is_match_all() const {
 }
 
 bool OSDCapMatch::is_match(const string& pn, const string& ns,
-                           int64_t pool_auid,
 			   const OSDCapPoolTag::app_map_t& app_map,
 			   const string& object) const
 {
-  if (auid >= 0) {
-    if (auid != pool_auid)
-      return false;
-  } else if (!pool_namespace.is_match(pn, ns)) {
+  if (!pool_namespace.is_match(pn, ns)) {
     return false;
   } else if (!pool_tag.is_match(app_map)) {
     return false;
@@ -255,7 +251,6 @@ bool OSDCapGrant::allow_all() const
 bool OSDCapGrant::is_capable(
   const string& pool_name,
   const string& ns,
-  int64_t pool_auid,
   const OSDCapPoolTag::app_map_t& application_metadata,
   const string& object,
   bool op_may_read,
@@ -277,14 +272,14 @@ bool OSDCapGrant::is_capable(
   if (profile.is_valid()) {
     return std::any_of(profile_grants.cbegin(), profile_grants.cend(),
                        [&](const OSDCapGrant& grant) {
-			   return grant.is_capable(pool_name, ns, pool_auid,
+			   return grant.is_capable(pool_name, ns,
 						   application_metadata,
 						   object, op_may_read,
 						   op_may_write, classes, addr,
 						   class_allowed);
 		       });
   } else {
-    if (match.is_match(pool_name, ns, pool_auid, application_metadata, object)) {
+    if (match.is_match(pool_name, ns, application_metadata, object)) {
       allow = allow | spec.allow;
       if ((op_may_read && !(allow & OSD_CAP_R)) ||
           (op_may_write && !(allow & OSD_CAP_W))) {
@@ -383,7 +378,6 @@ void OSDCap::set_allow_all()
 }
 
 bool OSDCap::is_capable(const string& pool_name, const string& ns,
-                        int64_t pool_auid,
 			const OSDCapPoolTag::app_map_t& application_metadata,
 			const string& object,
                         bool op_may_read, bool op_may_write,
@@ -392,7 +386,7 @@ bool OSDCap::is_capable(const string& pool_name, const string& ns,
 {
   std::vector<bool> class_allowed(classes.size(), false);
   for (auto &grant : grants) {
-    if (grant.is_capable(pool_name, ns, pool_auid, application_metadata,
+    if (grant.is_capable(pool_name, ns, application_metadata,
 			 object, op_may_read, op_may_write, classes, addr,
 			 &class_allowed)) {
       return true;

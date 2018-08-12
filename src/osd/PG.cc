@@ -2131,7 +2131,6 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
     req->get_hobj().get_key();
 
   bool cap = caps.is_capable(pool.name, req->get_hobj().nspace,
-                             pool.info.auid,
 			     pool.info.application_metadata,
 			     key,
 			     op->need_read_cap(),
