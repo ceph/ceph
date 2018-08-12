@@ -211,6 +211,12 @@ void usage()
   cout << "  reshard cancel             cancel resharding a bucket\n";
   cout << "  sync error list            list sync error\n";
   cout << "  sync error trim            trim sync error\n";
+  cout << "  mfa create                 create a new MFA TOTP token\n";
+  cout << "  mfa list                   list MFA TOTP tokens\n";
+  cout << "  mfa get                    show MFA TOTP token\n";
+  cout << "  mfa remove                 delete MFA TOTP token\n";
+  cout << "  mfa check                  check MFA TOTP token\n";
+  cout << "  mfa resync                 re-sync MFA TOTP token\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --uid=<id>                user id\n";
@@ -341,6 +347,12 @@ void usage()
   cout << "   --policy-name             name of the policy document\n";
   cout << "   --policy-doc              permission policy document\n";
   cout << "   --path-prefix             path prefix for filtering roles\n";
+  cout << "\nMFA options:\n";
+  cout << "   --totp-serial             a string that represents the ID of a TOTP token\n";
+  cout << "   --totp-seed               the secret seed that is used to calculate the TOTP\n";
+  cout << "   --totp-seconds            the time resolution that is being used for TOTP generation\n";
+  cout << "   --totp-window             the number of TOTP tokens that are checked before and after the current token when validating token\n";
+  cout << "   --totp-pin                the valid value of a TOTP token at a certain time\n";
   cout << "\n";
   generic_client_usage();
 }
