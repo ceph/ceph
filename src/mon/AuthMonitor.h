@@ -48,19 +48,6 @@ public:
 
     void encode(bufferlist& bl, uint64_t features=-1) const {
       using ceph::encode;
-      if ((features & CEPH_FEATURE_MONENC) == 0) {
-	__u8 v = 1;
-	encode(v, bl);
-	__u32 _type = (__u32)inc_type;
-	encode(_type, bl);
-	if (_type == GLOBAL_ID) {
-	  encode(max_global_id, bl);
-	} else {
-	  encode(auth_type, bl);
-	  encode(auth_data, bl);
-	}
-	return;
-      } 
       ENCODE_START(2, 2, bl);
       __u32 _type = (__u32)inc_type;
       encode(_type, bl);
