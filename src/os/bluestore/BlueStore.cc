@@ -3197,6 +3197,11 @@ void BlueStore::Collection::flush()
   osr->flush();
 }
 
+void BlueStore::Collection::flush_all_but_last()
+{
+  osr->flush_all_but_last();
+}
+
 void BlueStore::Collection::open_shared_blob(uint64_t sbid, BlobRef b)
 {
   assert(!b->shared_blob);
@@ -8700,8 +8705,7 @@ void BlueStore::_txc_finish_io(TransContext *txc)
   } while (p != osr->q.end() &&
 	   p->state == TransContext::STATE_IO_DONE);
 
-  if (osr->kv_submitted_waiters &&
-      osr->_is_all_kv_submitted()) {
+  if (osr->kv_submitted_waiters) {
     osr->qcond.notify_all();
   }
 }
@@ -9215,9 +9219,7 @@ void BlueStore::_kv_sync_thread()
 	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  if (txc->osr->kv_submitted_waiters) {
 	    std::lock_guard<std::mutex> l(txc->osr->qlock);
-	    if (txc->osr->_is_all_kv_submitted()) {
-	      txc->osr->qcond.notify_all();
-	    }
+	    txc->osr->qcond.notify_all();
 	  }
 
 	} else {
@@ -11479,7 +11481,9 @@ int BlueStore::_remove(TransContext *txc,
 		       CollectionRef& c,
 		       OnodeRef &o)
 {
-  dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
+	   << " onode " << o.get()
+	   << " txc "<< txc << dendl;
   int r = _do_remove(txc, c, o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
@@ -12013,6 +12017,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
   dout(15) << __func__ << " " << cid << dendl;
   int r;
 
+  (*c)->flush_all_but_last();
   {
     RWLock::WLocker l(coll_lock);
     if (!*c) {
@@ -12051,7 +12056,9 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
         exists = !onode || onode->exists;
         if (exists) {
           dout(10) << __func__ << " " << *it
-                   << " exists in db" << dendl;
+		   << " exists in db, "
+		   << (!onode ? "not present in ram" : "present in ram")
+		   << dendl;
         }
       }
       if (!exists) {
