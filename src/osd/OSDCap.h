@@ -13,7 +13,6 @@
  * OSDCaps: Hold the capabilities associated with a single authenticated
  * user key. These are specified by text strings of the form
  * "allow r" (which allows reading anything on the OSD)
- * "allow rwx auid foo" (which allows full access to listed auids)
  *  "allow rwx pool foo" (which allows full access to listed pools)
  * "allow *" (which allows full access to EVERYTHING)
  *
@@ -154,7 +153,7 @@ struct OSDCapMatch {
    * @return true if we match, false otherwise
    */
   bool is_match(const std::string& pool_name, const std::string& nspace_name,
-                int64_t pool_auid, const app_map_t& app_map,
+                const app_map_t& app_map,
 		const std::string& object) const;
   bool is_match_all() const;
 };
@@ -214,7 +213,7 @@ struct OSDCapGrant {
   void set_network(const string& n);
 
   bool allow_all() const;
-  bool is_capable(const string& pool_name, const string& ns, int64_t pool_auid,
+  bool is_capable(const string& pool_name, const string& ns,
 		  const OSDCapPoolTag::app_map_t& application_metadata,
                   const string& object, bool op_may_read, bool op_may_write,
                   const std::vector<OpRequest::ClassInfo>& classes,
@@ -242,18 +241,17 @@ struct OSDCap {
    *
    * This method actually checks a description of a particular operation against
    * what the capability has specified.  Currently that is just rwx with matches
-   * against pool, pool auid, and object name prefix.
+   * against pool, and object name prefix.
    *
    * @param pool_name name of the pool we are accessing
    * @param ns name of the namespace we are accessing
-   * @param pool_auid owner of the pool we are accessing
    * @param object name of the object we are accessing
    * @param op_may_read whether the operation may need to read
    * @param op_may_write whether the operation may need to write
    * @param classes (class-name, rd, wr, whitelisted-flag) tuples
    * @return true if the operation is allowed, false otherwise
    */
-  bool is_capable(const string& pool_name, const string& ns, int64_t pool_auid,
+  bool is_capable(const string& pool_name, const string& ns,
 		  const OSDCapPoolTag::app_map_t& application_metadata,
 		  const string& object, bool op_may_read, bool op_may_write,
 		  const std::vector<OpRequest::ClassInfo>& classes,
