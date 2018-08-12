@@ -911,9 +911,23 @@ sub-directories, files')
 
 if __name__ == '__main__':
     config_file = ''
-    if sys.argv[1] == '-c':
-        config_file = sys.argv[2]
+    exe = sys.argv[0]
+    main_parser = argparse.ArgumentParser(description = '')
+    main_parser.add_argument('-c', '--config', action = 'store', help = 'Configuration file_path', type = str)
+    main_parser.add_argument('-b', '--batch', action = 'store', help = 'Batch File path.', type = str)
+    main_parser.add_argument('-t', '--test', action='store', help='Test against transcript(s) in FILE', nargs = '+')
+    main_parser.add_argument('commands', nargs='*', help='comma delimited commands')  
+    args = main_parser.parse_args()
+    if args.config:
+        config_file = args.config
+        sys.argv = [sys.argv[0]] + sys.argv[3:]  
+    if args.batch:
+        sys.argv[1] = 'load ' + args.batch
+        sys.argv[2] = 'quit'
+        sys.argv = sys.argv[:3]   
+    sys.argv.clear()
+    sys.argv.append(exe)
+    sys.argv.extend(' '.join(args.commands).split(','))
     setup_cephfs(config_file)
-    sys.argv = [sys.argv[0]]
     c = CephFSShell()
     c.cmdloop()
