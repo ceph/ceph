@@ -4342,7 +4342,7 @@ namespace {
     NODELETE, NOPGCHANGE, NOSIZECHANGE,
     WRITE_FADVISE_DONTNEED, NOSCRUB, NODEEP_SCRUB,
     HIT_SET_TYPE, HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
-    USE_GMT_HITSET, AUID, TARGET_MAX_OBJECTS, TARGET_MAX_BYTES,
+    USE_GMT_HITSET, TARGET_MAX_OBJECTS, TARGET_MAX_BYTES,
     CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_DIRTY_HIGH_RATIO,
     CACHE_TARGET_FULL_RATIO,
     CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
@@ -4915,7 +4915,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"hit_set_type", HIT_SET_TYPE}, {"hit_set_period", HIT_SET_PERIOD},
       {"hit_set_count", HIT_SET_COUNT}, {"hit_set_fpp", HIT_SET_FPP},
       {"use_gmt_hitset", USE_GMT_HITSET},
-      {"auid", AUID}, {"target_max_objects", TARGET_MAX_OBJECTS},
+      {"target_max_objects", TARGET_MAX_OBJECTS},
       {"target_max_bytes", TARGET_MAX_BYTES},
       {"cache_target_dirty_ratio", CACHE_TARGET_DIRTY_RATIO},
       {"cache_target_dirty_high_ratio", CACHE_TARGET_DIRTY_HIGH_RATIO},
@@ -5025,9 +5025,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    break;
 	  case PGP_NUM:
 	    f->dump_int("pgp_num", p->get_pgp_num());
-	    break;
-	  case AUID:
-	    f->dump_int("auid", p->get_auid());
 	    break;
 	  case SIZE:
 	    f->dump_int("size", p->get_size());
@@ -5176,9 +5173,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    break;
 	  case PGP_NUM:
 	    ss << "pgp_num: " << p->get_pgp_num() << "\n";
-	    break;
-	  case AUID:
-	    ss << "auid: " << p->get_auid() << "\n";
 	    break;
 	  case SIZE:
 	    ss << "size: " << p->get_size() << "\n";
@@ -6746,12 +6740,6 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
        }
     }
     p.min_size = n;
-  } else if (var == "auid") {
-    if (interr.length()) {
-      ss << "error parsing integer value '" << val << "': " << interr;
-      return -EINVAL;
-    }
-    p.auid = n;
   } else if (var == "pg_num") {
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pg_num change is disabled; you must unset nopgchange flag for the pool first";
