@@ -1400,6 +1400,7 @@ public:
 
     bool flush_commit(Context *c) override;
     void flush() override;
+    void flush_all_but_last();
 
     Collection(BlueStore *ns, Cache *ca, coll_t c);
   };
@@ -1741,6 +1742,29 @@ public:
 	if (q.empty() || _is_all_kv_submitted()) {
 	  --kv_submitted_waiters;
 	  return;
+	}
+	qcond.wait(l);
+	--kv_submitted_waiters;
+      }
+    }
+
+    void flush_all_but_last() {
+      std::unique_lock<std::mutex> l(qlock);
+      assert (q.size() >= 1);
+      while (true) {
+	// set flag before the check because the condition
+	// may become true outside qlock, and we need to make
+	// sure those threads see waiters and signal qcond.
+	++kv_submitted_waiters;
+	if (q.size() <= 1) {
+	  --kv_submitted_waiters;
+	  return;
+	} else {
+	  auto it = q.rbegin();
+	  it++;
+	  if (it->state >= TransContext::STATE_KV_SUBMITTED) {
+	    return;
+          }
 	}
 	qcond.wait(l);
 	--kv_submitted_waiters;
