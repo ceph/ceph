@@ -2333,6 +2333,13 @@ public:
   int _fsck(bool deep, bool repair);
 
   void set_cache_shards(unsigned num) override;
+  int get_cache_obj_count() {
+    int count = 0;
+    for (auto i: cache_shards) {
+      count += i->_get_num_onodes();
+    }
+    return count;
+  }
 
   int validate_hobject_key(const hobject_t &obj) const override {
     return 0;

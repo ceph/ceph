@@ -1435,6 +1435,10 @@ public:
     ConnectionRef conn,
     ceph_tid_t tid) override;
 
+  void clear_cache();
+  int get_cache_obj_count() {
+    return object_contexts.get_count();
+  }
   void do_request(
     OpRequestRef& op,
     ThreadPool::TPHandle &handle) override;
