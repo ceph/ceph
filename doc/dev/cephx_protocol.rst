@@ -147,15 +147,17 @@ give it an authentication ticket.
 
 We fetch C's ``eauth`` structure.  This contains an ID, a key, and a set of caps (capabilities).
 
-The client sent us its old ticket in the message, if it had one.  If so, we set a flag,
-``should_enc_ticket``, to true and set the global ID to the global ID in that old ticket.  
-If the attempt to decode its old ticket fails (most probably because it didn't have one),
-``should_enc_ticket`` remains false.  Now we set up the new ticket, filling in timestamps, 
-the name of C, the global ID provided in the method call (unless there was an old ticket), and 
-his ``auid``, obtained from the ``eauth`` structure obtained above.  We need a new session key 
-to help the client communicate securely with us, not using its permanent key.    We set the
-service ID to ``CEPH_ENTITY_TYPE_AUTH``, which will tell the client C what to do with the 
-message we send it.  We build a cephx response header and call 
+The client sent us its old ticket in the message, if it had one.  If
+so, we set a flag, ``should_enc_ticket``, to true and set the global
+ID to the global ID in that old ticket.  If the attempt to decode its
+old ticket fails (most probably because it didn't have one),
+``should_enc_ticket`` remains false.  Now we set up the new ticket,
+filling in timestamps, the name of C, and the global ID provided in the
+method call (unless there was an old ticket).  We need a new session
+key to help the client communicate securely with us, not using its
+permanent key.  We set the service ID to ``CEPH_ENTITY_TYPE_AUTH``,
+which will tell the client C what to do with the message we send it.
+We build a cephx response header and call
 ``cephx_build_service_ticket_reply()``.
 
 ``cephx_build_service_ticket_reply()`` is in ``auth/cephx/CephxProtocol.cc``.  This 
