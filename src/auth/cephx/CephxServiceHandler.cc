@@ -110,7 +110,6 @@ int CephxServiceHandler::handle_request(bufferlist::const_iterator& indata, buff
       info.ticket.init_timestamps(ceph_clock_now(), cct->_conf->auth_mon_ticket_ttl);
       info.ticket.name = entity_name;
       info.ticket.global_id = global_id;
-      info.ticket.auid = eauth.auid;
       info.validity += cct->_conf->auth_mon_ticket_ttl;
 
       key_server->generate_secret(session_key);
