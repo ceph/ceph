@@ -457,8 +457,6 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json("suspended", (int)suspended, f);
   encode_json("max_buckets", (int)max_buckets, f);
 
-  encode_json("auid", auid, f);
-
   encode_json_map("subusers", NULL, "subuser", NULL, user_info_dump_subuser,(void *)this, subusers, f);
   encode_json_map("keys", NULL, "key", NULL, user_info_dump_key,(void *)this, access_keys, f);
   encode_json_map("swift_keys", NULL, "key", NULL, user_info_dump_swift_key,(void *)this, swift_keys, f);
@@ -535,7 +533,6 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("suspended", susp, obj);
   suspended = (__u8)susp;
   JSONDecoder::decode_json("max_buckets", max_buckets, obj);
-  JSONDecoder::decode_json("auid", auid, obj);
 
   JSONDecoder::decode_json("keys", access_keys, decode_access_keys, obj);
   JSONDecoder::decode_json("swift_keys", swift_keys, decode_swift_keys, obj);
