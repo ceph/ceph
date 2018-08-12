@@ -1308,7 +1308,7 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
     is_valid = authorize_handler->verify_authorizer(
       cct, keys,
       authorizer_data, authorizer_reply, name, global_id, caps_info,
-      session_key, nullptr, challenge);
+      session_key, challenge);
   } else {
     dout(10) << __func__ << " no rotating_keys (yet), denied" << dendl;
     is_valid = false;
