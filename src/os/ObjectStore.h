@@ -1481,6 +1481,9 @@ public:
   virtual void generate_db_histogram(Formatter *f) { }
   virtual void flush_cache() { }
   virtual void dump_perf_counters(Formatter *f) {}
+  virtual int get_cache_obj_count() {
+    return -1;
+  }
 
   virtual string get_type() = 0;
 

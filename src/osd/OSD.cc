@@ -6020,6 +6020,12 @@ COMMAND("compact",
 COMMAND("smart name=devid,type=CephString,req=False",
         "runs smartctl on this osd devices.  ",
         "osd", "rw", "cli,rest")
+COMMAND("clear_cache",
+        "Clear OSD caches",
+        "osd", "rw", "cli,rest")
+COMMAND("get_cache_object_count",
+        "Get OSD caches object count",
+        "osd", "r", "cli,rest")
 };
 
 void OSD::do_command(
@@ -6494,6 +6500,46 @@ int OSD::_do_command(
     string devid;
     cmd_getval(cct, cmdmap, "devid", devid);
     probe_smart(devid, ds);
+  }
+
+  else if (prefix == "clear_cache") {
+    dout(20) << "clearing all caches" << dendl;
+    // Clear the objectstore's cache
+    store->flush_cache();
+    // Clear osd map cache
+    {
+      Mutex::Locker l(service.map_cache_lock);
+      service.map_cache.clear();
+    }
+    // Clear the objectcontext cache (per PG)
+    vector<PGRef> pgs;
+    _get_pgs(&pgs);
+    for (auto& pg: pgs) {
+      pg->clear_cache();
+    }
+  }
+
+  else if (prefix == "get_cache_object_count") {
+    int store_cache_count = store->get_cache_obj_count();
+    int obj_ctx_count = 0;
+    int osd_map_count = service.map_cache.get_count();
+    vector<PGRef> pgs;
+    _get_pgs(&pgs);
+    for (auto& pg: pgs) {
+      obj_ctx_count += pg->get_cache_obj_count();
+    }
+    if (f) {
+      f->open_object_section("caches_object_count");
+      f->dump_int("object_ctx", obj_ctx_count);
+      f->dump_int("objectstore_onode", store_cache_count);
+      f->dump_int("osd_map", osd_map_count);
+      f->close_section();
+      f->flush(ds);
+    } else {
+      ds << "object_ctx: " << obj_ctx_count;
+      ds << "objectstore_onode: " << store_cache_count;
+      ds << "osd_map: " << osd_map_count;
+    }
   }
 
   else {

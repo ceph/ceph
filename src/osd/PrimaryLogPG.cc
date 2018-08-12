@@ -11954,6 +11954,11 @@ void PrimaryLogPG::clear_async_reads()
   }
 }
 
+void PrimaryLogPG::clear_cache()
+{
+  object_contexts.clear();
+}
+
 void PrimaryLogPG::on_shutdown()
 {
   dout(10) << __func__ << dendl;

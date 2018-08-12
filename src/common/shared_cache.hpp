@@ -123,6 +123,10 @@ public:
     }
   }
 
+  int get_count() {
+    return lru.size();
+  }
+
   /// adjust container comparator (for purposes of get_next sort order)
   void reset_comparator(C comp) {
     // get_next uses weak_refs; that's the only container we need to
