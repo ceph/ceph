@@ -160,9 +160,6 @@ public:
 		      int num_dentries_wanted,
 		      MDRequestRef& mdr);
 
-  void encode_empty_dirstat(bufferlist& bl);
-  void encode_infinite_lease(bufferlist& bl);
-  void encode_null_lease(bufferlist& bl);
 
   void handle_slave_request(MMDSSlaveRequest *m);
   void handle_slave_request_reply(MMDSSlaveRequest *m);
