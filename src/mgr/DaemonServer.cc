@@ -195,7 +195,6 @@ bool DaemonServer::ms_verify_authorizer(
       authorizer_reply, s->entity_name,
       s->global_id, caps_info,
       session_key,
-      nullptr,
       challenge);
   } else {
     dout(10) << __func__ << " no rotating_keys (yet), denied" << dendl;

@@ -22,7 +22,6 @@ bool AuthNoneAuthorizeHandler::verify_authorizer(
   bufferlist& authorizer_data, bufferlist& authorizer_reply,
   EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info,
   CryptoKey& session_key,
-  uint64_t *auid,
   std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
   auto iter = authorizer_data.cbegin();
