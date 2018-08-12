@@ -149,6 +149,36 @@ health_status_t MgrMonitor::should_warn_about_mgr_down()
   return HEALTH_OK;
 }
 
+void MgrMonitor::post_paxos_update()
+{
+  // are we handling digest subscribers?
+  if (digest_event) {
+    bool send = false;
+    if (prev_health_checks.empty()) {
+      prev_health_checks.resize(mon->paxos_service.size());
+      send = true;
+    }
+    assert(prev_health_checks.size() == mon->paxos_service.size());
+    for (auto i = 0u; i < prev_health_checks.size(); i++) {
+      const auto& curr = mon->paxos_service[i]->get_health_checks();
+      if (!send && curr != prev_health_checks[i]) {
+        send = true;
+      }
+      prev_health_checks[i] = curr;
+    }
+    if (send) {
+      if (is_active()) {
+        send_digests();
+      } else {
+        cancel_timer();
+        wait_for_active_ctx(new C_MonContext(mon, [this](int) {
+          send_digests();
+        }));
+      }
+    }
+  }
+}
+
 void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   dout(10) << __func__ << " " << pending_map << dendl;
@@ -468,8 +498,10 @@ void MgrMonitor::send_digests()
   cancel_timer();
 
   const std::string type = "mgrdigest";
-  if (mon->session_map.subs.count(type) == 0)
+  if (mon->session_map.subs.count(type) == 0) {
+    prev_health_checks.clear();
     return;
+  }
 
   if (!is_active()) {
     // if paxos is currently not active, don't send a digest but reenable timer
