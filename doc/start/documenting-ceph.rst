@@ -31,7 +31,7 @@ steps:
 #. `Commit the Change`_
 #. `Push the Change`_
 #. `Make a Pull Request`_
-#. `Notify the Relevant Person`_
+#. `Notify Us`_
 
 Get the Source
 --------------
@@ -446,11 +446,10 @@ Pull`_ approach.
 
 
 
-Notify the Relevant Person
---------------------------
+Notify Us
+---------
 
-After you make a pull request, notify the relevant person. For general
-documentation pull requests, notify `John Wilkins`_.
+After you make a pull request, please email ceph-docs@redhat.com.
 
 
 
@@ -594,4 +593,3 @@ improves the readability of the document in a command line interface.
 .. _Showing code examples: http://sphinx-doc.org/markup/code.html
 .. _paragraph level markup: http://sphinx-doc.org/markup/para.html
 .. _topic directive: http://docutils.sourceforge.net/docs/ref/rst/directives.html#topic
-.. _John Wilkins: mailto:jowilkin@redhat.com
