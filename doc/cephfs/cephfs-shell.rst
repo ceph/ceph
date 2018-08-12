@@ -5,6 +5,15 @@ Ceph FS Shell
 
 The File System (FS) shell includes various shell-like commands that directly interact with the Ceph File System.
 
+Usage :
+
+    cephfs-shell [-options] -- [command, command,...]
+
+Options :
+    -c, --config FILE     Set Configuration file.
+    -b, --batch FILE      Process a batch file.
+    -t, --test FILE       Test against transcript(s) in FILE
+
 Commands
 ========
 
