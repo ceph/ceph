@@ -28,6 +28,7 @@
 #include "PyModule.h"
 
 #include "ActivePyModules.h"
+#include "DaemonServer.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -38,10 +39,10 @@ ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
           std::map<std::string, std::string> store_data,
           DaemonStateIndex &ds, ClusterState &cs,
 	  MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
-          Client &client_, Finisher &f)
+          Client &client_, Finisher &f, DaemonServer &server)
   : module_config(module_config_), daemon_state(ds), cluster_state(cs),
     monc(mc), clog(clog_), objecter(objecter_), client(client_), finisher(f),
-    lock("ActivePyModules")
+    server(server), lock("ActivePyModules")
 {
   store_cache = std::move(store_data);
 }
@@ -786,11 +787,29 @@ PyObject *ActivePyModules::get_osdmap()
 void ActivePyModules::set_health_checks(const std::string& module_name,
 				  health_check_map_t&& checks)
 {
-  Mutex::Locker l(lock);
+  bool changed = false;
+
+  lock.Lock();
   auto p = modules.find(module_name);
   if (p != modules.end()) {
-    p->second->set_health_checks(std::move(checks));
+    changed = p->second->set_health_checks(std::move(checks));
   }
+  lock.Unlock();
+
+  // immediately schedule a report to be sent to the monitors with the new
+  // health checks that have changed. This is done asynchronusly to avoid
+  // blocking python land. ActivePyModules::lock needs to be dropped to make
+  // lockdep happy:
+  //
+  //   send_report callers: DaemonServer::lock -> PyModuleRegistery::lock
+  //   active_start: PyModuleRegistry::lock -> ActivePyModules::lock
+  //
+  // if we don't release this->lock before calling schedule_tick a cycle is
+  // formed with the addition of ActivePyModules::lock -> DaemonServer::lock.
+  // This is still correct as send_report is run asynchronously under
+  // DaemonServer::lock.
+  if (changed)
+    server.schedule_tick(0);
 }
 
 int ActivePyModules::handle_command(

@@ -242,10 +242,6 @@ void MgrStandby::tick()
   dout(10) << __func__ << dendl;
   send_beacon();
 
-  if (active_mgr && active_mgr->is_initialized()) {
-    active_mgr->tick();
-  }
-
   timer.add_event_after(
       g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count(),
       new FunctionContext([this](int r){
