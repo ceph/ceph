@@ -6627,7 +6627,6 @@ bool OSD::ms_verify_authorizer(
   AuthCapsInfo caps_info;
   EntityName name;
   uint64_t global_id;
-  uint64_t auid = CEPH_AUTH_UID_DEFAULT;
 
   auto keys = monc->rotating_secrets.get();
   if (keys) {
@@ -6653,7 +6652,6 @@ bool OSD::ms_verify_authorizer(
     s->entity_name = name;
     if (caps_info.allow_all)
       s->caps.set_allow_all();
-    s->auid = auid;
 
     if (caps_info.caps.length() > 0) {
       auto p = caps_info.caps.cbegin();
