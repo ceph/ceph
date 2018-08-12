@@ -1068,7 +1068,13 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 
   MClientReply *reply = request->reply;
   ConnectionRef con = request->reply->get_connection();
-  uint64_t features = con->get_features();
+  uint64_t features;
+  if(session->mds_features.test(CEPHFS_FEATURE_REPLY_ENCODING)) {
+    features = (uint64_t)-1;
+  }
+  else {
+    features = con->get_features();
+  }
 
   dir_result_t *dirp = request->dirp;
   assert(dirp);
@@ -1087,7 +1093,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     assert(dir);
 
     // dirstat
-    DirStat dst(p);
+    DirStat dst(p, features);
     __u32 numdn;
     __u16 flags;
     decode(numdn, p);
@@ -1145,7 +1151,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     LeaseStat dlease;
     for (unsigned i=0; i<numdn; i++) {
       decode(dname, p);
-      decode(dlease, p);
+      dlease.decode(p, features);
       InodeStat ist(p, features);
 
       ldout(cct, 15) << "" << i << ": '" << dname << "'" << dendl;
@@ -1266,7 +1272,13 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
   }
 
   ConnectionRef con = request->reply->get_connection();
-  uint64_t features = con->get_features();
+  uint64_t features;
+  if (session->mds_features.test(CEPHFS_FEATURE_REPLY_ENCODING)) {
+    features = (uint64_t)-1;
+  }
+  else {
+    features = con->get_features();
+  }
   ldout(cct, 10) << " features 0x" << hex << features << dec << dendl;
 
   // snap trace
@@ -1287,9 +1299,9 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 
   if (reply->head.is_dentry) {
     dirst.decode(p, features);
-    dst.decode(p);
+    dst.decode(p, features);
     decode(dname, p);
-    decode(dlease, p);
+    dlease.decode(p, features);
   }
 
   Inode *in = 0;
@@ -2072,6 +2084,7 @@ void Client::handle_client_session(MClientSession *m)
 	_closed_mds_session(session);
 	break;
       }
+      session->mds_features = std::move(m->supported_features);
 
       renew_caps(session);
       session->state = MetaSession::STATE_OPEN;

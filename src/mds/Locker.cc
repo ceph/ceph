@@ -3774,20 +3774,17 @@ void Locker::issue_client_lease(CDentry *dn, client_t client,
     now += mdcache->client_lease_durations[pool];
     mdcache->touch_client_lease(l, pool, now);
 
-    LeaseStat e;
-    e.mask = 1 | CEPH_LOCK_DN;  // old and new bit values
-    e.seq = ++l->seq;
-    e.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
-    encode(e, bl);
-    dout(20) << "issue_client_lease seq " << e.seq << " dur " << e.duration_ms << "ms "
+    LeaseStat lstat;
+    lstat.mask = 1 | CEPH_LOCK_DN;  // old and new bit values
+    lstat.duration_ms = (uint32_t)(1000 * mdcache->client_lease_durations[pool]);
+    lstat.seq = ++l->seq;
+    encode_lease(bl, session->info, lstat);
+    dout(20) << "issue_client_lease seq " << lstat.seq << " dur " << lstat.duration_ms << "ms "
 	     << " on " << *dn << dendl;
   } else {
     // null lease
-    LeaseStat e;
-    e.mask = 0;
-    e.seq = 0;
-    e.duration_ms = 0;
-    encode(e, bl);
+    LeaseStat lstat;
+    encode_lease(bl, session->info, lstat);
     dout(20) << "issue_client_lease no/null lease on " << *dn << dendl;
   }
 }
@@ -3819,7 +3816,22 @@ void Locker::revoke_client_leases(SimpleLock *lock)
   }
 }
 
-
+void Locker::encode_lease(bufferlist& bl, const session_info_t& info,
+			  const LeaseStat& ls)
+{
+  if (info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
+    ENCODE_START(1, 1, bl);
+    encode(ls.mask, bl);
+    encode(ls.duration_ms, bl);
+    encode(ls.seq, bl);
+    ENCODE_FINISH(bl);
+  }
+  else {
+    encode(ls.mask, bl);
+    encode(ls.duration_ms, bl);
+    encode(ls.seq, bl);
+  }
+}
 
 // locks ----------------------------------------------------------------
 

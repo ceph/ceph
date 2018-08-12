@@ -33,6 +33,9 @@
 #include "CInode.h"
 #include "MDSCacheObject.h"
 #include "MDSContext.h"
+#include "cephfs_features.h"
+#include "SessionMap.h"
+#include "messages/MClientReply.h"
 
 class CDentry;
 class MDCache;
@@ -562,22 +565,8 @@ private:
 	ls.insert(auth);
     }
   }
-  void encode_dirstat(bufferlist& bl, mds_rank_t whoami) {
-    /*
-     * note: encoding matches struct ceph_client_reply_dirfrag
-     */
-    frag_t frag = get_frag();
-    mds_rank_t auth;
-    std::set<mds_rank_t> dist;
-    
-    auth = dir_auth.first;
-    if (is_auth()) 
-      get_dist_spec(dist, whoami);
 
-    encode(frag, bl);
-    encode(auth, bl);
-    encode(dist, bl);
-  }
+  static void encode_dirstat(bufferlist& bl, const session_info_t& info, const DirStat& ds);
 
   void _encode_base(bufferlist& bl) {
     encode(first, bl);
