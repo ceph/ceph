@@ -502,9 +502,8 @@ COMMAND("osd map " \
 	"name=object,type=CephObjectname " \
 	"name=nspace,type=CephString,req=false", \
 	"find pg for <object> in <pool> with [namespace]", "osd", "r", "cli,rest")
-COMMAND("osd lspools " \
-	"name=auid,type=CephInt,req=false", \
-	"list pools", "osd", "r", "cli,rest")
+COMMAND_WITH_FLAG("osd lspools",		\
+		  "list pools", "osd", "r", "cli,rest", FLAG(DEPRECATED))
 COMMAND_WITH_FLAG("osd crush rule list", "list crush rules", "osd", "r", "cli,rest",
 		  FLAG(DEPRECATED))
 COMMAND("osd crush rule ls", "list crush rules", "osd", "r", "cli,rest")

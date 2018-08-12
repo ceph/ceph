@@ -4784,24 +4784,20 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     goto reply;
 
   } else if (prefix == "osd lspools") {
-    int64_t auid;
-    cmd_getval_throws(cct, cmdmap, "auid", auid, int64_t(0));
     if (f)
       f->open_array_section("pools");
     for (map<int64_t, pg_pool_t>::iterator p = osdmap.pools.begin();
 	 p != osdmap.pools.end();
 	 ++p) {
-      if (!auid || p->second.auid == (uint64_t)auid) {
-	if (f) {
-	  f->open_object_section("pool");
-	  f->dump_int("poolnum", p->first);
-	  f->dump_string("poolname", osdmap.pool_name[p->first]);
-	  f->close_section();
-	} else {
-	  ds << p->first << ' ' << osdmap.pool_name[p->first];
-	  if (next(p) != osdmap.pools.end()) {
-	    ds << '\n';
-	  }
+      if (f) {
+	f->open_object_section("pool");
+	f->dump_int("poolnum", p->first);
+	f->dump_string("poolname", osdmap.pool_name[p->first]);
+	f->close_section();
+      } else {
+	ds << p->first << ' ' << osdmap.pool_name[p->first];
+	if (next(p) != osdmap.pools.end()) {
+	  ds << '\n';
 	}
       }
     }

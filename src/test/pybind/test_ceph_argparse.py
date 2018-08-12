@@ -570,10 +570,8 @@ class TestOSD(TestArgparse):
 
     def test_lspools(self):
         self.assert_valid_command(['osd', 'lspools'])
-        self.assert_valid_command(['osd', 'lspools', '1'])
-        self.assert_valid_command(['osd', 'lspools', '-1'])
         assert_equal({}, validate_command(sigdict, ['osd', 'lspools',
-                                                    '1', 'toomany']))
+                                                    'toomany']))
 
     def test_blacklist_ls(self):
         self.assert_valid_command(['osd', 'blacklist', 'ls'])
