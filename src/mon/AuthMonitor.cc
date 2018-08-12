@@ -636,7 +636,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   }
 
   try {
-    uint64_t auid = 0;
     if (start) {
       // new session
       proto = s->auth_handler->start_session(entity_name, indata, response_bl, caps_info);
@@ -663,7 +662,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 	str.clear();
       }
       s->caps.parse(str, NULL);
-      s->auid = auid;
       s->authenticated = true;
       finished = true;
     }
