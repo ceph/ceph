@@ -3444,10 +3444,14 @@ void *BlueStore::MempoolThread::entry()
 {
   std::unique_lock l(lock);
 
-  std::list<PriorityCache::PriCache *> caches;
-  caches.push_back(store->db);
-  caches.push_back(&meta_cache);
-  caches.push_back(&data_cache);
+  std::list<std::shared_ptr<PriorityCache::PriCache>> caches;
+  binned_kv_cache = store->db->get_priority_cache();
+  if (binned_kv_cache != nullptr) {
+    caches.push_back(binned_kv_cache);
+  }
+  caches.push_back(meta_cache);
+  caches.push_back(data_cache);
+
   autotune_cache_size = store->osd_memory_cache_min;
 
   utime_t next_balance = ceph_clock_now();
@@ -3456,13 +3460,14 @@ void *BlueStore::MempoolThread::entry()
   bool interval_stats_trim = false;
   bool interval_stats_resize = false; 
   while (!stop) {
-    _adjust_cache_settings();
 
     // Before we trim, check and see if it's time to rebalance/resize.
     double autotune_interval = store->cache_autotune_interval;
     double resize_interval = store->osd_memory_cache_resize_interval;
 
     if (autotune_interval > 0 && next_balance < ceph_clock_now()) {
+      _adjust_cache_settings();
+
       // Log events at 5 instead of 20 when balance happens.
       interval_stats_resize = true; 
       interval_stats_trim = true;
@@ -3497,9 +3502,11 @@ void *BlueStore::MempoolThread::entry()
 
 void BlueStore::MempoolThread::_adjust_cache_settings()
 {
-  store->db->set_cache_ratio(store->cache_kv_ratio);
-  meta_cache.set_cache_ratio(store->cache_meta_ratio);
-  data_cache.set_cache_ratio(store->cache_data_ratio);
+  if (binned_kv_cache != nullptr) {
+    binned_kv_cache->set_cache_ratio(store->cache_kv_ratio);
+  }
+  meta_cache->set_cache_ratio(store->cache_meta_ratio);
+  data_cache->set_cache_ratio(store->cache_data_ratio);
 }
 
 void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
@@ -3508,23 +3515,23 @@ void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
   size_t num_shards = store->cache_shards.size();
 
   int64_t kv_used = store->db->get_cache_usage();
-  int64_t meta_used = meta_cache._get_used_bytes();
-  int64_t data_used = data_cache._get_used_bytes();
+  int64_t meta_used = meta_cache->_get_used_bytes();
+  int64_t data_used = data_cache->_get_used_bytes();
 
   uint64_t cache_size = store->cache_size;
   int64_t kv_alloc =
-     static_cast<int64_t>(store->db->get_cache_ratio() * cache_size); 
+     static_cast<int64_t>(store->cache_kv_ratio * cache_size); 
   int64_t meta_alloc =
-     static_cast<int64_t>(meta_cache.get_cache_ratio() * cache_size);
+     static_cast<int64_t>(store->cache_meta_ratio * cache_size);
   int64_t data_alloc =
-     static_cast<int64_t>(data_cache.get_cache_ratio() * cache_size);
+     static_cast<int64_t>(store->cache_data_ratio * cache_size);
 
-  if (store->cache_autotune) {
+  if (binned_kv_cache != nullptr && store->cache_autotune) {
     cache_size = autotune_cache_size;
 
-    kv_alloc = store->db->get_committed_size();
-    meta_alloc = meta_cache.get_committed_size();
-    data_alloc = data_cache.get_committed_size();
+    kv_alloc = binned_kv_cache->get_committed_size();
+    meta_alloc = meta_cache->get_committed_size();
+    data_alloc = data_cache->get_committed_size();
   }
   
   if (interval_stats) {
@@ -3546,7 +3553,7 @@ void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
   }
 
   uint64_t max_shard_onodes = static_cast<uint64_t>(
-      (meta_alloc / (double) num_shards) / meta_cache.get_bytes_per_onode());
+      (meta_alloc / (double) num_shards) / meta_cache->get_bytes_per_onode());
   uint64_t max_shard_buffer = static_cast<uint64_t>(data_alloc / num_shards);
 
   ldout(cct, 30) << __func__ << " max_shard_onodes: " << max_shard_onodes
@@ -3643,9 +3650,9 @@ void BlueStore::MempoolThread::_balance_cache(
 }
 
 void BlueStore::MempoolThread::_balance_cache_pri(int64_t *mem_avail,
-    const std::list<PriorityCache::PriCache *>& caches, PriorityCache::Priority pri) 
+    const std::list<std::shared_ptr<PriorityCache::PriCache>>& caches, PriorityCache::Priority pri) 
 {
-  std::list<PriorityCache::PriCache *> tmp_caches = caches;
+  std::list<std::shared_ptr<PriorityCache::PriCache>> tmp_caches = caches;
   double cur_ratios = 0;
   double new_ratios = 0;
 

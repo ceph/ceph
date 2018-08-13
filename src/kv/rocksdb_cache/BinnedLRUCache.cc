@@ -551,6 +551,51 @@ size_t BinnedLRUCache::GetHighPriPoolUsage() const {
   return usage;
 }
 
+// PriCache
+
+int64_t BinnedLRUCache::request_cache_bytes(PriorityCache::Priority pri, uint64_t total_cache) const
+{
+  int64_t assigned = get_cache_bytes(pri);
+  int64_t request = 0;
+
+  switch (pri) {
+  // PRI0 is for rocksdb's high priority items (indexes/filters)
+  case PriorityCache::Priority::PRI0:
+    {
+      request = GetHighPriPoolUsage();
+      break;
+    }
+  // All other cache items are currently shoved into the LAST priority. 
+  case PriorityCache::Priority::LAST:
+    {
+      request = GetUsage();
+      request -= GetHighPriPoolUsage();
+      break;
+    }
+  default:
+    break;
+  }
+  request = (request > assigned) ? request - assigned : 0;
+  ldout(cct, 10) << __func__ << " Priority: " << static_cast<uint32_t>(pri)
+                 << " Request: " << request << dendl;
+  return request;
+}
+
+int64_t BinnedLRUCache::commit_cache_size(uint64_t total_bytes)
+{
+  size_t old_bytes = GetCapacity();
+  int64_t new_bytes = PriorityCache::get_chunk(
+      get_cache_bytes(), total_bytes);
+  ldout(cct, 10) << __func__ << " old: " << old_bytes
+                 << " new: " << new_bytes << dendl;
+  SetCapacity((size_t) new_bytes);
+  double ratio =
+      (double) get_cache_bytes(PriorityCache::Priority::PRI0) / new_bytes;
+  ldout(cct, 10) << __func__ << " High Pri Pool Ratio set to " << ratio << dendl;
+  SetHighPriPoolRatio(ratio);
+  return new_bytes;
+}
+
 std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(
     CephContext *c, 
     size_t capacity,

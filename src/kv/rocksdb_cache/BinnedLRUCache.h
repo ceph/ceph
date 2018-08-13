@@ -319,6 +319,17 @@ class BinnedLRUCache : public ShardedCache {
   // Retrieves high pri pool usage
   size_t GetHighPriPoolUsage() const;
 
+  // PriorityCache
+  virtual int64_t request_cache_bytes(PriorityCache::Priority pri, uint64_t total_cache) const;
+  virtual int64_t commit_cache_size(uint64_t total_cache);
+  virtual int64_t get_committed_size() const {
+    return GetCapacity();
+  }
+  virtual std::string get_cache_name() const {
+    return "RocksDB Binned LRU Cache";
+  }
+
+
  private:
   CephContext *cct;
   BinnedLRUCacheShard* shards_;
