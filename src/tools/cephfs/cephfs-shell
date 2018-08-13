@@ -5,7 +5,7 @@ import argparse
 import os
 import os.path
 import sys
-from cmd2 import Cmd, with_argparser
+from cmd2 import Cmd
 import cephfs as libcephfs
 import shutil
 import traceback
@@ -14,6 +14,36 @@ import readline
 import fnmatch
 import math
 import re
+import shlex
+
+try:
+    from cmd2 import with_argparser
+except ImportError:
+    def with_argparser(argparser):
+        import functools
+        def argparser_decorator(func):
+            @functools.wraps(func)
+            def wrapper(thiz, cmdline):
+                # do not split if it's already a list
+                if not isinstance(cmdline, list):
+                    arglist = shlex.split(cmdline, posix=False)
+                    # in case user quotes the command args
+                    arglist = [arg.strip('\'""') for arg in arglist]
+                try:
+                    args = argparser.parse_args(arglist)
+                except SystemExit:
+                    # argparse exits at seeing bad arguments
+                    return
+                else:
+                    return func(thiz, args)
+            argparser.prog = func.__name__[3:]
+            if argparser.description is None and func.__doc__:
+                argparser.description = func.__doc__
+            
+            return wrapper
+
+        return argparser_decorator
+
 
 cephfs = None
 
@@ -89,8 +119,7 @@ def glob(dir_name, pattern):
             if fnmatch.fnmatch(i.d_name.decode('utf-8'), pattern):
                 paths.append(os.path.join(dir_name, i.d_name.decode('utf-8')))
     return paths
-
-
+       
 def get_all_possible_paths(pattern):
     paths = []
     is_rel_path = not os.path.isabs(pattern)
@@ -448,11 +477,9 @@ exists.')
             root_src_dir = cephfs.getcwd().decode('utf-8')
         if args.local_path == '-':
             copy_to_local(self, root_src_dir, '-')
-        # any([i for i in list_items() if i.d_name.decode('utf-8') == args.remote_path and not i.is_dir()]):
         elif is_file_exists(args.remote_path):
             copy_to_local(self, root_src_dir,
                           root_dst_dir + '/' + root_src_dir)
-        # any([i for i in list_items() if i.d_name.decode('utf-8') == and not i.is_dir()]):
         elif '/'in root_src_dir and is_file_exists(root_src_dir.rsplit('/', 1)[1], root_src_dir.rsplit('/', 1)[0]):
             copy_to_local(self, root_src_dir, root_dst_dir)
         else:
@@ -588,11 +615,11 @@ sub-directories, files')
                     dir_path = '/'
                 dirs = []
                 for i in all_items:
-                    for item in list_items(dir_name):
+                    for item in list_items(dir_path):
                         d_name = item.d_name.decode('utf-8')
                         if os.path.basename(i) == d_name:
                             if item.is_dir():
-                                dirs.append(os.path.join(dir_name, d_name))
+                                dirs.append(os.path.join(dir_path, d_name))
                 directories.extend(dirs)
                 continue
             else:
