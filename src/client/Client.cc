@@ -1028,20 +1028,6 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
 
   // replicated
   in->dir_replicated = !dst->dist.empty();  // FIXME that's just one frag!
-  
-  // dist
-  /*
-  if (!st->dirfrag_dist.empty()) {   // FIXME
-    set<int> dist = st->dirfrag_dist.begin()->second;
-    if (dist.empty() && !in->dir_contacts.empty())
-      ldout(cct, 9) << "lost dist spec for " << in->ino 
-              << " " << dist << dendl;
-    if (!dist.empty() && in->dir_contacts.empty()) 
-      ldout(cct, 9) << "got dist spec for " << in->ino 
-              << " " << dist << dendl;
-    in->dir_contacts = dist;
-  }
-  */
 }
 
 void Client::clear_dir_complete_and_ordered(Inode *diri, bool complete)
@@ -3861,7 +3847,6 @@ void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
 
 void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
 {
-  //  Mutex::Locker l(client_lock);
   assert(client_lock.is_locked());   // will be called via dispatch() -> objecter -> ...
   Inode *in = static_cast<Inode *>(oset->parent);
   assert(in);
@@ -5815,17 +5800,6 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
       ldout(cct, 1) << "FAILED to open trace file '" << cct->_conf->client_trace << "'" << dendl;
     }
   }
-
-  /*
-  ldout(cct, 3) << "op: // client trace data structs" << dendl;
-  ldout(cct, 3) << "op: struct stat st;" << dendl;
-  ldout(cct, 3) << "op: struct utimbuf utim;" << dendl;
-  ldout(cct, 3) << "op: int readlinkbuf_len = 1000;" << dendl;
-  ldout(cct, 3) << "op: char readlinkbuf[readlinkbuf_len];" << dendl;
-  ldout(cct, 3) << "op: map<string, inode_t*> dir_contents;" << dendl;
-  ldout(cct, 3) << "op: map<int, int> open_files;" << dendl;
-  ldout(cct, 3) << "op: int fd;" << dendl;
-  */
   return 0;
 }
 
@@ -7730,14 +7704,6 @@ void Client::seekdir(dir_result_t *dirp, loff_t offset)
   dirp->offset = offset;
 }
 
-
-//struct dirent {
-//  ino_t          d_ino;       /* inode number */
-//  off_t          d_off;       /* offset to the next dirent */
-//  unsigned short d_reclen;    /* length of this record */
-//  unsigned char  d_type;      /* type of file */
-//  char           d_name[256]; /* filename */
-//};
 void Client::fill_dirent(struct dirent *de, const char *name, int type, uint64_t ino, loff_t next_off)
 {
   strncpy(de->d_name, name, 255);
@@ -8592,8 +8558,6 @@ Fh *Client::_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms)
 
 int Client::_release_fh(Fh *f)
 {
-  //ldout(cct, 3) << "op: client->close(open_files[ " << fh << " ]);" << dendl;
-  //ldout(cct, 3) << "op: open_files.erase( " << fh << " );" << dendl;
   Inode *in = f->inode.get();
   ldout(cct, 8) << __func__ << " " << f << " mode " << f->mode << " on " << *in << dendl;
 
@@ -8955,7 +8919,6 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 
   if ((f->mode & CEPH_FILE_MODE_RD) == 0)
     return -EBADF;
-  //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
   if (offset < 0) {
     lock_fh_pos(f);
@@ -13161,24 +13124,6 @@ int Client::ll_commit_blocks(Inode *in,
 			     uint64_t length)
 {
     Mutex::Locker lock(client_lock);
-    /*
-    BarrierContext *bctx;
-    vinodeno_t vino = _get_vino(in);
-    uint64_t ino = vino.ino;
-
-    ldout(cct, 1) << "ll_commit_blocks for " << vino.ino << " from "
-		  << offset << " to " << length << dendl;
-
-    if (length == 0) {
-      return -EINVAL;
-    }
-
-    map<uint64_t, BarrierContext*>::iterator p = barriers.find(ino);
-    if (p != barriers.end()) {
-      barrier_interval civ(offset, offset + length);
-      p->second->commit_barrier(civ);
-    }
-    */
     return 0;
 }
 

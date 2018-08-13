@@ -71,11 +71,6 @@ public:
   }
 };
 
-
-// PINS
-//int cdir_pins[CDIR_NUM_PINS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
-
-
 ostream& operator<<(ostream& out, const CDir& dir)
 {
   out << "[dir " << dir.dirfrag() << " " << dir.get_path() << "/"
@@ -355,7 +350,6 @@ CDentry* CDir::add_null_dentry(std::string_view dname,
   
   // add to dir
   assert(items.count(dn->key()) == 0);
-  //assert(null_items.count(dn->get_name()) == 0);
 
   items[dn->key()] = dn;
   if (last == CEPH_NOSNAP)
@@ -401,7 +395,6 @@ CDentry* CDir::add_primary_dentry(std::string_view dname, CInode *in,
   
   // add to dir
   assert(items.count(dn->key()) == 0);
-  //assert(null_items.count(dn->get_name()) == 0);
 
   items[dn->key()] = dn;
 
@@ -445,7 +438,6 @@ CDentry* CDir::add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned
   
   // add to dir
   assert(items.count(dn->key()) == 0);
-  //assert(null_items.count(dn->get_name()) == 0);
 
   items[dn->key()] = dn;
   if (last == CEPH_NOSNAP)
@@ -578,9 +570,6 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
   assert(dn->get_linkage()->get_inode() == in);
   in->set_primary_parent(dn);
 
-  // set inode version
-  //in->inode.version = dn->get_version();
-  
   // pin dentry?
   if (in->get_num_ref())
     dn->get(CDentry::PIN_INODEPIN);
@@ -1861,9 +1850,6 @@ CDentry *CDir::_load_dentry(
         if (in->inode.is_dirty_rstat())
           in->mark_dirty_rstat();
 
-        //in->hack_accessed = false;
-        //in->hack_load_stamp = ceph_clock_now();
-        //num_new_inodes_loaded++;
       } else if (g_conf().get_val<bool>("mds_hack_allow_loading_invalid_metadata")) {
 	dout(20) << "hack: adding duplicate dentry for " << *in << dendl;
 	dn = add_primary_dentry(dname, in, first, last);
@@ -2163,7 +2149,6 @@ void CDir::_omap_commit(int op_prio)
     dout(10) << " snap_purged_thru " << fnode.snap_purged_thru
 	     << " < " << realm->get_last_destroyed()
 	     << ", snap purge based on " << *snaps << dendl;
-    // fnode.snap_purged_thru = realm->get_last_destroyed();
   }
 
   set<string> to_remove;
@@ -2620,31 +2605,6 @@ mds_authority_t CDir::authority() const
   else
     return inode->authority();
 }
-
-/** is_subtree_root()
- * true if this is an auth delegation point.  
- * that is, dir_auth != default (parent,unknown)
- *
- * some key observations:
- *  if i am auth:
- *    - any region bound will be an export, or frozen.
- *
- * note that this DOES heed dir_auth.pending
- */
-/*
-bool CDir::is_subtree_root()
-{
-  if (dir_auth == CDIR_AUTH_DEFAULT) {
-    //dout(10) << "is_subtree_root false " << dir_auth << " != " << CDIR_AUTH_DEFAULT
-    //<< " on " << ino() << dendl;
-    return false;
-  } else {
-    //dout(10) << "is_subtree_root true " << dir_auth << " != " << CDIR_AUTH_DEFAULT
-    //<< " on " << ino() << dendl;
-    return true;
-  }
-}
-*/
 
 /** contains(x)
  * true if we are x, or an ancestor of x

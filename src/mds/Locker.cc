@@ -1269,10 +1269,6 @@ bool Locker::_rdlock_kick(SimpleLock *lock, bool as_anon)
   if (lock->is_stable()) {
     if (lock->get_parent()->is_auth()) {
       if (lock->get_sm() == &sm_scatterlock) {
-	// not until tempsync is fully implemented
-	//if (lock->get_parent()->is_replicated())
-	//scatter_tempsync((ScatterLock*)lock);
-	//else
 	simple_sync(lock);
       } else if (lock->get_sm() == &sm_filelock) {
 	CInode *in = static_cast<CInode*>(lock->get_parent());
@@ -1341,14 +1337,6 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon)
   CInode *in = 0;
   if (lock->get_type() != CEPH_LOCK_DN)
     in = static_cast<CInode *>(lock->get_parent());
-
-  /*
-  if (!lock->get_parent()->is_auth() &&
-      lock->fw_rdlock_to_auth()) {
-    mdcache->request_forward(mut, lock->get_parent()->authority().first);
-    return false;
-  }
-  */
 
   while (1) {
     // can read?  grab ref.
@@ -1959,12 +1947,6 @@ Capability* Locker::issue_new_caps(CInode *in,
     // [replica] tell auth about any new caps wanted
     request_inode_file_caps(in);
   }
-
-  // issue caps (pot. incl new one)
-  //issue_caps(in);  // note: _eval above may have done this already...
-
-  // re-issue whatever we can
-  //cap->issue(cap->pending());
 
   if (is_new)
     cap->dec_suppress();
@@ -4031,47 +4013,6 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
   m->put();
 }
 
-/* unused, currently.
-
-class C_Locker_SimpleEval : public Context {
-  Locker *locker;
-  SimpleLock *lock;
-public:
-  C_Locker_SimpleEval(Locker *l, SimpleLock *lk) : locker(l), lock(lk) {}
-  void finish(int r) {
-    locker->try_simple_eval(lock);
-  }
-};
-
-void Locker::try_simple_eval(SimpleLock *lock)
-{
-  // unstable and ambiguous auth?
-  if (!lock->is_stable() &&
-      lock->get_parent()->is_ambiguous_auth()) {
-    dout(7) << "simple_eval not stable and ambiguous auth, waiting on " << *lock->get_parent() << dendl;
-    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_Locker_SimpleEval(this, lock));
-    return;
-  }
-
-  if (!lock->get_parent()->is_auth()) {
-    dout(7) << "try_simple_eval not auth for " << *lock->get_parent() << dendl;
-    return;
-  }
-
-  if (!lock->get_parent()->can_auth_pin()) {
-    dout(7) << "try_simple_eval can't auth_pin, waiting on " << *lock->get_parent() << dendl;
-    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_SimpleEval(this, lock));
-    return;
-  }
-
-  if (lock->is_stable())
-    simple_eval(lock);
-}
-*/
-
-
 void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
 {
   dout(10) << "simple_eval " << *lock << " on " << *lock->get_parent() << dendl;
@@ -4385,7 +4326,6 @@ void Locker::simple_xlock(SimpleLock *lock)
 
   if (!gather) {
     lock->set_state(LOCK_PREXLOCK);
-    //assert("shouldn't be called if we are already xlockable" == 0);
   }
 }
 
@@ -4617,23 +4557,6 @@ void Locker::scatter_nudge(ScatterLock *lock, MDSInternalContextBase *c, bool fo
     int count = 0;
     while (true) {
       if (lock->is_stable()) {
-	// can we do it now?
-	//  (only if we're not replicated.. if we are, we really do need
-	//   to nudge the lock state!)
-	/*
-	  actually, even if we're not replicated, we can't stay in MIX, because another mds
-	  could discover and replicate us at any time.  if that happens while we're flushing,
-	  they end up in MIX but their inode has the old scatterstat version.
-
-	if (!forcelockchange && !lock->get_parent()->is_replicated() && lock->can_wrlock(-1)) {
-	  dout(10) << "scatter_nudge auth, propagating " << *lock << " on " << *p << dendl;
-	  scatter_writebehind(lock);
-	  if (c)
-	    lock->add_waiter(SimpleLock::WAIT_STABLE, c);
-	  return;
-	}
-	*/
-
 	if (mdcache->is_readonly()) {
 	  if (lock->get_state() != LOCK_SYNC) {
 	    dout(10) << "scatter_nudge auth, read-only FS, syncing " << *lock << " on " << *p << dendl;
@@ -4959,10 +4882,6 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 	   !(wanted & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) &&
 	   !((lock->get_state() == LOCK_MIX) &&
 	     in->is_dir() && in->has_subtree_or_exporting_dirfrag())  // if we are a delegation point, stay where we are
-	   //((wanted & CEPH_CAP_RD) || 
-	   //in->is_replicated() || 
-	   //lock->is_leased() ||
-	   //(!loner && lock->get_state() == LOCK_EXCL)) &&
 	   ) {
     dout(7) << "file_eval stable, bump to sync " << *lock 
 	    << " on " << *lock->get_parent() << dendl;
@@ -5171,19 +5090,10 @@ void Locker::file_recover(ScatterLock *lock)
   dout(7) << "file_recover " << *lock << " on " << *in << dendl;
 
   assert(in->is_auth());
-  //assert(lock->is_stable());
   assert(lock->get_state() == LOCK_PRE_SCAN); // only called from MDCache::start_files_to_recover()
 
   int gather = 0;
   
-  /*
-  if (in->is_replicated()
-      lock->get_sm()->states[oldstate].replica_state != LOCK_LOCK) {
-    send_lock_message(lock, LOCK_AC_LOCK);
-    lock->init_gather();
-    gather++;
-  }
-  */
   if (in->is_head() &&
       in->issued_caps_need_gather(lock)) {
     issue_caps(in);
