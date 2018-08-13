@@ -2007,7 +2007,13 @@ public:
   bool call(std::string_view admin_command, const cmdmap_t& cmdmap,
 	    std::string_view format, bufferlist& out) override {
     stringstream ss;
-    bool r = osd->asok_command(admin_command, cmdmap, format, ss);
+    bool r = true;
+    try {
+      r = osd->asok_command(admin_command, cmdmap, format, ss);
+    } catch (const bad_cmd_get& e) {
+      ss << e.what();
+      r = true;
+    }
     out.append(ss);
     return r;
   }
@@ -2268,7 +2274,11 @@ public:
   bool call(std::string_view command, const cmdmap_t& cmdmap,
 	    std::string_view format, bufferlist& out) override {
     stringstream ss;
-    test_ops(service, store, command, cmdmap, ss);
+    try {
+      test_ops(service, store, command, cmdmap, ss);
+    } catch (const bad_cmd_get& e) {
+      ss << e.what();
+    }
     out.append(ss);
     return true;
   }
