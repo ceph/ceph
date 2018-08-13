@@ -376,7 +376,11 @@ public:
 
   bool call(std::string_view command, const cmdmap_t& cmdmap,
 	    std::string_view format, bufferlist& out) override {
-    m_cct->do_command(command, cmdmap, format, &out);
+    try {
+      m_cct->do_command(command, cmdmap, format, &out);
+    } catch (const bad_cmd_get& e) {
+      return false;
+    }
     return true;
   }
 };
