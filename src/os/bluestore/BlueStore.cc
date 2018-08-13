@@ -6118,6 +6118,26 @@ int BlueStore::_fsck(bool deep, bool repair)
   }
 
   if (bluefs) {
+    interval_set<uint64_t> bset;
+    r = bluefs->get_block_extents(bluefs_shared_bdev, &bset);
+    assert(r == 0);
+    if (!(bset == bluefs_extents)) {
+      dout(10) << __func__ << " bluefs says 0x" << std::hex << bset << std::dec
+	       << dendl;
+      dout(10) << __func__ << " super says  0x" << std::hex << bluefs_extents
+	       << std::dec << dendl;
+
+      interval_set<uint64_t> overlap;
+      overlap.intersection_of(bset, bluefs_extents);
+
+      bset.subtract(overlap);
+      if (!bset.empty()) {
+	derr << "fsck error: bluefs extra 0x" << std::hex << bset << std::dec
+	     << dendl;
+	++errors;
+      }
+    }
+
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
         e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
