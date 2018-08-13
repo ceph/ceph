@@ -4709,6 +4709,15 @@ std::vector<Option> get_rgw_options() {
     .set_default(false)
     .set_description("Should S3 authentication use Keystone."),
 
+    Option("rgw_s3_auth_order", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+     .set_default("external, local")
+     .set_description("Authentication strategy order to use for s3 authentication")
+     .set_long_description(
+	  "Order of authentication strategies to try for s3 authentication, the allowed "
+	   "options are a comma separated list of engines external, local. The "
+	   "default order is to try all the externally configured engines before "
+	   "attempting local rados based authentication"),
+
     Option("rgw_barbican_url", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("URL to barbican server."),
