@@ -409,11 +409,11 @@ complaining about requests that are taking too long.  The warning threshold
 defaults to 30 seconds, and is configurable via the ``osd op complaint time``
 option.  When this happens, the cluster log will receive messages.
 
-Legacy versions of Ceph complain about 'old requests`::
+Legacy versions of Ceph complain about ``old requests``::
 
 	osd.0 192.168.106.220:6800/18813 312 : [WRN] old request osd_op(client.5099.0:790 fatty_26485_object789 [write 0~4096] 2.5e54f643) v4 received at 2012-03-06 15:42:56.054801 currently waiting for sub ops
 
-New versions of Ceph complain about 'slow requests`::
+New versions of Ceph complain about ``slow requests``::
 
 	{date} {osd.num} [WRN] 1 slow requests, 1 included below; oldest blocked for > 30.005692 secs
 	{date} {osd.num}  [WRN] slow request 30.005692 seconds old, received at {date-time}: osd_op(client.4240.0:8 benchmark_data_ceph-1_39426_object7 [write 0~4194304] 0.69848840) v4 currently waiting for subops from [610]
@@ -422,65 +422,63 @@ New versions of Ceph complain about 'slow requests`::
 Possible causes include:
 
 - A bad drive (check ``dmesg`` output)
-- A bug in the kernel file system bug (check ``dmesg`` output)
+- A bug in the kernel file system (check ``dmesg`` output)
 - An overloaded cluster (check system load, iostat, etc.)
 - A bug in the ``ceph-osd`` daemon.
 
-Possible solutions
+Possible solutions:
 
-- Remove VMs Cloud Solutions from Ceph Hosts
-- Upgrade Kernel
+- Remove VMs from Ceph hosts
+- Upgrade kernel
 - Upgrade Ceph
 - Restart OSDs
 
 Debugging Slow Requests
 -----------------------
 
-If you run "ceph daemon osd.<id> dump_historic_ops" or "dump_ops_in_flight",
+If you run ``ceph daemon osd.<id> dump_historic_ops`` or ``ceph daemon osd.<id> dump_ops_in_flight``,
 you will see a set of operations and a list of events each operation went
 through. These are briefly described below.
 
 Events from the Messenger layer:
 
-- header_read: when the messenger first started reading the message off the wire
-- throttled: when the messenger tried to acquire memory throttle space to read
-  the message into memory
-- all_read: when the messenger finished reading the message off the wire
-- dispatched: when the messenger gave the message to the OSD
-- Initiated: <This is identical to header_read. The existence of both is a
+- ``header_read``: When the messenger first started reading the message off the wire.
+- ``throttled``: When the messenger tried to acquire memory throttle space to read
+  the message into memory.
+- ``all_read``: When the messenger finished reading the message off the wire.
+- ``dispatched``: When the messenger gave the message to the OSD.
+- ``initiated``: This is identical to ``header_read``. The existence of both is a
   historical oddity.
 
-Events from the OSD as it prepares operations
+Events from the OSD as it prepares operations:
 
-- queued_for_pg: the op has been put into the queue for processing by its PG
-- reached_pg: the PG has started doing the op
-- waiting for \*: the op is waiting for some other work to complete before it
-  can proceed (a new OSDMap; for its object target to scrub; for the PG to
-  finish peering; all as specified in the message)
-- started: the op has been accepted as something the OSD should actually do
-  (reasons not to do it: failed security/permission checks; out-of-date local
-  state; etc) and is now actually being performed
-- waiting for subops from: the op has been sent to replica OSDs
+- ``queued_for_pg``: The op has been put into the queue for processing by its PG.
+- ``reached_pg``: The PG has started doing the op.
+- ``waiting for \*``: The op is waiting for some other work to complete before it
+  can proceed (e.g. a new OSDMap; for its object target to scrub; for the PG to
+  finish peering; all as specified in the message).
+- ``started``: The op has been accepted as something the OSD should do and 
+  is now being performed.
+- ``waiting for subops from``: The op has been sent to replica OSDs.
 
-Events from the FileStore
+Events from the FileStore:
 
-- commit_queued_for_journal_write: the op has been given to the FileStore
-- write_thread_in_journal_buffer: the op is in the journal's buffer and waiting
-  to be persisted (as the next disk write)
-- journaled_completion_queued: the op was journaled to disk and its callback
-  queued for invocation
+- ``commit_queued_for_journal_write``: The op has been given to the FileStore.
+- ``write_thread_in_journal_buffer``: The op is in the journal's buffer and waiting
+  to be persisted (as the next disk write).
+- ``journaled_completion_queued``: The op was journaled to disk and its callback
+  queued for invocation.
 
-Events from the OSD after stuff has been given to local disk
+Events from the OSD after stuff has been given to local disk:
 
-- op_commit: the op has been committed (ie, written to journal) by the
-  primary OSD
-- op_applied: The op has been write()'en to the backing FS (ie, applied in
-  memory but not flushed out to disk) on the primary
-- sub_op_applied: op_applied, but for a replica's "subop"
-- sub_op_committed: op_committed, but for a replica's subop (only for EC pools)
-- sub_op_commit_rec/sub_op_apply_rec from <X>: the primary marks this when it
-  hears about the above, but for a particular replica <X>
-- commit_sent: we sent a reply back to the client (or primary OSD, for sub ops)
+- ``op_commit``: The op has been committed (i.e. written to journal) by the
+  primary OSD.
+- ``op_applied``: The op has been `write()'en <https://www.freebsd.org/cgi/man.cgi?write(2)>`_ to the backing FS (i.e.   applied in memory but not flushed out to disk) on the primary.
+- ``sub_op_applied``: ``op_applied``, but for a replica's "subop".
+- ``sub_op_committed``: ``op_commit``, but for a replica's subop (only for EC pools).
+- ``sub_op_commit_rec/sub_op_apply_rec from <X>``: The primary marks this when it
+  hears about the above, but for a particular replica (i.e. ``<X>``).
+- ``commit_sent``: We sent a reply back to the client (or primary OSD, for sub ops).
 
 Many of these events are seemingly redundant, but cross important boundaries in
 the internal code (such as passing data across locks into new threads).
