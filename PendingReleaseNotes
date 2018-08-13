@@ -21,6 +21,12 @@
   The secrets can be set using the 'rbd mirror pool peer add' and
   'rbd mirror pool peer set' actions.
 
+* The libcephfs bindings added the ceph_select_filesystem function
+  for use with multiple filesystems.
+
+* The cephfs python bindings now include mount_root and filesystem_name
+  options in the mount() function.
+
 >=13.1.0
 --------
 
