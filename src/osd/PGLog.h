@@ -140,8 +140,7 @@ public:
       pg_log_t(std::forward<Args>(args)...),
       complete_to(log.end()),
       last_requested(0),
-      indexed_data(0),
-      rollback_info_trimmed_to_riter(log.rbegin())
+      indexed_data(0)
     {
       reset_rollback_info_trimmed_to_riter();
       index();
@@ -151,8 +150,7 @@ public:
       pg_log_t(rhs),
       complete_to(log.end()),
       last_requested(rhs.last_requested),
-      indexed_data(0),
-      rollback_info_trimmed_to_riter(log.rbegin())
+      indexed_data(0)
     {
       reset_rollback_info_trimmed_to_riter();
       index(rhs.indexed_data);
