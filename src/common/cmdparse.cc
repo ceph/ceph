@@ -487,19 +487,23 @@ bool validate_arg(CephContext* cct,
 		  std::ostream& os)
 {
   Value v;
-  if (!cmd_getval(cct, cmdmap, string(name), v)) {
-    if constexpr (is_vector) {
-      // an empty list is acceptable.
-      return true;
-    } else {
-      if (auto req = desc.find("req");
-	  req != end(desc) && req->second == "false") {
-	return true;
-      } else {
-	os << "missing required parameter: '" << name << "'";
-	return false;
+  try {
+    if (!cmd_getval(cct, cmdmap, string(name), v)) {
+      if constexpr (is_vector) {
+	  // an empty list is acceptable.
+	  return true;
+	} else {
+	if (auto req = desc.find("req");
+	    req != end(desc) && req->second == "false") {
+	  return true;
+	} else {
+	  os << "missing required parameter: '" << name << "'";
+	  return false;
+	}
       }
     }
+  } catch (const bad_cmd_get& e) {
+    return false;
   }
   auto validate = [&](const T& value) {
     if constexpr (is_same_v<std::string, T>) {
