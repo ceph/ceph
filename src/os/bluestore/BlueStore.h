@@ -1964,7 +1964,6 @@ private:
   double cache_kv_ratio = 0;     ///< cache ratio dedicated to kv (e.g., rocksdb)
   double cache_data_ratio = 0;   ///< cache ratio dedicated to object data
   bool cache_autotune = false;   ///< cache autotune setting
-  uint64_t cache_autotune_chunk_size = 0; ///< cache autotune chunk size
   double cache_autotune_interval = 0; ///< time to wait between cache rebalancing
   uint64_t osd_memory_target = 0;   ///< OSD memory target when autotuning cache
   uint64_t osd_memory_base = 0;     ///< OSD base memory when autotuning cache
@@ -1986,6 +1985,7 @@ private:
     struct MempoolCache : public PriorityCache::PriCache {
       BlueStore *store;
       int64_t cache_bytes[PriorityCache::Priority::LAST+1];
+      int64_t committed_bytes = 0;
       double cache_ratio = 0;
 
       MempoolCache(BlueStore *s) : store(s) {};
@@ -1993,15 +1993,14 @@ private:
       virtual uint64_t _get_used_bytes() const = 0;
 
       virtual int64_t request_cache_bytes(
-          PriorityCache::Priority pri, uint64_t chunk_bytes) const {
+          PriorityCache::Priority pri, uint64_t total_cache) const {
         int64_t assigned = get_cache_bytes(pri);
 
         switch (pri) {
         // All cache items are currently shoved into the LAST priority 
         case PriorityCache::Priority::LAST:
           {
-            uint64_t usage = _get_used_bytes();
-            int64_t request = PriorityCache::get_chunk(usage, chunk_bytes);
+            int64_t request = _get_used_bytes();
             return(request > assigned) ? request - assigned : 0;
           }
         default:
@@ -2028,8 +2027,13 @@ private:
       virtual void add_cache_bytes(PriorityCache::Priority pri, int64_t bytes) {
         cache_bytes[pri] += bytes;
       }
-      virtual int64_t commit_cache_size() {
-        return get_cache_bytes(); 
+      virtual int64_t commit_cache_size(uint64_t total_cache) {
+        committed_bytes = PriorityCache::get_chunk(
+            get_cache_bytes(), total_cache);
+        return committed_bytes;
+      }
+      virtual int64_t get_committed_size() const {
+        return committed_bytes;
       }
       virtual double get_cache_ratio() const {
         return cache_ratio;
