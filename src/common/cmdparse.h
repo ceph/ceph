@@ -57,23 +57,8 @@ struct bad_cmd_get : public std::exception {
 };
 
 template <typename T>
-bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k,
-		T& val)
-{
-  if (cmdmap.count(k)) {
-    try {
-      val = boost::get<T>(cmdmap.find(k)->second);
-      return true;
-    } catch (boost::bad_get&) {
-      handle_bad_get(cct, k, typeid(T).name());
-    }
-  }
-  return false;
-}
-
-template <typename T>
-bool cmd_getval_throws(CephContext *cct, const cmdmap_t& cmdmap,
-		       const std::string& k, T& val)
+bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+		const std::string& k, T& val)
 {
   if (cmdmap.count(k)) {
     try {
@@ -89,15 +74,7 @@ bool cmd_getval_throws(CephContext *cct, const cmdmap_t& cmdmap,
 // with default
 
 template <typename T>
-void cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k,
-		T& val, const T& defval)
-{
-  if (!cmd_getval(cct, cmdmap, k, val))
-    val = defval;
-}
-
-template <typename T>
-bool cmd_getval_throws(
+bool cmd_getval(
   CephContext *cct, const cmdmap_t& cmdmap, const std::string& k,
   T& val, const T& defval)
 {
