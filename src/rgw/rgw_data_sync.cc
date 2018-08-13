@@ -1252,6 +1252,11 @@ public:
       set_marker_tracker(new RGWDataSyncShardMarkerTrack(sync_env, status_oid, sync_marker));
       total_entries = sync_marker.pos;
       do {
+        if (!lease_cr->is_locked()) {
+          stop_spawned_services();
+          drain_all();
+          return set_cr_error(-ECANCELED);
+        }
         yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, oid), sync_marker.marker, &entries, max_entries));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
@@ -1334,6 +1339,11 @@ public:
       logger.log("inc sync");
       set_marker_tracker(new RGWDataSyncShardMarkerTrack(sync_env, status_oid, sync_marker));
       do {
+        if (!lease_cr->is_locked()) {
+          stop_spawned_services();
+          drain_all();
+          return set_cr_error(-ECANCELED);
+        }
         current_modified.clear();
         inc_lock.Lock();
         current_modified.swap(modified_shards);
