@@ -2136,7 +2136,8 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
 			     key,
 			     op->need_read_cap(),
 			     op->need_write_cap(),
-			     op->classes());
+			     op->classes(),
+			     session->get_peer_socket_addr());
 
   dout(20) << "op_has_sufficient_caps "
            << "session=" << session
