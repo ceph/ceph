@@ -46,6 +46,19 @@ class Zap(object):
     def __init__(self, argv):
         self.argv = argv
 
+    def unmount_lv(self, lv):
+        if lv.tags.get('ceph.cluster_name') and lv.tags.get('ceph.osd_id'):
+            lv_path = "/var/lib/ceph/osd/{}-{}".format(lv.tags['ceph.cluster_name'], lv.tags['ceph.osd_id'])
+        else:
+            lv_path = lv.path
+        dmcrypt_uuid = lv.lv_uuid
+        dmcrypt = lv.encrypted
+        if system.path_is_mounted(lv_path):
+            mlogger.info("Unmounting %s", lv_path)
+            system.unmount(lv_path)
+        if dmcrypt and dmcrypt_uuid:
+            self.dmcrypt_close(dmcrypt_uuid)
+
     @decorators.needs_root
     def zap(self, args):
         device = args.device
@@ -56,10 +69,16 @@ class Zap(object):
         if lv:
             # we are zapping a logical volume
             path = lv.lv_path
+            self.unmount_lv(lv)
         else:
             # we are zapping a partition
             #TODO: ensure device is a partition
             path = device
+            # check to if it is encrypted to close
+            partuuid = disk.get_partuuid(device)
+            if encryption.status("/dev/mapper/{}".format(partuuid)):
+                dmcrypt_uuid = partuuid
+                self.dmcrypt_close(dmcrypt_uuid)
 
         mlogger.info("Zapping: %s", path)
 
@@ -71,27 +90,8 @@ class Zap(object):
             vg_name = pv.vg_name
             lv = api.get_lv(vg_name=vg_name, lv_uuid=pv.lv_uuid)
 
-            dmcrypt = False
-            dmcrypt_uuid = None
             if lv:
-                if lv.tags.get('ceph.cluster_name') and lv.tags.get('ceph.osd_id'):
-                    lv_path = "/var/lib/ceph/osd/{}-{}".format(lv.tags['ceph.cluster_name'], lv.tags['ceph.osd_id'])
-                else:
-                    lv_path = lv.path
-                dmcrypt_uuid = lv.lv_uuid
-                dmcrypt = lv.encrypted
-                if system.path_is_mounted(lv_path):
-                    mlogger.info("Unmounting %s", lv_path)
-                    system.unmount(lv_path)
-                if dmcrypt and dmcrypt_uuid:
-                    self.dmcrypt_close(dmcrypt_uuid)
-        else:
-            # we're most likely dealing with a partition here, check to
-            # see if it was encrypted
-            partuuid = disk.get_partuuid(device)
-            if encryption.status("/dev/mapper/{}".format(partuuid)):
-                dmcrypt_uuid = partuuid
-                self.dmcrypt_close(dmcrypt_uuid)
+                self.unmount_lv(lv)
 
         if args.destroy and pvs:
             logger.info("Found a physical volume created from %s, will destroy all it's vgs and lvs", device)
