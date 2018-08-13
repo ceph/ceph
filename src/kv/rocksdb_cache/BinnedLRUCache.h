@@ -71,7 +71,13 @@ struct BinnedLRUHandle {
 
   uint32_t hash;     // Hash of key(); used for fast sharding and comparisons
 
-  char key_data[1];  // Beginning of key
+  char* key_data;  // Beginning of key
+
+  void SetKey(const char *src_data, size_t length) {
+    key_length = length;
+    key_data = new char[length];
+    memcpy(key_data, src_data, key_length);
+  }
 
   rocksdb::Slice key() const {
     // For cheaper lookups, we allow a temporary Handle object
@@ -119,7 +125,8 @@ struct BinnedLRUHandle {
     if (deleter) {
       (*deleter)(key(), value);
     }
-    delete[] reinterpret_cast<char*>(this);
+    delete[] key_data;
+    delete this;
   }
 };
 

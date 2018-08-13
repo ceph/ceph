@@ -345,15 +345,13 @@ rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t 
   // Allocate the memory here outside of the mutex
   // If the cache is full, we'll have to release it
   // It shouldn't happen very often though.
-  BinnedLRUHandle* e = reinterpret_cast<BinnedLRUHandle*>(
-      new char[sizeof(BinnedLRUHandle) - 1 + key.size()]);
+  BinnedLRUHandle* e = new BinnedLRUHandle();
   rocksdb::Status s;
   ceph::autovector<BinnedLRUHandle*> last_reference_list;
 
   e->value = value;
   e->deleter = deleter;
   e->charge = charge;
-  e->key_length = key.size();
   e->flags = 0;
   e->hash = hash;
   e->refs = (handle == nullptr
@@ -362,6 +360,7 @@ rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t 
   e->next = e->prev = nullptr;
   e->SetInCache(true);
   e->SetPriority(priority);
+  e->SetKey(key.data(), key.size());
   memcpy(e->key_data, key.data(), key.size());
 
   {
@@ -377,7 +376,7 @@ rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t 
         // into cache and get evicted immediately.
         last_reference_list.push_back(e);
       } else {
-        delete[] reinterpret_cast<char*>(e);
+        delete e;
         *handle = nullptr;
         s = rocksdb::Status::Incomplete("Insert failed due to LRU cache being full.");
       }
