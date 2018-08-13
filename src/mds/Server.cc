@@ -8469,16 +8469,17 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
 {
   dout(10) << "_commit_slave_rename " << *mdr << " r=" << r << dendl;
 
-  CDentry::linkage_t *destdnl = destdn->get_linkage();
+  CInode *in = destdn->get_linkage()->get_inode();
+
+  inodeno_t migrated_stray;
+  if (srcdn->is_auth() && srcdn->get_dir()->inode->is_stray())
+    migrated_stray = in->ino();
 
   MDSInternalContextBase::vec finished;
   if (r == 0) {
     // unfreeze+singleauth inode
     //  hmm, do i really need to delay this?
     if (mdr->more()->is_inode_exporter) {
-
-      CInode *in = destdnl->get_inode();
-
       // drop our pins
       // we exported, clear out any xlocks that we moved to another MDS
       set<SimpleLock*>::iterator i = mdr->xlocks.begin();
@@ -8495,14 +8496,13 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
       auto bp = mdr->more()->inode_import.cbegin();
       decode(peer_imported, bp);
 
-      dout(10) << " finishing inode export on " << *destdnl->get_inode() << dendl;
-      mdcache->migrator->finish_export_inode(destdnl->get_inode(),
-					     mdr->slave_to_mds, peer_imported, finished);
+      dout(10) << " finishing inode export on " << *in << dendl;
+      mdcache->migrator->finish_export_inode(in, mdr->slave_to_mds, peer_imported, finished);
       mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
 
       // unfreeze
-      assert(destdnl->get_inode()->is_frozen_inode());
-      destdnl->get_inode()->unfreeze_inode(finished);
+      assert(in->is_frozen_inode());
+      in->unfreeze_inode(finished);
     }
 
     // singleauth
@@ -8538,8 +8538,8 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
     // witness list from the master, and they failed before we tried prep again.
     if (mdr->more()->rollback_bl.length()) {
       if (mdr->more()->is_inode_exporter) {
-	dout(10) << " reversing inode export of " << *destdnl->get_inode() << dendl;
-	destdnl->get_inode()->abort_export();
+	dout(10) << " reversing inode export of " << *in << dendl;
+	in->abort_export();
       }
       if (mdcache->is_ambiguous_slave_update(mdr->reqid, mdr->slave_to_mds)) {
 	mdcache->remove_ambiguous_slave_update(mdr->reqid, mdr->slave_to_mds);
@@ -8562,6 +8562,9 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
       mdcache->request_finish(mdr);
     }
   }
+
+  if (migrated_stray && mds->is_stopping())
+    mdcache->shutdown_export_stray_finish(migrated_stray);
 }
 
 void _rollback_repair_dir(MutationRef& mut, CDir *dir, rename_rollback::drec &r, utime_t ctime,
