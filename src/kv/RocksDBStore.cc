@@ -392,6 +392,7 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
 
   if (g_conf()->rocksdb_cache_type == "binned_lru") {
     bbt_opts.block_cache = rocksdb_cache::NewBinnedLRUCache(
+      cct,
       block_cache_size,
       g_conf()->rocksdb_cache_shard_bits);
   } else if (g_conf()->rocksdb_cache_type == "lru") {

@@ -14,9 +14,10 @@
 #include <mutex>
 
 #include "ShardedCache.h"
-
 #include "common/autovector.h"
+#include "common/dout.h"
 #include "include/ceph_assert.h"
+#include "common/ceph_context.h"
 
 namespace rocksdb_cache {
 
@@ -47,6 +48,7 @@ namespace rocksdb_cache {
 // RUCache::Release (to move into state 2) or BinnedLRUCacheShard::Erase (for state 3)
 
 std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(
+    CephContext *c,
     size_t capacity,
     int num_shard_bits = -1,
     bool strict_capacity_limit = false,
@@ -297,8 +299,8 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
 
 class BinnedLRUCache : public ShardedCache {
  public:
-  BinnedLRUCache(size_t capacity, int num_shard_bits, bool strict_capacity_limit,
-           double high_pri_pool_ratio);
+  BinnedLRUCache(CephContext *c, size_t capacity, int num_shard_bits,
+      bool strict_capacity_limit, double high_pri_pool_ratio);
   virtual ~BinnedLRUCache();
   virtual const char* Name() const override { return "BinnedLRUCache"; }
   virtual CacheShard* GetShard(int shard) override;
@@ -318,6 +320,7 @@ class BinnedLRUCache : public ShardedCache {
   size_t GetHighPriPoolUsage() const;
 
  private:
+  CephContext *cct;
   BinnedLRUCacheShard* shards_;
   int num_shards_ = 0;
 };

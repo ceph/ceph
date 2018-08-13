@@ -13,10 +13,14 @@
 
 #include "BinnedLRUCache.h"
 
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
+
+#define dout_context cct
+#define dout_subsys ceph_subsys_rocksdb
+#undef dout_prefix
+#define dout_prefix *_dout << "rocksdb: "
 
 namespace rocksdb_cache {
 
@@ -461,9 +465,12 @@ std::string BinnedLRUCacheShard::GetPrintableOptions() const {
   return std::string(buffer);
 }
 
-BinnedLRUCache::BinnedLRUCache(size_t capacity, int num_shard_bits,
-                   bool strict_capacity_limit, double high_pri_pool_ratio)
-    : ShardedCache(capacity, num_shard_bits, strict_capacity_limit) {
+BinnedLRUCache::BinnedLRUCache(CephContext *c, 
+                               size_t capacity, 
+                               int num_shard_bits,
+                               bool strict_capacity_limit, 
+                               double high_pri_pool_ratio)
+    : ShardedCache(capacity, num_shard_bits, strict_capacity_limit), cct(c) {
   num_shards_ = 1 << num_shard_bits;
   // TODO: Switch over to use mempool
   int rc = posix_memalign((void**) &shards_, 
@@ -544,9 +551,12 @@ size_t BinnedLRUCache::GetHighPriPoolUsage() const {
   return usage;
 }
 
-std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(size_t capacity, int num_shard_bits,
-                                   bool strict_capacity_limit,
-                                   double high_pri_pool_ratio) {
+std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(
+    CephContext *c, 
+    size_t capacity,
+    int num_shard_bits,
+    bool strict_capacity_limit,
+    double high_pri_pool_ratio) {
   if (num_shard_bits >= 20) {
     return nullptr;  // the cache cannot be sharded into too many fine pieces
   }
@@ -557,8 +567,8 @@ std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(size_t capacity, int num_shard
   if (num_shard_bits < 0) {
     num_shard_bits = GetDefaultCacheShardBits(capacity);
   }
-  return std::make_shared<BinnedLRUCache>(capacity, num_shard_bits,
-                                    strict_capacity_limit, high_pri_pool_ratio);
+  return std::make_shared<BinnedLRUCache>(
+      c, capacity, num_shard_bits, strict_capacity_limit, high_pri_pool_ratio);
 }
 
 }  // namespace rocksdb_cache
