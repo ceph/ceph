@@ -5813,30 +5813,55 @@ COMMAND("smart name=devid,type=CephString,req=False",
         "osd", "rw", "cli,rest")
 };
 
-void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, bufferlist& data)
+void OSD::do_command(
+  Connection *con, ceph_tid_t tid, vector<string>& cmd, bufferlist& data)
 {
-  int r = 0;
-  stringstream ss, ds;
-  string rs;
-  bufferlist odata;
-
   dout(20) << "do_command tid " << tid << " " << cmd << dendl;
 
+  int r = 0;
+  stringstream ss, ds;
+  bufferlist odata;
   cmdmap_t cmdmap;
-  string prefix;
-  string format;
-  string pgidstr;
-  boost::scoped_ptr<Formatter> f;
-
   if (cmd.empty()) {
     ss << "no command given";
     goto out;
   }
-
   if (!cmdmap_from_json(cmd, &cmdmap, ss)) {
     r = -EINVAL;
     goto out;
   }
+
+  try {
+    r = _do_command(con, cmdmap, tid, data, odata, ss, ds);
+  } catch (const bad_cmd_get& e) {
+    r = -EINVAL;
+    ss << e.what();
+  }
+  if (r == -EAGAIN) {
+    return;
+  }
+ out:
+  string rs = ss.str();
+  odata.append(ds);
+  dout(0) << "do_command r=" << r << " " << rs << dendl;
+  clog->info() << rs;
+  if (con) {
+    MCommandReply *reply = new MCommandReply(r, rs);
+    reply->set_tid(tid);
+    reply->set_data(odata);
+    con->send_message(reply);
+  }
+}
+
+int OSD::_do_command(
+  Connection *con, cmdmap_t& cmdmap, ceph_tid_t tid, bufferlist& data,
+  bufferlist& odata, stringstream& ss, stringstream& ds)
+{
+  int r = 0;
+  string prefix;
+  string format;
+  string pgidstr;
+  boost::scoped_ptr<Formatter> f;
 
   cmd_getval(cct, cmdmap, "prefix", prefix);
 
@@ -5973,11 +5998,17 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
 	  // simulate pg <pgid> cmd= for pg->do-command
 	  if (prefix != "pg")
 	    cmd_putval(cct, cmdmap, "cmd", prefix);
-	  r = pg->do_command(cmdmap, ss, data, odata, con, tid);
+	  try {
+	    r = pg->do_command(cmdmap, ss, data, odata, con, tid);
+	  } catch (const bad_cmd_get& e) {
+	    pg->unlock();
+	    ss << e.what();
+	    return -EINVAL;
+	  }
 	  if (r == -EAGAIN) {
 	    pg->unlock();
 	    // don't reply, pg will do so async
-	    return;
+	    return -EAGAIN;
 	  }
 	} else {
 	  ss << "not primary for pgid " << pgid;
@@ -5989,7 +6020,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
 	  // do not reply; they will get newer maps and realize they
 	  // need to resend.
 	  pg->unlock();
-	  return;
+	  return -EAGAIN;
 	}
 	pg->unlock();
       } else {
@@ -6257,21 +6288,12 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   }
 
   else {
-    ss << "unrecognized command! " << cmd;
+    ss << "unrecognized command '" << prefix << "'";
     r = -EINVAL;
   }
 
  out:
-  rs = ss.str();
-  odata.append(ds);
-  dout(0) << "do_command r=" << r << " " << rs << dendl;
-  clog->info() << rs;
-  if (con) {
-    MCommandReply *reply = new MCommandReply(r, rs);
-    reply->set_tid(tid);
-    reply->set_data(odata);
-    con->send_message(reply);
-  }
+  return r;
 }
 
 void OSD::probe_smart(const string& only_devid, ostream& ss)

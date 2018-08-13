@@ -2065,6 +2065,10 @@ protected:
   void handle_command(class MMonCommand *m);
   void handle_command(class MCommand *m);
   void do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, bufferlist& data);
+  int _do_command(
+    Connection *con, cmdmap_t& cmdmap, ceph_tid_t tid, bufferlist& data,
+    bufferlist& odata, stringstream& ss, stringstream& ds);
+
 
   // -- pg recovery --
   void do_recovery(PG *pg, epoch_t epoch_queued, uint64_t pushes_reserved,
