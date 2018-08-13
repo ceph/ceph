@@ -2027,8 +2027,9 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
 
     Session *session = mds->get_session(it->first);
     if (in->inode.inline_data.version != CEPH_INLINE_NONE &&
-	!(session && session->connection &&
-	  session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)))
+	!(session &&
+	  session->get_connection() &&
+	  session->get_connection()->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)))
       allowed &= ~(CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR);
 
     int pending = cap->pending();

@@ -185,22 +185,40 @@ struct OSDCapGrant {
   OSDCapMatch match;
   OSDCapSpec spec;
   OSDCapProfile profile;
+  string network;
+  entity_addr_t network_parsed;
+  unsigned network_prefix = 0;
+  bool network_valid = true;
 
   // explicit grants that a profile grant expands to; populated as
   // needed by expand_profile() and cached here.
   std::list<OSDCapGrant> profile_grants;
 
   OSDCapGrant() {}
-  OSDCapGrant(const OSDCapMatch& m, const OSDCapSpec& s) : match(m), spec(s) {}
-  explicit OSDCapGrant(const OSDCapProfile& profile) : profile(profile) {
+  OSDCapGrant(const OSDCapMatch& m, const OSDCapSpec& s,
+	      boost::optional<string> n = {})
+    : match(m), spec(s) {
+    if (n) {
+      set_network(*n);
+    }
+  }
+  explicit OSDCapGrant(const OSDCapProfile& profile,
+		       boost::optional<string> n = {})
+    : profile(profile) {
+    if (n) {
+      set_network(*n);
+    }
     expand_profile();
   }
+
+  void set_network(const string& n);
 
   bool allow_all() const;
   bool is_capable(const string& pool_name, const string& ns, int64_t pool_auid,
 		  const OSDCapPoolTag::app_map_t& application_metadata,
                   const string& object, bool op_may_read, bool op_may_write,
                   const std::vector<OpRequest::ClassInfo>& classes,
+		  const entity_addr_t& addr,
                   std::vector<bool>* class_allowed) const;
 
   void expand_profile();
@@ -238,7 +256,8 @@ struct OSDCap {
   bool is_capable(const string& pool_name, const string& ns, int64_t pool_auid,
 		  const OSDCapPoolTag::app_map_t& application_metadata,
 		  const string& object, bool op_may_read, bool op_may_write,
-		  const std::vector<OpRequest::ClassInfo>& classes) const;
+		  const std::vector<OpRequest::ClassInfo>& classes,
+		  const entity_addr_t& addr) const;
 };
 
 static inline ostream& operator<<(ostream& out, const OSDCap& cap) 

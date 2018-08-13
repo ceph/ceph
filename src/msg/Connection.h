@@ -157,6 +157,9 @@ public:
   bool peer_is_osd() const { return peer_type == CEPH_ENTITY_TYPE_OSD; }
   bool peer_is_client() const { return peer_type == CEPH_ENTITY_TYPE_CLIENT; }
 
+  /// which of the peer's addrs is actually in use for this connection
+  virtual entity_addr_t get_peer_socket_addr() const = 0;
+
   entity_addr_t get_peer_addr() const {
     return peer_addrs.front();
   }

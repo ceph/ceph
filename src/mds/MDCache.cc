@@ -2038,8 +2038,9 @@ void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct)
 
   for (auto &p : in->client_caps) {
     Session *session = mds->get_session(p.first);
-    if (!session || !session->connection ||
-        !session->connection->has_feature(CEPH_FEATURE_MDS_QUOTA))
+    if (!session ||
+	!session->get_connection() ||
+        !session->get_connection()->has_feature(CEPH_FEATURE_MDS_QUOTA))
       continue;
 
     Capability *cap = &p.second;
@@ -2079,7 +2080,7 @@ update:
     msg->ino = in->ino();
     msg->rstat = i->rstat;
     msg->quota = i->quota;
-    mds->send_message_client_counted(msg, session->connection);
+    mds->send_message_client_counted(msg, session->get_connection());
   }
   for (const auto &it : in->get_replicas()) {
     MGatherCaps *msg = new MGatherCaps;

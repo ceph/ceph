@@ -113,17 +113,20 @@ bool is_unmanaged_snap_op_permitted(CephContext* cct,
                                     const KeyServer& key_server,
                                     const EntityName& entity_name,
                                     const MonCap& mon_caps,
+				    const entity_addr_t& peer_socket_addr,
                                     const std::string* pool_name)
 {
   typedef std::map<std::string, std::string> CommandArgs;
 
-  if (mon_caps.is_capable(cct, CEPH_ENTITY_TYPE_MON,
-                               entity_name, "osd",
-                               "osd pool op unmanaged-snap",
-                               (pool_name == nullptr ?
-                                  CommandArgs{} /* pool DNE, require unrestricted cap */ :
-                                  CommandArgs{{"poolname", *pool_name}}),
-                                false, true, false)) {
+  if (mon_caps.is_capable(
+	cct, CEPH_ENTITY_TYPE_MON,
+	entity_name, "osd",
+	"osd pool op unmanaged-snap",
+	(pool_name == nullptr ?
+	 CommandArgs{} /* pool DNE, require unrestricted cap */ :
+	 CommandArgs{{"poolname", *pool_name}}),
+	false, true, false,
+	peer_socket_addr)) {
     return true;
   }
 
@@ -3340,7 +3343,8 @@ bool OSDMonitor::preprocess_remove_snaps(MonOpRequestRef op)
 	cct,
 	CEPH_ENTITY_TYPE_MON,
 	session->entity_name,
-        "osd", "osd pool rmsnap", {}, true, true, false)) {
+        "osd", "osd pool rmsnap", {}, true, true, false,
+	session->get_peer_socket_addr())) {
     dout(0) << "got preprocess_remove_snaps from entity with insufficient caps "
 	    << session->caps << dendl;
     goto ignore;
@@ -11893,6 +11897,7 @@ bool OSDMonitor::enforce_pool_op_caps(MonOpRequestRef op)
 
       if (!is_unmanaged_snap_op_permitted(cct, mon->key_server,
                                           session->entity_name, session->caps,
+					  session->get_peer_socket_addr(),
                                           pool_name)) {
         dout(0) << "got unmanaged-snap pool op from entity with insufficient "
                 << "privileges. message: " << *m  << std::endl

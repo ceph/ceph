@@ -212,6 +212,9 @@ class AsyncConnection : public Connection {
     std::lock_guard<std::mutex> l(lock);
     policy.lossy = true;
   }
+  entity_addr_t get_peer_socket_addr() const override {
+    return target_addr;
+  }
   
  private:
   enum {

@@ -518,7 +518,7 @@ void SessionMapStore::decode_legacy(bufferlist::const_iterator& p)
     
     while (n-- && !p.end()) {
       auto p2 = p;
-      Session *s = new Session;
+      Session *s = new Session(nullptr);
       s->info.decode(p);
       if (session_map.count(s->info.inst.name)) {
 	// eager client connected too fast!  aie.
@@ -930,7 +930,8 @@ int Session::check_access(CInode *in, unsigned mask,
 
   if (!auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
-			    new_uid, new_gid)) {
+			    new_uid, new_gid,
+			    socket_addr)) {
     return -EACCES;
   }
   return 0;

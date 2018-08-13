@@ -48,6 +48,10 @@ public:
   void mark_down() override;
   void mark_disposable() override;
 
+  entity_addr_t get_peer_socket_addr() const override {
+    return peer_addrs.front();
+  }
+
 }; /* PipeConnection */
 
 typedef boost::intrusive_ptr<PipeConnection> PipeConnectionRef;
