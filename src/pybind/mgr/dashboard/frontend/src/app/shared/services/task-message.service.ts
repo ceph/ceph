@@ -152,4 +152,8 @@ export class TaskMessageService {
   getRunningTitle(task: Task) {
     return this._getTaskTitle(task).running(task.metadata);
   }
+
+  getRunningText(task: Task) {
+    return this._getTaskTitle(task).operation.running;
+  }
 }
