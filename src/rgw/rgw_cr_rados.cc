@@ -249,10 +249,12 @@ int RGWRadosSetOmapKeysCR::request_complete()
 RGWRadosGetOmapKeysCR::RGWRadosGetOmapKeysCR(RGWRados *_store,
                       const rgw_raw_obj& _obj,
                       const string& _marker,
-                      std::set<std::string> *_entries, int _max_entries) : RGWSimpleCoroutine(_store->ctx()),
+                      std::set<std::string> *_entries,
+                      int _max_entries, bool *_pmore) : RGWSimpleCoroutine(_store->ctx()),
                                                 store(_store),
                                                 marker(_marker),
                                                 entries(_entries), max_entries(_max_entries),
+                                                pmore(_pmore),
                                                 obj(_obj), cn(NULL)
 {
   set_description() << "get omap keys dest=" << obj << " marker=" << marker;
@@ -268,7 +270,7 @@ int RGWRadosGetOmapKeysCR::send_request() {
   set_status() << "send request";
 
   librados::ObjectReadOperation op;
-  op.omap_get_keys2(marker, max_entries, entries, nullptr, nullptr);
+  op.omap_get_keys2(marker, max_entries, entries, pmore, nullptr);
 
   cn = stack->create_completion_notifier();
   return ref.ioctx.aio_operate(ref.oid, cn->completion(), &op, NULL);
