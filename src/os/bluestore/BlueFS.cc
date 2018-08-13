@@ -570,12 +570,15 @@ int BlueFS::_replay(bool noop, bool to_stdout)
   log_seq = 0;
 
   FileRef log_file;
-  if (noop) {
-    log_file = new File;
+  log_file = _get_file(1);
+  if (!noop) {
+    log_file->fnode = super.log_fnode;
   } else {
-    log_file = _get_file(1);
+    // do not use fnode from superblock in 'noop' mode - log_file's one should
+    // be fine and up-to-date
+    assert(log_file->fnode.ino == 1);
+    assert(log_file->fnode.extents.size() != 0);
   }
-  log_file->fnode = super.log_fnode;
   dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
   if (unlikely(to_stdout)) {
     std::cout << " log_fnode " << super.log_fnode << std::endl;
@@ -950,19 +953,10 @@ int BlueFS::_replay(bool noop, bool to_stdout)
   return 0;
 }
 
-int BlueFS::log_dump(
-  CephContext *cct,
-  const string& path,
-  const vector<string>& devs)
+int BlueFS::log_dump()
 {
-  int r = _open_super();
-  if (r < 0) {
-    derr << __func__ << " failed to open super: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
   // only dump log file's content
-  r = _replay(true, true);
+  int r = _replay(true, true);
   if (r < 0) {
     derr << __func__ << " failed to replay log: " << cpp_strerror(r) << dendl;
     return r;
