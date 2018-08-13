@@ -2206,7 +2206,8 @@ void OSDMap::_apply_upmap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) co
   if (p != pg_upmap.end()) {
     // make sure targets aren't marked out
     for (auto osd : p->second) {
-      if (osd != CRUSH_ITEM_NONE && osd < max_osd && osd_weight[osd] == 0) {
+      if (osd != CRUSH_ITEM_NONE && osd < max_osd && osd >= 0 &&
+          osd_weight[osd] == 0) {
 	// reject/ignore the explicit mapping
 	return;
       }
@@ -2233,7 +2234,7 @@ void OSDMap::_apply_upmap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) co
 	if (osd == r.first &&
 	    pos < 0 &&
 	    !(r.second != CRUSH_ITEM_NONE && r.second < max_osd &&
-	      osd_weight[r.second] == 0)) {
+	      r.second >= 0 && osd_weight[r.second] == 0)) {
 	  pos = i;
 	}
       }
