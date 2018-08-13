@@ -198,15 +198,17 @@ def get_package_list(ctx, config):
         debs = filter(lambda p: not p.endswith('-dbg'), debs)
         rpms = filter(lambda p: not p.endswith('-debuginfo'), rpms)
 
-    excluded_packages = config.get('exclude_packages', list())
-    if excluded_packages:
+    def exclude(pkgs, exclude_list):
+        return list(set(pkgs).difference(set(exclude_list)))
+
+    excluded_packages = config.get('exclude_packages', [])
+    if isinstance(excluded_packages, dict):
         log.debug("Excluding packages: {}".format(excluded_packages))
-
-        def exclude(pkgs):
-            return list(set(pkgs).difference(set(excluded_packages)))
-
-        debs = exclude(debs)
-        rpms = exclude(rpms)
+        debs = exclude(debs, excluded_packages.get('deb', []))
+        rpms = exclude(rpms, excluded_packages.get('rpm', []))
+    else:
+        debs = exclude(debs, excluded_packages)
+        rpms = exclude(rpms, excluded_packages)
 
     package_list = dict(deb=debs, rpm=rpms)
     log.debug("Package list is: {}".format(package_list))
@@ -227,13 +229,17 @@ def install(ctx, config):
 
     package_list = get_package_list(ctx, config)
     debs = package_list['deb']
-    rpm = package_list['rpm']
+    rpms = package_list['rpm']
 
     # pull any additional packages out of config
-    extra_pkgs = config.get('extra_packages')
+    extra_pkgs = config.get('extra_packages', [])
     log.info('extra packages: {packages}'.format(packages=extra_pkgs))
-    debs += extra_pkgs
-    rpm += extra_pkgs
+    if isinstance(extra_pkgs, dict):
+        debs += extra_pkgs.get('deb', [])
+        rpms += extra_pkgs.get('rpm', [])
+    else:
+        debs += extra_pkgs
+        rpms += extra_pkgs
 
     # When extras is in the config we want to purposely not install ceph.
     # This is typically used on jobs that use ceph-deploy to install ceph
@@ -245,8 +251,8 @@ def install(ctx, config):
         debs = ['ceph-test', 'ceph-fuse',
                 'librados2', 'librbd1',
                 'python-ceph']
-        rpm = ['ceph-fuse', 'librbd1', 'librados2', 'ceph-test', 'python-ceph']
-    package_list = dict(deb=debs, rpm=rpm)
+        rpms = ['ceph-fuse', 'librbd1', 'librados2', 'ceph-test', 'python-ceph']
+    package_list = dict(deb=debs, rpm=rpms)
     install_packages(ctx, package_list, config)
     try:
         yield
@@ -351,7 +357,6 @@ def upgrade_common(ctx, config, deploy_style):
     remotes = upgrade_remote_to_config(ctx, config)
     project = config.get('project', 'ceph')
 
-    # FIXME: extra_pkgs is not distro-agnostic
     extra_pkgs = config.get('extra_packages', [])
     log.info('extra packages: {packages}'.format(packages=extra_pkgs))
 
@@ -362,8 +367,10 @@ def upgrade_common(ctx, config, deploy_style):
         pkgs = get_package_list(ctx, config)[system_type]
         log.info("Upgrading {proj} {system_type} packages: {pkgs}".format(
             proj=project, system_type=system_type, pkgs=', '.join(pkgs)))
-        # FIXME: again, make extra_pkgs distro-agnostic
-        pkgs += extra_pkgs
+        if isinstance(extra_pkgs, dict):
+            pkgs += extra_pkgs.get(system_type, [])
+        else:
+            pkgs += extra_pkgs
 
         installed_version = packaging.get_package_version(remote, 'ceph-common')
         upgrade_version = get_upgrade_version(ctx, node, remote)
@@ -462,6 +469,13 @@ def task(ctx, config):
         project: samba
         branch: foo
         extra_packages: ['samba']
+    - install:
+        extra_packages:
+           deb: ['librados-dev', 'libradosstriper-dev']
+           rpm: ['librados-devel', 'libradosstriper-devel']
+        extra_system_packages:
+           deb: ['libboost-system-dev']
+           rpm: ['boost-devel']
     - install:
         rhbuild: 1.3.0
         playbook: downstream_setup.yml

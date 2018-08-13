@@ -93,6 +93,14 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
     :param rpm: list of packages names to install
     :param config: the config dict
     """
+    # rpm does not force installation of a particular version of the project
+    # packages, so we can put extra_system_packages together with the rest
+    system_pkglist = config.get('extra_system_packages')
+    if system_pkglist:
+        if isinstance(system_pkglist, dict):
+            rpm += system_pkglist.get('rpm')
+        else:
+            rpm += system_pkglist
     rpm = _package_overrides(rpm, remote.os)
     builder = _get_builder_project(ctx, remote, config)
     log.info('Pulling from %s', builder.base_url)
