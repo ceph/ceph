@@ -13,6 +13,7 @@ except ImportError:
     from urllib.parse import urljoin
 import cherrypy
 from mgr_module import MgrModule, MgrStandbyModule
+import rados
 
 if 'COVERAGE_ENABLED' in os.environ:
     import coverage
@@ -69,8 +70,27 @@ class Module(MgrModule):
     def url_prefix(self):
         return self._url_prefix
 
+    @property
+    def rados(self):
+        """
+        A librados instance to be shared by any classes within
+        this mgr module that want one.
+        """
+        if self._rados:
+            return self._rados
+
+        ctx_capsule = self.get_context()
+        self._rados = rados.Rados(context=ctx_capsule)
+        self._rados.connect()
+
+        return self._rados
+
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
+
+        # Keep a librados instance for those that need it.
+        self._rados = None
+
         mgr.init(self)
         self._url_prefix = ''
 
@@ -142,6 +162,11 @@ class Module(MgrModule):
         NotificationQueue.stop()
         cherrypy.engine.exit()
         logger.info('Stopped server')
+
+        logger.info("Stopping librados...")
+        if self._rados:
+            self._rados.shutdown()
+        logger.info("Stopped librados.")
 
     def handle_command(self, cmd):
         if cmd['prefix'] == 'dashboard set-login-credentials':
