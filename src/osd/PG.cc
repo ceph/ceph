@@ -1208,6 +1208,22 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
       continue;
     }
 
+    if (!p->second.has_missing() && best->second.has_missing()) {
+      dout(10) << __func__ << " prefer osd." << p->first
+               << " because it is complete while best has missing"
+               << dendl;
+      best = p;
+      continue;
+    } else if (p->second.has_missing() && !best->second.has_missing()) {
+      dout(10) << __func__ << " skipping osd." << p->first
+               << " because it has missing while best is complete"
+               << dendl;
+      continue;
+    } else {
+      // both are complete or have missing
+      // fall through
+    }
+
     // prefer current primary (usually the caller), all things being equal
     if (p->first == pg_whoami) {
       dout(10) << "calc_acting prefer osd." << p->first
