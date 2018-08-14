@@ -534,6 +534,13 @@ public:
   typedef boost::intrusive_ptr<T> ref;
   typedef boost::intrusive_ptr<T const> const_ref;
 
+  static auto msgref_cast(typename M::ref const& m) {
+    return boost::static_pointer_cast<typename T::const_ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
+  }
+  static auto msgref_cast(typename M::const_ref const& m) {
+    return boost::static_pointer_cast<typename T::ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
+  }
+
 protected:
 template<typename... Args>
   MessageSubType(Args&&... args) : M(std::forward<Args>(args)...) {}
@@ -545,6 +552,13 @@ template<class T, class M = Message>
 class MessageInstance : public MessageSubType<T, M> {
 public:
   using factory = MessageFactory<T>;
+
+  static auto msgref_cast(typename Message::ref const& m) {
+    return boost::static_pointer_cast<typename T::ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
+  }
+  static auto msgref_cast(typename Message::const_ref const& m) {
+    return boost::static_pointer_cast<typename T::const_ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
+  }
 
 protected:
 template<typename... Args>

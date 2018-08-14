@@ -1184,12 +1184,12 @@ bool MDSDaemon::handle_core_message(const Message::const_ref &m)
     // MDS
   case CEPH_MSG_MDS_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_MDS);
-    handle_mds_map(boost::static_pointer_cast<MMDSMap::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_mds_map(MMDSMap::msgref_cast(m));
     break;
 
     // OSD
   case MSG_COMMAND:
-    handle_command(boost::static_pointer_cast<MCommand::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_command(MCommand::msgref_cast(m));
     break;
   case CEPH_MSG_OSD_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);

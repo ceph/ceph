@@ -184,14 +184,14 @@ void Server::dispatch(const Message::const_ref &m)
 {
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_RECONNECT:
-    handle_client_reconnect(boost::static_pointer_cast<MClientReconnect::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_client_reconnect(MClientReconnect::msgref_cast(m));
     return;
   }
 
   // active?
   // handle_slave_request()/handle_client_session() will wait if necessary
   if (m->get_type() == CEPH_MSG_CLIENT_REQUEST && !mds->is_active()) {
-    const auto &req = boost::static_pointer_cast<MClientRequest::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m);
+    const auto &req = MClientRequest::msgref_cast(m);
     if (mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
       Session *session = mds->get_session(req);
       if (!session || session->is_closed()) {
@@ -242,13 +242,13 @@ void Server::dispatch(const Message::const_ref &m)
 
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_SESSION:
-    handle_client_session(boost::static_pointer_cast<MClientSession::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_client_session(MClientSession::msgref_cast(m));
     return;
   case CEPH_MSG_CLIENT_REQUEST:
-    handle_client_request(boost::static_pointer_cast<MClientRequest::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_client_request(MClientRequest::msgref_cast(m));
     return;
   case MSG_MDS_SLAVE_REQUEST:
-    handle_slave_request(boost::static_pointer_cast<MMDSSlaveRequest::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_slave_request(MMDSSlaveRequest::msgref_cast(m));
     return;
   default:
     derr << "server unknown message " << m->get_type() << dendl;

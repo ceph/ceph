@@ -64,7 +64,7 @@ int MDBalancer::proc_message(const Message::const_ref &m)
   switch (m->get_type()) {
 
   case MSG_MDS_HEARTBEAT:
-    handle_heartbeat(boost::static_pointer_cast<MHeartbeat::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_heartbeat(MHeartbeat::msgref_cast(m));
     break;
 
   default:

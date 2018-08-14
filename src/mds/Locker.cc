@@ -95,21 +95,21 @@ void Locker::dispatch(const Message::const_ref &m)
   switch (m->get_type()) {
     // inter-mds locking
   case MSG_MDS_LOCK:
-    handle_lock(boost::static_pointer_cast<MLock::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_lock(MLock::msgref_cast(m));
     break;
     // inter-mds caps
   case MSG_MDS_INODEFILECAPS:
-    handle_inode_file_caps(boost::static_pointer_cast<MInodeFileCaps::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_inode_file_caps(MInodeFileCaps::msgref_cast(m));
     break;
     // client sync
   case CEPH_MSG_CLIENT_CAPS:
-    handle_client_caps(boost::static_pointer_cast<MClientCaps::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_client_caps(MClientCaps::msgref_cast(m));
     break;
   case CEPH_MSG_CLIENT_CAPRELEASE:
-    handle_client_cap_release(boost::static_pointer_cast<MClientCapRelease::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_client_cap_release(MClientCapRelease::msgref_cast(m));
     break;
   case CEPH_MSG_CLIENT_LEASE:
-    handle_client_lease(boost::static_pointer_cast<MClientLease::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_client_lease(MClientLease::msgref_cast(m));
     break;
   default:
     derr << "locker unknown message " << m->get_type() << dendl;
@@ -2644,7 +2644,7 @@ void Locker::handle_client_caps(const MClientCaps::const_ref &m)
 	  << " op " << ceph_cap_op_name(op)
 	  << " flags 0x" << std::hex << m->flags << std::dec << dendl;
 
-  Session *session = mds->get_session(boost::static_pointer_cast<Message::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+  Session *session = mds->get_session(m);
   if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
     if (!session) {
       dout(5) << " no session, dropping " << *m << dendl;
@@ -3371,7 +3371,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   if (!dirty && !change_max)
     return false;
 
-  Session *session = mds->get_session(boost::static_pointer_cast<Message::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+  Session *session = mds->get_session(m);
   if (session->check_access(in, MAY_WRITE,
 			    m->caller_uid, m->caller_gid, NULL, 0, 0) < 0) {
     dout(10) << "check_access failed, dropping cap update on " << *in << dendl;
@@ -3466,7 +3466,7 @@ void Locker::handle_client_cap_release(const MClientCapRelease::const_ref &m)
     mds->set_osd_epoch_barrier(m->osd_epoch_barrier);
   }
 
-  Session *session = mds->get_session(boost::static_pointer_cast<Message::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+  Session *session = mds->get_session(m);
 
   for (const auto &cap : m->caps) {
     _do_cap_release(client, inodeno_t((uint64_t)cap.ino) , cap.cap_id, cap.migrate_seq, cap.seq);

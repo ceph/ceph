@@ -7854,59 +7854,59 @@ void MDCache::dispatch(const Message::const_ref &m)
 
     // RESOLVE
   case MSG_MDS_RESOLVE:
-    handle_resolve(boost::static_pointer_cast<MMDSResolve::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_resolve(MMDSResolve::msgref_cast(m));
     break;
   case MSG_MDS_RESOLVEACK:
-    handle_resolve_ack(boost::static_pointer_cast<MMDSResolveAck::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_resolve_ack(MMDSResolveAck::msgref_cast(m));
     break;
 
     // REJOIN
   case MSG_MDS_CACHEREJOIN:
-    handle_cache_rejoin(boost::static_pointer_cast<MMDSCacheRejoin::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_cache_rejoin(MMDSCacheRejoin::msgref_cast(m));
     break;
 
   case MSG_MDS_DISCOVER:
-    handle_discover(boost::static_pointer_cast<MDiscover::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_discover(MDiscover::msgref_cast(m));
     break;
   case MSG_MDS_DISCOVERREPLY:
-    handle_discover_reply(boost::static_pointer_cast<MDiscoverReply::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_discover_reply(MDiscoverReply::msgref_cast(m));
     break;
 
   case MSG_MDS_DIRUPDATE:
-    handle_dir_update(boost::static_pointer_cast<MDirUpdate::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_dir_update(MDirUpdate::msgref_cast(m));
     break;
 
   case MSG_MDS_CACHEEXPIRE:
-    handle_cache_expire(boost::static_pointer_cast<MCacheExpire::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_cache_expire(MCacheExpire::msgref_cast(m));
     break;
 
   case MSG_MDS_DENTRYLINK:
-    handle_dentry_link(boost::static_pointer_cast<MDentryLink::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_dentry_link(MDentryLink::msgref_cast(m));
     break;
   case MSG_MDS_DENTRYUNLINK:
-    handle_dentry_unlink(boost::static_pointer_cast<MDentryUnlink::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_dentry_unlink(MDentryUnlink::msgref_cast(m));
     break;
 
   case MSG_MDS_FRAGMENTNOTIFY:
-    handle_fragment_notify(boost::static_pointer_cast<MMDSFragmentNotify::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_fragment_notify(MMDSFragmentNotify::msgref_cast(m));
     break;
 
   case MSG_MDS_FINDINO:
-    handle_find_ino(boost::static_pointer_cast<MMDSFindIno::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_find_ino(MMDSFindIno::msgref_cast(m));
     break;
   case MSG_MDS_FINDINOREPLY:
-    handle_find_ino_reply(boost::static_pointer_cast<MMDSFindInoReply::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_find_ino_reply(MMDSFindInoReply::msgref_cast(m));
     break;
 
   case MSG_MDS_OPENINO:
-    handle_open_ino(boost::static_pointer_cast<MMDSOpenIno::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_open_ino(MMDSOpenIno::msgref_cast(m));
     break;
   case MSG_MDS_OPENINOREPLY:
-    handle_open_ino_reply(boost::static_pointer_cast<MMDSOpenInoReply::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_open_ino_reply(MMDSOpenInoReply::msgref_cast(m));
     break;
 
   case MSG_MDS_SNAPUPDATE:
-    handle_snap_update(boost::static_pointer_cast<MMDSSnapUpdate::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+    handle_snap_update(MMDSSnapUpdate::msgref_cast(m));
     break;
     
   default:
