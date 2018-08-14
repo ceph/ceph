@@ -100,7 +100,7 @@ Write a copy of the most recent OSD map to a file. See
 
 	ceph osd getmap -o file
 
-.. _osdmaptool: ../../man/8/osdmaptool
+.. _osdmaptool: http://docs.ceph.com/docs/master/man/8/osdmaptool/
 
 Write a copy of the crush map from the most recent OSD map to
 file. ::
