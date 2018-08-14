@@ -29,6 +29,13 @@ struct MockTestImageCtx : public MockImageCtx {
     assert(s_instance != nullptr);
     return s_instance;
   }
+  static MockTestImageCtx* create(const std::string &image_name,
+                                  const std::string &image_id,
+                                  librados::snap_t snap_id, IoCtx& p,
+                                  bool read_only) {
+    assert(s_instance != nullptr);
+    return s_instance;
+  }
 
   MockTestImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {
     s_instance = this;
@@ -224,6 +231,9 @@ public:
       .WillOnce(WithArg<1>(Invoke([this, r](Context* ctx) {
                              image_ctx->op_work_queue->queue(ctx, r);
                            })));
+    if (r < 0) {
+      EXPECT_CALL(mock_image_ctx, destroy());
+    }
   }
 
   void expect_set_parent(MockImageCtx &mock_image_ctx, int r) {
@@ -352,6 +362,8 @@ TEST_F(TestMockImageCloneRequest, SuccessV1) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_open(mock_image_ctx, 0);
+
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
 
@@ -380,11 +392,12 @@ TEST_F(TestMockImageCloneRequest, SuccessV1) {
   }
 
   expect_close(mock_image_ctx, 0);
+  expect_close(mock_image_ctx, 0);
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
                                   image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
@@ -397,6 +410,8 @@ TEST_F(TestMockImageCloneRequest, SuccessV2) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_open(mock_image_ctx, 0);
+
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
 
@@ -423,11 +438,12 @@ TEST_F(TestMockImageCloneRequest, SuccessV2) {
   }
 
   expect_close(mock_image_ctx, 0);
+  expect_close(mock_image_ctx, 0);
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
                                   image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
@@ -442,6 +458,8 @@ TEST_F(TestMockImageCloneRequest, SuccessAuto) {
 
   InSequence seq;
   expect_get_min_compat_client(1, 0);
+  expect_open(mock_image_ctx, 0);
+
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
 
@@ -470,14 +488,33 @@ TEST_F(TestMockImageCloneRequest, SuccessAuto) {
   }
 
   expect_close(mock_image_ctx, 0);
+  expect_close(mock_image_ctx, 0);
 
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
                                   image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockImageCloneRequest, OpenParentError) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  MockTestImageCtx mock_image_ctx(*image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_open(mock_image_ctx, -EINVAL);
+
+  C_SaferCond ctx;
+  ImageOptions clone_opts;
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
+                                  image_ctx->op_work_queue, &ctx);
+  req->send();
+  ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
 TEST_F(TestMockImageCloneRequest, CreateError) {
@@ -487,16 +524,20 @@ TEST_F(TestMockImageCloneRequest, CreateError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_open(mock_image_ctx, 0);
+
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
 
   MockCreateRequest mock_create_request;
   expect_create(mock_create_request, -EINVAL);
 
+  expect_close(mock_image_ctx, 0);
+
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
                                   image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -509,6 +550,8 @@ TEST_F(TestMockImageCloneRequest, OpenError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_open(mock_image_ctx, 0);
+
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
 
@@ -520,10 +563,12 @@ TEST_F(TestMockImageCloneRequest, OpenError) {
   MockRemoveRequest mock_remove_request;
   expect_remove(mock_remove_request, 0);
 
+  expect_close(mock_image_ctx, 0);
+
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
                                   image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -536,6 +581,8 @@ TEST_F(TestMockImageCloneRequest, SetParentError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_open(mock_image_ctx, 0);
+
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
 
@@ -549,10 +596,12 @@ TEST_F(TestMockImageCloneRequest, SetParentError) {
   MockRemoveRequest mock_remove_request;
   expect_remove(mock_remove_request, 0);
 
+  expect_close(mock_image_ctx, 0);
+
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
                                   image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -566,6 +615,8 @@ TEST_F(TestMockImageCloneRequest, AddChildError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_open(mock_image_ctx, 0);
+
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
 
@@ -580,10 +631,12 @@ TEST_F(TestMockImageCloneRequest, AddChildError) {
   MockRemoveRequest mock_remove_request;
   expect_remove(mock_remove_request, 0);
 
+  expect_close(mock_image_ctx, 0);
+
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
                                   image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -597,6 +650,8 @@ TEST_F(TestMockImageCloneRequest, RefreshError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_open(mock_image_ctx, 0);
+
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
 
@@ -615,10 +670,12 @@ TEST_F(TestMockImageCloneRequest, RefreshError) {
   MockRemoveRequest mock_remove_request;
   expect_remove(mock_remove_request, 0);
 
+  expect_close(mock_image_ctx, 0);
+
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
                                   image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -632,6 +689,8 @@ TEST_F(TestMockImageCloneRequest, MetadataListError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_open(mock_image_ctx, 0);
+
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
 
@@ -653,10 +712,12 @@ TEST_F(TestMockImageCloneRequest, MetadataListError) {
   MockRemoveRequest mock_remove_request;
   expect_remove(mock_remove_request, 0);
 
+  expect_close(mock_image_ctx, 0);
+
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
                                   image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -669,6 +730,8 @@ TEST_F(TestMockImageCloneRequest, MetadataSetError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_open(mock_image_ctx, 0);
+
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
 
@@ -689,10 +752,12 @@ TEST_F(TestMockImageCloneRequest, MetadataSetError) {
   MockRemoveRequest mock_remove_request;
   expect_remove(mock_remove_request, 0);
 
+  expect_close(mock_image_ctx, 0);
+
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
                                   image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -706,6 +771,8 @@ TEST_F(TestMockImageCloneRequest, GetMirrorModeError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_open(mock_image_ctx, 0);
+
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
 
@@ -730,10 +797,12 @@ TEST_F(TestMockImageCloneRequest, GetMirrorModeError) {
   MockRemoveRequest mock_remove_request;
   expect_remove(mock_remove_request, 0);
 
+  expect_close(mock_image_ctx, 0);
+
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
                                   image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -746,6 +815,8 @@ TEST_F(TestMockImageCloneRequest, MirrorEnableError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_open(mock_image_ctx, 0);
+
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
 
@@ -771,10 +842,12 @@ TEST_F(TestMockImageCloneRequest, MirrorEnableError) {
   MockRemoveRequest mock_remove_request;
   expect_remove(mock_remove_request, 0);
 
+  expect_close(mock_image_ctx, 0);
+
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
                                   image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -787,6 +860,8 @@ TEST_F(TestMockImageCloneRequest, CloseError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_open(mock_image_ctx, 0);
+
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
 
@@ -804,10 +879,15 @@ TEST_F(TestMockImageCloneRequest, CloseError) {
 
   expect_close(mock_image_ctx, -EINVAL);
 
+  MockRemoveRequest mock_remove_request;
+  expect_remove(mock_remove_request, 0);
+
+  expect_close(mock_image_ctx, 0);
+
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
                                   image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -820,6 +900,8 @@ TEST_F(TestMockImageCloneRequest, RemoveError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_open(mock_image_ctx, 0);
+
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
 
@@ -831,10 +913,43 @@ TEST_F(TestMockImageCloneRequest, RemoveError) {
   MockRemoveRequest mock_remove_request;
   expect_remove(mock_remove_request, -EPERM);
 
+  expect_close(mock_image_ctx, 0);
+
   C_SaferCond ctx;
   ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
+                                  image_ctx->op_work_queue, &ctx);
+  req->send();
+  ASSERT_EQ(-EINVAL, ctx.wait());
+}
+
+TEST_F(TestMockImageCloneRequest, CloseParentError) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  MockTestImageCtx mock_image_ctx(*image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_open(mock_image_ctx, 0);
+
+  expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
+  expect_is_snap_protected(mock_image_ctx, true, 0);
+
+  MockCreateRequest mock_create_request;
+  expect_create(mock_create_request, 0);
+
+  expect_open(mock_image_ctx, -EINVAL);
+
+  MockRemoveRequest mock_remove_request;
+  expect_remove(mock_remove_request, 0);
+
+  expect_close(mock_image_ctx, -EPERM);
+
+  C_SaferCond ctx;
+  ImageOptions clone_opts;
+  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
+                                  "clone name", "clone id", clone_opts, "", "",
                                   image_ctx->op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());

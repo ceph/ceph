@@ -284,7 +284,7 @@ void ObjectCopyRequest<I>::handle_read_from_parent(int r) {
 
   if (m_write_ops.empty()) {
     // nothing to copy
-    finish(0);
+    finish(-ENOENT);
     return;
   }
 
@@ -329,6 +329,11 @@ void ObjectCopyRequest<I>::send_write_object() {
   librados::ObjectWriteOperation op;
   uint64_t buffer_offset;
 
+  if (!m_dst_image_ctx->migration_info.empty()) {
+    cls_client::assert_snapc_seq(&op, dst_snap_seq,
+                                 cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ);
+  }
+
   for (auto &copy_op : copy_ops) {
     switch (copy_op.type) {
     case COPY_OP_TYPE_WRITE:
@@ -366,7 +371,7 @@ void ObjectCopyRequest<I>::send_write_object() {
     }
   }
 
-  if (op.size() == 0) {
+  if (op.size() == (m_dst_image_ctx->migration_info.empty() ? 0 : 1)) {
     handle_write_object(0);
     return;
   }
@@ -388,7 +393,7 @@ void ObjectCopyRequest<I>::send_write_object() {
     });
   librados::AioCompletion *comp = create_rados_callback(ctx);
   int r = m_dst_io_ctx.aio_operate(m_dst_oid, comp, &op, dst_snap_seq,
-                                   dst_snap_ids);
+                                   dst_snap_ids, nullptr);
   assert(r == 0);
   comp->release();
 }
@@ -398,6 +403,9 @@ void ObjectCopyRequest<I>::handle_write_object(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
   if (r == -ENOENT) {
+    r = 0;
+  } else if (r == -ERANGE) {
+    ldout(m_cct, 10) << "concurrent deep copy" << dendl;
     r = 0;
   }
   if (r < 0) {

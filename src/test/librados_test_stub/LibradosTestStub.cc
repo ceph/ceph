@@ -1355,6 +1355,19 @@ uint64_t cls_get_client_features(cls_method_context_t hctx) {
   return CEPH_FEATURES_SUPPORTED_DEFAULT;
 }
 
+int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  librados::snap_set_t snapset;
+  int r = ctx->io_ctx_impl->list_snaps(ctx->oid, &snapset);
+  if (r < 0) {
+    return r;
+  }
+
+  *snap_seq = snapset.seq;
+  return 0;
+}
+
 int cls_log(int level, const char *format, ...) {
   int size = 256;
   va_list ap;

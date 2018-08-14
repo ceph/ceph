@@ -190,8 +190,8 @@ Context *SetSnapRequest<I>::send_refresh_parent(int *result) {
     }
 
     parent_md = *parent_info;
-    refresh_parent = RefreshParentRequest<I>::is_refresh_required(m_image_ctx,
-                                                                  parent_md);
+    refresh_parent = RefreshParentRequest<I>::is_refresh_required(
+        m_image_ctx, parent_md, m_image_ctx.migration_info);
   }
 
   if (!refresh_parent) {
@@ -212,6 +212,7 @@ Context *SetSnapRequest<I>::send_refresh_parent(int *result) {
   Context *ctx = create_context_callback<
     klass, &klass::handle_refresh_parent>(this);
   m_refresh_parent = RefreshParentRequest<I>::create(m_image_ctx, parent_md,
+                                                     m_image_ctx.migration_info,
                                                      ctx);
   m_refresh_parent->send();
   return nullptr;

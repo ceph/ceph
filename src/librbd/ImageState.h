@@ -26,8 +26,8 @@ public:
   ImageState(ImageCtxT *image_ctx);
   ~ImageState();
 
-  int open(bool skip_open_parent);
-  void open(bool skip_open_parent, Context *on_finish);
+  int open(uint64_t flags);
+  void open(uint64_t flags, Context *on_finish);
 
   int close();
   void close(Context *on_finish);
@@ -110,7 +110,7 @@ private:
 
   ImageUpdateWatchers *m_update_watchers;
 
-  bool m_skip_open_parent_image;
+  uint64_t m_open_flags;
 
   bool is_transition_state() const;
   bool is_closed() const;

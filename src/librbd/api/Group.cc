@@ -235,7 +235,7 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
 
     C_SaferCond* on_finish = new C_SaferCond;
 
-    image_ctx->state->open(false, on_finish);
+    image_ctx->state->open(0, on_finish);
 
     ictxs.push_back(image_ctx);
     on_finishes.push_back(on_finish);
@@ -787,7 +787,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
 
     C_SaferCond* on_finish = new C_SaferCond;
 
-    image_ctx->state->open(false, on_finish);
+    image_ctx->state->open(0, on_finish);
 
     ictxs.push_back(image_ctx);
     on_finishes.push_back(on_finish);

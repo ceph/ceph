@@ -1,0 +1,46 @@
+
+- hosts: osds
+  become: yes
+  tasks:
+
+    - name: stop ceph-osd@1 daemon
+      service:
+        name: ceph-osd@1
+        state: stopped
+
+    - name: stop ceph-osd@0 daemon
+      service:
+        name: ceph-osd@0
+        state: stopped
+
+
+- hosts: mons
+  become: yes
+  tasks:
+
+    - name: destroy osd.1
+      command: "ceph osd purge osd.1 --yes-i-really-mean-it"
+
+    - name: destroy osd.0
+      command: "ceph osd purge osd.0 --yes-i-really-mean-it"
+
+
+- hosts: osds
+  become: yes
+  tasks:
+
+    - name: zap /dev/sdd
+      command: "ceph-volume lvm zap /dev/sdb --destroy"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+
+    - name: zap /dev/sdc
+      command: "ceph-volume lvm zap /dev/sdc --destroy"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: batch create /dev/sdb and /dev/sdc again
+      command: "ceph-volume lvm batch --yes --bluestore --dmcrypt /dev/sdb /dev/sdc"
+      environment:
+        CEPH_VOLUME_DEBUG: 1

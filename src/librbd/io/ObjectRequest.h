@@ -74,7 +74,7 @@ public:
   virtual const char *get_op_type() const = 0;
 
 protected:
-  bool compute_parent_extents(Extents *parent_extents);
+  bool compute_parent_extents(Extents *parent_extents, bool read_request);
 
   ImageCtxT *m_ictx;
   std::string m_oid;

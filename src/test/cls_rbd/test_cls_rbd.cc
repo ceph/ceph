@@ -2764,3 +2764,177 @@ TEST_F(TestClsRbd, namespace_methods)
   ASSERT_EQ(0, namespace_list(&ioctx, name1, 1, &entries));
   ASSERT_TRUE(entries.empty());
 }
+
+TEST_F(TestClsRbd, migration)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
+
+  cls::rbd::MigrationSpec migration_spec(cls::rbd::MIGRATION_HEADER_TYPE_DST, 1,
+                                         "name", "id", {}, 0, false, false,
+                                         cls::rbd::MIGRATION_STATE_PREPARING,
+                                         "123");
+  cls::rbd::MigrationSpec read_migration_spec;
+
+  ASSERT_EQ(-EINVAL, migration_get(&ioctx, oid, &read_migration_spec));
+
+  uint64_t features;
+  ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &features));
+  ASSERT_EQ(0U, features);
+
+  ASSERT_EQ(0, migration_set(&ioctx, oid, migration_spec));
+  ASSERT_EQ(0, migration_get(&ioctx, oid, &read_migration_spec));
+  ASSERT_EQ(migration_spec, read_migration_spec);
+
+  ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &features));
+  ASSERT_EQ(RBD_FEATURE_MIGRATING, features);
+
+  ASSERT_EQ(-EEXIST, migration_set(&ioctx, oid, migration_spec));
+
+  migration_spec.state = cls::rbd::MIGRATION_STATE_PREPARED;
+  migration_spec.state_description = "456";
+  ASSERT_EQ(0, migration_set_state(&ioctx, oid, migration_spec.state,
+                                   migration_spec.state_description));
+  ASSERT_EQ(0, migration_get(&ioctx, oid, &read_migration_spec));
+  ASSERT_EQ(migration_spec, read_migration_spec);
+
+  ASSERT_EQ(0, migration_remove(&ioctx, oid));
+
+  ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &features));
+  ASSERT_EQ(0U, features);
+
+  ASSERT_EQ(-EINVAL, migration_get(&ioctx, oid, &read_migration_spec));
+  ASSERT_EQ(-EINVAL, migration_set_state(&ioctx, oid, migration_spec.state,
+                                         migration_spec.state_description));
+
+  migration_spec.header_type = cls::rbd::MIGRATION_HEADER_TYPE_SRC;
+
+  ASSERT_EQ(0, migration_set(&ioctx, oid, migration_spec));
+
+  ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &features));
+  ASSERT_EQ(RBD_FEATURE_MIGRATING, features);
+
+  ASSERT_EQ(0, migration_remove(&ioctx, oid));
+
+  ASSERT_EQ(-EINVAL, migration_get(&ioctx, oid, &read_migration_spec));
+  ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &features));
+  ASSERT_EQ(0U, features);
+
+  ioctx.close();
+}
+
+TEST_F(TestClsRbd, migration_v1)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  bufferlist header;
+  header.append(RBD_HEADER_TEXT, sizeof(RBD_HEADER_TEXT));
+  string oid = get_temp_image_name();
+  ASSERT_EQ(0, ioctx.write(oid, header, header.length(), 0));
+
+  cls::rbd::MigrationSpec migration_spec(cls::rbd::MIGRATION_HEADER_TYPE_DST, 1,
+                                         "name", "id", {}, 0, false, false,
+                                         cls::rbd::MIGRATION_STATE_PREPARING,
+                                         "123");
+  cls::rbd::MigrationSpec read_migration_spec;
+
+  ASSERT_EQ(-EINVAL, migration_get(&ioctx, oid, &read_migration_spec));
+
+  // v1 format image can only be migration source
+  ASSERT_EQ(-EINVAL, migration_set(&ioctx, oid, migration_spec));
+
+  migration_spec.header_type = cls::rbd::MIGRATION_HEADER_TYPE_SRC;
+  ASSERT_EQ(0, migration_set(&ioctx, oid, migration_spec));
+
+  ASSERT_EQ(0, migration_get(&ioctx, oid, &read_migration_spec));
+  ASSERT_EQ(migration_spec, read_migration_spec);
+
+  header.clear();
+  ASSERT_EQ(static_cast<int>(sizeof(RBD_MIGRATE_HEADER_TEXT)),
+            ioctx.read(oid, header, sizeof(RBD_MIGRATE_HEADER_TEXT), 0));
+  ASSERT_STREQ(RBD_MIGRATE_HEADER_TEXT, header.c_str());
+
+  ASSERT_EQ(-EEXIST, migration_set(&ioctx, oid, migration_spec));
+
+  migration_spec.state = cls::rbd::MIGRATION_STATE_PREPARED;
+  migration_spec.state_description = "456";
+  ASSERT_EQ(0, migration_set_state(&ioctx, oid, migration_spec.state,
+                                   migration_spec.state_description));
+  ASSERT_EQ(0, migration_get(&ioctx, oid, &read_migration_spec));
+  ASSERT_EQ(migration_spec, read_migration_spec);
+
+  ASSERT_EQ(0, migration_remove(&ioctx, oid));
+
+  ASSERT_EQ(-EINVAL, migration_get(&ioctx, oid, &read_migration_spec));
+  ASSERT_EQ(-EINVAL, migration_set_state(&ioctx, oid, migration_spec.state,
+                                         migration_spec.state_description));
+  header.clear();
+  ASSERT_EQ(static_cast<int>(sizeof(RBD_HEADER_TEXT)),
+            ioctx.read(oid, header, sizeof(RBD_HEADER_TEXT), 0));
+  ASSERT_STREQ(RBD_HEADER_TEXT, header.c_str());
+
+  ioctx.close();
+}
+
+TEST_F(TestClsRbd, assert_snapc_seq)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+
+  ASSERT_EQ(0,
+            assert_snapc_seq(&ioctx, oid, 0,
+                             cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ));
+  ASSERT_EQ(-ERANGE,
+            assert_snapc_seq(&ioctx, oid, 0,
+                             cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ));
+
+  ASSERT_EQ(0, ioctx.create(oid, true));
+
+  uint64_t snapc_seq = 0;
+
+  ASSERT_EQ(-ERANGE,
+            assert_snapc_seq(&ioctx, oid, snapc_seq,
+                             cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ));
+  ASSERT_EQ(0,
+            assert_snapc_seq(&ioctx, oid, snapc_seq,
+                             cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ));
+
+  std::vector<uint64_t> snaps;
+  snaps.push_back(CEPH_NOSNAP);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&snaps.back()));
+  snapc_seq = snaps[0];
+
+  ASSERT_EQ(0,
+            assert_snapc_seq(&ioctx, oid, snapc_seq,
+                             cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ));
+  ASSERT_EQ(-ERANGE,
+            assert_snapc_seq(&ioctx, oid, snapc_seq,
+                             cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ));
+
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(snaps[0], snaps));
+  bufferlist bl;
+  bl.append("foo");
+  ASSERT_EQ(0, ioctx.write(oid, bl, bl.length(), 0));
+
+  ASSERT_EQ(-ERANGE,
+            assert_snapc_seq(&ioctx, oid, snapc_seq,
+                             cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ));
+  ASSERT_EQ(0,
+            assert_snapc_seq(&ioctx, oid, snapc_seq,
+                             cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ));
+
+  ASSERT_EQ(0,
+            assert_snapc_seq(&ioctx, oid, snapc_seq + 1,
+                             cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ));
+  ASSERT_EQ(-ERANGE,
+            assert_snapc_seq(&ioctx, oid, snapc_seq + 1,
+                             cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ));
+
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_remove(snapc_seq));
+}

@@ -113,7 +113,7 @@ public:
       copyup_list_lock(util::unique_lock_name("librbd::ImageCtx::copyup_list_lock", this)),
       completed_reqs_lock(util::unique_lock_name("librbd::ImageCtx::completed_reqs_lock", this)),
       extra_read_flags(0),
-      old_format(true),
+      old_format(false),
       order(0), size(0), features(0),
       format_string(NULL),
       id(image_id), parent(NULL),
@@ -148,6 +148,12 @@ public:
       exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
     }
     journal_policy = new journal::StandardPolicy<ImageCtx>(this);
+  }
+
+  ImageCtx::ImageCtx(const string &image_name, const string &image_id,
+		     uint64_t snap_id, IoCtx& p, bool ro)
+    : ImageCtx(image_name, image_id, "", p, ro) {
+    open_snap_id = snap_id;
   }
 
   ImageCtx::~ImageCtx() {

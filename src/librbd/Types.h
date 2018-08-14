@@ -6,6 +6,7 @@
 
 #include "include/types.h"
 #include "cls/rbd/cls_rbd_types.h"
+#include "deep_copy/Types.h"
 #include <map>
 #include <string>
 
@@ -111,6 +112,34 @@ struct SnapInfo {
     : name(_name), snap_namespace(_snap_namespace), size(_size),
       parent(_parent), protection_status(_protection_status), flags(_flags),
       timestamp(_timestamp) {
+  }
+};
+
+enum {
+  OPEN_FLAG_SKIP_OPEN_PARENT = 1 << 0,
+  OPEN_FLAG_OLD_FORMAT = 1 << 1,
+  OPEN_FLAG_IGNORE_MIGRATING = 1 << 2,
+};
+
+struct MigrationInfo {
+  int64_t pool_id = -1;
+  std::string image_name;
+  std::string image_id;
+  deep_copy::SnapMap snap_map;
+  uint64_t overlap = 0;
+  bool flatten = false;
+
+  MigrationInfo() {
+  }
+  MigrationInfo(int64_t pool_id, std::string image_name, std::string image_id,
+                const deep_copy::SnapMap &snap_map, uint64_t overlap,
+                bool flatten)
+    : pool_id(pool_id), image_name(image_name), image_id(image_id),
+      snap_map(snap_map), overlap(overlap), flatten(flatten) {
+  }
+
+  bool empty() const {
+    return pool_id == -1;
   }
 };
 

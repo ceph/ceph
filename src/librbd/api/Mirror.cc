@@ -596,7 +596,7 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
 
       if ((features & RBD_FEATURE_JOURNALING) != 0) {
         I *img_ctx = I::create("", img_pair.second, nullptr, io_ctx, false);
-        r = img_ctx->state->open(false);
+        r = img_ctx->state->open(0);
         if (r < 0) {
           lderr(cct) << "error opening image "<< img_pair.first << ": "
                      << cpp_strerror(r) << dendl;
@@ -640,7 +640,7 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
         }
       } else {
         I *img_ctx = I::create("", img_id, nullptr, io_ctx, false);
-        r = img_ctx->state->open(false);
+        r = img_ctx->state->open(0);
         if (r < 0) {
           lderr(cct) << "error opening image id "<< img_id << ": "
                      << cpp_strerror(r) << dendl;

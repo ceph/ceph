@@ -1367,10 +1367,8 @@ void BlueStore::BufferSpace::read(
   cache->logger->inc(l_bluestore_buffer_miss_bytes, miss_bytes);
 }
 
-void BlueStore::BufferSpace::finish_write(Cache* cache, uint64_t seq)
+void BlueStore::BufferSpace::_finish_write(Cache* cache, uint64_t seq)
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
-
   auto i = writing.begin();
   while (i != writing.end()) {
     if (i->seq > seq) {
@@ -1639,6 +1637,23 @@ void BlueStore::SharedBlob::put_ref(uint64_t offset, uint32_t length,
   assert(persistent);
   persistent->ref_map.put(offset, length, r,
     unshare && !*unshare ? unshare : nullptr);
+}
+
+void BlueStore::SharedBlob::finish_write(uint64_t seq)
+{
+  while (true) {
+    Cache *cache = coll->cache;
+    std::lock_guard<std::recursive_mutex> l(cache->lock);
+    if (coll->cache != cache) {
+      ldout(coll->store->cct, 20) << __func__
+				  << " raced with sb cache update, was " << cache
+				  << ", now " << coll->cache << ", retrying"
+				  << dendl;
+      continue;
+    }
+    bc._finish_write(cache, seq);
+    break;
+  }
 }
 
 // SharedBlobSet
@@ -8884,7 +8899,7 @@ void BlueStore::_txc_finish(TransContext *txc)
   assert(txc->state == TransContext::STATE_FINISHING);
 
   for (auto& sb : txc->shared_blobs_written) {
-    sb->bc.finish_write(sb->get_cache(), txc->seq);
+    sb->finish_write(txc->seq);
   }
   txc->shared_blobs_written.clear();
 

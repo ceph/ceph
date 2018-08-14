@@ -64,19 +64,10 @@ private:
    *                    OPEN_REMOTE_PARENT  * * * * * * * | * * *   *
    *                        |                             |       * *
    *                        v                             |         *
-   *                    OPEN_LOCAL_PARENT * * * * * * *   |         *
-   *                        |                         *   |         *
-   *                        v                         *   |         *
-   *                    SET_LOCAL_PARENT_SNAP         *   |         *
-   *                        |         *               *   |         *
-   *                        v         *               *   |         *
-   *                    CLONE_IMAGE   *               *   |         *
-   *                        |         *               *   |         *
-   *                        v         v               *   |         *
-   *                    CLOSE_LOCAL_PARENT            *   |         *
-   *                        |                         *   |         *
-   *                        v                         *   |         *
-   *                    CLOSE_REMOTE_PARENT < * * * * *   |         *
+   *                    CLONE_IMAGE                       |         *
+   *                        |                             |         *
+   *                        v                             |         *
+   *                    CLOSE_REMOTE_PARENT               |         *
    *                        |                             v         *
    *                        \------------------------> <finish> < * *
    * @endverbatim
@@ -96,7 +87,6 @@ private:
   librbd::ParentSpec m_remote_parent_spec;
 
   librados::IoCtx m_local_parent_io_ctx;
-  ImageCtxT *m_local_parent_image_ctx = nullptr;
   librbd::ParentSpec m_local_parent_spec;
 
   bufferlist m_out_bl;
@@ -116,17 +106,8 @@ private:
   void open_remote_parent_image();
   void handle_open_remote_parent_image(int r);
 
-  void open_local_parent_image();
-  void handle_open_local_parent_image(int r);
-
-  void set_local_parent_snap();
-  void handle_set_local_parent_snap(int r);
-
   void clone_image();
   void handle_clone_image(int r);
-
-  void close_local_parent_image();
-  void handle_close_local_parent_image(int r);
 
   void close_remote_parent_image();
   void handle_close_remote_parent_image(int r);

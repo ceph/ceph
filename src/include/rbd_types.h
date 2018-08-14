@@ -99,6 +99,7 @@
 #define RBD_CRYPT_NONE		0
 
 #define RBD_HEADER_TEXT		"<<< Rados Block Device Image >>>\n"
+#define RBD_MIGRATE_HEADER_TEXT	"<<< Migrating RBD Image      >>>\n"
 #define RBD_HEADER_SIGNATURE	"RBD"
 #define RBD_HEADER_VERSION	"001.005"
 

@@ -122,6 +122,10 @@ void DeepCopyRequest<I>::handle_copy_snapshots(int r) {
     return;
   }
 
+  if (m_snap_id_end == CEPH_NOSNAP) {
+    (*m_snap_seqs)[CEPH_NOSNAP] = CEPH_NOSNAP;
+  }
+
   send_copy_image();
 }
 

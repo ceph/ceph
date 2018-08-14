@@ -8,7 +8,6 @@
 #include "librbd/deep_copy/Utils.h"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/OpenRequest.h"
-#include "librbd/image/SetSnapRequest.h"
 #include "osdc/Striper.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -62,6 +61,7 @@ void ImageCopyRequest<I>::cancel() {
 
 template <typename I>
 void ImageCopyRequest<I>::send_open_parent() {
+  ParentSpec parent_spec;
   {
     RWLock::RLocker snap_locker(m_src_image_ctx->snap_lock);
     RWLock::RLocker parent_locker(m_src_image_ctx->parent_lock);
@@ -72,24 +72,24 @@ void ImageCopyRequest<I>::send_open_parent() {
         ldout(m_cct, 20) << "could not find parent info for snap id " << snap_id
                          << dendl;
     } else {
-      m_parent_spec = parent_info->spec;
+      parent_spec = parent_info->spec;
     }
   }
 
-  if (m_parent_spec.pool_id == -1) {
+  if (parent_spec.pool_id == -1) {
     send_object_copies();
     return;
   }
 
-  ldout(m_cct, 20) << "pool_id=" << m_parent_spec.pool_id << ", image_id="
-                   << m_parent_spec.image_id << ", snap_id="
-                   << m_parent_spec.snap_id << dendl;
+  ldout(m_cct, 20) << "pool_id=" << parent_spec.pool_id << ", image_id="
+                   << parent_spec.image_id << ", snap_id="
+                   << parent_spec.snap_id << dendl;
 
   librados::Rados rados(m_src_image_ctx->md_ctx);
   librados::IoCtx parent_io_ctx;
-  int r = rados.ioctx_create2(m_parent_spec.pool_id, parent_io_ctx);
+  int r = rados.ioctx_create2(parent_spec.pool_id, parent_io_ctx);
   if (r < 0) {
-    lderr(m_cct) << "failed to access parent pool (id=" << m_parent_spec.pool_id
+    lderr(m_cct) << "failed to access parent pool (id=" << parent_spec.pool_id
                  << "): " << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -98,9 +98,8 @@ void ImageCopyRequest<I>::send_open_parent() {
   // TODO support clone v2 parent namespaces
   parent_io_ctx.set_namespace(m_src_image_ctx->md_ctx.get_namespace());
 
-  m_src_parent_image_ctx = I::create("", m_parent_spec.image_id, nullptr,
-                                     parent_io_ctx, true);
-
+  m_src_parent_image_ctx = I::create("", parent_spec.image_id,
+                                     parent_spec.snap_id, parent_io_ctx, true);
   auto ctx = create_context_callback<
     ImageCopyRequest<I>, &ImageCopyRequest<I>::handle_open_parent>(this);
 
@@ -117,31 +116,6 @@ void ImageCopyRequest<I>::handle_open_parent(int r) {
     m_src_parent_image_ctx->destroy();
     m_src_parent_image_ctx = nullptr;
     finish(r);
-    return;
-  }
-
-  send_set_parent_snap();
-}
-
-template <typename I>
-void ImageCopyRequest<I>::send_set_parent_snap() {
-  ldout(m_cct, 20) << dendl;
-
-  auto ctx = create_context_callback<
-    ImageCopyRequest<I>, &ImageCopyRequest<I>::handle_set_parent_snap>(this);
-  auto req = image::SetSnapRequest<I>::create(*m_src_parent_image_ctx,
-                                              m_parent_spec.snap_id, ctx);
-  req->send();
-}
-
-template <typename I>
-void ImageCopyRequest<I>::handle_set_parent_snap(int r) {
-  ldout(m_cct, 20) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_cct) << "failed to set parent snap: " << cpp_strerror(r) << dendl;
-    m_ret_val = r;
-    send_close_parent();
     return;
   }
 
@@ -226,7 +200,7 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
     assert(m_current_ops > 0);
     --m_current_ops;
 
-    if (r < 0) {
+    if (r < 0 && r != -ENOENT) {
       lderr(m_cct) << "object copy failed: " << cpp_strerror(r) << dendl;
       if (m_ret_val == 0) {
         m_ret_val = r;

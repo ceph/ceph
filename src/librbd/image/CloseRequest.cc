@@ -266,6 +266,36 @@ template <typename I>
 void CloseRequest<I>::handle_flush_op_work_queue(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
+  send_close_migration_parent();
+}
+
+template <typename I>
+void CloseRequest<I>::send_close_migration_parent() {
+  if (m_image_ctx->migration_parent == nullptr) {
+    send_close_parent();
+    return;
+  }
+
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  m_image_ctx->migration_parent->state->close(create_async_context_callback(
+    *m_image_ctx, create_context_callback<
+      CloseRequest<I>, &CloseRequest<I>::handle_close_migration_parent>(this)));
+}
+
+template <typename I>
+void CloseRequest<I>::handle_close_migration_parent(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
+
+  delete m_image_ctx->migration_parent;
+  m_image_ctx->migration_parent = nullptr;
+  save_result(r);
+  if (r < 0) {
+    lderr(cct) << "error closing migration parent image: " << cpp_strerror(r)
+               << dendl;
+  }
   send_close_parent();
 }
 
@@ -290,6 +320,7 @@ void CloseRequest<I>::handle_close_parent(int r) {
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
   delete m_image_ctx->parent;
+  m_image_ctx->parent = nullptr;
   save_result(r);
   if (r < 0) {
     lderr(cct) << "error closing parent image: " << cpp_strerror(r) << dendl;

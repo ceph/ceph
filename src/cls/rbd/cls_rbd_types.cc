@@ -670,13 +670,7 @@ void TrashImageSpec::decode(bufferlist::const_iterator &it) {
 }
 
 void TrashImageSpec::dump(Formatter *f) const {
-  switch(source) {
-    case TRASH_IMAGE_SOURCE_USER:
-      f->dump_string("source", "user");
-      break;
-    case TRASH_IMAGE_SOURCE_MIRRORING:
-      f->dump_string("source", "rbd_mirror");
-  }
+  f->dump_stream("source") << source;
   f->dump_string("name", name);
   f->dump_unsigned("deletion_time", deletion_time);
   f->dump_unsigned("deferment_end_time", deferment_end_time);
@@ -730,6 +724,137 @@ std::ostream& operator<<(std::ostream& os,
                          const MirrorImageMap &image_map) {
   return os << "[" << "instance_id=" << image_map.instance_id << ", mapped_time="
             << image_map.mapped_time << "]";
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MigrationHeaderType& type) {
+  switch (type) {
+  case MIGRATION_HEADER_TYPE_SRC:
+    os << "source";
+    break;
+  case MIGRATION_HEADER_TYPE_DST:
+    os << "destination";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(type) << ")";
+    break;
+  }
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MigrationState& migration_state) {
+  switch (migration_state) {
+  case MIGRATION_STATE_ERROR:
+    os << "error";
+    break;
+  case MIGRATION_STATE_PREPARING:
+    os << "preparing";
+    break;
+  case MIGRATION_STATE_PREPARED:
+    os << "prepared";
+    break;
+  case MIGRATION_STATE_EXECUTING:
+    os << "executing";
+    break;
+  case MIGRATION_STATE_EXECUTED:
+    os << "executed";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(migration_state) << ")";
+    break;
+  }
+  return os;
+}
+
+void MigrationSpec::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(header_type, bl);
+  encode(pool_id, bl);
+  encode(image_name, bl);
+  encode(image_id, bl);
+  encode(snap_seqs, bl);
+  encode(overlap, bl);
+  encode(flatten, bl);
+  encode(mirroring, bl);
+  encode(state, bl);
+  encode(state_description, bl);
+  ENCODE_FINISH(bl);
+}
+
+void MigrationSpec::decode(bufferlist::const_iterator& bl) {
+  DECODE_START(1, bl);
+  decode(header_type, bl);
+  decode(pool_id, bl);
+  decode(image_name, bl);
+  decode(image_id, bl);
+  decode(snap_seqs, bl);
+  decode(overlap, bl);
+  decode(flatten, bl);
+  decode(mirroring, bl);
+  decode(state, bl);
+  decode(state_description, bl);
+  DECODE_FINISH(bl);
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const std::map<uint64_t, uint64_t>& snap_seqs) {
+  os << "{";
+  size_t count = 0;
+  for (auto &it : snap_seqs) {
+    os << (count++ > 0 ? ", " : "") << "(" << it.first << ", " << it.second
+       << ")";
+  }
+  os << "}";
+  return os;
+}
+
+void MigrationSpec::dump(Formatter *f) const {
+  f->dump_stream("header_type") << header_type;
+  f->dump_int("pool_id", pool_id);
+  f->dump_string("image_name", image_name);
+  f->dump_string("image_id", image_id);
+  f->dump_stream("snap_seqs") << snap_seqs;
+  f->dump_unsigned("overlap", overlap);
+  f->dump_bool("mirroring", mirroring);
+}
+
+void MigrationSpec::generate_test_instances(std::list<MigrationSpec*> &o) {
+  o.push_back(new MigrationSpec());
+  o.push_back(new MigrationSpec(MIGRATION_HEADER_TYPE_SRC, 1, "image_name",
+                                "image_id", {{1, 2}}, 123, true, true,
+                                MIGRATION_STATE_PREPARED, "description"));
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MigrationSpec& migration_spec) {
+  os << "["
+     << "header_type=" << migration_spec.header_type << ", "
+     << "pool_id=" << migration_spec.pool_id << ", "
+     << "image_name=" << migration_spec.image_name << ", "
+     << "image_id=" << migration_spec.image_id << ", "
+     << "snap_seqs=" << migration_spec.snap_seqs << ", "
+     << "overlap=" << migration_spec.overlap << ", "
+     << "flatten=" << migration_spec.flatten << ", "
+     << "mirroring=" << migration_spec.mirroring << ", "
+     << "state=" << migration_spec.state << ", "
+     << "state_description=" << migration_spec.state_description << "]";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const AssertSnapcSeqState& state) {
+  switch (state) {
+  case ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ:
+    os << "gt";
+    break;
+  case ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ:
+    os << "le";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(state) << ")";
+    break;
+  }
+  return os;
 }
 
 } // namespace rbd
