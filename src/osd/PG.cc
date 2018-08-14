@@ -6734,14 +6734,28 @@ void PG::_delete_some(ObjectStore::Transaction *t)
     }
     ch->flush();
 
-    osd->finish_pg_delete(this, pool.info.get_pg_num());
-    deleted = true;
+    if (!osd->try_finish_pg_delete(this, pool.info.get_pg_num())) {
+      dout(1) << __func__ << " raced with merge, reinstantiating" << dendl;
+      ch = osd->store->create_new_collection(coll);
+      _create(*t,
+	      info.pgid,
+	      info.pgid.get_split_bits(pool.info.get_pg_num()));
+      _init(*t, info.pgid, &pool.info);
+      dirty_info = true;
+      dirty_big_info = true;
 
-    // cancel reserver here, since the PG is about to get deleted and the
-    // exit() methods don't run when that happens.
-    osd->local_reserver.cancel_reservation(info.pgid);
+#warning remove me before final merge
+      // REMOVE ME: trigger log error to ensure we exercise this in testing
+      osd->clog->error() << info.pgid << " delete merge race";
+    } else {
+      deleted = true;
 
-    osd->logger->dec(l_osd_pg_removing);
+      // cancel reserver here, since the PG is about to get deleted and the
+      // exit() methods don't run when that happens.
+      osd->local_reserver.cancel_reservation(info.pgid);
+
+      osd->logger->dec(l_osd_pg_removing);
+    }
   }
 }
 

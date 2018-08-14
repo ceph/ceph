@@ -753,7 +753,7 @@ public:
   void queue_for_snap_trim(PG *pg);
   void queue_for_scrub(PG *pg, bool with_high_priority);
   void queue_for_pg_delete(spg_t pgid, epoch_t e);
-  void finish_pg_delete(PG *pg, unsigned old_pg_num);
+  bool try_finish_pg_delete(PG *pg, unsigned old_pg_num);
 
 private:
   // -- pg recovery and associated throttling --
@@ -1896,7 +1896,7 @@ protected:
   PGRef _lookup_pg(spg_t pgid);
   PGRef _lookup_lock_pg(spg_t pgid);
   void register_pg(PGRef pg);
-  void unregister_pg(PG *pg);
+  bool try_finish_pg_delete(PG *pg, unsigned old_pg_num);
 
   void _get_pgs(vector<PGRef> *v, bool clear_too=false);
   void _get_pgids(vector<spg_t> *v);

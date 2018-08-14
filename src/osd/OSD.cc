@@ -1689,20 +1689,9 @@ void OSDService::queue_for_pg_delete(spg_t pgid, epoch_t e)
       e));
 }
 
-void OSDService::finish_pg_delete(PG *pg, unsigned old_pg_num)
+bool OSDService::try_finish_pg_delete(PG *pg, unsigned old_pg_num)
 {
-  // update pg count now since we might not get an osdmap any time soon.
-  if (pg->is_primary())
-    logger->dec(l_osd_pg_primary);
-  else if (pg->is_replica())
-    logger->dec(l_osd_pg_replica);
-  else
-    logger->dec(l_osd_pg_stray);
-
-  osd->unregister_pg(pg);
-  for (auto shard : osd->shards) {
-    shard->unprime_split_children(pg->pg_id, old_pg_num);
-  }
+  return osd->try_finish_pg_delete(pg, old_pg_num);
 }
 
 // ---
@@ -3934,19 +3923,39 @@ void OSD::register_pg(PGRef pg)
   sdata->_attach_pg(slot, pg.get());
 }
 
-void OSD::unregister_pg(PG *pg)
+bool OSD::try_finish_pg_delete(PG *pg, unsigned old_pg_num)
 {
   auto sdata = pg->osd_shard;
   ceph_assert(sdata);
-  Mutex::Locker l(sdata->shard_lock);
-  auto p = sdata->pg_slots.find(pg->pg_id);
-  if (p != sdata->pg_slots.end() &&
-      p->second->pg) {
+  {
+    Mutex::Locker l(sdata->shard_lock);
+    auto p = sdata->pg_slots.find(pg->pg_id);
+    if (p == sdata->pg_slots.end() ||
+	!p->second->pg) {
+      dout(20) << __func__ << " " << pg->pg_id << " not found" << dendl;
+      return false;
+    }
+    if (p->second->waiting_for_merge_epoch) {
+      dout(20) << __func__ << " " << pg->pg_id << " waiting for merge" << dendl;
+      return false;
+    }
     dout(20) << __func__ << " " << pg->pg_id << " " << pg << dendl;
     sdata->_detach_pg(p->second.get());
-  } else {
-    dout(20) << __func__ << " " << pg->pg_id << " not found" << dendl;
   }
+
+  for (auto shard : shards) {
+    shard->unprime_split_children(pg->pg_id, old_pg_num);
+  }
+
+  // update pg count now since we might not get an osdmap any time soon.
+  if (pg->is_primary())
+    service.logger->dec(l_osd_pg_primary);
+  else if (pg->is_replica())
+    service.logger->dec(l_osd_pg_replica);
+  else
+    service.logger->dec(l_osd_pg_stray);
+
+  return true;
 }
 
 PGRef OSD::_lookup_pg(spg_t pgid)
@@ -8198,6 +8207,7 @@ bool OSD::advance_pg(
 	    unsigned split_bits = pg->pg_id.get_split_bits(new_pg_num);
 	    dout(1) << __func__ << " merging " << pg->pg_id << dendl;
 	    pg->merge_from(sources, rctx, split_bits);
+	    pg->pg_slot->waiting_for_merge_epoch = 0;
 	  } else {
 	    dout(20) << __func__ << " not ready to merge yet" << dendl;
 	    pg->write_if_dirty(rctx);
