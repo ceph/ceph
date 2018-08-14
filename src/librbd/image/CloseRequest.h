@@ -55,6 +55,9 @@ private:
    *    v
    * FLUSH_OP_WORK_QUEUE
    *    |
+   *    v (skip if no migration parent)
+   * CLOSE_MIGRATION_PARENT
+   *    |
    *    v (skip if no parent)
    * CLOSE_PARENT
    *    |
@@ -102,6 +105,9 @@ private:
 
   void send_flush_op_work_queue();
   void handle_flush_op_work_queue(int r);
+
+  void send_close_migration_parent();
+  void handle_close_migration_parent(int r);
 
   void send_close_parent();
   void handle_close_parent(int r);

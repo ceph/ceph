@@ -8,6 +8,8 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/image/TypeTraits.h"
 
+#include <list>
+
 class Context;
 class ContextWQ;
 class SafeTimer;
@@ -37,6 +39,15 @@ public:
                              on_finish);
   }
 
+  static RemoveRequest *create(librados::IoCtx &ioctx, ImageCtxT *image_ctx,
+                               bool force, bool from_trash_remove,
+                               ProgressContext &prog_ctx,
+                               ContextWQ *op_work_queue,
+                               Context *on_finish) {
+    return new RemoveRequest(ioctx, image_ctx, force, from_trash_remove,
+                             prog_ctx, op_work_queue, on_finish);
+  }
+
   void send();
 
 private:
@@ -46,7 +57,7 @@ private:
    *                                  <start>
    *                                     |
    *                                     v
-   *                                OPEN IMAGE------------------\
+   *       (skip if already opened) OPEN IMAGE------------------\
    *                                     |                      |
    *                                     v                      |
    *	   error		   CHECK EXCLUSIVE LOCK---\     |
@@ -107,9 +118,14 @@ private:
                 ProgressContext &prog_ctx, ContextWQ *op_work_queue,
                 Context *on_finish);
 
+  RemoveRequest(librados::IoCtx &ioctx, ImageCtxT *image_ctx, bool force,
+                bool from_trash_remove, ProgressContext &prog_ctx,
+                ContextWQ *op_work_queue, Context *on_finish);
+
   librados::IoCtx &m_ioctx;
   std::string m_image_name;
   std::string m_image_id;
+  ImageCtxT *m_image_ctx = nullptr;
   bool m_force;
   bool m_from_trash_remove;
   ProgressContext &m_prog_ctx;
@@ -120,7 +136,6 @@ private:
   std::string m_header_oid;
   bool m_old_format = false;
   bool m_unknown_format = true;
-  ImageCtxT *m_image_ctx;
 
   librados::IoCtx m_parent_io_ctx;
 
@@ -129,7 +144,6 @@ private:
   int m_ret_val = 0;
   bufferlist m_out_bl;
   std::list<obj_watch_t> m_watchers;
-  std::list<obj_watch_t> m_mirror_watchers;
 
   std::map<uint64_t, SnapInfo> m_snap_infos;
 
@@ -156,12 +170,6 @@ private:
 
   void list_image_watchers();
   void handle_list_image_watchers(int r);
-
-  void get_mirror_image();
-  void handle_get_mirror_image(int r);
-
-  void list_mirror_watchers();
-  void handle_list_mirror_watchers(int r);
 
   void check_image_watchers();
 

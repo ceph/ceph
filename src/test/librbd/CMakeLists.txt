@@ -8,6 +8,7 @@ set(librbd_test
   test_BlockGuard.cc
   test_DeepCopy.cc
   test_Groups.cc
+  test_Migration.cc
   test_MirroringWatcher.cc
   test_ObjectMap.cc
   test_Operations.cc
@@ -46,6 +47,7 @@ set(unittest_librbd_srcs
   exclusive_lock/test_mock_PreReleaseRequest.cc
   image/test_mock_CloneRequest.cc
   image/test_mock_DetachChildRequest.cc
+  image/test_mock_ListWatchersRequest.cc
   image/test_mock_RefreshRequest.cc
   image/test_mock_RemoveRequest.cc
   io/test_mock_ImageRequest.cc

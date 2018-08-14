@@ -465,6 +465,7 @@ TYPE(cls_rbd_snap)
 
 #include "cls/rbd/cls_rbd_types.h"
 TYPE(cls::rbd::ChildImageSpec)
+TYPE(cls::rbd::MigrationSpec)
 TYPE(cls::rbd::MirrorPeer)
 TYPE(cls::rbd::MirrorImage)
 TYPE(cls::rbd::MirrorImageMap)

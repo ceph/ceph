@@ -230,36 +230,20 @@ vinodeno_t Client::map_faked_ino(ino_t ino)
 
 Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   : Dispatcher(m->cct),
-    m_command_hook(this),
     timer(m->cct, client_lock),
-    callback_handle(NULL),
-    switch_interrupt_cb(NULL),
-    remount_cb(NULL),
-    ino_invalidate_cb(NULL),
-    dentry_invalidate_cb(NULL),
-    umask_cb(NULL),
-    can_invalidate_dentries(false),
+    client_lock("Client::client_lock"),
+    messenger(m),
+    monclient(mc),
+    objecter(objecter_),
+    whoami(mc->get_global_id()),
     async_ino_invalidator(m->cct),
     async_dentry_invalidator(m->cct),
     interrupt_finisher(m->cct),
     remount_finisher(m->cct),
     objecter_finisher(m->cct),
-    tick_event(NULL),
-    messenger(m), monclient(mc),
-    objecter(objecter_),
-    whoami(mc->get_global_id()), cap_epoch_barrier(0),
-    last_tid(0), oldest_tid(0), last_flush_tid(1),
-    local_osd(-ENXIO), local_osd_epoch(0),
-    unsafe_sync_write(0),
-    client_lock("Client::client_lock"),
-    deleg_timeout(0)
+    m_command_hook(this)
 {
   _reset_faked_inos();
-  //
-  root = 0;
-  root_ancestor = 0;
-
-  num_flushing_caps = 0;
 
   _dir_vxattrs_name_size = _vxattrs_calcu_name_size(_dir_vxattrs);
   _file_vxattrs_name_size = _vxattrs_calcu_name_size(_file_vxattrs);
@@ -267,7 +251,6 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   user_id = cct->_conf->client_mount_uid;
   group_id = cct->_conf->client_mount_gid;
 
-  acl_type = NO_ACL;
   if (cct->_conf->client_acl_type == "posix_acl")
     acl_type = POSIX_ACL;
 
@@ -14258,7 +14241,7 @@ int StandaloneClient::init()
   objecter->init();
 
   client_lock.Lock();
-  assert(!initialized);
+  assert(!is_initialized());
 
   messenger->add_dispatcher_tail(objecter);
   messenger->add_dispatcher_tail(this);

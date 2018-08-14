@@ -395,6 +395,7 @@ scopes are:
   management.
 - **log**: include all features related to Ceph logs management.
 - **grafana**: include all features related to Grafana proxy.
+- **dashboard-settings**: allows to change dashboard settings.
 
 A *role* specifies a set of mappings between a *security scope* and a set of
 *permissions*. There are four types of permissions:
@@ -427,7 +428,8 @@ installation.
 The list of system roles are:
 
 - **administrator**: provides full permissions for all security scopes.
-- **read-only**: provides *read* permission for all security scopes.
+- **read-only**: provides *read* permission for all security scopes except
+  the dashboard settings.
 - **block-manager**: provides full permissions for *rbd-image*,
   *rbd-mirroring*, and *iscsi* scopes.
 - **rgw-manager**: provides full permissions for the *rgw* scope

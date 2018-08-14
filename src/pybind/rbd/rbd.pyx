@@ -166,7 +166,8 @@ cdef extern from "rbd/librbd.h" nogil:
 
     ctypedef enum rbd_trash_image_source_t:
         _RBD_TRASH_IMAGE_SOURCE_USER "RBD_TRASH_IMAGE_SOURCE_USER",
-        _RBD_TRASH_IMAGE_SOURCE_MIRRORING "RBD_TRASH_IMAGE_SOURCE_MIRRORING"
+        _RBD_TRASH_IMAGE_SOURCE_MIRRORING "RBD_TRASH_IMAGE_SOURCE_MIRRORING",
+        _RBD_TRASH_IMAGE_SOURCE_MIGRATION "RBD_TRASH_IMAGE_SOURCE_MIGRATION"
 
     ctypedef struct rbd_trash_image_info_t:
         char *id
@@ -196,6 +197,24 @@ cdef extern from "rbd/librbd.h" nogil:
     ctypedef struct rbd_group_snap_info_t:
         char *name
         rbd_group_snap_state_t state
+
+    ctypedef enum rbd_image_migration_state_t:
+        _RBD_IMAGE_MIGRATION_STATE_UNKNOWN "RBD_IMAGE_MIGRATION_STATE_UNKNOWN"
+        _RBD_IMAGE_MIGRATION_STATE_ERROR "RBD_IMAGE_MIGRATION_STATE_ERROR"
+        _RBD_IMAGE_MIGRATION_STATE_PREPARING "RBD_IMAGE_MIGRATION_STATE_PREPARING"
+        _RBD_IMAGE_MIGRATION_STATE_PREPARED "RBD_IMAGE_MIGRATION_STATE_PREPARED"
+        _RBD_IMAGE_MIGRATION_STATE_EXECUTING "RBD_IMAGE_MIGRATION_STATE_EXECUTING"
+        _RBD_IMAGE_MIGRATION_STATE_EXECUTED "RBD_IMAGE_MIGRATION_STATE_EXECUTED"
+
+    ctypedef struct rbd_image_migration_status_t:
+        int64_t source_pool_id
+        char *source_image_name
+        char *source_image_id
+        int64_t dest_pool_id
+        char *dest_image_name
+        char *dest_image_id
+        rbd_image_migration_state_t state
+        char *state_description
 
     ctypedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg)
     ctypedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void* ptr)
@@ -238,6 +257,17 @@ cdef extern from "rbd/librbd.h" nogil:
                                 size_t num_entries)
     int rbd_trash_remove(rados_ioctx_t io, const char *id, int force)
     int rbd_trash_restore(rados_ioctx_t io, const char *id, const char *name)
+
+    int rbd_migration_prepare(rados_ioctx_t io_ctx, const char *image_name,
+                              rados_ioctx_t dest_io_ctx, const char *dest_image_name,
+                              rbd_image_options_t opts)
+    int rbd_migration_execute(rados_ioctx_t io_ctx, const char *image_name)
+    int rbd_migration_commit(rados_ioctx_t io_ctx, const char *image_name)
+    int rbd_migration_abort(rados_ioctx_t io_ctx, const char *image_name)
+    int rbd_migration_status(rados_ioctx_t io_ctx, const char *image_name,
+                             rbd_image_migration_status_t *status,
+                             size_t status_size)
+    void rbd_migration_status_cleanup(rbd_image_migration_status_t *status)
 
     int rbd_mirror_mode_get(rados_ioctx_t io, rbd_mirror_mode_t *mirror_mode)
     int rbd_mirror_mode_set(rados_ioctx_t io, rbd_mirror_mode_t mirror_mode)
@@ -519,6 +549,13 @@ RBD_GROUP_IMAGE_STATE_INCOMPLETE = _RBD_GROUP_IMAGE_STATE_INCOMPLETE
 
 RBD_GROUP_SNAP_STATE_INCOMPLETE = _RBD_GROUP_SNAP_STATE_INCOMPLETE
 RBD_GROUP_SNAP_STATE_COMPLETE = _RBD_GROUP_SNAP_STATE_COMPLETE
+
+RBD_IMAGE_MIGRATION_STATE_UNKNOWN = _RBD_IMAGE_MIGRATION_STATE_UNKNOWN
+RBD_IMAGE_MIGRATION_STATE_ERROR = _RBD_IMAGE_MIGRATION_STATE_ERROR
+RBD_IMAGE_MIGRATION_STATE_PREPARING = _RBD_IMAGE_MIGRATION_STATE_PREPARING
+RBD_IMAGE_MIGRATION_STATE_PREPARED = _RBD_IMAGE_MIGRATION_STATE_PREPARED
+RBD_IMAGE_MIGRATION_STATE_EXECUTING = _RBD_IMAGE_MIGRATION_STATE_EXECUTING
+RBD_IMAGE_MIGRATION_STATE_EXECUTED = _RBD_IMAGE_MIGRATION_STATE_EXECUTED
 
 class Error(Exception):
     pass
@@ -1136,7 +1173,7 @@ class RBD(object):
         if ret != 0:
             raise make_ex(ret, 'error retrieving image from trash')
 
-        __source_string = ['USER', 'MIRRORING']
+        __source_string = ['USER', 'MIRRORING', 'MIGRATION']
         info = {
             'id'          : decode_cstr(c_info.id),
             'name'        : decode_cstr(c_info.name),
@@ -1177,6 +1214,180 @@ class RBD(object):
             ret = rbd_trash_restore(_ioctx, _image_id, _name)
         if ret != 0:
             raise make_ex(ret, 'error restoring image from trash')
+
+    def migration_prepare(self, ioctx, image_name, dest_ioctx, dest_image_name,
+                          features=None, order=None, stripe_unit=None, stripe_count=None,
+                          data_pool=None):
+        """
+        Prepare an RBD image migration.
+
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param image_name: the current name of the image
+        :type src: str
+        :param dest_ioctx: determines which pool to migration into
+        :type dest_ioctx: :class:`rados.Ioctx`
+        :param dest_image_name: the name of the destination image (may be the same image)
+        :type dest_image_name: str
+        :param features: bitmask of features to enable; if set, must include layering
+        :type features: int
+        :param order: the image is split into (2**order) byte objects
+        :type order: int
+        :param stripe_unit: stripe unit in bytes (default None to let librbd decide)
+        :type stripe_unit: int
+        :param stripe_count: objects to stripe over before looping
+        :type stripe_count: int
+        :param data_pool: optional separate pool for data blocks
+        :type data_pool: str
+        :raises: :class:`TypeError`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`ImageExists`
+        :raises: :class:`FunctionNotSupported`
+        :raises: :class:`ArgumentOutOfRange`
+        """
+        dest_image_name = cstr(dest_image_name, 'dest_image_name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_image_name = image_name
+            rados_ioctx_t _dest_ioctx = convert_ioctx(dest_ioctx)
+            char *_dest_image_name = dest_image_name
+            rbd_image_options_t opts
+
+        rbd_image_options_create(&opts)
+        try:
+            if features is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
+                                             features)
+            if order is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
+                                             order)
+            if stripe_unit is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                             stripe_unit)
+            if stripe_count is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                             stripe_count)
+            if data_pool is not None:
+                rbd_image_options_set_string(opts, RBD_IMAGE_OPTION_DATA_POOL,
+                                             data_pool)
+            with nogil:
+                ret = rbd_migration_prepare(_ioctx, _image_name, _dest_ioctx,
+                                            _dest_image_name, opts)
+        finally:
+            rbd_image_options_destroy(opts)
+        if ret < 0:
+            raise make_ex(ret, 'error migrating image %s' % (image_name))
+
+    def migration_execute(self, ioctx, image_name):
+        """
+        Execute a prepared RBD image migration.
+
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param image_name: the name of the image
+        :type image_name: str
+        :raises: :class:`ImageNotFound`
+        """
+        image_name = cstr(image_name, 'image_name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_image_name = image_name
+        with nogil:
+            ret = rbd_migration_execute(_ioctx, _image_name)
+        if ret != 0:
+            raise make_ex(ret, 'error aborting migration')
+
+    def migration_commit(self, ioctx, image_name):
+        """
+        Commit an executed RBD image migration.
+
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param image_name: the name of the image
+        :type image_name: str
+        :raises: :class:`ImageNotFound`
+        """
+        image_name = cstr(image_name, 'image_name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_image_name = image_name
+        with nogil:
+            ret = rbd_migration_commit(_ioctx, _image_name)
+        if ret != 0:
+            raise make_ex(ret, 'error aborting migration')
+
+    def migration_abort(self, ioctx, image_name):
+        """
+        Cancel a previously started but interrupted migration.
+
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param image_name: the name of the image
+        :type image_name: str
+        :raises: :class:`ImageNotFound`
+        """
+        image_name = cstr(image_name, 'image_name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_image_name = image_name
+        with nogil:
+            ret = rbd_migration_abort(_ioctx, _image_name)
+        if ret != 0:
+            raise make_ex(ret, 'error aborting migration')
+
+    def migration_status(self, ioctx, image_name):
+        """
+        Return RBD image migration status.
+
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param image_name: the name of the image
+        :type image_name: str
+        :returns: dict - contains the following keys:
+
+            * ``source_pool_id`` (int) - source image pool id
+
+            * ``source_image_name`` (str) - source image name
+
+            * ``source_image_id`` (str) - source image id
+
+            * ``dest_pool_id`` (int) - destination image pool id
+
+            * ``dest_image_name`` (str) - destination image name
+
+            * ``dest_image_id`` (str) - destination image id
+
+            * ``state`` (int) - current migration state
+
+            * ``state_description`` (str) - migration state description
+
+        :raises: :class:`ImageNotFound`
+        """
+        image_name = cstr(image_name, 'image_name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_image_name = image_name
+            rbd_image_migration_status_t c_status
+        with nogil:
+            ret = rbd_migration_status(_ioctx, _image_name, &c_status,
+                                       sizeof(c_status))
+        if ret != 0:
+            raise make_ex(ret, 'error getting migration status')
+
+        status = {
+            'source_pool_id'    : c_status.source_pool_id,
+            'source_image_name' : decode_cstr(c_status.source_image_name),
+            'source_image_id'   : decode_cstr(c_status.source_image_id),
+            'dest_pool_id'      : c_status.source_pool_id,
+            'dest_image_name'   : decode_cstr(c_status.dest_image_name),
+            'dest_image_id'     : decode_cstr(c_status.dest_image_id),
+            'state'             : c_status.state,
+            'state_description' : decode_cstr(c_status.state_description)
+         }
+
+        rbd_migration_status_cleanup(&c_status)
+
+        return status
 
     def mirror_mode_get(self, ioctx):
         """

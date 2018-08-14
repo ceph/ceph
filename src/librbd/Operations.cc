@@ -23,6 +23,7 @@
 #include "librbd/operation/FlattenRequest.h"
 #include "librbd/operation/MetadataRemoveRequest.h"
 #include "librbd/operation/MetadataSetRequest.h"
+#include "librbd/operation/MigrateRequest.h"
 #include "librbd/operation/ObjectMapIterate.h"
 #include "librbd/operation/RebuildObjectMapRequest.h"
 #include "librbd/operation/RenameRequest.h"
@@ -249,9 +250,10 @@ struct C_InvokeAsyncRequest : public Context {
     CephContext *cct = image_ctx.cct;
     ldout(cct, 20) << __func__ << dendl;
 
-    Context *ctx = util::create_context_callback<
-      C_InvokeAsyncRequest<I>, &C_InvokeAsyncRequest<I>::handle_remote_request>(
-        this);
+    Context *ctx = util::create_async_context_callback(
+      image_ctx, util::create_context_callback<
+        C_InvokeAsyncRequest<I>,
+        &C_InvokeAsyncRequest<I>::handle_remote_request>(this));
     remote(ctx);
   }
 
@@ -1534,6 +1536,84 @@ void Operations<I>::execute_metadata_remove(const std::string &key,
 	m_image_ctx,
 	new C_NotifyUpdate<I>(m_image_ctx, on_finish), key);
   request->send();
+}
+
+template <typename I>
+int Operations<I>::migrate(ProgressContext &prog_ctx) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "migrate" << dendl;
+
+  int r = m_image_ctx.state->refresh_if_required();
+  if (r < 0) {
+    return r;
+  }
+
+  if (m_image_ctx.read_only) {
+    return -EROFS;
+  }
+
+  {
+    RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
+    if (m_image_ctx.migration_info.empty()) {
+      lderr(cct) << "image has no migrating parent" << dendl;
+      return -EINVAL;
+    }
+  }
+
+  uint64_t request_id = ++m_async_request_seq;
+  r = invoke_async_request("migrate", false,
+                           boost::bind(&Operations<I>::execute_migrate, this,
+                                       boost::ref(prog_ctx), _1),
+                           boost::bind(&ImageWatcher<I>::notify_migrate,
+                                       m_image_ctx.image_watcher, request_id,
+                                       boost::ref(prog_ctx), _1));
+
+  if (r < 0 && r != -EINVAL) {
+    return r;
+  }
+  ldout(cct, 20) << "migrate finished" << dendl;
+  return 0;
+}
+
+template <typename I>
+void Operations<I>::execute_migrate(ProgressContext &prog_ctx,
+                                    Context *on_finish) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "migrate" << dendl;
+
+  if (m_image_ctx.read_only || m_image_ctx.operations_disabled) {
+    on_finish->complete(-EROFS);
+    return;
+  }
+
+  m_image_ctx.snap_lock.get_read();
+  m_image_ctx.parent_lock.get_read();
+
+  if (m_image_ctx.migration_info.empty()) {
+    lderr(cct) << "image has no migrating parent" << dendl;
+    m_image_ctx.parent_lock.put_read();
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-EINVAL);
+    return;
+  }
+  if (m_image_ctx.snap_id != CEPH_NOSNAP) {
+    lderr(cct) << "snapshots cannot be migrated" << dendl;
+    m_image_ctx.parent_lock.put_read();
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-EROFS);
+    return;
+  }
+
+  m_image_ctx.parent_lock.put_read();
+  m_image_ctx.snap_lock.put_read();
+
+  operation::MigrateRequest<I> *req = new operation::MigrateRequest<I>(
+    m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), prog_ctx);
+  req->send();
 }
 
 template <typename I>
