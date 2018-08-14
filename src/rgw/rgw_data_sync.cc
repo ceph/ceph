@@ -1199,7 +1199,7 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   string error_marker;
   int max_error_entries;
 
-  ceph::real_time error_retry_time;
+  ceph::coarse_real_time error_retry_time;
 
 #define RETRY_BACKOFF_SECS_MIN 60
 #define RETRY_BACKOFF_SECS_DEFAULT 60
@@ -1432,7 +1432,7 @@ public:
           } else {
             retry_backoff_secs = RETRY_BACKOFF_SECS_DEFAULT;
           }
-          error_retry_time = ceph::real_clock::now() + make_timespan(retry_backoff_secs);
+          error_retry_time = ceph::coarse_real_clock::now() + make_timespan(retry_backoff_secs);
           error_marker.clear();
         }
         omapkeys.reset();
