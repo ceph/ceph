@@ -610,6 +610,7 @@ def task(ctx, config):
                 debuginfo=config.get('debuginfo'),
                 flavor=flavor,
                 extra_packages=config.get('extra_packages', []),
+                extra_system_packages=config.get('extra_system_packages', []),
                 exclude_packages=config.get('exclude_packages', []),
                 extras=config.get('extras', None),
                 wait_for_package=config.get('wait_for_package', False),
