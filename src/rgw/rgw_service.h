@@ -10,7 +10,6 @@
 
 
 class CephContext;
-class JSONFormattable;
 class RGWServiceInstance;
 class RGWServiceRegistry;
 
@@ -35,7 +34,7 @@ public:
   const std::string& type() {
     return svc_type;
   }
-  virtual int create_instance(JSONFormattable& conf, RGWServiceInstanceRef *instance) = 0;
+  virtual int create_instance(const string& conf, RGWServiceInstanceRef *instance) = 0;
 };
 
 
@@ -51,10 +50,15 @@ protected:
   string svc_instance;
   uint64_t svc_id{0};
 
-  virtual std::vector<std::string> get_deps() {
-    return vector<std::string>();
+  struct dependency {
+    string name;
+    string conf;
+  };
+
+  virtual std::map<std::string, dependency> get_deps() {
+    return std::map<std::string, dependency>();
   }
-  virtual int init(JSONFormattable& conf) = 0;
+  virtual int init(const string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs) = 0;
 public:
   RGWServiceInstance(RGWService *svc, CephContext *_cct) : cct(_cct) {}
 
@@ -66,26 +70,42 @@ public:
 };
 
 class RGWServiceRegistry : std::enable_shared_from_this<RGWServiceRegistry> {
+  CephContext *cct;
+
   map<string, RGWServiceRef> services;
 
   struct instance_info {
+    string conf_id;
     uint64_t id;
     string title;
-    JSONFormattable conf;
+    string conf;
     RGWServiceInstanceRef ref;
   };
   map<uint64_t, instance_info> instances; /* registry_id -> instance */
+  map<string, instance_info> instances_by_conf; /* conf_id -> instance */
 
   std::atomic<uint64_t> max_registry_id;
 
+  string get_conf_id(const string& service_type, const string& conf);
   void register_all(CephContext *cct);
 public:
-  RGWServiceRegistry(CephContext *cct) {
+  RGWServiceRegistry(CephContext *_cct) : cct(_cct) {
     register_all(cct);
   }
   bool find(const string& name, RGWServiceRef *svc);
 
-  int instantiate(RGWServiceRegistryRef& registry, RGWServiceRef& svc, JSONFormattable& conf);
+  int get_instance(RGWServiceRef& svc,
+                   const string& conf,
+                   RGWServiceInstanceRef *ref); /* returns existing or creates a new one */
+  int get_instance(const string& svc_name,
+                   const string& conf,
+                   RGWServiceInstanceRef *ref) {
+    auto iter = services.find(svc_name);
+    if (iter == services.end()) {
+      return -ENOENT;
+    }
+    return get_instance(iter->second, conf, ref);
+  }
   void remove_instance(RGWServiceInstance *instance);
 };
 
