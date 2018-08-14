@@ -295,7 +295,7 @@ void MDSRankDispatcher::tick()
   heartbeat_reset();
 
   if (beacon.is_laggy()) {
-    dout(5) << "tick bailing out since we seem laggy" << dendl;
+    dout(1) << "skipping upkeep work because connection to Monitors appears laggy" << dendl;
     return;
   }
 
@@ -596,10 +596,10 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
   }
 
   if (beacon.is_laggy()) {
-    dout(10) << " laggy, deferring " << *m << dendl;
+    dout(5) << " laggy, deferring " << *m << dendl;
     waiting_for_nolaggy.push_back(m);
   } else if (new_msg && !waiting_for_nolaggy.empty()) {
-    dout(10) << " there are deferred messages, deferring " << *m << dendl;
+    dout(5) << " there are deferred messages, deferring " << *m << dendl;
     waiting_for_nolaggy.push_back(m);
   } else {
     if (!handle_deferrable_message(m)) {
@@ -910,19 +910,22 @@ Session *MDSRank::get_session(Message *m)
     if (session->is_closed()) {
       Session *imported_session = sessionmap.get_session(session->info.inst.name);
       if (imported_session && imported_session != session) {
-        dout(10) << __func__ << " replacing connection bootstrap session " << session << " with imported session " << imported_session << dendl;
+        dout(10) << __func__ << " replacing connection bootstrap session "
+		 << session << " with imported session " << imported_session
+		 << dendl;
         imported_session->info.auth_name = session->info.auth_name;
         //assert(session->info.auth_name == imported_session->info.auth_name);
         assert(session->info.inst == imported_session->info.inst);
-        imported_session->connection = session->connection;
+        imported_session->set_connection(session->get_connection().get());
         // send out any queued messages
         while (!session->preopen_out_queue.empty()) {
-          imported_session->connection->send_message(session->preopen_out_queue.front());
+          imported_session->get_connection()->send_message(
+	    session->preopen_out_queue.front());
           session->preopen_out_queue.pop_front();
         }
         imported_session->auth_caps = session->auth_caps;
         assert(session->get_nref() == 1);
-        imported_session->connection->set_priv(imported_session->get());
+        imported_session->get_connection()->set_priv(imported_session->get());
         session = imported_session;
       }
     }
@@ -1033,8 +1036,8 @@ void MDSRank::send_message_client_counted(Message *m, Session *session)
   version_t seq = session->inc_push_seq();
   dout(10) << "send_message_client_counted " << session->info.inst.name << " seq "
 	   << seq << " " << *m << dendl;
-  if (session->connection) {
-    session->connection->send_message(m);
+  if (session->get_connection()) {
+    session->get_connection()->send_message(m);
   } else {
     session->preopen_out_queue.push_back(m);
   }
@@ -1043,8 +1046,8 @@ void MDSRank::send_message_client_counted(Message *m, Session *session)
 void MDSRank::send_message_client(Message *m, Session *session)
 {
   dout(10) << "send_message_client " << session->info.inst << " " << *m << dendl;
-  if (session->connection) {
-    session->connection->send_message(m);
+  if (session->get_connection()) {
+    session->get_connection()->send_message(m);
   } else {
     session->preopen_out_queue.push_back(m);
   }
@@ -3025,7 +3028,7 @@ void MDSRank::bcast_mds_map()
   for (set<Session*>::const_iterator p = clients.begin();
        p != clients.end();
        ++p)
-    (*p)->connection->send_message(new MMDSMap(monc->get_fsid(), mdsmap));
+    (*p)->get_connection()->send_message(new MMDSMap(monc->get_fsid(), mdsmap));
   last_client_mdsmap_bcast = mdsmap->get_epoch();
 }
 

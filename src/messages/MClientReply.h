@@ -52,21 +52,24 @@ struct LeaseStat {
   __u32 seq;
 
   LeaseStat() : mask(0), duration_ms(0), seq(0) {}
+  LeaseStat(__u16 msk, __u32 dur, __u32 sq) : mask{msk}, duration_ms{dur}, seq{sq} {}
 
-  void encode(bufferlist &bl) const {
-    using ceph::encode;
-    encode(mask, bl);
-    encode(duration_ms, bl);
-    encode(seq, bl);
-  }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(bufferlist::const_iterator &bl, const uint64_t features) {
     using ceph::decode;
-    decode(mask, bl);
-    decode(duration_ms, bl);
-    decode(seq, bl);
+    if (features == (uint64_t)-1) {
+      DECODE_START(1, bl);
+      decode(mask, bl);
+      decode(duration_ms, bl);
+      decode(seq, bl);
+      DECODE_FINISH(bl);
+    }
+    else {
+      decode(mask, bl);
+      decode(duration_ms, bl);
+      decode(seq, bl);
+    }
   }
 };
-WRITE_CLASS_ENCODER(LeaseStat)
 
 inline ostream& operator<<(ostream& out, const LeaseStat& l) {
   return out << "lease(mask " << l.mask << " dur " << l.duration_ms << ")";
@@ -79,21 +82,24 @@ struct DirStat {
   set<__s32> dist;
   
   DirStat() : auth(CDIR_AUTH_PARENT) {}
-  DirStat(bufferlist::const_iterator& p) {
-    decode(p);
+  DirStat(bufferlist::const_iterator& p, const uint64_t features) {
+    decode(p, features);
   }
 
-  void encode(bufferlist& bl) {
-    using ceph::encode;
-    encode(frag, bl);
-    encode(auth, bl);
-    encode(dist, bl);
-  }
-  void decode(bufferlist::const_iterator& p) {
+  void decode(bufferlist::const_iterator& p, const uint64_t features) {
     using ceph::decode;
-    decode(frag, p);
-    decode(auth, p);
-    decode(dist, p);
+    if (features == (uint64_t)-1) {
+      DECODE_START(1, p);
+      decode(frag, p);
+      decode(auth, p);
+      decode(dist, p);
+      DECODE_FINISH(p);
+    }
+    else {
+      decode(frag, p);
+      decode(auth, p);
+      decode(dist, p);
+    }
   }
 
   // see CDir::encode_dirstat for encoder.
@@ -130,73 +136,116 @@ struct InodeStat {
 
  public:
   InodeStat() {}
-  InodeStat(bufferlist::const_iterator& p, uint64_t features) {
+  InodeStat(bufferlist::const_iterator& p, const uint64_t features) {
     decode(p, features);
   }
 
-  void decode(bufferlist::const_iterator &p, uint64_t features) {
+  void decode(bufferlist::const_iterator &p, const uint64_t features) {
     using ceph::decode;
-    decode(vino.ino, p);
-    decode(vino.snapid, p);
-    decode(rdev, p);
-    decode(version, p);
-    decode(xattr_version, p);
-    decode(cap, p);
-    {
-      ceph_file_layout legacy_layout;
-      decode(legacy_layout, p);
-      layout.from_legacy(legacy_layout);
-    }
-    decode(ctime, p);
-    decode(mtime, p);
-    decode(atime, p);
-    decode(time_warp_seq, p);
-    decode(size, p);
-    decode(max_size, p);
-    decode(truncate_size, p);
-    decode(truncate_seq, p);
-    decode(mode, p);
-    decode(uid, p);
-    decode(gid, p);
-    decode(nlink, p);
-    decode(dirstat.nfiles, p);
-    decode(dirstat.nsubdirs, p);
-    decode(rstat.rbytes, p);
-    decode(rstat.rfiles, p);
-    decode(rstat.rsubdirs, p);
-    decode(rstat.rctime, p);
-
-    decode(dirfragtree, p);
-
-    decode(symlink, p);
-    
-    if (features & CEPH_FEATURE_DIRLAYOUTHASH)
+    if (features == (uint64_t)-1) {
+      DECODE_START(1, p);
+      decode(vino.ino, p);
+      decode(vino.snapid, p);
+      decode(rdev, p);
+      decode(version, p);
+      decode(xattr_version, p);
+      decode(cap, p);
+      {
+        ceph_file_layout legacy_layout;
+        decode(legacy_layout, p);
+        layout.from_legacy(legacy_layout);
+      }
+      decode(ctime, p);
+      decode(mtime, p);
+      decode(atime, p);
+      decode(time_warp_seq, p);
+      decode(size, p);
+      decode(max_size, p);
+      decode(truncate_size, p);
+      decode(truncate_seq, p);
+      decode(mode, p);
+      decode(uid, p);
+      decode(gid, p);
+      decode(nlink, p);
+      decode(dirstat.nfiles, p);
+      decode(dirstat.nsubdirs, p);
+      decode(rstat.rbytes, p);
+      decode(rstat.rfiles, p);
+      decode(rstat.rsubdirs, p);
+      decode(rstat.rctime, p);
+      decode(dirfragtree, p);
+      decode(symlink, p);
       decode(dir_layout, p);
-    else
-      memset(&dir_layout, 0, sizeof(dir_layout));
-
-    decode(xattrbl, p);
-
-    if (features & CEPH_FEATURE_MDS_INLINE_DATA) {
+      decode(xattrbl, p);
       decode(inline_version, p);
       decode(inline_data, p);
-    } else {
-      inline_version = CEPH_INLINE_NONE;
-    }
-
-    if (features & CEPH_FEATURE_MDS_QUOTA)
       decode(quota, p);
-    else
-      quota = quota_info_t{};
-
-    if ((features & CEPH_FEATURE_FS_FILE_LAYOUT_V2))
       decode(layout.pool_ns, p);
-    if ((features & CEPH_FEATURE_FS_BTIME)) {
       decode(btime, p);
       decode(change_attr, p);
-    } else {
-      btime = utime_t();
-      change_attr = 0;
+      DECODE_FINISH(p);
+    }
+    else {
+      decode(vino.ino, p);
+      decode(vino.snapid, p);
+      decode(rdev, p);
+      decode(version, p);
+      decode(xattr_version, p);
+      decode(cap, p);
+      {
+        ceph_file_layout legacy_layout;
+        decode(legacy_layout, p);
+        layout.from_legacy(legacy_layout);
+      }
+      decode(ctime, p);
+      decode(mtime, p);
+      decode(atime, p);
+      decode(time_warp_seq, p);
+      decode(size, p);
+      decode(max_size, p);
+      decode(truncate_size, p);
+      decode(truncate_seq, p);
+      decode(mode, p);
+      decode(uid, p);
+      decode(gid, p);
+      decode(nlink, p);
+      decode(dirstat.nfiles, p);
+      decode(dirstat.nsubdirs, p);
+      decode(rstat.rbytes, p);
+      decode(rstat.rfiles, p);
+      decode(rstat.rsubdirs, p);
+      decode(rstat.rctime, p);
+      decode(dirfragtree, p);
+      decode(symlink, p);
+      if (features & CEPH_FEATURE_DIRLAYOUTHASH)
+        decode(dir_layout, p);
+      else
+        memset(&dir_layout, 0, sizeof(dir_layout));
+
+      decode(xattrbl, p);
+
+      if (features & CEPH_FEATURE_MDS_INLINE_DATA) {
+        decode(inline_version, p);
+        decode(inline_data, p);
+      } else {
+        inline_version = CEPH_INLINE_NONE;
+      }
+
+      if (features & CEPH_FEATURE_MDS_QUOTA)
+        decode(quota, p);
+      else
+        quota = quota_info_t{};
+
+      if ((features & CEPH_FEATURE_FS_FILE_LAYOUT_V2))
+        decode(layout.pool_ns, p);
+
+      if ((features & CEPH_FEATURE_FS_BTIME)) {
+        decode(btime, p);
+        decode(change_attr, p);
+      } else {
+        btime = utime_t();
+        change_attr = 0;
+      }
     }
   }
   

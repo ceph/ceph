@@ -27,7 +27,7 @@ function(distutils_install_module name)
     endif()
     execute_process(
     COMMAND ${PYTHON${PYTHON_VERSION}_EXECUTABLE}
-        setup.py install \${options}
+        setup.py install \${options} --single-version-externally-managed
     WORKING_DIRECTORY \"${CMAKE_CURRENT_BINARY_DIR}\")")
 endfunction(distutils_install_module)
 

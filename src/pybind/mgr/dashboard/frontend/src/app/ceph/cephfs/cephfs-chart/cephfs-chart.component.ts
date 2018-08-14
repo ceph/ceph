@@ -11,10 +11,13 @@ import { ChartTooltip } from '../../../shared/models/chart-tooltip';
   styleUrls: ['./cephfs-chart.component.scss']
 })
 export class CephfsChartComponent implements OnChanges, OnInit {
-  @ViewChild('chartCanvas') chartCanvas: ElementRef;
-  @ViewChild('chartTooltip') chartTooltip: ElementRef;
+  @ViewChild('chartCanvas')
+  chartCanvas: ElementRef;
+  @ViewChild('chartTooltip')
+  chartTooltip: ElementRef;
 
-  @Input() mdsCounter: any;
+  @Input()
+  mdsCounter: any;
 
   lhsCounter = 'mds.inodes';
   rhsCounter = 'mds_server.handle_client_request';

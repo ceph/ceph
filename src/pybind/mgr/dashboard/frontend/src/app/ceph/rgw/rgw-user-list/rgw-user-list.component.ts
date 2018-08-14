@@ -19,7 +19,8 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
   styleUrls: ['./rgw-user-list.component.scss']
 })
 export class RgwUserListComponent {
-  @ViewChild(TableComponent) table: TableComponent;
+  @ViewChild(TableComponent)
+  table: TableComponent;
 
   permission: Permission;
   columns: CdTableColumn[] = [];

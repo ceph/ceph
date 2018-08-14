@@ -314,6 +314,10 @@ if(WITH_LZ4)
 endif(WITH_LZ4)
 
 #if allocator is set on command line make sure it matches below strings
+set(ALLOCATOR "" CACHE STRING
+  "specify memory allocator to use. currently tcmalloc, tcmalloc_minimal, \
+jemalloc, and libc is supported. if not specified, will try to find tcmalloc, \
+and then jemalloc. If neither of then is found. use the one in libc.")
 if(ALLOCATOR)
   if(${ALLOCATOR} MATCHES "tcmalloc(_minimal)?")
     find_package(gperftools REQUIRED)
@@ -485,6 +489,7 @@ if(WITH_MGR)
   set(MGR_PYTHON_EXECUTABLE ${PYTHON_EXECUTABLE})
   set(MGR_PYTHON_LIBRARIES ${PYTHON_LIBRARIES})
   set(MGR_PYTHON_VERSION_MAJOR ${PYTHON_VERSION_MAJOR})
+  set(MGR_PYTHON_VERSION_MINOR ${PYTHON_VERSION_MINOR})
   # Boost dependency check deferred to Boost section
 endif(WITH_MGR)
 
@@ -581,7 +586,7 @@ endif()
 # Rocksdb
 option(WITH_SYSTEM_ROCKSDB "require and build with system rocksdb" OFF)
 if (WITH_SYSTEM_ROCKSDB)
-  find_package(rocksdb 5.8 REQUIRED)
+  find_package(RocksDB 5.8 REQUIRED)
 endif()
 
 option(WITH_SEASTAR "Build seastar components")
@@ -597,7 +602,8 @@ set(BOOST_COMPONENTS
 set(BOOST_HEADER_COMPONENTS container)
 
 if(WITH_MGR)
-	list(APPEND BOOST_COMPONENTS python)
+  list(APPEND BOOST_COMPONENTS
+    python${MGR_PYTHON_VERSION_MAJOR}${MGR_PYTHON_VERSION_MINOR})
 endif()
 if(WITH_BOOST_CONTEXT)
   list(APPEND BOOST_COMPONENTS context coroutine)

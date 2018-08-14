@@ -47,6 +47,7 @@
 
 #include "mds/MDSContinuation.h"
 #include "mds/InoTable.h"
+#include "cephfs_features.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -3208,9 +3209,11 @@ int CInode::get_caps_allowed_for_client(Session *session, mempool_inode *file_i)
 
   if (!is_dir()) {
     if ((file_i->inline_data.version != CEPH_INLINE_NONE &&
-	 !session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) ||
+	 !session->get_connection()->has_feature(
+	   CEPH_FEATURE_MDS_INLINE_DATA)) ||
 	(!file_i->layout.pool_ns.empty() &&
-	 !session->connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)))
+	 !session->get_connection()->has_feature(
+	   CEPH_FEATURE_FS_FILE_LAYOUT_V2)))
       allowed &= ~(CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR);
   }
   return allowed;
@@ -3317,7 +3320,6 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 {
   client_t client = session->get_client();
   assert(snapid);
-  assert(session->connection);
   
   bool valid = true;
 
@@ -3577,62 +3579,103 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   /*
    * note: encoding matches MClientReply::InodeStat
    */
-  encode(oi->ino, bl);
-  encode(snapid, bl);
-  encode(oi->rdev, bl);
-  encode(version, bl);
-
-  encode(xattr_version, bl);
-
-  encode(ecap, bl);
-  {
-    ceph_file_layout legacy_layout;
-    layout.to_legacy(&legacy_layout);
-    encode(legacy_layout, bl);
-  }
-  encode(any_i->ctime, bl);
-  encode(file_i->mtime, bl);
-  encode(file_i->atime, bl);
-  encode(file_i->time_warp_seq, bl);
-  encode(file_i->size, bl);
-  encode(max_size, bl);
-  encode(file_i->truncate_size, bl);
-  encode(file_i->truncate_seq, bl);
-
-  encode(auth_i->mode, bl);
-  encode((uint32_t)auth_i->uid, bl);
-  encode((uint32_t)auth_i->gid, bl);
-
-  encode(link_i->nlink, bl);
-
-  encode(file_i->dirstat.nfiles, bl);
-  encode(file_i->dirstat.nsubdirs, bl);
-  encode(file_i->rstat.rbytes, bl);
-  encode(file_i->rstat.rfiles, bl);
-  encode(file_i->rstat.rsubdirs, bl);
-  encode(file_i->rstat.rctime, bl);
-
-  dirfragtree.encode(bl);
-
-  encode(symlink, bl);
-  if (session->connection->has_feature(CEPH_FEATURE_DIRLAYOUTHASH)) {
+  if (session->info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
+    ENCODE_START(1, 1, bl);
+    encode(oi->ino, bl);
+    encode(snapid, bl);
+    encode(oi->rdev, bl);
+    encode(version, bl);
+    encode(xattr_version, bl);
+    encode(ecap, bl);
+    {
+      ceph_file_layout legacy_layout;
+      layout.to_legacy(&legacy_layout);
+      encode(legacy_layout, bl);
+    }
+    encode(any_i->ctime, bl);
+    encode(file_i->mtime, bl);
+    encode(file_i->atime, bl);
+    encode(file_i->time_warp_seq, bl);
+    encode(file_i->size, bl);
+    encode(max_size, bl);
+    encode(file_i->truncate_size, bl);
+    encode(file_i->truncate_seq, bl);
+    encode(auth_i->mode, bl);
+    encode((uint32_t)auth_i->uid, bl);
+    encode((uint32_t)auth_i->gid, bl);
+    encode(link_i->nlink, bl);
+    encode(file_i->dirstat.nfiles, bl);
+    encode(file_i->dirstat.nsubdirs, bl);
+    encode(file_i->rstat.rbytes, bl);
+    encode(file_i->rstat.rfiles, bl);
+    encode(file_i->rstat.rsubdirs, bl);
+    encode(file_i->rstat.rctime, bl);
+    dirfragtree.encode(bl);
+    encode(symlink, bl);
     encode(file_i->dir_layout, bl);
-  }
-  encode(xbl, bl);
-  if (session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
+    encode(xbl, bl);
     encode(inline_version, bl);
     encode(inline_data, bl);
-  }
-  if (session->connection->has_feature(CEPH_FEATURE_MDS_QUOTA)) {
     mempool_inode *policy_i = ppolicy ? pi : oi;
     encode(policy_i->quota, bl);
-  }
-  if (session->connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
     encode(layout.pool_ns, bl);
-  }
-  if (session->connection->has_feature(CEPH_FEATURE_FS_BTIME)) {
     encode(any_i->btime, bl);
     encode(any_i->change_attr, bl);
+    ENCODE_FINISH(bl);
+  }
+  else {
+    assert(session->get_connection());
+
+    encode(oi->ino, bl);
+    encode(snapid, bl);
+    encode(oi->rdev, bl);
+    encode(version, bl);
+    encode(xattr_version, bl);
+    encode(ecap, bl);
+    {
+      ceph_file_layout legacy_layout;
+      layout.to_legacy(&legacy_layout);
+      encode(legacy_layout, bl);
+    }
+    encode(any_i->ctime, bl);
+    encode(file_i->mtime, bl);
+    encode(file_i->atime, bl);
+    encode(file_i->time_warp_seq, bl);
+    encode(file_i->size, bl);
+    encode(max_size, bl);
+    encode(file_i->truncate_size, bl);
+    encode(file_i->truncate_seq, bl);
+    encode(auth_i->mode, bl);
+    encode((uint32_t)auth_i->uid, bl);
+    encode((uint32_t)auth_i->gid, bl);
+    encode(link_i->nlink, bl);
+    encode(file_i->dirstat.nfiles, bl);
+    encode(file_i->dirstat.nsubdirs, bl);
+    encode(file_i->rstat.rbytes, bl);
+    encode(file_i->rstat.rfiles, bl);
+    encode(file_i->rstat.rsubdirs, bl);
+    encode(file_i->rstat.rctime, bl);
+    dirfragtree.encode(bl);
+    encode(symlink, bl);
+    if (session->get_connection()->has_feature(CEPH_FEATURE_DIRLAYOUTHASH)) {
+      encode(file_i->dir_layout, bl);
+    }
+    encode(xbl, bl);
+    if (session->get_connection()->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
+      encode(inline_version, bl);
+      encode(inline_data, bl);
+    }
+    if (session->get_connection()->has_feature(CEPH_FEATURE_MDS_QUOTA)) {
+      mempool_inode *policy_i = ppolicy ? pi : oi;
+      encode(policy_i->quota, bl);
+    }
+    if (session->get_connection()->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
+      encode(layout.pool_ns, bl);
+    }
+    if (session->get_connection()->has_feature(CEPH_FEATURE_FS_BTIME)) {
+      encode(any_i->btime, bl);
+      encode(any_i->change_attr, bl);
+    }
   }
 
   return valid;

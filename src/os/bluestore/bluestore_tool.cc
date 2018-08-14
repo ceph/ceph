@@ -134,26 +134,6 @@ void add_devices(
   }
 }
 
-void log_dump(
-  CephContext *cct,
-  const string& path,
-  const vector<string>& devs)
-{
-  validate_path(cct, path, true);
-  BlueFS *fs = new BlueFS(cct);
-  
-  add_devices(fs, cct, devs);
-
-  int r = fs->log_dump(cct, path, devs);
-  if (r < 0) {
-    cerr << "log_dump failed" << ": "
-         << cpp_strerror(r) << std::endl;
-    exit(EXIT_FAILURE);
-  }
-
-  delete fs;
-}
-
 BlueFS *open_bluefs(
   CephContext *cct,
   const string& path,
@@ -171,6 +151,22 @@ BlueFS *open_bluefs(
     exit(EXIT_FAILURE);
   }
   return fs;
+}
+
+void log_dump(
+  CephContext *cct,
+  const string& path,
+  const vector<string>& devs)
+{
+  BlueFS* fs = open_bluefs(cct, path, devs);
+  int r = fs->log_dump();
+  if (r < 0) {
+    cerr << "log_dump failed" << ": "
+         << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  delete fs;
 }
 
 void inferring_bluefs_devices(vector<string>& devs, std::string& path)
@@ -333,8 +329,12 @@ int main(int argc, char **argv)
     if (r < 0) {
       cerr << "error from fsck: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
+    } else if (r > 0) {
+      cerr << action << " found " << r << " error(s)" << std::endl;
+      exit(EXIT_FAILURE);
+    } else {
+      cout << action << " success" << std::endl;
     }
-    cout << action << " success" << std::endl;
   }
   else if (action == "prime-osd-dir") {
     bluestore_bdev_label_t label;

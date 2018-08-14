@@ -84,7 +84,10 @@ DaemonServer::DaemonServer(MonClient *monc_,
                       g_conf()->auth_service_required :
                       g_conf()->auth_supported),
       lock("DaemonServer"),
-      pgmap_ready(false)
+      pgmap_ready(false),
+      timer(g_ceph_context, lock),
+      shutting_down(false),
+      tick_event(nullptr)
 {
   g_conf().add_observer(this);
 }
@@ -140,6 +143,12 @@ int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
   msgr->add_dispatcher_tail(this);
 
   started_at = ceph_clock_now();
+
+  Mutex::Locker l(lock);
+  timer.init();
+
+  schedule_tick_locked(
+    g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count());
 
   return 0;
 }
@@ -341,12 +350,55 @@ void DaemonServer::maybe_ready(int32_t osd_id)
   }
 }
 
+void DaemonServer::tick()
+{
+  dout(10) << dendl;
+  send_report();
+
+  schedule_tick_locked(
+    g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count());
+}
+
+// Currently modules do not set health checks in response to events delivered to
+// all modules (e.g. notify) so we do not risk a thundering hurd situation here.
+// if this pattern emerges in the future, this scheduler could be modified to
+// fire after all modules have had a chance to set their health checks.
+void DaemonServer::schedule_tick_locked(double delay_sec)
+{
+  assert(lock.is_locked_by_me());
+
+  if (tick_event) {
+    timer.cancel_event(tick_event);
+    tick_event = nullptr;
+  }
+
+  // on shutdown start rejecting explicit requests to send reports that may
+  // originate from python land which may still be running.
+  if (shutting_down)
+    return;
+
+  tick_event = timer.add_event_after(delay_sec,
+    new FunctionContext([this](int r) {
+      tick();
+  }));
+}
+
+void DaemonServer::schedule_tick(double delay_sec)
+{
+  Mutex::Locker l(lock);
+  schedule_tick_locked(delay_sec);
+}
+
 void DaemonServer::shutdown()
 {
   dout(10) << "begin" << dendl;
   msgr->shutdown();
   msgr->wait();
   dout(10) << "done" << dendl;
+
+  Mutex::Locker l(lock);
+  shutting_down = true;
+  timer.shutdown();
 }
 
 static DaemonKey key_from_service(
@@ -661,7 +713,8 @@ bool DaemonServer::_allowed_command(
     CEPH_ENTITY_TYPE_MGR,
     s->entity_name,
     module, prefix, param_str_map,
-    cmd_r, cmd_w, cmd_x);
+    cmd_r, cmd_w, cmd_x,
+    s->get_peer_addr());
 
   dout(10) << " " << s->entity_name << " "
 	   << (capable ? "" : "not ") << "capable" << dendl;

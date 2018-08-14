@@ -33,51 +33,72 @@ import { CdUserConfig } from '../../models/cd-user-config';
   styleUrls: ['./table.component.scss']
 })
 export class TableComponent implements AfterContentChecked, OnInit, OnChanges, OnDestroy {
-  @ViewChild(DatatableComponent) table: DatatableComponent;
-  @ViewChild('tableCellBoldTpl') tableCellBoldTpl: TemplateRef<any>;
-  @ViewChild('sparklineTpl') sparklineTpl: TemplateRef<any>;
-  @ViewChild('routerLinkTpl') routerLinkTpl: TemplateRef<any>;
-  @ViewChild('checkIconTpl') checkIconTpl: TemplateRef<any>;
-  @ViewChild('perSecondTpl') perSecondTpl: TemplateRef<any>;
-  @ViewChild('executingTpl') executingTpl: TemplateRef<any>;
+  @ViewChild(DatatableComponent)
+  table: DatatableComponent;
+  @ViewChild('tableCellBoldTpl')
+  tableCellBoldTpl: TemplateRef<any>;
+  @ViewChild('sparklineTpl')
+  sparklineTpl: TemplateRef<any>;
+  @ViewChild('routerLinkTpl')
+  routerLinkTpl: TemplateRef<any>;
+  @ViewChild('checkIconTpl')
+  checkIconTpl: TemplateRef<any>;
+  @ViewChild('perSecondTpl')
+  perSecondTpl: TemplateRef<any>;
+  @ViewChild('executingTpl')
+  executingTpl: TemplateRef<any>;
 
   // This is the array with the items to be shown.
-  @Input() data: any[];
+  @Input()
+  data: any[];
   // Each item -> { prop: 'attribute name', name: 'display name' }
-  @Input() columns: CdTableColumn[];
+  @Input()
+  columns: CdTableColumn[];
   // Each item -> { prop: 'attribute name', dir: 'asc'||'desc'}
-  @Input() sorts?: SortPropDir[];
+  @Input()
+  sorts?: SortPropDir[];
   // Method used for setting column widths.
-  @Input() columnMode? = 'flex';
+  @Input()
+  columnMode? = 'flex';
   // Display the tool header, including reload button, pagination and search fields?
-  @Input() toolHeader? = true;
+  @Input()
+  toolHeader? = true;
   // Display the table header?
-  @Input() header? = true;
+  @Input()
+  header? = true;
   // Display the table footer?
-  @Input() footer? = true;
+  @Input()
+  footer? = true;
   // Page size to show. Set to 0 to show unlimited number of rows.
-  @Input() limit? = 10;
+  @Input()
+  limit? = 10;
 
   /**
    * Auto reload time in ms - per default every 5s
    * You can set it to 0, undefined or false to disable the auto reload feature in order to
    * trigger 'fetchData' if the reload button is clicked.
    */
-  @Input() autoReload: any = 5000;
+  @Input()
+  autoReload: any = 5000;
 
   // Which row property is unique for a row. If the identifier is not specified in any
   // column, then the property name of the first column is used. Defaults to 'id'.
-  @Input() identifier = 'id';
+  @Input()
+  identifier = 'id';
   // If 'true', then the specified identifier is used anyway, although it is not specified
   // in any column. Defaults to 'false'.
-  @Input() forceIdentifier = false;
+  @Input()
+  forceIdentifier = false;
   // Allows other components to specify which type of selection they want,
   // e.g. 'single' or 'multi'.
-  @Input() selectionType: string = undefined;
+  @Input()
+  selectionType: string = undefined;
   // If `true` selected item details will be updated on table refresh
-  @Input() updateSelectionOnRefresh = true;
+  @Input()
+  updateSelectionOnRefresh = true;
 
-  @Input() autoSave = true;
+  @Input()
+  autoSave = true;
 
   /**
    * Should be a function to update the input data if undefined nothing will be triggered
@@ -88,7 +109,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
    * What happens:
    * The function is triggered through one table and all tables will update
    */
-  @Output() fetchData = new EventEmitter();
+  @Output()
+  fetchData = new EventEmitter();
 
   /**
    * This should be defined if you need access to the selection object.
@@ -98,7 +120,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
    *
    * @memberof TableComponent
    */
-  @Output() updateSelection = new EventEmitter();
+  @Output()
+  updateSelection = new EventEmitter();
 
   /**
    * Use this variable to access the selected row(s).

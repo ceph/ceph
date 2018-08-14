@@ -52,6 +52,11 @@
 %else
 %bcond_without python2
 %endif
+%if 0%{?fedora}
+%bcond_without cephfs_shell
+%else
+%bcond_with cephfs_shell
+%endif
 %if 0%{without python2}
 %global _defined_if_python2_absent 1
 %endif
@@ -776,6 +781,20 @@ well as the RESTful interface. These have to do with querying the daemons for
 command-description information, validating user command input against those
 descriptions, and submitting the command to the appropriate daemon.
 
+# python3-cmd2 and python3-colorama are not available in RHEL/CentOS, openSUSE
+# or SLES
+%if 0%{?fedora}
+%package -n cephfs-shell
+Summary:    Interactive shell for Ceph file system
+Requires:   python%{python3_pkgversion}-cmd2
+Requires:   python%{python3_pkgversion}-colorama
+Requires:   python%{python3_pkgversion}-cephfs
+%description -n cephfs-shell
+This package contains an interactive tool that allows accessing a Ceph
+file system without mounting it  by providing a nice pseudo-shell which
+works like an FTP client.
+%endif
+
 %if 0%{with ceph_test_package}
 %package -n ceph-test
 Summary:	Ceph benchmarks and test tools
@@ -983,6 +1002,9 @@ ${CMAKE} .. \
     -DWITH_BOOST_CONTEXT=ON \
 %else
     -DWITH_BOOST_CONTEXT=OFF \
+%endif
+%if 0%{with cephfs_shell}
+    -DWITH_CEPHFS_SHELL=ON \
 %endif
     -DBOOST_J=$CEPH_SMP_NCPUS
 
@@ -1752,6 +1774,12 @@ fi
 %{python3_sitelib}/__pycache__/ceph_argparse.cpython*.py*
 %{python3_sitelib}/ceph_daemon.py
 %{python3_sitelib}/__pycache__/ceph_daemon.cpython*.py*
+
+%if 0%{?fedora}
+%files -n cephfs-shell
+%{python3_sitelib}/cephfs_shell-*.egg-info
+%{_bindir}/cephfs-shell
+%endif
 
 %if 0%{with ceph_test_package}
 %files -n ceph-test

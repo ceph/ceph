@@ -75,6 +75,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_MALFORMED_DOC, {400, "MalformedPolicyDocument"}},
     { ERR_INVALID_TAG, {400, "InvalidTag"}},
     { ERR_MALFORMED_ACL_ERROR, {400, "MalformedACLError" }},
+    { ERR_INVALID_CORS_RULES_ERROR, {400, "InvalidRequest" }},
     { ERR_INVALID_ENCRYPTION_ALGORITHM, {400, "InvalidEncryptionAlgorithmError" }},
     { ERR_LENGTH_REQUIRED, {411, "MissingContentLength" }},
     { EACCES, {403, "AccessDenied" }},
@@ -914,6 +915,7 @@ void RGWHTTPArgs::append(const string& name, const string& val)
 
   if ((name.compare("acl") == 0) ||
       (name.compare("cors") == 0) ||
+      (name.compare("notification") == 0) ||
       (name.compare("location") == 0) ||
       (name.compare("logging") == 0) ||
       (name.compare("usage") == 0) ||

@@ -79,12 +79,24 @@ void Beacon::shutdown()
   timer.shutdown();
 }
 
+bool Beacon::ms_can_fast_dispatch(const Message *m) const
+{
+  return m->get_type() == MSG_MDS_BEACON;
+}
+
+void Beacon::ms_fast_dispatch(Message *m)
+{
+  bool handled = ms_dispatch(m);
+  assert(handled);
+}
 
 bool Beacon::ms_dispatch(Message *m)
 {
   if (m->get_type() == MSG_MDS_BEACON) {
     if (m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
       handle_mds_beacon(static_cast<MMDSBeacon*>(m));
+    } else {
+      m->put();
     }
     return true;
   }
@@ -112,8 +124,8 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
       last_acked_stamp = seq_stamp[seq];
       utime_t rtt = now - last_acked_stamp;
 
-      dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
-	       << " seq " << m->get_seq() << " rtt " << rtt << dendl;
+      dout(5) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
+	      << " seq " << m->get_seq() << " rtt " << rtt << dendl;
 
       if (was_laggy && rtt < g_conf()->mds_beacon_grace) {
 	dout(0) << "handle_mds_beacon no longer laggy" << dendl;
@@ -123,7 +135,7 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
     } else {
       // Mark myself laggy if system clock goes backwards. Hopping
       // later beacons will clear it.
-      dout(1) << "handle_mds_beacon system clock goes backwards, "
+      dout(0) << "handle_mds_beacon system clock goes backwards, "
 	      << "mark myself laggy" << dendl;
       last_acked_stamp = now - utime_t(g_conf()->mds_beacon_grace + 1, 0);
       was_laggy = true;
@@ -139,8 +151,8 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
       waiting_cond.Signal();
     }
   } else {
-    dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
-	     << " seq " << m->get_seq() << " dne" << dendl;
+    dout(1) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
+	    << " seq " << m->get_seq() << " dne" << dendl;
   }
   m->put();
 }
@@ -191,14 +203,12 @@ void Beacon::_send()
   if (!cct->get_heartbeat_map()->is_healthy()) {
     /* If anything isn't progressing, let avoid sending a beacon so that
      * the MDS will consider us laggy */
-    dout(1) << __func__ << " skipping beacon, heartbeat map not healthy" << dendl;
+    dout(0) << __func__ << " skipping beacon, heartbeat map not healthy" << dendl;
     return;
   }
 
   ++last_seq;
-  dout(10) << __func__ << " " << ceph_mds_state_name(want_state)
-	   << " seq " << last_seq
-	   << dendl;
+  dout(5) << __func__ << " " << ceph_mds_state_name(want_state) << " seq " << last_seq << dendl;
 
   seq_stamp[last_seq] = ceph_clock_now();
 
@@ -262,13 +272,13 @@ bool Beacon::is_laggy()
   utime_t now = ceph_clock_now();
   utime_t since = now - last_acked_stamp;
   if (since > g_conf()->mds_beacon_grace) {
-    dout(5) << "is_laggy " << since << " > " << g_conf()->mds_beacon_grace
+    dout(1) << "is_laggy " << since << " > " << g_conf()->mds_beacon_grace
 	    << " since last acked beacon" << dendl;
     was_laggy = true;
     if (since > (g_conf()->mds_beacon_grace*2) &&
 	now > last_mon_reconnect + g_conf()->mds_beacon_interval) {
       // maybe it's not us?
-      dout(5) << "initiating monitor reconnect; maybe we're not the slow one"
+      dout(1) << "initiating monitor reconnect; maybe we're not the slow one"
               << dendl;
       last_mon_reconnect = now;
       monc->reopen_session();
@@ -297,7 +307,7 @@ void Beacon::set_want_state(MDSMap const *mdsmap, MDSMap::DaemonState const news
   _notify_mdsmap(mdsmap);
 
   if (want_state != newstate) {
-    dout(10) << __func__ << ": "
+    dout(5) << __func__ << ": "
       << ceph_mds_state_name(want_state) << " -> "
       << ceph_mds_state_name(newstate) << dendl;
     want_state = newstate;

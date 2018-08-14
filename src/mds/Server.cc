@@ -511,8 +511,8 @@ void Server::flush_client_sessions(set<client_t>& client_set, MDSGatherBuilder& 
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
     assert(session);
     if (!session->is_open() ||
-	!session->connection.get() ||
-	!session->connection->has_feature(CEPH_FEATURE_EXPORT_PEER))
+	!session->get_connection() ||
+	!session->get_connection()->has_feature(CEPH_FEATURE_EXPORT_PEER))
       continue;
     version_t seq = session->wait_for_flush(gather.new_sub());
     mds->send_message_client(new MClientSession(CEPH_SESSION_FLUSHMSG, seq), session);
@@ -551,13 +551,13 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     assert(session->is_opening());
     mds->sessionmap.set_state(session, Session::STATE_OPEN);
     mds->sessionmap.touch_session(session);
-    assert(session->connection != NULL);
+    assert(session->get_connection());
     MClientSession *reply = new MClientSession(CEPH_SESSION_OPEN);
     if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
       reply->supported_features = supported_features;
-    session->connection->send_message(reply);
+    session->get_connection()->send_message(reply);
     if (mdcache->is_readonly())
-      session->connection->send_message(new MClientSession(CEPH_SESSION_FORCE_RO));
+      session->get_connection()->send_message(new MClientSession(CEPH_SESSION_FORCE_RO));
   } else if (session->is_closing() ||
 	     session->is_killing()) {
     // kill any lingering capabilities, leases, requests
@@ -590,10 +590,10 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       // ms_handle_remote_reset() and realize they had in fact closed.
       // do this *before* sending the message to avoid a possible
       // race.
-      if (session->connection != NULL) {
+      if (session->get_connection()) {
         // Conditional because terminate_sessions will indiscrimately
         // put sessions in CLOSING whether they ever had a conn or not.
-        session->connection->mark_disposable();
+        session->get_connection()->mark_disposable();
       }
 
       // reset session
@@ -603,9 +603,9 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       mds->sessionmap.remove_session(session);
     } else if (session->is_killing()) {
       // destroy session, close connection
-      if (session->connection != NULL) {
-	session->connection->mark_down();
-	session->connection->set_priv(NULL);
+      if (session->get_connection()) {
+	session->get_connection()->mark_down();
+	session->get_connection()->set_priv(NULL);
       }
       mds->sessionmap.remove_session(session);
     } else {
@@ -1103,18 +1103,18 @@ void Server::infer_supported_features(Session *session, client_metadata_t& clien
     // user space client
     if (it->second.compare(0, 16, "ceph version 12.") == 0)
       supported = CEPHFS_FEATURE_LUMINOUS;
-    else if (session->connection->has_feature(CEPH_FEATURE_FS_CHANGE_ATTR))
+    else if (session->get_connection()->has_feature(CEPH_FEATURE_FS_CHANGE_ATTR))
       supported = CEPHFS_FEATURE_KRAKEN;
   } else {
     it = client_metadata.find("kernel_version");
     if (it != client_metadata.end()) {
       // kernel client
-      if (session->connection->has_feature(CEPH_FEATURE_NEW_OSDOP_ENCODING))
+      if (session->get_connection()->has_feature(CEPH_FEATURE_NEW_OSDOP_ENCODING))
 	supported = CEPHFS_FEATURE_LUMINOUS;
     }
   }
   if (supported == -1 &&
-      session->connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2))
+      session->get_connection()->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2))
     supported = CEPHFS_FEATURE_JEWEL;
 
   if (supported >= 0) {
@@ -1658,34 +1658,6 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
   }
 }
 
-
-void Server::encode_empty_dirstat(bufferlist& bl)
-{
-  static DirStat empty;
-  empty.encode(bl);
-}
-
-void Server::encode_infinite_lease(bufferlist& bl)
-{
-  LeaseStat e;
-  e.seq = 0;
-  e.mask = -1;
-  e.duration_ms = -1;
-  encode(e, bl);
-  dout(20) << "encode_infinite_lease " << e << dendl;
-}
-
-void Server::encode_null_lease(bufferlist& bl)
-{
-  LeaseStat e;
-  e.seq = 0;
-  e.mask = 0;
-  e.duration_ms = 0;
-  encode(e, bl);
-  dout(20) << "encode_null_lease " << e << dendl;
-}
-
-
 /*
  * pass inode OR dentry (not both, or we may get confused)
  *
@@ -1739,14 +1711,23 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
     if (dir->is_complete())
       dir->verify_fragstat();
 #endif
-    dir->encode_dirstat(bl, whoami);
+    DirStat ds;
+    ds.frag = dir->get_frag();
+    ds.auth = dir->get_dir_auth().first;
+    if (dir->is_auth())
+      dir->get_dist_spec(ds.dist, whoami);
+
+    dir->encode_dirstat(bl, session->info, ds);
     dout(20) << "set_trace_dist added dir  " << *dir << dendl;
 
     encode(dn->get_name(), bl);
     if (snapid == CEPH_NOSNAP)
       mds->locker->issue_client_lease(dn, client, bl, now, session);
-    else
-      encode_null_lease(bl);
+    else {
+      //null lease
+      LeaseStat e;
+      mds->locker->encode_lease(bl, session->info, e);
+    }
     dout(20) << "set_trace_dist added dn   " << snapid << " " << *dn << dendl;
   } else
     reply->head.is_dentry = 0;
@@ -2853,7 +2834,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   }
 
   if (!mds->mdsmap->get_inline_data_enabled() ||
-      !mdr->session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA))
+      !mdr->session->get_connection()->has_feature(CEPH_FEATURE_MDS_INLINE_DATA))
     in->inode.inline_data.version = CEPH_INLINE_NONE;
 
   mdcache->add_inode(in);  // add
@@ -3535,7 +3516,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   }
 
   if (cur->inode.inline_data.version != CEPH_INLINE_NONE &&
-      !mdr->session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
+      !mdr->session->get_connection()->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
     dout(7) << "old client cannot open inline data file " << *cur << dendl;
     respond_to_request(mdr, -EPERM);
     return;
@@ -3971,7 +3952,13 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 
   // start final blob
   bufferlist dirbl;
-  dir->encode_dirstat(dirbl, mds->get_nodeid());
+  DirStat ds;
+  ds.frag = dir->get_frag();
+  ds.auth = dir->get_dir_auth().first;
+  if (dir->is_auth())
+    dir->get_dist_spec(ds.dist, mds->get_nodeid());
+
+  dir->encode_dirstat(dirbl, mdr->session->info, ds);
 
   // count bytes available.
   //  this isn't perfect, but we should capture the main variable/unbounded size items!
@@ -9132,8 +9119,10 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
   if (!offset_str.empty())
     last_snapid = realm->resolve_snapname(offset_str, diri->ino());
 
+  //Empty DirStat
   bufferlist dirbl;
-  encode_empty_dirstat(dirbl);
+  static DirStat empty;
+  CDir::encode_dirstat(dirbl, mdr->session->info, empty);
 
   max_bytes -= dirbl.length() - sizeof(__u32) + sizeof(__u8) * 2;
 
@@ -9155,7 +9144,10 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
       break;
 
     encode(snap_name, dnbl);
-    encode_infinite_lease(dnbl);
+    //infinite lease
+    LeaseStat e(-1, -1, 0);
+    mds->locker->encode_lease(dnbl, mdr->session->info, e);
+    dout(20) << "encode_infinite_lease" << dendl;
 
     int r = diri->encode_inodestat(dnbl, mdr->session, realm, p->first, max_bytes - (int)dnbl.length());
     if (r < 0) {

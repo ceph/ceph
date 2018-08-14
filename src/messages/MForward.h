@@ -26,7 +26,9 @@
 
 struct MForward : public Message {
   uint64_t tid;
-  entity_inst_t client;
+  uint8_t client_type;
+  entity_addrvec_t client_addrs;
+  entity_addr_t client_socket_addr;
   MonCap client_caps;
   uint64_t con_features;
   EntityName entity_name;
@@ -34,8 +36,8 @@ struct MForward : public Message {
 
   string msg_desc;  // for operator<< only
   
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 3;
+  static const int HEAD_VERSION = 4;
+  static const int COMPAT_VERSION = 4;
 
   MForward() : Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
                tid(0), con_features(0), msg(NULL) {}
@@ -43,7 +45,11 @@ struct MForward : public Message {
   MForward(uint64_t t, PaxosServiceMessage *m, uint64_t feat) :
     Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
     tid(t), msg(NULL) {
-    client = m->get_source_inst();
+    client_type = m->get_source().type();
+    client_addrs = m->get_source_addrs();
+    if (auto con = m->get_connection()) {
+      client_socket_addr = con->get_peer_socket_addr();
+    }
     client_caps = m->get_session()->caps;
     con_features = feat;
     // we may need to reencode for the target mon
@@ -54,7 +60,11 @@ struct MForward : public Message {
            const MonCap& caps) :
     Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
     tid(t), client_caps(caps), msg(NULL) {
-    client = m->get_source_inst();
+    client_type = m->get_source().type();
+    client_addrs = m->get_source_addrs();
+    if (auto con = m->get_connection()) {
+      client_socket_addr = con->get_peer_socket_addr();
+    }
     con_features = feat;
     msg = (PaxosServiceMessage*)m->get();
   }
@@ -70,8 +80,34 @@ private:
 public:
   void encode_payload(uint64_t features) override {
     using ceph::encode;
+    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      header.version = 3;
+      header.compat_version = 3;
+      encode(tid, payload);
+      entity_inst_t client;
+      client.name = entity_name_t(client_type, -1);
+      client.addr = client_addrs.legacy_addr();
+      encode(client, payload, features);
+      encode(client_caps, payload, features);
+      // Encode client message with intersection of target and source
+      // features.  This could matter if the semantics of the encoded
+      // message are changed when reencoding with more features than the
+      // client had originally.  That should never happen, but we may as
+      // well be defensive here.
+      if (con_features != features) {
+	msg->clear_payload();
+      }
+      encode_message(msg, features & con_features, payload);
+      encode(con_features, payload);
+      encode(entity_name, payload);
+      return;
+    }
+    header.version = HEAD_VERSION;
+    header.compat_version = COMPAT_VERSION;
     encode(tid, payload);
-    encode(client, payload, features);
+    encode(client_type, payload, features);
+    encode(client_addrs, payload, features);
+    encode(client_socket_addr, payload, features);
     encode(client_caps, payload, features);
     // Encode client message with intersection of target and source
     // features.  This could matter if the semantics of the encoded
@@ -89,7 +125,17 @@ public:
   void decode_payload() override {
     auto p = payload.cbegin();
     decode(tid, p);
-    decode(client, p);
+    if (header.version < 4) {
+      entity_inst_t client;
+      decode(client, p);
+      client_type = client.name.type();
+      client_addrs = entity_addrvec_t(client.addr);
+      client_socket_addr = client.addr;
+    } else {
+      decode(client_type, p);
+      decode(client_addrs, p);
+      decode(client_socket_addr, p);
+    }
     decode(client_caps, p);
     msg = (PaxosServiceMessage *)decode_message(NULL, 0, p);
     decode(con_features, p);

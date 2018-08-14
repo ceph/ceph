@@ -95,7 +95,7 @@ public:
                 DaemonStateIndex &ds, ClusterState &cs,
                 const std::map<std::string, std::string> &kv_store,
                 MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
-                Client &client_, Finisher &f);
+                Client &client_, Finisher &f, DaemonServer &server);
   void standby_start(MonClient &mc);
 
   bool is_standby_running() const

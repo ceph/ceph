@@ -9,10 +9,13 @@ import { ChartTooltip } from '../../../shared/models/chart-tooltip';
   styleUrls: ['./sparkline.component.scss']
 })
 export class SparklineComponent implements OnInit, OnChanges {
-  @ViewChild('sparkCanvas') chartCanvasRef: ElementRef;
-  @ViewChild('sparkTooltip') chartTooltipRef: ElementRef;
+  @ViewChild('sparkCanvas')
+  chartCanvasRef: ElementRef;
+  @ViewChild('sparkTooltip')
+  chartTooltipRef: ElementRef;
 
-  @Input() data: any;
+  @Input()
+  data: any;
   @Input()
   style = {
     height: '30px',
