@@ -132,6 +132,7 @@ def locate_file(name, case_sensitive=True):
 
 
 def get_all_possible_paths(pattern):
+    complete_pattern = pattern[:]
     paths = []
     is_rel_path = not os.path.isabs(pattern)
     if is_rel_path:
@@ -145,7 +146,7 @@ def get_all_possible_paths(pattern):
     for pattern in patterns:
         for path in paths:
             paths.extend(glob(path, pattern))
-    return [path for path in paths if fnmatch.fnmatch(path, '/'*is_rel_path + pattern)]
+    return [path for path in paths if fnmatch.fnmatch(path, os.path.join(cephfs.getcwd().decode('utf-8'), complete_pattern))]
 
 
 suffixes = ['B', 'K', 'M', 'G', 'T', 'P']
@@ -636,10 +637,10 @@ sub-directories, files')
             else:
                 is_pattern = False
             path = ''
-            dir_path = os.path.normpath(dir_path)
+            dir_path = os.path.normpath(os.path.join(cephfs.getcwd().decode('utf-8'), dir_path))
             if args.parent:
                 files = reversed(
-                    sorted(set(dirwalk(cephfs.getcwd().decode('utf-8') + dir_path))))
+                    sorted(set(dirwalk(dir_path))))
                 for path in files:
                     path = os.path.normpath(path)
                     if path[1:] != dir_path:
