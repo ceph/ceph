@@ -224,7 +224,7 @@ def print_list(shell, words, termwidth=79):
             word = words[i]
             if word[0] == '\x1b':
                 shell.poutput(
-                    '%-*s' % (width + 9, words[i]), end='\n' if i + nrows >= nwords else '')
+                    '%-*s' % (width + 10, words[i]), end='\n' if i + nrows >= nwords else '')
             else:
                 shell.poutput(
                     '%-*s' % (width, words[i]), end='\n' if i + nrows >= nwords else '')
@@ -722,7 +722,7 @@ sub-directories, files')
         """
         Get current working directory.
         """
-        self.poutput(cephfs.getcwd())
+        self.poutput(cephfs.getcwd().decode('utf-8'))
 
     def complete_chmod(self, text, line, begidx, endidx):
         """
