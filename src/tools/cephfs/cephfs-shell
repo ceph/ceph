@@ -124,6 +124,13 @@ def glob(dir_name, pattern):
     return paths
 
 
+def locate_file(name, case_sensitive=True):
+    if not case_sensitive:
+        return [i for i in sorted(set(dirwalk(cephfs.getcwd().decode('utf-8')))) if name.lower() in i.lower()]
+    else:
+        return [i for i in sorted(set(dirwalk(cephfs.getcwd().decode('utf-8')))) if name in i]
+
+
 def get_all_possible_paths(pattern):
     paths = []
     is_rel_path = not os.path.isabs(pattern)
@@ -231,8 +238,7 @@ def copy_from_local(shell, local_path, remote_path):
         file_ = open(local_path, 'rb')
         stdin = 1
         file_size = os.path.getsize(local_path)
-    #     return
-    fd = cephfs.open(to_bytes(remote_path), 'w', 0o666)
+    fd = cephfs.open(to_bytes(remote_path), 'w', 0o666) 
     if file_size == 0:
         return
     progress = 0
@@ -251,13 +257,13 @@ def copy_from_local(shell, local_path, remote_path):
 
 
 def copy_to_local(shell, remote_path, local_path):
-    local_dir = os.path.dirname(local_path)
-    if not os.path.exists(local_dir):
-        os.makedirs(local_dir)
     fd = None
-    if len(remote_path.rsplit('/', 1)) > 2 and remote_path.rsplit('/', 1)[1] == '':
-        return
     if local_path != '-':
+        local_dir = os.path.dirname(local_path)
+        if not os.path.exists(local_dir):
+            os.makedirs(local_dir)
+        if len(remote_path.rsplit('/', 1)) > 2 and remote_path.rsplit('/', 1)[1] == '':
+            return
         fd = open(local_path, 'wb+')
     file_ = cephfs.open(to_bytes(remote_path), 'r')
     file_size = cephfs.stat(remote_path).st_size
@@ -286,11 +292,12 @@ def dirwalk(dir_name):
         yield fullpath.rsplit('/', 1)[0] + '/'
         if is_dir_exists(item.d_name, fullpath.rsplit('/', 1)[0]):
             if not len(list_items(fullpath)[2:]):
-                yield fullpath
+                yield os.path.normpath(fullpath)
             else:
-                return dirwalk(fullpath)
+                for x in dirwalk(fullpath): 
+                    yield x 
         else:
-            yield fullpath
+            yield os.path.normpath(fullpath)
 
 
 class CephFSShell(Cmd):
@@ -430,10 +437,8 @@ exists.')
         root_dst_dir = args.remote_path
         if args.local_path == '.':
             root_src_dir = os.getcwd()
-        if root_dst_dir == '.' and (root_src_dir.count('/') > 0 and root_src_dir[-1] != '/'):
-            root_dst_dir = root_src_dir.rsplit('/', 1)[1]
-        elif args.remote_path == '.':
-            root_dst_dir = cephfs.getcwd().decode('utf-8')
+        if root_dst_dir == '.':
+            root_dst_dir = root_src_dir.rsplit('/',1)[1]
         elif root_dst_dir[-1] != '/':
             root_dst_dir += '/'
         if args.local_path == '-' or os.path.isfile(root_src_dir):
@@ -441,19 +446,21 @@ exists.')
         else:
             for src_dir, dirs, files in os.walk(root_src_dir):
                 dst_dir = src_dir.replace(root_src_dir, root_dst_dir, 1)
-                if not args.force and dst_dir != '/':
+                dst_dir = re.sub('\/+', '/', '/'+ dst_dir)
+                if args.force and dst_dir != '/' and not is_dir_exists(dst_dir[:-1]) and len(locate_file(dst_dir)) == 0:
                     cephfs.mkdirs(to_bytes(dst_dir), 0o777)
-                elif args.force and dst_dir != '/' and not is_dir_exists(dst_dir[:-1]):
-                    cephfs.mkdirs(to_bytes(dst_dir), 0o777)
-                if not args.force and not is_dir_exists(dst_dir) and not os.path.isfile(root_src_dir) and root_dst_dir != '/':
+                if not args.force and dst_dir != '/' and not is_dir_exists(dst_dir) and not os.path.isfile(root_src_dir):
                     args.force = True
                     cephfs.mkdirs(to_bytes(dst_dir), 0o777)
+                for dir_ in dirs:
+                    if not is_dir_exists(os.path.join(dst_dir, dir_)):
+                        cephfs.mkdirs(to_bytes(os.path.join(dst_dir, dir_)), 0o777)
                 for file_ in files:
                     src_file = os.path.join(src_dir, file_)
-                    dst_file = os.path.join(dst_dir, file_)
+                    dst_file = re.sub('\/+', '/', '/'+ dst_dir + '/'+ file_)
                     if (not args.force) and is_file_exists(dst_file):
                         return
-                    copy_from_local(self, src_file, dst_file)
+                    copy_from_local(self, src_file, os.path.join(cephfs.getcwd().decode('utf-8'), dst_file))
 
     def complete_get(self, text, line, begidx, endidx):
         """
@@ -873,14 +880,12 @@ sub-directories, files')
             if args.name[0] == '*':
                 args.name += '/'
             elif args.name[-1] == '*':
-                args.name = '/' + args.name
+                args.name = '/'+ args.name
         args.name = args.name.replace('*', '')
         if args.ignorecase:
-            locations = [i for i in sorted(
-                set(dirwalk(cephfs.getcwd().decode('utf-8')))) if args.name.lower() in i.lower()]
+            locations = locate_file(args.name, False)
         else:
-            locations = [i for i in sorted(
-                set(dirwalk(cephfs.getcwd().decode('utf-8')))) if args.name in i]
+            locations = locate_file(args.name)
         if args.count:
             self.poutput(len(locations))
         else:
