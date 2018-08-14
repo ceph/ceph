@@ -2400,7 +2400,7 @@ int RGWRados::init_complete()
     return ret;
   }
 
-  if (is_meta_master()) {
+  if (zone_svc->is_meta_master()) {
     auto md_log = meta_mgr->get_log(current_period.get_id());
     meta_notifier = new RGWMetaNotifier(this, md_log);
     meta_notifier->start();
@@ -2523,6 +2523,17 @@ int RGWRados::initialize()
   inject_notify_timeout_probability =
     cct->_conf.get_val<double>("rgw_inject_notify_timeout_probability");
   max_notify_retries = cct->_conf.get_val<uint64_t>("rgw_max_notify_retries");
+
+  svc_registry = std::make_unique<RGWServiceRegistry>();
+  svc_registry->register_all();
+
+  JSONFormattable zone_svc_conf;
+  ret = svc_registry->get_instance("zone", zone_svc_conf, &zone_svc);
+  if (ret < 0) {
+    return ret;
+  }
+
+  host_id = zone_svc->gen_host_id();
 
   ret = init_rados();
   if (ret < 0)
@@ -6318,15 +6329,6 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
                             nullptr, nullptr, nullptr, nullptr, nullptr);
-}
-
-bool RGWRados::is_meta_master()
-{
-  if (!get_zonegroup().is_master_zonegroup()) {
-    return false;
-  }
-
-  return (get_zonegroup().master_zone == zone_public_config.id);
 }
 
 /**
@@ -11866,7 +11868,6 @@ int RGWRados::get_bucket_index_object(const string& bucket_oid_base, const strin
   }
   return r;
 }
-
 
 uint64_t RGWRados::instance_id()
 {

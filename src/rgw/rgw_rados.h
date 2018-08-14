@@ -28,6 +28,7 @@
 #include "rgw_sync_log_trim.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_rados.h"
 
 class RGWWatcher;
 class SafeTimer;
@@ -995,45 +996,39 @@ struct RGWListRawObjsCtx {
   RGWListRawObjsCtx() : initialized(false) {}
 };
 
-struct RGWDefaultSystemMetaObjInfo {
-  string default_id;
+struct objexp_hint_entry {
+  string tenant;
+  string bucket_name;
+  string bucket_id;
+  rgw_obj_key obj_key;
+  ceph::real_time exp_time;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(default_id, bl);
+    ENCODE_START(2, 1, bl);
+    encode(bucket_name, bl);
+    encode(bucket_id, bl);
+    encode(obj_key, bl);
+    encode(exp_time, bl);
+    encode(tenant, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(default_id, bl);
+    // XXX Do we want DECODE_START_LEGACY_COMPAT_LEN(2, 1, 1, bl); ?
+    DECODE_START(2, bl);
+    decode(bucket_name, bl);
+    decode(bucket_id, bl);
+    decode(obj_key, bl);
+    decode(exp_time, bl);
+    if (struct_v >= 2) {
+      decode(tenant, bl);
+    } else {
+      tenant.clear();
+    }
     DECODE_FINISH(bl);
   }
-
-  void dump(Formatter *f) const;
-  void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWDefaultSystemMetaObjInfo)
-
-struct RGWNameToId {
-  string obj_id;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(obj_id, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(obj_id, bl);
-    DECODE_FINISH(bl);
-  }
-
-  void dump(Formatter *f) const;
-  void decode_json(JSONObj *obj);
-};
-WRITE_CLASS_ENCODER(RGWNameToId)
+WRITE_CLASS_ENCODER(objexp_hint_entry)
 
 class RGWDataChangesLog;
 class RGWMetaSyncStatusManager;
@@ -1068,13 +1063,6 @@ public:
 
 class RGWGetDirHeader_CB;
 class RGWGetUserHeader_CB;
-
-struct rgw_rados_ref {
-  rgw_pool pool;
-  string oid;
-  string key;
-  librados::IoCtx ioctx;
-};
 
 class RGWChainedCache {
 public:
@@ -1328,7 +1316,7 @@ protected:
   RGWSyncModuleInstanceRef sync_module;
   bool writeable_zone{false};
 
-
+  RGWServiceRegistryRef svc_registry;
   std::shared_ptr<RGWSI_Zone> zone_svc;
 
   RGWIndexCompletionManager *index_completion_manager{nullptr};
@@ -1368,19 +1356,7 @@ public:
    * AmazonS3 errors contain a HostId string, but is an opaque base64 blob; we
    * try to be more transparent. This has a wrapper so we can update it when zonegroup/zone are changed.
    */
-  void init_host_id() {
-    /* uint64_t needs 16, two '-' separators and a trailing null */
-    const string& zone_name = get_zone().name;
-    const string& zonegroup_name = zonegroup.get_name();
-    char charbuf[16 + zone_name.size() + zonegroup_name.size() + 2 + 1];
-    snprintf(charbuf, sizeof(charbuf), "%llx-%s-%s", (unsigned long long)instance_id(), zone_name.c_str(), zonegroup_name.c_str());
-    string s(charbuf);
-    host_id = s;
-  }
-
   string host_id;
-
-  RGWRealm realm;
 
   RGWRESTConn *rest_master_conn;
   map<string, RGWRESTConn *> zone_conn_map;
@@ -1419,26 +1395,11 @@ public:
   }
 
   const RGWQuotaInfo& get_bucket_quota() {
-    return current_period.get_config().bucket_quota;
+    return zone_svc->get_current_period().get_config().bucket_quota;
   }
 
   const RGWQuotaInfo& get_user_quota() {
-    return current_period.get_config().user_quota;
-  }
-
-  const string& get_current_period_id() {
-    return current_period.get_id();
-  }
-
-  bool has_zonegroup_api(const std::string& api) const {
-    if (!current_period.get_id().empty()) {
-      const auto& zonegroups_by_api = current_period.get_map().zonegroups_by_api;
-      if (zonegroups_by_api.find(api) != zonegroups_by_api.end())
-        return true;
-    } else if (zonegroup.api_name == api) {
-        return true;
-    }
-    return false;
+    return zone_svc->current_period.get_config().user_quota;
   }
 
   // pulls missing periods for period_history
@@ -1555,12 +1516,6 @@ public:
   int create_pool(const rgw_pool& pool);
 
   int init_bucket_index(RGWBucketInfo& bucket_info, int num_shards);
-  int select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
-                              string *pselected_rule_name, RGWZonePlacementInfo *rule_info);
-  int select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info);
-  int select_new_bucket_location(RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
-                                 string *pselected_rule_name, RGWZonePlacementInfo *rule_info);
-  int select_bucket_location_by_rule(const string& location_rule, RGWZonePlacementInfo *rule_info);
   void create_bucket_id(string *bucket_id);
 
   bool get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool);
@@ -2166,8 +2121,6 @@ public:
    */
   int delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, bool check_empty = true);
 
-  bool is_meta_master();
-
   /**
    * Check to see if the bucket metadata is synced
    */
@@ -2602,10 +2555,7 @@ public:
   uint64_t instance_id();
 
   string unique_id(uint64_t unique_num) {
-    char buf[32];
-    snprintf(buf, sizeof(buf), ".%llu.%llu", (unsigned long long)instance_id(), (unsigned long long)unique_num);
-    string s = get_zone_params().get_id() + buf;
-    return s;
+    return zone_svc->unique_id(unique_num);
   }
 
   void init_unique_trans_id_deps() {
@@ -2635,24 +2585,6 @@ public:
              (unsigned long long)timestamp);
 
     return string(buf) + trans_id_suffix;
-  }
-
-  void get_log_pool(rgw_pool& pool) {
-    pool = get_zone_params().log_pool;
-  }
-
-  bool need_to_log_data() {
-    return get_zone().log_data;
-  }
-
-  bool need_to_log_metadata() {
-    return is_meta_master() &&
-      (get_zonegroup().zones.size() > 1 || current_period.is_multi_zonegroups_with_zones());
-  }
-
-  bool can_reshard() const {
-    return current_period.get_id().empty() ||
-      (zonegroup.zones.size() == 1 && current_period.is_single_zonegroup());
   }
 
   librados::Rados* get_rados_handle();
