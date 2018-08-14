@@ -23,12 +23,18 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_subdirectory(src)
-add_subdirectory(sim)
 
-enable_testing()
-add_subdirectory(test)
-add_subdirectory(support/test)
-add_test(NAME dmclock-tests
-  COMMAND $<TARGET_FILE:dmclock-tests>)
-add_test(NAME dmclock-data-struct-tests
-  COMMAND $<TARGET_FILE:dmclock-data-struct-tests>)
+# Determine if dmclock is built as a subproject (using add_subdirectory)
+# or if it is the master project.
+set(MASTER_PROJECT FALSE)
+if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+  set(MASTER_PROJECT TRUE)
+endif()
+
+option(dmclock_TEST "Generate test targets" ${MASTER_PROJECT})
+if(dmclock_TEST)
+  enable_testing()
+  add_subdirectory(test)
+  add_subdirectory(support/test)
+  add_subdirectory(sim)
+endif()
