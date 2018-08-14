@@ -1219,6 +1219,7 @@ OPTION(filestore_kill_at, OPT_INT)            // inject a failure at the n'th op
 OPTION(filestore_inject_stall, OPT_INT)       // artificially stall for N seconds in op queue thread
 OPTION(filestore_fail_eio, OPT_BOOL)       // fail/crash on EIO
 OPTION(filestore_debug_verify_split, OPT_BOOL)
+OPTION(filestore_auto_split_dirs, OPT_BOOL)
 OPTION(journal_dio, OPT_BOOL)
 OPTION(journal_aio, OPT_BOOL)
 OPTION(journal_force_aio, OPT_BOOL)

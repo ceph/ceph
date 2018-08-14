@@ -745,12 +745,41 @@ bool HashIndex::must_merge(const subdir_info_s &info) {
 }
 
 bool HashIndex::must_split(const subdir_info_s &info, int target_level) {
-  // target_level is used for ceph-objectstore-tool to split dirs offline.
-  // if it is set (defalult is 0) and current hash level < target_level, 
-  // this dir would be split no matters how many objects it has.
-  return (info.hash_level < (unsigned)MAX_HASH_LEVEL &&
-         ((target_level > 0 && info.hash_level < (unsigned)target_level) ||
-         (info.objs > ((unsigned)(abs(merge_threshold) * split_multiplier + settings.split_rand_factor) * 16))));
+  uint64_t split_hard_threshold = abs(merge_threshold) * split_multiplier * 16;
+
+  // if the number of objects is *TWO* times more than 
+  // expected split threshold without rand factor, 
+  // just ignore filestore_auto_split_dirs setting.
+  if (!cct->_conf->filestore_auto_split_dirs) { 
+    if (info.objs < (split_hard_threshold * 2)) {
+      dout(25) << __func__ << " auto split dirs disabled and current dir has " 
+               << info.objs << " objects (less than 2 * " << split_hard_threshold 
+               << "), no splitting this time." << dendl;
+      return false;
+    } else {
+      dout(25) << __func__ << " auto split dirs disabled but current dir has " 
+               << info.objs << " objects (more than 2 * " << split_hard_threshold 
+               << "), ignoring filestore_auto_split_dirs setting." << dendl;
+    }
+  }
+
+  if (info.hash_level < (unsigned)MAX_HASH_LEVEL) {
+
+    // target_level is used for ceph-objectstore-tool to split dirs offline.
+    // if it is set (default is 0) and current hash level < target_level, 
+    // this dir would be split no matters how many objects it has.
+    if (target_level > 0 && info.hash_level < (unsigned)target_level) {
+      return true;      
+    } 
+
+    // normal case to check split condition 
+    uint64_t split_rand_threshold = (abs(merge_threshold) * split_multiplier 
+                                    + settings.split_rand_factor) * 16;
+    if (info.objs > split_rand_threshold) {
+      return true;
+    }
+  }
+  return false;
 }
 
 int HashIndex::initiate_merge(const vector<string> &path, subdir_info_s info) {
