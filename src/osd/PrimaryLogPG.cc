@@ -10382,32 +10382,22 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     }
   }
 
-  for (set<pg_shard_t>::const_iterator i = acting_recovery_backfill.begin();
-       i != acting_recovery_backfill.end();
-       ++i) {
-    pg_shard_t peer(*i);
-    if (peer == pg_whoami) continue;
-    if (async_recovery_targets.count(peer) && peer_missing[peer].is_missing(soid)) {
-      for (auto &&entry: ctx->log) {
-	missing_loc.add_missing(soid, ctx->at_version, eversion_t(), entry.is_delete());
-      }
-    }
-  }
-
-  dout(30) << __func__ << " missing_loc before: " << missing_loc.get_locations(soid) << dendl;
-
   if (requires_missing_loc) {
-    // clear out missing_loc
-    missing_loc.clear_location(soid);
-    for (set<pg_shard_t>::const_iterator i = actingset.begin();
-         i != actingset.end();
-         ++i) {
-      pg_shard_t peer(*i);
-      if (!peer_missing[peer].is_missing(soid))
-        missing_loc.add_location(soid, peer);
+    for (auto &&entry: ctx->log) {
+      dout(30) << __func__ << " missing_loc before: "
+               << missing_loc.get_locations(entry.soid) << dendl;
+      missing_loc.add_missing(entry.soid, entry.version,
+                              eversion_t(), entry.is_delete());
+      // clear out missing_loc
+      missing_loc.clear_location(entry.soid);
+      for (auto &i: actingset) {
+        if (!peer_missing[i].is_missing(entry.soid))
+          missing_loc.add_location(entry.soid, i);
+      }
+      dout(30) << __func__ << " missing_loc after: "
+               << missing_loc.get_locations(entry.soid) << dendl;
     }
   }
-  dout(30) << __func__ << " missing_loc after: " << missing_loc.get_locations(soid) << dendl;
 
   pgbackend->submit_transaction(
     soid,
