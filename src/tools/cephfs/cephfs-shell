@@ -668,7 +668,7 @@ sub-directories, files')
         files = args.file_paths
         for file_path in files:
             if file_path.count('*') > 0:
-                files.extend(get_all_possible_paths(file_path))
+                files.extend([i for i in get_all_possible_paths(file_path) if is_file_exists(i)])
             else:
                 cephfs.unlink(to_bytes(file_path))
 
