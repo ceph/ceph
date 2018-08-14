@@ -1,5 +1,7 @@
 :orphan:
 
+.. _osdmaptool:
+
 ======================================================
  osdmaptool -- ceph osd cluster map manipulation tool
 ======================================================
