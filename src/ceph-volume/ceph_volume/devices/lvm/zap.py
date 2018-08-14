@@ -86,6 +86,7 @@ class Zap(object):
         # name of device
         pvs = api.PVolumes()
         pvs.filter(pv_name=device)
+        vgs = set([pv.vg_name for pv in pvs])
         for pv in pvs:
             vg_name = pv.vg_name
             lv = api.get_lv(vg_name=vg_name, lv_uuid=pv.lv_uuid)
@@ -93,15 +94,12 @@ class Zap(object):
             if lv:
                 self.unmount_lv(lv)
 
-        if args.destroy and pvs:
-            logger.info("Found a physical volume created from %s, will destroy all it's vgs and lvs", device)
-            vg_name = pv.vg_name
-            mlogger.info("Destroying volume group %s because --destroy was given", vg_name)
-            api.remove_vg(vg_name)
+        if args.destroy:
+            for vg_name in vgs:
+                mlogger.info("Destroying volume group %s because --destroy was given", vg_name)
+                api.remove_vg(vg_name)
             mlogger.info("Destroying physical volume %s because --destroy was given", device)
             api.remove_pv(device)
-        elif args.destroy and not pvs:
-            mlogger.info("Skipping --destroy because no associated physical volumes are found for %s", device)
 
         wipefs(path)
         zap_data(path)
