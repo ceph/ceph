@@ -21,11 +21,14 @@ try:
 except ImportError:
     def with_argparser(argparser):
         import functools
+
         def argparser_decorator(func):
             @functools.wraps(func)
             def wrapper(thiz, cmdline):
-                # do not split if it's already a list
-                if not isinstance(cmdline, list):
+                if isinstance(cmdline, list):
+                    arglist = cmdline
+                else:
+                    # do not split if it's already a list
                     arglist = shlex.split(cmdline, posix=False)
                     # in case user quotes the command args
                     arglist = [arg.strip('\'""') for arg in arglist]
@@ -119,7 +122,8 @@ def glob(dir_name, pattern):
             if fnmatch.fnmatch(i.d_name.decode('utf-8'), pattern):
                 paths.append(os.path.join(dir_name, i.d_name.decode('utf-8')))
     return paths
-       
+
+
 def get_all_possible_paths(pattern):
     paths = []
     is_rel_path = not os.path.isabs(pattern)
