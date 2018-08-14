@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <boost/utility/string_ref.hpp>
 
 #include "common/ceph_json.h"
@@ -1996,6 +1999,12 @@ public:
           call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, store, obj, attrs));
         }
       }
+      if (info.syncstopped) {
+        retcode = -ENOENT;
+      }
+      if (retcode < 0) {
+        return set_cr_error(retcode);
+      }
       return set_cr_done();
     }
     return 0;
@@ -3220,6 +3229,12 @@ int RGWRunBucketSyncCoroutine::operate()
 
     if (sync_status.state == rgw_bucket_shard_sync_info::StateInit) {
       yield call(new RGWInitBucketShardSyncStatusCoroutine(sync_env, bs, sync_status));
+      if (retcode == -ENOENT) {
+        tn->log(0, "bucket sync disabled");
+        lease_cr->go_down();
+        drain_all();
+        return set_cr_done();
+      }
       if (retcode < 0) {
         tn->log(0, SSTR("ERROR: init sync on bucket failed, retcode=" << retcode));
         lease_cr->go_down();
