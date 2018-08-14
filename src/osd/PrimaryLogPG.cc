@@ -12678,7 +12678,8 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
   assert(!acting_recovery_backfill.empty());
   // choose replicas to recover, replica has the shortest missing list first
   // so we can bring it back to normal ASAP
-  std::vector<std::pair<unsigned int, pg_shard_t>> replicas_by_num_missing;
+  std::vector<std::pair<unsigned int, pg_shard_t>> replicas_by_num_missing,
+    async_by_num_missing;
   replicas_by_num_missing.reserve(acting_recovery_backfill.size() - 1);
   for (auto &p: acting_recovery_backfill) {
     if (p == get_primary()) {
@@ -12688,16 +12689,24 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
     assert(pm != peer_missing.end());
     auto nm = pm->second.num_missing();
     if (nm != 0) {
-      replicas_by_num_missing.push_back(make_pair(nm, p));
+      if (async_recovery_targets.count(p)) {
+        async_by_num_missing.push_back(make_pair(nm, p));
+      } else {
+        replicas_by_num_missing.push_back(make_pair(nm, p));
+      }
     }
   }
   // sort by number of missing objects, in ascending order.
-  std::sort(replicas_by_num_missing.begin(), replicas_by_num_missing.end(),
-    [](const std::pair<unsigned int, pg_shard_t> &lhs,
-       const std::pair<unsigned int, pg_shard_t> &rhs) {
-      return lhs.first < rhs.first;
-    }
-  );
+  auto func = [](const std::pair<unsigned int, pg_shard_t> &lhs,
+                 const std::pair<unsigned int, pg_shard_t> &rhs) {
+    return lhs.first < rhs.first;
+  };
+  // acting goes first
+  std::sort(replicas_by_num_missing.begin(), replicas_by_num_missing.end(), func);
+  // then async_recovery_targets
+  std::sort(async_by_num_missing.begin(), async_by_num_missing.end(), func);
+  replicas_by_num_missing.insert(replicas_by_num_missing.end(),
+    async_by_num_missing.begin(), async_by_num_missing.end());
   for (auto &replica: replicas_by_num_missing) {
     pg_shard_t &peer = replica.second;
     assert(peer != get_primary());
