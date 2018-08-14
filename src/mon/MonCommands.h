@@ -834,7 +834,7 @@ COMMAND("osd reweightn " \
 	"reweight osds with {<id>: <weight>,...})",
 	"osd", "rw", "cli,rest")
 COMMAND("osd force-create-pg " \
-	"name=pgid,type=CephPgid,"\
+	"name=pgid,type=CephPgid "\
         "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"force creation of pg <pgid>",
         "osd", "rw", "cli,rest")
