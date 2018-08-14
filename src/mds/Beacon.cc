@@ -92,7 +92,7 @@ bool Beacon::ms_dispatch2(const Message::ref& m)
 {
   if (m->get_type() == MSG_MDS_BEACON) {
     if (m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-      handle_mds_beacon(boost::static_pointer_cast<MMDSBeacon::const_ref::element_type, std::remove_reference<decltype(m)>::type::element_type>(m));
+      handle_mds_beacon(MMDSBeacon::msgref_cast(m));
     }
     return true;
   }
