@@ -17,14 +17,23 @@
 
 #include <stdint.h>
 #include <string>
+#include <vector>
 
 namespace PriorityCache {
   enum Priority {
-    PRI0,  // Reserved for special items
-    PRI1,  // High priority cache items
-    PRI2,  // Medium priority cache items
-    PRI3,  // Low priority cache items
-    LAST = PRI3,
+    PRI0,
+    PRI1,
+    PRI2,
+    PRI3,
+    PRI4,
+    PRI5,
+    PRI6,
+    PRI7,
+    PRI8,
+    PRI9,
+    PRI10,
+    PRI11,
+    LAST = PRI11,
   };
 
   int64_t get_chunk(uint64_t usage, uint64_t total_bytes);
@@ -67,6 +76,19 @@ namespace PriorityCache {
 
     // Get the name of this cache.
     virtual std::string get_cache_name() const = 0;
+
+    // Rotate the bins
+    virtual void rotate_bins() = 0;
+
+    // Import user intervals (from PRI1 to LAST-1)
+    virtual void import_intervals(const std::vector<uint64_t> &intervals) = 0;
+
+    // Set intervals (PRI0 and LAST should be ignored)
+    virtual void set_intervals(PriorityCache::Priority pri, uint64_t end_interval) = 0;
+
+    // Get intervals
+    virtual uint64_t get_intervals(PriorityCache::Priority pri) const = 0;
+;
   };
 }
 

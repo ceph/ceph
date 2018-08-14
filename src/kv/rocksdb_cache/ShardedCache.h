@@ -88,6 +88,9 @@ class ShardedCache : public rocksdb::Cache, public PriorityCache::PriCache {
 
   int GetNumShardBits() const { return num_shard_bits_; }
 
+  virtual uint32_t _get_bin_count() const = 0;
+  virtual void _set_bin_count(uint32_t count) = 0;
+
   // PriCache
   virtual int64_t get_cache_bytes(PriorityCache::Priority pri) const {
     return cache_bytes[pri];
@@ -112,6 +115,46 @@ class ShardedCache : public rocksdb::Cache, public PriorityCache::PriCache {
   virtual void set_cache_ratio(double ratio) {
     cache_ratio = ratio;
   }
+  virtual uint64_t get_intervals(PriorityCache::Priority pri) const {
+    if (pri > PriorityCache::Priority::PRI0 &&
+        pri < PriorityCache::Priority::LAST) {
+      return intervals[pri];
+    }
+    return 0;
+  }
+  virtual void set_intervals(PriorityCache::Priority pri, uint64_t end_interval) {
+    if (pri <= PriorityCache::Priority::PRI0 &&
+        pri >= PriorityCache::Priority::LAST) {
+      return;
+    }
+    intervals[pri] = end_interval;
+    uint64_t max = 0;
+    for (int pri = 1; pri < PriorityCache::Priority::LAST; pri++) {
+      if (intervals[pri] > max) {
+        max = intervals[pri];
+      }
+    }
+    if (max != _get_bin_count()) {
+      _set_bin_count(max);
+    }
+  }
+  virtual void import_intervals(const std::vector<uint64_t> &intervals_v) {
+    uint64_t max = 0;
+    for (int pri = 1; pri < PriorityCache::Priority::LAST; pri++) {
+      unsigned i = (unsigned) pri - 1;
+      if (i < intervals_v.size()) {
+        intervals[pri] = intervals_v[i];
+        if (intervals[pri] > max) {
+          max = intervals[pri];
+        }
+      } else {
+        intervals[pri] = 0;
+      }
+    }
+    if (max != _get_bin_count()) {
+      _set_bin_count(max);
+    }
+  }
   virtual std::string get_cache_name() const = 0;
 
  private:
@@ -125,7 +168,7 @@ class ShardedCache : public rocksdb::Cache, public PriorityCache::PriCache {
     return (num_shard_bits_ > 0) ? (hash >> (32 - num_shard_bits_)) : 0;
   }
 
-
+  uint64_t intervals[PriorityCache::Priority::LAST+1] = {0};
   int64_t cache_bytes[PriorityCache::Priority::LAST+1] = {0};
   double cache_ratio = 0;
 

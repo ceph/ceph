@@ -4190,6 +4190,19 @@ std::vector<Option> get_global_options() {
     .add_see_also("bluestore_cache_autotune")
     .set_description("The number of seconds to wait between rebalances when cache autotune is enabled."),
 
+    Option("bluestore_cache_autotune_kv_intervals", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("1 2 6 24 120 720 0 0 0 0")
+    .add_see_also("bluestore_cache_autotune_interval")
+    .set_description("A 10 element, space separated list of cache age intervals grouped by priority such that PRI1=[0,n), PRI2=[n,n+1), PRI3=[n+1,n+2) ... PRI10=[n+8,n+9)"),
+    Option("bluestore_cache_autotune_meta_intervals", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("0 0 1 2 6 24 120 720 0 0")
+    .add_see_also("bluestore_cache_autotune_interval")
+    .set_description("A 10 element, space separated list of cache age intervals grouped by priority such that PRI1=[0,n), PRI2=[n,n+1), PRI3=[n+1,n+2) ... PRI10=[n+8,n+9)"),
+    Option("bluestore_cache_autotune_data_intervals", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("0 0 0 0 1 2 6 24 120 720")
+    .add_see_also("bluestore_cache_autotune_interval")
+    .set_description("A 10 element, space separated list of cache age intervals grouped by priority such that PRI1=[0,n), PRI2=[n,n+1), PRI3=[n+1,n+2) ... PRI10=[n+8,n+9)"),
+
     Option("bluestore_kvbackend", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("rocksdb")
     .set_flag(Option::FLAG_CREATE)

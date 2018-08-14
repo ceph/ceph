@@ -12,6 +12,7 @@
 
 #include <string>
 #include <mutex>
+#include <boost/circular_buffer.hpp> 
 
 #include "ShardedCache.h"
 #include "common/autovector.h"
@@ -55,6 +56,7 @@ std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(
     double high_pri_pool_ratio = 0.0);
 
 struct BinnedLRUHandle {
+  std::shared_ptr<uint64_t> age_bin;
   void* value;
   void (*deleter)(const rocksdb::Slice&, void* value);
   BinnedLRUHandle* next_hash;
@@ -230,6 +232,18 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // Retrieves high pri pool usage
   size_t GetHighPriPoolUsage() const;
 
+  // Rotate the bins
+  void rotate_bins();
+
+  // Get the bin count
+  uint32_t _get_bin_count() const;
+
+  // Set the bin count
+  void _set_bin_count(uint32_t count);
+
+  // Get the byte counts for a range of age bins
+  uint64_t sum_bins(uint32_t start, uint32_t end) const;
+
  private:
   void LRU_Remove(BinnedLRUHandle* e);
   void LRU_Insert(BinnedLRUHandle* e);
@@ -295,6 +309,9 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // We don't count mutex_ as the cache's internal state so semantically we
   // don't mind mutex_ invoking the non-const actions.
   mutable std::mutex mutex_;
+
+  // Circular buffer of byte counters for age binning
+  boost::circular_buffer<std::shared_ptr<uint64_t>> age_bins;
 };
 
 class BinnedLRUCache : public ShardedCache {
@@ -325,10 +342,16 @@ class BinnedLRUCache : public ShardedCache {
   virtual int64_t get_committed_size() const {
     return GetCapacity();
   }
+  virtual void rotate_bins(); 
   virtual std::string get_cache_name() const {
     return "RocksDB Binned LRU Cache";
   }
-
+  // Get the total counts from the starting bin to the ending bin.
+  uint64_t sum_bins(uint32_t start, uint32_t end) const;
+  // Get the bin count
+  uint32_t _get_bin_count() const;
+  // Set the bin count
+  void _set_bin_count(uint32_t count);
 
  private:
   CephContext *cct;
