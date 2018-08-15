@@ -1716,6 +1716,13 @@ CEPH_RADOS_API int rados_omap_get_next2(rados_omap_iter_t iter,
                                        size_t *val_len);
 
 /**
+ * Return number of elements in the iterator
+ *
+ * @param iter the iterator of which to return the size
+ */
+CEPH_RADOS_API unsigned int rados_omap_iter_size(rados_omap_iter_t iter);
+
+/**
  * Close the omap iterator.
  *
  * iter should not be used after this is called.

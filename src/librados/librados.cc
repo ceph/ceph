@@ -6370,6 +6370,12 @@ extern "C" int rados_omap_get_next2(rados_omap_iter_t iter,
   return 0;
 }
 
+extern "C" unsigned int rados_omap_iter_size(rados_omap_iter_t iter)
+{
+  RadosOmapIter *it = static_cast<RadosOmapIter *>(iter);
+  return it->values.size();
+}
+
 extern "C" void rados_omap_get_end(rados_omap_iter_t iter)
 {
   tracepoint(librados, rados_omap_get_end_enter, iter);
