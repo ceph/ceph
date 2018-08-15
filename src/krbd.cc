@@ -610,7 +610,7 @@ static int unmap_image(struct krbd_ctx *ctx, const char *pool,
   string id;
   int r;
 
-  if (!snap)
+  if (!*snap)
     snap = "-";
 
   r = spec_to_devno_and_krbd_id(ctx->udev, pool, image, snap, &devno, &id);
