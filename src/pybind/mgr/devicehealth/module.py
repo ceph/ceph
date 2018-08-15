@@ -149,26 +149,50 @@ class Module(MgrModule):
 
     def serve(self):
         self.log.info("Starting")
+
+        last_scrape = None
+        ls = self.get_store('last_scrape')
+        if ls:
+            try:
+                last_scrape = datetime.strptime(ls, TIME_FORMAT)
+            except ValueError as e:
+                pass
+        self.log.debug('Last scrape %s', last_scrape)
+
         while self.run:
             self.refresh_config()
 
-            sleep_interval = int(self.sleep_interval) or 60
+            if self.enable_monitoring:
+                self.log.debug('Running')
+                self.check_health()
 
+                now = datetime.utcnow()
+                if not last_scrape:
+                    next_scrape = now
+                else:
+                    # align to scrape interval
+                    scrape_frequency = int(self.scrape_frequency) or 86400
+                    seconds = (last_scrape - datetime.utcfromtimestamp(0)).total_seconds()
+                    seconds -= seconds % scrape_frequency
+                    seconds += scrape_frequency
+                    next_scrape = datetime.utcfromtimestamp(seconds)
+                if last_scrape:
+                    self.log.debug('Last scrape %s, next scrape due %s',
+                                   last_scrape.strftime(TIME_FORMAT),
+                                   next_scrape.strftime(TIME_FORMAT))
+                else:
+                    self.log.debug('Last scrape never, next scrape due %s',
+                                   next_scrape.strftime(TIME_FORMAT))
+                if now >= next_scrape:
+                    self.scrape_all()
+                    last_scrape = now
+                    self.set_store('last_scrape', last_scrape.strftime(TIME_FORMAT))
+
+            # sleep
+            sleep_interval = int(self.sleep_interval) or 60
             self.log.debug('Sleeping for %d seconds', sleep_interval)
             ret = self.event.wait(sleep_interval)
             self.event.clear()
-
-            # in case 'wait' was interrupted, it could mean config was changed
-            # by the user; go back and read config vars
-            if ret:
-                continue
-
-            self.log.debug('Waking up [%s]',
-                           "active" if self.enable_monitoring else "inactive")
-            if not self.enable_monitoring:
-                continue
-            self.log.debug('Running')
-            self.check_health()
 
     def shutdown(self):
         self.log.info('Stopping')
