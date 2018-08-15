@@ -346,6 +346,13 @@ void Server::reclaim_session(Session *session, const MClientReclaim::const_ref &
 
   Session* target = find_session_by_uuid(m->get_uuid());
   if (target) {
+    if (session->info.auth_name != target->info.auth_name) {
+      dout(10) << __func__ << " session auth_name " << session->info.auth_name
+	       << " != target auth_name " << target->info.auth_name << dendl;
+      reply->set_result(-EPERM);
+      mds->send_message_client(reply, session);
+    }
+
     assert(!target->reclaiming_from);
     assert(!session->reclaiming_from);
     session->reclaiming_from = target;
