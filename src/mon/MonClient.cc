@@ -1277,7 +1277,7 @@ int MonConnection::_negotiate(MAuthReply *m,
     return 0;
   }
 
-  auth.reset(get_auth_client_handler(cct, m->protocol, keyring));
+  auth.reset(AuthClientHandler::create(cct, m->protocol, keyring));
   if (!auth) {
     ldout(cct, 10) << "no handler for protocol " << m->protocol << dendl;
     if (m->result == -ENOTSUP) {

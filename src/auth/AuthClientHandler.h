@@ -60,13 +60,12 @@ public:
   virtual bool need_tickets() = 0;
 
   virtual void set_global_id(uint64_t id) = 0;
+
+  static AuthClientHandler* create(CephContext *cct,
+				   int proto, RotatingKeyRing *rkeys);
 protected:
   virtual void validate_tickets() = 0;
 };
-
-
-extern AuthClientHandler *get_auth_client_handler(CephContext *cct,
-				      int proto, RotatingKeyRing *rkeys);
 
 #endif
 

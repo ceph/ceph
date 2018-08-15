@@ -19,8 +19,9 @@
 #include "cephx/CephxClientHandler.h"
 #include "none/AuthNoneClientHandler.h"
 
-AuthClientHandler *get_auth_client_handler(CephContext *cct, int proto,
-					   RotatingKeyRing *rkeys)
+
+AuthClientHandler* AuthClientHandler::create(CephContext *cct, int proto,
+					     RotatingKeyRing *rkeys)
 {
   switch (proto) {
   case CEPH_AUTH_CEPHX:
