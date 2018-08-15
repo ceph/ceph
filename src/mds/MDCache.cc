@@ -2996,10 +2996,7 @@ void MDCache::handle_mds_failure(mds_rank_t who)
 	if (!mdr->more()->waiting_on_slave.empty()) {
 	  assert(mdr->more()->srcdn_auth_mds == mds->get_nodeid());
 	  // will rollback, no need to wait
-	  if (mdr->slave_request) {
-	    mdr->slave_request->put();
-	    mdr->slave_request = 0;
-	  }
+	  mdr->reset_slave_request();
 	  mdr->more()->waiting_on_slave.clear();
 	}
       } else if (!mdr->committing) {
@@ -9350,8 +9347,7 @@ void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
   if (mdr->client_request && mdr->client_request->get_source().is_client()) {
     dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
             << *mdr->client_request << dendl;
-    mds->forward_message_mds(mdr->client_request, who);
-    mdr->client_request = 0;
+    mds->forward_message_mds(mdr->release_client_request(), who);
     if (mds->logger) mds->logger->inc(l_mds_forward);
   } else if (mdr->internal_op >= 0) {
     dout(10) << "request_forward on internal op; cancelling" << dendl;

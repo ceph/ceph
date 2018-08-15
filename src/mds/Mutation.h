@@ -347,11 +347,16 @@ struct MDRequestImpl : public MutationImpl {
   void print(ostream &out) const override;
   void dump(Formatter *f) const override;
 
+  MClientRequest* release_client_request();
+  void reset_slave_request(MMDSSlaveRequest *req=nullptr);
+
   // TrackedOp stuff
   typedef boost::intrusive_ptr<MDRequestImpl> Ref;
 protected:
   void _dump(Formatter *f) const override;
   void _dump_op_descriptor_unlocked(ostream& stream) const override;
+private:
+  mutable ceph::spinlock msg_lock;
 };
 
 typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;
