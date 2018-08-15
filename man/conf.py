@@ -17,6 +17,8 @@ def _get_description(fname, base):
                 continue
             if line.startswith(':') and line.endswith(':'):
                 continue
+            if line.startswith('.. '):
+                continue
             one = line
             break
         two = f.readline().rstrip('\n')
