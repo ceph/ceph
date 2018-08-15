@@ -310,6 +310,25 @@ bool MDRequestImpl::is_queued_for_replay() const
   return client_request ? client_request->is_queued_for_replay() : false;
 }
 
+MClientRequest::const_ref MDRequestImpl::release_client_request()
+{
+  msg_lock.lock();
+  MClientRequest::const_ref req;
+  req.swap(client_request);
+  msg_lock.unlock();
+  return req;
+}
+
+void MDRequestImpl::reset_slave_request(const MMDSSlaveRequest::const_ref& req)
+{
+  msg_lock.lock();
+  MMDSSlaveRequest::const_ref old;
+  old.swap(slave_request);
+  slave_request = req;
+  msg_lock.unlock();
+  old.reset();
+}
+
 void MDRequestImpl::print(ostream &out) const
 {
   out << "request(" << reqid;
@@ -330,31 +349,36 @@ void MDRequestImpl::_dump(Formatter *f) const
   f->dump_string("flag_point", state_string());
   f->dump_stream("reqid") << reqid;
   {
-    if (client_request) {
+    msg_lock.lock();
+    auto _client_request = client_request;
+    auto _slave_request =slave_request;
+    msg_lock.unlock();
+
+    if (_client_request) {
       f->dump_string("op_type", "client_request");
       f->open_object_section("client_info");
-      f->dump_stream("client") << client_request->get_orig_source();
-      f->dump_int("tid", client_request->get_tid());
+      f->dump_stream("client") << _client_request->get_orig_source();
+      f->dump_int("tid", _client_request->get_tid());
       f->close_section(); // client_info
-    } else if (is_slave() && slave_request) { // replies go to an existing mdr
+    } else if (is_slave() && _slave_request) { // replies go to an existing mdr
       f->dump_string("op_type", "slave_request");
       f->open_object_section("master_info");
-      f->dump_stream("master") << slave_request->get_orig_source();
+      f->dump_stream("master") << _slave_request->get_orig_source();
       f->close_section(); // master_info
 
       f->open_object_section("request_info");
-      f->dump_int("attempt", slave_request->get_attempt());
+      f->dump_int("attempt", _slave_request->get_attempt());
       f->dump_string("op_type",
-                     slave_request->get_opname(slave_request->get_op()));
-      f->dump_int("lock_type", slave_request->get_lock_type());
-      f->dump_stream("object_info") << slave_request->get_object_info();
-      f->dump_stream("srcdnpath") << slave_request->srcdnpath;
-      f->dump_stream("destdnpath") << slave_request->destdnpath;
-      f->dump_stream("witnesses") << slave_request->witnesses;
+	  MMDSSlaveRequest::get_opname(_slave_request->get_op()));
+      f->dump_int("lock_type", _slave_request->get_lock_type());
+      f->dump_stream("object_info") << _slave_request->get_object_info();
+      f->dump_stream("srcdnpath") << _slave_request->srcdnpath;
+      f->dump_stream("destdnpath") << _slave_request->destdnpath;
+      f->dump_stream("witnesses") << _slave_request->witnesses;
       f->dump_bool("has_inode_export",
-                   slave_request->inode_export.length() != 0);
-      f->dump_int("inode_export_v", slave_request->inode_export_v);
-      f->dump_stream("op_stamp") << slave_request->op_stamp;
+	  _slave_request->inode_export_v != 0);
+      f->dump_int("inode_export_v", _slave_request->inode_export_v);
+      f->dump_stream("op_stamp") << _slave_request->op_stamp;
       f->close_section(); // request_info
     }
     else if (internal_op != -1) { // internal request
@@ -378,10 +402,15 @@ void MDRequestImpl::_dump(Formatter *f) const
 
 void MDRequestImpl::_dump_op_descriptor_unlocked(ostream& stream) const
 {
-  if (client_request) {
-    client_request->print(stream);
-  } else if (slave_request) {
-    slave_request->print(stream);
+  msg_lock.lock();
+  auto _client_request = client_request;
+  auto _slave_request = slave_request;
+  msg_lock.unlock();
+
+  if (_client_request) {
+    _client_request->print(stream);
+  } else if (_slave_request) {
+    _slave_request->print(stream);
   } else if (internal_op >= 0) {
     stream << "internal op " << ceph_mds_op_name(internal_op) << ":" << reqid;
   } else {
