@@ -1511,8 +1511,9 @@ public:
             }
           }
 	}
-	tn->log(20, SSTR("shard_id=" << shard_id << " datalog_marker=" << datalog_marker << " sync_marker.marker=" << sync_marker.marker));
-	if (datalog_marker == sync_marker.marker || remote_trimmed == RemoteTrimmed) {
+	tn->log(20, SSTR("shard_id=" << shard_id << " datalog_marker=" << datalog_marker << " sync_marker.marker=" << sync_marker.marker << " truncated=" << truncated));
+	if (!truncated) {
+          // we reached the end, wait a while before checking for more
           tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 #define INCREMENTAL_INTERVAL 20
 	  yield wait(utime_t(INCREMENTAL_INTERVAL, 0));
