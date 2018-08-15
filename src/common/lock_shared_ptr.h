@@ -6,7 +6,7 @@
 #include <memory>
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 
-namespace ceph::internal {
+namespace ceph {
 
 template<LockPolicy lock_policy>
 struct SharedPtrTrait {

@@ -27,15 +27,15 @@
 #include "include/assert.h"
 
 template <class K, class V,
-	  ceph::internal::LockPolicy lock_policy = ceph::internal::LockPolicy::MUTEX>
+	  ceph::LockPolicy lock_policy = ceph::LockPolicy::MUTEX>
 class SharedLRU {
   CephContext *cct;
-  using shared_ptr_trait_t = ceph::internal::SharedPtrTrait<lock_policy>;
+  using shared_ptr_trait_t = SharedPtrTrait<lock_policy>;
   using VPtr = typename shared_ptr_trait_t::template shared_ptr<V>;
   using WeakVPtr = typename shared_ptr_trait_t::template weak_ptr<V>;
-  ceph::internal::LockMutex<lock_policy> lock;
+  LockMutex<lock_policy> lock;
   size_t max_size;
-  ceph::internal::LockCond<lock_policy> cond;
+  LockCond<lock_policy> cond;
   unsigned size;
 public:
   int waiting;
