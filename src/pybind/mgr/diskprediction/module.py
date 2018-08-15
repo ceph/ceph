@@ -26,7 +26,7 @@ class Module(MgrModule):
         },
         {
             'name': 'diskprediction_server',
-            'default': 'api.federator.ai'
+            'default': ''
         },
         {
             'name': 'diskprediction_port',

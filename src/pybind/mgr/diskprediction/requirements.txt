@@ -9,6 +9,6 @@ grpc-google-logging-v2==0.8.1
 grpc-google-pubsub-v1==0.8.1
 grpcio==1.14.1
 mock==2.0.0
-numpy==1.8.2
+numpy==1.9.0
 scipy==0.13.3
 sklearn==0.0
