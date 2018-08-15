@@ -427,7 +427,7 @@ int MonClient::init()
   }
 
   rotating_secrets.reset(
-    new RotatingKeyRing(cct, cct->get_module_type(), keyring.get()));
+    new RotatingKeyRing<LockPolicy::MUTEX>(cct, cct->get_module_type(), keyring.get()));
 
   initialized = true;
 
@@ -1250,7 +1250,7 @@ void MonConnection::start(epoch_t epoch,
 int MonConnection::handle_auth(MAuthReply* m,
 			       const EntityName& entity_name,
 			       uint32_t want_keys,
-			       RotatingKeyRing* keyring)
+			       RotatingKeyRing<LockPolicy::MUTEX>* keyring)
 {
   if (state == State::NEGOTIATING) {
     int r = _negotiate(m, entity_name, want_keys, keyring);
@@ -1269,7 +1269,7 @@ int MonConnection::handle_auth(MAuthReply* m,
 int MonConnection::_negotiate(MAuthReply *m,
 			      const EntityName& entity_name,
 			      uint32_t want_keys,
-			      RotatingKeyRing* keyring)
+			      RotatingKeyRing<LockPolicy::MUTEX>* keyring)
 {
   if (auth && (int)m->protocol == auth->get_protocol()) {
     // good, negotiation completed
@@ -1277,7 +1277,8 @@ int MonConnection::_negotiate(MAuthReply *m,
     return 0;
   }
 
-  auth.reset(AuthClientHandler::create(cct, m->protocol, keyring));
+  auth.reset(
+    AuthClientHandler<LockPolicy::MUTEX>::create(cct,m->protocol, keyring));
   if (!auth) {
     ldout(cct, 10) << "no handler for protocol " << m->protocol << dendl;
     if (m->result == -ENOTSUP) {

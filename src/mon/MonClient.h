@@ -34,9 +34,9 @@ class MAuthRotating;
 class LogClient;
 class AuthAuthorizer;
 class AuthMethodList;
-class AuthClientHandler;
+template<LockPolicy> class AuthClientHandler;
 class KeyRing;
-class RotatingKeyRing;
+template<LockPolicy> class RotatingKeyRing;
 
 struct MonClientPinger : public Dispatcher {
 
@@ -106,7 +106,7 @@ public:
   int handle_auth(MAuthReply *m,
 		  const EntityName& entity_name,
 		  uint32_t want_keys,
-		  RotatingKeyRing* keyring);
+		  RotatingKeyRing<LockPolicy::MUTEX>* keyring);
   int authenticate(MAuthReply *m);
   void start(epoch_t epoch,
              const EntityName& entity_name,
@@ -118,7 +118,7 @@ public:
   ConnectionRef get_con() {
     return con;
   }
-  std::unique_ptr<AuthClientHandler>& get_auth() {
+  std::unique_ptr<AuthClientHandler<LockPolicy::MUTEX>>& get_auth() {
     return auth;
   }
 
@@ -126,7 +126,7 @@ private:
   int _negotiate(MAuthReply *m,
 		 const EntityName& entity_name,
 		 uint32_t want_keys,
-		 RotatingKeyRing* keyring);
+		 RotatingKeyRing<LockPolicy::MUTEX>* keyring);
 
 private:
   CephContext *cct;
@@ -139,7 +139,7 @@ private:
   State state = State::NONE;
   ConnectionRef con;
 
-  std::unique_ptr<AuthClientHandler> auth;
+  std::unique_ptr<AuthClientHandler<LockPolicy::MUTEX>> auth;
   uint64_t global_id;
 };
 
@@ -192,7 +192,7 @@ private:
   bool got_config = false;
 
   // authenticate
-  std::unique_ptr<AuthClientHandler> auth;
+  std::unique_ptr<AuthClientHandler<LockPolicy::MUTEX>> auth;
   uint32_t want_keys = 0;
   uint64_t global_id = 0;
   Cond auth_cond;
@@ -337,7 +337,7 @@ public:
   }
   
   std::unique_ptr<KeyRing> keyring;
-  std::unique_ptr<RotatingKeyRing> rotating_secrets;
+  std::unique_ptr<RotatingKeyRing<LockPolicy::MUTEX>> rotating_secrets;
 
  public:
   explicit MonClient(CephContext *cct_);

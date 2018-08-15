@@ -35,7 +35,7 @@ class SharedLRU {
   using WeakVPtr = typename shared_ptr_trait_t::template weak_ptr<V>;
   LockMutexT<lock_policy> lock;
   size_t max_size;
-  LockCond<lock_policy> cond;
+  LockCondT<lock_policy> cond;
   unsigned size;
 public:
   int waiting;
