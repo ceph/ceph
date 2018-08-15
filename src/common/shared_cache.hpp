@@ -33,7 +33,7 @@ class SharedLRU {
   using shared_ptr_trait_t = SharedPtrTrait<lock_policy>;
   using VPtr = typename shared_ptr_trait_t::template shared_ptr<V>;
   using WeakVPtr = typename shared_ptr_trait_t::template weak_ptr<V>;
-  LockMutex<lock_policy> lock;
+  LockMutexT<lock_policy> lock;
   size_t max_size;
   LockCond<lock_policy> cond;
   unsigned size;
@@ -78,12 +78,12 @@ private:
   }
 
   void remove(const K& key, V *valptr) {
-    auto locker = lock();
+    std::lock_guard l{lock};
     typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
     if (i != weak_refs.end() && i->second.second == valptr) {
       weak_refs.erase(i);
     }
-    cond.Signal();
+    cond.notify_one();
   }
 
   class Cleanup {
@@ -99,7 +99,9 @@ private:
 
 public:
   SharedLRU(CephContext *cct = NULL, size_t max_size = 20)
-    : cct(cct), lock("SharedLRU::lock"), max_size(max_size), 
+    : cct(cct),
+      lock{LockMutex<lock_policy>::create("SharedLRU::lock")},
+      max_size(max_size),
       size(0), waiting(0) {
     contents.rehash(max_size); 
   }
@@ -123,7 +125,7 @@ public:
     // reorder.
     map<K, pair<WeakVPtr, V*>, C> temp;
 
-    auto locker = lock();
+    std::lock_guard locker{lock};
     temp.swap(weak_refs);
 
     // reconstruct with new comparator
@@ -160,7 +162,7 @@ public:
   void clear() {
     while (true) {
       VPtr val; // release any ref we have after we drop the lock
-      auto locker = lock();
+      std::lock_guard locker{lock};
       if (size == 0)
         break;
 
@@ -172,7 +174,7 @@ public:
   void clear(const K& key) {
     VPtr val; // release any ref we have after we drop the lock
     {
-      auto locker = lock();
+      std::lock_guard l{lock};
       typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
       if (i != weak_refs.end()) {
 	val = i->second.first.lock();
@@ -184,7 +186,7 @@ public:
   void purge(const K &key) {
     VPtr val; // release any ref we have after we drop the lock
     {
-      auto locker = lock();
+      std::lock_guard l{lock};
       typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
       if (i != weak_refs.end()) {
 	val = i->second.first.lock();
@@ -197,7 +199,7 @@ public:
   void set_size(size_t new_size) {
     list<VPtr> to_release;
     {
-      auto locker = lock();
+      std::lock_guard l{lock};
       max_size = new_size;
       trim_cache(&to_release);
     }
@@ -205,7 +207,7 @@ public:
 
   // Returns K key s.t. key <= k for all currently cached k,v
   K cached_key_lower_bound() {
-    auto locker = lock();
+    std::lock_guard l{lock};
     return weak_refs.begin()->first;
   }
 
@@ -213,26 +215,23 @@ public:
     VPtr val;
     list<VPtr> to_release;
     {
-      auto locker = lock();
+      std::unique_lock l{lock};
       ++waiting;
-      bool retry = false;
-      do {
-	retry = false;
-	if (weak_refs.empty())
-	  break;
-	typename map<K, pair<WeakVPtr, V*>, C>::iterator i =
-	  weak_refs.lower_bound(key);
-	if (i == weak_refs.end())
-	  --i;
-	val = i->second.first.lock();
-	if (val) {
-	  lru_add(i->first, val, &to_release);
-	} else {
-	  retry = true;
-	}
-	if (retry)
-	  cond.Wait(lock);
-      } while (retry);
+      cond.wait(l, [this, &key, &val, &to_release] {
+        if (weak_refs.empty()) {
+          return true;
+        }
+        auto i = weak_refs.lower_bound(key);
+        if (i == weak_refs.end()) {
+          --i;
+        }
+        if (val = i->second.first.lock(); val) {
+          lru_add(i->first, val, &to_release);
+          return true;
+        } else {
+          return false;
+        }
+      });
       --waiting;
     }
     return val;
@@ -240,7 +239,7 @@ public:
   bool get_next(const K &key, pair<K, VPtr> *next) {
     pair<K, VPtr> r;
     {
-      auto locker = lock();
+      std::lock_guard l{lock};
       VPtr next_val;
       typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.upper_bound(key);
 
@@ -273,23 +272,20 @@ public:
     VPtr val;
     list<VPtr> to_release;
     {
-      auto locker = lock();
+      std::unique_lock l{lock};
       ++waiting;
-      bool retry = false;
-      do {
-	retry = false;
-	typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
-	if (i != weak_refs.end()) {
-	  val = i->second.first.lock();
-	  if (val) {
-	    lru_add(key, val, &to_release);
-	  } else {
-	    retry = true;
-	  }
-	}
-	if (retry)
-	  cond.Wait(lock);
-      } while (retry);
+      cond.wait(l, [this, &key, &val, &to_release] {
+        if (auto i = weak_refs.find(key); i != weak_refs.end()) {
+          if (val = i->second.first.lock(); val) {
+            lru_add(key, val, &to_release);
+            return true;
+          } else {
+            return false;
+          }
+        } else {
+          return true;
+        }
+      });
       --waiting;
     }
     return val;
@@ -298,30 +294,25 @@ public:
     VPtr val;
     list<VPtr> to_release;
     {
-      auto locker = lock();
-      bool retry = false;
-      do {
-	retry = false;
-	typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
-	if (i != weak_refs.end()) {
-	  val = i->second.first.lock();
-	  if (val) {
-	    lru_add(key, val, &to_release);
-	    return val;
-	  } else {
-	    retry = true;
-	  }
-	}
-	if (retry)
-	  cond.Wait(lock);
-      } while (retry);
-
-      V *new_value = new V();
-      VPtr new_val(new_value, Cleanup(this, key));
-      weak_refs.insert(make_pair(key, make_pair(new_val, new_value)));
-      lru_add(key, new_val, &to_release);
-      return new_val;
+      std::unique_lock l{lock};
+      cond.wait(l, [this, &key, &val] {
+        if (auto i = weak_refs.find(key); i != weak_refs.end()) {
+          if (val = i->second.first.lock(); val) {
+            return true;
+          } else {
+            return false;
+          }
+        } else {
+          return true;
+        }
+      });
+      if (!val) {
+        val = VPtr{new V{}, Cleanup{this, key}};
+        weak_refs.insert(make_pair(key, make_pair(val, val.get())));
+      }
+      lru_add(key, val, &to_release);
     }
+    return val;
   }
 
   /**
@@ -331,7 +322,7 @@ public:
    * in the cache.
    */
   bool empty() {
-    auto locker = lock();
+    std::lock_guard l{lock};
     return weak_refs.empty();
   }
 
@@ -351,7 +342,7 @@ public:
     VPtr val;
     list<VPtr> to_release;
     {
-      auto locker = lock();
+      std::lock_guard l{lock};
       typename map<K, pair<WeakVPtr, V*>, C>::iterator actual =
 	weak_refs.lower_bound(key);
       if (actual != weak_refs.end() && actual->first == key) {

@@ -4,7 +4,11 @@
 
 #include "lock_policy.h"
 #include "lock_mutex.h"
-#include "Cond.h"
+#ifdef NDEBUG
+#include <condition_variable>
+#else
+#include "common/condition_variable_debug.h"
+#endif
 
 class SharedLRUTest;
 
@@ -13,31 +17,26 @@ namespace ceph {
 // empty helper class except when the template argument is LockPolicy::MUTEX
 template<LockPolicy lock_policy>
 class LockCond {
-public:
-  int Wait(LockMutex<lock_policy>&) {
-    return 0;
-  }
-  int Signal() {
-    return 0;
-  }
+  // lockless condition_variable cannot be represented using
+  // std::condition_variables interfaces.
 };
 
+#ifdef NDEBUG
+template<>
+class LockCond<LockPolicy::MUTEX>
+{
+public:
+  using type = std::condition_variable;
+};
+#else
 template<>
 class LockCond<LockPolicy::MUTEX> {
 public:
-  int Wait(LockMutex<LockPolicy::MUTEX>& mutex) {
-    return cond.Wait(mutex.get());
-  }
-  int Signal() {
-    return cond.Signal();
-  }
-private:
-  Cond& get() {
-    return cond;
-  }
-  Cond cond;
-  friend class ::SharedLRUTest;
+  using type = ceph::condition_variable_debug;
 };
 
-} // namespace ceph
+#endif	// NDEBUG
 
+template<LockPolicy lp> using LockCondT = typename LockCond<lp>::type;
+
+} // namespace ceph
