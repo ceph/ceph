@@ -7078,6 +7078,12 @@ next:
       return -EINVAL;
     }
 
+    if (!yes_i_really_mean_it) {
+      cerr << "This command will update bucket stats and object stats" << std::endl;
+      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+      return 1;
+    }
+
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
     map<string, bufferlist> attrs;
