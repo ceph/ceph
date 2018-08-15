@@ -2948,34 +2948,26 @@ void CDir::unfreeze_tree()
   }
 }
 
-bool CDir::is_freezing_tree() const
+pair<bool,bool> CDir::is_freezing_or_frozen_tree() const
 {
-  if (num_freezing_trees == 0)
-    return false;
-  const CDir *dir = this;
-  while (1) {
-    if (dir->is_freezing_tree_root()) return true;
-    if (dir->is_subtree_root()) return false;
-    if (dir->inode->parent)
-      dir = dir->inode->parent->dir;
-    else
-      return false; // root on replica
-  }
-}
+  if (!num_freezing_trees && !num_frozen_trees)
+    return make_pair(false, false);
 
-bool CDir::is_frozen_tree() const
-{
-  if (num_frozen_trees == 0)
-    return false;
+  bool freezing, frozen;
   const CDir *dir = this;
   while (1) {
-    if (dir->is_frozen_tree_root()) return true;
-    if (dir->is_subtree_root()) return false;
+    freezing = dir->is_freezing_tree_root();
+    frozen = dir->is_frozen_tree_root();
+    if (freezing || frozen)
+      break;
+    if (dir->is_subtree_root())
+      break;
     if (dir->inode->parent)
       dir = dir->inode->parent->dir;
     else
-      return false;  // root on replica
+      break; // root on replica
   }
+  return make_pair(freezing, frozen);
 }
 
 CDir *CDir::get_frozen_tree_root() 
