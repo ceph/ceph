@@ -161,13 +161,13 @@ def humansize(nbytes):
     return '%s%s' % (f, suffixes[i])
 
 
-def print_long(shell, file_name, flag, human_readable):
+def print_long(shell, file_name, is_dir, human_readable):
     if not isinstance(file_name, bytes):
         file_name = to_bytes(file_name)
     info = cephfs.stat(file_name)
     file_name = os.path.basename(file_name.decode('utf-8'))
-    if flag:
-        file_name = colorama.Fore.BLUE + file_name + '/' + colorama.Style.RESET_ALL
+    if is_dir:
+        file_name = shell.colorize(file_name.decode('utf-8').rsplit('/', 1)[1] + '/',  'blue')
     if human_readable:
         shell.poutput('{}\t{:10s} {} {} {} {}'.format(
             mode_notation(info.st_mode),
@@ -306,7 +306,6 @@ class CephFSShell(Cmd):
         super().__init__(use_ipython=False)
         self.working_dir = cephfs.getcwd().decode('utf-8')
         self.set_prompt()
-        self.intro = 'Ceph File System Shell'
         self.interactive = False
         self.umask = '2'
 
@@ -579,18 +578,19 @@ exists.')
                 if not isinstance(item, str):
                     path = item.d_name.decode('utf-8')
                     if item.is_dir():
-                        flag = 1
+                        is_dir = True
                     else:
-                        flag = 0
+                        is_dir = False
                 if args.long and args.H:
                     print_long(self, cephfs.getcwd().decode(
-                        'utf-8') + dir_name + '/' + path, flag, True)
+                        'utf-8') + dir_name + '/' + path, is_dir, True)
                 elif args.long:
                     print_long(self, cephfs.getcwd().decode(
-                        'utf-8') + dir_name + '/' + path, flag, False)
+                        'utf-8') + dir_name + '/' + path, is_dir, False)
+                elif is_dir:
+                    values.append(self.colorize(path + '/', 'blue'))
                 else:
-                    values.append(colorama.Fore.BLUE * flag + path +
-                                  '/' * flag + colorama.Style.RESET_ALL * flag)
+                    values.append(path)
             if not args.long:
                 print_list(self, values, shutil.get_terminal_size().columns)
                 if dir_name != directories[-1]:
