@@ -498,8 +498,7 @@ int execute_unmap(const po::variables_map &vm,
   utils::init_context();
 
   r = do_kernel_unmap(device_name.empty() ? nullptr : device_name.c_str(),
-                      pool_name.c_str(), image_name.c_str(),
-                      snap_name.empty() ? nullptr : snap_name.c_str());
+                      pool_name.c_str(), image_name.c_str(), snap_name.c_str());
   if (r < 0) {
     std::cerr << "rbd: unmap failed: " << cpp_strerror(r) << std::endl;
     return r;
