@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs/tabs.module';
 
@@ -16,7 +17,13 @@ describe('ConfigurationComponent', () => {
   configureTestBed({
     declarations: [ConfigurationComponent],
     providers: [ConfigurationService],
-    imports: [SharedModule, FormsModule, TabsModule.forRoot(), HttpClientTestingModule]
+    imports: [
+      SharedModule,
+      FormsModule,
+      TabsModule.forRoot(),
+      HttpClientTestingModule,
+      RouterTestingModule
+    ]
   });
 
   beforeEach(() => {
