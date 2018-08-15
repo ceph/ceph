@@ -1,5 +1,6 @@
 tasks:
   - install:
       extra_packages:
-        - python3-cephfs
+        rpm: ['python3-cephfs']
+        deb: ['python3-cephfs', 'cephfs-shell']
   - ceph:
