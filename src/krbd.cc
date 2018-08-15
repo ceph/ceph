@@ -13,7 +13,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <iostream>
-#include <map>
 #include <poll.h>
 #include <sstream>
 #include <stdio.h>
