@@ -2934,6 +2934,26 @@ void CDir::unfreeze_tree()
   }
 }
 
+bool CDir::can_auth_pin(int *err_ret) const
+{
+  int err;
+  if (!is_auth()) {
+    err = ERR_NOT_AUTH;
+  } else if (is_freezing_dir() || is_frozen_dir()) {
+    err = ERR_FRAGMENTING_DIR;
+  } else {
+    auto p = is_freezing_or_frozen_tree();
+    if (p.first || p.second) {
+      err = ERR_EXPORTING_TREE;
+    } else {
+      err = 0;
+    }
+  }
+  if (err && err_ret)
+    *err_ret = err;
+  return !err;
+}
+
 pair<bool,bool> CDir::is_freezing_or_frozen_tree() const
 {
   if (!num_freezing_trees && !num_frozen_trees)
