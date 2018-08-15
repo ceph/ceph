@@ -818,11 +818,17 @@ void PGMapDigest::dump_pool_stats_full(
 
 void PGMapDigest::dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const
 {
+  float used = 0.0;
+  if (osd_sum.kb > 0) {
+    used = ((float)osd_sum.kb_used / osd_sum.kb);
+  }
+
   if (f) {
     f->open_object_section("stats");
     f->dump_int("total_bytes", osd_sum.kb * 1024ull);
     f->dump_int("total_used_bytes", osd_sum.kb_used * 1024ull);
     f->dump_int("total_avail_bytes", osd_sum.kb_avail * 1024ull);
+    f->dump_float("total_percent_used", used * 100);
     if (verbose) {
       f->dump_int("total_objects", pg_sum.stats.sum.num_objects);
     }
@@ -840,10 +846,6 @@ void PGMapDigest::dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) co
     tbl << stringify(byte_u_t(osd_sum.kb*1024))
         << stringify(byte_u_t(osd_sum.kb_avail*1024))
         << stringify(byte_u_t(osd_sum.kb_used*1024));
-    float used = 0.0;
-    if (osd_sum.kb > 0) {
-      used = ((float)osd_sum.kb_used / osd_sum.kb);
-    }
     tbl << percentify(used*100);
     if (verbose) {
       tbl << stringify(si_u_t(pg_sum.stats.sum.num_objects));
