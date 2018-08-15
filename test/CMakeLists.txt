@@ -27,3 +27,8 @@ target_link_libraries(dmclock-tests LINK_PRIVATE
   Threads::Threads
   GTest::GTest
   GTest::Main)
+
+add_test(NAME dmclock-tests
+  COMMAND $<TARGET_FILE:dmclock-tests>)
+add_test(NAME dmclock-data-struct-tests
+  COMMAND $<TARGET_FILE:dmclock-data-struct-tests>)
