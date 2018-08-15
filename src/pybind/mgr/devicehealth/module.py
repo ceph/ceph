@@ -21,6 +21,7 @@ DEFAULTS = {
     'mark_out_threshold': str(86400*14),
     'warn_threshold': str(86400*14*2),
     'self_heal': str(True),
+    'sleep_interval': str(60),
 }
 
 DEVICE_HEALTH = 'DEVICE_HEALTH'
@@ -42,6 +43,7 @@ class Module(MgrModule):
         {'name': 'mark_out_threshold'},
         {'name': 'warn_threshold'},
         {'name': 'self_heal'},
+        {'name': 'sleep_interval'},
     ]
 
     COMMANDS = [
@@ -150,8 +152,7 @@ class Module(MgrModule):
         while self.run:
             self.refresh_config()
 
-            # TODO normalize/align sleep interval
-            sleep_interval = int(self.scrape_frequency)
+            sleep_interval = int(self.sleep_interval) or 60
 
             self.log.debug('Sleeping for %d seconds', sleep_interval)
             ret = self.event.wait(sleep_interval)
