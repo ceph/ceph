@@ -709,16 +709,7 @@ public:
   void abort_import();
 
   // -- auth pins --
-  bool can_auth_pin() const override {
-    if (!is_auth())
-      return false;
-    if (is_freezing_dir() || is_frozen_dir())
-      return false;
-    auto p = is_freezing_or_frozen_tree();
-    if (p.first || p.second)
-      return false;
-    return true;
-  }
+  bool can_auth_pin(int *err_ret=nullptr) const override;
   int get_cum_auth_pins() const { return auth_pins + nested_auth_pins; }
   int get_auth_pins() const { return auth_pins; }
   int get_nested_auth_pins() const { return nested_auth_pins; }

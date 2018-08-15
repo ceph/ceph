@@ -235,7 +235,14 @@ protected:
 
   // --------------------------------------------
   // auth pins
-  virtual bool can_auth_pin() const = 0;
+  enum {
+    // can_auth_pin() error codes
+    ERR_NOT_AUTH = 1,
+    ERR_EXPORTING_TREE,
+    ERR_FRAGMENTING_DIR,
+    ERR_EXPORTING_INODE,
+  };
+  virtual bool can_auth_pin(int *err_code=nullptr) const = 0;
   virtual void auth_pin(void *who) = 0;
   virtual void auth_unpin(void *who) = 0;
   virtual bool is_frozen() const = 0;

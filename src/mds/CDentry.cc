@@ -334,10 +334,10 @@ int CDentry::get_num_dir_auth_pins() const
   return auth_pins;
 }
 
-bool CDentry::can_auth_pin() const
+bool CDentry::can_auth_pin(int *err_ret) const
 {
   assert(dir);
-  return dir->can_auth_pin();
+  return dir->can_auth_pin(err_ret);
 }
 
 void CDentry::auth_pin(void *by)
