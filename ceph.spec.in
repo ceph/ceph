@@ -1063,13 +1063,14 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/mon
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/osd
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/mds
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/mgr
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/crash
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/crash/posted
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/radosgw
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mds
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rgw
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mgr
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd
-mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/crash
 
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
@@ -1085,6 +1086,7 @@ rm -rf %{buildroot}
 %files
 
 %files base
+%{_bindir}/ceph-crash
 %{_bindir}/crushtool
 %{_bindir}/monmaptool
 %{_bindir}/osdmaptool
@@ -1101,6 +1103,7 @@ rm -rf %{buildroot}
 %{_libdir}/ceph/erasure-code/libec_*.so*
 %dir %{_libdir}/ceph/compressor
 %{_libdir}/ceph/compressor/libceph_*.so*
+%{_unitdir}/ceph-crash.service
 %ifarch x86_64
 %dir %{_libdir}/ceph/crypto
 %{_libdir}/ceph/crypto/libceph_*.so*
@@ -1136,6 +1139,8 @@ rm -rf %{buildroot}
 %{_mandir}/man8/monmaptool.8*
 %{_mandir}/man8/ceph-kvstore-tool.8*
 #set up placeholder directories
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/crash
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/crash/posted
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/tmp
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mds
@@ -1148,22 +1153,22 @@ rm -rf %{buildroot}
 %if 0%{?suse_version}
 %fillup_only
 if [ $1 -eq 1 ] ; then
-/usr/bin/systemctl preset ceph.target >/dev/null 2>&1 || :
+/usr/bin/systemctl preset ceph.target ceph-crash.service >/dev/null 2>&1 || :
 fi
 %endif
 %if 0%{?fedora} || 0%{?rhel}
-%systemd_post ceph.target
+%systemd_post ceph.target ceph-crash.service
 %endif
 if [ $1 -eq 1 ] ; then
-/usr/bin/systemctl start ceph.target >/dev/null 2>&1 || :
+/usr/bin/systemctl start ceph.target ceph-crash.service >/dev/null 2>&1 || :
 fi
 
 %preun base
 %if 0%{?suse_version}
-%service_del_preun ceph.target
+%service_del_preun ceph.target ceph-crash.service
 %endif
 %if 0%{?fedora} || 0%{?rhel}
-%systemd_preun ceph.target
+%systemd_preun ceph.target ceph-crash.service
 %endif
 
 %postun base

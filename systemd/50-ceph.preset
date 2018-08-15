@@ -4,3 +4,4 @@ enable ceph-mgr.target
 enable ceph-mon.target
 enable ceph-osd.target
 enable ceph-radosgw.target
+enable ceph-crash.service
