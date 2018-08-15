@@ -1,3 +1,5 @@
+import { ExecutingTask } from '../../shared/models/executing-task';
+
 export class Pool {
   cache_target_full_ratio_micro: number;
   fast_read: boolean;
@@ -33,6 +35,8 @@ export class Pool {
   cache_target_dirty_ratio_micro: number;
   pool: number;
   removed_snaps: string;
+  cdExecuting?: string;
+  executingTasks?: ExecutingTask[];
   crush_rule: string;
   tiers: any[];
   hit_set_params: {
@@ -56,4 +60,8 @@ export class Pool {
   last_change: string;
   min_write_recency_for_promote: number;
   read_tier: number;
+
+  constructor(name) {
+    this.pool_name = name;
+  }
 }
