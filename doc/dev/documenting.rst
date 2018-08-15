@@ -129,4 +129,4 @@ SVG diagrams using Inkscape.
 
 HTML5 will support SVG inline.
 
-.. _Submitting Patches: /SubmittingPatches.rst
+.. _`Submitting Patches`: https://github.com/ceph/ceph/blob/master/SubmittingPatches.rst
