@@ -1,26 +1,33 @@
-import { Component } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
 
 import { BsModalRef, BsModalService } from 'ngx-bootstrap';
 
 import { PoolService } from '../../../shared/api/pool.service';
 import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
+import { TableComponent } from '../../../shared/datatable/table/table.component';
+import { CellTemplate } from '../../../shared/enum/cell-template.enum';
+import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permission } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { Pool } from '../pool';
 
 @Component({
   selector: 'cd-pool-list',
   templateUrl: './pool-list.component.html',
+  providers: [TaskListService],
   styleUrls: ['./pool-list.component.scss']
 })
-export class PoolListComponent {
+export class PoolListComponent implements OnInit {
+  @ViewChild(TableComponent)
+  table: TableComponent;
+
   pools: Pool[] = [];
   columns: CdTableColumn[];
   selection = new CdTableSelection();
@@ -28,11 +35,13 @@ export class PoolListComponent {
   executingTasks: ExecutingTask[] = [];
   permission: Permission;
   tableActions: CdTableAction[];
+  viewCacheStatusList: any[];
 
   constructor(
     private poolService: PoolService,
     private taskWrapper: TaskWrapperService,
     private authStorageService: AuthStorageService,
+    private taskListService: TaskListService,
     private modalService: BsModalService
   ) {
     this.permission = this.authStorageService.getPermissions().pool;
@@ -55,7 +64,8 @@ export class PoolListComponent {
       {
         prop: 'pool_name',
         name: 'Name',
-        flexGrow: 3
+        flexGrow: 3,
+        cellTransformation: CellTemplate.executing
       },
       {
         prop: 'type',
@@ -98,19 +108,27 @@ export class PoolListComponent {
     ];
   }
 
-  updateSelection(selection: CdTableSelection) {
-    this.selection = selection;
+  ngOnInit() {
+    this.taskListService.init(
+      () => this.poolService.getList(),
+      undefined,
+      (pools) => (this.pools = pools),
+      () => {
+        this.table.reset(); // Disable loading indicator.
+        this.viewCacheStatusList = [{ status: ViewCacheStatus.ValueException }];
+      },
+      (task) => task.name.startsWith('pool/'),
+      (pool, task) => task.metadata['pool_name'] === pool.pool_name,
+      { default: (task: ExecutingTask) => new Pool(task.metadata['pool_name']) }
+    );
   }
 
-  getPoolList(context: CdTableFetchDataContext) {
-    this.poolService.getList().subscribe(
-      (pools: Pool[]) => {
-        this.pools = pools;
-      },
-      () => {
-        context.error();
-      }
-    );
+  updateSelection(selection: CdTableSelection) {
+    if (selection.hasSingleSelection && Object.keys(selection.first()).length === 3) {
+      selection.selected = [];
+      selection.update();
+    }
+    this.selection = selection;
   }
 
   deletePoolModal() {
