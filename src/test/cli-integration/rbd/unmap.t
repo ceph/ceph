@@ -194,12 +194,12 @@ pool/img@snap, custom pool:
 Not a mapped spec - random junk (which gets interpreted as a spec):
 
   $ sudo rbd device unmap foobar
-  rbd: rbd/foobar@-: not a mapped image or snapshot
+  rbd: rbd/foobar: not a mapped image or snapshot
   rbd: unmap failed: (22) Invalid argument
   [22]
 
   $ sudo rbd --image foobar device unmap
-  rbd: rbd/foobar@-: not a mapped image or snapshot
+  rbd: rbd/foobar: not a mapped image or snapshot
   rbd: unmap failed: (22) Invalid argument
   [22]
 
@@ -209,7 +209,7 @@ Not a mapped spec - spec that's just been unmapped:
   /dev/rbd? (glob)
   $ sudo rbd device unmap img
   $ sudo rbd device unmap img
-  rbd: rbd/img@-: not a mapped image or snapshot
+  rbd: rbd/img: not a mapped image or snapshot
   rbd: unmap failed: (22) Invalid argument
   [22]
 
@@ -395,7 +395,7 @@ img:
   ?  rbd  img   -    /dev/rbd?  (glob)
   ?  rbd  img   -    /dev/rbd?  (glob)
   $ sudo rbd device unmap img
-  rbd: rbd/img@-: mapped more than once, unmapping /dev/rbd? only (glob)
+  rbd: rbd/img: mapped more than once, unmapping /dev/rbd? only (glob)
   $ rbd device list
   id pool image snap device    
   ?  rbd  img   -    /dev/rbd?  (glob)
