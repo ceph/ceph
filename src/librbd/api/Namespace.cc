@@ -20,6 +20,7 @@ int Namespace<I>::create(librados::IoCtx& io_ctx, const std::string& name)
   ldout(cct, 5) << "name=" << name << dendl;
 
   if (name.empty()) {
+    lderr(cct) << "namespace name was not specified" << dendl;
     return -EINVAL;
   }
 
@@ -63,6 +64,7 @@ int Namespace<I>::remove(librados::IoCtx& io_ctx, const std::string& name)
   ldout(cct, 5) << "name=" << name << dendl;
 
   if (name.empty()) {
+    lderr(cct) << "namespace name was not specified" << dendl;
     return -EINVAL;
   }
 
