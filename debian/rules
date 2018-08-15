@@ -67,24 +67,6 @@ override_dh_installlogrotate:
 	dh_installlogrotate -pceph-common
 
 override_dh_installinit:
-	# dh_installinit is only set up to handle one upstart script
-	# per package, so do this ourselves
-	install -d -m0755 debian/ceph-base/etc/init
-	install -m0644 src/upstart/ceph-all.conf debian/ceph-base/etc/init
-	install -d -m0755 debian/ceph-osd/etc/init
-	install -m0644 src/upstart/ceph-osd*.conf debian/ceph-osd/etc/init
-	install -d -m0755 debian/ceph-mon/etc/init
-	install -m0644 src/upstart/ceph-mon*.conf debian/ceph-mon/etc/init
-	install -d -m0755 debian/ceph-common/etc/init
-	install -m0644 src/upstart/rbdmap.conf debian/ceph-common/etc/init
-	install -d -m0755 debian/ceph-mds/etc/init
-	install -m0644 src/upstart/ceph-mds*.conf debian/ceph-mds/etc/init
-	install -d -m0755 debian/ceph-mgr/etc/init
-	install -m0644 src/upstart/ceph-mgr*.conf debian/ceph-mgr/etc/init
-	install -d -m0755 debian/radosgw/etc/init
-	install -m0644 src/upstart/radosgw*.conf debian/radosgw/etc/init
-	install -d -m0755 debian/rbd-mirror/etc/init
-	install -m0644 src/upstart/ceph-rbd-mirror*.conf debian/rbd-mirror/etc/init
 	# install the systemd stuff manually since we have funny service names
 	install -d -m0755 debian/ceph-common/etc/default
 	install -m0644 etc/default/ceph debian/ceph-common/etc/default/
