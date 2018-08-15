@@ -1168,9 +1168,6 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   list<rgw_data_change_log_entry>::iterator log_iter;
   bool truncated;
 
-  RGWDataChangesLogInfo shard_info;
-  string datalog_marker;
-
   Mutex inc_lock;
   Cond inc_cond;
 
@@ -1435,17 +1432,9 @@ public:
         }
 
 
-        yield call(new RGWReadRemoteDataLogShardInfoCR(sync_env, shard_id, &shard_info));
-        if (retcode < 0) {
-          tn->log(0, SSTR("ERROR: failed to fetch remote data log info: ret=" << retcode));
-          stop_spawned_services();
-          drain_all();
-          return set_cr_error(retcode);
-        }
-        datalog_marker = shard_info.marker;
 #define INCREMENTAL_MAX_ENTRIES 100
-	tn->log(20, SSTR("shard_id=" << shard_id << " datalog_marker=" << datalog_marker << " sync_marker.marker=" << sync_marker.marker));
-	if (datalog_marker > sync_marker.marker) {
+	tn->log(20, SSTR("shard_id=" << shard_id << " sync_marker=" << sync_marker.marker));
+	{
           spawned_keys.clear();
           yield call(new RGWReadRemoteDataLogShardCR(sync_env, shard_id, &sync_marker.marker, &log_entries, &truncated));
           if (retcode < 0) {
@@ -1496,7 +1485,7 @@ public:
             }
           }
 	}
-	tn->log(20, SSTR("shard_id=" << shard_id << " datalog_marker=" << datalog_marker << " sync_marker.marker=" << sync_marker.marker << " truncated=" << truncated));
+	tn->log(20, SSTR("shard_id=" << shard_id << " sync_marker=" << sync_marker.marker << " truncated=" << truncated));
 	if (!truncated) {
           // we reached the end, wait a while before checking for more
           tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
