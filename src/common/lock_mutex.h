@@ -7,7 +7,7 @@
 
 class SharedLRUTest;
 
-namespace ceph::internal {
+namespace ceph {
 
 template<LockPolicy lp> class LockCond;
 
@@ -48,4 +48,4 @@ private:
   friend class ::SharedLRUTest;
 };
 
-} // namespace ceph::internal
+} // namespace ceph
