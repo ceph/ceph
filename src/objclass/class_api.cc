@@ -737,7 +737,7 @@ int cls_cxx_chunk_write_and_set(cls_method_context_t hctx, int ofs, int len,
 		   int set_len)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
-  char cname[] = "refcount";
+  char cname[] = "cas";
   char method[] = "chunk_set";
 
   vector<OSDOp> ops(2);

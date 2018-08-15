@@ -2610,11 +2610,13 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
       return -ENODATA;
     }
 
+    unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
+		     CEPH_OSD_FLAG_RWORDERED;
     tgt_length = chunk_data.length();
-    pg_pool_t::fingerprint_t fp_t = pool.info.get_fingerprint_type();
+    pg_pool_t::fingerprint_t fp_algo_t = pool.info.get_fingerprint_type();
     if (iter->second.has_reference() &&
-	fp_t != pg_pool_t::TYPE_FINGERPRINT_NONE) {
-      switch (fp_t) {
+	fp_algo_t != pg_pool_t::TYPE_FINGERPRINT_NONE) {
+      switch (fp_algo_t) {
 	case pg_pool_t::TYPE_FINGERPRINT_SHA1:
 	  {
 	    boost::optional<sha1_digest_info_t> fp_t = chunk_data.sha1();
@@ -2622,6 +2624,19 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
 	    bufferlist in;
 	    if (fp_t != boost::none) {
 	      fp_oid = fp_t.get().to_str();
+	    }
+	    if (fp_oid != tgt_soid.oid) {
+	      // decrement old chunk's reference count 
+	      ObjectOperation dec_op;
+	      cls_chunk_refcount_put_op put_call;
+	      ::encode(put_call, in);                             
+	      dec_op.call("refcount", "chunk_put", in);         
+	      // we don't care dec_op's completion. scrub for dedup will fix this.
+	      tid = osd->objecter->mutate(
+		tgt_soid.oid, oloc, dec_op, snapc,
+		ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
+		flags, NULL);
+	      in.clear();
 	    }
 	    tgt_soid.oid = fp_oid;
 	    iter->second.oid = tgt_soid;
@@ -2642,8 +2657,6 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
     } else {
       obj_op.add_data(CEPH_OSD_OP_WRITE, tgt_offset, tgt_length, chunk_data);
     }
-    unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
-		     CEPH_OSD_FLAG_RWORDERED ;
 
     C_ManifestFlush *fin = new C_ManifestFlush(this, soid, get_last_peering_reset());
     fin->offset = iter->first;
