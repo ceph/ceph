@@ -207,7 +207,7 @@ public:
   void _put() override;
 
   // auth pins
-  bool can_auth_pin() const override;
+  bool can_auth_pin(int *err_ret=nullptr) const override;
   void auth_pin(void *by) override;
   void auth_unpin(void *by) override;
   void adjust_nested_auth_pins(int adjustment, int diradj, void *by);
