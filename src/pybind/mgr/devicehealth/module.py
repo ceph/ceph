@@ -283,7 +283,7 @@ class Module(MgrModule):
                     osd_id, outb))
 
     def put_device_metrics(self, ioctx, devid, data):
-        old_key = datetime.now() - timedelta(
+        old_key = datetime.utcnow() - timedelta(
             seconds=int(self.retention_period))
         prune = old_key.strftime(TIME_FORMAT)
         self.log.debug('put_device_metrics device %s prune %s' %
@@ -307,7 +307,7 @@ class Module(MgrModule):
             log.exception("Error reading OMAP: {0}".format(e))
             return
 
-        key = datetime.now().strftime(TIME_FORMAT)
+        key = datetime.utcnow().strftime(TIME_FORMAT)
         self.log.debug('put_device_metrics device %s key %s = %s, erase %s' %
                        (devid, key, data, erase))
         with rados.WriteOpCtx() as op:
@@ -362,7 +362,7 @@ class Module(MgrModule):
         devs = self.get("devices")
         osds_in = {}
         osds_out = {}
-        now = datetime.now()
+        now = datetime.utcnow()
         osdmap = self.get("osd_map")
         assert osdmap is not None
         for dev in devs['devices']:
