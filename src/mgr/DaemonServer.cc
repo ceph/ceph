@@ -188,8 +188,7 @@ bool DaemonServer::ms_verify_authorizer(
   s->inst.addr = con->get_peer_addr();
   AuthCapsInfo caps_info;
 
-  RotatingKeyRing *keys = monc->rotating_secrets.get();
-  if (keys) {
+  if (auto keys = monc->rotating_secrets.get(); keys) {
     is_valid = handler->verify_authorizer(
       cct, keys,
       authorizer_data,
