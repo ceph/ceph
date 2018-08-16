@@ -16,10 +16,6 @@
 #include "ScatterLock.h"
 #include "CDir.h"
 
-#include "messages/MClientRequest.h"
-#include "messages/MMDSSlaveRequest.h"
-
-
 // MutationImpl
 
 void MutationImpl::pin(MDSCacheObject *o)
@@ -182,10 +178,6 @@ void MutationImpl::_dump_op_descriptor_unlocked(ostream& stream) const
 
 MDRequestImpl::~MDRequestImpl()
 {
-  if (client_request)
-    client_request->put();
-  if (slave_request)
-    slave_request->put();
   delete _more;
 }
 

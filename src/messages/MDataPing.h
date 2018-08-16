@@ -28,9 +28,9 @@ struct xio_reg_mem {};
 
 typedef void (*mdata_hook_func)(struct xio_reg_mem *mp);
 
-class MDataPing : public Message {
-
- public:
+class MDataPing : public MessageInstance<MDataPing> {
+public:
+  friend factory;
 
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
@@ -42,7 +42,7 @@ class MDataPing : public Message {
   bool free_data;
 
   MDataPing()
-    : Message(MSG_DATA_PING, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_DATA_PING, HEAD_VERSION, COMPAT_VERSION),
       mdata_hook(NULL),
       free_data(false)
   {}

@@ -229,4 +229,6 @@ protected:
 
 typedef C_GatherBuilderBase<MDSInternalContextBase, MDSGather> MDSGatherBuilder;
 
+using MDSContextFactory = ContextFactory<MDSInternalContextBase>;
+
 #endif  // MDS_CONTEXT_H

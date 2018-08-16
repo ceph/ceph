@@ -3,16 +3,19 @@
 
 #include "msg/Message.h"
 
-struct MClientQuota : public Message {
+class MClientQuota : public MessageInstance<MClientQuota> {
+public:
+  friend factory;
+
   inodeno_t ino;
   nest_info_t rstat;
   quota_info_t quota;
 
+protected:
   MClientQuota() :
-    Message(CEPH_MSG_CLIENT_QUOTA),
+    MessageInstance(CEPH_MSG_CLIENT_QUOTA),
     ino(0)
   {}
-private:
   ~MClientQuota() override {}
 
 public:

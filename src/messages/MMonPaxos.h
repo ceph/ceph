@@ -20,8 +20,10 @@
 #include "mon/mon_types.h"
 #include "include/ceph_features.h"
 
-class MMonPaxos : public Message {
-
+class MMonPaxos : public MessageInstance<MMonPaxos> {
+public:
+  friend factory;
+private:
   static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 3;
 
@@ -65,9 +67,9 @@ class MMonPaxos : public Message {
 
   bufferlist feature_map;
 
-  MMonPaxos() : Message(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION) { }
+  MMonPaxos() : MessageInstance(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION) { }
   MMonPaxos(epoch_t e, int o, utime_t now) : 
-    Message(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION),
     epoch(e),
     op(o),
     first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0),

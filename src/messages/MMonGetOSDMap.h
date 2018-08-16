@@ -19,13 +19,17 @@
 
 #include "include/types.h"
 
-class MMonGetOSDMap : public PaxosServiceMessage {
+class MMonGetOSDMap : public MessageInstance<MMonGetOSDMap, PaxosServiceMessage> {
+public:
+  friend factory;
+private:
+
   epoch_t full_first, full_last;
   epoch_t inc_first, inc_last;
 
 public:
   MMonGetOSDMap()
-    : PaxosServiceMessage(CEPH_MSG_MON_GET_OSDMAP, 0),
+    : MessageInstance(CEPH_MSG_MON_GET_OSDMAP, 0),
       full_first(0),
       full_last(0),
       inc_first(0),

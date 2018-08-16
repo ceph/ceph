@@ -296,7 +296,7 @@ public:
     }
   };
 
-  void decode_locked_state(bufferlist& bl) {
+  void decode_locked_state(const bufferlist& bl) {
     parent->decode_lock_state(type->type, bl);
   }
   void encode_locked_state(bufferlist& bl) {

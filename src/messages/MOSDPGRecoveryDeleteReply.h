@@ -6,7 +6,10 @@
 
 #include "MOSDFastDispatchOp.h"
 
-struct MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
+class MOSDPGRecoveryDeleteReply : public MessageInstance<MOSDPGRecoveryDeleteReply, MOSDFastDispatchOp> {
+public:
+  friend factory;
+
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
@@ -26,7 +29,7 @@ struct MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
   }
 
   MOSDPGRecoveryDeleteReply()
-    : MOSDFastDispatchOp(MSG_OSD_PG_RECOVERY_DELETE_REPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_RECOVERY_DELETE_REPLY, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0), min_epoch(0)
     {}
 

@@ -20,8 +20,10 @@
 #include "msg/Message.h"
 #include "mon/MonMap.h"
 
-class MMonProbe : public Message {
+class MMonProbe : public MessageInstance<MMonProbe> {
 public:
+  friend factory;
+
   static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 5;
 
@@ -57,9 +59,9 @@ public:
   uint64_t required_features = 0;
 
   MMonProbe()
-    : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION) {}
   MMonProbe(const uuid_d& f, int o, const string& n, bool hej)
-    : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION),
       fsid(f),
       op(o),
       name(n),

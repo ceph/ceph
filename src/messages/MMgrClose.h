@@ -5,8 +5,11 @@
 
 #include "msg/Message.h"
 
-class MMgrClose : public Message
-{
+class MMgrClose : public MessageInstance<MMgrClose> {
+public:
+  friend factory;
+private:
+
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 
@@ -40,6 +43,6 @@ public:
   }
 
   MMgrClose()
-    : Message(MSG_MGR_CLOSE, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_MGR_CLOSE, HEAD_VERSION, COMPAT_VERSION)
   {}
 };

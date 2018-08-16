@@ -20,8 +20,10 @@
 #include "include/types.h"
 #include "osd/osd_types.h"
 
-class MOSDBoot : public PaxosServiceMessage {
-
+class MOSDBoot : public MessageInstance<MOSDBoot, PaxosServiceMessage> {
+public:
+  friend factory;
+private:
   static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 6;
 
@@ -34,7 +36,7 @@ class MOSDBoot : public PaxosServiceMessage {
   uint64_t osd_features;
 
   MOSDBoot()
-    : PaxosServiceMessage(MSG_OSD_BOOT, 0, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_BOOT, 0, HEAD_VERSION, COMPAT_VERSION),
       boot_epoch(0), osd_features(0)
   { }
   MOSDBoot(OSDSuperblock& s, epoch_t e, epoch_t be,
@@ -42,7 +44,7 @@ class MOSDBoot : public PaxosServiceMessage {
 	   const entity_addrvec_t& hb_front_addr_ref,
            const entity_addrvec_t& cluster_addr_ref,
 	   uint64_t feat)
-    : PaxosServiceMessage(MSG_OSD_BOOT, e, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_BOOT, e, HEAD_VERSION, COMPAT_VERSION),
       sb(s),
       hb_back_addrs(hb_back_addr_ref),
       hb_front_addrs(hb_front_addr_ref),

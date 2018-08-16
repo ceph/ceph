@@ -20,7 +20,10 @@
 
 #include "msg/Message.h"
 
-struct MClientLease : public Message {
+class MClientLease : public MessageInstance<MClientLease> {
+public:
+  friend factory;
+
   struct ceph_mds_lease h;
   std::string dname;
   
@@ -31,9 +34,14 @@ struct MClientLease : public Message {
   snapid_t get_first() const { return snapid_t(h.first); }
   snapid_t get_last() const { return snapid_t(h.last); }
 
-  MClientLease() : Message(CEPH_MSG_CLIENT_LEASE) {}
+protected:
+  MClientLease() : MessageInstance(CEPH_MSG_CLIENT_LEASE) {}
+  MClientLease(const MClientLease& m) :
+    MessageInstance(CEPH_MSG_CLIENT_LEASE),
+    h(m.h),
+    dname(m.dname) {}
   MClientLease(int ac, ceph_seq_t seq, int m, uint64_t i, uint64_t sf, uint64_t sl) :
-    Message(CEPH_MSG_CLIENT_LEASE) {
+    MessageInstance(CEPH_MSG_CLIENT_LEASE) {
     h.action = ac;
     h.seq = seq;
     h.mask = m;
@@ -43,7 +51,7 @@ struct MClientLease : public Message {
     h.duration_ms = 0;
   }
   MClientLease(int ac, ceph_seq_t seq, int m, uint64_t i, uint64_t sf, uint64_t sl, std::string_view d) :
-    Message(CEPH_MSG_CLIENT_LEASE),
+    MessageInstance(CEPH_MSG_CLIENT_LEASE),
     dname(d) {
     h.action = ac;
     h.seq = seq;
@@ -53,7 +61,6 @@ struct MClientLease : public Message {
     h.last = sl;
     h.duration_ms = 0;
   }
-private:
   ~MClientLease() override {}
 
 public:

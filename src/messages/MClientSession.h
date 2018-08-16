@@ -18,7 +18,10 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 
-class MClientSession : public Message {
+class MClientSession : public MessageInstance<MClientSession> {
+public:
+  friend factory;
+private:
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 
@@ -34,21 +37,21 @@ public:
   int get_max_caps() const { return head.max_caps; }
   int get_max_leases() const { return head.max_leases; }
 
-  MClientSession() : Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) { }
+protected:
+  MClientSession() : MessageInstance(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) { }
   MClientSession(int o, version_t s=0) : 
-    Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
+    MessageInstance(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = s;
   }
   MClientSession(int o, utime_t st) : 
-    Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
+    MessageInstance(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = 0;
     st.encode_timeval(&head.stamp);
   }
-private:
   ~MClientSession() override {}
 
 public:

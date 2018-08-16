@@ -19,20 +19,22 @@
 #include "msg/Message.h"
 #include "mds/mds_table_types.h"
 
-class MMDSTableRequest : public Message {
- public:
+class MMDSTableRequest : public MessageInstance<MMDSTableRequest> {
+public:
+  friend factory;
+
   __u16 table = 0;
   __s16 op = 0;
   uint64_t reqid = 0;
   bufferlist bl;
 
-  MMDSTableRequest() : Message(MSG_MDS_TABLE_REQUEST) {}
+protected:
+  MMDSTableRequest() : MessageInstance(MSG_MDS_TABLE_REQUEST) {}
   MMDSTableRequest(int tab, int o, uint64_t r, version_t v=0) : 
-    Message(MSG_MDS_TABLE_REQUEST),
+    MessageInstance(MSG_MDS_TABLE_REQUEST),
     table(tab), op(o), reqid(r) {
     set_tid(v);
   }
-private:
   ~MMDSTableRequest() override {}
 
 public:  

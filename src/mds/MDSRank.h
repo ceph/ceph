@@ -22,7 +22,9 @@
 #include "common/Timer.h"
 #include "common/TrackedOp.h"
 
+#include "messages/MClientRequest.h"
 #include "messages/MCommand.h"
+#include "messages/MMDSMap.h"
 
 #include "Beacon.h"
 #include "DamageTable.h"
@@ -116,7 +118,6 @@ class Messenger;
 class Objecter;
 class MonClient;
 class Finisher;
-class MMDSMap;
 class ScrubStack;
 
 /**
@@ -162,7 +163,7 @@ class MDSRank {
     // to share a timer.
     SafeTimer &timer;
 
-    MDSMap *&mdsmap;
+    std::unique_ptr<MDSMap> &mdsmap; /* MDSDaemon::mdsmap */
 
     Objecter     *objecter;
 
@@ -188,7 +189,7 @@ class MDSRank {
     Session *get_session(client_t client) {
       return sessionmap.get_session(entity_name_t::CLIENT(client.v));
     }
-    Session *get_session(Message *m);
+    Session *get_session(const Message::const_ref &m);
 
     PerfCounters       *logger, *mlogger;
     OpTracker    op_tracker;
@@ -248,20 +249,20 @@ class MDSRank {
       void signal() {cond.Signal();}
     } progress_thread;
 
-    list<Message*> waiting_for_nolaggy;
+    list<Message::const_ref> waiting_for_nolaggy;
     MDSInternalContextBase::que finished_queue;
     // Dispatch, retry, queues
     int dispatch_depth;
     void inc_dispatch_depth() { ++dispatch_depth; }
     void dec_dispatch_depth() { --dispatch_depth; }
-    void retry_dispatch(Message *m);
-    bool handle_deferrable_message(Message *m);
+    void retry_dispatch(const Message::const_ref &m);
+    bool handle_deferrable_message(const Message::const_ref &m);
     void _advance_queues();
-    bool _dispatch(Message *m, bool new_msg);
+    bool _dispatch(const Message::const_ref &m, bool new_msg);
 
     ceph::heartbeat_handle_d *hb;  // Heartbeat for threads using mds_lock
 
-    bool is_stale_message(Message *m) const;
+    bool is_stale_message(const Message::const_ref &m) const;
 
     map<mds_rank_t, version_t> peer_mdsmap_epoch;
 
@@ -320,7 +321,7 @@ class MDSRank {
         LogChannelRef &clog_,
         SafeTimer &timer_,
         Beacon &beacon_,
-        MDSMap *& mdsmap_,
+        std::unique_ptr<MDSMap> & mdsmap_,
         Messenger *msgr,
         MonClient *monc_,
         Context *respawn_hook_,
@@ -369,20 +370,13 @@ class MDSRank {
     utime_t get_laggy_until() const;
     double get_dispatch_queue_max_age(utime_t now) const;
 
-    void send_message_mds(Message *m, mds_rank_t mds);
-    void forward_message_mds(Message *req, mds_rank_t mds);
-
-    void send_message_client_counted(Message *m, client_t client);
-    void send_message_client_counted(Message *m, Session *session);
-    void send_message_client_counted(Message *m, Connection *connection);
-    void send_message_client_counted(Message *m, const ConnectionRef& con) {
-      send_message_client_counted(m, con.get());
-    }
-    void send_message_client(Message *m, Session *session);
-    void send_message(Message *m, Connection *c);
-    void send_message(Message *m, const ConnectionRef& c) {
-      send_message(m, c.get());
-    }
+    void send_message_mds(const Message::ref& m, mds_rank_t mds);
+    void forward_message_mds(const MClientRequest::const_ref& req, mds_rank_t mds);
+    void send_message_client_counted(const Message::ref& m, client_t client);
+    void send_message_client_counted(const Message::ref& m, Session* session);
+    void send_message_client_counted(const Message::ref& m, const ConnectionRef& connection);
+    void send_message_client(const Message::ref& m, Session* session);
+    void send_message(const Message::ref& m, const ConnectionRef& c);
 
     void wait_for_active_peer(mds_rank_t who, MDSInternalContextBase *c) { 
       waiting_for_active_peer[who].push_back(c);
@@ -427,7 +421,7 @@ class MDSRank {
 
     Finisher     *finisher;
 
-    MDSMap *get_mds_map() { return mdsmap; }
+    MDSMap *get_mds_map() { return mdsmap.get(); }
 
     uint64_t get_num_requests() const { return logger->get(l_mds_request); }
   
@@ -556,17 +550,27 @@ private:
  * will put the Message exactly once.*/
 class C_MDS_RetryMessage : public MDSInternalContext {
 protected:
-  Message *m;
+  Message::const_ref m;
 public:
-  C_MDS_RetryMessage(MDSRank *mds, Message *m)
-    : MDSInternalContext(mds)
-  {
-    assert(m);
-    this->m = m;
-  }
+  C_MDS_RetryMessage(MDSRank *mds, const Message::const_ref &m)
+    : MDSInternalContext(mds), m(m) {}
   void finish(int r) override {
     mds->retry_dispatch(m);
   }
+};
+
+class CF_MDS_RetryMessageFactory : public MDSContextFactory {
+public:
+  CF_MDS_RetryMessageFactory(MDSRank *mds, const Message::const_ref &m)
+    : mds(mds), m(m) {}
+
+  MDSInternalContextBase *build() {
+    return new C_MDS_RetryMessage(mds, m);
+  }
+
+private:
+  MDSRank *mds;
+  Message::const_ref m;
 };
 
 /**
@@ -582,23 +586,23 @@ public:
   void shutdown();
   bool handle_asok_command(std::string_view command, const cmdmap_t& cmdmap,
                            Formatter *f, std::ostream& ss);
-  void handle_mds_map(MMDSMap *m, MDSMap *oldmap);
+  void handle_mds_map(const MMDSMap::const_ref &m, const MDSMap &oldmap);
   void handle_osd_map();
   void update_log_config();
 
   bool handle_command(
     const cmdmap_t &cmdmap,
-    MCommand *m,
+    const MCommand::const_ref &m,
     int *r,
     std::stringstream *ds,
     std::stringstream *ss,
     bool *need_reply);
 
   void dump_sessions(const SessionFilter &filter, Formatter *f) const;
-  void evict_clients(const SessionFilter &filter, MCommand *m);
+  void evict_clients(const SessionFilter &filter, const MCommand::const_ref &m);
 
   // Call into me from MDS::ms_dispatch
-  bool ms_dispatch(Message *m);
+  bool ms_dispatch(const Message::const_ref &m);
 
   MDSRankDispatcher(
       mds_rank_t whoami_,
@@ -606,7 +610,7 @@ public:
       LogChannelRef &clog_,
       SafeTimer &timer_,
       Beacon &beacon_,
-      MDSMap *& mdsmap_,
+      std::unique_ptr<MDSMap> &mdsmap_,
       Messenger *msgr,
       MonClient *monc_,
       Context *respawn_hook_,
@@ -619,7 +623,6 @@ do { \
   if (m->get_connection() && (m->get_connection()->get_peer_type() & (peers)) == 0) { \
     dout(0) << __FILE__ << "." << __LINE__ << ": filtered out request, peer=" << m->get_connection()->get_peer_type() \
            << " allowing=" << #peers << " message=" << *m << dendl; \
-    m->put();							    \
     return true; \
   } \
 } while (0)

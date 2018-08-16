@@ -18,14 +18,16 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MGetPoolStats : public PaxosServiceMessage {
+class MGetPoolStats : public MessageInstance<MGetPoolStats, PaxosServiceMessage> {
 public:
+  friend factory;
+
   uuid_d fsid;
   list<string> pools;
 
-  MGetPoolStats() : PaxosServiceMessage(MSG_GETPOOLSTATS, 0) {}
+  MGetPoolStats() : MessageInstance(MSG_GETPOOLSTATS, 0) {}
   MGetPoolStats(const uuid_d& f, ceph_tid_t t, list<string>& ls, version_t l) :
-    PaxosServiceMessage(MSG_GETPOOLSTATS, l),
+    MessageInstance(MSG_GETPOOLSTATS, l),
     fsid(f), pools(ls) {
     set_tid(t);
   }

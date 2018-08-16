@@ -18,7 +18,10 @@
 #include "MOSDFastDispatchOp.h"
 #include "osd/ECMsgTypes.h"
 
-class MOSDECSubOpRead : public MOSDFastDispatchOp {
+class MOSDECSubOpRead : public MessageInstance<MOSDECSubOpRead, MOSDFastDispatchOp> {
+public:
+  friend factory;
+private:
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 
@@ -41,7 +44,7 @@ public:
   }
 
   MOSDECSubOpRead()
-    : MOSDFastDispatchOp(MSG_OSD_EC_READ, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_OSD_EC_READ, HEAD_VERSION, COMPAT_VERSION)
     {}
 
   void decode_payload() override {

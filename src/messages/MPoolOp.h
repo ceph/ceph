@@ -18,8 +18,10 @@
 #include "messages/PaxosServiceMessage.h"
 
 
-class MPoolOp : public PaxosServiceMessage {
-
+class MPoolOp : public MessageInstance<MPoolOp, PaxosServiceMessage> {
+public:
+  friend factory;
+private:
   static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 2;
 
@@ -33,16 +35,16 @@ public:
   __s16 crush_rule = 0;
 
   MPoolOp()
-    : PaxosServiceMessage(CEPH_MSG_POOLOP, 0, HEAD_VERSION, COMPAT_VERSION) { }
+    : MessageInstance(CEPH_MSG_POOLOP, 0, HEAD_VERSION, COMPAT_VERSION) { }
   MPoolOp(const uuid_d& f, ceph_tid_t t, int p, string& n, int o, version_t v)
-    : PaxosServiceMessage(CEPH_MSG_POOLOP, v, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(CEPH_MSG_POOLOP, v, HEAD_VERSION, COMPAT_VERSION),
       fsid(f), pool(p), name(n), op(o),
       auid(0), snapid(0), crush_rule(0) {
     set_tid(t);
   }
   MPoolOp(const uuid_d& f, ceph_tid_t t, int p, string& n,
 	  int o, uint64_t uid, version_t v)
-    : PaxosServiceMessage(CEPH_MSG_POOLOP, v, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(CEPH_MSG_POOLOP, v, HEAD_VERSION, COMPAT_VERSION),
       fsid(f), pool(p), name(n), op(o),
       auid(uid), snapid(0), crush_rule(0) {
     set_tid(t);

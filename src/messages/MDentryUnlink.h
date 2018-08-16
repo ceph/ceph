@@ -18,24 +18,30 @@
 
 #include <string_view>
 
-class MDentryUnlink : public Message {
+#include "msg/Message.h"
+
+class MDentryUnlink : public MessageInstance<MDentryUnlink> {
+public:
+  friend factory;
+private:
+
   dirfrag_t dirfrag;
   string dn;
 
  public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  string& get_dn() { return dn; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+  const string& get_dn() const { return dn; }
 
   bufferlist straybl;
   bufferlist snapbl;
 
+protected:
   MDentryUnlink() :
-    Message(MSG_MDS_DENTRYUNLINK) { }
+    MessageInstance(MSG_MDS_DENTRYUNLINK) { }
   MDentryUnlink(dirfrag_t df, std::string_view n) :
-    Message(MSG_MDS_DENTRYUNLINK),
+    MessageInstance(MSG_MDS_DENTRYUNLINK),
     dirfrag(df),
     dn(n) {}
-private:
   ~MDentryUnlink() override {}
 
 public:

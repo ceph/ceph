@@ -37,7 +37,6 @@
 class CInode;
 class CDir;
 class Locker;
-class Message;
 class CDentry;
 class LogSegment;
 
@@ -309,7 +308,7 @@ public:
   }
   void set_object_info(MDSCacheObjectInfo &info) override;
   void encode_lock_state(int type, bufferlist& bl) override;
-  void decode_lock_state(int type, bufferlist& bl) override;
+  void decode_lock_state(int type, const bufferlist& bl) override;
 
   // ---------------------------------------------
   // replicas (on clients)

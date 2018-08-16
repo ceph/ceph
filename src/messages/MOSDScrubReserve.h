@@ -17,7 +17,10 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDScrubReserve : public MOSDFastDispatchOp {
+class MOSDScrubReserve : public MessageInstance<MOSDScrubReserve, MOSDFastDispatchOp> {
+public:
+  friend factory;
+private:
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 public:
@@ -40,13 +43,13 @@ public:
   }
 
   MOSDScrubReserve()
-    : MOSDFastDispatchOp(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0), type(-1) {}
   MOSDScrubReserve(spg_t pgid,
 		   epoch_t map_epoch,
 		   int type,
 		   pg_shard_t from)
-    : MOSDFastDispatchOp(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid), map_epoch(map_epoch),
       type(type), from(from) {}
 

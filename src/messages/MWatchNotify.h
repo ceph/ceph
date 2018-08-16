@@ -19,7 +19,10 @@
 #include "msg/Message.h"
 
 
-class MWatchNotify : public Message {
+class MWatchNotify : public MessageInstance<MWatchNotify> {
+public:
+  friend factory;
+private:
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 
@@ -33,9 +36,9 @@ class MWatchNotify : public Message {
   uint64_t notifier_gid; ///< who sent the notify
 
   MWatchNotify()
-    : Message(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { }
+    : MessageInstance(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { }
   MWatchNotify(uint64_t c, uint64_t v, uint64_t i, uint8_t o, bufferlist b)
-    : Message(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
       cookie(c),
       ver(v),
       notify_id(i),

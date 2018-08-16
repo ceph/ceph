@@ -19,8 +19,10 @@
 #include "MOSDFastDispatchOp.h"
 #include "osd/osd_types.h"
 
-class MOSDBackoff : public MOSDFastDispatchOp {
+class MOSDBackoff : public MessageInstance<MOSDBackoff, MOSDFastDispatchOp> {
 public:
+  friend factory;
+
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -38,10 +40,10 @@ public:
   }
 
   MOSDBackoff()
-    : MOSDFastDispatchOp(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDBackoff(spg_t pgid_, epoch_t ep, uint8_t op_, uint64_t id_,
 	      hobject_t begin_, hobject_t end_)
-    : MOSDFastDispatchOp(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid_),
       map_epoch(ep),
       op(op_),

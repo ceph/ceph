@@ -19,16 +19,18 @@
 #include "msg/Message.h"
 
 
-class MExportCapsAck : public Message {
- public:  
+class MExportCapsAck : public MessageInstance<MExportCapsAck> {
+public:  
+  friend factory;
+
   inodeno_t ino;
   bufferlist cap_bl;
 
+protected:
   MExportCapsAck() :
-    Message(MSG_MDS_EXPORTCAPSACK) {}
+    MessageInstance(MSG_MDS_EXPORTCAPSACK) {}
   MExportCapsAck(inodeno_t i) :
-    Message(MSG_MDS_EXPORTCAPSACK), ino(i) {}
-private:
+    MessageInstance(MSG_MDS_EXPORTCAPSACK), ino(i) {}
   ~MExportCapsAck() override {}
 
 public:

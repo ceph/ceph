@@ -18,17 +18,19 @@
 #include "osd/osd_types.h"
 #include "messages/PaxosServiceMessage.h"
 
-class MPGStats : public PaxosServiceMessage {
+class MPGStats : public MessageInstance<MPGStats, PaxosServiceMessage> {
 public:
+  friend factory;
+
   uuid_d fsid;
   map<pg_t,pg_stat_t> pg_stat;
   osd_stat_t osd_stat;
   epoch_t epoch = 0;
   utime_t had_map_for;
   
-  MPGStats() : PaxosServiceMessage(MSG_PGSTATS, 0) {}
+  MPGStats() : MessageInstance(MSG_PGSTATS, 0) {}
   MPGStats(const uuid_d& f, epoch_t e, utime_t had)
-    : PaxosServiceMessage(MSG_PGSTATS, 0),
+    : MessageInstance(MSG_PGSTATS, 0),
       fsid(f),
       epoch(e),
       had_map_for(had)

@@ -253,15 +253,16 @@ struct InodeStat {
 };
 
 
-class MClientReply : public Message {
-  // reply data
+class MClientReply : public MessageInstance<MClientReply> {
 public:
+  friend factory;
+
+  // reply data
   struct ceph_mds_reply_head head {};
   bufferlist trace_bl;
   bufferlist extra_bl;
   bufferlist snapbl;
 
- public:
   int get_op() const { return head.op; }
 
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
@@ -277,16 +278,16 @@ public:
 
   bool is_safe() const { return head.safe; }
 
-  MClientReply() : Message(CEPH_MSG_CLIENT_REPLY) {}
-  MClientReply(MClientRequest *req, int result = 0) : 
-    Message(CEPH_MSG_CLIENT_REPLY) {
+protected:
+  MClientReply() : MessageInstance(CEPH_MSG_CLIENT_REPLY) {}
+  MClientReply(const MClientRequest &req, int result = 0) :
+    MessageInstance(CEPH_MSG_CLIENT_REPLY) {
     memset(&head, 0, sizeof(head));
-    header.tid = req->get_tid();
-    head.op = req->get_op();
+    header.tid = req.get_tid();
+    head.op = req.get_op();
     head.result = result;
     head.safe = 1;
   }
-private:
   ~MClientReply() override {}
 
 public:

@@ -18,6 +18,7 @@
 #define CEPH_MESSENGER_H
 
 #include <map>
+#include <deque>
 
 #include "Message.h"
 #include "Dispatcher.h"
@@ -41,8 +42,8 @@ class Timer;
 
 class Messenger {
 private:
-  list<Dispatcher*> dispatchers;
-  list <Dispatcher*> fast_dispatchers;
+  std::deque<Dispatcher*> dispatchers;
+  std::deque<Dispatcher*> fast_dispatchers;
   ZTracer::Endpoint trace_endpoint;
 
 protected:
@@ -593,11 +594,9 @@ public:
    *
    * @param m The Message we are testing.
    */
-  bool ms_can_fast_dispatch(const Message *m) {
-    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
-	 p != fast_dispatchers.end();
-	 ++p) {
-      if ((*p)->ms_can_fast_dispatch(m))
+  bool ms_can_fast_dispatch(const Message::const_ref& m) {
+    for (const auto &dispatcher : fast_dispatchers) {
+      if (dispatcher->ms_can_fast_dispatch2(m))
 	return true;
     }
     return false;
@@ -606,30 +605,28 @@ public:
   /**
    * Deliver a single Message via "fast dispatch".
    *
-   * @param m The Message we are fast dispatching. We take ownership
-   * of one reference to it.
+   * @param m The Message we are fast dispatching.
    * If none of our Dispatchers can handle it, ceph_abort().
    */
-  void ms_fast_dispatch(Message *m) {
+  void ms_fast_dispatch(const Message::ref &m) {
     m->set_dispatch_stamp(ceph_clock_now());
-    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
-	 p != fast_dispatchers.end();
-	 ++p) {
-      if ((*p)->ms_can_fast_dispatch(m)) {
-	(*p)->ms_fast_dispatch(m);
+    for (const auto &dispatcher : fast_dispatchers) {
+      if (dispatcher->ms_can_fast_dispatch2(m)) {
+	dispatcher->ms_fast_dispatch2(m);
 	return;
       }
     }
     ceph_abort();
   }
+  void ms_fast_dispatch(Message *m) {
+    return ms_fast_dispatch(Message::ref(m, false)); /* consume ref */
+  }
   /**
    *
    */
-  void ms_fast_preprocess(Message *m) {
-    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
-	 p != fast_dispatchers.end();
-	 ++p) {
-      (*p)->ms_fast_preprocess(m);
+  void ms_fast_preprocess(const Message::ref &m) {
+    for (const auto &dispatcher : fast_dispatchers) {
+      dispatcher->ms_fast_preprocess2(m);
     }
   }
   /**
@@ -637,21 +634,20 @@ public:
    *  in sequence until one of them handles it.
    *  If none of our Dispatchers can handle it, assert(0).
    *
-   *  @param m The Message to deliver. We take ownership of
-   *  one reference to it.
+   *  @param m The Message to deliver.
    */
-  void ms_deliver_dispatch(Message *m) {
+  void ms_deliver_dispatch(const Message::ref &m) {
     m->set_dispatch_stamp(ceph_clock_now());
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 ++p) {
-      if ((*p)->ms_dispatch(m))
+    for (const auto &dispatcher : dispatchers) {
+      if (dispatcher->ms_dispatch2(m))
 	return;
     }
     lsubdout(cct, ms, 0) << "ms_deliver_dispatch: unhandled message " << m << " " << *m << " from "
 			 << m->get_source_inst() << dendl;
     assert(!cct->_conf->ms_die_on_unhandled_msg);
-    m->put();
+  }
+  void ms_deliver_dispatch(Message *m) {
+    return ms_deliver_dispatch(Message::ref(m, false)); /* consume ref */
   }
   /**
    * Notify each Dispatcher of a new Connection. Call
@@ -661,10 +657,9 @@ public:
    * @param con Pointer to the new Connection.
    */
   void ms_deliver_handle_connect(Connection *con) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 ++p)
-      (*p)->ms_handle_connect(con);
+    for (const auto& dispatcher : dispatchers) {
+      dispatcher->ms_handle_connect(con);
+    }
   }
 
   /**
@@ -675,10 +670,9 @@ public:
    * @param con Pointer to the new Connection.
    */
   void ms_deliver_handle_fast_connect(Connection *con) {
-    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
-         p != fast_dispatchers.end();
-         ++p)
-      (*p)->ms_handle_fast_connect(con);
+    for (const auto& dispatcher : fast_dispatchers) {
+      dispatcher->ms_handle_fast_connect(con);
+    }
   }
 
   /**
@@ -688,10 +682,9 @@ public:
    * @param con Pointer to the new Connection.
    */
   void ms_deliver_handle_accept(Connection *con) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 ++p)
-      (*p)->ms_handle_accept(con);
+    for (const auto& dispatcher : dispatchers) {
+      dispatcher->ms_handle_accept(con);
+    }
   }
 
   /**
@@ -701,10 +694,9 @@ public:
    * @param con Pointer to the new Connection.
    */
   void ms_deliver_handle_fast_accept(Connection *con) {
-    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
-         p != fast_dispatchers.end();
-         ++p)
-      (*p)->ms_handle_fast_accept(con);
+    for (const auto& dispatcher : fast_dispatchers) {
+      dispatcher->ms_handle_fast_accept(con);
+    }
   }
 
   /**
@@ -715,10 +707,8 @@ public:
    * @param con Pointer to the broken Connection.
    */
   void ms_deliver_handle_reset(Connection *con) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 ++p) {
-      if ((*p)->ms_handle_reset(con))
+    for (const auto& dispatcher : dispatchers) {
+      if (dispatcher->ms_handle_reset(con))
 	return;
     }
   }
@@ -730,10 +720,9 @@ public:
    * @param con Pointer to the broken Connection.
    */
   void ms_deliver_handle_remote_reset(Connection *con) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 ++p)
-      (*p)->ms_handle_remote_reset(con);
+    for (const auto& dispatcher : dispatchers) {
+      dispatcher->ms_handle_remote_reset(con);
+    }
   }
 
   /**
@@ -745,10 +734,8 @@ public:
    * @param con Pointer to the broken Connection.
    */
   void ms_deliver_handle_refused(Connection *con) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-         p != dispatchers.end();
-         ++p) {
-      if ((*p)->ms_handle_refused(con))
+    for (const auto& dispatcher : dispatchers) {
+      if (dispatcher->ms_handle_refused(con))
         return;
     }
   }
@@ -762,10 +749,8 @@ public:
    */
   AuthAuthorizer *ms_deliver_get_authorizer(int peer_type, bool force_new) {
     AuthAuthorizer *a = 0;
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 ++p) {
-      if ((*p)->ms_get_authorizer(peer_type, &a, force_new))
+    for (const auto& dispatcher : dispatchers) {
+      if (dispatcher->ms_get_authorizer(peer_type, &a, force_new))
 	return a;
     }
     return NULL;
@@ -788,11 +773,9 @@ public:
 				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
 				    bool& isvalid, CryptoKey& session_key,
 				    std::unique_ptr<AuthAuthorizerChallenge> *challenge) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 ++p) {
-      if ((*p)->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply,
-				     isvalid, session_key, challenge))
+    for (const auto& dispatcher : dispatchers) {
+      if (dispatcher->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply,
+                                           isvalid, session_key, challenge))
 	return true;
     }
     return false;
