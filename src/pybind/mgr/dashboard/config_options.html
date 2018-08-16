@@ -1,0 +1,120 @@
+
+{% extends "base.html" %}
+
+{% block content %}
+
+
+<script>
+  $(document).ready(function(){
+             // Pre-populated initial data at page load
+            var content_data = {{ content_data }};
+	    
+	     rivets.formatters.display_arrays = function(arr) {
+	         result = arr.join().replace(/,/g, "<br/>");
+	         return "<div style='width:90px;word-break:break-all'>" + result + "</div>";
+             };
+
+             str_to_level = function(str) {
+                 if (str == "basic")
+                     return "0"
+                 else if (str == "advanced")
+                     return "1"
+                 else if (str == "developer")
+                     return "2" 
+             };
+  
+             apply_filters = function() {
+                 content_data.options_list = [];
+                 var selection = "#" + content_data.service;
+                 $(selection).attr('selected','selected');
+                 var level = $("#level").val();
+                 var service = $("#service").val();
+                 if (level == "developer" && service == "any") {
+                     content_data.options_list = content_data.options.options;
+                 }
+                 for (var opt of content_data.options.options) {
+                     if (service == "any" && str_to_level(opt.level) <= level) {
+                         content_data.options_list.push(opt); 
+                     } else if (opt.services.includes(service) && str_to_level(opt.level) <= level) {
+                         content_data.options_list.push(opt);
+                     }
+                 }
+         
+             };
+             
+             rivets.bind($("#content"), content_data);         
+             apply_filters();
+
+         });
+</script>
+
+<!-- Page Header -->
+<section class="content-header">
+    <h1 style="font-weight:bold">
+      Configuration Options
+      <div class="pull-right" style="font-size:17px">
+	<label>Services:</label>
+	<select id="service" style="color:grey" onchange="apply_filters()">
+	  <option id="mon">mon</option>
+	  <option id="mgr">mgr</option>
+	  <option id="osd">osd</option>
+	  <option id="mds">mds</option>
+	  <option id="common">common</option>
+	  <option id="mds_client">mds_client</option>
+	  <option id="rgw">rgw</option>
+	  <option id="any">any</option>
+	</select>
+	<label>Level:</label>
+	<select id="level" style="color:grey" onchange="apply_filters()">
+	  <option value="0">basic</option>
+	  <option value="1">advanced</option>
+	  <option value="2">developer</option>
+	</select>
+      </div>
+    </h1>
+</section>
+	
+<!-- Main content -->
+<section class="content">
+    <div class="box" style="overflow:auto">
+      <div class="box-body">
+	    <table class="table table-bordered">
+	        <thead>
+		    <tr>
+		        <th>Name</th>
+			<th>Description</th>
+			<th>Long description</th>
+			<th>Type</th>
+			<th>Level</th>
+			<th>Default</th>
+			<th>Daemon default</th>
+			<th>Tags</th>
+			<th>Services</th>
+			<th>See_also</th>
+			<th>Max</th>
+			<th>Min</th>
+		    </tr>
+		</thead>
+		<tbody>
+		    <tr rv-each-opt="options_list">
+		        <td><div style="width:120px;word-break:break-all">{opt.name}</div></td>
+			<td><div style="width:80px;word-break:break-all">{opt.desc}</td>
+			<td><div style="width:120px;word-break:break-all">{opt.long_desc}</div></td>
+			<td><div style="width:70px;word-break:break-all">{opt.type}<div></td>
+			<td>{opt.level}</td>
+			<td><div style="width:80px;word-break:break-all">{opt.default}<div></td>
+			<td><div style="width:120px;word-break:break-all">{opt.daemon_default}</div></td>
+			<td rv-html="opt.tags | display_arrays"</td>
+			<td rv-html="opt.services |  display_arrays"></td>
+                       <td rv-html="opt.see_also | display_arrays"</td>
+                       <td>{opt.max}</td>
+			<td>{opt.min}</td>    
+		    </tr>
+		</tbody>
+	    </table>
+	</div>	
+    </div>
+</section>
+ 
+
+{% endblock %}

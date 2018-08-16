@@ -180,6 +180,9 @@ public:
   void show_config(std::ostream& out);
   /// dump all config values to a formatter
   void show_config(Formatter *f);
+  
+  /// dump all config settings to a formatter
+  void config_options(Formatter *f);
 
   /// obtain a diff between our config values and another md_config_t values
   void diff(const md_config_t *other,

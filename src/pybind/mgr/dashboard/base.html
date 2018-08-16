@@ -347,7 +347,7 @@
             <i class="fa fa-heartbeat" rv-style="health_status | health_color"></i>
             <span>Cluster health</span></a>
         </li>
-        <li class="treeview{%if path_info.startswith(('/server', '/osd'))%} active{%endif%}">
+        <li class="treeview{%if path_info.startswith(('/server', '/osd','/config_options'))%} active{%endif%}">
           <a href="#"><i class="fa fa-server"></i> <span>Cluster</span>
             <span class="pull-right-container">
               <i class="fa fa-angle-left pull-right"></i>
@@ -359,6 +359,9 @@
             </li>
             <li>
                 <a href="{{ url_prefix }}/osd">OSDs</a>
+            </li>
+	    <li>
+              <a href="{{ url_prefix }}/config_options">Configuration</a>
             </li>
           </ul>
         </li>
