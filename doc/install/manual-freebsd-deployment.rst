@@ -53,8 +53,8 @@ Current implementation works on ZFS pools
 * One ZFS pool is allocated per OSD, like::
 
     gpart create -s GPT ada1
-    gpart add -t freebsd-zfs -l osd1 ada1
-    zpool create -o mountpoint=/var/lib/ceph/osd/osd.1 osd
+    gpart add -t freebsd-zfs -l osd.1 ada1
+    zpool create -m /var/lib/ceph/osd/osd.1 osd.1 gpt/osd.1
 
 * Some cache and log (ZIL) can be attached.
   Please note that this is different from the Ceph journals. Cache and log are
@@ -63,10 +63,10 @@ Current implementation works on ZFS pools
   Assuming that ada2 is an SSD::
 
     gpart create -s GPT ada2
-    gpart add -t freebsd-zfs -l osd1-log -s 1G ada2
-    zpool add osd1 log gpt/osd1-log
-    gpart add -t freebsd-zfs -l osd1-cache -s 10G ada2
-    zpool add osd1 log gpt/osd1-cache
+    gpart add -t freebsd-zfs -l osd.1-log -s 1G ada2
+    zpool add osd.1 log gpt/osd.1-log
+    gpart add -t freebsd-zfs -l osd.1-cache -s 10G ada2
+    zpool add osd.1 log gpt/osd.1-cache
 
 * Note: *UFS2 does not allow large xattribs*
 
