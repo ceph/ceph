@@ -21,6 +21,10 @@
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
 #include "rgw_common.h"
+#include "rgw_zone.h"
+
+#include "services/svc_zone.h"
+
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 
@@ -86,7 +90,7 @@ void RGWOp_MDLog_List::execute() {
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = store->get_current_period_id();
+    period = store->svc.zone->get_current_period_id();
     if (period.empty()) {
       ldout(s->cct, 5) << "Missing period id" << dendl;
       http_ret = -EINVAL;
@@ -164,7 +168,7 @@ void RGWOp_MDLog_ShardInfo::execute() {
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = store->get_current_period_id();
+    period = store->svc.zone->get_current_period_id();
 
     if (period.empty()) {
       ldout(s->cct, 5) << "Missing period id" << dendl;
@@ -223,7 +227,7 @@ void RGWOp_MDLog_Delete::execute() {
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = store->get_current_period_id();
+    period = store->svc.zone->get_current_period_id();
 
     if (period.empty()) {
       ldout(s->cct, 5) << "Missing period id" << dendl;
@@ -250,7 +254,7 @@ void RGWOp_MDLog_Lock::execute() {
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = store->get_current_period_id();
+    period = store->svc.zone->get_current_period_id();
   }
 
   if (period.empty() ||
@@ -298,7 +302,7 @@ void RGWOp_MDLog_Unlock::execute() {
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = store->get_current_period_id();
+    period = store->svc.zone->get_current_period_id();
   }
 
   if (period.empty() ||

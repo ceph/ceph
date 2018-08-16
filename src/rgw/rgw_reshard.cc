@@ -4,6 +4,7 @@
 #include <limits>
 
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_bucket.h"
 #include "rgw_reshard.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -12,6 +13,8 @@
 #include "common/ceph_json.h"
 
 #include "common/dout.h"
+
+#include "services/svc_zone.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -733,7 +736,7 @@ void RGWReshard::get_bucket_logshard_oid(const string& tenant, const string& buc
 
 int RGWReshard::add(cls_rgw_reshard_entry& entry)
 {
-  if (!store->can_reshard()) {
+  if (!store->svc.zone->can_reshard()) {
     ldout(store->ctx(), 20) << __func__ << " Resharding is disabled"  << dendl;
     return 0;
   }
@@ -792,7 +795,7 @@ int RGWReshard::list(int logshard_num, string& marker, uint32_t max, std::list<c
     }
     lderr(store->ctx()) << "ERROR: failed to list reshard log entries, oid=" << logshard_oid << dendl;
     if (ret == -EACCES) {
-      lderr(store->ctx()) << "access denied to pool " << store->get_zone_params().reshard_pool
+      lderr(store->ctx()) << "access denied to pool " << store->svc.zone->get_zone_params().reshard_pool
                           << ". Fix the pool access permissions of your client" << dendl;
     }
   }
@@ -1035,7 +1038,7 @@ void  RGWReshard::get_logshard_oid(int shard_num, string *logshard)
 
 int RGWReshard::process_all_logshards()
 {
-  if (!store->can_reshard()) {
+  if (!store->svc.zone->can_reshard()) {
     ldout(store->ctx(), 20) << __func__ << " Resharding is disabled"  << dendl;
     return 0;
   }

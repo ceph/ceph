@@ -5,6 +5,9 @@
 #include "rgw_rest_realm.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_config.h"
+#include "rgw_zone.h"
+
+#include "services/svc_zone.h"
 
 #include "include/ceph_assert.h"
 
@@ -91,9 +94,9 @@ void RGWOp_Period_Post::execute()
   }
 
   // require period.realm_id to match our realm
-  if (period.get_realm() != store->realm.get_id()) {
+  if (period.get_realm() != store->svc.zone->get_realm().get_id()) {
     error_stream << "period with realm id " << period.get_realm()
-        << " doesn't match current realm " << store->realm.get_id() << std::endl;
+        << " doesn't match current realm " << store->svc.zone->get_realm().get_id() << std::endl;
     http_ret = -EINVAL;
     return;
   }
@@ -127,7 +130,7 @@ void RGWOp_Period_Post::execute()
   }
 
   // if it's not period commit, nobody is allowed to push to the master zone
-  if (period.get_master_zone() == store->get_zone_params().get_id()) {
+  if (period.get_master_zone() == store->svc.zone->get_zone_params().get_id()) {
     ldout(cct, 10) << "master zone rejecting period id="
         << period.get_id() << " epoch=" << period.get_epoch() << dendl;
     http_ret = -EINVAL; // XXX: error code

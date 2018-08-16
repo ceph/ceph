@@ -1,6 +1,10 @@
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_coroutine.h"
 #include "rgw_cr_rados.h"
+
+#include "services/svc_zone.h"
+#include "services/svc_zone_utils.h"
 
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"

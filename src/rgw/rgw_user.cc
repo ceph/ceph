@@ -12,6 +12,7 @@
 #include "common/ceph_json.h"
 #include "common/RWLock.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_acl.h"
 
 #include "include/types.h"
@@ -23,6 +24,8 @@
 
 #include "rgw_bucket.h"
 #include "rgw_quota.h"
+
+#include "services/svc_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -210,7 +213,7 @@ int rgw_store_user_info(RGWRados *store,
   if (!info.user_email.empty()) {
     if (!old_info ||
         old_info->user_email.compare(info.user_email) != 0) { /* only if new index changed */
-      ret = rgw_put_system_obj(store, store->get_zone_params().user_email_pool, info.user_email,
+      ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_email_pool, info.user_email,
                                link_bl, exclusive, NULL, real_time());
       if (ret < 0)
         return ret;
@@ -224,7 +227,7 @@ int rgw_store_user_info(RGWRados *store,
       if (old_info && old_info->access_keys.count(iter->first) != 0)
 	continue;
 
-      ret = rgw_put_system_obj(store, store->get_zone_params().user_keys_pool, k.id,
+      ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_keys_pool, k.id,
                                link_bl, exclusive, NULL, real_time());
       if (ret < 0)
         return ret;
@@ -237,7 +240,7 @@ int rgw_store_user_info(RGWRados *store,
     if (old_info && old_info->swift_keys.count(siter->first) != 0)
       continue;
 
-    ret = rgw_put_system_obj(store, store->get_zone_params().user_swift_pool, k.id,
+    ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_swift_pool, k.id,
                              link_bl, exclusive, NULL, real_time());
     if (ret < 0)
       return ret;
@@ -321,7 +324,7 @@ int rgw_get_user_info_by_uid(RGWRados *store,
 
   RGWObjectCtx obj_ctx(store);
   string oid = uid.to_str();
-  int ret = rgw_get_system_obj(store, obj_ctx, store->get_zone_params().user_uid_pool, oid, bl, objv_tracker, pmtime, pattrs, cache_info);
+  int ret = rgw_get_system_obj(store, obj_ctx, store->svc.zone->get_zone_params().user_uid_pool, oid, bl, objv_tracker, pmtime, pattrs, cache_info);
   if (ret < 0) {
     return ret;
   }
@@ -351,7 +354,7 @@ int rgw_get_user_info_by_uid(RGWRados *store,
 int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info,
                                RGWObjVersionTracker *objv_tracker, real_time *pmtime)
 {
-  return rgw_get_user_info_from_index(store, email, store->get_zone_params().user_email_pool, info, objv_tracker, pmtime);
+  return rgw_get_user_info_from_index(store, email, store->svc.zone->get_zone_params().user_email_pool, info, objv_tracker, pmtime);
 }
 
 /**
@@ -365,7 +368,7 @@ extern int rgw_get_user_info_by_swift(RGWRados * const store,
                                       real_time * const pmtime)
 {
   return rgw_get_user_info_from_index(store, swift_name,
-                                      store->get_zone_params().user_swift_pool,
+                                      store->svc.zone->get_zone_params().user_swift_pool,
                                       info, objv_tracker, pmtime);
 }
 
@@ -380,7 +383,7 @@ extern int rgw_get_user_info_by_access_key(RGWRados* store,
                                            real_time *pmtime)
 {
   return rgw_get_user_info_from_index(store, access_key,
-                                      store->get_zone_params().user_keys_pool,
+                                      store->svc.zone->get_zone_params().user_keys_pool,
                                       info, objv_tracker, pmtime);
 }
 
@@ -390,7 +393,7 @@ int rgw_get_user_attrs_by_uid(RGWRados *store,
                               RGWObjVersionTracker *objv_tracker)
 {
   RGWObjectCtx obj_ctx(store);
-  rgw_raw_obj obj(store->get_zone_params().user_uid_pool, user_id.to_str());
+  rgw_raw_obj obj(store->svc.zone->get_zone_params().user_uid_pool, user_id.to_str());
   RGWRados::SystemObject src(store, obj_ctx, obj);
   RGWRados::SystemObject::Read rop(&src);
 
@@ -400,7 +403,7 @@ int rgw_get_user_attrs_by_uid(RGWRados *store,
 
 int rgw_remove_key_index(RGWRados *store, RGWAccessKey& access_key)
 {
-  rgw_raw_obj obj(store->get_zone_params().user_keys_pool, access_key.id);
+  rgw_raw_obj obj(store->svc.zone->get_zone_params().user_keys_pool, access_key.id);
   int ret = store->delete_system_obj(obj);
   return ret;
 }
@@ -426,13 +429,13 @@ int rgw_remove_email_index(RGWRados *store, string& email)
   if (email.empty()) {
     return 0;
   }
-  rgw_raw_obj obj(store->get_zone_params().user_email_pool, email);
+  rgw_raw_obj obj(store->svc.zone->get_zone_params().user_email_pool, email);
   return store->delete_system_obj(obj);
 }
 
 int rgw_remove_swift_name_index(RGWRados *store, string& swift_name)
 {
-  rgw_raw_obj obj(store->get_zone_params().user_swift_pool, swift_name);
+  rgw_raw_obj obj(store->svc.zone->get_zone_params().user_swift_pool, swift_name);
   int ret = store->delete_system_obj(obj);
   return ret;
 }
@@ -478,7 +481,7 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
 
   string buckets_obj_id;
   rgw_get_buckets_obj(info.user_id, buckets_obj_id);
-  rgw_raw_obj uid_bucks(store->get_zone_params().user_uid_pool, buckets_obj_id);
+  rgw_raw_obj uid_bucks(store->svc.zone->get_zone_params().user_uid_pool, buckets_obj_id);
   ldout(store->ctx(), 10) << "removing user buckets index" << dendl;
   ret = store->delete_system_obj(uid_bucks);
   if (ret < 0 && ret != -ENOENT) {
@@ -489,7 +492,7 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
   string key;
   info.user_id.to_str(key);
   
-  rgw_raw_obj uid_obj(store->get_zone_params().user_uid_pool, key);
+  rgw_raw_obj uid_obj(store->svc.zone->get_zone_params().user_uid_pool, key);
   ldout(store->ctx(), 10) << "removing user index: " << info.user_id << dendl;
   ret = store->meta_mgr->remove_entry(user_meta_handler, key, &objv_tracker);
   if (ret < 0 && ret != -ENOENT && ret  != -ECANCELED) {
@@ -2746,7 +2749,7 @@ public:
 
   void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
     oid = key;
-    pool = store->get_zone_params().user_uid_pool;
+    pool = store->svc.zone->get_zone_params().user_uid_pool;
   }
 
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override
@@ -2755,7 +2758,7 @@ public:
 
     info->store = store;
 
-    int ret = store->list_raw_objects_init(store->get_zone_params().user_uid_pool, marker,
+    int ret = store->list_raw_objects_init(store->svc.zone->get_zone_params().user_uid_pool, marker,
                                            &info->ctx);
     if (ret < 0) {
       return ret;

@@ -8,7 +8,7 @@
 
 int RGWS_RADOS::create_instance(const string& conf, RGWServiceInstanceRef *instance)
 {
-  *instance = std::make_shared<RGWServiceInstance>();
+  instance->reset(new RGWSI_RADOS(this, cct));
   return 0;
 }
 

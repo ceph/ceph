@@ -9,6 +9,9 @@
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rest.h"
 #include "rgw_acl.h"
+#include "rgw_zone.h"
+
+#include "services/svc_zone.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -557,11 +560,11 @@ struct AWSSyncConfig {
   void expand_target(RGWDataSyncEnv *sync_env, const string& sid, const string& path, string *dest) {
       apply_meta_param(path, "sid", sid, dest);
 
-      RGWZoneGroup& zg = sync_env->store->get_zonegroup();
+      RGWZoneGroup& zg = sync_env->store->svc.zone->get_zonegroup();
       apply_meta_param(path, "zonegroup", zg.get_name(), dest);
       apply_meta_param(path, "zonegroup_id", zg.get_id(), dest);
 
-      RGWZone& zone = sync_env->store->get_zone();
+      RGWZone& zone = sync_env->store->svc.zone->get_zone();
       apply_meta_param(path, "zone", zone.name, dest);
       apply_meta_param(path, "zone_id", zone.id, dest);
   }
@@ -636,7 +639,7 @@ struct AWSSyncConfig {
     auto& root_conf = root_profile->conn_conf;
 
     root_profile->conn.reset(new S3RESTConn(sync_env->cct,
-                                           sync_env->store,
+                                           sync_env->store->svc.zone.get(),
                                            id,
                                            { root_conf->endpoint },
                                            root_conf->key,
@@ -646,7 +649,7 @@ struct AWSSyncConfig {
       auto& c = i.second;
 
       c->conn.reset(new S3RESTConn(sync_env->cct,
-                                   sync_env->store,
+                                   sync_env->store->svc.zone.get(),
                                    id,
                                    { c->conn_conf->endpoint },
                                    c->conn_conf->key,
@@ -1420,7 +1423,7 @@ public:
                                                    obj_size(_obj_size),
                                                    src_properties(_src_properties),
                                                    rest_obj(_rest_obj),
-                                                   status_obj(sync_env->store->get_zone_params().log_pool,
+                                                   status_obj(sync_env->store->svc.zone->get_zone_params().log_pool,
                                                               RGWBucketSyncStatusManager::obj_status_oid(sync_env->source_zone, src_obj)) {
   }
 
@@ -1599,7 +1602,7 @@ public:
                               << " attrs=" << attrs
                               << dendl;
 
-      source_conn = sync_env->store->get_zone_conn_by_id(sync_env->source_zone);
+      source_conn = sync_env->store->svc.zone->get_zone_conn_by_id(sync_env->source_zone);
       if (!source_conn) {
         ldout(sync_env->cct, 0) << "ERROR: cannot find http connection to zone " << sync_env->source_zone << dendl;
         return set_cr_error(-EINVAL);
