@@ -123,7 +123,7 @@ EOM
         echo "Current ccache max_size setting:"
         ccache -p | grep max_size
     fi
-    $DRY_RUN ccache -z # Reset the ccache statistics
+    $DRY_RUN ccache -sz # Reset the ccache statistics and show the current configuration
 
     $DRY_RUN ./do_cmake.sh $CMAKE_BUILD_OPTS $@ || return 1
     $DRY_RUN cd build
