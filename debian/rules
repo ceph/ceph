@@ -143,6 +143,8 @@ override_dh_python2:
 	dh_python2 -p ceph-base
 	dh_python2 -p ceph-osd
 	dh_python2 -p ceph-mgr
+	# batch-compile, and set up for delete, all the module files
+	dh_python2 -p ceph-mgr usr/lib/ceph/mgr
 
 override_dh_python3:
 	for binding in rados cephfs rbd rgw; do \
