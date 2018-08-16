@@ -25,7 +25,10 @@
 #include "rgw_data_sync.h"
 #include "rgw_metadata.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_sync.h"
+
+#include "services/svc_zone.h"
 
 #include <boost/asio/yield.hpp>
 #include "include/ceph_assert.h"
@@ -434,8 +437,8 @@ class BucketTrimInstanceCR : public RGWCoroutine {
     : RGWCoroutine(store->ctx()), store(store),
       http(http), observer(observer),
       bucket_instance(bucket_instance),
-      zone_id(store->get_zone().id),
-      peer_status(store->zone_conn_map.size())
+      zone_id(store->svc.zone->get_zone().id),
+      peer_status(store->svc.zone->get_zone_conn_map().size())
   {}
 
   int operate() override;
@@ -459,7 +462,7 @@ int BucketTrimInstanceCR::operate()
       };
 
       auto p = peer_status.begin();
-      for (auto& c : store->zone_conn_map) {
+      for (auto& c : store->svc.zone->get_zone_conn_map()) {
         using StatusCR = RGWReadRESTResourceCR<StatusShards>;
         spawn(new StatusCR(cct, c.second, http, "/admin/log/", params, &*p),
               false);
@@ -1016,7 +1019,7 @@ class BucketTrimManager::Impl : public TrimCounters::Server,
 
   Impl(RGWRados *store, const BucketTrimConfig& config)
     : store(store), config(config),
-      status_obj(store->get_zone_params().log_pool, BucketTrimStatus::oid),
+      status_obj(store->svc.zone->get_zone_params().log_pool, BucketTrimStatus::oid),
       counter(config.counter_size),
       trimmed(config.recent_size, config.recent_duration),
       watcher(store, status_obj, this)

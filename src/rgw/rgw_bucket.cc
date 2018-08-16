@@ -13,6 +13,7 @@
 #include "common/errno.h"
 #include "common/ceph_json.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 
@@ -21,6 +22,8 @@
 #include "rgw_user.h"
 #include "rgw_string.h"
 #include "rgw_multi.h"
+
+#include "services/svc_zone.h"
 
 #include "include/rados/librados.hpp"
 // until everything is moved from rgw_common
@@ -106,7 +109,7 @@ int rgw_read_user_buckets(RGWRados * store,
   buckets.clear();
   std::string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
-  rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
+  rgw_raw_obj obj(store->svc.zone->get_zone_params().user_uid_pool, buckets_obj_id);
 
   bool truncated = false;
   string m = marker;
@@ -154,7 +157,7 @@ int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, const R
 {
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
-  rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
+  rgw_raw_obj obj(store->svc.zone->get_zone_params().user_uid_pool, buckets_obj_id);
 
   return store->cls_user_sync_bucket_stats(obj, bucket_info);
 }
@@ -214,7 +217,7 @@ int rgw_link_bucket(RGWRados* const store,
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
 
-  rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
+  rgw_raw_obj obj(store->svc.zone->get_zone_params().user_uid_pool, buckets_obj_id);
   ret = store->cls_user_add_bucket(obj, new_bucket);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error adding bucket to directory: "
@@ -251,7 +254,7 @@ int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id, const string& te
 
   cls_user_bucket bucket;
   bucket.name = bucket_name;
-  rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
+  rgw_raw_obj obj(store->svc.zone->get_zone_params().user_uid_pool, buckets_obj_id);
   ret = store->cls_user_remove_bucket(obj, bucket);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error removing bucket from directory: "
@@ -818,7 +821,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   std::string display_name = op_state.get_user_display_name();
   rgw_bucket bucket = op_state.get_bucket();
 
-  const rgw_pool& root_pool = store->get_zone_params().domain_root;
+  const rgw_pool& root_pool = store->svc.zone->get_zone_params().domain_root;
   std::string bucket_entry;
   rgw_make_bucket_entry_name(tenant, bucket_name, bucket_entry);
   rgw_raw_obj obj(root_pool, bucket_entry);
@@ -1703,7 +1706,7 @@ int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs) {
 
 int RGWDataChangesLog::renew_entries()
 {
-  if (!store->need_to_log_data())
+  if (!store->svc.zone->need_to_log_data())
     return 0;
 
   /* we can't keep the bucket name as part of the cls_log_entry, and we need
@@ -1797,7 +1800,7 @@ int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
 }
 
 int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
-  if (!store->need_to_log_data())
+  if (!store->svc.zone->need_to_log_data())
     return 0;
 
   if (observer) {
@@ -2007,6 +2010,14 @@ int RGWDataChangesLog::trim_entries(const real_time& start_time, const real_time
   return 0;
 }
 
+int RGWDataChangesLog::lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id) {
+  return store->lock_exclusive(store->svc.zone->get_zone_params().log_pool, oids[shard_id], duration, zone_id, owner_id);
+}
+
+int RGWDataChangesLog::unlock(int shard_id, string& zone_id, string& owner_id) {
+  return store->unlock(store->svc.zone->get_zone_params().log_pool, oids[shard_id], zone_id, owner_id);
+}
+
 bool RGWDataChangesLog::going_down()
 {
   return down_flag;
@@ -2187,7 +2198,7 @@ public:
 
   void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
     oid = key;
-    pool = store->get_zone_params().domain_root;
+    pool = store->svc.zone->get_zone_params().domain_root;
   }
 
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
@@ -2195,7 +2206,7 @@ public:
 
     info->store = store;
 
-    int ret = store->list_raw_objects_init(store->get_zone_params().domain_root, marker,
+    int ret = store->list_raw_objects_init(store->svc.zone->get_zone_params().domain_root, marker,
                                            &info->ctx);
     if (ret < 0) {
       return ret;
@@ -2303,7 +2314,7 @@ public:
       bci.info.bucket.name = bucket_name;
       bci.info.bucket.bucket_id = bucket_instance;
       bci.info.bucket.tenant = tenant_name;
-      ret = store->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
+      ret = store->svc.zone->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
       if (ret < 0) {
         ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
         return ret;
@@ -2386,7 +2397,7 @@ public:
   void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
     oid = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
     rgw_bucket_instance_key_to_oid(oid);
-    pool = store->get_zone_params().domain_root;
+    pool = store->svc.zone->get_zone_params().domain_root;
   }
 
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
@@ -2394,7 +2405,7 @@ public:
 
     info->store = store;
 
-    int ret = store->list_raw_objects_init(store->get_zone_params().domain_root, marker,
+    int ret = store->list_raw_objects_init(store->svc.zone->get_zone_params().domain_root, marker,
                                            &info->ctx);
     if (ret < 0) {
       return ret;

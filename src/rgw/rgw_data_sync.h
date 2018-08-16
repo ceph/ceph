@@ -228,6 +228,7 @@ struct rgw_bucket_entry_owner {
 };
 
 class RGWSyncErrorLogger;
+class RGWRESTConn;
 
 struct RGWDataSyncEnv {
   const DoutPrefixProvider *dpp{nullptr};

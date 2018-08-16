@@ -12,6 +12,7 @@
 #include "include/str_list.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_formats.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"

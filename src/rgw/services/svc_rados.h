@@ -24,8 +24,6 @@ struct rgw_rados_ref {
 
 class RGWSI_RADOS : public RGWServiceInstance
 {
-  RGWServiceInstanceRef svc_rados;
-
   std::vector<librados::Rados> rados;
   uint32_t next_rados_handle{0};
   RWLock handle_lock;

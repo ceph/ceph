@@ -39,8 +39,10 @@ function(gperf_generate input output)
 endfunction()
 
 set(librgw_common_srcs
+  services/svc_quota.cc
   services/svc_rados.cc
   services/svc_zone.cc
+  services/svc_zone_utils.cc
   rgw_service.cc
   rgw_acl.cc
   rgw_acl_s3.cc

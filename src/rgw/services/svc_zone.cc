@@ -3,6 +3,12 @@
 
 #include "rgw/rgw_zone.h"
 
+int RGWS_Zone::create_instance(const string& conf, RGWServiceInstanceRef *instance)
+{
+  instance->reset(new RGWSI_Zone(this, cct));
+  return 0;
+}
+
 std::map<string, RGWServiceInstance::dependency> RGWSI_Zone::get_deps()
 {
   RGWServiceInstance::dependency dep = { .name = "rados",
@@ -72,23 +78,6 @@ bool RGWSI_Zone::has_zonegroup_api(const std::string& api) const
   return false;
 }
 
-string RGWSI_Zone::gen_host_id() {
-  /* uint64_t needs 16, two '-' separators and a trailing null */
-  const string& zone_name = zone_public_config->name;
-  const string& zonegroup_name = zonegroup->get_name();
-  char charbuf[16 + zone_name.size() + zonegroup_name.size() + 2 + 1];
-  snprintf(charbuf, sizeof(charbuf), "%llx-%s-%s", (unsigned long long)rados_svc->instance_id(), zone_name.c_str(), zonegroup_name.c_str());
-  return string(charbuf);
-}
-
-string RGWSI_Zone::unique_id(uint64_t unique_num)
-{
-  char buf[32];
-  snprintf(buf, sizeof(buf), ".%llu.%llu", (unsigned long long)rados_svc->instance_id(), (unsigned long long)unique_num);
-  string s = zone_params->get_id() + buf;
-  return s;
-}
-
 bool RGWSI_Zone::zone_is_writeable()
 {
   return writeable_zone && !get_zone().is_read_only();
@@ -106,6 +95,43 @@ const string& RGWSI_Zone::zone_name()
 const string& RGWSI_Zone::zone_id()
 {
   return get_zone_params().get_id();
+}
+
+bool RGWSI_Zone::find_zone_by_id(const string& id, RGWZone **zone)
+{
+  auto iter = zone_by_id.find(id);
+  if (iter == zone_by_id.end()) {
+    return false;
+  }
+  *zone = &(iter->second);
+  return true;
+}
+
+RGWRESTConn *RGWSI_Zone::get_zone_conn_by_id(const string& id) {
+  auto citer = zone_conn_map.find(id);
+  if (citer == zone_conn_map.end()) {
+    return NULL;
+  }
+
+  return citer->second;
+}
+
+RGWRESTConn *RGWSI_Zone::get_zone_conn_by_name(const string& name) {
+  auto i = zone_id_by_name.find(name);
+  if (i == zone_id_by_name.end()) {
+    return NULL;
+  }
+
+  return get_zone_conn_by_id(i->second);
+}
+
+bool RGWSI_Zone::find_zone_id_by_name(const string& name, string *id) {
+  auto i = zone_id_by_name.find(name);
+  if (i == zone_id_by_name.end()) {
+    return false;
+  }
+  *id = i->second; 
+  return true;
 }
 
 bool RGWSI_Zone::need_to_log_data() const

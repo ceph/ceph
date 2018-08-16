@@ -27,7 +27,6 @@
 #include "rgw_sync_module.h"
 #include "rgw_sync_log_trim.h"
 
-#include "services/svc_zone.h"
 #include "services/svc_rados.h"
 
 class RGWWatcher;
@@ -42,13 +41,14 @@ class RGWMetaSyncProcessorThread;
 class RGWDataSyncProcessorThread;
 class RGWSyncLogTrimThread;
 class RGWSyncTraceManager;
-class RGWRESTConn;
 struct RGWZoneGroup;
 struct RGWZoneParams;
 class RGWReshard;
 class RGWReshardWait;
-struct RGWZone;
-struct RGWPeriod;
+
+class RGWSI_Zone;
+class RGWSI_ZoneUtils;
+class RGWSI_Quota;
 
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01
@@ -583,7 +583,7 @@ public:
   static void generate_test_instances(list<RGWObjManifest*>& o);
 
   int append(RGWObjManifest& m, RGWZoneGroup& zonegroup, RGWZoneParams& zone_params);
-  int append(RGWObjManifest& m, RGWRados *store);
+  int append(RGWObjManifest& m, RGWSI_Zone *zone_svc);
 
   bool get_rule(uint64_t ofs, RGWObjManifestRule *rule);
 
@@ -1304,8 +1304,6 @@ protected:
 
   bool pools_initialized;
 
-  string trans_id_suffix;
-
   RGWQuotaHandler *quota_handler;
 
   Finisher *finisher;
@@ -1317,8 +1315,6 @@ protected:
   bool writeable_zone{false};
 
   RGWServiceRegistryRef svc_registry;
-  std::shared_ptr<RGWSI_Zone> zone_svc;
-
   RGWIndexCompletionManager *index_completion_manager{nullptr};
 public:
   RGWRados() : lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
@@ -1338,7 +1334,6 @@ public:
                quota_handler(NULL),
                finisher(NULL),
                cr_registry(NULL),
-               rest_master_conn(NULL),
                meta_mgr(NULL), data_log(NULL), reshard(NULL) {}
 
   uint64_t get_new_req_id() {
@@ -1352,55 +1347,18 @@ public:
     cct = _cct;
   }
 
+  struct {
+    std::shared_ptr<RGWSI_RADOS> rados;
+    std::shared_ptr<RGWSI_Zone> zone;
+    std::shared_ptr<RGWSI_ZoneUtils> zone_utils;
+    std::shared_ptr<RGWSI_Quota> quota;
+  } svc;
+
   /**
    * AmazonS3 errors contain a HostId string, but is an opaque base64 blob; we
    * try to be more transparent. This has a wrapper so we can update it when zonegroup/zone are changed.
    */
   string host_id;
-
-  RGWRESTConn *rest_master_conn;
-  map<string, RGWRESTConn *> zone_conn_map;
-  map<string, RGWRESTConn *> zone_data_sync_from_map;
-  map<string, RGWRESTConn *> zone_data_notify_to_map;
-  map<string, RGWRESTConn *> zonegroup_conn_map;
-
-  map<string, string> zone_id_by_name;
-  map<string, RGWZone> zone_by_id;
-
-  RGWRESTConn *get_zone_conn_by_id(const string& id) {
-    auto citer = zone_conn_map.find(id);
-    if (citer == zone_conn_map.end()) {
-      return NULL;
-    }
-
-    return citer->second;
-  }
-
-  RGWRESTConn *get_zone_conn_by_name(const string& name) {
-    auto i = zone_id_by_name.find(name);
-    if (i == zone_id_by_name.end()) {
-      return NULL;
-    }
-
-    return get_zone_conn_by_id(i->second);
-  }
-
-  bool find_zone_id_by_name(const string& name, string *id) {
-    auto i = zone_id_by_name.find(name);
-    if (i == zone_id_by_name.end()) {
-      return false;
-    }
-    *id = i->second; 
-    return true;
-  }
-
-  const RGWQuotaInfo& get_bucket_quota() {
-    return zone_svc->get_current_period().get_config().bucket_quota;
-  }
-
-  const RGWQuotaInfo& get_user_quota() {
-    return zone_svc->current_period.get_config().user_quota;
-  }
 
   // pulls missing periods for period_history
   std::unique_ptr<RGWPeriodPuller> period_puller;
@@ -2553,39 +2511,6 @@ public:
   int add_bucket_to_reshard(const RGWBucketInfo& bucket_info, uint32_t new_num_shards);
 
   uint64_t instance_id();
-
-  string unique_id(uint64_t unique_num) {
-    return zone_svc->unique_id(unique_num);
-  }
-
-  void init_unique_trans_id_deps() {
-    char buf[16 + 2 + 1]; /* uint64_t needs 16, 2 hyphens add further 2 */
-
-    snprintf(buf, sizeof(buf), "-%llx-", (unsigned long long)instance_id());
-    url_encode(string(buf) + get_zone_params().get_name(), trans_id_suffix);
-  }
-
-  /* In order to preserve compatibility with Swift API, transaction ID
-   * should contain at least 32 characters satisfying following spec:
-   *  - first 21 chars must be in range [0-9a-f]. Swift uses this
-   *    space for storing fragment of UUID obtained through a call to
-   *    uuid4() function of Python's uuid module;
-   *  - char no. 22 must be a hyphen;
-   *  - at least 10 next characters constitute hex-formatted timestamp
-   *    padded with zeroes if necessary. All bytes must be in [0-9a-f]
-   *    range;
-   *  - last, optional part of transaction ID is any url-encoded string
-   *    without restriction on length. */
-  string unique_trans_id(const uint64_t unique_num) {
-    char buf[41]; /* 2 + 21 + 1 + 16 (timestamp can consume up to 16) + 1 */
-    time_t timestamp = time(NULL);
-
-    snprintf(buf, sizeof(buf), "tx%021llx-%010llx",
-             (unsigned long long)unique_num,
-             (unsigned long long)timestamp);
-
-    return string(buf) + trans_id_suffix;
-  }
 
   librados::Rados* get_rados_handle();
 

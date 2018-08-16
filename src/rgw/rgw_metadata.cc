@@ -9,11 +9,15 @@
 #include "cls/version/cls_version_types.h"
 
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_tools.h"
 
 #include "rgw_cr_rados.h"
 
+#include "services/svc_zone.h"
+
 #include "include/ceph_assert.h"
+
 #include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
@@ -94,7 +98,7 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
 
 
 int RGWMetadataLog::add_entry(RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl) {
-  if (!store->need_to_log_metadata())
+  if (!store->svc.zone->need_to_log_metadata())
     return 0;
 
   string oid;
@@ -236,14 +240,14 @@ int RGWMetadataLog::lock_exclusive(int shard_id, timespan duration, string& zone
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return store->lock_exclusive(store->get_zone_params().log_pool, oid, duration, zone_id, owner_id);
+  return store->lock_exclusive(store->svc.zone->get_zone_params().log_pool, oid, duration, zone_id, owner_id);
 }
 
 int RGWMetadataLog::unlock(int shard_id, string& zone_id, string& owner_id) {
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return store->unlock(store->get_zone_params().log_pool, oid, zone_id, owner_id);
+  return store->unlock(store->svc.zone->get_zone_params().log_pool, oid, zone_id, owner_id);
 }
 
 void RGWMetadataLog::mark_modified(int shard_id)
@@ -357,7 +361,7 @@ int read_history(RGWRados *store, RGWMetadataLogHistory *state,
                  RGWObjVersionTracker *objv_tracker)
 {
   RGWObjectCtx ctx{store};
-  auto& pool = store->get_zone_params().log_pool;
+  auto& pool = store->svc.zone->get_zone_params().log_pool;
   const auto& oid = RGWMetadataLogHistory::oid;
   bufferlist bl;
   int ret = rgw_get_system_obj(store, ctx, pool, oid, bl, objv_tracker, nullptr);
@@ -391,7 +395,7 @@ int write_history(RGWRados *store, const RGWMetadataLogHistory& state,
   bufferlist bl;
   state.encode(bl);
 
-  auto& pool = store->get_zone_params().log_pool;
+  auto& pool = store->svc.zone->get_zone_params().log_pool;
   const auto& oid = RGWMetadataLogHistory::oid;
   return rgw_put_system_obj(store, pool, oid, bl,
                             exclusive, objv_tracker, real_time{});
@@ -415,7 +419,7 @@ class ReadHistoryCR : public RGWCoroutine {
   int operate() {
     reenter(this) {
       yield {
-        rgw_raw_obj obj{store->get_zone_params().log_pool,
+        rgw_raw_obj obj{store->svc.zone->get_zone_params().log_pool,
                         RGWMetadataLogHistory::oid};
         constexpr bool empty_on_enoent = false;
 
@@ -460,7 +464,7 @@ class WriteHistoryCR : public RGWCoroutine {
       state.oldest_realm_epoch = cursor.get_epoch();
 
       yield {
-        rgw_raw_obj obj{store->get_zone_params().log_pool,
+        rgw_raw_obj obj{store->svc.zone->get_zone_params().log_pool,
                         RGWMetadataLogHistory::oid};
 
         using WriteCR = RGWSimpleRadosWriteCR<RGWMetadataLogHistory>;
@@ -1038,7 +1042,7 @@ int RGWMetadataManager::store_in_heap(RGWMetadataHandler *handler, const string&
     return -EINVAL;
   }
 
-  rgw_pool heap_pool(store->get_zone_params().metadata_heap);
+  rgw_pool heap_pool(store->svc.zone->get_zone_params().metadata_heap);
 
   if (heap_pool.empty()) {
     return 0;
@@ -1063,7 +1067,7 @@ int RGWMetadataManager::remove_from_heap(RGWMetadataHandler *handler, const stri
     return -EINVAL;
   }
 
-  rgw_pool heap_pool(store->get_zone_params().metadata_heap);
+  rgw_pool heap_pool(store->svc.zone->get_zone_params().metadata_heap);
 
   if (heap_pool.empty()) {
     return 0;

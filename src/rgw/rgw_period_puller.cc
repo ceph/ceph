@@ -2,9 +2,12 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_rest_conn.h"
 #include "common/ceph_json.h"
 #include "common/errno.h"
+
+#include "services/svc_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -60,7 +63,7 @@ int RGWPeriodPuller::pull(const std::string& period_id, RGWPeriod& period)
   period.set_epoch(0);
   int r = period.init(store->ctx(), store);
   if (r < 0) {
-    if (store->is_meta_master()) {
+    if (store->svc.zone->is_meta_master()) {
       // can't pull if we're the master
       ldout(store->ctx(), 1) << "metadata master failed to read period "
           << period_id << " from local storage: " << cpp_strerror(r) << dendl;
@@ -69,8 +72,8 @@ int RGWPeriodPuller::pull(const std::string& period_id, RGWPeriod& period)
     ldout(store->ctx(), 14) << "pulling period " << period_id
         << " from master" << dendl;
     // request the period from the master zone
-    r = pull_period(store->rest_master_conn, period_id,
-                    store->realm.get_id(), period);
+    r = pull_period(store->svc.zone->get_master_conn(), period_id,
+                    store->svc.zone->get_realm().get_id(), period);
     if (r < 0) {
       lderr(store->ctx()) << "failed to pull period " << period_id << dendl;
       return r;
@@ -95,7 +98,7 @@ int RGWPeriodPuller::pull(const std::string& period_id, RGWPeriod& period)
       return r;
     }
     // reflect period objects if this is the latest version
-    if (store->realm.get_current_period() == period_id) {
+    if (store->svc.zone->get_realm().get_current_period() == period_id) {
       r = period.reflect();
       if (r < 0) {
         return r;
