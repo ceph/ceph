@@ -5,7 +5,7 @@
 # DPDK_FOUND
 # DPDK_INCLUDE_DIR
 # DPDK_LIBRARIES
-
+if(NOT WITH_SEASTAR)
 find_path(DPDK_INCLUDE_DIR rte_config.h
   PATH_SUFFIXES dpdk
   HINTS $ENV{DPDK_DIR}/include)
@@ -51,3 +51,4 @@ if(DPDK_FOUND)
   set(DPDK_LIBRARIES
     -Wl,--whole-archive ${check_LIBRARIES} -Wl,--no-whole-archive)
 endif(DPDK_FOUND)
+endif(NOT WITH_SEASTAR)
