@@ -1,4 +1,5 @@
 import os
+from ceph_volume import sys_info
 from ceph_volume.api import lvm
 from ceph_volume.util import disk
 
@@ -12,6 +13,7 @@ class Device(object):
         self.lv_api = None
         self.pvs_api = []
         self.disk_api = {}
+        self.sys_api = {}
         self._exists = None
         self._is_lvm_member = None
         self._parse()
@@ -29,6 +31,10 @@ class Device(object):
             # always check is this is an lvm member
             if device_type in ['part', 'disk']:
                 self._set_lvm_membership()
+
+        if not sys_info.devices:
+            sys_info.devices = disk.get_devices()
+        self.sys_api = sys_info.devices.get(self.abspath, {})
 
     def __repr__(self):
         prefix = 'Unknown'
@@ -63,9 +69,7 @@ class Device(object):
 
     @property
     def exists(self):
-        if self._exists is None:
-            self._exists = os.path.exists(self.abspath)
-        return self._exists
+        return os.path.exists(self.abspath)
 
     @property
     def is_lvm_member(self):
@@ -75,9 +79,7 @@ class Device(object):
 
     @property
     def is_mapper(self):
-        if self._is_mapper is None:
-            self._is_mapper = self.path.startswith('/dev/mapper')
-        return self._is_mapper
+        return self.path.startswith('/dev/mapper')
 
     @property
     def is_lv(self):
