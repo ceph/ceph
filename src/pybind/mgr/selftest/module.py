@@ -81,6 +81,11 @@ class Module(MgrModule):
                 "desc": "Clear health checks by name. If no names provided, clear all.",
                 "perm": "rw"
             },
+            {
+                "cmd": "mgr self-test insights_set_now_offset name=hours,type=CephString",
+                "desc": "Set the now time for the insights module.",
+                "perm": "rw"
+            },
             ]
 
     def __init__(self, *args, **kwargs):
@@ -129,6 +134,8 @@ class Module(MgrModule):
             return self._health_set(inbuf, command)
         elif command['prefix'] == 'mgr self-test health clear':
             return self._health_clear(inbuf, command)
+        elif command['prefix'] == 'mgr self-test insights_set_now_offset':
+            return self._insights_set_now_offset(inbuf, command)
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
@@ -161,6 +168,15 @@ class Module(MgrModule):
             self._health = dict()
 
         self.set_health_checks(self._health)
+        return 0, "", ""
+
+    def _insights_set_now_offset(self, inbuf, command):
+        try:
+            hours = long(command["hours"])
+        except Exception as e:
+            return -1, "", "Timestamp must be numeric: {}".format(e.message)
+
+        self.remote("insights", "testing_set_now_time_offset", hours)
         return 0, "", ""
 
     def _self_test(self):
