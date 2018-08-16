@@ -410,32 +410,43 @@ out_enm:
   return r;
 }
 
-static int enumerate_devices(struct udev_enumerate *enm, const krbd_spec& spec)
+static int enumerate_devices(struct udev *udev, const krbd_spec& spec,
+                             struct udev_enumerate **penm)
 {
+  struct udev_enumerate *enm;
   int r;
+
+  enm = udev_enumerate_new(udev);
+  if (!enm)
+    return -ENOMEM;
 
   r = udev_enumerate_add_match_subsystem(enm, "rbd");
   if (r < 0)
-    return r;
+    goto out_enm;
 
   r = udev_enumerate_add_match_sysattr(enm, "pool", spec.pool_name.c_str());
   if (r < 0)
-    return r;
+    goto out_enm;
 
   r = udev_enumerate_add_match_sysattr(enm, "name", spec.image_name.c_str());
   if (r < 0)
-    return r;
+    goto out_enm;
 
   r = udev_enumerate_add_match_sysattr(enm, "current_snap",
                                        spec.snap_name.c_str());
   if (r < 0)
-    return r;
+    goto out_enm;
 
   r = udev_enumerate_scan_devices(enm);
   if (r < 0)
-    return r;
+    goto out_enm;
 
+  *penm = enm;
   return 0;
+
+out_enm:
+  udev_enumerate_unref(enm);
+  return r;
 }
 
 static int spec_to_devno_and_krbd_id(struct udev *udev, const krbd_spec& spec,
@@ -448,13 +459,9 @@ static int spec_to_devno_and_krbd_id(struct udev *udev, const krbd_spec& spec,
   string err;
   int r;
 
-  enm = udev_enumerate_new(udev);
-  if (!enm)
-    return -ENOMEM;
-
-  r = enumerate_devices(enm, spec);
+  r = enumerate_devices(udev, spec, &enm);
   if (r < 0)
-    goto out_enm;
+    return r;
 
   l = udev_enumerate_get_list_entry(enm);
   if (!l) {
@@ -748,13 +755,9 @@ static int is_mapped_image(struct udev *udev, const krbd_spec& spec,
   struct udev_list_entry *l;
   int r;
 
-  enm = udev_enumerate_new(udev);
-  if (!enm)
-    return -ENOMEM;
-
-  r = enumerate_devices(enm, spec);
+  r = enumerate_devices(udev, spec, &enm);
   if (r < 0)
-    goto out_enm;
+    return r;
 
   l = udev_enumerate_get_list_entry(enm);
   if (l) {
