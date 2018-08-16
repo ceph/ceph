@@ -258,7 +258,7 @@ double StupidAllocator::get_fragmentation(uint64_t alloc_unit)
   uint64_t intervals = 0;
   {
     std::lock_guard<std::mutex> l(lock);
-    max_intervals = num_free / alloc_unit;
+    max_intervals = P2ROUNDUP(num_free, alloc_unit) / alloc_unit;
     for (unsigned bin = 0; bin < free.size(); ++bin) {
       intervals += free[bin].num_intervals();
     }
