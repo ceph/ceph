@@ -103,15 +103,41 @@ Capability syntax follows the form::
 - **Monitor Caps:** Monitor capabilities include ``r``, ``w``, ``x`` access
   settings or ``profile {name}``. For example::
 
-	mon 'allow rwx'
-	mon 'profile osd'
+	mon 'allow {access-spec} [network {network/prefix}]'
+
+	mon 'profile {name}'
+
+  The ``{access-spec}`` syntax is as follows: ::
+
+        * | all | [r][w][x]
+
+  The optional ``{network/prefix}`` is a standard network name and
+  prefix length in CIDR notation (e.g., ``10.3.0.0/16``).  If present,
+  the use of this capability is restricted to clients connecting from
+  this network.
 
 - **OSD Caps:** OSD capabilities include ``r``, ``w``, ``x``, ``class-read``,
   ``class-write`` access settings or ``profile {name}``. Additionally, OSD
   capabilities also allow for pool and namespace settings. ::
 
-	osd 'allow {access} [pool={pool-name} [namespace={namespace-name}]]'
-	osd 'profile {name} [pool={pool-name} [namespace={namespace-name}]]'
+	osd 'allow {access-spec} [{match-spec}] [network {network/prefix}]'
+
+	osd 'profile {name} [pool={pool-name} [namespace={namespace-name}]] [network {network/prefix}]'
+
+  The ``{access-spec}`` syntax is either of the following: ::
+
+        * | all | [r][w][x] [class-read] [class-write]
+
+        class {class name} [{method name}]
+
+  The optional ``{match-spec}`` syntax is: ::
+
+        pool={pool-name} [namespace={namespace-name}]
+
+  The optional ``{network/prefix}`` is a standard network name and
+  prefix length in CIDR notation (e.g., ``10.3.0.0/16``).  If present,
+  the use of this capability is restricted to clients connecting from
+  this network.
 
 - **Metadata Server Caps:** For administrators, use ``allow *``.  For all
   other users, such as CephFS clients, consult :doc:`/cephfs/client-auth`
