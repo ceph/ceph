@@ -53,17 +53,20 @@ static const std::string SNAP_HEAD_NAME("-");
 
 struct krbd_spec {
   std::string pool_name;
+  std::string nspace_name;
   std::string image_name;
   std::string snap_name;
 
-  krbd_spec(const char *pool_name, const char *image_name,
-            const char *snap_name)
+  krbd_spec(const char *pool_name, const char *nspace_name,
+            const char *image_name, const char *snap_name)
       : pool_name(pool_name),
+        nspace_name(nspace_name),
         image_name(image_name),
         snap_name(*snap_name ? snap_name : SNAP_HEAD_NAME) { }
 
   bool operator==(const krbd_spec& rhs) const {
     return pool_name == rhs.pool_name &&
+           nspace_name == rhs.nspace_name &&
            image_name == rhs.image_name &&
            snap_name == rhs.snap_name;
   }
@@ -71,6 +74,8 @@ struct krbd_spec {
 
 std::ostream& operator<<(std::ostream& os, const krbd_spec& spec) {
   os << spec.pool_name << "/";
+  if (!spec.nspace_name.empty())
+    os << spec.nspace_name << "/";
   os << spec.image_name;
   if (spec.snap_name != SNAP_HEAD_NAME)
     os << "@" << spec.snap_name;
@@ -79,6 +84,7 @@ std::ostream& operator<<(std::ostream& os, const krbd_spec& spec) {
 
 std::optional<krbd_spec> spec_from_dev(udev_device *dev) {
   const char *pool_name = udev_device_get_sysattr_value(dev, "pool");
+  const char *nspace_name = udev_device_get_sysattr_value(dev, "pool_ns");
   const char *image_name = udev_device_get_sysattr_value(dev, "name");
   const char *snap_name = udev_device_get_sysattr_value(dev, "current_snap");
 
@@ -86,7 +92,7 @@ std::optional<krbd_spec> spec_from_dev(udev_device *dev) {
     return std::nullopt;
 
   return std::make_optional<krbd_spec>(
-      pool_name, image_name, snap_name);
+      pool_name, nspace_name ?: "", image_name, snap_name);
 }
 
 static string get_kernel_rbd_name(const char *id)
@@ -212,6 +218,8 @@ static int build_map_buf(CephContext *cct, const krbd_spec& spec,
 
   if (strcmp(options, "") != 0)
     oss << "," << options;
+  if (!spec.nspace_name.empty())
+    oss << ",_pool_ns=" << spec.nspace_name;
 
   oss << " " << spec.pool_name << " " << spec.image_name << " "
       << spec.snap_name;
@@ -410,8 +418,8 @@ out_enm:
   return r;
 }
 
-static int enumerate_devices(struct udev *udev, const krbd_spec& spec,
-                             struct udev_enumerate **penm)
+static int __enumerate_devices(struct udev *udev, const krbd_spec& spec,
+                               bool match_nspace, struct udev_enumerate **penm)
 {
   struct udev_enumerate *enm;
   int r;
@@ -425,6 +433,19 @@ static int enumerate_devices(struct udev *udev, const krbd_spec& spec,
     goto out_enm;
 
   r = udev_enumerate_add_match_sysattr(enm, "pool", spec.pool_name.c_str());
+  if (r < 0)
+    goto out_enm;
+
+  if (match_nspace) {
+    r = udev_enumerate_add_match_sysattr(enm, "pool_ns",
+                                         spec.nspace_name.c_str());
+  } else {
+    /*
+     * Match _only_ devices that don't have pool_ns attribute.
+     * If the kernel supports namespaces, the result will be empty.
+     */
+    r = udev_enumerate_add_nomatch_sysattr(enm, "pool_ns", nullptr);
+  }
   if (r < 0)
     goto out_enm;
 
@@ -447,6 +468,32 @@ static int enumerate_devices(struct udev *udev, const krbd_spec& spec,
 out_enm:
   udev_enumerate_unref(enm);
   return r;
+}
+
+static int enumerate_devices(struct udev *udev, const krbd_spec& spec,
+                             struct udev_enumerate **penm)
+{
+  struct udev_enumerate *enm;
+  int r;
+
+  r = __enumerate_devices(udev, spec, true, &enm);
+  if (r < 0)
+    return r;
+
+  /*
+   * If no namespace is set, try again with match_nspace=false to
+   * handle older kernels.  On a newer kernel the result will remain
+   * the same (i.e. empty).
+   */
+  if (!udev_enumerate_get_list_entry(enm) && spec.nspace_name.empty()) {
+    udev_enumerate_unref(enm);
+    r = __enumerate_devices(udev, spec, false, &enm);
+    if (r < 0)
+      return r;
+  }
+
+  *penm = enm;
+  return 0;
 }
 
 static int spec_to_devno_and_krbd_id(struct udev *udev, const krbd_spec& spec,
@@ -673,13 +720,14 @@ static bool dump_one_image(Formatter *f, TextTable *tbl,
     f->open_object_section("device");
     f->dump_string("id", id);
     f->dump_string("pool", spec->pool_name);
+    f->dump_string("namespace", spec->nspace_name);
     f->dump_string("name", spec->image_name);
     f->dump_string("snap", spec->snap_name);
     f->dump_string("device", kname);
     f->close_section();
   } else {
-    *tbl << id << spec->pool_name << spec->image_name << spec->snap_name << kname
-         << TextTable::endrow;
+    *tbl << id << spec->pool_name << spec->nspace_name << spec->image_name
+         << spec->snap_name << kname << TextTable::endrow;
   }
 
   return true;
@@ -730,6 +778,7 @@ int dump_images(struct krbd_ctx *ctx, Formatter *f)
   } else {
     tbl.define_column("id", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("pool", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("namespace", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("image", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("snap", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("device", TextTable::LEFT, TextTable::LEFT);
@@ -807,11 +856,15 @@ extern "C" void krbd_destroy(struct krbd_ctx *ctx)
   delete ctx;
 }
 
-extern "C" int krbd_map(struct krbd_ctx *ctx, const char *pool,
-                        const char *image, const char *snap,
-                        const char *options, char **pdevnode)
+extern "C" int krbd_map(struct krbd_ctx *ctx,
+                        const char *pool_name,
+                        const char *nspace_name,
+                        const char *image_name,
+                        const char *snap_name,
+                        const char *options,
+                        char **pdevnode)
 {
-  krbd_spec spec(pool, image, snap);
+  krbd_spec spec(pool_name, nspace_name, image_name, snap_name);
   string name;
   char *devnode;
   int r;
@@ -834,11 +887,14 @@ extern "C" int krbd_unmap(struct krbd_ctx *ctx, const char *devnode,
   return unmap_image(ctx, devnode, options);
 }
 
-extern "C" int krbd_unmap_by_spec(struct krbd_ctx *ctx, const char *pool,
-                                  const char *image, const char *snap,
+extern "C" int krbd_unmap_by_spec(struct krbd_ctx *ctx,
+                                  const char *pool_name,
+                                  const char *nspace_name,
+                                  const char *image_name,
+                                  const char *snap_name,
                                   const char *options)
 {
-  krbd_spec spec(pool, image, snap);
+  krbd_spec spec(pool_name, nspace_name, image_name, snap_name);
   return unmap_image(ctx, spec, options);
 }
 
@@ -847,11 +903,14 @@ int krbd_showmapped(struct krbd_ctx *ctx, Formatter *f)
   return dump_images(ctx, f);
 }
 
-extern "C" int krbd_is_mapped(struct krbd_ctx *ctx, const char *pool,
-                              const char *image, const char *snap,
+extern "C" int krbd_is_mapped(struct krbd_ctx *ctx,
+                              const char *pool_name,
+                              const char *nspace_name,
+                              const char *image_name,
+                              const char *snap_name,
                               char **pdevnode)
 {
-  krbd_spec spec(pool, image, snap);
+  krbd_spec spec(pool_name, nspace_name, image_name, snap_name);
   string name;
   char *devnode;
   int r;
