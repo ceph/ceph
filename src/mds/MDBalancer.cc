@@ -27,7 +27,6 @@
 
 #include "include/Context.h"
 #include "msg/Messenger.h"
-#include "messages/MHeartbeat.h"
 
 #include <fstream>
 #include <iostream>
@@ -60,13 +59,12 @@ using std::chrono::duration_cast;
 #define MIN_OFFLOAD 10   // point at which i stop trying, close enough
 
 
-/* This function DOES put the passed message before returning */
-int MDBalancer::proc_message(Message *m)
+int MDBalancer::proc_message(const Message::const_ref &m)
 {
   switch (m->get_type()) {
 
   case MSG_MDS_HEARTBEAT:
-    handle_heartbeat(static_cast<MHeartbeat*>(m));
+    handle_heartbeat(MHeartbeat::msgref_cast(m));
     break;
 
   default:
@@ -392,23 +390,22 @@ void MDBalancer::send_heartbeat()
 
   set<mds_rank_t> up;
   mds->get_mds_map()->get_up_mds_set(up);
-  for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) {
-    if (*p == mds->get_nodeid())
+  for (const auto& r : up) {
+    if (r == mds->get_nodeid())
       continue;
-    MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
+    auto hb = MHeartbeat::create(load, beat_epoch);
     hb->get_import_map() = import_map;
-    messenger->send_to_mds(hb, mds->mdsmap->get_addrs(*p));
+    mds->send_message_mds(hb, r);
   }
 }
 
-/* This function DOES put the passed message before returning */
-void MDBalancer::handle_heartbeat(MHeartbeat *m)
+void MDBalancer::handle_heartbeat(const MHeartbeat::const_ref &m)
 {
   mds_rank_t who = mds_rank_t(m->get_source().num());
   dout(25) << "=== got heartbeat " << m->get_beat() << " from " << m->get_source().num() << " " << m->get_load() << dendl;
 
   if (!mds->is_active())
-    goto out;
+    return;
 
   if (!mds->mdcache->is_open()) {
     dout(10) << "opening root on handle_heartbeat" << dendl;
@@ -418,7 +415,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 
   if (mds->is_cluster_degraded()) {
     dout(10) << " degraded, ignoring" << dendl;
-    goto out;
+    return;
   }
 
   if (mds->get_nodeid() != 0 && m->get_beat() > beat_epoch) {
@@ -442,7 +439,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   } else if (mds->get_nodeid() == 0) {
     if (beat_epoch != m->get_beat()) {
       dout(10) << " old heartbeat epoch, ignoring" << dendl;
-      goto out;
+      return;
     }
   }
 
@@ -463,7 +460,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
       /* avoid spamming ceph -w if user does not turn mantle on */
       if (mds->mdsmap->get_balancer() != "") {
         int r = mantle_prep_rebalance();
-        if (!r) goto out;
+        if (!r) return;
 	mds->clog->warn() << "using old balancer; mantle failed for "
                           << "balancer=" << mds->mdsmap->get_balancer()
                           << " : " << cpp_strerror(r);
@@ -471,10 +468,6 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
       prep_rebalance(m->get_beat());
     }
   }
-
-  // done
- out:
-  m->put();
 }
 
 double MDBalancer::try_match(balance_state_t& state, mds_rank_t ex, double& maxex,

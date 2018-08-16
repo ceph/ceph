@@ -17,7 +17,10 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGPushReply : public MOSDFastDispatchOp {
+class MOSDPGPushReply : public MessageInstance<MOSDPGPushReply, MOSDFastDispatchOp> {
+public:
+  friend factory;
+private:
   static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 2;
 
@@ -39,7 +42,7 @@ public:
   }
 
   MOSDPGPushReply()
-    : MOSDFastDispatchOp(MSG_OSD_PG_PUSH_REPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_PUSH_REPLY, HEAD_VERSION, COMPAT_VERSION),
       cost(0)
     {}
 

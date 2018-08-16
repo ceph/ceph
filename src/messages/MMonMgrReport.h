@@ -20,8 +20,10 @@
 #include "include/health.h"
 #include "mon/health_check.h"
 
-class MMonMgrReport : public PaxosServiceMessage {
-
+class MMonMgrReport : public MessageInstance<MMonMgrReport, PaxosServiceMessage> {
+public:
+  friend factory;
+private:
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 
@@ -31,7 +33,7 @@ public:
   bufferlist service_map_bl;  // encoded ServiceMap
 
   MMonMgrReport()
-    : PaxosServiceMessage(MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION)
   {}
 private:
   ~MMonMgrReport() override {}

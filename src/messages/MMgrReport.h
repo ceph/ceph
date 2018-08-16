@@ -70,8 +70,11 @@ public:
 };
 WRITE_CLASS_ENCODER(PerfCounterType)
 
-class MMgrReport : public Message
-{
+class MMgrReport : public MessageInstance<MMgrReport> {
+public:
+  friend factory;
+private:
+
   static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 1;
 
@@ -157,7 +160,7 @@ public:
   }
 
   MMgrReport()
-    : Message(MSG_MGR_REPORT, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_MGR_REPORT, HEAD_VERSION, COMPAT_VERSION)
   {}
 };
 

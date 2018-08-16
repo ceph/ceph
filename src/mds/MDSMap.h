@@ -26,7 +26,6 @@
 
 #include "include/types.h"
 #include "common/Clock.h"
-#include "msg/Message.h"
 #include "include/health.h"
 
 #include "common/config.h"
@@ -605,9 +604,8 @@ public:
    * Get the MDS daemon entity_inst_t for a rank
    * known to be up.
    */
-  entity_addrvec_t get_addrs(mds_rank_t m) {
-    assert(up.count(m));
-    return mds_info[up[m]].get_addrs();
+  entity_addrvec_t get_addrs(mds_rank_t m) const {
+    return mds_info.at(up.at(m)).get_addrs();
   }
 
   mds_rank_t get_rank_gid(mds_gid_t gid) const {
@@ -626,7 +624,7 @@ public:
   }
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::const_iterator& p);
-  void decode(bufferlist& bl) {
+  void decode(const bufferlist& bl) {
     auto p = bl.cbegin();
     decode(p);
   }

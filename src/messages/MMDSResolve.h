@@ -19,8 +19,10 @@
 
 #include "include/types.h"
 
-class MMDSResolve : public Message {
+class MMDSResolve : public MessageInstance<MMDSResolve> {
 public:
+  friend factory;
+
   map<dirfrag_t, vector<dirfrag_t> > subtrees;
   map<dirfrag_t, vector<dirfrag_t> > ambiguous_imports;
 
@@ -65,8 +67,8 @@ public:
 
   list<table_client> table_clients;
 
-  MMDSResolve() : Message(MSG_MDS_RESOLVE) {}
-private:
+protected:
+  MMDSResolve() : MessageInstance(MSG_MDS_RESOLVE) {}
   ~MMDSResolve() override {}
 
 public:

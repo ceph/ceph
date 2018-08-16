@@ -5,15 +5,18 @@
 
 #include "msg/Message.h"
 
-struct MConfig : public Message {
+class MConfig : public MessageInstance<MConfig> {
+public:
+  friend factory;
+
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 
   map<string,string> config;
 
-  MConfig() : Message(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
+  MConfig() : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
   MConfig(const map<string,string>& c)
-    : Message(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
       config(c) {}
 
   const char *get_type_name() const override {

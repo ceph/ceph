@@ -19,7 +19,10 @@
 #include "msg/Message.h"
 #include "osd/osd_types.h"
 
-class MOSDPGInfo : public Message {
+class MOSDPGInfo : public MessageInstance<MOSDPGInfo> {
+public:
+  friend factory;
+private:
   static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 5;
 
@@ -31,11 +34,11 @@ public:
   epoch_t get_epoch() const { return epoch; }
 
   MOSDPGInfo()
-    : Message(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION) {
+    : MessageInstance(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION) {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
   MOSDPGInfo(version_t mv)
-    : Message(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION),
       epoch(mv) {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }

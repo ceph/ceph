@@ -21,7 +21,9 @@
  * instruct non-primary to remove some objects during backfill
  */
 
-struct MOSDPGBackfillRemove : public MOSDFastDispatchOp {
+class MOSDPGBackfillRemove : public MessageInstance<MOSDPGBackfillRemove, MOSDFastDispatchOp> {
+public:
+  friend factory;
 
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
@@ -38,11 +40,11 @@ struct MOSDPGBackfillRemove : public MOSDFastDispatchOp {
   }
 
   MOSDPGBackfillRemove()
-    : MOSDFastDispatchOp(MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
+    : MessageInstance(MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
 			COMPAT_VERSION) {}
 
   MOSDPGBackfillRemove(spg_t pgid, epoch_t map_epoch)
-    : MOSDFastDispatchOp(MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
+    : MessageInstance(MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
 			 COMPAT_VERSION),
       pgid(pgid),
       map_epoch(map_epoch) {}

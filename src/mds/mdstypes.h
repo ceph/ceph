@@ -1125,6 +1125,8 @@ struct client_metadata_t {
     kv_map(std::move(other.kv_map)), features(std::move(other.features)) {}
   client_metadata_t(kv_map_t&& kv, feature_bitset_t &&f) :
     kv_map(std::move(kv)), features(std::move(f)) {}
+  client_metadata_t(const kv_map_t& kv, const feature_bitset_t &f) :
+    kv_map(kv), features(f) {}
   client_metadata_t& operator=(const client_metadata_t& other) {
     kv_map = other.kv_map;
     features = other.features;

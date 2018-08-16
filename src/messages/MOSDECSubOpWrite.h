@@ -18,7 +18,10 @@
 #include "MOSDFastDispatchOp.h"
 #include "osd/ECMsgTypes.h"
 
-class MOSDECSubOpWrite : public MOSDFastDispatchOp {
+class MOSDECSubOpWrite : public MessageInstance<MOSDECSubOpWrite, MOSDFastDispatchOp> {
+public:
+  friend factory;
+private:
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
@@ -41,10 +44,10 @@ public:
   }
 
   MOSDECSubOpWrite()
-    : MOSDFastDispatchOp(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION)
     {}
   MOSDECSubOpWrite(ECSubWrite &in_op)
-    : MOSDFastDispatchOp(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION) {
+    : MessageInstance(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION) {
     op.claim(in_op);
   }
 

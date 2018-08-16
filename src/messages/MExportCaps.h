@@ -19,7 +19,10 @@
 #include "msg/Message.h"
 
 
-class MExportCaps : public Message {
+class MExportCaps : public MessageInstance<MExportCaps> {
+public:
+  friend factory;
+private:
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
  public:  
@@ -28,9 +31,9 @@ class MExportCaps : public Message {
   map<client_t,entity_inst_t> client_map;
   map<client_t,client_metadata_t> client_metadata_map;
 
+protected:
   MExportCaps() :
-    Message(MSG_MDS_EXPORTCAPS, HEAD_VERSION, COMPAT_VERSION) {}
-private:
+    MessageInstance(MSG_MDS_EXPORTCAPS, HEAD_VERSION, COMPAT_VERSION) {}
   ~MExportCaps() override {}
 
 public:

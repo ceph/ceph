@@ -492,6 +492,13 @@ private:
   boost::function<void(int)> m_callback;
 };
 
+template <class ContextType>
+class ContextFactory {
+public:
+  virtual ~ContextFactory() {}
+  virtual ContextType *build() = 0;
+};
+
 #undef mydout
 
 #endif

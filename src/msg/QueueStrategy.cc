@@ -45,16 +45,15 @@ void QueueStrategy::ds_dispatch(Message *m) {
 
 void QueueStrategy::entry(QSThread *thrd)
 {
-  Message *m = NULL;
   for (;;) {
+    Message::ref m;
     lock.Lock();
     for (;;) {
       if (! mqueue.empty()) {
-	m = &(mqueue.front());
+	m = Message::ref(&mqueue.front(), false);
 	mqueue.pop_front();
 	break;
       }
-      m = NULL;
       if (stop)
 	break;
       disp_threads.push_front(*thrd);
@@ -63,7 +62,6 @@ void QueueStrategy::entry(QSThread *thrd)
     lock.Unlock();
     if (stop) {
 	if (!m) break;
-	m->put();
 	continue;
     }
     get_messenger()->ms_deliver_dispatch(m);
