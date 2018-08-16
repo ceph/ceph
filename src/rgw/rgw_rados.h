@@ -2889,11 +2889,12 @@ public:
         rgw_zone_set *zones_trace;
         bool modify_tail;
         bool completeMultipart;
+        bool modify_olh;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
                  if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), placement_type(nullptr), zones_trace(nullptr),
-                 modify_tail(false),  completeMultipart(false) {}
+                 modify_tail(false),  completeMultipart(false), modify_olh(true) {}
       } meta;
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
@@ -3175,7 +3176,7 @@ public:
     ATTRSMOD_MERGE   = 2
   };
 
-  int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj);
+  int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj, const string* placement_type = nullptr, string* placement_id = nullptr);
 
   int stat_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
@@ -3280,7 +3281,9 @@ public:
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
                string *version_id,
-               string *petag);
+               string *petag,
+               string *placement_id = nullptr,
+               bool modify_olh = true);
   
   int check_bucket_empty(RGWBucketInfo& bucket_info);
 
@@ -4080,6 +4083,7 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
   bool versioned_object;
   std::optional<uint64_t> olh_epoch;
   string version_id;
+  bool modify_olh;
 
 protected:
   rgw_bucket bucket;
@@ -4118,16 +4122,21 @@ public:
                                 data_ofs(0),
                                 max_chunk_size(0),
                                 versioned_object(versioned),
-                                placement_id(_placement_id),
+                                modify_olh(true),
                                 bucket(_b),
                                 obj_str(_o),
-                                unique_tag(_t) {}
+                                unique_tag(_t),
+                                placement_id(_placement_id) {}
   int prepare(RGWRados *store, string *oid_rand) override;
   virtual bool immutable_head() { return false; }
   int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override;
 
   void set_olh_epoch(uint64_t epoch) {
     olh_epoch = epoch;
+  }
+
+  void set_modify_olh(bool _modify_olh) {
+    modify_olh = _modify_olh;
   }
 
   void set_version_id(const string& vid) {

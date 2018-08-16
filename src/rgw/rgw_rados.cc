@@ -2864,6 +2864,7 @@ int RGWPutObjProcessor_Atomic::do_complete(size_t accounted_size, const string& 
   obj_op.meta.placement_type = placement_type;
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
+  obj_op.meta.modify_olh = modify_olh;
 
   r = obj_op.write_meta(obj_len, accounted_size, attrs);
   if (r < 0) {
@@ -7324,7 +7325,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   target->invalidate_state();
   state = NULL;
 
-  if (versioned_op && meta.olh_epoch) {
+  if (versioned_op && meta.olh_epoch && meta.modify_olh) {
     r = store->set_olh(target->get_ctx(), target->get_bucket_info(), obj, false, NULL, *meta.olh_epoch, real_time(), false, meta.zones_trace);
     if (r < 0) {
       return r;
@@ -7798,14 +7799,13 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs,
   }
 }
 
-int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
+int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj, const string* placement_type, string* placement_id)
 {
   map<string, bufferlist> attrset;
 
   real_time mtime;
   uint64_t obj_size;
   RGWObjectCtx rctx(this);
-
   RGWRados::Object op_target(this, dest_bucket_info, rctx, obj);
   RGWRados::Object::Read read_op(&op_target);
 
@@ -7819,11 +7819,17 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
 
   attrset.erase(RGW_ATTR_ID_TAG);
   attrset.erase(RGW_ATTR_TAIL_TAG);
+  attrset.erase(RGW_ATTR_PLACEMENT_TYPE);
+  if (placement_type && !(*placement_type).empty()) {
+    bufferlist tmp;
+    tmp.append((*placement_type).c_str(), (*placement_type).length());
+    attrset.emplace(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
+  }
 
   return copy_obj_data(rctx, dest_bucket_info, read_op, obj_size - 1, obj, NULL, mtime, attrset,
                        0, real_time(),
                        (obj.key.instance.empty() ? NULL : &(obj.key.instance)),
-                       NULL);
+                       NULL, placement_id, false);
 }
 
 struct obj_time_weight {
@@ -8655,18 +8661,22 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                uint64_t olh_epoch,
 	       real_time delete_at,
                string *version_id,
-               string *petag)
+               string *petag,
+               string *placement_id,
+               bool modify_olh)
 {
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
 
   RGWPutObjProcessor_Atomic processor(obj_ctx,
                                       dest_bucket_info, dest_obj.bucket, dest_obj.key.name,
-                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled(), obj_ctx.s->placement_id);
+                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled(),
+                                      (placement_id != nullptr)? *placement_id : obj_ctx.s->placement_id);
   if (version_id) {
     processor.set_version_id(*version_id);
   }
   processor.set_olh_epoch(olh_epoch);
+  processor.set_modify_olh(modify_olh);
   int ret = processor.prepare(this, NULL);
   if (ret < 0)
     return ret;

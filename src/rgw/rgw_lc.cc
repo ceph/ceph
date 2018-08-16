@@ -27,6 +27,8 @@ const char* LC_STATUS[] = {
       "COMPLETE"
 };
 
+static string STANDARD_IA = "STANDARD_IA";
+
 using namespace librados;
 
 bool LCRule::valid()
@@ -343,6 +345,216 @@ int RGWLC::remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, c
   }
 }
 
+static int read_obj_tags(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& obj, RGWObjectCtx& ctx, bufferlist& tags_bl)
+{
+  RGWRados::Object op_target(store, bucket_info, ctx, obj);
+  RGWRados::Object::Read read_op(&op_target);
+
+  return read_op.get_attr(RGW_ATTR_TAGS, tags_bl);
+}
+
+int RGWLC::handle_transition(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map, const string& src_type, const string& dst_type)
+{
+  /* init the placement_id for the dst_type*/
+  string placement_id;
+  const auto &zonegroup = store->get_zonegroup();
+  for (const auto &target : zonegroup.placement_targets) {
+    if (strcmp(target.second.type.c_str(), dst_type.c_str()) == 0) {
+      placement_id = target.second.name;
+      break;
+    }
+  }
+  if (placement_id.empty()) {
+    return 0;
+  }
+  int ret;
+  bool is_truncated;
+  auto delay_ms = cct->_conf.get_val<int64_t>("rgw_lc_thread_delay");
+  vector<rgw_bucket_dir_entry> objs;
+  RGWBucketInfo& bucket_info = target->get_bucket_info();
+  RGWRados::Bucket::List list_op(target);
+  list_op.params.list_versions = bucket_info.versioned();
+  if (!bucket_info.versioned()) {
+    for(auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
+      auto &transitions = prefix_iter->second.transitions;
+      if (!prefix_iter->second.status || transitions.empty()) {
+        continue;
+      }
+      auto dst_iter = transitions.find(dst_type);
+      if (dst_iter == transitions.end()) {
+        continue;
+      }
+      if (dst_iter->second.date != boost::none &&
+        ceph_clock_now() < ceph::real_clock::to_time_t(*(dst_iter->second.date))) {
+        continue;
+      }
+      /* lifecycle processing does not depend on total order, so can
+       * take advantage of unorderd listing optimizations--such as
+       * operating on one shard at a time */
+      list_op.params.prefix = prefix_iter->first;
+      list_op.params.allow_unordered = true;
+      do {
+        objs.clear();
+        list_op.params.marker = list_op.get_next_marker();
+        ret = list_op.list_objects(1000, &objs, NULL, &is_truncated);
+
+        if (ret < 0) {
+          if (ret == (-ENOENT))
+            return 0;
+          ldout(cct, 0) << "ERROR: store->list_objects():" <<dendl;
+          return ret;
+        }
+        
+        bool need_transition;
+        for (auto obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
+          rgw_obj_key key(obj_iter->key);
+          RGWObjState *state;
+          rgw_obj obj(bucket_info.bucket, key);
+          RGWObjectCtx rctx(store);
+          if (prefix_iter->second.obj_tags != boost::none) {
+            bufferlist tags_bl;
+            int ret = read_obj_tags(store, bucket_info, obj, rctx, tags_bl);
+            if (ret < 0) {
+              if (ret != -ENODATA)
+                ldout(cct, 5) << "ERROR: read_obj_tags returned r=" << ret << dendl;
+              continue;
+            }
+            RGWObjTags dest_obj_tags;
+            try {
+              auto iter = tags_bl.cbegin();
+              dest_obj_tags.decode(iter);
+            } catch (buffer::error& err) {
+               ldout(cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+              return -EIO;
+            }
+
+            if (!includes(dest_obj_tags.get_tags().begin(),
+                          dest_obj_tags.get_tags().end(),
+                          prefix_iter->second.obj_tags->get_tags().begin(),
+                          prefix_iter->second.obj_tags->get_tags().end())){
+              ldout(cct, 20) << __func__ << "() skipping obj " << key << " as tags do not match" << dendl;
+              continue;
+            }
+          }
+
+          if (!key.ns.empty()) {
+            continue;
+          }
+          if (obj_iter->meta.placement_type != src_type) {
+            continue;
+          }
+          if (dst_iter->second.date != boost::none) {
+            //we have checked it before
+            need_transition = true;
+          } else {
+            need_transition = obj_has_expired(obj_iter->meta.mtime, dst_iter->second.days);
+          }
+          if (need_transition) {
+            int ret = store->get_obj_state(&rctx, bucket_info, obj, &state, false);
+            if (ret < 0) {
+              return ret;
+            }
+            if (state->mtime != obj_iter->meta.mtime) {
+              //Check mtime again to avoid transit a recently update object as much as possible
+              ldout(cct, 20) << __func__ << "() skipping transition: state->mtime " << state->mtime << " obj->mtime " << obj_iter->meta.mtime << dendl;
+              continue;
+            }
+            ret = store->rewrite_obj(bucket_info, obj, &dst_type, &placement_id);
+            if (ret < 0) {
+              ldout(cct, 0) << "ERROR: rewrite_obj ret=" << ret << dendl;
+            } else {
+              ldout(cct, 2) << "Transition:" << bucket_info.bucket.name << ":"<< obj_iter->key << " from " << src_type << " to " << dst_type<<dendl;
+            }
+
+            if (going_down())
+              return 0;
+          }
+        } /* for objs */
+        std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+      } while (is_truncated);
+    }
+  } else {
+  //bucket versioning is enabled or suspended
+    rgw_obj_key pre_marker;
+    for(auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
+      auto &transitions = prefix_iter->second.transitions;
+      auto &noncur_transitions = prefix_iter->second.noncur_transitions;
+      if (!prefix_iter->second.status || (transitions.empty() && noncur_transitions.empty())) {
+        continue;
+      }
+      auto dst_iter = transitions.find(dst_type);
+      auto noncur_dst_iter= noncur_transitions.find(dst_type);
+      bool has_transition = dst_iter != transitions.end();
+      bool has_noncur_transition = noncur_dst_iter != noncur_transitions.end();
+      if (!has_transition && !has_noncur_transition) {
+        continue;
+      }
+      bool transition_date_expir = false;
+      if (has_transition && dst_iter->second.date != boost::none) {
+        transition_date_expir = ceph_clock_now() >= ceph::real_clock::to_time_t(*(dst_iter->second.date));
+      }
+      list_op.params.prefix = prefix_iter->first;
+      rgw_bucket_dir_entry pre_obj;
+      do {
+        if (!objs.empty()) {
+          pre_obj = objs.back();
+        }
+        objs.clear();
+        list_op.params.marker = list_op.get_next_marker();
+        ret = list_op.list_objects(1000, &objs, NULL, &is_truncated);
+
+        if (ret < 0) {
+          if (ret == (-ENOENT))
+            return 0;
+          ldout(cct, 0) << "ERROR: store->list_objects():" <<dendl;
+          return ret;
+        }
+
+        ceph::real_time mtime;
+        bool need_transition = false;
+        for (auto obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
+          if (obj_iter->is_delete_marker()) {
+            //transition not apply for delete marker
+            continue;
+          }
+          if (obj_iter->is_current() && has_transition) {
+            if (transition_date_expir) {
+              need_transition = true;
+            } else if (dst_iter->second.days > 0){
+              need_transition = obj_has_expired(obj_iter->meta.mtime, dst_iter->second.days);
+            }
+          } else if (!obj_iter->is_current() && has_noncur_transition) {
+            mtime = (obj_iter == objs.begin())?pre_obj.meta.mtime:(obj_iter - 1)->meta.mtime;
+            need_transition = obj_has_expired(mtime, noncur_dst_iter->second.days);
+          }
+          if (need_transition) {
+            rgw_obj obj(bucket_info.bucket, obj_iter->key);
+            if (obj_iter->is_visible()) {
+              RGWObjectCtx rctx(store);
+              RGWObjState *state;
+              int ret = store->get_obj_state(&rctx, bucket_info, obj, &state, false);
+              if (ret < 0) {
+                return ret;
+              }
+              if (state->mtime != obj_iter->meta.mtime)//Check mtime again to avoid delete a recently update object as much as possible
+                continue;
+            }
+            ret = store->rewrite_obj(bucket_info, obj, &dst_type, &placement_id);
+            if (ret < 0) {
+              ldout(cct, 0) << "ERROR: rewrite_obj ret=" << ret << dendl;
+            } else {
+              ldout(cct, 2) << "Transition:" << bucket_info.bucket.name << ":" << obj_iter->key << " from " << src_type << " to " << dst_type <<dendl;
+            }
+            if (going_down())
+              return 0;
+          }
+        }
+      } while (is_truncated);
+    }
+  }
+  return 0;
+}
+
 int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map)
 {
   MultipartMetaFilter mp_filter;
@@ -397,14 +609,6 @@ int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<strin
     } while(is_truncated);
   }
   return 0;
-}
-
-static int read_obj_tags(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& obj, RGWObjectCtx& ctx, bufferlist& tags_bl)
-{
-  RGWRados::Object op_target(store, bucket_info, ctx, obj);
-  RGWRados::Object::Read read_op(&op_target);
-
-  return read_op.get_attr(RGW_ATTR_TAGS, tags_bl);
 }
 
 
@@ -652,6 +856,10 @@ int RGWLC::bucket_lc_process(string& shard_id)
   }
 
   ret = handle_multipart_expiration(&target, prefix_map);
+  if (ret < 0) {
+    return ret;
+  }
+  ret = handle_transition(&target, prefix_map, "STANDARD", "STANDARD_IA");
 
   return ret;
 }
