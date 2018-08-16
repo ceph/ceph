@@ -21,7 +21,7 @@ DEFAULTS = {
     'mark_out_threshold': str(86400*14),
     'warn_threshold': str(86400*14*2),
     'self_heal': str(True),
-    'sleep_interval': str(60),
+    'sleep_interval': str(600),
 }
 
 DEVICE_HEALTH = 'DEVICE_HEALTH'
