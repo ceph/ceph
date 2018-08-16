@@ -1349,10 +1349,16 @@ void PG::calc_replicated_acting(
   acting_backfill->insert(primary->first);
   unsigned usable = 1;
 
-  // select replicas that have log contiguity with primary.
-  // prefer up, then acting, then any peer_info osds
+  /* We include auth_log_shard->second.log_tail because in GetLog,
+   * we will request logs back to the min last_update over our
+   * acting_backfill set, which will result in our log being extended
+   * as far backwards as necessary to pick up any peers which can
+   * be log recovered by auth_log_shard's log */
   eversion_t oldest_auth_log_entry =
     std::min(primary->second.log_tail, auth_log_shard->second.log_tail);
+
+  // select replicas that have log contiguity with primary.
+  // prefer up, then acting, then any peer_info osds
   for (vector<int>::const_iterator i = up.begin();
        i != up.end();
        ++i) {
@@ -1362,11 +1368,6 @@ void PG::calc_replicated_acting(
     const pg_info_t &cur_info = all_info.find(up_cand)->second;
     if (cur_info.is_incomplete() ||
         cur_info.last_update < oldest_auth_log_entry) {
-      /* We include auth_log_shard->second.log_tail because in GetLog,
-       * we will request logs back to the min last_update over our
-       * acting_backfill set, which will result in our log being extended
-       * as far backwards as necessary to pick up any peers which can
-       * be log recovered by auth_log_shard's log */
       ss << " shard " << up_cand << " (up) backfill " << cur_info << std::endl;
       backfill->insert(up_cand);
       acting_backfill->insert(up_cand);
