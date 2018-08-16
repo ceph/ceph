@@ -191,6 +191,9 @@ public:
       throw std::system_error(r, std::generic_category());
     }
   }
+  pthread_mutex_t* native_handle() {
+    return &m;
+  }
 };
 } // namespace mutex_debug_detail
 typedef mutex_debug_detail::mutex_debug_impl<false> mutex_debug;

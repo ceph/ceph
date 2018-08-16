@@ -54,6 +54,7 @@ set(common_srcs
   code_environment.cc
   common_init.cc
   compat.cc
+  condition_variable_debug.cc
   config.cc
   config_values.cc
   dns_resolve.cc
@@ -85,6 +86,7 @@ set(common_srcs
   reverse.c
   run_cmd.cc
   scrub_types.cc
+  shared_mutex_debug.cc
   signal.cc
   snap_types.cc
   str_list.cc
