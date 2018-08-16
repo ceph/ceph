@@ -8,6 +8,7 @@
 #include <boost/bind.hpp>
 #include <boost/algorithm/string.hpp>
 #include "include/assert.h"
+#include "include/Context.h"
 #include "CacheControllerSocketCommon.h"
 
 
@@ -26,8 +27,12 @@ public:
       m_client_process_msg(processmsg),
       ep_(stream_protocol::endpoint(file))
   {
-     std::thread thd([this](){io_service_.run(); });
-     thd.detach();
+     io_thread.reset(new std::thread([this](){io_service_.run(); }));
+  }
+
+  ~CacheClient() {
+    io_service_.stop();
+    io_thread->join();
   }
 
   void run(){
@@ -53,7 +58,8 @@ public:
     message->offset = 0;
     message->length = 0;
     boost::asio::async_write(socket_,  boost::asio::buffer((char*)message, message->size()),
-        [this](const boost::system::error_code& err, size_t cb) {
+        [this, message](const boost::system::error_code& err, size_t cb) {
+        delete message;
         if (!err) {
           boost::asio::async_read(socket_, boost::asio::buffer(buffer_),
               boost::asio::transfer_exactly(544),
@@ -72,7 +78,7 @@ public:
     return 0;
   }
 
-  int lookup_object(std::string pool_name, std::string vol_name, std::string object_id, bool* result) {
+  int lookup_object(std::string pool_name, std::string vol_name, std::string object_id, Context* on_finish) {
     rbdsc_req_type_t *message = new rbdsc_req_type_t();
     message->type = RBDSC_READ;
     memcpy(message->pool_name, pool_name.c_str(), pool_name.size());
@@ -82,49 +88,48 @@ public:
     message->length = 0;
 
     boost::asio::async_write(socket_,  boost::asio::buffer((char*)message, message->size()),
-        [this, result](const boost::system::error_code& err, size_t cb) {
+        [this, on_finish, message](const boost::system::error_code& err, size_t cb) {
+        delete message;
         if (!err) {
-          get_result(result);
+          get_result(on_finish);
         } else {
           return -1;
         }
     });
-    std::unique_lock<std::mutex> lk(m);
-    //cv.wait(lk);
-    cv.wait_for(lk, std::chrono::milliseconds(100));
+
     return 0;
   }
 
-  void get_result(bool* result) {
+  void get_result(Context* on_finish) {
     boost::asio::async_read(socket_, boost::asio::buffer(buffer_),
         boost::asio::transfer_exactly(544),
-        [this, result](const boost::system::error_code& err, size_t cb) {
+        [this, on_finish](const boost::system::error_code& err, size_t cb) {
+        if (cb != 544) {
+	  assert(0);
+        }
         if (!err) {
 	    rbdsc_req_type_t *io_ctx = (rbdsc_req_type_t*)(buffer_);
             if (io_ctx->type == RBDSC_READ_REPLY) {
-	      *result = true;
+	      on_finish->complete(true);
+              return;
             } else {
-	      *result = false;
+	      on_finish->complete(false);
+              return;
             }
-            cv.notify_one();
-            m_client_process_msg(std::string(buffer_, cb));
         } else {
-            return -1;
+	    assert(0);
+            return on_finish->complete(false);
         }
     });
   }
 
-  void handle_connect(const boost::system::error_code& error) {
-    //TODO(): open librbd snap
-  }
-
-  void handle_write(const boost::system::error_code& error) {
-  }
 
 private:
   boost::asio::io_service& io_service_;
   boost::asio::io_service::work io_service_work_;
   stream_protocol::socket socket_;
+
+  std::shared_ptr<std::thread> io_thread;
   ClientProcessMsg m_client_process_msg;
   stream_protocol::endpoint ep_;
   char buffer_[1024];

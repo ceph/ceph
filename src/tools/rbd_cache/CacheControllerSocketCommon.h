@@ -4,6 +4,7 @@
 #ifndef CACHE_CONTROLLER_SOCKET_COMMON_H
 #define CACHE_CONTROLLER_SOCKET_COMMON_H
 
+/*
 #define RBDSC_REGISTER         0X11
 #define RBDSC_READ             0X12
 #define RBDSC_LOOKUP           0X13
@@ -11,9 +12,20 @@
 #define RBDSC_READ_REPLY       0X15
 #define RBDSC_LOOKUP_REPLY     0X16
 #define RBDSC_READ_RADOS       0X17
+*/
 
 namespace rbd {
 namespace cache {
+
+static const int RBDSC_REGISTER        =  0X11;
+static const int RBDSC_READ            =  0X12;
+static const int RBDSC_LOOKUP          =  0X13;
+static const int RBDSC_REGISTER_REPLY  =  0X14;
+static const int RBDSC_READ_REPLY      =  0X15;
+static const int RBDSC_LOOKUP_REPLY    =  0X16;
+static const int RBDSC_READ_RADOS      =  0X17;
+
+
 
 typedef std::function<void(uint64_t, std::string)> ProcessMsg;
 typedef std::function<void(std::string)> ClientProcessMsg;

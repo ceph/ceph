@@ -112,6 +112,13 @@ public:
 
 private:
 
+  int handle_read_cache(
+      bool cache,
+      const std::string &oid, uint64_t object_off,
+      uint64_t object_len, ceph::bufferlist* read_data,
+      io::DispatchResult* dispatch_result,
+      Context* on_dispatched);
+
   ImageCtxT* m_image_ctx;
 
   void client_handle_request(std::string msg);

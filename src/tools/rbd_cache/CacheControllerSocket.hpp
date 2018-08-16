@@ -43,7 +43,9 @@ public:
   void handle_read(const boost::system::error_code& error, size_t bytes_transferred) {
 
     if (!error) {
-     
+      if(bytes_transferred != 544){
+	assert(0);
+      }
       process_msg(session_id, std::string(data_, bytes_transferred));
 
     }
@@ -51,7 +53,8 @@ public:
 
   void handle_write(const boost::system::error_code& error) {
     if (!error) {
-      socket_.async_read_some(boost::asio::buffer(data_),
+    boost::asio::async_read(socket_, boost::asio::buffer(data_),
+                            boost::asio::transfer_exactly(544),
           boost::bind(&session::handle_read,
             shared_from_this(),
             boost::asio::placeholders::error,
@@ -63,6 +66,7 @@ public:
 
       boost::asio::async_write(socket_,
           boost::asio::buffer(msg.c_str(), msg.size()),
+          boost::asio::transfer_exactly(544),
           boost::bind(&session::handle_write,
             shared_from_this(),
             boost::asio::placeholders::error));
