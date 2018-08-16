@@ -957,10 +957,12 @@ if __name__ == '__main__':
     if args.config:
         config_file = args.config
     if args.batch:
-        args.commands = ['load ' + args.batch, 'quit']
+        args.commands = ['load ' + args.batch, ',quit']
+    if args.test:
+        args.commands.extend(['-t,'] + [arg+',' for arg in args.test])
     sys.argv.clear()
     sys.argv.append(exe)
-    sys.argv.extend(' '.join(args.commands).split(','))
+    sys.argv.extend([i.strip() for i in ' '.join(args.commands).split(',')])
     setup_cephfs(config_file)
     c = CephFSShell()
     c.cmdloop()
