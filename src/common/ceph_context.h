@@ -143,7 +143,7 @@ public:
   void do_command(std::string_view command, const cmdmap_t& cmdmap,
 		  std::string_view format, ceph::bufferlist *out);
 
-  static constexpr std::size_t largest_singleton = sizeof(void*) * 72;
+  static constexpr std::size_t largest_singleton = 8 * 72;
 
   template<typename T, typename... Args>
   T& lookup_or_create_singleton_object(std::string_view name,
