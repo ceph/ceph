@@ -4370,7 +4370,7 @@ void OSD::build_initial_pg_history(
  * and same_primary_since.
  */
 bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
-			     const OSDMap& endmap,
+			     const OSDMapRef& endmap,
 			     const vector<int>& currentup,
 			     int currentupprimary,
 			     const vector<int>& currentacting,
@@ -4391,7 +4391,6 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
       dout(15) << __func__ << ": found map gap, returning false" << dendl;
       return false;
     }
-    ceph_assert(oldmap->have_pg_pool(pgid.pool()));
 
     int upprimary, actingprimary;
     vector<int> up, acting;
@@ -4402,25 +4401,18 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
       &acting,
       &actingprimary);
 
-    // acting set change?
-    if ((actingprimary != currentactingprimary ||
-	 upprimary != currentupprimary ||
-	 acting != currentacting ||
-	 up != currentup) && e > h.same_interval_since) {
-      dout(15) << "project_pg_history " << pgid << " acting|up changed in " << e
-	       << " from " << acting << "/" << up
-	       << " " << actingprimary << "/" << upprimary
-	       << " -> " << currentacting << "/" << currentup
-	       << " " << currentactingprimary << "/" << currentupprimary
-	       << dendl;
+    if (e > h.same_interval_since &&
+	PastIntervals::is_new_interval(
+	  actingprimary, currentactingprimary,
+	  acting, currentacting,
+	  upprimary, currentupprimary,
+	  up, currentup,
+	  oldmap, endmap,
+	  pgid.pgid)) {
+      dout(15) << "project_pg_history " << pgid << " interval changed in " << e << dendl;
       h.same_interval_since = e;
     }
-    // split?
-    if (pgid.is_split(oldmap->get_pg_num(pgid.pool()),
-		      endmap->get_pg_num(pgid.pool()),
-		      0) && e > h.same_interval_since) {
-      h.same_interval_since = e;
-    }
+
     // up set change?
     if ((up != currentup || upprimary != currentupprimary)
 	&& e > h.same_up_since) {

@@ -1926,7 +1926,7 @@ protected:
   /// project pg history from from to now
   bool project_pg_history(
     spg_t pgid, pg_history_t& h, epoch_t from,
-    const OSDMap &osdmap,
+    const OSDMapRef &osdmap,
     const vector<int>& lastup,
     int lastupprimary,
     const vector<int>& lastacting,
