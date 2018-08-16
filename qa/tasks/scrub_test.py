@@ -342,7 +342,7 @@ def task(ctx, config):
         - deep-scrub [0-9]+ errors
         - repair 0 missing, 1 inconsistent objects
         - repair [0-9]+ errors, [0-9]+ fixed
-        - shard [0-9]+ missing
+        - shard [0-9]+ .* : missing
         - deep-scrub 1 missing, 1 inconsistent objects
         - does not match object info size
         - attr name mistmatch
