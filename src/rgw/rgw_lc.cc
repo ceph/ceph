@@ -462,10 +462,6 @@ int RGWLC::bucket_lc_process(string& shard_id)
               continue;
             }
           }
-
-          if (!key.ns.empty()) {
-            continue;
-          }
           if (prefix_iter->second.expiration_date != boost::none) {
             //we have checked it before
             is_expired = true;
