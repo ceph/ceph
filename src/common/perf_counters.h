@@ -713,14 +713,14 @@ class perf_counters_t : public PerfCountersCollectionable {
 
 	const bool val_overflowed = \
 	  __builtin_uadd_overflow(val_n_cnt.val, amount, &val_n_cnt.val);
-	const bool cnt_overflowed = \
-	  __builtin_uadd_overflow(val_n_cnt.cnt, 1, &val_n_cnt.cnt);
-
-	if (unlikely(val_overflowed || cnt_overflowed)) {
+	if (unlikely(val_overflowed)) {
+	  // amount is always greater-or-equal 1, so val moves at greater-or-eq
+	  // pace than cnt. This is pretty handy as we can asumme if val doesn't
+	  // overflow, then cnt is overflow-free as well.
 	  atomic_perf_counters[idx].val_with_counter.val += \
 	    val_n_cnt.val + std::numeric_limits<decltype(val_n_cnt.val)>::max();
 	  atomic_perf_counters[idx].val_with_counter.cnt += \
-	    val_n_cnt.cnt + std::numeric_limits<decltype(val_n_cnt.cnt)>::max();
+	    static_cast<std::uint64_t>(val_n_cnt.cnt) + 1;
 	  threaded_counters->val_with_counter.store({ 0, 0 },
 						    std::memory_order_relaxed);
 	} else {
@@ -728,6 +728,7 @@ class perf_counters_t : public PerfCountersCollectionable {
 	  // thread and we don't expect any other writer, so employing costly
 	  // synchronization would be pointless. On x86 this will be translated
 	  // into plain store without MFENCE.
+	  ++val_n_cnt.cnt;
 	  threaded_counters->val_with_counter.store(val_n_cnt,
 						    std::memory_order_relaxed);
 	}
