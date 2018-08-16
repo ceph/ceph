@@ -302,7 +302,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_open_by_id_read_only(rados_ioctx_t io, const char *image_id,
                                  rbd_image_t *image, const char *snap_name)
     int rbd_close(rbd_image_t image)
-    int rbd_resize(rbd_image_t image, uint64_t size)
+    int rbd_resize2(rbd_image_t image, uint64_t size, bint allow_shrink,
+                    librbd_progress_fn_t cb, void *cbdata)
     int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize)
     int rbd_get_old_format(rbd_image_t image, uint8_t *old)
     int rbd_get_size(rbd_image_t image, uint64_t *size)
@@ -2083,18 +2084,28 @@ cdef class Image(object):
     def __repr__(self):
         return "rbd.Image(ioctx, %r)" % self.name
 
-    def resize(self, size):
+    def resize(self, size, allow_shrink=True):
         """
-        Change the size of the image.
+        Change the size of the image, allow shrink.
 
         :param size: the new size of the image
         :type size: int
+        :param allow_shrink: permit shrinking
+        :type allow_shrink: bool
         """
-        cdef uint64_t _size = size
+        old_size = self.size()
+        if old_size == size:
+            return
+        if not allow_shrink and old_size > size:
+            raise InvalidArgument("error allow_shrink is False but old_size > new_size")
+        cdef:
+            uint64_t _size = size
+            bint _allow_shrink = allow_shrink
+            librbd_progress_fn_t prog_cb = &no_op_progress_callback
         with nogil:
-            ret = rbd_resize(self.image, _size)
+            ret = rbd_resize2(self.image, _size, _allow_shrink, prog_cb, NULL)
         if ret < 0:
-            raise make_ex(ret, 'error resizing image %s' % (self.name,))
+            raise make_ex(ret, 'error resizing image %s' % self.name)
 
     def stat(self):
         """
