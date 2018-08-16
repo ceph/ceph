@@ -553,6 +553,10 @@ class MessageInstance : public MessageSubType<T, M> {
 public:
   using factory = MessageFactory<T>;
 
+  template<typename... Args>
+  static auto create(Args&&... args) {
+    return MessageFactory<T>::build(std::forward<Args>(args)...);
+  }
   static auto msgref_cast(typename Message::ref const& m) {
     return boost::static_pointer_cast<typename T::ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
   }

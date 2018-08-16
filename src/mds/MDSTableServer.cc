@@ -80,7 +80,7 @@ void MDSTableServer::_prepare_logged(const MMDSTableRequest::const_ref &req, ver
   _prepare(req->bl, req->reqid, from, out);
   assert(version == tid);
 
-  auto reply = MMDSTableRequest::factory::build(table, TABLESERVER_OP_AGREE, req->reqid, tid);
+  auto reply = MMDSTableRequest::create(table, TABLESERVER_OP_AGREE, req->reqid, tid);
   reply->bl = std::move(out);
 
   if (_notify_prep(tid)) {
@@ -153,7 +153,7 @@ void MDSTableServer::handle_commit(const MMDSTableRequest::const_ref &req)
   else if (tid <= version) {
     dout(0) << "got commit for tid " << tid << " <= " << version
 	    << ", already committed, sending ack." << dendl;
-    auto reply = MMDSTableRequest::factory::build(table, TABLESERVER_OP_ACK, req->reqid, tid);
+    auto reply = MMDSTableRequest::create(table, TABLESERVER_OP_ACK, req->reqid, tid);
     mds->send_message(reply, req->get_connection());
   } 
   else {
@@ -176,7 +176,7 @@ void MDSTableServer::_commit_logged(const MMDSTableRequest::const_ref &req)
   _commit(tid, req);
   _note_commit(tid);
 
-  auto reply = MMDSTableRequest::factory::build(table, TABLESERVER_OP_ACK, req->reqid, req->get_tid());
+  auto reply = MMDSTableRequest::create(table, TABLESERVER_OP_ACK, req->reqid, req->get_tid());
   mds->send_message_mds(reply, mds_rank_t(req->get_source().num()));
 }
 
@@ -281,13 +281,13 @@ void MDSTableServer::_do_server_recovery()
       next_reqids[who] = p.second.reqid + 1;
 
     version_t tid = p.second.tid;
-    auto reply = MMDSTableRequest::factory::build(table, TABLESERVER_OP_AGREE, p.second.reqid, tid);
+    auto reply = MMDSTableRequest::create(table, TABLESERVER_OP_AGREE, p.second.reqid, tid);
     _get_reply_buffer(tid, &reply->bl);
     mds->send_message_mds(reply, who);
   }
 
   for (auto p : active_clients) {
-    auto reply = MMDSTableRequest::factory::build(table, TABLESERVER_OP_SERVER_READY, next_reqids[p]);
+    auto reply = MMDSTableRequest::create(table, TABLESERVER_OP_SERVER_READY, next_reqids[p]);
     mds->send_message_mds(reply, p);
   }
   recovered = true;
@@ -331,12 +331,12 @@ void MDSTableServer::handle_mds_recovery(mds_rank_t who)
     if (p->second.reqid >= next_reqid)
       next_reqid = p->second.reqid + 1;
 
-    auto reply = MMDSTableRequest::factory::build(table, TABLESERVER_OP_AGREE, p->second.reqid, p->second.tid);
+    auto reply = MMDSTableRequest::create(table, TABLESERVER_OP_AGREE, p->second.reqid, p->second.tid);
     _get_reply_buffer(p->second.tid, &reply->bl);
     mds->send_message_mds(reply, who);
   }
 
-  auto reply = MMDSTableRequest::factory::build(table, TABLESERVER_OP_SERVER_READY, next_reqid);
+  auto reply = MMDSTableRequest::create(table, TABLESERVER_OP_SERVER_READY, next_reqid);
   mds->send_message_mds(reply, who);
 }
 

@@ -2016,7 +2016,7 @@ MetaSession *Client::_open_mds_session(mds_rank_t mds)
     }
   }
 
-  auto m = MClientSession::factory::build(CEPH_SESSION_REQUEST_OPEN);
+  auto m = MClientSession::create(CEPH_SESSION_REQUEST_OPEN);
   m->metadata = metadata;
   m->supported_features = feature_bitset_t(CEPHFS_FEATURES_CLIENT_SUPPORTED);
   session->con->send_message2(m);
@@ -2027,7 +2027,7 @@ void Client::_close_mds_session(MetaSession *s)
 {
   ldout(cct, 2) << __func__ << " mds." << s->mds_num << " seq " << s->seq << dendl;
   s->state = MetaSession::STATE_CLOSING;
-  s->con->send_message2(MClientSession::factory::build(CEPH_SESSION_REQUEST_CLOSE, s->seq));
+  s->con->send_message2(MClientSession::create(CEPH_SESSION_REQUEST_CLOSE, s->seq));
 }
 
 void Client::_closed_mds_session(MetaSession *s)
@@ -2104,7 +2104,7 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_FLUSHMSG:
-    session->con->send_message2(MClientSession::factory::build(CEPH_SESSION_FLUSHMSG_ACK, m->get_seq()));
+    session->con->send_message2(MClientSession::create(CEPH_SESSION_FLUSHMSG_ACK, m->get_seq()));
     break;
 
   case CEPH_SESSION_FORCE_RO:
@@ -2209,7 +2209,7 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
 
 MClientRequest* Client::build_client_request(MetaRequest *request)
 {
-  auto req = MClientRequest::factory::build(request->get_op());
+  auto req = MClientRequest::create(request->get_op());
   req->set_tid(request->tid);
   req->set_stamp(request->op_stamp);
   memcpy(&req->head, &request->head, sizeof(ceph_mds_request_head));
@@ -2883,7 +2883,7 @@ void Client::got_mds_push(MetaSession *s)
   s->seq++;
   ldout(cct, 10) << " mds." << s->mds_num << " seq now " << s->seq << dendl;
   if (s->state == MetaSession::STATE_CLOSING) {
-    s->con->send_message2(MClientSession::factory::build(CEPH_SESSION_REQUEST_CLOSE, s->seq));
+    s->con->send_message2(MClientSession::create(CEPH_SESSION_REQUEST_CLOSE, s->seq));
   }
 }
 
@@ -2924,7 +2924,7 @@ void Client::handle_lease(MClientLease *m)
 
  revoke:
   {
-    auto reply = MClientLease::factory::build(CEPH_MDS_LEASE_RELEASE, seq, m->get_mask(), m->get_ino(), m->get_first(), m->get_last(), m->dname);
+    auto reply = MClientLease::create(CEPH_MDS_LEASE_RELEASE, seq, m->get_mask(), m->get_ino(), m->get_first(), m->get_last(), m->dname);
     m->get_connection()->send_message2(reply);
   }
   m->put();
@@ -3281,7 +3281,7 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   if (flush)
     follows = in->snaprealm->get_snap_context().seq;
   
-  auto m = MClientCaps::factory::build(op,
+  auto m = MClientCaps::create(op,
 				   in->ino,
 				   0,
 				   cap->cap_id, cap->seq,
@@ -3644,7 +3644,7 @@ void Client::flush_snaps(Inode *in, bool all_again)
       session->flushing_caps_tids.insert(capsnap.flush_tid);
     }
 
-    auto m = MClientCaps::factory::build(CEPH_CAP_OP_FLUSHSNAP, in->ino, in->snaprealm->ino, 0, mseq,
+    auto m = MClientCaps::create(CEPH_CAP_OP_FLUSHSNAP, in->ino, in->snaprealm->ino, 0, mseq,
 				     cap_epoch_barrier);
     m->caller_uid = capsnap.cap_dirtier_uid;
     m->caller_gid = capsnap.cap_dirtier_gid;
@@ -5845,7 +5845,7 @@ void Client::flush_mdlog(MetaSession *session)
   // will crash if they see an unknown CEPH_SESSION_* value in this msg.
   const uint64_t features = session->con->get_features();
   if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
-    auto m = MClientSession::factory::build(CEPH_SESSION_REQUEST_FLUSH_MDLOG);
+    auto m = MClientSession::create(CEPH_SESSION_REQUEST_FLUSH_MDLOG);
     session->con->send_message2(m);
   }
 }
@@ -6113,7 +6113,7 @@ void Client::renew_caps(MetaSession *session)
   ldout(cct, 10) << "renew_caps mds." << session->mds_num << dendl;
   session->last_cap_renew_request = ceph_clock_now();
   uint64_t seq = ++session->cap_renew_seq;
-  session->con->send_message2(MClientSession::factory::build(CEPH_SESSION_REQUEST_RENEWCAPS, seq));
+  session->con->send_message2(MClientSession::create(CEPH_SESSION_REQUEST_RENEWCAPS, seq));
 }
 
 

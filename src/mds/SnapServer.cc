@@ -262,7 +262,7 @@ bool SnapServer::_notify_prep(version_t tid)
   assert(version == tid);
 
   for (auto &p : active_clients) {
-    auto m = MMDSTableRequest::factory::build(table, TABLESERVER_OP_NOTIFY_PREP, 0, version);
+    auto m = MMDSTableRequest::create(table, TABLESERVER_OP_NOTIFY_PREP, 0, version);
     m->bl = bl;
     mds->send_message_mds(m, p);
   }
@@ -277,7 +277,7 @@ void SnapServer::handle_query(const MMDSTableRequest::const_ref &req)
   auto p = req->bl.cbegin();
   decode(op, p);
 
-  auto reply = MMDSTableRequest::factory::build(table, TABLESERVER_OP_QUERY_REPLY, req->reqid, version);
+  auto reply = MMDSTableRequest::create(table, TABLESERVER_OP_QUERY_REPLY, req->reqid, version);
 
   switch (op) {
     case 'F': // full
@@ -349,7 +349,7 @@ void SnapServer::check_osd_map(bool force)
 
   if (!all_purge.empty()) {
     dout(10) << "requesting removal of " << all_purge << dendl;
-    auto m = MRemoveSnaps::factory::build(all_purge);
+    auto m = MRemoveSnaps::create(all_purge);
     mon_client->send_mon_message(m.detach());
   }
 

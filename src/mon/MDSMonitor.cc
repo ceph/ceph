@@ -376,7 +376,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
       MDSMap null_map;
       null_map.epoch = fsmap.epoch;
       null_map.compat = fsmap.compat;
-      auto m = MMDSMap::factory::build(mon->monmap->fsid, null_map);
+      auto m = MMDSMap::create(mon->monmap->fsid, null_map);
       mon->send_reply(op, m.detach());
       return true;
     } else {
@@ -452,7 +452,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   assert(effective_epoch > 0);
   _note_beacon(m);
   {
-    auto beacon = MMDSBeacon::factory::build(mon->monmap->fsid,
+    auto beacon = MMDSBeacon::create(mon->monmap->fsid,
         m->get_global_id(), m->get_name(), effective_epoch,
         state, seq, CEPH_FEATURES_SUPPORTED_DEFAULT);
     mon->send_reply(op, beacon.detach());
@@ -721,7 +721,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       last_beacon.erase(gid);
 
       // Respond to MDS, so that it knows it can continue to shut down
-      auto beacon = MMDSBeacon::factory::build(
+      auto beacon = MMDSBeacon::create(
 			mon->monmap->fsid, m->get_global_id(),
 			m->get_name(), pending.get_epoch(), state, seq,
 			CEPH_FEATURES_SUPPORTED_DEFAULT);
@@ -739,7 +739,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       request_proposal(mon->osdmon());
 
       // Respond to MDS, so that it knows it can continue to shut down
-      auto beacon = MMDSBeacon::factory::build(mon->monmap->fsid,
+      auto beacon = MMDSBeacon::create(mon->monmap->fsid,
           m->get_global_id(), m->get_name(), pending.get_epoch(), state, seq,
           CEPH_FEATURES_SUPPORTED_DEFAULT);
       mon->send_reply(op, beacon.detach());
@@ -828,10 +828,10 @@ void MDSMonitor::_updated(MonOpRequestRef op)
     MDSMap null_map;
     null_map.epoch = fsmap.epoch;
     null_map.compat = fsmap.compat;
-    auto m = MMDSMap::factory::build(mon->monmap->fsid, null_map);
+    auto m = MMDSMap::create(mon->monmap->fsid, null_map);
     mon->send_reply(op, m.detach());
   } else {
-    auto beacon = MMDSBeacon::factory::build(mon->monmap->fsid,
+    auto beacon = MMDSBeacon::create(mon->monmap->fsid,
         m->get_global_id(), m->get_name(), fsmap.get_epoch(),
         m->get_state(), m->get_seq(), CEPH_FEATURES_SUPPORTED_DEFAULT);
     mon->send_reply(op, beacon.detach());
@@ -1570,7 +1570,7 @@ void MDSMonitor::check_sub(Subscription *sub)
     if (sub->next > mds_map->epoch) {
       return;
     }
-    auto msg = MMDSMap::factory::build(mon->monmap->fsid, *mds_map);
+    auto msg = MMDSMap::create(mon->monmap->fsid, *mds_map);
 
     sub->session->con->send_message(msg.detach());
     if (sub->onetime) {

@@ -335,502 +335,502 @@ Message *decode_message(CephContext *cct, int crcflags,
     // -- with payload --
 
   case MSG_PGSTATS:
-    m = MPGStats::factory::build();
+    m = MPGStats::create();
     break;
   case MSG_PGSTATSACK:
-    m = MPGStatsAck::factory::build();
+    m = MPGStatsAck::create();
     break;
 
   case CEPH_MSG_STATFS:
-    m = MStatfs::factory::build();
+    m = MStatfs::create();
     break;
   case CEPH_MSG_STATFS_REPLY:
-    m = MStatfsReply::factory::build();
+    m = MStatfsReply::create();
     break;
   case MSG_GETPOOLSTATS:
-    m = MGetPoolStats::factory::build();
+    m = MGetPoolStats::create();
     break;
   case MSG_GETPOOLSTATSREPLY:
-    m = MGetPoolStatsReply::factory::build();
+    m = MGetPoolStatsReply::create();
     break;
   case CEPH_MSG_POOLOP:
-    m = MPoolOp::factory::build();
+    m = MPoolOp::create();
     break;
   case CEPH_MSG_POOLOP_REPLY:
-    m = MPoolOpReply::factory::build();
+    m = MPoolOpReply::create();
     break;
   case MSG_MON_COMMAND:
-    m = MMonCommand::factory::build();
+    m = MMonCommand::create();
     break;
   case MSG_MON_COMMAND_ACK:
-    m = MMonCommandAck::factory::build();
+    m = MMonCommandAck::create();
     break;
   case MSG_MON_PAXOS:
-    m = MMonPaxos::factory::build();
+    m = MMonPaxos::create();
     break;
   case MSG_CONFIG:
-    m = MConfig::factory::build();
+    m = MConfig::create();
     break;
   case MSG_GET_CONFIG:
-    m = MGetConfig::factory::build();
+    m = MGetConfig::create();
     break;
 
   case MSG_MON_PROBE:
-    m = MMonProbe::factory::build();
+    m = MMonProbe::create();
     break;
   case MSG_MON_JOIN:
-    m = MMonJoin::factory::build();
+    m = MMonJoin::create();
     break;
   case MSG_MON_ELECTION:
-    m = MMonElection::factory::build();
+    m = MMonElection::create();
     break;
   case MSG_MON_SYNC:
-    m = MMonSync::factory::build();
+    m = MMonSync::create();
     break;
   case MSG_MON_SCRUB:
-    m = MMonScrub::factory::build();
+    m = MMonScrub::create();
     break;
 
   case MSG_LOG:
-    m = MLog::factory::build();
+    m = MLog::create();
     break;
   case MSG_LOGACK:
-    m = MLogAck::factory::build();
+    m = MLogAck::create();
     break;
 
   case CEPH_MSG_PING:
-    m = MPing::factory::build();
+    m = MPing::create();
     break;
   case MSG_COMMAND:
-    m = MCommand::factory::build();
+    m = MCommand::create();
     break;
   case MSG_COMMAND_REPLY:
-    m = MCommandReply::factory::build();
+    m = MCommandReply::create();
     break;
   case MSG_OSD_BACKFILL_RESERVE:
-    m = MBackfillReserve::factory::build();
+    m = MBackfillReserve::create();
     break;
   case MSG_OSD_RECOVERY_RESERVE:
-    m = MRecoveryReserve::factory::build();
+    m = MRecoveryReserve::create();
     break;
   case MSG_OSD_FORCE_RECOVERY:
-    m = MOSDForceRecovery::factory::build();
+    m = MOSDForceRecovery::create();
     break;
 
   case MSG_ROUTE:
-    m = MRoute::factory::build();
+    m = MRoute::create();
     break;
   case MSG_FORWARD:
-    m = MForward::factory::build();
+    m = MForward::create();
     break;
     
   case CEPH_MSG_MON_MAP:
-    m = MMonMap::factory::build();
+    m = MMonMap::create();
     break;
   case CEPH_MSG_MON_GET_MAP:
-    m = MMonGetMap::factory::build();
+    m = MMonGetMap::create();
     break;
   case CEPH_MSG_MON_GET_OSDMAP:
-    m = MMonGetOSDMap::factory::build();
+    m = MMonGetOSDMap::create();
     break;
   case CEPH_MSG_MON_GET_VERSION:
-    m = MMonGetVersion::factory::build();
+    m = MMonGetVersion::create();
     break;
   case CEPH_MSG_MON_GET_VERSION_REPLY:
-    m = MMonGetVersionReply::factory::build();
+    m = MMonGetVersionReply::create();
     break;
   case CEPH_MSG_MON_METADATA:
-    m = MMonMetadata::factory::build();
+    m = MMonMetadata::create();
     break;
 
   case MSG_OSD_BOOT:
-    m = MOSDBoot::factory::build();
+    m = MOSDBoot::create();
     break;
   case MSG_OSD_ALIVE:
-    m = MOSDAlive::factory::build();
+    m = MOSDAlive::create();
     break;
   case MSG_OSD_BEACON:
-    m = MOSDBeacon::factory::build();
+    m = MOSDBeacon::create();
     break;
   case MSG_OSD_PGTEMP:
-    m = MOSDPGTemp::factory::build();
+    m = MOSDPGTemp::create();
     break;
   case MSG_OSD_FAILURE:
-    m = MOSDFailure::factory::build();
+    m = MOSDFailure::create();
     break;
   case MSG_OSD_MARK_ME_DOWN:
-    m = MOSDMarkMeDown::factory::build();
+    m = MOSDMarkMeDown::create();
     break;
   case MSG_OSD_FULL:
-    m = MOSDFull::factory::build();
+    m = MOSDFull::create();
     break;
   case MSG_OSD_PING:
-    m = MOSDPing::factory::build();
+    m = MOSDPing::create();
     break;
   case CEPH_MSG_OSD_OP:
-    m = MOSDOp::factory::build();
+    m = MOSDOp::create();
     break;
   case CEPH_MSG_OSD_OPREPLY:
-    m = MOSDOpReply::factory::build();
+    m = MOSDOpReply::create();
     break;
   case MSG_OSD_REPOP:
-    m = MOSDRepOp::factory::build();
+    m = MOSDRepOp::create();
     break;
   case MSG_OSD_REPOPREPLY:
-    m = MOSDRepOpReply::factory::build();
+    m = MOSDRepOpReply::create();
     break;
   case MSG_OSD_PG_CREATED:
-    m = MOSDPGCreated::factory::build();
+    m = MOSDPGCreated::create();
     break;
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
-    m = MOSDPGUpdateLogMissing::factory::build();
+    m = MOSDPGUpdateLogMissing::create();
     break;
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
-    m = MOSDPGUpdateLogMissingReply::factory::build();
+    m = MOSDPGUpdateLogMissingReply::create();
     break;
   case CEPH_MSG_OSD_BACKOFF:
-    m = MOSDBackoff::factory::build();
+    m = MOSDBackoff::create();
     break;
 
   case CEPH_MSG_OSD_MAP:
-    m = MOSDMap::factory::build();
+    m = MOSDMap::create();
     break;
 
   case CEPH_MSG_WATCH_NOTIFY:
-    m = MWatchNotify::factory::build();
+    m = MWatchNotify::create();
     break;
 
   case MSG_OSD_PG_NOTIFY:
-    m = MOSDPGNotify::factory::build();
+    m = MOSDPGNotify::create();
     break;
   case MSG_OSD_PG_QUERY:
-    m = MOSDPGQuery::factory::build();
+    m = MOSDPGQuery::create();
     break;
   case MSG_OSD_PG_LOG:
-    m = MOSDPGLog::factory::build();
+    m = MOSDPGLog::create();
     break;
   case MSG_OSD_PG_REMOVE:
-    m = MOSDPGRemove::factory::build();
+    m = MOSDPGRemove::create();
     break;
   case MSG_OSD_PG_INFO:
-    m = MOSDPGInfo::factory::build();
+    m = MOSDPGInfo::create();
     break;
   case MSG_OSD_PG_CREATE:
-    m = MOSDPGCreate::factory::build();
+    m = MOSDPGCreate::create();
     break;
   case MSG_OSD_PG_CREATE2:
-    m = MOSDPGCreate2::factory::build();
+    m = MOSDPGCreate2::create();
     break;
   case MSG_OSD_PG_TRIM:
-    m = MOSDPGTrim::factory::build();
+    m = MOSDPGTrim::create();
     break;
 
   case MSG_OSD_SCRUB:
-    m = MOSDScrub::factory::build();
+    m = MOSDScrub::create();
     break;
   case MSG_OSD_SCRUB2:
-    m = MOSDScrub2::factory::build();
+    m = MOSDScrub2::create();
     break;
   case MSG_OSD_SCRUB_RESERVE:
-    m = MOSDScrubReserve::factory::build();
+    m = MOSDScrubReserve::create();
     break;
   case MSG_REMOVE_SNAPS:
-    m = MRemoveSnaps::factory::build();
+    m = MRemoveSnaps::create();
     break;
   case MSG_OSD_REP_SCRUB:
-    m = MOSDRepScrub::factory::build();
+    m = MOSDRepScrub::create();
     break;
   case MSG_OSD_REP_SCRUBMAP:
-    m = MOSDRepScrubMap::factory::build();
+    m = MOSDRepScrubMap::create();
     break;
   case MSG_OSD_PG_SCAN:
-    m = MOSDPGScan::factory::build();
+    m = MOSDPGScan::create();
     break;
   case MSG_OSD_PG_BACKFILL:
-    m = MOSDPGBackfill::factory::build();
+    m = MOSDPGBackfill::create();
     break;
   case MSG_OSD_PG_BACKFILL_REMOVE:
-    m = MOSDPGBackfillRemove::factory::build();
+    m = MOSDPGBackfillRemove::create();
     break;
   case MSG_OSD_PG_PUSH:
-    m = MOSDPGPush::factory::build();
+    m = MOSDPGPush::create();
     break;
   case MSG_OSD_PG_PULL:
-    m = MOSDPGPull::factory::build();
+    m = MOSDPGPull::create();
     break;
   case MSG_OSD_PG_PUSH_REPLY:
-    m = MOSDPGPushReply::factory::build();
+    m = MOSDPGPushReply::create();
     break;
   case MSG_OSD_PG_RECOVERY_DELETE:
-    m = MOSDPGRecoveryDelete::factory::build();
+    m = MOSDPGRecoveryDelete::create();
     break;
   case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
-    m = MOSDPGRecoveryDeleteReply::factory::build();
+    m = MOSDPGRecoveryDeleteReply::create();
     break;
   case MSG_OSD_EC_WRITE:
-    m = MOSDECSubOpWrite::factory::build();
+    m = MOSDECSubOpWrite::create();
     break;
   case MSG_OSD_EC_WRITE_REPLY:
-    m = MOSDECSubOpWriteReply::factory::build();
+    m = MOSDECSubOpWriteReply::create();
     break;
   case MSG_OSD_EC_READ:
-    m = MOSDECSubOpRead::factory::build();
+    m = MOSDECSubOpRead::create();
     break;
   case MSG_OSD_EC_READ_REPLY:
-    m = MOSDECSubOpReadReply::factory::build();
+    m = MOSDECSubOpReadReply::create();
     break;
    // auth
   case CEPH_MSG_AUTH:
-    m = MAuth::factory::build();
+    m = MAuth::create();
     break;
   case CEPH_MSG_AUTH_REPLY:
-    m = MAuthReply::factory::build();
+    m = MAuthReply::create();
     break;
 
   case MSG_MON_GLOBAL_ID:
-    m = MMonGlobalID::factory::build();
+    m = MMonGlobalID::create();
     break; 
 
     // clients
   case CEPH_MSG_MON_SUBSCRIBE:
-    m = MMonSubscribe::factory::build();
+    m = MMonSubscribe::create();
     break;
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
-    m = MMonSubscribeAck::factory::build();
+    m = MMonSubscribeAck::create();
     break;
   case CEPH_MSG_CLIENT_SESSION:
-    m = MClientSession::factory::build();
+    m = MClientSession::create();
     break;
   case CEPH_MSG_CLIENT_RECONNECT:
-    m = MClientReconnect::factory::build();
+    m = MClientReconnect::create();
     break;
   case CEPH_MSG_CLIENT_REQUEST:
-    m = MClientRequest::factory::build();
+    m = MClientRequest::create();
     break;
   case CEPH_MSG_CLIENT_REQUEST_FORWARD:
-    m = MClientRequestForward::factory::build();
+    m = MClientRequestForward::create();
     break;
   case CEPH_MSG_CLIENT_REPLY:
-    m = MClientReply::factory::build();
+    m = MClientReply::create();
     break;
   case CEPH_MSG_CLIENT_CAPS:
-    m = MClientCaps::factory::build();
+    m = MClientCaps::create();
     break;
   case CEPH_MSG_CLIENT_CAPRELEASE:
-    m = MClientCapRelease::factory::build();
+    m = MClientCapRelease::create();
     break;
   case CEPH_MSG_CLIENT_LEASE:
-    m = MClientLease::factory::build();
+    m = MClientLease::create();
     break;
   case CEPH_MSG_CLIENT_SNAP:
-    m = MClientSnap::factory::build();
+    m = MClientSnap::create();
     break;
   case CEPH_MSG_CLIENT_QUOTA:
-    m = MClientQuota::factory::build();
+    m = MClientQuota::create();
     break;
 
     // mds
   case MSG_MDS_SLAVE_REQUEST:
-    m = MMDSSlaveRequest::factory::build();
+    m = MMDSSlaveRequest::create();
     break;
 
   case CEPH_MSG_MDS_MAP:
-    m = MMDSMap::factory::build();
+    m = MMDSMap::create();
     break;
   case CEPH_MSG_FS_MAP:
-    m = MFSMap::factory::build();
+    m = MFSMap::create();
     break;
   case CEPH_MSG_FS_MAP_USER:
-    m = MFSMapUser::factory::build();
+    m = MFSMapUser::create();
     break;
   case MSG_MDS_BEACON:
-    m = MMDSBeacon::factory::build();
+    m = MMDSBeacon::create();
     break;
   case MSG_MDS_OFFLOAD_TARGETS:
-    m = MMDSLoadTargets::factory::build();
+    m = MMDSLoadTargets::create();
     break;
   case MSG_MDS_RESOLVE:
-    m = MMDSResolve::factory::build();
+    m = MMDSResolve::create();
     break;
   case MSG_MDS_RESOLVEACK:
-    m = MMDSResolveAck::factory::build();
+    m = MMDSResolveAck::create();
     break;
   case MSG_MDS_CACHEREJOIN:
-    m = MMDSCacheRejoin::factory::build();
+    m = MMDSCacheRejoin::create();
 	break;
   
   case MSG_MDS_DIRUPDATE:
-    m = MDirUpdate::factory::build();
+    m = MDirUpdate::create();
     break;
 
   case MSG_MDS_DISCOVER:
-    m = MDiscover::factory::build();
+    m = MDiscover::create();
     break;
   case MSG_MDS_DISCOVERREPLY:
-    m = MDiscoverReply::factory::build();
+    m = MDiscoverReply::create();
     break;
 
   case MSG_MDS_FINDINO:
-    m = MMDSFindIno::factory::build();
+    m = MMDSFindIno::create();
     break;
   case MSG_MDS_FINDINOREPLY:
-    m = MMDSFindInoReply::factory::build();
+    m = MMDSFindInoReply::create();
     break;
 
   case MSG_MDS_OPENINO:
-    m = MMDSOpenIno::factory::build();
+    m = MMDSOpenIno::create();
     break;
   case MSG_MDS_OPENINOREPLY:
-    m = MMDSOpenInoReply::factory::build();
+    m = MMDSOpenInoReply::create();
     break;
 
   case MSG_MDS_SNAPUPDATE:
-    m = MMDSSnapUpdate::factory::build();
+    m = MMDSSnapUpdate::create();
     break;
 
   case MSG_MDS_FRAGMENTNOTIFY:
-    m = MMDSFragmentNotify::factory::build();
+    m = MMDSFragmentNotify::create();
     break;
 
   case MSG_MDS_EXPORTDIRDISCOVER:
-    m = MExportDirDiscover::factory::build();
+    m = MExportDirDiscover::create();
     break;
   case MSG_MDS_EXPORTDIRDISCOVERACK:
-    m = MExportDirDiscoverAck::factory::build();
+    m = MExportDirDiscoverAck::create();
     break;
   case MSG_MDS_EXPORTDIRCANCEL:
-    m = MExportDirCancel::factory::build();
+    m = MExportDirCancel::create();
     break;
 
   case MSG_MDS_EXPORTDIR:
-    m = MExportDir::factory::build();
+    m = MExportDir::create();
     break;
   case MSG_MDS_EXPORTDIRACK:
-    m = MExportDirAck::factory::build();
+    m = MExportDirAck::create();
     break;
   case MSG_MDS_EXPORTDIRFINISH:
-    m = MExportDirFinish::factory::build();
+    m = MExportDirFinish::create();
     break;
 
   case MSG_MDS_EXPORTDIRNOTIFY:
-    m = MExportDirNotify::factory::build();
+    m = MExportDirNotify::create();
     break;
 
   case MSG_MDS_EXPORTDIRNOTIFYACK:
-    m = MExportDirNotifyAck::factory::build();
+    m = MExportDirNotifyAck::create();
     break;
 
   case MSG_MDS_EXPORTDIRPREP:
-    m = MExportDirPrep::factory::build();
+    m = MExportDirPrep::create();
     break;
 
   case MSG_MDS_EXPORTDIRPREPACK:
-    m = MExportDirPrepAck::factory::build();
+    m = MExportDirPrepAck::create();
     break;
 
   case MSG_MDS_EXPORTCAPS:
-    m = MExportCaps::factory::build();
+    m = MExportCaps::create();
     break;
   case MSG_MDS_EXPORTCAPSACK:
-    m = MExportCapsAck::factory::build();
+    m = MExportCapsAck::create();
     break;
   case MSG_MDS_GATHERCAPS:
-    m = MGatherCaps::factory::build();
+    m = MGatherCaps::create();
     break;
 
 
   case MSG_MDS_DENTRYUNLINK:
-    m = MDentryUnlink::factory::build();
+    m = MDentryUnlink::create();
     break;
   case MSG_MDS_DENTRYLINK:
-    m = MDentryLink::factory::build();
+    m = MDentryLink::create();
     break;
 
   case MSG_MDS_HEARTBEAT:
-    m = MHeartbeat::factory::build();
+    m = MHeartbeat::create();
     break;
 
   case MSG_MDS_CACHEEXPIRE:
-    m = MCacheExpire::factory::build();
+    m = MCacheExpire::create();
     break;
 
   case MSG_MDS_TABLE_REQUEST:
-    m = MMDSTableRequest::factory::build();
+    m = MMDSTableRequest::create();
     break;
 
 	/*  case MSG_MDS_INODEUPDATE:
-    m = MInodeUpdate::factory::build();
+    m = MInodeUpdate::create();
     break;
 	*/
 
   case MSG_MDS_INODEFILECAPS:
-    m = MInodeFileCaps::factory::build();
+    m = MInodeFileCaps::create();
     break;
 
   case MSG_MDS_LOCK:
-    m = MLock::factory::build();
+    m = MLock::create();
     break;
 
   case MSG_MGR_BEACON:
-    m = MMgrBeacon::factory::build();
+    m = MMgrBeacon::create();
     break;
 
   case MSG_MON_MGR_REPORT:
-    m = MMonMgrReport::factory::build();
+    m = MMonMgrReport::create();
     break;
 
   case MSG_SERVICE_MAP:
-    m = MServiceMap::factory::build();
+    m = MServiceMap::create();
     break;
 
   case MSG_MGR_MAP:
-    m = MMgrMap::factory::build();
+    m = MMgrMap::create();
     break;
 
   case MSG_MGR_DIGEST:
-    m = MMgrDigest::factory::build();
+    m = MMgrDigest::create();
     break;
 
   case MSG_MGR_OPEN:
-    m = MMgrOpen::factory::build();
+    m = MMgrOpen::create();
     break;
 
   case MSG_MGR_CLOSE:
-    m = MMgrClose::factory::build();
+    m = MMgrClose::create();
     break;
 
   case MSG_MGR_REPORT:
-    m = MMgrReport::factory::build();
+    m = MMgrReport::create();
     break;
 
   case MSG_MGR_CONFIGURE:
-    m = MMgrConfigure::factory::build();
+    m = MMgrConfigure::create();
     break;
 
   case MSG_TIMECHECK:
-    m = MTimeCheck::factory::build();
+    m = MTimeCheck::create();
     break;
   case MSG_TIMECHECK2:
-    m = MTimeCheck2::factory::build();
+    m = MTimeCheck2::create();
     break;
 
   case MSG_MON_HEALTH:
-    m = MMonHealth::factory::build();
+    m = MMonHealth::create();
     break;
 
   case MSG_MON_HEALTH_CHECKS:
-    m = MMonHealthChecks::factory::build();
+    m = MMonHealthChecks::create();
     break;
 
 #if defined(HAVE_XIO)
   case MSG_DATA_PING:
-    m = MDataPing::factory::build();
+    m = MDataPing::create();
     break;
 #endif
     // -- simple messages without payload --
 
   case CEPH_MSG_SHUTDOWN:
-    m = MGenericMessage::factory::build(type);
+    m = MGenericMessage::create(type);
     break;
 
   default:
