@@ -218,7 +218,7 @@ class MessageDencoderImpl : public Dencoder {
   list<typename T::ref> m_list;
 
 public:
-  MessageDencoderImpl() : m_object(T::factory::build()) {}
+  MessageDencoderImpl() : m_object(T::create()) {}
   ~MessageDencoderImpl() override {}
 
   string decode(bufferlist bl, uint64_t seek) override {

@@ -208,7 +208,7 @@ void Beacon::_send()
 
   assert(want_state != MDSMap::STATE_NULL);
   
-  auto beacon = MMDSBeacon::factory::build(
+  auto beacon = MMDSBeacon::create(
       monc->get_fsid(), mds_gid_t(monc->get_global_id()),
       name,
       epoch,

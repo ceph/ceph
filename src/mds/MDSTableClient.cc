@@ -102,7 +102,7 @@ void MDSTableClient::handle_request(const MMDSTableRequest::const_ref &m)
       dout(10) << "stray agree on " << reqid << " tid " << tid
 	       << ", sending ROLLBACK" << dendl;
       assert(!server_ready);
-      auto req = MMDSTableRequest::factory::build(table, TABLESERVER_OP_ROLLBACK, 0, tid);
+      auto req = MMDSTableRequest::create(table, TABLESERVER_OP_ROLLBACK, 0, tid);
       mds->send_message_mds(req, mds->get_mds_map()->get_tableserver());
     }
     break;
@@ -174,7 +174,7 @@ void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, bufferlist 
 
   if (server_ready) {
     // send message
-    auto req = MMDSTableRequest::factory::build(table, TABLESERVER_OP_PREPARE, reqid);
+    auto req = MMDSTableRequest::create(table, TABLESERVER_OP_PREPARE, reqid);
     req->bl = mutation;
     mds->send_message_mds(req, mds->get_mds_map()->get_tableserver());
   } else
@@ -198,7 +198,7 @@ void MDSTableClient::commit(version_t tid, LogSegment *ls)
 
   if (server_ready) {
     // send message
-    auto req = MMDSTableRequest::factory::build(table, TABLESERVER_OP_COMMIT, 0, tid);
+    auto req = MMDSTableRequest::create(table, TABLESERVER_OP_COMMIT, 0, tid);
     mds->send_message_mds(req, mds->get_mds_map()->get_tableserver());
   } else
     dout(10) << "tableserver is not ready yet, deferring request" << dendl;
@@ -232,7 +232,7 @@ void MDSTableClient::resend_commits()
        p != pending_commit.end();
        ++p) {
     dout(10) << "resending commit on " << p->first << dendl;
-    auto req = MMDSTableRequest::factory::build(table, TABLESERVER_OP_COMMIT, 0, p->first);
+    auto req = MMDSTableRequest::create(table, TABLESERVER_OP_COMMIT, 0, p->first);
     mds->send_message_mds(req, mds->get_mds_map()->get_tableserver());
   }
 }
@@ -248,7 +248,7 @@ void MDSTableClient::resend_prepares()
        p != pending_prepare.end();
        ++p) {
     dout(10) << "resending prepare on " << p->first << dendl;
-    auto req = MMDSTableRequest::factory::build(table, TABLESERVER_OP_PREPARE, p->first);
+    auto req = MMDSTableRequest::create(table, TABLESERVER_OP_PREPARE, p->first);
     req->bl = p->second.mutation;
     mds->send_message_mds(req, mds->get_mds_map()->get_tableserver());
   }
