@@ -1007,8 +1007,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 
 out:
     if (error)
-        errorstream << pgid.pgid << " shard " << l << ": soid " << obj
-		    << " " << shard_errorstream.str() << "\n";
+        errorstream << pgid.pgid << " shard " << l << " soid " << obj
+		    << " : " << shard_errorstream.str() << "\n";
     // Keep scanning other shards
   }
   dout(10) << __func__ << ": selecting osd " << auth->first
@@ -1061,7 +1061,7 @@ void PGBackend::be_compare_scrubmaps(
 	++shallow_errors;
       store->add_object_error(k->pool, object_error);
       errorstream << pgid.pgid << " soid " << *k
-		  << ": failed to pick suitable object info\n";
+		  << " : failed to pick suitable object info\n";
       continue;
     }
     object_error.set_version(auth_oi.user_version);
@@ -1107,7 +1107,7 @@ void PGBackend::be_compare_scrubmaps(
 	  fix_digest = true;
 	  // Clear the error
 	  shard_map[j->first].clear_data_digest_mismatch_info();
-	  errorstream << pgid << " : soid " << *k << " repairing object info data_digest" << "\n";
+	  errorstream << pgid << " soid " << *k << " : repairing object info data_digest" << "\n";
 	}
 	// Some errors might have already been set in be_select_auth_object()
 	if (shard_map[j->first].errors != 0) {
@@ -1119,13 +1119,13 @@ void PGBackend::be_compare_scrubmaps(
 	  // Only true if be_compare_scrub_objects() found errors and put something
 	  // in ss.
 	  if (found)
-	    errorstream << pgid << " shard " << j->first << ": soid " << *k
-		      << " " << ss.str() << "\n";
+	    errorstream << pgid << " shard " << j->first << " soid " << *k
+		      << " : " << ss.str() << "\n";
 	} else if (found) {
 	  // Track possible shard to use as authoritative, if needed
 	  // There are errors, without identifying the shard
 	  object_errors.insert(j->first);
-	  errorstream << pgid << " : soid " << *k << " " << ss.str() << "\n";
+	  errorstream << pgid << " soid " << *k << " : " << ss.str() << "\n";
 	} else {
 	  // XXX: The auth shard might get here that we don't know
 	  // that it has the "correct" data.
@@ -1137,8 +1137,7 @@ void PGBackend::be_compare_scrubmaps(
         shard_map[j->first].primary = (j->first == get_parent()->whoami_shard());
 	// Can't have any other errors if there is no information available
 	++shallow_errors;
-	errorstream << pgid << " shard " << j->first << " missing " << *k
-		    << "\n";
+	errorstream << pgid << " shard " << j->first << " " << *k << " : missing\n";
       }
       object_error.add_shard(j->first, shard_map[j->first]);
     }
@@ -1146,7 +1145,7 @@ void PGBackend::be_compare_scrubmaps(
     if (auth_list.empty()) {
       if (object_errors.empty()) {
         errorstream << pgid.pgid << " soid " << *k
-		  << ": failed to pick suitable auth object\n";
+		  << " : failed to pick suitable auth object\n";
         goto out;
       }
       // Object errors exist and nothing in auth_list
