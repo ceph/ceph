@@ -19,6 +19,7 @@
 
 #include "OSDMap.h"
 #include <algorithm>
+#include <random>
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -5199,7 +5200,9 @@ void OSDMap::get_random_up_osds_by_subtree(int n,     // whoami
     return;
   vector<int> subtrees;
   crush->get_subtree_of_type(subtree_type, &subtrees);
-  std::random_shuffle(subtrees.begin(), subtrees.end());
+  std::random_device rd;
+  std::default_random_engine rng{rd()};
+  std::shuffle(subtrees.begin(), subtrees.end(), rng);
   for (auto s : subtrees) {
     if (limit <= 0)
       break;
