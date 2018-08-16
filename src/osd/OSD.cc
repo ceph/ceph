@@ -4205,18 +4205,19 @@ void OSD::build_initial_pg_history(
  * and same_primary_since.
  */
 bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
+			     const OSDMapRef& endmap,
 			     const vector<int>& currentup,
 			     int currentupprimary,
 			     const vector<int>& currentacting,
 			     int currentactingprimary)
 {
   dout(15) << "project_pg_history " << pgid
-           << " from " << from << " to " << osdmap->get_epoch()
+           << " from " << from << " to " << endmap->get_epoch()
            << ", start " << h
            << dendl;
 
   epoch_t e;
-  for (e = osdmap->get_epoch();
+  for (e = endmap->get_epoch();
        e > from;
        e--) {
     // verify during intermediate epoch (e-1)
@@ -4251,7 +4252,7 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
     }
     // split?
     if (pgid.is_split(oldmap->get_pg_num(pgid.pool()),
-		      osdmap->get_pg_num(pgid.pool()),
+		      endmap->get_pg_num(pgid.pool()),
 		      0) && e > h.same_interval_since) {
       h.same_interval_since = e;
     }
@@ -8618,6 +8619,7 @@ void OSD::handle_pg_query_nopg(const MQuery& q)
   pg_history_t history = q.query.history;
   bool valid_history = project_pg_history(
     pgid, history, q.query.epoch_sent,
+    osdmap,
     up, up_primary, acting, acting_primary);
 
   if (!valid_history ||
