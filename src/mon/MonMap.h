@@ -279,10 +279,7 @@ public:
     if (n.empty())
       return -1;
 
-    for (unsigned i = 0; i < ranks.size(); i++)
-      if (ranks[i] == n)
-	return i;
-    return -1;
+    return get_rank(n);
   }
   bool get_addr_name(const entity_addr_t& a, string& name) {
     if (addr_mons.count(a) == 0)
