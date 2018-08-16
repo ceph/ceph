@@ -444,6 +444,13 @@ class TestImage(object):
         info = self.image.stat()
         check_stat(info, new_size, IMG_ORDER)
 
+    def test_resize_allow_shrink_False(self):
+        new_size = IMG_SIZE * 2
+        self.image.resize(new_size)
+        info = self.image.stat()
+        check_stat(info, new_size, IMG_ORDER)
+        assert_raises(InvalidArgument, self.image.resize, IMG_SIZE, False)
+
     def test_size(self):
         eq(IMG_SIZE, self.image.size())
         self.image.create_snap('snap1')
