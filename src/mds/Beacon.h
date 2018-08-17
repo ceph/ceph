@@ -43,7 +43,7 @@ class Beacon : public Dispatcher
 {
 public:
   Beacon(CephContext *cct_, MonClient *monc_, boost::string_view name);
-  ~Beacon() override;
+  ~Beacon() override {};
 
   void init(MDSMap const *mdsmap);
   void shutdown();
@@ -87,20 +87,20 @@ private:
 
   // Items we duplicate from the MDS to have access under our own lock
   std::string name;
-  version_t epoch;
+  version_t epoch = 0;
   CompatSet compat;
-  mds_rank_t standby_for_rank;
+  mds_rank_t standby_for_rank = MDS_RANK_NONE;
   std::string standby_for_name;
-  fs_cluster_id_t standby_for_fscid;
-  bool standby_replay;
-  MDSMap::DaemonState want_state;
+  fs_cluster_id_t standby_for_fscid = FS_CLUSTER_ID_NONE;
+  bool standby_replay = false;
+  MDSMap::DaemonState want_state = MDSMap::STATE_BOOT;
 
   // Internal beacon state
-  version_t last_seq;          // last seq sent to monitor
+  version_t last_seq = 0; // last seq sent to monitor
   std::map<version_t,utime_t>  seq_stamp;    // seq # -> time sent
   utime_t last_acked_stamp;  // last time we sent a beacon that got acked
   utime_t last_mon_reconnect;
-  bool was_laggy;
+  bool was_laggy = false;
   utime_t laggy_until;
 
   // Health status to be copied into each beacon message
@@ -109,7 +109,7 @@ private:
   // Ticker
   Context *sender = nullptr;
 
-  version_t awaiting_seq;
+  version_t awaiting_seq = -1;
   Cond waiting_cond;
 };
 
