@@ -63,6 +63,6 @@ if(WITH_DPDK)
     async/dpdk/ethernet.cc)
   add_library(common_async_dpdk STATIC
     ${async_dpdk_srcs})
-  target_link_libraries(common_async_dpdk
-    ${DPDK_LIBRARIES})
+  target_link_libraries(common_async_dpdk PRIVATE
+    dpdk::dpdk)
 endif(WITH_DPDK)
