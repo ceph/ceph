@@ -2908,15 +2908,12 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
-  MonSession *session = static_cast<MonSession *>(
-    m->get_connection()->get_priv());
+  auto priv = m->get_connection()->get_priv();
+  auto session = static_cast<MonSession *>(priv.get());
   if (!session) {
     dout(5) << __func__ << " dropping stray message " << *m << dendl;
     return;
   }
-  BOOST_SCOPE_EXIT_ALL(=) {
-    session->put();
-  };
 
   if (m->cmd.empty()) {
     string rs = "No command supplied";
@@ -3708,7 +3705,7 @@ void Monitor::handle_forward(MonOpRequestRef op)
     ConnectionRef c(new AnonConnection(cct));
     MonSession *s = new MonSession(req->get_source_inst(),
 				   static_cast<Connection*>(c.get()));
-    c->set_priv(s->get());
+    c->set_priv(RefCountedPtr{s, false});
     c->set_peer_addr(m->client.addr);
     c->set_peer_type(m->client.name.type());
     c->set_features(m->con_features);
@@ -3746,7 +3743,6 @@ void Monitor::handle_forward(MonOpRequestRef op)
     dout(10) << " mesg " << req << " from " << m->get_source_addr() << dendl;
 
     _ms_dispatch(req);
-    s->put();
   }
 }
 
@@ -3924,7 +3920,7 @@ void Monitor::remove_session(MonSession *s)
     routed_requests.erase(*p);
   }
   s->routed_request_tids.clear();
-  s->con->set_priv(NULL);
+  s->con->set_priv(nullptr);
   session_map.remove_session(s);
   logger->set(l_mon_num_sessions, session_map.get_size());
   logger->inc(l_mon_session_rm);
@@ -4047,7 +4043,7 @@ void Monitor::_ms_dispatch(Message *m)
       s = session_map.new_session(m->get_source_inst(), con.get());
     }
     assert(s);
-    con->set_priv(s->get());
+    con->set_priv(RefCountedPtr{s, false});
     dout(10) << __func__ << " new session " << s << " " << *s
 	     << " features 0x" << std::hex
 	     << s->con_features << std::dec << dendl;
@@ -4063,7 +4059,6 @@ void Monitor::_ms_dispatch(Message *m)
         s->caps = *mon_caps;
       s->authenticated = true;
     }
-    s->put();
   } else {
     dout(20) << __func__ << " existing session " << s << " for " << s->inst
 	     << dendl;
@@ -4926,12 +4921,13 @@ bool Monitor::ms_handle_reset(Connection *con)
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     return false;
 
-  MonSession *s = static_cast<MonSession *>(con->get_priv());
+  auto priv = con->get_priv();
+  auto s = static_cast<MonSession*>(priv.get());
   if (!s)
     return false;
 
   // break any con <-> session ref cycle
-  s->con->set_priv(NULL);
+  s->con->set_priv(nullptr);
 
   if (is_shutdown())
     return false;
@@ -4943,7 +4939,6 @@ bool Monitor::ms_handle_reset(Connection *con)
     Mutex::Locker l(session_map_lock);
     remove_session(s);
   }
-  s->put();
   return true;
 }
 
