@@ -34,8 +34,8 @@ class MOSDOpReply : public MessageInstance<MOSDOpReply> {
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 8;
-  static const int COMPAT_VERSION = 2;
+  static constexpr int HEAD_VERSION = 8;
+  static constexpr int COMPAT_VERSION = 2;
 
   object_t oid;
   pg_t pgid;

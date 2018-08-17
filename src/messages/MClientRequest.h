@@ -52,8 +52,8 @@ class MClientRequest : public MessageInstance<MClientRequest> {
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 4;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 4;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
   mutable struct ceph_mds_request_head head; /* XXX HACK! */

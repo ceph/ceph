@@ -25,14 +25,14 @@ public:
   friend factory;
 
 private:
-  static const int HEAD_VERSION = 7;
-  static const int COMPAT_VERSION = 5;
+  static constexpr int HEAD_VERSION = 7;
+  static constexpr int COMPAT_VERSION = 5;
 
 public:
-  static const int OP_PROPOSE = 1;
-  static const int OP_ACK     = 2;
-  static const int OP_NAK     = 3;
-  static const int OP_VICTORY = 4;
+  static constexpr int OP_PROPOSE = 1;
+  static constexpr int OP_ACK     = 2;
+  static constexpr int OP_NAK     = 3;
+  static constexpr int OP_VICTORY = 4;
   static const char *get_opname(int o) {
     switch (o) {
     case OP_PROPOSE: return "propose";

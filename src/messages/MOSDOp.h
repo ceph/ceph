@@ -35,8 +35,8 @@ class MOSDOp : public MessageInstance<MOSDOp, MOSDFastDispatchOp> {
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 8;
-  static const int COMPAT_VERSION = 3;
+  static constexpr int HEAD_VERSION = 8;
+  static constexpr int COMPAT_VERSION = 3;
 
 private:
   uint32_t client_inc = 0;

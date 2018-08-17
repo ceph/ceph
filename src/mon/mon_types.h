@@ -318,8 +318,8 @@ inline const char *ceph_mon_feature_name(uint64_t b)
 
 class mon_feature_t {
 
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   // mon-specific features
   uint64_t features;

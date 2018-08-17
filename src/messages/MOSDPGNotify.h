@@ -27,8 +27,8 @@ class MOSDPGNotify : public MessageInstance<MOSDPGNotify> {
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 6;
-  static const int COMPAT_VERSION = 6;
+  static constexpr int HEAD_VERSION = 6;
+  static constexpr int COMPAT_VERSION = 6;
 
   epoch_t epoch = 0;
   /// query_epoch is the epoch of the query being responded to, or

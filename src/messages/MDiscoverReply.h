@@ -67,7 +67,7 @@ class MDiscoverReply : public MessageInstance<MDiscoverReply> {
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 2;
+  static constexpr int HEAD_VERSION = 2;
 
   // info about original request
   inodeno_t base_ino;

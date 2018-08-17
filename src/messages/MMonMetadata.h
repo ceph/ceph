@@ -25,7 +25,7 @@ public:
   Metadata data;
 
 private:
-  static const int HEAD_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
   ~MMonMetadata() override {}
 
 public:

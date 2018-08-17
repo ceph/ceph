@@ -14,8 +14,8 @@ class MOSDPGCreate2 : public MessageInstance<MOSDPGCreate2> {
 public:
   friend factory;
 
-  const static int HEAD_VERSION = 1;
-  const static int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   epoch_t epoch = 0;
   map<spg_t,pair<epoch_t,utime_t>> pgs;

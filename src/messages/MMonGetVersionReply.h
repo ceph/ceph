@@ -28,7 +28,7 @@ class MMonGetVersionReply : public MessageInstance<MMonGetVersionReply> {
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 2;
+  static constexpr int HEAD_VERSION = 2;
 
 public:
   MMonGetVersionReply() : MessageInstance(CEPH_MSG_MON_GET_VERSION_REPLY, HEAD_VERSION) { }

@@ -22,8 +22,8 @@ public:
   friend factory;
 private:
 
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
 

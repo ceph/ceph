@@ -24,8 +24,8 @@ class MRoute : public MessageInstance<MRoute> {
 public:
   friend factory;
 
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 3;
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 3;
 
   uint64_t session_mon_tid;
   Message *msg;
