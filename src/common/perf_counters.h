@@ -596,6 +596,7 @@ static constexpr std::size_t CACHE_LINE_SIZE_ { 64 };
 static constexpr std::size_t EXPECTED_THREAD_NUM { 32 };
 
 #define DEBUG_NOINLINE __attribute__((noinline))
+#define ALWAYS_INLINE  __attribute__((always_inline))
 
 template <const perf_counter_meta_t&... P>
 class perf_counters_t : public PerfCountersCollectionable {
@@ -636,7 +637,8 @@ class perf_counters_t : public PerfCountersCollectionable {
   std::array<thread_group_t, EXPECTED_THREAD_NUM> threaded_perf_counters;
   atomic_group_t atomic_perf_counters;
 
-  perf_counter_any_data_t* _get_threaded_counters(const std::size_t idx) {
+  perf_counter_any_data_t* ALWAYS_INLINE _get_threaded_counters(
+      const std::size_t idx) {
     static std::atomic_size_t last_allocated_selector{ 0 };
     static constexpr std::size_t FIRST_SEEN_THREAD{
       std::tuple_size<decltype(threaded_perf_counters)>::value
