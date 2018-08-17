@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { inject, TestBed } from '@angular/core/testing';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
 import { Observable } from 'rxjs/Observable';
@@ -16,7 +17,7 @@ describe('TaskWrapperService', () => {
   let service: TaskWrapperService;
 
   configureTestBed({
-    imports: [HttpClientTestingModule, ToastModule.forRoot(), SharedModule],
+    imports: [HttpClientTestingModule, ToastModule.forRoot(), SharedModule, RouterTestingModule],
     providers: [TaskWrapperService]
   });
 
