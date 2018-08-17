@@ -595,7 +595,7 @@ static constexpr auto PERFCOUNTER_U64_HIST = \
 static constexpr std::size_t CACHE_LINE_SIZE_ { 64 };
 static constexpr std::size_t EXPECTED_THREAD_NUM { 32 };
 
-#define DEBUG_NOINLINE __attribute__((noinline))
+#define DEBUG_NOINLINE
 #define ALWAYS_INLINE  __attribute__((always_inline))
 
 template <const perf_counter_meta_t&... P>
