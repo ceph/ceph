@@ -18,8 +18,6 @@ function get_cmake_variable() {
 }
 
 function get_python_path() {
-    local ceph_lib=$1
-    shift
     local py_ver=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f1)
     if [ -z "${py_ver}" ]; then
         if [ $(get_cmake_variable WITH_PYTHON2) = ON ]; then
@@ -28,7 +26,7 @@ function get_python_path() {
             py_ver=3
         fi
     fi
-    echo $(realpath ../src/pybind):$ceph_lib/cython_modules/lib.$py_ver
+    echo $(realpath ../src/pybind):$(pwd)/lib/cython_modules/lib.$py_ver
 }
 
 if [ `uname` = FreeBSD ]; then
