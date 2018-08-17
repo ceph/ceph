@@ -26,8 +26,8 @@ class MOSDRepScrub : public MessageInstance<MOSDRepScrub, MOSDFastDispatchOp> {
 public:
   friend factory;
 
-  static const int HEAD_VERSION = 9;
-  static const int COMPAT_VERSION = 6;
+  static constexpr int HEAD_VERSION = 9;
+  static constexpr int COMPAT_VERSION = 6;
 
   spg_t pgid;             // PG to scrub
   eversion_t scrub_from; // only scrub log entries after scrub_from

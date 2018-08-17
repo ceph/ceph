@@ -184,8 +184,8 @@ public:
   friend factory;
 private:
 
-  static const int HEAD_VERSION = 7;
-  static const int COMPAT_VERSION = 6;
+  static constexpr int HEAD_VERSION = 7;
+  static constexpr int COMPAT_VERSION = 6;
 
   uuid_d fsid;
   mds_gid_t global_id;

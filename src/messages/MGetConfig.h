@@ -9,8 +9,8 @@ class MGetConfig : public MessageInstance<MGetConfig> {
 public:
   friend factory;
 
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   EntityName name;  ///< e.g., mon.a, client.foo
   string host;      ///< our hostname

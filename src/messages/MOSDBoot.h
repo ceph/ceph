@@ -24,8 +24,8 @@ class MOSDBoot : public MessageInstance<MOSDBoot, PaxosServiceMessage> {
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 6;
-  static const int COMPAT_VERSION = 6;
+  static constexpr int HEAD_VERSION = 6;
+  static constexpr int COMPAT_VERSION = 6;
 
  public:
   OSDSuperblock sb;

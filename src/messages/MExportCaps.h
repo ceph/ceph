@@ -23,9 +23,9 @@ class MExportCaps : public MessageInstance<MExportCaps> {
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
- public:  
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
+public:
   inodeno_t ino;
   bufferlist cap_bl;
   map<client_t,entity_inst_t> client_map;
