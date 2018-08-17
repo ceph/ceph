@@ -23,39 +23,39 @@ class MMDSSlaveRequest : public MessageInstance<MMDSSlaveRequest> {
 public:
   friend factory;
 
-  static const int OP_XLOCK =       1;
-  static const int OP_XLOCKACK =   -1;
-  static const int OP_UNXLOCK =     2;
-  static const int OP_AUTHPIN =     3;
-  static const int OP_AUTHPINACK = -3;
+  static constexpr int OP_XLOCK =       1;
+  static constexpr int OP_XLOCKACK =   -1;
+  static constexpr int OP_UNXLOCK =     2;
+  static constexpr int OP_AUTHPIN =     3;
+  static constexpr int OP_AUTHPINACK = -3;
 
-  static const int OP_LINKPREP =     4;
-  static const int OP_UNLINKPREP =   5;
-  static const int OP_LINKPREPACK = -4;
+  static constexpr int OP_LINKPREP =     4;
+  static constexpr int OP_UNLINKPREP =   5;
+  static constexpr int OP_LINKPREPACK = -4;
 
-  static const int OP_RENAMEPREP =     7;
-  static const int OP_RENAMEPREPACK = -7;
+  static constexpr int OP_RENAMEPREP =     7;
+  static constexpr int OP_RENAMEPREPACK = -7;
 
-  static const int OP_WRLOCK = 8;
-  static const int OP_WRLOCKACK = -8;
-  static const int OP_UNWRLOCK = 9;
+  static constexpr int OP_WRLOCK = 8;
+  static constexpr int OP_WRLOCKACK = -8;
+  static constexpr int OP_UNWRLOCK = 9;
 
-  static const int OP_RMDIRPREP = 10;
-  static const int OP_RMDIRPREPACK = -10;
+  static constexpr int OP_RMDIRPREP = 10;
+  static constexpr int OP_RMDIRPREPACK = -10;
 
-  static const int OP_DROPLOCKS	= 11;
+  static constexpr int OP_DROPLOCKS	= 11;
 
-  static const int OP_RENAMENOTIFY = 12;
-  static const int OP_RENAMENOTIFYACK = -12;
+  static constexpr int OP_RENAMENOTIFY = 12;
+  static constexpr int OP_RENAMENOTIFYACK = -12;
 
-  static const int OP_FINISH = 17;  
-  static const int OP_COMMITTED = -18;  
+  static constexpr int OP_FINISH = 17;
+  static constexpr int OP_COMMITTED = -18;
 
-  static const int OP_ABORT =  20;  // used for recovery only
-  //static const int OP_COMMIT = 21;  // used for recovery only
+  static constexpr int OP_ABORT =  20;  // used for recovery only
+  //static constexpr int OP_COMMIT = 21;  // used for recovery only
 
 
-  static const char *get_opname(int o) {
+  static constexpr char *get_opname(int o) {
     switch (o) { 
     case OP_XLOCK: return "xlock";
     case OP_XLOCKACK: return "xlock_ack";
@@ -98,12 +98,12 @@ public:
   __s16 op;
   mutable __u16 flags; /* XXX HACK for mark_interrupted */
 
-  static const unsigned FLAG_NONBLOCK	=	1<<0;
-  static const unsigned FLAG_WOULDBLOCK	=	1<<1;
-  static const unsigned FLAG_NOTJOURNALED =	1<<2;
-  static const unsigned FLAG_EROFS =		1<<3;
-  static const unsigned FLAG_ABORT =		1<<4;
-  static const unsigned FLAG_INTERRUPTED =	1<<5;
+  static constexpr unsigned FLAG_NONBLOCK       =	1<<0;
+  static constexpr unsigned FLAG_WOULDBLOCK     =	1<<1;
+  static constexpr unsigned FLAG_NOTJOURNALED   =	1<<2;
+  static constexpr unsigned FLAG_EROFS          =	1<<3;
+  static constexpr unsigned FLAG_ABORT          =	1<<4;
+  static constexpr unsigned FLAG_INTERRUPTED    =	1<<5;
 
   // for locking
   __u16 lock_type;  // lock object type

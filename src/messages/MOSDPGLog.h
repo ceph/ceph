@@ -22,8 +22,8 @@ class MOSDPGLog : public MessageInstance<MOSDPGLog, MOSDPeeringOp> {
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 5;
-  static const int COMPAT_VERSION = 5;
+  static constexpr int HEAD_VERSION = 5;
+  static constexpr int COMPAT_VERSION = 5;
 
   epoch_t epoch = 0;
   /// query_epoch is the epoch of the query being responded to, or

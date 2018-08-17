@@ -27,8 +27,8 @@ public:
   friend factory;
 private:
 
-  static const int HEAD_VERSION = 8;
-  static const int COMPAT_VERSION = 8;
+  static constexpr int HEAD_VERSION = 8;
+  static constexpr int COMPAT_VERSION = 8;
 
 protected:
   uint64_t gid;

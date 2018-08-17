@@ -25,8 +25,8 @@ class MOSDPGBackfillRemove : public MessageInstance<MOSDPGBackfillRemove, MOSDFa
 public:
   friend factory;
 
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   spg_t pgid;            ///< target spg_t
   epoch_t map_epoch = 0;

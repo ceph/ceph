@@ -24,8 +24,8 @@ class MMonProbe : public MessageInstance<MMonProbe> {
 public:
   friend factory;
 
-  static const int HEAD_VERSION = 6;
-  static const int COMPAT_VERSION = 5;
+  static constexpr int HEAD_VERSION = 6;
+  static constexpr int COMPAT_VERSION = 5;
 
   enum {
     OP_PROBE = 1,

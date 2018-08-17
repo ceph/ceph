@@ -32,13 +32,13 @@ public:
   friend factory;
 private:
 
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
  public:
-  static const int OP_WEAK    = 1;  // replica -> auth, i exist, + maybe open files.
-  static const int OP_STRONG  = 2;  // replica -> auth, i exist, + open files and lock state.
-  static const int OP_ACK     = 3;  // auth -> replica, here is your lock state.
+  static constexpr int OP_WEAK    = 1;  // replica -> auth, i exist, + maybe open files.
+  static constexpr int OP_STRONG  = 2;  // replica -> auth, i exist, + open files and lock state.
+  static constexpr int OP_ACK     = 3;  // auth -> replica, here is your lock state.
   static const char *get_opname(int op) {
     switch (op) {
     case OP_WEAK: return "weak";

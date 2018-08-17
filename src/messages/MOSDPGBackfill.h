@@ -21,8 +21,8 @@ class MOSDPGBackfill : public MessageInstance<MOSDPGBackfill, MOSDFastDispatchOp
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 3;
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 3;
 public:
   enum {
     OP_BACKFILL_PROGRESS = 2,

@@ -35,8 +35,8 @@ class MOSDForceRecovery : public MessageInstance<MOSDForceRecovery> {
 public:
   friend factory;
 
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 2;
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 2;
 
   uuid_d fsid;
   vector<spg_t> forced_pgs;

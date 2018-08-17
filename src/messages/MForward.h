@@ -39,8 +39,8 @@ public:
 
   string msg_desc;  // for operator<< only
   
-  static const int HEAD_VERSION = 4;
-  static const int COMPAT_VERSION = 4;
+  static constexpr int HEAD_VERSION = 4;
+  static constexpr int COMPAT_VERSION = 4;
 
   MForward() : MessageInstance(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
                tid(0), con_features(0), msg(NULL) {}

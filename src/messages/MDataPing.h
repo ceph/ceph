@@ -32,8 +32,8 @@ class MDataPing : public MessageInstance<MDataPing> {
 public:
   friend factory;
 
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   std::string tag;
   uint32_t counter = 0;

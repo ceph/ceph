@@ -23,8 +23,8 @@ class MOSDPGInfo : public MessageInstance<MOSDPGInfo> {
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 5;
-  static const int COMPAT_VERSION = 5;
+  static constexpr int HEAD_VERSION = 5;
+  static constexpr int COMPAT_VERSION = 5;
 
   epoch_t epoch = 0;
 

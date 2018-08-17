@@ -22,8 +22,8 @@ class MRecoveryReserve : public MessageInstance<MRecoveryReserve, MOSDPeeringOp>
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 2;
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 2;
 public:
   spg_t pgid;
   epoch_t query_epoch;

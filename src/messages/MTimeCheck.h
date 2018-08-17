@@ -19,7 +19,7 @@ class MTimeCheck : public MessageInstance<MTimeCheck> {
 public:
   friend factory;
 
-  static const int HEAD_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
 
   enum {
     OP_PING = 1,
