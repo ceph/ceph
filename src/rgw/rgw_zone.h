@@ -41,13 +41,15 @@ struct RGWDefaultSystemMetaObjInfo {
 };
 WRITE_CLASS_ENCODER(RGWDefaultSystemMetaObjInfo)
 
+class RGWSI_SysObj;
+
 class RGWSystemMetaObj {
 protected:
   string id;
   string name;
 
-  CephContext *cct;
-  RGWRados *store;
+  CephContext *cct{nullptr};
+  RGWSI_SysObj *sysobj_svc{nullptr};
 
   int store_name(bool exclusive);
   int store_info(bool exclusive);
@@ -59,11 +61,12 @@ protected:
   int use_default(bool old_format = false);
 
 public:
-  RGWSystemMetaObj() : cct(NULL), store(NULL) {}
-  RGWSystemMetaObj(const string& _name): name(_name), cct(NULL), store(NULL)  {}
-  RGWSystemMetaObj(const string& _id, const string& _name) : id(_id), name(_name), cct(NULL), store(NULL) {}
-  RGWSystemMetaObj(CephContext *_cct, RGWRados *_store): cct(_cct), store(_store){}
-  RGWSystemMetaObj(const string& _name, CephContext *_cct, RGWRados *_store): name(_name), cct(_cct), store(_store){}
+  RGWSystemMetaObj() {}
+  RGWSystemMetaObj(const string& _name): name(_name) {}
+  RGWSystemMetaObj(const string& _id, const string& _name) : id(_id), name(_name) {}
+  RGWSystemMetaObj(CephContext *_cct, RGWSI_SysObj *_sysobj_svc): cct(_cct), sysobj_svc(_sysobj_svc){}
+  RGWSystemMetaObj(const string& _name, CephContext *_cct, RGWSI_SysObj *_sysobj_svc): name(_name), cct(_cct), sysobj_svc(_sysobj_svc){}
+
   const string& get_name() const { return name; }
   const string& get_id() const { return id; }
 
@@ -87,11 +90,11 @@ public:
     DECODE_FINISH(bl);
   }
 
-  void reinit_instance(CephContext *_cct, RGWRados *_store) {
+  void reinit_instance(CephContext *_cct, RGWSI_SysObj *_sysobj_svc) {
     cct = _cct;
-    store = _store;
+    sysobj_svc = _sysobj_svc;
   }
-  int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true, bool old_format = false);
+  int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, bool setup_obj = true, bool old_format = false);
   virtual int read_default_id(string& default_id, bool old_format = false);
   virtual int set_as_default(bool exclusive = false);
   int delete_default();
@@ -205,7 +208,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   const string& get_info_oid_prefix(bool old_format = false) override;
   const string& get_predefined_name(CephContext *cct) override;
 
-  int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true,
+  int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, bool setup_obj = true,
 	   bool old_format = false);
   using RGWSystemMetaObj::init;
   int read_default_id(string& default_id, bool old_format = false) override;
@@ -520,9 +523,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   RGWZoneGroup(): is_master(false){}
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
   explicit RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
-  RGWZoneGroup(const std::string &_name, bool _is_master, CephContext *cct, RGWRados* store,
+  RGWZoneGroup(const std::string &_name, bool _is_master, CephContext *cct, RGWSI_SysObj* sysobj_svc,
 	       const string& _realm_id, const list<string>& _endpoints)
-    : RGWSystemMetaObj(_name, cct , store), endpoints(_endpoints), is_master(_is_master),
+    : RGWSystemMetaObj(_name, cct , sysobj_svc), endpoints(_endpoints), is_master(_is_master),
       realm_id(_realm_id) {}
 
   bool is_master_zonegroup() const { return is_master;}
@@ -648,8 +651,8 @@ struct RGWPeriodConfig
   // the period config must be stored in a local object outside of the period,
   // so that it can be used in a default configuration where no realm/period
   // exists
-  int read(RGWRados *store, const std::string& realm_id);
-  int write(RGWRados *store, const std::string& realm_id);
+  int read(RGWSI_SysObj *sysobj_svc, const std::string& realm_id);
+  int write(RGWSI_SysObj *sysobj_svc, const std::string& realm_id);
 
   static std::string get_oid(const std::string& realm_id);
   static rgw_pool get_pool(CephContext *cct);
@@ -685,7 +688,7 @@ struct RGWZoneGroupMap {
   RGWQuotaInfo user_quota;
 
   /* construct the map */
-  int read(CephContext *cct, RGWRados *store);
+  int read(CephContext *cct, RGWSI_SysObj *sysobj_svc);
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
@@ -708,8 +711,8 @@ class RGWRealm : public RGWSystemMetaObj
 public:
   RGWRealm() {}
   RGWRealm(const string& _id, const string& _name = "") : RGWSystemMetaObj(_id, _name) {}
-  RGWRealm(CephContext *_cct, RGWRados *_store): RGWSystemMetaObj(_cct, _store) {}
-  RGWRealm(const string& _name, CephContext *_cct, RGWRados *_store): RGWSystemMetaObj(_name, _cct, _store){}
+  RGWRealm(CephContext *_cct, RGWSI_SysObj *_sysobj_svc): RGWSystemMetaObj(_cct, _sysobj_svc) {}
+  RGWRealm(const string& _name, CephContext *_cct, RGWSI_SysObj *_sysobj_svc): RGWSystemMetaObj(_name, _cct, _sysobj_svc){}
 
   void encode(bufferlist& bl) const override {
     ENCODE_START(1, 1, bl);
@@ -781,7 +784,7 @@ WRITE_CLASS_ENCODER(RGWPeriodLatestEpochInfo)
 class RGWPeriod
 {
   string id;
-  epoch_t epoch;
+  epoch_t epoch{0};
   string predecessor_uuid;
   std::vector<std::string> sync_status;
   RGWPeriodMap period_map;
@@ -793,8 +796,8 @@ class RGWPeriod
   string realm_name;
   epoch_t realm_epoch{1}; //< realm epoch when period was made current
 
-  CephContext *cct;
-  RGWRados *store;
+  CephContext *cct{nullptr};
+  RGWSI_SysObj *sysobj_svc{nullptr};
 
   int read_info();
   int read_latest_epoch(RGWPeriodLatestEpochInfo& epoch_info,
@@ -810,11 +813,10 @@ class RGWPeriod
                          std::ostream& error_stream, bool force_if_stale);
 
 public:
-  RGWPeriod() : epoch(0), cct(NULL), store(NULL) {}
+  RGWPeriod() {}
 
   RGWPeriod(const string& period_id, epoch_t _epoch = 0)
-    : id(period_id), epoch(_epoch),
-      cct(NULL), store(NULL) {}
+    : id(period_id), epoch(_epoch) {}
 
   const string& get_id() const { return id; }
   epoch_t get_epoch() const { return epoch; }
@@ -887,9 +889,9 @@ public:
   // update latest_epoch if the given epoch is higher, else return -EEXIST
   int update_latest_epoch(epoch_t epoch);
 
-  int init(CephContext *_cct, RGWRados *_store, const string &period_realm_id, const string &period_realm_name = "",
+  int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, const string &period_realm_id, const string &period_realm_name = "",
 	   bool setup_obj = true);
-  int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true);  
+  int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, bool setup_obj = true);  
 
   int create(bool exclusive = true);
   int delete_obj();

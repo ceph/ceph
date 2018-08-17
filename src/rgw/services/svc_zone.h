@@ -3,16 +3,11 @@
 
 
 #include "rgw/rgw_service.h"
+#include "rgw/rgw_zone.h"
 
 
 class RGWSI_RADOS;
-
-struct RGWZoneGroup;
-struct RGWZone;
-struct RGWZoneParams;
-struct RGWPeriod;
-struct RGWRealm;
-struct RGWZonePlacementInfo;
+class RGWSI_SysObj;
 
 class RGWRESTConn;
 
@@ -21,12 +16,13 @@ class RGWS_Zone : public RGWService
 public:
   RGWS_Zone(CephContext *cct) : RGWService(cct, "zone") {}
 
-  int create_instance(const std::string& conf, RGWServiceInstanceRef *instance);
+  int create_instance(const std::string& conf, RGWServiceInstanceRef *instance) override;
 };
 
 class RGWSI_Zone : public RGWServiceInstance
 {
   std::shared_ptr<RGWSI_RADOS> rados_svc;
+  std::shared_ptr<RGWSI_SysObj> sysobj_svc;
 
   std::shared_ptr<RGWRealm> realm;
   std::shared_ptr<RGWZoneGroup> zonegroup;
@@ -36,9 +32,6 @@ class RGWSI_Zone : public RGWServiceInstance
   uint32_t zone_short_id{0};
   bool writeable_zone{false};
 
-  std::map<std::string, RGWServiceInstance::dependency> get_deps();
-  int init(const std::string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs);
-
   RGWRESTConn *rest_master_conn{nullptr};
   map<string, RGWRESTConn *> zone_conn_map;
   map<string, RGWRESTConn *> zone_data_sync_from_map;
@@ -47,6 +40,16 @@ class RGWSI_Zone : public RGWServiceInstance
 
   map<string, string> zone_id_by_name;
   map<string, RGWZone> zone_by_id;
+
+  std::map<std::string, RGWServiceInstance::dependency> get_deps() override;
+  int load(const std::string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs) override;
+  int init() override;
+  void shutdown() override;
+
+  int replace_region_with_zonegroup();
+  int init_zg_from_period(bool *initialized);
+  int init_zg_from_local(bool *creating_defaults);
+  int convert_regionmap();
 
 public:
   RGWSI_Zone(RGWService *svc, CephContext *cct): RGWServiceInstance(svc, cct) {}
@@ -77,6 +80,10 @@ public:
     return zone_conn_map;
   }
 
+  map<string, RGWRESTConn *>& get_zone_data_notify_to_map() {
+    return zone_data_notify_to_map;
+  }
+
   bool find_zone_by_id(const string& id, RGWZone **zone);
 
   RGWRESTConn *get_zone_conn_by_id(const string& id);
@@ -95,6 +102,13 @@ public:
   bool need_to_log_data() const;
   bool need_to_log_metadata() const;
   bool can_reshard() const;
+
+  int list_zonegroups(list<string>& zonegroups);
+  int list_regions(list<string>& regions);
+  int list_zones(list<string>& zones);
+  int list_realms(list<string>& realms);
+  int list_periods(list<string>& periods);
+  int list_periods(const string& current_period, list<string>& periods);
 };
 
 #endif

@@ -1,5 +1,7 @@
 #include "rgw_zone.h"
 
+#include "services/svc_sys_obj.h"
+
 void RGWDefaultZoneGroupInfo::dump(Formatter *f) const {
   encode_json("default_zonegroup", default_zonegroup, f);
 }
@@ -35,7 +37,7 @@ int RGWZoneGroup::create_default(bool old_format)
 
   RGWZoneParams zone_params(default_zone_name);
 
-  int r = zone_params.init(cct, store, false);
+  int r = zone_params.init(cct, zone_svc, false);
   if (r < 0) {
     ldout(cct, 0) << "create_default: error initializing zone params: " << cpp_strerror(-r) << dendl;
     return r;
@@ -48,7 +50,7 @@ int RGWZoneGroup::create_default(bool old_format)
   } else if (r == -EEXIST) {
     ldout(cct, 10) << "zone_params::create_default() returned -EEXIST, we raced with another default zone_params creation" << dendl;
     zone_params.clear_id();
-    r = zone_params.init(cct, store);
+    r = zone_params.init(cct, zone_svc);
     if (r < 0) {
       ldout(cct, 0) << "create_default: error in init existing zone params: " << cpp_strerror(-r) << dendl;
       return r;
@@ -71,7 +73,7 @@ int RGWZoneGroup::create_default(bool old_format)
   if (r == -EEXIST) {
     ldout(cct, 10) << "create_default() returned -EEXIST, we raced with another zonegroup creation" << dendl;
     id.clear();
-    r = init(cct, store);
+    r = init(cct, zone_svc);
     if (r < 0) {
       return r;
     }
@@ -172,11 +174,14 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bo
   }
   if (ptier_type) {
     zone.tier_type = *ptier_type;
+#warning FIXME
+#if 0
     if (!store->get_sync_modules_manager()->get_module(*ptier_type, nullptr)) {
       ldout(cct, 0) << "ERROR: could not found sync module: " << *ptier_type 
                     << ",  valid sync modules: " 
                     << store->get_sync_modules_manager()->get_registered_module_names()
                     << dendl;
+#endif
       return -ENOENT;
     }
   }
@@ -227,7 +232,7 @@ void RGWZoneGroup::post_process_params()
     zone.log_data = log_data;
 
     RGWZoneParams zone_params(zone.id, zone.name);
-    int ret = zone_params.init(cct, store);
+    int ret = zone_params.init(cct, zone_svc);
     if (ret < 0) {
       ldout(cct, 0) << "WARNING: could not read zone params for zone id=" << zone.id << " name=" << zone.name << dendl;
       continue;
@@ -270,7 +275,7 @@ int RGWZoneGroup::read_default_id(string& default_id, bool old_format)
   if (realm_id.empty()) {
     /* try using default realm */
     RGWRealm realm;
-    int ret = realm.init(cct, store);
+    int ret = realm.init(cct, zone_svc);
     // no default realm exist
     if (ret < 0) {
       return read_id(default_zonegroup_name, default_id);
@@ -286,7 +291,7 @@ int RGWZoneGroup::set_as_default(bool exclusive)
   if (realm_id.empty()) {
     /* try using default realm */
     RGWRealm realm;
-    int ret = realm.init(cct, store);
+    int ret = realm.init(cct, zone_svc);
     if (ret < 0) {
       ldout(cct, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
       return -EINVAL;
@@ -297,10 +302,10 @@ int RGWZoneGroup::set_as_default(bool exclusive)
   return RGWSystemMetaObj::set_as_default(exclusive);
 }
 
-int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, bool old_format)
+int RGWSystemMetaObj::init(CephContext *_cct, RGWSI_Zone *_zone_svc, bool setup_obj, bool old_format)
 {
   cct = _cct;
-  store = _store;
+  zone_svc = _zone_svc;
 
   if (!setup_obj)
     return 0;
@@ -338,7 +343,8 @@ int RGWSystemMetaObj::read_default(RGWDefaultSystemMetaObjInfo& default_info, co
   using ceph::decode;
   auto pool = get_pool(cct);
   bufferlist bl;
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = sysobj_svc->get_obj_ctx();
+
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0)
     return ret;
@@ -402,7 +408,8 @@ int RGWSystemMetaObj::read_id(const string& obj_name, string& object_id)
 
   string oid = get_names_oid_prefix() + obj_name;
 
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = sysobj_svc->get_obj_ctx();
+
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0) {
     return ret;
@@ -522,7 +529,8 @@ int RGWSystemMetaObj::read_info(const string& obj_id, bool old_format)
 
   string oid = get_info_oid_prefix(old_format) + obj_id;
 
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = sysobj_svc->get_obj_ctx();
+
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0) {
     ldout(cct, 0) << "failed reading obj info from " << pool << ":" << oid << ": " << cpp_strerror(-ret) << dendl;
@@ -803,7 +811,8 @@ rgw_pool RGWPeriodConfig::get_pool(CephContext *cct)
 
 int RGWPeriodConfig::read(RGWRados *store, const std::string& realm_id)
 {
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = sysobj_svc->get_obj_ctx();
+
   const auto& pool = get_pool(store->ctx());
   const auto& oid = get_oid(realm_id);
   bufferlist bl;
@@ -954,7 +963,8 @@ int RGWPeriod::read_latest_epoch(RGWPeriodLatestEpochInfo& info,
 
   rgw_pool pool(get_pool(cct));
   bufferlist bl;
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = sysobj_svc->get_obj_ctx();
+
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, objv, nullptr);
   if (ret < 0) {
     ldout(cct, 1) << "error read_lastest_epoch " << pool << ":" << oid << dendl;
@@ -1093,7 +1103,9 @@ int RGWPeriod::read_info()
 
   bufferlist bl;
 
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = sysobj_svc->get_obj_ctx();
+
+
   int ret = rgw_get_system_obj(store, obj_ctx, pool, get_period_oid(), bl, NULL, NULL);
   if (ret < 0) {
     ldout(cct, 0) << "failed reading obj info from " << pool << ":" << get_period_oid() << ": " << cpp_strerror(-ret) << dendl;

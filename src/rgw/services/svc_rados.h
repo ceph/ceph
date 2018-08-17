@@ -12,7 +12,7 @@ class RGWS_RADOS : public RGWService
 public:
   RGWS_RADOS(CephContext *cct) : RGWService(cct, "rados") {}
 
-  int create_instance(const string& conf, RGWServiceInstanceRef *instance);
+  int create_instance(const string& conf, RGWServiceInstanceRef *instance) override;
 };
 
 struct rgw_rados_ref {
@@ -29,7 +29,8 @@ class RGWSI_RADOS : public RGWServiceInstance
   RWLock handle_lock;
   std::map<pthread_t, int> rados_map;
 
-  int init(const string& conf, std::map<std::string, RGWServiceInstanceRef>& deps);
+  int load(const string& conf, std::map<std::string, RGWServiceInstanceRef>& deps) override;
+
   librados::Rados* get_rados_handle();
   int open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx);
 public:
@@ -41,7 +42,7 @@ public:
   class Obj {
     friend class RGWSI_RADOS;
 
-    RGWSI_RADOS *rados_svc;
+    RGWSI_RADOS *rados_svc{nullptr};
     rgw_rados_ref ref;
 
     void init(const rgw_raw_obj& obj);
@@ -51,17 +52,20 @@ public:
     }
 
   public:
+    Obj() {}
     Obj(const Obj& o) : rados_svc(o.rados_svc),
                         ref(o.ref) {}
 
-    Obj(const Obj&& o) : rados_svc(o.rados_svc),
-                         ref(std::move(o.ref)) {}
+    Obj(Obj&& o) : rados_svc(o.rados_svc),
+                   ref(std::move(o.ref)) {}
 
     int open();
 
     int operate(librados::ObjectWriteOperation *op);
     int operate(librados::ObjectReadOperation *op, bufferlist *pbl);
     int aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op);
+
+    uint64_t get_last_version();
   };
 
   Obj obj(const rgw_raw_obj& o) {

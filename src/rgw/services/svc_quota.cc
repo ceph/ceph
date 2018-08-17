@@ -18,7 +18,7 @@ std::map<string, RGWServiceInstance::dependency> RGWSI_Quota::get_deps()
   return deps;
 }
 
-int RGWSI_Quota::init(const string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs)
+int RGWSI_Quota::load(const string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs)
 {
   zone_svc = static_pointer_cast<RGWSI_Zone>(dep_refs["zone_dep"]);
   assert(zone_svc);
