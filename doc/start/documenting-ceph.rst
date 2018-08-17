@@ -588,7 +588,7 @@ improves the readability of the document in a command line interface.
 .. _ditaa: http://ditaa.sourceforge.net/
 .. _Document Title: http://docutils.sourceforge.net/docs/user/rst/quickstart.html#document-title-subtitle
 .. _Sections: http://docutils.sourceforge.net/docs/user/rst/quickstart.html#sections
-.. _Cross referencing arbitrary locations: http://sphinx-doc.org/markup/inline.html#ref-role
+.. _Cross referencing arbitrary locations: http://www.sphinx-doc.org/en/master/usage/restructuredtext/roles.html#role-ref
 .. _The TOC tree: http://sphinx-doc.org/markup/toctree.html
 .. _Showing code examples: http://sphinx-doc.org/markup/code.html
 .. _paragraph level markup: http://sphinx-doc.org/markup/para.html
