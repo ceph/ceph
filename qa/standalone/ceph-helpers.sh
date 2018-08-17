@@ -548,6 +548,7 @@ function run_mgr() {
         --admin-socket=$(get_asok_path) \
         --run-dir=$dir \
         --pid-file=$dir/\$name.pid \
+        --mgr-module-path=$(realpath ${CEPH_ROOT}/src/pybind/mgr) \
         "$@" || return 1
 }
 
