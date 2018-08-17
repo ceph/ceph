@@ -61,7 +61,7 @@ int RGWPeriodPuller::pull(const std::string& period_id, RGWPeriod& period)
   // try to read the period from rados
   period.set_id(period_id);
   period.set_epoch(0);
-  int r = period.init(store->ctx(), store);
+  int r = period.init(store->ctx(), store->svc.sysobj.get());
   if (r < 0) {
     if (store->svc.zone->is_meta_master()) {
       // can't pull if we're the master

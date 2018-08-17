@@ -49,6 +49,7 @@ class RGWReshardWait;
 class RGWSI_Zone;
 class RGWSI_ZoneUtils;
 class RGWSI_Quota;
+class RGWSI_SysObj;
 
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01
@@ -1352,6 +1353,7 @@ public:
     std::shared_ptr<RGWSI_Zone> zone;
     std::shared_ptr<RGWSI_ZoneUtils> zone_utils;
     std::shared_ptr<RGWSI_Quota> quota;
+    std::shared_ptr<RGWSI_SysObj> sysobj;
   } svc;
 
   /**
@@ -1411,13 +1413,6 @@ public:
   string list_raw_objs_get_cursor(RGWListRawObjsCtx& ctx);
 
   int list_raw_prefixed_objs(const rgw_pool& pool, const string& prefix, list<string>& result);
-  int list_zonegroups(list<string>& zonegroups);
-  int list_regions(list<string>& regions);
-  int list_zones(list<string>& zones);
-  int list_realms(list<string>& realms);
-  int list_periods(list<string>& periods);
-  int list_periods(const string& current_period, list<string>& periods);
-  void tick();
 
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
@@ -1432,11 +1427,7 @@ public:
   }
   /** Initialize the RADOS instance and prepare to do other ops */
   virtual int init_rados();
-  int init_zg_from_period(bool *initialized);
-  int init_zg_from_local(bool *creating_defaults);
   int init_complete();
-  int replace_region_with_zonegroup();
-  int convert_regionmap();
   int initialize();
   void finalize();
 

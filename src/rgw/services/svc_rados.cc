@@ -47,7 +47,7 @@ static int init_ioctx(CephContext *cct, librados::Rados *rados, const rgw_pool& 
   return 0;
 }
 
-int RGWSI_RADOS::init(const string& conf, map<string, RGWServiceInstanceRef>& deps)
+int RGWSI_RADOS::load(const string& conf, map<string, RGWServiceInstanceRef>& deps)
 {
   auto handles = std::vector<librados::Rados>{static_cast<size_t>(cct->_conf->rgw_num_rados_handles)};
 
@@ -130,4 +130,9 @@ int RGWSI_RADOS::Obj::operate(librados::ObjectReadOperation *op, bufferlist *pbl
 int RGWSI_RADOS::Obj::aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op)
 {
   return ref.ioctx.aio_operate(ref.oid, c, op);
+}
+
+uint64_t RGWSI_RADOS::Obj::get_last_version()
+{
+  return ref.ioctx.get_last_version();
 }

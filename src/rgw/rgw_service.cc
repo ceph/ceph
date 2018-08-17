@@ -1,12 +1,17 @@
 #include "rgw_service.h"
 
 #include "services/svc_rados.h"
+#include "services/svc_zone.h"
+#include "services/svc_zone_utils.h"
+#include "services/svc_quota.h"
+#include "services/svc_sys_obj.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 RGWServiceInstance::~RGWServiceInstance()
 {
   if (svc) {
+    shutdown();
     svc->svc_registry->remove_instance(this);
   }
 }
@@ -14,6 +19,10 @@ RGWServiceInstance::~RGWServiceInstance()
 void RGWServiceRegistry::register_all(CephContext *cct)
 {
   services["rados"] = make_shared<RGWS_RADOS>(cct);
+  services["zone"] = make_shared<RGWS_Zone>(cct);
+  services["zone_utils"] = make_shared<RGWS_ZoneUtils>(cct);
+  services["quota"] = make_shared<RGWS_Quota>(cct);
+  services["sys_obj"] = make_shared<RGWS_SysObj>(cct);
 }
 
 bool RGWServiceRegistry::find(const string& name, RGWServiceRef *svc)
@@ -76,8 +85,9 @@ int RGWServiceRegistry::get_instance(RGWServiceRef& svc,
     dep_refs[dep_id] = dep_ref;
   }
 
-  r = instance_ref->init(conf, dep_refs);
+  r = instance_ref->load(conf, dep_refs);
   if (r < 0) {
+    ldout(cct, 0) << "ERROR: service instance load return error: service=" << svc->type() << " r=" << r << dendl;
     return r;
   }
 
@@ -88,6 +98,12 @@ int RGWServiceRegistry::get_instance(RGWServiceRef& svc,
   }
 
   *ref = iinfo.ref;
+
+  r = instance_ref->init();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: service instance init return error: service=" << svc->type() << " r=" << r << dendl;
+    return r;
+  }
 
   return 0;
 }

@@ -58,11 +58,19 @@ protected:
   virtual std::map<std::string, dependency> get_deps() {
     return std::map<std::string, dependency>();
   }
-  virtual int init(const string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs) = 0;
+  virtual int load(const string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs) = 0;
+  virtual int init() {
+    return 0;
+  }
+  virtual void shutdown() {}
 public:
   RGWServiceInstance(RGWService *svc, CephContext *_cct) : cct(_cct) {}
 
   virtual ~RGWServiceInstance();
+
+  CephContext *ctx() {
+    return cct;
+  }
 
   string get_title() {
     return svc->type() + ":" + svc_instance;
