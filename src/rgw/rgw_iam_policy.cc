@@ -1280,20 +1280,28 @@ ostream& operator <<(ostream& m, const Condition& c) {
 Effect Statement::eval(const Environment& e,
 		       boost::optional<const rgw::auth::Identity&> ida,
 		       uint64_t act, const ARN& res) const {
-  if (ida && (!ida->is_identity(princ) || ida->is_identity(noprinc))) {
-    return Effect::Pass;
+  if (ida) {
+    if (!princ.empty() && !ida->is_identity(princ)) {
+      return Effect::Pass;
+    } else if (!noprinc.empty() && ida->is_identity(noprinc)) {
+      return Effect::Pass;
+    }
   }
 
-
-  if (!std::any_of(resource.begin(), resource.end(),
-		   [&res](const ARN& pattern) {
-		     return pattern.match(res);
-		   }) ||
-      (std::any_of(notresource.begin(), notresource.end(),
-		   [&res](const ARN& pattern) {
-		     return pattern.match(res);
-		   }))) {
-    return Effect::Pass;
+  if (!resource.empty()) {
+    if (!std::any_of(resource.begin(), resource.end(),
+          [&res](const ARN& pattern) {
+            return pattern.match(res);
+          })) {
+      return Effect::Pass;
+    }
+  } else if (!notresource.empty()) {
+    if (std::any_of(notresource.begin(), notresource.end(),
+          [&res](const ARN& pattern) {
+            return pattern.match(res);
+          })) {
+      return Effect::Pass;
+    }
   }
 
   if (!(action[act] == 1) || (notaction[act] == 1)) {
