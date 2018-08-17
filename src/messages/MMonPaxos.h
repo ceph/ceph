@@ -36,7 +36,7 @@ private:
   static constexpr int OP_COMMIT =    5; // proposer: notify learners of agreed value
   static constexpr int OP_LEASE =     6; // leader: extend peon lease
   static constexpr int OP_LEASE_ACK = 7; // peon: lease ack
-  const static char *get_opname(int op) {
+  static const char *get_opname(int op) {
     switch (op) {
     case OP_COLLECT: return "collect";
     case OP_LAST: return "last";
