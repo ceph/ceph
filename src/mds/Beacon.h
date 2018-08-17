@@ -41,6 +41,9 @@ class MDSRank;
 class Beacon : public Dispatcher
 {
 public:
+  using clock = ceph::coarse_mono_clock;
+  using time = ceph::coarse_mono_time;
+
   Beacon(CephContext *cct_, MonClient *monc_, std::string_view name);
   ~Beacon() override {};
 
@@ -73,7 +76,10 @@ public:
   void send_and_wait(const double duration);
 
   bool is_laggy();
-  utime_t get_laggy_until() const;
+  double last_cleared_laggy() const {
+    Mutex::Locker l(lock);
+    return std::chrono::duration<double>(clock::now()-last_laggy).count();
+  }
 
 private:
   void _notify_mdsmap(const MDSMap &mdsmap);
@@ -96,11 +102,11 @@ private:
 
   // Internal beacon state
   version_t last_seq = 0; // last seq sent to monitor
-  std::map<version_t,utime_t>  seq_stamp;    // seq # -> time sent
-  utime_t last_acked_stamp;  // last time we sent a beacon that got acked
-  utime_t last_mon_reconnect;
-  bool was_laggy = false;
-  utime_t laggy_until;
+  std::map<version_t,time>  seq_stamp;    // seq # -> time sent
+  time last_acked_stamp = clock::zero();  // last time we sent a beacon that got acked
+  time last_mon_reconnect = clock::zero();
+  bool laggy = false;
+  time last_laggy = clock::zero();
 
   // Health status to be copied into each beacon message
   MDSHealth health;
