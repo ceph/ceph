@@ -135,6 +135,18 @@ public:
   }
 };
 
+// completion notifier with opaque payload (ie a reference-counted pointer)
+template <typename T>
+class RGWAioCompletionNotifierWith : public RGWAioCompletionNotifier {
+  T value;
+public:
+  RGWAioCompletionNotifierWith(RGWCompletionManager *mgr,
+                               const rgw_io_id& io_id, void *user_data,
+                               T value)
+    : RGWAioCompletionNotifier(mgr, io_id, user_data), value(std::move(value))
+  {}
+};
+
 struct RGWCoroutinesEnv {
   uint64_t run_context;
   RGWCoroutinesManager *manager;
@@ -479,6 +491,8 @@ public:
   void cancel();
 
   RGWAioCompletionNotifier *create_completion_notifier();
+  template <typename T>
+  RGWAioCompletionNotifier *create_completion_notifier(T value);
   RGWCompletionManager *get_completion_mgr();
 
   void set_blocked_by(RGWCoroutinesStack *s) {
@@ -596,6 +610,8 @@ public:
   virtual void report_error(RGWCoroutinesStack *op);
 
   RGWAioCompletionNotifier *create_completion_notifier(RGWCoroutinesStack *stack);
+  template <typename T>
+  RGWAioCompletionNotifier *create_completion_notifier(RGWCoroutinesStack *stack, T value);
   RGWCompletionManager *get_completion_mgr() { return completion_mgr; }
 
   void schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *stack);
@@ -614,6 +630,21 @@ public:
     return io_id_provider;
   }
 };
+
+template <typename T>
+RGWAioCompletionNotifier *RGWCoroutinesManager::create_completion_notifier(RGWCoroutinesStack *stack, T value)
+{
+  rgw_io_id io_id{get_next_io_id(), -1};
+  RGWAioCompletionNotifier *cn = new RGWAioCompletionNotifierWith<T>(completion_mgr, io_id, (void *)stack, std::move(value));
+  completion_mgr->register_completion_notifier(cn);
+  return cn;
+}
+
+template <typename T>
+RGWAioCompletionNotifier *RGWCoroutinesStack::create_completion_notifier(T value)
+{
+  return ops_mgr->create_completion_notifier(this, std::move(value));
+}
 
 class RGWSimpleCoroutine : public RGWCoroutine {
   bool called_cleanup;
