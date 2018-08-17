@@ -35,21 +35,9 @@
 
 Beacon::Beacon(CephContext *cct_, MonClient *monc_, std::string_view name_) :
   Dispatcher(cct_), lock("Beacon"), monc(monc_), timer(g_ceph_context, lock),
-  name(name_), standby_for_rank(MDS_RANK_NONE),
-  standby_for_fscid(FS_CLUSTER_ID_NONE), want_state(MDSMap::STATE_BOOT),
-  awaiting_seq(-1)
-{
-  last_seq = 0;
-  was_laggy = false;
-
-  epoch = 0;
-}
-
-
-Beacon::~Beacon()
+  name(name_)
 {
 }
-
 
 void Beacon::init(const MDSMap &mdsmap)
 {
