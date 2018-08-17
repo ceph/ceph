@@ -1,0 +1,3 @@
+tasks:
+- s3tests-go:
+    client.0:
