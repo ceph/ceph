@@ -1384,8 +1384,8 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   string max_marker;
   const std::string& period_marker; //< max marker stored in next period
 
+  RGWRadosGetOmapKeysCR::ResultPtr omapkeys;
   std::set<std::string> entries;
-  bool more = false;
   std::set<std::string>::iterator iter;
 
   string oid;
@@ -1572,8 +1572,9 @@ public:
           lost_lock = true;
           break;
         }
+        omapkeys = std::make_shared<RGWRadosGetOmapKeysCR::Result>();
         yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, oid),
-                                             marker, &entries, max_entries, &more));
+                                             marker, max_entries, omapkeys));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
           tn->log(0, SSTR("ERROR: failed to list omap keys, status=" << retcode));
@@ -1581,6 +1582,7 @@ public:
           drain_all();
           return retcode;
         }
+        entries = std::move(omapkeys->entries);
         tn->log(20, SSTR("retrieved " << entries.size() << " entries to sync"));
         if (entries.size() > 0) {
           tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
@@ -1603,7 +1605,7 @@ public:
           }
         }
         collect_children();
-      } while (more && can_adjust_marker);
+      } while (omapkeys->more && can_adjust_marker);
 
       tn->unset_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
 
