@@ -709,6 +709,55 @@ class perf_counters_t : public PerfCountersCollectionable {
   }
 
   template<const perf_counter_meta_t& pcid>
+  void _inc_threaded(perf_counter_any_data_t* const threaded_counters,
+		     const std::size_t amount) {
+    if constexpr (pcid.type & PERFCOUNTER_LONGRUNAVG) {
+      // we are operating on the memory atomically with very weak ordering
+      // requirements. As the struct consists just two 32 bit unsigned
+      // integers, on most platforms this will be a plain load.
+      auto val_n_cnt = \
+        threaded_counters->val_with_counter.load(std::memory_order_relaxed);
+
+      const bool val_overflowed = \
+        __builtin_uadd_overflow(val_n_cnt.val, amount, &val_n_cnt.val);
+      if (unlikely(val_overflowed)) {
+	constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
+        // amount is always greater-or-equal 1, so val moves at greater-or-eq
+        // pace than cnt. This is pretty handy as we can asumme if val doesn't
+        // overflow, then cnt is overflow-free as well.
+        atomic_perf_counters[idx].val_with_counter.val += \
+          val_n_cnt.val + std::numeric_limits<decltype(val_n_cnt.val)>::max();
+        atomic_perf_counters[idx].val_with_counter.cnt += \
+          static_cast<std::uint64_t>(val_n_cnt.cnt) + 1;
+        threaded_counters->val_with_counter.store({ 0, 0 },
+      					    std::memory_order_relaxed);
+      } else {
+        // there is no compare-and-exchange. This slot belongs to the current
+        // thread and we don't expect any other writer, so employing costly
+        // synchronization would be pointless. On x86 this will be translated
+        // into plain store without MFENCE.
+        ++val_n_cnt.cnt;
+        threaded_counters->val_with_counter.store(val_n_cnt,
+      					    std::memory_order_relaxed);
+      }
+    } else {
+      threaded_counters->val += amount;
+    }
+  }
+
+  template<const perf_counter_meta_t& pcid>
+  void _inc_atomical(const std::size_t amount) {
+    constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
+
+    if constexpr (pcid.type & PERFCOUNTER_LONGRUNAVG) {
+      atomic_perf_counters[idx].val_with_counter.val += amount;
+      atomic_perf_counters[idx].val_with_counter.cnt += 1;
+    } else {
+      atomic_perf_counters[idx].val += amount;
+    }
+  }
+
+  template<const perf_counter_meta_t& pcid>
   void _inc(const std::size_t amount = 1) {
     static_assert(perf_counters_t::count<pcid, P...>() == 1);
     static_assert(0 == (pcid.type & PERFCOUNTER_SETABLE));
@@ -718,44 +767,9 @@ class perf_counters_t : public PerfCountersCollectionable {
       _get_threaded_counters(idx);
 
     if (likely(threaded_counters != nullptr)) {
-      if constexpr (pcid.type & PERFCOUNTER_LONGRUNAVG) {
-        // we are operating on the memory atomically with very weak ordering
-	// requirements. As the struct consists just two 32 bit unsigned
-	// integers, on most platforms this will be a plain load.
-	auto val_n_cnt = \
-	  threaded_counters->val_with_counter.load(std::memory_order_relaxed);
-
-	const bool val_overflowed = \
-	  __builtin_uadd_overflow(val_n_cnt.val, amount, &val_n_cnt.val);
-	if (unlikely(val_overflowed)) {
-	  // amount is always greater-or-equal 1, so val moves at greater-or-eq
-	  // pace than cnt. This is pretty handy as we can asumme if val doesn't
-	  // overflow, then cnt is overflow-free as well.
-	  atomic_perf_counters[idx].val_with_counter.val += \
-	    val_n_cnt.val + std::numeric_limits<decltype(val_n_cnt.val)>::max();
-	  atomic_perf_counters[idx].val_with_counter.cnt += \
-	    static_cast<std::uint64_t>(val_n_cnt.cnt) + 1;
-	  threaded_counters->val_with_counter.store({ 0, 0 },
-						    std::memory_order_relaxed);
-	} else {
-	  // there is no compare-and-exchange. This slot belongs to the current
-	  // thread and we don't expect any other writer, so employing costly
-	  // synchronization would be pointless. On x86 this will be translated
-	  // into plain store without MFENCE.
-	  ++val_n_cnt.cnt;
-	  threaded_counters->val_with_counter.store(val_n_cnt,
-						    std::memory_order_relaxed);
-	}
-      } else {
-	threaded_counters->val += amount;
-      }
+      _inc_threaded<pcid>(threaded_counters, amount);
     } else {
-      if constexpr (pcid.type & PERFCOUNTER_LONGRUNAVG) {
-	atomic_perf_counters[idx].val_with_counter.val += amount;
-	atomic_perf_counters[idx].val_with_counter.cnt += 1;
-      } else {
-	atomic_perf_counters[idx].val += amount;
-      }
+      _inc_atomical<pcid>(amount);
     }
   }
 
