@@ -595,6 +595,8 @@ static constexpr auto PERFCOUNTER_U64_HIST = \
 static constexpr std::size_t CACHE_LINE_SIZE_ { 64 };
 static constexpr std::size_t EXPECTED_THREAD_NUM { 32 };
 
+#define DEBUG_NOINLINE __attribute__((noinline))
+
 template <const perf_counter_meta_t&... P>
 class perf_counters_t : public PerfCountersCollectionable {
   union perf_counter_any_data_t {
@@ -767,13 +769,13 @@ public:
   }
 
   template<const perf_counter_meta_t& pcid>
-  void inc(const std::size_t count = 1) {
+  void DEBUG_NOINLINE inc(const std::size_t count = 1) {
     static_assert(pcid.type & PERFCOUNTER_U64);
     return _inc<pcid>(count);
   }
 
   template<const perf_counter_meta_t& pcid>
-  void dec(const std::size_t amount = 1) {
+  void DEBUG_NOINLINE dec(const std::size_t amount = 1) {
     static_assert(pcid.type & PERFCOUNTER_U64);
     static_assert(0 == (pcid.type & PERFCOUNTER_SETABLE));
     // don't touching the logic of the original PerfCounters
@@ -792,7 +794,7 @@ public:
   }
 
   template<const perf_counter_meta_t& pcid>
-  void set(const std::uint64_t amount) {
+  void DEBUG_NOINLINE set(const std::uint64_t amount) {
     static_assert(perf_counters_t::count<pcid, P...>() == 1);
     static_assert(pcid.type & PERFCOUNTER_SETABLE);
 
@@ -826,7 +828,7 @@ public:
   }
 
   template<const perf_counter_meta_t& pcid>
-  std::size_t get() const {
+  std::size_t DEBUG_NOINLINE get() const {
     static_assert(perf_counters_t::count<pcid, P...>() == 1);
     static_assert(pcid.type & PERFCOUNTER_U64);
 
@@ -839,19 +841,19 @@ public:
   }
 
   template<const perf_counter_meta_t& pcid>
-  void tinc(const utime_t amt) {
+  void DEBUG_NOINLINE tinc(const utime_t amt) {
     static_assert(pcid.type & PERFCOUNTER_TIME);
     return _inc<pcid>(amt.to_nsec());
   }
 
   template<const perf_counter_meta_t& pcid>
-  void tinc(const ceph::timespan amt) {
+  void DEBUG_NOINLINE tinc(const ceph::timespan amt) {
     static_assert(pcid.type & PERFCOUNTER_TIME);
     return _inc<pcid>(amt.count());
   }
 
   template<const perf_counter_meta_t& pcid>
-  void hinc(const std::int64_t x, const std::int64_t y) {
+  void DEBUG_NOINLINE hinc(const std::int64_t x, const std::int64_t y) {
     static_assert(pcid.type == PERFCOUNTER_U64_HIST);
     constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
     assert(atomic_perf_counters[idx].histogram);
