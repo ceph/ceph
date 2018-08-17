@@ -9,6 +9,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/MirroringWatcher.h"
+#include "librbd/journal/DisabledPolicy.h"
 #include "librbd/journal/RemoveRequest.h"
 #include "librbd/image/RemoveRequest.h"
 #include "librbd/operation/TrimRequest.h"
@@ -102,6 +103,13 @@ void RemoveRequest<I>::check_exclusive_lock() {
 template<typename I>
 void RemoveRequest<I>::acquire_exclusive_lock() {
   ldout(m_cct, 20) << dendl;
+
+  // do not attempt to open the journal when removing the image in case
+  // it's corrupt
+  if (m_image_ctx->test_features(RBD_FEATURE_JOURNALING)) {
+    RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
+    m_image_ctx->set_journal_policy(new journal::DisabledPolicy());
+  }
 
   using klass = RemoveRequest<I>;
   if (m_force) {
