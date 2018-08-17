@@ -1498,7 +1498,7 @@ def unmount(
 
 def extract_parted_partition_numbers(partitions):
     numbers_as_strings = re.findall('^\d+', partitions, re.MULTILINE)
-    return map(int, numbers_as_strings)
+    return list(map(int, numbers_as_strings))
 
 
 def get_free_partition_index(dev):
