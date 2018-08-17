@@ -268,7 +268,17 @@ void RGWQuotaCache<T>::adjust_stats(const rgw_user& user, rgw_bucket& bucket, in
                                  uint64_t added_bytes, uint64_t removed_bytes)
 {
   RGWQuotaStatsUpdate<T> update(objs_delta, added_bytes, removed_bytes);
-  map_find_and_update(user, bucket, &update);
+  if (!map_find_and_update(user, bucket, &update)) {
+    RGWQuotaCacheStats qs;
+    RGWStorageStats stats;
+    int ret = fetch_stats_from_storage(user, bucket, stats);
+    if (ret < 0 && ret != -ENOENT) {
+      return;
+    }
+    
+    set_stats(user, bucket, qs, stats);
+    map_find_and_update(user, bucket, &update);
+  }
 
   data_modified(user, bucket);
 }
