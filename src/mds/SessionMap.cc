@@ -489,7 +489,7 @@ uint64_t SessionMap::set_state(Session *session, int s) {
 
 void SessionMapStore::decode_legacy(bufferlist::const_iterator& p)
 {
-  utime_t now = ceph_clock_now();
+  auto now = clock::now();
   uint64_t pre;
   decode(pre, p);
   if (pre == (uint64_t)-1) {
@@ -632,7 +632,7 @@ void SessionMap::touch_session(Session *session)
 				      new xlist<Session*>).first;
   by_state_entry->second->push_back(&session->item_session_list);
 
-  session->last_cap_renew = ceph_clock_now();
+  session->last_cap_renew = clock::now();
 }
 
 void SessionMap::_mark_dirty(Session *s)
@@ -821,7 +821,7 @@ size_t Session::get_request_count()
  */
 void Session::notify_cap_release(size_t n_caps)
 {
-  if (!recalled_at.is_zero()) {
+  if (recalled_at != clock::zero()) {
     recall_release_count += n_caps;
     if (recall_release_count >= recall_count)
       clear_recalled_at();
@@ -836,21 +836,21 @@ void Session::notify_cap_release(size_t n_caps)
  */
 void Session::notify_recall_sent(const size_t new_limit)
 {
-  if (recalled_at.is_zero()) {
+  if (recalled_at == clock::zero()) {
     // Entering recall phase, set up counters so we can later
     // judge whether the client has respected the recall request
-    recalled_at = last_recall_sent = ceph_clock_now();
+    recalled_at = last_recall_sent = clock::now();
     assert (new_limit < caps.size());  // Behaviour of Server::recall_client_state
     recall_count = caps.size() - new_limit;
     recall_release_count = 0;
   } else {
-    last_recall_sent = ceph_clock_now();
+    last_recall_sent = clock::now();
   }
 }
 
 void Session::clear_recalled_at()
 {
-  recalled_at = last_recall_sent = utime_t();
+  recalled_at = last_recall_sent = clock::zero();
   recall_count = 0;
   recall_release_count = 0;
 }
