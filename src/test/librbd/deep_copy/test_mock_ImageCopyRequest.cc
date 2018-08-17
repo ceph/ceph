@@ -49,7 +49,6 @@ struct ObjectCopyRequest<librbd::MockTestImageCtx> {
   static ObjectCopyRequest* s_instance;
   static ObjectCopyRequest* create(
       librbd::MockTestImageCtx *src_image_ctx,
-      librbd::MockTestImageCtx *src_parent_image_ctx,
       librbd::MockTestImageCtx *dst_image_ctx, const SnapMap &snap_map,
       uint64_t object_number, bool flatten, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
@@ -165,10 +164,6 @@ public:
       .WillOnce(Return(size)).RetiresOnSaturation();
   }
 
-  void expect_get_parent_info(librbd::MockTestImageCtx &mock_image_ctx) {
-    EXPECT_CALL(mock_image_ctx, get_parent_info(_)).WillOnce(Return(nullptr));
-  }
-
   void expect_object_copy_send(MockObjectCopyRequest &mock_object_copy_request) {
     EXPECT_CALL(mock_object_copy_request, send());
   }
@@ -268,7 +263,6 @@ TEST_F(TestMockDeepCopyImageCopyRequest, SimpleImage) {
   MockObjectCopyRequest mock_object_copy_request;
 
   InSequence seq;
-  expect_get_parent_info(mock_src_image_ctx);
   expect_get_image_size(mock_src_image_ctx, 1 << m_src_image_ctx->order);
   expect_get_image_size(mock_src_image_ctx, 0);
   expect_object_copy_send(mock_object_copy_request);
@@ -304,7 +298,6 @@ TEST_F(TestMockDeepCopyImageCopyRequest, OutOfOrder) {
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
   MockObjectCopyRequest mock_object_copy_request;
 
-  expect_get_parent_info(mock_src_image_ctx);
   expect_get_image_size(mock_src_image_ctx,
                         object_count * (1 << m_src_image_ctx->order));
   expect_get_image_size(mock_src_image_ctx, 0);
@@ -372,7 +365,6 @@ TEST_F(TestMockDeepCopyImageCopyRequest, SnapshotSubset) {
   MockObjectCopyRequest mock_object_copy_request;
 
   InSequence seq;
-  expect_get_parent_info(mock_src_image_ctx);
   expect_get_image_size(mock_src_image_ctx, 1 << m_src_image_ctx->order);
   expect_get_image_size(mock_src_image_ctx, 0);
   expect_get_image_size(mock_src_image_ctx, 0);
@@ -405,7 +397,6 @@ TEST_F(TestMockDeepCopyImageCopyRequest, RestartPartialSync) {
   MockObjectCopyRequest mock_object_copy_request;
 
   InSequence seq;
-  expect_get_parent_info(mock_src_image_ctx);
   expect_get_image_size(mock_src_image_ctx, 2 * (1 << m_src_image_ctx->order));
   expect_get_image_size(mock_src_image_ctx, 0);
   expect_object_copy_send(mock_object_copy_request);
@@ -440,7 +431,6 @@ TEST_F(TestMockDeepCopyImageCopyRequest, Cancel) {
   MockObjectCopyRequest mock_object_copy_request;
 
   InSequence seq;
-  expect_get_parent_info(mock_src_image_ctx);
   expect_get_image_size(mock_src_image_ctx, 1 << m_src_image_ctx->order);
   expect_get_image_size(mock_src_image_ctx, 0);
   expect_object_copy_send(mock_object_copy_request);
@@ -477,7 +467,6 @@ TEST_F(TestMockDeepCopyImageCopyRequest, Cancel_Inflight_Sync) {
   MockObjectCopyRequest mock_object_copy_request;
 
   InSequence seq;
-  expect_get_parent_info(mock_src_image_ctx);
   expect_get_image_size(mock_src_image_ctx, 6 * (1 << m_src_image_ctx->order));
   expect_get_image_size(mock_src_image_ctx, m_image_size);
 

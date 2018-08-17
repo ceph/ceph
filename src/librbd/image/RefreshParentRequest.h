@@ -41,25 +41,19 @@ private:
    * <start>
    *    |
    *    | (open required)
-   *    |----------------> OPEN_PARENT * * * * * * * * * * * * * * * * * * * * *
-   *    |                     |                                                *
-   *    |                     v                                                *
-   *    |                  OPEN_MIGRATION_PARENT * * * * * * * * * * * * * *   *
-   *    |                     |             (skip if not                   *   *
-   *    |                     v              needed)                       *   *
-   *    \----------------> <apply>                                         *   *
-   *                          |                              (skip if not  *   *
-   *                          | (close required)              needed)      *   *
-   *                          |-----------------> CLOSE_MIGRATION_PARENT   *   *
-   *                          |                      |                     *   *
-   *                          |                      v                     *   *
-   *                          |                   CLOSE_PARENT  <* * * * * *   *
-   *                          |                      |              (on error) *
-   *                          |                      v                         *
-   *                          |                   RESET_EXISTENCE              *
-   *                          |                      |                         *
-   *                          |                      v                         *
-   *                          \-----------------> <finish> < * * * * * * * * * *
+   *    |----------------> OPEN_PARENT * * * * * * * * * * * * * * *
+   *    |                     |                                    *
+   *    |                     v                        (on error)  *
+   *    \----------------> <apply>                                 *
+   *                          |                                    *
+   *                          | (close required)                   *
+   *                          |-----------------> CLOSE_PARENT     *
+   *                          |                      |             *
+   *                          |                      v             *
+   *                          |                   RESET_EXISTENCE  *
+   *                          |                      |             *
+   *                          |                      v             *
+   *                          \-----------------> <finish> < * * * *
    *
    * @endverbatim
    */
@@ -73,7 +67,6 @@ private:
   Context *m_on_finish;
 
   ImageCtxT *m_parent_image_ctx;
-  ImageCtxT *m_migration_parent_image_ctx = nullptr;
   uint64_t m_parent_snap_id;
 
   int m_error_result;
@@ -90,12 +83,6 @@ private:
 
   void send_open_parent();
   Context *handle_open_parent(int *result);
-
-  void send_open_migration_parent();
-  Context *handle_open_migration_parent(int *result);
-
-  void send_close_migration_parent();
-  Context *handle_close_migration_parent(int *result);
 
   void send_close_parent();
   Context *handle_close_parent(int *result);
