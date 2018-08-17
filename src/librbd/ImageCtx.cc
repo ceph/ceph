@@ -373,25 +373,25 @@ struct C_InvalidateCache : public Context {
 
     plb.add_u64_counter(l_librbd_rd, "rd", "Reads", "r", perf_prio);
     plb.add_u64_counter(l_librbd_rd_bytes, "rd_bytes", "Data size in reads",
-                        "rb", perf_prio);
+                        "rb", perf_prio, unit_t(BYTES));
     plb.add_time_avg(l_librbd_rd_latency, "rd_latency", "Latency of reads",
                      "rl", perf_prio);
     plb.add_u64_counter(l_librbd_wr, "wr", "Writes", "w", perf_prio);
     plb.add_u64_counter(l_librbd_wr_bytes, "wr_bytes", "Written data",
-                        "wb", perf_prio);
+                        "wb", perf_prio, unit_t(BYTES));
     plb.add_time_avg(l_librbd_wr_latency, "wr_latency", "Write latency",
                      "wl", perf_prio);
     plb.add_u64_counter(l_librbd_discard, "discard", "Discards");
-    plb.add_u64_counter(l_librbd_discard_bytes, "discard_bytes", "Discarded data");
+    plb.add_u64_counter(l_librbd_discard_bytes, "discard_bytes", "Discarded data", NULL, 0, unit_t(BYTES));
     plb.add_time_avg(l_librbd_discard_latency, "discard_latency", "Discard latency");
     plb.add_u64_counter(l_librbd_flush, "flush", "Flushes");
     plb.add_u64_counter(l_librbd_aio_flush, "aio_flush", "Async flushes");
     plb.add_time_avg(l_librbd_aio_flush_latency, "aio_flush_latency", "Latency of async flushes");
     plb.add_u64_counter(l_librbd_ws, "ws", "WriteSames");
-    plb.add_u64_counter(l_librbd_ws_bytes, "ws_bytes", "WriteSame data");
+    plb.add_u64_counter(l_librbd_ws_bytes, "ws_bytes", "WriteSame data", NULL, 0, unit_t(BYTES));
     plb.add_time_avg(l_librbd_ws_latency, "ws_latency", "WriteSame latency");
     plb.add_u64_counter(l_librbd_cmp, "cmp", "CompareAndWrites");
-    plb.add_u64_counter(l_librbd_cmp_bytes, "cmp_bytes", "Data size in cmps");
+    plb.add_u64_counter(l_librbd_cmp_bytes, "cmp_bytes", "Data size in cmps", NULL, 0, unit_t(BYTES));
     plb.add_time_avg(l_librbd_cmp_latency, "cmp_latency", "Latency of cmps");
     plb.add_u64_counter(l_librbd_snap_create, "snap_create", "Snap creations");
     plb.add_u64_counter(l_librbd_snap_remove, "snap_remove", "Snap removals");
@@ -400,7 +400,7 @@ struct C_InvalidateCache : public Context {
     plb.add_u64_counter(l_librbd_notify, "notify", "Updated header notifications");
     plb.add_u64_counter(l_librbd_resize, "resize", "Resizes");
     plb.add_u64_counter(l_librbd_readahead, "readahead", "Read ahead");
-    plb.add_u64_counter(l_librbd_readahead_bytes, "readahead_bytes", "Data size in read ahead");
+    plb.add_u64_counter(l_librbd_readahead_bytes, "readahead_bytes", "Data size in read ahead", NULL, 0, unit_t(BYTES));
     plb.add_u64_counter(l_librbd_invalidate_cache, "invalidate_cache", "Cache invalidates");
 
     plb.add_time(l_librbd_opened_time, "opened_time", "Opened time",

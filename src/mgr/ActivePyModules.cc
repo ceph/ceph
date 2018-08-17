@@ -641,6 +641,7 @@ PyObject* ActivePyModules::get_perf_schema_python(
 	}
 	f.dump_unsigned("type", type.type);
 	f.dump_unsigned("priority", type.priority);
+	f.dump_unsigned("units", type.unit);
 	f.close_section();
       }
       f.close_section();

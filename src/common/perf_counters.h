@@ -41,6 +41,11 @@ enum perfcounter_type_d : uint8_t
   PERFCOUNTER_HISTOGRAM = 0x10, // histogram (vector) of values
 };
 
+enum unit_t : uint8_t
+{
+  BYTES,
+  NONE
+};
 
 /* Class for constructing a PerfCounters object.
  *
@@ -73,15 +78,15 @@ public:
   };
   void add_u64(int key, const char *name,
 	       const char *description=NULL, const char *nick = NULL,
-	       int prio=0);
+	       int prio=0, int unit=NONE);
   void add_u64_counter(int key, const char *name,
 		       const char *description=NULL,
 		       const char *nick = NULL,
-		       int prio=0);
+		       int prio=0, int unit=NONE);
   void add_u64_avg(int key, const char *name,
 		   const char *description=NULL,
 		   const char *nick = NULL,
-		   int prio=0);
+		   int prio=0, int unit=NONE);
   void add_time(int key, const char *name,
 		const char *description=NULL,
 		const char *nick = NULL,
@@ -96,7 +101,7 @@ public:
     PerfHistogramCommon::axis_config_d y_axis_config,
     const char *description=NULL,
     const char* nick = NULL,
-    int prio=0);
+    int prio=0, int unit=NONE);
 
   void set_prio_default(int prio_)
   {
@@ -108,7 +113,7 @@ private:
   PerfCountersBuilder(const PerfCountersBuilder &rhs);
   PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
   void add_impl(int idx, const char *name,
-                const char *description, const char *nick, int prio, int ty,
+                const char *description, const char *nick, int prio, int ty, int unit=NONE,
                 unique_ptr<PerfHistogram<>> histogram = nullptr);
 
   PerfCounters *m_perf_counters;
@@ -150,14 +155,16 @@ public:
       : name(NULL),
         description(NULL),
         nick(NULL),
-	    type(PERFCOUNTER_NONE)
+	 type(PERFCOUNTER_NONE),
+	 unit(NONE)
     {}
     perf_counter_data_any_d(const perf_counter_data_any_d& other)
       : name(other.name),
         description(other.description),
         nick(other.nick),
-	type(other.type),
-	u64(other.u64.load()) {
+	 type(other.type),
+	 unit(other.unit),
+	 u64(other.u64.load()) {
       pair<uint64_t,uint64_t> a = other.read_avg();
       u64 = a.first;
       avgcount = a.second;
@@ -172,6 +179,7 @@ public:
     const char *nick;
     uint8_t prio = 0;
     enum perfcounter_type_d type;
+    enum unit_t unit;
     std::atomic<uint64_t> u64 = { 0 };
     std::atomic<uint64_t> avgcount = { 0 };
     std::atomic<uint64_t> avgcount2 = { 0 };
