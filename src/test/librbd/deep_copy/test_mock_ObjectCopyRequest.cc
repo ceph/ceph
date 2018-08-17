@@ -25,6 +25,8 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
   explicit MockTestImageCtx(librbd::ImageCtx &image_ctx)
     : librbd::MockImageCtx(image_ctx) {
   }
+
+  MockTestImageCtx *parent = nullptr;
 };
 
 } // anonymous namespace
@@ -206,9 +208,8 @@ public:
       librbd::MockTestImageCtx &mock_dst_image_ctx, Context *on_finish) {
     expect_get_object_name(mock_dst_image_ctx);
     expect_get_object_count(mock_dst_image_ctx);
-    return new MockObjectCopyRequest(&mock_src_image_ctx, nullptr,
-                                     &mock_dst_image_ctx, m_snap_map, 0, false,
-                                     on_finish);
+    return new MockObjectCopyRequest(&mock_src_image_ctx, &mock_dst_image_ctx,
+                                     m_snap_map, 0, false, on_finish);
   }
 
   void expect_set_snap_read(librados::MockTestMemIoCtxImpl &mock_io_ctx,

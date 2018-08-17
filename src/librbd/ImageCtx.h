@@ -125,7 +125,6 @@ namespace librbd {
     ImageCtx *parent;
     ImageCtx *child = nullptr;
     MigrationInfo migration_info;
-    ImageCtx *migration_parent = nullptr;
     cls::rbd::GroupSpec group_spec;
     uint64_t stripe_unit, stripe_count;
     uint64_t flags;
