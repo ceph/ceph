@@ -23,13 +23,13 @@ public:
   friend factory;
 private:
 
-  static const int HEAD_VERSION = 11;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 11;
+  static constexpr int COMPAT_VERSION = 1;
 
  public:
-  static const unsigned FLAG_SYNC		= (1<<0);
-  static const unsigned FLAG_NO_CAPSNAP		= (1<<1); // unused
-  static const unsigned FLAG_PENDING_CAPSNAP	= (1<<2);
+  static constexpr unsigned FLAG_SYNC		= (1<<0);
+  static constexpr unsigned FLAG_NO_CAPSNAP		= (1<<1); // unused
+  static constexpr unsigned FLAG_PENDING_CAPSNAP	= (1<<2);
 
   struct ceph_mds_caps_head head;
 

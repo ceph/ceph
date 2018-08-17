@@ -26,8 +26,8 @@ class MNop : public MessageInstance<MNop> {
 public:
   friend factory;
 
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   __u32 tag; // ignored tag value
 

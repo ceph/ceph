@@ -22,8 +22,8 @@ class MPoolOp : public MessageInstance<MPoolOp, PaxosServiceMessage> {
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 4;
-  static const int COMPAT_VERSION = 2;
+  static constexpr int HEAD_VERSION = 4;
+  static constexpr int COMPAT_VERSION = 2;
 
 public:
   uuid_d fsid;

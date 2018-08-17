@@ -26,8 +26,8 @@ class MOSDScrub : public MessageInstance<MOSDScrub> {
 public:
   friend factory;
 
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 2;
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 2;
 
   uuid_d fsid;
   vector<pg_t> scrub_pgs;

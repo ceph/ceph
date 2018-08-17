@@ -22,7 +22,7 @@ class MMonHealth : public MessageInstance<MMonHealth, MMonQuorumService> {
 public:
   friend factory;
 
-  static const int HEAD_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
 
   int service_type = 0;
   int service_op = 0;

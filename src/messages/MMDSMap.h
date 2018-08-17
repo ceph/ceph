@@ -24,9 +24,8 @@ class MMDSMap : public MessageInstance<MMDSMap> {
 public:
   friend factory;
 private:
-
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 public:
   uuid_d fsid;
   epoch_t epoch = 0;

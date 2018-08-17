@@ -27,8 +27,8 @@ class MOSDPGCreate : public MessageInstance<MOSDPGCreate> {
 public:
   friend factory;
 
-  const static int HEAD_VERSION = 3;
-  const static int COMPAT_VERSION = 3;
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 3;
 
   version_t          epoch = 0;
   map<pg_t,pg_create_t> mkpg;

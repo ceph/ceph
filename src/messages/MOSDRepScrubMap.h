@@ -25,8 +25,8 @@ class MOSDRepScrubMap : public MessageInstance<MOSDRepScrubMap, MOSDFastDispatch
 public:
   friend factory;
 
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
   spg_t pgid;            // primary spg_t
   epoch_t map_epoch = 0;

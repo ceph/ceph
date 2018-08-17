@@ -19,8 +19,8 @@ class MMonSync : public MessageInstance<MMonSync> {
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 2;
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 2;
 
 public:
   /**

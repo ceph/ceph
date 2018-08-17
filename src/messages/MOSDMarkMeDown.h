@@ -21,8 +21,8 @@ class MOSDMarkMeDown : public MessageInstance<MOSDMarkMeDown, PaxosServiceMessag
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 3;
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 3;
 
  public:
   uuid_d fsid;

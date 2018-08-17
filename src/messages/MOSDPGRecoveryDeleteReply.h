@@ -10,8 +10,8 @@ class MOSDPGRecoveryDeleteReply : public MessageInstance<MOSDPGRecoveryDeleteRep
 public:
   friend factory;
 
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
   pg_shard_t from;
   spg_t pgid;

@@ -22,8 +22,8 @@ class MBackfillReserve : public MessageInstance<MBackfillReserve, MOSDPeeringOp>
 public:
   friend factory;
 private:
-  static const int HEAD_VERSION = 4;
-  static const int COMPAT_VERSION = 4;
+  static constexpr int HEAD_VERSION = 4;
+  static constexpr int COMPAT_VERSION = 4;
 public:
   spg_t pgid;
   epoch_t query_epoch;
