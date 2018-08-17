@@ -567,6 +567,12 @@ static constexpr auto PERFCOUNTER_U64_HIST = \
   static_cast<enum perfcounter_type_d>(
     PERFCOUNTER_U64 | PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER);
 
+// add_u64
+#define PERF_COUNTERS_ADD_U64(id, name, desc, ...)		\
+  static constexpr perf_counter_meta_t id {			\
+    PERFCOUNTER_U64, name, desc, __VA_ARGS__			\
+  }
+
 // add_u64_counter
 #define PERF_COUNTERS_ADD_U64_COUNTER(id, name, desc, ...)	\
   static constexpr perf_counter_meta_t id {			\
