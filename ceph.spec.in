@@ -276,6 +276,7 @@ of cluster membership, configuration, and state.
 %package fuse
 Summary:	Ceph fuse-based client
 Group:		System Environment/Base
+Requires:	fuse
 %description fuse
 FUSE based client for Ceph distributed network file system
 
