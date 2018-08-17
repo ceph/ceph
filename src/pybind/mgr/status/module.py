@@ -200,6 +200,9 @@ class Module(MgrModule):
                     5
                 ) + "/s"
 
+                metadata = self.get_metadata('mds', daemon_info['name'])
+                mds_versions[metadata.get('ceph_version', "unknown")].append(daemon_info['name'])
+
                 rank_table.add_row([
                     "{0}-s".format(daemon_info['rank']), "standby-replay",
                     daemon_info['name'], activity,
