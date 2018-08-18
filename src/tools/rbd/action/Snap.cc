@@ -204,6 +204,10 @@ int do_purge_snaps(librbd::Image& image, bool no_progress)
     return 0;
   } else {
     list<std::string> protect;
+    snaps.erase(remove_if(snaps.begin(),
+                          snaps.end(),
+                          boost::bind(utils::is_not_user_snap_namespace, &image, _1)),
+                snaps.end());
     for (auto it = snaps.begin(); it != snaps.end();) {
       r = image.snap_is_protected(it->name.c_str(), &is_protected);
       if (r < 0) {
