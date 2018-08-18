@@ -647,24 +647,51 @@ class perf_counters_t : public PerfCountersCollectionable {
   std::array<thread_group_t, EXPECTED_THREAD_NUM> threaded_perf_counters;
   atomic_group_t atomic_perf_counters;
 
+  // threaded selection
+  static constexpr std::size_t FIRST_SEEN_THREAD{
+    std::tuple_size<decltype(threaded_perf_counters)>::value
+  };
+
+  static std::atomic_size_t& last_allocated_selector() {
+    static std::atomic_size_t p_last_allocated_selector{ 0 };
+    return p_last_allocated_selector;
+  }
+  static std::size_t& thread_selector() {
+    thread_local std::size_t p_thread_selector{ FIRST_SEEN_THREAD };
+    return p_thread_selector;
+  }
+
   perf_counter_any_data_t* ALWAYS_INLINE _get_threaded_counters(
       const std::size_t idx) {
-    static std::atomic_size_t last_allocated_selector{ 0 };
-    static constexpr std::size_t FIRST_SEEN_THREAD{
-      std::tuple_size<decltype(threaded_perf_counters)>::value
-    };
-    thread_local std::size_t thread_selector{ FIRST_SEEN_THREAD };
+    if (likely(thread_selector() < threaded_perf_counters.size())) {
+      return &threaded_perf_counters[thread_selector()][idx];
+    } else {
+      return nullptr;
+    }
+  }
 
-    if (likely(thread_selector < threaded_perf_counters.size())) {
-      return &threaded_perf_counters[thread_selector][idx];
-    } else if (likely(thread_selector == last_allocated_selector)) {
+  perf_counter_any_data_t* ALWAYS_INLINE _alloc_threaded_counters(
+      const std::size_t idx) {
+    if (likely(thread_selector() == last_allocated_selector())) {
       // Well, it looks we're ran out of per-thread slots.
       return nullptr;
     } else {
       // The rare case
-      thread_selector = last_allocated_selector.fetch_add(1);
-      assert(thread_selector < threaded_perf_counters.size());
-      return &threaded_perf_counters[thread_selector][idx];
+      thread_selector() = last_allocated_selector().fetch_add(1);
+      assert(thread_selector() < threaded_perf_counters.size());
+      return &threaded_perf_counters[thread_selector()][idx];
+    }
+  }
+
+  perf_counter_any_data_t* ALWAYS_INLINE _get_or_alloc_threaded_counters(
+      const std::size_t idx) {
+
+    perf_counter_any_data_t* const threaded_counters = \
+      _get_threaded_counters(idx);
+    if (likely(threaded_counters != nullptr)) {
+      return threaded_counters;
+    } else {
+      return _alloc_threaded_counters(idx);
     }
   }
 
@@ -709,8 +736,8 @@ class perf_counters_t : public PerfCountersCollectionable {
   }
 
   template<const perf_counter_meta_t& pcid>
-  void _inc_threaded(perf_counter_any_data_t* const threaded_counters,
-		     const std::size_t amount) {
+  void _do_inc_threaded(perf_counter_any_data_t* const threaded_counters,
+			const std::size_t amount) {
     if constexpr (pcid.type & PERFCOUNTER_LONGRUNAVG) {
       // we are operating on the memory atomically with very weak ordering
       // requirements. As the struct consists just two 32 bit unsigned
@@ -746,7 +773,7 @@ class perf_counters_t : public PerfCountersCollectionable {
   }
 
   template<const perf_counter_meta_t& pcid>
-  void _inc_atomical(const std::size_t amount) {
+  void _do_inc_atomical(const std::size_t amount) {
     constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
 
     if constexpr (pcid.type & PERFCOUNTER_LONGRUNAVG) {
@@ -758,18 +785,50 @@ class perf_counters_t : public PerfCountersCollectionable {
   }
 
   template<const perf_counter_meta_t& pcid>
+  void __attribute__((noinline)) _inc_slow(const std::size_t amount) {
+    constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
+    if (likely(thread_selector() == last_allocated_selector())) {
+      // the pool of thread slots is exhausted. Need to go atomic.
+      _do_inc_atomical<pcid>(amount);
+    } else {
+      thread_selector() = last_allocated_selector().fetch_add(1);
+      assert(thread_selector() < threaded_perf_counters.size());
+      _do_inc_threaded<pcid>(&threaded_perf_counters[thread_selector()][idx], amount);
+    }
+  }
+
+  template<const perf_counter_meta_t& pcid>
   void _inc(const std::size_t amount = 1) {
     static_assert(perf_counters_t::count<pcid, P...>() == 1);
     static_assert(0 == (pcid.type & PERFCOUNTER_SETABLE));
 
-    constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
-    perf_counter_any_data_t* const threaded_counters = \
-      _get_threaded_counters(idx);
+    // Yup, tons of ugly, templated code just to put on hot paths as few
+    // instructions as possible while preserving the same behaviour from
+    // operator's point-of-view.
+    //
+    //    mov    %fs:0x0,%rax
+    //    mov    -0x30d0(%rax),%rdx
+    //    cmp    $0x1f,%rdx
+    //    ja     68bdf0 <PrimaryLogPG::log_op_stats(OpRequest const&,
+    //						    unsigned long,
+    //						    unsigned long)+0x8a0>
+    //    shl    $0x8,%rdx
+    //    lea    0x40(%r13,%rdx,1),%rdx
+    //    addq   $0x1,0x88(%rdx)
+    //
+    // Counters tend to be manipulated in groups, so the code is arranged
+    // to let compilers reuse previous computations. Increamenting second
+    // and third one in ::log_op_stats costs single instruction:
+    //
+    //    add    %r15,0x90(%rdx)
+    //    add    %r14,0x98(%rdx)
 
-    if (likely(threaded_counters != nullptr)) {
-      _inc_threaded<pcid>(threaded_counters, amount);
+    if (likely(thread_selector() < threaded_perf_counters.size())) {
+      constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
+      _do_inc_threaded<pcid>(&threaded_perf_counters[thread_selector()][idx],
+			  amount);
     } else {
-      _inc_atomical<pcid>(amount);
+      _inc_slow<pcid>(amount);
     }
   }
 
@@ -810,7 +869,7 @@ public:
 
     constexpr std::size_t idx = perf_counters_t::index_of<pcid, P...>();
     perf_counter_any_data_t* const threaded_counters = \
-      _get_threaded_counters(idx);
+      _get_or_alloc_threaded_counters(idx);
 
     if (likely(threaded_counters != nullptr)) {
       threaded_counters->val -= amount;
