@@ -25,8 +25,12 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, const rgw_pool
 int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker);
 
+const char *rgw_find_mime_by_ext(string& ext);
+
+void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const string& check_prefix,
+                        map<string, bufferlist> *attrset);
+
 int rgw_tools_init(CephContext *cct);
 void rgw_tools_cleanup();
-const char *rgw_find_mime_by_ext(string& ext);
 
 #endif

@@ -49,6 +49,7 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
+#include "services/svc_sys_obj.h"
 
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -5608,7 +5609,7 @@ void RGWCompleteMultipart::execute()
         op_ret = -ERR_INVALID_PART;
         return;
       } else {
-        manifest.append(obj_part.manifest, store);
+        manifest.append(obj_part.manifest, store->svc.zone.get());
       }
 
       bool part_compressed = (obj_part.cs_info.compression_type != "none");

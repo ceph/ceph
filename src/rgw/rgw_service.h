@@ -102,12 +102,29 @@ public:
   }
   bool find(const string& name, RGWServiceRef *svc);
 
+  /* returns existing or creates a new one */
   int get_instance(RGWServiceRef& svc,
                    const string& conf,
                    RGWServiceInstanceRef *ref); /* returns existing or creates a new one */
+
+  /* returns existing or creates a new one */
+  template <class T>
+  int get_instance(RGWServiceRef& svc,
+                   const string& conf,
+                   T *ref) {
+    RGWServiceInstanceRef r;
+    int ret = get_instance(svc, conf, &r);
+    if (ret < 0) {
+      return ret;
+    }
+    *ref = std::static_pointer_cast<typename T::element_type>(r);
+    return 0;
+  }
+
+  template <class T>
   int get_instance(const string& svc_name,
                    const string& conf,
-                   RGWServiceInstanceRef *ref) {
+                   T *ref) {
     auto iter = services.find(svc_name);
     if (iter == services.end()) {
       return -ENOENT;
@@ -116,5 +133,6 @@ public:
   }
   void remove_instance(RGWServiceInstance *instance);
 };
+
 
 #endif

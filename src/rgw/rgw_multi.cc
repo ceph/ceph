@@ -12,6 +12,8 @@
 #include "rgw_multi.h"
 #include "rgw_op.h"
 
+#include "services/svc_sys_obj.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 
@@ -82,7 +84,6 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
 {
   map<string, bufferlist> parts_map;
   map<string, bufferlist>::iterator iter;
-  bufferlist header;
 
   rgw_obj obj;
   obj.init_ns(bucket_info.bucket, meta_oid, RGW_OBJ_NS_MULTIPART);
@@ -97,6 +98,10 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
 
   parts.clear();
 
+
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(raw_obj);
+
   if (sorted_omap) {
     string p;
     p = "part.";
@@ -105,9 +110,9 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
     snprintf(buf, sizeof(buf), "%08d", marker);
     p.append(buf);
 
-    ret = store->omap_get_vals(raw_obj, header, p, num_parts + 1, parts_map);
+    ret = sysobj.omap().get_vals(p, num_parts + 1, &parts_map, nullptr);
   } else {
-    ret = store->omap_get_all(raw_obj, header, parts_map);
+    ret = sysobj.omap().get_all(&parts_map);
   }
   if (ret < 0)
     return ret;

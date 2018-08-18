@@ -15,6 +15,7 @@
 #include "rgw_putobj_aio.h"
 #include "rgw_putobj_processor.h"
 #include "rgw_multi.h"
+#include "services/svc_sys_obj.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -441,8 +442,13 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   rgw_raw_obj raw_meta_obj;
 
   store->obj_to_raw(bucket_info.placement_rule, meta_obj, &raw_meta_obj);
-  const bool must_exist = true;// detect races with abort
-  r = store->omap_set(raw_meta_obj, p, bl, must_exist);
+
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(raw_meta_obj);
+
+  r = sysobj.omap()
+      .set_must_exist(true)
+      .set(p, bl);
   if (r < 0) {
     return r;
   }
