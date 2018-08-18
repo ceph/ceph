@@ -55,7 +55,7 @@ public:
   //static constexpr int OP_COMMIT = 21;  // used for recovery only
 
 
-  static constexpr char *get_opname(int o) {
+  static const char *get_opname(int o) {
     switch (o) { 
     case OP_XLOCK: return "xlock";
     case OP_XLOCKACK: return "xlock_ack";
