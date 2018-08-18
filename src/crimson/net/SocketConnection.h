@@ -109,9 +109,6 @@ class SocketConnection : public Connection {
   void set_features(uint64_t new_features) {
     features = new_features;
   }
-  bool has_feature(uint64_t feature) const {
-    return features & feature;
-  }
 
   /// the seq num of the last transmitted message
   seq_num_t out_seq = 0;
