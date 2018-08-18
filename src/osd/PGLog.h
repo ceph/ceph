@@ -140,8 +140,7 @@ public:
       pg_log_t(std::forward<Args>(args)...),
       complete_to(log.end()),
       last_requested(0),
-      indexed_data(0),
-      rollback_info_trimmed_to_riter(log.rbegin())
+      indexed_data(0)
     {
       reset_rollback_info_trimmed_to_riter();
       index();
@@ -151,8 +150,7 @@ public:
       pg_log_t(rhs),
       complete_to(log.end()),
       last_requested(rhs.last_requested),
-      indexed_data(0),
-      rollback_info_trimmed_to_riter(log.rbegin())
+      indexed_data(0)
     {
       reset_rollback_info_trimmed_to_riter();
       index(rhs.indexed_data);
@@ -326,9 +324,7 @@ public:
       }
       if (objects.count(oid) == 0)
 	return;
-      for (list<pg_log_entry_t>::const_reverse_iterator i = log.rbegin();
-           i != log.rend();
-           ++i) {
+      for (auto i = log.rbegin(); i != log.rend(); ++i) {
 	if (i->soid == oid) {
 	  if (i->reqid_is_indexed())
 	    pls->push_back(make_pair(i->reqid, i->user_version));
@@ -368,9 +364,7 @@ public:
 	PGLOG_INDEXED_EXTRA_CALLER_OPS;
 
       if (to_index & any_log_entry_index) {
-	for (list<pg_log_entry_t>::const_iterator i = log.begin();
-	     i != log.end();
-	     ++i) {
+	for (auto i = log.begin(); i != log.end(); ++i) {
 	  if (to_index & PGLOG_INDEXED_OBJECTS) {
 	    if (i->object_is_indexed()) {
 	      objects[i->soid] = const_cast<pg_log_entry_t*>(&(*i));
@@ -503,7 +497,7 @@ public:
 
       // riter previously pointed to the previous entry
       if (rollback_info_trimmed_to_riter == log.rbegin())
-	++rollback_info_trimmed_to_riter;
+        ++rollback_info_trimmed_to_riter;
 
       assert(e.version > head);
       assert(head.version == 0 || e.version.version > head.version);
@@ -1374,9 +1368,7 @@ public:
 	set<hobject_t> did;
 	set<hobject_t> checked;
 	set<hobject_t> skipped;
-	for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
-	     i != log.log.rend();
-	     ++i) {
+	for (auto i = log.log.rbegin(); i != log.log.rend(); ++i) {
 	  if (!debug_verify_stored_missing && i->version <= info.last_complete) break;
 	  if (i->soid > info.last_backfill)
 	    continue;

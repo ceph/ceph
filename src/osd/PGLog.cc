@@ -125,18 +125,14 @@ void PGLog::IndexedLog::trim(
 ostream& PGLog::IndexedLog::print(ostream& out) const
 {
   out << *this << std::endl;
-  for (list<pg_log_entry_t>::const_iterator p = log.begin();
-       p != log.end();
-       ++p) {
+  for (auto p = log.begin(); p != log.end(); ++p) {
     out << *p << " " <<
       (logged_object(p->soid) ? "indexed" : "NOT INDEXED") <<
       std::endl;
     assert(!p->reqid_is_indexed() || logged_req(p->reqid));
   }
 
-  for (list<pg_log_dup_t>::const_iterator p = dups.begin();
-       p != dups.end();
-       ++p) {
+  for (auto p = dups.begin(); p != dups.end(); ++p) {
     out << *p << std::endl;
   }
 
@@ -224,8 +220,7 @@ void PGLog::proc_replica_log(
 	     << " have " << i->second.have << dendl;
   }
 
-  list<pg_log_entry_t>::const_reverse_iterator first_non_divergent =
-    log.log.rbegin();
+  auto first_non_divergent = log.log.rbegin();
   while (1) {
     if (first_non_divergent == log.log.rend())
       break;
@@ -275,7 +270,7 @@ void PGLog::proc_replica_log(
     eversion_t first_missing =
       omissing.get_items().at(omissing.get_rmissing().begin()->second).need;
     oinfo.last_complete = eversion_t();
-    list<pg_log_entry_t>::const_iterator i = olog.log.begin();
+    auto i = olog.log.begin();
     for (;
 	 i != olog.log.end();
 	 ++i) {
@@ -359,12 +354,10 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
   eversion_t orig_tail = log.tail;
   if (olog.tail < log.tail) {
     dout(10) << "merge_log extending tail to " << olog.tail << dendl;
-    list<pg_log_entry_t>::iterator from = olog.log.begin();
-    list<pg_log_entry_t>::iterator to;
+    auto from = olog.log.begin();
+    auto to = from;
     eversion_t last;
-    for (to = from;
-	 to != olog.log.end();
-	 ++to) {
+    for ( ; to != olog.log.end(); ++to) {
       if (to->version > log.tail)
 	break;
       log.index(*to);
@@ -373,9 +366,8 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
     }
     mark_dirty_to(last);
 
-    // splice into our log.
-    log.log.splice(log.log.begin(),
-		   olog.log, from, to);
+    // copy into our log.
+    log.log.insert(log.log.begin(), from, to);
 
     info.log_tail = log.tail = olog.tail;
     changed = true;
@@ -401,8 +393,8 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
     dout(10) << "merge_log extending head to " << olog.head << dendl;
 
     // find start point in olog
-    list<pg_log_entry_t>::iterator to = olog.log.end();
-    list<pg_log_entry_t>::iterator from = olog.log.end();
+    auto to = olog.log.end();
+    auto from = olog.log.end();
     eversion_t lower_bound = std::max(olog.tail, orig_tail);
     while (1) {
       if (from == olog.log.begin())
@@ -427,7 +419,7 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
     log.roll_forward_to(log.head, rollbacker);
 
     mempool::osd_pglog::list<pg_log_entry_t> new_entries;
-    new_entries.splice(new_entries.end(), olog.log, from, to);
+    new_entries.insert(new_entries.end(), from, to);
     append_log_entries_update_missing(
       info.last_backfill,
       info.last_backfill_bitwise,
@@ -562,9 +554,7 @@ void PGLog::check() {
   if (log.log.size() != log_keys_debug.size()) {
     derr << "log.log.size() != log_keys_debug.size()" << dendl;
     derr << "actual log:" << dendl;
-    for (list<pg_log_entry_t>::iterator i = log.log.begin();
-	 i != log.log.end();
-	 ++i) {
+    for (auto i = log.log.begin(); i != log.log.end(); ++i) {
       derr << "    " << *i << dendl;
     }
     derr << "log_keys_debug:" << dendl;
@@ -575,9 +565,7 @@ void PGLog::check() {
     }
   }
   assert(log.log.size() == log_keys_debug.size());
-  for (list<pg_log_entry_t>::iterator i = log.log.begin();
-       i != log.log.end();
-       ++i) {
+  for (auto i = log.log.begin(); i != log.log.end(); ++i) {
     assert(log_keys_debug.count(i->get_key_name()));
   }
 }
@@ -700,7 +688,7 @@ void PGLog::_write_log_and_missing_wo_missing(
     clear_after(log_keys_debug, dirty_from.get_key_name());
   }
 
-  for (list<pg_log_entry_t>::iterator p = log.log.begin();
+  for (auto p = log.log.begin();
        p != log.log.end() && p->version <= dirty_to;
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
@@ -708,7 +696,7 @@ void PGLog::_write_log_and_missing_wo_missing(
     (*km)[p->get_key_name()].claim(bl);
   }
 
-  for (list<pg_log_entry_t>::reverse_iterator p = log.log.rbegin();
+  for (auto p = log.log.rbegin();
        p != log.log.rend() &&
 	 (p->version >= dirty_from || p->version >= writeout_from) &&
 	 p->version >= dirty_to;
@@ -755,7 +743,7 @@ void PGLog::_write_log_and_missing_wo_missing(
     (*km)[entry.get_key_name()].claim(bl);
   }
 
-  for (list<pg_log_dup_t>::reverse_iterator p = log.dups.rbegin();
+  for (auto p = log.dups.rbegin();
        p != log.dups.rend() &&
 	 (p->version >= dirty_from_dups || p->version >= write_from_dups) &&
 	 p->version >= dirty_to_dups;
@@ -829,7 +817,7 @@ void PGLog::_write_log_and_missing(
     clear_after(log_keys_debug, dirty_from.get_key_name());
   }
 
-  for (list<pg_log_entry_t>::iterator p = log.log.begin();
+  for (auto p = log.log.begin();
        p != log.log.end() && p->version <= dirty_to;
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
@@ -837,7 +825,7 @@ void PGLog::_write_log_and_missing(
     (*km)[p->get_key_name()].claim(bl);
   }
 
-  for (list<pg_log_entry_t>::reverse_iterator p = log.log.rbegin();
+  for (auto p = log.log.rbegin();
        p != log.log.rend() &&
 	 (p->version >= dirty_from || p->version >= writeout_from) &&
 	 p->version >= dirty_to;
@@ -884,7 +872,7 @@ void PGLog::_write_log_and_missing(
     (*km)[entry.get_key_name()].claim(bl);
   }
 
-  for (list<pg_log_dup_t>::reverse_iterator p = log.dups.rbegin();
+  for (auto p = log.dups.rbegin();
        p != log.dups.rend() &&
 	 (p->version >= dirty_from_dups || p->version >= write_from_dups) &&
 	 p->version >= dirty_to_dups;
@@ -950,9 +938,7 @@ void PGLog::rebuild_missing_set_with_deletes(
   // versions on disk, just as if we were reading the log + metadata
   // off disk originally
   set<hobject_t> did;
-  for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
-       i != log.log.rend();
-       ++i) {
+  for (auto i = log.log.rbegin(); i != log.log.rend(); ++i) {
     if (i->version <= info.last_complete)
       break;
     if (i->soid > info.last_backfill ||
