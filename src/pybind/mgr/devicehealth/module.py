@@ -78,6 +78,16 @@ class Module(MgrModule):
             "desc": "Check life expectancy of devices",
             "perm": "rw",
         },
+        {
+            "cmd": "device monitoring on",
+            "desc": "Enable device health monitoring",
+            "perm": "rw",
+        },
+        {
+            "cmd": "device monitoring off",
+            "desc": "Disable device health monitoring",
+            "perm": "rw",
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -120,6 +130,14 @@ class Module(MgrModule):
             return self.show_device_metrics(cmd['devid'], cmd.get('sample'))
         elif cmd['prefix'] == 'device check-health':
             return self.check_health()
+        elif cmd['prefix'] == 'device monitoring on':
+            self.set_config('enable_monitoring', 'true')
+            self.event.set()
+            return 0, '', ''
+        elif cmd['prefix'] == 'device monitoring off':
+            self.set_config('enable_monitoring', 'false')
+            self.set_health_checks({})  # avoid stuck health alerts
+            return 0, '', ''
         else:
             # mgr should respect our self.COMMANDS and not call us for
             # any prefix we don't advertise
