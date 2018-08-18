@@ -13,7 +13,16 @@ The *devicehealth* module is enabled with::
 
   ceph mgr module enable devicehealth
 
-(It is enabled by default.)
+(The module is enabled by default.)
+
+To turn on automatic device health monitoring, including regular (daily)
+scraping of device health metrics like SMART::
+
+  ceph device monitoring on
+
+To disable monitoring,::
+
+  ceph device monitoring off
 
 Scraping
 --------
@@ -30,6 +39,10 @@ Or a single daemon's devices can be scraped with::
 
   ceph device scrape-daemon-health-metrics <who>
 
+The stored health metrics for a device can be retrieved (optionally
+for a specific timestamp) with::
+
+  ceph device show-health-metrics <devid> [sample-timestamp]
 
 Health monitoring
 -----------------
@@ -50,3 +63,8 @@ will automatically migrate data away from them by marking the devices
 The ``mgr/devicehealth/mark_out_threshold`` controls how soon an
 expected device failure must be before we automatically mark an osd
 "out".
+
+The stored life expectancy of all devices can be checked, and any
+appropriate health alerts generated, with::
+
+  ceph device check-health
