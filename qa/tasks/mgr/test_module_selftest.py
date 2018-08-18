@@ -236,10 +236,10 @@ class TestModuleSelftest(MgrTestCase):
         # Calling a command on a disabled module should return the proper
         # error code.
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
-            "mgr", "module", "disable", "status")
+            "mgr", "module", "disable", "hello")
         with self.assertRaises(CommandFailedError) as exc_raised:
             self.mgr_cluster.mon_manager.raw_cluster_cmd(
-                "osd", "status")
+                "hello")
 
         self.assertEqual(exc_raised.exception.exitstatus, errno.EOPNOTSUPP)
 
