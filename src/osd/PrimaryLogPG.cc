@@ -4104,37 +4104,39 @@ void PrimaryLogPG::log_op_stats(const OpRequest& op,
   const utime_t latency = now - m->get_recv_stamp();
   const utime_t process_latency = now - op.get_dequeued_time();
 
+  auto& logger = osd->new_logger;
+
   if (op.may_read() && op.may_write()) {
-    osd->new_logger.hinc<l_osd_op_rw_lat_inb_hist>(latency.to_nsec(), inb);
-    osd->new_logger.hinc<l_osd_op_rw_lat_outb_hist>(latency.to_nsec(), outb);
-    osd->new_logger.inc<l_osd_op_rw>();
-    osd->new_logger.inc<l_osd_op_rw_inb>(inb);
-    osd->new_logger.inc<l_osd_op_rw_outb>(outb);
-    osd->new_logger.tinc<l_osd_op_rw_lat>(latency);
-    osd->new_logger.tinc<l_osd_op_rw_process_lat>(process_latency);
+    logger.hinc<l_osd_op_rw_lat_inb_hist>(latency.to_nsec(), inb);
+    logger.hinc<l_osd_op_rw_lat_outb_hist>(latency.to_nsec(), outb);
+    logger.inc<l_osd_op_rw>();
+    logger.inc<l_osd_op_rw_inb>(inb);
+    logger.inc<l_osd_op_rw_outb>(outb);
+    logger.tinc<l_osd_op_rw_lat>(latency);
+    logger.tinc<l_osd_op_rw_process_lat>(process_latency);
   } else if (op.may_read()) {
-    osd->new_logger.hinc<l_osd_op_r_lat_outb_hist>(latency.to_nsec(), outb);
-    osd->new_logger.inc<l_osd_op_r>();
-    osd->new_logger.inc<l_osd_op_r_outb>(outb);
-    osd->new_logger.tinc<l_osd_op_r_lat>(latency);
-    osd->new_logger.tinc<l_osd_op_r_process_lat>(process_latency);
+    logger.hinc<l_osd_op_r_lat_outb_hist>(latency.to_nsec(), outb);
+    logger.inc<l_osd_op_r>();
+    logger.inc<l_osd_op_r_outb>(outb);
+    logger.tinc<l_osd_op_r_lat>(latency);
+    logger.tinc<l_osd_op_r_process_lat>(process_latency);
   } else if (op.may_write() || op.may_cache()) {
-    osd->new_logger.hinc<l_osd_op_w_lat_inb_hist>(latency.to_nsec(), inb);
-    osd->new_logger.inc<l_osd_op_w>();
-    osd->new_logger.inc<l_osd_op_w_inb>(inb);
-    osd->new_logger.tinc<l_osd_op_w_lat>(latency);
-    osd->new_logger.tinc<l_osd_op_w_process_lat>(process_latency);
+    logger.hinc<l_osd_op_w_lat_inb_hist>(latency.to_nsec(), inb);
+    logger.inc<l_osd_op_w>();
+    logger.inc<l_osd_op_w_inb>(inb);
+    logger.tinc<l_osd_op_w_lat>(latency);
+    logger.tinc<l_osd_op_w_process_lat>(process_latency);
   } else {
     ceph_abort();
   }
 
-  osd->new_logger.inc<l_osd_op>();
+  logger.tinc<l_osd_op_lat>(latency);
+  logger.tinc<l_osd_op_process_lat>(process_latency);
 
-  osd->new_logger.inc<l_osd_op_outb>(outb);
-  osd->new_logger.inc<l_osd_op_inb>(inb);
-  osd->new_logger.tinc<l_osd_op_lat>(latency);
-  osd->new_logger.tinc<l_osd_op_process_lat>(process_latency);
+  logger.inc<l_osd_op>();
 
+  logger.inc<l_osd_op_outb>(outb);
+  logger.inc<l_osd_op_inb>(inb);
 
   dout(15) << "log_op_stats " << *m
 	   << " inb " << inb
