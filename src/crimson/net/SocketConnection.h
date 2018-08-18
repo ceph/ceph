@@ -128,7 +128,14 @@ class SocketConnection : public Connection {
   static void discard_up_to(std::queue<MessageRef>*, seq_num_t);
 
   struct Keepalive {
-    ceph_timespec reply_stamp;
+    struct {
+      const char tag = CEPH_MSGR_TAG_KEEPALIVE2;
+      ceph_timespec stamp;
+    } __attribute__((packed)) req;
+    struct {
+      const char tag = CEPH_MSGR_TAG_KEEPALIVE2_ACK;
+      ceph_timespec stamp;
+    } __attribute__((packed)) ack;
     ceph_timespec ack_stamp;
   } k;
 
@@ -151,6 +158,8 @@ class SocketConnection : public Connection {
   seastar::future<MessageRef> read_message() override;
 
   seastar::future<> send(MessageRef msg) override;
+
+  seastar::future<> keepalive() override;
 
   seastar::future<> close() override;
 
