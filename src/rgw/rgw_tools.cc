@@ -189,6 +189,19 @@ const char *rgw_find_mime_by_ext(string& ext)
   return iter->second.c_str();
 }
 
+void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const string& check_prefix,
+                        map<string, bufferlist> *attrset)
+{
+  attrset->clear();
+  map<string, bufferlist>::iterator iter;
+  for (iter = unfiltered_attrset.lower_bound(check_prefix);
+       iter != unfiltered_attrset.end(); ++iter) {
+    if (!boost::algorithm::starts_with(iter->first, check_prefix))
+      break;
+    (*attrset)[iter->first] = iter->second;
+  }
+}
+
 int rgw_tools_init(CephContext *cct)
 {
   ext_mime_map = new std::map<std::string, std::string>;

@@ -309,12 +309,6 @@ public:
   virtual ~RGWGetDataCB() {}
 };
 
-class RGWAccessListFilter {
-public:
-  virtual ~RGWAccessListFilter() {}
-  virtual bool filter(string& name, string& key) = 0;
-};
-
 struct RGWCloneRangeInfo {
   rgw_obj src;
   off_t src_ofs;
@@ -2070,10 +2064,6 @@ public:
    */
   int delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, bool check_empty = true);
 
-  /**
-   * Check to see if the bucket metadata is synced
-   */
-  bool is_syncing_bucket_meta(const rgw_bucket& bucket);
   void wakeup_meta_sync_shards(set<int>& shard_ids);
   void wakeup_data_sync_shards(const string& source_zone, map<int, set<string> >& shard_ids);
 
@@ -2227,11 +2217,6 @@ public:
 
   void gen_rand_obj_instance_name(rgw_obj *target);
 
-  int omap_get_vals(rgw_raw_obj& obj, bufferlist& header, const std::string& marker, uint64_t count, std::map<string, bufferlist>& m);
-  int omap_get_all(rgw_raw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);
-  int omap_set(rgw_raw_obj& obj, const std::string& key, bufferlist& bl, bool must_exist = false);
-  int omap_set(rgw_raw_obj& obj, map<std::string, bufferlist>& m, bool must_exist = false);
-  int omap_del(rgw_raw_obj& obj, const std::string& key);
   int update_containers_stats(map<string, RGWBucketEnt>& m);
   int append_async(rgw_raw_obj& obj, size_t size, bufferlist& bl);
 
