@@ -14,7 +14,7 @@ from six import iteritems
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
 DEFAULTS = {
-    'enable_monitoring': str(True),
+    'enable_monitoring': str(False),
     'scrape_frequency': str(86400),
     'retention_period': str(86400 * 14),
     'pool_name': 'device_health_metrics',
@@ -160,10 +160,9 @@ class Module(MgrModule):
             assert before != after
 
     def refresh_config(self):
-        self.enable_monitoring = self.get_config('enable_monitoring',
-                                                 '') is not '' or 'false'
         for opt, value in iteritems(DEFAULTS):
             setattr(self, opt, self.get_config(opt) or value)
+            self.log.debug(' %s = %s', opt, getattr(self, opt))
 
     def serve(self):
         self.log.info("Starting")
@@ -180,7 +179,7 @@ class Module(MgrModule):
         while self.run:
             self.refresh_config()
 
-            if self.enable_monitoring:
+            if self.enable_monitoring == 'true' or self.enable_monitoring == 'True':
                 self.log.debug('Running')
                 self.check_health()
 
