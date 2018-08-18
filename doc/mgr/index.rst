@@ -28,7 +28,6 @@ sensible.
     Installation and Configuration <administrator>
     Writing plugins <plugins>
     Writing orchestrator plugins <orchestrator_modules>
-    Balancer plugin <balancer>
     Dashboard plugin <dashboard>
     Local pool plugin <localpool>
     RESTful plugin <restful>
