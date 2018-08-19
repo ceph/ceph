@@ -15,15 +15,17 @@ set(librbd_test
   journal/test_Entries.cc
   journal/test_Replay.cc)
 add_library(rbd_test STATIC ${librbd_test})
-target_link_libraries(rbd_test PRIVATE Boost::thread)
-set_target_properties(rbd_test PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+target_link_libraries(rbd_test PRIVATE
+  Boost::thread
+  GMock::GMock
+  GTest::GTest)
 
 set(librbd_test_mock_srcs
   mock/MockImageCtx.cc
   mock/MockJournal.cc)
 add_library(rbd_test_mock STATIC ${librbd_test_mock_srcs})
-set_target_properties(rbd_test_mock PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(rbd_test_mock PUBLIC
+  GMock::GMock)
 
 # unittest_librbd
 # doesn't use add_ceph_test because it is called by run-rbd-unit-tests.sh
@@ -89,8 +91,6 @@ add_executable(unittest_librbd
   ${unittest_librbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 target_compile_definitions(unittest_librbd PUBLIC "-DTEST_LIBRBD_INTERNALS")
-set_target_properties(unittest_librbd PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
 target_link_libraries(unittest_librbd
   cls_rbd
   cls_rbd_client
@@ -127,8 +127,6 @@ target_link_libraries(ceph_test_librbd
   ${UNITTEST_LIBS}
   radostest)
 target_compile_definitions(ceph_test_librbd PUBLIC "-DTEST_LIBRBD_INTERNALS")
-set_target_properties(ceph_test_librbd PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
 
 add_executable(ceph_test_librbd_api
   test_support.cc
@@ -140,8 +138,6 @@ target_link_libraries(ceph_test_librbd_api
   librbd
   librados
   ${UNITTEST_LIBS})
-set_target_properties(ceph_test_librbd_api PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
 
 add_executable(ceph_test_librbd_fsx
   fsx.cc
