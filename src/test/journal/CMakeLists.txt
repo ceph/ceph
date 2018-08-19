@@ -1,6 +1,6 @@
 add_library(journal_test_mock STATIC mock/MockJournaler.cc)
-set_target_properties(journal_test_mock PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(journal_test_mock
+  PUBLIC GMock::GMock)
 
 # unittest_journal
 set(unittest_journal_srcs
