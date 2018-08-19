@@ -139,14 +139,22 @@ int MemDB::_init(bool create)
     if (r < 0) {
       r = -errno;
       if (r != -EEXIST) {
-        derr << __func__ << " mkdir failed: " << cpp_strerror(r) << dendl;
-        return r;
+	derr << __func__ << " mkdir failed: " << cpp_strerror(r) << dendl;
+	return r;
       }
-      return 0; // ignore EEXIST
+      r = 0; // ignore EEXIST
     }
   } else {
     r = _load();
   }
+
+  PerfCountersBuilder plb(g_ceph_context, "memdb", l_memdb_first, l_memdb_last);
+  plb.add_u64_counter(l_memdb_gets, "get", "Gets");
+  plb.add_u64_counter(l_memdb_txns, "submit_transaction", "Submit transactions");
+  plb.add_time_avg(l_memdb_get_latency, "get_latency", "Get latency");
+  plb.add_time_avg(l_memdb_submit_latency, "submit_latency", "Submit Latency");
+  logger = plb.create_perf_counters();
+  m_cct->get_perfcounters_collection()->add(logger);
 
   return r;
 }
@@ -193,10 +201,14 @@ void MemDB::close()
    * Save whatever in memory btree.
    */
   _save();
+  if (logger)
+    m_cct->get_perfcounters_collection()->remove(logger);
 }
 
 int MemDB::submit_transaction(KeyValueDB::Transaction t)
 {
+  utime_t start = ceph_clock_now();
+
   MDBTransactionImpl* mt =  static_cast<MDBTransactionImpl*>(t.get());
 
   dtrace << __func__ << " " << mt->get_ops().size() << dendl;
@@ -213,6 +225,10 @@ int MemDB::submit_transaction(KeyValueDB::Transaction t)
       _rmkey(rm_op);
     }
   }
+
+  utime_t lat = ceph_clock_now() - start;
+  logger->inc(l_memdb_txns);
+  logger->tinc(l_memdb_submit_latency, lat);
 
   return 0;
 }
@@ -399,20 +415,36 @@ bool MemDB::_get_locked(const string &prefix, const string &k, bufferlist *out)
 int MemDB::get(const string &prefix, const std::string& key,
                  bufferlist *out)
 {
+  utime_t start = ceph_clock_now();
+  int ret;
+
   if (_get_locked(prefix, key, out)) {
-    return 0;
+    ret = 0;
+  } else {
+    ret = -ENOENT;
   }
-  return -ENOENT;
+
+  utime_t lat = ceph_clock_now() - start;
+  logger->inc(l_memdb_gets);
+  logger->tinc(l_memdb_get_latency, lat);
+
+  return ret;
 }
 
 int MemDB::get(const string &prefix, const std::set<string> &keys,
     std::map<string, bufferlist> *out)
 {
+  utime_t start = ceph_clock_now();
+
   for (const auto& i : keys) {
     bufferlist bl;
     if (_get_locked(prefix, i, &bl))
       out->insert(make_pair(i, bl));
   }
+
+  utime_t lat = ceph_clock_now() - start;
+  logger->inc(l_memdb_gets);
+  logger->tinc(l_memdb_get_latency, lat);
 
   return 0;
 }
