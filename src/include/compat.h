@@ -159,6 +159,10 @@
 
 #if defined(HAVE_PTHREAD_GETNAME_NP)
   #define ceph_pthread_getname pthread_getname_np
+#elif defined(HAVE_PTHREAD_GET_NAME_NP)
+  #define ceph_pthread_getname(thread, name, len) ({ \
+    pthread_get_name_np(thread, name, len);          \
+    0; })
 #else
   /* compiler warning free success noop */
   #define ceph_pthread_getname(thread, name, len) ({ \
