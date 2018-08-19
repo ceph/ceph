@@ -38,10 +38,18 @@ namespace PriorityCache {
     
     // bound the chunk size to be between 4MB and 32MB
     chunk = (chunk > 4ul*1024*1024) ? chunk : 4ul*1024*1024;
-    chunk = (chunk < 32ul*1024*1024) ? chunk : 32ul*1024*1024;
+    chunk = (chunk < 16ul*1024*1024) ? chunk : 16ul*1024*1024;
  
-    // Add 7 chunks of headroom and round up to the near chunk
-    uint64_t val = usage + (7 * chunk);
+    /* Add 16 chunks of headroom and round up to the near chunk.  Note that 
+     * if RocksDB is used, it's a good idea to have N MB of headroom where
+     * N is the target_file_size_base value.  RocksDB will read SST files
+     * into the block cache during compaction which potentially can force out
+     * all existing cached data.  Once compaction is finished, the SST data is
+     * released leaving an empty cache.  Having enough headroom to absorb
+     * compaction reads allows the kv cache grow even during extremely heavy 
+     * compaction workloads. 
+     */
+    uint64_t val = usage + (16 * chunk);
     uint64_t r = (val) % chunk;
     if (r > 0)
       val = val + chunk - r;
@@ -292,20 +300,6 @@ namespace PriorityCache {
       cur_ratios += it->second->get_cache_ratio();
     }
 
-    // If this is the last priority, divide up any remaining memory based
-    // solely on the ratios.
-    if (pri == Priority::LAST) {
-      uint64_t total_assigned = 0;
-      for (auto it = caches.begin(); it != caches.end(); it++) {
-        double ratio = it->second->get_cache_ratio();
-        int64_t fair_share = static_cast<int64_t>(*mem_avail * ratio);
-        it->second->set_cache_bytes(Priority::LAST, fair_share);
-        total_assigned += fair_share;
-      }
-      *mem_avail -= total_assigned;
-      return;
-    }
-
     // For other priorities, loop until caches are satisified or we run out of
     // memory (stop if we can't guarantee a full byte allocation).
     while (!tmp_caches.empty() && *mem_avail > static_cast<int64_t>(tmp_caches.size())) {
@@ -355,6 +349,19 @@ namespace PriorityCache {
       cur_ratios = new_ratios;
       new_ratios = 0;
       ++round;
+    }
+
+    // If this is the last priority, divide up any remaining memory based
+    // solely on the ratios.
+    if (pri == Priority::LAST) {
+      uint64_t total_assigned = 0;
+      for (auto it = caches.begin(); it != caches.end(); it++) {
+        double ratio = it->second->get_cache_ratio();
+        int64_t fair_share = static_cast<int64_t>(*mem_avail * ratio);
+        it->second->set_cache_bytes(Priority::LAST, fair_share);
+        total_assigned += fair_share;
+      }
+      *mem_avail -= total_assigned;
     }
   }
 
