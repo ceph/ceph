@@ -233,7 +233,7 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
   con->send_message(new MPing);
 
   pinger->lock.Lock();
-  int ret = pinger->wait_for_reply(cct->_conf->client_mount_timeout);
+  int ret = pinger->wait_for_reply(cct->_conf->mon_client_ping_timeout);
   if (ret == 0) {
     ldout(cct,10) << __func__ << " got ping reply" << dendl;
   } else {
