@@ -157,6 +157,8 @@ struct MockImageCtx {
   MOCK_CONST_METHOD1(get_image_size, uint64_t(librados::snap_t));
   MOCK_CONST_METHOD1(get_object_count, uint64_t(librados::snap_t));
   MOCK_CONST_METHOD1(get_read_flags, int(librados::snap_t));
+  MOCK_CONST_METHOD2(get_flags, int(librados::snap_t in_snap_id,
+                     uint64_t *flags));
   MOCK_CONST_METHOD2(get_snap_id,
 		     librados::snap_t(cls::rbd::SnapshotNamespace snap_namespace,
 				      std::string in_snap_name));
