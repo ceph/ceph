@@ -461,7 +461,7 @@ TYPE(rgw_data_sync_status)
 
 #ifdef WITH_RBD
 #include "cls/rbd/cls_rbd.h"
-TYPE(cls_rbd_parent)
+TYPE_FEATUREFUL(cls_rbd_parent)
 TYPE(cls_rbd_snap)
 
 #include "cls/rbd/cls_rbd_types.h"
