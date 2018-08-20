@@ -104,7 +104,7 @@ WRITE_CLASS_ENCODER_FEATURES(cls_rbd_parent)
 
 struct cls_rbd_snap {
   snapid_t id = CEPH_NOSNAP;
-  string name;
+  std::string name;
   uint64_t image_size = 0;
   uint8_t protection_status = RBD_PROTECTION_STATUS_UNPROTECTED;
   cls_rbd_parent parent;
@@ -115,9 +115,18 @@ struct cls_rbd_snap {
   uint32_t child_count = 0;
   std::optional<uint64_t> parent_overlap = std::nullopt;
 
-  /// true if we have a parent
-  bool has_parent() const {
-    return parent.exists();
+  cls_rbd_snap() {
+  }
+  cls_rbd_snap(snapid_t id, const std::string& name, uint64_t image_size,
+               uint8_t protection_status, const cls_rbd_parent& parent,
+               uint64_t flags, utime_t timestamp,
+               const cls::rbd::SnapshotNamespace& snapshot_namespace,
+               uint32_t child_count,
+               const std::optional<uint64_t>& parent_overlap)
+    : id(id), name(name), image_size(image_size),
+      protection_status(protection_status), parent(parent), flags(flags),
+      timestamp(timestamp), snapshot_namespace(snapshot_namespace),
+      child_count(child_count), parent_overlap(parent_overlap) {
   }
 
   bool migrate_parent_format(uint64_t features) const {
@@ -126,13 +135,22 @@ struct cls_rbd_snap {
   }
 
   void encode(bufferlist& bl, uint64_t features) const {
-    ENCODE_START(8, 1, bl);
+    // NOTE: remove support for versions < 8 after Nautilus EOLed
+    uint8_t min_version = 1;
+    if ((features & CEPH_FEATURE_SERVER_NAUTILUS) != 0ULL) {
+      // break backwards compatability when using nautilus or later OSDs
+      min_version = 8;
+    }
+
+    ENCODE_START(8, min_version, bl);
     encode(id, bl);
     encode(name, bl);
     encode(image_size, bl);
-    uint64_t features = 0;
-    encode(features, bl); // unused -- preserve ABI
-    encode(parent, bl, features);
+    if (min_version < 8) {
+      uint64_t image_features = 0;
+      encode(image_features, bl); // unused -- preserve ABI
+      encode(parent, bl, features);
+    }
     encode(protection_status, bl);
     encode(flags, bl);
     encode(snapshot_namespace, bl);
@@ -141,14 +159,17 @@ struct cls_rbd_snap {
     encode(parent_overlap, bl);
     ENCODE_FINISH(bl);
   }
+
   void decode(bufferlist::const_iterator& p) {
-    DECODE_START(7, p);
+    DECODE_START(8, p);
     decode(id, p);
     decode(name, p);
     decode(image_size, p);
-    uint64_t features;
-    decode(features, p); // unused -- preserve ABI
-    if (struct_v >= 2) {
+    if (struct_compat < 8) {
+      uint64_t features;
+      decode(features, p); // unused -- preserve ABI
+    }
+    if (struct_v >= 2 && struct_compat < 8) {
       decode(parent, p);
     }
     if (struct_v >= 3) {
@@ -171,11 +192,12 @@ struct cls_rbd_snap {
     }
     DECODE_FINISH(p);
   }
+
   void dump(Formatter *f) const {
     f->dump_unsigned("id", id);
     f->dump_string("name", name);
     f->dump_unsigned("image_size", image_size);
-    if (has_parent()) {
+    if (parent.exists()) {
       f->open_object_section("parent");
       parent.dump(f);
       f->close_section();
@@ -198,24 +220,22 @@ struct cls_rbd_snap {
       f->dump_unsigned("parent_overlap", *parent_overlap);
     }
   }
+
   static void generate_test_instances(list<cls_rbd_snap*>& o) {
-    o.push_back(new cls_rbd_snap);
-    cls_rbd_snap *t = new cls_rbd_snap;
-    t->id = 1;
-    t->name = "snap";
-    t->image_size = 123456;
-    t->flags = 31;
-    t->child_count = 543;
-    o.push_back(t);
-    t = new cls_rbd_snap;
-    t->id = 2;
-    t->name = "snap2";
-    t->image_size = 12345678;
-    t->parent = {{1, "", "parent", 456}, 12345};
-    t->protection_status = RBD_PROTECTION_STATUS_PROTECTED;
-    t->flags = 14;
-    t->timestamp = utime_t();
-    o.push_back(t);
+    o.push_back(new cls_rbd_snap{});
+    o.push_back(new cls_rbd_snap{1, "snap", 123456,
+                                 RBD_PROTECTION_STATUS_PROTECTED,
+                                 {{1, "", "image", 123}, 234}, 31, {},
+                                 cls::rbd::UserSnapshotNamespace{}, 543, {}});
+    o.push_back(new cls_rbd_snap{1, "snap", 123456,
+                                 RBD_PROTECTION_STATUS_PROTECTED,
+                                 {{1, "", "image", 123}, 234}, 31, {},
+                                 cls::rbd::UserSnapshotNamespace{}, 543, {0}});
+    o.push_back(new cls_rbd_snap{1, "snap", 123456,
+                                 RBD_PROTECTION_STATUS_PROTECTED,
+                                 {{1, "ns", "image", 123}, 234}, 31, {},
+                                 cls::rbd::UserSnapshotNamespace{}, 543,
+                                 {123}});
   }
 };
 WRITE_CLASS_ENCODER_FEATURES(cls_rbd_snap)
