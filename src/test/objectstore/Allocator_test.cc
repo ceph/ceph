@@ -241,7 +241,8 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   for (size_t i = 0; i < capacity / alloc_unit; ++i)
   {
     tmp.clear();
-    EXPECT_EQ(want_size, alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
+    EXPECT_EQ(static_cast<int64_t>(want_size),
+	      alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
     allocated.insert(allocated.end(), tmp.begin(), tmp.end());
 
     // bitmap fragmentation calculation doesn't provide such constant
@@ -267,7 +268,7 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   }
   if (bitmap_alloc) {
     // fragmentation = one l1 slot is free + one l1 slot is partial
-    EXPECT_EQ(50, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+    EXPECT_EQ(50U, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
   } else {
     // fragmentation approx = 257 intervals / 768 max intervals
     EXPECT_EQ(33, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
@@ -310,9 +311,10 @@ TEST_P(AllocTest, test_alloc_bug_24598)
   alloc->init_add_free(0x4900000, 0x100000);
   alloc->init_add_free(0x4b00000, 0x200000);
 
-  EXPECT_EQ(want_size, alloc->allocate(want_size, 0x100000, 0, 0, &tmp));
-  EXPECT_EQ(tmp[0].offset, 0x4b00000);
-  EXPECT_EQ(tmp[0].length, 0x200000);
+  EXPECT_EQ(static_cast<int64_t>(want_size),
+	    alloc->allocate(want_size, 0x100000, 0, 0, &tmp));
+  EXPECT_EQ(tmp[0].offset, 0x4b00000U);
+  EXPECT_EQ(tmp[0].length, 0x200000U);
   EXPECT_EQ(tmp.size(), 1);
 }
 
