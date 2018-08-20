@@ -489,14 +489,10 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
       continue;
     }
 
-    if (key == "X-Amz-Credential") {
-      /* FIXME(rzarzynski): I can't find any comment in the previously linked
-       * Amazon's docs saying that X-Amz-Credential should be handled in this
-       * way. */
-      canonical_qs_map[key.to_string()] = val.to_string();
-    } else {
-      canonical_qs_map[aws4_uri_recode(key, true)] = aws4_uri_recode(val, true);
-    }
+    // while awsv4 specs ask for all slashes to be encoded, s3 itself is relaxed
+    // in its implementation allowing non-url-encoded slashes to be present in
+    // presigned urls for instance
+    canonical_qs_map[aws4_uri_recode(key, true)] = aws4_uri_recode(val, true);
   }
 
   /* Thanks to the early exist we have the guarantee that canonical_qs_map has
