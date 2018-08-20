@@ -2105,7 +2105,7 @@ void Server::handle_slave_request(const MMDSSlaveRequest::const_ref &m)
     return;
   }
 
-  mdr->slave_request = m;
+  mdr->reset_slave_request(m);
   
   dispatch_slave_request(mdr);
 }
@@ -2263,7 +2263,7 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
       }
 
       // done.
-      mdr->slave_request = 0;
+      mdr->reset_slave_request();
     }
     break;
 
@@ -2286,13 +2286,13 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
 	mds->locker->issue_caps(static_cast<CInode*>(lock->get_parent()));
 
       // done.  no ack necessary.
-      mdr->slave_request = 0;
+      mdr->reset_slave_request();
     }
     break;
 
   case MMDSSlaveRequest::OP_DROPLOCKS:
     mds->locker->drop_locks(mdr.get());
-    mdr->slave_request = 0;
+    mdr->reset_slave_request();
     break;
 
   case MMDSSlaveRequest::OP_AUTHPIN:
@@ -2441,7 +2441,7 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
   mds->send_message_mds(reply, mdr->slave_to_mds);
   
   // clean up this request
-  mdr->slave_request = 0;
+  mdr->reset_slave_request();
   return;
 }
 
@@ -5925,7 +5925,7 @@ void Server::_logged_slave_link(MDRequestRef& mdr, CInode *targeti, bool adjust_
   mds->balancer->hit_inode(targeti, META_POP_IWR);
 
   // done.
-  mdr->slave_request = 0;
+  mdr->reset_slave_request();
 
   if (adjust_realm) {
     int op = CEPH_SNAP_OP_SPLIT;
@@ -6636,7 +6636,7 @@ void Server::_logged_slave_rmdir(MDRequestRef& mdr, CDentry *dn, CDentry *strayd
       mdcache->do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT, false);
 
   // done.
-  mdr->slave_request = 0;
+  mdr->reset_slave_request();
   mdr->straydn = 0;
 
   if (!mdr->aborted) {
@@ -8084,7 +8084,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
     auto reply = MMDSSlaveRequest::create(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMEPREPACK);
     reply->mark_interrupted();
     mds->send_message_mds(reply, mdr->slave_to_mds);
-    mdr->slave_request = 0;
+    mdr->reset_slave_request();
     return;
   }
 
@@ -8217,7 +8217,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
       auto reply = MMDSSlaveRequest::create(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMEPREPACK);
       reply->witnesses.swap(srcdnrep);
       mds->send_message_mds(reply, mdr->slave_to_mds);
-      mdr->slave_request = 0;
+      mdr->reset_slave_request();
       return;	
     }
     dout(10) << " witness list sufficient: includes all srcdn replicas" << dendl;
@@ -8373,7 +8373,7 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
     mds->balancer->hit_inode(destdnl->get_inode(), META_POP_IWR);
 
   // done.
-  mdr->slave_request = 0;
+  mdr->reset_slave_request();
   mdr->straydn = 0;
 
   if (reply) {
