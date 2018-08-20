@@ -33,7 +33,7 @@ namespace ceph {
     public:
       Digest (SECOidTag _type, size_t _digest_size) : digest_size(_digest_size) {
 	ctx = PK11_CreateDigestContext(_type);
-	assert(ctx);
+	ceph_assert_always(ctx);
 	Restart();
       }
       ~Digest () {
@@ -42,21 +42,21 @@ namespace ceph {
       void Restart() {
 	SECStatus s;
 	s = PK11_DigestBegin(ctx);
-	assert(s == SECSuccess);
+	ceph_assert_always(s == SECSuccess);
       }
       void Update (const unsigned char *input, size_t length) {
         if (length) {
 	  SECStatus s;
 	  s = PK11_DigestOp(ctx, input, length);
-	  assert(s == SECSuccess);
+	  ceph_assert_always(s == SECSuccess);
         }
       }
       void Final (unsigned char *digest) {
 	SECStatus s;
 	unsigned int dummy;
 	s = PK11_DigestFinal(ctx, digest, &dummy, digest_size);
-	assert(s == SECSuccess);
-	assert(dummy == digest_size);
+	ceph_assert_always(s == SECSuccess);
+	ceph_assert_always(dummy == digest_size);
 	Restart();
       }
     };
@@ -85,39 +85,39 @@ namespace ceph {
       HMAC (CK_MECHANISM_TYPE cktype, unsigned int digestsize, const unsigned char *key, size_t length) {
         digest_size = digestsize;
 	slot = PK11_GetBestSlot(cktype, NULL);
-	assert(slot);
+	ceph_assert_always(slot);
 	SECItem keyItem;
 	keyItem.type = siBuffer;
 	keyItem.data = (unsigned char*)key;
 	keyItem.len = length;
 	symkey = PK11_ImportSymKey(slot, cktype, PK11_OriginUnwrap,
 				   CKA_SIGN,  &keyItem, NULL);
-	assert(symkey);
+	ceph_assert_always(symkey);
 	SECItem param;
 	param.type = siBuffer;
 	param.data = NULL;
 	param.len = 0;
 	ctx = PK11_CreateContextBySymKey(cktype, CKA_SIGN, symkey, &param);
-	assert(ctx);
+	ceph_assert_always(ctx);
 	Restart();
       }
       ~HMAC ();
       void Restart() {
 	SECStatus s;
 	s = PK11_DigestBegin(ctx);
-	assert(s == SECSuccess);
+	ceph_assert_always(s == SECSuccess);
       }
       void Update (const unsigned char *input, size_t length) {
 	SECStatus s;
 	s = PK11_DigestOp(ctx, input, length);
-	assert(s == SECSuccess);
+	ceph_assert_always(s == SECSuccess);
       }
       void Final (unsigned char *digest) {
 	SECStatus s;
 	unsigned int dummy;
 	s = PK11_DigestFinal(ctx, digest, &dummy, digest_size);
-	assert(s == SECSuccess);
-	assert(dummy == digest_size);
+	ceph_assert_always(s == SECSuccess);
+	ceph_assert_always(dummy == digest_size);
 	Restart();
       }
     };
