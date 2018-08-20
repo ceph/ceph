@@ -102,6 +102,7 @@ void StrayManager::purge(CDentry *dn)
 
   PurgeItem item;
   item.ino = in->inode.ino;
+  item.stamp = ceph_clock_now();
   if (in->is_dir()) {
     item.action = PurgeItem::PURGE_DIR;
     item.fragtree = in->dirfragtree;
@@ -737,6 +738,7 @@ void StrayManager::truncate(CDentry *dn)
   item.layout = in->inode.layout;
   item.snapc = *snapc;
   item.size = to;
+  item.stamp = ceph_clock_now();
 
   purge_queue.push(item, new C_IO_PurgeStrayPurged(
         this, dn, true));
