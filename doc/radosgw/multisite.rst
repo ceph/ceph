@@ -63,10 +63,13 @@ A multi-site configuration requires at least two Ceph storage clusters,
 preferably given a distinct cluster name. At least two Ceph object
 gateway instances, one for each Ceph storage cluster.
 
-This guide assumes at least two Ceph storage clusters in geographically
+This guide assumes at least two Ceph storage clusters are in geographically
 separate locations; however, the configuration can work on the same
 site. This guide also assumes two Ceph object gateway servers named
 ``rgw1`` and ``rgw2``.
+
+.. important:: Running a single Ceph storage cluster is NOT recommended unless you have 
+               low latency WAN connections.
 
 A multi-site configuration requires a master zone group and a master
 zone. Additionally, each zone group requires a master zone. Zone groups
