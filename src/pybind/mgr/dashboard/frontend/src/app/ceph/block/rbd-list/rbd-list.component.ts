@@ -9,6 +9,7 @@ import { DeletionModalComponent } from '../../../shared/components/deletion-moda
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
+import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
@@ -40,6 +41,7 @@ export class RbdListComponent implements OnInit {
   flattenTpl: TemplateRef<any>;
 
   permission: Permission;
+  tableActions: CdTableAction[];
   images: any;
   columns: CdTableColumn[];
   retries: number;
@@ -75,6 +77,45 @@ export class RbdListComponent implements OnInit {
     private taskListService: TaskListService
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
+    const getImageUri = () =>
+      this.selection.first() &&
+      `${encodeURI(this.selection.first().pool_name)}/${encodeURI(this.selection.first().name)}`;
+    const addAction: CdTableAction = {
+      permission: 'create',
+      icon: 'fa-plus',
+      routerLink: () => '/block/rbd/add',
+      buttonCondition: (selection: CdTableSelection) => !selection.hasSingleSelection,
+      name: 'Add'
+    };
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: 'fa-pencil',
+      routerLink: () => `/block/rbd/edit/${getImageUri()}`,
+      name: 'Edit'
+    };
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: 'fa-trash-o',
+      click: () => this.deleteRbdModal(),
+      name: 'Delete'
+    };
+    const copyAction: CdTableAction = {
+      permission: 'create',
+      buttonCondition: (selection: CdTableSelection) => selection.hasSingleSelection,
+      disable: (selection: CdTableSelection) => !selection.hasSingleSelection,
+      icon: 'fa-copy',
+      routerLink: () => `/block/rbd/copy/${getImageUri()}`,
+      name: 'Copy'
+    };
+    const flattenAction: CdTableAction = {
+      permission: 'update',
+      disable: (selection: CdTableSelection) =>
+        !selection.hasSingleSelection || selection.first().cdExecuting || !selection.first().parent,
+      icon: 'fa-chain-broken',
+      click: () => this.flattenRbdModal(),
+      name: 'Flatten'
+    };
+    this.tableActions = [addAction, editAction, copyAction, flattenAction, deleteAction];
   }
 
   ngOnInit() {
