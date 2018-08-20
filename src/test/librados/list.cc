@@ -185,7 +185,8 @@ TEST_F(LibRadosList, ListObjectsNS) {
 
   char nspace[4];
   ASSERT_EQ(-ERANGE, rados_ioctx_get_namespace(ioctx, nspace, 3));
-  ASSERT_EQ(strlen("ns2"), rados_ioctx_get_namespace(ioctx, nspace, sizeof(nspace)));
+  ASSERT_EQ(static_cast<int>(strlen("ns2")),
+	    rados_ioctx_get_namespace(ioctx, nspace, sizeof(nspace)));
   ASSERT_EQ(0, strcmp("ns2", nspace));
 
   std::set<std::string> def, ns1, ns2, all;
