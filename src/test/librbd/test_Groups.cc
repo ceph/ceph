@@ -34,7 +34,7 @@ TEST_F(TestGroup, group_create)
   ASSERT_EQ(strlen("mygroup") + 1, size);
 
   char groups[80];
-  ASSERT_EQ(static_cast<size_t>(strlen("mygroup") + 1),
+  ASSERT_EQ(static_cast<int>(strlen("mygroup") + 1),
 	    rbd_group_list(ioctx, groups, &size));
   ASSERT_STREQ("mygroup", groups);
 

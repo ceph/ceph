@@ -546,7 +546,7 @@ TEST_F(TestMockManagedLock, ReacquireWithSameCookie) {
   C_SaferCond reacquire_ctx;
   expect_post_reacquired_lock_handler(*mock_image_ctx.image_watcher, managed_lock, client_id);
   managed_lock.reacquire_lock(&reacquire_ctx);
-  ASSERT_LT(0, client_id);
+  ASSERT_LT(0U, client_id);
   ASSERT_TRUE(is_lock_owner(managed_lock));
 
   MockReleaseRequest shutdown_release;
