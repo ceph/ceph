@@ -61,18 +61,6 @@ int set_size(librados::IoCtx *ioctx, const std::string &oid,
              uint64_t size);
 void set_size(librados::ObjectWriteOperation *op, uint64_t size);
 
-void get_parent_start(librados::ObjectReadOperation *op, snapid_t snap_id);
-int get_parent_finish(bufferlist::const_iterator *it, ParentSpec *pspec,
-                      uint64_t *parent_overlap);
-int get_parent(librados::IoCtx *ioctx, const std::string &oid,
-               snapid_t snap_id, ParentSpec *pspec,
-               uint64_t *parent_overlap);
-
-int set_parent(librados::IoCtx *ioctx, const std::string &oid,
-               const ParentSpec &pspec, uint64_t parent_overlap);
-void set_parent(librados::ObjectWriteOperation *op,
-                const ParentSpec &pspec, uint64_t parent_overlap);
-
 void get_flags_start(librados::ObjectReadOperation *op, snapid_t snap_id);
 int get_flags_finish(bufferlist::const_iterator *it, uint64_t *flags);
 int get_flags(librados::IoCtx *ioctx, const std::string &oid,
@@ -89,8 +77,46 @@ void op_features_set(librados::ObjectWriteOperation *op,
                      uint64_t op_features, uint64_t mask);
 int op_features_set(librados::IoCtx *ioctx, const std::string &oid,
                     uint64_t op_features, uint64_t mask);
+
+// NOTE: deprecate v1 parent APIs after mimic EOLed
+void get_parent_start(librados::ObjectReadOperation *op, snapid_t snap_id);
+int get_parent_finish(bufferlist::const_iterator *it, ParentSpec *pspec,
+                      uint64_t *parent_overlap);
+int get_parent(librados::IoCtx *ioctx, const std::string &oid,
+               snapid_t snap_id, ParentSpec *pspec,
+               uint64_t *parent_overlap);
+int set_parent(librados::IoCtx *ioctx, const std::string &oid,
+               const ParentSpec &pspec, uint64_t parent_overlap);
+void set_parent(librados::ObjectWriteOperation *op,
+                const ParentSpec &pspec, uint64_t parent_overlap);
 int remove_parent(librados::IoCtx *ioctx, const std::string &oid);
 void remove_parent(librados::ObjectWriteOperation *op);
+
+// v2 parent APIs
+void parent_get_start(librados::ObjectReadOperation* op);
+int parent_get_finish(bufferlist::const_iterator* it,
+                      cls::rbd::ParentImageSpec* parent_image_spec);
+int parent_get(librados::IoCtx* ioctx, const std::string &oid,
+               cls::rbd::ParentImageSpec* parent_image_spec);
+
+void parent_overlap_get_start(librados::ObjectReadOperation* op,
+                              snapid_t snap_id);
+int parent_overlap_get_finish(bufferlist::const_iterator* it,
+                              std::optional<uint64_t>* parent_overlap);
+int parent_overlap_get(librados::IoCtx* ioctx, const std::string &oid,
+                       snapid_t snap_id,
+                       std::optional<uint64_t>* parent_overlap);
+
+void parent_attach(librados::ObjectWriteOperation* op,
+                   const cls::rbd::ParentImageSpec& parent_image_spec,
+                   uint64_t parent_overlap);
+int parent_attach(librados::IoCtx *ioctx, const std::string &oid,
+                  const cls::rbd::ParentImageSpec& parent_image_spec,
+                  uint64_t parent_overlap);
+
+void parent_detach(librados::ObjectWriteOperation* op);
+int parent_detach(librados::IoCtx *ioctx, const std::string &oid);
+
 int add_child(librados::IoCtx *ioctx, const std::string &oid,
               const ParentSpec &pspec, const std::string &c_imageid);
 void add_child(librados::ObjectWriteOperation *op,

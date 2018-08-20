@@ -206,63 +206,6 @@ void set_size(librados::ObjectWriteOperation *op, uint64_t size)
   op->exec("rbd", "set_size", bl);
 }
 
-void get_parent_start(librados::ObjectReadOperation *op, snapid_t snap_id)
-{
-  bufferlist bl;
-  encode(snap_id, bl);
-  op->exec("rbd", "get_parent", bl);
-}
-
-int get_parent_finish(bufferlist::const_iterator *it, ParentSpec *pspec,
-                      uint64_t *parent_overlap)
-{
-  try {
-    decode(pspec->pool_id, *it);
-    decode(pspec->image_id, *it);
-    decode(pspec->snap_id, *it);
-    decode(*parent_overlap, *it);
-  } catch (const buffer::error &) {
-    return -EBADMSG;
-  }
-  return 0;
-}
-
-int get_parent(librados::IoCtx *ioctx, const std::string &oid,
-               snapid_t snap_id, ParentSpec *pspec,
-               uint64_t *parent_overlap)
-{
-  librados::ObjectReadOperation op;
-  get_parent_start(&op, snap_id);
-
-  bufferlist out_bl;
-  int r = ioctx->operate(oid, &op, &out_bl);
-  if (r < 0) {
-    return r;
-  }
-
-  auto it = out_bl.cbegin();
-  return get_parent_finish(&it, pspec, parent_overlap);
-}
-
-int set_parent(librados::IoCtx *ioctx, const std::string &oid,
-               const ParentSpec &pspec, uint64_t parent_overlap)
-{
-  librados::ObjectWriteOperation op;
-  set_parent(&op, pspec, parent_overlap);
-  return ioctx->operate(oid, &op);
-}
-
-void set_parent(librados::ObjectWriteOperation *op,
-                const ParentSpec &pspec, uint64_t parent_overlap) {
-  bufferlist in_bl;
-  encode(pspec.pool_id, in_bl);
-  encode(pspec.image_id, in_bl);
-  encode(pspec.snap_id, in_bl);
-  encode(parent_overlap, in_bl);
-
-  op->exec("rbd", "set_parent", in_bl);
-}
-
 void get_flags_start(librados::ObjectReadOperation *op, snapid_t snap_id) {
   bufferlist in_bl;
   encode(static_cast<snapid_t>(snap_id), in_bl);
@@ -354,6 +297,63 @@ int op_features_set(librados::IoCtx *ioctx, const std::string &oid,
   return ioctx->operate(oid, &op);
 }
 
+void get_parent_start(librados::ObjectReadOperation *op, snapid_t snap_id)
+{
+  bufferlist bl;
+  encode(snap_id, bl);
+  op->exec("rbd", "get_parent", bl);
+}
+
+int get_parent_finish(bufferlist::const_iterator *it, ParentSpec *pspec,
+                      uint64_t *parent_overlap)
+{
+  try {
+    decode(pspec->pool_id, *it);
+    decode(pspec->image_id, *it);
+    decode(pspec->snap_id, *it);
+    decode(*parent_overlap, *it);
+  } catch (const buffer::error &) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+int get_parent(librados::IoCtx *ioctx, const std::string &oid,
+               snapid_t snap_id, ParentSpec *pspec,
+               uint64_t *parent_overlap)
+{
+  librados::ObjectReadOperation op;
+  get_parent_start(&op, snap_id);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(oid, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto it = out_bl.cbegin();
+  return get_parent_finish(&it, pspec, parent_overlap);
+}
+
+int set_parent(librados::IoCtx *ioctx, const std::string &oid,
+               const ParentSpec &pspec, uint64_t parent_overlap)
+{
+  librados::ObjectWriteOperation op;
+  set_parent(&op, pspec, parent_overlap);
+  return ioctx->operate(oid, &op);
+}
+
+void set_parent(librados::ObjectWriteOperation *op,
+                const ParentSpec &pspec, uint64_t parent_overlap) {
+  bufferlist in_bl;
+  encode(pspec.pool_id, in_bl);
+  encode(pspec.image_id, in_bl);
+  encode(pspec.snap_id, in_bl);
+  encode(parent_overlap, in_bl);
+
+  op->exec("rbd", "set_parent", in_bl);
+}
+
 int remove_parent(librados::IoCtx *ioctx, const std::string &oid)
 {
   librados::ObjectWriteOperation op;
@@ -365,6 +365,105 @@ void remove_parent(librados::ObjectWriteOperation *op)
 {
   bufferlist inbl;
   op->exec("rbd", "remove_parent", inbl);
+}
+
+void parent_get_start(librados::ObjectReadOperation* op) {
+  bufferlist in_bl;
+  op->exec("rbd", "parent_get", in_bl);
+}
+
+int parent_get_finish(bufferlist::const_iterator* it,
+                      cls::rbd::ParentImageSpec* parent_image_spec) {
+  try {
+    decode(*parent_image_spec, *it);
+  } catch (const buffer::error &) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+int parent_get(librados::IoCtx* ioctx, const std::string &oid,
+               cls::rbd::ParentImageSpec* parent_image_spec) {
+  librados::ObjectReadOperation op;
+  parent_get_start(&op);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(oid, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto it = out_bl.cbegin();
+  r = parent_get_finish(&it, parent_image_spec);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void parent_overlap_get_start(librados::ObjectReadOperation* op,
+                              snapid_t snap_id) {
+  bufferlist in_bl;
+  encode(snap_id, in_bl);
+  op->exec("rbd", "parent_overlap_get", in_bl);
+}
+
+int parent_overlap_get_finish(bufferlist::const_iterator* it,
+                              std::optional<uint64_t>* parent_overlap) {
+  try {
+    decode(*parent_overlap, *it);
+  } catch (const buffer::error &) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+int parent_overlap_get(librados::IoCtx* ioctx, const std::string &oid,
+                       snapid_t snap_id,
+                       std::optional<uint64_t>* parent_overlap) {
+  librados::ObjectReadOperation op;
+  parent_overlap_get_start(&op, snap_id);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(oid, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto it = out_bl.cbegin();
+  r = parent_overlap_get_finish(&it, parent_overlap);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void parent_attach(librados::ObjectWriteOperation* op,
+                   const cls::rbd::ParentImageSpec& parent_image_spec,
+                   uint64_t parent_overlap) {
+  bufferlist in_bl;
+  encode(parent_image_spec, in_bl);
+  encode(parent_overlap, in_bl);
+  op->exec("rbd", "parent_attach", in_bl);
+}
+
+int parent_attach(librados::IoCtx *ioctx, const std::string &oid,
+                  const cls::rbd::ParentImageSpec& parent_image_spec,
+                  uint64_t parent_overlap) {
+  librados::ObjectWriteOperation op;
+  parent_attach(&op, parent_image_spec, parent_overlap);
+  return ioctx->operate(oid, &op);
+}
+
+void parent_detach(librados::ObjectWriteOperation* op) {
+  bufferlist in_bl;
+  op->exec("rbd", "parent_detach", in_bl);
+}
+
+int parent_detach(librados::IoCtx *ioctx, const std::string &oid) {
+  librados::ObjectWriteOperation op;
+  parent_detach(&op);
+  return ioctx->operate(oid, &op);
 }
 
 int add_child(librados::IoCtx *ioctx, const std::string &oid,
