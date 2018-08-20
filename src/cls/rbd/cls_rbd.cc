@@ -66,6 +66,19 @@ CLS_NAME(rbd)
 #define RBD_DIR_NAME_KEY_PREFIX "name_"
 #define RBD_METADATA_KEY_PREFIX "metadata_"
 
+namespace {
+
+uint64_t get_encode_features(cls_method_context_t hctx) {
+  uint64_t features = 0;
+  int8_t require_osd_release = cls_get_required_osd_release(hctx);
+  if (require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+    features |= CEPH_FEATURE_SERVER_NAUTILUS;
+  }
+  return features;
+}
+
+} // anonymous namespace
+
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
   unsigned snap_count = 0;
@@ -144,6 +157,20 @@ template <typename T>
 static int write_key(cls_method_context_t hctx, const string &key, const T &t) {
   bufferlist bl;
   encode(t, bl);
+
+  int r = cls_cxx_map_set_val(hctx, key, &bl);
+  if (r < 0) {
+    CLS_ERR("failed to set omap key: %s", key.c_str());
+    return r;
+  }
+  return 0;
+}
+
+template <typename T>
+static int write_key(cls_method_context_t hctx, const string &key, const T &t,
+                     uint64_t features) {
+  bufferlist bl;
+  encode(t, bl, features);
 
   int r = cls_cxx_map_set_val(hctx, key, &bl);
   if (r < 0) {
@@ -801,13 +828,10 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       r = 0;
     if (r < 0)
       return r;
-    if (parent.exists() && parent.overlap > size) {
-      bufferlist parentbl;
-      parent.overlap = size;
-      encode(parent, parentbl);
-      r = cls_cxx_map_set_val(hctx, "parent", &parentbl);
+    if (parent.exists() && parent.head_overlap.value_or(0ULL) > size) {
+      parent.head_overlap = size;
+      r = write_key(hctx, "parent", parent, get_encode_features(hctx));
       if (r < 0) {
-	CLS_ERR("error writing parent: %s", cpp_strerror(r).c_str());
 	return r;
       }
     }
@@ -1398,10 +1422,10 @@ int get_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     }
   }
 
-  encode(parent.pool, *out);
-  encode(parent.id, *out);
-  encode(parent.snapid, *out);
-  encode(parent.overlap, *out);
+  encode(parent.pool_id, *out);
+  encode(parent.image_id, *out);
+  encode(parent.snap_id, *out);
+  encode(parent.head_overlap.value_or(0ULL), *out);
   return 0;
 }
 
@@ -1459,9 +1483,10 @@ int set_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   r = read_key(hctx, "parent", &parent);
   if (r == 0) {
     CLS_LOG(20, "set_parent existing parent pool=%llu id=%s snapid=%llu"
-            "overlap=%llu", (unsigned long long)parent.pool, parent.id.c_str(),
-	    (unsigned long long)parent.snapid.val,
-	    (unsigned long long)parent.overlap);
+            "overlap=%llu", (unsigned long long)parent.pool_id,
+            parent.image_id.c_str(),
+	    (unsigned long long)parent.snap_id.val,
+	    (unsigned long long)parent.head_overlap.value_or(0ULL));
     return -EEXIST;
   }
 
@@ -1471,15 +1496,12 @@ int set_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   if (r < 0)
     return r;
 
-  bufferlist parentbl;
-  parent.pool = pool;
-  parent.id = id;
-  parent.snapid = snapid;
-  parent.overlap = std::min(our_size, size);
-  encode(parent, parentbl);
-  r = cls_cxx_map_set_val(hctx, "parent", &parentbl);
+  parent.pool_id = pool;
+  parent.image_id = id;
+  parent.snap_id = snapid;
+  parent.head_overlap = std::min(our_size, size);
+  r = write_key(hctx, "parent", parent, get_encode_features(hctx));
   if (r < 0) {
-    CLS_ERR("error writing parent: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -1511,7 +1533,7 @@ int remove_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   auto flatten_lambda = [hctx, features](const cls_rbd_snap& snap_meta) {
-    if (snap_meta.parent.pool != -1) {
+    if (snap_meta.parent.pool_id != -1) {
       if ((features & RBD_FEATURE_DEEP_FLATTEN) != 0ULL) {
         // remove parent reference from snapshot
         cls_rbd_snap snap_meta_copy = snap_meta;
@@ -2246,7 +2268,7 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   auto remove_lambda =
     [snap_id, &has_child_snaps, &has_trash_snaps](const cls_rbd_snap& snap_meta) {
       if (snap_meta.id != snap_id) {
-        if (snap_meta.parent.pool != -1) {
+        if (snap_meta.parent.pool_id != -1) {
           has_child_snaps = true;
         }
         if (cls::rbd::get_snap_namespace_type(snap_meta.snapshot_namespace) ==
@@ -2267,7 +2289,7 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   if (r < 0 && r != -ENOENT) {
     return r;
   }
-  bool has_parent = (r >= 0 && parent.pool != -1);
+  bool has_parent = (r >= 0 && parent.pool_id != -1);
 
   uint64_t op_features_mask = 0ULL;
   if (!has_child_snaps && !has_parent) {

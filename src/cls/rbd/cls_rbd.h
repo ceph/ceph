@@ -12,51 +12,95 @@
 
 /// information about our parent image, if any
 struct cls_rbd_parent {
-  int64_t pool;        ///< parent pool id
-  string id;           ///< parent image id
-  snapid_t snapid;     ///< parent snapid we refer to
-  uint64_t overlap;    ///< portion of this image mapped onto parent (bytes)
+  int64_t pool_id = -1;
+  std::string pool_namespace;
+  std::string image_id;
+  snapid_t snap_id = CEPH_NOSNAP;
+  std::optional<uint64_t> head_overlap = std::nullopt;
 
-  /// true if our parent pointer information is defined
-  bool exists() const {
-    return snapid != CEPH_NOSNAP && pool >= 0 && id.length() > 0 && overlap > 0;
+  cls_rbd_parent() {
+  }
+  cls_rbd_parent(const cls::rbd::ParentImageSpec& parent_image_spec,
+                 const std::optional<uint64_t>& head_overlap)
+    : pool_id(parent_image_spec.pool_id),
+      pool_namespace(parent_image_spec.pool_namespace),
+      image_id(parent_image_spec.image_id), snap_id(parent_image_spec.snap_id),
+      head_overlap(head_overlap) {
   }
 
-  cls_rbd_parent() : pool(-1), snapid(CEPH_NOSNAP), overlap(0) {}
+  inline bool exists() const {
+    return (pool_id >= 0 && !image_id.empty() && snap_id != CEPH_NOSNAP);
+  }
 
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(pool, bl);
-    encode(id, bl);
-    encode(snapid, bl);
-    encode(overlap, bl);
+  inline bool operator==(const cls_rbd_parent& rhs) const {
+    return (pool_id == rhs.pool_id &&
+            pool_namespace == rhs.pool_namespace &&
+            image_id == rhs.image_id &&
+            snap_id == rhs.snap_id);
+  }
+  inline bool operator!=(const cls_rbd_parent& rhs) const {
+    return !(*this == rhs);
+  }
+
+  void encode(bufferlist& bl, uint64_t features) const {
+    // NOTE: remove support for version 1 after Nautilus EOLed
+    uint8_t version = 1;
+    if ((features & CEPH_FEATURE_SERVER_NAUTILUS) != 0ULL) {
+      // break backwards compatability when using nautilus or later OSDs
+      version = 2;
+    }
+
+    ENCODE_START(version, version, bl);
+    encode(pool_id, bl);
+    if (version >= 2) {
+      encode(pool_namespace, bl);
+    }
+    encode(image_id, bl);
+    encode(snap_id, bl);
+    if (version == 1) {
+      encode(head_overlap.value_or(0ULL), bl);
+    } else {
+      encode(head_overlap, bl);
+    }
     ENCODE_FINISH(bl);
   }
+
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(pool, bl);
-    decode(id, bl);
-    decode(snapid, bl);
-    decode(overlap, bl);
+    DECODE_START(2, bl);
+    decode(pool_id, bl);
+    if (struct_v >= 2) {
+      decode(pool_namespace, bl);
+    }
+    decode(image_id, bl);
+    decode(snap_id, bl);
+    if (struct_v == 1) {
+      uint64_t overlap;
+      decode(overlap, bl);
+      head_overlap = overlap;
+    } else {
+      decode(head_overlap, bl);
+    }
     DECODE_FINISH(bl);
   }
+
   void dump(Formatter *f) const {
-    f->dump_int("pool", pool);
-    f->dump_string("id", id);
-    f->dump_unsigned("snapid", snapid);
-    f->dump_unsigned("overlap", overlap);
+    f->dump_int("pool_id", pool_id);
+    f->dump_string("pool_namespace", pool_namespace);
+    f->dump_string("image_id", image_id);
+    f->dump_unsigned("snap_id", snap_id);
+    if (head_overlap) {
+      f->dump_unsigned("head_overlap", *head_overlap);
+    }
   }
+
   static void generate_test_instances(list<cls_rbd_parent*>& o) {
-    o.push_back(new cls_rbd_parent);
-    cls_rbd_parent *t = new cls_rbd_parent;
-    t->pool = 1;
-    t->id = "foo";
-    t->snapid = 3;
-    t->overlap = 500;
-    o.push_back(t);
+    o.push_back(new cls_rbd_parent{});
+    o.push_back(new cls_rbd_parent{{1, "", "image id", 234}, {}});
+    o.push_back(new cls_rbd_parent{{1, "", "image id", 234}, {123}});
+    o.push_back(new cls_rbd_parent{{1, "ns", "image id", 234}, {123}});
   }
 };
-WRITE_CLASS_ENCODER(cls_rbd_parent)
+WRITE_CLASS_ENCODER_FEATURES(cls_rbd_parent)
 
 struct cls_rbd_snap {
   snapid_t id = CEPH_NOSNAP;
@@ -82,7 +126,7 @@ struct cls_rbd_snap {
     encode(image_size, bl);
     uint64_t features = 0;
     encode(features, bl); // unused -- preserve ABI
-    encode(parent, bl);
+    encode(parent, bl, 0);
     encode(protection_status, bl);
     encode(flags, bl);
     encode(snapshot_namespace, bl);
@@ -154,10 +198,7 @@ struct cls_rbd_snap {
     t->id = 2;
     t->name = "snap2";
     t->image_size = 12345678;
-    t->parent.pool = 1;
-    t->parent.id = "parent";
-    t->parent.snapid = 456;
-    t->parent.overlap = 12345;
+    t->parent = {{1, "", "parent", 456}, 12345};
     t->protection_status = RBD_PROTECTION_STATUS_PROTECTED;
     t->flags = 14;
     t->timestamp = utime_t();
