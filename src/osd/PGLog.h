@@ -753,6 +753,7 @@ public:
   void recover_got(hobject_t oid, eversion_t v, pg_info_t &info) {
     if (missing.is_missing(oid, v)) {
       missing.got(oid, v);
+      info.stats.stats.sum.num_objects_missing = missing.num_missing();
 
       // raise last_complete?
       if (missing.get_items().empty()) {
