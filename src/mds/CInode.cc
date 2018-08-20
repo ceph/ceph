@@ -2558,12 +2558,20 @@ void CInode::clear_ambiguous_auth()
 }
 
 // auth_pins
-bool CInode::can_auth_pin() const {
-  if (!is_auth() || is_freezing_inode() || is_frozen_inode() || is_frozen_auth_pin())
-    return false;
-  if (parent)
-    return parent->can_auth_pin();
-  return true;
+bool CInode::can_auth_pin(int *err_ret) const {
+  int err;
+  if (!is_auth()) {
+    err = ERR_NOT_AUTH;
+  } else if (is_freezing_inode() || is_frozen_inode() || is_frozen_auth_pin()) {
+    err = ERR_EXPORTING_INODE;
+  } else {
+    if (parent)
+      return parent->can_auth_pin(err_ret);
+    err = 0;
+  }
+  if (err && err_ret)
+    *err_ret = err;
+  return !err;
 }
 
 void CInode::auth_pin(void *by) 
