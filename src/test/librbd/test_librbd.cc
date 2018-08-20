@@ -6656,13 +6656,13 @@ TEST_F(TestLibRBD, TestListWatchers) {
   // No watchers
   ASSERT_EQ(0, rbd.open_read_only(ioctx, image, name.c_str(), nullptr));
   ASSERT_EQ(0, image.list_watchers(watchers));
-  ASSERT_EQ(0, watchers.size());
+  ASSERT_EQ(0U, watchers.size());
   ASSERT_EQ(0, image.close());
 
   // One watcher
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
   ASSERT_EQ(0, image.list_watchers(watchers));
-  ASSERT_EQ(1, watchers.size());
+  ASSERT_EQ(1U, watchers.size());
   ASSERT_EQ(0, image.close());
 }
 

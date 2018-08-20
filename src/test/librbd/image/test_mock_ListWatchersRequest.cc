@@ -154,11 +154,11 @@ TEST_F(TestMockListWatchersRequest, Success) {
 
   auto w = watchers.begin();
   ASSERT_STREQ("a", w->addr);
-  ASSERT_EQ(123, w->cookie);
+  ASSERT_EQ(123U, w->cookie);
 
   w++;
   ASSERT_STREQ("b", w->addr);
-  ASSERT_EQ(456, w->cookie);
+  ASSERT_EQ(456U, w->cookie);
 }
 
 TEST_F(TestMockListWatchersRequest, FilterOutMyInstance) {
@@ -183,7 +183,7 @@ TEST_F(TestMockListWatchersRequest, FilterOutMyInstance) {
   ASSERT_EQ(1U, watchers.size());
 
   ASSERT_STREQ("b", watchers.begin()->addr);
-  ASSERT_EQ(456, watchers.begin()->cookie);
+  ASSERT_EQ(456U, watchers.begin()->cookie);
 }
 
 TEST_F(TestMockListWatchersRequest, FilterOutMirrorInstance) {
@@ -213,7 +213,7 @@ TEST_F(TestMockListWatchersRequest, FilterOutMirrorInstance) {
   ASSERT_EQ(1U, watchers.size());
 
   ASSERT_STREQ("a", watchers.begin()->addr);
-  ASSERT_EQ(123, watchers.begin()->cookie);
+  ASSERT_EQ(123U, watchers.begin()->cookie);
 }
 
 } // namespace image

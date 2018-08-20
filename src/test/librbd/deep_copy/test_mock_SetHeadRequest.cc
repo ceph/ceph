@@ -212,7 +212,7 @@ TEST_F(TestMockDeepCopySetHeadRequest, SetParentOverlap) {
                                 mock_image_ctx.parent_md.spec, 123, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
-  ASSERT_EQ(123, mock_image_ctx.parent_md.overlap);
+  ASSERT_EQ(123U, mock_image_ctx.parent_md.overlap);
 }
 
 TEST_F(TestMockDeepCopySetHeadRequest, SetParentError) {

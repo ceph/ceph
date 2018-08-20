@@ -229,11 +229,12 @@ struct TestMigration : public TestFixture {
 
     bufferlist ref_bl;
     ref_bl.append(std::string(len, c));
-    ASSERT_EQ(len, m_ref_ictx->io_work_queue->write(off, len, std::move(ref_bl),
-                                                    0));
+    ASSERT_EQ(static_cast<ssize_t>(len),
+              m_ref_ictx->io_work_queue->write(off, len, std::move(ref_bl), 0));
     bufferlist bl;
     bl.append(std::string(len, c));
-    ASSERT_EQ(len, m_ictx->io_work_queue->write(off, len, std::move(bl), 0));
+    ASSERT_EQ(static_cast<ssize_t>(len),
+              m_ictx->io_work_queue->write(off, len, std::move(bl), 0));
   }
 
   void discard(uint64_t off, uint64_t len) {

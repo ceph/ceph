@@ -769,7 +769,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessOpFeatures) {
   req->send();
 
   ASSERT_EQ(0, ctx.wait());
-  ASSERT_EQ(4096, mock_image_ctx.op_features);
+  ASSERT_EQ(4096U, mock_image_ctx.op_features);
   ASSERT_TRUE(mock_image_ctx.operations_disabled);
 }
 
