@@ -1,6 +1,4 @@
 tasks:
-- install:
-- ceph:
 - parallel:
    - user-workload
    - kclient-workload
