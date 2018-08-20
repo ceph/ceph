@@ -227,7 +227,7 @@ inline ostream& operator<<(ostream& out, const filepath& path)
 {
   if (path.get_ino()) {
     out << '#' << path.get_ino();
-    if (path.depth())
+    if (path.length())
       out << '/';
   }
   return out << path.get_path();
