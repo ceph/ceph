@@ -378,7 +378,7 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
       if (!active_modules->module_exists(name)) {
         if (failed_modules.find(name) == failed_modules.end() &&
             dependency_modules.find(name) == dependency_modules.end()) {
-          failed_modules[name] = "Unknown error";
+          failed_modules[name] = "Not found or unloadable";
         }
       }
     }
