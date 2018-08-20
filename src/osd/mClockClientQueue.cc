@@ -78,7 +78,7 @@ namespace ceph {
 					 unsigned priority,
 					 unsigned cost,
 					 Request&& item) {
-    queue.enqueue(get_inner_client(cl, item), priority, 0u, std::move(item));
+    queue.enqueue(get_inner_client(cl, item), priority, 1u, std::move(item));
   }
 
   // Enqueue the op in the front of the regular queue
@@ -86,7 +86,7 @@ namespace ceph {
 					       unsigned priority,
 					       unsigned cost,
 					       Request&& item) {
-    queue.enqueue_front(get_inner_client(cl, item), priority, 0u,
+    queue.enqueue_front(get_inner_client(cl, item), priority, 1u,
 			std::move(item));
   }
 
