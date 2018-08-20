@@ -621,7 +621,7 @@ int attach(cls_method_context_t hctx, cls_rbd_parent parent) {
   return 0;
 }
 
-int detach(cls_method_context_t hctx) {
+int detach(cls_method_context_t hctx, bool legacy_api) {
   int r = check_exists(hctx);
   if (r < 0) {
     CLS_LOG(20, "cls_rbd::parent::detach: child doesn't exist");
@@ -642,6 +642,8 @@ int detach(cls_method_context_t hctx) {
   r = read_key(hctx, "parent", &on_disk_parent);
   if (r < 0) {
     return r;
+  } else if (legacy_api && !on_disk_parent.pool_namespace.empty()) {
+    return -EXDEV;
   } else if (!on_disk_parent.head_overlap) {
     return -ENOENT;
   }
@@ -1583,6 +1585,8 @@ int get_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     r = read_key(hctx, "parent", &parent);
     if (r < 0 && r != -ENOENT) {
       return r;
+    } else if (!parent.pool_namespace.empty()) {
+      return -EXDEV;
     }
 
     if (snap_id != CEPH_NOSNAP) {
@@ -1666,13 +1670,159 @@ int set_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  */
 int remove_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  int r = image::parent::detach(hctx);
+  int r = image::parent::detach(hctx, true);
   if (r < 0) {
     return r;
   }
 
   return 0;
 }
+
+/**
+ * Input:
+ * none
+ *
+ * Output:
+ * @param parent spec (cls::rbd::ParentImageSpec)
+ * @returns 0 on success, negative error code on failure
+ */
+int parent_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
+  int r = check_exists(hctx);
+  if (r < 0) {
+    return r;
+  }
+
+  CLS_LOG(20, "parent_get");
+
+  cls_rbd_parent parent;
+  r = image::require_feature(hctx, RBD_FEATURE_LAYERING);
+  if (r == 0) {
+    r = read_key(hctx, "parent", &parent);
+    if (r < 0 && r != -ENOENT) {
+      return r;
+    } else if (r == -ENOENT) {
+      // examine oldest snapshot to see if it has a denormalized parent
+      auto parent_lambda = [hctx, &parent](const cls_rbd_snap& snap_meta) {
+        if (snap_meta.parent.exists()) {
+          parent = snap_meta.parent;
+        }
+        return 0;
+      };
+
+      r = image::snapshot::iterate(hctx, parent_lambda);
+      if (r < 0) {
+        return r;
+      }
+    }
+  }
+
+  cls::rbd::ParentImageSpec parent_image_spec{
+    parent.pool_id, parent.pool_namespace, parent.image_id,
+    parent.snap_id};
+  encode(parent_image_spec, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param snap id (uint64_t) parent snapshot id
+ *
+ * Output:
+ * @param byte overlap of parent image (std::optional<uint64_t>)
+ * @returns 0 on success, negative error code on failure
+ */
+int parent_overlap_get(cls_method_context_t hctx, bufferlist *in,
+                       bufferlist *out) {
+  uint64_t snap_id;
+  auto iter = in->cbegin();
+  try {
+    decode(snap_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = check_exists(hctx);
+  CLS_LOG(20, "parent_overlap_get");
+
+  std::optional<uint64_t> parent_overlap = std::nullopt;
+  r = image::require_feature(hctx, RBD_FEATURE_LAYERING);
+  if (r == 0) {
+    if (snap_id == CEPH_NOSNAP) {
+      cls_rbd_parent parent;
+      r = read_key(hctx, "parent", &parent);
+      if (r < 0 && r != -ENOENT) {
+        return r;
+      } else if (r == 0) {
+        parent_overlap = parent.head_overlap;
+      }
+    } else {
+      cls_rbd_snap snap;
+      std::string snapshot_key;
+      key_from_snap_id(snap_id, &snapshot_key);
+      r = read_key(hctx, snapshot_key, &snap);
+      if (r < 0) {
+        return r;
+      }
+
+      if (snap.parent_overlap) {
+        parent_overlap = snap.parent_overlap;
+      } else if (snap.parent.exists()) {
+        // legacy format where full parent spec is written within
+        // each snapshot record
+        parent_overlap = snap.parent.head_overlap;
+      }
+    }
+  };
+
+  encode(parent_overlap, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param parent spec (cls::rbd::ParentImageSpec)
+ * @param size parent size (uint64_t)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int parent_attach(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
+  cls::rbd::ParentImageSpec parent_image_spec;
+  uint64_t parent_overlap;
+
+  auto iter = in->cbegin();
+  try {
+    decode(parent_image_spec, iter);
+    decode(parent_overlap, iter);
+  } catch (const buffer::error &err) {
+    CLS_LOG(20, "cls_rbd::parent_attach: invalid decode");
+    return -EINVAL;
+  }
+
+  int r = image::parent::attach(hctx, {parent_image_spec, parent_overlap});
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Input:
+ * none
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int parent_detach(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
+  int r = image::parent::detach(hctx, false);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 
 /**
  * methods for dealing with rbd_children object
@@ -6897,6 +7047,11 @@ CLS_INIT(rbd)
   cls_method_handle_t h_set_size;
   cls_method_handle_t h_get_parent;
   cls_method_handle_t h_set_parent;
+  cls_method_handle_t h_remove_parent;
+  cls_method_handle_t h_parent_get;
+  cls_method_handle_t h_parent_overlap_get;
+  cls_method_handle_t h_parent_attach;
+  cls_method_handle_t h_parent_detach;
   cls_method_handle_t h_get_protection_status;
   cls_method_handle_t h_set_protection_status;
   cls_method_handle_t h_get_stripe_unit_count;
@@ -6908,7 +7063,6 @@ CLS_INIT(rbd)
   cls_method_handle_t h_set_flags;
   cls_method_handle_t h_op_features_get;
   cls_method_handle_t h_op_features_set;
-  cls_method_handle_t h_remove_parent;
   cls_method_handle_t h_add_child;
   cls_method_handle_t h_remove_child;
   cls_method_handle_t h_get_children;
@@ -7059,6 +7213,8 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "copyup",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  copyup, &h_copyup);
+
+  // NOTE: deprecate v1 parent APIs after mimic EOLed
   cls_register_cxx_method(h_class, "get_parent",
 			  CLS_METHOD_RD,
 			  get_parent, &h_get_parent);
@@ -7068,6 +7224,19 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "remove_parent",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  remove_parent, &h_remove_parent);
+
+  cls_register_cxx_method(h_class, "parent_get",
+                          CLS_METHOD_RD, parent_get, &h_parent_get);
+  cls_register_cxx_method(h_class, "parent_overlap_get",
+                          CLS_METHOD_RD, parent_overlap_get,
+                          &h_parent_overlap_get);
+  cls_register_cxx_method(h_class, "parent_attach",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          parent_attach, &h_parent_attach);
+  cls_register_cxx_method(h_class, "parent_detach",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          parent_detach, &h_parent_detach);
+
   cls_register_cxx_method(h_class, "set_protection_status",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  set_protection_status, &h_set_protection_status);

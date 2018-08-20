@@ -646,30 +646,31 @@ TEST_F(TestClsRbd, snapshot_limits)
   ioctx.close();
 }
 
-TEST_F(TestClsRbd, parents)
+TEST_F(TestClsRbd, parents_v1)
 {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
-  string oid = get_temp_image_name();
   ParentSpec pspec;
   uint64_t size;
 
   ASSERT_EQ(-ENOENT, get_parent(&ioctx, "doesnotexist", CEPH_NOSNAP, &pspec, &size));
 
   // old image should fail
-  ASSERT_EQ(0, create_image(&ioctx, "old", 33<<20, 22, 0, "old_blk.", -1));
+  std::string oid = get_temp_image_name();
+  ASSERT_EQ(0, create_image(&ioctx, oid, 33<<20, 22, 0, "old_blk.", -1));
   // get nonexistent parent: succeed, return (-1, "", CEPH_NOSNAP), overlap 0
-  ASSERT_EQ(0, get_parent(&ioctx, "old", CEPH_NOSNAP, &pspec, &size));
+  ASSERT_EQ(0, get_parent(&ioctx, oid, CEPH_NOSNAP, &pspec, &size));
   ASSERT_EQ(pspec.pool_id, -1);
   ASSERT_STREQ("", pspec.image_id.c_str());
   ASSERT_EQ(pspec.snap_id, CEPH_NOSNAP);
   ASSERT_EQ(size, 0ULL);
   pspec = ParentSpec(-1, "parent", 3);
-  ASSERT_EQ(-ENOEXEC, set_parent(&ioctx, "old", ParentSpec(-1, "parent", 3), 10<<20));
-  ASSERT_EQ(-ENOEXEC, remove_parent(&ioctx, "old"));
+  ASSERT_EQ(-ENOEXEC, set_parent(&ioctx, oid, ParentSpec(-1, "parent", 3), 10<<20));
+  ASSERT_EQ(-ENOEXEC, remove_parent(&ioctx, oid));
 
   // new image will work
+  oid = get_temp_image_name();
   ASSERT_EQ(0, create_image(&ioctx, oid, 33<<20, 22, RBD_FEATURE_LAYERING,
                             "foo.", -1));
 
@@ -818,6 +819,134 @@ TEST_F(TestClsRbd, parents)
   ASSERT_EQ(-1, pspec.pool_id);
 
   ioctx.close();
+}
+
+TEST_F(TestClsRbd, parents_v2)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  std::string oid = get_temp_image_name();
+  cls::rbd::ParentImageSpec parent_image_spec;
+  std::optional<uint64_t> parent_overlap;
+
+  ASSERT_EQ(-ENOENT, parent_get(&ioctx, oid, &parent_image_spec));
+  ASSERT_EQ(-ENOENT, parent_overlap_get(&ioctx, oid, CEPH_NOSNAP,
+                                        &parent_overlap));
+  ASSERT_EQ(-ENOENT, parent_attach(&ioctx, oid, parent_image_spec, 0ULL));
+  ASSERT_EQ(-ENOENT, parent_detach(&ioctx, oid));
+
+  // no layering support should fail
+  oid = get_temp_image_name();
+  ASSERT_EQ(0, create_image(&ioctx, oid, 33<<20, 22, 0, "old_blk.", -1));
+  ASSERT_EQ(0, parent_get(&ioctx, oid, &parent_image_spec));
+  ASSERT_FALSE(parent_image_spec.exists());
+  ASSERT_EQ(0, parent_overlap_get(&ioctx, oid, CEPH_NOSNAP, &parent_overlap));
+  ASSERT_EQ(std::nullopt, parent_overlap);
+  ASSERT_EQ(-ENOEXEC, parent_attach(&ioctx, oid, parent_image_spec, 0ULL));
+  ASSERT_EQ(-ENOEXEC, parent_detach(&ioctx, oid));
+
+  // layering support available -- no pool namespaces
+  oid = get_temp_image_name();
+  ASSERT_EQ(0, create_image(&ioctx, oid, 33<<20, 22, RBD_FEATURE_LAYERING,
+                            "foo.", -1));
+
+  ASSERT_EQ(0, parent_get(&ioctx, oid, &parent_image_spec));
+  ASSERT_FALSE(parent_image_spec.exists());
+  ASSERT_EQ(0, parent_overlap_get(&ioctx, oid, CEPH_NOSNAP, &parent_overlap));
+  ASSERT_EQ(std::nullopt, parent_overlap);
+  ASSERT_EQ(-EINVAL, parent_attach(&ioctx, oid, parent_image_spec, 0ULL));
+  ASSERT_EQ(-ENOENT, parent_detach(&ioctx, oid));
+
+  parent_image_spec = {1, "", "parent", 2};
+  parent_overlap = (33 << 20) + 1;
+  ASSERT_EQ(0, parent_attach(&ioctx, oid, parent_image_spec, *parent_overlap));
+  ASSERT_EQ(-EEXIST, parent_attach(&ioctx, oid, parent_image_spec,
+                                   *parent_overlap));
+  --(*parent_overlap);
+
+  cls::rbd::ParentImageSpec on_disk_parent_image_spec;
+  std::optional<uint64_t> on_disk_parent_overlap;
+  ASSERT_EQ(0, parent_get(&ioctx, oid, &on_disk_parent_image_spec));
+  ASSERT_EQ(parent_image_spec, on_disk_parent_image_spec);
+  ASSERT_EQ(0, parent_overlap_get(&ioctx, oid, CEPH_NOSNAP,
+                                  &on_disk_parent_overlap));
+  ASSERT_EQ(parent_overlap, on_disk_parent_overlap);
+
+  ASSERT_EQ(0, snapshot_add(&ioctx, oid, 10, "snap1"));
+  ASSERT_EQ(0, parent_overlap_get(&ioctx, oid, 10, &on_disk_parent_overlap));
+  std::optional<uint64_t> snap_1_parent_overlap = parent_overlap;
+  ASSERT_EQ(snap_1_parent_overlap, on_disk_parent_overlap);
+
+  parent_overlap = (32 << 20);
+  ASSERT_EQ(0, set_size(&ioctx, oid, *parent_overlap));
+  ASSERT_EQ(0, parent_overlap_get(&ioctx, oid, CEPH_NOSNAP,
+                                  &on_disk_parent_overlap));
+  ASSERT_EQ(parent_overlap, on_disk_parent_overlap);
+
+  ASSERT_EQ(0, parent_overlap_get(&ioctx, oid, 10, &on_disk_parent_overlap));
+  ASSERT_EQ(snap_1_parent_overlap, on_disk_parent_overlap);
+
+  ASSERT_EQ(0, parent_detach(&ioctx, oid));
+  ASSERT_EQ(-ENOENT, parent_detach(&ioctx, oid));
+
+  ASSERT_EQ(0, parent_get(&ioctx, oid, &on_disk_parent_image_spec));
+  ASSERT_EQ(parent_image_spec, on_disk_parent_image_spec);
+  ASSERT_EQ(0, parent_overlap_get(&ioctx, oid, CEPH_NOSNAP,
+                                  &on_disk_parent_overlap));
+  ASSERT_EQ(std::nullopt, on_disk_parent_overlap);
+
+  ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 10));
+  ASSERT_EQ(0, parent_get(&ioctx, oid, &on_disk_parent_image_spec));
+  ASSERT_FALSE(on_disk_parent_image_spec.exists());
+
+  // clone across pool namespaces
+  parent_image_spec.pool_namespace = "ns";
+  parent_overlap = 31 << 20;
+  ASSERT_EQ(0, parent_attach(&ioctx, oid, parent_image_spec, *parent_overlap));
+  ASSERT_EQ(-EEXIST, parent_attach(&ioctx, oid, parent_image_spec,
+                                   *parent_overlap));
+
+  ASSERT_EQ(0, parent_get(&ioctx, oid, &on_disk_parent_image_spec));
+  ASSERT_EQ(parent_image_spec, on_disk_parent_image_spec);
+  ASSERT_EQ(0, parent_overlap_get(&ioctx, oid, CEPH_NOSNAP,
+                                  &on_disk_parent_overlap));
+  ASSERT_EQ(parent_overlap, on_disk_parent_overlap);
+
+  ASSERT_EQ(0, snapshot_add(&ioctx, oid, 10, "snap1"));
+  ASSERT_EQ(0, parent_overlap_get(&ioctx, oid, 10, &on_disk_parent_overlap));
+  snap_1_parent_overlap = parent_overlap;
+  ASSERT_EQ(snap_1_parent_overlap, on_disk_parent_overlap);
+
+  parent_overlap = (30 << 20);
+  ASSERT_EQ(0, set_size(&ioctx, oid, *parent_overlap));
+  ASSERT_EQ(0, parent_overlap_get(&ioctx, oid, CEPH_NOSNAP,
+                                  &on_disk_parent_overlap));
+  ASSERT_EQ(parent_overlap, on_disk_parent_overlap);
+
+  ASSERT_EQ(0, parent_overlap_get(&ioctx, oid, 10, &on_disk_parent_overlap));
+  ASSERT_EQ(snap_1_parent_overlap, on_disk_parent_overlap);
+
+  ASSERT_EQ(-EXDEV, remove_parent(&ioctx, oid));
+  ASSERT_EQ(0, parent_detach(&ioctx, oid));
+  ASSERT_EQ(-ENOENT, parent_detach(&ioctx, oid));
+
+  ParentSpec on_disk_parent_spec;
+  uint64_t legacy_parent_overlap;
+  ASSERT_EQ(-EXDEV, get_parent(&ioctx, oid, CEPH_NOSNAP, &on_disk_parent_spec,
+                               &legacy_parent_overlap));
+  ASSERT_EQ(-EXDEV, get_parent(&ioctx, oid, 10, &on_disk_parent_spec,
+                               &legacy_parent_overlap));
+
+  ASSERT_EQ(0, parent_get(&ioctx, oid, &on_disk_parent_image_spec));
+  ASSERT_EQ(parent_image_spec, on_disk_parent_image_spec);
+  ASSERT_EQ(0, parent_overlap_get(&ioctx, oid, CEPH_NOSNAP,
+                                  &on_disk_parent_overlap));
+  ASSERT_EQ(std::nullopt, on_disk_parent_overlap);
+
+  ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 10));
+  ASSERT_EQ(0, parent_get(&ioctx, oid, &on_disk_parent_image_spec));
+  ASSERT_FALSE(on_disk_parent_image_spec.exists());
 }
 
 TEST_F(TestClsRbd, snapshots)
