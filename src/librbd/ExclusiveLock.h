@@ -6,11 +6,13 @@
 
 #include "librbd/ManagedLock.h"
 #include "common/AsyncOpTracker.h"
+#include "common/RefCountedObj.h"
 
 namespace librbd {
 
 template <typename ImageCtxT = ImageCtx>
-class ExclusiveLock : public ManagedLock<ImageCtxT> {
+class ExclusiveLock : public RefCountedObject,
+                      public ManagedLock<ImageCtxT> {
 public:
   static ExclusiveLock *create(ImageCtxT &image_ctx) {
     return new ExclusiveLock<ImageCtxT>(image_ctx);

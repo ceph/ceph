@@ -27,7 +27,8 @@ using ML = ManagedLock<I>;
 
 template <typename I>
 ExclusiveLock<I>::ExclusiveLock(I &image_ctx)
-  : ML<I>(image_ctx.md_ctx, image_ctx.op_work_queue, image_ctx.header_oid,
+  : RefCountedObject(image_ctx.cct),
+    ML<I>(image_ctx.md_ctx, image_ctx.op_work_queue, image_ctx.header_oid,
           image_ctx.image_watcher, managed_lock::EXCLUSIVE,
           image_ctx.blacklist_on_break_lock,
           image_ctx.blacklist_expire_seconds),

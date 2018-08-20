@@ -208,8 +208,9 @@ struct C_InvokeAsyncRequest : public Context {
 
     Context *ctx = util::create_async_context_callback(
       image_ctx, util::create_context_callback<
-        C_InvokeAsyncRequest<I>,
-        &C_InvokeAsyncRequest<I>::handle_acquire_exclusive_lock>(this));
+      C_InvokeAsyncRequest<I>,
+      &C_InvokeAsyncRequest<I>::handle_acquire_exclusive_lock>(
+        this, image_ctx.exclusive_lock));
 
     if (request_lock) {
       // current lock owner doesn't support op -- try to perform

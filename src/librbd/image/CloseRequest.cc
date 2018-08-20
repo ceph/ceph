@@ -110,8 +110,8 @@ void CloseRequest<I>::send_shut_down_exclusive_lock() {
 
     // if reading a snapshot -- possible object map is open
     RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
-    if (m_exclusive_lock == nullptr) {
-      delete m_image_ctx->object_map;
+    if (m_exclusive_lock == nullptr && m_image_ctx->object_map) {
+      m_image_ctx->object_map->put();
       m_image_ctx->object_map = nullptr;
     }
   }
@@ -126,8 +126,10 @@ void CloseRequest<I>::send_shut_down_exclusive_lock() {
 
   // in-flight IO will be flushed and in-flight requests will be canceled
   // before releasing lock
-  m_exclusive_lock->shut_down(create_context_callback<
-    CloseRequest<I>, &CloseRequest<I>::handle_shut_down_exclusive_lock>(this));
+  Context *ctx = create_context_callback<
+    CloseRequest<I>,
+    &CloseRequest<I>::handle_shut_down_exclusive_lock>(this, m_exclusive_lock);
+  m_exclusive_lock->shut_down(ctx);
 }
 
 template <typename I>
@@ -145,7 +147,7 @@ void CloseRequest<I>::handle_shut_down_exclusive_lock(int r) {
     assert(m_image_ctx->object_map == nullptr);
   }
 
-  delete m_exclusive_lock;
+  m_exclusive_lock->put();
   m_exclusive_lock = nullptr;
 
   save_result(r);

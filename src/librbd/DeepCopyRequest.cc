@@ -214,13 +214,19 @@ void DeepCopyRequest<I>::send_copy_object_map() {
 
   // rollback the object map (copy snapshot object map to HEAD)
   RWLock::WLocker object_map_locker(m_dst_image_ctx->object_map_lock);
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
-      handle_copy_object_map(r);
-      finish_op_ctx->complete(0);
-    });
+
   assert(m_snap_seqs->count(m_snap_id_end) > 0);
   librados::snap_t copy_snap_id = (*m_snap_seqs)[m_snap_id_end];
+
+  using klass = DeepCopyRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_copy_object_map>(this, m_dst_image_ctx->object_map);
+  ctx = new FunctionContext([this, ctx, finish_op_ctx](int r) {
+      ctx->complete(r);
+      finish_op_ctx->complete(0);
+    });
   m_dst_image_ctx->object_map->rollback(copy_snap_id, ctx);
+
   m_dst_image_ctx->snap_lock.put_read();
   m_dst_image_ctx->owner_lock.put_read();
 }
@@ -250,11 +256,15 @@ void DeepCopyRequest<I>::send_refresh_object_map() {
 
   ldout(m_cct, 20) << dendl;
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
-      handle_refresh_object_map(r);
+  m_object_map = m_dst_image_ctx->create_object_map(CEPH_NOSNAP);
+
+  using klass = DeepCopyRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_refresh_object_map>(this, m_object_map);
+  ctx = new FunctionContext([this, ctx, finish_op_ctx](int r) {
+      ctx->complete(r);
       finish_op_ctx->complete(0);
     });
-  m_object_map = m_dst_image_ctx->create_object_map(CEPH_NOSNAP);
   m_object_map->open(ctx);
 }
 
@@ -267,7 +277,7 @@ void DeepCopyRequest<I>::handle_refresh_object_map(int r) {
     RWLock::WLocker snap_locker(m_dst_image_ctx->snap_lock);
     std::swap(m_dst_image_ctx->object_map, m_object_map);
   }
-  delete m_object_map;
+  m_object_map->put();
 
   send_copy_metadata();
 }

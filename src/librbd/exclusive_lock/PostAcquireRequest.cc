@@ -122,10 +122,11 @@ void PostAcquireRequest<I>::send_open_journal() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  using klass = PostAcquireRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_open_journal>(
-    this);
   m_journal = m_image_ctx.create_journal();
+
+  using klass = PostAcquireRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_open_journal>(this, m_journal);
 
   // journal playback requires object map (if enabled) and itself
   apply();
@@ -156,7 +157,7 @@ void PostAcquireRequest<I>::send_allocate_journal_tag() {
   RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
   using klass = PostAcquireRequest<I>;
   Context *ctx = create_context_callback<
-    klass, &klass::handle_allocate_journal_tag>(this);
+    klass, &klass::handle_allocate_journal_tag>(this, m_journal);
   m_image_ctx.get_journal_policy()->allocate_tag_on_lock(ctx);
 }
 
@@ -182,8 +183,8 @@ void PostAcquireRequest<I>::send_close_journal() {
   ldout(cct, 10) << dendl;
 
   using klass = PostAcquireRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_close_journal>(
-    this);
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_close_journal>(this, m_journal);
   m_journal->close(ctx);
 }
 
@@ -210,11 +211,11 @@ void PostAcquireRequest<I>::send_open_object_map() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  using klass = PostAcquireRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_open_object_map>(
-    this);
-
   m_object_map = m_image_ctx.create_object_map(CEPH_NOSNAP);
+
+  using klass = PostAcquireRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_open_object_map>(this, m_object_map);
   m_object_map->open(ctx);
 }
 
@@ -227,7 +228,7 @@ void PostAcquireRequest<I>::handle_open_object_map(int r) {
     lderr(cct) << "failed to open object map: " << cpp_strerror(r) << dendl;
 
     r = 0;
-    delete m_object_map;
+    m_object_map->put();
     m_object_map = nullptr;
   }
 
@@ -247,7 +248,7 @@ void PostAcquireRequest<I>::send_close_object_map() {
 
   using klass = PostAcquireRequest<I>;
   Context *ctx = create_context_callback<
-    klass, &klass::handle_close_object_map>(this);
+    klass, &klass::handle_close_object_map>(this, m_object_map);
   m_object_map->close(ctx);
 }
 
@@ -283,8 +284,12 @@ void PostAcquireRequest<I>::revert() {
   m_image_ctx.object_map = nullptr;
   m_image_ctx.journal = nullptr;
 
-  delete m_object_map;
-  delete m_journal;
+  if (m_object_map) {
+    m_object_map->put();
+  }
+  if (m_journal) {
+    m_journal->put();
+  }
 
   assert(m_error_result < 0);
 }

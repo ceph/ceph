@@ -59,8 +59,8 @@ public:
   ContextWQ *op_work_queue;
 
   explicit ThreadPoolSingleton(CephContext *cct)
-    : ThreadPool(cct, "librbd::thread_pool", "tp_librbd", 1,
-                 "rbd_op_threads"),
+    : ThreadPool(cct, "librbd::thread_pool", "tp_librbd",
+                 cct->_conf->get_val<int64_t>("rbd_op_threads"), "rbd_op_threads"),
       op_work_queue(new ContextWQ("librbd::op_work_queue",
                                   cct->_conf.get_val<int64_t>("rbd_op_thread_timeout"),
                                   this)) {

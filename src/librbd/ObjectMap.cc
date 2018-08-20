@@ -34,7 +34,8 @@ namespace librbd {
 
 template <typename I>
 ObjectMap<I>::ObjectMap(I &image_ctx, uint64_t snap_id)
-  : m_image_ctx(image_ctx), m_snap_id(snap_id),
+  : RefCountedObject(image_ctx.cct),
+    m_image_ctx(image_ctx), m_snap_id(snap_id),
     m_update_guard(new UpdateGuard(m_image_ctx.cct)) {
 }
 

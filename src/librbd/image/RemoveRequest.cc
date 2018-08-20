@@ -153,17 +153,18 @@ void RemoveRequest<I>::acquire_exclusive_lock() {
     m_image_ctx->set_journal_policy(new journal::DisabledPolicy());
   }
 
+  m_exclusive_lock = m_image_ctx->exclusive_lock;
+
   using klass = RemoveRequest<I>;
   if (m_force) {
     Context *ctx = create_context_callback<
-      klass, &klass::handle_exclusive_lock_force>(this);
-    m_exclusive_lock = m_image_ctx->exclusive_lock;
+      klass, &klass::handle_exclusive_lock_force>(this, m_exclusive_lock);
     m_exclusive_lock->shut_down(ctx);
   } else {
     Context *ctx = create_context_callback<
-      klass, &klass::handle_exclusive_lock>(this);
+      klass, &klass::handle_exclusive_lock>(this, m_exclusive_lock);
     RWLock::WLocker owner_lock(m_image_ctx->owner_lock);
-    m_image_ctx->exclusive_lock->try_acquire_lock(ctx);
+    m_exclusive_lock->try_acquire_lock(ctx);
   }
 }
 
@@ -171,7 +172,7 @@ template<typename I>
 void RemoveRequest<I>::handle_exclusive_lock_force(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  delete m_exclusive_lock;
+  m_exclusive_lock->put();
   m_exclusive_lock = nullptr;
 
   if (r < 0) {

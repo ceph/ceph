@@ -32,8 +32,12 @@ template <typename I>
 SetSnapRequest<I>::~SetSnapRequest() {
   assert(!m_writes_blocked);
   delete m_refresh_parent;
-  delete m_object_map;
-  delete m_exclusive_lock;
+  if (m_object_map) {
+    m_object_map->put();
+  }
+  if (m_exclusive_lock) {
+    m_exclusive_lock->put();
+  }
 }
 
 template <typename I>
@@ -72,7 +76,7 @@ void SetSnapRequest<I>::send_init_exclusive_lock() {
 
   using klass = SetSnapRequest<I>;
   Context *ctx = create_context_callback<
-    klass, &klass::handle_init_exclusive_lock>(this);
+    klass, &klass::handle_init_exclusive_lock>(this, m_exclusive_lock);
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   m_exclusive_lock->init(m_image_ctx.features, ctx);
@@ -151,7 +155,7 @@ Context *SetSnapRequest<I>::send_shut_down_exclusive_lock(int *result) {
 
   using klass = SetSnapRequest<I>;
   Context *ctx = create_context_callback<
-    klass, &klass::handle_shut_down_exclusive_lock>(this);
+    klass, &klass::handle_shut_down_exclusive_lock>(this, m_exclusive_lock);
   m_exclusive_lock->shut_down(ctx);
   return nullptr;
 }
@@ -260,10 +264,11 @@ Context *SetSnapRequest<I>::send_open_object_map(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << dendl;
 
+  m_object_map = ObjectMap<I>::create(m_image_ctx, m_snap_id);
+
   using klass = SetSnapRequest<I>;
   Context *ctx = create_context_callback<
-    klass, &klass::handle_open_object_map>(this);
-  m_object_map = ObjectMap<I>::create(m_image_ctx, m_snap_id);
+    klass, &klass::handle_open_object_map>(this, m_object_map);
   m_object_map->open(ctx);
   return nullptr;
 }
@@ -276,7 +281,7 @@ Context *SetSnapRequest<I>::handle_open_object_map(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to open object map: " << cpp_strerror(*result)
                << dendl;
-    delete m_object_map;
+    m_object_map->put();
     m_object_map = nullptr;
   }
 

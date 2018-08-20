@@ -25,6 +25,9 @@
                            << " " << __func__ << ": "
 
 namespace librbd {
+
+using util::create_context_callback;
+
 namespace io {
 
 using librbd::util::get_image_ctx;
@@ -474,10 +477,15 @@ void ImageFlushRequest<I>::send_request() {
         image_ctx.journal->commit_io_event(journal_tid, r);
         ctx->complete(r);
       });
+
     ctx = new FunctionContext(
       [&image_ctx, journal_tid, ctx](int r) {
         image_ctx.journal->flush_event(journal_tid, ctx);
       });
+    ctx = create_context_callback<
+      Context, &Context::complete,
+      typename std::decay<decltype(*image_ctx.journal)>::type>(
+        ctx, image_ctx.journal);
   } else {
     // flush rbd cache only when journaling is not enabled
     auto object_dispatch_spec = ObjectDispatchSpec::create_flush(

@@ -138,13 +138,13 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, Success) {
 
   expect_flush_notifies(mock_image_ctx);
 
-  MockJournal *mock_journal = new MockJournal();
-  mock_image_ctx.journal = mock_journal;
-  expect_close_journal(mock_image_ctx, *mock_journal, -EINVAL);
+  MockJournal mock_journal;
+  mock_image_ctx.journal = &mock_journal;
+  expect_close_journal(mock_image_ctx, mock_journal, -EINVAL);
 
-  MockObjectMap *mock_object_map = new MockObjectMap();
-  mock_image_ctx.object_map = mock_object_map;
-  expect_close_object_map(mock_image_ctx, *mock_object_map);
+  MockObjectMap mock_object_map;
+  mock_image_ctx.object_map = &mock_object_map;
+  expect_close_object_map(mock_image_ctx, mock_object_map);
 
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
@@ -173,9 +173,9 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, SuccessJournalDisabled) {
 
   expect_flush_notifies(mock_image_ctx);
 
-  MockObjectMap *mock_object_map = new MockObjectMap();
-  mock_image_ctx.object_map = mock_object_map;
-  expect_close_object_map(mock_image_ctx, *mock_object_map);
+  MockObjectMap mock_object_map;
+  mock_image_ctx.object_map = &mock_object_map;
+  expect_close_object_map(mock_image_ctx, mock_object_map);
 
   expect_handle_prepare_lock_complete(mock_image_ctx);
 
@@ -228,13 +228,13 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, Blacklisted) {
 
   expect_flush_notifies(mock_image_ctx);
 
-  MockJournal *mock_journal = new MockJournal();
-  mock_image_ctx.journal = mock_journal;
-  expect_close_journal(mock_image_ctx, *mock_journal, -EBLACKLISTED);
+  MockJournal mock_journal;
+  mock_image_ctx.journal = &mock_journal;
+  expect_close_journal(mock_image_ctx, mock_journal, -EBLACKLISTED);
 
-  MockObjectMap *mock_object_map = new MockObjectMap();
-  mock_image_ctx.object_map = mock_object_map;
-  expect_close_object_map(mock_image_ctx, *mock_object_map);
+  MockObjectMap mock_object_map;
+  mock_image_ctx.object_map = &mock_object_map;
+  expect_close_object_map(mock_image_ctx, mock_object_map);
 
   expect_handle_prepare_lock_complete(mock_image_ctx);
 

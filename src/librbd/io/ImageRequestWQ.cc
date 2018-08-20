@@ -21,6 +21,9 @@
                            << " " << __func__ << ": "
 
 namespace librbd {
+
+using util::create_context_callback;
+
 namespace io {
 
 namespace {
@@ -732,7 +735,12 @@ void *ImageRequestWQ<I>::_void_dequeue() {
       } else {
         // stall IO until the acquire completes
         ++m_io_blockers;
-        m_image_ctx.exclusive_lock->acquire_lock(new C_AcquireLock(this, item));
+        Context *ctx = new C_AcquireLock(this, item);
+        ctx = create_context_callback<
+          Context, &Context::complete,
+          typename std::decay<decltype(*m_image_ctx.exclusive_lock)>::type>(
+            ctx, m_image_ctx.exclusive_lock);
+        m_image_ctx.exclusive_lock->acquire_lock(ctx);
       }
     } else {
       // raced with the exclusive lock being disabled
