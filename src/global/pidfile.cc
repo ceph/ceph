@@ -171,8 +171,14 @@ int pidfh::open(const ConfigProxy& conf)
   };
   int r = ::fcntl(pf_fd, F_SETLK, &l);
   if (r < 0) {
-    derr << __func__ << ": failed to lock pidfile "
-	 << pf_path << " because another process locked it." << dendl;
+    if (errno == EAGAIN || errno == EACCES) {
+      derr << __func__ << ": failed to lock pidfile "
+	   << pf_path << " because another process locked it" 
+	   << "': " << cpp_strerror(errno) << dendl;
+    } else {
+      derr << __func__ << ": failed to lock pidfile "
+	   << pf_path << "': " << cpp_strerror(errno) << dendl;
+    }
     ::close(pf_fd);
     reset();
     return -errno;
