@@ -1,3 +1,5 @@
+.. _multisite:
+
 ==========
 Multi-Site
 ==========
