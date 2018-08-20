@@ -112,6 +112,13 @@ void CloneRequest<I>::validate_options() {
     }
   }
 
+  if (m_clone_format == 1 &&
+      m_parent_io_ctx.get_namespace() != m_ioctx.get_namespace()) {
+    ldout(m_cct, 1) << "clone v2 required for cross-namespace clones" << dendl;
+    complete(-EXDEV);
+    return;
+  }
+
   open_parent();
 }
 
