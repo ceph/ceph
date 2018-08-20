@@ -2469,7 +2469,7 @@ public:
       t.omap_setkeys(test_coll, log_oid, km);
     }
     auto ch = store->open_collection(test_coll);
-    ASSERT_EQ(0u, store->queue_transaction(ch, std::move(t)));
+    ASSERT_EQ(0, store->queue_transaction(ch, std::move(t)));
 
     auto orig_dups = log.dups;
     clear();

@@ -109,8 +109,8 @@ TEST(TestAllocatorLevel01, test_l1)
   // Free: 1M~1M, 4M+4K ~ 2M-4K, 6M ~...
   //
   auto i4 = al1.allocate_l1_cont(1024 * 1024, 0x1000, 0, num_l1_entries);
-  ASSERT_EQ(i4.offset, 1 * 1024 * 1024);
-  ASSERT_EQ(i4.length, 1024 * 1024);
+  ASSERT_EQ(1 * 1024 * 1024u, i4.offset);
+  ASSERT_EQ(1024 * 1024u, i4.length);
   al1.free_l1(i4);
 
   i4 = al1.allocate_l1_cont(1024 * 1024 - 0x1000, 0x1000, 0, num_l1_entries);
