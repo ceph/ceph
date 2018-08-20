@@ -152,7 +152,7 @@ def cat_file(level, filename):
 def vstart(new, opt=""):
     print("vstarting....", end="")
     NEW = new and "-n" or "-N"
-    call("MON=1 OSD=4 MDS=0 MGR=1 CEPH_PORT=7400 {path}/src/vstart.sh --filestore --short -l {new} -d {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
+    call("MON=1 OSD=4 MDS=0 MGR=1 CEPH_PORT=7400 MGR_PYTHON_PATH={path}/src/pybind/mgr {path}/src/vstart.sh --filestore --short -l {new} -d {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
     print("DONE")
 
 
