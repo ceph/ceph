@@ -48,6 +48,8 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
       // always apply the new settings synchronously on the owner shard, to
       // avoid racings with other do_change() calls in parallel.
       owner.values.reset(new_values);
+      owner.obs_mgr.apply_changes(owner.values->changed,
+                                  owner, nullptr);
 
       return seastar::parallel_for_each(boost::irange(1u, seastar::smp::count),
                                         [&owner, new_values] (auto cpu) {
