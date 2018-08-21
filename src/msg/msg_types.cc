@@ -64,7 +64,7 @@ void entity_inst_t::generate_test_instances(list<entity_inst_t*>& o)
 
 bool entity_addr_t::parse(const char *s, const char **end)
 {
-  memset(this, 0, sizeof(*this));
+  *this = entity_addr_t();
 
   const char *start = s;
 
