@@ -24,7 +24,7 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
   md_config_t* remote_config = nullptr;
   std::unique_ptr<md_config_t> local_config;
 
-  using ConfigObserver = ceph::internal::md_config_obs_impl<ConfigProxy>;
+  using ConfigObserver = ceph::md_config_obs_impl<ConfigProxy>;
   ObserverMgr<ConfigObserver> obs_mgr;
 
   const md_config_t& get_config() const {

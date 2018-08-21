@@ -6624,7 +6624,7 @@ bool OSD::ms_verify_authorizer(
   uint64_t global_id;
   uint64_t auid = CEPH_AUTH_UID_DEFAULT;
 
-  RotatingKeyRing *keys = monc->rotating_secrets.get();
+  auto keys = monc->rotating_secrets.get();
   if (keys) {
     isvalid = authorize_handler->verify_authorizer(
       cct, keys,

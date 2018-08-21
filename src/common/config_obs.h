@@ -20,8 +20,7 @@
 
 #include "common/config_fwd.h"
 
-namespace ceph::internal {
-
+namespace ceph {
 /** @brief Base class for configuration observers.
  * Use this as a base class for your object if it has to respond to configuration changes,
  * for example by updating some values or modifying its behavior.
@@ -45,5 +44,4 @@ public:
 				    const std::set<int>& changed) { }
 };
 }
-
 #endif

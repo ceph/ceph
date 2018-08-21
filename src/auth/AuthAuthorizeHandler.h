@@ -27,7 +27,6 @@
 
 class CephContext;
 class KeyRing;
-class RotatingKeyRing;
 
 struct AuthAuthorizeHandler {
   virtual ~AuthAuthorizeHandler() {}

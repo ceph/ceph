@@ -22,7 +22,8 @@
 class CephContext;
 class KeyRing;
 
-class CephxClientHandler : public AuthClientHandler {
+template<LockPolicy lock_policy>
+class CephxClientHandler : public AuthClientHandler<lock_policy> {
   bool starting;
 
   /* envelope protocol parameters */
@@ -31,12 +32,20 @@ class CephxClientHandler : public AuthClientHandler {
   CephXTicketManager tickets;
   CephXTicketHandler* ticket_handler;
 
-  RotatingKeyRing *rotating_secrets;
+  RotatingKeyRing<lock_policy> *rotating_secrets;
   KeyRing *keyring;
 
+  using AuthClientHandler<lock_policy>::cct;
+  using AuthClientHandler<lock_policy>::global_id;
+  using AuthClientHandler<lock_policy>::want;
+  using AuthClientHandler<lock_policy>::have;
+  using AuthClientHandler<lock_policy>::need;
+  using AuthClientHandler<lock_policy>::lock;
+
 public:
-  CephxClientHandler(CephContext *cct_, RotatingKeyRing *rsecrets) 
-    : AuthClientHandler(cct_),
+  CephxClientHandler(CephContext *cct_,
+		     RotatingKeyRing<lock_policy> *rsecrets)
+    : AuthClientHandler<lock_policy>(cct_),
       starting(false),
       server_challenge(0),
       tickets(cct_),
@@ -48,7 +57,7 @@ public:
   }
 
   void reset() override {
-    RWLock::WLocker l(lock);
+    std::unique_lock l{lock};
     starting = true;
     server_challenge = 0;
   }
@@ -64,7 +73,7 @@ public:
   bool need_tickets() override;
 
   void set_global_id(uint64_t id) override {
-    RWLock::WLocker l(lock);
+    std::unique_lock l{lock};
     global_id = id;
     tickets.global_id = id;
   }
