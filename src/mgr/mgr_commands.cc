@@ -14,7 +14,11 @@
 // enabled set (or upgrade script to run `disable <module`). At the time of
 // writing, the proposed always-on modules are being added within the same
 // release.
-const std::set<std::string> always_on_modules = {"crash"};
+const std::set<std::string> always_on_modules = {
+  "crash",
+  "status",
+  "balancer",
+};
 
 /* The set of statically defined (C++-handled) commands.  This
  * does not include the Python-defined commands, which are loaded

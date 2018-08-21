@@ -1,23 +1,14 @@
-Balancer plugin
-===============
+Balancer
+========
 
-The *balancer* plugin can optimize the placement of PGs across OSDs in
+The *balancer* can optimize the placement of PGs across OSDs in
 order to achieve a balanced distribution, either automatically or in a
 supervised fashion.
-
-Enabling
---------
-
-The *balancer* module is enabled with::
-
-  ceph mgr module enable balancer
-
-(It is enabled by default.)
 
 Status
 ------
 
-The current status of the balancer can be check at any time with::
+The current status of the balancer can be checked at any time with::
 
   ceph balancer status
 
