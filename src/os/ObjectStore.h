@@ -115,7 +115,7 @@ public:
    *
    * This appears to be called with nothing locked.
    */
-  virtual const PerfCounters* get_perf_counters() const = 0;
+  virtual const PerfCountersCollectionable* get_perf_counters() const = 0;
 
   /**
    * a collection also orders transactions

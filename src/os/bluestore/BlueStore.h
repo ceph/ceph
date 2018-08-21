@@ -2470,9 +2470,8 @@ public:
     perf_tracker.update_from_perfcounters(logger);
     return perf_tracker.get_cur_stats();
   }
-  const PerfCounters* get_perf_counters() const override {
-    // FIXME
-    return nullptr;
+  const PerfCountersCollectionable* get_perf_counters() const override {
+    return &logger;
   }
 
   int queue_transactions(

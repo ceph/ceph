@@ -553,7 +553,7 @@ public:
   objectstore_perf_stat_t get_cur_stats() override {
     return objectstore_perf_stat_t();
   }
-  const PerfCounters* get_perf_counters() const override {
+  const PerfCountersCollectionable* get_perf_counters() const override {
     return logger;
   }
 
