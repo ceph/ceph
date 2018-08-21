@@ -737,27 +737,25 @@ void Server::terminate_sessions()
 
 void Server::find_idle_sessions()
 {
-  dout(10) << "find_idle_sessions.  laggy until " << mds->get_laggy_until() << dendl;
+  auto now = clock::now();
+  auto last_cleared_laggy = mds->last_cleared_laggy();
+
+  dout(10) << "find_idle_sessions. last cleared laggy state " << last_cleared_laggy << "s ago" << dendl;
   
   // timeout/stale
   //  (caps go stale, lease die)
-  utime_t now = ceph_clock_now();
-  double queue_max_age = mds->get_dispatch_queue_max_age(now);
-
-  utime_t cutoff = now;
-  cutoff -= queue_max_age;
-  cutoff -= mds->mdsmap->get_session_timeout();
+  double queue_max_age = mds->get_dispatch_queue_max_age(ceph_clock_now());
+  double cutoff = queue_max_age + mds->mdsmap->get_session_timeout();
   while (1) {
     Session *session = mds->sessionmap.get_oldest_session(Session::STATE_OPEN);
     if (!session) break;
-    dout(20) << "laggiest active session is " << session->info.inst << dendl;
-    if (session->last_cap_renew >= cutoff) {
-      dout(20) << "laggiest active session is " << session->info.inst << " and sufficiently new (" 
-	       << session->last_cap_renew << ")" << dendl;
+    auto last_cap_renew_span = std::chrono::duration<double>(now-session->last_cap_renew).count();
+    if (last_cap_renew_span < cutoff) {
+      dout(20) << "laggiest active session is " << session->info.inst << " and renewed caps recently (" << last_cap_renew_span << "s ago)" << dendl;
       break;
     }
 
-    dout(10) << "new stale session " << session->info.inst << " last " << session->last_cap_renew << dendl;
+    dout(10) << "new stale session " << session->info.inst << " last renewed caps " << last_cap_renew_span << "s ago" << dendl;
     mds->sessionmap.set_state(session, Session::STATE_STALE);
     mds->locker->revoke_stale_caps(session);
     mds->locker->remove_stale_leases(session);
@@ -766,21 +764,17 @@ void Server::find_idle_sessions()
   }
 
   // autoclose
-  cutoff = now;
-  cutoff -= queue_max_age;
-  cutoff -= mds->mdsmap->get_session_autoclose();
+  cutoff = queue_max_age + mds->mdsmap->get_session_autoclose();
 
   // don't kick clients if we've been laggy
-  if (mds->get_laggy_until() > cutoff) {
-    dout(10) << " laggy_until " << mds->get_laggy_until() << " > cutoff " << cutoff
-	     << ", not kicking any clients to be safe" << dendl;
+  if (last_cleared_laggy < cutoff) {
+    dout(10) << " last cleared laggy " << last_cleared_laggy << "s ago (< cutoff " << cutoff
+	     << "), not kicking any clients to be safe" << dendl;
     return;
   }
 
-  if (mds->sessionmap.get_sessions().size() == 1 &&
-      mds->mdsmap->get_num_in_mds() == 1) {
-    dout(20) << "not evicting a slow client, because there is only one"
-             << dendl;
+  if (mds->sessionmap.get_sessions().size() == 1 && mds->mdsmap->get_num_in_mds() == 1) {
+    dout(20) << "skipping client eviction because there is only one" << dendl;
     return;
   }
 
@@ -794,14 +788,14 @@ void Server::find_idle_sessions()
   assert(stale_sessions != nullptr);
 
   for (const auto &session: *stale_sessions) {
+    auto last_cap_renew_span = std::chrono::duration<double>(now-session->last_cap_renew).count();
     if (session->is_importing()) {
       dout(10) << "stopping at importing session " << session->info.inst << dendl;
       break;
     }
     assert(session->is_stale());
-    if (session->last_cap_renew >= cutoff) {
-      dout(20) << "oldest stale session is " << session->info.inst << " and sufficiently new (" 
-	       << session->last_cap_renew << ")" << dendl;
+    if (last_cap_renew_span < cutoff) {
+      dout(20) << "oldest stale session is " << session->info.inst << " and recently renewed caps " << last_cap_renew_span << "s ago" << dendl;
       break;
     }
 
@@ -809,12 +803,9 @@ void Server::find_idle_sessions()
   }
 
   for (const auto &session: to_evict) {
-    utime_t age = now;
-    age -= session->last_cap_renew;
-    mds->clog->warn() << "evicting unresponsive client " << *session
-                      << ", after " << age << " seconds";
-    dout(10) << "autoclosing stale session " << session->info.inst << " last "
-             << session->last_cap_renew << dendl;
+    auto last_cap_renew_span = std::chrono::duration<double>(now-session->last_cap_renew).count();
+    mds->clog->warn() << "evicting unresponsive client " << *session << ", after " << last_cap_renew_span << " seconds";
+    dout(10) << "autoclosing stale session " << session->info.inst << " last renewed caps " << last_cap_renew_span << "s ago" << dendl;
 
     if (g_conf()->mds_session_blacklist_on_timeout) {
       std::stringstream ss;
@@ -1009,7 +1000,7 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
     reply->supported_features = supported_features;
   m->get_connection()->send_message2(reply);
 
-  session->last_cap_renew = ceph_clock_now();
+  session->last_cap_renew = clock::now();
   mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay;
   
   // snaprealms

@@ -69,6 +69,11 @@ public:
     + additional dimension of 'importing' (with counter)
 
   */
+
+  using clock = ceph::coarse_mono_clock;
+  using time = ceph::coarse_mono_time;
+
+
   enum {
     STATE_CLOSED = 0,
     STATE_OPENING = 1,   // journaling open
@@ -135,8 +140,8 @@ public:
   const std::string& get_human_name() const {return human_name;}
 
   // Ephemeral state for tracking progress of capability recalls
-  utime_t recalled_at;  // When was I asked to SESSION_RECALL?
-  utime_t last_recall_sent;
+  time recalled_at = clock::zero();  // When was I asked to SESSION_RECALL?
+  time last_recall_sent = clock::zero();
   uint32_t recall_count;  // How many caps was I asked to SESSION_RECALL?
   uint32_t recall_release_count;  // How many caps have I actually revoked?
 
@@ -227,7 +232,7 @@ private:
 public:
   xlist<Capability*> caps;     // inodes with caps; front=most recently used
   xlist<ClientLease*> leases;  // metadata leases to clients
-  utime_t last_cap_renew;
+  time last_cap_renew = clock::zero();
 
 public:
   version_t inc_push_seq() { return ++cap_push_seq; }
@@ -378,8 +383,7 @@ public:
     info.clear_meta();
 
     cap_push_seq = 0;
-    last_cap_renew = utime_t();
-
+    last_cap_renew = clock::zero();
   }
 };
 
@@ -421,6 +425,10 @@ class MDSRank;
  * encode/decode outside of live MDS instance.
  */
 class SessionMapStore {
+public:
+  using clock = Session::clock;
+  using time = Session::time;
+
 protected:
   version_t version;
   ceph::unordered_map<entity_name_t, Session*> session_map;
@@ -454,7 +462,7 @@ public:
     } else {
       s = session_map[i.name] = new Session(nullptr);
       s->info.inst = i;
-      s->last_cap_renew = ceph_clock_now();
+      s->last_cap_renew = Session::clock::now();
       if (logger) {
         logger->set(l_mdssm_session_count, session_map.size());
         logger->inc(l_mdssm_session_add);

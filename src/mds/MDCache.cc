@@ -7536,7 +7536,7 @@ void MDCache::check_memory_usage()
   mds->mlogger->set(l_mdm_heap, last.get_heap());
 
   if (cache_toofull()) {
-    last_recall_state = ceph_clock_now();
+    last_recall_state = clock::now();
     mds->server->recall_client_state();
   }
 
