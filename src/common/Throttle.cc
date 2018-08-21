@@ -151,15 +151,21 @@ bool Throttle::get_or_fail(int64_t c)
   }
 
   assert (c >= 0);
-  auto l = uniquely_lock(lock);
-  if (_should_wait(c) || !conds.empty()) {
+  bool should_wait;
+  {
+    auto l = uniquely_lock(lock);
+    should_wait = _should_wait(c) || !conds.empty();
+    if (!should_wait) {
+      count += c;
+    }
+  }
+  if (should_wait) {
     ldout(cct, 10) << "get_or_fail " << c << " failed" << dendl;
     logger->inc<l_throttle_get_or_fail_fail>();
     return false;
   } else {
     ldout(cct, 10) << "get_or_fail " << c << " success (" << count.load()
 		   << " -> " << (count.load() + c) << ")" << dendl;
-    count += c;
     logger->inc<l_throttle_get_or_fail_success>();
     logger->inc<l_throttle_get>();
     logger->inc<l_throttle_get_sum>(c);
@@ -177,13 +183,15 @@ int64_t Throttle::put(int64_t c)
   ceph_assert(c >= 0);
   ldout(cct, 10) << "put " << c << " (" << count.load() << " -> "
 		 << (count.load()-c) << ")" << dendl;
-  auto l = uniquely_lock(lock);
   if (c) {
-    if (!conds.empty())
-      conds.front().notify_one();
-    // if count goes negative, we failed somewhere!
-    ceph_assert(count >= c);
-    count -= c;
+    {
+      auto l = uniquely_lock(lock);
+      if (!conds.empty())
+	conds.front().notify_one();
+      // if count goes negative, we failed somewhere!
+      ceph_assert(count >= c);
+      count -= c;
+    }
     logger->inc<l_throttle_put>();
     logger->inc<l_throttle_put_sum>(c);
     logger->set<l_throttle_val>(count);
