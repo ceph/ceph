@@ -99,6 +99,7 @@ void usage(ostream& out)
 "   stat <obj-name>                  stat the named object\n"
 "   stat2 <obj-name>                 stat2 the named object (with high precision time)\n"
 "   touch <obj-name> [timestamp]     change the named object modification time\n"
+"   touch2 <obj-name> [sec.usec]     change the named object modification time (with high precision time)\n"
 "   mapext <obj-name>\n"
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
 "\n"
@@ -2392,6 +2393,30 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (ret < 0) {
       cerr << " error touch-ing " << pool_name << "/" << oid << ": "
 	   << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+  }
+  else if (strcmp(nargs[0], "touch2") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+    string oid(nargs[1]);
+    utime_t time = ceph_clock_now();
+    if (nargs.size() > 2 && !time.parse(nargs[2])) {
+      cerr << "Invalid value for mtime: '" << nargs[2] << "'" << std::endl;
+      ret = -EINVAL;
+      goto out;
+    }
+    
+    struct timespec mtime;
+    time.to_timespec(&mtime);
+
+    ObjectWriteOperation op;
+    op.create(false);
+    op.mtime2(&mtime);
+    ret = io_ctx.operate(oid, &op);
+    if (ret < 0) {
+      cerr << " error touch-ing " << pool_name << "/" << oid << ": "
+           << cpp_strerror(ret) << std::endl;
       goto out;
     }
   }
