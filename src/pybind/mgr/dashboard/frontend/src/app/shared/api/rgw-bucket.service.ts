@@ -9,7 +9,7 @@ import { Observable } from 'rxjs/Observable';
 @Injectable()
 export class RgwBucketService {
 
-  private url = '/api/rgw/proxy/bucket';
+  private url = 'api/rgw/proxy/bucket';
 
   constructor(private http: HttpClient) { }
 
@@ -49,7 +49,7 @@ export class RgwBucketService {
       'bucket': bucket,
       'uid': uid
     };
-    return this.http.post('/api/rgw/bucket', body);
+    return this.http.post('api/rgw/bucket', body);
   }
 
   update(bucketId: string, bucket: string, uid: string) {
