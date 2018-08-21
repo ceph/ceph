@@ -12,7 +12,6 @@ class TestInsights(MgrTestCase):
     def setUp(self):
         self.setup_mgrs()
         self._load_module("insights")
-        self._load_module("crash")
         self._load_module("selftest")
         self.crash_ids = []
 
