@@ -313,7 +313,8 @@ class RGWBucket
 
 public:
   RGWBucket() : store(NULL), handle(NULL), failure(false) {}
-  int init(RGWRados *storage, RGWBucketAdminOpState& op_state);
+  int init(RGWRados *storage, RGWBucketAdminOpState& op_state,
+              std::string *err_msg = NULL);
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
               RGWFormatterFlusher& flusher, std::string *err_msg = NULL);
