@@ -340,16 +340,13 @@ public:
   int mount();
   void umount();
   
-  int log_dump(
-    CephContext *cct,
-    const string& path,
-    const vector<string>& devs);
+  int log_dump();
 
   void collect_metadata(map<string,string> *pm, unsigned skip_bdev_id);
   void get_devices(set<string> *ls);
   int fsck();
 
-  uint64_t get_fs_usage();
+  uint64_t get_used();
   uint64_t get_total(unsigned id);
   uint64_t get_free(unsigned id);
   void get_usage(vector<pair<uint64_t,uint64_t>> *usage); // [<free,total> ...]

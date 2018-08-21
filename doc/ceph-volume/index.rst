@@ -20,7 +20,7 @@ that may have been deployed with ``ceph-disk``.
 
 Migrating
 ---------
-Starting on Ceph version 12.2.2, ``ceph-disk`` is deprecated. Deprecation
+Starting on Ceph version 13.0.0, ``ceph-disk`` is deprecated. Deprecation
 warnings will show up that will link to this page. It is strongly suggested
 that users start consuming ``ceph-volume``. There are two paths for migrating:
 
@@ -57,6 +57,7 @@ and ``ceph-disk`` is fully disabled. Encryption is fully supported.
    systemd
    lvm/index
    lvm/activate
+   lvm/batch
    lvm/encryption
    lvm/prepare
    lvm/create

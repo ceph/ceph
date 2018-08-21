@@ -1634,8 +1634,8 @@ void PrimaryLogPG::calc_trim_to()
       pg_log.get_log().approx_size() > target) {
     dout(10) << __func__ << " approx pg log length =  "
              << pg_log.get_log().approx_size() << dendl;
-    size_t num_to_trim = std::min(pg_log.get_log().approx_size() - target,
-				  cct->_conf->osd_pg_log_trim_max);
+    uint64_t num_to_trim = std::min<uint64_t>(pg_log.get_log().approx_size() - target,
+                                              cct->_conf->osd_pg_log_trim_max);
     dout(10) << __func__ << " num_to_trim =  " << num_to_trim << dendl;
     if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
 	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
@@ -1643,7 +1643,7 @@ void PrimaryLogPG::calc_trim_to()
     }
     list<pg_log_entry_t>::const_iterator it = pg_log.get_log().log.begin();
     eversion_t new_trim_to;
-    for (size_t i = 0; i < num_to_trim; ++i) {
+    for (uint64_t i = 0; i < num_to_trim; ++i) {
       new_trim_to = it->version;
       ++it;
       if (new_trim_to >= limit) {
@@ -5438,7 +5438,8 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     int r = pgbackend->objects_read_sync(
       soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
     // whole object?  can we verify the checksum?
-    if (r >= 0 && op.extent.length == oi.size && oi.is_data_digest()) {
+    if (r >= 0 && op.extent.offset == 0 &&
+        (uint64_t)r == oi.size && oi.is_data_digest()) {
       uint32_t crc = osd_op.outdata.crc32c(-1);
       if (oi.data_digest != crc) {
         osd->clog->error() << info.pgid << std::hex
@@ -5590,8 +5591,10 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
           << " full-object read crc 0x" << crc
           << " != expected 0x" << oi.data_digest
           << std::dec << " on " << soid;
-        // FIXME fall back to replica or something?
-        return -EIO;
+        r = rep_repair_primary_object(soid, ctx->op);
+	if (r < 0) {
+	  return r;
+	}
       }
     }
 

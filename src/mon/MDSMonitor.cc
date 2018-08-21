@@ -120,7 +120,7 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
   PaxosFSMap::decode(fsmap_bl);
 
   // new map
-  dout(4) << "new map" << dendl;
+  dout(0) << "new map" << dendl;
   print_map<0>(get_fsmap());
   if (!g_conf()->mon_mds_skip_sanity) {
     get_fsmap().sanity();
@@ -286,7 +286,14 @@ bool MDSMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_beacon(op);
     
   case MSG_MON_COMMAND:
-    return preprocess_command(op);
+    try {
+      return preprocess_command(op);
+    }
+    catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
 
   case MSG_MDS_OFFLOAD_TARGETS:
     return preprocess_offload_targets(op);
@@ -302,7 +309,7 @@ void MDSMonitor::_note_beacon(MMDSBeacon *m)
   mds_gid_t gid = mds_gid_t(m->get_global_id());
   version_t seq = m->get_seq();
 
-  dout(15) << "_note_beacon " << *m << " noting time" << dendl;
+  dout(5) << "_note_beacon " << *m << " noting time" << dendl;
   auto &beacon = last_beacon[gid];
   beacon.stamp = mono_clock::now();
   beacon.seq = seq;
@@ -335,7 +342,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
     goto ignore;
   }
 
-  dout(12) << "preprocess_beacon " << *m
+  dout(5)  << "preprocess_beacon " << *m
 	   << " from " << m->get_orig_source_inst()
 	   << " " << m->get_compat()
 	   << dendl;
@@ -369,7 +376,8 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
       MDSMap null_map;
       null_map.epoch = fsmap.epoch;
       null_map.compat = fsmap.compat;
-      mon->send_reply(op, new MMDSMap(mon->monmap->fsid, &null_map));
+      auto m = MMDSMap::create(mon->monmap->fsid, null_map);
+      mon->send_reply(op, m.detach());
       return true;
     } else {
       return false;  // not booted yet.
@@ -434,7 +442,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   // and return false (i.e. require proposal) if they
   // do not match, to update our stored
   if (!(pending_daemon_health[gid] == m->get_health())) {
-    dout(20) << __func__ << " health metrics for gid " << gid << " were updated" << dendl;
+    dout(10) << __func__ << " health metrics for gid " << gid << " were updated" << dendl;
     _note_beacon(m);
     return false;
   }
@@ -443,10 +451,12 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   // note time and reply
   assert(effective_epoch > 0);
   _note_beacon(m);
-  mon->send_reply(op,
-		  new MMDSBeacon(mon->monmap->fsid, m->get_global_id(), m->get_name(),
-				 effective_epoch, state, seq,
-				 CEPH_FEATURES_SUPPORTED_DEFAULT));
+  {
+    auto beacon = MMDSBeacon::create(mon->monmap->fsid,
+        m->get_global_id(), m->get_name(), effective_epoch,
+        state, seq, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    mon->send_reply(op, beacon.detach());
+  }
   return true;
 
  ignore:
@@ -497,7 +507,14 @@ bool MDSMonitor::prepare_update(MonOpRequestRef op)
     return prepare_beacon(op);
 
   case MSG_MON_COMMAND:
-    return prepare_command(op);
+    try {
+      return prepare_command(op);
+    }
+    catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
 
   case MSG_MDS_OFFLOAD_TARGETS:
     return prepare_offload_targets(op);
@@ -522,7 +539,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 
   auto &pending = get_pending_fsmap_writeable();
 
-  dout(20) << __func__ << " got health from gid " << gid << " with " << m->get_health().metrics.size() << " metrics." << dendl;
+  dout(15) << __func__ << " got health from gid " << gid << " with " << m->get_health().metrics.size() << " metrics." << dendl;
 
   // Calculate deltas of health metrics created and removed
   // Do this by type rather than MDSHealthMetric equality, because messages can
@@ -649,7 +666,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
     }
 
     if (info.laggy()) {
-      dout(10) << "prepare_beacon clearing laggy flag on " << addrs << dendl;
+      dout(1) << "prepare_beacon clearing laggy flag on " << addrs << dendl;
       pending.modify_daemon(info.global_id, [](MDSMap::mds_info_t *info)
         {
           info->clear_laggy();
@@ -657,7 +674,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       );
     }
   
-    dout(10) << "prepare_beacon mds." << info.rank
+    dout(5)  << "prepare_beacon mds." << info.rank
 	     << " " << ceph_mds_state_name(info.state)
 	     << " -> " << ceph_mds_state_name(state)
 	     << "  standby_for_rank=" << m->get_standby_for_rank()
@@ -685,7 +702,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 
     } else if (state == MDSMap::STATE_DAMAGED) {
       if (!mon->osdmon()->is_writeable()) {
-        dout(4) << __func__ << ": DAMAGED from rank " << info.rank
+        dout(1) << __func__ << ": DAMAGED from rank " << info.rank
                 << " waiting for osdmon writeable to blacklist it" << dendl;
         mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
         return false;
@@ -693,7 +710,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 
       // Record this MDS rank as damaged, so that other daemons
       // won't try to run it.
-      dout(4) << __func__ << ": marking rank "
+      dout(0) << __func__ << ": marking rank "
               << info.rank << " damaged" << dendl;
 
       utime_t until = ceph_clock_now();
@@ -704,14 +721,14 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       last_beacon.erase(gid);
 
       // Respond to MDS, so that it knows it can continue to shut down
-      mon->send_reply(op,
-		      new MMDSBeacon(
+      auto beacon = MMDSBeacon::create(
 			mon->monmap->fsid, m->get_global_id(),
 			m->get_name(), pending.get_epoch(), state, seq,
-			CEPH_FEATURES_SUPPORTED_DEFAULT));
+			CEPH_FEATURES_SUPPORTED_DEFAULT);
+      mon->send_reply(op, beacon.detach());
     } else if (state == MDSMap::STATE_DNE) {
       if (!mon->osdmon()->is_writeable()) {
-        dout(4) << __func__ << ": DNE from rank " << info.rank
+        dout(1) << __func__ << ": DNE from rank " << info.rank
                 << " waiting for osdmon writeable to blacklist it" << dendl;
         mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
         return false;
@@ -722,11 +739,10 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       request_proposal(mon->osdmon());
 
       // Respond to MDS, so that it knows it can continue to shut down
-      mon->send_reply(op,
-		      new MMDSBeacon(
-			mon->monmap->fsid, m->get_global_id(),
-			m->get_name(), pending.get_epoch(), state, seq,
-			CEPH_FEATURES_SUPPORTED_DEFAULT));
+      auto beacon = MMDSBeacon::create(mon->monmap->fsid,
+          m->get_global_id(), m->get_name(), pending.get_epoch(), state, seq,
+          CEPH_FEATURES_SUPPORTED_DEFAULT);
+      mon->send_reply(op, beacon.detach());
     } else if (info.state == MDSMap::STATE_STANDBY && state != info.state) {
       // Standby daemons should never modify their own
       // state.  Reject any attempts to do so.
@@ -759,7 +775,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
     }
   }
 
-  dout(7) << "prepare_beacon pending map now:" << dendl;
+  dout(5) << "prepare_beacon pending map now:" << dendl;
   print_map(pending);
   
   wait_for_finished_proposal(op, new FunctionContext([op, this](int r){
@@ -812,15 +828,13 @@ void MDSMonitor::_updated(MonOpRequestRef op)
     MDSMap null_map;
     null_map.epoch = fsmap.epoch;
     null_map.compat = fsmap.compat;
-    mon->send_reply(op, new MMDSMap(mon->monmap->fsid, &null_map));
+    auto m = MMDSMap::create(mon->monmap->fsid, null_map);
+    mon->send_reply(op, m.detach());
   } else {
-    mon->send_reply(op, new MMDSBeacon(mon->monmap->fsid,
-				       m->get_global_id(),
-				       m->get_name(),
-				       fsmap.get_epoch(),
-				       m->get_state(),
-				       m->get_seq(),
-				       CEPH_FEATURES_SUPPORTED_DEFAULT));
+    auto beacon = MMDSBeacon::create(mon->monmap->fsid,
+        m->get_global_id(), m->get_name(), fsmap.get_epoch(),
+        m->get_state(), m->get_seq(), CEPH_FEATURES_SUPPORTED_DEFAULT);
+    mon->send_reply(op, beacon.detach());
   }
 }
 
@@ -1070,7 +1084,7 @@ out:
 bool MDSMonitor::fail_mds_gid(FSMap &fsmap, mds_gid_t gid)
 {
   const MDSMap::mds_info_t &info = fsmap.get_info_gid(gid);
-  dout(10) << "fail_mds_gid " << gid << " mds." << info.name << " role " << info.rank << dendl;
+  dout(1) << "fail_mds_gid " << gid << " mds." << info.name << " role " << info.rank << dendl;
 
   epoch_t blacklist_epoch = 0;
   if (info.rank >= 0 && info.state != MDSMap::STATE_STANDBY_REPLAY) {
@@ -1396,9 +1410,9 @@ int MDSMonitor::filesystem_command(
 
     bool modified = fsmap.undamaged(role.fscid, role.rank);
     if (modified) {
-      dout(4) << "repaired: restoring rank " << role << dendl;
+      dout(1) << "repaired: restoring rank " << role << dendl;
     } else {
-      dout(4) << "repaired: no-op on rank " << role << dendl;
+      dout(1) << "repaired: no-op on rank " << role << dendl;
     }
 
     r = 0;
@@ -1556,9 +1570,9 @@ void MDSMonitor::check_sub(Subscription *sub)
     if (sub->next > mds_map->epoch) {
       return;
     }
-    auto msg = new MMDSMap(mon->monmap->fsid, mds_map);
+    auto msg = MMDSMap::create(mon->monmap->fsid, *mds_map);
 
-    sub->session->con->send_message(msg);
+    sub->session->con->send_message(msg.detach());
     if (sub->onetime) {
       mon->session_map.remove_sub(sub);
     } else {
@@ -1805,7 +1819,7 @@ void MDSMonitor::maybe_replace_gid(FSMap &fsmap, mds_gid_t gid,
   {
     
     MDSMap::mds_info_t si = fsmap.get_info_gid(sgid);
-    dout(10) << " replacing " << gid << " " << info.addrs
+    dout(1)  << " replacing " << gid << " " << info.addrs
 	     << " mds." << info.rank << "." << info.inc
 	     << " " << ceph_mds_state_name(info.state)
 	     << " with " << sgid << "/" << si.name << " " << si.addrs
@@ -1829,7 +1843,7 @@ void MDSMonitor::maybe_replace_gid(FSMap &fsmap, mds_gid_t gid,
     *mds_propose = true;
   } else if ((info.state == MDSMap::STATE_STANDBY_REPLAY ||
              info.state == MDSMap::STATE_STANDBY) && may_replace) {
-    dout(10) << " failing and removing " << gid << " " << info.addrs
+    dout(1)  << " failing and removing " << gid << " " << info.addrs
 	     << " mds." << info.rank
 	     << "." << info.inc << " " << ceph_mds_state_name(info.state)
 	     << dendl;
@@ -1838,7 +1852,7 @@ void MDSMonitor::maybe_replace_gid(FSMap &fsmap, mds_gid_t gid,
     fail_mds_gid(fsmap, gid);
     *mds_propose = true;
   } else if (!info.laggy()) {
-      dout(10) << " marking " << gid << " " << info.addrs
+      dout(1)  << " marking " << gid << " " << info.addrs
 	       << " mds." << info.rank << "." << info.inc
 	       << " " << ceph_mds_state_name(info.state)
 	       << " laggy" << dendl;
@@ -1868,7 +1882,7 @@ bool MDSMonitor::maybe_promote_standby(FSMap &fsmap, std::shared_ptr<Filesystem>
           g_conf()->mon_force_standby_active);
       if (sgid) {
         const MDSMap::mds_info_t si = fsmap.get_info_gid(sgid);
-        dout(0) << " taking over failed mds." << f << " with " << sgid
+        dout(1) << " taking over failed mds." << f << " with " << sgid
                 << "/" << si.name << " " << si.addrs << dendl;
         mon->clog->info() << "Standby " << si.human_name()
                           << " assigned to filesystem " << fs->mds_map.fs_name
@@ -1998,7 +2012,7 @@ void MDSMonitor::tick()
     // This case handles either local slowness (calls being delayed
     // for whatever reason) or cluster election slowness (a long gap
     // between calls while an election happened)
-    dout(4) << __func__ << ": resetting beacon timeouts due to mon delay "
+    dout(1) << __func__ << ": resetting beacon timeouts due to mon delay "
             "(slow election?) of " << now - last_tick << " seconds" << dendl;
     for (auto &p : last_beacon) {
       p.second.stamp = now;

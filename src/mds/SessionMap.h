@@ -30,6 +30,7 @@ using std::set;
 
 class CInode;
 struct MDRequestImpl;
+class DecayCounter;
 
 #include "CInode.h"
 #include "Capability.h"
@@ -41,6 +42,10 @@ enum {
   l_mdssm_session_count,
   l_mdssm_session_add,
   l_mdssm_session_remove,
+  l_mdssm_session_open,
+  l_mdssm_session_stale,
+  l_mdssm_total_load,
+  l_mdssm_avg_load,
   l_mdssm_last,
 };
 
@@ -99,7 +104,8 @@ private:
   // that appropriate mark_dirty calls follow.
   std::deque<version_t> projected;
 
-
+  // request load average for this session
+  DecayCounter load_avg;
 
 public:
 
@@ -138,10 +144,13 @@ public:
 
   MDSAuthCaps auth_caps;
 
+protected:
   ConnectionRef connection;
+public:
+  entity_addr_t socket_addr;
   xlist<Session*>::item item_session_list;
 
-  list<Message*> preopen_out_queue;  ///< messages for client, queued before they connect
+  list<Message::ref> preopen_out_queue;  ///< messages for client, queued before they connect
 
   elist<MDRequestImpl*> requests;
   size_t get_request_count();
@@ -198,6 +207,17 @@ public:
     --importing_count;
   }
   bool is_importing() const { return importing_count > 0; }
+
+  void set_load_avg_decay_rate(double rate) {
+    assert(is_open() || is_stale());
+    load_avg = DecayCounter(rate);
+  }
+  uint64_t get_load_avg() const {
+    return (uint64_t)load_avg.get();
+  }
+  void hit_session() {
+    load_avg.adjust();
+  }
 
   // -- caps --
 private:
@@ -321,7 +341,7 @@ public:
 		   const vector<uint64_t> *gid_list, int new_uid, int new_gid);
 
 
-  Session() : 
+  Session(Connection *con) :
     state(STATE_CLOSED), state_seq(0), importing_count(0),
     recall_count(0), recall_release_count(0),
     auth_caps(g_ceph_context),
@@ -331,17 +351,26 @@ public:
     lease_seq(0),
     completed_requests_dirty(false),
     num_trim_flushes_warnings(0),
-    num_trim_requests_warnings(0) { }
+    num_trim_requests_warnings(0) {
+    if (con) {
+      set_connection(con);
+    }
+  }
   ~Session() override {
     if (state == STATE_CLOSED) {
       item_session_list.remove_myself();
     } else {
       assert(!item_session_list.is_on_list());
     }
-    while (!preopen_out_queue.empty()) {
-      preopen_out_queue.front()->put();
-      preopen_out_queue.pop_front();
-    }
+    preopen_out_queue.clear();
+  }
+
+  void set_connection(Connection *con) {
+    connection = con;
+    socket_addr = con->get_peer_socket_addr();
+  }
+  const ConnectionRef& get_connection() const {
+    return connection;
   }
 
   void clear() {
@@ -396,6 +425,11 @@ protected:
   version_t version;
   ceph::unordered_map<entity_name_t, Session*> session_map;
   PerfCounters *logger;
+
+  // total request load avg
+  double decay_rate;
+  DecayCounter total_load_avg;
+
 public:
   mds_rank_t rank;
 
@@ -418,7 +452,7 @@ public:
     if (session_map_entry != session_map.end()) {
       s = session_map_entry->second;
     } else {
-      s = session_map[i.name] = new Session;
+      s = session_map[i.name] = new Session(nullptr);
       s->info.inst = i;
       s->last_cap_renew = ceph_clock_now();
       if (logger) {
@@ -437,7 +471,11 @@ public:
     session_map.clear();
   }
 
-  SessionMapStore() : version(0), logger(nullptr), rank(MDS_RANK_NONE) {}
+  SessionMapStore()
+    : version(0), logger(nullptr),
+      decay_rate(g_conf().get_val<double>("mds_request_load_average_decay_rate")),
+      total_load_avg(decay_rate), rank(MDS_RANK_NONE) {
+  }
   virtual ~SessionMapStore() {};
 };
 
@@ -669,6 +707,16 @@ public:
    */
   void save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
                      MDSGatherBuilder *gather_bld);
+
+private:
+  uint64_t get_session_count_in_state(int state) {
+    return !is_any_state(state) ? 0 : by_state[state]->size();
+  }
+
+public:
+  void hit_session(Session *session);
+  void handle_conf_change(const ConfigProxy &conf,
+                          const std::set <std::string> &changed);
 };
 
 std::ostream& operator<<(std::ostream &out, const Session &s);

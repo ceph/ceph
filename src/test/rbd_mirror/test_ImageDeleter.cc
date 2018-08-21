@@ -193,9 +193,10 @@ public:
     std::string clone_id = librbd::util::generate_image_id(m_local_io_ctx);
     librbd::ImageOptions clone_opts;
     clone_opts.set(RBD_IMAGE_OPTION_FEATURES, ictx->features);
-    EXPECT_EQ(0, librbd::clone(ictx, m_local_io_ctx, "clone1", clone_id,
-                               clone_opts, GLOBAL_CLONE_IMAGE_ID,
-                               m_remote_mirror_uuid));
+    EXPECT_EQ(0, librbd::clone(m_local_io_ctx, m_local_image_id.c_str(),
+                               nullptr, "snap1", m_local_io_ctx,
+                               clone_id.c_str(), "clone1", clone_opts,
+                               GLOBAL_CLONE_IMAGE_ID, m_remote_mirror_uuid));
 
     cls::rbd::MirrorImage mirror_image(
       GLOBAL_CLONE_IMAGE_ID, MirrorImageState::MIRROR_IMAGE_STATE_ENABLED);

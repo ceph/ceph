@@ -17,7 +17,10 @@
 
 #include "msg/Message.h"
 
-struct MClientSnap : public Message {
+class MClientSnap : public MessageInstance<MClientSnap> {
+public:
+  friend factory;
+
   ceph_mds_snap_head head;
   bufferlist bl;
   
@@ -25,12 +28,12 @@ struct MClientSnap : public Message {
   vector<inodeno_t> split_inos;
   vector<inodeno_t> split_realms;
 
+protected:
   MClientSnap(int o=0) : 
-    Message(CEPH_MSG_CLIENT_SNAP) {
+    MessageInstance(CEPH_MSG_CLIENT_SNAP) {
     memset(&head, 0, sizeof(head));
     head.op = o;
   }
-private:
   ~MClientSnap() override {}
 
 public:  

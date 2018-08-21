@@ -18,9 +18,12 @@
 #include "msg/Message.h"
 #include "messages/MOSDPeeringOp.h"
 
-class MRecoveryReserve : public MOSDPeeringOp {
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 2;
+class MRecoveryReserve : public MessageInstance<MRecoveryReserve, MOSDPeeringOp> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 2;
 public:
   spg_t pgid;
   epoch_t query_epoch;
@@ -71,13 +74,13 @@ public:
   }
 
   MRecoveryReserve()
-    : MOSDPeeringOp(MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       query_epoch(0), type(-1) {}
   MRecoveryReserve(int type,
 		   spg_t pgid,
 		   epoch_t query_epoch,
 		   unsigned prio = 0)
-    : MOSDPeeringOp(MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid), query_epoch(query_epoch),
       type(type), priority(prio) {}
 

@@ -40,7 +40,7 @@ void SnapClient::resend_queries()
   }
 }
 
-void SnapClient::handle_query_result(MMDSTableRequest *m)
+void SnapClient::handle_query_result(const MMDSTableRequest::const_ref &m)
 {
   dout(10) << __func__ << " " << *m << dendl;
 
@@ -111,11 +111,11 @@ void SnapClient::handle_query_result(MMDSTableRequest *m)
   }
 }
 
-void SnapClient::handle_notify_prep(MMDSTableRequest *m)
+void SnapClient::handle_notify_prep(const MMDSTableRequest::const_ref &m)
 {
   dout(10) << __func__ << " " << *m << dendl;
   handle_query_result(m);
-  MMDSTableRequest *ack = new MMDSTableRequest(table, TABLESERVER_OP_NOTIFY_ACK, 0, m->get_tid());
+  auto ack = MMDSTableRequest::create(table, TABLESERVER_OP_NOTIFY_ACK, 0, m->get_tid());
   mds->send_message(ack, m->get_connection());
 }
 
@@ -153,7 +153,7 @@ void SnapClient::refresh(version_t want, MDSInternalContextBase *onfinish)
     return;
 
   mds_rank_t ts = mds->mdsmap->get_tableserver();
-  MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_QUERY, ++last_reqid, 0);
+  auto req = MMDSTableRequest::create(table, TABLESERVER_OP_QUERY, ++last_reqid, 0);
   using ceph::encode;
   char op = 'F';
   encode(op, req->bl);

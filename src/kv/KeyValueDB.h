@@ -418,6 +418,11 @@ public:
 
   virtual ~KeyValueDB() {}
 
+  /// estimate space utilization for a prefix (in bytes)
+  virtual int64_t estimate_prefix_size(const string& prefix) {
+    return 0;
+  }
+
   /// compact the underlying store
   virtual void compact() {}
 
@@ -447,7 +452,7 @@ public:
       const char *rdata, size_t rlen,
       std::string *new_value) = 0;
     /// We use each operator name and each prefix to construct the overall RocksDB operator name for consistency check at open time.
-    virtual string name() const = 0;
+    virtual const char *name() const = 0;
 
     virtual ~MergeOperator() {}
   };

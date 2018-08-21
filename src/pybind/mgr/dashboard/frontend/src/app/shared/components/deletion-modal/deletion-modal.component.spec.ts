@@ -36,8 +36,10 @@ export class MockModule {}
   `
 })
 class MockComponent {
-  @ViewChild('ctrlDescription') ctrlDescription: TemplateRef<any>;
-  @ViewChild('modalDescription') modalDescription: TemplateRef<any>;
+  @ViewChild('ctrlDescription')
+  ctrlDescription: TemplateRef<any>;
+  @ViewChild('modalDescription')
+  modalDescription: TemplateRef<any>;
   someData = [1, 2, 3, 4, 5];
   finished: number[];
   ctrlRef: BsModalRef;
@@ -285,6 +287,14 @@ describe('DeletionModalComponent', () => {
         changeValue('ctrl-test');
         testValidation(false, undefined, false);
         testValidation(true, undefined, false);
+      });
+
+      it('should test regex pattern', () => {
+        component.pattern = 'a+b';
+        changeValue('ab');
+        testValidation(false, 'pattern', true);
+        changeValue('a+b');
+        testValidation(false, 'pattern', false);
       });
     });
 

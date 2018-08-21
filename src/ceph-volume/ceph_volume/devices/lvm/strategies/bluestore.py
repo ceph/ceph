@@ -1,34 +1,11 @@
 from __future__ import print_function
 import json
+from uuid import uuid4
 from ceph_volume.util import disk
 from ceph_volume.api import lvm
 from . import validators
 from ceph_volume.devices.lvm.create import Create
-
-# TODO: get these templates out so filestore can re-use them
-
-osd_header_template = """
-{:-^80}""".format('')
-
-
-osd_component_titles = """
-  Type            Path                      LV Size         % of device"""
-
-
-osd_component_template = """
-  {_type: <15} {path: <25} {size: <15} {percent}%"""
-
-
-header_template = """
-Total OSDs: {total_osds}
-"""
-
-vg_template = """
-Solid State VG:
-  Targets:   {target: <25} Total size: {total_lv_size: <25}
-  Total LVs: {total_lvs: <25} Size per LV: {lv_size: <25}
-  Devices:   {block_db_devices}
-"""
+from ceph_volume.util import templates
 
 
 class SingleType(object):
@@ -50,14 +27,14 @@ class SingleType(object):
 
     def report_pretty(self):
         string = ""
-        string += header_template.format(
+        string += templates.total_osds.format(
             total_osds=len(self.hdds) or len(self.ssds) * 2
         )
-        string += osd_component_titles
+        string += templates.osd_component_titles
 
         for osd in self.computed['osds']:
-            string += osd_header_template
-            string += osd_component_template.format(
+            string += templates.osd_header
+            string += templates.osd_component.format(
                 _type='[data]',
                 path=osd['data']['path'],
                 size=osd['data']['human_readable_size'],
@@ -124,11 +101,16 @@ class SingleType(object):
             lvs = lvm.create_lvs(create['vg'], parts=create['parts'], name_prefix='osd-data')
             vg_name = create['vg'].name
             for lv in lvs:
-                # FIXME: no support for dmcrypt, crush class, etc...
-                Create([
-                    '--bluestore',
-                    '--data', "%s/%s" % (vg_name, lv.name),
-                ]).main()
+                command = ['--bluestore', '--data']
+                command.append('%s/%s' % (vg_name, lv.name))
+                if self.args.dmcrypt:
+                    command.append('--dmcrypt')
+                if self.args.no_systemd:
+                    command.append('--no-systemd')
+                if self.args.crush_device_class:
+                    command.extend(['--crush-device-class', self.args.crush_device_class])
+
+                Create(command).main()
 
 
 class MixedType(object):
@@ -153,16 +135,11 @@ class MixedType(object):
         db_size = str(disk.Size(b=(vg_extents['sizes'])))
 
         string = ""
-        string += header_template.format(
-            targets='block.db',
-            total_lv_size=str(self.total_ssd_size),
-            total_lvs=vg_extents['parts'],
-            block_lv_size=db_size,
-            block_db_devices=', '.join([ssd['path'] for ssd in self.ssds]),
-            lv_size=str(disk.Size(b=(vg_extents['sizes']))),
+        string += templates.total_osds.format(
             total_osds=len(self.hdds)
         )
-        string += vg_template.format(
+
+        string += templates.ssd_volume_group.format(
             target='block.db',
             total_lv_size=str(self.total_ssd_size),
             total_lvs=vg_extents['parts'],
@@ -172,16 +149,16 @@ class MixedType(object):
             total_osds=len(self.hdds)
         )
 
-        string += osd_component_titles
+        string += templates.osd_component_titles
         for osd in self.computed['osds']:
-            string += osd_header_template
-            string += osd_component_template.format(
+            string += templates.osd_header
+            string += templates.osd_component.format(
                 _type='[data]',
                 path=osd['data']['path'],
                 size=osd['data']['human_readable_size'],
                 percent=osd['data']['percentage'])
 
-            string += osd_component_template.format(
+            string += templates.osd_component.format(
                 _type='[block.db]',
                 path='(volume-group/lv)',
                 size=osd['block.db']['human_readable_size'],
@@ -229,15 +206,21 @@ class MixedType(object):
         # create the data lvs, and create the OSD with the matching block.db lvs from before
         for osd in self.computed['osds']:
             vg = lvm.create_vg(osd['data']['path'])
-            from uuid import uuid4
             data_lv = lvm.create_lv('osd-data-%s' % str(uuid4()), vg.name)
             db_lv = db_lvs.pop()
-            # FIXME: no support for dmcrypt, crush class, etc...
-            Create([
+            command = [
                 '--bluestore',
                 '--data', "%s/%s" % (data_lv.vg_name, data_lv.name),
                 '--block.db', '%s/%s' % (db_lv.vg_name, db_lv.name)
-            ]).main()
+            ]
+            if self.args.dmcrypt:
+                command.append('--dmcrypt')
+            if self.args.no_systemd:
+                command.append('--no-systemd')
+            if self.args.crush_device_class:
+                command.extend(['--crush-device-class', self.args.crush_device_class])
+
+            Create(command).main()
 
     def validate(self):
         """
@@ -253,7 +236,7 @@ class MixedType(object):
         # the minimum alllowed for block.db
         self.total_ssd_size = disk.Size(b=0)
         for ssd in self.ssds:
-            self.total_ssd_size + disk.Size(b=ssd['size'])
+            self.total_ssd_size += disk.Size(b=ssd['size'])
 
         self.block_db_size = self.total_ssd_size / self.db_lvs
         self.vg_extents = lvm.sizing(self.total_ssd_size.b, parts=self.db_lvs)

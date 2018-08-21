@@ -149,6 +149,36 @@ health_status_t MgrMonitor::should_warn_about_mgr_down()
   return HEALTH_OK;
 }
 
+void MgrMonitor::post_paxos_update()
+{
+  // are we handling digest subscribers?
+  if (digest_event) {
+    bool send = false;
+    if (prev_health_checks.empty()) {
+      prev_health_checks.resize(mon->paxos_service.size());
+      send = true;
+    }
+    assert(prev_health_checks.size() == mon->paxos_service.size());
+    for (auto i = 0u; i < prev_health_checks.size(); i++) {
+      const auto& curr = mon->paxos_service[i]->get_health_checks();
+      if (!send && curr != prev_health_checks[i]) {
+        send = true;
+      }
+      prev_health_checks[i] = curr;
+    }
+    if (send) {
+      if (is_active()) {
+        send_digests();
+      } else {
+        cancel_timer();
+        wait_for_active_ctx(new C_MonContext(mon, [this](int) {
+          send_digests();
+        }));
+      }
+    }
+  }
+}
+
 void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   dout(10) << __func__ << " " << pending_map << dendl;
@@ -220,7 +250,15 @@ bool MgrMonitor::preprocess_query(MonOpRequestRef op)
     case MSG_MGR_BEACON:
       return preprocess_beacon(op);
     case MSG_MON_COMMAND:
-      return preprocess_command(op);
+      try {
+	return preprocess_command(op);
+      }
+      catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
+
     default:
       mon->no_reply(op);
       derr << "Unhandled message type " << m->get_type() << dendl;
@@ -236,7 +274,14 @@ bool MgrMonitor::prepare_update(MonOpRequestRef op)
       return prepare_beacon(op);
 
     case MSG_MON_COMMAND:
-      return prepare_command(op);
+      try {
+	return prepare_command(op);
+      }
+      catch (const bad_cmd_get& e) {
+	bufferlist bl;
+	mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+	return true;
+      }
 
     default:
       mon->no_reply(op);
@@ -453,8 +498,10 @@ void MgrMonitor::send_digests()
   cancel_timer();
 
   const std::string type = "mgrdigest";
-  if (mon->session_map.subs.count(type) == 0)
+  if (mon->session_map.subs.count(type) == 0) {
+    prev_health_checks.clear();
     return;
+  }
 
   if (!is_active()) {
     // if paxos is currently not active, don't send a digest but reenable timer
@@ -682,16 +729,16 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
   }
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
+  cmd_getval_throws(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
   int r = 0;
 
   if (prefix == "mgr dump") {
     int64_t epoch = 0;
-    cmd_getval(g_ceph_context, cmdmap, "epoch", epoch, (int64_t)map.get_epoch());
+    cmd_getval_throws(g_ceph_context, cmdmap, "epoch", epoch, (int64_t)map.get_epoch());
     if (epoch == (int64_t)map.get_epoch()) {
       f->dump_object("mgrmap", map);
     } else {
@@ -739,14 +786,14 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     f->flush(rdata);
   } else if (prefix == "mgr metadata") {
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "who", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "who", name);
     if (name.size() > 0 && !map.have_name(name)) {
       ss << "mgr." << name << " does not exist";
       r = -ENOENT;
       goto reply;
     }
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    cmd_getval_throws(g_ceph_context, cmdmap, "format", format);
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     if (name.size()) {
       f->open_object_section("mgr_metadata");
@@ -785,7 +832,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     if (!f)
       f.reset(Formatter::create("json-pretty"));
     string field;
-    cmd_getval(g_ceph_context, cmdmap, "property", field);
+    cmd_getval_throws(g_ceph_context, cmdmap, "property", field);
     count_metadata(field, f.get());
     f->flush(rdata);
     r = 0;
@@ -821,17 +868,17 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
   }
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval_throws(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
 
   int r = 0;
 
   if (prefix == "mgr fail") {
     string who;
-    cmd_getval(g_ceph_context, cmdmap, "who", who);
+    cmd_getval_throws(g_ceph_context, cmdmap, "who", who);
 
     std::string err;
     uint64_t gid = strict_strtol(who.c_str(), 10, &err);
@@ -873,13 +920,13 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     }
   } else if (prefix == "mgr module enable") {
     string module;
-    cmd_getval(g_ceph_context, cmdmap, "module", module);
+    cmd_getval_throws(g_ceph_context, cmdmap, "module", module);
     if (module.empty()) {
       r = -EINVAL;
       goto out;
     }
     string force;
-    cmd_getval(g_ceph_context, cmdmap, "force", force);
+    cmd_getval_throws(g_ceph_context, cmdmap, "force", force);
     if (!pending_map.all_support_module(module) &&
 	force != "--force") {
       ss << "all mgr daemons do not support module '" << module << "', pass "
@@ -905,7 +952,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     pending_map.modules.insert(module);
   } else if (prefix == "mgr module disable") {
     string module;
-    cmd_getval(g_ceph_context, cmdmap, "module", module);
+    cmd_getval_throws(g_ceph_context, cmdmap, "module", module);
     if (module.empty()) {
       r = -EINVAL;
       goto out;

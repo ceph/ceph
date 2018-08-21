@@ -96,11 +96,9 @@ Query OSD subsystem status. ::
 	ceph osd stat
 
 Write a copy of the most recent OSD map to a file. See
-`osdmaptool`_. ::
+:ref:`osdmaptool <osdmaptool>`. ::
 
 	ceph osd getmap -o file
-
-.. _osdmaptool: ../../man/8/osdmaptool
 
 Write a copy of the crush map from the most recent OSD map to
 file. ::

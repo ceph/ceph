@@ -1,3 +1,5 @@
+.. _infernalis-release-notes:
+
 v9.2.1 Infernalis
 =================
 

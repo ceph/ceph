@@ -15,10 +15,12 @@
 
 #include "msg/Message.h"
 
-class MMonSync : public Message
-{
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 2;
+class MMonSync : public MessageInstance<MMonSync> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 2;
 
 public:
   /**
@@ -61,11 +63,11 @@ public:
   entity_inst_t reply_to;
 
   MMonSync()
-    : Message(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION)
   { }
 
   MMonSync(uint32_t op, uint64_t c = 0)
-    : Message(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION),
       op(op),
       cookie(c),
       last_committed(0)

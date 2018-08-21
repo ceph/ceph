@@ -16,18 +16,15 @@
 
 #include "msg/Message.h"
 
-struct MMonQuorumService : public Message
-{
-  epoch_t epoch;
-  version_t round;
-
-  MMonQuorumService(int type, int head=1, int compat=1) :
-    Message(type, head, compat),
-    epoch(0),
-    round(0)
-  { }
+class MMonQuorumService : public MessageSubType<MMonQuorumService> {
+public:
+  epoch_t epoch = 0;
+  version_t round = 0;
 
 protected:
+template<typename... Args>
+  MMonQuorumService(Args&&... args) : MessageSubType(std::forward<Args>(args)...) {}
+
   ~MMonQuorumService() override { }
 
 public:

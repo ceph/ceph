@@ -36,7 +36,7 @@ int validate_features(CephContext *cct, uint64_t features,
     lderr(cct) << "librbd does not support requested features." << dendl;
     return -ENOSYS;
   }
-  if ((features & RBD_FEATURES_INTERNAL) != 0) {
+  if ((features & RBD_FEATURE_OPERATIONS) != 0) {
     lderr(cct) << "cannot use internally controlled features" << dendl;
     return -EINVAL;
   }
@@ -737,8 +737,9 @@ void CreateRequest<I>::complete(int r) {
   }
 
   m_data_io_ctx.close();
-  m_on_finish->complete(r);
+  auto on_finish = m_on_finish;
   delete this;
+  on_finish->complete(r);
 }
 
 // cleanup

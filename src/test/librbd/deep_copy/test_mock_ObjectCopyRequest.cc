@@ -464,7 +464,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, DNE) {
   expect_list_snaps(mock_src_image_ctx, mock_src_io_ctx, -ENOENT);
 
   request->send();
-  ASSERT_EQ(0, ctx.wait());
+  ASSERT_EQ(-ENOENT, ctx.wait());
 }
 
 TEST_F(TestMockDeepCopyObjectCopyRequest, Write) {

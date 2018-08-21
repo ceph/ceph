@@ -278,6 +278,184 @@ int snapshot_iterate(cls_method_context_t hctx, L& lambda) {
   return 0;
 }
 
+int set_migration(cls_method_context_t hctx,
+                  const cls::rbd::MigrationSpec &migration_spec, bool init) {
+  if (init) {
+    bufferlist bl;
+    int r = cls_cxx_map_get_val(hctx, "migration", &bl);
+    if (r != -ENOENT) {
+      if (r == 0) {
+        CLS_LOG(10, "migration already set");
+        return -EEXIST;
+      }
+      CLS_ERR("failed to read migration off disk: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+
+    uint64_t features = 0;
+    r = read_key(hctx, "features", &features);
+    if (r == -ENOENT) {
+      CLS_LOG(20, "no features, assuming v1 format");
+      bufferlist header;
+      r = cls_cxx_read(hctx, 0, sizeof(RBD_HEADER_TEXT), &header);
+      if (r < 0) {
+        CLS_ERR("failed to read v1 header: %s", cpp_strerror(r).c_str());
+        return r;
+      }
+      if (header.length() != sizeof(RBD_HEADER_TEXT)) {
+        CLS_ERR("unrecognized v1 header format");
+        return -ENXIO;
+      }
+      if (memcmp(RBD_HEADER_TEXT, header.c_str(), header.length()) != 0) {
+        if (memcmp(RBD_MIGRATE_HEADER_TEXT, header.c_str(),
+                   header.length()) == 0) {
+          CLS_LOG(10, "migration already set");
+          return -EEXIST;
+        } else {
+          CLS_ERR("unrecognized v1 header format");
+          return -ENXIO;
+        }
+      }
+      if (migration_spec.header_type != cls::rbd::MIGRATION_HEADER_TYPE_SRC) {
+        CLS_LOG(10, "v1 format image can only be migration source");
+        return -EINVAL;
+      }
+
+      header.clear();
+      header.append(RBD_MIGRATE_HEADER_TEXT);
+      r = cls_cxx_write(hctx, 0, header.length(), &header);
+      if (r < 0) {
+        CLS_ERR("error updating v1 header: %s", cpp_strerror(r).c_str());
+        return r;
+      }
+    } else if (r < 0) {
+      CLS_ERR("failed to read features off disk: %s", cpp_strerror(r).c_str());
+      return r;
+    } else if ((features & RBD_FEATURE_MIGRATING) != 0ULL) {
+      if (migration_spec.header_type != cls::rbd::MIGRATION_HEADER_TYPE_DST) {
+        CLS_LOG(10, "migrating feature already set");
+        return -EEXIST;
+      }
+    } else {
+      features |= RBD_FEATURE_MIGRATING;
+      bl.clear();
+      encode(features, bl);
+      r = cls_cxx_map_set_val(hctx, "features", &bl);
+      if (r < 0) {
+        CLS_ERR("error updating features: %s", cpp_strerror(r).c_str());
+        return r;
+      }
+    }
+  }
+
+  bufferlist bl;
+  encode(migration_spec, bl);
+  int r = cls_cxx_map_set_val(hctx, "migration", &bl);
+  if (r < 0) {
+    CLS_ERR("error setting migration: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
+int read_migration(cls_method_context_t hctx,
+                   cls::rbd::MigrationSpec *migration_spec) {
+  uint64_t features = 0;
+  int r = read_key(hctx, "features", &features);
+  if (r == -ENOENT) {
+    CLS_LOG(20, "no features, assuming v1 format");
+    bufferlist header;
+    r = cls_cxx_read(hctx, 0, sizeof(RBD_HEADER_TEXT), &header);
+    if (r < 0) {
+      CLS_ERR("failed to read v1 header: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+    if (header.length() != sizeof(RBD_HEADER_TEXT)) {
+      CLS_ERR("unrecognized v1 header format");
+      return -ENXIO;
+    }
+    if (memcmp(RBD_MIGRATE_HEADER_TEXT, header.c_str(), header.length()) != 0) {
+      if (memcmp(RBD_HEADER_TEXT, header.c_str(), header.length()) == 0) {
+        CLS_LOG(10, "migration feature not set");
+        return -EINVAL;
+      } else {
+        CLS_ERR("unrecognized v1 header format");
+        return -ENXIO;
+      }
+    }
+    if (migration_spec->header_type != cls::rbd::MIGRATION_HEADER_TYPE_SRC) {
+      CLS_LOG(10, "v1 format image can only be migration source");
+      return -EINVAL;
+    }
+  } else if (r < 0) {
+    CLS_ERR("failed to read features off disk: %s", cpp_strerror(r).c_str());
+    return r;
+  } else if ((features & RBD_FEATURE_MIGRATING) == 0ULL) {
+    CLS_LOG(10, "migration feature not set");
+    return -EINVAL;
+  }
+
+  r = read_key(hctx, "migration", migration_spec);
+  if (r < 0) {
+    CLS_ERR("failed to read migration off disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
+int remove_migration(cls_method_context_t hctx) {
+  int r = remove_key(hctx, "migration");
+  if (r < 0) {
+    return r;
+  }
+
+  uint64_t features = 0;
+  r = read_key(hctx, "features", &features);
+  if (r == -ENOENT) {
+    CLS_LOG(20, "no features, assuming v1 format");
+    bufferlist header;
+    r = cls_cxx_read(hctx, 0, sizeof(RBD_MIGRATE_HEADER_TEXT), &header);
+    if (header.length() != sizeof(RBD_MIGRATE_HEADER_TEXT)) {
+      CLS_ERR("unrecognized v1 header format");
+      return -ENXIO;
+    }
+    if (memcmp(RBD_MIGRATE_HEADER_TEXT, header.c_str(), header.length()) != 0) {
+      if (memcmp(RBD_HEADER_TEXT, header.c_str(), header.length()) == 0) {
+        CLS_LOG(10, "migration feature not set");
+        return -EINVAL;
+      } else {
+        CLS_ERR("unrecognized v1 header format");
+        return -ENXIO;
+      }
+    }
+    header.clear();
+    header.append(RBD_HEADER_TEXT);
+    r = cls_cxx_write(hctx, 0, header.length(), &header);
+    if (r < 0) {
+      CLS_ERR("error updating v1 header: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+  } else if (r < 0) {
+    CLS_ERR("failed to read features off disk: %s", cpp_strerror(r).c_str());
+    return r;
+  } else if ((features & RBD_FEATURE_MIGRATING) == 0ULL) {
+    CLS_LOG(10, "migrating feature not set");
+  } else {
+    features &= ~RBD_FEATURE_MIGRATING;
+    bufferlist bl;
+    encode(features, bl);
+    r = cls_cxx_map_set_val(hctx, "features", &bl);
+    if (r < 0) {
+      CLS_ERR("error updating features: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+  }
+
+  return 0;
+}
+
 } // namespace image
 
 /**
@@ -360,9 +538,8 @@ int create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   omap_vals["snap_seq"] = snap_seqbl;
   omap_vals["create_timestamp"] = create_timestampbl;
 
-  if ((features & RBD_FEATURES_INTERNAL) != 0ULL) {
-    CLS_ERR("Attempting to set internal feature: %" PRIu64,
-            static_cast<uint64_t>(features & RBD_FEATURES_INTERNAL));
+  if ((features & RBD_FEATURE_OPERATIONS) != 0ULL) {
+    CLS_ERR("Attempting to set internal feature: operations");
     return -EINVAL;
   }
 
@@ -3449,6 +3626,154 @@ int children_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ * Set image migration.
+ *
+ * Input:
+ * @param migration_spec (cls::rbd::MigrationSpec) image migration spec
+ *
+ * Output:
+ *
+ * @returns 0 on success, negative error code on failure
+ */
+int migration_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
+  cls::rbd::MigrationSpec migration_spec;
+  try {
+    auto it = in->cbegin();
+    decode(migration_spec, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = image::set_migration(hctx, migration_spec, true);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Set image migration state.
+ *
+ * Input:
+ * @param state (cls::rbd::MigrationState) migration state
+ * @param description (std::string) migration state description
+ *
+ * Output:
+ *
+ * @returns 0 on success, negative error code on failure
+ */
+int migration_set_state(cls_method_context_t hctx, bufferlist *in,
+                        bufferlist *out) {
+  cls::rbd::MigrationState state;
+  std::string description;
+  try {
+    auto it = in->cbegin();
+    decode(state, it);
+    decode(description, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  cls::rbd::MigrationSpec migration_spec;
+  int r = image::read_migration(hctx, &migration_spec);
+  if (r < 0) {
+    return r;
+  }
+
+  migration_spec.state = state;
+  migration_spec.state_description = description;
+
+  r = image::set_migration(hctx, migration_spec, false);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Get image migration spec.
+ *
+ * Input:
+ *
+ * Output:
+ * @param migration_spec (cls::rbd::MigrationSpec) image migration spec
+ *
+ * @returns 0 on success, negative error code on failure
+ */
+int migration_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
+  cls::rbd::MigrationSpec migration_spec;
+  int r = image::read_migration(hctx, &migration_spec);
+  if (r < 0) {
+    return r;
+  }
+
+  encode(migration_spec, *out);
+
+  return 0;
+}
+
+/**
+ * Remove image migration spec.
+ *
+ * Input:
+ *
+ * Output:
+ *
+ * @returns 0 on success, negative error code on failure
+ */
+int migration_remove(cls_method_context_t hctx, bufferlist *in,
+                     bufferlist *out) {
+  int r = image::remove_migration(hctx);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Ensure writer snapc state
+ *
+ * Input:
+ * @param snap id (uint64_t) snap context sequence id
+ * @param state (cls::rbd::AssertSnapcSeqState) snap context state
+ *
+ * Output:
+ * @returns -ERANGE if assertion fails
+ * @returns 0 on success, negative error code on failure
+ */
+int assert_snapc_seq(cls_method_context_t hctx, bufferlist *in,
+                     bufferlist *out)
+{
+  uint64_t snapc_seq;
+  cls::rbd::AssertSnapcSeqState state;
+  try {
+    auto it = in->cbegin();
+    decode(snapc_seq, it);
+    decode(state, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  uint64_t snapset_seq;
+  int r = cls_get_snapset_seq(hctx, &snapset_seq);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  switch (state) {
+  case cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ:
+    return (r == -ENOENT || snapc_seq > snapset_seq) ? 0 : -ERANGE;
+  case cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ:
+    return (r == -ENOENT || snapc_seq > snapset_seq) ? -ERANGE : 0;
+  default:
+    return -EOPNOTSUPP;
+  }
+}
+
 /****************************** Old format *******************************/
 
 int old_snapshots_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -6371,6 +6696,11 @@ CLS_INIT(rbd)
   cls_method_handle_t h_child_attach;
   cls_method_handle_t h_child_detach;
   cls_method_handle_t h_children_list;
+  cls_method_handle_t h_migration_set;
+  cls_method_handle_t h_migration_set_state;
+  cls_method_handle_t h_migration_get;
+  cls_method_handle_t h_migration_remove;
+  cls_method_handle_t h_assert_snapc_seq;
   cls_method_handle_t h_old_snapshots_list;
   cls_method_handle_t h_old_snapshot_add;
   cls_method_handle_t h_old_snapshot_remove;
@@ -6536,6 +6866,22 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "children_list",
                           CLS_METHOD_RD,
                           children_list, &h_children_list);
+  cls_register_cxx_method(h_class, "migration_set",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          migration_set, &h_migration_set);
+  cls_register_cxx_method(h_class, "migration_set_state",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          migration_set_state, &h_migration_set_state);
+  cls_register_cxx_method(h_class, "migration_get",
+                          CLS_METHOD_RD,
+                          migration_get, &h_migration_get);
+  cls_register_cxx_method(h_class, "migration_remove",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          migration_remove, &h_migration_remove);
+  cls_register_cxx_method(h_class, "assert_snapc_seq",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          assert_snapc_seq,
+                          &h_assert_snapc_seq);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",

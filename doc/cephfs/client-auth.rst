@@ -130,3 +130,19 @@ in the ``bar`` directory of filesystem ``cephfs_a``.
 
 
 .. _User Management - Add a User to a Keyring: ../../rados/operations/user-management/#add-a-user-to-a-keyring
+
+Network restriction
+===================
+
+::
+
+ client.foo
+   key: *key*
+   caps: [mds] allow r network 10.0.0.0/8, allow rw path=/bar network 10.0.0.0/8
+   caps: [mon] allow r network 10.0.0.0/8
+   caps: [osd] allow rw tag cephfs data=cephfs_a network 10.0.0.0/8
+
+The optional ``{network/prefix}`` is a standard network name and
+prefix length in CIDR notation (e.g., ``10.3.0.0/16``).  If present,
+the use of this capability is restricted to clients connecting from
+this network.

@@ -21,10 +21,13 @@
  * This message is sent from ceph-mgr to MgrClient, instructing it
  * it about what data to send back to ceph-mgr at what frequency.
  */
-class MMgrConfigure : public Message
-{
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+class MMgrConfigure : public MessageInstance<MMgrConfigure> {
+public:
+  friend factory;
+private:
+
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
   uint32_t stats_period = 0;
@@ -54,7 +57,7 @@ public:
   }
 
   MMgrConfigure()
-    : Message(MSG_MGR_CONFIGURE, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_MGR_CONFIGURE, HEAD_VERSION, COMPAT_VERSION)
   {}
 };
 

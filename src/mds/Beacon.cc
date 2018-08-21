@@ -19,7 +19,6 @@
 #include "include/stringify.h"
 #include "include/util.h"
 
-#include "messages/MMDSBeacon.h"
 #include "mon/MonClient.h"
 #include "mds/MDLog.h"
 #include "mds/MDSRank.h"
@@ -52,10 +51,9 @@ Beacon::~Beacon()
 }
 
 
-void Beacon::init(MDSMap const *mdsmap)
+void Beacon::init(const MDSMap &mdsmap)
 {
   Mutex::Locker l(lock);
-  assert(mdsmap != NULL);
 
   _notify_mdsmap(mdsmap);
   standby_for_rank = mds_rank_t(g_conf()->mds_standby_for_rank);
@@ -79,12 +77,22 @@ void Beacon::shutdown()
   timer.shutdown();
 }
 
+bool Beacon::ms_can_fast_dispatch2(const Message::const_ref& m) const
+{
+  return m->get_type() == MSG_MDS_BEACON;
+}
 
-bool Beacon::ms_dispatch(Message *m)
+void Beacon::ms_fast_dispatch2(const Message::ref& m)
+{
+  bool handled = ms_dispatch2(m);
+  assert(handled);
+}
+
+bool Beacon::ms_dispatch2(const Message::ref& m)
 {
   if (m->get_type() == MSG_MDS_BEACON) {
     if (m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-      handle_mds_beacon(static_cast<MMDSBeacon*>(m));
+      handle_mds_beacon(MMDSBeacon::msgref_cast(m));
     }
     return true;
   }
@@ -98,10 +106,9 @@ bool Beacon::ms_dispatch(Message *m)
  *
  * This function puts the passed message before returning
  */
-void Beacon::handle_mds_beacon(MMDSBeacon *m)
+void Beacon::handle_mds_beacon(const MMDSBeacon::const_ref &m)
 {
   Mutex::Locker l(lock);
-  assert(m != NULL);
 
   version_t seq = m->get_seq();
 
@@ -112,8 +119,8 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
       last_acked_stamp = seq_stamp[seq];
       utime_t rtt = now - last_acked_stamp;
 
-      dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
-	       << " seq " << m->get_seq() << " rtt " << rtt << dendl;
+      dout(5) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
+	      << " seq " << m->get_seq() << " rtt " << rtt << dendl;
 
       if (was_laggy && rtt < g_conf()->mds_beacon_grace) {
 	dout(0) << "handle_mds_beacon no longer laggy" << dendl;
@@ -123,7 +130,7 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
     } else {
       // Mark myself laggy if system clock goes backwards. Hopping
       // later beacons will clear it.
-      dout(1) << "handle_mds_beacon system clock goes backwards, "
+      dout(0) << "handle_mds_beacon system clock goes backwards, "
 	      << "mark myself laggy" << dendl;
       last_acked_stamp = now - utime_t(g_conf()->mds_beacon_grace + 1, 0);
       was_laggy = true;
@@ -139,10 +146,9 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
       waiting_cond.Signal();
     }
   } else {
-    dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
-	     << " seq " << m->get_seq() << " dne" << dendl;
+    dout(1) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
+	    << " seq " << m->get_seq() << " dne" << dendl;
   }
-  m->put();
 }
 
 
@@ -191,20 +197,18 @@ void Beacon::_send()
   if (!cct->get_heartbeat_map()->is_healthy()) {
     /* If anything isn't progressing, let avoid sending a beacon so that
      * the MDS will consider us laggy */
-    dout(1) << __func__ << " skipping beacon, heartbeat map not healthy" << dendl;
+    dout(0) << __func__ << " skipping beacon, heartbeat map not healthy" << dendl;
     return;
   }
 
   ++last_seq;
-  dout(10) << __func__ << " " << ceph_mds_state_name(want_state)
-	   << " seq " << last_seq
-	   << dendl;
+  dout(5) << __func__ << " " << ceph_mds_state_name(want_state) << " seq " << last_seq << dendl;
 
   seq_stamp[last_seq] = ceph_clock_now();
 
   assert(want_state != MDSMap::STATE_NULL);
   
-  MMDSBeacon *beacon = new MMDSBeacon(
+  auto beacon = MMDSBeacon::create(
       monc->get_fsid(), mds_gid_t(monc->get_global_id()),
       name,
       epoch,
@@ -225,29 +229,27 @@ void Beacon::_send()
     sys_info["addr"] = stringify(monc->get_myaddrs());
     beacon->set_sys_info(sys_info);
   }
-  monc->send_mon_message(beacon);
+  monc->send_mon_message(beacon.detach());
 }
 
 /**
  * Call this when there is a new MDSMap available
  */
-void Beacon::notify_mdsmap(MDSMap const *mdsmap)
+void Beacon::notify_mdsmap(const MDSMap &mdsmap)
 {
   Mutex::Locker l(lock);
-  assert(mdsmap != NULL);
 
   _notify_mdsmap(mdsmap);
 }
 
-void Beacon::_notify_mdsmap(MDSMap const *mdsmap)
+void Beacon::_notify_mdsmap(const MDSMap &mdsmap)
 {
-  assert(mdsmap != NULL);
-  assert(mdsmap->get_epoch() >= epoch);
+  assert(mdsmap.get_epoch() >= epoch);
 
-  if (mdsmap->get_epoch() != epoch) {
-    epoch = mdsmap->get_epoch();
+  if (mdsmap.get_epoch() != epoch) {
+    epoch = mdsmap.get_epoch();
     compat = MDSMap::get_compat_set_default();
-    compat.merge(mdsmap->compat);
+    compat.merge(mdsmap.compat);
   }
 }
 
@@ -262,13 +264,13 @@ bool Beacon::is_laggy()
   utime_t now = ceph_clock_now();
   utime_t since = now - last_acked_stamp;
   if (since > g_conf()->mds_beacon_grace) {
-    dout(5) << "is_laggy " << since << " > " << g_conf()->mds_beacon_grace
+    dout(1) << "is_laggy " << since << " > " << g_conf()->mds_beacon_grace
 	    << " since last acked beacon" << dendl;
     was_laggy = true;
     if (since > (g_conf()->mds_beacon_grace*2) &&
 	now > last_mon_reconnect + g_conf()->mds_beacon_interval) {
       // maybe it's not us?
-      dout(5) << "initiating monitor reconnect; maybe we're not the slow one"
+      dout(1) << "initiating monitor reconnect; maybe we're not the slow one"
               << dendl;
       last_mon_reconnect = now;
       monc->reopen_session();
@@ -285,7 +287,7 @@ utime_t Beacon::get_laggy_until() const
   return laggy_until;
 }
 
-void Beacon::set_want_state(MDSMap const *mdsmap, MDSMap::DaemonState const newstate)
+void Beacon::set_want_state(const MDSMap &mdsmap, MDSMap::DaemonState const newstate)
 {
   Mutex::Locker l(lock);
 
@@ -297,7 +299,7 @@ void Beacon::set_want_state(MDSMap const *mdsmap, MDSMap::DaemonState const news
   _notify_mdsmap(mdsmap);
 
   if (want_state != newstate) {
-    dout(10) << __func__ << ": "
+    dout(5) << __func__ << ": "
       << ceph_mds_state_name(want_state) << " -> "
       << ceph_mds_state_name(newstate) << dendl;
     want_state = newstate;

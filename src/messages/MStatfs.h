@@ -19,18 +19,20 @@
 #include <sys/statvfs.h>    /* or <sys/statfs.h> */
 #include "messages/PaxosServiceMessage.h"
 
-class MStatfs : public PaxosServiceMessage {
-
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+class MStatfs : public MessageInstance<MStatfs, PaxosServiceMessage> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
   uuid_d fsid;
   boost::optional<int64_t> data_pool;
 
-  MStatfs() : PaxosServiceMessage(CEPH_MSG_STATFS, 0, HEAD_VERSION, COMPAT_VERSION) {}
+  MStatfs() : MessageInstance(CEPH_MSG_STATFS, 0, HEAD_VERSION, COMPAT_VERSION) {}
   MStatfs(const uuid_d& f, ceph_tid_t t, boost::optional<int64_t> _data_pool,
-	      version_t v) : PaxosServiceMessage(CEPH_MSG_STATFS, v,
+	      version_t v) : MessageInstance(CEPH_MSG_STATFS, v,
                                             HEAD_VERSION, COMPAT_VERSION),
 					         fsid(f), data_pool(_data_pool) {
     set_tid(t);

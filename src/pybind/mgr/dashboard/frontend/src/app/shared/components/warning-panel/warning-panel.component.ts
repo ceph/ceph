@@ -10,5 +10,6 @@ export class WarningPanelComponent {
    * The title to be displayed. Defaults to 'Warning'.
    * @type {string}
    */
-  @Input() title = 'Warning';
+  @Input()
+  title = 'Warning';
 }

@@ -6783,6 +6783,129 @@ TEST_F(TestLibRBD, NamespacesPP) {
   ASSERT_EQ("name3", names[0]);
 }
 
+TEST_F(TestLibRBD, Migration) {
+  bool old_format;
+  uint64_t features;
+  ASSERT_EQ(0, get_features(&old_format, &features));
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+  BOOST_SCOPE_EXIT(&ioctx) {
+    rados_ioctx_destroy(ioctx);
+  } BOOST_SCOPE_EXIT_END;
+
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+
+  rbd_image_options_t image_options;
+  rbd_image_options_create(&image_options);
+  BOOST_SCOPE_EXIT(&image_options) {
+    rbd_image_options_destroy(image_options);
+  } BOOST_SCOPE_EXIT_END;
+
+  ASSERT_EQ(0, rbd_migration_prepare(ioctx, name.c_str(), ioctx, name.c_str(),
+                                     image_options));
+
+  rbd_image_migration_status_t status;
+  ASSERT_EQ(0, rbd_migration_status(ioctx, name.c_str(), &status,
+                                    sizeof(status)));
+  ASSERT_EQ(status.source_pool_id, rados_ioctx_get_id(ioctx));
+  ASSERT_EQ(status.source_image_name, name);
+  if (old_format) {
+    ASSERT_EQ(status.source_image_id, string());
+  } else {
+    ASSERT_NE(status.source_image_id, string());
+  }
+  ASSERT_EQ(status.dest_pool_id, rados_ioctx_get_id(ioctx));
+  ASSERT_EQ(status.dest_image_name, name);
+  ASSERT_NE(status.dest_image_id, string());
+  ASSERT_EQ(status.state, RBD_IMAGE_MIGRATION_STATE_PREPARED);
+  rbd_migration_status_cleanup(&status);
+
+  ASSERT_EQ(-EBUSY, rbd_remove(ioctx, name.c_str()));
+
+  ASSERT_EQ(0, rbd_migration_execute(ioctx, name.c_str()));
+
+  ASSERT_EQ(0, rbd_migration_status(ioctx, name.c_str(), &status,
+                                    sizeof(status)));
+  ASSERT_EQ(status.state, RBD_IMAGE_MIGRATION_STATE_EXECUTED);
+  rbd_migration_status_cleanup(&status);
+
+  ASSERT_EQ(0, rbd_migration_commit(ioctx, name.c_str()));
+
+  std::string new_name = get_temp_image_name();
+
+  ASSERT_EQ(0, rbd_migration_prepare(ioctx, name.c_str(), ioctx,
+                                     new_name.c_str(), image_options));
+
+  ASSERT_EQ(-EBUSY, rbd_remove(ioctx, new_name.c_str()));
+
+  ASSERT_EQ(0, rbd_migration_abort(ioctx, name.c_str()));
+
+  rbd_image_t image;
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+  EXPECT_EQ(0, rbd_close(image));
+}
+
+TEST_F(TestLibRBD, MigrationPP) {
+  bool old_format;
+  uint64_t features;
+  ASSERT_EQ(0, get_features(&old_format, &features));
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  librbd::RBD rbd;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::ImageOptions image_options;
+
+  ASSERT_EQ(0, rbd.migration_prepare(ioctx, name.c_str(), ioctx, name.c_str(),
+                                     image_options));
+
+  librbd::image_migration_status_t status;
+  ASSERT_EQ(0, rbd.migration_status(ioctx, name.c_str(), &status,
+                                    sizeof(status)));
+  ASSERT_EQ(status.source_pool_id, ioctx.get_id());
+  ASSERT_EQ(status.source_image_name, name);
+  if (old_format) {
+    ASSERT_EQ(status.source_image_id, "");
+  } else {
+    ASSERT_NE(status.source_image_id, "");
+  }
+  ASSERT_EQ(status.dest_pool_id, ioctx.get_id());
+  ASSERT_EQ(status.dest_image_name, name);
+  ASSERT_NE(status.dest_image_id, "");
+  ASSERT_EQ(status.state, RBD_IMAGE_MIGRATION_STATE_PREPARED);
+
+  ASSERT_EQ(-EBUSY, rbd.remove(ioctx, name.c_str()));
+
+  ASSERT_EQ(0, rbd.migration_execute(ioctx, name.c_str()));
+
+  ASSERT_EQ(0, rbd.migration_status(ioctx, name.c_str(), &status,
+                                    sizeof(status)));
+  ASSERT_EQ(status.state, RBD_IMAGE_MIGRATION_STATE_EXECUTED);
+
+  ASSERT_EQ(0, rbd.migration_commit(ioctx, name.c_str()));
+
+  std::string new_name = get_temp_image_name();
+
+  ASSERT_EQ(0, rbd.migration_prepare(ioctx, name.c_str(), ioctx,
+                                     new_name.c_str(), image_options));
+
+  ASSERT_EQ(-EBUSY, rbd.remove(ioctx, new_name.c_str()));
+
+  ASSERT_EQ(0, rbd.migration_abort(ioctx, name.c_str()));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+}
+
 // poorman's assert()
 namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,

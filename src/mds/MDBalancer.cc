@@ -27,7 +27,6 @@
 
 #include "include/Context.h"
 #include "msg/Messenger.h"
-#include "messages/MHeartbeat.h"
 
 #include <fstream>
 #include <iostream>
@@ -60,13 +59,12 @@ using std::chrono::duration_cast;
 #define MIN_OFFLOAD 10   // point at which i stop trying, close enough
 
 
-/* This function DOES put the passed message before returning */
-int MDBalancer::proc_message(Message *m)
+int MDBalancer::proc_message(const Message::const_ref &m)
 {
   switch (m->get_type()) {
 
   case MSG_MDS_HEARTBEAT:
-    handle_heartbeat(static_cast<MHeartbeat*>(m));
+    handle_heartbeat(MHeartbeat::msgref_cast(m));
     break;
 
   default:
@@ -245,32 +243,54 @@ mds_load_t MDBalancer::get_load()
   }
 
   uint64_t num_requests = mds->get_num_requests();
-  bool new_req_rate = false;
-  if (last_get_load != clock::zero() &&
-      now > last_get_load &&
-      num_requests >= last_num_requests) {
-    double el = std::chrono::duration<double>(now-last_get_load).count();
-    if (el >= 1.0) {
-      load.req_rate = (num_requests - last_num_requests) / (double)el;
-      new_req_rate = true;
+
+  uint64_t cpu_time = 1;
+  {
+    string stat_path = PROCPREFIX "/proc/self/stat";
+    ifstream stat_file(stat_path);
+    if (stat_file.is_open()) {
+      vector<string> stat_vec(std::istream_iterator<string>{stat_file},
+			      std::istream_iterator<string>());
+      if (stat_vec.size() >= 15) {
+	// utime + stime
+	cpu_time = strtoll(stat_vec[13].c_str(), nullptr, 10) +
+		   strtoll(stat_vec[14].c_str(), nullptr, 10);
+      } else {
+	derr << "input file '" << stat_path << "' not resolvable" << dendl_impl;
+      }
+    } else {
+      derr << "input file '" << stat_path << "' not found" << dendl_impl;
     }
   }
-  if (!new_req_rate) {
-    auto p = mds_load.find(mds->get_nodeid());
-    if (p != mds_load.end())
-      load.req_rate = p->second.req_rate;
-  }
-  last_get_load = now;
-  last_num_requests = num_requests;
 
   load.queue_len = messenger->get_dispatch_queue_len();
 
-  ifstream cpu(PROCPREFIX "/proc/loadavg");
-  if (cpu.is_open())
-    cpu >> load.cpu_load_avg;
-  else
-    derr << "input file " PROCPREFIX "'/proc/loadavg' not found" << dendl_impl;
-  
+  bool update_last = true;
+  if (last_get_load != clock::zero() &&
+      now > last_get_load) {
+    double el = std::chrono::duration<double>(now-last_get_load).count();
+    if (el >= 1.0) {
+      if (num_requests > last_num_requests)
+	load.req_rate = (num_requests - last_num_requests) / el;
+      if (cpu_time > last_cpu_time)
+	load.cpu_load_avg = (cpu_time - last_cpu_time) / el;
+    } else {
+      auto p = mds_load.find(mds->get_nodeid());
+      if (p != mds_load.end()) {
+	load.req_rate = p->second.req_rate;
+	load.cpu_load_avg = p->second.cpu_load_avg;
+      }
+      if (num_requests >= last_num_requests && cpu_time >= last_cpu_time)
+	update_last = false;
+    }
+  }
+
+  if (update_last) {
+    last_num_requests = num_requests;
+    last_cpu_time = cpu_time;
+    last_get_load = now;
+  }
+
   dout(15) << "get_load " << load << dendl;
   return load;
 }
@@ -370,23 +390,22 @@ void MDBalancer::send_heartbeat()
 
   set<mds_rank_t> up;
   mds->get_mds_map()->get_up_mds_set(up);
-  for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) {
-    if (*p == mds->get_nodeid())
+  for (const auto& r : up) {
+    if (r == mds->get_nodeid())
       continue;
-    MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
+    auto hb = MHeartbeat::create(load, beat_epoch);
     hb->get_import_map() = import_map;
-    messenger->send_to_mds(hb, mds->mdsmap->get_addrs(*p));
+    mds->send_message_mds(hb, r);
   }
 }
 
-/* This function DOES put the passed message before returning */
-void MDBalancer::handle_heartbeat(MHeartbeat *m)
+void MDBalancer::handle_heartbeat(const MHeartbeat::const_ref &m)
 {
   mds_rank_t who = mds_rank_t(m->get_source().num());
   dout(25) << "=== got heartbeat " << m->get_beat() << " from " << m->get_source().num() << " " << m->get_load() << dendl;
 
   if (!mds->is_active())
-    goto out;
+    return;
 
   if (!mds->mdcache->is_open()) {
     dout(10) << "opening root on handle_heartbeat" << dendl;
@@ -396,7 +415,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 
   if (mds->is_cluster_degraded()) {
     dout(10) << " degraded, ignoring" << dendl;
-    goto out;
+    return;
   }
 
   if (mds->get_nodeid() != 0 && m->get_beat() > beat_epoch) {
@@ -420,7 +439,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   } else if (mds->get_nodeid() == 0) {
     if (beat_epoch != m->get_beat()) {
       dout(10) << " old heartbeat epoch, ignoring" << dendl;
-      goto out;
+      return;
     }
   }
 
@@ -441,7 +460,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
       /* avoid spamming ceph -w if user does not turn mantle on */
       if (mds->mdsmap->get_balancer() != "") {
         int r = mantle_prep_rebalance();
-        if (!r) goto out;
+        if (!r) return;
 	mds->clog->warn() << "using old balancer; mantle failed for "
                           << "balancer=" << mds->mdsmap->get_balancer()
                           << " : " << cpp_strerror(r);
@@ -449,10 +468,6 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
       prep_rebalance(m->get_beat());
     }
   }
-
-  // done
- out:
-  m->put();
 }
 
 double MDBalancer::try_match(balance_state_t& state, mds_rank_t ex, double& maxex,

@@ -108,7 +108,7 @@ def check_sanity():
     compiler = new_compiler()
     distutils.sysconfig.customize_compiler(compiler)
 
-    if {'MAKEFLAGS', 'MFLAGS', 'MAKELEVEL'}.issubset(set(os.environ.keys())):
+    if {'MAKEFLAGS', 'MAKELEVEL'}.issubset(set(os.environ.keys())):
         # The setup.py has been invoked by a top-level Ceph make.
         # Set the appropriate CFLAGS and LDFLAGS
 

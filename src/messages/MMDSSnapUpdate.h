@@ -17,22 +17,26 @@
 
 #include "msg/Message.h"
 
-class MMDSSnapUpdate : public Message {
+class MMDSSnapUpdate : public MessageInstance<MMDSSnapUpdate> {
+public:
+  friend factory;
+private:
+
   inodeno_t ino;
   __s16 snap_op;
 
 public:
-  inodeno_t get_ino() { return ino; }
-  int get_snap_op() { return snap_op; }
+  inodeno_t get_ino() const { return ino; }
+  int get_snap_op() const { return snap_op; }
 
   bufferlist snap_blob;
 
-  MMDSSnapUpdate() : Message(MSG_MDS_SNAPUPDATE) {}
+protected:
+  MMDSSnapUpdate() : MessageInstance(MSG_MDS_SNAPUPDATE) {}
   MMDSSnapUpdate(inodeno_t i, version_t tid, int op) :
-    Message(MSG_MDS_SNAPUPDATE), ino(i), snap_op(op) {
+    MessageInstance(MSG_MDS_SNAPUPDATE), ino(i), snap_op(op) {
       set_tid(tid);
     }
-private:
   ~MMDSSnapUpdate() override {}
 
 public:

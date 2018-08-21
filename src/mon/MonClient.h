@@ -409,17 +409,11 @@ public:
     return monmap.fsid;
   }
 
-  entity_addr_t get_mon_addr(unsigned i) const {
+  entity_addrvec_t get_mon_addrs(unsigned i) const {
     Mutex::Locker l(monc_lock);
     if (i < monmap.size())
-      return monmap.get_addr(i);
-    return entity_addr_t();
-  }
-  entity_inst_t get_mon_inst(unsigned i) const {
-    Mutex::Locker l(monc_lock);
-    if (i < monmap.size())
-      return monmap.get_inst(i);
-    return entity_inst_t();
+      return monmap.get_addrs(i);
+    return entity_addrvec_t();
   }
   int get_num_mon() const {
     Mutex::Locker l(monc_lock);

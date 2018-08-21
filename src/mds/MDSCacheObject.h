@@ -235,7 +235,14 @@ protected:
 
   // --------------------------------------------
   // auth pins
-  virtual bool can_auth_pin() const = 0;
+  enum {
+    // can_auth_pin() error codes
+    ERR_NOT_AUTH = 1,
+    ERR_EXPORTING_TREE,
+    ERR_FRAGMENTING_DIR,
+    ERR_EXPORTING_INODE,
+  };
+  virtual bool can_auth_pin(int *err_code=nullptr) const = 0;
   virtual void auth_pin(void *who) = 0;
   virtual void auth_unpin(void *who) = 0;
   virtual bool is_frozen() const = 0;
@@ -376,7 +383,7 @@ protected:
   virtual SimpleLock* get_lock(int type) { ceph_abort(); return 0; }
   virtual void set_object_info(MDSCacheObjectInfo &info) { ceph_abort(); }
   virtual void encode_lock_state(int type, bufferlist& bl) { ceph_abort(); }
-  virtual void decode_lock_state(int type, bufferlist& bl) { ceph_abort(); }
+  virtual void decode_lock_state(int type, const bufferlist& bl) { ceph_abort(); }
   virtual void finish_lock_waiters(int type, uint64_t mask, int r=0) { ceph_abort(); }
   virtual void add_lock_waiter(int type, uint64_t mask, MDSInternalContextBase *c) { ceph_abort(); }
   virtual bool is_lock_waiting(int type, uint64_t mask) { ceph_abort(); return false; }

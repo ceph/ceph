@@ -65,9 +65,20 @@ function(do_build_boost version)
   set(BOOST_CXXFLAGS "-fPIC -w") # check on arm, etc <---XXX
   list(APPEND boost_features "cxxflags=${BOOST_CXXFLAGS}")
 
-  list(FIND Boost_BUILD_COMPONENTS "python" with_python)
-  list_replace(Boost_BUILD_COMPONENTS "unit_test_framework" "test")
-  string(REPLACE ";" "," boost_with_libs "${Boost_BUILD_COMPONENTS}")
+  set(boost_with_libs)
+  foreach(c ${Boost_BUILD_COMPONENTS})
+    if(c MATCHES "^python([0-9])\$")
+      set(with_python_version "${CMAKE_MATCH_1}")
+      list(APPEND boost_with_libs "python")
+    elseif(c MATCHES "^python([0-9])\\.?([0-9])\$")
+      set(with_python_version "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}")
+      list(APPEND boost_with_libs "python")
+    else()
+      list(APPEND boost_with_libs ${c})
+    endif()
+  endforeach()
+  list_replace(boost_with_libs "unit_test_framework" "test")
+  string(REPLACE ";" "," boost_with_libs "${boost_with_libs}")
   # build b2 and prepare the project-config.jam for boost
   set(configure_command
     ./bootstrap.sh --prefix=<INSTALL_DIR>
@@ -97,12 +108,12 @@ function(do_build_boost version)
     " : "
     " : ${CMAKE_CXX_COMPILER}"
     " ;\n")
-  if(with_python GREATER -1)
-    set(python_ver ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR})
+  if(with_python_version)
+    find_package(PythonLibs ${with_python_version} QUIET REQUIRED)
     string(REPLACE ";" " " python_includes "${PYTHON_INCLUDE_DIRS}")
     file(APPEND ${user_config}
       "using python"
-      " : ${python_ver}"
+      " : ${with_python_version}"
       " : ${PYTHON_EXECUTABLE}"
       " : ${python_includes}"
       " : ${PYTHON_LIBRARIES}"
@@ -111,12 +122,8 @@ function(do_build_boost version)
   list(APPEND b2 --user-config=${user_config})
 
   list(APPEND b2 toolset=${toolset})
-  if(with_python GREATER -1)
-    if(NOT PYTHONLIBS_FOUND)
-      message(FATAL_ERROR "Please call find_package(PythonLibs) first for building "
-        "Boost.Python")
-    endif()
-    list(APPEND b2 python=${python_ver})
+  if(with_python_version)
+    list(APPEND b2 python=${with_python_version})
   endif()
 
   set(build_command
@@ -197,17 +204,15 @@ macro(build_boost version)
       add_library(Boost::${c} SHARED IMPORTED)
     endif()
     add_dependencies(Boost::${c} Boost)
-    if(c STREQUAL python)
-      set(buildid "${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}")
-    else()
-      set(buildid "")
+    if(c MATCHES "^python")
+      set(c "python${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}")
     endif()
     if(Boost_USE_STATIC_LIBS)
       set(Boost_${upper_c}_LIBRARY
-        ${install_dir}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}boost_${c}${buildid}${CMAKE_STATIC_LIBRARY_SUFFIX})
+        ${install_dir}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}boost_${c}${CMAKE_STATIC_LIBRARY_SUFFIX})
     else()
       set(Boost_${upper_c}_LIBRARY
-        ${install_dir}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}boost_${c}${buildid}${CMAKE_SHARED_LIBRARY_SUFFIX})
+        ${install_dir}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}boost_${c}${CMAKE_SHARED_LIBRARY_SUFFIX})
     endif()
     unset(buildid)
     set_target_properties(Boost::${c} PROPERTIES

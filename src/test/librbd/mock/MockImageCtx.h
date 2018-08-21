@@ -111,7 +111,8 @@ struct MockImageCtx {
       mirroring_replay_delay(image_ctx.mirroring_replay_delay),
       non_blocking_aio(image_ctx.non_blocking_aio),
       blkin_trace_all(image_ctx.blkin_trace_all),
-      enable_alloc_hint(image_ctx.enable_alloc_hint)
+      enable_alloc_hint(image_ctx.enable_alloc_hint),
+      ignore_migrating(image_ctx.ignore_migrating)
   {
     md_ctx.dup(image_ctx.md_ctx);
     data_ctx.dup(image_ctx.data_ctx);
@@ -156,6 +157,8 @@ struct MockImageCtx {
   MOCK_CONST_METHOD1(get_image_size, uint64_t(librados::snap_t));
   MOCK_CONST_METHOD1(get_object_count, uint64_t(librados::snap_t));
   MOCK_CONST_METHOD1(get_read_flags, int(librados::snap_t));
+  MOCK_CONST_METHOD2(get_flags, int(librados::snap_t in_snap_id,
+                     uint64_t *flags));
   MOCK_CONST_METHOD2(get_snap_id,
 		     librados::snap_t(cls::rbd::SnapshotNamespace snap_namespace,
 				      std::string in_snap_name));
@@ -264,6 +267,7 @@ struct MockImageCtx {
   std::string id;
   std::string name;
   ParentInfo parent_md;
+  MigrationInfo migration_info;
   char *format_string;
   cls::rbd::GroupSpec group_spec;
 
@@ -316,6 +320,7 @@ struct MockImageCtx {
   bool non_blocking_aio;
   bool blkin_trace_all;
   bool enable_alloc_hint;
+  bool ignore_migrating;
 };
 
 } // namespace librbd

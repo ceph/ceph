@@ -23,19 +23,21 @@
  * PGCreate - instruct an OSD to create a pg, if it doesn't already exist
  */
 
-struct MOSDPGCreate : public Message {
+class MOSDPGCreate : public MessageInstance<MOSDPGCreate> {
+public:
+  friend factory;
 
-  const static int HEAD_VERSION = 3;
-  const static int COMPAT_VERSION = 3;
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 3;
 
   version_t          epoch = 0;
   map<pg_t,pg_create_t> mkpg;
   map<pg_t,utime_t> ctimes;
 
   MOSDPGCreate()
-    : Message(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGCreate(epoch_t e)
-    : Message(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION),
       epoch(e) { }
 private:
   ~MOSDPGCreate() override {}

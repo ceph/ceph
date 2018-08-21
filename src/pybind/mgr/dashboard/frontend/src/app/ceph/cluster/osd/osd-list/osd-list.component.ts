@@ -19,9 +19,12 @@ import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.compo
   styleUrls: ['./osd-list.component.scss']
 })
 export class OsdListComponent implements OnInit {
-  @ViewChild('statusColor') statusColor: TemplateRef<any>;
-  @ViewChild('osdUsageTpl') osdUsageTpl: TemplateRef<any>;
-  @ViewChild(TableComponent) tableComponent: TableComponent;
+  @ViewChild('statusColor')
+  statusColor: TemplateRef<any>;
+  @ViewChild('osdUsageTpl')
+  osdUsageTpl: TemplateRef<any>;
+  @ViewChild(TableComponent)
+  tableComponent: TableComponent;
 
   permission: Permission;
   bsModalRef: BsModalRef;
@@ -72,6 +75,7 @@ export class OsdListComponent implements OnInit {
         osd.collectedStates = this.collectStates(osd);
         osd.stats_history.out_bytes = osd.stats_history.op_out_bytes.map((i) => i[1]);
         osd.stats_history.in_bytes = osd.stats_history.op_in_bytes.map((i) => i[1]);
+        osd.cdIsBinary = true;
         return osd;
       });
     });

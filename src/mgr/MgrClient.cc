@@ -428,7 +428,7 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
     MCommand *m = op.get_message({});
     session->con->send_message(m);
   } else {
-    ldout(cct, 4) << "start_command: no mgr session, waiting" << dendl;
+    ldout(cct, 0) << "no mgr session (no running mgr daemon?), waiting" << dendl;
   }
   return 0;
 }
@@ -510,6 +510,7 @@ int MgrClient::service_daemon_update_status(
 
 void MgrClient::update_daemon_health(std::vector<DaemonHealthMetric>&& metrics)
 {
+  Mutex::Locker l(lock);
   daemon_health_metrics = std::move(metrics);
 }
 

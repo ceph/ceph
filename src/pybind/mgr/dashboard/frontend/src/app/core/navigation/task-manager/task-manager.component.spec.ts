@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { PopoverModule } from 'ngx-bootstrap';
 
@@ -18,7 +19,7 @@ describe('TaskManagerComponent', () => {
   };
 
   configureTestBed({
-    imports: [SharedModule, PopoverModule.forRoot(), HttpClientTestingModule],
+    imports: [SharedModule, PopoverModule.forRoot(), HttpClientTestingModule, RouterTestingModule],
     declarations: [TaskManagerComponent]
   });
 
@@ -56,14 +57,19 @@ describe('TaskManagerComponent', () => {
     expect(component.executingTasks[0].description).toBe(`Deleting RBD 'somePool/someImage'`);
   });
 
-  it('should get finished message for task', () => {
+  it('should get finished message for successful task', () => {
     component._handleTasks([], tasks.finished);
     expect(component.finishedTasks.length).toBe(2);
-    expect(component.finishedTasks[0].description).toBe(`Copy RBD 'somePool/someImage'`);
+    expect(component.finishedTasks[0].description).toBe(`Copied RBD 'somePool/someImage'`);
     expect(component.finishedTasks[0].errorMessage).toBe(undefined);
-    expect(component.finishedTasks[1].description).toBe(`Clone RBD 'somePool/someImage'`);
+  });
+
+  it('should get failed message for finished task', () => {
+    component._handleTasks([], tasks.finished);
+    expect(component.finishedTasks.length).toBe(2);
+    expect(component.finishedTasks[1].description).toBe(`Failed to clone RBD 'somePool/someImage'`);
     expect(component.finishedTasks[1].errorMessage).toBe(
-      `Name 'somePool/someImage' is already in use.`
+      `Name is already used by RBD 'somePool/someImage'.`
     );
   });
 

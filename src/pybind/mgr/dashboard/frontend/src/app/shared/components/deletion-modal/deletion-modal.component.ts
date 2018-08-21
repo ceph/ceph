@@ -13,7 +13,8 @@ import { SubmitButtonComponent } from '../submit-button/submit-button.component'
   styleUrls: ['./deletion-modal.component.scss']
 })
 export class DeletionModalComponent implements OnInit {
-  @ViewChild(SubmitButtonComponent) submitButton: SubmitButtonComponent;
+  @ViewChild(SubmitButtonComponent)
+  submitButton: SubmitButtonComponent;
   description: TemplateRef<any>;
   metaType: string;
   pattern = 'yes';
@@ -92,5 +93,9 @@ export class DeletionModalComponent implements OnInit {
 
   stopLoadingSpinner() {
     this.deletionForm.setErrors({ cdSubmitButton: true });
+  }
+
+  escapeRegExp(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 }

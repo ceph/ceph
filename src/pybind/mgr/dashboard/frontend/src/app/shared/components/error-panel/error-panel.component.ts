@@ -10,11 +10,13 @@ export class ErrorPanelComponent {
    * The title to be displayed. Defaults to 'Error'.
    * @type {string}
    */
-  @Input() title = 'Error';
+  @Input()
+  title = 'Error';
 
   /**
    * The event that is triggered when the 'Back' button is pressed.
    * @type {EventEmitter<any>}
    */
-  @Output() backAction = new EventEmitter();
+  @Output()
+  backAction = new EventEmitter();
 }

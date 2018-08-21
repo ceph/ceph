@@ -108,11 +108,12 @@ class MDSCommandOp : public CommandOp
 
 /* getdir result */
 struct DirEntry {
+  explicit DirEntry(const string &s) : d_name(s), stmask(0) {}
+  DirEntry(const string &n, struct stat& s, int stm) : d_name(n), st(s), stmask(stm) {}
+
   string d_name;
   struct stat st;
   int stmask;
-  explicit DirEntry(const string &s) : d_name(s), stmask(0) {}
-  DirEntry(const string &n, struct stat& s, int stm) : d_name(n), st(s), stmask(stm) {}
 };
 
 struct Cap;
@@ -156,6 +157,24 @@ struct dir_result_t {
   static const int64_t HASH = 0xFFULL << (SHIFT + 24); // impossible frag bits
   static const loff_t END = 1ULL << (SHIFT + 32);
 
+  struct dentry {
+    int64_t offset;
+    string name;
+    InodeRef inode;
+    explicit dentry(int64_t o) : offset(o) {}
+    dentry(int64_t o, const string& n, const InodeRef& in) :
+      offset(o), name(n), inode(in) {}
+  };
+  struct dentry_off_lt {
+    bool operator()(const dentry& d, int64_t off) const {
+      return dir_result_t::fpos_cmp(d.offset, off) < 0;
+    }
+  };
+
+
+  explicit dir_result_t(Inode *in, const UserPerm& perms);
+
+
   static uint64_t make_fpos(unsigned h, unsigned l, bool hash) {
     uint64_t v =  ((uint64_t)h<< SHIFT) | (uint64_t)l;
     if (hash)
@@ -181,41 +200,6 @@ struct dir_result_t {
       return 0;
     return fpos_low(l) < fpos_low(r) ? -1 : 1;
   }
-
-  InodeRef inode;
-  int64_t offset;        // hash order:
-			 //   (0xff << 52) | ((24 bits hash) << 28) |
-			 //   (the nth entry has hash collision);
-			 // frag+name order;
-			 //   ((frag value) << 28) | (the nth entry in frag);
-
-  unsigned next_offset;  // offset of next chunk (last_name's + 1)
-  string last_name;      // last entry in previous chunk
-
-  uint64_t release_count;
-  uint64_t ordered_count;
-  unsigned cache_index;
-  int start_shared_gen;  // dir shared_gen at start of readdir
-  UserPerm perms;
-
-  frag_t buffer_frag;
-
-  struct dentry {
-    int64_t offset;
-    string name;
-    InodeRef inode;
-    explicit dentry(int64_t o) : offset(o) {}
-    dentry(int64_t o, const string& n, const InodeRef& in) :
-      offset(o), name(n), inode(in) {}
-  };
-  struct dentry_off_lt {
-    bool operator()(const dentry& d, int64_t off) const {
-      return dir_result_t::fpos_cmp(d.offset, off) < 0;
-    }
-  };
-  vector<dentry> buffer;
-
-  explicit dir_result_t(Inode *in, const UserPerm& perms);
 
   unsigned offset_high() { return fpos_high(offset); }
   unsigned offset_low() { return fpos_low(offset); }
@@ -244,714 +228,69 @@ struct dir_result_t {
     cache_index = 0;
     buffer.clear();
   }
+
+  InodeRef inode;
+  int64_t offset;        // hash order:
+			 //   (0xff << 52) | ((24 bits hash) << 28) |
+			 //   (the nth entry has hash collision);
+			 // frag+name order;
+			 //   ((frag value) << 28) | (the nth entry in frag);
+
+  unsigned next_offset;  // offset of next chunk (last_name's + 1)
+  string last_name;      // last entry in previous chunk
+
+  uint64_t release_count;
+  uint64_t ordered_count;
+  unsigned cache_index;
+  int start_shared_gen;  // dir shared_gen at start of readdir
+  UserPerm perms;
+
+  frag_t buffer_frag;
+
+  vector<dentry> buffer;
 };
 
 class Client : public Dispatcher, public md_config_obs_t {
- public:
+public:
+  friend class C_Block_Sync; // Calls block map and protected helpers
+  friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
+  friend class C_Client_DentryInvalidate;  // calls dentry_invalidate_cb
+  friend class C_Client_FlushComplete; // calls put_inode()
+  friend class C_Client_Remount;
+  friend class C_Client_RequestInterrupt;
+  friend class C_Deleg_Timeout; // Asserts on client_lock, called when a delegation is unreturned
+  friend class SyntheticClient;
+  friend void intrusive_ptr_release(Inode *in);
+
   using Dispatcher::cct;
 
-  std::unique_ptr<PerfCounters> logger;
+  typedef int (*add_dirent_cb_t)(void *p, struct dirent *de, struct ceph_statx *stx, off_t off, Inode *in);
 
   class CommandHook : public AdminSocketHook {
-    Client *m_client;
   public:
     explicit CommandHook(Client *client);
     bool call(std::string_view command, const cmdmap_t& cmdmap,
               std::string_view format, bufferlist& out) override;
+  private:
+    Client *m_client;
   };
-  CommandHook m_command_hook;
 
-  // cluster descriptors
-  std::unique_ptr<MDSMap> mdsmap;
-
-  SafeTimer timer;
-
-  void *callback_handle;
-  client_switch_interrupt_callback_t switch_interrupt_cb;
-  client_remount_callback_t remount_cb;
-  client_ino_callback_t ino_invalidate_cb;
-  client_dentry_callback_t dentry_invalidate_cb;
-  client_umask_callback_t umask_cb;
-  bool can_invalidate_dentries;
-
-  Finisher async_ino_invalidator;
-  Finisher async_dentry_invalidator;
-  Finisher interrupt_finisher;
-  Finisher remount_finisher;
-  Finisher objecter_finisher;
-
-  Context *tick_event;
-  utime_t last_cap_renew;
-  void renew_caps();
-  void renew_caps(MetaSession *session);
-  void flush_cap_releases();
-public:
-  void tick();
-
-  UserPerm pick_my_perms() {
-    uid_t uid = user_id >= 0 ? user_id : -1;
-    gid_t gid = group_id >= 0 ? group_id : -1;
-    return UserPerm(uid, gid);
-  }
+  Client(Messenger *m, MonClient *mc, Objecter *objecter_);
+  Client(const Client&) = delete;
+  Client(const Client&&) = delete;
+  virtual ~Client() override;
 
   static UserPerm pick_my_perms(CephContext *c) {
     uid_t uid = c->_conf->client_mount_uid >= 0 ? c->_conf->client_mount_uid : -1;
     gid_t gid = c->_conf->client_mount_gid >= 0 ? c->_conf->client_mount_gid : -1;
     return UserPerm(uid, gid);
   }
-protected:
-  Messenger *messenger;  
-  MonClient *monclient;
-  Objecter  *objecter;
-
-  client_t whoami;
-
-  int user_id, group_id;
-  int acl_type;
-
-  void set_cap_epoch_barrier(epoch_t e);
-  epoch_t cap_epoch_barrier;
-
-  // mds sessions
-  map<mds_rank_t, MetaSession> mds_sessions;  // mds -> push seq
-  list<Cond*> waiting_for_mdsmap;
-
-  // FSMap, for when using mds_command
-  list<Cond*> waiting_for_fsmap;
-  std::unique_ptr<FSMap> fsmap;
-  std::unique_ptr<FSMapUser> fsmap_user;
-
-  // MDS command state
-  CommandTable<MDSCommandOp> command_table;
-  void handle_command_reply(MCommandReply *m);
-  int fetch_fsmap(bool user);
-  int resolve_mds(
-      const std::string &mds_spec,
-      std::vector<mds_gid_t> *targets);
-
-  void get_session_metadata(std::map<std::string, std::string> *meta) const;
-  bool have_open_session(mds_rank_t mds);
-  void got_mds_push(MetaSession *s);
-  MetaSession *_get_mds_session(mds_rank_t mds, Connection *con);  ///< return session for mds *and* con; null otherwise
-  MetaSession *_get_or_open_mds_session(mds_rank_t mds);
-  MetaSession *_open_mds_session(mds_rank_t mds);
-  void _close_mds_session(MetaSession *s);
-  void _closed_mds_session(MetaSession *s);
-  bool _any_stale_sessions() const;
-  void _kick_stale_sessions();
-  void handle_client_session(MClientSession *m);
-  void send_reconnect(MetaSession *s);
-  void resend_unsafe_requests(MetaSession *s);
-  void wait_unsafe_requests();
-
-  // mds requests
-  ceph_tid_t last_tid;
-  ceph_tid_t oldest_tid; // oldest incomplete mds request, excluding setfilelock requests
-  map<ceph_tid_t, MetaRequest*> mds_requests;
-
-  // cap flushing
-  ceph_tid_t last_flush_tid;
-
-  void dump_mds_requests(Formatter *f);
-  void dump_mds_sessions(Formatter *f);
-
-  int make_request(MetaRequest *req, const UserPerm& perms,
-		   InodeRef *ptarget = 0, bool *pcreated = 0,
-		   mds_rank_t use_mds=-1, bufferlist *pdirbl=0);
-  void put_request(MetaRequest *request);
-  void unregister_request(MetaRequest *request);
-
-  int verify_reply_trace(int r, MetaRequest *request, MClientReply *reply,
-			 InodeRef *ptarget, bool *pcreated,
-			 const UserPerm& perms);
-  void encode_cap_releases(MetaRequest *request, mds_rank_t mds);
-  int encode_inode_release(Inode *in, MetaRequest *req,
-			   mds_rank_t mds, int drop,
-			   int unless,int force=0);
-  void encode_dentry_release(Dentry *dn, MetaRequest *req,
-			     mds_rank_t mds, int drop, int unless);
-  mds_rank_t choose_target_mds(MetaRequest *req, Inode** phash_diri=NULL);
-  void connect_mds_targets(mds_rank_t mds);
-  void send_request(MetaRequest *request, MetaSession *session,
-		    bool drop_cap_releases=false);
-  MClientRequest *build_client_request(MetaRequest *request);
-  void kick_requests(MetaSession *session);
-  void kick_requests_closed(MetaSession *session);
-  void handle_client_request_forward(MClientRequestForward *reply);
-  void handle_client_reply(MClientReply *reply);
-  bool is_dir_operation(MetaRequest *request);
-
-  bool   initialized = false;
-  bool   mounted = false;
-  bool   unmounting = false;
-  bool   blacklisted = false;
-
-  // When an MDS has sent us a REJECT, remember that and don't
-  // contact it again.  Remember which inst rejected us, so that
-  // when we talk to another inst with the same rank we can
-  // try again.
-  std::map<mds_rank_t, entity_addrvec_t> rejected_by_mds;
-
-  int local_osd;
-  epoch_t local_osd_epoch;
-
-  int unsafe_sync_write;
-
-public:
-  entity_name_t get_myname() { return messenger->get_myname(); } 
-  void _sync_write_commit(Inode *in);
-  void wait_on_list(list<Cond*>& ls);
-  void signal_cond_list(list<Cond*>& ls);
-
-protected:
-  std::unique_ptr<Filer>             filer;
-  std::unique_ptr<ObjectCacher>      objectcacher;
-  std::unique_ptr<WritebackHandler>  writeback_handler;
-
-  // cache
-  ceph::unordered_map<vinodeno_t, Inode*> inode_map;
-
-  // fake inode number for 32-bits ino_t
-  ceph::unordered_map<ino_t, vinodeno_t> faked_ino_map;
-  interval_set<ino_t> free_faked_inos;
-  ino_t last_used_faked_ino;
-  void _assign_faked_ino(Inode *in);
-  void _release_faked_ino(Inode *in);
-  bool _use_faked_inos;
-  void _reset_faked_inos();
-  vinodeno_t _map_faked_ino(ino_t ino);
-
-  std::map<snapid_t, int> ll_snap_ref;
-
-  Inode*                 root;
-  map<Inode*, InodeRef>  root_parents;
-  Inode*                 root_ancestor;
-  LRU                    lru;    // lru list of Dentry's in our local metadata cache.
-
-  // dirty_list keeps all the dirty inodes before flushing.
-  xlist<Inode*> delayed_list, dirty_list;
-  int num_flushing_caps;
-  ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
-
-  // Optional extra metadata about me to send to the MDS
-  std::map<std::string, std::string> metadata;
-  void populate_metadata(const std::string &mount_root);
-
-
-  /* async block write barrier support */
-  //map<uint64_t, BarrierContext* > barriers;
-
-  SnapRealm *get_snap_realm(inodeno_t r);
-  SnapRealm *get_snap_realm_maybe(inodeno_t r);
-  void put_snap_realm(SnapRealm *realm);
-  bool adjust_realm_parent(SnapRealm *realm, inodeno_t parent);
-  void update_snap_trace(bufferlist& bl, SnapRealm **realm_ret, bool must_flush=true);
-  void invalidate_snaprealm_and_children(SnapRealm *realm);
-
-  Inode *open_snapdir(Inode *diri);
-
-
-  // file handles, etc.
-  interval_set<int> free_fd_set;  // unused fds
-  ceph::unordered_map<int, Fh*> fd_map;
-  set<Fh*> ll_unclosed_fh_set;
-  ceph::unordered_set<dir_result_t*> opened_dirs;
-  
-  int get_fd() {
-    int fd = free_fd_set.range_start();
-    free_fd_set.erase(fd, 1);
-    return fd;
-  }
-  void put_fd(int fd) {
-    free_fd_set.insert(fd, 1);
+  UserPerm pick_my_perms() {
+    uid_t uid = user_id >= 0 ? user_id : -1;
+    gid_t gid = group_id >= 0 ? group_id : -1;
+    return UserPerm(uid, gid);
   }
 
-  /*
-   * Resolve file descriptor, or return NULL.
-   */
-  Fh *get_filehandle(int fd) {
-    ceph::unordered_map<int, Fh*>::iterator p = fd_map.find(fd);
-    if (p == fd_map.end())
-      return NULL;
-    return p->second;
-  }
-
-  // global client lock
-  //  - protects Client and buffer cache both!
-  Mutex                  client_lock;
-
-  // helpers
-  void wake_inode_waiters(MetaSession *s);
-
-  void wait_on_context_list(list<Context*>& ls);
-  void signal_context_list(list<Context*>& ls);
-
-  // -- metadata cache stuff
-
-  // decrease inode ref.  delete if dangling.
-  void put_inode(Inode *in, int n=1);
-  void close_dir(Dir *dir);
-
-  void _abort_mds_sessions(int err);
-  // same as unmount() but for when the client_lock is already held
-  void _unmount(bool abort);
-
-  friend class C_Client_FlushComplete; // calls put_inode()
-  friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
-  friend class C_Client_DentryInvalidate;  // calls dentry_invalidate_cb
-  friend class C_Block_Sync; // Calls block map and protected helpers
-  friend class C_Client_RequestInterrupt;
-  friend class C_Client_Remount;
-  friend class C_Deleg_Timeout; // Asserts on client_lock, called when a delegation is unreturned
-  friend void intrusive_ptr_release(Inode *in);
-
-  //int get_cache_size() { return lru.lru_get_size(); }
-
-  /**
-   * Don't call this with in==NULL, use get_or_create for that
-   * leave dn set to default NULL unless you're trying to add
-   * a new inode to a pre-created Dentry
-   */
-  Dentry* link(Dir *dir, const string& name, Inode *in, Dentry *dn);
-  void unlink(Dentry *dn, bool keepdir, bool keepdentry);
-
-  // path traversal for high-level interface
-  InodeRef cwd;
-  int path_walk(const filepath& fp, InodeRef *end, const UserPerm& perms,
-		bool followsym=true, int mask=0);
-		
-  int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
-  int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
-    return fill_stat(in.get(), st, dirstat, rstat);
-  }
-
-  void fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx);
-  void fill_statx(InodeRef& in, unsigned int mask, struct ceph_statx *stx) {
-    return fill_statx(in.get(), mask, stx);
-  }
-
-  void touch_dn(Dentry *dn);
-
-  // trim cache.
-  void trim_cache(bool trim_kernel_dcache=false);
-  void trim_cache_for_reconnect(MetaSession *s);
-  void trim_dentry(Dentry *dn);
-  void trim_caps(MetaSession *s, uint64_t max);
-  void _invalidate_kernel_dcache();
-  void _trim_negative_child_dentries(InodeRef& in);
-  
-  void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected);
-  void dump_cache(Formatter *f);  // debug
-
-  // force read-only
-  void force_session_readonly(MetaSession *s);
-
-  void dump_status(Formatter *f);  // debug
-  
-  // trace generation
-  ofstream traceout;
-
-
-  Cond mount_cond, sync_cond;
-
-
-  // friends
-  friend class SyntheticClient;
-  bool ms_dispatch(Message *m) override;
-
-  void ms_handle_connect(Connection *con) override;
-  bool ms_handle_reset(Connection *con) override;
-  void ms_handle_remote_reset(Connection *con) override;
-  bool ms_handle_refused(Connection *con) override;
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
-
-  int authenticate();
-
-  Inode* get_quota_root(Inode *in, const UserPerm& perms);
-  bool check_quota_condition(Inode *in, const UserPerm& perms,
-			     std::function<bool (const Inode &)> test);
-  bool is_quota_files_exceeded(Inode *in, const UserPerm& perms);
-  bool is_quota_bytes_exceeded(Inode *in, int64_t new_bytes,
-			       const UserPerm& perms);
-  bool is_quota_bytes_approaching(Inode *in, const UserPerm& perms);
-
-  std::map<std::pair<int64_t,std::string>, int> pool_perms;
-  list<Cond*> waiting_for_pool_perm;
-  int check_pool_perm(Inode *in, int need);
-
-  /**
-   * Call this when an OSDMap is seen with a full flag (global or per pool)
-   * set.
-   *
-   * @param pool the pool ID affected, or -1 if all.
-   */
-  void _handle_full_flag(int64_t pool);
-
-  void _close_sessions();
-
-  /**
-   * The basic housekeeping parts of init (perf counters, admin socket)
-   * that is independent of how objecters/monclient/messengers are
-   * being set up.
-   */
-  void _finish_init();
-
- public:
-  void set_filer_flags(int flags);
-  void clear_filer_flags(int flags);
-
-  Client(Messenger *m, MonClient *mc, Objecter *objecter_);
-  ~Client() override;
-  void tear_down_cache();
-
-  void update_metadata(std::string const &k, std::string const &v);
-
-  client_t get_nodeid() { return whoami; }
-
-  inodeno_t get_root_ino();
-  Inode *get_root();
-
-  virtual int init();
-  virtual void shutdown();
-
-  // messaging
-  void handle_mds_map(class MMDSMap *m);
-  void handle_fs_map(class MFSMap *m);
-  void handle_fs_map_user(class MFSMapUser *m);
-  void handle_osd_map(class MOSDMap *m);
-
-  void handle_lease(MClientLease *m);
-
-  // inline data
-  int uninline_data(Inode *in, Context *onfinish);
-
-  // file caps
-  void check_cap_issue(Inode *in, Cap *cap, unsigned issued);
-  void add_update_cap(Inode *in, MetaSession *session, uint64_t cap_id,
-		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
-		      int flags, const UserPerm& perms);
-  void remove_cap(Cap *cap, bool queue_release);
-  void remove_all_caps(Inode *in);
-  void remove_session_caps(MetaSession *session);
-  int mark_caps_flushing(Inode *in, ceph_tid_t *ptid);
-  void adjust_session_flushing_caps(Inode *in, MetaSession *old_s, MetaSession *new_s);
-  void flush_caps_sync();
-  void flush_caps(Inode *in, MetaSession *session, bool sync=false);
-  void kick_flushing_caps(MetaSession *session);
-  void early_kick_flushing_caps(MetaSession *session);
-  void kick_maxsize_requests(MetaSession *session);
-  int get_caps(Inode *in, int need, int want, int *have, loff_t endoff);
-  int get_caps_used(Inode *in);
-
-  void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater, 
-			      vector<snapid_t>& snaps);
-
-  void handle_quota(struct MClientQuota *m);
-  void handle_snap(struct MClientSnap *m);
-  void handle_caps(class MClientCaps *m);
-  void handle_cap_import(MetaSession *session, Inode *in, class MClientCaps *m);
-  void handle_cap_export(MetaSession *session, Inode *in, class MClientCaps *m);
-  void handle_cap_trunc(MetaSession *session, Inode *in, class MClientCaps *m);
-  void handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
-  void handle_cap_flushsnap_ack(MetaSession *session, Inode *in, class MClientCaps *m);
-  void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
-  void cap_delay_requeue(Inode *in);
-  void send_cap(Inode *in, MetaSession *session, Cap *cap, bool sync,
-		int used, int want, int retain, int flush,
-		ceph_tid_t flush_tid);
-
-  /* Flags for check_caps() */
-#define CHECK_CAPS_NODELAY	(0x1)
-#define CHECK_CAPS_SYNCHRONOUS	(0x2)
-
-  void check_caps(Inode *in, unsigned flags);
-  void get_cap_ref(Inode *in, int cap);
-  void put_cap_ref(Inode *in, int cap);
-  void flush_snaps(Inode *in, bool all_again=false);
-  void wait_sync_caps(Inode *in, ceph_tid_t want);
-  void wait_sync_caps(ceph_tid_t want);
-  void queue_cap_snap(Inode *in, SnapContext &old_snapc);
-  void finish_cap_snap(Inode *in, CapSnap &capsnap, int used);
-  void _flushed_cap_snap(Inode *in, snapid_t seq);
-
-  void _schedule_invalidate_dentry_callback(Dentry *dn, bool del);
-  void _async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string& name);
-  void _try_to_trim_inode(Inode *in, bool sched_inval);
-
-  void _schedule_invalidate_callback(Inode *in, int64_t off, int64_t len);
-  void _invalidate_inode_cache(Inode *in);
-  void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len);
-  void _async_invalidate(vinodeno_t ino, int64_t off, int64_t len);
-  bool _release(Inode *in);
-  
-  /**
-   * Initiate a flush of the data associated with the given inode.
-   * If you specify a Context, you are responsible for holding an inode
-   * reference for the duration of the flush. If not, _flush() will
-   * take the reference for you.
-   * @param in The Inode whose data you wish to flush.
-   * @param c The Context you wish us to complete once the data is
-   * flushed. If already flushed, this will be called in-line.
-   * 
-   * @returns true if the data was already flushed, false otherwise.
-   */
-  bool _flush(Inode *in, Context *c);
-  void _flush_range(Inode *in, int64_t off, uint64_t size);
-  void _flushed(Inode *in);
-  void flush_set_callback(ObjectCacher::ObjectSet *oset);
-
-  void close_release(Inode *in);
-  void close_safe(Inode *in);
-
-  void lock_fh_pos(Fh *f);
-  void unlock_fh_pos(Fh *f);
-  
-  // metadata cache
-  void update_dir_dist(Inode *in, DirStat *st);
-
-  void clear_dir_complete_and_ordered(Inode *diri, bool complete);
-  void insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri);
-  Inode* insert_trace(MetaRequest *request, MetaSession *session);
-  void update_inode_file_size(Inode *in, int issued, uint64_t size,
-			      uint64_t truncate_seq, uint64_t truncate_size);
-  void update_inode_file_time(Inode *in, int issued, uint64_t time_warp_seq,
-			      utime_t ctime, utime_t mtime, utime_t atime);
-
-  Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session,
-			  const UserPerm& request_perms);
-  Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
-			      Inode *in, utime_t from, MetaSession *session,
-			      Dentry *old_dentry = NULL);
-  void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, MetaSession *session);
-
-  bool use_faked_inos() { return _use_faked_inos; }
-  vinodeno_t map_faked_ino(ino_t ino);
- 
-  //notify the mds to flush the mdlog
-  void flush_mdlog_sync();
-  void flush_mdlog(MetaSession *session);
-  
-  xlist<Inode*> &get_dirty_list() { return dirty_list; }
-  // ----------------------
-  // fs ops.
-private:
-
-  uint32_t deleg_timeout;
-  void fill_dirent(struct dirent *de, const char *name, int type, uint64_t ino, loff_t next_off);
-
-  // some readdir helpers
-  typedef int (*add_dirent_cb_t)(void *p, struct dirent *de, struct ceph_statx *stx, off_t off, Inode *in);
-
-  int _opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms);
-  void _readdir_drop_dirp_buffer(dir_result_t *dirp);
-  bool _readdir_have_frag(dir_result_t *dirp);
-  void _readdir_next_frag(dir_result_t *dirp);
-  void _readdir_rechoose_frag(dir_result_t *dirp);
-  int _readdir_get_frag(dir_result_t *dirp);
-  int _readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p, int caps, bool getref);
-  void _closedir(dir_result_t *dirp);
-
-  // other helpers
-  void _fragmap_remove_non_leaves(Inode *in);
-  void _fragmap_remove_stopped_mds(Inode *in, mds_rank_t mds);
-
-  void _ll_get(Inode *in);
-  int _ll_put(Inode *in, int num);
-  void _ll_drop_pins();
-
-  Fh *_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms);
-  int _release_fh(Fh *fh);
-  void _put_fh(Fh *fh);
-
-  int _do_remount(void);
-
-  struct C_Readahead : public Context {
-    Client *client;
-    Fh *f;
-    C_Readahead(Client *c, Fh *f);
-    ~C_Readahead() override;
-    void finish(int r) override;
-  };
-
-  int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
-  int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
-
-  // internal interface
-  //   call these with client_lock held!
-  int _do_lookup(Inode *dir, const string& name, int mask, InodeRef *target,
-		 const UserPerm& perms);
-
-  int _lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
-	      const UserPerm& perm);
-
-  int _link(Inode *in, Inode *dir, const char *name, const UserPerm& perm,
-	    InodeRef *inp = 0);
-  int _unlink(Inode *dir, const char *name, const UserPerm& perm);
-  int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm);
-  int _mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& perm,
-	     InodeRef *inp = 0);
-  int _rmdir(Inode *dir, const char *name, const UserPerm& perms);
-  int _symlink(Inode *dir, const char *name, const char *target,
-	       const UserPerm& perms, InodeRef *inp = 0);
-  int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
-	     const UserPerm& perms, InodeRef *inp = 0);
-  int _do_setattr(Inode *in, struct ceph_statx *stx, int mask,
-		  const UserPerm& perms, InodeRef *inp);
-  void stat_to_statx(struct stat *st, struct ceph_statx *stx);
-  int __setattrx(Inode *in, struct ceph_statx *stx, int mask,
-		 const UserPerm& perms, InodeRef *inp = 0);
-  int _setattrx(InodeRef &in, struct ceph_statx *stx, int mask,
-		const UserPerm& perms);
-  int _setattr(InodeRef &in, struct stat *attr, int mask,
-	       const UserPerm& perms);
-  int _ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
-		   const UserPerm& perms, InodeRef *inp = 0);
-  int _getattr(Inode *in, int mask, const UserPerm& perms, bool force=false);
-  int _getattr(InodeRef &in, int mask, const UserPerm& perms, bool force=false) {
-    return _getattr(in.get(), mask, perms, force);
-  }
-  int _readlink(Inode *in, char *buf, size_t size);
-  int _getxattr(Inode *in, const char *name, void *value, size_t len,
-		const UserPerm& perms);
-  int _getxattr(InodeRef &in, const char *name, void *value, size_t len,
-		const UserPerm& perms);
-  int _listxattr(Inode *in, char *names, size_t len, const UserPerm& perms);
-  int _do_setxattr(Inode *in, const char *name, const void *value, size_t len,
-		   int flags, const UserPerm& perms);
-  int _setxattr(Inode *in, const char *name, const void *value, size_t len,
-		int flags, const UserPerm& perms);
-  int _setxattr(InodeRef &in, const char *name, const void *value, size_t len,
-		int flags, const UserPerm& perms);
-  int _setxattr_check_data_pool(string& name, string& value, const OSDMap *osdmap);
-  void _setxattr_maybe_wait_for_osdmap(const char *name, const void *value, size_t len);
-  int _removexattr(Inode *in, const char *nm, const UserPerm& perms);
-  int _removexattr(InodeRef &in, const char *nm, const UserPerm& perms);
-  int _open(Inode *in, int flags, mode_t mode, Fh **fhp,
-	    const UserPerm& perms);
-  int _renew_caps(Inode *in);
-  int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp,
-	      Fh **fhp, int stripe_unit, int stripe_count, int object_size,
-	      const char *data_pool, bool *created, const UserPerm &perms);
-
-  loff_t _lseek(Fh *fh, loff_t offset, int whence);
-  int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
-  int64_t _write(Fh *fh, int64_t offset, uint64_t size, const char *buf,
-          const struct iovec *iov, int iovcnt);
-  int64_t _preadv_pwritev_locked(Fh *f, const struct iovec *iov,
-	      unsigned iovcnt, int64_t offset, bool write, bool clamp_to_int);
-  int _preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write);
-  int _flush(Fh *fh);
-  int _fsync(Fh *fh, bool syncdataonly);
-  int _fsync(Inode *in, bool syncdataonly);
-  int _sync_fs();
-  int _fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
-  int _getlk(Fh *fh, struct flock *fl, uint64_t owner);
-  int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
-  int _flock(Fh *fh, int cmd, uint64_t owner);
-  int _lazyio(Fh *fh, int enable);
-
-  int get_or_create(Inode *dir, const char* name,
-		    Dentry **pdn, bool expect_null=false);
-
-  enum {
-    NO_ACL = 0,
-    POSIX_ACL,
-  };
-
-  enum {
-    MAY_EXEC = 1,
-    MAY_WRITE = 2,
-    MAY_READ = 4,
-  };
-
-  int xattr_permission(Inode *in, const char *name, unsigned want,
-		       const UserPerm& perms);
-  int may_setattr(Inode *in, struct ceph_statx *stx, int mask,
-		  const UserPerm& perms);
-  int may_open(Inode *in, int flags, const UserPerm& perms);
-  int may_lookup(Inode *dir, const UserPerm& perms);
-  int may_create(Inode *dir, const UserPerm& perms);
-  int may_delete(Inode *dir, const char *name, const UserPerm& perms);
-  int may_hardlink(Inode *in, const UserPerm& perms);
-
-  int _getattr_for_perm(Inode *in, const UserPerm& perms);
-
-  vinodeno_t _get_vino(Inode *in);
-
-  /*
-   * These define virtual xattrs exposing the recursive directory
-   * statistics and layout metadata.
-   */
-  struct VXattr {
-	  const string name;
-	  size_t (Client::*getxattr_cb)(Inode *in, char *val, size_t size);
-	  bool readonly, hidden;
-	  bool (Client::*exists_cb)(Inode *in);
-	  unsigned int flags;
-  };
-
-/* Flags for VXattr */
-#define VXATTR_RSTAT 0x1
-
-  bool _vxattrcb_quota_exists(Inode *in);
-  size_t _vxattrcb_quota(Inode *in, char *val, size_t size);
-  size_t _vxattrcb_quota_max_bytes(Inode *in, char *val, size_t size);
-  size_t _vxattrcb_quota_max_files(Inode *in, char *val, size_t size);
-
-  bool _vxattrcb_layout_exists(Inode *in);
-  size_t _vxattrcb_layout(Inode *in, char *val, size_t size);
-  size_t _vxattrcb_layout_stripe_unit(Inode *in, char *val, size_t size);
-  size_t _vxattrcb_layout_stripe_count(Inode *in, char *val, size_t size);
-  size_t _vxattrcb_layout_object_size(Inode *in, char *val, size_t size);
-  size_t _vxattrcb_layout_pool(Inode *in, char *val, size_t size);
-  size_t _vxattrcb_layout_pool_namespace(Inode *in, char *val, size_t size);
-  size_t _vxattrcb_dir_entries(Inode *in, char *val, size_t size);
-  size_t _vxattrcb_dir_files(Inode *in, char *val, size_t size);
-  size_t _vxattrcb_dir_subdirs(Inode *in, char *val, size_t size);
-  size_t _vxattrcb_dir_rentries(Inode *in, char *val, size_t size);
-  size_t _vxattrcb_dir_rfiles(Inode *in, char *val, size_t size);
-  size_t _vxattrcb_dir_rsubdirs(Inode *in, char *val, size_t size);
-  size_t _vxattrcb_dir_rbytes(Inode *in, char *val, size_t size);
-  size_t _vxattrcb_dir_rctime(Inode *in, char *val, size_t size);
-  size_t _vxattrs_calcu_name_size(const VXattr *vxattrs);
-
-  static const VXattr _dir_vxattrs[];
-  static const VXattr _file_vxattrs[];
-
-  static const VXattr *_get_vxattrs(Inode *in);
-  static const VXattr *_match_vxattr(Inode *in, const char *name);
-
-  size_t _file_vxattrs_name_size;
-  size_t _dir_vxattrs_name_size;
-  size_t _vxattrs_name_size(const VXattr *vxattrs) {
-	  if (vxattrs == _dir_vxattrs)
-		  return _dir_vxattrs_name_size;
-	  else if (vxattrs == _file_vxattrs)
-		  return _file_vxattrs_name_size;
-	  return 0;
-  }
-
-  int _do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
-		   struct flock *fl, uint64_t owner, bool removing=false);
-  int _interrupt_filelock(MetaRequest *req);
-  void _encode_filelocks(Inode *in, bufferlist& bl);
-  void _release_filelocks(Fh *fh);
-  void _update_lock_state(struct flock *fl, uint64_t owner, ceph_lock_state_t *lock_state);
-
-  int _posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
-			const UserPerm& perms);
-  int _posix_acl_chmod(Inode *in, mode_t mode, const UserPerm& perms);
-  int _posix_acl_permission(Inode *in, const UserPerm& perms, unsigned want);
-
-  mds_rank_t _get_random_up_mds() const;
-
-  int _ll_getattr(Inode *in, int caps, const UserPerm& perms);
-  int _lookup_parent(Inode *in, const UserPerm& perms, Inode **parent=NULL);
-  int _lookup_name(Inode *in, Inode *parent, const UserPerm& perms);
-  int _lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
-  bool _ll_forget(Inode *in, int count);
-
-public:
   int mount(const std::string &mount_root, const UserPerm& perms,
 	    bool require_mds=false);
   void unmount();
@@ -1120,7 +459,7 @@ public:
   int get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>& address);
   int get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& osds);
   int get_osd_addr(int osd, entity_addr_t& addr);
-  
+
   // expose mdsmap
   int64_t get_default_pool_id();
 
@@ -1265,6 +604,676 @@ public:
   uint32_t get_deleg_timeout() { return deleg_timeout; }
   int set_deleg_timeout(uint32_t timeout);
   int ll_delegation(Fh *fh, unsigned cmd, ceph_deleg_cb_t cb, void *priv);
+
+  entity_name_t get_myname() { return messenger->get_myname(); }
+  void wait_on_list(list<Cond*>& ls);
+  void signal_cond_list(list<Cond*>& ls);
+
+  void set_filer_flags(int flags);
+  void clear_filer_flags(int flags);
+
+  void tear_down_cache();
+
+  void update_metadata(std::string const &k, std::string const &v);
+
+  client_t get_nodeid() { return whoami; }
+
+  inodeno_t get_root_ino();
+  Inode *get_root();
+
+  virtual int init();
+  virtual void shutdown();
+
+  // messaging
+  void handle_mds_map(class MMDSMap *m);
+  void handle_fs_map(class MFSMap *m);
+  void handle_fs_map_user(class MFSMapUser *m);
+  void handle_osd_map(class MOSDMap *m);
+
+  void handle_lease(MClientLease *m);
+
+  // inline data
+  int uninline_data(Inode *in, Context *onfinish);
+
+  // file caps
+  void check_cap_issue(Inode *in, Cap *cap, unsigned issued);
+  void add_update_cap(Inode *in, MetaSession *session, uint64_t cap_id,
+		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
+		      int flags, const UserPerm& perms);
+  void remove_cap(Cap *cap, bool queue_release);
+  void remove_all_caps(Inode *in);
+  void remove_session_caps(MetaSession *session);
+  int mark_caps_flushing(Inode *in, ceph_tid_t *ptid);
+  void adjust_session_flushing_caps(Inode *in, MetaSession *old_s, MetaSession *new_s);
+  void flush_caps_sync();
+  void flush_caps(Inode *in, MetaSession *session, bool sync=false);
+  void kick_flushing_caps(MetaSession *session);
+  void early_kick_flushing_caps(MetaSession *session);
+  void kick_maxsize_requests(MetaSession *session);
+  int get_caps(Inode *in, int need, int want, int *have, loff_t endoff);
+  int get_caps_used(Inode *in);
+
+  void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater,
+			      vector<snapid_t>& snaps);
+
+  void handle_quota(struct MClientQuota *m);
+  void handle_snap(struct MClientSnap *m);
+  void handle_caps(class MClientCaps *m);
+  void handle_cap_import(MetaSession *session, Inode *in, class MClientCaps *m);
+  void handle_cap_export(MetaSession *session, Inode *in, class MClientCaps *m);
+  void handle_cap_trunc(MetaSession *session, Inode *in, class MClientCaps *m);
+  void handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
+  void handle_cap_flushsnap_ack(MetaSession *session, Inode *in, class MClientCaps *m);
+  void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
+  void cap_delay_requeue(Inode *in);
+  void send_cap(Inode *in, MetaSession *session, Cap *cap, bool sync,
+		int used, int want, int retain, int flush,
+		ceph_tid_t flush_tid);
+
+  void get_cap_ref(Inode *in, int cap);
+  void put_cap_ref(Inode *in, int cap);
+  void flush_snaps(Inode *in, bool all_again=false);
+  void wait_sync_caps(Inode *in, ceph_tid_t want);
+  void wait_sync_caps(ceph_tid_t want);
+  void queue_cap_snap(Inode *in, SnapContext &old_snapc);
+  void finish_cap_snap(Inode *in, CapSnap &capsnap, int used);
+  void _flushed_cap_snap(Inode *in, snapid_t seq);
+
+  void _schedule_invalidate_dentry_callback(Dentry *dn, bool del);
+  void _async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string& name);
+  void _try_to_trim_inode(Inode *in, bool sched_inval);
+
+  void _schedule_invalidate_callback(Inode *in, int64_t off, int64_t len);
+  void _invalidate_inode_cache(Inode *in);
+  void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len);
+  void _async_invalidate(vinodeno_t ino, int64_t off, int64_t len);
+  bool _release(Inode *in);
+
+  /**
+   * Initiate a flush of the data associated with the given inode.
+   * If you specify a Context, you are responsible for holding an inode
+   * reference for the duration of the flush. If not, _flush() will
+   * take the reference for you.
+   * @param in The Inode whose data you wish to flush.
+   * @param c The Context you wish us to complete once the data is
+   * flushed. If already flushed, this will be called in-line.
+   *
+   * @returns true if the data was already flushed, false otherwise.
+   */
+  bool _flush(Inode *in, Context *c);
+  void _flush_range(Inode *in, int64_t off, uint64_t size);
+  void _flushed(Inode *in);
+  void flush_set_callback(ObjectCacher::ObjectSet *oset);
+
+  void close_release(Inode *in);
+  void close_safe(Inode *in);
+
+  void lock_fh_pos(Fh *f);
+  void unlock_fh_pos(Fh *f);
+
+  // metadata cache
+  void update_dir_dist(Inode *in, DirStat *st);
+
+  void clear_dir_complete_and_ordered(Inode *diri, bool complete);
+  void insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri);
+  Inode* insert_trace(MetaRequest *request, MetaSession *session);
+  void update_inode_file_size(Inode *in, int issued, uint64_t size,
+			      uint64_t truncate_seq, uint64_t truncate_size);
+  void update_inode_file_time(Inode *in, int issued, uint64_t time_warp_seq,
+			      utime_t ctime, utime_t mtime, utime_t atime);
+
+  Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session,
+			  const UserPerm& request_perms);
+  Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease,
+			      Inode *in, utime_t from, MetaSession *session,
+			      Dentry *old_dentry = NULL);
+  void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, MetaSession *session);
+
+  bool use_faked_inos() { return _use_faked_inos; }
+  vinodeno_t map_faked_ino(ino_t ino);
+
+  //notify the mds to flush the mdlog
+  void flush_mdlog_sync();
+  void flush_mdlog(MetaSession *session);
+
+  void renew_caps();
+  void renew_caps(MetaSession *session);
+  void flush_cap_releases();
+  void tick();
+
+  xlist<Inode*> &get_dirty_list() { return dirty_list; }
+
+  SafeTimer timer;
+
+  std::unique_ptr<PerfCounters> logger;
+  std::unique_ptr<MDSMap> mdsmap;
+
+
+protected:
+  /* Flags for check_caps() */
+  static const unsigned CHECK_CAPS_NODELAY = 0x1;
+  static const unsigned CHECK_CAPS_SYNCHRONOUS = 0x2;
+
+
+  bool is_initialized() const { return initialized; }
+
+  void check_caps(Inode *in, unsigned flags);
+
+  void set_cap_epoch_barrier(epoch_t e);
+
+  void handle_command_reply(MCommandReply *m);
+  int fetch_fsmap(bool user);
+  int resolve_mds(
+      const std::string &mds_spec,
+      std::vector<mds_gid_t> *targets);
+
+  void get_session_metadata(std::map<std::string, std::string> *meta) const;
+  bool have_open_session(mds_rank_t mds);
+  void got_mds_push(MetaSession *s);
+  MetaSession *_get_mds_session(mds_rank_t mds, Connection *con);  ///< return session for mds *and* con; null otherwise
+  MetaSession *_get_or_open_mds_session(mds_rank_t mds);
+  MetaSession *_open_mds_session(mds_rank_t mds);
+  void _close_mds_session(MetaSession *s);
+  void _closed_mds_session(MetaSession *s);
+  bool _any_stale_sessions() const;
+  void _kick_stale_sessions();
+  void handle_client_session(MClientSession *m);
+  void send_reconnect(MetaSession *s);
+  void resend_unsafe_requests(MetaSession *s);
+  void wait_unsafe_requests();
+
+  void _sync_write_commit(Inode *in);
+
+  void dump_mds_requests(Formatter *f);
+  void dump_mds_sessions(Formatter *f);
+
+  int make_request(MetaRequest *req, const UserPerm& perms,
+		   InodeRef *ptarget = 0, bool *pcreated = 0,
+		   mds_rank_t use_mds=-1, bufferlist *pdirbl=0);
+  void put_request(MetaRequest *request);
+  void unregister_request(MetaRequest *request);
+
+  int verify_reply_trace(int r, MetaRequest *request, MClientReply *reply,
+			 InodeRef *ptarget, bool *pcreated,
+			 const UserPerm& perms);
+  void encode_cap_releases(MetaRequest *request, mds_rank_t mds);
+  int encode_inode_release(Inode *in, MetaRequest *req,
+			   mds_rank_t mds, int drop,
+			   int unless,int force=0);
+  void encode_dentry_release(Dentry *dn, MetaRequest *req,
+			     mds_rank_t mds, int drop, int unless);
+  mds_rank_t choose_target_mds(MetaRequest *req, Inode** phash_diri=NULL);
+  void connect_mds_targets(mds_rank_t mds);
+  void send_request(MetaRequest *request, MetaSession *session,
+		    bool drop_cap_releases=false);
+  MClientRequest *build_client_request(MetaRequest *request);
+  void kick_requests(MetaSession *session);
+  void kick_requests_closed(MetaSession *session);
+  void handle_client_request_forward(MClientRequestForward *reply);
+  void handle_client_reply(MClientReply *reply);
+  bool is_dir_operation(MetaRequest *request);
+
+  // fake inode number for 32-bits ino_t
+  void _assign_faked_ino(Inode *in);
+  void _release_faked_ino(Inode *in);
+  void _reset_faked_inos();
+  vinodeno_t _map_faked_ino(ino_t ino);
+
+  // Optional extra metadata about me to send to the MDS
+  void populate_metadata(const std::string &mount_root);
+
+  SnapRealm *get_snap_realm(inodeno_t r);
+  SnapRealm *get_snap_realm_maybe(inodeno_t r);
+  void put_snap_realm(SnapRealm *realm);
+  bool adjust_realm_parent(SnapRealm *realm, inodeno_t parent);
+  void update_snap_trace(bufferlist& bl, SnapRealm **realm_ret, bool must_flush=true);
+  void invalidate_snaprealm_and_children(SnapRealm *realm);
+
+  Inode *open_snapdir(Inode *diri);
+
+  int get_fd() {
+    int fd = free_fd_set.range_start();
+    free_fd_set.erase(fd, 1);
+    return fd;
+  }
+  void put_fd(int fd) {
+    free_fd_set.insert(fd, 1);
+  }
+
+  /*
+   * Resolve file descriptor, or return NULL.
+   */
+  Fh *get_filehandle(int fd) {
+    ceph::unordered_map<int, Fh*>::iterator p = fd_map.find(fd);
+    if (p == fd_map.end())
+      return NULL;
+    return p->second;
+  }
+
+  // helpers
+  void wake_inode_waiters(MetaSession *s);
+
+  void wait_on_context_list(list<Context*>& ls);
+  void signal_context_list(list<Context*>& ls);
+
+  // -- metadata cache stuff
+
+  // decrease inode ref.  delete if dangling.
+  void put_inode(Inode *in, int n=1);
+  void close_dir(Dir *dir);
+
+  void _abort_mds_sessions(int err);
+  // same as unmount() but for when the client_lock is already held
+  void _unmount(bool abort);
+
+  //int get_cache_size() { return lru.lru_get_size(); }
+
+  /**
+   * Don't call this with in==NULL, use get_or_create for that
+   * leave dn set to default NULL unless you're trying to add
+   * a new inode to a pre-created Dentry
+   */
+  Dentry* link(Dir *dir, const string& name, Inode *in, Dentry *dn);
+  void unlink(Dentry *dn, bool keepdir, bool keepdentry);
+
+  // path traversal for high-level interface
+  int path_walk(const filepath& fp, InodeRef *end, const UserPerm& perms,
+		bool followsym=true, int mask=0);
+
+  int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
+  int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
+    return fill_stat(in.get(), st, dirstat, rstat);
+  }
+
+  void fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx);
+  void fill_statx(InodeRef& in, unsigned int mask, struct ceph_statx *stx) {
+    return fill_statx(in.get(), mask, stx);
+  }
+
+  void touch_dn(Dentry *dn);
+
+  // trim cache.
+  void trim_cache(bool trim_kernel_dcache=false);
+  void trim_cache_for_reconnect(MetaSession *s);
+  void trim_dentry(Dentry *dn);
+  void trim_caps(MetaSession *s, uint64_t max);
+  void _invalidate_kernel_dcache();
+  void _trim_negative_child_dentries(InodeRef& in);
+
+  void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected);
+  void dump_cache(Formatter *f);  // debug
+
+  // force read-only
+  void force_session_readonly(MetaSession *s);
+
+  void dump_status(Formatter *f);  // debug
+
+  bool ms_dispatch(Message *m) override;
+
+  void ms_handle_connect(Connection *con) override;
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override;
+  bool ms_handle_refused(Connection *con) override;
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
+
+  int authenticate();
+
+  Inode* get_quota_root(Inode *in, const UserPerm& perms);
+  bool check_quota_condition(Inode *in, const UserPerm& perms,
+			     std::function<bool (const Inode &)> test);
+  bool is_quota_files_exceeded(Inode *in, const UserPerm& perms);
+  bool is_quota_bytes_exceeded(Inode *in, int64_t new_bytes,
+			       const UserPerm& perms);
+  bool is_quota_bytes_approaching(Inode *in, const UserPerm& perms);
+
+  int check_pool_perm(Inode *in, int need);
+
+  /**
+   * Call this when an OSDMap is seen with a full flag (global or per pool)
+   * set.
+   *
+   * @param pool the pool ID affected, or -1 if all.
+   */
+  void _handle_full_flag(int64_t pool);
+
+  void _close_sessions();
+
+  /**
+   * The basic housekeeping parts of init (perf counters, admin socket)
+   * that is independent of how objecters/monclient/messengers are
+   * being set up.
+   */
+  void _finish_init();
+
+  // global client lock
+  //  - protects Client and buffer cache both!
+  Mutex                  client_lock;
+
+  std::map<snapid_t, int> ll_snap_ref;
+
+  Inode*                 root = nullptr;
+  map<Inode*, InodeRef>  root_parents;
+  Inode*                 root_ancestor = nullptr;
+  LRU                    lru;    // lru list of Dentry's in our local metadata cache.
+
+  InodeRef cwd;
+
+  std::unique_ptr<Filer>             filer;
+  std::unique_ptr<ObjectCacher>      objectcacher;
+  std::unique_ptr<WritebackHandler>  writeback_handler;
+
+  Messenger *messenger;
+  MonClient *monclient;
+  Objecter  *objecter;
+
+  client_t whoami;
+
+
+private:
+  struct C_Readahead : public Context {
+    C_Readahead(Client *c, Fh *f);
+    ~C_Readahead() override;
+    void finish(int r) override;
+
+    Client *client;
+    Fh *f;
+  };
+
+  /*
+   * These define virtual xattrs exposing the recursive directory
+   * statistics and layout metadata.
+   */
+  struct VXattr {
+	  const string name;
+	  size_t (Client::*getxattr_cb)(Inode *in, char *val, size_t size);
+	  bool readonly, hidden;
+	  bool (Client::*exists_cb)(Inode *in);
+	  unsigned int flags;
+  };
+
+  enum {
+    NO_ACL = 0,
+    POSIX_ACL,
+  };
+
+  enum {
+    MAY_EXEC = 1,
+    MAY_WRITE = 2,
+    MAY_READ = 4,
+  };
+
+
+  /* Flags for VXattr */
+  static const unsigned VXATTR_RSTAT = 0x1;
+
+  static const VXattr _dir_vxattrs[];
+  static const VXattr _file_vxattrs[];
+
+
+
+  void fill_dirent(struct dirent *de, const char *name, int type, uint64_t ino, loff_t next_off);
+
+  int _opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms);
+  void _readdir_drop_dirp_buffer(dir_result_t *dirp);
+  bool _readdir_have_frag(dir_result_t *dirp);
+  void _readdir_next_frag(dir_result_t *dirp);
+  void _readdir_rechoose_frag(dir_result_t *dirp);
+  int _readdir_get_frag(dir_result_t *dirp);
+  int _readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p, int caps, bool getref);
+  void _closedir(dir_result_t *dirp);
+
+  // other helpers
+  void _fragmap_remove_non_leaves(Inode *in);
+  void _fragmap_remove_stopped_mds(Inode *in, mds_rank_t mds);
+
+  void _ll_get(Inode *in);
+  int _ll_put(Inode *in, int num);
+  void _ll_drop_pins();
+
+  Fh *_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms);
+  int _release_fh(Fh *fh);
+  void _put_fh(Fh *fh);
+
+  int _do_remount(void);
+
+  int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
+  int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
+
+  // internal interface
+  //   call these with client_lock held!
+  int _do_lookup(Inode *dir, const string& name, int mask, InodeRef *target,
+		 const UserPerm& perms);
+
+  int _lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
+	      const UserPerm& perm);
+
+  int _link(Inode *in, Inode *dir, const char *name, const UserPerm& perm,
+	    InodeRef *inp = 0);
+  int _unlink(Inode *dir, const char *name, const UserPerm& perm);
+  int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm);
+  int _mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& perm,
+	     InodeRef *inp = 0);
+  int _rmdir(Inode *dir, const char *name, const UserPerm& perms);
+  int _symlink(Inode *dir, const char *name, const char *target,
+	       const UserPerm& perms, InodeRef *inp = 0);
+  int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
+	     const UserPerm& perms, InodeRef *inp = 0);
+  int _do_setattr(Inode *in, struct ceph_statx *stx, int mask,
+		  const UserPerm& perms, InodeRef *inp);
+  void stat_to_statx(struct stat *st, struct ceph_statx *stx);
+  int __setattrx(Inode *in, struct ceph_statx *stx, int mask,
+		 const UserPerm& perms, InodeRef *inp = 0);
+  int _setattrx(InodeRef &in, struct ceph_statx *stx, int mask,
+		const UserPerm& perms);
+  int _setattr(InodeRef &in, struct stat *attr, int mask,
+	       const UserPerm& perms);
+  int _ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
+		   const UserPerm& perms, InodeRef *inp = 0);
+  int _getattr(Inode *in, int mask, const UserPerm& perms, bool force=false);
+  int _getattr(InodeRef &in, int mask, const UserPerm& perms, bool force=false) {
+    return _getattr(in.get(), mask, perms, force);
+  }
+  int _readlink(Inode *in, char *buf, size_t size);
+  int _getxattr(Inode *in, const char *name, void *value, size_t len,
+		const UserPerm& perms);
+  int _getxattr(InodeRef &in, const char *name, void *value, size_t len,
+		const UserPerm& perms);
+  int _listxattr(Inode *in, char *names, size_t len, const UserPerm& perms);
+  int _do_setxattr(Inode *in, const char *name, const void *value, size_t len,
+		   int flags, const UserPerm& perms);
+  int _setxattr(Inode *in, const char *name, const void *value, size_t len,
+		int flags, const UserPerm& perms);
+  int _setxattr(InodeRef &in, const char *name, const void *value, size_t len,
+		int flags, const UserPerm& perms);
+  int _setxattr_check_data_pool(string& name, string& value, const OSDMap *osdmap);
+  void _setxattr_maybe_wait_for_osdmap(const char *name, const void *value, size_t len);
+  int _removexattr(Inode *in, const char *nm, const UserPerm& perms);
+  int _removexattr(InodeRef &in, const char *nm, const UserPerm& perms);
+  int _open(Inode *in, int flags, mode_t mode, Fh **fhp,
+	    const UserPerm& perms);
+  int _renew_caps(Inode *in);
+  int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp,
+	      Fh **fhp, int stripe_unit, int stripe_count, int object_size,
+	      const char *data_pool, bool *created, const UserPerm &perms);
+
+  loff_t _lseek(Fh *fh, loff_t offset, int whence);
+  int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
+  int64_t _write(Fh *fh, int64_t offset, uint64_t size, const char *buf,
+          const struct iovec *iov, int iovcnt);
+  int64_t _preadv_pwritev_locked(Fh *f, const struct iovec *iov,
+	      unsigned iovcnt, int64_t offset, bool write, bool clamp_to_int);
+  int _preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write);
+  int _flush(Fh *fh);
+  int _fsync(Fh *fh, bool syncdataonly);
+  int _fsync(Inode *in, bool syncdataonly);
+  int _sync_fs();
+  int _fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
+  int _getlk(Fh *fh, struct flock *fl, uint64_t owner);
+  int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
+  int _flock(Fh *fh, int cmd, uint64_t owner);
+  int _lazyio(Fh *fh, int enable);
+
+  int get_or_create(Inode *dir, const char* name,
+		    Dentry **pdn, bool expect_null=false);
+
+  int xattr_permission(Inode *in, const char *name, unsigned want,
+		       const UserPerm& perms);
+  int may_setattr(Inode *in, struct ceph_statx *stx, int mask,
+		  const UserPerm& perms);
+  int may_open(Inode *in, int flags, const UserPerm& perms);
+  int may_lookup(Inode *dir, const UserPerm& perms);
+  int may_create(Inode *dir, const UserPerm& perms);
+  int may_delete(Inode *dir, const char *name, const UserPerm& perms);
+  int may_hardlink(Inode *in, const UserPerm& perms);
+
+  int _getattr_for_perm(Inode *in, const UserPerm& perms);
+
+  vinodeno_t _get_vino(Inode *in);
+
+  bool _vxattrcb_quota_exists(Inode *in);
+  size_t _vxattrcb_quota(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_quota_max_bytes(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_quota_max_files(Inode *in, char *val, size_t size);
+
+  bool _vxattrcb_layout_exists(Inode *in);
+  size_t _vxattrcb_layout(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_layout_stripe_unit(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_layout_stripe_count(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_layout_object_size(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_layout_pool(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_layout_pool_namespace(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_entries(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_files(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_subdirs(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rentries(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rfiles(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rsubdirs(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rbytes(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rctime(Inode *in, char *val, size_t size);
+  size_t _vxattrs_calcu_name_size(const VXattr *vxattrs);
+
+  static const VXattr *_get_vxattrs(Inode *in);
+  static const VXattr *_match_vxattr(Inode *in, const char *name);
+
+  size_t _vxattrs_name_size(const VXattr *vxattrs) {
+	  if (vxattrs == _dir_vxattrs)
+		  return _dir_vxattrs_name_size;
+	  else if (vxattrs == _file_vxattrs)
+		  return _file_vxattrs_name_size;
+	  return 0;
+  }
+
+  int _do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
+		   struct flock *fl, uint64_t owner, bool removing=false);
+  int _interrupt_filelock(MetaRequest *req);
+  void _encode_filelocks(Inode *in, bufferlist& bl);
+  void _release_filelocks(Fh *fh);
+  void _update_lock_state(struct flock *fl, uint64_t owner, ceph_lock_state_t *lock_state);
+
+  int _posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
+			const UserPerm& perms);
+  int _posix_acl_chmod(Inode *in, mode_t mode, const UserPerm& perms);
+  int _posix_acl_permission(Inode *in, const UserPerm& perms, unsigned want);
+
+  mds_rank_t _get_random_up_mds() const;
+
+  int _ll_getattr(Inode *in, int caps, const UserPerm& perms);
+  int _lookup_parent(Inode *in, const UserPerm& perms, Inode **parent=NULL);
+  int _lookup_name(Inode *in, Inode *parent, const UserPerm& perms);
+  int _lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
+  bool _ll_forget(Inode *in, int count);
+
+
+  uint32_t deleg_timeout = 0;
+  size_t _file_vxattrs_name_size;
+  size_t _dir_vxattrs_name_size;
+
+  client_switch_interrupt_callback_t switch_interrupt_cb = nullptr;
+  client_remount_callback_t remount_cb = nullptr;
+  client_ino_callback_t ino_invalidate_cb = nullptr;
+  client_dentry_callback_t dentry_invalidate_cb = nullptr;
+  client_umask_callback_t umask_cb = nullptr;
+  void *callback_handle = nullptr;
+  bool can_invalidate_dentries = false;
+
+  Finisher async_ino_invalidator;
+  Finisher async_dentry_invalidator;
+  Finisher interrupt_finisher;
+  Finisher remount_finisher;
+  Finisher objecter_finisher;
+
+  Context *tick_event = nullptr;
+  utime_t last_cap_renew;
+
+  CommandHook m_command_hook;
+
+  int user_id, group_id;
+  int acl_type = NO_ACL;
+
+  epoch_t cap_epoch_barrier = 0;
+
+  // mds sessions
+  map<mds_rank_t, MetaSession> mds_sessions;  // mds -> push seq
+  list<Cond*> waiting_for_mdsmap;
+
+  // FSMap, for when using mds_command
+  list<Cond*> waiting_for_fsmap;
+  std::unique_ptr<FSMap> fsmap;
+  std::unique_ptr<FSMapUser> fsmap_user;
+
+  // MDS command state
+  CommandTable<MDSCommandOp> command_table;
+
+  bool _use_faked_inos;
+
+  // file handles, etc.
+  interval_set<int> free_fd_set;  // unused fds
+  ceph::unordered_map<int, Fh*> fd_map;
+  set<Fh*> ll_unclosed_fh_set;
+  ceph::unordered_set<dir_result_t*> opened_dirs;
+
+  bool   initialized = false;
+  bool   mounted = false;
+  bool   unmounting = false;
+  bool   blacklisted = false;
+
+  ceph::unordered_map<vinodeno_t, Inode*> inode_map;
+  ceph::unordered_map<ino_t, vinodeno_t> faked_ino_map;
+  interval_set<ino_t> free_faked_inos;
+  ino_t last_used_faked_ino;
+
+  // When an MDS has sent us a REJECT, remember that and don't
+  // contact it again.  Remember which inst rejected us, so that
+  // when we talk to another inst with the same rank we can
+  // try again.
+  std::map<mds_rank_t, entity_addrvec_t> rejected_by_mds;
+
+  int local_osd = -ENXIO;
+  epoch_t local_osd_epoch = 0;
+
+  int unsafe_sync_write = 0;
+
+  // mds requests
+  ceph_tid_t last_tid = 0;
+  ceph_tid_t oldest_tid = 0; // oldest incomplete mds request, excluding setfilelock requests
+  map<ceph_tid_t, MetaRequest*> mds_requests;
+
+  // cap flushing
+  ceph_tid_t last_flush_tid = 1;
+
+  // dirty_list keeps all the dirty inodes before flushing.
+  xlist<Inode*> delayed_list, dirty_list;
+  int num_flushing_caps = 0;
+  ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
+  std::map<std::string, std::string> metadata;
+
+  // trace generation
+  ofstream traceout;
+
+  Cond mount_cond, sync_cond;
+
+  std::map<std::pair<int64_t,std::string>, int> pool_perms;
+  list<Cond*> waiting_for_pool_perm;
 };
 
 /**
@@ -1273,7 +1282,7 @@ public:
  */
 class StandaloneClient : public Client
 {
-  public:
+public:
   StandaloneClient(Messenger *m, MonClient *mc);
 
   ~StandaloneClient() override;

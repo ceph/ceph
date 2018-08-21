@@ -19,41 +19,43 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 
-class MMDSSlaveRequest : public Message {
- public:
-  static const int OP_XLOCK =       1;
-  static const int OP_XLOCKACK =   -1;
-  static const int OP_UNXLOCK =     2;
-  static const int OP_AUTHPIN =     3;
-  static const int OP_AUTHPINACK = -3;
+class MMDSSlaveRequest : public MessageInstance<MMDSSlaveRequest> {
+public:
+  friend factory;
 
-  static const int OP_LINKPREP =     4;
-  static const int OP_UNLINKPREP =   5;
-  static const int OP_LINKPREPACK = -4;
+  static constexpr int OP_XLOCK =       1;
+  static constexpr int OP_XLOCKACK =   -1;
+  static constexpr int OP_UNXLOCK =     2;
+  static constexpr int OP_AUTHPIN =     3;
+  static constexpr int OP_AUTHPINACK = -3;
 
-  static const int OP_RENAMEPREP =     7;
-  static const int OP_RENAMEPREPACK = -7;
+  static constexpr int OP_LINKPREP =     4;
+  static constexpr int OP_UNLINKPREP =   5;
+  static constexpr int OP_LINKPREPACK = -4;
 
-  static const int OP_WRLOCK = 8;
-  static const int OP_WRLOCKACK = -8;
-  static const int OP_UNWRLOCK = 9;
+  static constexpr int OP_RENAMEPREP =     7;
+  static constexpr int OP_RENAMEPREPACK = -7;
 
-  static const int OP_RMDIRPREP = 10;
-  static const int OP_RMDIRPREPACK = -10;
+  static constexpr int OP_WRLOCK = 8;
+  static constexpr int OP_WRLOCKACK = -8;
+  static constexpr int OP_UNWRLOCK = 9;
 
-  static const int OP_DROPLOCKS	= 11;
+  static constexpr int OP_RMDIRPREP = 10;
+  static constexpr int OP_RMDIRPREPACK = -10;
 
-  static const int OP_RENAMENOTIFY = 12;
-  static const int OP_RENAMENOTIFYACK = -12;
+  static constexpr int OP_DROPLOCKS	= 11;
 
-  static const int OP_FINISH = 17;  
-  static const int OP_COMMITTED = -18;  
+  static constexpr int OP_RENAMENOTIFY = 12;
+  static constexpr int OP_RENAMENOTIFYACK = -12;
 
-  static const int OP_ABORT =  20;  // used for recovery only
-  //static const int OP_COMMIT = 21;  // used for recovery only
+  static constexpr int OP_FINISH = 17;
+  static constexpr int OP_COMMITTED = -18;
+
+  static constexpr int OP_ABORT =  20;  // used for recovery only
+  //static constexpr int OP_COMMIT = 21;  // used for recovery only
 
 
-  const static char *get_opname(int o) {
+  static const char *get_opname(int o) {
     switch (o) { 
     case OP_XLOCK: return "xlock";
     case OP_XLOCKACK: return "xlock_ack";
@@ -94,14 +96,14 @@ class MMDSSlaveRequest : public Message {
   metareqid_t reqid;
   __u32 attempt;
   __s16 op;
-  __u16 flags;
+  mutable __u16 flags; /* XXX HACK for mark_interrupted */
 
-  static const unsigned FLAG_NONBLOCK	=	1<<0;
-  static const unsigned FLAG_WOULDBLOCK	=	1<<1;
-  static const unsigned FLAG_NOTJOURNALED =	1<<2;
-  static const unsigned FLAG_EROFS =		1<<3;
-  static const unsigned FLAG_ABORT =		1<<4;
-  static const unsigned FLAG_INTERRUPTED =	1<<5;
+  static constexpr unsigned FLAG_NONBLOCK       =	1<<0;
+  static constexpr unsigned FLAG_WOULDBLOCK     =	1<<1;
+  static constexpr unsigned FLAG_NOTJOURNALED   =	1<<2;
+  static constexpr unsigned FLAG_EROFS          =	1<<3;
+  static constexpr unsigned FLAG_ABORT          =	1<<4;
+  static constexpr unsigned FLAG_INTERRUPTED    =	1<<5;
 
   // for locking
   __u16 lock_type;  // lock object type
@@ -120,45 +122,47 @@ class MMDSSlaveRequest : public Message {
   mds_rank_t srcdn_auth;
   utime_t op_stamp;
 
-  bufferlist straybl;  // stray dir + dentry
+  mutable bufferlist straybl;  // stray dir + dentry
   bufferlist srci_snapbl;
   bufferlist desti_snapbl;
 
 public:
-  metareqid_t get_reqid() { return reqid; }
+  metareqid_t get_reqid() const { return reqid; }
   __u32 get_attempt() const { return attempt; }
-  int get_op() { return op; }
-  bool is_reply() { return op < 0; }
+  int get_op() const { return op; }
+  bool is_reply() const { return op < 0; }
 
-  int get_lock_type() { return lock_type; }
+  int get_lock_type() const { return lock_type; }
+  const MDSCacheObjectInfo &get_object_info() const { return object_info; }
   MDSCacheObjectInfo &get_object_info() { return object_info; }
+  const MDSCacheObjectInfo &get_authpin_freeze() const { return object_info; }
   MDSCacheObjectInfo &get_authpin_freeze() { return object_info; }
 
+  const vector<MDSCacheObjectInfo>& get_authpins() const { return authpins; }
   vector<MDSCacheObjectInfo>& get_authpins() { return authpins; }
   void mark_nonblock() { flags |= FLAG_NONBLOCK; }
-  bool is_nonblock() { return (flags & FLAG_NONBLOCK); }
+  bool is_nonblock() const { return (flags & FLAG_NONBLOCK); }
   void mark_error_wouldblock() { flags |= FLAG_WOULDBLOCK; }
-  bool is_error_wouldblock() { return (flags & FLAG_WOULDBLOCK); }
+  bool is_error_wouldblock() const { return (flags & FLAG_WOULDBLOCK); }
   void mark_not_journaled() { flags |= FLAG_NOTJOURNALED; }
-  bool is_not_journaled() { return (flags & FLAG_NOTJOURNALED); }
+  bool is_not_journaled() const { return (flags & FLAG_NOTJOURNALED); }
   void mark_error_rofs() { flags |= FLAG_EROFS; }
-  bool is_error_rofs() { return (flags & FLAG_EROFS); }
-  bool is_abort() { return (flags & FLAG_ABORT); }
+  bool is_error_rofs() const { return (flags & FLAG_EROFS); }
+  bool is_abort() const { return (flags & FLAG_ABORT); }
   void mark_abort() { flags |= FLAG_ABORT; }
-  bool is_interrupted() { return (flags & FLAG_INTERRUPTED); }
-  void mark_interrupted() { flags |= FLAG_INTERRUPTED; }
+  bool is_interrupted() const { return (flags & FLAG_INTERRUPTED); }
+  void mark_interrupted() const { flags |= FLAG_INTERRUPTED; }
 
   void set_lock_type(int t) { lock_type = t; }
+  const bufferlist& get_lock_data() const { return inode_export; }
   bufferlist& get_lock_data() { return inode_export; }
 
-
-  // ----
-  MMDSSlaveRequest() : Message(MSG_MDS_SLAVE_REQUEST) { }
+protected:
+  MMDSSlaveRequest() : MessageInstance(MSG_MDS_SLAVE_REQUEST) { }
   MMDSSlaveRequest(metareqid_t ri, __u32 att, int o) : 
-    Message(MSG_MDS_SLAVE_REQUEST),
+    MessageInstance(MSG_MDS_SLAVE_REQUEST),
     reqid(ri), attempt(att), op(o), flags(0), lock_type(0),
     inode_export_v(0), srcdn_auth(MDS_RANK_NONE) { }
-private:
   ~MMDSSlaveRequest() override {}
 
 public:

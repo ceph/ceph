@@ -166,7 +166,7 @@ hacks (e.g., ``root``,  ``admin``, ``{productname}``). The following procedure,
 substituting  ``{username}`` for the user name you define, describes how to
 create a user with passwordless ``sudo``.
 
-.. note:: Starting with the `Infernalis release`_ the "ceph" user name is reserved
+.. note:: Starting with the :ref:`Infernalis release <infernalis-release-notes>`, the "ceph" user name is reserved
    for the Ceph daemons. If the "ceph" user already exists on the Ceph nodes,
    removing the user must be done before attempting an upgrade.
 

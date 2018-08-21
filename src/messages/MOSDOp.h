@@ -31,10 +31,12 @@
 
 class OSD;
 
-class MOSDOp : public MOSDFastDispatchOp {
-
-  static const int HEAD_VERSION = 8;
-  static const int COMPAT_VERSION = 3;
+class MOSDOp : public MessageInstance<MOSDOp, MOSDFastDispatchOp> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 8;
+  static constexpr int COMPAT_VERSION = 3;
 
 private:
   uint32_t client_inc = 0;
@@ -167,14 +169,14 @@ public:
   }
 
   MOSDOp()
-    : MOSDFastDispatchOp(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       partial_decode_needed(true),
       final_decode_needed(true),
       bdata_encode(false) { }
   MOSDOp(int inc, long tid, const hobject_t& ho, spg_t& _pgid,
 	 epoch_t _osdmap_epoch,
 	 int _flags, uint64_t feat)
-    : MOSDFastDispatchOp(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       client_inc(inc),
       osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
       hobj(ho),

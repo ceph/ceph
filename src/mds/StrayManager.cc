@@ -102,6 +102,7 @@ void StrayManager::purge(CDentry *dn)
 
   PurgeItem item;
   item.ino = in->inode.ino;
+  item.stamp = ceph_clock_now();
   if (in->is_dir()) {
     item.action = PurgeItem::PURGE_DIR;
     item.fragtree = in->dirfragtree;
@@ -663,7 +664,7 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
   filepath dst;
   rdn->make_path(dst);
 
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME);
+  auto req = MClientRequest::create(CEPH_MDS_OP_RENAME);
   req->set_filepath(dst);
   req->set_filepath2(src);
   req->set_tid(mds->issue_tid());
@@ -692,7 +693,7 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
   dst.push_dentry(src[0]);
   dst.push_dentry(src[1]);
 
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME);
+  auto req = MClientRequest::create(CEPH_MDS_OP_RENAME);
   req->set_filepath(dst);
   req->set_filepath2(src);
   req->set_tid(mds->issue_tid());
@@ -737,6 +738,7 @@ void StrayManager::truncate(CDentry *dn)
   item.layout = in->inode.layout;
   item.snapc = *snapc;
   item.size = to;
+  item.stamp = ceph_clock_now();
 
   purge_queue.push(item, new C_IO_PurgeStrayPurged(
         this, dn, true));

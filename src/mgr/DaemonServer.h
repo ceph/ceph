@@ -21,6 +21,7 @@
 
 #include "common/Mutex.h"
 #include "common/LogClient.h"
+#include "common/Timer.h"
 
 #include <msg/Messenger.h>
 #include <mon/MonClient.h>
@@ -103,6 +104,12 @@ private:
   std::set<int32_t> reported_osds;
   void maybe_ready(int32_t osd_id);
 
+  SafeTimer timer;
+  bool shutting_down;
+  Context *tick_event;
+  void tick();
+  void schedule_tick_locked(double delay_sec);
+
 public:
   int init(uint64_t gid, entity_addrvec_t client_addrs);
   void shutdown();
@@ -147,6 +154,8 @@ public:
   virtual const char** get_tracked_conf_keys() const override;
   virtual void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
+
+  void schedule_tick(double delay_sec);
 };
 
 #endif

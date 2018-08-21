@@ -12,6 +12,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/deep_copy/ObjectCopyRequest.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ObjectRequest.h"
@@ -204,9 +205,50 @@ bool CopyupRequest<I>::is_copyup_required() {
 }
 
 template <typename I>
+bool CopyupRequest<I>::is_update_object_map_required(int r) {
+  if (r < 0) {
+    return false;
+  }
+
+  RWLock::RLocker owner_locker(m_ictx->owner_lock);
+  RWLock::RLocker snap_locker(m_ictx->snap_lock);
+  if (m_ictx->object_map == nullptr) {
+    return false;
+  }
+
+  if (!is_deep_copy()) {
+    return false;
+  }
+
+  auto it = m_ictx->migration_info.snap_map.find(CEPH_NOSNAP);
+  assert(it != m_ictx->migration_info.snap_map.end());
+  return it->second[0] != CEPH_NOSNAP;
+}
+
+template <typename I>
+bool CopyupRequest<I>::is_deep_copy() const {
+  return !m_ictx->migration_info.empty();
+}
+
+template <typename I>
 void CopyupRequest<I>::send()
 {
   m_state = STATE_READ_FROM_PARENT;
+
+  if (is_deep_copy()) {
+    m_flatten = is_copyup_required() ? true : m_ictx->migration_info.flatten;
+    auto req = deep_copy::ObjectCopyRequest<I>::create(
+        m_ictx->parent, m_ictx->migration_parent, m_ictx,
+        m_ictx->migration_info.snap_map, m_object_no, m_flatten,
+        util::create_context_callback(this));
+    ldout(m_ictx->cct, 20) << "deep copy object req " << req
+                           << ", object_no " << m_object_no
+                           << ", flatten " << m_flatten
+                           << dendl;
+    req->send();
+    return;
+  }
+
   AioCompletion *comp = AioCompletion::create_and_start(
     this, m_ictx, AIO_TYPE_READ);
 
@@ -221,27 +263,38 @@ void CopyupRequest<I>::send()
 template <typename I>
 void CopyupRequest<I>::complete(int r)
 {
-  if (should_complete(r)) {
+  if (should_complete(&r)) {
     complete_requests(r);
     delete this;
   }
 }
 
 template <typename I>
-bool CopyupRequest<I>::should_complete(int r)
-{
+bool CopyupRequest<I>::should_complete(int *r) {
   CephContext *cct = m_ictx->cct;
   ldout(cct, 20) << "oid " << m_oid
-                 << ", r " << r << dendl;
+                 << ", r " << *r << dendl;
 
   uint64_t pending_copyups;
   switch (m_state) {
   case STATE_READ_FROM_PARENT:
     ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
-    remove_from_list();
-    if (r >= 0 || r == -ENOENT) {
-      if (!is_copyup_required()) {
-        ldout(cct, 20) << "nop, skipping" << dendl;
+    m_ictx->copyup_list_lock.Lock();
+    if (*r == -ENOENT && is_deep_copy() && m_ictx->migration_parent &&
+        !m_flatten && is_copyup_required()) {
+      ldout(cct, 5) << "restart deep copy with flatten" << dendl;
+      m_ictx->copyup_list_lock.Unlock();
+      send();
+      return false;
+    }
+    remove_from_list(m_ictx->copyup_list_lock);
+    m_ictx->copyup_list_lock.Unlock();
+    if (*r >= 0 || *r == -ENOENT) {
+      if (!is_copyup_required() && !is_update_object_map_required(*r)) {
+        if (*r == -ENOENT && is_deep_copy()) {
+          *r = 0;
+        }
+        ldout(cct, 20) << "skipping" << dendl;
         return true;
       }
 
@@ -251,12 +304,16 @@ bool CopyupRequest<I>::should_complete(int r)
 
   case STATE_OBJECT_MAP_HEAD:
     ldout(cct, 20) << "OBJECT_MAP_HEAD" << dendl;
-    assert(r == 0);
+    assert(*r == 0);
     return send_object_map();
 
   case STATE_OBJECT_MAP:
     ldout(cct, 20) << "OBJECT_MAP" << dendl;
-    assert(r == 0);
+    assert(*r == 0);
+    if (!is_copyup_required()) {
+      ldout(cct, 20) << "skipping copyup" << dendl;
+      return true;
+    }
     return send_copyup();
 
   case STATE_COPYUP:
@@ -267,13 +324,14 @@ bool CopyupRequest<I>::should_complete(int r)
     }
     ldout(cct, 20) << "COPYUP (" << pending_copyups << " pending)"
                    << dendl;
-    if (r == -ENOENT) {
+    if (*r == -ENOENT) {
       // hide the -ENOENT error if this is the last op
       if (pending_copyups == 0) {
+        *r = 0;
         complete_requests(0);
       }
-    } else if (r < 0) {
-      complete_requests(r);
+    } else if (*r < 0) {
+      complete_requests(*r);
     }
     return (pending_copyups == 0);
 
@@ -282,13 +340,19 @@ bool CopyupRequest<I>::should_complete(int r)
     ceph_abort();
     break;
   }
-  return (r < 0);
+  return (*r < 0);
 }
 
 template <typename I>
-void CopyupRequest<I>::remove_from_list()
-{
+void CopyupRequest<I>::remove_from_list() {
   Mutex::Locker l(m_ictx->copyup_list_lock);
+
+  remove_from_list(m_ictx->copyup_list_lock);
+}
+
+template <typename I>
+void CopyupRequest<I>::remove_from_list(Mutex &lock) {
+  assert(m_ictx->copyup_list_lock.is_locked());
 
   auto it = m_ictx->copyup_list.find(m_object_no);
   assert(it != m_ictx->copyup_list.end());
@@ -310,9 +374,48 @@ bool CopyupRequest<I>::send_object_map_head() {
       assert(m_ictx->exclusive_lock->is_lock_owner());
 
       RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
+
       if (!m_ictx->snaps.empty()) {
-        m_snap_ids.insert(m_snap_ids.end(), m_ictx->snaps.begin(),
-                          m_ictx->snaps.end());
+        if (is_deep_copy()) {
+          // don't copy ids for the snaps updated by object deep copy or
+          // that don't overlap
+          std::set<uint64_t> deep_copied;
+          for (auto &it : m_ictx->migration_info.snap_map) {
+            if (it.first != CEPH_NOSNAP) {
+              deep_copied.insert(it.second.front());
+            }
+          }
+          std::copy_if(m_ictx->snaps.begin(), m_ictx->snaps.end(),
+                       std::back_inserter(m_snap_ids),
+                       [this, cct, &deep_copied](uint64_t snap_id) {
+                         if (deep_copied.count(snap_id)) {
+                           return false;
+                         }
+                         RWLock::RLocker parent_locker(m_ictx->parent_lock);
+                         uint64_t parent_overlap = 0;
+                         int r = m_ictx->get_parent_overlap(snap_id,
+                                                            &parent_overlap);
+                         if (r < 0) {
+                           ldout(cct, 5) << "failed getting parent overlap for "
+                                         << "snap_id: " << snap_id << ": "
+                                         << cpp_strerror(r) << dendl;
+                         }
+                         if (parent_overlap == 0) {
+                           return false;
+                         }
+                         std::vector<std::pair<uint64_t, uint64_t>> extents;
+                         Striper::extent_to_file(cct, &m_ictx->layout,
+                                                 m_object_no, 0,
+                                                 m_ictx->layout.object_size,
+                                                 extents);
+                         auto overlap = m_ictx->prune_parent_extents(
+                             extents, parent_overlap);
+                         return overlap > 0;
+                       });
+        } else {
+          m_snap_ids.insert(m_snap_ids.end(), m_ictx->snaps.begin(),
+                            m_ictx->snaps.end());
+        }
       }
       if (copy_on_read &&
           (*m_ictx->object_map)[m_object_no] != OBJECT_EXISTS) {

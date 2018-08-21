@@ -376,7 +376,7 @@ void PGMapDigest::print_oneline_summary(Formatter *f, ostream *out) const
     }
     int64_t iops = (pos_delta.stats.sum.num_rd + pos_delta.stats.sum.num_wr) / (double)stamp_delta;
     if (out)
-      *out << si_u_t(iops) << "op/s";
+      *out << si_u_t(iops) << " op/s";
     if (f)
       f->dump_unsigned("io_sec", iops);
   }
@@ -470,8 +470,8 @@ void PGMapDigest::recovery_rate_summary(Formatter *f, ostream *out,
     } else {
       *out << byte_u_t(bps) << "/s";
       if (pos_delta.stats.sum.num_keys_recovered)
-	*out << ", " << si_u_t(kps) << "keys/s";
-      *out << ", " << si_u_t(objps) << "objects/s";
+	*out << ", " << si_u_t(kps) << " keys/s";
+      *out << ", " << si_u_t(objps) << " objects/s";
     }
   }
 }
@@ -538,7 +538,7 @@ void PGMapDigest::client_io_rate_summary(Formatter *f, ostream *out,
       f->dump_int("read_op_per_sec", iops_rd);
       f->dump_int("write_op_per_sec", iops_wr);
     } else {
-      *out << si_u_t(iops_rd) << "op/s rd, " << si_u_t(iops_wr) << "op/s wr";
+      *out << si_u_t(iops_rd) << " op/s rd, " << si_u_t(iops_wr) << " op/s wr";
     }
   }
 }
@@ -595,7 +595,7 @@ void PGMapDigest::cache_io_rate_summary(Formatter *f, ostream *out,
     } else {
       if (have_output)
 	*out << ", ";
-      *out << si_u_t(promote) << "op/s promote";
+      *out << si_u_t(promote) << " op/s promote";
       have_output = true;
     }
   }
@@ -605,7 +605,7 @@ void PGMapDigest::cache_io_rate_summary(Formatter *f, ostream *out,
     } else {
       if (have_output)
 	*out << ", ";
-      *out << si_u_t(pos_delta.stats.sum.num_flush_mode_low) << "PG(s) flushing";
+      *out << si_u_t(pos_delta.stats.sum.num_flush_mode_low) << " PGs flushing";
       have_output = true;
     }
   }
@@ -615,7 +615,7 @@ void PGMapDigest::cache_io_rate_summary(Formatter *f, ostream *out,
     } else {
       if (have_output)
 	*out << ", ";
-      *out << si_u_t(pos_delta.stats.sum.num_flush_mode_high) << "PG(s) flushing (high)";
+      *out << si_u_t(pos_delta.stats.sum.num_flush_mode_high) << " PGs flushing (high)";
       have_output = true;
     }
   }
@@ -625,7 +625,7 @@ void PGMapDigest::cache_io_rate_summary(Formatter *f, ostream *out,
     } else {
       if (have_output)
 	*out << ", ";
-      *out << si_u_t(pos_delta.stats.sum.num_evict_mode_some) << "PG(s) evicting";
+      *out << si_u_t(pos_delta.stats.sum.num_evict_mode_some) << " PGs evicting";
       have_output = true;
     }
   }
@@ -635,7 +635,7 @@ void PGMapDigest::cache_io_rate_summary(Formatter *f, ostream *out,
     } else {
       if (have_output)
 	*out << ", ";
-      *out << si_u_t(pos_delta.stats.sum.num_evict_mode_full) << "PG(s) evicting (full)";
+      *out << si_u_t(pos_delta.stats.sum.num_evict_mode_full) << " PGs evicting (full)";
     }
   }
 }
@@ -818,11 +818,17 @@ void PGMapDigest::dump_pool_stats_full(
 
 void PGMapDigest::dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const
 {
+  float used = 0.0;
+  if (osd_sum.kb > 0) {
+    used = ((float)osd_sum.kb_used / osd_sum.kb);
+  }
+
   if (f) {
     f->open_object_section("stats");
     f->dump_int("total_bytes", osd_sum.kb * 1024ull);
     f->dump_int("total_used_bytes", osd_sum.kb_used * 1024ull);
     f->dump_int("total_avail_bytes", osd_sum.kb_avail * 1024ull);
+    f->dump_float("total_percent_used", used * 100);
     if (verbose) {
       f->dump_int("total_objects", pg_sum.stats.sum.num_objects);
     }
@@ -840,10 +846,6 @@ void PGMapDigest::dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) co
     tbl << stringify(byte_u_t(osd_sum.kb*1024))
         << stringify(byte_u_t(osd_sum.kb_avail*1024))
         << stringify(byte_u_t(osd_sum.kb_used*1024));
-    float used = 0.0;
-    if (osd_sum.kb > 0) {
-      used = ((float)osd_sum.kb_used / osd_sum.kb);
-    }
     tbl << percentify(used*100);
     if (verbose) {
       tbl << stringify(si_u_t(pg_sum.stats.sum.num_objects));
@@ -1120,7 +1122,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     pg_sum_delta.stats.add(d.stats);
     auto smooth_intervals =
       cct ? cct->_conf.get_val<uint64_t>("mon_stat_smooth_intervals") : 1;
-    if (pg_sum_deltas.size() > smooth_intervals) {
+    while (pg_sum_deltas.size() > smooth_intervals) {
       pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
       stamp_delta -= pg_sum_deltas.front().second;
       pg_sum_deltas.pop_front();
@@ -1962,7 +1964,7 @@ void PGMap::update_delta(
     result_pool_delta->stats.add(d.stats);
   }
   size_t s = cct ? cct->_conf.get_val<uint64_t>("mon_stat_smooth_intervals") : 1;
-  if (delta_avg_list->size() > s) {
+  while (delta_avg_list->size() > s) {
     result_pool_delta->stats.sub(delta_avg_list->front().first.stats);
     *result_ts_delta -= delta_avg_list->front().second;
     delta_avg_list->pop_front();

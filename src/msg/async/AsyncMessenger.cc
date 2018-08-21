@@ -581,20 +581,20 @@ AsyncConnectionRef AsyncMessenger::create_connect(
   return conn;
 }
 
-ConnectionRef AsyncMessenger::get_connection(const entity_inst_t& dest)
+ConnectionRef AsyncMessenger::connect_to(int type, const entity_addrvec_t& addrs)
 {
   Mutex::Locker l(lock);
-  if (my_addrs->legacy_addr() == dest.addr) {
+  if (*my_addrs == addrs) {
     // local
     return local_connection;
   }
 
-  AsyncConnectionRef conn = _lookup_conn(entity_addrvec_t(dest.addr));
+  AsyncConnectionRef conn = _lookup_conn(addrs);
   if (conn) {
-    ldout(cct, 10) << __func__ << " " << dest << " existing " << conn << dendl;
+    ldout(cct, 10) << __func__ << " " << addrs << " existing " << conn << dendl;
   } else {
-    conn = create_connect(entity_addrvec_t(dest.addr), dest.name.type());
-    ldout(cct, 10) << __func__ << " " << dest << " new " << conn << dendl;
+    conn = create_connect(addrs, type);
+    ldout(cct, 10) << __func__ << " " << addrs << " new " << conn << dendl;
   }
 
   return conn;
@@ -605,7 +605,7 @@ ConnectionRef AsyncMessenger::get_loopback_connection()
   return local_connection;
 }
 
-int AsyncMessenger::_send_message(Message *m, const entity_inst_t& dest)
+int AsyncMessenger::_send_to(Message *m, int type, const entity_addrvec_t& addrs)
 {
   FUNCTRACE(cct);
   assert(m);
@@ -615,24 +615,25 @@ int AsyncMessenger::_send_message(Message *m, const entity_inst_t& dest)
   else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
     OID_EVENT_TRACE(((MOSDOpReply *)m)->get_oid().name.c_str(), "SEND_MSG_OSD_OP_REPLY");
 
-  ldout(cct, 1) << __func__ << "--> " << dest.name << " "
-      << dest.addr << " -- " << *m << " -- ?+"
+  ldout(cct, 1) << __func__ << "--> " << ceph_entity_type_name(type) << " "
+      << addrs << " -- " << *m << " -- ?+"
       << m->get_data().length() << " " << m << dendl;
 
-  if (dest.addr == entity_addr_t()) {
+  if (addrs.empty()) {
     ldout(cct,0) << __func__ <<  " message " << *m
-        << " with empty dest " << dest.addr << dendl;
+        << " with empty dest " << addrs << dendl;
     m->put();
     return -EINVAL;
   }
 
-  AsyncConnectionRef conn = _lookup_conn(entity_addrvec_t(dest.addr));
-  submit_message(m, conn, dest.addr, dest.name.type());
+  AsyncConnectionRef conn = _lookup_conn(addrs);
+  submit_message(m, conn, addrs, type);
   return 0;
 }
 
 void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
-                                    const entity_addr_t& dest_addr, int dest_type)
+                                    const entity_addrvec_t& dest_addrs,
+				    int dest_type)
 {
   if (cct->_conf->ms_dump_on_send) {
     m->encode(-1, MSG_CRC_ALL);
@@ -653,7 +654,7 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
   }
 
   // local?
-  if (my_addrs->legacy_addr() == dest_addr) {
+  if (*my_addrs == dest_addrs) {
     // local
     local_connection->send_message(m);
     return ;
@@ -662,13 +663,14 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
   // remote, no existing connection.
   const Policy& policy = get_policy(dest_type);
   if (policy.server) {
-    ldout(cct, 20) << __func__ << " " << *m << " remote, " << dest_addr
+    ldout(cct, 20) << __func__ << " " << *m << " remote, " << dest_addrs
         << ", lossy server for target type "
         << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
     m->put();
   } else {
-    ldout(cct,20) << __func__ << " " << *m << " remote, " << dest_addr << ", new connection." << dendl;
-    con = create_connect(entity_addrvec_t(dest_addr), dest_type);
+    ldout(cct,20) << __func__ << " " << *m << " remote, " << dest_addrs
+		  << ", new connection." << dendl;
+    con = create_connect(dest_addrs, dest_type);
     con->send_message(m);
   }
 }

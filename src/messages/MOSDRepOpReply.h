@@ -28,9 +28,12 @@
  *
  */
 
-class MOSDRepOpReply : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+class MOSDRepOpReply : public MessageInstance<MOSDRepOpReply, MOSDFastDispatchOp> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 public:
   epoch_t map_epoch, min_epoch;
 
@@ -116,7 +119,7 @@ public:
   MOSDRepOpReply(
     const MOSDRepOp *req, pg_shard_t from, int result_, epoch_t e, epoch_t mine,
     int at) :
-    MOSDFastDispatchOp(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
     map_epoch(e),
     min_epoch(mine),
     reqid(req->reqid),
@@ -128,7 +131,7 @@ public:
     set_tid(req->get_tid());
   }
   MOSDRepOpReply() 
-    : MOSDFastDispatchOp(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0),
       min_epoch(0),
       ack_type(0), result(0),

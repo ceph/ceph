@@ -788,7 +788,6 @@ public:
     MonSession *session;
     ConnectionRef con;
     uint64_t con_features;
-    entity_inst_t client_inst;
     MonOpRequestRef op;
 
     RoutedRequest() : tid(0), session(NULL), con_features(0) {}

@@ -1125,6 +1125,8 @@ struct client_metadata_t {
     kv_map(std::move(other.kv_map)), features(std::move(other.features)) {}
   client_metadata_t(kv_map_t&& kv, feature_bitset_t &&f) :
     kv_map(std::move(kv)), features(std::move(f)) {}
+  client_metadata_t(const kv_map_t& kv, const feature_bitset_t &f) :
+    kv_map(kv), features(f) {}
   client_metadata_t& operator=(const client_metadata_t& other) {
     kv_map = other.kv_map;
     features = other.features;
@@ -1164,7 +1166,7 @@ struct session_info_t {
   EntityName auth_name;
 
   client_t get_client() const { return client_t(inst.name.num()); }
-  bool has_feature(size_t bit) { return client_metadata.features.test(bit); }
+  bool has_feature(size_t bit) const { return client_metadata.features.test(bit); }
   const entity_name_t& get_source() const { return inst.name; }
 
   void clear_meta() {

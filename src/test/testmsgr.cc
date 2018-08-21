@@ -128,11 +128,11 @@ int main(int argc, const char **argv, const char *envp[]) {
     if (rand() % 10 == 0) {
       //cerr << "mark_down " << t << std::endl;
       dout(0) << "mark_down " << t << dendl;
-      messenger->mark_down(mc.get_mon_addr(t));
+      messenger->mark_down_addrs(mc.get_mon_addrs(t));
     } 
     //cerr << "pinging " << t << std::endl;
     dout(0) << "pinging " << t << dendl;
-    messenger->send_message(new MPing, mc.get_mon_inst(t));
+    messenger->send_to_mon(new MPing, mc.get_mon_addrs(t));
     cerr << isend << "\t" << ++sent << "\t" << received << "\r";
   }
   test_lock.Unlock();

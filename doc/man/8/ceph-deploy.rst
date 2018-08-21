@@ -1,5 +1,7 @@
 :orphan:
 
+.. _ceph-deploy:
+
 =====================================
  ceph-deploy -- Ceph deployment tool
 =====================================

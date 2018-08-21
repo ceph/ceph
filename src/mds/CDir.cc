@@ -2590,6 +2590,20 @@ void CDir::abort_import()
   pop_auth_subtree.zero();
 }
 
+void CDir::encode_dirstat(bufferlist& bl, const session_info_t& info, const DirStat& ds) {
+  if (info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
+    ENCODE_START(1, 1, bl);
+    encode(ds.frag, bl);
+    encode(ds.auth, bl);
+    encode(ds.dist, bl);
+    ENCODE_FINISH(bl);
+  }
+  else {
+    encode(ds.frag, bl);
+    encode(ds.auth, bl);
+    encode(ds.dist, bl);
+  }
+}
 
 /********************************
  * AUTHORITY
@@ -2703,7 +2717,6 @@ void CDir::set_dir_auth(const mds_authority_t &a)
     cache->mds->queue_waiters(ls);
   }
 }
-
 
 /*****************************************
  * AUTH PINS and FREEZING
@@ -2935,34 +2948,46 @@ void CDir::unfreeze_tree()
   }
 }
 
-bool CDir::is_freezing_tree() const
+bool CDir::can_auth_pin(int *err_ret) const
 {
-  if (num_freezing_trees == 0)
-    return false;
-  const CDir *dir = this;
-  while (1) {
-    if (dir->is_freezing_tree_root()) return true;
-    if (dir->is_subtree_root()) return false;
-    if (dir->inode->parent)
-      dir = dir->inode->parent->dir;
-    else
-      return false; // root on replica
+  int err;
+  if (!is_auth()) {
+    err = ERR_NOT_AUTH;
+  } else if (is_freezing_dir() || is_frozen_dir()) {
+    err = ERR_FRAGMENTING_DIR;
+  } else {
+    auto p = is_freezing_or_frozen_tree();
+    if (p.first || p.second) {
+      err = ERR_EXPORTING_TREE;
+    } else {
+      err = 0;
+    }
   }
+  if (err && err_ret)
+    *err_ret = err;
+  return !err;
 }
 
-bool CDir::is_frozen_tree() const
+pair<bool,bool> CDir::is_freezing_or_frozen_tree() const
 {
-  if (num_frozen_trees == 0)
-    return false;
+  if (!num_freezing_trees && !num_frozen_trees)
+    return make_pair(false, false);
+
+  bool freezing, frozen;
   const CDir *dir = this;
   while (1) {
-    if (dir->is_frozen_tree_root()) return true;
-    if (dir->is_subtree_root()) return false;
+    freezing = dir->is_freezing_tree_root();
+    frozen = dir->is_frozen_tree_root();
+    if (freezing || frozen)
+      break;
+    if (dir->is_subtree_root())
+      break;
     if (dir->inode->parent)
       dir = dir->inode->parent->dir;
     else
-      return false;  // root on replica
+      break; // root on replica
   }
+  return make_pair(freezing, frozen);
 }
 
 CDir *CDir::get_frozen_tree_root() 

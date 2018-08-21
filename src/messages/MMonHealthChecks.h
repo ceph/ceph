@@ -7,18 +7,20 @@
 #include "messages/PaxosServiceMessage.h"
 #include "mon/health_check.h"
 
-struct MMonHealthChecks : public PaxosServiceMessage
-{
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+class MMonHealthChecks : public MessageInstance<MMonHealthChecks, PaxosServiceMessage> {
+public:
+  friend factory;
+
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   health_check_map_t health_checks;
 
   MMonHealthChecks()
-    : PaxosServiceMessage(MSG_MON_HEALTH_CHECKS, HEAD_VERSION, COMPAT_VERSION) {
+    : MessageInstance(MSG_MON_HEALTH_CHECKS, HEAD_VERSION, COMPAT_VERSION) {
   }
   MMonHealthChecks(health_check_map_t& m)
-    : PaxosServiceMessage(MSG_MON_HEALTH_CHECKS, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_MON_HEALTH_CHECKS, HEAD_VERSION, COMPAT_VERSION),
       health_checks(m) {
   }
 

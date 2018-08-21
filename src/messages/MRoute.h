@@ -20,21 +20,23 @@
 #include "msg/Message.h"
 #include "include/encoding.h"
 
-struct MRoute : public Message {
+class MRoute : public MessageInstance<MRoute> {
+public:
+  friend factory;
 
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 3;
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 3;
 
   uint64_t session_mon_tid;
   Message *msg;
   epoch_t send_osdmap_first;
   
-  MRoute() : Message(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION),
+  MRoute() : MessageInstance(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION),
 	     session_mon_tid(0),
 	     msg(NULL),
 	     send_osdmap_first(0) {}
   MRoute(uint64_t t, Message *m)
-    : Message(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_ROUTE, HEAD_VERSION, COMPAT_VERSION),
       session_mon_tid(t),
       msg(m),
       send_osdmap_first(0) {}

@@ -336,7 +336,7 @@ public:
       b->cache_private = _discard(cache, offset, bl.length());
       _add_buffer(cache, b, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
     }
-    void finish_write(Cache* cache, uint64_t seq);
+    void _finish_write(Cache* cache, uint64_t seq);
     void did_read(Cache* cache, uint32_t offset, bufferlist& bl) {
       std::lock_guard<std::recursive_mutex> l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
@@ -411,6 +411,8 @@ public:
     /// put logical references, and get back any released extents
     void put_ref(uint64_t offset, uint32_t length,
 		 PExtentVector *r, bool *unshare);
+
+    void finish_write(uint64_t seq);
 
     friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
       return l.get_sbid() == r.get_sbid();
@@ -1400,6 +1402,7 @@ public:
 
     bool flush_commit(Context *c) override;
     void flush() override;
+    void flush_all_but_last();
 
     Collection(BlueStore *ns, Cache *ca, coll_t c);
   };
@@ -1462,10 +1465,10 @@ public:
     }
     volatile_statfs& operator=(const store_statfs_t& st) {
       values[STATFS_ALLOCATED] = st.allocated;
-      values[STATFS_STORED] = st.stored;
-      values[STATFS_COMPRESSED_ORIGINAL] = st.compressed_original;
-      values[STATFS_COMPRESSED] = st.compressed;
-      values[STATFS_COMPRESSED_ALLOCATED] = st.compressed_allocated;
+      values[STATFS_STORED] = st.data_stored;
+      values[STATFS_COMPRESSED_ORIGINAL] = st.data_compressed_original;
+      values[STATFS_COMPRESSED] = st.data_compressed;
+      values[STATFS_COMPRESSED_ALLOCATED] = st.data_compressed_allocated;
       return *this;
     }
     bool is_empty() {
@@ -1747,6 +1750,29 @@ public:
       }
     }
 
+    void flush_all_but_last() {
+      std::unique_lock<std::mutex> l(qlock);
+      assert (q.size() >= 1);
+      while (true) {
+	// set flag before the check because the condition
+	// may become true outside qlock, and we need to make
+	// sure those threads see waiters and signal qcond.
+	++kv_submitted_waiters;
+	if (q.size() <= 1) {
+	  --kv_submitted_waiters;
+	  return;
+	} else {
+	  auto it = q.rbegin();
+	  it++;
+	  if (it->state >= TransContext::STATE_KV_SUBMITTED) {
+	    return;
+          }
+	}
+	qcond.wait(l);
+	--kv_submitted_waiters;
+      }
+    }
+
     bool flush_commit(Context *c) {
       std::lock_guard<std::mutex> l(qlock);
       if (q.empty()) {
@@ -1921,17 +1947,18 @@ private:
   uint64_t kv_throttle_costs = 0;
 
   // cache trim control
-  uint64_t cache_size = 0;      ///< total cache size
+  uint64_t cache_size = 0;       ///< total cache size
   double cache_meta_ratio = 0;   ///< cache ratio dedicated to metadata
   double cache_kv_ratio = 0;     ///< cache ratio dedicated to kv (e.g., rocksdb)
   double cache_data_ratio = 0;   ///< cache ratio dedicated to object data
-  uint64_t cache_meta_min = 0;   ///< cache min dedicated to metadata
-  uint64_t cache_kv_min = 0;     ///< cache min dedicated to kv (e.g., rocksdb)
-  uint64_t cache_data_min = 0;   ///< cache min dedicated to object data
   bool cache_autotune = false;   ///< cache autotune setting
   uint64_t cache_autotune_chunk_size = 0; ///< cache autotune chunk size
   double cache_autotune_interval = 0; ///< time to wait between cache rebalancing
-
+  uint64_t osd_memory_target = 0;   ///< OSD memory target when autotuning cache
+  uint64_t osd_memory_base = 0;     ///< OSD base memory when autotuning cache
+  double osd_memory_expected_fragmentation = 0; ///< expected memory fragmentation
+  uint64_t osd_memory_cache_min = 0; ///< Min memory to assign when autotuning cahce
+  double osd_memory_cache_resize_interval = 0; ///< Time to wait between cache resizing 
   std::mutex vstatfs_lock;
   volatile_statfs vstatfs;
 
@@ -1942,6 +1969,7 @@ private:
     Cond cond;
     Mutex lock;
     bool stop = false;
+    uint64_t autotune_cache_size = 0;
 
     struct MempoolCache : public PriorityCache::PriCache {
       BlueStore *store;
@@ -2060,7 +2088,8 @@ private:
 
   private:
     void _adjust_cache_settings();
-    void _trim_shards(bool log_stats);
+    void _trim_shards(bool interval_stats);
+    void _tune_cache_size(bool interval_stats);
     void _balance_cache(const std::list<PriorityCache::PriCache *>& caches);
     void _balance_cache_pri(int64_t *mem_avail, 
                             const std::list<PriorityCache::PriCache *>& caches, 
@@ -2086,6 +2115,11 @@ private:
   void _set_finisher_num();
 
   int _open_bdev(bool create);
+  // Verifies if disk space is enough for reserved + min bluefs
+  // and alters the latter if needed.
+  // Depends on min_alloc_size hence should be called after
+  // its initialization (and outside of _open_bdev)
+  void _validate_bdev();
   void _close_bdev();
   /*
    * @warning to_repair_db means that we open this db to repair it, will not
@@ -2228,6 +2262,7 @@ private:
   int32_t ondisk_format = 0;  ///< value detected on mount
 
   int _upgrade_super();  ///< upgrade (called during open_super)
+  uint64_t _get_ondisk_reserved() const;
   void _prepare_ondisk_format_super(KeyValueDB::Transaction& t);
 
   // --- public interface ---

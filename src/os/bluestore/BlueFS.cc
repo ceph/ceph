@@ -251,14 +251,16 @@ void BlueFS::handle_discard(unsigned id, interval_set<uint64_t>& to_release)
   alloc[id]->release(to_release);
 }
 
-uint64_t BlueFS::get_fs_usage()
+uint64_t BlueFS::get_used()
 {
   std::lock_guard<std::mutex> l(lock);
-  uint64_t total_bytes = 0;
-  for (auto& p : file_map) {
-    total_bytes += p.second->fnode.get_allocated();
+  uint64_t used = 0;
+  for (unsigned id = 0; id < MAX_BDEV; ++id) {
+    if (alloc[id]) {
+      used += block_all[id].size() - alloc[id]->get_free();
+    }
   }
-  return total_bytes;
+  return used;
 }
 
 uint64_t BlueFS::get_total(unsigned id)
@@ -288,8 +290,13 @@ void BlueFS::dump_block_extents(ostream& out)
     if (!bdev[i]) {
       continue;
     }
-    out << i << " : size 0x" << std::hex << bdev[i]->get_size()
-	<< " : own 0x" << block_all[i] << std::dec << "\n";
+    auto owned = get_total(i);
+    auto free = get_free(i);
+    out << i << " : device size 0x" << std::hex << bdev[i]->get_size()
+        << " : own 0x" << block_all[i]
+        << " = 0x" << owned
+        << " : using 0x" << owned - free
+        << std::dec << "\n";
   }
 }
 
@@ -570,12 +577,15 @@ int BlueFS::_replay(bool noop, bool to_stdout)
   log_seq = 0;
 
   FileRef log_file;
-  if (noop) {
-    log_file = new File;
+  log_file = _get_file(1);
+  if (!noop) {
+    log_file->fnode = super.log_fnode;
   } else {
-    log_file = _get_file(1);
+    // do not use fnode from superblock in 'noop' mode - log_file's one should
+    // be fine and up-to-date
+    assert(log_file->fnode.ino == 1);
+    assert(log_file->fnode.extents.size() != 0);
   }
-  log_file->fnode = super.log_fnode;
   dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
   if (unlikely(to_stdout)) {
     std::cout << " log_fnode " << super.log_fnode << std::endl;
@@ -950,19 +960,10 @@ int BlueFS::_replay(bool noop, bool to_stdout)
   return 0;
 }
 
-int BlueFS::log_dump(
-  CephContext *cct,
-  const string& path,
-  const vector<string>& devs)
+int BlueFS::log_dump()
 {
-  int r = _open_super();
-  if (r < 0) {
-    derr << __func__ << " failed to open super: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
   // only dump log file's content
-  r = _replay(true, true);
+  int r = _replay(true, true);
   if (r < 0) {
     derr << __func__ << " failed to replay log: " << cpp_strerror(r) << dendl;
     return r;

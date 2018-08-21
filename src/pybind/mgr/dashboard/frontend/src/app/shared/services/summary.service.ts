@@ -1,11 +1,11 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, NgZone } from '@angular/core';
+import { Router } from '@angular/router';
 
 import * as _ from 'lodash';
 import { BehaviorSubject, Subscription } from 'rxjs';
 
 import { ExecutingTask } from '../models/executing-task';
-import { AuthStorageService } from './auth-storage.service';
 import { ServicesModule } from './services.module';
 
 @Injectable({
@@ -18,16 +18,12 @@ export class SummaryService {
   // Observable streams
   summaryData$ = this.summaryDataSource.asObservable();
 
-  constructor(
-    private http: HttpClient,
-    private authStorageService: AuthStorageService,
-    private ngZone: NgZone
-  ) {
+  constructor(private http: HttpClient, private router: Router, private ngZone: NgZone) {
     this.refresh();
   }
 
   refresh() {
-    if (this.authStorageService.isLoggedIn()) {
+    if (this.router.url !== '/login') {
       this.http.get('api/summary').subscribe((data) => {
         this.summaryDataSource.next(data);
       });
@@ -57,11 +53,12 @@ export class SummaryService {
    * which is updated once every 5 seconds or when a new task is created.
    *
    * @param {(summary: any) => void} call
+   * @param {(error: any) => void} error
    * @returns {Subscription}
    * @memberof SummaryService
    */
-  subscribe(call: (summary: any) => void): Subscription {
-    return this.summaryData$.subscribe(call);
+  subscribe(call: (summary: any) => void, error?: (error: any) => void): Subscription {
+    return this.summaryData$.subscribe(call, error);
   }
 
   /**

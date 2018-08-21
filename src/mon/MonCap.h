@@ -80,6 +80,16 @@ struct MonCapGrant {
   std::string command;
   map<std::string,StringConstraint> command_args;
 
+  // restrict by network
+  std::string network;
+
+  // these are filled in by parse_network(), called by MonCap::parse()
+  entity_addr_t network_parsed;
+  unsigned network_prefix = 0;
+  bool network_valid = true;
+
+  void parse_network();
+
   mon_rwxa_t allow;
 
   // explicit grants that a profile grant expands to; populated as
@@ -163,7 +173,8 @@ struct MonCap {
 		  EntityName name,
 		  const string& service,
 		  const string& command, const map<string,string>& command_args,
-		  bool op_may_read, bool op_may_write, bool op_may_exec) const;
+		  bool op_may_read, bool op_may_write, bool op_may_exec,
+		  const entity_addr_t& addr) const;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);

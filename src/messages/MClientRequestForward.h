@@ -18,22 +18,24 @@
 
 #include "msg/Message.h"
 
-class MClientRequestForward : public Message {
+class MClientRequestForward : public MessageInstance<MClientRequestForward> {
+public:
+  friend factory;
+private:
   int32_t dest_mds;
   int32_t num_fwd;
   bool client_must_resend;
 
- public:
+protected:
   MClientRequestForward()
-    : Message(CEPH_MSG_CLIENT_REQUEST_FORWARD),
+    : MessageInstance(CEPH_MSG_CLIENT_REQUEST_FORWARD),
       dest_mds(-1), num_fwd(-1), client_must_resend(false) {}
   MClientRequestForward(ceph_tid_t t, int dm, int nf, bool cmr) :
-    Message(CEPH_MSG_CLIENT_REQUEST_FORWARD),
+    MessageInstance(CEPH_MSG_CLIENT_REQUEST_FORWARD),
     dest_mds(dm), num_fwd(nf), client_must_resend(cmr) {
     assert(client_must_resend);
     header.tid = t;
   }
-private:
   ~MClientRequestForward() override {}
 
 public:

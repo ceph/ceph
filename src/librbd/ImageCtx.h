@@ -69,6 +69,7 @@ namespace librbd {
                                         // a format librados can understand
     std::map<librados::snap_t, SnapInfo> snap_info;
     std::map<std::pair<cls::rbd::SnapshotNamespace, std::string>, librados::snap_t> snap_ids;
+    uint64_t open_snap_id = CEPH_NOSNAP;
     uint64_t snap_id;
     bool snap_exists; // false if our snap_id was deleted
     // whether the image was opened read-only. cannot be changed after opening
@@ -122,6 +123,8 @@ namespace librbd {
     ParentInfo parent_md;
     ImageCtx *parent;
     ImageCtx *child = nullptr;
+    MigrationInfo migration_info;
+    ImageCtx *migration_parent = nullptr;
     cls::rbd::GroupSpec group_spec;
     uint64_t stripe_unit, stripe_count;
     uint64_t flags;
@@ -157,6 +160,8 @@ namespace librbd {
     EventSocket event_socket;
 
     ContextWQ *op_work_queue;
+
+    bool ignore_migrating = false;
 
     // Configuration
     static const string METADATA_CONF_PREFIX;
@@ -220,6 +225,12 @@ namespace librbd {
                             const char *snap, IoCtx& p, bool read_only) {
       return new ImageCtx(image_name, image_id, snap, p, read_only);
     }
+    static ImageCtx* create(const std::string &image_name,
+                            const std::string &image_id,
+                            librados::snap_t snap_id, IoCtx& p,
+                            bool read_only) {
+      return new ImageCtx(image_name, image_id, snap_id, p, read_only);
+    }
     void destroy() {
       delete this;
     }
@@ -231,6 +242,8 @@ namespace librbd {
      */
     ImageCtx(const std::string &image_name, const std::string &image_id,
 	     const char *snap, IoCtx& p, bool read_only);
+    ImageCtx(const std::string &image_name, const std::string &image_id,
+	     librados::snap_t snap_id, IoCtx& p, bool read_only);
     ~ImageCtx();
     void init();
     void shutdown();

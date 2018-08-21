@@ -19,23 +19,20 @@
 #include <ostream>
 
 #include <boost/intrusive_ptr.hpp>
-// Because intusive_ptr clobbers our assert...
-#include "include/assert.h"
-
-#include "include/types.h"
-#include "include/buffer.h"
 
 #include "common/RefCountedObj.h"
-
-#include "common/debug.h"
 #include "common/config.h"
+#include "common/debug.h"
+#include "include/assert.h" // Because intusive_ptr clobbers our assert...
+#include "include/buffer.h"
+#include "include/types.h"
+#include "msg/MessageRef.h"
 
 
 // ======================================================
 
 // abstract Connection, for keeping per-connection state
 
-class Message;
 class Messenger;
 
 struct Connection : public RefCountedObject {
@@ -109,7 +106,7 @@ public:
    */
   virtual int send_message(Message *m) = 0;
 
-  int send_message(boost::intrusive_ptr<Message> m)
+  virtual int send_message2(MessageRef m)
   {
     return send_message(m.detach()); /* send_message(Message *m) consumes a reference */
   }
@@ -156,6 +153,9 @@ public:
   bool peer_is_mds() const { return peer_type == CEPH_ENTITY_TYPE_MDS; }
   bool peer_is_osd() const { return peer_type == CEPH_ENTITY_TYPE_OSD; }
   bool peer_is_client() const { return peer_type == CEPH_ENTITY_TYPE_CLIENT; }
+
+  /// which of the peer's addrs is actually in use for this connection
+  virtual entity_addr_t get_peer_socket_addr() const = 0;
 
   entity_addr_t get_peer_addr() const {
     return peer_addrs.front();

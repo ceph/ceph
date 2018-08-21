@@ -17,15 +17,17 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MMonCommandAck : public PaxosServiceMessage {
- public:
+class MMonCommandAck : public MessageInstance<MMonCommandAck, PaxosServiceMessage> {
+public:
+  friend factory;
+
   vector<string> cmd;
   errorcode32_t r;
   string rs;
   
-  MMonCommandAck() : PaxosServiceMessage(MSG_MON_COMMAND_ACK, 0) {}
+  MMonCommandAck() : MessageInstance(MSG_MON_COMMAND_ACK, 0) {}
   MMonCommandAck(vector<string>& c, int _r, string s, version_t v) : 
-    PaxosServiceMessage(MSG_MON_COMMAND_ACK, v),
+    MessageInstance(MSG_MON_COMMAND_ACK, v),
     cmd(c), r(_r), rs(s) { }
 private:
   ~MMonCommandAck() override {}

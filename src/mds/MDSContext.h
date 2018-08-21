@@ -17,7 +17,7 @@
 #define MDS_CONTEXT_H
 
 #include <vector>
-#include <queue>
+#include <deque>
 
 #include "include/Context.h"
 #include "include/elist.h"
@@ -52,7 +52,7 @@ public:
     using vec = vec_alloc<std::allocator>;
 
     template<template<typename> class A>
-    using que_alloc = std::queue<MDSInternalContextBase *, std::deque<MDSInternalContextBase *, A<MDSInternalContextBase *>>>;
+    using que_alloc = std::deque<MDSInternalContextBase *, A<MDSInternalContextBase *>>;
     using que = que_alloc<std::allocator>;
 
     void complete(int r) override;
@@ -228,5 +228,7 @@ protected:
 
 
 typedef C_GatherBuilderBase<MDSInternalContextBase, MDSGather> MDSGatherBuilder;
+
+using MDSContextFactory = ContextFactory<MDSInternalContextBase>;
 
 #endif  // MDS_CONTEXT_H

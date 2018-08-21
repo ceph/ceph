@@ -13,7 +13,7 @@ Synopsis
 |                 [--log-path LOG_PATH]
 
 | **ceph-volume** **lvm** [ *trigger* | *create* | *activate* | *prepare*
-| *zap* | *list*]
+| *zap* | *list* | *batch*]
 
 | **ceph-volume** **simple** [ *trigger* | *scan* | *activate* ]
 
@@ -43,6 +43,36 @@ activated.
 
 Subcommands:
 
+**batch**
+Creates OSDs from a list of devices using a ``filestore``
+or ``bluestore`` (default) setup. It will create all necessary volume groups
+and logical volumes required to have a working OSD.
+
+Example usage with three devices::
+
+    ceph-volume lvm batch --bluestore /dev/sda /dev/sdb /dev/sdc
+
+Optional arguments:
+
+* [-h, --help]          show the help message and exit
+* [--bluestore]         Use the bluestore objectstore (default)
+* [--filestore]         Use the filestore objectstore
+* [--yes]               Skip the report and prompt to continue provisioning
+
+.. * [--dmcrypt]           Enable encryption for the underlying OSD devices
+.. * [--crush-device-class] Define a CRUSH device class to assign the OSD to
+.. * [--no-systemd]         Do not enable or create any systemd units
+.. * [--report]         Report what the potential outcome would be for the
+..                      current input (requires devices to be passed in)
+.. * [--format]         Output format when reporting (used along with
+..                      --report), can be one of 'pretty' (default) or 'json'
+
+Required positional arguments:
+
+* <DEVICE>    Full path to a raw device, like ``/dev/sda``. Multiple
+              ``<DEVICE>`` paths can be passed in.
+
+
 **activate**
 Enables a systemd unit that persists the OSD ID and its UUID (also called
 ``fsid`` in Ceph CLI tools), so that at boot time it can understand what OSD is
@@ -55,7 +85,7 @@ Usage::
 Optional Arguments:
 
 * [-h, --help]  show the help message and exit
-* [--auto-detect-objectstore] Automatically detect the objecstore by inspecting
+* [--auto-detect-objectstore] Automatically detect the objectstore by inspecting
   the OSD
 * [--bluestore] bluestore objectstore (default)
 * [--filestore] filestore objectstore

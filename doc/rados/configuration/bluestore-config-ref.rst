@@ -20,17 +20,17 @@ and its private keyring.
 
 It is also possible to deploy BlueStore across two additional devices:
 
-* A *WAL device* can be used for BlueStore's internal journal or
-  write-ahead log.  It is identified by the ``block.wal`` symlink in
-  the data directory.  It is only useful to use a WAL device if the
-  device is faster than the primary device (e.g., when it is on an SSD
-  and the primary device is an HDD).
-* A *DB device* can be used for storing BlueStore's internal metadata.
-  BlueStore (or rather, the embedded RocksDB) will put as much
-  metadata as it can on the DB device to improve performance.  If the
-  DB device fills up, metadata will spill back onto the primary device
-  (where it would have been otherwise).  Again, it is only helpful to
-  provision a DB device if it is faster than the primary device.
+* A *WAL device* (identified as ``block.wal`` in the data directory) can be
+  used for BlueStore's internal journal or write-ahead log. It is only useful
+  to use a WAL device if the device is faster than the primary device (e.g.,
+  when it is on an SSD and the primary device is an HDD).
+* A *DB device* (identified as ``block.db`` in the data directory) can be used
+  for storing BlueStore's internal metadata.  BlueStore (or rather, the
+  embedded RocksDB) will put as much metadata as it can on the DB device to
+  improve performance.  If the DB device fills up, metadata will spill back
+  onto the primary device (where it would have been otherwise).  Again, it is
+  only helpful to provision a DB device if it is faster than the primary
+  device.
 
 If there is only a small amount of fast storage available (e.g., less
 than a gigabyte), we recommend using it as a WAL device.  If there is
@@ -50,6 +50,90 @@ To specify a WAL device and/or DB device, ::
 
 .. note:: --data can be a Logical Volume using the vg/lv notation. Other
           devices can be existing logical volumes or GPT partitions
+
+Provisioning strategies
+-----------------------
+Although there are multiple ways to deploy a Bluestore OSD (unlike Filestore
+which had 1) here are two common use cases that should help clarify the
+initial deployment strategy:
+
+.. _bluestore-single-type-device-config:
+
+**block (data) only**
+^^^^^^^^^^^^^^^^^^^^^
+If all the devices are the same type, for example all are spinning drives, and
+there are no fast devices to combine these, it makes sense to just deploy with
+block only and not try to separate ``block.db`` or ``block.wal``. The
+:ref:`ceph-volume-lvm` call for a single ``/dev/sda`` device would look like::
+
+    ceph-volume lvm create --bluestore --data /dev/sda
+
+If logical volumes have already been created for each device (1 LV using 100%
+of the device), then the :ref:`ceph-volume-lvm` call for an lv named
+``ceph-vg/block-lv`` would look like::
+
+    ceph-volume lvm create --bluestore --data ceph-vg/block-lv
+
+.. _bluestore-mixed-device-config:
+
+**block and block.db**
+^^^^^^^^^^^^^^^^^^^^^^
+If there is a mix of fast and slow devices (spinning and solid state),
+it is recommended to place ``block.db`` on the faster device while ``block``
+(data) lives on the slower (spinning drive). Sizing for ``block.db`` should be
+as large as possible to avoid performance penalties otherwise. The
+``ceph-volume`` tool is currently not able to create these automatically, so
+the volume groups and logical volumes need to be created manually.
+
+For the below example, lets assume 4 spinning drives (sda, sdb, sdc, and sdd)
+and 1 solid state drive (sdx). First create the volume groups::
+
+    $ vgcreate ceph-block-0 /dev/sda
+    $ vgcreate ceph-block-1 /dev/sdb
+    $ vgcreate ceph-block-2 /dev/sdc
+    $ vgcreate ceph-block-3 /dev/sdd
+
+Now create the logical volumes for ``block``::
+
+    $ lvcreate -l 100%FREE -n block-0 ceph-block-0
+    $ lvcreate -l 100%FREE -n block-1 ceph-block-1
+    $ lvcreate -l 100%FREE -n block-2 ceph-block-2
+    $ lvcreate -l 100%FREE -n block-3 ceph-block-3
+
+We are creating 4 OSDs for the four slow spinning devices, so assuming a 200GB
+SSD in ``/dev/sdx`` we will create 4 logical volumes, each of 50GB::
+
+    $ vgcreate ceph-db-0 /dev/sdx
+    $ lvcreate -L 50GB -n db-0 ceph-db-0
+    $ lvcreate -L 50GB -n db-1 ceph-db-0
+    $ lvcreate -L 50GB -n db-2 ceph-db-0
+    $ lvcreate -L 50GB -n db-3 ceph-db-0
+
+Finally, create the 4 OSDs with ``ceph-volume``::
+
+    $ ceph-volume lvm create --bluestore --data ceph-block-0/block-0 --block.db ceph-db-0/db-0
+    $ ceph-volume lvm create --bluestore --data ceph-block-1/block-1 --block.db ceph-db-0/db-1
+    $ ceph-volume lvm create --bluestore --data ceph-block-2/block-2 --block.db ceph-db-0/db-2
+    $ ceph-volume lvm create --bluestore --data ceph-block-3/block-3 --block.db ceph-db-0/db-3
+
+These operations should end up creating 4 OSDs, with ``block`` on the slower
+spinning drives and a 50GB logical volume for each coming from the solid state
+drive.
+
+Sizing
+======
+When using a :ref:`mixed spinning and solid drive setup
+<bluestore-mixed-device-config>` it is important to make a large-enough
+``block.db`` logical volume for Bluestore. Generally, ``block.db`` should have
+*as large as possible* logical volumes.
+
+It is recommended that the ``block.db`` size isn't smaller than 4% of
+``block``. For example, if the ``block`` size is 1TB, then ``block.db``
+shouldn't be less than 40GB.
+
+If *not* using a mix of fast and slow devices, it isn't required to create
+separate logical volumes for ``block.db`` (or ``block.wal``). Bluestore will
+automatically manage these within the space of ``block``.
 
 Cache size
 ==========

@@ -4,9 +4,18 @@ export DH_VERBOSE=1
 export DESTDIR=$(CURDIR)/debian/tmp
 
 export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
+ifneq (,$(findstring WITH_STATIC_LIBSTDCXX,$(CEPH_EXTRA_CMAKE_ARGS)))
+  # dh_auto_build sets LDFLAGS with `dpkg-buildflags --get LDFLAGS` on ubuntu,
+  # which makes the application aborts when the shared library throws
+  # exception, so strip this linker option,
+  # see http://tracker.ceph.com/issues/25209
+  export DEB_LDFLAGS_MAINT_STRIP = -Wl,-Bsymbolic-functions
+endif
 
-extraopts += -DWITH_OCF=ON -DWITH_LTTNG=ON -DWITH_PYTHON3=ON -DWITH_MGR_DASHBOARD_FRONTEND=OFF
+extraopts += -DWITH_OCF=ON -DWITH_LTTNG=ON
+extraopts += -DWITH_PYTHON3=ON -DWITH_MGR_DASHBOARD_FRONTEND=OFF
 extraopts += -DWITH_CEPHFS_JAVA=ON
+extraopts += -DWITH_CEPHFS_SHELL=ON
 extraopts += -DWITH_SYSTEMD=ON -DCEPH_SYSTEMD_ENV_DIR=/etc/default
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
@@ -140,6 +149,7 @@ override_dh_python3:
 	  dh_python3 -p python3-$$binding;      \
 	done
 	dh_python3 -p python3-ceph-argparse
+	dh_python3 -p cephfs-shell
 
 # do not run tests
 override_dh_auto_test:

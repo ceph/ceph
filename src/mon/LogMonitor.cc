@@ -258,7 +258,14 @@ bool LogMonitor::preprocess_query(MonOpRequestRef op)
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return preprocess_command(op);
+    try {
+      return preprocess_command(op);
+    }
+    catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
 
   case MSG_LOG:
     return preprocess_log(op);
@@ -276,7 +283,14 @@ bool LogMonitor::prepare_update(MonOpRequestRef op)
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return prepare_command(op);
+    try {
+      return prepare_command(op);
+    }
+    catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
   case MSG_LOG:
     return prepare_log(op);
   default:
@@ -397,22 +411,22 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
   }
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval_throws(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "log last") {
     int64_t num = 20;
-    cmd_getval(g_ceph_context, cmdmap, "num", num);
+    cmd_getval_throws(g_ceph_context, cmdmap, "num", num);
     if (f) {
       f->open_array_section("tail");
     }
 
     std::string level_str;
     clog_type level;
-    if (cmd_getval(g_ceph_context, cmdmap, "level", level_str)) {
+    if (cmd_getval_throws(g_ceph_context, cmdmap, "level", level_str)) {
       level = LogEntry::str_to_level(level_str);
       if (level == CLOG_UNKNOWN) {
         ss << "Invalid severity '" << level_str << "'";
@@ -424,7 +438,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
     }
 
     std::string channel;
-    if (!cmd_getval(g_ceph_context, cmdmap, "channel", channel)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "channel", channel)) {
       channel = CLOG_CHANNEL_DEFAULT;
     }
 
@@ -518,7 +532,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
   }
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
 
   MonSession *session = m->get_session();
   if (!session) {
@@ -528,7 +542,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
 
   if (prefix == "log") {
     vector<string> logtext;
-    cmd_getval(g_ceph_context, cmdmap, "logtext", logtext);
+    cmd_getval_throws(g_ceph_context, cmdmap, "logtext", logtext);
     LogEntry le;
     le.rank = m->get_orig_source();
     le.addrs.v.push_back(m->get_orig_source_addr());
