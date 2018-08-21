@@ -57,7 +57,10 @@ private:
    *                v                                         v
    *            V2_GET_METADATA                            <apply>
    *                |                                         |
-   *                v                                         |
+   *                |     -EOPNOTSUPP                         |
+   *                |  * * *                                  |
+   *                |  *   *                                  |
+   *                v  v   *                                  |
    *            V2_GET_PARENT                                 |
    *                |                                         |
    *                v (skip if not enabled)                   |
@@ -129,6 +132,7 @@ private:
 
   bufferlist m_out_bl;
 
+  bool m_legacy_parent = false;
   bool m_legacy_snapshot = false;
 
   uint8_t m_order = 0;
@@ -143,6 +147,7 @@ private:
 
   std::string m_object_prefix;
   ParentInfo m_parent_md;
+  bool m_head_parent_overlap = false;
   cls::rbd::GroupSpec m_group_spec;
 
   ::SnapContext m_snapc;
