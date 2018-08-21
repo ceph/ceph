@@ -423,10 +423,16 @@ template <typename I>
 void RefreshRequest<I>::send_v2_get_parent() {
   // NOTE: remove support when Mimic is EOLed
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
+  ldout(cct, 10) << this << " " << __func__ << ": legacy=" << m_legacy_parent
+                 << dendl;
 
   librados::ObjectReadOperation op;
-  cls_client::get_parent_start(&op, CEPH_NOSNAP);
+  if (!m_legacy_parent) {
+    cls_client::parent_get_start(&op);
+    cls_client::parent_overlap_get_start(&op, CEPH_NOSNAP);
+  } else {
+    cls_client::get_parent_start(&op, CEPH_NOSNAP);
+  }
 
   auto aio_comp = create_rados_callback<
     RefreshRequest<I>, &RefreshRequest<I>::handle_v2_get_parent>(this);
@@ -442,13 +448,41 @@ Context *RefreshRequest<I>::handle_v2_get_parent(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  if (*result == 0) {
-    auto it = m_out_bl.cbegin();
+  auto it = m_out_bl.cbegin();
+  if (!m_legacy_parent) {
+    cls::rbd::ParentImageSpec parent_image_spec;
+    if (*result == 0) {
+      *result = cls_client::parent_get_finish(&it, &parent_image_spec);
+
+      m_parent_md.spec = {};
+      if (*result == 0) {
+        m_parent_md.spec.pool_id = parent_image_spec.pool_id;
+        m_parent_md.spec.image_id = parent_image_spec.image_id;
+        m_parent_md.spec.snap_id = parent_image_spec.snap_id;
+      }
+    }
+
+    std::optional<uint64_t> parent_overlap;
+    if (*result == 0) {
+      *result = cls_client::parent_overlap_get_finish(&it, &parent_overlap);
+    }
+
+    if (*result == 0 && parent_overlap) {
+      m_parent_md.overlap = *parent_overlap;
+      m_head_parent_overlap = true;
+    }
+  } else if (*result == 0) {
     *result = cls_client::get_parent_finish(&it, &m_parent_md.spec,
                                             &m_parent_md.overlap);
+    m_head_parent_overlap = true;
   }
 
-  if (*result < 0) {
+  if (*result == -EOPNOTSUPP && !m_legacy_parent) {
+    ldout(cct, 10) << "retrying using legacy parent method" << dendl;
+    m_legacy_parent = true;
+    send_v2_get_parent();
+    return nullptr;
+  } if (*result < 0) {
     lderr(cct) << "failed to retrieve parent: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
@@ -622,8 +656,14 @@ void RefreshRequest<I>::send_v2_get_snapshots() {
     } else {
       cls_client::snapshot_get_start(&op, snap_id);
     }
+
+    if (m_legacy_parent) {
+      cls_client::get_parent_start(&op, snap_id);
+    } else {
+      cls_client::parent_overlap_get_start(&op, snap_id);
+    }
+
     cls_client::get_flags_start(&op, snap_id);
-    cls_client::get_parent_start(&op, snap_id);
     cls_client::get_protection_status_start(&op, snap_id);
   }
 
@@ -672,13 +712,22 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
       *result = cls_client::snapshot_get_finish(&it, &m_snap_infos[i]);
     }
 
-    if (*result >= 0) {
-      *result = cls_client::get_flags_finish(&it, &m_snap_flags[i]);
+    if (*result == 0) {
+      if (m_legacy_parent) {
+        *result = cls_client::get_parent_finish(&it, &m_snap_parents[i].spec,
+                                                &m_snap_parents[i].overlap);
+      } else {
+        std::optional<uint64_t> parent_overlap;
+        *result = cls_client::parent_overlap_get_finish(&it, &parent_overlap);
+        if (*result == 0 && parent_overlap && m_parent_md.spec.pool_id > -1) {
+          m_snap_parents[i].spec = m_parent_md.spec;
+          m_snap_parents[i].overlap = *parent_overlap;
+        }
+      }
     }
 
     if (*result >= 0) {
-      *result = cls_client::get_parent_finish(&it, &m_snap_parents[i].spec,
-                                              &m_snap_parents[i].overlap);
+      *result = cls_client::get_flags_finish(&it, &m_snap_flags[i]);
     }
 
     if (*result >= 0) {
@@ -1202,6 +1251,12 @@ void RefreshRequest<I>::apply() {
       m_image_ctx.object_prefix = std::move(m_object_prefix);
       m_image_ctx.init_layout();
     } else {
+      // HEAD revision doesn't have a defined overlap so it's only
+      // applicable to snapshots
+      if (!m_head_parent_overlap) {
+        m_parent_md = {};
+      }
+
       m_image_ctx.features = m_features;
       m_image_ctx.flags = m_flags;
       m_image_ctx.op_features = m_op_features;
