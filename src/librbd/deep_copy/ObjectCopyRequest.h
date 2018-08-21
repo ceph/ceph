@@ -161,6 +161,7 @@ private:
   std::map<librados::snap_t, interval_set<uint64_t>> m_zero_interval;
   std::map<librados::snap_t, interval_set<uint64_t>> m_dst_zero_interval;
   std::map<librados::snap_t, uint8_t> m_dst_object_state;
+  std::map<librados::snap_t, bool> m_dst_object_may_exist;
   bufferlist m_read_from_parent_data;
 
   void send_list_snaps();
@@ -187,6 +188,8 @@ private:
   void compute_read_from_parent_ops(io::Extents *image_extents);
   void merge_write_ops();
   void compute_zero_ops();
+
+  void compute_dst_object_may_exist();
 
   void finish(int r);
 };
