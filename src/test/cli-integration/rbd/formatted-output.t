@@ -140,6 +140,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
+      "access_timestamp": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "features": [
           "layering", 
           "exclusive-lock", 
@@ -203,6 +205,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
+      "access_timestamp": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "features": [
           "layering", 
           "exclusive-lock", 
@@ -268,6 +272,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
+      "access_timestamp": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "features": [
           "layering", 
           "exclusive-lock", 
@@ -332,6 +338,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
+      "access_timestamp": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "features": [
           "layering"
       ], 
@@ -417,6 +425,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
+      "access_timestamp": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "features": [
           "layering", 
           "exclusive-lock", 
@@ -480,6 +490,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
+      "access_timestamp": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "features": [
           "layering", 
           "exclusive-lock", 
@@ -554,6 +566,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
+      "access_timestamp": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "features": [
           "layering", 
           "exclusive-lock", 
@@ -617,6 +631,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "access_timestamp": "*",  (glob)
       "block_name_prefix": "rbd_data.*",  (glob)
       "create_timestamp": "*",  (glob)
+      "access_timestamp": "*",  (glob)
+      "modify_timestamp": "*",  (glob)
       "features": [
           "layering", 
           "exclusive-lock", 
