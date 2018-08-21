@@ -1736,12 +1736,12 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     to_check.insert(p.first);
   }
   for (auto& pg : to_check) {
-    auto crush_rule = tmpmap.get_pg_pool_crush_rule(pg);
-    if (crush_rule < 0) {
-      lderr(cct) << __func__ << " unable to load crush-rule of pg "
-                 << pg << dendl;
+    if (!tmpmap.pg_exists(pg)) {
+      ldout(cct, 0) << __func__ << " pg " << pg << " is gone" << dendl;
+      to_cancel.insert(pg);
       continue;
     }
+    auto crush_rule = tmpmap.get_pg_pool_crush_rule(pg);
     map<int, float> weight_map;
     auto it = rule_weight_map.find(crush_rule);
     if (it == rule_weight_map.end()) {
@@ -1769,6 +1769,13 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     vector<int> raw;
     int primary;
     tmpmap.pg_to_raw_up(pg, &raw, &primary);
+    auto size = tmpmap.get_pg_pool_size(pg);
+    if ((int)raw.size() > size) {
+      // probably because we have an old pg_upmap item and now pool-size
+      // is decreasing
+      to_cancel.insert(pg);
+      continue;
+    }
     set<int> parents;
     for (auto osd : raw) {
       if (type > 0) {
