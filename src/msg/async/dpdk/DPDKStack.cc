@@ -41,6 +41,7 @@
 #include <tuple>
 
 #include "common/ceph_argparse.h"
+#include "dpdk_rte.h"
 #include "DPDKStack.h"
 #include "DPDK.h"
 #include "IP.h"
@@ -197,6 +198,11 @@ DPDKWorker::Impl::Impl(CephContext *cct, unsigned i, EventCenter *c, std::shared
   _inet.set_netmask_address(ipv4_address(std::get<2>(tuples[0])));
 }
 
+DPDKWorker::Impl::~Impl()
+{
+  _dev->unset_local_queue(id);
+}
+
 int DPDKWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
                        ServerSocket *sock)
 {
@@ -263,5 +269,12 @@ void DPDKStack::spawn_worker(unsigned i, std::function<void ()> &&func)
       lderr(cct) << __func__ << " remote launch failed, r=" << r << dendl;
       ceph_abort();
     }
+  });
+}
+
+void DPDKStack::join_worker(unsigned i)
+{
+  dpdk::eal::execute_on_master([&]() {
+    rte_eal_wait_lcore(i+1);
   });
 }
