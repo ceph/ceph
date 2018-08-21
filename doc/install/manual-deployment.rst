@@ -240,30 +240,12 @@ The procedure is as follows:
 	osd pool default pgp num = 333
 	osd crush chooseleaf type = 1
 
-#. Touch the ``done`` file.
-
-   Mark that the monitor is created and ready to be started::
-
-	sudo touch /var/lib/ceph/mon/ceph-node1/done
 
 #. Start the monitor(s).
 
    For most distributions, services are started via systemd now::
 
 	sudo systemctl start ceph-mon@node1
-
-   For Ubuntu Trusty, use Upstart::
-
-	sudo start ceph-mon id=node1 [cluster={cluster-name}]
-
-   In this case, to allow the start of the daemon at each reboot you
-   must create two empty files like this::
-
-	sudo touch /var/lib/ceph/mon/{cluster-name}-{hostname}/upstart
-
-   For example::
-
-	sudo touch /var/lib/ceph/mon/ceph-node1/upstart
 
    For older Debian/CentOS/RHEL, use sysvinit::
 
