@@ -91,7 +91,7 @@ namespace librbd {
      * Lock ordering:
      *
      * owner_lock, md_lock, snap_lock, parent_lock,
-     * object_map_lock, async_op_lock
+     * object_map_lock, async_op_lock, timestamp_lock
      */
     RWLock owner_lock; // protects exclusive lock leadership updates
     RWLock md_lock; // protects access to the mutable image metadata that
@@ -104,6 +104,7 @@ namespace librbd {
                    // lockers
     RWLock snap_lock; // protects snapshot-related member variables,
                       // features (and associated helper classes), and flags
+    RWLock timestamp_lock;
     RWLock parent_lock; // protects parent_md and parent
     RWLock object_map_lock; // protects object map updates and object_map itself
     Mutex async_ops_lock; // protects async_ops and async_requests
@@ -131,6 +132,8 @@ namespace librbd {
     uint64_t op_features = 0;
     bool operations_disabled = false;
     utime_t create_timestamp;
+    utime_t access_timestamp;
+    utime_t modify_timestamp;
 
     file_layout_t layout;
 
@@ -202,6 +205,8 @@ namespace librbd {
     int mirroring_replay_delay;
     bool skip_partial_discard;
     bool blkin_trace_all;
+    uint64_t mtime_update_interval;
+    uint64_t atime_update_interval;
     uint64_t qos_iops_limit;
     uint64_t qos_bps_limit;
     uint64_t qos_read_iops_limit;
@@ -275,6 +280,11 @@ namespace librbd {
     uint64_t get_stripe_count() const;
     uint64_t get_stripe_period() const;
     utime_t get_create_timestamp() const;
+    utime_t get_access_timestamp() const;
+    utime_t get_modify_timestamp() const;
+
+    void set_access_timestamp(utime_t at);
+    void set_modify_timestamp(utime_t at);
 
     void add_snap(cls::rbd::SnapshotNamespace in_snap_namespace,
 		  std::string in_snap_name,

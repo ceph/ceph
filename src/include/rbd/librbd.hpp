@@ -378,6 +378,8 @@ public:
   uint64_t get_stripe_count() const;
 
   int get_create_timestamp(struct timespec *timestamp);
+  int get_access_timestamp(struct timespec *timestamp);
+  int get_modify_timestamp(struct timespec *timestamp);
 
   int flatten();
   int flatten_with_progress(ProgressContext &prog_ctx);
