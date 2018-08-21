@@ -55,7 +55,7 @@ class Device(object):
             if not pvs:
                 self._is_lvm_member = False
                 return self._is_lvm_member
-            has_vgs = [pv.vg_name for pv in pvs]
+            has_vgs = [pv.vg_name for pv in pvs if pv.vg_name]
             if has_vgs:
                 self._is_lvm_member = True
                 self.pvs_api = pvs
