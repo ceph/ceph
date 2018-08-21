@@ -780,15 +780,20 @@ static void set_err_msg(std::string *sink, std::string msg)
     *sink = msg;
 }
 
-int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
+int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state,
+	std::string *err_msg)
 {
-  if (!storage)
+  std::string bucket_tenant;
+  if (!storage) {
+    set_err_msg(err_msg, "no storage!");
     return -EINVAL;
+  }
 
   store = storage;
 
   rgw_user user_id = op_state.get_user_id();
   tenant = user_id.tenant;
+  bucket_tenant = tenant;
   bucket_name = op_state.get_bucket_name();
   RGWUserBuckets user_buckets;
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
@@ -796,9 +801,18 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
   if (bucket_name.empty() && user_id.empty())
     return -EINVAL;
 
+  // split possible tenant/name
+  auto pos = bucket_name.find('/');
+  if (pos != boost::string_ref::npos) {
+    bucket_tenant = bucket_name.substr(0, pos);
+    bucket_name = bucket_name.substr(pos + 1);
+  }
+
   if (!bucket_name.empty()) {
     int r = store->get_bucket_info(obj_ctx, tenant, bucket_name, bucket_info, NULL, null_yield);
+
     if (r < 0) {
+      set_err_msg(err_msg, "failed to fetch bucket info for bucket=" + bucket_name);
       ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return r;
     }
@@ -808,8 +822,10 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
 
   if (!user_id.empty()) {
     int r = rgw_get_user_info_by_uid(store, user_id, user_info);
-    if (r < 0)
+    if (r < 0) {
+      set_err_msg(err_msg, "failed to fetch user info");
       return r;
+    }
 
     op_state.display_name = user_info.display_name;
   }
@@ -826,13 +842,19 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   }
 
   string bucket_id = op_state.get_bucket_id();
+#if 0
   if (bucket_id.empty()) {
     set_err_msg(err_msg, "empty bucket instance id");
     return -EINVAL;
   }
+#endif
 
   std::string display_name = op_state.get_user_display_name();
   rgw_bucket bucket = op_state.get_bucket();
+  if (!bucket_id.empty() && bucket_id != bucket.bucket_id) {
+    set_err_msg(err_msg, "specified bucket id does not match");
+    return -EINVAL;
+  }
 
   const rgw_pool& root_pool = store->svc.zone->get_zone_params().domain_root;
   std::string bucket_entry;
@@ -846,6 +868,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, &attrs, null_yield);
   if (r < 0) {
+    set_err_msg(err_msg, "failed to refetch bucket info");
     return r;
   }
 
@@ -891,6 +914,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
               .set_objv_tracker(&objv_tracker)
               .write_attr(RGW_ATTR_ACL, aclbl, null_yield);
     if (r < 0) {
+      set_err_msg(err_msg, "failed to set new acl");
       return r;
     }
 
@@ -906,12 +930,14 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
                    .set_objv_tracker(&objv_tracker)
                    .write_attr(RGW_ATTR_ACL, aclbl, null_yield);
     if (r < 0) {
+      set_err_msg(err_msg, "failed to set bucket policy");
       return r;
     }
 
     r = rgw_link_bucket(store, user_info.user_id, bucket_info.bucket,
                         ceph::real_time());
     if (r < 0) {
+      set_err_msg(err_msg, "failed to relink bucket");
       return r;
     }
   }
@@ -1348,7 +1374,7 @@ int RGWBucketAdminOp::link(RGWRados *store, RGWBucketAdminOpState& op_state, str
 {
   RGWBucket bucket;
 
-  int ret = bucket.init(store, op_state);
+  int ret = bucket.init(store, op_state, err);
   if (ret < 0)
     return ret;
 

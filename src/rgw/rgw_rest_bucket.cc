@@ -131,17 +131,20 @@ void RGWOp_Bucket_Link::execute()
   std::string uid_str;
   std::string bucket;
   std::string bucket_id;
+  std::string new_bucket_name;
 
   RGWBucketAdminOpState op_state;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "bucket", bucket, &bucket);
   RESTArgs::get_string(s, "bucket-id", bucket_id, &bucket_id);
+  RESTArgs::get_string(s, "new-bucket-name", new_bucket_name, &new_bucket_name);
 
   rgw_user uid(uid_str);
   op_state.set_user_id(uid);
   op_state.set_bucket_name(bucket);
   op_state.set_bucket_id(bucket_id);
+  op_state.set_new_bucket_name(new_bucket_name);
 
   http_ret = RGWBucketAdminOp::link(store, op_state);
 }
