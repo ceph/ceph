@@ -1031,11 +1031,6 @@ void MDSRank::retry_dispatch(const Message::const_ref &m)
   dec_dispatch_depth();
 }
 
-utime_t MDSRank::get_laggy_until() const
-{
-  return beacon.get_laggy_until();
-}
-
 double MDSRank::get_dispatch_queue_max_age(utime_t now) const
 {
   return messenger->get_dispatch_queue_max_age(now);
