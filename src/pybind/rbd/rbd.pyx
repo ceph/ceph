@@ -2094,7 +2094,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_resize(self.image, _size)
         if ret < 0:
-            raise make_ex(ret, 'error resizing image %s' % (self.name,))
+            raise make_ex(ret, 'error resizing image %s' % self.name)
 
     def stat(self):
         """
@@ -2126,7 +2126,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_stat(self.image, &info, sizeof(info))
         if ret != 0:
-            raise make_ex(ret, 'error getting info for image %s' % (self.name,))
+            raise make_ex(ret, 'error getting info for image %s' % self.name)
         return {
             'size'              : info.size,
             'obj_size'          : info.obj_size,
@@ -2154,7 +2154,7 @@ cdef class Image(object):
                     ret = rbd_get_name(self.image, image_name, &size)
 
             if ret != 0:
-                raise make_ex(ret, 'error getting name for image %s' % (self.name,))
+                raise make_ex(ret, 'error getting name for image %s' % self.name)
             return decode_cstr(image_name)
         finally:
             free(image_name)
@@ -2178,7 +2178,7 @@ cdef class Image(object):
                     size *= 2
 
             if ret != 0:
-                raise make_ex(ret, 'error getting id for image %s' % (self.name,))
+                raise make_ex(ret, 'error getting id for image %s' % self.name)
             return decode_cstr(image_id)
         finally:
             free(image_id)
@@ -2202,7 +2202,7 @@ cdef class Image(object):
                     size *= 2
 
             if ret != 0:
-                raise make_ex(ret, 'error getting block name prefix for image %s' % (self.name,))
+                raise make_ex(ret, 'error getting block name prefix for image %s' % self.name)
             return decode_cstr(prefix)
         finally:
             free(prefix)
@@ -2241,7 +2241,7 @@ cdef class Image(object):
                     size *= 2
 
             if ret != 0:
-                raise make_ex(ret, 'error getting parent info for image %s' % (self.name,))
+                raise make_ex(ret, 'error getting parent info for image %s' % self.name)
             return (decode_cstr(pool), decode_cstr(name), decode_cstr(snapname))
         finally:
             free(pool)
@@ -2269,7 +2269,7 @@ cdef class Image(object):
                     size *= 2
 
             if ret != 0:
-                raise make_ex(ret, 'error getting parent id for image %s' % (self.name,))
+                raise make_ex(ret, 'error getting parent id for image %s' % self.name)
             return decode_cstr(parent_id)
         finally:
             free(parent_id)
@@ -2392,7 +2392,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_get_group(self.image, &info, sizeof(info))
         if ret != 0:
-            raise make_ex(ret, 'error getting group for image %s' % (self.name,))
+            raise make_ex(ret, 'error getting group for image %s' % self.name)
         result = {
             'pool' : info.pool,
             'name' : decode_cstr(info.name)
@@ -2904,7 +2904,7 @@ cdef class Image(object):
         if ret == <ssize_t>length:
             return ret
         elif ret < 0:
-            raise make_ex(ret, "error writing to %s" % (self.name,))
+            raise make_ex(ret, "error writing to %s" % self.name)
         elif ret < <ssize_t>length:
             raise IncompleteWriteError("Wrote only %ld out of %ld bytes" % (ret, length))
         else:
@@ -3200,8 +3200,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_mirror_image_enable(self.image)
         if ret < 0:
-            raise make_ex(ret, 'error enabling mirroring for image %s'
-                          % (self.name,))
+            raise make_ex(ret, 'error enabling mirroring for image %s' % self.name)
 
     def mirror_image_disable(self, force):
         """
@@ -3214,8 +3213,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_mirror_image_disable(self.image, c_force)
         if ret < 0:
-            raise make_ex(ret, 'error disabling mirroring for image %s' %
-                          (self.name,))
+            raise make_ex(ret, 'error disabling mirroring for image %s' % self.name)
 
     def mirror_image_promote(self, force):
         """
@@ -3228,8 +3226,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_mirror_image_promote(self.image, c_force)
         if ret < 0:
-            raise make_ex(ret, 'error promoting image %s to primary' %
-                          (self.name,))
+            raise make_ex(ret, 'error promoting image %s to primary' % self.name)
 
     def mirror_image_demote(self):
         """
@@ -3238,8 +3235,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_mirror_image_demote(self.image)
         if ret < 0:
-            raise make_ex(ret, 'error demoting image %s to secondary' %
-                          (self.name,))
+            raise make_ex(ret, 'error demoting image %s to secondary' % self.name)
 
     def mirror_image_resync(self):
         """
@@ -3248,7 +3244,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_mirror_image_resync(self.image)
         if ret < 0:
-            raise make_ex(ret, 'error to resync image %s' % (self.name,))
+            raise make_ex(ret, 'error to resync image %s' % self.name)
 
     def mirror_image_get_info(self):
         """
@@ -3266,8 +3262,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_mirror_image_get_info(self.image, &c_info, sizeof(c_info))
         if ret != 0:
-            raise make_ex(ret, 'error getting mirror info for image %s' %
-                          (self.name,))
+            raise make_ex(ret, 'error getting mirror info for image %s' % self.name)
         info = {
             'global_id' : decode_cstr(c_info.global_id),
             'state'     : int(c_info.state),
@@ -3299,8 +3294,7 @@ written." % (self.name, ret, length))
             ret = rbd_mirror_image_get_status(self.image, &c_status,
                                               sizeof(c_status))
         if ret != 0:
-            raise make_ex(ret, 'error getting mirror status for image %s' %
-                          (self.name,))
+            raise make_ex(ret, 'error getting mirror status for image %s' % self.name)
         status = {
             'name'      : decode_cstr(c_status.name),
             'info'      : {
@@ -3488,7 +3482,7 @@ written." % (self.name, ret, length))
                 raise KeyError('no metadata %s for image %s' % (key, self.name))
             if ret != 0:
                 raise make_ex(ret, 'error getting metadata %s for image %s' %
-                              (key, self.name,))
+                              (key, self.name))
             return decode_cstr(value)
         finally:
             free(value)
@@ -3512,7 +3506,7 @@ written." % (self.name, ret, length))
 
         if ret != 0:
             raise make_ex(ret, 'error setting metadata %s for image %s' %
-                          (key, self.name,))
+                          (key, self.name))
 
 
     def metadata_remove(self, key):
@@ -3532,7 +3526,7 @@ written." % (self.name, ret, length))
             raise KeyError('no metadata %s for image %s' % (key, self.name))
         if ret != 0:
             raise make_ex(ret, 'error removing metadata %s for image %s' %
-                          (key, self.name,))
+                          (key, self.name))
 
     def metadata_list(self):
         """
@@ -3663,7 +3657,7 @@ cdef class LockOwnerIterator(object):
             if ret >= 0:
                 break
             elif ret != -errno.ERANGE:
-                raise make_ex(ret, 'error listing lock owners for image %s' % (image.name,))
+                raise make_ex(ret, 'error listing lock owners for image %s' % image.name)
 
     def __iter__(self):
         for i in range(self.num_lock_owners):
@@ -3731,7 +3725,7 @@ cdef class MetadataIterator(object):
                     break
                 elif ret != -errno.ERANGE:
                     raise make_ex(ret, 'error listing metadata for image %s' %
-                                  (self.image_name,))
+                                  self.image_name)
             keys = [decode_cstr(key) for key in
                         c_keys[:keys_size].split(b'\0') if key]
             vals = [decode_cstr(val) for val in
@@ -3783,7 +3777,7 @@ cdef class SnapIterator(object):
                 self.num_snaps = ret
                 break
             elif ret != -errno.ERANGE:
-                raise make_ex(ret, 'error listing snapshots for image %s' % (image.name,))
+                raise make_ex(ret, 'error listing snapshots for image %s' % image.name)
 
     def __iter__(self):
         for i in range(self.num_snaps):
@@ -4004,7 +3998,7 @@ cdef class GroupImageIterator(object):
             if ret >= 0:
                 break
             elif ret != -errno.ERANGE:
-                raise make_ex(ret, 'error listing images for group %s' % (group.name,), group_errno_to_exception)
+                raise make_ex(ret, 'error listing images for group %s' % group.name, group_errno_to_exception)
 
     def __iter__(self):
         for i in range(self.num_images):
@@ -4054,7 +4048,7 @@ cdef class GroupSnapIterator(object):
             if ret >= 0:
                 break
             elif ret != -errno.ERANGE:
-                raise make_ex(ret, 'error listing snapshots for group %s' % (group.name,), group_errno_to_exception)
+                raise make_ex(ret, 'error listing snapshots for group %s' % group.name, group_errno_to_exception)
 
     def __iter__(self):
         for i in range(self.num_snaps):
