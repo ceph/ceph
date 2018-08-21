@@ -6,6 +6,7 @@ import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
+import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
@@ -22,6 +23,7 @@ export class RgwBucketListComponent {
   table: TableComponent;
 
   permission: Permission;
+  tableActions: CdTableAction[];
   columns: CdTableColumn[] = [];
   buckets: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
@@ -44,6 +46,27 @@ export class RgwBucketListComponent {
         flexGrow: 1
       }
     ];
+    const getBucketUri = () =>
+      this.selection.first() && `${encodeURI(this.selection.first().bucket)}`;
+    const addAction: CdTableAction = {
+      permission: 'create',
+      icon: 'fa-plus',
+      routerLink: () => '/rgw/bucket/add',
+      name: 'Add'
+    };
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: 'fa-pencil',
+      routerLink: () => `/rgw/bucket/edit/${getBucketUri()}`,
+      name: 'Edit'
+    };
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: 'fa-trash-o',
+      click: () => this.deleteAction(),
+      name: 'Delete'
+    };
+    this.tableActions = [addAction, editAction, deleteAction];
   }
 
   getBucketList(context: CdTableFetchDataContext) {
