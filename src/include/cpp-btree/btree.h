@@ -115,10 +115,6 @@
 #include <string>
 #include <utility>
 
-#ifndef NDEBUG
-#define NDEBUG 1
-#endif
-
 namespace btree {
 
 // Inside a btree method, if we just call swap(), it will choose the
@@ -681,6 +677,11 @@ class btree_node {
   // Swap the contents of "this" and "src".
   void swap(btree_node *src);
 
+#ifdef NDEBUG
+  static constexpr auto no_debug = true;
+#else
+  static constexpr auto no_debug = false;
+#endif
   // Node allocation/deletion routines.
   static btree_node* init_leaf(
       leaf_fields *f, btree_node *parent, int max_count) {
@@ -690,7 +691,7 @@ class btree_node {
     f->max_count = max_count;
     f->count = 0;
     f->parent = parent;
-    if (!NDEBUG) {
+    if (!no_debug) {
       memset(&f->values, 0, max_count * sizeof(value_type));
     }
     return n;
@@ -698,7 +699,7 @@ class btree_node {
   static btree_node* init_internal(internal_fields *f, btree_node *parent) {
     btree_node *n = init_leaf(f, parent, kNodeValues);
     f->leaf = 0;
-    if (!NDEBUG) {
+    if (!no_debug) {
       memset(f->children, 0, sizeof(f->children));
     }
     return n;
