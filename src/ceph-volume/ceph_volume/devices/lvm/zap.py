@@ -50,7 +50,7 @@ class Zap(object):
         if lv.tags.get('ceph.cluster_name') and lv.tags.get('ceph.osd_id'):
             lv_path = "/var/lib/ceph/osd/{}-{}".format(lv.tags['ceph.cluster_name'], lv.tags['ceph.osd_id'])
         else:
-            lv_path = lv.path
+            lv_path = lv.lv_path
         dmcrypt_uuid = lv.lv_uuid
         dmcrypt = lv.encrypted
         if system.path_is_mounted(lv_path):
@@ -89,7 +89,9 @@ class Zap(object):
         vgs = set([pv.vg_name for pv in pvs])
         for pv in pvs:
             vg_name = pv.vg_name
-            lv = api.get_lv(vg_name=vg_name, lv_uuid=pv.lv_uuid)
+            lv = None
+            if pv.lv_uuid:
+                lv = api.get_lv(vg_name=vg_name, lv_uuid=pv.lv_uuid)
 
             if lv:
                 self.unmount_lv(lv)
