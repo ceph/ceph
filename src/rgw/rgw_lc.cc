@@ -115,7 +115,7 @@ bool RGWLifecycleConfiguration::has_same_action(const lc_op& first, const lc_op&
   }
 }
 
-//Rules are conflicted: if one rule's prefix starts with other rule's prefix, and these two rules
+//Rules are conflicted: if one rule's prefix equals with other rule's prefix, and these two rules
 //define same action. 
 bool RGWLifecycleConfiguration::valid() 
 {
@@ -129,7 +129,7 @@ bool RGWLifecycleConfiguration::valid()
     while (next_iter != prefix_map.end()) {
       string c_pre = cur_iter->first;
       string n_pre = next_iter->first;
-      if (n_pre.compare(0, c_pre.length(), c_pre) == 0) {
+      if (c_pre == n_pre) {
         if (has_same_action(cur_iter->second, next_iter->second)) {
           return false;
         } else {
