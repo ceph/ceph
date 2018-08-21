@@ -55,6 +55,9 @@ private:
    *            V2_GET_CREATE_TIMESTAMP             |
    *                |                               |
    *                v                               |
+   *            V2_GET_ACCESS_MODIFIY_TIMESTAMP     |
+   *                |                               |
+   *                v                               |
    *            V2_GET_DATA_POOL --------------> REFRESH
    *                                                |
    *                                                v
@@ -107,6 +110,9 @@ private:
 
   void send_v2_get_create_timestamp();
   Context *handle_v2_get_create_timestamp(int *result);
+
+  void send_v2_get_access_modify_timestamp();
+  Context *handle_v2_get_access_modify_timestamp(int *result);
 
   void send_v2_get_data_pool();
   Context *handle_v2_get_data_pool(int *result);

@@ -222,6 +222,25 @@ namespace librbd {
                                     utime_t *timestamp);
     int get_create_timestamp(librados::IoCtx *ioctx, const std::string &oid,
                              utime_t *timestamp);
+
+    void get_access_timestamp_start(librados::ObjectReadOperation *op);
+    int get_access_timestamp_finish(bufferlist::const_iterator *it,
+                                    utime_t *timestamp);
+    int get_access_timestamp(librados::IoCtx *ioctx, const std::string &oid,
+                             utime_t *timestamp);
+
+    void get_modify_timestamp_start(librados::ObjectReadOperation *op);
+    int get_modify_timestamp_finish(bufferlist::const_iterator *it,
+                                    utime_t *timestamp);
+    int get_modify_timestamp(librados::IoCtx *ioctx, const std::string &oid,
+                             utime_t *timestamp);
+
+    void set_modify_timestamp(librados::ObjectWriteOperation *op);
+    int set_modify_timestamp(librados::IoCtx *ioctx, const std::string &oid);
+
+    void set_access_timestamp(librados::ObjectWriteOperation *op);
+    int set_access_timestamp(librados::IoCtx *ioctx, const std::string &oid);
+
     int metadata_list(librados::IoCtx *ioctx, const std::string &oid,
                       const std::string &start, uint64_t max_return,
                       map<string, bufferlist> *pairs);

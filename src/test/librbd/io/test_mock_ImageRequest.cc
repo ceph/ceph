@@ -59,9 +59,11 @@ using ::testing::Invoke;
 using ::testing::Return;
 using ::testing::WithArg;
 using ::testing::WithoutArgs;
+using ::testing::Exactly;
 
 struct TestMockIoImageRequest : public TestMockFixture {
   typedef ImageRequest<librbd::MockTestImageCtx> MockImageRequest;
+  typedef ImageReadRequest<librbd::MockTestImageCtx> MockImageReadRequest;
   typedef ImageWriteRequest<librbd::MockTestImageCtx> MockImageWriteRequest;
   typedef ImageDiscardRequest<librbd::MockTestImageCtx> MockImageDiscardRequest;
   typedef ImageFlushRequest<librbd::MockTestImageCtx> MockImageFlushRequest;
@@ -87,6 +89,118 @@ struct TestMockIoImageRequest : public TestMockFixture {
       .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 };
+
+TEST_F(TestMockIoImageRequest, AioWriteModifyTimestamp) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockTestJournal mock_journal;
+  mock_image_ctx.journal = &mock_journal;
+
+  mock_image_ctx.mtime_update_interval = 5;
+
+  utime_t dummy = ceph_clock_now();
+  dummy -= utime_t(10,0);
+
+  EXPECT_CALL(mock_image_ctx, get_modify_timestamp())
+      .Times(Exactly(3))
+      .WillOnce(Return(dummy))
+      .WillOnce(Return(dummy))
+      .WillOnce(Return(dummy + utime_t(10,0)));
+
+  EXPECT_CALL(mock_image_ctx, set_modify_timestamp(_))
+      .Times(Exactly(1));
+
+  InSequence seq;
+  expect_is_journal_appending(mock_journal, false);
+  expect_object_request_send(mock_image_ctx, 0);
+
+  C_SaferCond aio_comp_ctx_1, aio_comp_ctx_2;
+  AioCompletion *aio_comp_1 = AioCompletion::create_and_start(
+    &aio_comp_ctx_1, ictx, AIO_TYPE_WRITE);
+
+  AioCompletion *aio_comp_2 = AioCompletion::create_and_start(
+    &aio_comp_ctx_2, ictx, AIO_TYPE_WRITE);
+
+  bufferlist bl;
+  bl.append("1");
+  MockImageWriteRequest mock_aio_image_write_1(mock_image_ctx, aio_comp_1,
+                                             {{0, 1}}, std::move(bl), 0, {});
+  {
+    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    mock_aio_image_write_1.send();
+  }
+  ASSERT_EQ(0, aio_comp_ctx_1.wait());
+
+  expect_is_journal_appending(mock_journal, false);
+  expect_object_request_send(mock_image_ctx, 0);
+
+  bl.append("1");
+  MockImageWriteRequest mock_aio_image_write_2(mock_image_ctx, aio_comp_2,
+                                             {{0, 1}}, std::move(bl), 0, {});
+  {
+    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    mock_aio_image_write_2.send();
+  }
+  ASSERT_EQ(0, aio_comp_ctx_2.wait());
+}
+
+TEST_F(TestMockIoImageRequest, AioReadAccessTimestamp) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockTestJournal mock_journal;
+  mock_image_ctx.journal = &mock_journal;
+
+  mock_image_ctx.atime_update_interval = 5;
+
+  utime_t dummy = ceph_clock_now();
+  dummy -= utime_t(10,0);
+
+  EXPECT_CALL(mock_image_ctx, get_access_timestamp())
+      .Times(Exactly(3))
+      .WillOnce(Return(dummy))
+      .WillOnce(Return(dummy))
+      .WillOnce(Return(dummy + utime_t(10,0)));
+
+  EXPECT_CALL(mock_image_ctx, set_access_timestamp(_))
+      .Times(Exactly(1));
+
+  InSequence seq;
+  expect_object_request_send(mock_image_ctx, 0);
+
+  C_SaferCond aio_comp_ctx_1, aio_comp_ctx_2;
+  AioCompletion *aio_comp_1 = AioCompletion::create_and_start(
+    &aio_comp_ctx_1, ictx, AIO_TYPE_READ);
+
+
+  ReadResult rr;
+  MockImageReadRequest mock_aio_image_read_1(mock_image_ctx, aio_comp_1,
+                                             {{0, 1}}, std::move(rr), 0, {});
+  {
+    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    mock_aio_image_read_1.send();
+  }
+  ASSERT_EQ(1, aio_comp_ctx_1.wait());
+
+  AioCompletion *aio_comp_2 = AioCompletion::create_and_start(
+    &aio_comp_ctx_2, ictx, AIO_TYPE_READ);
+  expect_object_request_send(mock_image_ctx, 0);
+
+  MockImageReadRequest mock_aio_image_read_2(mock_image_ctx, aio_comp_2,
+                                             {{0, 1}}, std::move(rr), 0, {});
+  {
+    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    mock_aio_image_read_2.send();
+  }
+  ASSERT_EQ(1, aio_comp_ctx_2.wait());
+}
 
 TEST_F(TestMockIoImageRequest, AioWriteJournalAppendDisabled) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);

@@ -1065,6 +1065,32 @@ namespace librbd {
       return ioctx->operate(oid, &op);
     }
 
+    void set_modify_timestamp(librados::ObjectWriteOperation *op)
+    {
+        bufferlist empty_bl;
+        op->exec("rbd","set_modify_timestamp",empty_bl);
+    }
+
+    int set_modify_timestamp(librados::IoCtx *ioctx, const std::string &oid)
+    {
+        librados::ObjectWriteOperation op;
+        set_modify_timestamp(&op);
+        return ioctx->operate(oid, &op);
+    }
+
+    void set_access_timestamp(librados::ObjectWriteOperation *op)
+    {
+        bufferlist empty_bl;
+        op->exec("rbd","set_access_timestamp",empty_bl);
+    }
+
+    int set_access_timestamp(librados::IoCtx *ioctx, const std::string &oid)
+    {
+        librados::ObjectWriteOperation op;
+        set_access_timestamp(&op);
+        return ioctx->operate(oid, &op);
+    }
+
     void get_create_timestamp_start(librados::ObjectReadOperation *op) {
       bufferlist empty_bl;
       op->exec("rbd", "get_create_timestamp", empty_bl);
@@ -1096,6 +1122,72 @@ namespace librbd {
 
       auto it = out_bl.cbegin();
       return get_create_timestamp_finish(&it, timestamp);
+    }
+
+    void get_access_timestamp_start(librados::ObjectReadOperation *op) {
+      bufferlist empty_bl;
+      op->exec("rbd", "get_access_timestamp", empty_bl);
+    }
+
+    int get_access_timestamp_finish(bufferlist::const_iterator *it,
+                                    utime_t *timestamp) {
+      assert(timestamp);
+      
+      try {
+        decode(*timestamp, *it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int get_access_timestamp(librados::IoCtx *ioctx, const std::string &oid,
+                             utime_t *timestamp)
+    {
+      librados::ObjectReadOperation op;
+      get_access_timestamp_start(&op);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      auto it = out_bl.cbegin();
+      return get_access_timestamp_finish(&it, timestamp);
+    }
+
+    void get_modify_timestamp_start(librados::ObjectReadOperation *op) {
+      bufferlist empty_bl;
+      op->exec("rbd", "get_modify_timestamp", empty_bl);
+    }
+
+    int get_modify_timestamp_finish(bufferlist::const_iterator *it,
+                                      utime_t *timestamp) {
+      assert(timestamp);
+      
+      try {
+        decode(*timestamp, *it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int get_modify_timestamp(librados::IoCtx *ioctx, const std::string &oid,
+                               utime_t *timestamp)
+    {
+      librados::ObjectReadOperation op;
+      get_modify_timestamp_start(&op);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      auto it = out_bl.cbegin();
+      return get_modify_timestamp_finish(&it, timestamp);
     }
 
     /************************ rbd_id object methods ************************/

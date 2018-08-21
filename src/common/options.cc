@@ -6632,6 +6632,16 @@ static std::vector<Option> get_rbd_options() {
     Option("rbd_discard_on_zeroed_write_same", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("discard data on zeroed write same instead of writing zero"),
+
+    Option("rbd_mtime_update_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(60)
+    .set_min(0)
+    .set_description("RBD Image modify timestamp refresh interval. Set to 0 to disable modify timestamp update."),
+
+    Option("rbd_atime_update_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(60)
+    .set_min(0)
+    .set_description("RBD Image access timestamp refresh interval. Set to 0 to disable access timestamp update."),
   });
 }
 
