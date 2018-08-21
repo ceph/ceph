@@ -2464,7 +2464,6 @@ void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
   append_rand_alpha(cct, write_version.tag, write_version.tag, TAG_LEN);
 }
 
-
 int RGWRados::watch(const string& oid, uint64_t *watch_handle, librados::WatchCtx2 *ctx) {
   int r = control_pool_ctx.watch2(oid, watch_handle, ctx);
   if (r < 0)
@@ -6902,7 +6901,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   target->invalidate_state();
   state = NULL;
 
-  if (versioned_op && meta.olh_epoch) {
+  if (versioned_op && meta.olh_epoch && meta.modify_index) {
     r = store->set_olh(target->get_ctx(), target->get_bucket_info(), obj, false, NULL, *meta.olh_epoch, real_time(), false, meta.zones_trace);
     if (r < 0) {
       return r;
@@ -6986,6 +6985,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   RGWRados::Bucket bop(target->get_store(), bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, target->get_obj());
   index_op.set_zones_trace(meta.zones_trace);
+  index_op.set_blind(!meta.modify_index);
   
   bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
   int r;
@@ -7325,7 +7325,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj)
   attrset.erase(RGW_ATTR_TAIL_TAG);
 
   return copy_obj_data(rctx, dest_bucket_info, read_op, obj_size - 1, obj, NULL, mtime, attrset,
-                       0, real_time(), NULL);
+                       0, real_time(), NULL, false);
 }
 
 struct obj_time_weight {
@@ -8099,7 +8099,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                map<string, bufferlist>& attrs,
                uint64_t olh_epoch,
 	       real_time delete_at,
-               string *petag)
+               string *petag,
+               bool modify_index)
 {
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
@@ -8109,6 +8110,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info,
                                   dest_bucket_info.owner, obj_ctx,
                                   dest_obj, olh_epoch, tag);
+  processor.set_modify_index(modify_index);
   int ret = processor.prepare();
   if (ret < 0)
     return ret;

@@ -142,6 +142,7 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
 class AtomicObjectProcessor : public ManifestObjectProcessor {
   const std::optional<uint64_t> olh_epoch;
   const std::string unique_tag;
+  bool modify_index{false};
   bufferlist first_chunk; // written with the head in complete()
 
   int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
@@ -165,6 +166,10 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
                const char *if_match, const char *if_nomatch,
                const std::string *user_data,
                rgw_zone_set *zones_trace, bool *canceled) override;
+
+  void set_modify_index(bool _modify_index) {
+    modify_index = _modify_index;
+  }
 };
 
 

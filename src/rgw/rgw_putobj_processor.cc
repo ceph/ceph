@@ -284,6 +284,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
   obj_op.meta.user_data = user_data;
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
+  obj_op.meta.modify_index = modify_index;
 
   r = obj_op.write_meta(actual_size, accounted_size, attrs);
   if (r < 0) {

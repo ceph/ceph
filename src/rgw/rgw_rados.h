@@ -2743,11 +2743,12 @@ public:
         rgw_zone_set *zones_trace;
         bool modify_tail;
         bool completeMultipart;
+        bool modify_index;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
                  if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), zones_trace(nullptr),
-                 modify_tail(false),  completeMultipart(false) {}
+                 modify_tail(false),  completeMultipart(false), modify_index(true) {}
       } meta;
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
@@ -2899,6 +2900,10 @@ public:
       
       void set_zones_trace(rgw_zone_set *_zones_trace) {
         zones_trace = _zones_trace;
+      }
+
+      void set_blind(bool _blind) {
+        blind = _blind;
       }
 
       int prepare(RGWModifyOp, const string *write_tag);
@@ -3127,7 +3132,8 @@ public:
                map<string, bufferlist>& attrs,
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
-               string *petag);
+               string *petag,
+               bool modify_index = true);
   
   int check_bucket_empty(RGWBucketInfo& bucket_info);
 
@@ -3825,7 +3831,6 @@ public:
     entries.clear();
   }
 }; /* RGWChainedCacheImpl */
-
 
 #define MP_META_SUFFIX ".meta"
 
