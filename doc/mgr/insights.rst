@@ -39,10 +39,14 @@ Generate the full report.
 
   ceph insights prune-health <hours>
 
-Remove historical health data collected within the last <hours>. Passing in `0`
-for <hours> will clear all health data. This command is useful for removing
-health checks that have been recently resolved but which remain in the report.
-There is no need to prune health data to reclaim space; pruning occurs
-automatically each hour removing old health data from persistent storage.
+Remove historical health data older than <hours>. Passing `0` for <hours> will
+clear all health data.
+
+This command is useful for cleaning the health history before automated nightly
+reports are generated, which may contain spurious health checks accumulated
+while performing system maintenance, or other health checks that have been
+resolved. There is no need to prune health data to reclaim storage space;
+garbage collection is performed regularly to remove old health data from
+persistent storage.
 
 .. _crash module: ../crash
