@@ -1296,6 +1296,7 @@ OPTION(rgw_service_provider_name, OPT_STR) //service provider name which is cont
 OPTION(rgw_content_length_compat, OPT_BOOL) // Check both HTTP_CONTENT_LENGTH and CONTENT_LENGTH in fcgi env
 OPTION(rgw_lifecycle_work_time, OPT_STR) //job process lc  at 00:00-06:00s
 OPTION(rgw_lc_lock_max_time, OPT_INT)  // total run time for a single lc processor work
+OPTION(rgw_lc_thread_delay, OPT_INT)  // Delay after processing of bucket listing chunks (i.e., per 1000 entries) in milliseconds
 OPTION(rgw_lc_max_objs, OPT_INT)
 OPTION(rgw_lc_max_rules, OPT_U32)  // Max rules set on one bucket
 OPTION(rgw_lc_debug_interval, OPT_INT)  // Debug run interval, in seconds
