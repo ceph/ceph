@@ -4,6 +4,10 @@
 * The 'ceph osd rm' command has been deprecated.  Users should use
   'ceph osd destroy' or 'ceph osd purge' (but after first confirming it is
   safe to do so via the 'ceph osd safe-to-destroy' command).
+* The mon_health_preluminous_compat and mon_health_preluminous_compat_warning
+  config options are removed, as the related functionality is more
+  than two versions old.  Any legacy monitoring system expecting Jewel-style
+  health output will need to be updated to work with Nautilus.
 
 * Nautilus is not supported on any distros still running upstart so upstart
   specific files and references have been removed.
