@@ -30,7 +30,7 @@ class Cond {
 
  public:
   Cond() : waiter_mutex(NULL) {
-    int r = pthread_cond_init(&_c,NULL);
+    [[maybe_unused]] int r = pthread_cond_init(&_c,NULL);
     assert(r == 0);
   }
   virtual ~Cond() { 
