@@ -31,4 +31,10 @@ describe('ConfigurationService', () => {
     const req = httpTesting.expectOne('api/cluster_conf/');
     expect(req.request.method).toBe('GET');
   });
+
+  it('should call get', () => {
+    service.get('configOption').subscribe();
+    const req = httpTesting.expectOne('api/cluster_conf/configOption');
+    expect(req.request.method).toBe('GET');
+  });
 });
