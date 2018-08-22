@@ -10,6 +10,8 @@ overrides:
       - overall HEALTH_
       - \(MON_DOWN\)
       - \(MGR_DOWN\)
+      - \(REQUEST_SLOW\)
+      - slow request
     conf:
       global:
         enable experimental unrecoverable data corrupting features: "*"
