@@ -2311,7 +2311,7 @@ public:
     ObjectStore::Transaction t2;
     t2.touch(test_coll, ghobject_t(existing_oid));
     t2.setattr(test_coll, ghobject_t(existing_oid), OI_ATTR, enc_oi);
-    ASSERT_EQ(0u, store->queue_transaction(ch, std::move(t2)));
+    ASSERT_EQ(0, store->queue_transaction(ch, std::move(t2)));
     info.last_backfill = hobject_t::get_max();
     info.last_complete = eversion_t();
   }

@@ -3239,7 +3239,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1, read_ret.refs.size());
+    ASSERT_EQ(1U, read_ret.refs.size());
   }
   // chunk's refcount 
   {
@@ -3378,7 +3378,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   {
     bufferlist in, out;
     cache_ioctx.exec("bar", "refcount", "chunk_read", in, out);
-    ASSERT_EQ(0, out.length());
+    ASSERT_EQ(0U, out.length());
   }
   // chunk's refcount 
   {

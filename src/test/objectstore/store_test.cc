@@ -6467,7 +6467,7 @@ TEST_P(StoreTestSpecificAUSize, ExcessiveFragmentation) {
     stringify((uint64_t)2048 * 1024 * 1024).c_str());
 
   ASSERT_EQ(g_conf().get_val<Option::size_t>("bluefs_alloc_size"),
-	    1024 * 1024);
+	    1024 * 1024U);
 
   size_t block_size = 0x10000;
   StartDeferred(block_size);
@@ -7025,7 +7025,7 @@ TEST_P(StoreTest, BluestoreStatistics) {
   {
     bufferlist readback;
     r = store->read(ch, hoid, 0, bl.length(), readback);
-    ASSERT_EQ(r, bl.length());
+    ASSERT_EQ(static_cast<int>(bl.length()), r);
     ASSERT_TRUE(bl_eq(bl, readback));
   }
   Formatter *f = Formatter::create("store_test", "json-pretty", "json-pretty");
