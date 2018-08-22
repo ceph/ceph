@@ -2,9 +2,14 @@ import { Component, OnInit } from '@angular/core';
 import { FormControl, FormGroup, ValidatorFn, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
+import * as _ from 'lodash';
+
 import { ConfigurationService } from '../../../../shared/api/configuration.service';
+import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../../shared/forms/cd-validators';
+import { NotificationService } from '../../../../shared/services/notification.service';
+import { ConfigFormCreateRequestModel } from './configuration-form-create-request.model';
 import { ConfigFormModel } from './configuration-form.model';
 
 @Component({
@@ -26,7 +31,8 @@ export class ConfigurationFormComponent implements OnInit {
   constructor(
     private route: ActivatedRoute,
     private router: Router,
-    private configService: ConfigurationService
+    private configService: ConfigurationService,
+    private notificationService: NotificationService
   ) {
     this.createForm();
   }
@@ -238,5 +244,47 @@ export class ConfigurationFormComponent implements OnInit {
     this.type = currentType.name;
     this.inputType = currentType.inputType;
     this.humanReadableType = currentType.humanReadable;
+  }
+
+  createRequest(): ConfigFormCreateRequestModel | null {
+    const values = [];
+
+    this.availSections.forEach((section) => {
+      const sectionValue = this.configForm.getValue(section);
+      if (sectionValue) {
+        values.push({ section: section, value: sectionValue });
+      }
+    });
+
+    if (!_.isEqual(this.response.value, values)) {
+      const request = new ConfigFormCreateRequestModel();
+      request.name = this.configForm.getValue('name');
+      request.value = values;
+      return request;
+    }
+
+    return null;
+  }
+
+  submit() {
+    const request = this.createRequest();
+
+    if (request) {
+      this.configService.create(request).subscribe(
+        () => {
+          this.notificationService.show(
+            NotificationType.success,
+            'Config option ' + request.name + ' has been updated.',
+            'Update config option'
+          );
+          this.router.navigate(['/configuration']);
+        },
+        () => {
+          this.configForm.setErrors({ cdSubmitButton: true });
+        }
+      );
+    }
+
+    this.router.navigate(['/configuration']);
   }
 }

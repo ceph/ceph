@@ -4,6 +4,8 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { ToastModule } from 'ng2-toastr';
+
 import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../../shared/shared.module';
 import { ConfigurationFormComponent } from './configuration-form.component';
@@ -15,7 +17,13 @@ describe('ConfigurationFormComponent', () => {
   let activatedRoute: ActivatedRoute;
 
   configureTestBed({
-    imports: [HttpClientTestingModule, ReactiveFormsModule, RouterTestingModule, SharedModule],
+    imports: [
+      HttpClientTestingModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      ToastModule.forRoot(),
+      SharedModule
+    ],
     declarations: [ConfigurationFormComponent],
     providers: [
       {
