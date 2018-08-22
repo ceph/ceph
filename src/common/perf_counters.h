@@ -833,6 +833,15 @@ public:
     P...
   };
 
+  template<const perf_counter_meta_t& pcid>
+  std::pair<std::uint64_t, std::uint64_t> get_tavg_ns() const {
+    static_assert(pcid.type & PERFCOUNTER_TIME);
+    static_assert(pcid.type & PERFCOUNTER_LONGRUNAVG);
+
+    std::pair<std::uint64_t, std::uint64_t> a = read_avg(pcid);
+    return make_pair(a.second, a.first);
+  }
+
   // virtuals begins here
   const iterator begin() const override final {
     return { &m_meta.front() };
