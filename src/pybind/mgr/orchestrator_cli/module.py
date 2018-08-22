@@ -175,6 +175,20 @@ class OrchestratorCli(MgrModule):
             self._wait([completion])
 
             return 0, "", "Success."
+        elif svc_type == "rgw":
+            store_name = cmd['svc_arg']
+
+            spec = orchestrator.StatelessServiceSpec()
+            spec.name = store_name
+
+            completion = self._oremote(
+                "add_stateless_service",
+                svc_type,
+                spec
+            )
+            self._wait([completion])
+
+            return 0, "", "Success."
         else:
             raise NotImplementedError(svc_type)
 
