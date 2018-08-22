@@ -12,7 +12,6 @@
   <button type="button"
           dropdownToggle
           *ngIf="showDropDownActions()"
-          [ngClass]="{'disabled': onlyDropDown && disableSelectionAction(onlyDropDown)}"
           class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split">
     <ng-container *ngIf="onlyDropDown" i18n>{{ onlyDropDown }}</ng-container>
     <span class="caret"></span>
