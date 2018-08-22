@@ -211,6 +211,7 @@ class Module(MgrModule):
             {'name': 'max_misplaced'},
             {'name': 'min_score'},
             {'name': 'mode'},
+            {'name': 'pools'},
             {'name': 'sleep_interval'},
             {'name': 'upmap_max_iterations'},
             {'name': 'upmap_max_deviation'},
@@ -412,7 +413,24 @@ class Module(MgrModule):
             if self.active and self.time_in_interval(timeofday, begin_time, end_time):
                 self.log.debug('Running')
                 name = 'auto_%s' % time.strftime(TIME_FORMAT, time.gmtime())
-                plan = self.plan_create(name, self.get_osdmap(), [])
+                # get comma separated configured pools to balance
+                pools = []
+                if self.get_config('pools'):
+                    pools = self.get_config('pools').replace(' ', '').split(',')
+                # filter out unknown pools
+                if len(pools):
+                    osdmap = self.get_osdmap()
+                    valid_pool_names = [p['pool_name'] for p in osdmap.dump().get('pools', [])]
+                    invalid_pool_names = []
+                    for p in pools:
+                        if p not in valid_pool_names:
+                            invalid_pool_names.append(p)
+                    if len(invalid_pool_names):
+                        self.log.info('pools %s not found, ignoring them' % invalid_pool_names)
+                    for p in invalid_pool_names:
+                        pools.remove(p)
+                # create and execute the optimization plan
+                plan = self.plan_create(name, self.get_osdmap(), pools)
                 r, detail = self.optimize(plan)
                 if r == 0:
                     self.execute(plan)
