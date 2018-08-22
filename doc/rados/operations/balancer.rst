@@ -28,6 +28,9 @@ This will use the ``crush-compat`` mode, which is backward compatible
 with older clients, and will make small changes to the data
 distribution over time to ensure that OSDs are equally utilized.
 
+The automatic balancing can be limited to specific pools with::
+
+  ceph config set mgr mgr/balancer/pools poolA,poolB,...
 
 Throttling
 ----------
