@@ -8877,6 +8877,18 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef& op, epoch_t epoch)
       epoch));
 }
 
+bool OSD::can_no_lock(OpRequestRef op) 
+{
+  switch (op->get_req()->get_type()) {
+    case MSG_OSD_REPOPREPLY:
+    case MSG_OSD_EC_WRITE_REPLY:
+      return true;
+    default:
+      break;
+  }
+  return false;
+}
+
 void OSD::enqueue_peering_evt(spg_t pgid, PGPeeringEventRef evt)
 {
   dout(15) << __func__ << " " << pgid << " " << evt->get_desc() << dendl;
@@ -8926,7 +8938,13 @@ void OSD::dequeue_op(
 
   auto priv = op->get_req()->get_connection()->get_priv();
   if (auto session = static_cast<Session *>(priv.get()); session) {
-    maybe_share_map(session, op, pg->get_osdmap());
+    if (can_no_lock(op)) {
+      if (op->check_send_map) {
+        maybe_share_map(session, op, osdmap);
+      } 
+    } else {
+      maybe_share_map(session, op, pg->get_osdmap());
+    }
   }
 
   if (pg->is_deleting())

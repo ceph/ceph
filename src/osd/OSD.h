@@ -1754,6 +1754,7 @@ protected:
   void dequeue_op(
     PGRef pg, OpRequestRef op,
     ThreadPool::TPHandle &handle);
+  bool can_no_lock(OpRequestRef op); 
 
   void enqueue_peering_evt(
     spg_t pgid,

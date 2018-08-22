@@ -296,6 +296,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual bool check_osdmap_full(const set<pg_shard_t> &missing_on) = 0;
 
      virtual bool maybe_preempt_replica_scrub(const hobject_t& oid) = 0;
+
+     virtual void pg_lock() = 0;
+     virtual void pg_unlock() = 0;
+
      virtual ~Listener() {}
    };
    Listener *parent;
@@ -385,6 +389,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    bool handle_message(
      OpRequestRef op ///< [in] message received
      ); ///< @return true if the message was handled
+   virtual bool handle_message_no_lock(OpRequestRef op) { return false; }
 
    /// the variant of handle_message that is overridden by child classes
    virtual bool _handle_message(OpRequestRef op) = 0;

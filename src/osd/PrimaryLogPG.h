@@ -761,6 +761,9 @@ public:
 	//generic_dout(0) << "deleting " << this << dendl;
       }
     }
+    ceph_tid_t get_tid() {
+      return rep_tid;
+    }
   };
 
 
@@ -1862,6 +1865,9 @@ public:
   int getattrs_maybe_cache(
     ObjectContextRef obc,
     map<string, bufferlist> *out);
+public:
+  void pg_lock();
+  void pg_unlock();
 };
 
 inline ostream& operator<<(ostream& out, const PrimaryLogPG::RepGather& repop)

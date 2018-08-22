@@ -1711,6 +1711,11 @@ void PrimaryLogPG::do_request(
     op->pg_trace.init("pg op", &trace_endpoint, &op->osd_trace);
     op->pg_trace.event("do request");
   }
+  
+  if (pgbackend->handle_message_no_lock(op)) {
+    return;
+  }
+
   // make sure we have a new enough map
   auto p = waiting_for_map.find(op->get_source());
   if (p != waiting_for_map.end()) {
@@ -3990,9 +3995,11 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 	if (reply)
 	  ctx->reply = nullptr;
 	else {
+	  lock();
 	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
 	  reply->set_reply_versions(ctx->at_version,
 				    ctx->user_at_version);
+	  unlock();
 	}
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
 	dout(10) << " sending reply on " << *m << " " << reply << dendl;
@@ -14437,6 +14444,16 @@ void PrimaryLogPG::agent_estimate_temp(const hobject_t& oid, int *temp)
       --last_n;
     }
   }
+}
+
+void PrimaryLogPG::pg_lock()
+{
+  lock();
+}
+
+void PrimaryLogPG::pg_unlock()
+{
+  unlock();
 }
 
 // Dup op detection

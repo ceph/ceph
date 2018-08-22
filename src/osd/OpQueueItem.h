@@ -187,10 +187,10 @@ public:
     public:
       explicit Locker(PGRef pg) : pg(pg) {}
       void lock() override final {
-	pg->lock();
+        pg->lock();
       }
       void unlock() override final {
-	pg->unlock();
+        pg->unlock();
       }
     };
     return OpQueueItem::OrderLocker::Ref(
