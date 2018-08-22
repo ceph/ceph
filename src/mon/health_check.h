@@ -178,27 +178,13 @@ struct health_check_map_t {
     }
   }
 
-  void dump_detail(Formatter *f, std::string *plain, bool compat) const {
+  void dump_detail(std::string *plain) const {
     for (auto& p : checks) {
-      if (f) {
-	if (compat) {
-	  // this is sloppy, but the best we can do: just dump all of the
-	  // individual checks' details together
-	  for (auto& d : p.second.detail) {
-	    f->dump_string("item", d);
-	  }
-	}
-      } else {
-	if (!compat) {
-	  *plain += p.first + " " + p.second.summary + "\n";
-	}
-	for (auto& d : p.second.detail) {
-	  if (!compat) {
-	    *plain += "    ";
-	  }
-	  *plain += d;
-	  *plain += "\n";
-	}
+      *plain += p.first + " " + p.second.summary + "\n";
+      for (auto& d : p.second.detail) {
+        *plain += "    ";
+        *plain += d;
+        *plain += "\n";
       }
     }
   }
