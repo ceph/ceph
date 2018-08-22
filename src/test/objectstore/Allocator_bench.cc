@@ -150,7 +150,8 @@ TEST_P(AllocTest, test_alloc_bench_seq)
   for (uint64_t i = 0; i < capacity; i += want_size)
   {
     tmp.clear();
-    EXPECT_EQ(want_size, alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
+    EXPECT_EQ(static_cast<int64_t>(want_size),
+	      alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
     if (0 == (i % (1 * 1024 * _1m))) {
       std::cout << "alloc " << i / 1024 / 1024 << " mb of "
         << capacity / 1024 / 1024 << std::endl;
