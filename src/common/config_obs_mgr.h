@@ -67,7 +67,7 @@ void ObserverMgr<ConfigObs>::add_observer(ConfigObs* observer)
 template<class ConfigObs>
 void ObserverMgr<ConfigObs>::remove_observer(ConfigObs* observer)
 {
-  bool found_obs = false;
+  [[maybe_unused]] bool found_obs = false;
   for (auto o = observers.begin(); o != observers.end(); ) {
     if (o->second == observer) {
       observers.erase(o++);

@@ -15,7 +15,7 @@ class OnExitManager {
     typedef void (*callback_t)(void *arg);
 
     OnExitManager() {
-      int ret = pthread_mutex_init(&lock_, NULL);
+      [[maybe_unused]] int ret = pthread_mutex_init(&lock_, NULL);
       assert(ret == 0);
     }
 
