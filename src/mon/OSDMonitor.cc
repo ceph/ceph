@@ -7774,7 +7774,10 @@ int OSDMonitor::prepare_command_osd_new(
     assert(id >= 0);
     assert(osdmap.is_destroyed(id));
     pending_inc.new_weight[id] = CEPH_OSD_OUT;
-    pending_inc.new_state[id] |= CEPH_OSD_DESTROYED | CEPH_OSD_NEW;
+    pending_inc.new_state[id] |= CEPH_OSD_DESTROYED;
+    if ((osdmap.get_state(id) & CEPH_OSD_NEW) == 0) {
+      pending_inc.new_state[id] |= CEPH_OSD_NEW;
+    }
     if (osdmap.get_state(id) & CEPH_OSD_UP) {
       // due to http://tracker.ceph.com/issues/20751 some clusters may
       // have UP set for non-existent OSDs; make sure it is cleared
@@ -10581,7 +10584,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return true;
     }
 
-  } else if (prefix == "osd destroy" || prefix == "osd purge") {
+  } else if (prefix == "osd destroy" ||
+	     prefix == "osd purge" ||
+	     prefix == "osd purge-new") {
     /* Destroying an OSD means that we don't expect to further make use of
      * the OSDs data (which may even become unreadable after this operation),
      * and that we are okay with scrubbing all its cephx keys and config-key
@@ -10612,7 +10617,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     bool is_destroy = (prefix == "osd destroy");
     if (!is_destroy) {
-      assert("osd purge" == prefix);
+      assert("osd purge" == prefix ||
+	     "osd purge-new" == prefix);
     }
 
     string sure;
@@ -10634,6 +10640,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } else if (is_destroy && osdmap.is_destroyed(id)) {
       ss << "destroyed osd." << id;
       err = 0;
+      goto reply;
+    }
+
+    if (prefix == "osd purge-new" &&
+	(osdmap.get_state(id) & CEPH_OSD_NEW) == 0) {
+      ss << "osd." << id << " is not new";
+      err = -EPERM;
       goto reply;
     }
 
