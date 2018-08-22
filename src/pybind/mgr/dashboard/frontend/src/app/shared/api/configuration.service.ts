@@ -13,7 +13,7 @@ export class ConfigurationService {
     return this.http.get('api/cluster_conf/');
   }
 
-  get(configOption) {
+  get(configOption: string) {
     return this.http.get(`api/cluster_conf/${configOption}`);
   }
 }
