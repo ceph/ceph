@@ -2517,8 +2517,8 @@ public:
   }
 
   struct BSPerfTracker {
-    PerfCounters::avg_tracker<uint64_t> os_commit_latency_ns;
-    PerfCounters::avg_tracker<uint64_t> os_apply_latency_ns;
+    ceph::perf_avg_tracker_t<std::uint64_t> os_commit_latency_ns;
+    ceph::perf_avg_tracker_t<std::uint64_t> os_apply_latency_ns;
 
     objectstore_perf_stat_t get_cur_stats() const {
       objectstore_perf_stat_t ret;

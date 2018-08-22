@@ -75,6 +75,26 @@ struct perf_counter_meta_t {
   }
 };
 
+namespace ceph {
+
+template <typename T>
+struct perf_avg_tracker_t {
+  std::pair<std::uint64_t, T> last{ 0, 0 };
+  std::pair<std::uint64_t, T> cur{ 0, 0 };
+
+  T current_avg() const {
+    if (cur.first == last.first)
+      return 0;
+    return (cur.second - last.second) / (cur.first - last.first);
+  }
+  void consume_next(const std::pair<std::uint64_t, T> &next) {
+    last = cur;
+    cur = next;
+  }
+};
+
+} // namespace ceph
+
 template <class T>
 class configurable_advance_iterator {
 public:
@@ -321,22 +341,6 @@ public:
 	sum = u64;
       } while (avgcount2 != count);
       return make_pair(sum, count);
-    }
-  };
-
-  template <typename T>
-  struct avg_tracker {
-    pair<uint64_t, T> last;
-    pair<uint64_t, T> cur;
-    avg_tracker() : last(0, 0), cur(0, 0) {}
-    T current_avg() const {
-      if (cur.first == last.first)
-        return 0;
-      return (cur.second - last.second) / (cur.first - last.first);
-    }
-    void consume_next(const pair<uint64_t, T> &next) {
-      last = cur;
-      cur = next;
     }
   };
 
