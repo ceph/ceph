@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/sleep.hh>
+#include <seastar/net/packet.hh>
 
 #include "Config.h"
 #include "Messenger.h"
@@ -242,7 +243,7 @@ seastar::future<MessageRef> SocketConnection::read_message()
 bool SocketConnection::update_rx_seq(seq_num_t seq)
 {
   if (seq <= in_seq) {
-    if (has_feature(CEPH_FEATURE_RECONNECT_SEQ) &&
+    if (HAVE_FEATURE(features, RECONNECT_SEQ) &&
         conf.ms_die_on_old_message) {
       assert(0 == "old msgs despite reconnect_seq feature");
     }
@@ -270,7 +271,7 @@ seastar::future<> SocketConnection::write_message(MessageRef msg)
   bl.append(msg->get_middle());
   bl.append(msg->get_data());
   auto& footer = msg->get_footer();
-  if (has_feature(CEPH_FEATURE_MSG_AUTH)) {
+  if (HAVE_FEATURE(features, MSG_AUTH)) {
     bl.append((const char*)&footer, sizeof(footer));
   } else {
     ceph_msg_footer_old old_footer;
@@ -309,6 +310,21 @@ seastar::future<> SocketConnection::send(MessageRef msg)
   // chain any later messages after this one completes
   send_ready = f.get_future();
   // allow the caller to wait on the same future
+  return f.get_future();
+}
+
+seastar::future<> SocketConnection::keepalive()
+{
+  seastar::shared_future<> f = send_ready.then([this] {
+      k.req.stamp = ceph::coarse_real_clock::to_ceph_timespec(
+        ceph::coarse_real_clock::now());
+      seastar::net::packet msg{reinterpret_cast<const char*>(&k.req),
+                               sizeof(k.req)};
+      return out.write(std::move(msg));
+    }).then([this] {
+      return out.flush();
+    });
+  send_ready = f.get_future();
   return f.get_future();
 }
 
@@ -539,14 +555,11 @@ SocketConnection::handle_keepalive2()
 {
   return in.read_exactly(sizeof(ceph_timespec))
     .then([this] (auto buf) {
-      auto t = reinterpret_cast<const ceph_timespec*>(buf.get());
-      k.reply_stamp = *t;
-      std::cout << "keepalive2 " << t->tv_sec << std::endl;
-      char tag = CEPH_MSGR_TAG_KEEPALIVE2_ACK;
-      return out.write(reinterpret_cast<const char*>(&tag), sizeof(tag));
-    }).then([this] {
-      out.write(reinterpret_cast<const char*>(&k.reply_stamp),
-                sizeof(k.reply_stamp));
+      k.ack.stamp = *reinterpret_cast<const ceph_timespec*>(buf.get());
+      std::cout << "keepalive2 " << k.ack.stamp.tv_sec << std::endl;
+      seastar::net::packet msg{reinterpret_cast<const char*>(&k.ack),
+                               sizeof(k.ack)};
+      return out.write(std::move(msg));
     }).then([this] {
       return out.flush();
     });
@@ -610,7 +623,8 @@ seastar::future<> SocketConnection::replace_existing(ConnectionRef existing,
 						     bool is_reset_from_peer)
 {
   msgr_tag_t reply_tag;
-  if ((h.connect.features & CEPH_FEATURE_RECONNECT_SEQ) && !is_reset_from_peer) {
+  if (HAVE_FEATURE(h.connect.features, RECONNECT_SEQ) &&
+      !is_reset_from_peer) {
     reply_tag = CEPH_MSGR_TAG_SEQ;
   } else {
     reply_tag = CEPH_MSGR_TAG_READY;
@@ -708,7 +722,7 @@ void SocketConnection::reset_session()
   decltype(sent){}.swap(sent);
   in_seq = 0;
   h.connect_seq = 0;
-  if (has_feature(CEPH_FEATURE_MSG_AUTH)) {
+  if (HAVE_FEATURE(features, MSG_AUTH)) {
     // Set out_seq to a random value, so CRC won't be predictable.
     // Constant to limit starting sequence number to 2^31.  Nothing special
     // about it, just a big number.

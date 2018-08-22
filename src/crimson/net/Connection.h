@@ -59,6 +59,10 @@ class Connection : public boost::intrusive_ref_counter<Connection,
   /// send a message over a connection that has completed its handshake
   virtual seastar::future<> send(MessageRef msg) = 0;
 
+  /// send a keepalive message over a connection that has completed its
+  /// handshake
+  virtual seastar::future<> keepalive() = 0;
+
   /// close the connection and cancel any any pending futures from read/send
   virtual seastar::future<> close() = 0;
 
