@@ -162,7 +162,7 @@ void SnapshotRemoveRequest<I>::detach_child() {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
     RWLock::RLocker parent_locker(image_ctx.parent_lock);
 
-    ParentSpec our_pspec;
+    cls::rbd::ParentImageSpec our_pspec;
     int r = image_ctx.get_parent_spec(m_snap_id, &our_pspec);
     if (r < 0) {
       if (r == -ENOENT) {
@@ -338,7 +338,8 @@ void SnapshotRemoveRequest<I>::remove_snap_context() {
 }
 
 template <typename I>
-int SnapshotRemoveRequest<I>::scan_for_parents(ParentSpec &pspec) {
+int SnapshotRemoveRequest<I>::scan_for_parents(
+    cls::rbd::ParentImageSpec &pspec) {
   I &image_ctx = this->m_image_ctx;
   ceph_assert(image_ctx.snap_lock.is_locked());
   ceph_assert(image_ctx.parent_lock.is_locked());

@@ -450,16 +450,8 @@ Context *RefreshRequest<I>::handle_v2_get_parent(int *result) {
 
   auto it = m_out_bl.cbegin();
   if (!m_legacy_parent) {
-    cls::rbd::ParentImageSpec parent_image_spec;
     if (*result == 0) {
-      *result = cls_client::parent_get_finish(&it, &parent_image_spec);
-
-      m_parent_md.spec = {};
-      if (*result == 0) {
-        m_parent_md.spec.pool_id = parent_image_spec.pool_id;
-        m_parent_md.spec.image_id = parent_image_spec.image_id;
-        m_parent_md.spec.snap_id = parent_image_spec.snap_id;
-      }
+      *result = cls_client::parent_get_finish(&it, &m_parent_md.spec);
     }
 
     std::optional<uint64_t> parent_overlap;
@@ -765,7 +757,7 @@ void RefreshRequest<I>::send_v2_refresh_parent() {
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
     RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
 
-    ParentInfo parent_md;
+    ParentImageInfo parent_md;
     MigrationInfo migration_info;
     int r = get_parent_info(m_image_ctx.snap_id, &parent_md, &migration_info);
     if (!m_skip_open_parent_image && (r < 0 ||
@@ -1296,7 +1288,7 @@ void RefreshRequest<I>::apply() {
       uint8_t protection_status = m_image_ctx.old_format ?
         static_cast<uint8_t>(RBD_PROTECTION_STATUS_UNPROTECTED) :
         m_snap_protection[i];
-      ParentInfo parent;
+      ParentImageInfo parent;
       if (!m_image_ctx.old_format) {
         if (!m_image_ctx.migration_info.empty()) {
           parent = m_image_ctx.parent_md;
@@ -1369,7 +1361,7 @@ void RefreshRequest<I>::apply() {
 
 template <typename I>
 int RefreshRequest<I>::get_parent_info(uint64_t snap_id,
-                                       ParentInfo *parent_md,
+                                       ParentImageInfo *parent_md,
                                        MigrationInfo *migration_info) {
   if (get_migration_info(parent_md, migration_info)) {
     return 0;
@@ -1390,7 +1382,7 @@ int RefreshRequest<I>::get_parent_info(uint64_t snap_id,
 }
 
 template <typename I>
-bool RefreshRequest<I>::get_migration_info(ParentInfo *parent_md,
+bool RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
                                            MigrationInfo *migration_info) {
   if (m_migration_spec.header_type != cls::rbd::MIGRATION_HEADER_TYPE_DST ||
       (m_migration_spec.state != cls::rbd::MIGRATION_STATE_PREPARED &&

@@ -71,7 +71,8 @@ int Image<I>::list_images(librados::IoCtx& io_ctx, ImageNameToIds *images) {
 }
 
 template <typename I>
-int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
+int Image<I>::list_children(I *ictx,
+                            const cls::rbd::ParentImageSpec &parent_spec,
                             PoolImageIds *pool_image_ids)
 {
   CephContext *cct = ictx->cct;
@@ -129,16 +130,19 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
                  << dendl;
       return r;
     }
-    pool_image_ids->insert({*it, image_ids});
+    pool_image_ids->insert({
+      {it->first, it->second, ictx->md_ctx.get_namespace()}, image_ids});
   }
 
   // retrieve clone v2 children attached to this snapshot
   IoCtx parent_io_ctx;
   r = rados.ioctx_create2(parent_spec.pool_id, parent_io_ctx);
-  ceph_assert(r == 0);
-
-  // TODO support clone v2 parent namespaces
-  parent_io_ctx.set_namespace(ictx->md_ctx.get_namespace());
+  if (r < 0) {
+    lderr(cct) << "error accessing parent image pool "
+               << parent_spec.pool_id << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  parent_io_ctx.set_namespace(parent_spec.pool_namespace);
 
   cls::rbd::ChildImageSpecs child_images;
   r = cls_client::children_list(&parent_io_ctx,
@@ -156,12 +160,13 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
       ldout(cct, 1) << "pool " << child_image.pool_id << " no longer exists"
                     << dendl;
       continue;
+    } else if (r < 0) {
+      lderr(cct) << "error accessing child image pool "
+                 << child_image.pool_id << ": " << cpp_strerror(r) << dendl;
     }
 
-    // TODO support clone v2 child namespaces
-    io_ctx.set_namespace(ictx->md_ctx.get_namespace());
-
-    PoolSpec pool_spec = {child_image.pool_id, io_ctx.get_pool_name()};
+    PoolSpec pool_spec = {child_image.pool_id, io_ctx.get_pool_name(),
+                          child_image.pool_namespace};
     (*pool_image_ids)[pool_spec].insert(child_image.image_id);
   }
 
@@ -217,7 +222,7 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
     opts.unset(RBD_IMAGE_OPTION_FLATTEN);
   }
 
-  ParentSpec parent_spec;
+  cls::rbd::ParentImageSpec parent_spec;
   if (flatten > 0) {
     parent_spec.pool_id = -1;
   } else {

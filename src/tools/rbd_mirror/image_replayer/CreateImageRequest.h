@@ -101,10 +101,10 @@ private:
   std::string m_local_parent_mirror_uuid;
   Journaler *m_remote_journaler = nullptr;
   ImageCtxT *m_remote_parent_image_ctx = nullptr;
-  librbd::ParentSpec m_remote_parent_spec;
+  cls::rbd::ParentImageSpec m_remote_parent_spec;
 
   librados::IoCtx m_local_parent_io_ctx;
-  librbd::ParentSpec m_local_parent_spec;
+  cls::rbd::ParentImageSpec m_local_parent_spec;
 
   bufferlist m_out_bl;
   std::string m_parent_global_image_id;

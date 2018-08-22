@@ -148,7 +148,8 @@ void CloneRequest<I>::handle_open_parent(int r) {
   }
 
   m_parent_snap_id = m_parent_image_ctx->snap_id;
-  m_pspec = {m_parent_io_ctx.get_id(), m_parent_image_id, m_parent_snap_id};
+  m_pspec = {m_parent_io_ctx.get_id(), m_parent_io_ctx.get_namespace(),
+             m_parent_image_id, m_parent_snap_id};
   validate_parent();
 }
 
@@ -327,8 +328,7 @@ void CloneRequest<I>::attach_parent() {
   auto ctx = create_context_callback<
     CloneRequest<I>, &CloneRequest<I>::handle_attach_parent>(this);
   auto req = AttachParentRequest<I>::create(
-    *m_imctx, {m_pspec.pool_id, "", m_pspec.image_id, m_pspec.snap_id},
-    m_size, ctx);
+    *m_imctx, m_pspec, m_size, ctx);
   req->send();
 }
 

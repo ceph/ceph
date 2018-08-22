@@ -23,7 +23,7 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class SetHeadRequest {
 public:
   static SetHeadRequest* create(ImageCtxT *image_ctx, uint64_t size,
-                                const librbd::ParentSpec &parent_spec,
+                                const cls::rbd::ParentImageSpec &parent_spec,
                                 uint64_t parent_overlap,
                                 Context *on_finish) {
     return new SetHeadRequest(image_ctx, size, parent_spec, parent_overlap,
@@ -31,8 +31,8 @@ public:
   }
 
   SetHeadRequest(ImageCtxT *image_ctx, uint64_t size,
-                 const librbd::ParentSpec &parent_spec, uint64_t parent_overlap,
-                 Context *on_finish);
+                 const cls::rbd::ParentImageSpec &parent_spec,
+                 uint64_t parent_overlap, Context *on_finish);
 
   void send();
 
@@ -59,7 +59,7 @@ private:
 
   ImageCtxT *m_image_ctx;
   uint64_t m_size;
-  librbd::ParentSpec m_parent_spec;
+  cls::rbd::ParentImageSpec m_parent_spec;
   uint64_t m_parent_overlap;
   Context *m_on_finish;
 

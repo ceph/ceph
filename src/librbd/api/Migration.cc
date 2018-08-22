@@ -1131,7 +1131,7 @@ int Migration<I>::create_dst_image() {
   ldout(m_cct, 10) << dendl;
 
   uint64_t size;
-  ParentSpec parent_spec;
+  cls::rbd::ParentImageSpec parent_spec;
   {
     RWLock::RLocker snap_locker(m_src_image_ctx->snap_lock);
     RWLock::RLocker parent_locker(m_src_image_ctx->parent_lock);

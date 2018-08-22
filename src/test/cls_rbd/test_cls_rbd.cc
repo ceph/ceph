@@ -14,6 +14,7 @@
 #include "cls/rbd/cls_rbd.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
+#include "librbd/Types.h"
 
 #include "gtest/gtest.h"
 #include "test/librados/test.h"
@@ -24,8 +25,7 @@
 
 using namespace std;
 using namespace librbd::cls_client;
-using ::librbd::ParentInfo;
-using ::librbd::ParentSpec;
+using ::librbd::ParentImageInfo;
 using ceph::encode;
 using ceph::decode;
 
@@ -196,7 +196,7 @@ TEST_F(TestClsRbd, add_remove_child)
   snapid_t snapid(10);
   string parent_image = "parent_id";
   set<string>children;
-  ParentSpec pspec(ioctx.get_id(), parent_image, snapid);
+  cls::rbd::ParentImageSpec pspec(ioctx.get_id(), "", parent_image, snapid);
 
   // nonexistent children cannot be listed or removed
   ASSERT_EQ(-ENOENT, get_children(&ioctx, oid, pspec, children));
@@ -651,7 +651,7 @@ TEST_F(TestClsRbd, parents_v1)
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
-  ParentSpec pspec;
+  cls::rbd::ParentImageSpec pspec;
   uint64_t size;
 
   ASSERT_EQ(-ENOENT, get_parent(&ioctx, "doesnotexist", CEPH_NOSNAP, &pspec, &size));
@@ -665,8 +665,8 @@ TEST_F(TestClsRbd, parents_v1)
   ASSERT_STREQ("", pspec.image_id.c_str());
   ASSERT_EQ(pspec.snap_id, CEPH_NOSNAP);
   ASSERT_EQ(size, 0ULL);
-  pspec = ParentSpec(-1, "parent", 3);
-  ASSERT_EQ(-ENOEXEC, set_parent(&ioctx, oid, ParentSpec(-1, "parent", 3), 10<<20));
+  pspec = {-1, "", "parent", 3};
+  ASSERT_EQ(-ENOEXEC, set_parent(&ioctx, oid, {-1, "", "parent", 3}, 10<<20));
   ASSERT_EQ(-ENOEXEC, remove_parent(&ioctx, oid));
 
   // new image will work
@@ -679,15 +679,15 @@ TEST_F(TestClsRbd, parents_v1)
   ASSERT_EQ(0, get_parent(&ioctx, oid, 123, &pspec, &size));
   ASSERT_EQ(-1, pspec.pool_id);
 
-  ASSERT_EQ(-EINVAL, set_parent(&ioctx, oid, ParentSpec(-1, "parent", 3), 10<<20));
-  ASSERT_EQ(-EINVAL, set_parent(&ioctx, oid, ParentSpec(1, "", 3), 10<<20));
-  ASSERT_EQ(-EINVAL, set_parent(&ioctx, oid, ParentSpec(1, "parent", CEPH_NOSNAP), 10<<20));
-  ASSERT_EQ(-EINVAL, set_parent(&ioctx, oid, ParentSpec(1, "parent", 3), 0));
+  ASSERT_EQ(-EINVAL, set_parent(&ioctx, oid, {-1, "", "parent", 3}, 10<<20));
+  ASSERT_EQ(-EINVAL, set_parent(&ioctx, oid, {1, "", "", 3}, 10<<20));
+  ASSERT_EQ(-EINVAL, set_parent(&ioctx, oid, {1, "", "parent", CEPH_NOSNAP}, 10<<20));
+  ASSERT_EQ(-EINVAL, set_parent(&ioctx, oid, {1, "", "parent", 3}, 0));
 
-  pspec = ParentSpec(1, "parent", 3);
+  pspec = {1, "", "parent", 3};
   ASSERT_EQ(0, set_parent(&ioctx, oid, pspec, 10<<20));
   ASSERT_EQ(-EEXIST, set_parent(&ioctx, oid, pspec, 10<<20));
-  ASSERT_EQ(-EEXIST, set_parent(&ioctx, oid, ParentSpec(2, "parent", 34), 10<<20));
+  ASSERT_EQ(-EEXIST, set_parent(&ioctx, oid, {2, "", "parent", 34}, 10<<20));
 
   ASSERT_EQ(0, get_parent(&ioctx, oid, CEPH_NOSNAP, &pspec, &size));
   ASSERT_EQ(pspec.pool_id, 1);
@@ -700,7 +700,7 @@ TEST_F(TestClsRbd, parents_v1)
   ASSERT_EQ(-1, pspec.pool_id);
 
   // snapshots
-  ASSERT_EQ(0, set_parent(&ioctx, oid, ParentSpec(1, "parent", 3), 10<<20));
+  ASSERT_EQ(0, set_parent(&ioctx, oid, {1, "", "parent", 3}, 10<<20));
   ASSERT_EQ(0, snapshot_add(&ioctx, oid, 10, "snap1"));
   ASSERT_EQ(0, get_parent(&ioctx, oid, 10, &pspec, &size));
   ASSERT_EQ(pspec.pool_id, 1);
@@ -709,7 +709,7 @@ TEST_F(TestClsRbd, parents_v1)
   ASSERT_EQ(size, 10ull<<20);
 
   ASSERT_EQ(0, remove_parent(&ioctx, oid));
-  ASSERT_EQ(0, set_parent(&ioctx, oid, ParentSpec(1, "parent", 3), 5<<20));
+  ASSERT_EQ(0, set_parent(&ioctx, oid, {1, "", "parent", 3}, 5<<20));
   ASSERT_EQ(0, snapshot_add(&ioctx, oid, 11, "snap2"));
   ASSERT_EQ(0, get_parent(&ioctx, oid, 10, &pspec, &size));
   ASSERT_EQ(pspec.pool_id, 1);
@@ -738,7 +738,7 @@ TEST_F(TestClsRbd, parents_v1)
   ASSERT_EQ(-1, pspec.pool_id);
 
   // make sure set_parent takes min of our size and parent's size
-  ASSERT_EQ(0, set_parent(&ioctx, oid, ParentSpec(1, "parent", 3), 1<<20));
+  ASSERT_EQ(0, set_parent(&ioctx, oid, {1, "", "parent", 3}, 1<<20));
   ASSERT_EQ(0, get_parent(&ioctx, oid, CEPH_NOSNAP, &pspec, &size));
   ASSERT_EQ(pspec.pool_id, 1);
   ASSERT_EQ(pspec.image_id, "parent");
@@ -746,7 +746,7 @@ TEST_F(TestClsRbd, parents_v1)
   ASSERT_EQ(size, 1ull<<20);
   ASSERT_EQ(0, remove_parent(&ioctx, oid));
 
-  ASSERT_EQ(0, set_parent(&ioctx, oid, ParentSpec(1, "parent", 3), 100<<20));
+  ASSERT_EQ(0, set_parent(&ioctx, oid, {1, "", "parent", 3}, 100<<20));
   ASSERT_EQ(0, get_parent(&ioctx, oid, CEPH_NOSNAP, &pspec, &size));
   ASSERT_EQ(pspec.pool_id, 1);
   ASSERT_EQ(pspec.image_id, "parent");
@@ -755,7 +755,7 @@ TEST_F(TestClsRbd, parents_v1)
   ASSERT_EQ(0, remove_parent(&ioctx, oid));
 
   // make sure resize adjust parent overlap
-  ASSERT_EQ(0, set_parent(&ioctx, oid, ParentSpec(1, "parent", 3), 10<<20));
+  ASSERT_EQ(0, set_parent(&ioctx, oid, {1, "", "parent", 3}, 10<<20));
 
   ASSERT_EQ(0, snapshot_add(&ioctx, oid, 14, "snap4"));
   ASSERT_EQ(0, set_size(&ioctx, oid, 3 << 20));
@@ -806,7 +806,7 @@ TEST_F(TestClsRbd, parents_v1)
   ASSERT_EQ(0, create_image(&ioctx, oid, 33<<20, 22,
                             RBD_FEATURE_LAYERING | RBD_FEATURE_DEEP_FLATTEN,
                             "foo.", -1));
-  ASSERT_EQ(0, set_parent(&ioctx, oid, ParentSpec(1, "parent", 3), 100<<20));
+  ASSERT_EQ(0, set_parent(&ioctx, oid, {1, "", "parent", 3}, 100<<20));
   ASSERT_EQ(0, snapshot_add(&ioctx, oid, 1, "snap1"));
   ASSERT_EQ(0, snapshot_add(&ioctx, oid, 2, "snap2"));
   ASSERT_EQ(0, remove_parent(&ioctx, oid));
@@ -931,7 +931,7 @@ TEST_F(TestClsRbd, parents_v2)
   ASSERT_EQ(0, parent_detach(&ioctx, oid));
   ASSERT_EQ(-ENOENT, parent_detach(&ioctx, oid));
 
-  ParentSpec on_disk_parent_spec;
+  cls::rbd::ParentImageSpec on_disk_parent_spec;
   uint64_t legacy_parent_overlap;
   ASSERT_EQ(-EXDEV, get_parent(&ioctx, oid, CEPH_NOSNAP, &on_disk_parent_spec,
                                &legacy_parent_overlap));
@@ -965,7 +965,7 @@ TEST_F(TestClsRbd, snapshots)
   std::string snap_name;
   uint64_t snap_size;
   uint8_t snap_order;
-  ParentInfo parent;
+  ParentImageInfo parent;
   uint8_t protection_status;
   utime_t snap_timestamp;
 
@@ -2737,7 +2737,7 @@ TEST_F(TestClsRbd, clone_child)
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22,
                             RBD_FEATURE_LAYERING | RBD_FEATURE_DEEP_FLATTEN,
                             oid, -1));
-  ASSERT_EQ(0, set_parent(&ioctx, oid, {1, "parent", 2}, 1));
+  ASSERT_EQ(0, set_parent(&ioctx, oid, {1, "", "parent", 2}, 1));
   ASSERT_EQ(0, snapshot_add(&ioctx, oid, 123, "user_snap1"));
   ASSERT_EQ(0, op_features_set(&ioctx, oid, RBD_OPERATION_FEATURE_CLONE_CHILD,
                                RBD_OPERATION_FEATURE_CLONE_CHILD));
@@ -2749,7 +2749,7 @@ TEST_F(TestClsRbd, clone_child)
   ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_CLONE_CHILD) == 0ULL);
 
   ASSERT_EQ(0, set_features(&ioctx, oid, 0, RBD_FEATURE_DEEP_FLATTEN));
-  ASSERT_EQ(0, set_parent(&ioctx, oid, {1, "parent", 2}, 1));
+  ASSERT_EQ(0, set_parent(&ioctx, oid, {1, "", "parent", 2}, 1));
   ASSERT_EQ(0, snapshot_add(&ioctx, oid, 124, "user_snap2"));
   ASSERT_EQ(0, op_features_set(&ioctx, oid, RBD_OPERATION_FEATURE_CLONE_CHILD,
                                RBD_OPERATION_FEATURE_CLONE_CHILD));

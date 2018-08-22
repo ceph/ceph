@@ -389,7 +389,7 @@ public:
   }
 
   int ImageCtx::get_parent_spec(snap_t in_snap_id,
-				ParentSpec *out_pspec) const
+				cls::rbd::ParentImageSpec *out_pspec) const
   {
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
@@ -487,8 +487,9 @@ public:
   void ImageCtx::add_snap(cls::rbd::SnapshotNamespace in_snap_namespace,
 			  string in_snap_name,
 			  snap_t id, uint64_t in_size,
-			  const ParentInfo &parent, uint8_t protection_status,
-                          uint64_t flags, utime_t timestamp)
+			  const ParentImageInfo &parent,
+                          uint8_t protection_status, uint64_t flags,
+                          utime_t timestamp)
   {
     ceph_assert(snap_lock.is_wlocked());
     snaps.push_back(id);
@@ -616,7 +617,7 @@ public:
     return 0;
   }
 
-  const ParentInfo* ImageCtx::get_parent_info(snap_t in_snap_id) const
+  const ParentImageInfo* ImageCtx::get_parent_info(snap_t in_snap_id) const
   {
     ceph_assert(snap_lock.is_locked());
     ceph_assert(parent_lock.is_locked());
@@ -630,7 +631,7 @@ public:
 
   int64_t ImageCtx::get_parent_pool_id(snap_t in_snap_id) const
   {
-    const ParentInfo *info = get_parent_info(in_snap_id);
+    const auto info = get_parent_info(in_snap_id);
     if (info)
       return info->spec.pool_id;
     return -1;
@@ -638,7 +639,7 @@ public:
 
   string ImageCtx::get_parent_image_id(snap_t in_snap_id) const
   {
-    const ParentInfo *info = get_parent_info(in_snap_id);
+    const auto info = get_parent_info(in_snap_id);
     if (info)
       return info->spec.image_id;
     return "";
@@ -646,7 +647,7 @@ public:
 
   uint64_t ImageCtx::get_parent_snap_id(snap_t in_snap_id) const
   {
-    const ParentInfo *info = get_parent_info(in_snap_id);
+    const auto info = get_parent_info(in_snap_id);
     if (info)
       return info->spec.snap_id;
     return CEPH_NOSNAP;
@@ -655,7 +656,7 @@ public:
   int ImageCtx::get_parent_overlap(snap_t in_snap_id, uint64_t *overlap) const
   {
     ceph_assert(snap_lock.is_locked());
-    const ParentInfo *info = get_parent_info(in_snap_id);
+    const auto info = get_parent_info(in_snap_id);
     if (info) {
       *overlap = info->overlap;
       return 0;

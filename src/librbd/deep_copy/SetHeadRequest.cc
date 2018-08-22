@@ -23,7 +23,7 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 SetHeadRequest<I>::SetHeadRequest(I *image_ctx, uint64_t size,
-                                  const librbd::ParentSpec &spec,
+                                  const cls::rbd::ParentImageSpec &spec,
                                   uint64_t parent_overlap,
                                   Context *on_finish)
   : m_image_ctx(image_ctx), m_size(size), m_parent_spec(spec),
@@ -172,10 +172,7 @@ void SetHeadRequest<I>::send_attach_parent() {
       finish_op_ctx->complete(0);
     });
   auto req = image::AttachParentRequest<I>::create(
-    *m_image_ctx,
-    {m_parent_spec.pool_id, "", m_parent_spec.image_id,
-     m_parent_spec.snap_id},
-    m_parent_overlap, ctx);
+    *m_image_ctx, m_parent_spec, m_parent_overlap, ctx);
   req->send();
 }
 

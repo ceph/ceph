@@ -24,7 +24,7 @@ using util::create_context_callback;
 
 template <typename I>
 RefreshParentRequest<I>::RefreshParentRequest(
-    I &child_image_ctx, const ParentInfo &parent_md,
+    I &child_image_ctx, const ParentImageInfo &parent_md,
     const MigrationInfo &migration_info, Context *on_finish)
   : m_child_image_ctx(child_image_ctx), m_parent_md(parent_md),
     m_migration_info(migration_info), m_on_finish(on_finish),
@@ -34,7 +34,7 @@ RefreshParentRequest<I>::RefreshParentRequest(
 
 template <typename I>
 bool RefreshParentRequest<I>::is_refresh_required(
-    I &child_image_ctx, const ParentInfo &parent_md,
+    I &child_image_ctx, const ParentImageInfo &parent_md,
     const MigrationInfo &migration_info) {
   ceph_assert(child_image_ctx.snap_lock.is_locked());
   ceph_assert(child_image_ctx.parent_lock.is_locked());
@@ -44,7 +44,7 @@ bool RefreshParentRequest<I>::is_refresh_required(
 
 template <typename I>
 bool RefreshParentRequest<I>::is_close_required(
-    I &child_image_ctx, const ParentInfo &parent_md,
+    I &child_image_ctx, const ParentImageInfo &parent_md,
     const MigrationInfo &migration_info) {
   return (child_image_ctx.parent != nullptr &&
           !does_parent_exist(child_image_ctx, parent_md, migration_info));
@@ -52,18 +52,20 @@ bool RefreshParentRequest<I>::is_close_required(
 
 template <typename I>
 bool RefreshParentRequest<I>::is_open_required(
-    I &child_image_ctx, const ParentInfo &parent_md,
+    I &child_image_ctx, const ParentImageInfo &parent_md,
     const MigrationInfo &migration_info) {
   return (does_parent_exist(child_image_ctx, parent_md, migration_info) &&
           (child_image_ctx.parent == nullptr ||
            child_image_ctx.parent->md_ctx.get_id() != parent_md.spec.pool_id ||
+           child_image_ctx.parent->md_ctx.get_namespace() !=
+             parent_md.spec.pool_namespace ||
            child_image_ctx.parent->id != parent_md.spec.image_id ||
            child_image_ctx.parent->snap_id != parent_md.spec.snap_id));
 }
 
 template <typename I>
 bool RefreshParentRequest<I>::does_parent_exist(
-    I &child_image_ctx, const ParentInfo &parent_md,
+    I &child_image_ctx, const ParentImageInfo &parent_md,
     const MigrationInfo &migration_info) {
   if (child_image_ctx.child != nullptr &&
       child_image_ctx.child->migration_info.empty() && parent_md.overlap == 0) {
@@ -122,9 +124,7 @@ void RefreshParentRequest<I>::send_open_parent() {
     send_complete(r);
     return;
   }
-
-  // TODO support clone v2 parent namespaces
-  parent_io_ctx.set_namespace(m_child_image_ctx.md_ctx.get_namespace());
+  parent_io_ctx.set_namespace(m_parent_md.spec.pool_namespace);
 
   std::string image_name;
   uint64_t flags = 0;

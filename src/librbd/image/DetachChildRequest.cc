@@ -69,10 +69,13 @@ void DetachChildRequest<I>::clone_v2_child_detach() {
 
   librados::Rados rados(m_image_ctx.md_ctx);
   int r = rados.ioctx_create2(m_parent_spec.pool_id, m_parent_io_ctx);
-  ceph_assert(r == 0);
-
-  // TODO support clone v2 parent namespaces
-  m_parent_io_ctx.set_namespace(m_image_ctx.md_ctx.get_namespace());
+  if (r < 0) {
+    lderr(cct) << "error accessing parent pool: " << cpp_strerror(r)
+               << dendl;
+    finish(r);
+    return;
+  }
+  m_parent_io_ctx.set_namespace(m_parent_spec.pool_namespace);
 
   m_parent_header_name = util::header_name(m_parent_spec.image_id);
 
