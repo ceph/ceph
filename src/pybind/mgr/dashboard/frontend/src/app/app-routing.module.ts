@@ -78,7 +78,7 @@ const routes: Routes = [
   },
   {
     path: 'configuration',
-    data: { breadcrumbs: 'Cluster/Configuration Documentation' },
+    data: { breadcrumbs: 'Cluster/Configuration' },
     children: [
       { path: '', component: ConfigurationComponent },
       {
