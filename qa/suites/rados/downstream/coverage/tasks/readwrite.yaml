@@ -1,0 +1,19 @@
+roles:
+- [mon.0, osd.6, osd.7, osd.8, client.0]
+- [mgr.0,osd.0, osd.1, osd.2, osd.3, osd.4, osd.5]
+
+overrides:
+  ceph:
+    crush_tunables: optimal
+    conf:
+      mon:
+        mon osd initial require min compat client: luminous
+tasks:
+- rados:
+    clients: [client.0]
+    ops: 4000
+    objects: 500
+    op_weights:
+      read: 45
+      write: 45
+      delete: 10

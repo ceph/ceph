@@ -1,0 +1,3 @@
+#!/bin/bash
+dest=$1
+sed -i '/^cmake/ s/cmake/cmake\ -DCMAKE_INSTALL_PREFIX=\/usr/' $1

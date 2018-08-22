@@ -1,0 +1,17 @@
+roles:
+- [mon.0, osd.6, osd.7, osd.8, client.0]
+- [mgr.0,osd.0, osd.1, osd.2, osd.3, osd.4, osd.5]
+
+overrides:
+  ceph:
+    conf:
+      mon:
+        osd default pool size: 3
+
+tasks:
+- radosbench:
+    clients: [client.0]
+    time: 720
+    type: rand
+    objectsize: 1048576
+
