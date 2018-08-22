@@ -268,4 +268,14 @@ describe('TableActionsComponent', () => {
       });
     });
   });
+
+  describe('with drop down only', () => {
+    beforeEach(() => {
+      component.onlyDropDown = 'displayMe';
+    });
+
+    it('should not return any button with getCurrentButton', () => {
+      expect(component.getCurrentButton()).toBeFalsy();
+    });
+  });
 });

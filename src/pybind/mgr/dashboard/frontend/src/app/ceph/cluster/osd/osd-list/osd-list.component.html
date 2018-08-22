@@ -6,34 +6,12 @@
           [updateSelectionOnRefresh]="'never'">
   <div class="table-actions btn-toolbar"
        *ngIf="permission.update">
-    <div class="btn-group"
-         dropdown>
-      <button dropdownToggle
-              type="button"
-              class="btn btn-sm btn-primary dropdown-toggle tc_scrub_toggle"
-              [ngClass]="{disabled: !tableComponent.selection.hasSelection}">
-        <ng-container i18n>Perform Task </ng-container>
-        <span class="caret"></span>
-      </button>
-      <ul *dropdownMenu
-          class="dropdown-menu"
-          role="menu">
-        <li role="menuitem"
-            (click)="scrubAction(false)">
-          <a>
-            <i class="fa fa-fw fa-stethoscope"></i>
-            <ng-container i18n>Scrub</ng-container>
-          </a>
-        </li>
-        <li role="menuitem"
-            (click)="scrubAction(true)">
-          <a>
-            <i class="fa fa-fw fa-stethoscope"></i>
-            <ng-container i18n>Deep Scrub</ng-container>
-          </a>
-        </li>
-      </ul>
-    </div>
+    <cd-table-actions [permission]="permission"
+                      [selection]="selection"
+                      onlyDropDown="Perform Task"
+                      class="btn-group"
+                      [tableActions]="tableActions">
+    </cd-table-actions>
 
     <button class="btn btn-sm btn-default btn-label tc_configureCluster"
             type="button"
