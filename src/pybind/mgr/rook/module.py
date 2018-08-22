@@ -359,6 +359,10 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             return RookWriteCompletion(
                 lambda: self.rook_cluster.add_filesystem(spec), None,
                 "Creating Filesystem services for {0}".format(spec.name))
+        elif service_type == "rgw" :
+            return RookWriteCompletion(
+                lambda: self.rook_cluster.add_objectstore(spec), None,
+                "Creating RGW services for {0}".format(spec.name))
         else:
             # TODO: RGW, NFS
             raise NotImplementedError(service_type)
