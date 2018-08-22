@@ -15,6 +15,10 @@ else
   exit 1
 fi
 
+if [ `uname -K` -ge 1200078 ] ; then
+    RBD_GGATE_RESIZE_SUPPORTED=1
+fi
+
 _sudo()
 {
     local cmd
@@ -30,6 +34,20 @@ _sudo()
     cmd=`which $1 2>/dev/null` || cmd=$1
     shift
     sudo -nE "${cmd}" "$@"
+}
+
+check_geom_gate() 
+{
+    # See if geom_date is load, or can be loaded.
+    # Otherwise the tests can not run
+    if ! kldstat -q -n geom_gate ; then 
+        # See if we can load it
+        if ! _sudo kldload geom_gate ; then
+	    echo Not able to load geom_gate
+	    echo check /var/log/messages as to why 
+	    exit 1
+    	fi
+    fi
 }
 
 setup()
@@ -50,6 +68,7 @@ setup()
     fi
 
     _sudo echo test sudo
+    check_geom_gate
 
     trap cleanup INT TERM EXIT
     TEMPDIR=`mktemp -d`
@@ -81,7 +100,7 @@ expect_false()
 
 setup
 
-# exit status test
+echo  exit status test
 expect_false rbd-ggate
 expect_false rbd-ggate INVALIDCMD
 if [ `id -u` -ne 0 ]
@@ -90,36 +109,36 @@ then
 fi
 expect_false _sudo rbd-ggate map INVALIDIMAGE
 
-# map test using the first unused device
+echo  map test using the first unused device
 DEV=`_sudo rbd-ggate map ${POOL}/${IMAGE}`
-_sudo rbd-ggate list | grep " ${DEV} *$"
+rbd-ggate list | grep " ${DEV} *$"
 
-# map test specifying the device
+echo  map test specifying the device
 expect_false _sudo rbd-ggate --device ${DEV} map ${POOL}/${IMAGE}
 dev1=${DEV}
 _sudo rbd-ggate unmap ${DEV}
-_sudo rbd-ggate list | expect_false grep " ${DEV} *$"
+rbd-ggate list | expect_false grep " ${DEV} *$"
 DEV=
 # XXX: race possible when the device is reused by other process
 DEV=`_sudo rbd-ggate --device ${dev1} map ${POOL}/${IMAGE}`
 [ "${DEV}" = "${dev1}" ]
-_sudo rbd-ggate list | grep " ${DEV} *$"
+rbd-ggate list | grep " ${DEV} *$"
 
-# list format test
+echo  list format test
 expect_false _sudo rbd-ggate --format INVALID list
-_sudo rbd-ggate --format json --pretty-format list
-_sudo rbd-ggate --format xml list
+rbd-ggate --format json --pretty-format list
+rbd-ggate --format xml list
 
-# read test
+echo  read test
 [ "`dd if=${DATA} bs=1M | md5`" = "`_sudo dd if=${DEV} bs=1M | md5`" ]
 
-# write test
+echo  write test
 dd if=/dev/urandom of=${DATA} bs=1M count=${SIZE}
 _sudo dd if=${DATA} of=${DEV} bs=1M
 _sudo sync
 [ "`dd if=${DATA} bs=1M | md5`" = "`rbd -p ${POOL} --no-progress export ${IMAGE} - | md5`" ]
 
-# trim test
+echo  trim test
 provisioned=`rbd -p ${POOL} --format xml du ${IMAGE} |
   $XMLSTARLET sel -t -m "//stats/images/image/provisioned_size" -v .`
 used=`rbd -p ${POOL} --format xml du ${IMAGE} |
@@ -133,18 +152,20 @@ used=`rbd -p ${POOL} --format xml du ${IMAGE} |
   $XMLSTARLET sel -t -m "//stats/images/image/used_size" -v .`
 [ "${used}" -lt "${provisioned}" ]
 
-# resize test
+echo  resize test
 devname=$(basename ${DEV})
 size=$(geom gate list ${devname} | awk '$1 ~ /Mediasize:/ {print $2}')
 test -n "${size}"
 rbd resize ${POOL}/${IMAGE} --size $((SIZE * 2))M
 rbd info ${POOL}/${IMAGE}
 if [ -z "$RBD_GGATE_RESIZE_SUPPORTED" ]; then
-    # XXX: ggate device resize is not supported by vanila kernel.
-    # rbd-ggate should terminate when detecting resize.
-    _sudo rbd-ggate list | expect_false grep " ${DEV} *$"
+    # when resizing is not supported:
+    # resizing the underlying image for a GEOM ggate will stop the
+    # ggate process servicing the device. So we can resize and test 
+    # the disappearance of the device
+    rbd-ggate list | expect_false grep " ${DEV} *$" 
 else
-    _sudo rbd-ggate list | grep " ${DEV} *$"
+    rbd-ggate list | grep " ${DEV} *$"
     size2=$(geom gate list ${devname} | awk '$1 ~ /Mediasize:/ {print $2}')
     test -n "${size2}"
     test ${size2} -eq $((size * 2))
@@ -163,19 +184,19 @@ else
 fi
 DEV=
 
-# read-only option test
+echo  read-only option test
 DEV=`_sudo rbd-ggate map --read-only ${POOL}/${IMAGE}`
 devname=$(basename ${DEV})
-_sudo rbd-ggate list | grep " ${DEV} *$"
+rbd-ggate list | grep " ${DEV} *$"
 access=$(geom gate list ${devname} | awk '$1 == "access:" {print $2}')
 test "${access}" = "read-only"
 _sudo dd if=${DEV} of=/dev/null bs=1M
 expect_false _sudo dd if=${DATA} of=${DEV} bs=1M
 _sudo rbd-ggate unmap ${DEV}
 
-# exclusive option test
+echo  exclusive option test
 DEV=`_sudo rbd-ggate map --exclusive ${POOL}/${IMAGE}`
-_sudo rbd-ggate list | grep " ${DEV} *$"
+rbd-ggate list | grep " ${DEV} *$"
 _sudo dd if=${DATA} of=${DEV} bs=1M
 _sudo sync
 expect_false timeout 10 \
@@ -184,19 +205,19 @@ _sudo rbd-ggate unmap ${DEV}
 DEV=
 rbd bench -p ${POOL} ${IMAGE} --io-type=write --io-size=1024 --io-total=1024
 
-# unmap by image name test
+echo  unmap by image name test
 DEV=`_sudo rbd-ggate map ${POOL}/${IMAGE}`
-_sudo rbd-ggate list | grep " ${DEV} *$"
+rbd-ggate list | grep " ${DEV} *$"
 _sudo rbd-ggate unmap "${POOL}/${IMAGE}"
-rbd-ggate list-mapped | expect_false grep " ${DEV} *$"
+rbd-ggate list | expect_false grep " ${DEV} *$"
 DEV=
 
-# map/unmap snap test
+echo  map/unmap snap test
 rbd snap create ${POOL}/${IMAGE}@snap
 DEV=`_sudo rbd-ggate map ${POOL}/${IMAGE}@snap`
-_sudo rbd-ggate list | grep " ${DEV} *$"
+rbd-ggate list | grep " ${DEV} *$"
 _sudo rbd-ggate unmap "${POOL}/${IMAGE}@snap"
-rbd-ggate list-mapped | expect_false grep " ${DEV} *$"
+rbd-ggate list | expect_false grep " ${DEV} *$"
 DEV=
 
 echo OK
