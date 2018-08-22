@@ -37,6 +37,7 @@ CRUSH algorithm.
 	erasure-code
 	cache-tiering
 	placement-groups
+	balancer
 	upmap
 	crush-map
 	crush-map-edits
