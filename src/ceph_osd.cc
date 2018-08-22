@@ -190,6 +190,11 @@ int main(int argc, const char **argv)
   if (global_init_prefork(g_ceph_context) >= 0) {
     std::string err;
     int r = forker.prefork(err);
+    if (r < 0 || forker.is_parent()) {
+      // Start log if current process is about to exit. Otherwise, we hit an assert
+      // in the Ceph context destructor.
+      g_ceph_context->_log->start();
+    }
     if (r < 0) {
       cerr << err << std::endl;
       return r;
