@@ -1962,6 +1962,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   }
   if (p.get_fingerprint_type() != pg_pool_t::TYPE_FINGERPRINT_NONE) {
     out << " fingerprint_algorighm " << p.get_fingerprint_name();
+  }
   return out;
 }
 
