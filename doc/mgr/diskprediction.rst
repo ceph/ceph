@@ -21,7 +21,7 @@ Select the prediction mode:
 
 ::
 
-    ceph diskprediction config-mode <local/cloud>
+    ceph device set-prediction-mode <local/cloud>
 
 
 Connection settings
@@ -40,11 +40,6 @@ Cloud Mode
 The user registration is required in cloud mode. The users have to sign up their accounts at http://federator-ai-homepage.s3-website-us-west-2.amazonaws.com/#/ to receive the following DiskPrediction server information for connection settings. 
 
 **Certificate file path**: After user registration is confirmed, the system will send a confirmation email including a certificate file download link. Download the certificate file and save it to the Ceph system. Run the following command to verify the file. Without certificate file verification, the connection settings cannot be completed.
-
-::
-
-    ceph diskprediction config-cert <certificate_file_path>
-
 	
 **DiskPrediction server**: The DiskPrediction server name. It could be an IP address if required. 
 
@@ -56,14 +51,14 @@ Run the following command to complete connection setup.
 
 ::
 
-    ceph diskprediction config-set <diskprediction_server> <connection_account> <connection_password>
+    ceph device set-clould-prediction-config <diskprediction_server> <connection_account> <connection_password> <certificate file path>
 	
 
 You can use the following command to display the connection settings:
 
 ::
 
-    ceph diskprediction config-show
+    ceph device show-prediction-config
 
 
 Additional optional configuration settings are the following:
@@ -282,7 +277,7 @@ following command.
 
 ::
 
-    ceph diskprediction get-predicted-status <device id>
+    ceph device get-predicted-status <device id>
 
 
 The get-predicted-status command returns:

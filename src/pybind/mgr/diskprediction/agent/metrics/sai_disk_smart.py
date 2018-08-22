@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import datetime
+import json
 import _strptime
 import socket
 import time
@@ -76,10 +77,47 @@ class SAIDiskSmartAgent(MetricsAgent):
                                     else:
                                         smart_data.fields['%s_raw' % attr.get('id')] = \
                                             attr.get('raw', {}).get('value', 0)
-
-                        if s_val.get('temperature', {}).get('current'):
+                        smart_data.fields['raw_data'] = str(json.dumps(osds_smart[s_date]).replace("\"", "\'"))
+                        if s_val.get('temperature', {}).get('current') is not None:
                             smart_data.fields['CurrentDriveTemperature_raw'] = \
                                 int(s_val['temperature']['current'])
+                        if s_val.get('temperature', {}).get('drive_trip') is not None:
+                            smart_data.fields['DriveTripTemperature_raw'] = \
+                                int(s_val['temperature']['drive_trip'])
+                        if s_val.get('elements_grown_list') is not None:
+                            smart_data.fields['ElementsInGrownDefectList_raw'] = int(s_val['elements_grown_list'])
+                        if s_val.get('hours_powered_up') is not None:
+                            smart_data.fields['9_raw'] = int(round(float(s_val['hours_powered_up'])))
+                        if s_val.get('percentage_used_endurance_indicator') is not None:
+                            smart_data.fields['PercentageUsedEnduranceIndicator_raw'] = \
+                                int(s_val['percentage_used_endurance_indicator'])
+                        if s_val.get('error_counter_log') is not None:
+                            s_err_counter = s_val['error_counter_log']
+                            for s_key in s_err_counter.keys():
+                                if s_key.lower() in ['read', 'write']:
+                                    for s1_key in s_err_counter[s_key].keys():
+                                        if s1_key.lower() == 'errors_corrected_by_eccfast':
+                                            smart_data.fields['ErrorsCorrectedbyECCFast%s_raw' % s_key.capitalize()] = \
+                                                int(s_err_counter[s_key]['errors_corrected_by_eccfast'])
+                                        elif s1_key.lower() == 'errors_corrected_by_eccdelayed':
+                                            smart_data.fields['ErrorsCorrectedbyECCDelayed%s_raw' % s_key.capitalize()] = \
+                                                int(s_err_counter[s_key]['errors_corrected_by_eccdelayed'])
+                                        elif s1_key.lower() == 'errors_corrected_by_rereads_rewrites':
+                                            smart_data.fields['ErrorCorrectedByRereadsRewrites%s_raw' % s_key.capitalize()] = \
+                                                int(s_err_counter[s_key]['errors_corrected_by_rereads_rewrites'])
+                                        elif s1_key.lower() == 'total_errors_corrected':
+                                            smart_data.fields['TotalErrorsCorrected%s_raw' % s_key.capitalize()] = \
+                                                int(s_err_counter[s_key]['total_errors_corrected'])
+                                        elif s1_key.lower() == 'correction_algorithm_invocations':
+                                            smart_data.fields['CorrectionAlgorithmInvocations%s_raw' % s_key.capitalize()] = \
+                                                int(s_err_counter[s_key]['correction_algorithm_invocations'])
+                                        elif s1_key.lower() == 'gigabytes_processed':
+                                            smart_data.fields['GigaBytesProcessed%s_raw' % s_key.capitalize()] = \
+                                                float(s_err_counter[s_key]['gigabytes_processed'])
+                                        elif s1_key.lower() == 'total_uncorrected_errors':
+                                            smart_data.fields['TotalUncorrectedErrors%s_raw' % s_key.capitalize()] = \
+                                                int(s_err_counter[s_key]['total_uncorrected_errors'])
+
                         serial_number = s_val.get('serial_number')
                         wwn = s_val.get('wwn', {})
                         wwpn = ''

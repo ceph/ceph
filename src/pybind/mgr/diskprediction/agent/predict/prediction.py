@@ -50,12 +50,14 @@ class PredictionAgent(BaseAgent):
             status_code = query_info.status_code
             if status_code == 200:
                 result = query_info.json()
-                self._module_inst.status = DP_MGR_STAT_OK
+                self._module_inst.status = {'status': DP_MGR_STAT_OK}
             else:
                 resp = query_info.json()
                 if resp.get('error'):
                     self._logger.error(str(resp['error']))
-                    self._module_inst.status = DP_MGR_STAT_FAILED
+                    self._module_inst.status = \
+                        {'status': DP_MGR_STAT_FAILED,
+                         'reason': 'failed to parse device {} prediction data'.format(disk_domain_id)}
         except Exception as e:
             self._logger.error(str(e))
         return result
@@ -173,7 +175,7 @@ class PredictionAgent(BaseAgent):
                         life_expectancy_day_max = None
                     elif disk_info['prediction']['near_failure'].lower() == 'warning':
                         life_expectancy_day_min = (TIME_WEEK * 2)
-                        life_expectancy_day_max = (TIME_WEEK * 6) - TIME_DAYS
+                        life_expectancy_day_max = (TIME_WEEK * 6)
                     elif disk_info['prediction']['near_failure'].lower() == 'bad':
                         life_expectancy_day_min = 0
                         life_expectancy_day_max = (TIME_WEEK * 2) - TIME_DAYS

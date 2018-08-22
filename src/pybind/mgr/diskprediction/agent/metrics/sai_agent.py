@@ -56,7 +56,7 @@ class SAIAgent(MetricsAgent):
                 int(obj_api.get_configuration('diskprediction_upload_metrics_interval'))
             c_data.fields['host_ip'] = str(mgr_meta.get('addr', '127.0.0.1'))
             c_data.fields['host_name'] = str(socket.gethostname())
-            if obj_api.module.status in [DP_MGR_STAT_WARNING, DP_MGR_STAT_FAILED]:
+            if obj_api.module.status.get('status', '') in [DP_MGR_STAT_WARNING, DP_MGR_STAT_FAILED]:
                 c_data.fields['is_error'] = bool(True)
             else:
                 c_data.fields['is_error'] = bool(False)

@@ -81,17 +81,24 @@ class AgentRunner(Thread):
                 self._obj_sender = LocalPredictor(conf)
             if not self._obj_sender:
                 self._log.error('invalid diskprediction sender')
-                self._module_inst.status = DP_MGR_STAT_FAILED
+                self._module_inst.status = \
+                    {'status': DP_MGR_STAT_FAILED,
+                     'reason': 'invalid diskprediction sender'}
                 return
             if self._obj_sender.test_connection():
-                self._module_inst.status = DP_MGR_STAT_OK
+                self._module_inst.status = {'status': DP_MGR_STAT_OK}
                 self._log.debug('succeed to test connection')
                 self._run()
             else:
                 self._log.error('failed to test connection')
-                self._module_inst.status = DP_MGR_STAT_FAILED
+                self._module_inst.status = \
+                    {'status': DP_MGR_STAT_FAILED,
+                     'reason': 'failed to test connection'}
         except Exception as e:
-            self._module_inst.status = DP_MGR_STAT_FAILED
+            self._module_inst.status = \
+                {'status': DP_MGR_STAT_FAILED,
+                 'reason': 'failed to start %s agents, %s'
+                           % (self.task_name, str(e))}
             self._log.error(
                 'failed to start %s agents, %s' % (self.task_name, str(e)))
 
@@ -109,13 +116,16 @@ class AgentRunner(Thread):
                     break
                 except Exception as e:
                     if str(e).find('configuring') >= 0:
-                        self._log.warning(
+                        self._log.debug(
                             'failed to execute {}, {}, retry again.'.format(
                                 agent.measurement, str(e)))
                         time.sleep(1)
                         continue
                     else:
-                        self._module_inst.status = DP_MGR_STAT_WARNING
+                        self._module_inst.status = \
+                            {'status': DP_MGR_STAT_WARNING,
+                             'reason': 'failed to execute {}, {}'.format(
+                                agent.measurement, ';'.join(str(e).split('\n\t')))}
                         self._log.warning(
                             'failed to execute {}, {}'.format(
                                 agent.measurement, ';'.join(str(e).split('\n\t'))))

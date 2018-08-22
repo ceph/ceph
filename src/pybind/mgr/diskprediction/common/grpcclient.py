@@ -181,7 +181,7 @@ class GRPcClient:
             else:
                 result = stub_collection.PostMetrics(
                     client_pb2.PostMetricsInput(points=data), metadata=self.auth)
-            if result and 'success' in str(result.message):
+            if result and 'success' in str(result.message).lower():
                 resp.status_code = 200
                 resp.content = ''
             else:

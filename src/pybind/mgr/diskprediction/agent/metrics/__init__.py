@@ -48,11 +48,14 @@ class MetricsAgent(BaseAgent):
             total_count = status_info['success_count'] + status_info['failure_count']
             if total_count:
                 if status_info['success_count'] == 0:
-                    self._module_inst.status = DP_MGR_STAT_FAILED
+                    self._module_inst.status = \
+                        {'status': DP_MGR_STAT_FAILED,
+                         'reason': 'failed to send metrics data to the server'}
                 elif status_info['failure_count'] == 0:
-                    self._module_inst.status = DP_MGR_STAT_OK
+                    self._module_inst.status = \
+                        {'status': DP_MGR_STAT_OK}
                 else:
-                    self._module_inst.status = DP_MGR_STAT_WARNING
-            return result
-            self._module_inst.status = DP_MGR_STAT_FAILED
+                    self._module_inst.status = \
+                        {'status': DP_MGR_STAT_WARNING,
+                         'reason': 'failed to send partial metrics data to the server'}
         return result

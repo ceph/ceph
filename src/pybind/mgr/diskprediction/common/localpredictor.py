@@ -5,6 +5,7 @@ from logging import getLogger
 import time
 
 from . import DummyResonse
+from .clusterdata import ClusterAPI
 from ..predictor.DiskFailurePredictor import DiskFailurePredictor, get_diskfailurepredictor_path
 
 
@@ -57,27 +58,12 @@ class LocalPredictor:
             except Exception as e:
                 status_info['failure_count'] += 1
                 self._logger.error(str(e))
-        for dev_id in self.mgr_inst.history_smart.keys():
-            if dev_id not in [x.tags['disk_domain_id'] for x in data]:
-                del self.mgr_inst.history_smart[dev_id]
         return status_info
 
     def _send_info(self, data, measurement):
         resp = DummyResonse()
         resp.status_code = 200
         resp.content = ''
-        # Ignore none disk smart table.
-        if measurement != 'sai_disk_smart':
-            return resp
-        dev_id = data.tags['disk_domain_id']
-        if dev_id not in self.mgr_inst.history_smart.keys():
-            self.mgr_inst.history_smart[dev_id] = list()
-
-        if data.timestamp not in [x.timestamp for x in self.mgr_inst.history_smart[dev_id]]:
-            self.mgr_inst.history_smart[dev_id].append(data)
-            # Maximum keep data 10
-            if len(self.mgr_inst.history_smart[dev_id]) > 10:
-                self.mgr_inst.history_smart[dev_id].pop(0)
         return resp
 
     def _local_predict(self, smart_datas):
@@ -88,17 +74,34 @@ class LocalPredictor:
         return obj_predictor.predict(smart_datas)
 
     def query_info(self, host_domain_id, disk_domain_id, measurement):
+        predict_datas = list()
+        obj_api = ClusterAPI(self.mgr_inst)
         predicted_result = 'Unknown'
-        smart_datas = self.mgr_inst.history_smart.get(disk_domain_id, [])
+        smart_datas = obj_api.get_device_health(disk_domain_id)
         if len(smart_datas) >= 6:
-            predict_datas = list()
-            for s_data in smart_datas:
-                predict_data = {}
-                for field in s_data.fields:
-                    if '_raw' == field[-4:] and str(field[0:-4]).isdigit():
-                        predict_data['smart_{}'.format(field)] = s_data.fields[field]
-                if predict_data:
-                    predict_datas.append(predict_data)
+            o_keys = sorted(smart_datas.iterkeys(), reverse=True)
+            for o_key in o_keys:
+                dev_smart = {}
+                s_val = smart_datas[o_key]
+                ata_smart = s_val.get('ata_smart_attributes', {})
+                for attr in ata_smart.get('table', []):
+                    if attr.get('raw', {}).get('string'):
+                        if str(attr.get('raw', {}).get('string', '0')).isdigit():
+                            dev_smart['smart_%s_raw' % attr.get('id')] = \
+                                int(attr.get('raw', {}).get('string', '0'))
+                        else:
+                            if str(attr.get('raw', {}).get('string', '0')).split(' ')[0].isdigit():
+                                dev_smart['smart_%s_raw' % attr.get('id')] = \
+                                    int(attr.get('raw', {}).get('string',
+                                                                '0').split(' ')[0])
+                            else:
+                                dev_smart['smart_%s_raw' % attr.get('id')] = \
+                                    attr.get('raw', {}).get('value', 0)
+                if s_val.get('hours_powered_up') is not None:
+                    dev_smart['smart_9_raw'] = int(s_val['hours_powered_up'])
+                if dev_smart:
+                    predict_datas.append(dev_smart)
+
             if predict_datas:
                 predicted_result = self._local_predict(predict_datas)
             resp = DummyResonse()
@@ -111,6 +114,7 @@ class LocalPredictor:
         else:
             resp = DummyResonse()
             resp.status_code = 400
+            resp.content = '\'predict\' need least 6 pieces disk smart data'
             resp.resp_json = \
                 {'error': '\'predict\' need least 6 pieces disk smart data'}
         return resp
