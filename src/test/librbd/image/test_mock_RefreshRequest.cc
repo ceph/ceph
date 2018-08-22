@@ -40,7 +40,7 @@ template <>
 struct RefreshParentRequest<MockRefreshImageCtx> {
   static RefreshParentRequest* s_instance;
   static RefreshParentRequest* create(MockRefreshImageCtx &mock_image_ctx,
-                                      const ParentInfo &parent_md,
+                                      const ParentImageInfo &parent_md,
                                       const MigrationInfo &migration_info,
                                       Context *on_finish) {
     ceph_assert(s_instance != nullptr);
@@ -48,7 +48,7 @@ struct RefreshParentRequest<MockRefreshImageCtx> {
     return s_instance;
   }
   static bool is_refresh_required(MockRefreshImageCtx &mock_image_ctx,
-                                  const ParentInfo& parent_md,
+                                  const ParentImageInfo& parent_md,
                                   const MigrationInfo &migration_info) {
     ceph_assert(s_instance != nullptr);
     return s_instance->is_refresh_required();

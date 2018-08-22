@@ -273,8 +273,10 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
       RWLock::RLocker l(ictx->snap_lock);
       map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
       for (auto &info : snap_info) {
-        ParentSpec parent_spec(ictx->md_ctx.get_id(), ictx->id, info.first);
-        map< pair<int64_t, string>, set<string> > image_info;
+        cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
+                                              ictx->md_ctx.get_namespace(),
+                                              ictx->id, info.first};
+        map< tuple<int64_t, string, string>, set<string> > image_info;
 
         r = Image<I>::list_children(ictx, parent_spec, &image_info);
         if (r < 0) {
@@ -287,16 +289,14 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
         librados::Rados rados(ictx->md_ctx);
         for (auto &info: image_info) {
           librados::IoCtx ioctx;
-          r = rados.ioctx_create2(info.first.first, ioctx);
+          r = rados.ioctx_create2(std::get<0>(info.first), ioctx);
           if (r < 0) {
             rollback = true;
             lderr(cct) << "error accessing child image pool "
-                       << info.first.second  << dendl;
+                       << std::get<1>(info.first)  << dendl;
             return r;
           }
-
-          // TODO support clone v2 child namespaces
-          ioctx.set_namespace(ictx->md_ctx.get_namespace());
+          ioctx.set_namespace(std::get<2>(info.first));
 
           for (auto &id_it : info.second) {
             cls::rbd::MirrorImage mirror_image_internal;

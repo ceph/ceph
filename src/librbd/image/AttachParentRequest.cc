@@ -35,11 +35,7 @@ void AttachParentRequest<I>::attach_parent() {
     librbd::cls_client::parent_attach(&op, m_parent_image_spec,
                                       m_parent_overlap);
   } else {
-    librbd::cls_client::set_parent(&op,
-                                   {m_parent_image_spec.pool_id,
-                                    m_parent_image_spec.image_id,
-                                    m_parent_image_spec.snap_id},
-                                   m_parent_overlap);
+    librbd::cls_client::set_parent(&op, m_parent_image_spec, m_parent_overlap);
   }
 
   auto aio_comp = create_rados_callback<

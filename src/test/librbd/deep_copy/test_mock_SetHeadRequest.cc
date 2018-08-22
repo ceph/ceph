@@ -140,7 +140,7 @@ public:
 
   MockSetHeadRequest *create_request(
       librbd::MockTestImageCtx &mock_local_image_ctx, uint64_t size,
-      const librbd::ParentSpec &parent_spec, uint64_t parent_overlap,
+      const cls::rbd::ParentImageSpec &parent_spec, uint64_t parent_overlap,
       Context *on_finish) {
     return new MockSetHeadRequest(&mock_local_image_ctx, size, parent_spec,
                                   parent_overlap, on_finish);
@@ -230,7 +230,7 @@ TEST_F(TestMockDeepCopySetHeadRequest, RemoveSetParent) {
 
   C_SaferCond ctx;
   auto request = create_request(mock_image_ctx, m_image_ctx->size,
-                                {123, "test", 0}, 0, &ctx);
+                                {123, "", "test", 0}, 0, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -247,7 +247,7 @@ TEST_F(TestMockDeepCopySetHeadRequest, SetParentSpec) {
 
   C_SaferCond ctx;
   auto request = create_request(mock_image_ctx, m_image_ctx->size,
-                                {123, "test", 0}, 0, &ctx);
+                                {123, "", "test", 0}, 0, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -257,7 +257,7 @@ TEST_F(TestMockDeepCopySetHeadRequest, SetParentOverlap) {
   librbd::MockExclusiveLock mock_exclusive_lock;
   mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
-  mock_image_ctx.parent_md.spec = {123, "test", 0};
+  mock_image_ctx.parent_md.spec = {123, "", "test", 0};
   mock_image_ctx.parent_md.overlap = m_image_ctx->size;
 
   InSequence seq;
@@ -284,7 +284,7 @@ TEST_F(TestMockDeepCopySetHeadRequest, SetParentError) {
 
   C_SaferCond ctx;
   auto request = create_request(mock_image_ctx, m_image_ctx->size,
-                                {123, "test", 0}, 0, &ctx);
+                                {123, "", "test", 0}, 0, &ctx);
   request->send();
   ASSERT_EQ(-ESTALE, ctx.wait());
 }
