@@ -62,7 +62,7 @@ void PyModuleRegistry::init()
   // Drop the GIL and remember the main thread state (current
   // thread state becomes NULL)
   pMainThreadState = PyEval_SaveThread();
-  assert(pMainThreadState != nullptr);
+  ceph_assert(pMainThreadState != nullptr);
 
   std::list<std::string> failed_modules;
 
@@ -131,12 +131,12 @@ bool PyModuleRegistry::handle_mgr_map(const MgrMap &mgr_map_)
 void PyModuleRegistry::standby_start(MonClient &mc)
 {
   Mutex::Locker l(lock);
-  assert(active_modules == nullptr);
-  assert(standby_modules == nullptr);
+  ceph_assert(active_modules == nullptr);
+  ceph_assert(standby_modules == nullptr);
 
   // Must have seen a MgrMap by this point, in order to know
   // which modules should be enabled
-  assert(mgr_map.epoch > 0);
+  ceph_assert(mgr_map.epoch > 0);
 
   dout(4) << "Starting modules in standby mode" << dendl;
 
@@ -185,11 +185,11 @@ void PyModuleRegistry::active_start(
 
   dout(4) << "Starting modules in active mode" << dendl;
 
-  assert(active_modules == nullptr);
+  ceph_assert(active_modules == nullptr);
 
   // Must have seen a MgrMap by this point, in order to know
   // which modules should be enabled
-  assert(mgr_map.epoch > 0);
+  ceph_assert(mgr_map.epoch > 0);
 
   if (standby_modules != nullptr) {
     standby_modules->shutdown();

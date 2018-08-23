@@ -126,7 +126,7 @@ public:
   void get_commands(std::vector<ModuleCommand> *out) const
   {
     Mutex::Locker l(lock);
-    assert(out != nullptr);
+    ceph_assert(out != nullptr);
     out->insert(out->end(), commands.begin(), commands.end());
   }
 

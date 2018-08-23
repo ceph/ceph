@@ -179,7 +179,7 @@ int MgrStandby::init()
 
 void MgrStandby::send_beacon()
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
   dout(4) << state_str() << dendl;
 
   std::list<PyModuleRef> modules = py_module_registry.get_modules();
@@ -253,7 +253,7 @@ void MgrStandby::tick()
 void MgrStandby::handle_signal(int signum)
 {
   Mutex::Locker l(lock);
-  assert(signum == SIGINT || signum == SIGTERM);
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
   shutdown();
 }
@@ -261,7 +261,7 @@ void MgrStandby::handle_signal(int signum)
 void MgrStandby::shutdown()
 {
   // Expect already to be locked as we're called from signal handler
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   dout(4) << "Shutting down" << dendl;
 
@@ -304,7 +304,7 @@ void MgrStandby::respawn()
     /* Print CWD for the user's interest */
     char buf[PATH_MAX];
     char *cwd = getcwd(buf, sizeof(buf));
-    assert(cwd);
+    ceph_assert(cwd);
     dout(1) << " cwd " << cwd << dendl;
 
     /* Fall back to a best-effort: just running in our CWD */
