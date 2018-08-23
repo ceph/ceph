@@ -579,6 +579,30 @@ class TestCreateLV(object):
         assert capture.calls[2]['args'][0] == data_tag
 
 
+class TestExtendVG(object):
+
+    def setup(self):
+        self.foo_volume = api.VolumeGroup(vg_name='foo', lv_tags='')
+
+    def test_uses_single_device_in_list(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.extend_vg(self.foo_volume, ['/dev/sda'])
+        expected = ['vgextend', '--force', '--yes', 'foo', '/dev/sda']
+        assert fake_run.calls[0]['args'][0] == expected
+
+    def test_uses_single_device(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.extend_vg(self.foo_volume, '/dev/sda')
+        expected = ['vgextend', '--force', '--yes', 'foo', '/dev/sda']
+        assert fake_run.calls[0]['args'][0] == expected
+
+    def test_uses_multiple_devices(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.extend_vg(self.foo_volume, ['/dev/sda', '/dev/sdb'])
+        expected = ['vgextend', '--force', '--yes', 'foo', '/dev/sda', '/dev/sdb']
+        assert fake_run.calls[0]['args'][0] == expected
+
+
 #
 # The following tests are pretty gnarly. VDO detection is very convoluted and
 # involves correlating information from device mappers, realpaths, slaves of
