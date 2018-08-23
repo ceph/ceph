@@ -307,6 +307,9 @@ Commands
 :command:`group snap rename` *group-snap-spec* *snap-name*
   Rename group's snapshot.
 
+:command:`group snap rollback` *group-snap-spec*
+  Rollback group to snapshot.
+
 :command:`image-meta get` *image-spec* *key*
   Get metadata value with the key.
 
