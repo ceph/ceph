@@ -109,10 +109,8 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 #define ldlog_p1(cct, sub, lvl)                 \
   (cct->_conf->subsys.should_gather((sub), (lvl)))
 
-// NOTE: depend on magic value in _ASSERT_H so that we detect when
-// /usr/include/assert.h clobbers our fancier version.
 #define dendl_impl std::flush;				\
-  _ASSERT_H->_log->submit_entry(_dout_e);		\
+  _dout_cct->_log->submit_entry(_dout_e);		\
     }						\
   } while (0)
 
