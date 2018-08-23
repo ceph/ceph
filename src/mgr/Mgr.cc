@@ -141,8 +141,8 @@ void MetadataUpdate::finish(int r)
 void Mgr::background_init(Context *completion)
 {
   Mutex::Locker l(lock);
-  assert(!initializing);
-  assert(!initialized);
+  ceph_assert(!initializing);
+  ceph_assert(!initialized);
   initializing = true;
 
   finisher.start();
@@ -155,7 +155,7 @@ void Mgr::background_init(Context *completion)
 
 std::map<std::string, std::string> Mgr::load_store()
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   dout(10) << "listing keys" << dendl;
   JSONCommand cmd;
@@ -163,7 +163,7 @@ std::map<std::string, std::string> Mgr::load_store()
   lock.Unlock();
   cmd.wait();
   lock.Lock();
-  assert(cmd.r == 0);
+  ceph_assert(cmd.r == 0);
 
   std::map<std::string, std::string> loaded;
   
@@ -216,8 +216,8 @@ std::map<std::string, std::string> Mgr::load_store()
 void Mgr::init()
 {
   Mutex::Locker l(lock);
-  assert(initializing);
-  assert(!initialized);
+  ceph_assert(initializing);
+  ceph_assert(!initialized);
 
   // Start communicating with daemons to learn statistics etc
   int r = server.init(monc->get_global_id(), client_messenger->get_myaddrs());
@@ -295,7 +295,7 @@ void Mgr::init()
 
 void Mgr::load_all_metadata()
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   JSONCommand mds_cmd;
   mds_cmd.run(monc, "{\"prefix\": \"mds metadata\"}");
@@ -310,9 +310,9 @@ void Mgr::load_all_metadata()
   mon_cmd.wait();
   lock.Lock();
 
-  assert(mds_cmd.r == 0);
-  assert(mon_cmd.r == 0);
-  assert(osd_cmd.r == 0);
+  ceph_assert(mds_cmd.r == 0);
+  ceph_assert(mon_cmd.r == 0);
+  ceph_assert(osd_cmd.r == 0);
 
   for (auto &metadata_val : mds_cmd.json_result.get_array()) {
     json_spirit::mObject daemon_meta = metadata_val.get_obj();
@@ -409,7 +409,7 @@ void Mgr::shutdown()
 
 void Mgr::handle_osd_map()
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   std::set<std::string> names_exist;
 
@@ -539,7 +539,7 @@ bool Mgr::ms_dispatch(Message *m)
 
 void Mgr::handle_fs_map(MFSMap* m)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   std::set<std::string> names_exist;
   

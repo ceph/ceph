@@ -76,8 +76,8 @@ public:
   void open_object_section(const char *name) override;
   void close_section() override
   {
-    assert(cursor != root);
-    assert(!stack.empty());
+    ceph_assert(cursor != root);
+    ceph_assert(!stack.empty());
     cursor = stack.top();
     stack.pop();
   }
