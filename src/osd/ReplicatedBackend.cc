@@ -1828,6 +1828,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
           << dendl;
 
   eversion_t v  = recovery_info.version;
+  object_info_t oi;
   if (progress.first) {
     int r = store->omap_get_header(ch, ghobject_t(recovery_info.soid), &out_op->omap_header);
     if(r < 0) {
@@ -1842,7 +1843,6 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
     // Debug
     bufferlist bv = out_op->attrset[OI_ATTR];
-    object_info_t oi;
     try {
      auto bliter = bv.cbegin();
      decode(oi, bliter);
@@ -1955,6 +1955,17 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
       break;
     }
     out_op->data.claim_append(bit);
+  }
+  if (progress.first && out_op->data_included.begin().get_start() == 0 &&
+      out_op->data.length() == oi.size && oi.is_data_digest()) {
+    uint32_t crc = out_op->data.crc32c(-1);
+    if (oi.data_digest != crc) {
+      dout(0) << __func__ << " " << coll << std::hex
+                         << " full-object read crc 0x" << crc
+                         << " != expected 0x" << oi.data_digest
+                         << std::dec << " on " << recovery_info.soid << dendl;
+      return -EIO;
+    }
   }
 
   if (new_progress.is_complete(recovery_info)) {
