@@ -1,4 +1,0 @@
-overrides:
-  ceph:
-    log-whitelist:
-    - slow request

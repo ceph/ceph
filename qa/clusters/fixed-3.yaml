@@ -11,5 +11,3 @@ overrides:
     conf:
       osd:
         osd shutdown pgref assert: true
-
-
