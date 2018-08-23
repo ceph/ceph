@@ -154,13 +154,13 @@ public:
    * @param m monitor info of the new monitor
    */
   void add(const mon_info_t& m) {
-    assert(mon_info.count(m.name) == 0);
-    assert(addr_mons.count(m.public_addr) == 0);
+    ceph_assert(mon_info.count(m.name) == 0);
+    ceph_assert(addr_mons.count(m.public_addr) == 0);
     mon_info[m.name] = m;
     if (get_required_features().contains_all(
 	  ceph::features::mon::FEATURE_NAUTILUS)) {
       ranks.push_back(m.name);
-      assert(ranks.size() == mon_info.size());
+      ceph_assert(ranks.size() == mon_info.size());
     } else {
       calc_legacy_ranks();
     }
@@ -183,13 +183,13 @@ public:
    * @param name Monitor name (i.e., 'foo' in 'mon.foo')
    */
   void remove(const string &name) {
-    assert(mon_info.count(name));
+    ceph_assert(mon_info.count(name));
     mon_info.erase(name);
-    assert(mon_info.count(name) == 0);
+    ceph_assert(mon_info.count(name) == 0);
     if (get_required_features().contains_all(
 	  ceph::features::mon::FEATURE_NAUTILUS)) {
       ranks.erase(std::find(ranks.begin(), ranks.end(), name));
-      assert(ranks.size() == mon_info.size());
+      ceph_assert(ranks.size() == mon_info.size());
     } else {
       calc_legacy_ranks();
     }
@@ -203,15 +203,15 @@ public:
    * @param newname monitor's new name (i.e., 'bar' in 'mon.bar')
    */
   void rename(string oldname, string newname) {
-    assert(contains(oldname));
-    assert(!contains(newname));
+    ceph_assert(contains(oldname));
+    ceph_assert(!contains(newname));
     mon_info[newname] = mon_info[oldname];
     mon_info.erase(oldname);
     mon_info[newname].name = newname;
     if (get_required_features().contains_all(
 	  ceph::features::mon::FEATURE_NAUTILUS)) {
       *std::find(ranks.begin(), ranks.end(), oldname) = newname;
-      assert(ranks.size() == mon_info.size());
+      ceph_assert(ranks.size() == mon_info.size());
     } else {
       calc_legacy_ranks();
     }
@@ -257,7 +257,7 @@ public:
   }
 
   string get_name(unsigned n) const {
-    assert(n < ranks.size());
+    ceph_assert(n < ranks.size());
     return ranks[n];
   }
   string get_name(const entity_addr_t& a) const {
@@ -298,16 +298,16 @@ public:
   }
 
   const entity_addr_t& get_addr(const string& n) const {
-    assert(mon_info.count(n));
+    ceph_assert(mon_info.count(n));
     map<string,mon_info_t>::const_iterator p = mon_info.find(n);
     return p->second.public_addr;
   }
   const entity_addr_t& get_addr(unsigned m) const {
-    assert(m < ranks.size());
+    ceph_assert(m < ranks.size());
     return get_addr(ranks[m]);
   }
   void set_addr(const string& n, const entity_addr_t& a) {
-    assert(mon_info.count(n));
+    ceph_assert(mon_info.count(n));
     mon_info[n].public_addr = a;
   }
 

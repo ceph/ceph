@@ -308,7 +308,7 @@ class MonitorDBStore
 	compact.pop_front();
       }
     } else {
-      assert(0 == "failed to write to db");
+      ceph_assert(0 == "failed to write to db");
     }
     return r;
   }
@@ -447,8 +447,8 @@ class MonitorDBStore
      * @param last_key[out] Last key in the chunk
      */
     void get_chunk_tx(TransactionRef tx, uint64_t max) override {
-      assert(done == false);
-      assert(iter->valid() == true);
+      ceph_assert(done == false);
+      ceph_assert(iter->valid() == true);
 
       while (iter->valid()) {
 	string prefix(iter->raw_key().first);
@@ -460,12 +460,12 @@ class MonitorDBStore
 	}
 	iter->next();
       }
-      assert(iter->valid() == false);
+      ceph_assert(iter->valid() == false);
       done = true;
     }
 
     pair<string,string> get_next_key() override {
-      assert(iter->valid());
+      ceph_assert(iter->valid());
 
       for (; iter->valid(); iter->next()) {
         pair<string,string> r = iter->raw_key();
@@ -498,7 +498,7 @@ class MonitorDBStore
   }
 
   KeyValueDB::Iterator get_iterator(const string &prefix) {
-    assert(!prefix.empty());
+    ceph_assert(!prefix.empty());
     KeyValueDB::Iterator iter = db->get_iterator(prefix);
     iter->seek_to_first();
     return iter;
@@ -512,7 +512,7 @@ class MonitorDBStore
   }
 
   int get(const string& prefix, const string& key, bufferlist& bl) {
-    assert(bl.length() == 0);
+    ceph_assert(bl.length() == 0);
     return db->get(prefix, key, &bl);
   }
 
@@ -533,10 +533,10 @@ class MonitorDBStore
       generic_dout(0) << "MonitorDBStore::get() error obtaining"
                       << " (" << prefix << ":" << key << "): "
                       << cpp_strerror(err) << dendl;
-      assert(0 == "error obtaining key");
+      ceph_assert(0 == "error obtaining key");
     }
 
-    assert(bl.length());
+    ceph_assert(bl.length());
     version_t ver;
     auto p = bl.cbegin();
     decode(ver, p);
@@ -579,7 +579,7 @@ class MonitorDBStore
       dbt->rmkeys_by_prefix((*iter));
     }
     int r = db->submit_transaction_sync(dbt);
-    assert(r >= 0);
+    ceph_assert(r >= 0);
   }
 
   void _open(string kv_type) {
@@ -600,7 +600,7 @@ class MonitorDBStore
       derr << __func__ << " error initializing "
 	   << kv_type << " db back storage in "
 	   << full_path << dendl;
-      assert(0 == "MonitorDBStore: error initializing keyvaluedb back storage");
+      ceph_assert(0 == "MonitorDBStore: error initializing keyvaluedb back storage");
     }
     db.reset(db_ptr);
 
@@ -761,7 +761,7 @@ class MonitorDBStore
       is_open(false) {
   }
   ~MonitorDBStore() {
-    assert(!is_open);
+    ceph_assert(!is_open);
     if (do_dump) {
       if (!g_conf()->mon_debug_dump_json) {
         ::close(dump_fd_binary);

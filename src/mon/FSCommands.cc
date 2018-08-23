@@ -95,7 +95,7 @@ class FsNewHandler : public FileSystemCommandHandler
       const cmdmap_t& cmdmap,
       std::stringstream &ss) override
   {
-    assert(m_paxos->is_plugged());
+    ceph_assert(m_paxos->is_plugged());
 
     string metadata_name;
     cmd_getval_throws(g_ceph_context, cmdmap, "metadata", metadata_name);
@@ -174,9 +174,9 @@ class FsNewHandler : public FileSystemCommandHandler
     }
 
     pg_pool_t const *data_pool = mon->osdmon()->osdmap.get_pg_pool(data);
-    assert(data_pool != NULL);  // Checked it existed above
+    ceph_assert(data_pool != NULL);  // Checked it existed above
     pg_pool_t const *metadata_pool = mon->osdmon()->osdmap.get_pg_pool(metadata);
-    assert(metadata_pool != NULL);  // Checked it existed above
+    ceph_assert(metadata_pool != NULL);  // Checked it existed above
 
     int r = _check_pool(mon->osdmon()->osdmap, data, false, force, &ss);
     if (r < 0) {
@@ -568,7 +568,7 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       const cmdmap_t& cmdmap,
       std::stringstream &ss) override
   {
-    assert(m_paxos->is_plugged());
+    ceph_assert(m_paxos->is_plugged());
 
     string poolname;
     cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolname);
@@ -708,7 +708,7 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
     std::vector<mds_gid_t> to_fail;
     // There may be standby_replay daemons left here
     for (const auto &i : fs->mds_map.get_mds_info()) {
-      assert(i.second.state == MDSMap::STATE_STANDBY_REPLAY);
+      ceph_assert(i.second.state == MDSMap::STATE_STANDBY_REPLAY);
       to_fail.push_back(i.first);
     }
 
@@ -812,7 +812,7 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
       }
     }
 
-    assert(poolid >= 0);  // Checked by parsing code above
+    ceph_assert(poolid >= 0);  // Checked by parsing code above
 
     if (fs->mds_map.get_first_data_pool() == poolid) {
       ss << "cannot remove default data pool";
@@ -894,7 +894,7 @@ int FileSystemCommandHandler::parse_bool(
       bool *result,
       std::ostream &ss)
 {
-  assert(result != nullptr);
+  ceph_assert(result != nullptr);
 
   string interr;
   int64_t n = strict_strtoll(bool_str.c_str(), 10, &interr);
@@ -920,7 +920,7 @@ int FileSystemCommandHandler::_check_pool(
     bool force,
     std::stringstream *ss) const
 {
-  assert(ss != NULL);
+  ceph_assert(ss != NULL);
 
   const pg_pool_t *pool = osd_map.get_pg_pool(pool_id);
   if (!pool) {
@@ -947,7 +947,7 @@ int FileSystemCommandHandler::_check_pool(
     // write operations like modify+truncate we care about support for)
     const pg_pool_t *write_tier = osd_map.get_pg_pool(
         pool->write_tier);
-    assert(write_tier != NULL);  // OSDMonitor shouldn't allow DNE tier
+    ceph_assert(write_tier != NULL);  // OSDMonitor shouldn't allow DNE tier
     if (write_tier->cache_mode == pg_pool_t::CACHEMODE_FORWARD
         || write_tier->cache_mode == pg_pool_t::CACHEMODE_READONLY) {
       *ss << "EC pool '" << pool_name << "' has a write tier ("

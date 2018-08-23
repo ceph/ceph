@@ -1206,11 +1206,11 @@ public:
     return plugged;
   }
   void plug() {
-    assert(plugged == false);
+    ceph_assert(plugged == false);
     plugged = true;
   }
   void unplug() {
-    assert(plugged == true);
+    ceph_assert(plugged == true);
     plugged = false;
   }
 
@@ -1266,7 +1266,7 @@ public:
    * @param onreadable A callback
    */
   void wait_for_readable(MonOpRequestRef op, Context *onreadable) {
-    assert(!is_readable());
+    ceph_assert(!is_readable());
     if (op)
       op->mark_event("paxos:wait_for_readable");
     waiting_for_readable.push_back(onreadable);
@@ -1308,7 +1308,7 @@ public:
    * @param c A callback
    */
   void wait_for_writeable(MonOpRequestRef op, Context *c) {
-    assert(!is_writeable());
+    ceph_assert(!is_writeable());
     if (op)
       op->mark_event("paxos:wait_for_writeable");
     waiting_for_writeable.push_back(c);

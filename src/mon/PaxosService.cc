@@ -31,7 +31,7 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string 
 
 bool PaxosService::dispatch(MonOpRequestRef op)
 {
-  assert(op->is_type_service() || op->is_type_command());
+  ceph_assert(op->is_type_service() || op->is_type_command());
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   op->mark_event("psvc:dispatch");
 
@@ -124,7 +124,7 @@ bool PaxosService::dispatch(MonOpRequestRef op)
         } else if (r == -ECANCELED || r == -EAGAIN) {
           return;
         } else {
-          assert(0 == "bad return value for proposal_timer");
+          ceph_assert(0 == "bad return value for proposal_timer");
         }
     });
     dout(10) << " setting proposal_timer " << do_propose
@@ -185,10 +185,10 @@ bool PaxosService::should_propose(double& delay)
 void PaxosService::propose_pending()
 {
   dout(10) << __func__ << dendl;
-  assert(have_pending);
-  assert(!proposing);
-  assert(mon->is_leader());
-  assert(is_active());
+  ceph_assert(have_pending);
+  ceph_assert(!proposing);
+  ceph_assert(mon->is_leader());
+  ceph_assert(is_active());
 
   if (proposal_timer) {
     dout(10) << " canceling proposal_timer " << proposal_timer << dendl;
@@ -240,7 +240,7 @@ void PaxosService::propose_pending()
       else if (r == -ECANCELED || r == -EAGAIN)
 	return;
       else
-	assert(0 == "bad return value for C_Committed");
+	ceph_assert(0 == "bad return value for C_Committed");
     }
   };
   paxos->queue_pending_finisher(new C_Committed(this));
@@ -409,7 +409,7 @@ void PaxosService::trim(MonitorDBStore::TransactionRef t,
 			version_t from, version_t to)
 {
   dout(10) << __func__ << " from " << from << " to " << to << dendl;
-  assert(from != to);
+  ceph_assert(from != to);
 
   for (version_t v = from; v < to; ++v) {
     dout(20) << __func__ << " " << v << dendl;

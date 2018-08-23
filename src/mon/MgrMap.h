@@ -352,7 +352,7 @@ public:
   void print_summary(Formatter *f, std::ostream *ss) const
   {
     // One or the other, not both
-    assert((ss != nullptr) != (f != nullptr));
+    ceph_assert((ss != nullptr) != (f != nullptr));
     if (f) {
       dump(f);
     } else {
