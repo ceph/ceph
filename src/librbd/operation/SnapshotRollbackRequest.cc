@@ -222,7 +222,7 @@ Context *SnapshotRollbackRequest<I>::handle_get_snap_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  assert(*result == 0);
+  ceph_assert(*result == 0);
   send_rollback_object_map();
   return nullptr;
 }
@@ -256,7 +256,7 @@ Context *SnapshotRollbackRequest<I>::handle_rollback_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  assert(*result == 0);
+  ceph_assert(*result == 0);
   send_rollback_objects();
   return nullptr;
 }
@@ -337,7 +337,7 @@ Context *SnapshotRollbackRequest<I>::handle_refresh_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  assert(*result == 0);
+  ceph_assert(*result == 0);
   return send_invalidate_cache();
 }
 

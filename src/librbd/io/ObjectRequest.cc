@@ -133,8 +133,8 @@ void ObjectRequest<I>::add_write_hint(I& image_ctx,
 template <typename I>
 bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents,
                                               bool read_request) {
-  assert(m_ictx->snap_lock.is_locked());
-  assert(m_ictx->parent_lock.is_locked());
+  ceph_assert(m_ictx->snap_lock.is_locked());
+  ceph_assert(m_ictx->parent_lock.is_locked());
 
   m_has_parent = false;
   parent_extents->clear();
@@ -239,7 +239,7 @@ void ObjectReadRequest<I>::read_object() {
   int r = image_ctx->data_ctx.aio_operate(
     this->m_oid, rados_completion, &op, flags, nullptr,
     (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   rados_completion->release();
 }
@@ -417,7 +417,7 @@ void AbstractObjectWriteRequest<I>::send() {
       m_object_may_exist = true;
     } else {
       // should have been flushed prior to releasing lock
-      assert(image_ctx->exclusive_lock->is_lock_owner());
+      ceph_assert(image_ctx->exclusive_lock->is_lock_owner());
       m_object_may_exist = image_ctx->object_map->object_may_exist(
         this->m_object_no);
     }
@@ -475,7 +475,7 @@ void AbstractObjectWriteRequest<I>::handle_pre_write_object_map_update(int r) {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << "r=" << r << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
   write_object();
 }
 
@@ -497,7 +497,7 @@ void AbstractObjectWriteRequest<I>::write_object() {
 
   add_write_hint(&write);
   add_write_ops(&write);
-  assert(write.size() != 0);
+  ceph_assert(write.size() != 0);
 
   librados::AioCompletion *rados_completion = util::create_rados_callback<
     AbstractObjectWriteRequest<I>,
@@ -505,7 +505,7 @@ void AbstractObjectWriteRequest<I>::write_object() {
   int r = image_ctx->data_ctx.aio_operate(
     this->m_oid, rados_completion, &write, m_snap_seq, m_snaps,
     (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -539,7 +539,7 @@ void AbstractObjectWriteRequest<I>::copyup() {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << dendl;
 
-  assert(!m_copyup_in_progress);
+  ceph_assert(!m_copyup_in_progress);
   m_copyup_in_progress = true;
 
   image_ctx->copyup_list_lock.Lock();
@@ -567,7 +567,7 @@ void AbstractObjectWriteRequest<I>::handle_copyup(int r) {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << "r=" << r << dendl;
 
-  assert(m_copyup_in_progress);
+  ceph_assert(m_copyup_in_progress);
   m_copyup_in_progress = false;
 
   if (r < 0) {
@@ -600,7 +600,7 @@ void AbstractObjectWriteRequest<I>::post_write_object_map_update() {
   ldout(image_ctx->cct, 20) << dendl;
 
   // should have been flushed prior to releasing lock
-  assert(image_ctx->exclusive_lock->is_lock_owner());
+  ceph_assert(image_ctx->exclusive_lock->is_lock_owner());
   image_ctx->object_map_lock.get_write();
   if (image_ctx->object_map->template aio_update<
         AbstractObjectWriteRequest<I>,
@@ -622,7 +622,7 @@ void AbstractObjectWriteRequest<I>::handle_post_write_object_map_update(int r) {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << "r=" << r << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
   this->finish(0);
 }
 
@@ -682,7 +682,7 @@ int ObjectCompareAndWriteRequest<I>::filter_write_result(int r) const {
     Striper::extent_to_file(image_ctx->cct, &image_ctx->layout,
                             this->m_object_no, offset, this->m_object_len,
                             image_extents);
-    assert(image_extents.size() == 1);
+    ceph_assert(image_extents.size() == 1);
 
     if (m_mismatch_offset) {
       *m_mismatch_offset = image_extents[0].first;

@@ -42,7 +42,7 @@ struct ObjectCacherObjectDispatch<I>::C_InvalidateCache : public Context {
   }
 
   void finish(int r) override {
-    assert(dispatcher->m_cache_lock.is_locked());
+    ceph_assert(dispatcher->m_cache_lock.is_locked());
     auto cct = dispatcher->m_image_ctx->cct;
 
     if (r == -EBLACKLISTED) {

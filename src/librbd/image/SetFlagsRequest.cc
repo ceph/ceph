@@ -54,7 +54,7 @@ void SetFlagsRequest<I>::send_set_flags() {
     librados::AioCompletion *comp =
       create_rados_callback(gather_ctx->new_sub());
     int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
   gather_ctx->activate();

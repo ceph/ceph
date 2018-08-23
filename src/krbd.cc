@@ -227,13 +227,13 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
         const char *this_major = udev_device_get_property_value(dev, "MAJOR");
         const char *this_minor = udev_device_get_property_value(dev, "MINOR");
 
-        assert(!minor ^ have_minor_attr());
+        ceph_assert(!minor ^ have_minor_attr());
 
         if (strcmp(this_major, major) == 0 &&
             (!minor || strcmp(this_minor, minor) == 0)) {
           string name = get_kernel_rbd_name(udev_device_get_sysname(bus_dev));
 
-          assert(strcmp(udev_device_get_devnode(dev), name.c_str()) == 0);
+          ceph_assert(strcmp(udev_device_get_devnode(dev), name.c_str()) == 0);
           *pname = name;
 
           udev_device_unref(dev);
@@ -363,7 +363,7 @@ static int devno_to_krbd_id(struct udev *udev, dev_t devno, string *pid)
   }
 
   /* make sure there is only one match */
-  assert(!udev_list_entry_get_next(l));
+  ceph_assert(!udev_list_entry_get_next(l));
 
   dev = udev_device_new_from_syspath(udev, udev_list_entry_get_name(l));
   if (!dev) {

@@ -63,7 +63,7 @@ Context *SnapshotCreateRequest<I>::handle_suspend_requests(int *result) {
 template <typename I>
 void SnapshotCreateRequest<I>::send_suspend_aio() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
@@ -163,7 +163,7 @@ void SnapshotCreateRequest<I>::send_create_snap() {
   RWLock::RLocker parent_locker(image_ctx.parent_lock);
 
   // should have been canceled prior to releasing lock
-  assert(image_ctx.exclusive_lock == nullptr ||
+  ceph_assert(image_ctx.exclusive_lock == nullptr ||
          image_ctx.exclusive_lock->is_lock_owner());
 
   // save current size / parent info for creating snapshot record in ImageCtx
@@ -182,7 +182,7 @@ void SnapshotCreateRequest<I>::send_create_snap() {
     &SnapshotCreateRequest<I>::handle_create_snap>(this);
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid,
                                        rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -238,7 +238,7 @@ Context *SnapshotCreateRequest<I>::handle_create_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  assert(*result == 0);
+  ceph_assert(*result == 0);
 
   image_ctx.io_work_queue->unblock_writes();
   return this->create_context_finisher(0);
@@ -250,7 +250,7 @@ void SnapshotCreateRequest<I>::send_release_snap_id() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
-  assert(m_snap_id != CEPH_NOSNAP);
+  ceph_assert(m_snap_id != CEPH_NOSNAP);
 
   librados::AioCompletion *rados_completion = create_rados_callback<
     SnapshotCreateRequest<I>,
@@ -265,7 +265,7 @@ Context *SnapshotCreateRequest<I>::handle_release_snap_id(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  assert(m_ret_val < 0);
+  ceph_assert(m_ret_val < 0);
   *result = m_ret_val;
 
   image_ctx.io_work_queue->unblock_writes();
@@ -290,7 +290,7 @@ void SnapshotCreateRequest<I>::update_snap_context() {
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
   // should have been canceled prior to releasing lock
-  assert(image_ctx.exclusive_lock == nullptr ||
+  ceph_assert(image_ctx.exclusive_lock == nullptr ||
          image_ctx.exclusive_lock->is_lock_owner());
 
   // immediately add a reference to the new snapshot
@@ -313,8 +313,8 @@ void SnapshotCreateRequest<I>::update_snap_context() {
 
   if (!image_ctx.migration_info.empty()) {
     auto it = image_ctx.migration_info.snap_map.find(CEPH_NOSNAP);
-    assert(it != image_ctx.migration_info.snap_map.end());
-    assert(!it->second.empty());
+    ceph_assert(it != image_ctx.migration_info.snap_map.end());
+    ceph_assert(!it->second.empty());
     if (it->second[0] == CEPH_NOSNAP) {
       ldout(cct, 5) << this << " " << __func__
                     << ": updating migration snap_map" << dendl;

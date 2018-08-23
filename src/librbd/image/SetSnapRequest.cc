@@ -30,7 +30,7 @@ SetSnapRequest<I>::SetSnapRequest(I &image_ctx, uint64_t snap_id,
 
 template <typename I>
 SetSnapRequest<I>::~SetSnapRequest() {
-  assert(!m_writes_blocked);
+  ceph_assert(!m_writes_blocked);
   delete m_refresh_parent;
   delete m_object_map;
   delete m_exclusive_lock;
@@ -50,7 +50,7 @@ void SetSnapRequest<I>::send_init_exclusive_lock() {
   {
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
     if (m_image_ctx.exclusive_lock != nullptr) {
-      assert(m_image_ctx.snap_id == CEPH_NOSNAP);
+      ceph_assert(m_image_ctx.snap_id == CEPH_NOSNAP);
       send_complete();
       return;
     }
@@ -328,7 +328,7 @@ int SetSnapRequest<I>::apply() {
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
   RWLock::WLocker parent_locker(m_image_ctx.parent_lock);
   if (m_snap_id != CEPH_NOSNAP) {
-    assert(m_image_ctx.exclusive_lock == nullptr);
+    ceph_assert(m_image_ctx.exclusive_lock == nullptr);
     int r = m_image_ctx.snap_set(m_snap_id);
     if (r < 0) {
       return r;

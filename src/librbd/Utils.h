@@ -175,7 +175,7 @@ public:
 
   template <typename I>
   void wait(I &image_ctx, Context *on_finish) {
-    assert(m_on_finish == nullptr);
+    ceph_assert(m_on_finish == nullptr);
 
     on_finish = create_async_context_callback(image_ctx, on_finish);
     if (m_refs == 0) {

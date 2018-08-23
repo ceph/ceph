@@ -70,7 +70,7 @@ void CreateRequest<I>::send_object_map_resize() {
     std::string oid(ObjectMap<>::object_map_name(m_image_ctx->id, snap_id));
     librados::AioCompletion *comp = create_rados_callback(gather_ctx->new_sub());
     int r = m_image_ctx->md_ctx.aio_operate(oid, comp, &op);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
   gather_ctx->activate();

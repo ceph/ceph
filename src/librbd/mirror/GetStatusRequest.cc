@@ -72,7 +72,7 @@ void GetStatusRequest<I>::get_status() {
   librados::AioCompletion *comp = create_rados_callback<
     GetStatusRequest<I>, &GetStatusRequest<I>::handle_get_status>(this);
   int r = m_image_ctx.md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 

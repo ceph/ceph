@@ -40,7 +40,7 @@ public:
 
   int send() override {
     I &image_ctx = this->m_image_ctx;
-    assert(image_ctx.owner_lock.is_locked());
+    ceph_assert(image_ctx.owner_lock.is_locked());
     CephContext *cct = image_ctx.cct;
 
     if (image_ctx.exclusive_lock != nullptr &&
@@ -62,11 +62,11 @@ private:
 
   void start_async_op() {
     I &image_ctx = this->m_image_ctx;
-    assert(image_ctx.owner_lock.is_locked());
+    ceph_assert(image_ctx.owner_lock.is_locked());
     CephContext *cct = image_ctx.cct;
     ldout(cct, 10) << dendl;
 
-    assert(m_async_op == nullptr);
+    ceph_assert(m_async_op == nullptr);
     m_async_op = new io::AsyncOperation();
     m_async_op->start_op(image_ctx);
 
@@ -110,7 +110,7 @@ private:
 
   void migrate_object() {
     I &image_ctx = this->m_image_ctx;
-    assert(image_ctx.owner_lock.is_locked());
+    ceph_assert(image_ctx.owner_lock.is_locked());
     CephContext *cct = image_ctx.cct;
 
     auto ctx = create_context_callback<
@@ -128,7 +128,7 @@ private:
 
       req->send();
     } else {
-      assert(image_ctx.parent != nullptr);
+      ceph_assert(image_ctx.parent != nullptr);
 
       auto req = deep_copy::ObjectCopyRequest<I>::create(
         image_ctx.parent, image_ctx.migration_parent, &image_ctx,
@@ -160,7 +160,7 @@ private:
 template <typename I>
 void MigrateRequest<I>::send_op() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
   CephContext *cct = image_ctx.cct;
   ldout(cct, 10) << dendl;
 
@@ -184,7 +184,7 @@ template <typename I>
 void MigrateRequest<I>::migrate_objects() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   uint64_t overlap_objects = get_num_overlap_objects();
 

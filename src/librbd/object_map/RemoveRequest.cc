@@ -43,7 +43,7 @@ void RemoveRequest<I>::send_remove_object_map() {
   }
 
   Mutex::Locker locker(m_lock);
-  assert(m_ref_counter == 0);
+  ceph_assert(m_ref_counter == 0);
 
   for (auto snap_id : snap_ids) {
     m_ref_counter++;
@@ -53,7 +53,7 @@ void RemoveRequest<I>::send_remove_object_map() {
       create_rados_callback<klass, &klass::handle_remove_object_map>(this);
 
     int r = m_image_ctx->md_ctx.aio_remove(oid, comp);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
 }
@@ -65,7 +65,7 @@ Context *RemoveRequest<I>::handle_remove_object_map(int *result) {
 
   {
     Mutex::Locker locker(m_lock);
-    assert(m_ref_counter > 0);
+    ceph_assert(m_ref_counter > 0);
     m_ref_counter--;
 
     if (*result < 0 && *result != -ENOENT) {

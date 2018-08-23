@@ -39,8 +39,8 @@ public:
 
   int send() override {
     I &image_ctx = this->m_image_ctx;
-    assert(image_ctx.owner_lock.is_locked());
-    assert(image_ctx.exclusive_lock == nullptr ||
+    ceph_assert(image_ctx.owner_lock.is_locked());
+    ceph_assert(image_ctx.exclusive_lock == nullptr ||
            image_ctx.exclusive_lock->is_lock_owner());
 
     string oid = image_ctx.get_object_name(m_object_no);
@@ -69,8 +69,8 @@ public:
 
   int send() override {
     I &image_ctx = this->m_image_ctx;
-    assert(image_ctx.owner_lock.is_locked());
-    assert(image_ctx.exclusive_lock == nullptr ||
+    ceph_assert(image_ctx.owner_lock.is_locked());
+    ceph_assert(image_ctx.exclusive_lock == nullptr ||
            image_ctx.exclusive_lock->is_lock_owner());
 
     {
@@ -87,7 +87,7 @@ public:
     librados::AioCompletion *rados_completion =
       util::create_rados_callback(this);
     int r = image_ctx.data_ctx.aio_remove(oid, rados_completion);
-    assert(r == 0);
+    ceph_assert(r == 0);
     rados_completion->release();
     return 0;
   }
@@ -180,7 +180,7 @@ void TrimRequest<I>::send() {
 template<typename I>
 void TrimRequest<I>::send_pre_trim() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   if (m_delete_start >= m_num_objects) {
     send_clean_boundary();
@@ -195,7 +195,7 @@ void TrimRequest<I>::send_pre_trim() {
                               << " num_objects=" << m_num_objects << dendl;
       m_state = STATE_PRE_TRIM;
 
-      assert(image_ctx.exclusive_lock->is_lock_owner());
+      ceph_assert(image_ctx.exclusive_lock->is_lock_owner());
 
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
@@ -212,7 +212,7 @@ void TrimRequest<I>::send_pre_trim() {
 template<typename I>
 void TrimRequest<I>::send_copyup_objects() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   ::SnapContext snapc;
   bool has_snapshots;
@@ -224,7 +224,7 @@ void TrimRequest<I>::send_copyup_objects() {
     snapc = image_ctx.snapc;
     has_snapshots = !image_ctx.snaps.empty();
     int r = image_ctx.get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 
   // copyup is only required for portion of image that overlaps parent
@@ -259,7 +259,7 @@ void TrimRequest<I>::send_copyup_objects() {
 template <typename I>
 void TrimRequest<I>::send_remove_objects() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   ldout(image_ctx.cct, 5) << this << " send_remove_objects: "
 			    << " delete_start=" << m_delete_start
@@ -279,7 +279,7 @@ void TrimRequest<I>::send_remove_objects() {
 template<typename I>
 void TrimRequest<I>::send_post_trim() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
@@ -289,7 +289,7 @@ void TrimRequest<I>::send_post_trim() {
                               << " num_objects=" << m_num_objects << dendl;
       m_state = STATE_POST_TRIM;
 
-      assert(image_ctx.exclusive_lock->is_lock_owner());
+      ceph_assert(image_ctx.exclusive_lock->is_lock_owner());
 
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
@@ -306,7 +306,7 @@ void TrimRequest<I>::send_post_trim() {
 template <typename I>
 void TrimRequest<I>::send_clean_boundary() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
   CephContext *cct = image_ctx.cct;
   if (m_delete_off <= m_new_size) {
     send_finish(0);
@@ -314,7 +314,7 @@ void TrimRequest<I>::send_clean_boundary() {
   }
 
   // should have been canceled prior to releasing lock
-  assert(image_ctx.exclusive_lock == nullptr ||
+  ceph_assert(image_ctx.exclusive_lock == nullptr ||
          image_ctx.exclusive_lock->is_lock_owner());
   uint64_t delete_len = m_delete_off - m_new_size;
   ldout(image_ctx.cct, 5) << this << " send_clean_boundary: "

@@ -211,8 +211,8 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 
   void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx)
   {
-    assert(ictx->owner_lock.is_locked());
-    assert(ictx->exclusive_lock == nullptr ||
+    ceph_assert(ictx->owner_lock.is_locked());
+    ceph_assert(ictx->exclusive_lock == nullptr ||
 	   ictx->exclusive_lock->is_lock_owner());
 
     C_SaferCond ctx;
@@ -494,7 +494,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       IMAGE_OPTIONS_TYPE_MAPPING.find(optname);
 
     if (i == IMAGE_OPTIONS_TYPE_MAPPING.end()) {
-      assert((*opts_)->find(optname) == (*opts_)->end());
+      ceph_assert((*opts_)->find(optname) == (*opts_)->end());
       return -EINVAL;
     }
 
@@ -634,7 +634,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
         }
       }
       pctx.update_progress(++i, size);
-      assert(i <= size);
+      ceph_assert(i <= size);
     }
 
     return 0;
@@ -806,12 +806,12 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     ImageOptions opts;
 
     int r = opts.set(RBD_IMAGE_OPTION_ORDER, order_);
-    assert(r == 0);
+    ceph_assert(r == 0);
 
     r = create(io_ctx, imgname, "", size, opts, "", "", false);
 
     int r1 = opts.get(RBD_IMAGE_OPTION_ORDER, &order_);
-    assert(r1 == 0);
+    ceph_assert(r1 == 0);
     *order = order_;
 
     return r;
@@ -830,20 +830,20 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     int r;
 
     r = opts.set(RBD_IMAGE_OPTION_FORMAT, format);
-    assert(r == 0);
+    ceph_assert(r == 0);
     r = opts.set(RBD_IMAGE_OPTION_FEATURES, features);
-    assert(r == 0);
+    ceph_assert(r == 0);
     r = opts.set(RBD_IMAGE_OPTION_ORDER, order_);
-    assert(r == 0);
+    ceph_assert(r == 0);
     r = opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
-    assert(r == 0);
+    ceph_assert(r == 0);
     r = opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
-    assert(r == 0);
+    ceph_assert(r == 0);
 
     r = create(io_ctx, imgname, "", size, opts, "", "", false);
 
     int r1 = opts.get(RBD_IMAGE_OPTION_ORDER, &order_);
-    assert(r1 == 0);
+    ceph_assert(r1 == 0);
     *order = order_;
 
     return r;
@@ -920,7 +920,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     }
 
     int r1 = opts.set(RBD_IMAGE_OPTION_ORDER, order);
-    assert(r1 == 0);
+    ceph_assert(r1 == 0);
 
     return r;
   }
@@ -954,7 +954,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
             const std::string &non_primary_global_image_id,
             const std::string &primary_mirror_uuid)
   {
-    assert((p_id == nullptr) ^ (p_name == nullptr));
+    ceph_assert((p_id == nullptr) ^ (p_name == nullptr));
 
     CephContext *cct = (CephContext *)p_ioctx.cct();
     if (p_snap_name == nullptr) {
@@ -1732,7 +1732,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
   int snap_get_timestamp(ImageCtx *ictx, uint64_t snap_id, struct timespec *timestamp)
   {
     std::map<librados::snap_t, SnapInfo>::iterator snap_it = ictx->snap_info.find(snap_id);
-    assert(snap_it != ictx->snap_info.end());
+    ceph_assert(snap_it != ictx->snap_info.end());
     utime_t time = snap_it->second.timestamp;
     time.to_timespec(timestamp);
     return 0;
@@ -1859,7 +1859,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 	m_throttle->end_op(r);
 	return;
       }
-      assert(m_bl->length() == (size_t)r);
+      ceph_assert(m_bl->length() == (size_t)r);
 
       if (m_bl->is_zero()) {
 	delete m_bl;
@@ -1907,7 +1907,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 	}
       }
       delete m_bl;
-      assert(gather_ctx->get_sub_created_count() > 0);
+      ceph_assert(gather_ctx->get_sub_created_count() > 0);
       gather_ctx->activate();
     }
 
@@ -2242,7 +2242,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
   // validate extent against image size; clip to image size if necessary
   int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len)
   {
-    assert(ictx->snap_lock.is_locked());
+    ceph_assert(ictx->snap_lock.is_locked());
     uint64_t image_size = ictx->get_image_size(ictx->snap_id);
     bool snap_exists = ictx->snap_exists;
 
