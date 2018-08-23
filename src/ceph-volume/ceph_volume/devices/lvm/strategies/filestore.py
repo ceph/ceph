@@ -67,17 +67,17 @@ class SingleType(object):
         osds = self.computed['osds']
         vgs = self.computed['vgs']
         for device in devices:
-            device_size = disk.Size(b=device['size'])
+            device_size = disk.Size(b=device.sys_api['size'])
             journal_size = prepare.get_journal_size(lv_format=False)
             data_size = device_size - journal_size
             data_percentage = data_size * 100 / device_size
-            vgs.append({'devices': [device['path']], 'parts': 2})
+            vgs.append({'devices': [device.abspath], 'parts': 2})
             osd = {'data': {}, 'journal': {}}
-            osd['data']['path'] = device['path']
+            osd['data']['path'] = device.abspath
             osd['data']['size'] = data_size.b
             osd['data']['percentage'] = int(data_percentage)
             osd['data']['human_readable_size'] = str(data_size)
-            osd['journal']['path'] = device['path']
+            osd['journal']['path'] = device.abspath
             osd['journal']['size'] = journal_size.b
             osd['journal']['percentage'] = int(100 - data_percentage)
             osd['journal']['human_readable_size'] = str(journal_size)
