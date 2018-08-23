@@ -133,7 +133,7 @@ class SyntheticClient {
 
   filepath n1;
   const char *get_random_subdir() {
-    assert(!subdirs.empty());
+    ceph_assert(!subdirs.empty());
     int r = ((rand() % subdirs.size()) + (rand() % subdirs.size())) / 2;  // non-uniform distn
     set<string>::iterator it = subdirs.begin();
     while (r--) ++it;
@@ -144,7 +144,7 @@ class SyntheticClient {
   }
   filepath n2;
   const char *get_random_sub() {
-    assert(!contents.empty());
+    ceph_assert(!contents.empty());
     int r = ((rand() % contents.size()) + (rand() % contents.size())) / 2;  // non-uniform distn
     if (cwd.depth() && cwd.last_dentry().length()) 
       r += cwd.last_dentry().c_str()[0];                                         // slightly permuted

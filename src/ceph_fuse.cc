@@ -54,7 +54,7 @@ static void fuse_usage()
   if (fuse_parse_cmdline(&args, nullptr, nullptr, nullptr) == -1) {
     derr << "fuse_parse_cmdline failed." << dendl;
   }
-  assert(args.allocated);
+  ceph_assert(args.allocated);
   fuse_opt_free_args(&args);
 }
 
@@ -108,7 +108,7 @@ int main(int argc, const char **argv, const char *envp[]) {
       if (fuse_parse_cmdline(&fargs, nullptr, nullptr, nullptr) == -1) {
        derr << "fuse_parse_cmdline failed." << dendl;
       }
-      assert(fargs.allocated);
+      ceph_assert(fargs.allocated);
       fuse_opt_free_args(&fargs);
       exit(0);
     } else {
@@ -176,7 +176,7 @@ int main(int argc, const char **argv, const char *envp[]) {
       void *entry() override {
 #if defined(__linux__)
 	int ver = get_linux_version();
-	assert(ver != 0);
+	ceph_assert(ver != 0);
         bool client_try_dentry_invalidate = g_conf().get_val<bool>(
           "client_try_dentry_invalidate");
 	bool can_invalidate_dentries =
