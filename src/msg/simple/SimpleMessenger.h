@@ -111,7 +111,7 @@ public:
    * @{
    */
   void set_cluster_protocol(int p) override {
-    assert(!started && !did_bind);
+    ceph_assert(!started && !did_bind);
     cluster_protocol = p;
   }
 

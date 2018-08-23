@@ -37,7 +37,7 @@ struct ethernet_address {
   }
 
   ethernet_address(std::initializer_list<uint8_t> eaddr) {
-    assert(eaddr.size() == mac.size());
+    ceph_assert(eaddr.size() == mac.size());
     std::copy(eaddr.begin(), eaddr.end(), mac.begin());
   }
 

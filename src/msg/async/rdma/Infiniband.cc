@@ -148,7 +148,7 @@ void Device::binding_port(CephContext *cct, int port_num) {
   }
   if (nullptr == active_port) {
     lderr(cct) << __func__ << "  port not found" << dendl;
-    assert(active_port);
+    ceph_assert(active_port);
   }
 }
 
@@ -213,7 +213,7 @@ int Infiniband::QueuePair::init()
       return -1;
     }
   } else {
-    assert(cm_id->verbs == pd->context);
+    ceph_assert(cm_id->verbs == pd->context);
     if (rdma_create_qp(cm_id, pd, &qpia)) {
       lderr(cct) << __func__ << " failed to create queue pair with rdmacm library"
                  << cpp_strerror(errno) << dendl;
@@ -382,7 +382,7 @@ Infiniband::CompletionChannel::~CompletionChannel()
     int r = ibv_destroy_comp_channel(channel);
     if (r < 0)
       lderr(cct) << __func__ << " failed to destroy cc: " << cpp_strerror(errno) << dendl;
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 }
 
@@ -439,7 +439,7 @@ Infiniband::CompletionQueue::~CompletionQueue()
     int r = ibv_destroy_cq(cq);
     if (r < 0)
       lderr(cct) << __func__ << " failed to destroy cq: " << cpp_strerror(errno) << dendl;
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 }
 
@@ -587,7 +587,7 @@ Infiniband::MemoryManager::Cluster::Cluster(MemoryManager& m, uint32_t s)
 Infiniband::MemoryManager::Cluster::~Cluster()
 {
   int r = ibv_dereg_mr(chunk_base->mr);
-  assert(r == 0);
+  ceph_assert(r == 0);
   const auto chunk_end = chunk_base + num_chunk;
   for (auto chunk = chunk_base; chunk != chunk_end; chunk++) {
     chunk->~Chunk();
@@ -599,18 +599,18 @@ Infiniband::MemoryManager::Cluster::~Cluster()
 
 int Infiniband::MemoryManager::Cluster::fill(uint32_t num)
 {
-  assert(!base);
+  ceph_assert(!base);
   num_chunk = num;
   uint32_t bytes = buffer_size * num;
 
   base = (char*)manager.malloc(bytes);
   end = base + bytes;
-  assert(base);
+  ceph_assert(base);
   chunk_base = static_cast<Chunk*>(::malloc(sizeof(Chunk) * num));
   memset(static_cast<void*>(chunk_base), 0, sizeof(Chunk) * num);
   free_chunks.reserve(num);
   ibv_mr* m = ibv_reg_mr(manager.pd->pd, base, bytes, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
-  assert(m);
+  ceph_assert(m);
   Chunk* chunk = chunk_base;
   for (uint32_t offset = 0; offset < bytes; offset += buffer_size){
     new(chunk) Chunk(m, buffer_size, base+offset);
@@ -717,7 +717,7 @@ char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type bytes)
   MemoryManager *manager;
   CephContext *cct;
 
-  assert(g_ctx);
+  ceph_assert(g_ctx);
   manager     = g_ctx->manager;
   cct         = manager->cct;
   rx_buf_size = sizeof(Chunk) + cct->_conf->ms_async_rdma_buffer_size;
@@ -812,7 +812,7 @@ void Infiniband::MemoryManager::huge_pages_free(void *ptr)
   if (ptr == NULL) return;
   void *real_ptr = (char *)ptr -HUGE_PAGE_SIZE;
   size_t real_size = *((size_t *)real_ptr);
-  assert(real_size % HUGE_PAGE_SIZE == 0);
+  ceph_assert(real_size % HUGE_PAGE_SIZE == 0);
   if (real_size != 0)
     munmap(real_ptr, real_size);
   else
@@ -838,8 +838,8 @@ void Infiniband::MemoryManager::free(void *ptr)
 
 void Infiniband::MemoryManager::create_tx_pool(uint32_t size, uint32_t tx_num)
 {
-  assert(device);
-  assert(pd);
+  ceph_assert(device);
+  ceph_assert(pd);
 
   send = new Cluster(*this, size);
   send->fill(tx_num);
@@ -907,11 +907,11 @@ void Infiniband::init()
   initialized = true;
 
   device = device_list->get_device(device_name.c_str());
-  assert(device);
+  ceph_assert(device);
   device->binding_port(cct, port_num);
   ib_physical_port = device->active_port->get_port_num();
   pd = new ProtectionDomain(cct, device);
-  assert(NetHandler(cct).set_nonblock(device->ctxt->async_fd) == 0);
+  ceph_assert(NetHandler(cct).set_nonblock(device->ctxt->async_fd) == 0);
 
   support_srq = cct->_conf->ms_async_rdma_support_srq;
   if (support_srq)
@@ -1050,11 +1050,11 @@ int Infiniband::post_chunks_to_rq(int num, ibv_qp *qp)
   ibv_recv_wr *badworkrequest;
   if (support_srq) {
     ret = ibv_post_srq_recv(srq, &rx_work_request[0], &badworkrequest);
-    assert(ret == 0);
+    ceph_assert(ret == 0);
   } else {
-    assert(qp);
+    ceph_assert(qp);
     ret = ibv_post_recv(qp, &rx_work_request[0], &badworkrequest);
-    assert(ret == 0);
+    ceph_assert(ret == 0);
   }
   return i;
 }
@@ -1172,7 +1172,7 @@ Infiniband::QueuePair::~QueuePair()
 {
   if (qp) {
     ldout(cct, 20) << __func__ << " destroy qp=" << qp << dendl;
-    assert(!ibv_destroy_qp(qp));
+    ceph_assert(!ibv_destroy_qp(qp));
   }
 }
 

@@ -114,7 +114,7 @@ class AsyncConnection : public Connection {
     Message *m = 0;
     if (!out_q.empty()) {
       map<int, list<pair<bufferlist, Message*> > >::reverse_iterator it = out_q.rbegin();
-      assert(!it->second.empty());
+      ceph_assert(!it->second.empty());
       list<pair<bufferlist, Message*> >::iterator p = it->second.begin();
       m = p->second;
       if (bl)
@@ -152,8 +152,8 @@ class AsyncConnection : public Connection {
       : msgr(omsgr), center(c), dispatch_queue(q), conn_id(cid),
         stop_dispatch(false) { }
     ~DelayedDelivery() override {
-      assert(register_time_events.empty());
-      assert(delay_queue.empty());
+      ceph_assert(register_time_events.empty());
+      ceph_assert(delay_queue.empty());
     }
     void set_center(EventCenter *c) { center = c; }
     void do_request(uint64_t id) override;

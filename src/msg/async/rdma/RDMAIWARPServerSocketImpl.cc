@@ -49,13 +49,13 @@ int RDMAIWARPServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions
 {
   ldout(cct, 15) << __func__ << dendl;
 
-  assert(sock);
+  ceph_assert(sock);
   struct pollfd pfd = {
     .fd = cm_channel->fd,
     .events = POLLIN,
   };
   int ret = poll(&pfd, 1, 0);
-  assert(ret >= 0);
+  ceph_assert(ret >= 0);
   if (!ret)
     return -EAGAIN;
 

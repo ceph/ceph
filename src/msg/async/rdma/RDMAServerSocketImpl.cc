@@ -80,7 +80,7 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
 {
   ldout(cct, 15) << __func__ << dendl;
 
-  assert(sock);
+  ceph_assert(sock);
 
   sockaddr_storage ss;
   socklen_t slen = sizeof(ss);
@@ -102,7 +102,7 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
     return -errno;
   }
 
-  assert(NULL != out); //out should not be NULL in accept connection
+  ceph_assert(NULL != out); //out should not be NULL in accept connection
 
   out->set_type(addr_type);
   out->set_sockaddr((sockaddr*)&ss);
