@@ -279,7 +279,7 @@ int KvFlatBtreeAsync::read_index(const string &key, index_data * idata,
     cerr << "\t" << client_name
 	<< "-read_index: getting keys failed with "
 	<< err << std::endl;
-    assert(0 == client_name + "-read_index: reading index failed");
+    ceph_assert(0 == client_name + "-read_index: reading index failed");
     return err;
   }
   kvmap.insert(dupmap.begin(), dupmap.end());
@@ -315,7 +315,7 @@ int KvFlatBtreeAsync::read_index(const string &key, index_data * idata,
       << kvmap.size()
       << ", idata is " << idata->str() << std::endl;
 
-  assert(idata->obj != "");
+  ceph_assert(idata->obj != "");
   icache_lock.Lock();
   icache.push(key, *idata);
   icache_lock.Unlock();
@@ -561,7 +561,7 @@ int KvFlatBtreeAsync::rebalance(const index_data &idata1,
     ops.push_back(make_pair(
 	pair<int, string>(MAKE_OBJECT, o2w),
 	&create[0]));
-    assert((int)write2_map.size() <= 2*k);
+    ceph_assert((int)write2_map.size() <= 2*k);
   } else {
     //rebalance
     if (verbose) cout << "\t\t" << client_name << "-rebalance: rebalancing "
@@ -741,7 +741,7 @@ void KvFlatBtreeAsync::set_up_prefix_index(
 	<< "-setup_prefix: will assert "
 	<< this_entry.str() << std::endl;
   }
-  assert(*err == 0);
+  ceph_assert(*err == 0);
   owo->omap_cmp(assertions, err);
   if (to_create.size() <= 2) {
     owo->omap_set(to_insert);
@@ -996,7 +996,7 @@ int KvFlatBtreeAsync::cleanup(const index_data &idata, const int &error) {
       << idata.str()
       << std::endl;
   int err = 0;
-  assert(idata.prefix != "");
+  ceph_assert(idata.prefix != "");
   map<std::string,bufferlist> new_index;
   map<std::string, pair<bufferlist, int> > assertions;
   switch (error) {
