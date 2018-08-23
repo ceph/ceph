@@ -79,6 +79,35 @@ namespace ceph {
     __ceph_assert_fail(ctx.assertion, ctx.file, ctx.line, ctx.function);
   }
 
+  class BufAppender {
+  public:
+    BufAppender(char* buf, int size) : bufptr(buf), remaining(size) {}
+
+    void printf(const char * format, ...) {
+      va_list args;
+      va_start(args, format);
+      this->vprintf(format, args);
+      va_end(args);
+    }
+
+    void vprintf(const char * format, va_list args) {
+      int n = vsnprintf(bufptr, remaining, format, args);
+      if (n >= 0) {
+	if (n < remaining) {
+	  remaining -= n;
+	  bufptr += n;
+	} else {
+	  remaining = 0;
+	}
+      }
+    }
+
+  private:
+    char* bufptr;
+    int remaining;
+  };
+
+
   [[gnu::cold]] void __ceph_assertf_fail(const char *assertion,
 					 const char *file, int line,
 					 const char *func, const char* msg,
@@ -95,35 +124,6 @@ namespace ceph {
     ceph_pthread_getname(pthread_self(), g_assert_thread_name,
 		       sizeof(g_assert_thread_name));
 
-    class BufAppender {
-    public:
-      BufAppender(char* buf, int size) : bufptr(buf), remaining(size) {
-      }
-
-      void printf(const char * format, ...) {
-	va_list args;
-	va_start(args, format);
-	this->vprintf(format, args);
-	va_end(args);
-      }
-
-      void vprintf(const char * format, va_list args) {
-	int n = vsnprintf(bufptr, remaining, format, args);
-	if (n >= 0) {
-	  if (n < remaining) {
-	    remaining -= n;
-	    bufptr += n;
-	  } else {
-	    remaining = 0;
-	  }
-	}
-      }
-
-    private:
-      char* bufptr;
-      int remaining;
-    };
-
     char buf[8096];
     BufAppender ba(buf, sizeof(buf));
     BackTrace *bt = new BackTrace(1);
@@ -132,6 +132,77 @@ namespace ceph {
 	     file, func, (unsigned long long)pthread_self(), tss.str().c_str(),
 	     file, line, assertion);
     ba.printf("Assertion details: ");
+    va_list args;
+    va_start(args, msg);
+    ba.vprintf(msg, args);
+    va_end(args);
+    ba.printf("\n");
+    dout_emergency(buf);
+
+    // TODO: get rid of this memory allocation.
+    ostringstream oss;
+    oss << *bt;
+    dout_emergency(oss.str());
+
+    if (g_assert_context) {
+      lderr(g_assert_context) << buf << std::endl;
+      *_dout << oss.str() << dendl;
+
+      // dump recent only if the abort signal handler won't do it for us
+      if (!g_assert_context->_conf->fatal_signal_handlers) {
+	g_assert_context->_log->dump_recent();
+      }
+    }
+
+    abort();
+  }
+
+  [[gnu::cold]] void __ceph_abort(const char *file, int line,
+				  const char *func, const string& msg)
+  {
+    ostringstream tss;
+    tss << ceph_clock_now();
+
+    BackTrace *bt = new BackTrace(1);
+    ba.printf("%s: In function '%s' thread %llx time %s\n"
+	      "%s: %d: abort()\n",
+	      file, func, (unsigned long long)pthread_self(), tss.str().c_str(),
+	      file, line);
+    dout_emergency(msg);
+
+    // TODO: get rid of this memory allocation.
+    ostringstream oss;
+    oss << *bt;
+    dout_emergency(oss.str());
+
+    if (g_assert_context) {
+      lderr(g_assert_context) << buf << std::endl;
+      *_dout << oss.str() << dendl;
+
+      // dump recent only if the abort signal handler won't do it for us
+      if (!g_assert_context->_conf->fatal_signal_handlers) {
+	g_assert_context->_log->dump_recent();
+      }
+    }
+
+    abort();
+  }
+
+  [[gnu::cold]] void __ceph_abortf(const char *file, int line,
+				   const char *func, const char* msg,
+				   ...)
+  {
+    ostringstream tss;
+    tss << ceph_clock_now();
+
+    char buf[8096];
+    BufAppender ba(buf, sizeof(buf));
+    BackTrace *bt = new BackTrace(1);
+    ba.printf("%s: In function '%s' thread %llx time %s\n"
+	      "%s: %d: abort()\n",
+	      file, func, (unsigned long long)pthread_self(), tss.str().c_str(),
+	      file, line);
+    ba.printf("Abort details: ");
     va_list args;
     va_start(args, msg);
     ba.vprintf(msg, args);

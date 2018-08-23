@@ -1,7 +1,8 @@
 #ifndef CEPH_ASSERT_H
 #define CEPH_ASSERT_H
 
-#include <stdlib.h>
+#include <cstdlib>
+#include <string>
 
 #if defined(__linux__)
 #include <features.h>
@@ -78,6 +79,12 @@ extern void __ceph_assertf_fail(const char *assertion, const char *file, int lin
   __attribute__ ((__noreturn__));
 extern void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *function);
 
+[[noreturn]] void __ceph_abort(const char *file, int line, const char *func,
+                               const std::string& msg);
+
+[[noreturn]] void __ceph_abortf(const char *file, int line, const char *func,
+                                const char* msg, ...);
+
 #define _CEPH_ASSERT_VOID_CAST static_cast<void>
 
 #define assert_warn(expr)							\
@@ -96,12 +103,14 @@ using namespace ceph;
  * Currently, it's the same as assert(0), but we may one day make assert a
  * debug-only thing, like it is in many projects.
  */
-#define ceph_abort() abort()
+#define ceph_abort(msg, ...)                                            \
+  __ceph_abort( __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, "abort() called")
 
-#define ceph_abort_msg(cct, msg) {					\
-		lgeneric_derr(cct) << "abort: " << msg << dendl;	\
-		abort();						\
-	}
+#define ceph_abort_msg(msg)                                             \
+  __ceph_abort( __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, msg) 
+
+#define ceph_abort_msgf(...)                                             \
+  __ceph_abortf( __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__)
 
 #define ceph_assert(expr)							\
   do { static const ceph::assert_data assert_data_ctx = \

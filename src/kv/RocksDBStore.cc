@@ -1056,7 +1056,7 @@ int RocksDBStore::get(
       if (status.ok()) {
 	(*out)[key].append(value);
       } else if (status.IsIOError()) {
-	ceph_abort_msg(cct, status.ToString());
+	ceph_abort_msg(status.getState());
       }
     }
   } else {
@@ -1070,7 +1070,7 @@ int RocksDBStore::get(
       if (status.ok()) {
 	(*out)[key].append(value);
       } else if (status.IsIOError()) {
-	ceph_abort_msg(cct, status.ToString());
+	ceph_abort_msg(status.getState());
       }
     }
   }
@@ -1108,7 +1108,7 @@ int RocksDBStore::get(
   } else if (s.IsNotFound()) {
     r = -ENOENT;
   } else {
-    ceph_abort_msg(cct, s.ToString());
+    ceph_abort_msg(s.getState());
   }
   utime_t lat = ceph_clock_now() - start;
   logger->inc(l_rocksdb_gets);
@@ -1146,7 +1146,7 @@ int RocksDBStore::get(
   } else if (s.IsNotFound()) {
     r = -ENOENT;
   } else {
-    ceph_abort_msg(cct, s.ToString());
+    ceph_abort_msg(s.getState());
   }
   utime_t lat = ceph_clock_now() - start;
   logger->inc(l_rocksdb_gets);
