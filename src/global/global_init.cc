@@ -172,11 +172,11 @@ global_init(const std::map<std::string,std::string> *defaults,
   static bool first_run = true;
   if (run_pre_init) {
     // We will run pre_init from here (default).
-    assert(!g_ceph_context && first_run);
+    ceph_assert(!g_ceph_context && first_run);
     global_pre_init(defaults, args, module_type, code_env, flags);
   } else {
     // Caller should have invoked pre_init manually.
-    assert(g_ceph_context && first_run);
+    ceph_assert(g_ceph_context && first_run);
   }
   first_run = false;
 
