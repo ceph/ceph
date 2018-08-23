@@ -63,7 +63,7 @@ class LZ4Compressor : public Compressor {
       encode(origin_len, dst);
       encode((uint32_t)compressed_len, dst);
     }
-    assert(p.end());
+    ceph_assert(p.end());
 
     dst.append(outptr, 0, pos);
     return 0;
