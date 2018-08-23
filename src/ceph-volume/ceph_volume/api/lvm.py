@@ -401,7 +401,7 @@ def create_pv(device):
     ])
 
 
-def create_vg(devices, name=None):
+def create_vg(devices, name=None, name_prefix=None):
     """
     Create a Volume Group. Command looks like::
 
@@ -412,10 +412,16 @@ def create_vg(devices, name=None):
     :param devices: A list of devices to create a VG. Optionally, a single
                     device (as a string) can be used.
     :param name: Optionally set the name of the VG, defaults to 'ceph-{uuid}'
+    :param name_prefix: Optionally prefix the name of the VG, which will get combined
+                        with a UUID string
     """
+    if isinstance(devices, set):
+        devices = list(devices)
     if not isinstance(devices, list):
         devices = [devices]
-    if name is None:
+    if name_prefix:
+        name = "%s-%s" % (name_prefix, str(uuid.uuid4()))
+    elif name is None:
         name = "ceph-%s" % str(uuid.uuid4())
     process.run([
         'vgcreate',
@@ -482,7 +488,7 @@ def remove_lv(path):
     return True
 
 
-def create_lv(name, group, extents=None, size=None, tags=None):
+def create_lv(name, group, extents=None, size=None, tags=None, uuid_name=False):
     """
     Create a Logical Volume in a Volume Group. Command looks like::
 
@@ -493,7 +499,11 @@ def create_lv(name, group, extents=None, size=None, tags=None):
     conform to the convention of prefixing them with "ceph." like::
 
         {"ceph.block_device": "/dev/ceph/osd-1"}
+
+    :param uuid_name: Optionally combine the ``name`` with UUID to ensure uniqueness
     """
+    if uuid_name:
+        name = '%s-%s' % (name, uuid.uuid4())
     if tags is None:
         tags = {
             "ceph.osd_id": "null",
