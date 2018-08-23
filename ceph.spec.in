@@ -253,12 +253,7 @@ BuildRequires:	python3-Cython
 BuildRequires:	python%{_python_buildid}-cherrypy
 BuildRequires:	python%{_python_buildid}-routes
 BuildRequires:	python%{_python_buildid}-werkzeug
-%if 0%{?fedora}
 BuildRequires:	python%{_python_buildid}-bcrypt
-%endif
-%if 0%{?rhel}
-BuildRequires:	py-bcrypt
-%endif
 %endif
 %if 0%{?suse_version}
 BuildRequires:	python%{_python_buildid}-CherryPy
@@ -415,12 +410,7 @@ Requires:       python%{_python_buildid}-jinja2
 Requires:       python%{_python_buildid}-routes
 Requires:       python%{_python_buildid}-werkzeug
 Requires:       pyOpenSSL%{_python_buildid}
-%if 0%{?fedora}
 Requires:	python%{_python_buildid}-bcrypt
-%endif
-%if 0%{?rhel}
-Requires:	py-bcrypt
-%endif
 %endif
 %if 0%{?suse_version}
 Requires:       python%{_python_buildid}-CherryPy
