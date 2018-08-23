@@ -34,7 +34,7 @@ class MAuthRotating;
 class LogClient;
 class AuthAuthorizer;
 class AuthMethodList;
-template<LockPolicy> class AuthClientHandler;
+class AuthClientHandler;
 class KeyRing;
 template<LockPolicy> class RotatingKeyRing;
 
@@ -118,7 +118,7 @@ public:
   ConnectionRef get_con() {
     return con;
   }
-  std::unique_ptr<AuthClientHandler<LockPolicy::MUTEX>>& get_auth() {
+  std::unique_ptr<AuthClientHandler>& get_auth() {
     return auth;
   }
 
@@ -139,7 +139,7 @@ private:
   State state = State::NONE;
   ConnectionRef con;
 
-  std::unique_ptr<AuthClientHandler<LockPolicy::MUTEX>> auth;
+  std::unique_ptr<AuthClientHandler> auth;
   uint64_t global_id;
 };
 
@@ -192,7 +192,7 @@ private:
   bool got_config = false;
 
   // authenticate
-  std::unique_ptr<AuthClientHandler<LockPolicy::MUTEX>> auth;
+  std::unique_ptr<AuthClientHandler> auth;
   uint32_t want_keys = 0;
   uint64_t global_id = 0;
   Cond auth_cond;

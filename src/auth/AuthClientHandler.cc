@@ -21,19 +21,23 @@
 
 
 template<ceph::LockPolicy lp>
-AuthClientHandler<lp>*
-AuthClientHandler<lp>::create(CephContext *cct, int proto,
-			      RotatingKeyRing<lp> *rkeys)
+AuthClientHandler*
+AuthClientHandler::create(CephContext *cct, int proto,
+			  RotatingKeyRing<lp> *rkeys)
 {
   switch (proto) {
   case CEPH_AUTH_CEPHX:
     return new CephxClientHandler<lp>(cct, rkeys);
   case CEPH_AUTH_NONE:
-    return new AuthNoneClientHandler<lp>(cct, rkeys);
+    return new AuthNoneClientHandler{cct};
   default:
     return NULL;
   }
 }
 
 // explicitly instantiate only the classes we need
-template class AuthClientHandler<ceph::LockPolicy::MUTEX>;
+template AuthClientHandler*
+AuthClientHandler::create<ceph::LockPolicy::MUTEX>(
+  CephContext *cct,
+  int proto,
+  RotatingKeyRing<ceph::LockPolicy::MUTEX> *rkeys);
