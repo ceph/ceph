@@ -1,4 +1,4 @@
 overrides:
   deepsea:
     exec:
-    - "suites/basic/health-nfs-ganesha.sh --fsal=both"
+    - suites/basic/health-ok.sh --client-nodes=1 --fsal=both --min-nodes=2 --nfs-ganesha
