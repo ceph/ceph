@@ -43,3 +43,16 @@ Ceph Object Store APIs
 .. _S3-compatible API: ../radosgw/s3/
 .. _Swift-compatible API: ../radosgw/swift/
 .. _Admin Ops API: ../radosgw/adminops
+
+Exported Data Schemas
+=====================
+
+See `data schemas`_.
+
+.. _data schemas: data-schemas
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+
+   data-schemas
