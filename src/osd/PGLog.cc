@@ -50,7 +50,7 @@ void PGLog::IndexedLog::trim(
   set<string>* trimmed_dups,
   eversion_t *write_from_dups)
 {
-  assert(s <= can_rollback_to);
+  ceph_assert(s <= can_rollback_to);
   if (complete_to != log.end())
     lgeneric_subdout(cct, osd, 20) << " complete_to " << complete_to->version << dendl;
 
@@ -131,7 +131,7 @@ ostream& PGLog::IndexedLog::print(ostream& out) const
     out << *p << " " <<
       (logged_object(p->soid) ? "indexed" : "NOT INDEXED") <<
       std::endl;
-    assert(!p->reqid_is_indexed() || logged_req(p->reqid));
+    ceph_assert(!p->reqid_is_indexed() || logged_req(p->reqid));
   }
 
   for (list<pg_log_dup_t>::const_iterator p = dups.begin();
@@ -177,7 +177,7 @@ void PGLog::trim(
     // Don't assert for async_recovery_targets or backfill_targets
     // or whenever there are missing items
     if (transaction_applied && !async && (missing.num_missing() == 0))
-      assert(trim_to <= info.last_complete);
+      ceph_assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;
     log.trim(cct, trim_to, &trimmed, &trimmed_dups, &write_from_dups);
@@ -340,9 +340,9 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
   // Check preconditions
 
   // If our log is empty, the incoming log needs to have not been trimmed.
-  assert(!log.null() || olog.tail == eversion_t());
+  ceph_assert(!log.null() || olog.tail == eversion_t());
   // The logs must overlap.
-  assert(log.head >= olog.tail && olog.head >= log.tail);
+  ceph_assert(log.head >= olog.tail && olog.head >= log.tail);
 
   for (map<hobject_t, pg_missing_item>::const_iterator i = missing.get_items().begin();
        i != missing.get_items().end();
@@ -574,11 +574,11 @@ void PGLog::check() {
       derr << "    " << *i << dendl;
     }
   }
-  assert(log.log.size() == log_keys_debug.size());
+  ceph_assert(log.log.size() == log_keys_debug.size());
   for (list<pg_log_entry_t>::iterator i = log.log.begin();
        i != log.log.end();
        ++i) {
-    assert(log_keys_debug.count(i->get_key_name()));
+    ceph_assert(log_keys_debug.count(i->get_key_name()));
   }
 }
 
@@ -724,7 +724,7 @@ void PGLog::_write_log_and_missing_wo_missing(
 	 ++i) {
       if (i->first[0] == '_')
 	continue;
-      assert(!log_keys_debug->count(i->first));
+      ceph_assert(!log_keys_debug->count(i->first));
       log_keys_debug->insert(i->first);
     }
   }
@@ -806,7 +806,7 @@ void PGLog::_write_log_and_missing(
     string key = t.get_key_name();
     if (log_keys_debug) {
       auto it = log_keys_debug->find(key);
-      assert(it != log_keys_debug->end());
+      ceph_assert(it != log_keys_debug->end());
       log_keys_debug->erase(it);
     }
     to_remove.emplace(std::move(key));
@@ -853,7 +853,7 @@ void PGLog::_write_log_and_missing(
 	 ++i) {
       if (i->first[0] == '_')
 	continue;
-      assert(!log_keys_debug->count(i->first));
+      ceph_assert(!log_keys_debug->count(i->first));
       log_keys_debug->insert(i->first);
     }
   }

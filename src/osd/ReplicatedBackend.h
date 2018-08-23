@@ -102,7 +102,7 @@ public:
 	       j != i->second.end();
 	       ++j) {
 	    f->open_object_section("pull_info");
-	    assert(pulling.count(*j));
+	    ceph_assert(pulling.count(*j));
 	    pulling.find(*j)->second.dump(f);
 	    f->close_section();
 	  }
