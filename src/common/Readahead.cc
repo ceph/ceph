@@ -97,12 +97,12 @@ Readahead::extent_t Readahead::_compute_readahead(uint64_t limit) {
 	uint64_t dist_next = align_next - readahead_end;
 	if (dist_prev < readahead_length / 2 && dist_prev < dist_next) {
 	  // we can snap to the previous alignment point by a less than 50% reduction in size
-	  assert(align_prev > readahead_offset);
+	  ceph_assert(align_prev > readahead_offset);
 	  readahead_length = align_prev - readahead_offset;
 	  break;
 	} else if(dist_next < readahead_length / 2) {
 	  // we can snap to the next alignment point by a less than 50% increase in size
-	  assert(align_next > readahead_offset);
+	  ceph_assert(align_next > readahead_offset);
 	  readahead_length = align_next - readahead_offset;
 	  break;
 	}
@@ -121,16 +121,16 @@ Readahead::extent_t Readahead::_compute_readahead(uint64_t limit) {
 }
 
 void Readahead::inc_pending(int count) {
-  assert(count > 0);
+  ceph_assert(count > 0);
   m_pending_lock.Lock();
   m_pending += count;
   m_pending_lock.Unlock();
 }
 
 void Readahead::dec_pending(int count) {
-  assert(count > 0);
+  ceph_assert(count > 0);
   m_pending_lock.Lock();
-  assert(m_pending >= count);
+  ceph_assert(m_pending >= count);
   m_pending -= count;
   if (m_pending == 0) {
     std::list<Context *> pending_waiting(std::move(m_pending_waiting));

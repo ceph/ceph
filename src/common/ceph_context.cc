@@ -88,7 +88,7 @@ public:
       "dump_mempools",
       this,
       "get mempool stats");
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
   ~MempoolObs() override {
     cct->_conf.remove_observer(this);
@@ -394,7 +394,7 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
   lgeneric_dout(this, 1) << "do_command '" << command << "' '"
 			 << ss.str() << dendl;
   if (command == "assert" && _conf->debug_asok_assert_abort) {
-    assert(0 == "assert");
+    ceph_assert(0 == "assert");
   }
   if (command == "abort" && _conf->debug_asok_assert_abort) {
     abort();
@@ -534,7 +534,7 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
       _log->reopen_log_file();
     }
     else {
-      assert(0 == "registered under wrong command?");    
+      ceph_assert(0 == "registered under wrong command?");    
     }
     f->close_section();
   }
@@ -667,7 +667,7 @@ CephContext::~CephContext()
   delete _crypto_none;
   delete _crypto_aes;
   if (_crypto_inited > 0) {
-    assert(_crypto_inited == 1);  // or else someone explicitly did
+    ceph_assert(_crypto_inited == 1);  // or else someone explicitly did
 				  // init but not shutdown
     shutdown_crypto();
   }
@@ -774,7 +774,7 @@ void CephContext::enable_perf_counter()
   PerfCounters *perf_tmp = plb.create_perf_counters();
 
   std::unique_lock<ceph::spinlock> lg(_cct_perf_lock);
-  assert(_cct_perf == NULL);
+  ceph_assert(_cct_perf == NULL);
   _cct_perf = perf_tmp;
   lg.unlock();
 

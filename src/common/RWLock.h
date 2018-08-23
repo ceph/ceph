@@ -67,19 +67,19 @@ public:
   }
 
   bool is_locked() const {
-    assert(track);
+    ceph_assert(track);
     return (nrlock > 0) || (nwlock > 0);
   }
 
   bool is_wlocked() const {
-    assert(track);
+    ceph_assert(track);
     return (nwlock > 0);
   }
   ~RWLock() {
     // The following check is racy but we are about to destroy
     // the object and we assume that there are no other users.
     if (track)
-      assert(!is_locked());
+      ceph_assert(!is_locked());
     pthread_rwlock_destroy(&L);
     if (lockdep && g_lockdep) {
       lockdep_unregister(id);
@@ -91,21 +91,21 @@ public:
       if (nwlock > 0) {
         nwlock--;
       } else {
-        assert(nrlock > 0);
+        ceph_assert(nrlock > 0);
         nrlock--;
       }
     }
     if (lockdep && this->lockdep && g_lockdep)
       id = lockdep_will_unlock(name.c_str(), id);
     int r = pthread_rwlock_unlock(&L);
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 
   // read
   void get_read() const {
     if (lockdep && g_lockdep) id = lockdep_will_lock(name.c_str(), id);
     int r = pthread_rwlock_rdlock(&L);
-    assert(r == 0);
+    ceph_assert(r == 0);
     if (lockdep && g_lockdep) id = lockdep_locked(name.c_str(), id);
     if (track)
       nrlock++;
@@ -128,7 +128,7 @@ public:
     if (lockdep && this->lockdep && g_lockdep)
       id = lockdep_will_lock(name.c_str(), id);
     int r = pthread_rwlock_wrlock(&L);
-    assert(r == 0);
+    ceph_assert(r == 0);
     if (lockdep && this->lockdep && g_lockdep)
       id = lockdep_locked(name.c_str(), id);
     if (track)
@@ -169,7 +169,7 @@ public:
       locked = true;
     }
     void unlock() {
-      assert(locked);
+      ceph_assert(locked);
       m_lock.unlock();
       locked = false;
     }
@@ -191,7 +191,7 @@ public:
       locked = true;
     }
     void unlock() {
-      assert(locked);
+      ceph_assert(locked);
       m_lock.unlock();
       locked = false;
     }
@@ -220,27 +220,27 @@ public:
     Context(RWLock& l, LockState s) : lock(l), state(s) {}
 
     void get_write() {
-      assert(state == Untaken);
+      ceph_assert(state == Untaken);
 
       lock.get_write();
       state = TakenForWrite;
     }
 
     void get_read() {
-      assert(state == Untaken);
+      ceph_assert(state == Untaken);
 
       lock.get_read();
       state = TakenForRead;
     }
 
     void unlock() {
-      assert(state != Untaken);
+      ceph_assert(state != Untaken);
       lock.unlock();
       state = Untaken;
     }
 
     void promote() {
-      assert(state == TakenForRead);
+      ceph_assert(state == TakenForRead);
       unlock();
       get_write();
     }

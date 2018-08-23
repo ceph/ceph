@@ -74,13 +74,13 @@ class PerfHistogram : public PerfHistogramCommon {
 public:
   /// Initialize new histogram object
   PerfHistogram(std::initializer_list<axis_config_d> axes_config) {
-    assert(axes_config.size() == DIM &&
-           "Invalid number of axis configuration objects");
+    ceph_assert(axes_config.size() == DIM &&
+		"Invalid number of axis configuration objects");
 
     int i = 0;
     for (const auto &ac : axes_config) {
-      assert(ac.m_buckets > 0 && "Must have at least one bucket on axis");
-      assert(ac.m_quant_size > 0 &&
+      ceph_assert(ac.m_buckets > 0 && "Must have at least one bucket on axis");
+      ceph_assert(ac.m_quant_size > 0 &&
              "Quantization unit must be non-zero positive integer value");
 
       m_axes_config[i++] = ac;
@@ -178,8 +178,8 @@ protected:
     static_assert(sizeof...(T) == DIM, "Incorrect number of arguments");
     return get_raw_index_internal<0>(
         [](int64_t bucket, const axis_config_d &ac) {
-          assert(bucket >= 0 && "Bucket index can not be negative");
-          assert(bucket < ac.m_buckets && "Bucket index too large");
+          ceph_assert(bucket >= 0 && "Bucket index can not be negative");
+          ceph_assert(bucket < ac.m_buckets && "Bucket index too large");
           return bucket;
         },
         0, buckets...);

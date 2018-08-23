@@ -33,7 +33,7 @@ public:
   {}
 
   int prefork(std::string &err) {
-    assert(!forked);
+    ceph_assert(!forked);
     int r = ::socketpair(AF_UNIX, SOCK_STREAM, 0, fd);
     std::ostringstream oss;
     if (r < 0) {
@@ -72,7 +72,7 @@ public:
   }
 
   int parent_wait(std::string &err_msg) {
-    assert(forked);
+    ceph_assert(forked);
 
     int r = -1;
     std::ostringstream oss;
@@ -119,7 +119,7 @@ public:
   }
 
   void daemonize() {
-    assert(forked);
+    ceph_assert(forked);
     static int r = -1;
     int r2 = ::write(fd[1], &r, sizeof(r));
     r += r2;  // make the compiler shut up about the unused return code from ::write(2).

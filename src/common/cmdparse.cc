@@ -135,7 +135,7 @@ dump_cmddesc_to_json(Formatter *jf,
 
 void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
 {
-  assert(f != nullptr);
+  ceph_assert(f != nullptr);
 
   class dump_visitor : public boost::static_visitor<void>
   {
@@ -458,7 +458,7 @@ bool validate_str_arg(std::string_view value,
     }
   } else if (type == "CephChoices") {
     auto choices = desc.find("strings");
-    assert(choices != end(desc));
+    ceph_assert(choices != end(desc));
     auto strings = choices->second;
     if (find_first_in(strings, "|", [=](auto choice) {
 	  return (value == choice);
@@ -527,8 +527,8 @@ bool validate_cmd(CephContext* cct,
     if (arg_desc.empty()) {
       return false;
     }
-    assert(arg_desc.count("name"));
-    assert(arg_desc.count("type"));
+    ceph_assert(arg_desc.count("name"));
+    ceph_assert(arg_desc.count("type"));
     auto name = arg_desc["name"];
     auto type = arg_desc["type"];
     if (arg_desc.count("n")) {

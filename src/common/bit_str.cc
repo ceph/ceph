@@ -37,7 +37,7 @@ static void _dump_bit_str(
           *out << "(" << r << ")";
         }
       } else {
-        assert(f != NULL);
+        ceph_assert(f != NULL);
         if (dump_bit_val) {
           f->dump_stream("bit_flag") << func(r)
                                      << "(" << r << ")";

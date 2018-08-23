@@ -64,7 +64,7 @@ static std::string generate_object_name_fast(int objnum, int pid = 0)
 
   char name[512];
   int n = snprintf(&name[0], sizeof(name),  BENCH_OBJ_NAME.c_str(), cached_hostname, cached_pid, objnum);
-  assert(n > 0 && n < (int)sizeof(name));
+  ceph_assert(n > 0 && n < (int)sizeof(name));
   return std::string(&name[0], (size_t)n);
 }
 

@@ -87,19 +87,19 @@ public:
 
   void _post_lock() {
     if (!recursive) {
-      assert(nlock == 0);
+      ceph_assert(nlock == 0);
       locked_by = pthread_self();
     };
     nlock++;
   }
 
   void _pre_unlock() {
-    assert(nlock > 0);
+    ceph_assert(nlock > 0);
     --nlock;
     if (!recursive) {
-      assert(locked_by == pthread_self());
+      ceph_assert(locked_by == pthread_self());
       locked_by = 0;
-      assert(nlock == 0);
+      ceph_assert(nlock == 0);
     }
   }
   void Unlock();

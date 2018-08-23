@@ -149,8 +149,8 @@ namespace cohort {
 	      --(o->lru_refcnt);
 	      /* assertions that o state has not changed across
 	       * relock */
-	      assert(o->lru_refcnt == SENTINEL_REFCNT);
-	      assert(o->lru_flags & FLAG_INLRU);
+	      ceph_assert(o->lru_refcnt == SENTINEL_REFCNT);
+	      ceph_assert(o->lru_flags & FLAG_INLRU);
 	      Object::Queue::iterator it =
 		Object::Queue::s_iterator_to(*o);
 	      lane.q.erase(it);
@@ -173,7 +173,7 @@ namespace cohort {
       LRU(int lanes, uint32_t _hiwat)
 	: n_lanes(lanes), evict_lane(0), lane_hiwat(_hiwat)
 	  {
-	    assert(n_lanes > 0);
+	    ceph_assert(n_lanes > 0);
 	    qlane = new Lane[n_lanes];
 	  }
 
@@ -336,7 +336,7 @@ namespace cohort {
       }
 
       TreeX(int n_part=1, int csz=127) : n_part(n_part), csz(csz) {
-	assert(n_part > 0);
+	ceph_assert(n_part > 0);
 	part = new Partition[n_part];
 	for (int ix = 0; ix < n_part; ++ix) {
 	  Partition& p = part[ix];
