@@ -75,6 +75,19 @@ struct TestMockIoImageRequest : public TestMockFixture {
       .WillOnce(Return(appending));
   }
 
+  void expect_get_modify_timestamp(MockTestImageCtx &mock_image_ctx,
+                                   bool needs_update) {
+    if (needs_update) {
+      mock_image_ctx.mtime_update_interval = 5;
+      EXPECT_CALL(mock_image_ctx, get_modify_timestamp())
+        .WillOnce(Return(ceph_clock_now() - utime_t(10,0)));
+    } else {
+      mock_image_ctx.mtime_update_interval = 0;
+      EXPECT_CALL(mock_image_ctx, get_modify_timestamp());
+    }
+  }
+
+
   void expect_object_request_send(MockTestImageCtx &mock_image_ctx,
                                   int r) {
     EXPECT_CALL(*mock_image_ctx.io_object_dispatcher, send(_))
@@ -214,6 +227,7 @@ TEST_F(TestMockIoImageRequest, AioWriteJournalAppendDisabled) {
 
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);
+  expect_get_modify_timestamp(mock_image_ctx, false);
   expect_object_request_send(mock_image_ctx, 0);
 
   C_SaferCond aio_comp_ctx;
@@ -243,6 +257,7 @@ TEST_F(TestMockIoImageRequest, AioDiscardJournalAppendDisabled) {
 
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);
+  expect_get_modify_timestamp(mock_image_ctx, false);
   expect_object_request_send(mock_image_ctx, 0);
 
   C_SaferCond aio_comp_ctx;
@@ -300,6 +315,7 @@ TEST_F(TestMockIoImageRequest, AioWriteSameJournalAppendDisabled) {
 
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);
+  expect_get_modify_timestamp(mock_image_ctx, false);
   expect_object_request_send(mock_image_ctx, 0);
 
   C_SaferCond aio_comp_ctx;
@@ -330,6 +346,7 @@ TEST_F(TestMockIoImageRequest, AioCompareAndWriteJournalAppendDisabled) {
 
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);
+  expect_get_modify_timestamp(mock_image_ctx, false);
   expect_object_request_send(mock_image_ctx, 0);
 
   C_SaferCond aio_comp_ctx;
