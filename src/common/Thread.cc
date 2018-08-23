@@ -157,7 +157,7 @@ void Thread::create(const char *name, size_t stacksize)
 int Thread::join(void **prval)
 {
   if (thread_id == 0) {
-    ceph_assert("join on thread that was never started" == 0);
+    ceph_abort_msg("join on thread that was never started");
     return -EINVAL;
   }
 

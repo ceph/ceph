@@ -134,7 +134,7 @@ static void namespace_breaker_func(struct ceph_mount_info *cmount, int cmd, cons
       break;
     default:
       // Bad command
-      ceph_assert(false);
+      ceph_abort();
     }
     if (ret != -EAGAIN)
       break;

@@ -929,7 +929,7 @@ public:
 	cerr << "Error: racing read on " << oid << " returned version "
 	     << rcompletion->get_version64() << " rather than version "
 	     << version << std::endl;
-	ceph_assert(0 == "racing read got wrong version");
+	ceph_abort_msg("racing read got wrong version");
       }
 
       {
@@ -1106,7 +1106,7 @@ public:
 	cerr << "Error: racing read on " << oid << " returned version "
 	     << rcompletion->get_version64() << " rather than version "
 	     << version << std::endl;
-	ceph_assert(0 == "racing read got wrong version");
+	ceph_abort_msg("racing read got wrong version");
       }
 
       {
@@ -1412,7 +1412,7 @@ public:
       }
       if (old_value.deleted()) {
 	std::cout << num << ":  expect deleted" << std::endl;
-	ceph_assert(0 == "expected deleted");
+	ceph_abort_msg("expected deleted");
       } else {
 	std::cout << num << ":  expect " << old_value.most_recent() << std::endl;
       }
@@ -2162,7 +2162,7 @@ public:
     if (!retval) {
       if (old_value.deleted()) {
 	std::cout << num << ":  expect deleted" << std::endl;
-	ceph_assert(0 == "expected deleted");
+	ceph_abort_msg("expected deleted");
       } else {
 	std::cout << num << ":  expect " << old_value.most_recent() << std::endl;
       }
@@ -2673,7 +2673,7 @@ public:
     if (r == 0) {
       // sucess
     } else {
-      ceph_assert(0 == "shouldn't happen");
+      ceph_abort_msg("shouldn't happen");
     }
     context->update_object_version(oid, completion->get_version64());
     context->find_object(oid, &oid_value);
@@ -3013,7 +3013,7 @@ public:
     } else if (r == -ENOENT) {
       // may have raced with a remove?
     } else {
-      ceph_assert(0 == "shouldn't happen");
+      ceph_abort_msg("shouldn't happen");
     }
     context->kick();
     done = true;
@@ -3099,7 +3099,7 @@ public:
     } else if (r == -ENOENT) {
       // may have raced with a remove?
     } else {
-      ceph_assert(0 == "shouldn't happen");
+      ceph_abort_msg("shouldn't happen");
     }
     context->kick();
     done = true;

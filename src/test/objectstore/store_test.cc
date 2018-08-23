@@ -4171,7 +4171,7 @@ public:
 	  cerr << "- " << *p << std::endl;
       //cerr << " objects_set: " << objects_set << std::endl;
       //cerr << " available_set: " << available_objects << std::endl;
-      ceph_assert(0 == "badness");
+      ceph_abort_msg("badness");
     }
 
     ASSERT_EQ(objects_set.size(), available_objects.size());

@@ -726,14 +726,14 @@ void AsyncConnection::process()
                     << ", discarding" << dendl;
             message->put();
             if (has_feature(CEPH_FEATURE_RECONNECT_SEQ) && async_msgr->cct->_conf->ms_die_on_old_message)
-              ceph_assert(0 == "old msgs despite reconnect_seq feature");
+              ceph_abort_msg("old msgs despite reconnect_seq feature");
             break;
           }
           if (message->get_seq() > cur_seq + 1) {
             ldout(async_msgr->cct, 0) << __func__ << " missed message?  skipped from seq "
                                       << cur_seq << " to " << message->get_seq() << dendl;
             if (async_msgr->cct->_conf->ms_die_on_skipped_message)
-              ceph_assert(0 == "skipped incoming seq");
+              ceph_abort_msg("skipped incoming seq");
           }
 
           message->set_connection(this);

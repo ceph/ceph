@@ -193,7 +193,7 @@ int ErasureCode::encode(const set<int> &want_to_encode,
 int ErasureCode::encode_chunks(const set<int> &want_to_encode,
                                map<int, bufferlist> *encoded)
 {
-  ceph_assert("ErasureCode::encode_chunks not implemented" == 0);
+  ceph_abort_msg("ErasureCode::encode_chunks not implemented");
 }
  
 int ErasureCode::_decode(const set<int> &want_to_read,
@@ -245,7 +245,7 @@ int ErasureCode::decode_chunks(const set<int> &want_to_read,
                                const map<int, bufferlist> &chunks,
                                map<int, bufferlist> *decoded)
 {
-  ceph_assert("ErasureCode::decode_chunks not implemented" == 0);
+  ceph_abort_msg("ErasureCode::decode_chunks not implemented");
 }
 
 int ErasureCode::parse(const ErasureCodeProfile &profile,

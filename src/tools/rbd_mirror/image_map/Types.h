@@ -87,7 +87,7 @@ struct PolicyMetaUnknown {
   }
 
   void encode(bufferlist& bl) const {
-    ceph_assert(false);
+    ceph_abort();
   }
 
   void decode(__u8 version, bufferlist::const_iterator& it) {

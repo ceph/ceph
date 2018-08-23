@@ -139,7 +139,7 @@ void MDSTableClient::handle_request(const MMDSTableRequest::const_ref &m)
     break;
 
   default:
-    ceph_assert(0 == "unrecognized mds_table_client request op");
+    ceph_abort_msg("unrecognized mds_table_client request op");
   }
 }
 

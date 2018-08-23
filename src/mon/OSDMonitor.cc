@@ -347,7 +347,7 @@ void OSDMonitor::create_initial()
     int r = ceph_release_from_name(
       g_conf()->mon_osd_initial_require_min_compat_client.c_str());
     if (r <= 0) {
-      ceph_assert(0 == "mon_osd_initial_require_min_compat_client is not valid");
+      ceph_abort_msg("mon_osd_initial_require_min_compat_client is not valid");
     }
     newmap.require_min_compat_client = r;
   }
@@ -1704,7 +1704,7 @@ void OSDMonitor::load_osdmap_manifest()
   int r = get_value("osdmap_manifest", manifest_bl);
   if (r < 0) {
     derr << __func__ << " unable to read osdmap version manifest" << dendl;
-    ceph_assert(0 == "error reading manifest");
+    ceph_abort_msg("error reading manifest");
   }
   osdmap_manifest.decode(manifest_bl);
   has_osdmap_manifest = true;
@@ -3798,7 +3798,7 @@ int OSDMonitor::get_full_from_pinned_map(version_t ver, bufferlist& bl)
         derr << __func__
              << "    osdmap crc mismatch! (osdmap crc " << tosdm.get_crc()
              << ", expected " << inc.full_crc << ")" << dendl;
-        ceph_assert(0 == "osdmap crc mismatch");
+        ceph_abort_msg("osdmap crc mismatch");
       }
     }
 
@@ -7423,7 +7423,7 @@ void OSDMonitor::do_osd_create(
     *new_id = pending_inc.new_max_osd - 1;
     ceph_assert(*new_id == allocated_id);
   } else {
-    ceph_assert(0 == "unexpected condition");
+    ceph_abort_msg("unexpected condition");
   }
 
 out:
@@ -9969,7 +9969,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           break;
 
         default:
-	  ceph_assert(0 == "invalid option");
+	  ceph_abort_msg("invalid option");
         }
       }
     }
@@ -10031,7 +10031,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           osdmap.get_noout_osds(&osds);
           break;
         default:
-          ceph_assert(0 == "invalid option");
+          ceph_abort_msg("invalid option");
         }
 
         // cancel any pending noup/nodown/noin/noout requests too
@@ -10069,7 +10069,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
             break;
 
           default:
-            ceph_assert(0 == "invalid option");
+            ceph_abort_msg("invalid option");
           }
         }
 
@@ -10137,7 +10137,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
             break;
 
           default:
-            ceph_assert(0 == "invalid option");
+            ceph_abort_msg("invalid option");
         }
       }
     }
@@ -10387,7 +10387,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       break;
 
     default:
-      ceph_assert(0 == "invalid option");
+      ceph_abort_msg("invalid option");
     }
 
     switch (option) {
@@ -10530,7 +10530,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       break;
 
     default:
-      ceph_assert(0 == "invalid option");
+      ceph_abort_msg("invalid option");
     }
 
     goto update;
@@ -11779,7 +11779,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } else if (field == "max_bytes") {
       value = strict_iecstrtoll(val.c_str(), &tss);
     } else {
-      ceph_assert(0 == "unrecognized option");
+      ceph_abort_msg("unrecognized option");
     }
     if (!tss.empty()) {
       ss << "error parsing value '" << val << "': " << tss;
@@ -11793,7 +11793,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } else if (field == "max_bytes") {
       pi->quota_max_bytes = value;
     } else {
-      ceph_assert(0 == "unrecognized option");
+      ceph_abort_msg("unrecognized option");
     }
     ss << "set-quota " << field << " = " << value << " for pool " << poolstr;
     rs = ss.str();

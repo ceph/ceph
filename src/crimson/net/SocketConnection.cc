@@ -245,12 +245,12 @@ bool SocketConnection::update_rx_seq(seq_num_t seq)
   if (seq <= in_seq) {
     if (HAVE_FEATURE(features, RECONNECT_SEQ) &&
         conf.ms_die_on_old_message) {
-      ceph_assert(0 == "old msgs despite reconnect_seq feature");
+      ceph_abort_msg("old msgs despite reconnect_seq feature");
     }
     return false;
   } else if (seq > in_seq + 1) {
     if (conf.ms_die_on_skipped_message) {
-      ceph_assert(0 == "skipped incoming seq");
+      ceph_abort_msg("skipped incoming seq");
     }
     return false;
   } else {

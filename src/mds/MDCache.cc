@@ -5791,7 +5791,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
     reap->set_cap_peer(p_cap_id, p_seq, p_mseq, peer, p_flags);
     mds->send_message_client_counted(reap, session);
   } else {
-    ceph_assert(0);
+    ceph_abort();
   }
 }
 
@@ -7968,7 +7968,7 @@ void MDCache::dispatch(const Message::const_ref &m)
     
   default:
     derr << "cache unknown message " << m->get_type() << dendl;
-    ceph_assert(0 == "cache unknown message");
+    ceph_abort_msg("cache unknown message");
   }
 }
 

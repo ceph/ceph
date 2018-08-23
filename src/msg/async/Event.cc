@@ -234,7 +234,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
     // add_event shouldn't report error, otherwise it must be a innermost bug!
     lderr(cct) << __func__ << " add event failed, ret=" << r << " fd=" << fd
                << " mask=" << mask << " original mask is " << event->mask << dendl;
-    ceph_assert(0 == "BUG!");
+    ceph_abort_msg("BUG!");
     return r;
   }
 
@@ -267,7 +267,7 @@ void EventCenter::delete_file_event(int fd, int mask)
   int r = driver->del_event(fd, event->mask, mask);
   if (r < 0) {
     // see create_file_event
-    ceph_assert(0 == "BUG!");
+    ceph_abort_msg("BUG!");
   }
 
   if (mask & EVENT_READABLE && event->read_cb) {

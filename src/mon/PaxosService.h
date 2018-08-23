@@ -120,7 +120,7 @@ public:
       else if (r == -ECANCELED)
         return;
       else
-	ceph_assert(0 == "bad C_RetryMessage return value");
+	ceph_abort_msg("bad C_RetryMessage return value");
     }
   };
 

@@ -4029,7 +4029,7 @@ int OSDMap::summarize_mapping_stats(
 	    }
 	  }
 	} else {
-	  ceph_assert(0 == "unhandled pool type");
+	  ceph_abort_msg("unhandled pool type");
 	}
       }
     }

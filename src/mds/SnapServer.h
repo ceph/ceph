@@ -123,7 +123,7 @@ public:
     else if (ino == MDS_INO_MDSDIR(rank))
       mdsdir_scrubbed = true;
     else
-      ceph_assert(0);
+      ceph_abort();
   }
   bool can_allow_multimds_snaps() const {
     return (root_scrubbed && mdsdir_scrubbed) ||

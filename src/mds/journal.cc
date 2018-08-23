@@ -311,7 +311,7 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 		!dir->state_test(CDir::STATE_AUXSUBTREE) &&
 		!diri->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
 	      dout(0) << "EMetaBlob::add_dir_context unexpected subtree " << *dir << dendl;
-	      ceph_assert(0);
+	      ceph_abort();
 	    }
 	    dout(20) << "EMetaBlob::add_dir_context(" << dir << ") ambiguous or transient subtree " << dendl;
 	  } else {

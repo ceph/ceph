@@ -777,7 +777,7 @@ BlueStore::Cache *BlueStore::Cache::create(CephContext* cct, string type,
   else if (type == "2q")
     c = new TwoQCache(cct);
   else
-    ceph_assert(0 == "unrecognized cache type");
+    ceph_abort_msg("unrecognized cache type");
 
   c->logger = logger;
   return c;
@@ -925,7 +925,7 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
       buffer_hot.insert(buffer_hot.iterator_to(*near), *b);
       break;
     default:
-      ceph_assert(0 == "bad cache_private");
+      ceph_abort_msg("bad cache_private");
     }
   } else if (b->cache_private == BUFFER_NEW) {
     b->cache_private = BUFFER_WARM_IN;
@@ -952,7 +952,7 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
       buffer_hot.push_front(*b);
       break;
     default:
-      ceph_assert(0 == "bad cache_private");
+      ceph_abort_msg("bad cache_private");
     }
   }
   if (!b->is_empty()) {
@@ -981,7 +981,7 @@ void BlueStore::TwoQCache::_rm_buffer(Buffer *b)
     buffer_hot.erase(buffer_hot.iterator_to(*b));
     break;
   default:
-    ceph_assert(0 == "bad cache_private");
+    ceph_abort_msg("bad cache_private");
   }
 }
 
@@ -1005,7 +1005,7 @@ void BlueStore::TwoQCache::_move_buffer(Cache *srcc, Buffer *b)
     buffer_hot.push_back(*b);
     break;
   default:
-    ceph_assert(0 == "bad cache_private");
+    ceph_abort_msg("bad cache_private");
   }
   if (!b->is_empty()) {
     buffer_bytes += b->length;
@@ -2178,7 +2178,7 @@ bid_t BlueStore::ExtentMap::allocate_spanning_blob_id()
       if (bid < 0) bid = 0;
     }
   } while (bid != begin_bid);
-  ceph_assert(0 == "no available blob id");
+  ceph_abort_msg("no available blob id");
 }
 
 void BlueStore::ExtentMap::reshard(
@@ -2779,7 +2779,7 @@ void BlueStore::ExtentMap::dirty_range(
       derr << __func__ << "on write 0x" << std::hex << offset
 	   << "~" << length << " shard 0x" << p->shard_info->offset
 	   << std::dec << " is not loaded, can't mark dirty" << dendl;
-      ceph_assert(0 == "can't mark unloaded shard dirty");
+      ceph_abort_msg("can't mark unloaded shard dirty");
     }
     if (!p->dirty) {
       dout(20) << __func__ << " mark shard 0x" << std::hex
@@ -3252,7 +3252,7 @@ void BlueStore::Collection::load_shared_blob(SharedBlobRef sb)
 	lderr(store->cct) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " not found at key "
 			  << pretty_binary_string(key) << dendl;
-      ceph_assert(0 == "uh oh, missing shared_blob");
+      ceph_abort_msg("uh oh, missing shared_blob");
     }
 
     sb->loaded = true;
@@ -6660,7 +6660,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	    if (r < 0) {
 	      derr << __func__ << " failed to read from 0x" << std::hex << e->offset
 		    <<"~" << e->length << std::dec << dendl;
-	      ceph_assert(0 == "read failed, wtf");
+	      ceph_abort_msg("read failed, wtf");
 	    }
 	    pext_to_release.push_back(*e);
 	    e = pextents.erase(e);
@@ -8421,7 +8421,7 @@ int BlueStore::_open_super_meta()
       freelist_type = std::string(bl.c_str(), bl.length());
       dout(10) << __func__ << " freelist_type " << freelist_type << dendl;
     } else {
-      ceph_assert("Not Support extent freelist manager" == 0);
+      ceph_abort_msg("Not Support extent freelist manager");
     }
   }
 
@@ -8732,7 +8732,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
     default:
       derr << __func__ << " unexpected txc " << txc
 	   << " state " << txc->get_state_name() << dendl;
-      ceph_assert(0 == "unexpected txc state");
+      ceph_abort_msg("unexpected txc state");
       return;
     }
   }
@@ -9845,7 +9845,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_SPLIT_COLLECTION:
-      ceph_assert(0 == "deprecated");
+      ceph_abort_msg("deprecated");
       break;
 
     case Transaction::OP_SPLIT_COLLECTION2:
@@ -9889,7 +9889,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_COLL_RENAME:
-      ceph_assert(0 == "not implemented");
+      ceph_abort_msg("not implemented");
       break;
     }
     if (r < 0) {
@@ -9897,7 +9897,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
            << " not handled on operation " << op->op
            << " (op " << pos << ", counting from 0)" << dendl;
       _dump_transaction<0>(t);
-      ceph_assert(0 == "unexpected error");
+      ceph_abort_msg("unexpected error");
     }
 
     // these operations implicity create the object
@@ -10007,7 +10007,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_CLONERANGE:
-      ceph_assert(0 == "deprecated");
+      ceph_abort_msg("deprecated");
       break;
 
     case Transaction::OP_CLONERANGE2:
@@ -10025,15 +10025,15 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_COLL_ADD:
-      ceph_assert(0 == "not implemented");
+      ceph_abort_msg("not implemented");
       break;
 
     case Transaction::OP_COLL_REMOVE:
-      ceph_assert(0 == "not implemented");
+      ceph_abort_msg("not implemented");
       break;
 
     case Transaction::OP_COLL_MOVE:
-      ceph_assert(0 == "deprecated");
+      ceph_abort_msg("deprecated");
       break;
 
     case Transaction::OP_COLL_MOVE_RENAME:
@@ -10141,7 +10141,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
              << dendl;
         derr << msg << dendl;
         _dump_transaction<0>(t);
-	ceph_assert(0 == "unexpected error");
+	ceph_abort_msg("unexpected error");
       }
     }
   }

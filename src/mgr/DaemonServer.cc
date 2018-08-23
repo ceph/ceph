@@ -1533,7 +1533,7 @@ bool DaemonServer::handle_command(MCommand *m)
 		  }
 		  break;
 		default:
-		  ceph_assert(0 == "actual_op value is not supported");
+		  ceph_abort_msg("actual_op value is not supported");
 	      }
 
 	      parsed_pgs.push_back(std::move(parsed_pg));

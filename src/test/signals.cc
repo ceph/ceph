@@ -70,7 +70,7 @@ void testhandler(int signal)
     usr2 = true;
     break;
   default:
-    ceph_assert(0 == "unexpected signal");
+    ceph_abort_msg("unexpected signal");
   }
 }
 

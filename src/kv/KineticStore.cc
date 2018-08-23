@@ -47,7 +47,7 @@ int KineticStore::_test_init(CephContext *c)
 int KineticStore::open(ostream &out, const vector<ColumnFamily>& cfs)
 {
   if (!cfs.empty()) {
-    ceph_assert(0 == "Not implemented");
+    ceph_abort_msg("Not implemented");
   }
   return do_open(out, false);
 }
@@ -55,7 +55,7 @@ int KineticStore::open(ostream &out, const vector<ColumnFamily>& cfs)
 int KineticStore::create_and_open(ostream &out, const vector<ColumnFamily>& cfs)
 {
   if (!cfs.empty()) {
-    ceph_assert(0 == "Not implemented");
+    ceph_abort_msg("Not implemented");
   }
   return do_open(out, true);
 }

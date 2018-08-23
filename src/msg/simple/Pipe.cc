@@ -1773,14 +1773,14 @@ void Pipe::reader()
 	m->put();
 	if (connection_state->has_feature(CEPH_FEATURE_RECONNECT_SEQ) &&
 	    msgr->cct->_conf->ms_die_on_old_message)
-	  ceph_assert(0 == "old msgs despite reconnect_seq feature");
+	  ceph_abort_msg("old msgs despite reconnect_seq feature");
 	continue;
       }
       if (m->get_seq() > in_seq + 1) {
 	ldout(msgr->cct,0) << "reader missed message?  skipped from seq "
 			   << in_seq << " to " << m->get_seq() << dendl;
 	if (msgr->cct->_conf->ms_die_on_skipped_message)
-	  ceph_assert(0 == "skipped incoming seq");
+	  ceph_abort_msg("skipped incoming seq");
       }
 
       m->set_connection(connection_state.get());

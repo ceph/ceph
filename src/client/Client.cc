@@ -156,7 +156,7 @@ bool Client::CommandHook::call(std::string_view command,
   else if (command == "status")
     m_client->dump_status(f.get());
   else
-    ceph_assert(0 == "bad command registered");
+    ceph_abort_msg("bad command registered");
   m_client->client_lock.Unlock();
   f->close_section();
   f->flush(out);
@@ -1185,7 +1185,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	  else
 	    dir->readdir_cache[dirp->cache_index] = dn;
 	} else {
-	  ceph_assert(0 == "unexpected readdir buffer idx");
+	  ceph_abort_msg("unexpected readdir buffer idx");
 	}
 	dirp->cache_index++;
       }
@@ -1299,7 +1299,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 
       if ((wanted & CEPH_CAP_XATTR_SHARED) &&
 	  !(ist.xattr_version > 0 && ist.xattrbl.length() > 0))
-	  ceph_assert(0 == "MDS reply does not contain xattrs");
+	ceph_abort_msg("MDS reply does not contain xattrs");
     }
 
     in = add_update_inode(&ist, request->sent_stamp, session,
@@ -1580,7 +1580,7 @@ int Client::verify_reply_trace(int r,
 			 &target, perms);
 	} else {
 	  // if the dentry is not linked, just do our best. see #5021.
-	  ceph_assert(0 == "how did this happen?  i want logs!");
+	  ceph_abort_msg("how did this happen?  i want logs!");
 	}
       } else {
 	Inode *in = request->inode();

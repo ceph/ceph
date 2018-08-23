@@ -142,7 +142,7 @@ public:
       const std::string &prefix,   ///< [in] Prefix/CF ==> MUST match some established merge operator
       const std::string &key,      ///< [in] Key to be merged
       const bufferlist  &value     ///< [in] value to be merged into key
-    ) { ceph_assert(0 == "Not implemented"); }
+    ) { ceph_abort_msg("Not implemented"); }
 
     virtual ~TransactionImpl() {}
   };

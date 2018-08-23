@@ -203,7 +203,7 @@ void StrayManager::_purge_stray_purged(
       // is being purged (aside from it were 
 
       derr << "Rogue reference after purge to " << *dn << dendl;
-      ceph_assert(0 == "rogue reference to purging inode");
+      ceph_abort_msg("rogue reference to purging inode");
     }
 
     // kill dentry.

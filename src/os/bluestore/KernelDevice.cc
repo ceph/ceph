@@ -83,7 +83,7 @@ int KernelDevice::open(const string& p)
   dio = true;
   aio = cct->_conf->bdev_aio;
   if (!aio) {
-    ceph_assert(0 == "non-aio not supported");
+    ceph_abort_msg("non-aio not supported");
   }
 
   // disable readahead as it will wreak havoc on our mix of
@@ -430,7 +430,7 @@ void KernelDevice::_aio_thread()
 					 aio, max);
     if (r < 0) {
       derr << __func__ << " got " << cpp_strerror(r) << dendl;
-      ceph_assert(0 == "got unexpected error from io_getevents");
+      ceph_abort_msg("got unexpected error from io_getevents");
     }
     if (r > 0) {
       dout(30) << __func__ << " got " << r << " completed aios" << dendl;
@@ -465,7 +465,7 @@ void KernelDevice::_aio_thread()
         } else if (aio[i]->length != (uint64_t)r) {
           derr << "aio to " << aio[i]->offset << "~" << aio[i]->length
                << " but returned: " << r << dendl;
-          ceph_assert(0 == "unexpected aio error");
+          ceph_abort_msg("unexpected aio error");
         }
 
         dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
@@ -499,7 +499,7 @@ void KernelDevice::_aio_thread()
 		 << " since " << debug_stall_since << ", timeout is "
 		 << cct->_conf->bdev_debug_aio_suicide_timeout
 		 << "s, suicide" << dendl;
-	    ceph_assert(0 == "stalled aio... buggy kernel or bad device?");
+	    ceph_abort_msg("stalled aio... buggy kernel or bad device?");
 	  }
 	}
       }

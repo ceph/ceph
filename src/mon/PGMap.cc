@@ -684,7 +684,7 @@ static float pool_raw_used_rate(const OSDMap &osd_map, int64_t poolid)
   }
   break;
   default:
-    ceph_assert(0 == "unrecognized pool type");
+    ceph_abort_msg("unrecognized pool type");
   }
 }
 

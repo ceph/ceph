@@ -33,7 +33,7 @@ void MDSTableServer::handle_request(const MMDSTableRequest::const_ref &req)
   case TABLESERVER_OP_COMMIT: return handle_commit(req);
   case TABLESERVER_OP_ROLLBACK: return handle_rollback(req);
   case TABLESERVER_OP_NOTIFY_ACK: return handle_notify_ack(req);
-  default: ceph_assert(0 == "unrecognized mds_table_server request op");
+  default: ceph_abort_msg("unrecognized mds_table_server request op");
   }
 }
 

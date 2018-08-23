@@ -308,7 +308,7 @@ class MonitorDBStore
 	compact.pop_front();
       }
     } else {
-      ceph_assert(0 == "failed to write to db");
+      ceph_abort_msg("failed to write to db");
     }
     return r;
   }
@@ -533,7 +533,7 @@ class MonitorDBStore
       generic_dout(0) << "MonitorDBStore::get() error obtaining"
                       << " (" << prefix << ":" << key << "): "
                       << cpp_strerror(err) << dendl;
-      ceph_assert(0 == "error obtaining key");
+      ceph_abort_msg("error obtaining key");
     }
 
     ceph_assert(bl.length());
@@ -600,7 +600,7 @@ class MonitorDBStore
       derr << __func__ << " error initializing "
 	   << kv_type << " db back storage in "
 	   << full_path << dendl;
-      ceph_assert(0 == "MonitorDBStore: error initializing keyvaluedb back storage");
+      ceph_abort_msg("MonitorDBStore: error initializing keyvaluedb back storage");
     }
     db.reset(db_ptr);
 

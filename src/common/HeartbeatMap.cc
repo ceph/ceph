@@ -79,7 +79,7 @@ bool HeartbeatMap::_check(const heartbeat_handle_d *h, const char *who,
 		    << " had suicide timed out after " << h->suicide_grace << dendl;
     pthread_kill(h->thread_id, SIGABRT);
     sleep(1);
-    ceph_assert(0 == "hit suicide timeout");
+    ceph_abort_msg("hit suicide timeout");
   }
   return healthy;
 }

@@ -279,7 +279,7 @@ int KvFlatBtreeAsync::read_index(const string &key, index_data * idata,
     cerr << "\t" << client_name
 	<< "-read_index: getting keys failed with "
 	<< err << std::endl;
-    ceph_assert(0 == client_name + "-read_index: reading index failed");
+    ceph_abort_msg(client_name + "-read_index: reading index failed");
     return err;
   }
   kvmap.insert(dupmap.begin(), dupmap.end());

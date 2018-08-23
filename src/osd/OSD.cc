@@ -524,7 +524,7 @@ void OSDService::agent_stop()
     if (!agent_queue.empty()) {
       set<PGRef>& top = agent_queue.rbegin()->second;
       derr << "agent queue not empty, for example " << (*top.begin())->get_pgid() << dendl;
-      ceph_assert(0 == "agent queue not empty");
+      ceph_abort_msg("agent queue not empty");
     }
 
     agent_stop_flag = true;
@@ -2253,7 +2253,7 @@ will start to track new ops received afterwards.";
     }
     f->close_section();
   } else {
-    ceph_assert(0 == "broken asok registration");
+    ceph_abort_msg("broken asok registration");
   }
   f->flush(ss);
   delete f;
@@ -3850,7 +3850,7 @@ void OSD::load_pgs()
 	  derr << __func__ << ": have pgid " << pgid << " at epoch "
 	       << map_epoch << ", but missing map.  Crashing."
 	       << dendl;
-	  ceph_assert(0 == "Missing map in load_pgs");
+	  ceph_abort_msg("Missing map in load_pgs");
 	}
       }
       pg = _make_pg(pgosdmap, pgid);
@@ -7342,7 +7342,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       inc.decode(p);
       if (o->apply_incremental(inc) < 0) {
 	derr << "ERROR: bad fsid?  i have " << osdmap->get_fsid() << " and inc has " << inc.fsid << dendl;
-	ceph_assert(0 == "bad fsid");
+	ceph_abort_msg("bad fsid");
       }
 
       bufferlist fbl;
@@ -7377,7 +7377,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       continue;
     }
 
-    ceph_assert(0 == "MOSDMap lied about what maps it had?");
+    ceph_abort_msg("MOSDMap lied about what maps it had?");
   }
 
   // even if this map isn't from a mon, we may have satisfied our subscription

@@ -529,7 +529,7 @@ void ImageMap<I>::init(Context *on_finish) {
   if (policy_type == "none" || policy_type == "simple") {
     m_policy.reset(image_map::SimplePolicy::create(m_ioctx));
   } else {
-    ceph_assert(false); // not really needed as such, but catch it.
+    ceph_abort(); // not really needed as such, but catch it.
   }
 
   dout(20) << "mapping policy=" << policy_type << dendl;

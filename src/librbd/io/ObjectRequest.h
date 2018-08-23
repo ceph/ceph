@@ -327,7 +327,7 @@ public:
     case DISCARD_ACTION_ZERO:
       return "zero";
     }
-    ceph_assert(false);
+    ceph_abort();
     return nullptr;
   }
 
@@ -371,7 +371,7 @@ protected:
       wr->zero(this->m_object_off, this->m_object_len);
       break;
     default:
-      ceph_assert(false);
+      ceph_abort();
       break;
     }
   }

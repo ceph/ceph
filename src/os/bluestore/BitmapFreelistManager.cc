@@ -452,7 +452,7 @@ void BitmapFreelistManager::_verify_range(uint64_t offset, uint64_t length,
   }
   if (errors) {
     derr << __func__ << " saw " << errors << " errors" << dendl;
-    ceph_assert(0 == "bitmap freelist errors");
+    ceph_abort_msg("bitmap freelist errors");
   }
 }
 

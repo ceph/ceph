@@ -1392,7 +1392,7 @@ void Journaler::handle_write_error(int r)
     lderr(cct) << __func__ << ": multiple write errors, handler already called"
 	       << dendl;
   } else {
-    ceph_assert(0 == "unhandled write error");
+    ceph_abort_msg("unhandled write error");
   }
 }
 

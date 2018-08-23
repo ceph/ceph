@@ -23,7 +23,7 @@ rocksdb::Status err_to_status(int r)
     return rocksdb::Status::IOError(strerror(r));
   default:
     // FIXME :(
-    ceph_assert(0 == "unrecognized error code");
+    ceph_abort_msg("unrecognized error code");
     return rocksdb::Status::NotSupported(rocksdb::Status::kNone);
   }
 }

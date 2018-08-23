@@ -601,7 +601,7 @@ public:
       b_len -= p->length;
       ++p;
     }
-    ceph_assert(0 == "we should not get here");
+    ceph_abort_msg("we should not get here");
     return false;
   }
 
@@ -743,7 +743,7 @@ public:
     const char *p = csum_data.c_str();
     switch (cs) {
     case 0:
-      ceph_assert(0 == "no csum data, bad index");
+      ceph_abort_msg("no csum data, bad index");
     case 1:
       return reinterpret_cast<const uint8_t*>(p)[i];
     case 2:
@@ -753,7 +753,7 @@ public:
     case 8:
       return reinterpret_cast<const __le64*>(p)[i];
     default:
-      ceph_assert(0 == "unrecognized csum word size");
+      ceph_abort_msg("unrecognized csum word size");
     }
   }
   const char *get_csum_item_ptr(unsigned i) const {

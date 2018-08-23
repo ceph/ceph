@@ -929,7 +929,7 @@ void PG::check_past_interval_bounds() const
       derr << info.pgid << " past_intervals [" << apib
 	   << ") start interval does not contain the required"
 	   << " bound [" << rpib << ") start" << dendl;
-      ceph_assert(0 == "past_interval start interval mismatch");
+      ceph_abort_msg("past_interval start interval mismatch");
     }
     if (apib.second != rpib.second) {
       osd->clog->error() << info.pgid << " past_interal bound [" << apib
@@ -938,7 +938,7 @@ void PG::check_past_interval_bounds() const
       derr << info.pgid << " past_interal bound [" << apib
 	   << ") end does not match required [" << rpib
 	   << ") end" << dendl;
-      ceph_assert(0 == "past_interval end mismatch");
+      ceph_abort_msg("past_interval end mismatch");
     }
   }
 }
@@ -3738,7 +3738,7 @@ void PG::read_state(ObjectStore *store)
   if (info_struct_v < compat_struct_v) {
     derr << "PG needs upgrade, but on-disk data is too old; upgrade to"
 	 << " an older version first." << dendl;
-    ceph_assert(0 == "PG too old to upgrade");
+    ceph_abort_msg("PG too old to upgrade");
   }
 
   last_written_info = info;
@@ -4622,7 +4622,7 @@ void PG::repair_object(
     decode(oi, bliter);
   } catch (...) {
     dout(0) << __func__ << ": Need version of replica, bad object_info_t: " << soid << dendl;
-    ceph_assert(0);
+    ceph_abort();
   }
   if (bad_peer != primary) {
     peer_missing[bad_peer].add(soid, oi.version, eversion_t(), false);
@@ -6608,7 +6608,7 @@ PG::RecoveryState::Crashed::Crashed(my_context ctx)
     NamedState(context< RecoveryMachine >().pg, "Crashed")
 {
   context< RecoveryMachine >().log_enter(state_name);
-  ceph_assert(0 == "we got a bad state machine event");
+  ceph_abort_msg("we got a bad state machine event");
 }
 
 

@@ -632,7 +632,7 @@ public:
   /**
    *  Deliver a single Message. Send it to each Dispatcher
    *  in sequence until one of them handles it.
-   *  If none of our Dispatchers can handle it, ceph_assert(0).
+   *  If none of our Dispatchers can handle it, ceph_abort().
    *
    *  @param m The Message to deliver.
    */

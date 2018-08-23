@@ -324,7 +324,7 @@ void SessionMap::_load_legacy_finish(int r, bufferlist &bl)
   auto blp = bl.cbegin();
   if (r < 0) {
     derr << "_load_finish got " << cpp_strerror(r) << dendl;
-    ceph_assert(0 == "failed to load sessionmap");
+    ceph_abort_msg("failed to load sessionmap");
   }
   dump();
   decode_legacy(blp);  // note: this sets last_cap_renew = now()

@@ -301,7 +301,7 @@ void PyModule::init_ceph_module()
   for (auto [name, type] : classes) {
     type->tp_new = PyType_GenericNew;
     if (PyType_Ready(type) < 0) {
-      ceph_assert(0);
+      ceph_abort();
     }
     Py_INCREF(type);
 

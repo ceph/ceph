@@ -116,7 +116,7 @@ public:
       case RWEXCL:
 	return false;
       default:
-	ceph_assert(0 == "unhandled case");
+	ceph_abort_msg("unhandled case");
 	return false;
       }
     }
@@ -150,7 +150,7 @@ public:
       case RWEXCL:
 	return false;
       default:
-	ceph_assert(0 == "unhandled case");
+	ceph_abort_msg("unhandled case");
 	return false;
       }
     }
@@ -168,7 +168,7 @@ public:
       case RWEXCL:
 	return false;
       default:
-	ceph_assert(0 == "unhandled case");
+	ceph_abort_msg("unhandled case");
 	return false;
       }
     }
@@ -230,7 +230,7 @@ public:
     case RWState::RWEXCL:
       return get_excl(op);
     default:
-      ceph_assert(0 == "invalid lock type");
+      ceph_abort_msg("invalid lock type");
       return true;
     }
   }
@@ -277,7 +277,7 @@ public:
       rwstate.put_excl(to_wake);
       break;
     default:
-      ceph_assert(0 == "invalid lock type");
+      ceph_abort_msg("invalid lock type");
     }
     if (rwstate.empty() && rwstate.recovery_read_marker) {
       rwstate.recovery_read_marker = false;

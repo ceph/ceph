@@ -93,7 +93,7 @@ static void log_subop_stats(
       logger->inc(l_osd_sop_push_inb, inb);
       logger->tinc(l_osd_sop_push_lat, latency);
     } else
-      ceph_assert("no support subop" == 0);
+      ceph_abort_msg("no support subop");
   } else {
     logger->tinc(l_osd_sop_pull_lat, latency);
   }
@@ -261,7 +261,7 @@ void ReplicatedBackend::objects_read_async(
   Context *on_complete,
   bool fast_read)
 {
-  ceph_assert(0 == "async read is not used by replica pool");
+  ceph_abort_msg("async read is not used by replica pool");
 }
 
 class C_OSD_OnOpCommit : public Context {
