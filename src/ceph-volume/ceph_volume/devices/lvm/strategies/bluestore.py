@@ -16,8 +16,8 @@ class SingleType(object):
     def __init__(self, devices, args):
         self.args = args
         self.devices = devices
-        self.hdds = [device for device in devices if device['rotational'] == '1']
-        self.ssds = [device for device in devices if device['rotational'] == '0']
+        self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
+        self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
         self.computed = {'osds': [], 'vgs': []}
         self.validate()
         self.compute()
@@ -59,22 +59,22 @@ class SingleType(object):
         osds = self.computed['osds']
         vgs = self.computed['vgs']
         for device in self.hdds:
-            vgs.append({'devices': [device['path']], 'parts': 1})
+            vgs.append({'devices': [device.abspath], 'parts': 1})
             osd = {'data': {}, 'block.db': {}}
-            osd['data']['path'] = device['path']
-            osd['data']['size'] = device['size']
+            osd['data']['path'] = device.abspath
+            osd['data']['size'] = device.sys_api['size']
             osd['data']['parts'] = 1
             osd['data']['percentage'] = 100
-            osd['data']['human_readable_size'] = str(disk.Size(b=device['size']))
+            osd['data']['human_readable_size'] = str(disk.Size(b=device.sys_api['size']))
             osds.append(osd)
 
         for device in self.ssds:
             # TODO: creates 2 OSDs per device, make this configurable (env var?)
-            extents = lvm.sizing(device['size'], parts=2)
-            vgs.append({'devices': [device['path']], 'parts': 2})
+            extents = lvm.sizing(device.sys_api['size'], parts=2)
+            vgs.append({'devices': [device.abspath], 'parts': 2})
             for ssd in range(2):
                 osd = {'data': {}, 'block.db': {}}
-                osd['data']['path'] = device['path']
+                osd['data']['path'] = device.abspath
                 osd['data']['size'] = extents['sizes']
                 osd['data']['parts'] = extents['parts']
                 osd['data']['percentage'] = 50
@@ -118,8 +118,8 @@ class MixedType(object):
     def __init__(self, devices, args):
         self.args = args
         self.devices = devices
-        self.hdds = [device for device in devices if device['rotational'] == '1']
-        self.ssds = [device for device in devices if device['rotational'] == '0']
+        self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
+        self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
         self.computed = {'osds': [], 'vgs': []}
         self.block_db_size = None
         # For every HDD we get 1 block.db
@@ -144,7 +144,7 @@ class MixedType(object):
             total_lv_size=str(self.total_ssd_size),
             total_lvs=vg_extents['parts'],
             block_lv_size=db_size,
-            block_db_devices=', '.join([ssd['path'] for ssd in self.ssds]),
+            block_db_devices=', '.join([ssd.abspath for ssd in self.ssds]),
             lv_size=str(disk.Size(b=(vg_extents['sizes']))),
             total_osds=len(self.hdds)
         )
@@ -170,10 +170,10 @@ class MixedType(object):
         osds = self.computed['osds']
         for device in self.hdds:
             osd = {'data': {}, 'block.db': {}}
-            osd['data']['path'] = device['path']
-            osd['data']['size'] = device['size']
+            osd['data']['path'] = device.abspath
+            osd['data']['size'] = device.sys_api['size']
             osd['data']['percentage'] = 100
-            osd['data']['human_readable_size'] = str(disk.Size(b=(device['size'])))
+            osd['data']['human_readable_size'] = str(disk.Size(b=(device.sys_api['size'])))
             osd['block.db']['path'] = None
             osd['block.db']['size'] = int(self.block_db_size.b)
             osd['block.db']['human_readable_size'] = str(self.block_db_size)
@@ -236,7 +236,7 @@ class MixedType(object):
         # the minimum alllowed for block.db
         self.total_ssd_size = disk.Size(b=0)
         for ssd in self.ssds:
-            self.total_ssd_size += disk.Size(b=ssd['size'])
+            self.total_ssd_size += disk.Size(b=ssd.sys_api['size'])
 
         self.block_db_size = self.total_ssd_size / self.db_lvs
         self.vg_extents = lvm.sizing(self.total_ssd_size.b, parts=self.db_lvs)
