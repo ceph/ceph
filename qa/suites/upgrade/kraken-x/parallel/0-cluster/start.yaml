@@ -27,8 +27,6 @@ overrides:
     - wrongly marked
     - \(POOL_APP_NOT_ENABLED\)
     - overall HEALTH_
-    - \(REQUEST_SLOW\)
-    - slow request
     conf:
       global:
         enable experimental unrecoverable data corrupting features: "*"
