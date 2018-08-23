@@ -314,7 +314,7 @@ class RGWBucket
 public:
   RGWBucket() : store(NULL), handle(NULL), failure(false) {}
   int init(RGWRados *storage, RGWBucketAdminOpState& op_state,
-              std::string *err_msg = NULL);
+              std::string *err_msg = NULL, map<string, bufferlist> *pattrs = NULL);
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
               RGWFormatterFlusher& flusher, std::string *err_msg = NULL);
@@ -329,7 +329,8 @@ public:
           std::string *err_msg = NULL);
 
   int remove(RGWBucketAdminOpState& op_state, bool bypass_gc = false, bool keep_index_consistent = true, std::string *err_msg = NULL);
-  int link(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
+  int link(RGWBucketAdminOpState& op_state, map<string, bufferlist>& attrs,
+	std::string *err_msg = NULL);
   int unlink(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int set_quota(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
 
