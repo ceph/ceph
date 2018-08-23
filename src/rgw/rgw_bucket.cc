@@ -1766,7 +1766,7 @@ int RGWDataChangesLog::renew_entries()
 
 void RGWDataChangesLog::_get_change(const rgw_bucket_shard& bs, ChangeStatusPtr& status)
 {
-  assert(lock.is_locked());
+  ceph_assert(lock.is_locked());
   if (!changes.find(bs, status)) {
     status = ChangeStatusPtr(new ChangeStatus);
     changes.add(bs, status);
@@ -1830,7 +1830,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
   if (status->pending) {
     cond = status->cond;
 
-    assert(cond);
+    ceph_assert(cond);
 
     status->cond->get();
     status->lock->Unlock();

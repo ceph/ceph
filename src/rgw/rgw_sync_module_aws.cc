@@ -672,7 +672,7 @@ struct AWSSyncInstanceEnv {
 
   void get_profile(const rgw_bucket& bucket, std::shared_ptr<AWSSyncConfig_Profile> *ptarget) {
     conf.find_profile(bucket, ptarget);
-    assert(ptarget);
+    ceph_assert(ptarget);
   }
 };
 

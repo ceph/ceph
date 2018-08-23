@@ -1538,7 +1538,7 @@ int RGWPeriod::update_sync_status(const RGWPeriod &current_period,
   const auto current_epoch = current_period.get_realm_epoch();
   if (current_epoch != status.sync_info.realm_epoch) {
     // no sync status markers for the current period
-    assert(current_epoch > status.sync_info.realm_epoch);
+    ceph_assert(current_epoch > status.sync_info.realm_epoch);
     const int behind = current_epoch - status.sync_info.realm_epoch;
     if (!force_if_stale && current_epoch > 1) {
       error_stream << "ERROR: This zone is " << behind << " period(s) behind "
@@ -3387,7 +3387,7 @@ void RGWRados::wakeup_data_sync_shards(const string& source_zone, map<int, set<s
   }
 
   RGWDataSyncProcessorThread *thread = iter->second;
-  assert(thread);
+  ceph_assert(thread);
   thread->wakeup_sync_shards(shard_ids);
 }
 
@@ -6441,7 +6441,7 @@ int RGWRados::create_pools(vector<rgw_pool>& pools, vector<int>& retcodes)
   vector<librados::PoolAsyncCompletion *>::iterator citer;
 
   bool error = false;
-  assert(rets.size() == completions.size());
+  ceph_assert(rets.size() == completions.size());
   for (riter = rets.begin(), citer = completions.begin(); riter != rets.end(); ++riter, ++citer) {
     int r = *riter;
     PoolAsyncCompletion *c = *citer;
@@ -6482,7 +6482,7 @@ int RGWRados::create_pools(vector<rgw_pool>& pools, vector<int>& retcodes)
     completions.push_back(c);
     int ret = io_ctx.application_enable_async(pg_pool_t::APPLICATION_NAME_RGW,
                                               false, c);
-    assert(ret == 0);
+    ceph_assert(ret == 0);
   }
 
   retcodes.clear();
@@ -7553,7 +7553,7 @@ class RGWPutObj_Buffer : public RGWPutObj_Filter {
  public:
   RGWPutObj_Buffer(RGWPutObjDataProcessor* next, unsigned buffer_size)
     : RGWPutObj_Filter(next), buffer_size(buffer_size) {
-    assert(isp2(buffer_size)); // must be power of 2
+    ceph_assert(isp2(buffer_size)); // must be power of 2
   }
 
   int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj,
@@ -7661,7 +7661,7 @@ public:
       }
     }
 
-    assert(uint64_t(ofs) >= extra_data_len);
+    ceph_assert(uint64_t(ofs) >= extra_data_len);
 
     lofs = ofs - extra_data_len;
 
@@ -9473,7 +9473,7 @@ static bool has_olh_tag(map<string, bufferlist>& attrs)
 int RGWRados::get_olh_target_state(RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                                    RGWObjState *olh_state, RGWObjState **target_state)
 {
-  assert(olh_state->is_olh);
+  ceph_assert(olh_state->is_olh);
 
   rgw_obj target;
   int r = RGWRados::follow_olh(bucket_info, obj_ctx, olh_state, obj, &target); /* might return -EAGAIN */
@@ -10788,7 +10788,7 @@ struct get_obj_data : public RefCountedObject {
     const auto& io_iter = io_map.insert(
       map<off_t, get_obj_io>::value_type(ofs, get_obj_io()));
 
-    assert(io_iter.second); // assert new insertion
+    ceph_assert(io_iter.second); // assert new insertion
 
     get_obj_io& io = (io_iter.first)->second;
     *pbl = &io.bl;
@@ -11197,7 +11197,7 @@ int RGWRados::olh_init_modification_impl(const RGWBucketInfo& bucket_info, RGWOb
 {
   ObjectWriteOperation op;
 
-  assert(olh_obj.key.instance.empty());
+  ceph_assert(olh_obj.key.instance.empty());
 
   bool has_tag = (state.exists && has_olh_tag(state.attrset));
 
@@ -11942,7 +11942,7 @@ int RGWRados::follow_olh(const RGWBucketInfo& bucket_info, RGWObjectCtx& obj_ctx
   }
 
   map<string, bufferlist>::iterator iter = state->attrset.find(RGW_ATTR_OLH_INFO);
-  assert(iter != state->attrset.end());
+  ceph_assert(iter != state->attrset.end());
   RGWOLHInfo olh;
   try {
     auto biter = iter->second.cbegin();
@@ -12019,7 +12019,7 @@ int RGWRados::get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, string 
     return r;
   }
 
-  assert(headers.size() == bucket_instance_ids.size());
+  ceph_assert(headers.size() == bucket_instance_ids.size());
 
   auto iter = headers.begin();
   map<int, string>::iterator viter = bucket_instance_ids.begin();
@@ -12058,7 +12058,7 @@ int RGWRados::get_bi_log_status(RGWBucketInfo& bucket_info, int shard_id,
   if (r < 0)
     return r;
 
-  assert(headers.size() == bucket_instance_ids.size());
+  ceph_assert(headers.size() == bucket_instance_ids.size());
 
   auto iter = headers.begin();
   map<int, string>::iterator viter = bucket_instance_ids.begin();
@@ -12116,7 +12116,7 @@ int RGWRados::get_bucket_stats_async(RGWBucketInfo& bucket_info, int shard_id, R
 {
   int num_aio = 0;
   RGWGetBucketStatsContext *get_ctx = new RGWGetBucketStatsContext(ctx, bucket_info.num_shards ? : 1);
-  assert(get_ctx);
+  ceph_assert(get_ctx);
   int r = cls_bucket_head_async(bucket_info, shard_id, get_ctx, &num_aio);
   if (r < 0) {
     ctx->put();
@@ -13509,7 +13509,7 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
       return r;
 
     const std::string& oid = oids[current_shard];
-    assert(list_results.find(current_shard) != list_results.end());
+    ceph_assert(list_results.find(current_shard) != list_results.end());
     auto& result = list_results[current_shard];
     for (auto& entry : result.dir.m) {
       rgw_bucket_dir_entry& dirent = entry.second;

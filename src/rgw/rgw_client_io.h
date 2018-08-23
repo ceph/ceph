@@ -354,20 +354,20 @@ public:
 /* Type conversions to work around lack of req_state type hierarchy matching
  * (e.g.) REST backends (may be replaced w/dynamic typed req_state). */
 static inline rgw::io::RestfulClient* RESTFUL_IO(struct req_state* s) {
-  assert(dynamic_cast<rgw::io::RestfulClient*>(s->cio) != nullptr);
+  ceph_assert(dynamic_cast<rgw::io::RestfulClient*>(s->cio) != nullptr);
 
   return static_cast<rgw::io::RestfulClient*>(s->cio);
 }
 
 static inline rgw::io::Accounter* ACCOUNTING_IO(struct req_state* s) {
   auto ptr = dynamic_cast<rgw::io::Accounter*>(s->cio);
-  assert(ptr != nullptr);
+  ceph_assert(ptr != nullptr);
 
   return ptr;
 }
 
 static inline RGWRestfulIO* AWS_AUTHv4_IO(const req_state* const s) {
-  assert(dynamic_cast<RGWRestfulIO*>(s->cio) != nullptr);
+  ceph_assert(dynamic_cast<RGWRestfulIO*>(s->cio) != nullptr);
 
   return static_cast<RGWRestfulIO*>(s->cio);
 }

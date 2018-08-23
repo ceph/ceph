@@ -303,7 +303,7 @@ Cursor RGWPeriodHistory::Impl::insert_locked(RGWPeriod&& period)
 RGWPeriodHistory::Impl::Set::iterator
 RGWPeriodHistory::Impl::merge(Set::iterator dst, Set::iterator src)
 {
-  assert(dst->get_newest_epoch() + 1 == src->get_oldest_epoch());
+  ceph_assert(dst->get_newest_epoch() + 1 == src->get_oldest_epoch());
 
   // always merge into current_history
   if (src == current_history) {
