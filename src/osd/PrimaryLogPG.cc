@@ -6929,6 +6929,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    oi.manifest.chunk_map[src_offset].flags |=
 	      chunk_info_t::FLAG_HAS_REFERENCE;
 	  }
+	  if (need_reference && pool.info.get_fingerprint_type() != pg_pool_t::TYPE_FINGERPRINT_NONE) {
+	    oi.manifest.chunk_map[src_offset].flags |= chunk_info_t::FLAG_HAS_FINGERPRINT;
+	  }
 	  ctx->modify = true;
 
 	  dout(10) << "set-chunked oid:" << oi.soid << " user_version: " << oi.user_version 
