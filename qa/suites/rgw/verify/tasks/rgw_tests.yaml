@@ -8,7 +8,7 @@ tasks:
 - openssl_keys:
 - rgw:
     client.0:
-      valgrind: [--tool=memcheck]
+      valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
 - s3tests:
     client.0:
       force-branch: ceph-mimic
