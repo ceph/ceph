@@ -79,7 +79,7 @@ inline void decode_raw(T& t, bufferlist::const_iterator &p)
 
 #define WRITE_RAW_ENCODER(type)						\
   inline void encode(const type &v, ::ceph::bufferlist& bl, uint64_t features=0) { ::ceph::encode_raw(v, bl); } \
-  inline void decode(type &v, ::ceph::bufferlist::const_iterator& p) { __ASSERT_FUNCTION ::ceph::decode_raw(v, p); }
+  inline void decode(type &v, ::ceph::bufferlist::const_iterator& p) { ::ceph::decode_raw(v, p); }
 
 WRITE_RAW_ENCODER(__u8)
 #ifndef _CHAR_IS_SIGNED
