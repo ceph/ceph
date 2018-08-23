@@ -96,3 +96,17 @@ class TestExcludeGroupOptions(object):
         )
         stdout, stderr = capsys.readouterr()
         assert 'Cannot use --filestore (filestore) with --bluestore (bluestore)' in stdout
+
+
+class TestValidDevice(object):
+
+    def setup(self):
+        self.validator = arg_validators.ValidDevice()
+
+    def test_path_is_valid(self, fake_call):
+        result = self.validator('/')
+        assert result.abspath == '/'
+
+    def test_path_is_invalid(self, fake_call):
+        with pytest.raises(argparse.ArgumentError):
+            self.validator('/device/does/not/exist')
