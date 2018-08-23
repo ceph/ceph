@@ -4297,9 +4297,9 @@ void BlueStore::_init_logger()
 	    "Number of buffers in cache");
   b.add_u64(l_bluestore_buffer_bytes, "bluestore_buffer_bytes",
 	    "Number of buffer bytes in cache", NULL, 0, unit_t(UNIT_BYTES));
-  b.add_u64(l_bluestore_buffer_hit_bytes, "bluestore_buffer_hit_bytes",
+  b.add_u64_counter(l_bluestore_buffer_hit_bytes, "bluestore_buffer_hit_bytes",
 	    "Sum for bytes of read hit in the cache", NULL, 0, unit_t(UNIT_BYTES));
-  b.add_u64(l_bluestore_buffer_miss_bytes, "bluestore_buffer_miss_bytes",
+  b.add_u64_counter(l_bluestore_buffer_miss_bytes, "bluestore_buffer_miss_bytes",
 	    "Sum for bytes of read missed in the cache", NULL, 0, unit_t(UNIT_BYTES));
 
   b.add_u64_counter(l_bluestore_write_big, "bluestore_write_big",
