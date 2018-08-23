@@ -233,15 +233,13 @@ int open_source_image(librados::IoCtx& io_ctx, const std::string &image_name,
         return r;
       }
 
+      // TODO support namespaces
       if (io_ctx.get_id() == migration_spec.pool_id) {
         src_io_ctx.dup(io_ctx);
       } else {
-        r = librados::Rados(io_ctx).ioctx_create2(migration_spec.pool_id,
-                                                  src_io_ctx);
+        r = util::create_ioctx(io_ctx, "source image", migration_spec.pool_id,
+                               {}, &src_io_ctx);
         if (r < 0) {
-          lderr(cct) << "error accessing source pool "
-                     << migration_spec.pool_id << ": " << cpp_strerror(r)
-                     << dendl;
           return r;
         }
       }
@@ -306,14 +304,13 @@ int open_source_image(librados::IoCtx& io_ctx, const std::string &image_name,
     ldout(cct, 20) << "migration spec: " << migration_spec << dendl;
   }
 
+  // TODO support namespaces
   if (image_ctx->md_ctx.get_id() == migration_spec.pool_id) {
     dst_io_ctx->dup(io_ctx);
   } else {
-    r = librados::Rados(image_ctx->md_ctx).ioctx_create2(migration_spec.pool_id,
-                                                         *dst_io_ctx);
+    r = util::create_ioctx(image_ctx->md_ctx, "source image",
+                           migration_spec.pool_id, {}, dst_io_ctx);
     if (r < 0) {
-      lderr(cct) << "error accessing destination pool "
-                 << migration_spec.pool_id << ": " << cpp_strerror(r) << dendl;
       return r;
     }
   }
@@ -1151,7 +1148,6 @@ int Migration<I>::create_dst_image() {
 
   int r;
   C_SaferCond on_create;
-  librados::Rados rados(m_src_image_ctx->md_ctx);
   librados::IoCtx parent_io_ctx;
   if (parent_spec.pool_id == -1) {
     auto *req = image::CreateRequest<I>::create(
@@ -1159,10 +1155,10 @@ int Migration<I>::create_dst_image() {
       "", "", true /* skip_mirror_enable */, op_work_queue, &on_create);
     req->send();
   } else {
-    r = rados.ioctx_create2(parent_spec.pool_id, parent_io_ctx);
+    r = util::create_ioctx(m_src_image_ctx->md_ctx, "destination image",
+                           parent_spec.pool_id, parent_spec.pool_namespace,
+                           &parent_io_ctx);
     if (r < 0) {
-      lderr(m_cct) << "failed to open source parent pool: "
-                   << cpp_strerror(r) << dendl;
       return r;
     }
 
@@ -1265,12 +1261,10 @@ int Migration<I>::remove_group(I *image_ctx, group_info_t *group_info) {
 
   ldout(m_cct, 10) << dendl;
 
-  librados::Rados rados(image_ctx->md_ctx);
   IoCtx group_ioctx;
-  r = rados.ioctx_create2(group_info->pool, group_ioctx);
+  r = util::create_ioctx(image_ctx->md_ctx, "group", group_info->pool, {},
+                         &group_ioctx);
   if (r < 0) {
-    lderr(m_cct) << "failed to access pool by ID " << group_info->pool << ": "
-                 << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -1295,12 +1289,10 @@ int Migration<I>::add_group(I *image_ctx, group_info_t &group_info) {
 
   ldout(m_cct, 10) << dendl;
 
-  librados::Rados rados(image_ctx->md_ctx);
   IoCtx group_ioctx;
-  int r = rados.ioctx_create2(group_info.pool, group_ioctx);
+  int r = util::create_ioctx(image_ctx->md_ctx, "group", group_info.pool, {},
+                             &group_ioctx);
   if (r < 0) {
-    lderr(m_cct) << "failed to access pool by ID " << group_info.pool << ": "
-                 << cpp_strerror(r) << dendl;
     return r;
   }
 

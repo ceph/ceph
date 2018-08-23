@@ -87,17 +87,13 @@ public:
       return 1;
     }
 
-    r = rados.ioctx_create2(m_pool.first, m_pool_ioctx);
+    r = util::create_ioctx(image_ctx.md_ctx, "child image", m_pool.first, {},
+                           &m_pool_ioctx);
     if (r == -ENOENT) {
-      ldout(cct, 1) << "pool '" << m_pool.second << "' no longer exists"
-                    << dendl;
       return 1;
     } else if (r < 0) {
-      lderr(cct) << "can't create ioctx for pool '" << m_pool.second
-                 << "'" << dendl;
       return r;
     }
-    m_pool_ioctx.set_namespace(m_pspec.pool_namespace);
 
     librados::ObjectReadOperation op;
     cls_client::get_children_start(&op, m_pspec);
