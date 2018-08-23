@@ -397,7 +397,7 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
     ceph_assert(0 == "assert");
   }
   if (command == "abort" && _conf->debug_asok_assert_abort) {
-    abort();
+    ceph_abort();
   }
   if (command == "perfcounters_dump" || command == "1" ||
       command == "perf dump") {

@@ -481,7 +481,7 @@ namespace rgw {
       }
       goto out;
       default:
-	abort();
+	ceph_abort();
       } /* switch */
     } /* ix */
   unlock:

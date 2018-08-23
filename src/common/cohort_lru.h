@@ -256,7 +256,7 @@ namespace cohort {
 	  lane.q.push_back(*o);
 	  break;
 	default:
-	  abort();
+	  ceph_abort();
 	  break;
 	}
 	if (flags & FLAG_INITIAL)
