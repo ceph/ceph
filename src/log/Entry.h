@@ -4,103 +4,110 @@
 #ifndef __CEPH_LOG_ENTRY_H
 #define __CEPH_LOG_ENTRY_H
 
-#include "common/CachedPrebufferedStreambuf.h"
-#include <pthread.h>
-#include <string>
 #include "log/LogClock.h"
 
+#include "common/StackStringStream.h"
+
+#include "boost/container/small_vector.hpp"
+
+#include <pthread.h>
+
+#include <string_view>
 
 namespace ceph {
 namespace logging {
 
-struct Entry {
-  log_time m_stamp;
+class Entry {
+public:
+  using time = log_time;
+
+  Entry() = delete;
+  Entry(short pr, short sub) :
+    m_stamp(clock().now()),
+    m_thread(pthread_self()),
+    m_prio(pr),
+    m_subsys(sub)
+  {}
+  Entry(const Entry &) = default;
+  Entry& operator=(const Entry &) = default;
+  Entry(Entry &&e) = default;
+  Entry& operator=(Entry &&e) = default;
+  virtual ~Entry() = default;
+
+  virtual std::string_view strv() const = 0;
+  virtual std::size_t size() const = 0;
+
+  time m_stamp;
   pthread_t m_thread;
   short m_prio, m_subsys;
-  Entry *m_next;
 
-  size_t m_buf_len;
-  size_t* m_exp_len;
-  char m_static_buf[1];
+private:
+  static log_clock& clock() {
+    static log_clock clock;
+    return clock;
+  }
+};
 
-  prebuffered_data m_data;
-  CachedPrebufferedStreambuf* m_streambuf;
+/* This should never be moved to the heap! Only allocate this on the stack. See
+ * CachedStackStringStream for rationale.
+ */
+class MutableEntry : public Entry {
+public:
+  MutableEntry() = delete;
+  MutableEntry(short pr, short sub) : Entry(pr, sub) {}
+  MutableEntry(const MutableEntry&) = delete;
+  MutableEntry& operator=(const MutableEntry&) = delete;
+  MutableEntry(MutableEntry&&) = delete;
+  MutableEntry& operator=(MutableEntry&&) = delete;
+  ~MutableEntry() override = default;
 
-  Entry()
-    : Entry(log_time{}, 0, 0, 0, nullptr)
-  {}
-  Entry(log_time s, pthread_t t, short pr, short sub,
-	const char *msg = NULL)
-    : Entry(s, t, pr, sub, m_static_buf, sizeof(m_static_buf), nullptr,
-	    msg)
-  {}
-  Entry(log_time s, pthread_t t, short pr, short sub, char* buf, size_t buf_len, size_t* exp_len,
-	const char *msg = NULL)
-    : m_stamp(s), m_thread(t), m_prio(pr), m_subsys(sub),
-      m_next(NULL),
-      m_buf_len(buf_len),
-      m_exp_len(exp_len),
-      m_data(buf, buf_len),
-      m_streambuf(CachedPrebufferedStreambuf::create(&m_data))
-  {
-    if (msg) {
-      get_ostream() << msg;
-    }
+  std::ostream& get_ostream() {
+    return cos.get_stream();
+  }
+
+  std::string_view strv() const override {
+    return cos.get_stream().strv();
+  }
+  std::size_t size() const override {
+    return cos.get_stream().strv().size();
   }
 
 private:
-  ~Entry() = default;
+  CachedStackStringStream cos;
+};
 
+class ConcreteEntry : public Entry {
 public:
-  std::ostream& get_ostream() {
-    return m_streambuf->get_ostream();
+  ConcreteEntry() = delete;
+  ConcreteEntry(const Entry& e) : Entry(e) {
+    auto strv = e.strv();
+    str.reserve(strv.size());
+    str.insert(str.end(), strv.begin(), strv.end());
+  }
+  ConcreteEntry& operator=(const Entry& e) {
+    Entry::operator=(e);
+    auto strv = e.strv();
+    str.reserve(strv.size());
+    str.assign(strv.begin(), strv.end());
+    return *this;
+  }
+  ConcreteEntry(ConcreteEntry&& e) : Entry(e), str(std::move(e.str)) {}
+  ConcreteEntry& operator=(ConcreteEntry&& e) {
+    Entry::operator=(e);
+    str = std::move(e.str);
+    return *this;
+  }
+  ~ConcreteEntry() override = default;
+
+  std::string_view strv() const override {
+    return std::string_view(str.data(), str.size());
+  }
+  std::size_t size() const override {
+    return str.size();
   }
 
-  // function improves estimate for expected size of message
-  void hint_size() {
-    if (m_exp_len != NULL) {
-      size_t size = m_data.size();
-      if (size > __atomic_load_n(m_exp_len, __ATOMIC_RELAXED)) {
-        //log larger then expected, just expand
-        __atomic_store_n(m_exp_len, size + 10, __ATOMIC_RELAXED);
-      }
-      else {
-        //asymptotically adapt expected size to message size
-        __atomic_store_n(m_exp_len, (size + 10 + m_buf_len*31) / 32, __ATOMIC_RELAXED);
-      }
-    }
-  }
-
-  void set_str(const std::string &s) {
-    get_ostream() << s;
-  }
-
-  std::string get_str() const {
-    return m_data.get_str();
-  }
-
-  // returns current size of content
-  size_t size() const {
-    return m_data.size();
-  }
-
-  // extracts up to avail chars of content
-  int snprintf(char* dst, size_t avail) const {
-    return m_data.snprintf(dst, avail);
-  }
-
-  void finish() {
-    m_streambuf->finish();
-  }
-
-  void destroy() {
-    if (m_exp_len != NULL) {
-      this->~Entry();
-      ::operator delete(this);
-    } else {
-      delete(this);
-    }
-  }
+private:
+  boost::container::small_vector<char, 4096> str;
 };
 
 }
