@@ -259,7 +259,7 @@ bool SnapServer::_notify_prep(version_t tid)
   encode(pending_destroy, bl);
   encode(last_created, bl);
   encode(last_destroyed, bl);
-  assert(version == tid);
+  ceph_assert(version == tid);
 
   for (auto &p : active_clients) {
     auto m = MMDSTableRequest::create(table, TABLESERVER_OP_NOTIFY_PREP, 0, version);
@@ -283,7 +283,7 @@ void SnapServer::handle_query(const MMDSTableRequest::const_ref &req)
     case 'F': // full
       version_t have_version;
       decode(have_version, p);
-      assert(have_version <= version);
+      ceph_assert(have_version <= version);
       if (have_version == version) {
 	char type = 'U';
 	encode(type, reply->bl);

@@ -384,7 +384,7 @@ void MDSRankDispatcher::shutdown()
   // It should never be possible for shutdown to get called twice, because
   // anyone picking up mds_lock checks if stopping is true and drops
   // out if it is.
-  assert(stopping == false);
+  ceph_assert(stopping == false);
   stopping = true;
 
   dout(1) << __func__ << ": shutting down rank " << whoami << dendl;
@@ -443,8 +443,8 @@ class C_MDS_VoidFn : public MDSInternalContext
   C_MDS_VoidFn(MDSRank *mds_, fn_ptr fn_)
     : MDSInternalContext(mds_), fn(fn_)
   {
-    assert(mds_);
-    assert(fn_);
+    ceph_assert(mds_);
+    ceph_assert(fn_);
   }
 
   void finish(int r) override
@@ -494,8 +494,8 @@ void MDSRank::respawn()
 
 void MDSRank::damaged()
 {
-  assert(whoami != MDS_RANK_NONE);
-  assert(mds_lock.is_locked_by_me());
+  ceph_assert(whoami != MDS_RANK_NONE);
+  ceph_assert(mds_lock.is_locked_by_me());
 
   beacon.set_want_state(*mdsmap, MDSMap::STATE_DAMAGED);
   monc->flush_log();  // Flush any clog error from before we were called
@@ -558,8 +558,8 @@ void *MDSRank::ProgressThread::entry()
 
 void MDSRank::ProgressThread::shutdown()
 {
-  assert(mds->mds_lock.is_locked_by_me());
-  assert(mds->stopping);
+  ceph_assert(mds->mds_lock.is_locked_by_me());
+  ceph_assert(mds->stopping);
 
   if (am_self()) {
     // Stopping is set, we will fall out of our main loop naturally
@@ -809,7 +809,7 @@ bool MDSRank::handle_deferrable_message(const Message::const_ref &m)
  */
 void MDSRank::_advance_queues()
 {
-  assert(mds_lock.is_locked_by_me());
+  ceph_assert(mds_lock.is_locked_by_me());
 
   if (!finished_queue.empty()) {
     dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
@@ -853,7 +853,7 @@ void MDSRank::heartbeat_reset()
   // after a call to suicide() completes, in which case MDSRank::hb
   // has been freed and we are a no-op.
   if (!hb) {
-      assert(stopping);
+      ceph_assert(stopping);
       return;
   }
 
@@ -905,7 +905,7 @@ Session *MDSRank::get_session(const Message::const_ref &m)
 		 << dendl;
         imported_session->info.auth_name = session->info.auth_name;
         //assert(session->info.auth_name == imported_session->info.auth_name);
-        assert(session->info.inst == imported_session->info.inst);
+        ceph_assert(session->info.inst == imported_session->info.inst);
         imported_session->set_connection(session->get_connection().get());
         // send out any queued messages
         while (!session->preopen_out_queue.empty()) {
@@ -913,7 +913,7 @@ Session *MDSRank::get_session(const Message::const_ref &m)
           session->preopen_out_queue.pop_front();
         }
         imported_session->auth_caps = session->auth_caps;
-        assert(session->get_nref() == 1);
+        ceph_assert(session->get_nref() == 1);
         imported_session->get_connection()->set_priv(imported_session->get());
         session = imported_session;
       }
@@ -926,7 +926,7 @@ Session *MDSRank::get_session(const Message::const_ref &m)
 
 void MDSRank::send_message(const Message::ref& m, const ConnectionRef& c)
 {
-  assert(c);
+  ceph_assert(c);
   c->send_message2(m);
 }
 
@@ -951,7 +951,7 @@ void MDSRank::send_message_mds(const Message::ref& m, mds_rank_t mds)
 
 void MDSRank::forward_message_mds(const MClientRequest::const_ref& m, mds_rank_t mds)
 {
-  assert(mds != whoami);
+  ceph_assert(mds != whoami);
 
   /*
    * don't actually forward if non-idempotent!
@@ -1073,7 +1073,7 @@ void MDSRank::boot_start(BootStep step, int r)
       clog->error() << "Error loading MDS rank " << whoami << ": "
         << cpp_strerror(r);
       damaged();
-      assert(r == 0);  // Unreachable, damaged() calls respawn()
+      ceph_assert(r == 0);  // Unreachable, damaged() calls respawn()
     } else {
       // Completely unexpected error, give up and die
       dout(0) << "boot_start encountered an error, failing" << dendl;
@@ -1082,7 +1082,7 @@ void MDSRank::boot_start(BootStep step, int r)
     }
   }
 
-  assert(is_starting() || is_any_replay());
+  ceph_assert(is_starting() || is_any_replay());
 
   switch(step) {
     case MDS_BOOT_INITIAL:
@@ -1166,7 +1166,7 @@ void MDSRank::boot_start(BootStep step, int r)
       }
       break;
     case MDS_BOOT_REPLAY_DONE:
-      assert(is_any_replay());
+      ceph_assert(is_any_replay());
 
       // Sessiontable and inotable should be in sync after replay, validate
       // that they are consistent.
@@ -1179,7 +1179,7 @@ void MDSRank::boot_start(BootStep step, int r)
 
 void MDSRank::validate_sessions()
 {
-  assert(mds_lock.is_locked_by_me());
+  ceph_assert(mds_lock.is_locked_by_me());
   bool valid = true;
 
   // Identify any sessions which have state inconsistent with other,
@@ -1198,14 +1198,14 @@ void MDSRank::validate_sessions()
 
   if (!valid) {
     damaged();
-    assert(valid);
+    ceph_assert(valid);
   }
 }
 
 void MDSRank::starting_done()
 {
   dout(3) << "starting_done" << dendl;
-  assert(is_starting());
+  ceph_assert(is_starting());
   request_state(MDSMap::STATE_ACTIVE);
 
   mdlog->start_new_segment();
@@ -1281,7 +1281,7 @@ class MDSRank::C_MDS_StandbyReplayRestart : public MDSInternalContext {
 public:
   explicit C_MDS_StandbyReplayRestart(MDSRank *m) : MDSInternalContext(m) {}
   void finish(int r) override {
-    assert(!r);
+    ceph_assert(!r);
     mds->standby_replay_restart();
   }
 };
@@ -1325,7 +1325,7 @@ void MDSRank::replay_done()
 
   if (is_standby_replay()) {
     // The replay was done in standby state, and we are still in that state
-    assert(standby_replaying);
+    ceph_assert(standby_replaying);
     dout(10) << "setting replay timer" << dendl;
     timer.add_event_after(g_conf()->mds_replay_interval,
                           new C_MDS_StandbyReplayRestart(this));
@@ -1338,8 +1338,8 @@ void MDSRank::replay_done()
     return;
   } else {
     // Replay is complete, journal read should be up to date
-    assert(mdlog->get_journaler()->get_read_pos() == mdlog->get_journaler()->get_write_pos());
-    assert(!is_standby_replay());
+    ceph_assert(mdlog->get_journaler()->get_read_pos() == mdlog->get_journaler()->get_write_pos());
+    ceph_assert(!is_standby_replay());
 
     // Reformat and come back here
     if (mdlog->get_journaler()->get_stream_format() < g_conf()->mds_journal_format) {
@@ -1468,7 +1468,7 @@ void MDSRank::rejoin_done()
       // The root should always have a subtree!
       clog->error() << "No subtrees found for root MDS rank!";
       damaged();
-      assert(mdcache->is_subtrees());
+      ceph_assert(mdcache->is_subtrees());
     } else {
       dout(1) << " empty cache, no subtrees, leaving cluster" << dendl;
       request_state(MDSMap::STATE_STOPPED);
@@ -1530,7 +1530,7 @@ void MDSRank::active_start()
 void MDSRank::recovery_done(int oldstate)
 {
   dout(1) << "recovery_done -- successful recovery!" << dendl;
-  assert(is_clientreplay() || is_active());
+  ceph_assert(is_clientreplay() || is_active());
 
   if (oldstate == MDSMap::STATE_CREATING)
     return;
@@ -1600,7 +1600,7 @@ void MDSRank::boot_create()
     snapserver->save(fin.new_sub());
   }
 
-  assert(g_conf()->mds_kill_create_at != 1);
+  ceph_assert(g_conf()->mds_kill_create_at != 1);
 
   // ok now journal it
   mdlog->journal_segment_subtree_map(fin.new_sub());
@@ -1629,7 +1629,7 @@ void MDSRank::stopping_start()
     }
 
     dout(20) << __func__ << " matched " << victims.size() << " sessions" << dendl;
-    assert(!victims.empty());
+    ceph_assert(!victims.empty());
 
     C_GatherBuilder gather(g_ceph_context, new C_MDSInternalNoop);
     for (const auto &s : victims) {
@@ -1656,7 +1656,7 @@ void MDSRankDispatcher::handle_mds_map(
     const MDSMap &oldmap)
 {
   // I am only to be passed MDSMaps in which I hold a rank
-  assert(whoami != MDS_RANK_NONE);
+  ceph_assert(whoami != MDS_RANK_NONE);
 
   MDSMap::DaemonState oldstate = state;
   mds_gid_t mds_gid = mds_gid_t(monc->get_global_id());
@@ -1741,7 +1741,7 @@ void MDSRankDispatcher::handle_mds_map(
 	    restart.insert(r);
 	    handle_mds_failure(r);
 	  } else {
-	    assert(info.state == MDSMap::STATE_STARTING ||
+	    ceph_assert(info.state == MDSMap::STATE_STARTING ||
 		   info.state == MDSMap::STATE_ACTIVE);
 	    // -> stopped (missing) -> starting -> active
 	    restart.insert(r);
@@ -1757,7 +1757,7 @@ void MDSRankDispatcher::handle_mds_map(
 	  restart.insert(r);
 	  handle_mds_failure(r);
 	} else {
-	  assert(info.state == MDSMap::STATE_CREATING ||
+	  ceph_assert(info.state == MDSMap::STATE_CREATING ||
 		 info.state == MDSMap::STATE_STARTING ||
 		 info.state == MDSMap::STATE_ACTIVE);
 	}
@@ -1800,7 +1800,7 @@ void MDSRankDispatcher::handle_mds_map(
       } else if (is_starting()) {
         boot_start();
       } else if (is_stopping()) {
-        assert(oldstate == MDSMap::STATE_ACTIVE);
+        ceph_assert(oldstate == MDSMap::STATE_ACTIVE);
         stopping_start();
       }
     }
@@ -2289,7 +2289,7 @@ void MDSRank::command_flush_path(Formatter *f, std::string_view path)
  */
 void MDSRank::command_flush_journal(Formatter *f)
 {
-  assert(f != NULL);
+  ceph_assert(f != NULL);
 
   std::stringstream ss;
   const int r = _command_flush_journal(ss);
@@ -2386,7 +2386,7 @@ int MDSRank::_command_flush_journal(std::ostream& ss)
     int r = cond.wait();
     mds_lock.Lock();
 
-    assert(r == 0);  // MDLog is not allowed to raise errors via wait_for_expiry
+    ceph_assert(r == 0);  // MDLog is not allowed to raise errors via wait_for_expiry
   }
 
   dout(5) << __func__ << ": expiry complete, expire_pos/trim_pos is now " << std::hex <<
@@ -2419,7 +2419,7 @@ int MDSRank::_command_flush_journal(std::ostream& ss)
 
 void MDSRank::command_get_subtrees(Formatter *f)
 {
-  assert(f != NULL);
+  ceph_assert(f != NULL);
   Mutex::Locker l(mds_lock);
 
   std::list<CDir*> subtrees;
@@ -2872,10 +2872,10 @@ bool MDSRank::evict_client(int64_t session_id,
     bool wait, bool blacklist, std::ostream& err_ss,
     Context *on_killed)
 {
-  assert(mds_lock.is_locked_by_me());
+  ceph_assert(mds_lock.is_locked_by_me());
 
   // Mutually exclusive args
-  assert(!(wait && on_killed != nullptr));
+  ceph_assert(!(wait && on_killed != nullptr));
 
   if (is_any_replay()) {
     err_ss << "MDS is replaying log";
@@ -2899,7 +2899,7 @@ bool MDSRank::evict_client(int64_t session_id,
   std::vector<std::string> cmd = {tmp};
 
   auto kill_client_session = [this, session_id, wait, on_killed](){
-    assert(mds_lock.is_locked_by_me());
+    ceph_assert(mds_lock.is_locked_by_me());
     Session *session = sessionmap.get_session(
         entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
     if (session) {
@@ -2926,7 +2926,7 @@ bool MDSRank::evict_client(int64_t session_id,
   };
 
   auto apply_blacklist = [this, cmd](std::function<void ()> fn){
-    assert(mds_lock.is_locked_by_me());
+    ceph_assert(mds_lock.is_locked_by_me());
 
     Context *on_blacklist_done = new FunctionContext([this, fn](int r) {
       objecter->wait_for_latest_osdmap(
@@ -3014,9 +3014,9 @@ bool MDSRankDispatcher::handle_command(
   std::stringstream *ss,
   bool *need_reply)
 {
-  assert(r != nullptr);
-  assert(ds != nullptr);
-  assert(ss != nullptr);
+  ceph_assert(r != nullptr);
+  ceph_assert(ds != nullptr);
+  ceph_assert(ss != nullptr);
 
   *need_reply = true;
 

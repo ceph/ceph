@@ -49,7 +49,7 @@ public:
 void MDSTableClient::handle_request(const MMDSTableRequest::const_ref &m)
 {
   dout(10) << "handle_request " << *m << dendl;
-  assert(m->table == table);
+  ceph_assert(m->table == table);
 
   if (mds->get_state() < MDSMap::STATE_RESOLVE) {
     if (mds->get_want_state() == CEPH_MDS_STATE_RESOLVE) {
@@ -67,7 +67,7 @@ void MDSTableClient::handle_request(const MMDSTableRequest::const_ref &m)
     break;
 
   case TABLESERVER_OP_NOTIFY_PREP:
-    assert(g_conf()->mds_kill_mdstable_at != 9);
+    ceph_assert(g_conf()->mds_kill_mdstable_at != 9);
     handle_notify_prep(m);
     break;
     
@@ -75,7 +75,7 @@ void MDSTableClient::handle_request(const MMDSTableRequest::const_ref &m)
     if (pending_prepare.count(reqid)) {
       dout(10) << "got agree on " << reqid << " atid " << tid << dendl;
 
-      assert(g_conf()->mds_kill_mdstable_at != 3);
+      ceph_assert(g_conf()->mds_kill_mdstable_at != 3);
 
       MDSInternalContextBase *onfinish = pending_prepare[reqid].onfinish;
       *pending_prepare[reqid].ptid = tid;
@@ -89,19 +89,19 @@ void MDSTableClient::handle_request(const MMDSTableRequest::const_ref &m)
     }
     else if (prepared_update.count(tid)) {
       dout(10) << "got duplicated agree on " << reqid << " atid " << tid << dendl;
-      assert(prepared_update[tid] == reqid);
-      assert(!server_ready);
+      ceph_assert(prepared_update[tid] == reqid);
+      ceph_assert(!server_ready);
     }
     else if (pending_commit.count(tid)) {
       dout(10) << "stray agree on " << reqid << " tid " << tid
 	       << ", already committing, will resend COMMIT" << dendl;
-      assert(!server_ready);
+      ceph_assert(!server_ready);
       // will re-send commit when receiving the server ready message
     }
     else {
       dout(10) << "stray agree on " << reqid << " tid " << tid
 	       << ", sending ROLLBACK" << dendl;
-      assert(!server_ready);
+      ceph_assert(!server_ready);
       auto req = MMDSTableRequest::create(table, TABLESERVER_OP_ROLLBACK, 0, tid);
       mds->send_message_mds(req, mds->get_mds_map()->get_tableserver());
     }
@@ -112,7 +112,7 @@ void MDSTableClient::handle_request(const MMDSTableRequest::const_ref &m)
 	pending_commit[tid]->pending_commit_tids[table].count(tid)) {
       dout(10) << "got ack on tid " << tid << ", logging" << dendl;
       
-      assert(g_conf()->mds_kill_mdstable_at != 7);
+      ceph_assert(g_conf()->mds_kill_mdstable_at != 7);
       
       // remove from committing list
       pending_commit[tid]->pending_commit_tids[table].erase(tid);
@@ -127,7 +127,7 @@ void MDSTableClient::handle_request(const MMDSTableRequest::const_ref &m)
     break;
 
   case TABLESERVER_OP_SERVER_READY:
-    assert(!server_ready);
+    ceph_assert(!server_ready);
     server_ready = true;
 
     if (last_reqid == ~0ULL)
@@ -139,7 +139,7 @@ void MDSTableClient::handle_request(const MMDSTableRequest::const_ref &m)
     break;
 
   default:
-    assert(0 == "unrecognized mds_table_client request op");
+    ceph_assert(0 == "unrecognized mds_table_client request op");
   }
 }
 
@@ -185,16 +185,16 @@ void MDSTableClient::commit(version_t tid, LogSegment *ls)
 {
   dout(10) << "commit " << tid << dendl;
 
-  assert(prepared_update.count(tid));
+  ceph_assert(prepared_update.count(tid));
   prepared_update.erase(tid);
 
-  assert(pending_commit.count(tid) == 0);
+  ceph_assert(pending_commit.count(tid) == 0);
   pending_commit[tid] = ls;
   ls->pending_commit_tids[table].insert(tid);
 
   notify_commit(tid);
 
-  assert(g_conf()->mds_kill_mdstable_at != 4);
+  ceph_assert(g_conf()->mds_kill_mdstable_at != 4);
 
   if (server_ready) {
     // send message

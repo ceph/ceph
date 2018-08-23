@@ -38,7 +38,7 @@ class SessionMapIOContext : public MDSIOContextBase
     MDSRank *get_mds() override {return sessionmap->mds;}
   public:
     explicit SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
-      assert(sessionmap != NULL);
+      ceph_assert(sessionmap != NULL);
     }
 };
 };
@@ -324,7 +324,7 @@ void SessionMap::_load_legacy_finish(int r, bufferlist &bl)
   auto blp = bl.cbegin();
   if (r < 0) {
     derr << "_load_finish got " << cpp_strerror(r) << dendl;
-    assert(0 == "failed to load sessionmap");
+    ceph_assert(0 == "failed to load sessionmap");
   }
   dump();
   decode_legacy(blp);  // note: this sets last_cap_renew = now()
@@ -375,7 +375,7 @@ void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
   dout(10) << __func__ << ": needv " << needv << ", v " << version << dendl;
  
   if (needv && committing >= needv) {
-    assert(committing > committed);
+    ceph_assert(committing > committed);
     commit_waiters[committing].push_back(onsave);
     return;
   }
@@ -518,7 +518,7 @@ void SessionMapStore::decode_legacy(bufferlist::const_iterator& p)
   decode(pre, p);
   if (pre == (uint64_t)-1) {
     DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, p);
-    assert(struct_v >= 2);
+    ceph_assert(struct_v >= 2);
     
     decode(version, p);
     
@@ -619,7 +619,7 @@ void SessionMap::add_session(Session *s)
 {
   dout(10) << __func__ << " s=" << s << " name=" << s->info.inst.name << dendl;
 
-  assert(session_map.count(s->info.inst.name) == 0);
+  ceph_assert(session_map.count(s->info.inst.name) == 0);
   session_map[s->info.inst.name] = s;
   auto by_state_entry = by_state.find(s->state);
   if (by_state_entry == by_state.end())
@@ -652,7 +652,7 @@ void SessionMap::touch_session(Session *session)
 
   // Move to the back of the session list for this state (should
   // already be on a list courtesy of add_session and set_state)
-  assert(session->item_session_list.is_on_list());
+  ceph_assert(session->item_session_list.is_on_list());
   auto by_state_entry = by_state.find(session->state);
   if (by_state_entry == by_state.end())
     by_state_entry = by_state.emplace(session->state,
@@ -736,7 +736,7 @@ public:
 void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
                                MDSGatherBuilder *gather_bld)
 {
-  assert(gather_bld != NULL);
+  ceph_assert(gather_bld != NULL);
 
   std::vector<entity_name_t> write_sessions;
 
@@ -968,7 +968,7 @@ int Session::check_access(CInode *in, unsigned mask,
 void SessionMap::hit_session(Session *session) {
   uint64_t sessions = get_session_count_in_state(Session::STATE_OPEN) +
                       get_session_count_in_state(Session::STATE_STALE);
-  assert(sessions != 0);
+  ceph_assert(sessions != 0);
 
   double total_load = total_load_avg.hit();
   double avg_load = total_load / sessions;
@@ -1006,7 +1006,7 @@ int SessionFilter::parse(
     const std::vector<std::string> &args,
     std::stringstream *ss)
 {
-  assert(ss != NULL);
+  ceph_assert(ss != NULL);
 
   for (const auto &s : args) {
     dout(20) << __func__ << " parsing filter '" << s << "'" << dendl;
@@ -1052,7 +1052,7 @@ int SessionFilter::parse(
        */
       auto is_true = [](std::string_view bstr, bool *out) -> bool
       {
-        assert(out != nullptr);
+        ceph_assert(out != nullptr);
 
         if (bstr == "true" || bstr == "1") {
           *out = true;
