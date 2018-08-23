@@ -32,9 +32,9 @@ xattrs`` threshold is reached.
 
 ``filestore max inline xattr size``
 
-:Description: The maximimum size of an XATTR stored in the filesystem (i.e., XFS,
+:Description: The maximum size of an XATTR stored in the filesystem (i.e., XFS,
               btrfs, ext4, etc.) per object. Should not be larger than the
-              filesytem can handle. Default value of 0 means to use the value
+              filesystem can handle. Default value of 0 means to use the value
               specific to the underlying filesystem.
 :Type: Unsigned 32-bit Integer
 :Required: No
@@ -43,7 +43,7 @@ xattrs`` threshold is reached.
 
 ``filestore max inline xattr size xfs``
 
-:Description: The maximimum size of an XATTR stored in the XFS filesystem.
+:Description: The maximum size of an XATTR stored in the XFS filesystem.
               Only used if ``filestore max inline xattr size`` == 0.
 :Type: Unsigned 32-bit Integer
 :Required: No
@@ -52,7 +52,7 @@ xattrs`` threshold is reached.
 
 ``filestore max inline xattr size btrfs``
 
-:Description: The maximimum size of an XATTR stored in the btrfs filesystem.
+:Description: The maximum size of an XATTR stored in the btrfs filesystem.
               Only used if ``filestore max inline xattr size`` == 0.
 :Type: Unsigned 32-bit Integer
 :Required: No
@@ -61,7 +61,7 @@ xattrs`` threshold is reached.
 
 ``filestore max inline xattr size other``
 
-:Description: The maximimum size of an XATTR stored in other filesystems.
+:Description: The maximum size of an XATTR stored in other filesystems.
               Only used if ``filestore max inline xattr size`` == 0.
 :Type: Unsigned 32-bit Integer
 :Required: No

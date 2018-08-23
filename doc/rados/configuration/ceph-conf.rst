@@ -343,7 +343,7 @@ The following CLI commands are used to configure the cluster:
   of the output.
 
 * ``ceph config assimilate-conf -i <input file> -o <output file>``
-  will injest a configuration file from *input file* and move any
+  will ingest a configuration file from *input file* and move any
   valid options into the monitors' configuration database.  Any
   settings that are unrecognized, invalid, or cannot be controlled by
   the monitor will be returned in an abbreviated config file stored in
