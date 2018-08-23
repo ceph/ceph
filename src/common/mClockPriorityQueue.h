@@ -128,20 +128,20 @@ namespace ceph {
       }
 
       const std::pair<cost_t, T>& front() const {
-	assert(!(q.empty()));
-	assert(cur != q.end());
+	ceph_assert(!(q.empty()));
+	ceph_assert(cur != q.end());
 	return cur->second.front();
       }
 
       std::pair<cost_t, T>& front() {
-	assert(!(q.empty()));
-	assert(cur != q.end());
+	ceph_assert(!(q.empty()));
+	ceph_assert(cur != q.end());
 	return cur->second.front();
       }
 
       void pop_front() {
-	assert(!(q.empty()));
-	assert(cur != q.end());
+	ceph_assert(!(q.empty()));
+	ceph_assert(cur != q.end());
 	cur->second.pop_front();
 	if (cur->second.empty()) {
 	  auto i = cur;
@@ -157,7 +157,7 @@ namespace ceph {
       }
 
       unsigned length() const {
-	assert(size >= 0);
+	ceph_assert(size >= 0);
 	return (unsigned)size;
       }
 
@@ -234,7 +234,7 @@ namespace ceph {
       total += queue_front.size();
       total += queue.request_count();
       for (auto i = high_queue.cbegin(); i != high_queue.cend(); ++i) {
-	assert(i->second.length());
+	ceph_assert(i->second.length());
 	total += i->second.length();
       }
       return total;
@@ -323,7 +323,7 @@ namespace ceph {
     }
 
     T dequeue() override final {
-      assert(!empty());
+      ceph_assert(!empty());
 
       if (!high_queue.empty()) {
 	T ret = std::move(high_queue.rbegin()->second.front().second);
@@ -341,7 +341,7 @@ namespace ceph {
       }
 
       auto pr = queue.pull_request();
-      assert(pr.is_retn());
+      ceph_assert(pr.is_retn());
       auto& retn = pr.get_retn();
       return std::move(*(retn.request));
     }

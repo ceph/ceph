@@ -18,6 +18,7 @@
 
 #include <sys/uio.h>
 
+#include "include/assert.h"
 #include "include/types.h"
 #include "include/buffer_raw.h"
 #include "include/compat.h"
@@ -280,7 +281,7 @@ using namespace ceph;
 
     raw_posix_aligned(unsigned l, unsigned _align) : raw(l) {
       align = _align;
-      assert((align >= sizeof(void *)) && (align & (align - 1)) == 0);
+      ceph_assert((align >= sizeof(void *)) && (align & (align - 1)) == 0);
 #ifdef DARWIN
       data = (char *) valloc(len);
 #else
@@ -323,7 +324,7 @@ using namespace ceph;
       //cout << "hack aligned " << (unsigned)data
       //<< " in raw " << (unsigned)realdata
       //<< " off " << off << std::endl;
-      assert(((unsigned)data & (align-1)) == 0);
+      ceph_assert(((unsigned)data & (align-1)) == 0);
     }
     ~raw_hack_aligned() {
       delete[] realdata;
@@ -403,7 +404,7 @@ using namespace ceph;
     }
 
     int zero_copy_to_fd(int fd, loff_t *offset) override {
-      assert(!source_consumed);
+      ceph_assert(!source_consumed);
       int flags = SPLICE_F_NONBLOCK;
       ssize_t r = safe_splice_exact(pipefds[0], NULL, fd, offset, len, flags);
       if (r < 0) {
@@ -465,8 +466,8 @@ using namespace ceph;
       int tmpfd[2];
       int r;
 
-      assert(!source_consumed);
-      assert(fds[0] >= 0);
+      ceph_assert(!source_consumed);
+      ceph_assert(fds[0] >= 0);
 
       if (::pipe(tmpfd) == -1) {
 	r = -errno;
@@ -768,8 +769,8 @@ using namespace ceph;
   buffer::ptr::ptr(const ptr& p, unsigned o, unsigned l)
     : _raw(p._raw), _off(p._off + o), _len(l)
   {
-    assert(o+l <= p._len);
-    assert(_raw);
+    ceph_assert(o+l <= p._len);
+    ceph_assert(_raw);
     _raw->nref++;
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
@@ -877,25 +878,25 @@ using namespace ceph;
   }
 
   const char *buffer::ptr::c_str() const {
-    assert(_raw);
+    ceph_assert(_raw);
     if (buffer_track_c_str)
       buffer_c_str_accesses++;
     return _raw->get_data() + _off;
   }
   char *buffer::ptr::c_str() {
-    assert(_raw);
+    ceph_assert(_raw);
     if (buffer_track_c_str)
       buffer_c_str_accesses++;
     return _raw->get_data() + _off;
   }
   const char *buffer::ptr::end_c_str() const {
-    assert(_raw);
+    ceph_assert(_raw);
     if (buffer_track_c_str)
       buffer_c_str_accesses++;
     return _raw->get_data() + _off + _len;
   }
   char *buffer::ptr::end_c_str() {
-    assert(_raw);
+    ceph_assert(_raw);
     if (buffer_track_c_str)
       buffer_c_str_accesses++;
     return _raw->get_data() + _off + _len;
@@ -910,23 +911,23 @@ using namespace ceph;
   }
   const char& buffer::ptr::operator[](unsigned n) const
   {
-    assert(_raw);
-    assert(n < _len);
+    ceph_assert(_raw);
+    ceph_assert(n < _len);
     return _raw->get_data()[_off + n];
   }
   char& buffer::ptr::operator[](unsigned n)
   {
-    assert(_raw);
-    assert(n < _len);
+    ceph_assert(_raw);
+    ceph_assert(n < _len);
     return _raw->get_data()[_off + n];
   }
 
-  const char *buffer::ptr::raw_c_str() const { assert(_raw); return _raw->data; }
-  unsigned buffer::ptr::raw_length() const { assert(_raw); return _raw->len; }
-  int buffer::ptr::raw_nref() const { assert(_raw); return _raw->nref; }
+  const char *buffer::ptr::raw_c_str() const { ceph_assert(_raw); return _raw->data; }
+  unsigned buffer::ptr::raw_length() const { ceph_assert(_raw); return _raw->len; }
+  int buffer::ptr::raw_nref() const { ceph_assert(_raw); return _raw->nref; }
 
   void buffer::ptr::copy_out(unsigned o, unsigned l, char *dest) const {
-    assert(_raw);
+    ceph_assert(_raw);
     if (o+l > _len)
         throw end_of_buffer();
     char* src =  _raw->data + _off + o;
@@ -960,8 +961,8 @@ using namespace ceph;
 
   unsigned buffer::ptr::append(char c)
   {
-    assert(_raw);
-    assert(1 <= unused_tail_length());
+    ceph_assert(_raw);
+    ceph_assert(1 <= unused_tail_length());
     char* ptr = _raw->data + _off + _len;
     *ptr = c;
     _len++;
@@ -970,8 +971,8 @@ using namespace ceph;
 
   unsigned buffer::ptr::append(const char *p, unsigned l)
   {
-    assert(_raw);
-    assert(l <= unused_tail_length());
+    ceph_assert(_raw);
+    ceph_assert(l <= unused_tail_length());
     char* c = _raw->data + _off + _len;
     maybe_inline_memcpy(c, p, l, 32);
     _len += l;
@@ -980,8 +981,8 @@ using namespace ceph;
 
   unsigned buffer::ptr::append_zeros(unsigned l)
   {
-    assert(_raw);
-    assert(l <= unused_tail_length());
+    ceph_assert(_raw);
+    ceph_assert(l <= unused_tail_length());
     char* c = _raw->data + _off + _len;
     memset(c, 0, l);
     _len += l;
@@ -995,9 +996,9 @@ using namespace ceph;
 
   void buffer::ptr::copy_in(unsigned o, unsigned l, const char *src, bool crc_reset)
   {
-    assert(_raw);
-    assert(o <= _len);
-    assert(o+l <= _len);
+    ceph_assert(_raw);
+    ceph_assert(o <= _len);
+    ceph_assert(o+l <= _len);
     char* dest = _raw->data + _off + o;
     if (crc_reset)
         _raw->invalidate_crc();
@@ -1023,7 +1024,7 @@ using namespace ceph;
 
   void buffer::ptr::zero(unsigned o, unsigned l, bool crc_reset)
   {
-    assert(o+l <= _len);
+    ceph_assert(o+l <= _len);
     if (crc_reset)
         _raw->invalidate_crc();
     memset(c_str()+o, 0, l);
@@ -1093,7 +1094,7 @@ using namespace ceph;
 	off -= d;
 	o += d;
       } else if (off > 0) {
-	assert(p != ls->begin());
+	ceph_assert(p != ls->begin());
 	p--;
 	p_off = p->length();
       } else {
@@ -1145,7 +1146,7 @@ using namespace ceph;
     while (len > 0) {
       if (p == ls->end())
 	throw end_of_buffer();
-      assert(p->length() > 0);
+      ceph_assert(p->length() > 0);
 
       unsigned howmuch = p->length() - p_off;
       if (len < howmuch) howmuch = len;
@@ -1171,7 +1172,7 @@ using namespace ceph;
     }
     if (p == ls->end())
       throw end_of_buffer();
-    assert(p->length() > 0);
+    ceph_assert(p->length() > 0);
     dest = create(len);
     copy(len, dest.c_str());
   }
@@ -1184,7 +1185,7 @@ using namespace ceph;
     }
     if (p == ls->end())
       throw end_of_buffer();
-    assert(p->length() > 0);
+    ceph_assert(p->length() > 0);
     unsigned howmuch = p->length() - p_off;
     if (howmuch < len) {
       dest = create(len);
@@ -1242,7 +1243,7 @@ using namespace ceph;
     while (1) {
       if (p == ls->end())
 	return;
-      assert(p->length() > 0);
+      ceph_assert(p->length() > 0);
 
       unsigned howmuch = p->length() - p_off;
       const char *c_str = p->c_str();
@@ -1466,7 +1467,7 @@ using namespace ceph;
 	  ++b;
 	}
       }
-      assert(b == other._buffers.end());
+      ceph_assert(b == other._buffers.end());
       return true;
     }
 
@@ -1554,7 +1555,7 @@ using namespace ceph;
 
   void buffer::list::zero(unsigned o, unsigned l)
   {
-    assert(o+l <= _len);
+    ceph_assert(o+l <= _len);
     unsigned p = 0;
     for (std::list<ptr>::iterator it = _buffers.begin();
 	 it != _buffers.end();
@@ -1857,7 +1858,7 @@ using namespace ceph;
 
   void buffer::list::append(const ptr& bp, unsigned off, unsigned len)
   {
-    assert(len+off <= bp.length());
+    ceph_assert(len+off <= bp.length());
     if (!_buffers.empty()) {
       ptr &l = _buffers.back();
       if (l.get_raw() == bp.get_raw() &&
@@ -1995,7 +1996,7 @@ using namespace ceph;
 
       } while (curbuf != _buffers.end() && l > 0);
 
-      assert(l == 0);
+      ceph_assert(l == 0);
 
       tmp.rebuild();
       _buffers.insert(curbuf, tmp._buffers.front());
@@ -2023,7 +2024,7 @@ using namespace ceph;
       off -= (*curbuf).length();
       ++curbuf;
     }
-    assert(len == 0 || curbuf != other._buffers.end());
+    ceph_assert(len == 0 || curbuf != other._buffers.end());
     
     while (len > 0) {
       // partial?
@@ -2054,13 +2055,13 @@ using namespace ceph;
     if (off >= length())
       throw end_of_buffer();
 
-    assert(len > 0);
+    ceph_assert(len > 0);
     //cout << "splice off " << off << " len " << len << " ... mylen = " << length() << std::endl;
       
     // skip off
     std::list<ptr>::iterator curbuf = _buffers.begin();
     while (off > 0) {
-      assert(curbuf != _buffers.end());
+      ceph_assert(curbuf != _buffers.end());
       if (off >= (*curbuf).length()) {
 	// skip this buffer
 	//cout << "off = " << off << " skipping over " << *curbuf << std::endl;
@@ -2147,7 +2148,7 @@ void buffer::list::decode_base64(buffer::list& e)
     hexdump(oss);
     throw buffer::malformed_input(oss.str().c_str());
   }
-  assert(l <= (int)bp.length());
+  ceph_assert(l <= (int)bp.length());
   bp.set_length(l);
   push_back(std::move(bp));
 }

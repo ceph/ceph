@@ -50,7 +50,7 @@ mutex_debugging_base::mutex_debugging_base(const std::string &n, bool bt,
 }
 
 mutex_debugging_base::~mutex_debugging_base() {
-  assert(nlock == 0);
+  ceph_assert(nlock == 0);
   if (cct && logger) {
     cct->get_perfcounters_collection()->remove(logger);
     delete logger;

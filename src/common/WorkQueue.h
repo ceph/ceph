@@ -202,7 +202,7 @@ public:
     }
     void _void_process(void *, TPHandle &handle) override {
       _lock.Lock();
-      assert(!to_process.empty());
+      ceph_assert(!to_process.empty());
       U u = to_process.front();
       to_process.pop_front();
       _lock.Unlock();
@@ -216,7 +216,7 @@ public:
 
     void _void_process_finish(void *) override {
       _lock.Lock();
-      assert(!to_finish.empty());
+      ceph_assert(!to_finish.empty());
       U u = to_finish.front();
       to_finish.pop_front();
       _lock.Unlock();
@@ -348,7 +348,7 @@ public:
   public:
     ~PointerWQ() override {
       m_pool->remove_work_queue(this);
-      assert(m_processing == 0);
+      ceph_assert(m_processing == 0);
     }
     void drain() {
       {
@@ -378,15 +378,15 @@ public:
       m_pool->add_work_queue(this);
     }
     void _clear() override {
-      assert(m_pool->_lock.is_locked());
+      ceph_assert(m_pool->_lock.is_locked());
       m_items.clear();
     }
     bool _empty() override {
-      assert(m_pool->_lock.is_locked());
+      ceph_assert(m_pool->_lock.is_locked());
       return m_items.empty();
     }
     void *_void_dequeue() override {
-      assert(m_pool->_lock.is_locked());
+      ceph_assert(m_pool->_lock.is_locked());
       if (m_items.empty()) {
         return NULL;
       }
@@ -400,8 +400,8 @@ public:
       process(reinterpret_cast<T *>(item));
     }
     void _void_process_finish(void *item) override {
-      assert(m_pool->_lock.is_locked());
-      assert(m_processing > 0);
+      ceph_assert(m_pool->_lock.is_locked());
+      ceph_assert(m_processing > 0);
       --m_processing;
     }
 
@@ -412,7 +412,7 @@ public:
     }
 
     T *front() {
-      assert(m_pool->_lock.is_locked());
+      ceph_assert(m_pool->_lock.is_locked());
       if (m_items.empty()) {
         return NULL;
       }
@@ -482,7 +482,7 @@ public:
       i++;
     for (i++; i < work_queues.size(); i++) 
       work_queues[i-1] = work_queues[i];
-    assert(i == work_queues.size());
+    ceph_assert(i == work_queues.size());
     work_queues.resize(i-1);
   }
 
@@ -551,7 +551,7 @@ public:
     return _queue.empty();
   }
   GenContext<ThreadPool::TPHandle&> *_dequeue() override {
-    assert(!_queue.empty());
+    ceph_assert(!_queue.empty());
     GenContext<ThreadPool::TPHandle&> *c = _queue.front();
     _queue.pop_front();
     return c;

@@ -373,7 +373,7 @@ int lockdep_will_unlock(const char *name, int id)
 
   if (id < 0) {
     //id = lockdep_register(name);
-    assert(id == -1);
+    ceph_assert(id == -1);
     return id;
   }
 

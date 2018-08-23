@@ -71,9 +71,9 @@ public:
     opsvc.create("OpHistorySvc");
   }
   ~OpHistory() {
-    assert(arrived.empty());
-    assert(duration.empty());
-    assert(slow_op.empty());
+    ceph_assert(arrived.empty());
+    ceph_assert(duration.empty());
+    ceph_assert(slow_op.empty());
   }
   void insert(const utime_t& now, TrackedOpRef op)
   {

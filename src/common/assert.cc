@@ -18,7 +18,7 @@
 namespace ceph {
   static CephContext *g_assert_context = NULL;
 
-  /* If you register an assert context, assert() will try to lock the dout
+  /* If you register an assert context, ceph_assert() will try to lock the dout
    * stream of that context before starting an assert. This is nice because the
    * output looks better. Your assert will not be interleaved with other dout
    * statements.
@@ -29,7 +29,7 @@ namespace ceph {
    */
   void register_assert_context(CephContext *cct)
   {
-    assert(!g_assert_context);
+    ceph_assert(!g_assert_context);
     g_assert_context = cct;
   }
 
@@ -51,7 +51,7 @@ namespace ceph {
     char buf[8096];
     snprintf(buf, sizeof(buf),
 	     "%s: In function '%s' thread %llx time %s\n"
-	     "%s: %d: FAILED assert(%s)\n",
+	     "%s: %d: FAILED ceph_assert(%s)\n",
 	     file, func, (unsigned long long)pthread_self(), tss.str().c_str(),
 	     file, line, assertion);
     dout_emergency(buf);
@@ -128,7 +128,7 @@ namespace ceph {
     BufAppender ba(buf, sizeof(buf));
     BackTrace *bt = new BackTrace(1);
     ba.printf("%s: In function '%s' thread %llx time %s\n"
-	     "%s: %d: FAILED assert(%s)\n",
+	     "%s: %d: FAILED ceph_assert(%s)\n",
 	     file, func, (unsigned long long)pthread_self(), tss.str().c_str(),
 	     file, line, assertion);
     ba.printf("Assertion details: ");
@@ -163,7 +163,7 @@ namespace ceph {
   {
     char buf[8096];
     snprintf(buf, sizeof(buf),
-	     "WARNING: assert(%s) at: %s: %d: %s()\n",
+	     "WARNING: ceph_assert(%s) at: %s: %d: %s()\n",
 	     assertion, file, line, func);
     dout_emergency(buf);
   }

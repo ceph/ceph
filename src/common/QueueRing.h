@@ -34,7 +34,7 @@ class QueueRing {
       if (entries.empty()) {
         cond.Wait(lock);
       };
-      assert(!entries.empty());
+      ceph_assert(!entries.empty());
       *entry = entries.front();
       entries.pop_front();
       lock.Unlock();
