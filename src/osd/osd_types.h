@@ -4609,6 +4609,7 @@ struct chunk_info_t {
     FLAG_DIRTY = 1, 
     FLAG_MISSING = 2,
     FLAG_HAS_REFERENCE = 4,
+    FLAG_HAS_FINGERPRINT = 8,
   };
   uint32_t offset;
   uint32_t length;
@@ -4627,6 +4628,9 @@ struct chunk_info_t {
     }
     if (flags & FLAG_HAS_REFERENCE) {
       r += "|has_reference";
+    }
+    if (flags & FLAG_HAS_FINGERPRINT) {
+      r += "|has_fingerprint";
     }
     if (r.length())
       return r.substr(1);
