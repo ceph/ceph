@@ -603,6 +603,39 @@ class TestExtendVG(object):
         assert fake_run.calls[0]['args'][0] == expected
 
 
+class TestCreateVG(object):
+
+    def setup(self):
+        self.foo_volume = api.VolumeGroup(vg_name='foo', lv_tags='')
+
+    def test_no_name(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.create_vg('/dev/sda')
+        result = fake_run.calls[0]['args'][0]
+        assert '/dev/sda' in result
+        assert result[-2].startswith('ceph-')
+
+    def test_devices_list(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.create_vg(['/dev/sda', '/dev/sdb'], name='ceph')
+        result = fake_run.calls[0]['args'][0]
+        expected = ['vgcreate', '--force', '--yes', 'ceph', '/dev/sda', '/dev/sdb']
+        assert result == expected
+
+    def test_name_prefix(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.create_vg('/dev/sda', name_prefix='master')
+        result = fake_run.calls[0]['args'][0]
+        assert '/dev/sda' in result
+        assert result[-2].startswith('master-')
+
+    def test_specific_name(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.create_vg('/dev/sda', name='master')
+        result = fake_run.calls[0]['args'][0]
+        assert '/dev/sda' in result
+        assert result[-2] == 'master'
+
 #
 # The following tests are pretty gnarly. VDO detection is very convoluted and
 # involves correlating information from device mappers, realpaths, slaves of
