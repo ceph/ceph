@@ -10,8 +10,8 @@ devices.
 
 In the simplest case, BlueStore consumes a single (primary) storage device.
 The storage device is normally used as a whole, occupying the full device that
-is managed directly by BlueStore. This *primary device* is normally identifed
-by a ``block`` symlink in data directory.
+is managed directly by BlueStore. This *primary device* is normally identified
+by a ``block`` symlink in the data directory.
 
 The data directory is a ``tmpfs`` mount which gets populated (at boot time, or
 when ``ceph-volume`` activates it) with all the common OSD files that hold
@@ -383,7 +383,7 @@ SPDK Usage
 ==================
 
 If you want to use SPDK driver for NVME SSD, you need to ready your system.
-Please refer to `SPDK document`__ for more detailes.
+Please refer to `SPDK document`__ for more details.
 
 .. __: http://www.spdk.io/doc/getting_started.html#getting_started_examples
 
