@@ -43,7 +43,7 @@ seastar::future<> SocketMessenger::dispatch(ConnectionRef conn)
 {
   auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
   std::ignore = i;
-  assert(added);
+  ceph_assert(added);
 
   return seastar::repeat([=] {
       return conn->read_message()
@@ -185,10 +185,10 @@ ceph::net::ConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
 
 void SocketMessenger::unregister_conn(ConnectionRef conn)
 {
-  assert(conn);
+  ceph_assert(conn);
   auto found = connections.find(conn->get_peer_addr());
-  assert(found != connections.end());
-  assert(found->second == conn);
+  ceph_assert(found != connections.end());
+  ceph_assert(found->second == conn);
   connections.erase(found);
 }
 
