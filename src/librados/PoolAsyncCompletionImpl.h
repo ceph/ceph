@@ -64,13 +64,13 @@ namespace librados {
     }
     void get() {
       lock.Lock();
-      assert(ref > 0);
+      ceph_assert(ref > 0);
       ref++;
       lock.Unlock();
     }
     void release() {
       lock.Lock();
-      assert(!released);
+      ceph_assert(!released);
       released = true;
       put_unlock();
     }
@@ -79,7 +79,7 @@ namespace librados {
       put_unlock();
     }
     void put_unlock() {
-      assert(ref > 0);
+      ceph_assert(ref > 0);
       int n = --ref;
       lock.Unlock();
       if (!n)
