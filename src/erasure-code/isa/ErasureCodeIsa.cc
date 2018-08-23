@@ -109,7 +109,7 @@ int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
       coding[i - k] = (*decoded)[i].c_str();
   }
   erasures[erasures_count] = -1;
-  assert(erasures_count > 0);
+  ceph_assert(erasures_count > 0);
   return isa_decode(erasures, data, coding, blocksize);
 }
 
@@ -194,7 +194,7 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
 
   if (m == 1) {
     // single parity decoding
-    assert(1 == nerrs);
+    ceph_assert(1 == nerrs);
     dout(20) << "isa_decode: reconstruct using region xor [" <<
       erasures[0] << "]" << dendl;
     region_xor(recover_source, recover_target[0], k, blocksize);
@@ -208,8 +208,8 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
     // use xor decoding if a data chunk is missing or the first coding chunk
     dout(20) << "isa_decode: reconstruct using region xor [" <<
       erasures[0] << "]" << dendl;
-    assert(1 == s);
-    assert(k == r);
+    ceph_assert(1 == s);
+    ceph_assert(k == r);
     region_xor(recover_source, recover_target[0], k, blocksize);
     return 0;
   }
@@ -415,7 +415,7 @@ ErasureCodeIsaDefault::prepare()
     " [ matrix ] = " <<
     ((matrixtype == kVandermonde) ? "Vandermonde" : "Cauchy") << dendl;
 
-  assert((matrixtype == kVandermonde) || (matrixtype == kCauchy));
+  ceph_assert((matrixtype == kVandermonde) || (matrixtype == kCauchy));
 
 }
 // -----------------------------------------------------------------------------
