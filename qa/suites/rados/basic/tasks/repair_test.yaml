@@ -17,6 +17,7 @@ overrides:
       - 'size 1 != size'
       - attr name mismatch
       - Regular scrub request, deep-scrub details will be lost
+      - candidate size [0-9]+ info size [0-9]+ mismatch
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
       - \(OSD_
