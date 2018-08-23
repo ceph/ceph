@@ -165,7 +165,7 @@ Ceph Monitor and Ceph Manager to ``node2`` and ``node3`` to improve reliability 
                      |                  |     node2      |
                      |                  | cCCC           |
                      +----------------->+                |
-                     |                  |     osd.0      |
+                     |                  |     osd.1      |
                      |                  |   mon.node2    |
                      |                  \----------------/
                      |
@@ -173,7 +173,7 @@ Ceph Monitor and Ceph Manager to ``node2`` and ``node3`` to improve reliability 
                      |                  |     node3      |
                      |                  | cCCC           |
                      +----------------->+                |
-                                        |     osd.1      |
+                                        |     osd.2      |
                                         |   mon.node3    |
                                         \----------------/
 
