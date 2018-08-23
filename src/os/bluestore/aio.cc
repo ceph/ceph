@@ -32,7 +32,7 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
     ++left;
     ++cur;
   }
-  assert(aios_size >= left);
+  ceph_assert(aios_size >= left);
   int done = 0;
   while (left > 0) {
     int r = io_submit(ctx, std::min(left, max_iodepth), piocb + done);
@@ -45,7 +45,7 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
       }
       return r;
     }
-    assert(r > 0);
+    ceph_assert(r > 0);
     done += r;
     left -= r;
     attempts = 16;

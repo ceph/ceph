@@ -77,10 +77,10 @@ public:
 	num_reading(0)
       {}
     ~File() override {
-      assert(num_readers.load() == 0);
-      assert(num_writers.load() == 0);
-      assert(num_reading.load() == 0);
-      assert(!locked);
+      ceph_assert(num_readers.load() == 0);
+      ceph_assert(num_writers.load() == 0);
+      ceph_assert(num_reading.load() == 0);
+      ceph_assert(!locked);
     }
 
     friend void intrusive_ptr_add_ref(File *f) {

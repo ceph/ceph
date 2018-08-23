@@ -73,8 +73,8 @@ protected:
       com_lock("JOS::ApplyManager::com_lock", false, true, false, cct),
       committing_seq(0), committed_seq(0) {}
     void reset() {
-      assert(open_ops == 0);
-      assert(blocked == false);
+      ceph_assert(open_ops == 0);
+      ceph_assert(blocked == false);
       max_applied_seq = 0;
       committing_seq = 0;
       committed_seq = 0;

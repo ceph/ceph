@@ -192,11 +192,11 @@ class AllocatorLevel01Loose : public AllocatorLevel01
 
     ++l0_dives;
 
-    assert(l0_pos0 < l0_pos1);
-    assert(length > *allocated);
-    assert(0 == (l0_pos0 % (slotset_width * d0)));
-    assert(0 == (l0_pos1 % (slotset_width * d0)));
-    assert(((length - *allocated) % l0_granularity) == 0);
+    ceph_assert(l0_pos0 < l0_pos1);
+    ceph_assert(length > *allocated);
+    ceph_assert(0 == (l0_pos0 % (slotset_width * d0)));
+    ceph_assert(0 == (l0_pos1 % (slotset_width * d0)));
+    ceph_assert(((length - *allocated) % l0_granularity) == 0);
 
     uint64_t need_entries = (length - *allocated) / l0_granularity;
 
@@ -225,7 +225,7 @@ class AllocatorLevel01Loose : public AllocatorLevel01
       }
 
       auto free_pos = find_next_set_bit(slot_val, 0);
-      assert(free_pos < bits_per_slot);
+      ceph_assert(free_pos < bits_per_slot);
       auto next_pos = free_pos + 1;
       while (next_pos < bits_per_slot &&
         (next_pos - free_pos) < need_entries) {
@@ -368,8 +368,8 @@ protected:
   {
     bool no_free = true;
     uint64_t d = slotset_width * CHILD_PER_SLOT_L0;
-    assert(0 == (l0_pos % d));
-    assert(0 == (l0_pos_end % d));
+    ceph_assert(0 == (l0_pos % d));
+    ceph_assert(0 == (l0_pos_end % d));
 
     auto idx = l0_pos / CHILD_PER_SLOT_L0;
     auto idx_end = l0_pos_end / CHILD_PER_SLOT_L0;
@@ -383,8 +383,8 @@ protected:
   {
     bool no_free = true;
     uint64_t d = slotset_width * _children_per_slot();
-    assert(0 == (l1_pos % d));
-    assert(0 == (l1_pos_end % d));
+    ceph_assert(0 == (l1_pos % d));
+    ceph_assert(0 == (l1_pos_end % d));
 
     auto idx = l1_pos / CHILD_PER_SLOT;
     auto idx_end = l1_pos_end / CHILD_PER_SLOT;
@@ -433,8 +433,8 @@ public:
 
   uint64_t debug_get_free(uint64_t l1_pos0 = 0, uint64_t l1_pos1 = 0)
   {
-    assert(0 == (l1_pos0 % CHILD_PER_SLOT));
-    assert(0 == (l1_pos1 % CHILD_PER_SLOT));
+    ceph_assert(0 == (l1_pos0 % CHILD_PER_SLOT));
+    ceph_assert(0 == (l1_pos1 % CHILD_PER_SLOT));
 
     auto idx0 = l1_pos0 * slotset_width;
     auto idx1 = l1_pos1 * slotset_width;
@@ -525,7 +525,7 @@ protected:
 
   void _init(uint64_t capacity, uint64_t _alloc_unit, bool mark_as_free = true)
   {
-    assert(isp2(_alloc_unit));
+    ceph_assert(isp2(_alloc_unit));
     l1._init(capacity, _alloc_unit, mark_as_free);
 
     l2_granularity =
@@ -552,8 +552,8 @@ protected:
   void _mark_l2_allocated(int64_t l2_pos, int64_t l2_pos_end)
   {
     auto d = CHILD_PER_SLOT;
-    assert(0 <= l2_pos_end);
-    assert((int64_t)l2.size() >= (l2_pos_end / d));
+    ceph_assert(0 <= l2_pos_end);
+    ceph_assert((int64_t)l2.size() >= (l2_pos_end / d));
 
     while (l2_pos < l2_pos_end) {
       l2[l2_pos / d] &= ~(slot_t(1) << (l2_pos % d));
@@ -564,8 +564,8 @@ protected:
   void _mark_l2_free(int64_t l2_pos, int64_t l2_pos_end)
   {
     auto d = CHILD_PER_SLOT;
-    assert(0 <= l2_pos_end);
-    assert((int64_t)l2.size() >= (l2_pos_end / d));
+    ceph_assert(0 <= l2_pos_end);
+    ceph_assert((int64_t)l2.size() >= (l2_pos_end / d));
 
     while (l2_pos < l2_pos_end) {
         l2[l2_pos / d] |= (slot_t(1) << (l2_pos % d));
@@ -576,8 +576,8 @@ protected:
   void _mark_l2_on_l1(int64_t l2_pos, int64_t l2_pos_end)
   {
     auto d = CHILD_PER_SLOT;
-    assert(0 <= l2_pos_end);
-    assert((int64_t)l2.size() >= (l2_pos_end / d));
+    ceph_assert(0 <= l2_pos_end);
+    ceph_assert((int64_t)l2.size() >= (l2_pos_end / d));
 
     auto idx = l2_pos * slotset_width;
     auto idx_end = l2_pos_end * slotset_width;
@@ -613,12 +613,12 @@ protected:
   {
     uint64_t prev_allocated = *allocated;
     uint64_t d = CHILD_PER_SLOT;
-    assert(isp2(min_length));
-    assert(min_length <= l2_granularity);
-    assert(max_length == 0 || max_length >= min_length);
-    assert(max_length == 0 || (max_length % min_length) == 0);
-    assert(length >= min_length);
-    assert((length % min_length) == 0);
+    ceph_assert(isp2(min_length));
+    ceph_assert(min_length <= l2_granularity);
+    ceph_assert(max_length == 0 || max_length >= min_length);
+    ceph_assert(max_length == 0 || (max_length % min_length) == 0);
+    ceph_assert(length >= min_length);
+    ceph_assert((length % min_length) == 0);
 
     uint64_t l1_w = slotset_width * l1._children_per_slot();
 
@@ -651,10 +651,10 @@ protected:
 	  all_set = true;
 	} else {
 	  free_pos = find_next_set_bit(slot_val, 0);
-	  assert(free_pos < bits_per_slot);
+	  ceph_assert(free_pos < bits_per_slot);
 	}
 	do {
-	  assert(length > *allocated);
+	  ceph_assert(length > *allocated);
 	  bool empty = l1._allocate_l1(length,
 	    min_length,
 	    max_length,
@@ -683,7 +683,7 @@ protected:
 
     ++l2_allocs;
     auto allocated_here = *allocated - prev_allocated;
-    assert(available >= allocated_here);
+    ceph_assert(available >= allocated_here);
     available -= allocated_here;
   }
 
@@ -726,7 +726,7 @@ protected:
 
     std::lock_guard<std::mutex> l(lock);
     auto allocated = l1._mark_alloc_l1(o, len);
-    assert(available >= allocated);
+    ceph_assert(available >= allocated);
     available -= allocated;
     _mark_l2_on_l1(l2_pos, l2_pos_end);
   }
