@@ -87,7 +87,7 @@ static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
       return -EINVAL;
 
     header = (struct rbd_obj_header_ondisk *)bl.c_str();
-    assert(header);
+    ceph_assert(header);
 
     if ((snap_count != header->snap_count) ||
         (snap_names_len != header->snap_names_len)) {
@@ -4497,7 +4497,7 @@ int image_status_set(cls_method_context_t hctx, const string &global_image_id,
   ondisk_status.last_update = ceph_clock_now();
 
   int r = cls_get_request_origin(hctx, &ondisk_status.origin);
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   bufferlist bl;
   encode(ondisk_status, bl, cls_get_features(hctx));

@@ -70,8 +70,8 @@ static clslua_hctx *__clslua_get_hctx(lua_State *L)
   lua_gettable(L, LUA_REGISTRYINDEX);
 
   /* check cls_lua assumptions */
-  assert(!lua_isnil(L, -1));
-  assert(lua_type(L, -1) == LUA_TLIGHTUSERDATA);
+  ceph_assert(!lua_isnil(L, -1));
+  ceph_assert(lua_type(L, -1) == LUA_TLIGHTUSERDATA);
 
   /* cast and cleanup stack */
   clslua_hctx *hctx = (struct clslua_hctx *)lua_touserdata(L, -1);
@@ -118,7 +118,7 @@ static int clslua_pcall(lua_State *L)
   lua_insert(L, 1);
   lua_call(L, nargs, LUA_MULTRET);
   struct clslua_err *err = clslua_checkerr(L);
-  assert(err);
+  ceph_assert(err);
   if (err->error) {
     err->error = false;
     lua_pushinteger(L, err->ret);
@@ -187,7 +187,7 @@ static int clslua_register(lua_State *L)
   /* get table of registered handlers */
   lua_pushlightuserdata(L, &clslua_registered_handle_reg_key);
   lua_gettable(L, LUA_REGISTRYINDEX);
-  assert(lua_type(L, -1) == LUA_TTABLE);
+  ceph_assert(lua_type(L, -1) == LUA_TTABLE);
 
   /* lookup function argument */
   lua_pushvalue(L, 1);
@@ -215,7 +215,7 @@ static void clslua_check_registered_handler(lua_State *L)
   /* get table of registered handlers */
   lua_pushlightuserdata(L, &clslua_registered_handle_reg_key);
   lua_gettable(L, LUA_REGISTRYINDEX);
-  assert(lua_type(L, -1) == LUA_TTABLE);
+  ceph_assert(lua_type(L, -1) == LUA_TTABLE);
 
   /* lookup function argument */
   lua_pushvalue(L, -2);
@@ -239,7 +239,7 @@ static int clslua_opresult(lua_State *L, int ok, int ret, int nargs,
 {
   struct clslua_err *err = clslua_checkerr(L);
 
-  assert(err);
+  ceph_assert(err);
   if (err->error) {
     CLS_ERR("error: cls_lua state machine: unexpected error");
     ceph_abort();

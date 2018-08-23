@@ -90,13 +90,13 @@ namespace librbd {
                                              rados::cls::lock::locker_info_t> *lockers,
                                     bool *exclusive_lock, std::string *lock_tag,
 				    ::SnapContext *snapc, ParentInfo *parent) {
-      assert(size);
-      assert(features);
-      assert(incompatible_features);
-      assert(lockers);
-      assert(exclusive_lock);
-      assert(snapc);
-      assert(parent);
+      ceph_assert(size);
+      ceph_assert(features);
+      ceph_assert(incompatible_features);
+      ceph_assert(lockers);
+      ceph_assert(exclusive_lock);
+      ceph_assert(snapc);
+      ceph_assert(parent);
 
       try {
 	uint8_t order;
@@ -1018,8 +1018,8 @@ namespace librbd {
     int get_stripe_unit_count_finish(bufferlist::const_iterator *it,
                                      uint64_t *stripe_unit,
                                      uint64_t *stripe_count) {
-      assert(stripe_unit);
-      assert(stripe_count);
+      ceph_assert(stripe_unit);
+      ceph_assert(stripe_count);
 
       try {
 	decode(*stripe_unit, *it);
@@ -1098,7 +1098,7 @@ namespace librbd {
 
     int get_create_timestamp_finish(bufferlist::const_iterator *it,
                                     utime_t *timestamp) {
-      assert(timestamp);
+      ceph_assert(timestamp);
 
       try {
         decode(*timestamp, *it);
@@ -1131,7 +1131,7 @@ namespace librbd {
 
     int get_access_timestamp_finish(bufferlist::const_iterator *it,
                                     utime_t *timestamp) {
-      assert(timestamp);
+      ceph_assert(timestamp);
       
       try {
         decode(*timestamp, *it);
@@ -1164,7 +1164,7 @@ namespace librbd {
 
     int get_modify_timestamp_finish(bufferlist::const_iterator *it,
                                       utime_t *timestamp) {
-      assert(timestamp);
+      ceph_assert(timestamp);
       
       try {
         decode(*timestamp, *it);
@@ -1567,7 +1567,7 @@ namespace librbd {
     int metadata_list_finish(bufferlist::const_iterator *it,
                              std::map<std::string, bufferlist> *pairs)
     {
-      assert(pairs);
+      ceph_assert(pairs);
       try {
         decode(*pairs, *it);
       } catch (const buffer::error &err) {
@@ -1579,7 +1579,7 @@ namespace librbd {
     int metadata_get(librados::IoCtx *ioctx, const std::string &oid,
                      const std::string &key, string *s)
     {
-      assert(s);
+      ceph_assert(s);
       bufferlist in, out;
       encode(key, in);
       int r = ioctx->exec(oid, "rbd", "metadata_get", in, out);
@@ -2640,7 +2640,7 @@ namespace librbd {
     int trash_list_finish(bufferlist::const_iterator *it,
                           map<string, cls::rbd::TrashImageSpec> *entries)
     {
-      assert(entries);
+      ceph_assert(entries);
 
       try {
 	decode(*entries, *it);
@@ -2678,7 +2678,7 @@ namespace librbd {
 
     int trash_get_finish(bufferlist::const_iterator *it,
                           cls::rbd::TrashImageSpec *trash_spec) {
-      assert(trash_spec);
+      ceph_assert(trash_spec);
       try {
         decode(*trash_spec, *it);
       } catch (const buffer::error &err) {
@@ -2749,7 +2749,7 @@ namespace librbd {
     int namespace_list_finish(bufferlist::const_iterator *it,
                               std::list<std::string> *entries)
     {
-      assert(entries);
+      ceph_assert(entries);
 
       try {
 	decode(*entries, *it);

@@ -21,7 +21,7 @@ private:
   T *data;
   int *ret_code;
 public:
-  ClsBucketIndexOpCtx(T* _data, int *_ret_code) : data(_data), ret_code(_ret_code) { assert(data); }
+  ClsBucketIndexOpCtx(T* _data, int *_ret_code) : data(_data), ret_code(_ret_code) { ceph_assert(data); }
   ~ClsBucketIndexOpCtx() override {}
   void handle_completion(int r, bufferlist& outbl) override {
     if (r >= 0) {
@@ -42,7 +42,7 @@ void BucketIndexAioManager::do_completion(int id) {
   Mutex::Locker l(lock);
 
   map<int, librados::AioCompletion*>::iterator iter = pendings.find(id);
-  assert(iter != pendings.end());
+  ceph_assert(iter != pendings.end());
   completions[id] = iter->second;
   pendings.erase(iter);
 
