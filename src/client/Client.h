@@ -180,7 +180,7 @@ struct dir_result_t {
     if (hash)
       v |= HASH;
     else
-      assert((v & HASH) != HASH);
+      ceph_assert((v & HASH) != HASH);
     return v;
   }
   static unsigned fpos_high(uint64_t p) {

@@ -105,7 +105,7 @@ public:
 static int getgroups(fuse_req_t req, gid_t **sgids)
 {
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
-  assert(sgids);
+  ceph_assert(sgids);
   int c = fuse_req_getgroups(req, 0, NULL);
   if (c < 0) {
     return c;
@@ -1148,7 +1148,7 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     return EINVAL;
   }
 
-  assert(args.allocated);  // Checking fuse has realloc'd args so we can free newargv
+  ceph_assert(args.allocated);  // Checking fuse has realloc'd args so we can free newargv
   free(newargv);
   return 0;
 }
@@ -1217,7 +1217,7 @@ uint64_t CephFuse::Handle::fino_snap(uint64_t fino)
   } else {
     Mutex::Locker l(stag_lock);
     uint64_t stag = FINO_STAG(fino);
-    assert(stag_snap_map.count(stag));
+    ceph_assert(stag_snap_map.count(stag));
     return stag_snap_map[stag];
   }
 }
@@ -1280,7 +1280,7 @@ uint64_t CephFuse::Handle::make_fake_ino(inodeno_t ino, snapid_t snapid)
       }
     }
     if (stag == first)
-      assert(0 == "run out of stag");
+      ceph_assert(0 == "run out of stag");
 
     inodeno_t fino = MAKE_FINO(ino, stag);
     //cout << "make_fake_ino " << ino << "." << snapid << " -> " << fino << std::endl;

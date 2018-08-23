@@ -15,12 +15,12 @@ public:
     dir(_dir), name(_name), inode_xlist_link(this)
   {
     auto r = dir->dentries.insert(make_pair(name, this));
-    assert(r.second);
+    ceph_assert(r.second);
     dir->num_null_dentries++;
   }
   ~Dentry() {
-    assert(ref == 0);
-    assert(dir == nullptr);
+    ceph_assert(ref == 0);
+    ceph_assert(dir == nullptr);
   }
 
   /*
@@ -28,13 +28,13 @@ public:
    * ref >1 -> pinned in lru
    */
   void get() {
-    assert(ref > 0);
+    ceph_assert(ref > 0);
     if (++ref == 2)
       lru_pin();
     //cout << "dentry.get on " << this << " " << name << " now " << ref << std::endl;
   }
   void put() {
-    assert(ref > 0);
+    ceph_assert(ref > 0);
     if (--ref == 1)
       lru_unpin();
     //cout << "dentry.put on " << this << " " << name << " now " << ref << std::endl;
@@ -59,15 +59,15 @@ public:
       if (inode->ll_ref)
         put(); // ll_ref -> dn pin
     }
-    assert(inode_xlist_link.get_list() == &inode->dentries);
+    ceph_assert(inode_xlist_link.get_list() == &inode->dentries);
     inode_xlist_link.remove_myself();
     inode.reset();
     dir->num_null_dentries++;
   }
   void detach(void) {
-    assert(!inode);
+    ceph_assert(!inode);
     auto p = dir->dentries.find(name);
-    assert(p != dir->dentries.end());
+    ceph_assert(p != dir->dentries.end());
     dir->dentries.erase(p);
     dir->num_null_dentries--;
     dir = nullptr;
