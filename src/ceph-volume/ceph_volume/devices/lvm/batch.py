@@ -2,6 +2,8 @@ import argparse
 from textwrap import dedent
 from ceph_volume import terminal, decorators
 from ceph_volume.util import disk, prompt_bool
+from ceph_volume.util.device import Device
+from ceph_volume.util import arg_validators
 from . import strategies
 
 
@@ -56,12 +58,12 @@ def filestore_mixed_type(device_facts):
     Detect if devices are HDDs as well as solid state so that the journal can be
     placed in solid devices while data is kept in the spinning drives.
     """
-    types = [device['rotational'] for device in device_facts]
+    types = [device.sys_api['rotational'] for device in device_facts]
     if len(set(types)) > 1:
         return strategies.filestore.MixedType
 
 
-def get_strategy(devices, args):
+def get_strategy(args):
     """
     Given a set of devices as input, go through the different detection
     mechanisms to narrow down on a strategy to use. The strategies are 4 in
@@ -84,9 +86,9 @@ def get_strategy(devices, args):
         strategies = filestore_strategies
 
     for strategy in strategies:
-        backend = strategy(devices)
+        backend = strategy(args.devices)
         if backend:
-            return backend(devices, args)
+            return backend(args.devices, args)
 
 
 class Batch(object):
@@ -126,25 +128,8 @@ class Batch(object):
             detected_devices=self.get_devices(),
         )
 
-    def get_filtered_devices(self, devices):
-        """
-        Parse all devices in the current system and keep only the ones that are
-        being explicity passed in
-        """
-        system_devices = disk.get_devices()
-        if not devices:
-            return system_devices.values()
-        parsed_devices = []
-        for device in devices:
-            try:
-                parsed_devices.append(system_devices[device])
-            except KeyError:
-                continue
-
-        return parsed_devices
-
     def report(self, args):
-        strategy = get_strategy(self.get_filtered_devices(args.devices), args)
+        strategy = get_strategy(args)
         if args.format == 'pretty':
             strategy.report_pretty()
         elif args.format == 'json':
@@ -175,6 +160,7 @@ class Batch(object):
             'devices',
             metavar='DEVICES',
             nargs='*',
+            type=arg_validators.ValidDevice(),
             default=[],
             help='Devices to provision OSDs',
         )
