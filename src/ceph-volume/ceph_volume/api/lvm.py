@@ -434,6 +434,31 @@ def create_vg(devices, name=None, name_prefix=None):
     return vg
 
 
+def extend_vg(vg, devices):
+    """
+    Extend a Volume Group. Command looks like::
+
+        vgextend --force --yes group_name [device, ...]
+
+    Once created the volume group is extended and returned as a ``VolumeGroup`` object
+
+    :param vg: A VolumeGroup object
+    :param devices: A list of devices to extend the VG. Optionally, a single
+                    device (as a string) can be used.
+    """
+    if not isinstance(devices, list):
+        devices = [devices]
+    process.run([
+        'vgextend',
+        '--force',
+        '--yes',
+        vg.name] + devices
+    )
+
+    vg = get_vg(vg_name=vg.name)
+    return vg
+
+
 def remove_vg(vg_name):
     """
     Removes a volume group.
