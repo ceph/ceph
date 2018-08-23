@@ -987,7 +987,7 @@ namespace rgw {
     auto bl_iter_key1 = ux_key1->cbegin();
     decode(fhk, bl_iter_key1);
     if (fhk.version >= 2) {
-      assert(this->fh.fh_hk == fhk.fh_hk);
+      ceph_assert(this->fh.fh_hk == fhk.fh_hk);
     } else {
       get<0>(dar) = true;
     }
@@ -1290,8 +1290,8 @@ namespace rgw {
 	s->bucket_info.placement_rule);
 
     /* not obviously supportable */
-    assert(! dlo_manifest);
-    assert(! slo_info);
+    ceph_assert(! dlo_manifest);
+    ceph_assert(! slo_info);
 
     perfcounter->inc(l_rgw_put);
     op_ret = -EINVAL;
@@ -1542,7 +1542,7 @@ void rgwfile_version(int *major, int *minor, int *extra)
   /* stash access data for "mount" */
   RGWLibFS* new_fs = new RGWLibFS(static_cast<CephContext*>(rgw), uid, acc_key,
 				  sec_key, "/");
-  assert(new_fs);
+  ceph_assert(new_fs);
 
   rc = new_fs->authorize(rgwlib.get_store());
   if (rc != 0) {
@@ -1573,7 +1573,7 @@ int rgw_mount2(librgw_t rgw, const char *uid, const char *acc_key,
   /* stash access data for "mount" */
   RGWLibFS* new_fs = new RGWLibFS(static_cast<CephContext*>(rgw), uid, acc_key,
 				  sec_key, root);
-  assert(new_fs);
+  ceph_assert(new_fs);
 
   rc = new_fs->authorize(rgwlib.get_store());
   if (rc != 0) {

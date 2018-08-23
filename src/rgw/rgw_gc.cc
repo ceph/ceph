@@ -180,7 +180,7 @@ public:
   }
 
   void handle_next_completion() {
-    assert(!ios.empty());
+    ceph_assert(!ios.empty());
     IO& io = ios.front();
     io.c->wait_for_safe();
     int ret = io.c->get_return_value();

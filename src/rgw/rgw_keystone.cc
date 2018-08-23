@@ -415,7 +415,7 @@ bool TokenCache::find(const std::string& token_id,
 bool TokenCache::find_locked(const std::string& token_id,
                              rgw::keystone::TokenEnvelope& token)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
   map<string, token_entry>::iterator iter = tokens.find(token_id);
   if (iter == tokens.end()) {
     if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_miss);
@@ -464,7 +464,7 @@ void TokenCache::add(const std::string& token_id,
 void TokenCache::add_locked(const std::string& token_id,
                             const rgw::keystone::TokenEnvelope& token)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
   map<string, token_entry>::iterator iter = tokens.find(token_id);
   if (iter != tokens.end()) {
     token_entry& e = iter->second;
@@ -479,7 +479,7 @@ void TokenCache::add_locked(const std::string& token_id,
   while (tokens_lru.size() > max) {
     list<string>::reverse_iterator riter = tokens_lru.rbegin();
     iter = tokens.find(*riter);
-    assert(iter != tokens.end());
+    ceph_assert(iter != tokens.end());
     tokens.erase(iter);
     tokens_lru.pop_back();
   }

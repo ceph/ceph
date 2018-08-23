@@ -114,7 +114,7 @@ class RGWReshardWait {
 public:
   explicit RGWReshardWait(RGWRados *_store) : store(_store) {}
   ~RGWReshardWait() {
-    assert(going_down);
+    ceph_assert(going_down);
   }
   int block_while_resharding(RGWRados::BucketShard *bs, string *new_bucket_id);
 
