@@ -57,7 +57,7 @@ public:
       return 0;
     }
     --it;
-    assert(it != db->db.end());
+    ceph_assert(it != db->db.end());
     ready = true;
     return 0;
   }
@@ -85,7 +85,7 @@ public:
       return 0;
     }
 
-    assert(it != db->db.end());
+    ceph_assert(it != db->db.end());
 
     ready = true;
     return 0;
@@ -98,7 +98,7 @@ public:
       ready = false;
       return 0;
     }
-    assert(it != db->db.end());
+    ceph_assert(it != db->db.end());
     ready = true;
     return 0;
   }

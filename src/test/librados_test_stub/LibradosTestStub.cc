@@ -945,7 +945,7 @@ Rados::Rados(IoCtx& ioctx) {
   impl->get();
 
   client = reinterpret_cast<RadosClient*>(impl);
-  assert(client != NULL);
+  ceph_assert(client != NULL);
 }
 
 Rados::~Rados() {
@@ -958,7 +958,7 @@ AioCompletion *Rados::aio_create_completion(void *cb_arg,
   AioCompletionImpl *c;
   int r = rados_aio_create_completion(cb_arg, cb_complete, cb_safe,
       reinterpret_cast<void**>(&c));
-  assert(r == 0);
+  ceph_assert(r == 0);
   return new AioCompletion(c);
 }
 

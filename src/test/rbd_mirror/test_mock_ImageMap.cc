@@ -60,7 +60,7 @@ struct LoadRequest<librbd::MockTestImageCtx> {
   static LoadRequest *create(librados::IoCtx &ioctx,
                              std::map<std::string, cls::rbd::MirrorImageMap> *image_map,
                              Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->image_map = image_map;
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -81,7 +81,7 @@ struct UpdateRequest<librbd::MockTestImageCtx> {
                                std::map<std::string, cls::rbd::MirrorImageMap> &&update_mapping,
                                std::set<std::string> &&global_image_ids,
                                Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }

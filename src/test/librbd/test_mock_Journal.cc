@@ -55,7 +55,7 @@ struct TypeTraits<MockJournalImageCtx> {
 struct MockReplay {
   static MockReplay *s_instance;
   static MockReplay &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 
@@ -99,7 +99,7 @@ MockReplay *MockReplay::s_instance = nullptr;
 struct MockRemove {
   static MockRemove *s_instance;
   static MockRemove &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 
@@ -129,7 +129,7 @@ MockRemove *MockRemove::s_instance = nullptr;
 struct MockCreate {
   static MockCreate *s_instance;
   static MockCreate &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 
@@ -170,7 +170,7 @@ public:
                              Mutex *lock, journal::ImageClientMeta *client_meta,
                              uint64_t *tag_tid, journal::TagData *tag_data,
                              Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->tag_data = tag_data;
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -206,7 +206,7 @@ struct ObjectDispatch<MockJournalImageCtx> : public io::MockObjectDispatch {
 
   static ObjectDispatch* create(MockJournalImageCtx* image_ctx,
                                 Journal<MockJournalImageCtx>* journal) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
@@ -254,7 +254,7 @@ public:
   }
 
   ~TestMockJournal() override {
-    assert(m_commit_contexts.empty());
+    ceph_assert(m_commit_contexts.empty());
   }
 
   Mutex m_lock;

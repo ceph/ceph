@@ -36,9 +36,9 @@ struct ResizeRequest<MockOperationImageCtx> {
                                uint64_t new_size, bool allow_shrink,
                                ProgressContext &prog_ctx, uint64_t journal_op_tid,
                                bool disable_journal) {
-    assert(s_instance != nullptr);
-    assert(journal_op_tid == 0);
-    assert(disable_journal);
+    ceph_assert(s_instance != nullptr);
+    ceph_assert(journal_op_tid == 0);
+    ceph_assert(disable_journal);
     s_instance->on_finish = on_finish;
     return s_instance;
   }

@@ -39,7 +39,7 @@ public:
 
   static SetFlagsRequest *create(MockOperationImageCtx *image_ctx, uint64_t flags,
 				 uint64_t mask, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -67,7 +67,7 @@ public:
                                const std::string &client_id,
                                MockContextWQ *op_work_queue,
                                Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -100,7 +100,7 @@ public:
 
   static DisableRequest *create(MockOperationImageCtx *image_ctx, bool force,
                                 bool remove, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -125,7 +125,7 @@ public:
   Context *on_finish = nullptr;
 
   static RemoveRequest *create(MockOperationImageCtx *image_ctx, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }

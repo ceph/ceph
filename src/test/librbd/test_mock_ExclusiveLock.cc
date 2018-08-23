@@ -92,7 +92,7 @@ struct BaseRequest {
 
   static T* create(MockExclusiveLockImageCtx &image_ctx,
                    Context *on_lock_unlock, Context *on_finish) {
-    assert(!s_requests.empty());
+    ceph_assert(!s_requests.empty());
     T* req = s_requests.front();
     req->on_lock_unlock = on_lock_unlock;
     req->on_finish = on_finish;

@@ -104,11 +104,11 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
   dout(0) << "Writing " << cfg.size
       << " in blocks of " << cfg.block_size << dendl;
 
-  assert(starting_offset < cfg.size);
-  assert(starting_offset % cfg.block_size == 0);
+  ceph_assert(starting_offset < cfg.size);
+  ceph_assert(starting_offset % cfg.block_size == 0);
 
   ObjectStore::CollectionHandle ch = os->open_collection(cid);
-  assert(ch);
+  ceph_assert(ch);
 
   for (int i = 0; i < cfg.repeats; ++i) {
     uint64_t offset = starting_offset;
@@ -283,7 +283,7 @@ int main(int argc, const char *argv[])
       ObjectStore::Transaction t;
       t.touch(cid, oids[i]);
       int r = os->queue_transaction(ch, std::move(t));
-      assert(r == 0);
+      ceph_assert(r == 0);
     }
   } else {
     oids.emplace_back(hobject_t(sobject_t("osbench", CEPH_NOSNAP)));
@@ -291,7 +291,7 @@ int main(int argc, const char *argv[])
     ObjectStore::Transaction t;
     t.touch(cid, oids.back());
     int r = os->queue_transaction(ch, std::move(t));
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 
   // run the worker threads

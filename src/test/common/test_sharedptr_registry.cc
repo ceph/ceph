@@ -270,9 +270,9 @@ TEST_F(SharedPtrRegistry_all, remove) {
 
     ptr1 = std::shared_ptr<int>();
     std::shared_ptr<int> res = registry.lookup(key1);
-    assert(res);
-    assert(res == ptr2);
-    assert(*res == 500);
+    ceph_assert(res);
+    ceph_assert(res == ptr2);
+    ceph_assert(*res == 500);
   }
   {
     SharedPtrRegistryTest registry;
@@ -284,9 +284,9 @@ TEST_F(SharedPtrRegistry_all, remove) {
 
     ptr1 = std::shared_ptr<int>();
     std::shared_ptr<int> res = registry.lookup(key1);
-    assert(res);
-    assert(res == ptr2);
-    assert(*res == 500);
+    ceph_assert(res);
+    ceph_assert(res == ptr2);
+    ceph_assert(*res == 500);
   }
 }
 

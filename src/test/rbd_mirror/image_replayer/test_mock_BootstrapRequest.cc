@@ -43,7 +43,7 @@ static std::string s_image_id;
 
 template <>
 std::string generate_image_id<MockTestImageCtx>(librados::IoCtx&) {
-  assert(!s_image_id.empty());
+  ceph_assert(!s_image_id.empty());
   return s_image_id;
 }
 
@@ -68,13 +68,13 @@ struct ImageSync<librbd::MockTestImageCtx> {
       librbd::journal::MirrorPeerClientMeta *client_meta, ContextWQ *work_queue,
       InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
       Context *on_finish, ProgressContext *progress_ctx) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
 
   ImageSync() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
   ~ImageSync() {
@@ -104,7 +104,7 @@ struct CloseImageRequest<librbd::MockTestImageCtx> {
 
   static CloseImageRequest* create(librbd::MockTestImageCtx **image_ctx,
                                    Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->image_ctx = image_ctx;
     s_instance->on_finish = on_finish;
     s_instance->construct(*image_ctx);
@@ -112,7 +112,7 @@ struct CloseImageRequest<librbd::MockTestImageCtx> {
   }
 
   CloseImageRequest() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
   ~CloseImageRequest() {
@@ -136,14 +136,14 @@ struct CreateImageRequest<librbd::MockTestImageCtx> {
 				    const std::string &local_image_id,
                                     librbd::MockTestImageCtx *remote_image_ctx,
                                     Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     s_instance->construct(local_image_id);
     return s_instance;
   }
 
   CreateImageRequest() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
   ~CreateImageRequest() {
@@ -162,14 +162,14 @@ struct IsPrimaryRequest<librbd::MockTestImageCtx> {
 
   static IsPrimaryRequest* create(librbd::MockTestImageCtx *image_ctx,
                                   bool *primary, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->primary = primary;
     s_instance->on_finish = on_finish;
     return s_instance;
   }
 
   IsPrimaryRequest() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
   ~IsPrimaryRequest() {
@@ -189,7 +189,7 @@ struct OpenImageRequest<librbd::MockTestImageCtx> {
                                   librbd::MockTestImageCtx **image_ctx,
                                   const std::string &image_id,
                                   bool read_only, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->image_ctx = image_ctx;
     s_instance->on_finish = on_finish;
     s_instance->construct(io_ctx, image_id);
@@ -197,7 +197,7 @@ struct OpenImageRequest<librbd::MockTestImageCtx> {
   }
 
   OpenImageRequest() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
   ~OpenImageRequest() {
@@ -220,7 +220,7 @@ struct OpenLocalImageRequest<librbd::MockTestImageCtx> {
                                        const std::string &local_image_id,
                                        ContextWQ *work_queue,
                                        Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->image_ctx = local_image_ctx;
     s_instance->on_finish = on_finish;
     s_instance->construct(local_io_ctx, local_image_id);
@@ -228,7 +228,7 @@ struct OpenLocalImageRequest<librbd::MockTestImageCtx> {
   }
 
   OpenLocalImageRequest() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
   ~OpenLocalImageRequest() {

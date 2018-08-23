@@ -27,6 +27,8 @@
 #include <thread>
 #include <atomic>
 
+#include "include/assert.h"
+
 /* in ms -- 1 minute */
 #define MAX_WAIT	(60 * 1000)
 
@@ -132,7 +134,7 @@ static void namespace_breaker_func(struct ceph_mount_info *cmount, int cmd, cons
       break;
     default:
       // Bad command
-      assert(false);
+      ceph_assert(false);
     }
     if (ret != -EAGAIN)
       break;

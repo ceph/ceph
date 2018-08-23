@@ -239,7 +239,7 @@ TEST_F(TestMockObjectWatcher, Reregister) {
   mock_image_watcher.register_watch(&register_ctx);
   ASSERT_EQ(0, register_ctx.wait());
 
-  assert(m_watch_ctx != nullptr);
+  ceph_assert(m_watch_ctx != nullptr);
   m_watch_ctx->handle_error(0, -ESHUTDOWN);
 
   // wait for recovery unwatch/watch
@@ -269,7 +269,7 @@ TEST_F(TestMockObjectWatcher, ReregisterUnwatchError) {
   mock_image_watcher.register_watch(&register_ctx);
   ASSERT_EQ(0, register_ctx.wait());
 
-  assert(m_watch_ctx != nullptr);
+  ceph_assert(m_watch_ctx != nullptr);
   m_watch_ctx->handle_error(0, -ESHUTDOWN);
 
   // wait for recovery unwatch/watch
@@ -300,7 +300,7 @@ TEST_F(TestMockObjectWatcher, ReregisterWatchError) {
   mock_image_watcher.register_watch(&register_ctx);
   ASSERT_EQ(0, register_ctx.wait());
 
-  assert(m_watch_ctx != nullptr);
+  ceph_assert(m_watch_ctx != nullptr);
   m_watch_ctx->handle_error(0, -ESHUTDOWN);
 
   // wait for recovery unwatch/watch
@@ -333,7 +333,7 @@ TEST_F(TestMockObjectWatcher, ReregisterUnwatchPendingUnregister) {
   mock_image_watcher.register_watch(&register_ctx);
   ASSERT_EQ(0, register_ctx.wait());
 
-  assert(m_watch_ctx != nullptr);
+  ceph_assert(m_watch_ctx != nullptr);
   m_watch_ctx->handle_error(0, -ESHUTDOWN);
 
   ASSERT_EQ(0, unregister_ctx.wait());
@@ -363,7 +363,7 @@ TEST_F(TestMockObjectWatcher, ReregisterWatchPendingUnregister) {
   mock_image_watcher.register_watch(&register_ctx);
   ASSERT_EQ(0, register_ctx.wait());
 
-  assert(m_watch_ctx != nullptr);
+  ceph_assert(m_watch_ctx != nullptr);
   m_watch_ctx->handle_error(0, -ESHUTDOWN);
 
   ASSERT_EQ(0, unregister_ctx.wait());
@@ -395,7 +395,7 @@ TEST_F(TestMockObjectWatcher, ReregisterPendingUnregister) {
   mock_image_watcher.register_watch(&register_ctx);
   ASSERT_EQ(0, register_ctx.wait());
 
-  assert(m_watch_ctx != nullptr);
+  ceph_assert(m_watch_ctx != nullptr);
   m_watch_ctx->handle_error(0, -ESHUTDOWN);
 
   ASSERT_EQ(0, unregister_ctx.wait());

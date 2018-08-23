@@ -114,12 +114,12 @@ private:
 	    cond.Signal();
 	    return 0;
 	  }
-	  assert(!queue.empty());
-	  assert(!paused);
+	  ceph_assert(!queue.empty());
+	  ceph_assert(!paused);
 	  ops.swap(queue);
 	  cond.Signal();
 	}
-	assert(!ops.empty());
+	ceph_assert(!ops.empty());
 
 	for (list<Op>::iterator i = ops.begin();
 	     i != ops.end();
@@ -464,8 +464,8 @@ public:
   }
 
   void choose_random_snaps(int num, set<snapid_t> *snaps) {
-    assert(snaps);
-    assert(!snap_to_hobject.empty());
+    ceph_assert(snaps);
+    ceph_assert(!snap_to_hobject.empty());
     for (int i = 0; i < num || snaps->empty(); ++i) {
       snaps->insert(rand_choose(snap_to_hobject)->first);
     }
@@ -491,7 +491,7 @@ public:
 	 i != snaps.end();
 	 ++i) {
       map<snapid_t, set<hobject_t> >::iterator j = snap_to_hobject.find(*i);
-      assert(j != snap_to_hobject.end());
+      ceph_assert(j != snap_to_hobject.end());
       j->second.insert(obj);
     }
     {
@@ -513,13 +513,13 @@ public:
     while (mapper->get_next_objects_to_trim(
 	     snap->first, rand() % 5 + 1, &hoids) == 0) {
       for (auto &&hoid: hoids) {
-	assert(!hoid.is_max());
-	assert(hobjects.count(hoid));
+	ceph_assert(!hoid.is_max());
+	ceph_assert(hobjects.count(hoid));
 	hobjects.erase(hoid);
 
 	map<hobject_t, set<snapid_t>>::iterator j =
 	  hobject_to_snap.find(hoid);
-	assert(j->second.count(snap->first));
+	ceph_assert(j->second.count(snap->first));
 	set<snapid_t> old_snaps(j->second);
 	j->second.erase(snap->first);
 
@@ -539,7 +539,7 @@ public:
       }
       hoids.clear();
     }
-    assert(hobjects.empty());
+    ceph_assert(hobjects.empty());
     snap_to_hobject.erase(snap);
   }
 
@@ -554,7 +554,7 @@ public:
 	 ++i) {
       map<snapid_t, set<hobject_t> >::iterator j =
 	snap_to_hobject.find(*i);
-      assert(j->second.count(obj->first));
+      ceph_assert(j->second.count(obj->first));
       j->second.erase(obj->first);
     }
     {
@@ -575,7 +575,7 @@ public:
       rand_choose(hobject_to_snap);
     set<snapid_t> snaps;
     int r = mapper->get_snaps(obj->first, &snaps);
-    assert(r == 0);
+    ceph_assert(r == 0);
     ASSERT_EQ(snaps, obj->second);
   }
 };

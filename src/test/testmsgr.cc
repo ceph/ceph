@@ -86,7 +86,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   
   // start up network
   int whoami = mc.monmap.get_rank(args[0]);
-  assert(whoami >= 0);
+  ceph_assert(whoami >= 0);
   ostringstream ss;
   ss << mc.monmap.get_addr(whoami);
   std::string sss(ss.str());

@@ -253,7 +253,7 @@ class ClientStub : public TestStub
     }
 
     messenger.reset(Messenger::create_client_messenger(cct, "stubclient"));
-    assert(messenger.get() != NULL);
+    ceph_assert(messenger.get() != NULL);
 
     messenger->set_default_policy(
 	Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
@@ -261,7 +261,7 @@ class ClientStub : public TestStub
 	    << messenger->get_myaddr() << dendl;
 
     objecter.reset(new Objecter(cct, messenger.get(), &monc, NULL, 0, 0));
-    assert(objecter.get() != NULL);
+    ceph_assert(objecter.get() != NULL);
     objecter->set_balanced_budget();
 
     monc.set_messenger(messenger.get());
@@ -421,7 +421,7 @@ class OSDStub : public TestStub
       monc.shutdown();
       return err;
     }
-    assert(!monc.get_fsid().is_zero());
+    ceph_assert(!monc.get_fsid().is_zero());
 
     monc.wait_auth_rotating(30.0);
 
@@ -556,7 +556,7 @@ class OSDStub : public TestStub
       if (pgs.count(pgid) == 0) {
 	derr << __func__
 	     << " pgid " << pgid << " not on our map" << dendl;
-	assert(0 == "pgid not on our map");
+	ceph_assert(0 == "pgid not on our map");
       }
       pg_stat_t &s = pgs[pgid];
       mstats->pg_stat[pgid] = s;
@@ -575,7 +575,7 @@ class OSDStub : public TestStub
 
   void modify_pg(pg_t pgid) {
     dout(10) << __func__ << " pg " << pgid << dendl;
-    assert(pgs.count(pgid) > 0);
+    ceph_assert(pgs.count(pgid) > 0);
 
     pg_stat_t &s = pgs[pgid];
     utime_t now = ceph_clock_now();
@@ -622,7 +622,7 @@ class OSDStub : public TestStub
 	++it;
 	++pgs_at;
       }
-      assert(it != pgs.end());
+      ceph_assert(it != pgs.end());
       dout(20) << __func__
 	       << " pg at pos " << at << ": " << it->first << dendl;
       modify_pg(it->first);
@@ -749,7 +749,7 @@ class OSDStub : public TestStub
   }
 
   void handle_pg_create(MOSDPGCreate *m) {
-    assert(m != NULL);
+    ceph_assert(m != NULL);
     if (m->epoch < osdmap.get_epoch()) {
       std::cout << __func__ << " epoch " << m->epoch << " < "
 	       << osdmap.get_epoch() << "; dropping" << std::endl;
@@ -786,7 +786,7 @@ class OSDStub : public TestStub
               << dendl;
       dout(0) << monc.get_monmap() << dendl;
     }
-    assert(m->fsid == monc.get_fsid());
+    ceph_assert(m->fsid == monc.get_fsid());
 
     epoch_t first = m->get_first();
     epoch_t last = m->get_last();
@@ -847,7 +847,7 @@ class OSDStub : public TestStub
 	derr << "osd." << whoami << "::" << __func__
 	     << "** ERROR: applying incremental: "
 	     << cpp_strerror(err) << dendl;
-	assert(0 == "error applying incremental");
+	ceph_assert(0 == "error applying incremental");
       }
     }
     dout(30) << __func__ << "\nosdmap:\n";
@@ -949,7 +949,7 @@ void handle_test_signal(int signum)
 }
 
 void usage() {
-  assert(our_name != NULL);
+  ceph_assert(our_name != NULL);
 
   std::cout << "usage: " << our_name
 	    << " <--stub-id ID> [--stub-id ID...]"

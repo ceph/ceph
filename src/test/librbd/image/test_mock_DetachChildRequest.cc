@@ -20,7 +20,7 @@ struct MockTestImageCtx : public MockImageCtx {
                                   const std::string &image_id,
                                   const char *snap, librados::IoCtx& p,
                                   bool read_only) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 

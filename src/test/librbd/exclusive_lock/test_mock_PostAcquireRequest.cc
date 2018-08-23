@@ -43,7 +43,7 @@ struct RefreshRequest<librbd::MockTestImageCtx> {
                                 bool acquire_lock_refresh,
                                 bool skip_open_parent, Context *on_finish) {
     EXPECT_TRUE(acquire_lock_refresh);
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }

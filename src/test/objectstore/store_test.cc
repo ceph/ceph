@@ -3438,7 +3438,7 @@ public:
 
       bufferlist r2;
       r = state->store->read(state->ch, hoid, 0, state->contents[hoid].data.length(), r2);
-      assert(bl_eq(state->contents[hoid].data, r2));
+      ceph_assert(bl_eq(state->contents[hoid].data, r2));
       state->cond.Signal();
     }
   };
@@ -3465,7 +3465,7 @@ public:
       r = state->store->read(
 	state->ch, noid, 0,
 	state->contents[noid].data.length(), r2);
-      assert(bl_eq(state->contents[noid].data, r2));
+      ceph_assert(bl_eq(state->contents[noid].data, r2));
       state->cond.Signal();
     }
   };
@@ -3492,7 +3492,7 @@ public:
       --(state->in_flight);
       bufferlist r2;
       r = state->store->read(state->ch, noid, 0, state->contents[noid].data.length(), r2);
-      assert(bl_eq(state->contents[noid].data, r2));
+      ceph_assert(bl_eq(state->contents[noid].data, r2));
       state->cond.Signal();
     }
   };
@@ -3538,7 +3538,7 @@ public:
       vector<ghobject_t> objects;
       int r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
 				     10, &objects, 0);
-      assert(r >= 0);
+      ceph_assert(r >= 0);
       if (objects.empty())
 	break;
       ObjectStore::Transaction t;
@@ -3797,7 +3797,7 @@ public:
       }
     } else {
       bufferlist value;
-      assert(dstdata.length() > dstoff);
+      ceph_assert(dstdata.length() > dstoff);
       dstdata.copy(0, dstoff, value);
       value.append(bl);
       if (value.length() < dstdata.length())
@@ -3843,7 +3843,7 @@ public:
       }
     } else {
       bufferlist value;
-      assert(data.length() > offset);
+      ceph_assert(data.length() > offset);
       data.copy(0, offset, value);
       value.append(bl);
       if (value.length() < data.length())
@@ -3969,7 +3969,7 @@ public:
       size_t max_len = expected.length() - offset;
       if (len > max_len)
         len = max_len;
-      assert(len == result.length());
+      ceph_assert(len == result.length());
       ASSERT_EQ(len, result.length());
       expected.copy(offset, len, bl);
       ASSERT_EQ(r, (int)len);
@@ -4132,7 +4132,7 @@ public:
     ch.reset();
     store->umount();
     int r = store->fsck(deep);
-    assert(r == 0 || r == -EOPNOTSUPP);
+    ceph_assert(r == 0 || r == -EOPNOTSUPP);
     store->mount();
     ch = store->open_collection(cid);
   }
@@ -4171,7 +4171,7 @@ public:
 	  cerr << "- " << *p << std::endl;
       //cerr << " objects_set: " << objects_set << std::endl;
       //cerr << " available_set: " << available_objects << std::endl;
-      assert(0 == "badness");
+      ceph_assert(0 == "badness");
     }
 
     ASSERT_EQ(objects_set.size(), available_objects.size());
@@ -4214,7 +4214,7 @@ public:
     struct stat buf;
     int r = store->stat(ch, hoid, &buf);
     ASSERT_EQ(0, r);
-    assert((uint64_t)buf.st_size == expected);
+    ceph_assert((uint64_t)buf.st_size == expected);
     ASSERT_TRUE((uint64_t)buf.st_size == expected);
     {
       Mutex::Locker locker(lock);

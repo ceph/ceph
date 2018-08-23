@@ -16,7 +16,7 @@ public:
     auto i = bl_buffers.begin();
     while (bl_len > 0)
     {
-      assert(i != bl_buffers.end());
+      ceph_assert(i != bl_buffers.end());
       off_t len = std::min<off_t>(bl_len, i->length());
       sink.append(*i, 0, len);
       bl_len -= len;

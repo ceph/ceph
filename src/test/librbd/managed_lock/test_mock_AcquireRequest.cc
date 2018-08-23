@@ -39,7 +39,7 @@ struct BreakRequest<librbd::MockImageCtx> {
     EXPECT_EQ(cct->_conf.get_val<int64_t>("rbd_blacklist_expire_seconds"),
               (int)blacklist_expire_seconds);
     EXPECT_FALSE(force_break_lock);
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -59,7 +59,7 @@ struct GetLockerRequest<librbd::MockImageCtx> {
   static GetLockerRequest* create(librados::IoCtx& ioctx,
                                   const std::string& oid, bool exclusive,
                                   Locker *locker, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->locker = locker;
     s_instance->on_finish = on_finish;
     return s_instance;
