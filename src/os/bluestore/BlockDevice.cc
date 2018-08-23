@@ -76,7 +76,7 @@ uint64_t IOContext::get_num_ios() const
 
 void IOContext::release_running_aios()
 {
-  assert(!num_running);
+  ceph_assert(!num_running);
 #ifdef HAVE_LIBAIO
   // release aio contexts (including pinned buffers).
   running_aios.clear();

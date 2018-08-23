@@ -186,7 +186,7 @@ class PageSet {
       length -= c;
     }
     // make sure we sized the vector correctly
-    assert(out == range.rend());
+    ceph_assert(out == range.rend());
   }
 
   // return all allocated pages that intersect the range [offset,length)
@@ -216,7 +216,7 @@ class PageSet {
   }
   void decode(bufferlist::const_iterator &p) {
     using ceph::decode;
-    assert(empty());
+    ceph_assert(empty());
     decode(page_size, p);
     unsigned count;
     decode(count, p);

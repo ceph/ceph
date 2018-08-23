@@ -62,11 +62,11 @@ struct aio_queue_t {
       ctx(0) {
   }
   ~aio_queue_t() {
-    assert(ctx == 0);
+    ceph_assert(ctx == 0);
   }
 
   int init() {
-    assert(ctx == 0);
+    ceph_assert(ctx == 0);
     int r = io_setup(max_iodepth, &ctx);
     if (r < 0) {
       if (ctx) {
@@ -79,7 +79,7 @@ struct aio_queue_t {
   void shutdown() {
     if (ctx) {
       int r = io_destroy(ctx);
-      assert(r == 0);
+      ceph_assert(r == 0);
       ctx = 0;
     }
   }
