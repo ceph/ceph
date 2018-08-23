@@ -591,14 +591,13 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       return 0;
 
     size_t i = 0;
-    Rados rados(ictx->md_ctx);
     for ( auto &info : image_info){
       string pool = std::get<1>(info.first);
       IoCtx ioctx;
-      r = rados.ioctx_create2(std::get<0>(info.first), ioctx);
+      r = util::create_ioctx(ictx->md_ctx, "child image",
+                             std::get<0>(info.first), std::get<2>(info.first),
+                             &ioctx);
       if (r < 0) {
-        lderr(cct) << "Error accessing child image pool " << pool
-                   << dendl;
         return r;
       }
       ioctx.set_namespace(std::get<2>(info.first));
@@ -664,16 +663,14 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       return r;
     }
 
-    Rados rados(ictx->md_ctx);
     for (auto &info : image_info) {
       IoCtx ioctx;
-      r = rados.ioctx_create2(std::get<0>(info.first), ioctx);
+      r = util::create_ioctx(ictx->md_ctx, "child image",
+                             std::get<0>(info.first), std::get<2>(info.first),
+                             &ioctx);
       if (r < 0) {
-        lderr(cct) << "Error accessing child image pool "
-                   << std::get<1>(info.first) << dendl;
         return r;
       }
-      ioctx.set_namespace(std::get<2>(info.first));
 
       for (auto &id_it : info.second) {
         string name;

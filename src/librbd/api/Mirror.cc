@@ -286,17 +286,15 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
         if (image_info.empty())
           continue;
 
-        librados::Rados rados(ictx->md_ctx);
         for (auto &info: image_info) {
           librados::IoCtx ioctx;
-          r = rados.ioctx_create2(std::get<0>(info.first), ioctx);
+          r = util::create_ioctx(ictx->md_ctx, "child image",
+                                 std::get<0>(info.first),
+                                 std::get<2>(info.first), &ioctx);
           if (r < 0) {
             rollback = true;
-            lderr(cct) << "error accessing child image pool "
-                       << std::get<1>(info.first)  << dendl;
             return r;
           }
-          ioctx.set_namespace(std::get<2>(info.first));
 
           for (auto &id_it : info.second) {
             cls::rbd::MirrorImage mirror_image_internal;

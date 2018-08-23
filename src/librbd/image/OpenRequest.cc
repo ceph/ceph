@@ -470,11 +470,9 @@ Context *OpenRequest<I>::handle_v2_get_data_pool(int *result) {
   }
 
   if (data_pool_id != -1) {
-    librados::Rados rados(m_image_ctx->md_ctx);
-    *result = rados.ioctx_create2(data_pool_id, m_image_ctx->data_ctx);
+    *result = util::create_ioctx(m_image_ctx->md_ctx, "data pool", data_pool_id,
+                                 {}, &m_image_ctx->data_ctx);
     if (*result < 0) {
-      lderr(cct) << "failed to initialize data pool IO context: "
-                 << cpp_strerror(*result) << dendl;
       send_close_image(*result);
       return nullptr;
     }
