@@ -2,7 +2,6 @@ import argparse
 from textwrap import dedent
 from ceph_volume import terminal, decorators
 from ceph_volume.util import disk, prompt_bool
-from ceph_volume.util.device import Device
 from ceph_volume.util import arg_validators
 from . import strategies
 
@@ -16,7 +15,7 @@ def device_formatter(devices):
     for path, details in devices:
         lines.append(device_list_template.format(
             path=path, size=details['human_readable_size'],
-            state='solid' if details['rotational'] == '0' else 'rotational')
+            state='solid' if details.sys_api['rotational'] == '0' else 'rotational')
         )
 
     return ''.join(lines)
@@ -28,7 +27,7 @@ def bluestore_single_type(device_facts):
     Detect devices that are just HDDs or solid state so that a 1:1
     device-to-osd provisioning can be done
     """
-    types = [device['rotational'] for device in device_facts]
+    types = [device.sys_api['rotational'] for device in device_facts]
     if len(set(types)) == 1:
         return strategies.bluestore.SingleType
 
@@ -38,7 +37,7 @@ def bluestore_mixed_type(device_facts):
     Detect if devices are HDDs as well as solid state so that block.db can be
     placed in solid devices while data is kept in the spinning drives.
     """
-    types = [device['rotational'] for device in device_facts]
+    types = [device.sys_api['rotational'] for device in device_facts]
     if len(set(types)) > 1:
         return strategies.bluestore.MixedType
 
@@ -48,7 +47,7 @@ def filestore_single_type(device_facts):
     Detect devices that are just HDDs or solid state so that a 1:1
     device-to-osd provisioning can be done, keeping the journal on the OSD
     """
-    types = [device['rotational'] for device in device_facts]
+    types = [device.sys_api['rotational'] for device in device_facts]
     if len(set(types)) == 1:
         return strategies.filestore.SingleType
 
