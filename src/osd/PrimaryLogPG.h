@@ -251,7 +251,7 @@ public:
     FlushOp()
       : flushed_version(0), objecter_tid(0), rval(0),
 	blocking(false), removal(false), chunks(0) {}
-    ~FlushOp() { assert(!on_flush); }
+    ~FlushOp() { ceph_assert(!on_flush); }
   };
   typedef std::shared_ptr<FlushOp> FlushOpRef;
 
@@ -664,7 +664,7 @@ public:
       }
     }
     ~OpContext() {
-      assert(!op_t);
+      ceph_assert(!op_t);
       if (reply)
 	reply->put();
       for (list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
@@ -755,7 +755,7 @@ public:
       return this;
     }
     void put() {
-      assert(nref > 0);
+      ceph_assert(nref > 0);
       if (--nref == 0) {
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;
@@ -783,12 +783,12 @@ protected:
     } else if (write_ordered) {
       ctx->lock_type = ObjectContext::RWState::RWWRITE;
     } else {
-      assert(ctx->op->may_read());
+      ceph_assert(ctx->op->may_read());
       ctx->lock_type = ObjectContext::RWState::RWREAD;
     }
 
     if (ctx->head_obc) {
-      assert(!ctx->obc->obs.exists);
+      ceph_assert(!ctx->obc->obs.exists);
       if (!ctx->lock_manager.get_lock_type(
 	    ctx->lock_type,
 	    ctx->head_obc->obs.oi.soid,
@@ -805,7 +805,7 @@ protected:
 	  ctx->op)) {
       return true;
     } else {
-      assert(!ctx->head_obc);
+      ceph_assert(!ctx->head_obc);
       ctx->lock_type = ObjectContext::RWState::RWNONE;
       return false;
     }
@@ -1005,9 +1005,9 @@ protected:
     _register_snapset_context(ssc);
   }
   void _register_snapset_context(SnapSetContext *ssc) {
-    assert(snapset_contexts_lock.is_locked());
+    ceph_assert(snapset_contexts_lock.is_locked());
     if (!ssc->registered) {
-      assert(snapset_contexts.count(ssc->oid) == 0);
+      ceph_assert(snapset_contexts.count(ssc->oid) == 0);
       ssc->registered = true;
       snapset_contexts[ssc->oid] = ssc;
     }
@@ -1570,8 +1570,8 @@ private:
       : my_base(ctx),
 	NamedState(context< SnapTrimmer >().pg, "Trimming") {
       context< SnapTrimmer >().log_enter(state_name);
-      assert(context< SnapTrimmer >().can_trim());
-      assert(in_flight.empty());
+      ceph_assert(context< SnapTrimmer >().can_trim());
+      ceph_assert(in_flight.empty());
     }
     void exit() {
       context< SnapTrimmer >().log_exit(state_name, enter_time);
@@ -1595,7 +1595,7 @@ private:
       : my_base(ctx),
 	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitTrimTimer") {
       context< SnapTrimmer >().log_enter(state_name);
-      assert(context<Trimming>().in_flight.empty());
+      ceph_assert(context<Trimming>().in_flight.empty());
       struct OnTimer : Context {
 	PrimaryLogPGRef pg;
 	epoch_t epoch;
@@ -1645,7 +1645,7 @@ private:
       : my_base(ctx),
 	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitRWLock") {
       context< SnapTrimmer >().log_enter(state_name);
-      assert(context<Trimming>().in_flight.empty());
+      ceph_assert(context<Trimming>().in_flight.empty());
     }
     void exit() {
       context< SnapTrimmer >().log_exit(state_name, enter_time);
@@ -1668,7 +1668,7 @@ private:
       : my_base(ctx),
 	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitRepops") {
       context< SnapTrimmer >().log_enter(state_name);
-      assert(!context<Trimming>().in_flight.empty());
+      ceph_assert(!context<Trimming>().in_flight.empty());
     }
     void exit() {
       context< SnapTrimmer >().log_exit(state_name, enter_time);
@@ -1711,8 +1711,8 @@ private:
 	pg->unlock();
       }
       void cancel() {
-	assert(pg->is_locked());
-	assert(!canceled);
+	ceph_assert(pg->is_locked());
+	ceph_assert(!canceled);
 	canceled = true;
       }
     };
@@ -1722,7 +1722,7 @@ private:
       : my_base(ctx),
 	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitReservation") {
       context< SnapTrimmer >().log_enter(state_name);
-      assert(context<Trimming>().in_flight.empty());
+      ceph_assert(context<Trimming>().in_flight.empty());
       auto *pg = context< SnapTrimmer >().pg;
       pending = new ReservationCB(pg);
       pg->osd->snap_reserver.request_reservation(

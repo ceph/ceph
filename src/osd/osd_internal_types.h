@@ -105,7 +105,7 @@ public:
       }
       switch (state) {
       case RWNONE:
-	assert(count == 0);
+	ceph_assert(count == 0);
 	state = RWREAD;
 	// fall through
       case RWREAD:
@@ -116,7 +116,7 @@ public:
       case RWEXCL:
 	return false;
       default:
-	assert(0 == "unhandled case");
+	ceph_assert(0 == "unhandled case");
 	return false;
       }
     }
@@ -139,7 +139,7 @@ public:
       }
       switch (state) {
       case RWNONE:
-	assert(count == 0);
+	ceph_assert(count == 0);
 	state = RWWRITE;
 	// fall through
       case RWWRITE:
@@ -150,14 +150,14 @@ public:
       case RWEXCL:
 	return false;
       default:
-	assert(0 == "unhandled case");
+	ceph_assert(0 == "unhandled case");
 	return false;
       }
     }
     bool get_excl_lock() {
       switch (state) {
       case RWNONE:
-	assert(count == 0);
+	ceph_assert(count == 0);
 	state = RWEXCL;
 	count = 1;
 	return true;
@@ -168,7 +168,7 @@ public:
       case RWEXCL:
 	return false;
       default:
-	assert(0 == "unhandled case");
+	ceph_assert(0 == "unhandled case");
 	return false;
       }
     }
@@ -189,8 +189,8 @@ public:
       return get_write_lock();
     }
     void dec(list<OpRequestRef> *requeue) {
-      assert(count > 0);
-      assert(requeue);
+      ceph_assert(count > 0);
+      ceph_assert(requeue);
       count--;
       if (count == 0) {
 	state = RWNONE;
@@ -198,15 +198,15 @@ public:
       }
     }
     void put_read(list<OpRequestRef> *requeue) {
-      assert(state == RWREAD);
+      ceph_assert(state == RWREAD);
       dec(requeue);
     }
     void put_write(list<OpRequestRef> *requeue) {
-      assert(state == RWWRITE);
+      ceph_assert(state == RWWRITE);
       dec(requeue);
     }
     void put_excl(list<OpRequestRef> *requeue) {
-      assert(state == RWEXCL);
+      ceph_assert(state == RWEXCL);
       dec(requeue);
     }
     bool empty() const { return state == RWNONE; }
@@ -230,7 +230,7 @@ public:
     case RWState::RWEXCL:
       return get_excl(op);
     default:
-      assert(0 == "invalid lock type");
+      ceph_assert(0 == "invalid lock type");
       return true;
     }
   }
@@ -257,7 +257,7 @@ public:
     return rwstate.get_read_lock();
   }
   void drop_recovery_read(list<OpRequestRef> *ls) {
-    assert(rwstate.recovery_read_marker);
+    ceph_assert(rwstate.recovery_read_marker);
     rwstate.put_read(ls);
     rwstate.recovery_read_marker = false;
   }
@@ -277,7 +277,7 @@ public:
       rwstate.put_excl(to_wake);
       break;
     default:
-      assert(0 == "invalid lock type");
+      ceph_assert(0 == "invalid lock type");
     }
     if (rwstate.empty() && rwstate.recovery_read_marker) {
       rwstate.recovery_read_marker = false;
@@ -298,17 +298,17 @@ public:
       blocked(false), requeue_scrub_on_unblock(false) {}
 
   ~ObjectContext() {
-    assert(rwstate.empty());
+    ceph_assert(rwstate.empty());
     if (destructor_callback)
       destructor_callback->complete(0);
   }
 
   void start_block() {
-    assert(!blocked);
+    ceph_assert(!blocked);
     blocked = true;
   }
   void stop_block() {
-    assert(blocked);
+    ceph_assert(blocked);
     blocked = false;
   }
   bool is_blocked() const {
@@ -365,7 +365,7 @@ public:
     const hobject_t &hoid,
     ObjectContextRef& obc,
     OpRequestRef& op) {
-    assert(locks.find(hoid) == locks.end());
+    ceph_assert(locks.find(hoid) == locks.end());
     if (obc->get_lock_type(op, type)) {
       locks.insert(make_pair(hoid, ObjectLockState(obc, type)));
       return true;
@@ -377,7 +377,7 @@ public:
   bool take_write_lock(
     const hobject_t &hoid,
     ObjectContextRef obc) {
-    assert(locks.find(hoid) == locks.end());
+    ceph_assert(locks.find(hoid) == locks.end());
     if (obc->rwstate.take_write_lock()) {
       locks.insert(
 	make_pair(
@@ -392,7 +392,7 @@ public:
     const hobject_t &hoid,
     ObjectContextRef obc,
     bool mark_if_unsuccessful) {
-    assert(locks.find(hoid) == locks.end());
+    ceph_assert(locks.find(hoid) == locks.end());
     if (obc->get_snaptrimmer_write(mark_if_unsuccessful)) {
       locks.insert(
 	make_pair(
@@ -407,7 +407,7 @@ public:
     const hobject_t &hoid,
     ObjectContextRef obc,
     OpRequestRef op) {
-    assert(locks.find(hoid) == locks.end());
+    ceph_assert(locks.find(hoid) == locks.end());
     if (obc->get_write_greedy(op)) {
       locks.insert(
 	make_pair(
@@ -422,7 +422,7 @@ public:
   bool try_get_read_lock(
     const hobject_t &hoid,
     ObjectContextRef obc) {
-    assert(locks.find(hoid) == locks.end());
+    ceph_assert(locks.find(hoid) == locks.end());
     if (obc->try_get_read_lock()) {
       locks.insert(
 	make_pair(
@@ -455,7 +455,7 @@ public:
     locks.clear();
   }
   ~ObcLockManager() {
-    assert(locks.empty());
+    ceph_assert(locks.empty());
   }
 };
 

@@ -203,7 +203,7 @@ int OSDMap::Incremental::identify_osd(uuid_d u) const
 int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
 						  const OSDMap& osdmap)
 {
-  assert(epoch == osdmap.get_epoch() + 1);
+  ceph_assert(epoch == osdmap.get_epoch() + 1);
 
   for (auto &new_pool : new_pools) {
     if (!new_pool.second.tiers.empty()) {
@@ -291,7 +291,7 @@ bool OSDMap::containing_subtree_is_down(CephContext *cct, int id, int subtree_ty
     } else {
       type = crush->get_bucket_type(current);
     }
-    assert(type >= 0);
+    ceph_assert(type >= 0);
 
     if (!subtree_is_down(current, down_cache)) {
       ldout(cct, 30) << "containing_subtree_is_down(" << id << ") = false" << dendl;
@@ -502,7 +502,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   // OSDMaps.  others should be passing around the canonical encoded
   // buffers from on high.  select out those callers by passing in an
   // "impossible" feature bit.
-  assert(features & CEPH_FEATURE_RESERVED);
+  ceph_assert(features & CEPH_FEATURE_RESERVED);
   features &= ~CEPH_FEATURE_RESERVED;
 
   size_t start_offset = bl.length();
@@ -1288,9 +1288,9 @@ void OSDMap::get_full_pools(CephContext *cct,
                             set<int64_t> *backfillfull,
                             set<int64_t> *nearfull) const
 {
-  assert(full);
-  assert(backfillfull);
-  assert(nearfull);
+  ceph_assert(full);
+  ceph_assert(backfillfull);
+  ceph_assert(nearfull);
   full->clear();
   backfillfull->clear();
   nearfull->clear();
@@ -1850,7 +1850,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
   else if (inc.fsid != fsid)
     return -EINVAL;
   
-  assert(inc.epoch == epoch+1);
+  ceph_assert(inc.epoch == epoch+1);
 
   epoch++;
   modified = inc.modified;
@@ -1902,7 +1902,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
        p != new_purged_snaps.end();
        ++p) {
     auto q = removed_snaps_queue.find(p->first);
-    assert(q != removed_snaps_queue.end());
+    ceph_assert(q != removed_snaps_queue.end());
     q->second.subtract(p->second);
     if (q->second.empty()) {
       removed_snaps_queue.erase(q);
@@ -2626,7 +2626,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   // OSDMaps.  others should be passing around the canonical encoded
   // buffers from on high.  select out those callers by passing in an
   // "impossible" feature bit.
-  assert(features & CEPH_FEATURE_RESERVED);
+  ceph_assert(features & CEPH_FEATURE_RESERVED);
   features &= ~CEPH_FEATURE_RESERVED;
 
   size_t start_offset = bl.length();
@@ -2707,8 +2707,8 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
       encode(pg_upmap, bl);
       encode(pg_upmap_items, bl);
     } else {
-      assert(pg_upmap.empty());
-      assert(pg_upmap_items.empty());
+      ceph_assert(pg_upmap.empty());
+      ceph_assert(pg_upmap_items.empty());
     }
     if (v >= 6) {
       encode(crush_version, bl);
@@ -3640,7 +3640,7 @@ void OSDMap::print_tree(Formatter *f, ostream *out, unsigned filter, string buck
   if (f) {
     OSDTreeFormattingDumper(crush.get(), this, filter).dump(f, bucket);
   } else {
-    assert(out);
+    ceph_assert(out);
     TextTable tbl;
     OSDTreePlainDumper(crush.get(), this, filter).dump(&tbl, bucket);
     *out << tbl;
@@ -3776,12 +3776,12 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
     r = build_simple_crush_map(cct, *crush, nosd, &ss);
   else
     r = build_simple_crush_map_from_conf(cct, *crush, &ss);
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   int poolbase = get_max_osd() ? get_max_osd() : 1;
 
   const int default_replicated_rule = crush->get_osd_pool_default_crush_replicated_ruleset(cct);
-  assert(default_replicated_rule >= 0);
+  ceph_assert(default_replicated_rule >= 0);
 
   if (default_pool) {
     // pgp_num <= pg_num
@@ -3867,7 +3867,7 @@ int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
   int rootid;
   int r = crush.add_bucket(0, 0, CRUSH_HASH_DEFAULT,
 			   root_type, 0, NULL, NULL, &rootid);
-  assert(r == 0);
+  ceph_assert(r == 0);
   crush.set_item_name(rootid, "default");
 
   for (int o=0; o<nosd; o++) {
@@ -3902,7 +3902,7 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
   int r = crush.add_bucket(0, 0,
 			   CRUSH_HASH_DEFAULT,
 			   root_type, 0, NULL, NULL, &rootid);
-  assert(r == 0);
+  ceph_assert(r == 0);
   crush.set_item_name(rootid, "default");
 
   // add osds
@@ -4029,7 +4029,7 @@ int OSDMap::summarize_mapping_stats(
 	    }
 	  }
 	} else {
-	  assert(0 == "unhandled pool type");
+	  ceph_assert(0 == "unhandled pool type");
 	}
       }
     }
@@ -4307,7 +4307,7 @@ int OSDMap::calc_pg_upmaps(
     set<int> overfull;
     for (auto& i : pgs_by_osd) {
       // make sure osd is still there (belongs to this crush-tree)
-      assert(osd_weight.count(i.first));
+      ceph_assert(osd_weight.count(i.first));
       float target = osd_weight[i.first] * pgs_per_weight;
       float deviation = (float)i.second.size() - target;
       ldout(cct, 20) << " osd." << i.first
@@ -4347,7 +4347,7 @@ int OSDMap::calc_pg_upmaps(
       int osd = p->second;
       float deviation = p->first;
       float target = osd_weight[osd] * pgs_per_weight;
-      assert(target > 0);
+      ceph_assert(target > 0);
       if (deviation/target < max_deviation_ratio) {
 	ldout(cct, 10) << " osd." << osd
 		       << " target " << target
@@ -4399,7 +4399,7 @@ int OSDMap::calc_pg_upmaps(
 	if (orig.size() != out.size()) {
 	  continue;
 	}
-	assert(orig != out);
+	ceph_assert(orig != out);
 	auto& rmi = tmp.pg_upmap_items[pg];
 	for (unsigned i = 0; i < out.size(); ++i) {
 	  if (orig[i] != out[i]) {
@@ -4440,13 +4440,13 @@ void OSDMap::get_pool_ids_by_osd(CephContext *cct,
                                 int osd,
                                 set<int64_t> *pool_ids) const
 {
-  assert(pool_ids);
+  ceph_assert(pool_ids);
   set<int> raw_rules;
   int r = crush->get_rules_by_osd(osd, &raw_rules);
   if (r < 0) {
     lderr(cct) << __func__ << " get_rules_by_osd failed: " << cpp_strerror(r)
                << dendl;
-    assert(r >= 0);
+    ceph_assert(r >= 0);
   }
   set<int> rules;
   for (auto &i: raw_rules) {
@@ -4917,7 +4917,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
       }
     }
     num_down_in_osds = down_in_osds.size();
-    assert(num_down_in_osds <= num_in_osds);
+    ceph_assert(num_down_in_osds <= num_in_osds);
     if (num_down_in_osds > 0) {
       // summary of down subtree types and osds
       for (int type = max_type; type > 0; type--) {

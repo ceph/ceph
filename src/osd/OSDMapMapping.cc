@@ -39,7 +39,7 @@ void OSDMapMapping::_init_mappings(const OSDMap& osdmap)
 				       p.second.is_erasure()));
   }
   pools.erase(q, pools.end());
-  assert(pools.size() == osdmap.get_pools().size());
+  ceph_assert(pools.size() == osdmap.get_pools().size());
 }
 
 void OSDMapMapping::update(const OSDMap& osdmap)
@@ -109,9 +109,9 @@ void OSDMapMapping::_update_range(
   unsigned pg_end)
 {
   auto i = pools.find(pool);
-  assert(i != pools.end());
-  assert(pg_begin <= pg_end);
-  assert(pg_end <= i->second.pg_num);
+  ceph_assert(i != pools.end());
+  ceph_assert(pg_begin <= pg_end);
+  ceph_assert(pg_end <= i->second.pg_num);
   for (unsigned ps = pg_begin; ps < pg_end; ++ps) {
     vector<int> up, acting;
     int up_primary, acting_primary;
@@ -169,5 +169,5 @@ void ParallelPGMapper::queue(
       any = true;
     }
   }
-  assert(any);
+  ceph_assert(any);
 }

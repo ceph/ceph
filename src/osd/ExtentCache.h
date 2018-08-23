@@ -142,12 +142,12 @@ private:
     }
 
     bool pinned_by_write() const {
-      assert(parent_pin_state);
+      ceph_assert(parent_pin_state);
       return parent_pin_state->is_write();
     }
 
     uint64_t pin_tid() const {
-      assert(parent_pin_state);
+      ceph_assert(parent_pin_state);
       return parent_pin_state->tid;
     }
 
@@ -220,14 +220,14 @@ private:
 
 	update_action action;
 	f(offset, extlen, nullptr, &action);
-	assert(!action.bl || action.bl->length() == extlen);
+	ceph_assert(!action.bl || action.bl->length() == extlen);
 	if (action.action == update_action::UPDATE_PIN) {
 	  extent *ext = action.bl ?
 	    new extent(offset, *action.bl) :
 	    new extent(offset, extlen);
 	  ext->link(*this, pin);
 	} else {
-	  assert(!action.bl);
+	  ceph_assert(!action.bl);
 	}
       }
 
@@ -242,7 +242,7 @@ private:
 
 	update_action action;
 	f(extoff, extlen, ext, &action);
-	assert(!action.bl || action.bl->length() == extlen);
+	ceph_assert(!action.bl || action.bl->length() == extlen);
 	extent *final_extent = nullptr;
 	if (action.action == update_action::NONE) {
 	  final_extent = ext;
@@ -302,8 +302,8 @@ private:
 	}
 
 	if (action.bl) {
-	  assert(final_extent);
-	  assert(final_extent->length == action.bl->length());
+	  ceph_assert(final_extent);
+	  ceph_assert(final_extent->length == action.bl->length());
 	  final_extent->bl = *(action.bl);
 	}
 
@@ -315,14 +315,14 @@ private:
 
 	  update_action action;
 	  f(tailoff, taillen, nullptr, &action);
-	  assert(!action.bl || action.bl->length() == taillen);
+	  ceph_assert(!action.bl || action.bl->length() == taillen);
 	  if (action.action == update_action::UPDATE_PIN) {
 	    extent *ext = action.bl ?
 	      new extent(tailoff, *action.bl) :
 	      new extent(tailoff, taillen);
 	    ext->link(*this, pin);
 	  } else {
-	    assert(!action.bl);
+	    ceph_assert(!action.bl);
 	  }
 	}
       }
@@ -367,13 +367,13 @@ private:
     using list = boost::intrusive::list<extent, list_member_options>;
     list pin_list;
     ~pin_state() {
-      assert(pin_list.empty());
-      assert(tid == 0);
-      assert(pin_type == NONE);
+      ceph_assert(pin_list.empty());
+      ceph_assert(tid == 0);
+      ceph_assert(pin_type == NONE);
     }
     void _open(uint64_t in_tid, pin_type_t in_type) {
-      assert(pin_type == NONE);
-      assert(in_tid > 0);
+      ceph_assert(pin_type == NONE);
+      ceph_assert(in_tid > 0);
       tid = in_tid;
       pin_type = in_type;
     }
@@ -383,7 +383,7 @@ private:
     for (auto iter = p.pin_list.begin(); iter != p.pin_list.end(); ) {
       unique_ptr<extent> extent(&*iter); // we now own this
       iter++; // unlink will invalidate
-      assert(extent->parent_extent_set);
+      ceph_assert(extent->parent_extent_set);
       auto &eset = *(extent->parent_extent_set);
       extent->unlink();
       remove_and_destroy_if_empty(eset);
