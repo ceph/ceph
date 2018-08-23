@@ -45,7 +45,7 @@ public:
   void load(MDSInternalContextBase *c);
   bool is_loaded() const { return load_done; }
   void wait_for_load(MDSInternalContextBase *c) {
-    assert(!load_done);
+    ceph_assert(!load_done);
     waiting_for_load.push_back(c);
   }
 
@@ -55,7 +55,7 @@ public:
   bool prefetch_inodes();
   bool is_prefetched() const { return prefetch_state == DONE; }
   void wait_for_prefetch(MDSInternalContextBase *c) {
-    assert(!is_prefetched());
+    ceph_assert(!is_prefetched());
     waiting_for_prefetch.push_back(c);
   }
 

@@ -390,7 +390,7 @@ feature_bitset_t::feature_bitset_t(const vector<size_t>& array)
       if (bit > last)
 	last = bit;
       else
-	assert(bit == last);
+	ceph_assert(bit == last);
       _vec[bit / bits_per_block] |= (block_type)1 << (bit % bits_per_block);
     }
   }

@@ -364,7 +364,7 @@ private:
   }
 
   void add_opened_ino(inodeno_t ino) {
-    assert(!opened_ino);
+    ceph_assert(!opened_ino);
     opened_ino = ino;
   }
 
@@ -489,7 +489,7 @@ private:
       add_null_dentry(dn, dirty);
       return;
     }
-    assert(dn->get_projected_linkage()->is_primary());
+    ceph_assert(dn->get_projected_linkage()->is_primary());
     add_primary_dentry(dn, 0, dirty, dirty_parent, dirty_pool);
   }
 

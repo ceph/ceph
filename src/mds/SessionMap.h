@@ -116,14 +116,14 @@ public:
 
   void push_pv(version_t pv)
   {
-    assert(projected.empty() || projected.back() != pv);
+    ceph_assert(projected.empty() || projected.back() != pv);
     projected.push_back(pv);
   }
 
   void pop_pv(version_t v)
   {
-    assert(!projected.empty());
-    assert(projected.front() == v);
+    ceph_assert(!projected.empty());
+    ceph_assert(projected.front() == v);
     projected.pop_front();
   }
 
@@ -172,7 +172,7 @@ public:
     return info.prealloc_inos.range_start();
   }
   inodeno_t take_ino(inodeno_t ino = 0) {
-    assert(!info.prealloc_inos.empty());
+    ceph_assert(!info.prealloc_inos.empty());
 
     if (ino) {
       if (info.prealloc_inos.contains(ino))
@@ -208,13 +208,13 @@ public:
     ++importing_count;
   }
   void dec_importing() {
-    assert(importing_count > 0);
+    ceph_assert(importing_count > 0);
     --importing_count;
   }
   bool is_importing() const { return importing_count > 0; }
 
   void set_load_avg_decay_rate(double rate) {
-    assert(is_open() || is_stale());
+    ceph_assert(is_open() || is_stale());
     load_avg = DecayCounter(rate);
   }
   uint64_t get_load_avg() const {
@@ -365,7 +365,7 @@ public:
     if (state == STATE_CLOSED) {
       item_session_list.remove_myself();
     } else {
-      assert(!item_session_list.is_on_list());
+      ceph_assert(!item_session_list.is_on_list());
     }
     preopen_out_queue.clear();
   }
@@ -620,7 +620,7 @@ public:
 
   // helpers
   entity_inst_t& get_inst(entity_name_t w) {
-    assert(session_map.count(w));
+    ceph_assert(session_map.count(w));
     return session_map[w]->info.inst;
   }
   version_t inc_push_seq(client_t client) {
@@ -635,7 +635,7 @@ public:
   }
   void trim_completed_requests(entity_name_t c, ceph_tid_t tid) {
     Session *session = get_session(c);
-    assert(session);
+    ceph_assert(session);
     session->trim_completed_requests(tid);
   }
 

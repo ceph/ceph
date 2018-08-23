@@ -96,7 +96,7 @@ bool Beacon::ms_can_fast_dispatch2(const Message::const_ref& m) const
 void Beacon::ms_fast_dispatch2(const Message::ref& m)
 {
   bool handled = ms_dispatch2(m);
-  assert(handled);
+  ceph_assert(handled);
 }
 
 bool Beacon::ms_dispatch2(const Message::ref& m)
@@ -196,7 +196,7 @@ void Beacon::_send()
 
   seq_stamp[last_seq] = now;
 
-  assert(want_state != MDSMap::STATE_NULL);
+  ceph_assert(want_state != MDSMap::STATE_NULL);
   
   auto beacon = MMDSBeacon::create(
       monc->get_fsid(), mds_gid_t(monc->get_global_id()),
@@ -235,7 +235,7 @@ void Beacon::notify_mdsmap(const MDSMap &mdsmap)
 
 void Beacon::_notify_mdsmap(const MDSMap &mdsmap)
 {
-  assert(mdsmap.get_epoch() >= epoch);
+  ceph_assert(mdsmap.get_epoch() >= epoch);
 
   if (mdsmap.get_epoch() != epoch) {
     epoch = mdsmap.get_epoch();
@@ -302,7 +302,7 @@ void Beacon::notify_health(MDSRank const *mds)
   }
 
   // I'm going to touch this MDS, so it must be locked
-  assert(mds->mds_lock.is_locked_by_me());
+  ceph_assert(mds->mds_lock.is_locked_by_me());
 
   health.metrics.clear();
 

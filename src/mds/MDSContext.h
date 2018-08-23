@@ -69,7 +69,7 @@ protected:
 
 public:
   explicit MDSInternalContext(MDSRank *mds_) : mds(mds_) {
-    assert(mds != NULL);
+    ceph_assert(mds != NULL);
   }
 };
 
@@ -142,7 +142,7 @@ protected:
 
 public:
   explicit MDSIOContext(MDSRank *mds_) : mds(mds_) {
-    assert(mds != NULL);
+    ceph_assert(mds != NULL);
   }
 };
 
@@ -192,7 +192,7 @@ protected:
 public:
   C_IO_Wrapper(MDSRank *mds_, MDSInternalContextBase *wrapped_) :
     MDSIOContext(mds_), async(true), wrapped(wrapped_) {
-    assert(wrapped != NULL);
+    ceph_assert(wrapped != NULL);
   }
 
   ~C_IO_Wrapper() override {

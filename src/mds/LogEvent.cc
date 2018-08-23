@@ -175,7 +175,7 @@ LogEvent *LogEvent::decode_event(bufferlist& bl, bufferlist::const_iterator& p, 
     return NULL;
   }
 
-  assert(p.end());
+  ceph_assert(p.end());
   return le;
 }
 

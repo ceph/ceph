@@ -325,7 +325,7 @@ public:
     return s;
   }
   void set_state_rejoin(int s, MDSInternalContextBase::vec& waiters, bool survivor) {
-    assert(!get_parent()->is_auth());
+    ceph_assert(!get_parent()->is_auth());
 
     // If lock in the replica object was not in SYNC state when auth mds of the object failed.
     // Auth mds of the object may take xlock on the lock and change the object when replaying
@@ -454,7 +454,7 @@ public:
     return ++num_rdlock; 
   }
   int put_rdlock() {
-    assert(num_rdlock>0);
+    ceph_assert(num_rdlock>0);
     --num_rdlock;
     if (num_rdlock == 0)
       parent->put(MDSCacheObject::PIN_LOCK);
@@ -487,8 +487,8 @@ public:
 
   // xlock
   void get_xlock(MutationRef who, client_t client) { 
-    assert(get_xlock_by() == MutationRef());
-    assert(state == LOCK_XLOCK || is_locallock() ||
+    ceph_assert(get_xlock_by() == MutationRef());
+    ceph_assert(state == LOCK_XLOCK || is_locallock() ||
 	   state == LOCK_LOCK /* if we are a slave */);
     parent->get(MDSCacheObject::PIN_LOCK);
     more()->num_xlock++;
@@ -496,15 +496,15 @@ public:
     more()->xlock_by_client = client;
   }
   void set_xlock_done() {
-    assert(more()->xlock_by);
-    assert(state == LOCK_XLOCK || is_locallock() ||
+    ceph_assert(more()->xlock_by);
+    ceph_assert(state == LOCK_XLOCK || is_locallock() ||
 	   state == LOCK_LOCK /* if we are a slave */);
     if (!is_locallock())
       state = LOCK_XLOCKDONE;
     more()->xlock_by.reset();
   }
   void put_xlock() {
-    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE ||
+    ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE ||
 	   state == LOCK_XLOCKSNAP || is_locallock() ||
 	   state == LOCK_LOCK /* if we are a master of a slave */);
     --more()->num_xlock;
@@ -536,11 +536,11 @@ public:
     return state_flags & LEASED;
   }
   void get_client_lease() {
-    assert(!is_leased());
+    ceph_assert(!is_leased());
     state_flags |= LEASED;
   }
   void put_client_lease() {
-    assert(is_leased());
+    ceph_assert(is_leased());
     state_flags &= ~LEASED;
   }
 
@@ -642,8 +642,8 @@ public:
    * called on first replica creation.
    */
   void replicate_relax() {
-    assert(parent->is_auth());
-    assert(!parent->is_replicated());
+    ceph_assert(parent->is_auth());
+    ceph_assert(!parent->is_replicated());
     if (state == LOCK_LOCK && !is_used())
       state = LOCK_SYNC;
   }

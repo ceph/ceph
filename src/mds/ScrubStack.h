@@ -62,8 +62,8 @@ public:
     scrub_kick(mdc, this),
     mdcache(mdc) {}
   ~ScrubStack() {
-    assert(inode_stack.empty());
-    assert(!scrubs_in_progress);
+    ceph_assert(inode_stack.empty());
+    ceph_assert(!scrubs_in_progress);
   }
   /**
    * Put a inode on the top of the scrub stack, so it is the highest priority.

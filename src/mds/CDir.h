@@ -207,7 +207,7 @@ public:
 public:
   version_t get_version() const { return fnode.version; }
   void set_version(version_t v) { 
-    assert(projected_fnode.empty());
+    ceph_assert(projected_fnode.empty());
     projected_version = fnode.version = v; 
   }
   version_t get_projected_version() const { return projected_version; }
@@ -454,7 +454,7 @@ protected:
 
   void inc_num_dirty() { num_dirty++; }
   void dec_num_dirty() { 
-    assert(num_dirty > 0);
+    ceph_assert(num_dirty > 0);
     num_dirty--; 
   }
   int get_num_dirty() const {

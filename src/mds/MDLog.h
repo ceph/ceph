@@ -143,7 +143,7 @@ protected:
   void set_safe_pos(uint64_t pos)
   {
     Mutex::Locker l(submit_mutex);
-    assert(pos >= safe_pos);
+    ceph_assert(pos >= safe_pos);
     safe_pos = pos;
   }
   friend class MDSLogContextBase;
@@ -172,7 +172,7 @@ protected:
   friend class MDCache;
 
   uint64_t get_last_segment_seq() const {
-    assert(!segments.empty());
+    ceph_assert(!segments.empty());
     return segments.rbegin()->first;
   }
   LogSegment *get_oldest_segment() {
@@ -238,7 +238,7 @@ public:
   }
 
   LogSegment *get_current_segment() { 
-    assert(!segments.empty());
+    ceph_assert(!segments.empty());
     return segments.rbegin()->second;
   }
 
