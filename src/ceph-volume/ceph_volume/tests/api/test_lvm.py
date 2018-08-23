@@ -578,6 +578,15 @@ class TestCreateLV(object):
         data_tag = ['lvchange', '--addtag', 'ceph.data_device=/path', '/path']
         assert capture.calls[2]['args'][0] == data_tag
 
+    def test_uses_uuid(self, monkeypatch, capture):
+        monkeypatch.setattr(process, 'run', capture)
+        monkeypatch.setattr(process, 'call', capture)
+        monkeypatch.setattr(api, 'get_lv', lambda *a, **kw: self.foo_volume)
+        api.create_lv('foo', 'foo_group', size='5G', tags={'ceph.type': 'data'}, uuid_name=True)
+        result = capture.calls[0]['args'][0][5]
+        assert result.startswith('foo-')
+        assert len(result) == 40
+
 
 class TestExtendVG(object):
 
