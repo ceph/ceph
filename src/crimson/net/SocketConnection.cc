@@ -44,7 +44,7 @@ SocketConnection::SocketConnection(Messenger *messenger,
 SocketConnection::~SocketConnection()
 {
   // errors were reported to callers of send()
-  assert(send_ready.available());
+  ceph_assert(send_ready.available());
   send_ready.ignore_ready_future();
 }
 
@@ -245,12 +245,12 @@ bool SocketConnection::update_rx_seq(seq_num_t seq)
   if (seq <= in_seq) {
     if (HAVE_FEATURE(features, RECONNECT_SEQ) &&
         conf.ms_die_on_old_message) {
-      assert(0 == "old msgs despite reconnect_seq feature");
+      ceph_assert(0 == "old msgs despite reconnect_seq feature");
     }
     return false;
   } else if (seq > in_seq + 1) {
     if (conf.ms_die_on_skipped_message) {
-      assert(0 == "skipped incoming seq");
+      ceph_assert(0 == "skipped incoming seq");
     }
     return false;
   } else {
@@ -666,7 +666,7 @@ seastar::future<> SocketConnection::handle_connect_reply(msgr_tag_t tag)
     h.global_seq = get_messenger()->get_global_seq(h.reply.global_seq);
     return seastar::now();
   case CEPH_MSGR_TAG_RETRY_SESSION:
-    assert(h.reply.connect_seq > h.connect_seq);
+    ceph_assert(h.reply.connect_seq > h.connect_seq);
     h.connect_seq = h.reply.connect_seq;
     return seastar::now();
   case CEPH_MSGR_TAG_WAIT:
@@ -773,7 +773,7 @@ seastar::future<> SocketConnection::connect(entity_type_t peer_type,
     }).then([this] (bufferlist bl) {
       auto p = bl.cbegin();
       ::decode(h.reply, p);
-      assert(p.end());
+      ceph_assert(p.end());
       return read(h.reply.authorizer_len);
     }).then([this] (bufferlist bl) {
       if (h.authorizer) {
@@ -797,7 +797,7 @@ seastar::future<> SocketConnection::client_handshake(entity_type_t peer_type,
       entity_addr_t saddr, caddr;
       ::decode(saddr, p);
       ::decode(caddr, p);
-      assert(p.end());
+      ceph_assert(p.end());
       validate_peer_addr(saddr, peer_addr);
 
       if (my_addr != caddr) {
@@ -840,7 +840,7 @@ seastar::future<> SocketConnection::server_handshake()
       validate_banner(p);
       entity_addr_t addr;
       ::decode(addr, p);
-      assert(p.end());
+      ceph_assert(p.end());
       if (!addr.is_blank_ip()) {
         peer_addr = addr;
       }
