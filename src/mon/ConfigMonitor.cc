@@ -473,8 +473,8 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       err = 0;
       goto reply;
     }
-    assert(num > 0);
-    assert((version_t)num < version);
+    ceph_assert(num > 0);
+    ceph_assert((version_t)num < version);
     for (int64_t v = version; v > num; --v) {
       ConfigChangeSet ch;
       load_changeset(v, &ch);

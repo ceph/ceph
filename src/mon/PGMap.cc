@@ -494,7 +494,7 @@ void PGMapDigest::pool_recovery_rate_summary(Formatter *f, ostream *out,
     return;
 
   auto ts = per_pool_sum_deltas_stamps.find(p->first);
-  assert(ts != per_pool_sum_deltas_stamps.end());
+  ceph_assert(ts != per_pool_sum_deltas_stamps.end());
   recovery_rate_summary(f, out, p->second.first, ts->second);
 }
 
@@ -556,7 +556,7 @@ void PGMapDigest::pool_client_io_rate_summary(Formatter *f, ostream *out,
     return;
 
   auto ts = per_pool_sum_deltas_stamps.find(p->first);
-  assert(ts != per_pool_sum_deltas_stamps.end());
+  ceph_assert(ts != per_pool_sum_deltas_stamps.end());
   client_io_rate_summary(f, out, p->second.first, ts->second);
 }
 
@@ -653,7 +653,7 @@ void PGMapDigest::pool_cache_io_rate_summary(Formatter *f, ostream *out,
     return;
 
   auto ts = per_pool_sum_deltas_stamps.find(p->first);
-  assert(ts != per_pool_sum_deltas_stamps.end());
+  ceph_assert(ts != per_pool_sum_deltas_stamps.end());
   cache_io_rate_summary(f, out, p->second.first, ts->second);
 }
 
@@ -675,8 +675,8 @@ static float pool_raw_used_rate(const OSDMap &osd_map, int64_t poolid)
       int k = atoi(pk->second.c_str());
       int m = atoi(pm->second.c_str());
       int mk = m + k;
-      assert(mk != 0);
-      assert(k != 0);
+      ceph_assert(mk != 0);
+      ceph_assert(k != 0);
       return (float)mk / k;
     } else {
       return 0.0;
@@ -684,7 +684,7 @@ static float pool_raw_used_rate(const OSDMap &osd_map, int64_t poolid)
   }
   break;
   default:
-    assert(0 == "unrecognized pool type");
+    ceph_assert(0 == "unrecognized pool type");
   }
 }
 
@@ -809,7 +809,7 @@ void PGMapDigest::dump_pool_stats_full(
   if (f)
     f->close_section();
   else {
-    assert(ss != nullptr);
+    ceph_assert(ss != nullptr);
     *ss << "POOLS:\n";
     tbl.set_indent(4);
     *ss << tbl;
@@ -834,7 +834,7 @@ void PGMapDigest::dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) co
     }
     f->close_section();
   } else {
-    assert(ss != nullptr);
+    ceph_assert(ss != nullptr);
     TextTable tbl;
     tbl.define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
@@ -1047,7 +1047,7 @@ void PGMap::Incremental::generate_test_instances(list<PGMap::Incremental*>& o)
 
 void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
 {
-  assert(inc.version == version+1);
+  ceph_assert(inc.version == version+1);
   version++;
 
   pool_stat_t pg_sum_old = pg_sum;
@@ -1226,7 +1226,7 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
 
   num_pg--;
   int end = --num_pg_by_state[s.state];
-  assert(end >= 0);
+  ceph_assert(end >= 0);
   if (end == 0)
     num_pg_by_state.erase(s.state);
   end = --num_pg_by_pool[pgid.pool()];
@@ -1262,7 +1262,7 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
        p != s.blocked_by.end();
        ++p) {
     auto q = blocked_by_sum.find(*p);
-    assert(q != blocked_by_sum.end());
+    ceph_assert(q != blocked_by_sum.end());
     --q->second;
     if (q->second == 0)
       blocked_by_sum.erase(q);
@@ -1330,7 +1330,7 @@ void PGMap::stat_osd_sub(int osd, const osd_stat_t &s)
 {
   num_osd--;
   osd_sum.sub(s);
-  assert(osd < (int)osd_last_seq.size());
+  ceph_assert(osd < (int)osd_last_seq.size());
   osd_last_seq[osd] = 0;
 }
 
@@ -1696,7 +1696,7 @@ void PGMap::get_stuck_stats(
   int types, const utime_t cutoff,
   mempool::pgmap::unordered_map<pg_t, pg_stat_t>& stuck_pgs) const
 {
-  assert(types != 0);
+  ceph_assert(types != 0);
   for (auto i = pg_stat.begin();
        i != pg_stat.end();
        ++i) {
@@ -1986,8 +1986,8 @@ void PGMap::update_one_pool_delta(
   const pool_stat_t& old_pool_sum)
 {
   if (per_pool_sum_deltas.count(pool) == 0) {
-    assert(per_pool_sum_deltas_stamps.count(pool) == 0);
-    assert(per_pool_sum_delta.count(pool) == 0);
+    ceph_assert(per_pool_sum_deltas_stamps.count(pool) == 0);
+    ceph_assert(per_pool_sum_delta.count(pool) == 0);
   }
 
   auto& sum_delta = per_pool_sum_delta[pool];
@@ -3387,7 +3387,7 @@ void PGMapUpdater::check_down_pgs(
 	}
 	for (auto pgid : p->second) {
 	  const pg_stat_t &stat = pg_map.pg_stat.at(pgid);
-	  assert(stat.acting_primary == osd);
+	  ceph_assert(stat.acting_primary == osd);
 	  _try_mark_pg_stale(osdmap, pgid, stat, pending_inc);
 	}
       }

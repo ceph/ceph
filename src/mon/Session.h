@@ -84,8 +84,8 @@ struct MonSession : public RefCountedObject {
   ~MonSession() override {
     //generic_dout(0) << "~MonSession " << this << dendl;
     // we should have been removed before we get destructed; see MonSessionMap::remove_session()
-    assert(!item.is_on_list());
-    assert(sub_map.empty());
+    ceph_assert(!item.is_on_list());
+    ceph_assert(sub_map.empty());
     delete auth_handler;
   }
 
@@ -115,7 +115,7 @@ struct MonSessionMap {
   MonSessionMap() {}
   ~MonSessionMap() {
     while (!subs.empty()) {
-      assert(subs.begin()->second->empty());
+      ceph_assert(subs.begin()->second->empty());
       delete subs.begin()->second;
       subs.erase(subs.begin());
     }
@@ -126,7 +126,7 @@ struct MonSessionMap {
   }
 
   void remove_session(MonSession *s) {
-    assert(!s->closed);
+    ceph_assert(!s->closed);
     for (map<string,Subscription*>::iterator p = s->sub_map.begin(); p != s->sub_map.end(); ++p) {
       p->second->type_item.remove_myself();
       delete p->second;
@@ -153,7 +153,7 @@ struct MonSessionMap {
 			  const entity_addrvec_t& av,
 			  Connection *c) {
     MonSession *s = new MonSession(n, av, c);
-    assert(s);
+    ceph_assert(s);
     sessions.push_back(&s->item);
     if (n.is_osd())
       by_osd.insert(pair<int,MonSession*>(n.num(), s));

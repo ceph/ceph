@@ -58,7 +58,7 @@ void Elector::shutdown()
 void Elector::bump_epoch(epoch_t e) 
 {
   dout(10) << "bump_epoch " << epoch << " to " << e << dendl;
-  assert(epoch <= e);
+  ceph_assert(epoch <= e);
   epoch = e;
   auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->put(Monitor::MONITOR_NAME, "election_epoch", epoch);
@@ -91,7 +91,7 @@ void Elector::start()
     auto t(std::make_shared<MonitorDBStore::Transaction>());
     t->put(Monitor::MONITOR_NAME, "election_writeable_test", rand());
     int r = mon->store->apply_transaction(t);
-    assert(r >= 0);
+    ceph_assert(r >= 0);
   }
   electing_me = true;
   acked_me[mon->rank].cluster_features = CEPH_FEATURES_ALL;
@@ -206,7 +206,7 @@ void Elector::victory()
 
   cancel_timer();
   
-  assert(epoch % 2 == 1);  // election
+  ceph_assert(epoch % 2 == 1);  // election
   bump_epoch(epoch+1);     // is over!
 
   // tell everyone!
@@ -236,7 +236,7 @@ void Elector::handle_propose(MonOpRequestRef op)
   dout(5) << "handle_propose from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
-  assert(m->epoch % 2 == 1); // election
+  ceph_assert(m->epoch % 2 == 1); // election
   uint64_t required_features = mon->get_required_features();
   mon_feature_t required_mon_features = mon->get_required_mon_features();
 
@@ -279,7 +279,7 @@ void Elector::handle_propose(MonOpRequestRef op)
   if (mon->rank < from) {
     // i would win over them.
     if (leader_acked >= 0) {        // we already acked someone
-      assert(leader_acked < from);  // and they still win, of course
+      ceph_assert(leader_acked < from);  // and they still win, of course
       dout(5) << "no, we already acked " << leader_acked << dendl;
     } else {
       // wait, i should win!
@@ -307,14 +307,14 @@ void Elector::handle_ack(MonOpRequestRef op)
   dout(5) << "handle_ack from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
-  assert(m->epoch % 2 == 1); // election
+  ceph_assert(m->epoch % 2 == 1); // election
   if (m->epoch > epoch) {
     dout(5) << "woah, that's a newer epoch, i must have rebooted.  bumping and re-starting!" << dendl;
     bump_epoch(m->epoch);
     start();
     return;
   }
-  assert(m->epoch == epoch);
+  ceph_assert(m->epoch == epoch);
   uint64_t required_features = mon->get_required_features();
   if ((required_features ^ m->get_connection()->get_features()) &
       required_features) {
@@ -356,7 +356,7 @@ void Elector::handle_ack(MonOpRequestRef op)
     }
   } else {
     // ignore, i'm deferring already.
-    assert(leader_acked >= 0);
+    ceph_assert(leader_acked >= 0);
   }
 }
 
@@ -371,8 +371,8 @@ void Elector::handle_victory(MonOpRequestRef op)
           << dendl;
   int from = m->get_source().num();
 
-  assert(from < mon->rank);
-  assert(m->epoch % 2 == 0);  
+  ceph_assert(from < mon->rank);
+  ceph_assert(m->epoch % 2 == 0);  
 
   leader_acked = -1;
 
@@ -394,7 +394,7 @@ void Elector::handle_victory(MonOpRequestRef op)
   cancel_timer();
 
   // stash leader's commands
-  assert(m->sharing_bl.length());
+  ceph_assert(m->sharing_bl.length());
   vector<MonCommand> new_cmds;
   auto bi = m->sharing_bl.cbegin();
   MonCommand::decode_vector(new_cmds, bi);
@@ -451,7 +451,7 @@ void Elector::handle_nak(MonOpRequestRef op)
 void Elector::dispatch(MonOpRequestRef op)
 {
   op->mark_event("elector:dispatch");
-  assert(op->is_type_election());
+  ceph_assert(op->is_type_election());
 
   switch (op->get_req()->get_type()) {
     
