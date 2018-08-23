@@ -543,7 +543,7 @@ bool librados::RadosClient::ms_handle_refused(Connection *con)
 
 bool librados::RadosClient::_dispatch(Message *m)
 {
-  assert(lock.is_locked());
+  ceph_assert(lock.is_locked());
   switch (m->get_type()) {
   // OSD
   case CEPH_MSG_OSD_MAP:
@@ -569,7 +569,7 @@ bool librados::RadosClient::_dispatch(Message *m)
 
 int librados::RadosClient::wait_for_osdmap()
 {
-  assert(!lock.is_locked_by_me());
+  ceph_assert(!lock.is_locked_by_me());
 
   if (state != CONNECTED) {
     return -ENOTCONN;
@@ -693,13 +693,13 @@ int librados::RadosClient::get_fs_stats(ceph_statfs& stats)
 
 void librados::RadosClient::get() {
   Mutex::Locker l(lock);
-  assert(refcnt > 0);
+  ceph_assert(refcnt > 0);
   refcnt++;
 }
 
 bool librados::RadosClient::put() {
   Mutex::Locker l(lock);
-  assert(refcnt > 0);
+  ceph_assert(refcnt > 0);
   refcnt--;
   return (refcnt == 0);
 }
@@ -1030,7 +1030,7 @@ int librados::RadosClient::monitor_log(const string& level,
 
 void librados::RadosClient::handle_log(MLog *m)
 {
-  assert(lock.is_locked());
+  ceph_assert(lock.is_locked());
   ldout(cct, 10) << __func__ << " version " << m->version << dendl;
 
   if (log_last_version < m->version) {
