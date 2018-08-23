@@ -146,12 +146,12 @@ public:
   int create(CephContext *cct, int type);
   int encrypt(CephContext *cct, const bufferlist& in, bufferlist& out,
 	       std::string *error) const {
-    assert(ckh); // Bad key?
+    ceph_assert(ckh); // Bad key?
     return ckh->encrypt(in, out, error);
   }
   int decrypt(CephContext *cct, const bufferlist& in, bufferlist& out,
 	       std::string *error) const {
-    assert(ckh); // Bad key?
+    ceph_assert(ckh); // Bad key?
     return ckh->decrypt(in, out, error);
   }
 
@@ -160,12 +160,12 @@ public:
 
   std::size_t encrypt(CephContext*, const in_slice_t& in,
 		      const out_slice_t& out) {
-    assert(ckh);
+    ceph_assert(ckh);
     return ckh->encrypt(in, out);
   }
   std::size_t decrypt(CephContext*, const in_slice_t& in,
 		      const out_slice_t& out) {
-    assert(ckh);
+    ceph_assert(ckh);
     return ckh->encrypt(in, out);
   }
 
