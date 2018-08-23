@@ -447,9 +447,10 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
 
     Mutex lock;
     Cond cond;
+    bool thread_stopped;
   public:
 
-    BucketsSyncThread(CephContext *_cct, RGWUserStatsCache *_s) : cct(_cct), stats(_s), lock("RGWUserStatsCache::BucketsSyncThread") {}
+    BucketsSyncThread(CephContext *_cct, RGWUserStatsCache *_s) : cct(_cct), stats(_s), lock("RGWUserStatsCache::BucketsSyncThread"), thread_stopped(false) {}
 
     void *entry() override {
       ldout(cct, 20) << "BucketsSyncThread: start" << dendl;
@@ -467,7 +468,9 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
             ldout(cct, 0) << "WARNING: sync_bucket() returned r=" << r << dendl;
           }
         }
-
+        if (thread_stopped) {
+	  stats->set_down();
+	}
         if (stats->going_down())
           break;
 
@@ -481,8 +484,12 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
     }
 
     void stop() {
+      if (stats->is_empty_modified_buckets()) {
+        stats->set_down();
+      }
       Mutex::Locker l(lock);
       cond.Signal();
+      thread_stopped = true;
     }
   };
 
@@ -524,6 +531,7 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
     }
 
     void stop() {
+      stats->set_down();
       Mutex::Locker l(lock);
       cond.Signal();
     }
@@ -596,16 +604,19 @@ public:
      */
     return true;
   }
+  bool is_empty_modified_buckets() {
+    return modified_buckets.empty();
+  }
+  void set_down() {
+    down_flag = true;
+  }
 
   bool going_down() {
     return down_flag;
   }
 
   void stop() {
-    down_flag = true;
-    rwlock.get_write();
     stop_thread(&buckets_sync_thread);
-    rwlock.unlock();
     stop_thread(&user_sync_thread);
   }
 };
