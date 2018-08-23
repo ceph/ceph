@@ -991,7 +991,6 @@ int PrimaryLogPG::do_command(
   ConnectionRef con,
   ceph_tid_t tid)
 {
-  const auto &missing = pg_log.get_missing();
   string prefix;
   string format;
 
@@ -1106,9 +1105,10 @@ int PrimaryLogPG::do_command(
     mark_all_unfound_lost(mode, con, tid);
     return -EAGAIN;
   }
-  else if (command == "list_missing") {
+  else if (command == "list_unfound") {
     hobject_t offset;
     string offset_json;
+    bool show_offset = false;
     if (cmd_getval(cct, cmdmap, "offset", offset_json)) {
       json_spirit::Value v;
       try {
@@ -1119,17 +1119,17 @@ int PrimaryLogPG::do_command(
 	ss << "error parsing offset: " << e.what();
 	return -EINVAL;
       }
+      show_offset = true;
     }
     f->open_object_section("missing");
-    {
+    if (show_offset) {
       f->open_object_section("offset");
       offset.dump(f.get());
       f->close_section();
     }
-    f->dump_int("num_missing", missing.num_missing());
+    auto &needs_recovery_map = missing_loc.get_needs_recovery();
+    f->dump_int("num_missing", needs_recovery_map.size());
     f->dump_int("num_unfound", get_num_unfound());
-    const map<hobject_t, pg_missing_item> &needs_recovery_map =
-      missing_loc.get_needs_recovery();
     map<hobject_t, pg_missing_item>::const_iterator p =
       needs_recovery_map.upper_bound(offset);
     {
