@@ -61,14 +61,14 @@ int LevelDBStore::init(string option_str)
 
 int LevelDBStore::open(ostream &out, const vector<ColumnFamily>& cfs)  {
   if (!cfs.empty()) {
-    assert(0 == "Not implemented");
+    ceph_assert(0 == "Not implemented");
   }
   return do_open(out, false);
 }
 
 int LevelDBStore::create_and_open(ostream &out, const vector<ColumnFamily>& cfs) {
   if (!cfs.empty()) {
-    assert(0 == "Not implemented");
+    ceph_assert(0 == "Not implemented");
   }
   return do_open(out, true);
 }
@@ -93,7 +93,7 @@ int LevelDBStore::load_leveldb_options(bool create_if_missing, leveldb::Options 
     filterpolicy.reset(_filterpolicy);
     ldoptions.filter_policy = filterpolicy.get();
 #else
-    assert(0 == "bloom size set but installed leveldb doesn't support bloom filters");
+    ceph_assert(0 == "bloom size set but installed leveldb doesn't support bloom filters");
 #endif
   }
   if (options.compression_enabled)
@@ -323,7 +323,7 @@ int LevelDBStore::get(const string &prefix,
       const string &key,
       bufferlist *out)
 {
-  assert(out && (out->length() == 0));
+  ceph_assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
   int r = 0;
   string value, k;
