@@ -345,11 +345,19 @@ namespace buffer CEPH_BUFFER_API {
 
     // modifiers
     void set_offset(unsigned o) {
+#ifdef __CEPH__
+      ceph_assert(raw_length() >= o);
+#else
       assert(raw_length() >= o);
+#endif
       _off = o;
     }
     void set_length(unsigned l) {
+#ifdef __CEPH__
+      ceph_assert(raw_length() >= l);
+#else
       assert(raw_length() >= l);
+#endif
       _len = l;
     }
 
@@ -749,7 +757,11 @@ namespace buffer CEPH_BUFFER_API {
 	   it++) {
 	len += (*it).length();
       }
+#ifdef __CEPH__
+      ceph_assert(len == _len);
+#else
       assert(len == _len);
+#endif // __CEPH__
 #endif
       return _len;
     }
@@ -927,7 +939,7 @@ namespace buffer CEPH_BUFFER_API {
     int write_fd_zero_copy(int fd) const;
     template<typename VectorT>
     void prepare_iov(VectorT *piov) const {
-      assert(_buffers.size() <= IOV_MAX);
+      ceph_assert(_buffers.size() <= IOV_MAX);
       piov->resize(_buffers.size());
       unsigned n = 0;
       for (auto& p : _buffers) {

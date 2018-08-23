@@ -520,7 +520,7 @@ inline void decode(T &o, const bufferlist& bl)
 {
   auto p = bl.begin();
   decode(o, p);
-  assert(p.end());
+  ceph_assert(p.end());
 }
 
 // boost optional

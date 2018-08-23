@@ -2,9 +2,9 @@
 #define CEPH_ON_EXIT_H
 
 #include <pthread.h>
-#include <assert.h>
 #include <vector>
 
+#include "include/assert.h"
 /*
  * Create a static instance at the file level to get callbacks called when the
  * process exits via main() or exit().
@@ -15,8 +15,8 @@ class OnExitManager {
     typedef void (*callback_t)(void *arg);
 
     OnExitManager() {
-      [[maybe_unused]] int ret = pthread_mutex_init(&lock_, NULL);
-      assert(ret == 0);
+      int ret = pthread_mutex_init(&lock_, NULL);
+      ceph_assert(ret == 0);
     }
 
     ~OnExitManager() {
