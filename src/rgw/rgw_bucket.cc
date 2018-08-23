@@ -781,7 +781,7 @@ static void set_err_msg(std::string *sink, std::string msg)
 }
 
 int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state,
-	std::string *err_msg)
+	std::string *err_msg, map<string, bufferlist> *pattrs)
 {
   std::string bucket_tenant;
   if (!storage) {
@@ -809,8 +809,9 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state,
   }
 
   if (!bucket_name.empty()) {
-    int r = store->get_bucket_info(obj_ctx, tenant, bucket_name, bucket_info, NULL, null_yield);
-
+    ceph::real_time mtime;
+    int r = store->get_bucket_info(obj_ctx, bucket_tenant, bucket_name,
+	bucket_info, &mtime, pattrs);
     if (r < 0) {
       set_err_msg(err_msg, "failed to fetch bucket info for bucket=" + bucket_name);
       ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
@@ -834,7 +835,8 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state,
   return 0;
 }
 
-int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
+int RGWBucket::link(RGWBucketAdminOpState& op_state,
+	map<string, bufferlist>& attrs, std::string *err_msg)
 {
   if (!op_state.is_user_op()) {
     set_err_msg(err_msg, "empty user id");
@@ -842,12 +844,6 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   }
 
   string bucket_id = op_state.get_bucket_id();
-#if 0
-  if (bucket_id.empty()) {
-    set_err_msg(err_msg, "empty bucket instance id");
-    return -EINVAL;
-  }
-#endif
 
   std::string display_name = op_state.get_user_display_name();
   rgw_bucket bucket = op_state.get_bucket();
@@ -861,16 +857,6 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   rgw_make_bucket_entry_name(tenant, bucket_name, bucket_entry);
   rgw_raw_obj obj(root_pool, bucket_entry);
   RGWObjVersionTracker objv_tracker;
-
-  map<string, bufferlist> attrs;
-  RGWBucketInfo bucket_info;
-
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, &attrs, null_yield);
-  if (r < 0) {
-    set_err_msg(err_msg, "failed to refetch bucket info");
-    return r;
-  }
 
   map<string, bufferlist>::iterator aiter = attrs.find(RGW_ATTR_ACL);
   if (aiter != attrs.end()) {
@@ -886,7 +872,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
       return -EIO;
     }
 
-    r = rgw_unlink_bucket(store, owner.get_id(), bucket.tenant, bucket.name, false);
+    int r = rgw_unlink_bucket(store, owner.get_id(), bucket.tenant, bucket.name, false);
     if (r < 0) {
       set_err_msg(err_msg, "could not unlink policy from user " + owner.get_id().to_str());
       return r;
@@ -1373,12 +1359,13 @@ int RGWBucketAdminOp::unlink(RGWRados *store, RGWBucketAdminOpState& op_state)
 int RGWBucketAdminOp::link(RGWRados *store, RGWBucketAdminOpState& op_state, string *err)
 {
   RGWBucket bucket;
+  map<string, bufferlist> attrs;
 
-  int ret = bucket.init(store, op_state, err);
+  int ret = bucket.init(store, op_state, err, &attrs);
   if (ret < 0)
     return ret;
 
-  return bucket.link(op_state, err);
+  return bucket.link(op_state, attrs, err);
 
 }
 
