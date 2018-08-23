@@ -126,7 +126,7 @@ class Filer {
 	   int flags,
 	   Context *onfinish,
 	   int op_flags = 0) {
-    assert(snap);  // (until there is a non-NOSNAP write)
+    ceph_assert(snap);  // (until there is a non-NOSNAP write)
     vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
     objecter->sg_read(extents, snap, bl, flags, onfinish, op_flags);
@@ -143,7 +143,7 @@ class Filer {
 		 __u32 truncate_seq,
 		 Context *onfinish,
 		 int op_flags = 0) {
-    assert(snap);  // (until there is a non-NOSNAP write)
+    ceph_assert(snap);  // (until there is a non-NOSNAP write)
     vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, truncate_size,
 			     extents);
