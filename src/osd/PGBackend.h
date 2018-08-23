@@ -570,14 +570,16 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const ScrubMap::object &candidate,
      shard_info_wrapper& shard_error,
      inconsistent_obj_wrapper &result,
-     ostream &errorstream);
+     ostream &errorstream,
+     bool has_snapset);
    map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
      const map<pg_shard_t,ScrubMap*> &maps,
      object_info_t *auth_oi,
      map<pg_shard_t, shard_info_wrapper> &shard_map,
-     inconsistent_obj_wrapper &object_error,
-     bool &digest_match);
+     bool &digest_match,
+     spg_t pgid,
+     ostream &errorstream);
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
      const set<hobject_t> &master_set,
