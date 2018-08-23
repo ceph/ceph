@@ -1,3 +1,6 @@
+#
+# Note: only compiled if WITH_LIBRADOSSTRIPER is defined.
+#
 add_library(rados_striper_test STATIC TestCase.cc)
 target_link_libraries(rados_striper_test
   radostest
