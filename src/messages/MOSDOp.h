@@ -84,32 +84,32 @@ public:
 
   // Fields decoded in partial decoding
   pg_t get_pg() const {
-    assert(!partial_decode_needed);
+    ceph_assert(!partial_decode_needed);
     return pgid.pgid;
   }
   spg_t get_spg() const override {
-    assert(!partial_decode_needed);
+    ceph_assert(!partial_decode_needed);
     return pgid;
   }
   pg_t get_raw_pg() const {
-    assert(!partial_decode_needed);
+    ceph_assert(!partial_decode_needed);
     return pg_t(hobj.get_hash(), pgid.pgid.pool());
   }
   epoch_t get_map_epoch() const override {
-    assert(!partial_decode_needed);
+    ceph_assert(!partial_decode_needed);
     return osdmap_epoch;
   }
   int get_flags() const {
-    assert(!partial_decode_needed);
+    ceph_assert(!partial_decode_needed);
     return flags;
   }
   osd_reqid_t get_reqid() const {
-    assert(!partial_decode_needed);
+    ceph_assert(!partial_decode_needed);
     if (reqid.name != entity_name_t() || reqid.tid != 0) {
       return reqid;
     } else {
       if (!final_decode_needed)
-	assert(reqid.inc == (int32_t)client_inc);  // decode() should have done this
+	ceph_assert(reqid.inc == (int32_t)client_inc);  // decode() should have done this
       return osd_reqid_t(get_orig_source(),
                          reqid.inc,
 			 header.tid);
@@ -118,37 +118,37 @@ public:
 
   // Fields decoded in final decoding
   int get_client_inc() const {
-    assert(!final_decode_needed);
+    ceph_assert(!final_decode_needed);
     return client_inc;
   }
   utime_t get_mtime() const {
-    assert(!final_decode_needed);
+    ceph_assert(!final_decode_needed);
     return mtime;
   }
   object_locator_t get_object_locator() const {
-    assert(!final_decode_needed);
+    ceph_assert(!final_decode_needed);
     if (hobj.oid.name.empty())
       return object_locator_t(hobj.pool, hobj.nspace, hobj.get_hash());
     else
       return object_locator_t(hobj);
   }
   const object_t& get_oid() const {
-    assert(!final_decode_needed);
+    ceph_assert(!final_decode_needed);
     return hobj.oid;
   }
   const hobject_t &get_hobj() const {
     return hobj;
   }
   snapid_t get_snapid() const {
-    assert(!final_decode_needed);
+    ceph_assert(!final_decode_needed);
     return hobj.snap;
   }
   const snapid_t& get_snap_seq() const {
-    assert(!final_decode_needed);
+    ceph_assert(!final_decode_needed);
     return snap_seq;
   }
   const vector<snapid_t> &get_snaps() const {
-    assert(!final_decode_needed);
+    ceph_assert(!final_decode_needed);
     return snaps;
   }
 
@@ -393,7 +393,7 @@ struct ceph_osd_request_head {
   }
 
   void decode_payload() override {
-    assert(partial_decode_needed && final_decode_needed);
+    ceph_assert(partial_decode_needed && final_decode_needed);
     p = std::cbegin(payload);
 
     // Always keep here the newest version of decoding order/rule
@@ -531,10 +531,10 @@ struct ceph_osd_request_head {
   }
 
   bool finish_decode() {
-    assert(!partial_decode_needed); // partial decoding required
+    ceph_assert(!partial_decode_needed); // partial decoding required
     if (!final_decode_needed)
       return false; // Message is already final decoded
-    assert(header.version >= 7);
+    ceph_assert(header.version >= 7);
 
     decode(client_inc, p);
     decode(mtime, p);

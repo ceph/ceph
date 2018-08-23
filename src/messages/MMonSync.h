@@ -51,7 +51,7 @@ public:
     case OP_CHUNK: return "chunk";
     case OP_LAST_CHUNK: return "last_chunk";
     case OP_NO_COOKIE: return "no_cookie";
-    default: assert(0 == "unknown op type"); return NULL;
+    default: ceph_assert(0 == "unknown op type"); return NULL;
     }
   }
 

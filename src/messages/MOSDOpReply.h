@@ -100,7 +100,7 @@ public:
   void add_flags(int f) { flags |= f; }
 
   void claim_op_out_data(vector<OSDOp>& o) {
-    assert(ops.size() == o.size());
+    ceph_assert(ops.size() == o.size());
     for (unsigned i = 0; i < o.size(); i++) {
       ops[i].outdata.claim(o[i].outdata);
     }
