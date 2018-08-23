@@ -1631,7 +1631,7 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
 			   uint32_t *struct_len) {			\
     const char *pos = p.get_pos();					\
     char *end = *start_pos + *struct_len;				\
-    assert(pos <= end);							\
+    ceph_assert(pos <= end);							\
     if (pos < end) {							\
       p.advance(end - pos);						\
     }									\
