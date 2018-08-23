@@ -142,7 +142,7 @@ int JournalTool::main(std::vector<const char*> &argv)
   }
  
   auto fs = fsmap->get_filesystem(role_selector.get_ns());
-  assert(fs != nullptr);
+  ceph_assert(fs != nullptr);
   int64_t const pool_id = fs->mds_map.get_metadata_pool();
   dout(4) << "JournalTool: resolving pool " << pool_id << dendl;
   std::string pool_name;
@@ -154,7 +154,7 @@ int JournalTool::main(std::vector<const char*> &argv)
 
   dout(4) << "JournalTool: creating IoCtx.." << dendl;
   r = rados.ioctx_create(pool_name.c_str(), input);
-  assert(r == 0);
+  ceph_assert(r == 0);
   output.dup(input);
 
   // Execution
@@ -262,7 +262,7 @@ int JournalTool::main_header(std::vector<const char*> &argv)
     derr << "Header could not be read!" << dendl;
     return -ENOENT;
   } else {
-    assert(js.header != NULL);
+    ceph_assert(js.header != NULL);
   }
 
   if (argv.size() == 0) {
@@ -291,7 +291,7 @@ int JournalTool::main_header(std::vector<const char*> &argv)
 
     std::string const value_str = *arg;
     arg = argv.erase(arg);
-    assert(argv.empty());
+    ceph_assert(argv.empty());
 
     std::string parse_err;
     uint64_t new_val = strict_strtoll(value_str.c_str(), 0, &parse_err);
@@ -389,7 +389,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
 				     nullptr)) {
       dout(1) << "Using alternate pool " << arg_str << dendl;
       int r = rados.ioctx_create(arg_str.c_str(), output);
-      assert(r == 0);
+      ceph_assert(r == 0);
       other_pool = true;
     } else {
       cerr << "Unknown argument: '" << *arg << "'" << std::endl;
@@ -653,7 +653,7 @@ int JournalTool::recover_dentries(
     bool const dry_run,
     std::set<inodeno_t> *consumed_inos)
 {
-  assert(consumed_inos != NULL);
+  ceph_assert(consumed_inos != NULL);
 
   int r = 0;
 
@@ -1082,7 +1082,7 @@ int JournalTool::erase_region(JournalScanner const &js, uint64_t const pos, uint
   stream.write(entry, &log_data, pos);
 
   dout(4) << "erase_region data length " << log_data.length() << dendl;
-  assert(log_data.length() == length);
+  ceph_assert(log_data.length() == length);
 
   // Write log stream region to RADOS
   // FIXME: get object size somewhere common to scan_events
@@ -1134,7 +1134,7 @@ void JournalTool::encode_fullbit_as_inode(
   const bool bare,
   bufferlist *out_bl)
 {
-  assert(out_bl != NULL);
+  ceph_assert(out_bl != NULL);
 
   // Compose InodeStore
   InodeStore new_inode;

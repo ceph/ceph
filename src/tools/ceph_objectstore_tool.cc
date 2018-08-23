@@ -306,7 +306,7 @@ static int get_fd_data(int fd, bufferlist &bl)
     total += bytes;
   } while(true);
 
-  assert(bl.length() == total);
+  ceph_assert(bl.length() == total);
   return 0;
 }
 
@@ -320,7 +320,7 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
       return -ENOENT;
     }
     ostringstream oss;
-    assert(struct_ver > 0);
+    ceph_assert(struct_ver > 0);
     PGLog::read_log_and_missing(
       fs, ch,
       pgid.make_pgmeta_oid(),
@@ -401,7 +401,7 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
     cerr << __func__ << " error on read_info " << cpp_strerror(r) << std::endl;
     return r;
   }
-  assert(struct_v >= 8);
+  ceph_assert(struct_v >= 8);
   // new omap key
   cout << "setting '_remove' omap key" << std::endl;
   map<string,bufferlist> values;
@@ -485,7 +485,7 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   map<string,bufferlist> km;
 
   if (!divergent.empty()) {
-    assert(missing.get_items().empty());
+    ceph_assert(missing.get_items().empty());
     PGLog::write_log_and_missing_wo_missing(
       t, &km, log, coll, info.pgid.make_pgmeta_oid(), divergent, true);
   } else {
@@ -508,8 +508,8 @@ int do_trim_pg_log(ObjectStore *store, const coll_t &coll,
   struct stat st;
   auto ch = store->open_collection(coll);
   int r = store->stat(ch, oid, &st);
-  assert(r == 0);
-  assert(st.st_size == 0);
+  ceph_assert(r == 0);
+  ceph_assert(st.st_size == 0);
 
   cerr << "Log bounds are: " << "(" << info.log_tail << ","
        << info.last_update << "]" << std::endl;
@@ -520,7 +520,7 @@ int do_trim_pg_log(ObjectStore *store, const coll_t &coll,
     return 0;
   }
 
-  assert(info.last_update.version > max_entries);
+  ceph_assert(info.last_update.version > max_entries);
   version_t trim_to = info.last_update.version - max_entries;
   size_t trim_at_once = g_ceph_context->_conf->osd_pg_log_trim_max;
   eversion_t new_tail;
@@ -745,7 +745,7 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
-      assert(!i->hobj.is_meta());
+      ceph_assert(!i->hobj.is_meta());
       if (i->is_pgmeta() || i->hobj.is_temp() || !i->is_no_gen()) {
 	continue;
       }
@@ -869,7 +869,7 @@ int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
 
   if (debug) {
     Formatter *formatter = Formatter::create("json-pretty");
-    assert(formatter);
+    ceph_assert(formatter);
     dump_log(formatter, cerr, log, missing);
     delete formatter;
   }
@@ -1039,7 +1039,7 @@ int get_attrs(
 	  cerr << "\tsetting " << clone.hobj << " snaps " << snaps
 	       << std::endl;
 	OSDriver::OSTransaction _t(driver.get_transaction(t));
-	assert(!snaps.empty());
+	ceph_assert(!snaps.empty());
 	snap_mapper.add_oid(clone.hobj, snaps, &_t);
       }
     } else {
@@ -1196,7 +1196,7 @@ int ObjectStoreTool::get_object(ObjectStore *store,
     cerr << "ERROR: Export contains temporary object '" << ob.hoid << "'" << std::endl;
     return -EFAULT;
   }
-  assert(g_ceph_context);
+  ceph_assert(g_ceph_context);
 
   auto ch = store->open_collection(coll);
   if (ob.hoid.hobj.nspace != g_ceph_context->_conf->osd_hit_set_namespace) {
@@ -1735,7 +1735,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
 
     bool ok = user_pgid.parse(pgidstr.c_str());
     // This succeeded in main() already
-    assert(ok);
+    ceph_assert(ok);
     if (pgid != user_pgid) {
       if (pgid.pool() != user_pgid.pool()) {
         cerr << "Can't specify a different pgid pool, must be " << pgid.pool() << std::endl;
@@ -1902,7 +1902,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     ms.missing.filter_objects([&](const hobject_t &obj) {
 	if (obj.nspace == g_ceph_context->_conf->osd_hit_set_namespace)
 	  return false;
-	assert(!obj.is_temp());
+	ceph_assert(!obj.is_temp());
 	object_t oid = obj.oid;
 	object_locator_t loc(obj);
 	pg_t raw_pgid = curmap.object_locator_to_pg(oid, loc);
@@ -2284,7 +2284,7 @@ int do_get_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
     return -ENOENT;
   }
 
-  assert(out.size() == 1);
+  ceph_assert(out.size() == 1);
 
   bufferlist bl = out.begin()->second;
   string value(bl.c_str(), bl.length());
@@ -3575,7 +3575,7 @@ int main(int argc, char **argv)
 	    throw std::runtime_error(ss.str());
 	  }
 	  vector<json_spirit::Value>::iterator i = array.begin();
-	  assert(i != array.end());
+	  ceph_assert(i != array.end());
 	  if (i->type() != json_spirit::str_type) {
 	    ss << "Object '" << object
 	       << "' must be a JSON array with the first element a string";
@@ -4115,7 +4115,7 @@ int main(int argc, char **argv)
         if (op == "export-remove") {
           ret = initiate_new_remove_pg(fs, pgid);
           // Export succeeded, so pgid is there
-          assert(ret == 0);
+          ceph_assert(ret == 0);
           cerr << "Remove successful" << std::endl;
         }
       }
@@ -4172,7 +4172,7 @@ int main(int argc, char **argv)
       cout << "Finished trimming pg log" << std::endl;
       goto out;
     } else {
-      assert(!"Should have already checked for valid --op");
+      ceph_assert(!"Should have already checked for valid --op");
     }
   } else {
     cerr << "PG '" << pgid << "' not found" << std::endl;

@@ -130,14 +130,14 @@ class StoreTool
   }
 
   bool exists(const string &prefix) {
-    assert(!prefix.empty());
+    ceph_assert(!prefix.empty());
     KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
     iter->seek_to_first(prefix);
     return (iter->valid() && (iter->raw_key().first == prefix));
   }
 
   bool exists(const string &prefix, const string &key) {
-    assert(!prefix.empty());
+    ceph_assert(!prefix.empty());
 
     if (key.empty()) {
       return exists(prefix);
@@ -149,7 +149,7 @@ class StoreTool
   }
 
   bufferlist get(const string &prefix, const string &key, bool &exists) {
-    assert(!prefix.empty() && !key.empty());
+    ceph_assert(!prefix.empty() && !key.empty());
 
     map<string,bufferlist> result;
     std::set<std::string> keys;
@@ -176,9 +176,9 @@ class StoreTool
   }
 
   bool set(const string &prefix, const string &key, bufferlist &val) {
-    assert(!prefix.empty());
-    assert(!key.empty());
-    assert(val.length() > 0);
+    ceph_assert(!prefix.empty());
+    ceph_assert(!key.empty());
+    ceph_assert(val.length() > 0);
 
     KeyValueDB::Transaction tx = db->get_transaction();
     tx->set(prefix, key, val);
@@ -188,8 +188,8 @@ class StoreTool
   }
 
   bool rm(const string& prefix, const string& key) {
-    assert(!prefix.empty());
-    assert(!key.empty());
+    ceph_assert(!prefix.empty());
+    ceph_assert(!key.empty());
 
     KeyValueDB::Transaction tx = db->get_transaction();
     tx->rmkey(prefix, key);
@@ -199,7 +199,7 @@ class StoreTool
   }
 
   bool rm_prefix(const string& prefix) {
-    assert(!prefix.empty());
+    ceph_assert(!prefix.empty());
 
     KeyValueDB::Transaction tx = db->get_transaction();
     tx->rmkeys_by_prefix(prefix);

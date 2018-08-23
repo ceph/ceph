@@ -46,7 +46,7 @@ void PrepareRemoteImageRequest<I>::get_remote_mirror_uuid() {
     PrepareRemoteImageRequest<I>,
     &PrepareRemoteImageRequest<I>::handle_get_remote_mirror_uuid>(this);
   int r = m_remote_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -111,7 +111,7 @@ void PrepareRemoteImageRequest<I>::get_client() {
   settings.max_fetch_bytes = g_ceph_context->_conf.get_val<Option::size_t>(
     "rbd_mirror_journal_max_fetch_bytes");
 
-  assert(*m_remote_journaler == nullptr);
+  ceph_assert(*m_remote_journaler == nullptr);
   *m_remote_journaler = new Journaler(m_threads->work_queue, m_threads->timer,
                                       &m_threads->timer_lock, m_remote_io_ctx,
                                       *m_remote_image_id, m_local_mirror_uuid,

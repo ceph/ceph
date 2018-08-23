@@ -38,7 +38,7 @@ SyncPointCreateRequest<I>::SyncPointCreateRequest(I *remote_image_ctx,
   : m_remote_image_ctx(remote_image_ctx), m_mirror_uuid(mirror_uuid),
     m_journaler(journaler), m_client_meta(client_meta), m_on_finish(on_finish),
     m_client_meta_copy(*client_meta) {
-  assert(m_client_meta->sync_points.size() < 2);
+  ceph_assert(m_client_meta->sync_points.size() < 2);
 
   // initialize the updated client meta with the new sync point
   m_client_meta_copy.sync_points.emplace_back();

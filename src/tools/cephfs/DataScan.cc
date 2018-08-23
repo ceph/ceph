@@ -213,7 +213,7 @@ int DataScan::main(const std::vector<const char*> &args)
     }
   }
   auto fs =  fsmap->get_filesystem(fscid);
-  assert(fs != nullptr);
+  ceph_assert(fs != nullptr);
 
   // Default to output to metadata pool
   if (driver == NULL) {
@@ -628,7 +628,7 @@ int DataScan::forall_objects(
         }
 
       } else if (untagged_only) {
-        assert(obj_name_offset == 0);
+        ceph_assert(obj_name_offset == 0);
         dout(20) << "OSD matched oid " << oid << dendl;
       }
 
@@ -944,7 +944,7 @@ int DataScan::scan_links()
 	continue;
       } else {
 	// parse_oid can only do 0 or -EINVAL
-	assert(r == 0);
+	ceph_assert(r == 0);
       }
 
       if (!valid_ino(dir_ino)) {
@@ -1302,7 +1302,7 @@ int MetadataTool::read_fnode(
     inodeno_t ino, frag_t frag, fnode_t *fnode,
     uint64_t *last_version)
 {
-  assert(fnode != NULL);
+  ceph_assert(fnode != NULL);
 
   object_t frag_oid = InodeStore::get_object_name(ino, frag, "");
   bufferlist fnode_bl;
@@ -1325,7 +1325,7 @@ int MetadataTool::read_fnode(
 int MetadataTool::read_dentry(inodeno_t parent_ino, frag_t frag,
                 const std::string &dname, InodeStore *inode)
 {
-  assert(inode != NULL);
+  ceph_assert(inode != NULL);
 
 
   std::string key;
@@ -1709,7 +1709,7 @@ int MetadataDriver::find_or_create_dirfrag(
     frag_t fragment,
     bool *created)
 {
-  assert(created != NULL);
+  ceph_assert(created != NULL);
 
   fnode_t existing_fnode;
   *created = false;
@@ -1737,13 +1737,13 @@ int MetadataDriver::find_or_create_dirfrag(
     librados::ObjectWriteOperation op;
 
     if (read_version) {
-      assert(r == -EINVAL);
+      ceph_assert(r == -EINVAL);
       // Case A: We must assert that the version isn't changed since we saw the object
       // was unreadable, to avoid the possibility of two data-scan processes
       // both creating the frag.
       op.assert_version(read_version);
     } else {
-      assert(r == -ENOENT);
+      ceph_assert(r == -ENOENT);
       // Case B: The object didn't exist in read_fnode, so while creating it we must
       // use an exclusive create to correctly populate *creating with
       // whether we created it ourselves or someone beat us to it.
@@ -1825,7 +1825,7 @@ int MetadataDriver::init(
 {
   if (metadata_pool_name.empty()) {
     auto fs =  fsmap->get_filesystem(fscid);
-    assert(fs != nullptr);
+    ceph_assert(fs != nullptr);
     int64_t const metadata_pool_id = fs->mds_map.get_metadata_pool();
 
     dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
@@ -1980,7 +1980,7 @@ void MetadataTool::build_file_dentry(
     inodeno_t ino, uint64_t file_size, time_t file_mtime,
     const file_layout_t &layout, InodeStore *out)
 {
-  assert(out != NULL);
+  ceph_assert(out != NULL);
 
   out->inode.mode = 0500 | S_IFREG;
   out->inode.size = file_size;
@@ -2008,7 +2008,7 @@ void MetadataTool::build_dir_dentry(
     inodeno_t ino, const frag_info_t &fragstat,
     const file_layout_t &layout, InodeStore *out)
 {
-  assert(out != NULL);
+  ceph_assert(out != NULL);
 
   out->inode.mode = 0755 | S_IFDIR;
   out->inode.dirstat = fragstat;

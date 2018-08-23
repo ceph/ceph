@@ -67,8 +67,8 @@ static void handle_signal(int signum)
 {
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
 
-  assert(signum == SIGINT || signum == SIGTERM);
-  assert(drv);
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
+  ceph_assert(drv);
 
   drv->shut_down();
 }
@@ -219,7 +219,7 @@ static int do_map(int argc, const char *argv[])
   shutdown_async_signal_handler();
 
   r = image.update_unwatch(handle);
-  assert(r == 0);
+  ceph_assert(r == 0);
 
 done:
   image.close();

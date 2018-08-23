@@ -70,7 +70,7 @@ void PrepareLocalImageRequest<I>::get_local_image_name() {
     PrepareLocalImageRequest<I>,
     &PrepareLocalImageRequest<I>::handle_get_local_image_name>(this);
   int r = m_io_ctx.aio_operate(RBD_DIRECTORY, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -106,7 +106,7 @@ void PrepareLocalImageRequest<I>::get_mirror_state() {
     PrepareLocalImageRequest<I>,
     &PrepareLocalImageRequest<I>::handle_get_mirror_state>(this);
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 

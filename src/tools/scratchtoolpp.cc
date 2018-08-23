@@ -114,7 +114,7 @@ int main(int argc, const char **argv)
 
   r = io_ctx.write(oid, bl, bl.length(), 0);
   uint64_t objver = io_ctx.get_last_version();
-  assert(objver > 0);
+  ceph_assert(objver > 0);
   cout << "io_ctx.write returned " << r << " last_ver=" << objver << std::endl;
 
   uint64_t stat_size;
@@ -176,19 +176,19 @@ int main(int argc, const char **argv)
 
   // test assert_version
   r = io_ctx.read(oid, bl, 0, 1);
-  assert(r >= 0);
+  ceph_assert(r >= 0);
   uint64_t v = io_ctx.get_last_version();
   cout << oid << " version is " << v << std::endl;
-  assert(v > 0);
+  ceph_assert(v > 0);
   io_ctx.set_assert_version(v);
   r = io_ctx.read(oid, bl, 0, 1);
-  assert(r >= 0);
+  ceph_assert(r >= 0);
   io_ctx.set_assert_version(v - 1);
   r = io_ctx.read(oid, bl, 0, 1);
-  assert(r == -ERANGE);
+  ceph_assert(r == -ERANGE);
   io_ctx.set_assert_version(v + 1);
   r = io_ctx.read(oid, bl, 0, 1);
-  assert(r == -EOVERFLOW);
+  ceph_assert(r == -EOVERFLOW);
 
   r = io_ctx.exec(oid, "crypto", "sha1", bl, bl2);
   cout << "exec returned " << r << std::endl;
@@ -243,13 +243,13 @@ int main(int argc, const char **argv)
   bufferlist val;
   val.append("foo");
   r = io_ctx.setxattr(oid, "foo", val);
-  assert(r >= 0);
+  ceph_assert(r >= 0);
   {
     ObjectReadOperation o;
     o.cmpxattr("foo", CEPH_OSD_CMPXATTR_OP_EQ, val);
     r = io_ctx.operate(oid, &o, &bl2);
     cout << " got " << r << " wanted >= 0" << std::endl;
-    assert(r >= 0);
+    ceph_assert(r >= 0);
   }
   val.append("...");
   {
@@ -257,7 +257,7 @@ int main(int argc, const char **argv)
     o.cmpxattr("foo", CEPH_OSD_CMPXATTR_OP_EQ, val);
     r = io_ctx.operate(oid, &o, &bl2);
     cout << " got " << r << " wanted " << -ECANCELED << " (-ECANCELED)" << std::endl;
-    assert(r == -ECANCELED);
+    ceph_assert(r == -ECANCELED);
   }
 
   io_ctx.locator_set_key(string());

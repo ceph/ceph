@@ -42,7 +42,7 @@ MDSUtility::~MDSUtility()
   delete monc;
   delete messenger;
   delete fsmap;
-  assert(waiting_for_mds_map == NULL);
+  ceph_assert(waiting_for_mds_map == NULL);
 }
 
 
@@ -94,7 +94,7 @@ int MDSUtility::init()
   Mutex init_lock("MDSUtility:init");
   Cond cond;
   bool done = false;
-  assert(!fsmap->get_epoch());
+  ceph_assert(!fsmap->get_epoch());
   lock.Lock();
   waiting_for_mds_map = new C_SafeCond(&init_lock, &cond, &done, NULL);
   lock.Unlock();

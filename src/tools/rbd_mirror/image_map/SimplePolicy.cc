@@ -27,7 +27,7 @@ size_t SimplePolicy::calc_images_per_instance(const InstanceToImageMap& map,
       ++nr_instances;
     }
   }
-  assert(nr_instances > 0);
+  ceph_assert(nr_instances > 0);
 
   size_t images_per_instance = image_count / nr_instances;
   if (images_per_instance == 0) {
@@ -68,7 +68,7 @@ std::string SimplePolicy::do_map(const InstanceToImageMap& map,
                                  const std::string &global_image_id) {
   auto min_it = map.end();
   for (auto it = map.begin(); it != map.end(); ++it) {
-    assert(it->second.find(global_image_id) == it->second.end());
+    ceph_assert(it->second.find(global_image_id) == it->second.end());
     if (Policy::is_dead_instance(it->first)) {
       continue;
     } else if (min_it == map.end()) {
@@ -78,7 +78,7 @@ std::string SimplePolicy::do_map(const InstanceToImageMap& map,
     }
   }
 
-  assert(min_it != map.end());
+  ceph_assert(min_it != map.end());
   dout(20) << "global_image_id=" << global_image_id << " maps to instance_id="
            << min_it->first << dendl;
   return min_it->first;

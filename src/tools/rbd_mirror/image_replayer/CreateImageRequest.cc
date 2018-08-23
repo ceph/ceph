@@ -103,7 +103,7 @@ void CreateImageRequest<I>::get_parent_global_image_id() {
   m_out_bl.clear();
   int r = m_remote_parent_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op,
                                              &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -150,7 +150,7 @@ void CreateImageRequest<I>::get_local_parent_image_id() {
   m_out_bl.clear();
   int r = m_local_parent_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op,
                                             &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
