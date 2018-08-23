@@ -210,7 +210,8 @@ namespace ceph {
 
     SubQueues high_queue;
 
-    dmc::PullPriorityQueue<K,T,true> queue;
+    using Queue = dmc::PullPriorityQueue<K,T,false>;
+    Queue queue;
 
     // when enqueue_front is called, rather than try to re-calc tags
     // to put in mClock priority queue, we'll just keep a separate
@@ -221,9 +222,9 @@ namespace ceph {
   public:
 
     mClockQueue(
-      const typename dmc::PullPriorityQueue<K,T,true>::ClientInfoFunc& info_func,
+      const typename Queue::ClientInfoFunc& info_func,
       double anticipation_timeout = 0.0) :
-      queue(info_func, true, anticipation_timeout)
+      queue(info_func, dmc::AtLimit::Allow, anticipation_timeout)
     {
       // empty
     }

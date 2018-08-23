@@ -21,6 +21,10 @@
 #include <sys/param.h>
 #endif
 
+#ifdef HAVE_SYS_VFS_H
+#include <sys/vfs.h>
+#endif
+
 #include <iostream>
 #include <string>
 #include <map>
@@ -31,7 +35,6 @@
 
 
 #include "osd/osd_types.h"
-#include "osd/OSD.h"
 #include "osdc/Objecter.h"
 #include "mon/MonClient.h"
 #include "msg/Dispatcher.h"
