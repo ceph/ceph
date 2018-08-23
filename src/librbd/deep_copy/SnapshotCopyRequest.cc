@@ -33,7 +33,7 @@ const std::string &get_snapshot_name(I *image_ctx, librados::snap_t snap_id) {
 					  librados::snap_t> &pair) {
     return pair.second == snap_id;
   });
-  assert(snap_it != image_ctx->snap_ids.end());
+  ceph_assert(snap_it != image_ctx->snap_ids.end());
   return snap_it->first.second;
 }
 
@@ -401,11 +401,11 @@ void SnapshotCopyRequest<I>::handle_snap_create(int r) {
     return;
   }
 
-  assert(m_prev_snap_id != CEPH_NOSNAP);
+  ceph_assert(m_prev_snap_id != CEPH_NOSNAP);
 
   auto snap_it = m_dst_image_ctx->snap_ids.find(
       {cls::rbd::UserSnapshotNamespace(), m_snap_name});
-  assert(snap_it != m_dst_image_ctx->snap_ids.end());
+  ceph_assert(snap_it != m_dst_image_ctx->snap_ids.end());
   librados::snap_t dst_snap_id = snap_it->second;
 
   ldout(m_cct, 20) << "mapping source snap id " << m_prev_snap_id << " to "
@@ -445,7 +445,7 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
 
     // if destination snapshot is not protected, protect it
     auto snap_seq_it = m_snap_seqs.find(src_snap_id);
-    assert(snap_seq_it != m_snap_seqs.end());
+    ceph_assert(snap_seq_it != m_snap_seqs.end());
 
     m_dst_image_ctx->snap_lock.get_read();
     bool dst_protected;
@@ -595,7 +595,7 @@ template <typename I>
 void SnapshotCopyRequest<I>::handle_resize_object_map(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
   finish(0);
 }
 
@@ -651,7 +651,7 @@ Context *SnapshotCopyRequest<I>::start_lock_op() {
 
 template <typename I>
 Context *SnapshotCopyRequest<I>::start_lock_op(RWLock &owner_lock) {
-  assert(m_dst_image_ctx->owner_lock.is_locked());
+  ceph_assert(m_dst_image_ctx->owner_lock.is_locked());
   if (m_dst_image_ctx->exclusive_lock == nullptr) {
     return new FunctionContext([](int r) {});
   }

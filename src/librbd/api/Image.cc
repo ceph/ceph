@@ -135,7 +135,7 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
   // retrieve clone v2 children attached to this snapshot
   IoCtx parent_io_ctx;
   r = rados.ioctx_create2(parent_spec.pool_id, parent_io_ctx);
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   // TODO support clone v2 parent namespaces
   parent_io_ctx.set_namespace(ictx->md_ctx.get_namespace());

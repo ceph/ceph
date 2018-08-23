@@ -26,7 +26,7 @@ public:
 
   ~AsyncOperation()
   {
-    assert(!m_xlist_item.is_on_list());
+    ceph_assert(!m_xlist_item.is_on_list());
   }
 
   inline bool started() const {

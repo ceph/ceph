@@ -51,7 +51,7 @@ void ListWatchersRequest<I>::list_image_watchers() {
 
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
                                          rados_completion, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -90,7 +90,7 @@ void ListWatchersRequest<I>::get_mirror_image() {
     create_rados_callback<klass, &klass::handle_get_mirror_image>(this);
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -122,7 +122,7 @@ void ListWatchersRequest<I>::list_mirror_watchers() {
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(RBD_MIRRORING, rados_completion,
                                          &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 

@@ -40,7 +40,7 @@ bool SnapshotLimitRequest<I>::should_complete(int r) {
 template <typename I>
 void SnapshotLimitRequest<I>::send_limit_snaps() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
@@ -56,7 +56,7 @@ void SnapshotLimitRequest<I>::send_limit_snaps() {
       this->create_callback_completion();
     int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, rados_completion,
 					 &op);
-    assert(r == 0);
+    ceph_assert(r == 0);
     rados_completion->release();
   }
 }

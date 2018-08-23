@@ -30,7 +30,7 @@ bool decode_lock_cookie(const std::string &tag, uint64_t *handle) {
 }
 
 std::string encode_lock_cookie(uint64_t watch_handle) {
-  assert(watch_handle != 0);
+  ceph_assert(watch_handle != 0);
   std::ostringstream ss;
   ss << WATCHER_LOCK_COOKIE_PREFIX << " " << watch_handle;
   return ss.str();

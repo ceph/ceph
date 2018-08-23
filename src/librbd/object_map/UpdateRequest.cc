@@ -33,8 +33,8 @@ void UpdateRequest<I>::send() {
 
 template <typename I>
 void UpdateRequest<I>::update_object_map() {
-  assert(m_image_ctx.snap_lock.is_locked());
-  assert(m_image_ctx.object_map_lock.is_locked());
+  ceph_assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(m_image_ctx.object_map_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
   // break very large requests into manageable batches
@@ -64,7 +64,7 @@ void UpdateRequest<I>::update_object_map() {
   int r = m_image_ctx.md_ctx.aio_operate(
     oid, rados_completion, &op, 0, snaps,
     (m_trace.valid() ? m_trace.get_info() : nullptr));
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -90,8 +90,8 @@ void UpdateRequest<I>::handle_update_object_map(int r) {
 
 template <typename I>
 void UpdateRequest<I>::update_in_memory_object_map() {
-  assert(m_image_ctx.snap_lock.is_locked());
-  assert(m_image_ctx.object_map_lock.is_locked());
+  ceph_assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(m_image_ctx.object_map_lock.is_locked());
 
   // rebuilding the object map might update on-disk only
   if (m_snap_id == m_image_ctx.snap_id) {
