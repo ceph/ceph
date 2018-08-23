@@ -185,7 +185,7 @@ void XioConnection::send_keepalive_or_ack_internal(bool ack, const utime_t *tp)
 
   struct ceph_timespec ts;
   if (ack) {
-    assert(tp);
+    ceph_assert(tp);
     tp->encode_timeval(&ts);
     xcmd->get_bl_ref().append(CEPH_MSGR_TAG_KEEPALIVE2_ACK);
     xcmd->get_bl_ref().append((char*)&ts, sizeof(ts));
@@ -199,9 +199,9 @@ void XioConnection::send_keepalive_or_ack_internal(bool ack, const utime_t *tp)
   }
 
   const std::list<buffer::ptr>& header = xcmd->get_bl_ref().buffers();
-  assert(header.size() == 1);  /* accelio header must be without scatter gather */
+  ceph_assert(header.size() == 1);  /* accelio header must be without scatter gather */
   list<bufferptr>::const_iterator pb = header.begin();
-  assert(pb->length() < XioMsgHdr::get_max_encoded_length());
+  ceph_assert(pb->length() < XioMsgHdr::get_max_encoded_length());
   struct xio_msg * msg = xcmd->get_xio_msg();
   msg->out.header.iov_base = (char*) pb->c_str();
   msg->out.header.iov_len = pb->length();
@@ -286,11 +286,11 @@ int XioConnection::handle_data_msg(struct xio_session *session,
       << " iov_len " << (int) tmsg->in.header.iov_len
       << " nents " << tmsg->in.pdata_iov.nents
       << " sn " << tmsg->sn << dendl;
-    assert(session == this->session);
+    ceph_assert(session == this->session);
     in_seq.set_count(msg_cnt.msg_cnt);
   } else {
     /* XXX major sequence error */
-    assert(! tmsg->in.header.iov_len);
+    ceph_assert(! tmsg->in.header.iov_len);
   }
 
   in_seq.append(msg);
@@ -540,7 +540,7 @@ int XioConnection::on_msg(struct xio_session *session,
 
   default:
     lderr(msgr->cct) << __func__ << " unsupported message tag " << (int) tag << dendl;
-    assert(! "unsupported message tag");
+    ceph_assert(! "unsupported message tag");
   }
 
   xio_release_msg(msg);

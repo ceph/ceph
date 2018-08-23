@@ -52,7 +52,7 @@ class PosixNetworkStack : public NetworkStack {
     threads[i] = std::thread(func);
   }
   void join_worker(unsigned i) override {
-    assert(threads.size() > i && threads[i].joinable());
+    ceph_assert(threads.size() > i && threads[i].joinable());
     threads[i].join();
   }
 };

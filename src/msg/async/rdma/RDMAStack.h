@@ -153,7 +153,7 @@ class RDMAWorker : public Worker {
   RDMAStack *get_stack() { return stack; }
   int get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c, size_t bytes);
   void remove_pending_conn(RDMAConnectedSocketImpl *o) {
-    assert(center.in_thread());
+    ceph_assert(center.in_thread());
     pending_sent_conns.remove(o);
   }
   void handle_pending_message();

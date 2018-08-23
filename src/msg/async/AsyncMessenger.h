@@ -111,7 +111,7 @@ public:
    * @{
    */
   void set_cluster_protocol(int p) override {
-    assert(!started && !did_bind);
+    ceph_assert(!started && !did_bind);
     cluster_protocol = p;
   }
 
@@ -307,7 +307,7 @@ private:
   bool stopped;
 
   AsyncConnectionRef _lookup_conn(const entity_addrvec_t& k) {
-    assert(lock.is_locked());
+    ceph_assert(lock.is_locked());
     auto p = conns.find(k);
     if (p == conns.end())
       return NULL;
@@ -324,7 +324,7 @@ private:
   }
 
   void _init_local_connection() {
-    assert(lock.is_locked());
+    ceph_assert(lock.is_locked());
     local_connection->peer_addrs = *my_addrs;
     local_connection->peer_type = my_name.type();
     local_connection->set_features(CEPH_FEATURES_ALL);

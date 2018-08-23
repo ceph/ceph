@@ -84,7 +84,7 @@ void QueueStrategy::shutdown()
 void QueueStrategy::wait()
 {
   lock.Lock();
-  assert(stop);
+  ceph_assert(stop);
   for (auto& thread : threads) {
     lock.Unlock();
 
@@ -98,7 +98,7 @@ void QueueStrategy::wait()
 
 void QueueStrategy::start()
 {
-  assert(!stop);
+  ceph_assert(!stop);
   lock.Lock();
   threads.reserve(n_threads);
   for (int ix = 0; ix < n_threads; ++ix) {

@@ -123,7 +123,7 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     } else {
       _cur_off += f.size;
     }
-    assert(data.length());
+    ceph_assert(data.length());
     return data.length();
   }
   virtual ssize_t send(bufferlist &bl, bool more) override {

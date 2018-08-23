@@ -1235,7 +1235,7 @@ Tub<Packet> tcp<InetTraits>::tcb::read() {
 template <typename InetTraits>
 int tcp<InetTraits>::tcb::send(Packet p) {
   // We can not send after the connection is closed
-  assert(!_snd.closed);
+  ceph_assert(!_snd.closed);
 
   if (in_state(CLOSED))
     return -ECONNRESET;
@@ -1460,7 +1460,7 @@ Tub<typename InetTraits::l4packet> tcp<InetTraits>::tcb::get_packet() {
     return p;
   }
 
-  assert(!_packetq.empty());
+  ceph_assert(!_packetq.empty());
 
   p = std::move(_packetq.front());
   _packetq.pop_front();

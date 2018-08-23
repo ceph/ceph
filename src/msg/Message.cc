@@ -206,7 +206,7 @@ void Message::encode(uint64_t features, int crcflags)
 {
   // encode and copy out of *m
   if (empty_payload()) {
-    assert(middle.length() == 0);
+    ceph_assert(middle.length() == 0);
     encode_payload(features);
 
     if (byte_throttler) {
