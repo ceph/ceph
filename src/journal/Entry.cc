@@ -37,7 +37,7 @@ void Entry::encode(bufferlist &bl) const {
   uint32_t bl_offset = bl.length();
   bl.claim_append(data_bl);
   encode(crc, bl);
-  assert(get_fixed_size() + m_data.length() + bl_offset == bl.length());
+  ceph_assert(get_fixed_size() + m_data.length() + bl_offset == bl.length());
 }
 
 void Entry::decode(bufferlist::const_iterator &iter) {
