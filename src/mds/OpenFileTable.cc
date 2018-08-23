@@ -1010,7 +1010,7 @@ void OpenFileTable::_open_ino_finish(inodeno_t ino, int r)
       finish_contexts(g_ceph_context, waiting_for_prefetch);
       waiting_for_prefetch.clear();
     } else {
-      ceph_assert(0);
+      ceph_abort();
     }
   }
 }
@@ -1093,7 +1093,7 @@ void OpenFileTable::_prefetch_inodes()
   else if (prefetch_state == FILE_INODES)
     pool = mds->mdsmap->get_first_data_pool();
   else
-    ceph_assert(0);
+    ceph_abort();
 
   MDCache *mdcache = mds->mdcache;
 

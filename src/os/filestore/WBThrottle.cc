@@ -113,7 +113,7 @@ void WBThrottle::set_from_conf()
     fd_limits.second =
       cct->_conf->filestore_wbthrottle_xfs_inodes_hard_limit;
   } else {
-    ceph_assert(0 == "invalid value for fs");
+    ceph_abort_msg("invalid value for fs");
   }
   cond.Signal();
 }

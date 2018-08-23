@@ -33,7 +33,7 @@ public:
     switch (op) {
     case OP_SCRUB: return "scrub";
     case OP_RESULT: return "result";
-    default: ceph_assert(0 == "unknown op type"); return NULL;
+    default: ceph_abort_msg("unknown op type"); return NULL;
     }
   }
 

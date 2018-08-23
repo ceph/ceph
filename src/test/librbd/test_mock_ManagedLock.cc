@@ -106,11 +106,11 @@ struct GetLockerRequest<MockManagedLockImageCtx> {
   static GetLockerRequest* create(librados::IoCtx& ioctx,
                                   const std::string& oid, bool exclusive,
                                   Locker *locker, Context *on_finish) {
-    ceph_assert(0 == "unexpected call");
+    ceph_abort_msg("unexpected call");
   }
 
   void send() {
-    ceph_assert(0 == "unexpected call");
+    ceph_abort_msg("unexpected call");
   }
 };
 
@@ -121,11 +121,11 @@ struct BreakRequest<MockManagedLockImageCtx> {
                               bool exclusive, bool blacklist_locker,
                               uint32_t blacklist_expire_seconds,
                               bool force_break_lock, Context *on_finish) {
-    ceph_assert(0 == "unexpected call");
+    ceph_abort_msg("unexpected call");
   }
 
   void send() {
-    ceph_assert(0 == "unexpected call");
+    ceph_abort_msg("unexpected call");
   }
 };
 

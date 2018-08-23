@@ -1279,7 +1279,7 @@ public:
 	break;
       case BUFFER_WARM_OUT:
 	// move from warm_out to hot LRU
-	ceph_assert(0 == "this happens via discard hint");
+	ceph_abort_msg("this happens via discard hint");
 	break;
       case BUFFER_HOT:
 	// move to front of hot LRU

@@ -1642,7 +1642,7 @@ int32_t CrushWrapper::_alloc_class_id() const {
       }
     }
   } while (class_id != start);
-  ceph_assert(0 == "no available class id");
+  ceph_abort_msg("no available class id");
 }
 
 void CrushWrapper::reweight(CephContext *cct)

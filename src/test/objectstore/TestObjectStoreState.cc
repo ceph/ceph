@@ -293,5 +293,5 @@ int TestObjectStoreState::coll_entry_t::get_random_obj_id(rngen_t& gen)
       return it->first;
     }
   }
-  ceph_assert(0 == "INTERNAL ERROR");
+  ceph_abort_msg("INTERNAL ERROR");
 }

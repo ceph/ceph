@@ -192,8 +192,8 @@ BasePyOSDMap_init(BasePyOSDMap *self, PyObject *args, PyObject *kwds)
     if (! PyArg_ParseTupleAndKeywords(args, kwds, "O",
                                       const_cast<char**>(kwlist),
                                       &osdmap_capsule)) {
-      ceph_assert(0);
-        return -1;
+      ceph_abort();
+      return -1;
     }
     ceph_assert(PyObject_TypeCheck(osdmap_capsule, &PyCapsule_Type));
 
@@ -291,8 +291,8 @@ BasePyOSDMapIncremental_init(BasePyOSDMapIncremental *self,
     if (! PyArg_ParseTupleAndKeywords(args, kwds, "O",
                                       const_cast<char**>(kwlist),
                                       &inc_capsule)) {
-      ceph_assert(0);
-        return -1;
+      ceph_abort();
+      return -1;
     }
     ceph_assert(PyObject_TypeCheck(inc_capsule, &PyCapsule_Type));
 
@@ -460,8 +460,8 @@ BasePyCRUSH_init(BasePyCRUSH *self,
     if (! PyArg_ParseTupleAndKeywords(args, kwds, "O",
                                       const_cast<char**>(kwlist),
                                       &crush_capsule)) {
-      ceph_assert(0);
-        return -1;
+      ceph_abort();
+      return -1;
     }
     ceph_assert(PyObject_TypeCheck(crush_capsule, &PyCapsule_Type));
 

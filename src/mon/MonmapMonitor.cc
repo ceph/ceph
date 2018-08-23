@@ -122,7 +122,7 @@ class C_ApplyFeatures : public Context {
       // established them in the first place.
       return;
     } else {
-      ceph_assert(0 == "bad C_ApplyFeatures return value");
+      ceph_abort_msg("bad C_ApplyFeatures return value");
     }
   }
 };

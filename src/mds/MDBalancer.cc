@@ -69,7 +69,7 @@ int MDBalancer::proc_message(const Message::const_ref &m)
 
   default:
     derr << " balancer unknown message " << m->get_type() << dendl_impl;
-    ceph_assert(0 == "balancer unknown message");
+    ceph_abort_msg("balancer unknown message");
   }
 
   return 0;

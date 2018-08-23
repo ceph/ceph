@@ -57,7 +57,7 @@ int ceph_deleg_caps_for_type(unsigned type)
 		break;
 	default:
 		// Should never happen
-		ceph_assert(false);
+		ceph_abort();
 	}
 	return caps;
 }

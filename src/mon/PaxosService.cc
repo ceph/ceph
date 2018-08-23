@@ -124,7 +124,7 @@ bool PaxosService::dispatch(MonOpRequestRef op)
         } else if (r == -ECANCELED || r == -EAGAIN) {
           return;
         } else {
-          ceph_assert(0 == "bad return value for proposal_timer");
+          ceph_abort_msg("bad return value for proposal_timer");
         }
     });
     dout(10) << " setting proposal_timer " << do_propose
@@ -240,7 +240,7 @@ void PaxosService::propose_pending()
       else if (r == -ECANCELED || r == -EAGAIN)
 	return;
       else
-	ceph_assert(0 == "bad return value for C_Committed");
+	ceph_abort_msg("bad return value for C_Committed");
     }
   };
   paxos->queue_pending_finisher(new C_Committed(this));

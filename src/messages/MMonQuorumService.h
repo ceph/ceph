@@ -57,11 +57,11 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ceph_assert(0 == "MMonQuorumService message must always be a base class");
+    ceph_abort_msg("MMonQuorumService message must always be a base class");
   }
 
   void decode_payload() override {
-    ceph_assert(0 == "MMonQuorumService message must always be a base class");
+    ceph_abort_msg("MMonQuorumService message must always be a base class");
   }
 
   const char *get_type_name() const override { return "quorum_service"; }

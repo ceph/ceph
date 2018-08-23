@@ -113,7 +113,7 @@ void Locker::dispatch(const Message::const_ref &m)
     break;
   default:
     derr << "locker unknown message " << m->get_type() << dendl;
-    ceph_assert(0 == "locker unknown message");
+    ceph_abort_msg("locker unknown message");
   }
 }
 
@@ -4699,7 +4699,7 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
   ceph_assert(lock->get_parent()->is_auth());
   ceph_assert(lock->is_stable());
 
-  ceph_assert(0 == "not fully implemented, at least not for filelock");
+  ceph_abort_msg("not fully implemented, at least not for filelock");
 
   CInode *in = static_cast<CInode *>(lock->get_parent());
 

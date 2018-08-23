@@ -340,7 +340,7 @@ void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
         please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
   } else {
-    ceph_assert(0 == "bad AdminSocket command binding");
+    ceph_abort_msg("bad AdminSocket command binding");
   }
   (read_only ? audit_clog->debug() : audit_clog->info())
     << "from='admin socket' "
@@ -1162,7 +1162,7 @@ void Monitor::sync_obtain_latest_monmap(bufferlist &bl)
       derr << __func__
            << " something wrong happened while reading the store: "
            << cpp_strerror(err) << dendl;
-      ceph_assert(0 == "error reading the store");
+      ceph_abort_msg("error reading the store");
     }
   } else {
     latest_monmap.decode(monmon_bl);
@@ -1176,7 +1176,7 @@ void Monitor::sync_obtain_latest_monmap(bufferlist &bl)
       derr << __func__
            << " something wrong happened while reading the store: "
            << cpp_strerror(err) << dendl;
-      ceph_assert(0 == "error reading the store");
+      ceph_abort_msg("error reading the store");
     }
     ceph_assert(backup_bl.length() > 0);
 
@@ -1363,7 +1363,7 @@ void Monitor::handle_sync(MonOpRequestRef op)
 
   default:
     dout(0) << __func__ << " unknown op " << m->op << dendl;
-    ceph_assert(0 == "unknown op");
+    ceph_abort_msg("unknown op");
   }
 }
 
@@ -3313,7 +3313,7 @@ void Monitor::handle_command(MonOpRequestRef op)
         ds << '\n';
       }
     } else {
-      ceph_assert(0 == "We should never get here!");
+      ceph_abort_msg("We should never get here!");
       return;
     }
     rdata.append(ds);
@@ -4381,7 +4381,7 @@ void Monitor::timecheck_start_round()
   ceph_assert(is_leader());
 
   if (monmap->size() == 1) {
-    ceph_assert(0 == "We are alone; this shouldn't have been scheduled!");
+    ceph_abort_msg("We are alone; this shouldn't have been scheduled!");
     return;
   }
 
@@ -4490,7 +4490,7 @@ void Monitor::timecheck_check_skews()
   ceph_assert(is_leader());
   ceph_assert((timecheck_round % 2) == 0);
   if (monmap->size() == 1) {
-    ceph_assert(0 == "We are alone; we shouldn't have gotten here!");
+    ceph_abort_msg("We are alone; we shouldn't have gotten here!");
     return;
   }
   ceph_assert(timecheck_latencies.size() == timecheck_skews.size());
@@ -4527,7 +4527,7 @@ void Monitor::timecheck_report()
   ceph_assert(is_leader());
   ceph_assert((timecheck_round % 2) == 0);
   if (monmap->size() == 1) {
-    ceph_assert(0 == "We are alone; we shouldn't have gotten here!");
+    ceph_abort_msg("We are alone; we shouldn't have gotten here!");
     return;
   }
 
@@ -4565,7 +4565,7 @@ void Monitor::timecheck()
   dout(10) << __func__ << dendl;
   ceph_assert(is_leader());
   if (monmap->size() == 1) {
-    ceph_assert(0 == "We are alone; we shouldn't have gotten here!");
+    ceph_abort_msg("We are alone; we shouldn't have gotten here!");
     return;
   }
   ceph_assert(timecheck_round % 2 != 0);

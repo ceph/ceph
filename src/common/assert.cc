@@ -163,11 +163,11 @@ namespace ceph {
     ostringstream tss;
     tss << ceph_clock_now();
 
+    char buf[8096];
     BackTrace *bt = new BackTrace(1);
-    ba.printf("%s: In function '%s' thread %llx time %s\n"
-	      "%s: %d: abort()\n",
-	      file, func, (unsigned long long)pthread_self(), tss.str().c_str(),
-	      file, line);
+    snprintf(buf, sizeof(buf), "%s: In function '%s' thread %llx time %s\n"
+	     "%s: %d: abort()\n", file, func, (unsigned long long)pthread_self(),
+	     tss.str().c_str(), file, line);
     dout_emergency(msg);
 
     // TODO: get rid of this memory allocation.

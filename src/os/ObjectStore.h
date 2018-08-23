@@ -683,7 +683,7 @@ public:
         break;
 
       default:
-        ceph_assert(0 == "Unknown OP");
+        ceph_abort_msg("Unknown OP");
       }
     }
     void _update_op_bl(

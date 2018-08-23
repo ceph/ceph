@@ -640,7 +640,7 @@ void coll_t::calc_str()
     _str = pgid.calc_name(_str_buff + spg_t::calc_name_buf_size - 1, "PMET_");
     break;
   default:
-    ceph_assert(0 == "unknown collection type");
+    ceph_abort_msg("unknown collection type");
   }
 }
 
@@ -3322,7 +3322,7 @@ void PastIntervals::decode(bufferlist::const_iterator &bl)
   case 0:
     break;
   case 1:
-    ceph_assert(0 == "pi_simple_rep support removed post-luminous");
+    ceph_abort_msg("pi_simple_rep support removed post-luminous");
     break;
   case 2:
     past_intervals.reset(new pi_compact_rep);
@@ -3745,12 +3745,12 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	break;
       }
       default:
-	ceph_assert(0 == "Invalid rollback code");
+	ceph_abort_msg("Invalid rollback code");
       }
       DECODE_FINISH(bp);
     }
   } catch (...) {
-    ceph_assert(0 == "Invalid encoding");
+    ceph_abort_msg("Invalid encoding");
   }
 }
 

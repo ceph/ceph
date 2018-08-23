@@ -188,7 +188,7 @@ int chain_getxattr_buf(const char *fn, const char *name, bufferptr *bp)
       }
     }
   }
-  ceph_assert(0 == "unreachable");
+  ceph_abort_msg("unreachable");
   return 0;
 }
 

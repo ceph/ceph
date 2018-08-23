@@ -170,7 +170,7 @@ void JournalingObjectStore::SubmitManager::op_submit_finish(uint64_t op)
   if (op != op_submitted + 1) {
     dout(0) << "op_submit_finish " << op << " expected " << (op_submitted + 1)
 	    << ", OUT OF ORDER" << dendl;
-    ceph_assert(0 == "out of order op_submit_finish");
+    ceph_abort_msg("out of order op_submit_finish");
   }
   op_submitted = op;
   lock.Unlock();

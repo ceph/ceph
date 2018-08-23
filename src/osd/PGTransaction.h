@@ -234,7 +234,7 @@ public:
 	    return BufferUpdate::Zero{z.len + r->len};
 	  },
 	  [&](const BufferUpdate::CloneRange &c) -> BufferUpdateType {
-	    ceph_assert(0 == "violates can_merge condition");
+	    ceph_abort_msg("violates can_merge condition");
 	    return left;
 	  });
       }

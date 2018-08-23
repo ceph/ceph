@@ -46,7 +46,7 @@ ostream &operator<<(ostream &lhs, const ECBackend::pipeline_state_t &rhs) {
   case ECBackend::pipeline_state_t::CACHE_INVALID:
     return lhs << "CACHE_INVALID";
   default:
-    ceph_assert(0 == "invalid pipeline state");
+    ceph_abort_msg("invalid pipeline state");
   }
   return lhs; // unreachable
 }
@@ -726,7 +726,7 @@ int ECBackend::recover_object(
       ceph_assert(head->ssc);
       h->ops.back().recovery_info.ss = head->ssc->snapset;
     } else {
-      ceph_assert(0 == "neither obc nor head set for a snap object");
+      ceph_abort_msg("neither obc nor head set for a snap object");
     }
   }
   h->ops.back().recovery_progress.omap_complete = true;

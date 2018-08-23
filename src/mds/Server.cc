@@ -264,7 +264,7 @@ void Server::dispatch(const Message::const_ref &m)
     return;
   default:
     derr << "server unknown message " << m->get_type() << dendl;
-    ceph_assert(0 == "server unknown message");  
+    ceph_abort_msg("server unknown message");  
   }
 }
 
@@ -1380,7 +1380,7 @@ void Server::respond_to_request(MDRequestRef& mdr, int r)
   } else if (mdr->internal_op > -1) {
     dout(10) << "respond_to_request on internal request " << mdr << dendl;
     if (!mdr->internal_op_finish)
-      ceph_assert(0 == "trying to respond to internal op without finisher");
+      ceph_abort_msg("trying to respond to internal op without finisher");
     mdr->internal_op_finish->complete(r);
     mdcache->request_finish(mdr);
   }

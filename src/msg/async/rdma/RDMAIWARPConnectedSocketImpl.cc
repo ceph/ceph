@@ -142,7 +142,7 @@ void RDMAIWARPConnectedSocketImpl::handle_cm_connection() {
       break;
 
     default:
-      ceph_assert(0 == "unhandled event");
+      ceph_abort_msg("unhandled event");
       break;
   }
   rdma_ack_cm_event(event);

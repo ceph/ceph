@@ -1874,7 +1874,7 @@ void PrimaryLogPG::do_request(
     break;
 
   default:
-    ceph_assert(0 == "bad message type in do_request");
+    ceph_abort_msg("bad message type in do_request");
   }
 }
 
@@ -2491,7 +2491,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
       return cache_result_t::NOOP;
     }
   default:
-    ceph_assert(0 == "unrecognized manifest type");
+    ceph_abort_msg("unrecognized manifest type");
   }
 
   return cache_result_t::NOOP;
@@ -2830,7 +2830,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
 
       return cache_result_t::HANDLED_PROXY;
     }
-    ceph_assert(0 == "unreachable");
+    ceph_abort_msg("unreachable");
     return cache_result_t::NOOP;
 
   case pg_pool_t::CACHEMODE_FORWARD:
@@ -2907,7 +2907,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
     return cache_result_t::HANDLED_PROXY;
 
   default:
-    ceph_assert(0 == "unrecognized cache_mode");
+    ceph_abort_msg("unrecognized cache_mode");
   }
   return cache_result_t::NOOP;
 }
@@ -3082,7 +3082,7 @@ void PrimaryLogPG::do_proxy_read(OpRequestRef op, ObjectContextRef obc)
 	  soid = obc->obs.oi.manifest.redirect_target;  
 	  break;
       default:
-	ceph_assert(0 == "unrecognized manifest type");
+	ceph_abort_msg("unrecognized manifest type");
     }
   } else {
   /* proxy */
@@ -3297,7 +3297,7 @@ void PrimaryLogPG::do_proxy_write(OpRequestRef op, ObjectContextRef obc)
 	  soid = obc->obs.oi.manifest.redirect_target;  
 	  break;
       default:
-	ceph_assert(0 == "unrecognized manifest type");
+	ceph_abort_msg("unrecognized manifest type");
     }
   } else {
   /* proxy */
@@ -3510,7 +3510,7 @@ void PrimaryLogPG::do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, 
   if (chunk_index <= req_offset) {
     osd_op.op.extent.offset = manifest->chunk_map[chunk_index].offset + req_offset - chunk_index;
   } else {
-    ceph_assert(0 == "chunk_index > req_offset");
+    ceph_abort_msg("chunk_index > req_offset");
   } 
   osd_op.op.extent.length = req_length; 
 
@@ -3728,7 +3728,7 @@ struct PromoteFinisher : public PrimaryLogPG::OpFinisher {
 						promote_callback->promote_results.get<1>(),
 						promote_callback->obc);
     } else {
-      ceph_assert(0 == "unrecognized manifest type");
+      ceph_abort_msg("unrecognized manifest type");
     }
     return 0;
   }
@@ -3791,7 +3791,7 @@ void PrimaryLogPG::promote_object(ObjectContextRef obc,
       src_hoid = obc->obs.oi.manifest.redirect_target;
       cb = new PromoteCallback(obc, this);
     } else {
-      ceph_assert(0 == "unrecognized manifest type");
+      ceph_abort_msg("unrecognized manifest type");
     }
   }
 
@@ -3950,7 +3950,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
       dout(20) << " op order client." << n << " tid " << t << " last was " << p->second << dendl;
       if (p->second > t) {
 	derr << "bad op order, already applied " << p->second << " > this " << t << dendl;
-	ceph_assert(0 == "out of order op");
+	ceph_abort_msg("out of order op");
       }
       p->second = t;
     }
@@ -6973,7 +6973,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    src_hoid = obs.oi.manifest.redirect_target;
 	    cb = new PromoteManifestCallback(ctx->obc, this, ctx);
 	  } else {
-	    ceph_assert(0 == "unrecognized manifest type");
+	    ceph_abort_msg("unrecognized manifest type");
 	  }
           ctx->op_finishers[ctx->current_osd_subop_num].reset(
             new PromoteFinisher(cb));
@@ -7038,7 +7038,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      }
 	    });
 	} else {
-	  ceph_assert(0 == "unrecognized manifest type");
+	  ceph_abort_msg("unrecognized manifest type");
 	}
 
 	oi.clear_flag(object_info_t::FLAG_MANIFEST);
@@ -7839,9 +7839,9 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       block_write_on_full_cache(soid, ctx->op);
       return -EAGAIN;
     case cache_result_t::REPLIED_WITH_EAGAIN:
-      ceph_assert(0 == "this can't happen, no rollback on replica");
+      ceph_abort_msg("this can't happen, no rollback on replica");
     default:
-      ceph_assert(0 == "must promote was set, other values are not valid");
+      ceph_abort_msg("must promote was set, other values are not valid");
       return -EAGAIN;
     }
   }
@@ -7860,7 +7860,7 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     }
   } else if (ret) {
     // ummm....huh? It *can't* return anything else at time of writing.
-    ceph_assert(0 == "unexpected error code in _rollback_to");
+    ceph_abort_msg("unexpected error code in _rollback_to");
   } else { //we got our context, let's use it to do the rollback!
     hobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
     if (is_degraded_or_backfilling_object(rollback_to_sobject) ||
@@ -8810,7 +8810,7 @@ void PrimaryLogPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
       auto p = obc->obs.oi.manifest.chunk_map.begin();
       _copy_some_manifest(obc, cop, p->first);
     } else {
-      ceph_assert(0 == "unrecognized manifest type");
+      ceph_abort_msg("unrecognized manifest type");
     }
   }
 }
@@ -9517,7 +9517,7 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
     if (!tctx->lock_manager.take_write_lock(
 	  head,
 	  obc)) {
-      ceph_assert(0 == "problem!");
+      ceph_abort_msg("problem!");
     }
     dout(20) << __func__ << " took lock on obc, " << obc->rwstate << dendl;
 
@@ -9623,7 +9623,7 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
   if (!tctx->lock_manager.take_write_lock(
 	obc->obs.oi.soid,
 	obc)) {
-    ceph_assert(0 == "problem!");
+    ceph_abort_msg("problem!");
   }
   dout(20) << __func__ << " took lock on obc, " << obc->rwstate << dendl;
 
@@ -11692,7 +11692,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
 
     switch (what) {
     case pg_log_entry_t::LOST_MARK:
-      ceph_assert(0 == "actually, not implemented yet!");
+      ceph_abort_msg("actually, not implemented yet!");
       break;
 
     case pg_log_entry_t::LOST_REVERT:
@@ -13292,7 +13292,7 @@ void PrimaryLogPG::update_range(
     projected_log.scan_log_after(bi->version, func);
     bi->version = projected_last_update;
   } else {
-    ceph_assert(0 == "scan_range should have raised bi->version past log_tail");
+    ceph_abort_msg("scan_range should have raised bi->version past log_tail");
   }
 }
 
@@ -13372,7 +13372,7 @@ void PrimaryLogPG::check_local()
       if (r != -ENOENT) {
 	derr << __func__ << " " << p->soid << " exists, but should have been "
 	     << "deleted" << dendl;
-	ceph_assert(0 == "erroneously present object");
+	ceph_abort_msg("erroneously present object");
       }
     } else {
       // ignore old(+missing) objects
@@ -15180,7 +15180,7 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
   if (r != 0 && r != -ENOENT) {
     lderr(pg->cct) << "get_next_objects_to_trim returned "
 		   << cpp_strerror(r) << dendl;
-    ceph_assert(0 == "get_next_objects_to_trim returned an invalid code");
+    ceph_abort_msg("get_next_objects_to_trim returned an invalid code");
   } else if (r == -ENOENT) {
     // Done!
     ldout(pg->cct, 10) << "got ENOENT" << dendl;

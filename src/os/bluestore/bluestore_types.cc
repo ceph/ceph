@@ -107,9 +107,9 @@ void bluestore_extent_ref_map_t::_check() const
   unsigned refs = 0;
   for (const auto &p : ref_map) {
     if (p.first < pos)
-      ceph_assert(0 == "overlap");
+      ceph_abort_msg("overlap");
     if (p.first == pos && p.second.refs == refs)
-      ceph_assert(0 == "unmerged");
+      ceph_abort_msg("unmerged");
     pos = p.first + p.second.length;
     refs = p.second.refs;
   }
@@ -197,11 +197,11 @@ void bluestore_extent_ref_map_t::put(
   auto p = ref_map.lower_bound(offset);
   if (p == ref_map.end() || p->first > offset) {
     if (p == ref_map.begin()) {
-      ceph_assert(0 == "put on missing extent (nothing before)");
+      ceph_abort_msg("put on missing extent (nothing before)");
     }
     --p;
     if (p->first + p->second.length <= offset) {
-      ceph_assert(0 == "put on missing extent (gap)");
+      ceph_abort_msg("put on missing extent (gap)");
     }
   }
   if (p->first < offset) {

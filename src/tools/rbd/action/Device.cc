@@ -111,7 +111,7 @@ const DeviceOperations *get_device_operations(const po::variables_map &vm) {
   case DEVICE_TYPE_NBD:
     return &nbd_operations;
   default:
-    ceph_assert(0);
+    ceph_abort();
     return nullptr;
   }
 }

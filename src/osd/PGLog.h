@@ -299,7 +299,7 @@ public:
 	    return true;
 	  }
 	}
-	ceph_assert(0 == "in extra_caller_ops but not extra_reqids");
+	ceph_abort_msg("in extra_caller_ops but not extra_reqids");
       }
 
       if (!(indexed_data & PGLOG_INDEXED_DUPS)) {
@@ -1440,7 +1440,7 @@ public:
 				<< i.first << " " << i.second
 				<< " last_backfill = " << info.last_backfill
 				<< dendl;
-	      ceph_assert(0 == "invalid missing set entry found");
+	      ceph_abort_msg("invalid missing set entry found");
 	    }
 	    bufferlist bv;
 	    int r = store->getattr(

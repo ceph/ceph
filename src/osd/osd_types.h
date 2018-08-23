@@ -1305,7 +1305,7 @@ struct pg_pool_t {
     case CACHEMODE_READPROXY:
       return true;
     default:
-      ceph_assert(0 == "implement me");
+      ceph_abort_msg("implement me");
     }
   }
 
@@ -1532,7 +1532,7 @@ public:
     case TYPE_ERASURE:
       return false;
     default:
-      ceph_assert(0 == "unhandled pool type");
+      ceph_abort_msg("unhandled pool type");
     }
   }
 
@@ -2693,7 +2693,7 @@ public:
     virtual void iterate_all_intervals(
       std::function<void(const pg_interval_t &)> &&f) const {
       ceph_assert(!has_full_intervals());
-      ceph_assert(0 == "not valid for this implementation");
+      ceph_abort_msg("not valid for this implementation");
     }
 
     virtual ~interval_rep() {}

@@ -983,7 +983,7 @@ void FileJournal::check_align(off64_t pos, bufferlist& bl)
   if (directio && !bl.is_aligned_size_and_memory(block_size, CEPH_DIRECTIO_ALIGNMENT)) {
     ceph_assert((bl.length() & (CEPH_DIRECTIO_ALIGNMENT - 1)) == 0);
     ceph_assert((pos & (CEPH_DIRECTIO_ALIGNMENT - 1)) == 0);
-    ceph_assert(0 == "bl was not aligned");
+    ceph_abort_msg("bl was not aligned");
   }
 }
 
@@ -1421,7 +1421,7 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
 	  continue;
 	}
 	check_align(pos, tbl);
-	ceph_assert(0 == "io_submit got unexpected error");
+	ceph_abort_msg("io_submit got unexpected error");
       } else {
 	break;
       }
@@ -1460,7 +1460,7 @@ void FileJournal::write_finish_thread_entry()
 	continue;
       }
       derr << "io_getevents got " << cpp_strerror(r) << dendl;
-      ceph_assert(0 == "got unexpected error from io_getevents");
+      ceph_abort_msg("got unexpected error from io_getevents");
     }
 
     {
@@ -1470,7 +1470,7 @@ void FileJournal::write_finish_thread_entry()
 	if (event[i].res != ai->len) {
 	  derr << "aio to " << ai->off << "~" << ai->len
 	       << " returned: " << (int)event[i].res << dendl;
-	  ceph_assert(0 == "unexpected aio error");
+	  ceph_abort_msg("unexpected aio error");
 	}
 	dout(10) << __func__ << " aio " << ai->off
 		 << "~" << ai->len << " done" << dendl;

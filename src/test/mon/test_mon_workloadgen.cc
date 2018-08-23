@@ -556,7 +556,7 @@ class OSDStub : public TestStub
       if (pgs.count(pgid) == 0) {
 	derr << __func__
 	     << " pgid " << pgid << " not on our map" << dendl;
-	ceph_assert(0 == "pgid not on our map");
+	ceph_abort_msg("pgid not on our map");
       }
       pg_stat_t &s = pgs[pgid];
       mstats->pg_stat[pgid] = s;
@@ -847,7 +847,7 @@ class OSDStub : public TestStub
 	derr << "osd." << whoami << "::" << __func__
 	     << "** ERROR: applying incremental: "
 	     << cpp_strerror(err) << dendl;
-	ceph_assert(0 == "error applying incremental");
+	ceph_abort_msg("error applying incremental");
       }
     }
     dout(30) << __func__ << "\nosdmap:\n";

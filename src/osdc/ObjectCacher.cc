@@ -2631,7 +2631,7 @@ void ObjectCacher::bh_stat_add(BufferHead *bh)
     stat_error += bh->length();
     break;
   default:
-    ceph_assert(0 == "bh_stat_add: invalid bufferhead state");
+    ceph_abort_msg("bh_stat_add: invalid bufferhead state");
   }
   if (get_stat_dirty_waiting() > 0)
     stat_cond.Signal();
@@ -2667,7 +2667,7 @@ void ObjectCacher::bh_stat_sub(BufferHead *bh)
     stat_error -= bh->length();
     break;
   default:
-    ceph_assert(0 == "bh_stat_sub: invalid bufferhead state");
+    ceph_abort_msg("bh_stat_sub: invalid bufferhead state");
   }
 }
 

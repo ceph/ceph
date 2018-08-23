@@ -393,11 +393,9 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
   }
   lgeneric_dout(this, 1) << "do_command '" << command << "' '"
 			 << ss.str() << dendl;
-  if (command == "assert" && _conf->debug_asok_assert_abort) {
-    ceph_assert(0 == "assert");
-  }
+  ceph_assert_always(!(command == "assert" && _conf->debug_asok_assert_abort));
   if (command == "abort" && _conf->debug_asok_assert_abort) {
-    ceph_abort();
+   ceph_abort();
   }
   if (command == "perfcounters_dump" || command == "1" ||
       command == "perf dump") {
@@ -534,7 +532,7 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
       _log->reopen_log_file();
     }
     else {
-      ceph_assert(0 == "registered under wrong command?");    
+      ceph_abort_msg("registered under wrong command?");    
     }
     f->close_section();
   }

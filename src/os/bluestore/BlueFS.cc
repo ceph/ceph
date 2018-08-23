@@ -713,7 +713,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 	      dout(10) << __func__ << " 0x" << std::hex << read_pos
 		       << ": stop: failed to skip to " << offset
 		       << std::dec << dendl;
-	      ceph_assert(0 == "problem with op_jump");
+	      ceph_abort_msg("problem with op_jump");
 	    }
 	  }
 	}
@@ -1663,7 +1663,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       derr << __func__ << " allocated: 0x" << std::hex << allocated
            << " offset: 0x" << offset << " length: 0x" << length << std::dec
            << dendl;
-      ceph_assert(0 == "bluefs enospc");
+      ceph_abort_msg("bluefs enospc");
       return r;
     }
     if (cct->_conf->bluefs_preextend_wal_files &&
@@ -1900,7 +1900,7 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
 	     << " unflushed bytes" << dendl;
     t.substr_of(h->buffer, 0, offset - h->pos);
     h->buffer.swap(t);
-    ceph_assert(0 == "actually this shouldn't happen");
+    ceph_abort_msg("actually this shouldn't happen");
   }
   if (h->buffer.length()) {
     int r = _flush(h, true);
@@ -1911,7 +1911,7 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
     return 0;  // no-op!
   }
   if (offset > h->file->fnode.size) {
-    ceph_assert(0 == "truncate up not supported");
+    ceph_abort_msg("truncate up not supported");
   }
   ceph_assert(h->file->fnode.size >= offset);
   h->file->fnode.size = offset;

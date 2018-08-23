@@ -148,7 +148,7 @@ void Migrator::dispatch(const Message::const_ref &m)
 
   default:
     derr << "migrator unknown message " << m->get_type() << dendl;
-    ceph_assert(0 == "migrator unknown message");
+    ceph_abort_msg("migrator unknown message");
   }
 }
 
@@ -2432,7 +2432,7 @@ void Migrator::handle_export_cancel(const MExportDirCancel::const_ref &m)
   dirfrag_t df = m->get_dirfrag();
   map<dirfrag_t,import_state_t>::iterator it = import_state.find(df);
   if (it == import_state.end()) {
-    ceph_assert(0 == "got export_cancel in weird state");
+    ceph_abort_msg("got export_cancel in weird state");
   } else if (it->second.state == IMPORT_DISCOVERING) {
     import_reverse_discovering(df);
   } else if (it->second.state == IMPORT_DISCOVERED) {
@@ -2453,7 +2453,7 @@ void Migrator::handle_export_cancel(const MExportDirCancel::const_ref &m)
     cache->adjust_subtree_auth(dir, it->second.peer);
     import_reverse_unfreeze(dir);
   } else {
-    ceph_assert(0 == "got export_cancel in weird state");
+    ceph_abort_msg("got export_cancel in weird state");
   }
 }
 
@@ -2566,7 +2566,7 @@ void Migrator::handle_export_prep(const MExportDirPrep::const_ref &m, bool did_a
       } else if (start == '-') {
 	// nothing
       } else
-	ceph_assert(0 == "unrecognized start char");
+	ceph_abort_msg("unrecognized start char");
 
       while (!q.end()) {
 	CDentry *dn = cache->add_replica_dentry(q, cur, finished);

@@ -112,7 +112,7 @@ AdminSocketOutput::run_command(AdminSocketClient &client,
   if (!err.empty()) {
     std::cerr << __func__  << " AdminSocketClient::do_request errored with: "
               << err << std::endl;
-    ceph_assert(false);
+    ceph_abort();
   }
   return std::make_pair(command, output);
 }

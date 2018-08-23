@@ -2447,12 +2447,12 @@ void FileStore::_set_global_replay_guard(const coll_t& cid,
   int ret = object_map->sync();
   if (ret < 0) {
     derr << __FUNC__ << ": omap sync error " << cpp_strerror(ret) << dendl;
-    ceph_assert(0 == "_set_global_replay_guard failed");
+    ceph_abort_msg("_set_global_replay_guard failed");
   }
   ret = sync_filesystem(basedir_fd);
   if (ret < 0) {
     derr << __FUNC__ << ": sync_filesystem error " << cpp_strerror(ret) << dendl;
-    ceph_assert(0 == "_set_global_replay_guard failed");
+    ceph_abort_msg("_set_global_replay_guard failed");
   }
 
   char fn[PATH_MAX];
@@ -2461,7 +2461,7 @@ void FileStore::_set_global_replay_guard(const coll_t& cid,
   if (fd < 0) {
     int err = errno;
     derr << __FUNC__ << ": " << cid << " error " << cpp_strerror(err) << dendl;
-    ceph_assert(0 == "_set_global_replay_guard failed");
+    ceph_abort_msg("_set_global_replay_guard failed");
   }
 
   _inject_failure();
@@ -2474,7 +2474,7 @@ void FileStore::_set_global_replay_guard(const coll_t& cid,
   if (r < 0) {
     derr << __FUNC__ << ": fsetxattr " << GLOBAL_REPLAY_GUARD_XATTR
 	 << " got " << cpp_strerror(r) << dendl;
-    ceph_assert(0 == "fsetxattr failed");
+    ceph_abort_msg("fsetxattr failed");
   }
 
   // and make sure our xattr is durable.
@@ -2527,7 +2527,7 @@ void FileStore::_set_replay_guard(const coll_t& cid,
   if (fd < 0) {
     int err = errno;
     derr << __FUNC__ << ": " << cid << " error " << cpp_strerror(err) << dendl;
-    ceph_assert(0 == "_set_replay_guard failed");
+    ceph_abort_msg("_set_replay_guard failed");
   }
   _set_replay_guard(fd, spos, 0, in_progress);
   VOID_TEMP_FAILURE_RETRY(::close(fd));
@@ -2566,7 +2566,7 @@ void FileStore::_set_replay_guard(int fd,
     fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
   if (r < 0) {
     derr << "fsetxattr " << REPLAY_GUARD_XATTR << " got " << cpp_strerror(r) << dendl;
-    ceph_assert(0 == "fsetxattr failed");
+    ceph_abort_msg("fsetxattr failed");
   }
 
   // and make sure our xattr is durable.
@@ -2586,7 +2586,7 @@ void FileStore::_close_replay_guard(const coll_t& cid,
   if (fd < 0) {
     int err = errno;
     derr << __FUNC__ << ": " << cid << " error " << cpp_strerror(err) << dendl;
-    ceph_assert(0 == "_close_replay_guard failed");
+    ceph_abort_msg("_close_replay_guard failed");
   }
   _close_replay_guard(fd, spos);
   VOID_TEMP_FAILURE_RETRY(::close(fd));
@@ -2616,7 +2616,7 @@ void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos,
     fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
   if (r < 0) {
     derr << "fsetxattr " << REPLAY_GUARD_XATTR << " got " << cpp_strerror(r) << dendl;
-    ceph_assert(0 == "fsetxattr failed");
+    ceph_abort_msg("fsetxattr failed");
   }
 
   // and make sure our xattr is durable.
@@ -3049,7 +3049,7 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_COLL_SETATTR:
     case Transaction::OP_COLL_RMATTR:
-      ceph_assert(0 == "collection attr methods no longer implemented");
+      ceph_abort_msg("collection attr methods no longer implemented");
       break;
 
     case Transaction::OP_COLL_RENAME:
@@ -3129,7 +3129,7 @@ void FileStore::_do_transaction(
       break;
     case Transaction::OP_SPLIT_COLLECTION:
       {
-	ceph_assert(0 == "not legacy journal; upgrade to firefly first");
+	ceph_abort_msg("not legacy journal; upgrade to firefly first");
       }
       break;
     case Transaction::OP_SPLIT_COLLECTION2:
@@ -3248,7 +3248,7 @@ void FileStore::_do_transaction(
 	  dump_open_fds(cct);
 	}
 
-	ceph_assert(0 == "unexpected error");
+	ceph_abort_msg("unexpected error");
       }
     }
 
@@ -3373,7 +3373,7 @@ int FileStore::read(
     if (errors != 0) {
       dout(0) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~"
 	      << got << " ... BAD CRC:\n" << ss.str() << dendl;
-      ceph_assert(0 == "bad crc on read");
+      ceph_abort_msg("bad crc on read");
     }
   }
 
@@ -4127,7 +4127,7 @@ void FileStore::sync_entry()
 	int err = write_op_seq(op_fd, cp);
 	if (err < 0) {
 	  derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
-	  ceph_assert(0 == "error during write_op_seq");
+	  ceph_abort_msg("error during write_op_seq");
 	}
 
 	char s[NAME_MAX];
@@ -4149,7 +4149,7 @@ void FileStore::sync_entry()
 	  err = backend->sync_checkpoint(cid);
 	  if (err < 0) {
 	    derr << "ioctl WAIT_SYNC got " << cpp_strerror(err) << dendl;
-	    ceph_assert(0 == "wait_sync got error");
+	    ceph_abort_msg("wait_sync got error");
 	  }
 	  dout(20) << " done waiting for checkpoint " << cid << " to complete" << dendl;
 	}
@@ -4160,24 +4160,24 @@ void FileStore::sync_entry()
 	int err = object_map->sync();
 	if (err < 0) {
 	  derr << "object_map sync got " << cpp_strerror(err) << dendl;
-	  ceph_assert(0 == "object_map sync returned error");
+	  ceph_abort_msg("object_map sync returned error");
 	}
 
 	err = backend->syncfs();
 	if (err < 0) {
 	  derr << "syncfs got " << cpp_strerror(err) << dendl;
-	  ceph_assert(0 == "syncfs returned error");
+	  ceph_abort_msg("syncfs returned error");
 	}
 
 	err = write_op_seq(op_fd, cp);
 	if (err < 0) {
 	  derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
-	  ceph_assert(0 == "error during write_op_seq");
+	  ceph_abort_msg("error during write_op_seq");
 	}
 	err = ::fsync(op_fd);
 	if (err < 0) {
 	  derr << "Error during fsync of op_seq: " << cpp_strerror(err) << dendl;
-	  ceph_assert(0 == "error during fsync of op_seq");
+	  ceph_abort_msg("error during fsync of op_seq");
 	}
       }
 
@@ -4912,7 +4912,7 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
       if (int n = snprintf(filename, sizeof(filename), "%s/%s", fn, de->d_name);
 	  n >= static_cast<int>(sizeof(filename))) {
 	derr << __func__ << " path length overrun: " << n << dendl;
-	ceph_assert(false);
+	ceph_abort();
       }
 
       r = ::stat(filename, &sb);
@@ -5536,7 +5536,7 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
 		 << oldcid << "/" << oldoid << " (dne, ignoring enoent)"
 		 << dendl;
       } else {
-	ceph_assert(0 == "ERROR: source must exist");
+	ceph_abort_msg("ERROR: source must exist");
       }
 
       if (!replaying) {
