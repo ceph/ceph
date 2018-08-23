@@ -35,6 +35,7 @@
       group snap list (group snap ls)     List snapshots of a group.
       group snap remove (group snap rm)   Remove a snapshot from a group.
       group snap rename                   Rename group's snapshot.
+      group snap rollback                 Rollback group to snapshot.
       image-meta get                      Image metadata get the value associated
                                           with the key.
       image-meta list (image-meta ls)     Image metadata list keys with values.
@@ -809,6 +810,27 @@
     --group arg          group name
     --snap arg           snapshot name
     --dest-snap arg      destination snapshot name
+  
+  rbd help group snap rollback
+  usage: rbd group snap rollback [--no-progress] [--pool <pool>] 
+                                 [--namespace <namespace>] [--group <group>] 
+                                 [--snap <snap>] 
+                                 <group-snap-spec> 
+  
+  Rollback group to snapshot.
+  
+  Positional arguments
+    <group-snap-spec>    group specification
+                         (example:
+                         [<pool-name>/[<namespace-name>/]]<group-name>@<snap-name>
+                         )
+  
+  Optional arguments
+    --no-progress        disable progress output
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --group arg          group name
+    --snap arg           snapshot name
   
   rbd help image-meta get
   usage: rbd image-meta get [--pool <pool>] [--namespace <namespace>] 

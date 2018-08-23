@@ -132,6 +132,13 @@ list_snapshots()
     rbd group snap list $group_name
 }
 
+rollback_snapshot()
+{
+    local group_name=$1
+    local snap_name=$2
+    rbd group snap rollback $group_name@$snap_name
+}
+
 check_snapshot_in_group()
 {
     local group_name=$1
@@ -180,6 +187,7 @@ image="test_image"
 group="test_consistency_group"
 snap="group_snap"
 new_snap="new_group_snap"
+sec_snap="group_snap2"
 create_image $image
 create_group $group
 add_image_to_group $image $group
@@ -187,8 +195,13 @@ create_snapshot $group $snap
 check_snapshot_in_group $group $snap
 rename_snapshot $group $snap $new_snap
 check_snapshot_not_in_group $group $snap
+create_snapshot $group $sec_snap
+check_snapshot_in_group $group $sec_snap
+rollback_snapshot $group $new_snap
 remove_snapshot $group $new_snap
 check_snapshot_not_in_group $group $new_snap
+remove_snapshot $group $sec_snap
+check_snapshot_not_in_group $group $sec_snap
 remove_group $group
 remove_image $image
 echo "PASSED"

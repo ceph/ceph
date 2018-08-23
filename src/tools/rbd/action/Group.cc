@@ -683,6 +683,47 @@ int execute_group_snap_list(const po::variables_map &vm,
   return 0;
 }
 
+int execute_group_snap_rollback(const po::variables_map &vm,
+                                const std::vector<std::string> &global_args) {
+  size_t arg_index = 0;
+
+  std::string group_name;
+  std::string namespace_name;
+  std::string pool_name;
+  std::string snap_name;
+
+  int r = utils::get_pool_generic_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, at::POOL_NAME, &pool_name,
+    &namespace_name, GROUP_NAME, "group", &group_name, &snap_name, true,
+    utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_FULL);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::IoCtx io_ctx;
+  librados::Rados rados;
+
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::RBD rbd;
+  utils::ProgressContext pc("Rolling back to group snapshot",
+                            vm[at::NO_PROGRESS].as<bool>());
+  r = rbd.group_snap_rollback_with_progress(io_ctx, group_name.c_str(),
+                                            snap_name.c_str(), pc);
+  if (r < 0) {
+    pc.fail();
+    std::cerr << "rbd: rollback group to snapshot failed: "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  pc.finish();
+  return 0;
+}
+
 void get_create_arguments(po::options_description *positional,
                           po::options_description *options) {
   add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE,
@@ -796,6 +837,13 @@ void get_group_snap_list_arguments(po::options_description *positional,
                          false);
 }
 
+void get_group_snap_rollback_arguments(po::options_description *positional,
+                                       po::options_description *options) {
+  at::add_no_progress_option(options);
+  add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE,
+                         true);
+}
+
 Shell::Action action_create(
   {"group", "create"}, {}, "Create a group.",
   "", &get_create_arguments, &execute_create);
@@ -833,6 +881,10 @@ Shell::Action action_group_snap_list(
   {"group", "snap", "list"}, {"group", "snap", "ls"},
   "List snapshots of a group.",
   "", &get_group_snap_list_arguments, &execute_group_snap_list);
+Shell::Action action_group_snap_rollback(
+  {"group", "snap", "rollback"}, {},
+  "Rollback group to snapshot.",
+  "", &get_group_snap_rollback_arguments, &execute_group_snap_rollback);
 
 } // namespace group
 } // namespace action
