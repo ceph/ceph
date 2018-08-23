@@ -1076,6 +1076,7 @@ public:
     CSUM_TYPE,
     CSUM_MAX_BLOCK,
     CSUM_MIN_BLOCK,
+    FINGERPRINT_ALGORITHM,
   };
 
   enum type_t {
@@ -1414,6 +1415,37 @@ public:
   bool fast_read;            ///< whether turn on fast read on the pool or not
 
   pool_opts_t opts; ///< options
+
+  typedef enum {
+    TYPE_FINGERPRINT_NONE = 0,
+    TYPE_FINGERPRINT_SHA1 = 1,     
+  } fingerprint_t;
+  static fingerprint_t get_fingerprint_from_str(const string& s) {
+    if (s == "none")
+      return TYPE_FINGERPRINT_NONE;
+    if (s == "sha1")
+      return TYPE_FINGERPRINT_SHA1;
+    return (fingerprint_t)-1;
+  }
+  const fingerprint_t get_fingerprint_type() const {
+    string fp_str;
+    opts.get(pool_opts_t::FINGERPRINT_ALGORITHM, &fp_str);
+    return get_fingerprint_from_str(fp_str);
+  }
+  const char *get_fingerprint_name() const {
+    string fp_str;
+    fingerprint_t fp_t;
+    opts.get(pool_opts_t::FINGERPRINT_ALGORITHM, &fp_str);
+    fp_t = get_fingerprint_from_str(fp_str);
+    return get_fingerprint_name(fp_t);
+  }
+  static const char *get_fingerprint_name(fingerprint_t m) {
+    switch (m) {
+    case TYPE_FINGERPRINT_NONE: return "none";
+    case TYPE_FINGERPRINT_SHA1: return "sha1";
+    default: return "unknown";
+    }
+  }
 
   /// application -> key/value metadata
   map<string, std::map<string, string>> application_metadata;
