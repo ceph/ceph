@@ -48,7 +48,7 @@ struct BaseRequest {
   static T* create(librados::IoCtx& ioctx, MockImageWatcher *watcher,
                    ContextWQ *work_queue, const std::string& oid,
                    const std::string& cookie, Context *on_finish) {
-    assert(!s_requests.empty());
+    ceph_assert(!s_requests.empty());
     T* req = s_requests.front();
     req->on_finish = on_finish;
     s_requests.pop_front();
@@ -106,11 +106,11 @@ struct GetLockerRequest<MockManagedLockImageCtx> {
   static GetLockerRequest* create(librados::IoCtx& ioctx,
                                   const std::string& oid, bool exclusive,
                                   Locker *locker, Context *on_finish) {
-    assert(0 == "unexpected call");
+    ceph_assert(0 == "unexpected call");
   }
 
   void send() {
-    assert(0 == "unexpected call");
+    ceph_assert(0 == "unexpected call");
   }
 };
 
@@ -121,11 +121,11 @@ struct BreakRequest<MockManagedLockImageCtx> {
                               bool exclusive, bool blacklist_locker,
                               uint32_t blacklist_expire_seconds,
                               bool force_break_lock, Context *on_finish) {
-    assert(0 == "unexpected call");
+    ceph_assert(0 == "unexpected call");
   }
 
   void send() {
-    assert(0 == "unexpected call");
+    ceph_assert(0 == "unexpected call");
   }
 };
 

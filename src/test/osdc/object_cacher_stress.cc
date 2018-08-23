@@ -47,7 +47,7 @@ public:
     : m_op(op), m_outstanding(outstanding) {}
   void finish(int r) override {
     m_op->done++;
-    assert(*m_outstanding > 0);
+    ceph_assert(*m_outstanding > 0);
     (*m_outstanding)--;
   }
 };
@@ -106,11 +106,11 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
       lock.Lock();
       int r = obc.readx(rd, &object_set, completion);
       lock.Unlock();
-      assert(r >= 0);
+      ceph_assert(r >= 0);
       if ((uint64_t)r == length)
 	completion->complete(r);
       else
-	assert(r == 0);
+	ceph_assert(r == 0);
     } else {
       ObjectCacher::OSDWrite *wr = obc.prepare_write(snapc, bl,
 						     ceph::real_time::min(), 0,
@@ -261,13 +261,13 @@ int correctness_test(uint64_t delay_ns)
   lock.Lock();
   int r = obc.readx(back_half_rd, &object_set, &backreadcond);
   lock.Unlock();
-  assert(r >= 0);
+  ceph_assert(r >= 0);
   if (r == 0) {
     std::cout << "Waiting to read data into cache" << std::endl;
     r = backreadcond.wait();
   }
 
-  assert(r == 1<<21);
+  ceph_assert(r == 1<<21);
 
   /* Read the whole object in,
    * verify we have to wait for it to complete,
@@ -285,7 +285,7 @@ int correctness_test(uint64_t delay_ns)
   lock.Lock();
   r = obc.readx(whole_rd, &object_set, &frontreadcond);
   // we cleared out the cache by reading back half, it shouldn't pass immediately!
-  assert(r == 0);
+  ceph_assert(r == 0);
   std::cout << "Data (correctly) not available without fetching" << std::endl;
 
   ObjectCacher::OSDWrite *verify_wr = obc.prepare_write(snapc, ones_bl,
@@ -309,11 +309,11 @@ int correctness_test(uint64_t delay_ns)
   for (int i = 1<<18; i < 1<<22; i+=1<<18) {
     bufferlist ones_maybe;
     ones_maybe.substr_of(readbl, i, ones_bl.length());
-    assert(0 == memcmp(ones_maybe.c_str(), ones_bl.c_str(), ones_bl.length()));
+    ceph_assert(0 == memcmp(ones_maybe.c_str(), ones_bl.c_str(), ones_bl.length()));
   }
   bufferlist ones_maybe;
   ones_maybe.substr_of(readbl, (1<<18)+(1<<16), ones_bl.length());
-  assert(0 == memcmp(ones_maybe.c_str(), ones_bl.c_str(), ones_bl.length()));
+  ceph_assert(0 == memcmp(ones_maybe.c_str(), ones_bl.c_str(), ones_bl.length()));
 
   std::cout << "validated that data is 0xff where it should be" << std::endl;
   

@@ -125,7 +125,7 @@ TestObjectStoreState::get_coll_at(int pos, bool erase)
   if (m_collections.empty())
     return NULL;
 
-  assert((size_t) pos < m_collections_ids.size());
+  ceph_assert((size_t) pos < m_collections_ids.size());
 
   coll_t cid = m_collections_ids[pos];
   coll_entry_t *entry = m_collections[cid];

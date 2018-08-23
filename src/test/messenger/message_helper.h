@@ -65,7 +65,7 @@ static inline Message* new_ping_with_data(const char *tag, uint32_t size)
 
   struct xio_reg_mem *mp = m->get_mp();
   int e = xio_mempool_alloc(xio_msgr_mpool, size, mp);
-  assert(e == 0);
+  ceph_assert(e == 0);
   p = mp->addr;
   m->set_rdma_hook(xio_hook_func);
 

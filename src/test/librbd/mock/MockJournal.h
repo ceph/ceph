@@ -20,7 +20,7 @@ struct ImageCtx;
 struct MockJournal {
   static MockJournal *s_instance;
   static MockJournal *get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 

@@ -79,7 +79,7 @@ bool DeterministicOpSequence::run_one_op(int op, rngen_t& gen)
 
   default:
     cout << "bad op " << op << std::endl;
-    assert(0 == "bad op");
+    ceph_assert(0 == "bad op");
   }
   return ok;
 }

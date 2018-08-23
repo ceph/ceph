@@ -27,7 +27,7 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
 struct MockMirroringWatcher {
   static MockMirroringWatcher *s_instance;
   static MockMirroringWatcher &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 
@@ -53,7 +53,7 @@ struct MirroringWatcher<MockTestImageCtx> {
   }
 
   static MirroringWatcher<MockTestImageCtx> &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 
@@ -114,7 +114,7 @@ struct RefreshImagesRequest<librbd::MockTestImageCtx> {
   static RefreshImagesRequest *create(librados::IoCtx &io_ctx,
                                       ImageIds *image_ids,
                                       Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->image_ids = image_ids;
     s_instance->on_finish = on_finish;
     return s_instance;

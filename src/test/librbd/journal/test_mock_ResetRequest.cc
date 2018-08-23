@@ -40,7 +40,7 @@ struct CreateRequest<MockTestImageCtx> {
                                uint64_t tag_class, TagData &tag_data,
                                const std::string &client_id,
                                ContextWQ *op_work_queue, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -60,7 +60,7 @@ struct RemoveRequest<MockTestImageCtx> {
   static RemoveRequest* create(IoCtx &ioctx, const std::string &image_id,
                                const std::string &client_id,
                                ContextWQ *op_work_queue, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }

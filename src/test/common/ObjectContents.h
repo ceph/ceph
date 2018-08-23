@@ -60,7 +60,7 @@ public:
     Iterator &operator++() {
       ++pos;
       if (iter != parent->seeds.end() && pos >= iter->first) {
-	assert(pos == iter->first);
+	ceph_assert(pos == iter->first);
 	current_state = iter->second;
 	++iter;
       }
