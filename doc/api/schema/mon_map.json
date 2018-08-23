@@ -1,0 +1,79 @@
+{
+    "definitions": {
+        "datetime": {
+            "oneOf": [{
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}.\\d{6}$"
+            }, {
+                "type": "string",
+                "pattern": "^\\d{1,}.\\d{6}$"
+            }]
+        },
+        "netaddr": {
+            "oneOf": [{
+                "type": "string",
+                "pattern": "^\\d{1,3}.\\d{1,3}.\\d{1,3}.\\d{1,3}:\\d{1,5}/\\d{1,10}$"
+            }, {
+                "type": "string",
+                "pattern": "^-$"
+            }]
+        },
+        "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        }
+    },
+    "additionalProperties": false,
+    "required": [
+      "features",
+      "created",
+      "modified",
+      "epoch",
+      "mons",
+      "fsid"
+    ],
+    "properties": {
+        "features": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "optional",
+              "persistent"
+            ],
+            "properties": {
+                "optional": {
+                    "type": "array"
+                },
+                "persistent": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "created": { "$ref": "#/definitions/datetime" },
+        "modified": { "$ref": "#/definitions/datetime" },
+        "epoch": { "type": "number" },
+        "mons": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "public_addr",
+                  "name",
+                  "rank",
+                  "addr"
+                ],
+                "properties": {
+                    "public_addr": { "$ref": "#/definitions/netaddr" },
+                    "name": { "type": "string" },
+                    "rank": { "type": "number" },
+                    "addr": { "$ref": "#/definitions/netaddr" }
+                }
+            }
+        },
+        "fsid": { "$ref": "#/definitions/uuid" }
+    }
+}
