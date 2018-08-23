@@ -157,18 +157,16 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
   }(cct);								\
 									\
   if (should_gather) {							\
-    static size_t _log_exp_length = 80; 				\
-    ceph::logging::Entry *_dout_e = 					\
-      cct->_log->create_entry(v, sub, &_log_exp_length);		\
+    ceph::logging::MutableEntry _dout_e(v, sub);                        \
     static_assert(std::is_convertible<decltype(&*cct), 			\
 				      CephContext* >::value,		\
 		  "provided cct must be compatible with CephContext*"); \
     auto _dout_cct = cct;						\
-    std::ostream* _dout = &_dout_e->get_ostream();
+    std::ostream* _dout = &_dout_e.get_ostream();
 
-#define dendl_impl std::flush;				\
-    _dout_cct->_log->submit_entry(_dout_e);		\
-  }							\
+#define dendl_impl std::flush;                                          \
+    _dout_cct->_log->submit_entry(std::move(_dout_e));                  \
+  }                                                                     \
   } while (0)
 #endif	// WITH_SEASTAR
 

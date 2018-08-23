@@ -41,8 +41,8 @@ TEST(Log, Simple)
     int sys = i % 4;
     int l = 5 + (i%4);
     if (subs.should_gather(sys, l)) {
-      Entry *e = log.create_entry(l, sys, "hello world");
-      log.submit_entry(e);
+      MutableEntry e(l, sys);
+      log.submit_entry(std::move(e));
     }
   }
   
@@ -65,18 +65,18 @@ TEST(Log, ReuseBad)
 
   const int l = 0;
   {
-    auto e = log.create_entry(l, 1);
-    auto& out = e->get_ostream();
+    MutableEntry e(l, 1);
+    auto& out = e.get_ostream();
     out << (std::streambuf*)nullptr;
     EXPECT_TRUE(out.bad()); // writing nullptr to a stream sets its badbit
-    log.submit_entry(e);
+    log.submit_entry(std::move(e));
   }
   {
-    auto e = log.create_entry(l, 1);
-    auto& out = e->get_ostream();
+    MutableEntry e(l, 1);
+    auto& out = e.get_ostream();
     EXPECT_FALSE(out.bad()); // should not see failures from previous log entry
     out << "hello world";
-    log.submit_entry(e);
+    log.submit_entry(std::move(e));
   }
 
   log.flush();
@@ -97,7 +97,7 @@ TEST(Log, ManyNoGather)
   for (int i=0; i<many; i++) {
     int l = 10;
     if (subs.should_gather(1, l))
-      log.submit_entry(log.create_entry(l, 1));
+      log.submit_entry(MutableEntry(1, 0));
   }
   log.flush();
   log.stop();
@@ -115,9 +115,11 @@ TEST(Log, ManyGatherLog)
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
-    if (subs.should_gather(1, l))
-      log.submit_entry(log.create_entry(l, 1,
-					"this is a long string asdf asdf asdf asdf asdf asdf asd fasd fasdf "));
+    if (subs.should_gather(1, l)) {
+      MutableEntry e(l, 1);
+      e.get_ostream() << "this is a long string asdf asdf asdf asdf asdf asdf asd fasd fasdf ";
+      log.submit_entry(std::move(e));
+    }
   }
   log.flush();
   log.stop();
@@ -135,41 +137,16 @@ TEST(Log, ManyGatherLogStringAssign)
   for (int i=0; i<many; i++) {
     int l = 10;
     if (subs.should_gather(1, l)) {
-      Entry *e = log.create_entry(l, 1);
-      ostringstream oss;
-      oss << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd";
-      e->set_str(oss.str());
-      log.submit_entry(e);
-    }
-  }
-  log.flush();
-  log.stop();
-}
-TEST(Log, ManyGatherLogStringAssignWithReserve)
-{
-  SubsystemMap subs;
-  subs.set_log_level(1, 20);
-  subs.set_gather_level(1, 10);
-  Log log(&subs);
-  log.start();
-  log.set_log_file("/tmp/big");
-  log.reopen_log_file();
-  for (int i=0; i<many; i++) {
-    int l = 10;
-    if (subs.should_gather(1, l)) {
-      Entry *e = log.create_entry(l, 1);
-      ostringstream oss;
-      oss.str().reserve(80);
-      oss << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd";
-      e->set_str(oss.str());
-      log.submit_entry(e);
+      MutableEntry e(l, 1);
+      e.get_ostream() << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd";
+      log.submit_entry(std::move(e));
     }
   }
   log.flush();
   log.stop();
 }
 
-TEST(Log, ManyGatherLogPrebuf)
+TEST(Log, ManyGatherLogStackSpillover)
 {
   SubsystemMap subs;
   subs.set_log_level(1, 20);
@@ -181,37 +158,11 @@ TEST(Log, ManyGatherLogPrebuf)
   for (int i=0; i<many; i++) {
     int l = 10;
     if (subs.should_gather(1, l)) {
-      Entry *e = log.create_entry(l, 1);
-      PrebufferedStreambuf psb(e->m_static_buf, sizeof(e->m_static_buf));
-      ostream oss(&psb);
-      oss << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd";
-      //e->m_str = oss.str();
-      log.submit_entry(e);
-    }
-  }
-  log.flush();
-  log.stop();
-}
-
-TEST(Log, ManyGatherLogPrebufOverflow)
-{
-  SubsystemMap subs;
-  subs.set_log_level(1, 20);
-  subs.set_gather_level(1, 10);
-  Log log(&subs);
-  log.start();
-  log.set_log_file("/tmp/big");
-  log.reopen_log_file();
-  for (int i=0; i<many; i++) {
-    int l = 10;
-    if (subs.should_gather(1, l)) {
-      Entry *e = log.create_entry(l, 1);
-      PrebufferedStreambuf psb(e->m_static_buf, sizeof(e->m_static_buf));
-      ostream oss(&psb);
-      oss << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd"
-          << std::string(sizeof(e->m_static_buf) * 2, '-') ;
-      //e->m_str = oss.str();
-      log.submit_entry(e);
+      MutableEntry e(l, 1);
+      auto& s = e.get_ostream();
+      s << "foo";
+      s << std::string(sizeof(e) * 2, '-');
+      log.submit_entry(std::move(e));
     }
   }
   log.flush();
@@ -230,7 +181,7 @@ TEST(Log, ManyGather)
   for (int i=0; i<many; i++) {
     int l = 10;
     if (subs.should_gather(1, l))
-      log.submit_entry(log.create_entry(l, 1));
+      log.submit_entry(MutableEntry(l, 1));
   }
   log.flush();
   log.stop();
@@ -247,10 +198,10 @@ void do_segv()
   log.reopen_log_file();
 
   log.inject_segv();
-  Entry *e = log.create_entry(10, 1);
+  MutableEntry e(10, 1);
   {
     PrCtl unset_dumpable;
-    log.submit_entry(e);  // this should segv
+    log.submit_entry(std::move(e));  // this should segv
   }
 
   log.flush();
@@ -272,11 +223,12 @@ TEST(Log, LargeLog)
   log.set_log_file("/tmp/big");
   log.reopen_log_file();
   int l = 10;
-  Entry *e = log.create_entry(l, 1);
-
-  std::string msg(10000000, 0);
-  e->set_str(msg);
-  log.submit_entry(e);
+  {
+    MutableEntry e(l, 1);
+    std::string msg(10000000, 'a');
+    e.get_ostream() << msg;
+    log.submit_entry(std::move(e));
+  }
   log.flush();
   log.stop();
 }
@@ -295,8 +247,9 @@ TEST(Log, TimeSwitch)
   int l = 10;
   bool coarse = true;
   for (auto i = 0U; i < 300; ++i) {
-    log.submit_entry(
-      log.create_entry(l, 1, "SQUID THEFT! PUNISHABLE BY DEATH!"));
+    MutableEntry e(l, 1);
+    e.get_ostream() << "SQUID THEFT! PUNISHABLE BY DEATH!";
+    log.submit_entry(std::move(e));
     if (i % 50)
       log.set_coarse_timestamps(coarse = !coarse);
   }
