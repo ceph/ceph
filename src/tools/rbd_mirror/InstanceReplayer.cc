@@ -44,9 +44,9 @@ InstanceReplayer<I>::InstanceReplayer(
 
 template <typename I>
 InstanceReplayer<I>::~InstanceReplayer() {
-  assert(m_image_state_check_task == nullptr);
-  assert(m_async_op_tracker.empty());
-  assert(m_image_replayers.empty());
+  ceph_assert(m_image_state_check_task == nullptr);
+  ceph_assert(m_async_op_tracker.empty());
+  ceph_assert(m_image_replayers.empty());
 }
 
 template <typename I>
@@ -77,7 +77,7 @@ void InstanceReplayer<I>::shut_down() {
   C_SaferCond shut_down_ctx;
   shut_down(&shut_down_ctx);
   int r = shut_down_ctx.wait();
-  assert(r == 0);
+  ceph_assert(r == 0);
 }
 
 template <typename I>
@@ -86,7 +86,7 @@ void InstanceReplayer<I>::shut_down(Context *on_finish) {
 
   Mutex::Locker locker(m_lock);
 
-  assert(m_on_shut_down == nullptr);
+  ceph_assert(m_on_shut_down == nullptr);
   m_on_shut_down = on_finish;
 
   Context *ctx = new FunctionContext(
@@ -105,7 +105,7 @@ void InstanceReplayer<I>::add_peer(std::string peer_uuid,
 
   Mutex::Locker locker(m_lock);
   auto result = m_peers.insert(Peer(peer_uuid, io_ctx)).second;
-  assert(result);
+  ceph_assert(result);
 }
 
 template <typename I>
@@ -137,7 +137,7 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
 
   Mutex::Locker locker(m_lock);
 
-  assert(m_on_shut_down == nullptr);
+  ceph_assert(m_on_shut_down == nullptr);
 
   auto it = m_image_replayers.find(global_image_id);
   if (it == m_image_replayers.end()) {
@@ -152,7 +152,7 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
                                                  image_replayer)).first;
 
     // TODO only a single peer is currently supported
-    assert(m_peers.size() == 1);
+    ceph_assert(m_peers.size() == 1);
     auto peer = *m_peers.begin();
     image_replayer->add_peer(peer.peer_uuid, peer.io_ctx);
     start_image_replayer(image_replayer);
@@ -174,7 +174,7 @@ void InstanceReplayer<I>::release_image(const std::string &global_image_id,
   dout(10) << "global_image_id=" << global_image_id << dendl;
 
   Mutex::Locker locker(m_lock);
-  assert(m_on_shut_down == nullptr);
+  ceph_assert(m_on_shut_down == nullptr);
 
   auto it = m_image_replayers.find(global_image_id);
   if (it == m_image_replayers.end()) {
@@ -202,7 +202,7 @@ void InstanceReplayer<I>::remove_peer_image(const std::string &global_image_id,
            << "peer_mirror_uuid=" << peer_mirror_uuid << dendl;
 
   Mutex::Locker locker(m_lock);
-  assert(m_on_shut_down == nullptr);
+  ceph_assert(m_on_shut_down == nullptr);
 
   auto it = m_image_replayers.find(global_image_id);
   if (it != m_image_replayers.end()) {
@@ -295,7 +295,7 @@ void InstanceReplayer<I>::flush()
 template <typename I>
 void InstanceReplayer<I>::start_image_replayer(
     ImageReplayer<I> *image_replayer) {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   std::string global_image_id = image_replayer->get_global_image_id();
   if (!image_replayer->is_stopped()) {
@@ -416,7 +416,7 @@ template <typename I>
 void InstanceReplayer<I>::handle_wait_for_ops(int r) {
   dout(10) << "r=" << r << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   Mutex::Locker locker(m_lock);
   stop_image_replayers();
@@ -426,7 +426,7 @@ template <typename I>
 void InstanceReplayer<I>::stop_image_replayers() {
   dout(10) << dendl;
 
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   Context *ctx = create_async_context_callback(
     m_threads->work_queue, create_context_callback<InstanceReplayer<I>,
@@ -443,19 +443,19 @@ template <typename I>
 void InstanceReplayer<I>::handle_stop_image_replayers(int r) {
   dout(10) << "r=" << r << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   Context *on_finish = nullptr;
   {
     Mutex::Locker locker(m_lock);
 
     for (auto &it : m_image_replayers) {
-      assert(it.second->is_stopped());
+      ceph_assert(it.second->is_stopped());
       it.second->destroy();
     }
     m_image_replayers.clear();
 
-    assert(m_on_shut_down != nullptr);
+    ceph_assert(m_on_shut_down != nullptr);
     std::swap(on_finish, m_on_shut_down);
   }
   on_finish->complete(r);
@@ -471,18 +471,18 @@ void InstanceReplayer<I>::cancel_image_state_check_task() {
 
   dout(10) << m_image_state_check_task << dendl;
   bool canceled = m_threads->timer->cancel_event(m_image_state_check_task);
-  assert(canceled);
+  ceph_assert(canceled);
   m_image_state_check_task = nullptr;
 }
 
 template <typename I>
 void InstanceReplayer<I>::schedule_image_state_check_task() {
-  assert(m_threads->timer_lock.is_locked());
-  assert(m_image_state_check_task == nullptr);
+  ceph_assert(m_threads->timer_lock.is_locked());
+  ceph_assert(m_image_state_check_task == nullptr);
 
   m_image_state_check_task = new FunctionContext(
     [this](int r) {
-      assert(m_threads->timer_lock.is_locked());
+      ceph_assert(m_threads->timer_lock.is_locked());
       m_image_state_check_task = nullptr;
       schedule_image_state_check_task();
       queue_start_image_replayers();

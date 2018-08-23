@@ -49,7 +49,7 @@ public:
     return fd != -1;
   }
   MonitorDBStore::TransactionRef cur() {
-    assert(valid());
+    ceph_assert(valid());
     return t;
   }
   unsigned num() { return idx; }
@@ -133,7 +133,7 @@ int parse_cmd_args(
   // and that's what 'desc_all' is all about.
   //
 
-  assert(desc != NULL);
+  ceph_assert(desc != NULL);
 
   po::options_description desc_all;
   desc_all.add(*desc);
@@ -285,7 +285,7 @@ int update_osdmap(MonitorDBStore& store, version_t ver, bool copy,
       fullmap.encode(inc.fullmap);
     }
   }
-  assert(osdmap.have_crc());
+  ceph_assert(osdmap.have_crc());
   inc.full_crc = osdmap.get_crc();
   bl.clear();
   // be consistent with OSDMonitor::update_from_paxos()
@@ -347,7 +347,7 @@ int rewrite_transaction(MonitorDBStore& store, int version,
   // (good_version, last_committed]
   // with the good crush map.
   // XXX: may need to break this into several paxos versions?
-  assert(good_version < last_committed);
+  ceph_assert(good_version < last_committed);
   for (version_t v = good_version + 1; v <= last_committed; v++) {
     cout << "rewriting epoch #" << v << "/" << last_committed << std::endl;
     r = update_osdmap(store, v, false, crush, t);

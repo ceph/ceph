@@ -132,7 +132,7 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
 
 static void handle_signal(int signum)
 {
-  assert(signum == SIGINT || signum == SIGTERM);
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
   dout(20) << __func__ << ": " << "sending NBD_DISCONNECT" << dendl;
   if (ioctl(nbd, NBD_DISCONNECT) < 0) {
@@ -202,7 +202,7 @@ private:
   void io_finish(IOContext *ctx)
   {
     Mutex::Locker l(lock);
-    assert(ctx->item.is_on_list());
+    ceph_assert(ctx->item.is_on_list());
     ctx->item.remove_myself();
     io_finished.push_back(&ctx->item);
     cond.Signal();
@@ -225,7 +225,7 @@ private:
 
   void wait_clean()
   {
-    assert(!reader_thread.is_started());
+    ceph_assert(!reader_thread.is_started());
     Mutex::Locker l(lock);
     while(!io_pending.empty())
       cond.Wait(lock);
@@ -884,7 +884,7 @@ static int do_map(int argc, const char *argv[], Config *cfg)
     }
 
     r = image.update_unwatch(handle);
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 
 close_nbd:

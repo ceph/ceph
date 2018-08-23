@@ -45,7 +45,7 @@ void TableTool::usage()
  */
 int TableTool::apply_role_fn(std::function<int(mds_role_t, Formatter *)> fptr, Formatter *f)
 {
-  assert(f != NULL);
+  ceph_assert(f != NULL);
 
   int r = 0;
 
@@ -107,8 +107,8 @@ public:
 
   int load_and_dump(librados::IoCtx *io, Formatter *f)
   {
-    assert(io != NULL);
-    assert(f != NULL);
+    ceph_assert(io != NULL);
+    ceph_assert(f != NULL);
 
     // Attempt read
     bufferlist table_bl;
@@ -200,8 +200,8 @@ public:
 
   int load_and_dump(librados::IoCtx *io, Formatter *f)
   {
-    assert(io != NULL);
-    assert(f != NULL);
+    ceph_assert(io != NULL);
+    ceph_assert(f != NULL);
 
     // Read in the header
     bufferlist header_bl;
@@ -334,7 +334,7 @@ int TableTool::main(std::vector<const char*> &argv)
   }
 
   auto fs =  fsmap->get_filesystem(role_selector.get_ns());
-  assert(fs != nullptr);
+  ceph_assert(fs != nullptr);
   int64_t const pool_id = fs->mds_map.get_metadata_pool();
   dout(4) << "resolving pool " << pool_id << dendl;
   std::string pool_name;

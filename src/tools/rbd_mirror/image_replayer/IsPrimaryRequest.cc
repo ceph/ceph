@@ -46,7 +46,7 @@ void IsPrimaryRequest<I>::send_get_mirror_state() {
     IsPrimaryRequest<I>, &IsPrimaryRequest<I>::handle_get_mirror_state>(this);
   int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op,
                                           &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
