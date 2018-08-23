@@ -148,7 +148,7 @@ int ErasureCode::encode_prepare(const bufferlist &raw,
     bufferlist &chunk = encoded[chunk_index(i)];
     chunk.substr_of(prepared, i * blocksize, blocksize);
     chunk.rebuild_aligned_size_and_memory(blocksize, SIMD_ALIGN);
-    assert(chunk.is_contiguous());
+    ceph_assert(chunk.is_contiguous());
   }
   if (padded_chunks) {
     unsigned remainder = raw.length() - (k - padded_chunks) * blocksize;
@@ -193,7 +193,7 @@ int ErasureCode::encode(const set<int> &want_to_encode,
 int ErasureCode::encode_chunks(const set<int> &want_to_encode,
                                map<int, bufferlist> *encoded)
 {
-  assert("ErasureCode::encode_chunks not implemented" == 0);
+  ceph_assert("ErasureCode::encode_chunks not implemented" == 0);
 }
  
 int ErasureCode::_decode(const set<int> &want_to_read,
@@ -245,7 +245,7 @@ int ErasureCode::decode_chunks(const set<int> &want_to_read,
                                const map<int, bufferlist> &chunks,
                                map<int, bufferlist> *decoded)
 {
-  assert("ErasureCode::decode_chunks not implemented" == 0);
+  ceph_assert("ErasureCode::decode_chunks not implemented" == 0);
 }
 
 int ErasureCode::parse(const ErasureCodeProfile &profile,

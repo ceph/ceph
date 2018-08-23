@@ -62,7 +62,7 @@ unsigned int ErasureCodeShec::get_chunk_size(unsigned int object_size) const
   unsigned tail = object_size % alignment;
   unsigned padded_length = object_size + ( tail ?  ( alignment - tail ) : 0 );
 
-  assert(padded_length % k == 0);
+  ceph_assert(padded_length % k == 0);
   return padded_length / k;
 }
 
@@ -408,7 +408,7 @@ void ErasureCodeShecReedSolomonVandermonde::prepare()
   dout(10) << " [ technique ] = " <<
     ((technique == MULTIPLE) ? "multiple" : "single") << dendl;
 
-  assert((technique == SINGLE) || (technique == MULTIPLE));
+  ceph_assert((technique == SINGLE) || (technique == MULTIPLE));
 
 }
 
