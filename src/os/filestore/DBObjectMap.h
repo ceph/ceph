@@ -92,12 +92,12 @@ public:
     }
 
     const ghobject_t &get_locked() const {
-      assert(locked);
+      ceph_assert(locked);
       return *locked;
     }
 
     void swap(MapHeaderLock &o) {
-      assert(db == o.db);
+      ceph_assert(db == o.db);
 
       // centos6's boost optional doesn't seem to have swap :(
       boost::optional<ghobject_t> _locked = o.locked;
@@ -108,7 +108,7 @@ public:
     ~MapHeaderLock() {
       if (locked) {
 	Mutex::Locker l(db->header_lock);
-	assert(db->map_header_in_use.count(*locked));
+	ceph_assert(db->map_header_in_use.count(*locked));
 	db->map_header_cond.Signal();
 	db->map_header_in_use.erase(*locked);
       }
@@ -235,7 +235,7 @@ public:
   int sync(const ghobject_t *oid=0, const SequencerPosition *spos=0) override;
 
   void compact() override {
-    assert(db);
+    ceph_assert(db);
     db->compact();
   }
 
@@ -565,7 +565,7 @@ private:
       db(db) {}
     void operator() (_Header *header) {
       Mutex::Locker l(db->header_lock);
-      assert(db->in_use.count(header->seq));
+      ceph_assert(db->in_use.count(header->seq));
       db->in_use.erase(header->seq);
       db->header_cond.Signal();
       delete header;

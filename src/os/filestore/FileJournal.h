@@ -97,12 +97,12 @@ public:
   }
   completion_item completion_peek_front() {
     Mutex::Locker l(completions_lock);
-    assert(!completions.empty());
+    ceph_assert(!completions.empty());
     return completions.front();
   }
   void completion_pop_front() {
     Mutex::Locker l(completions_lock);
-    assert(!completions.empty());
+    ceph_assert(!completions.empty());
     completions.pop_front();
   }
 
@@ -445,7 +445,7 @@ private:
       cct->_conf->add_observer(this);
   }
   ~FileJournal() override {
-    assert(fd == -1);
+    ceph_assert(fd == -1);
     delete[] zero_buf;
     cct->_conf->remove_observer(this);
   }
