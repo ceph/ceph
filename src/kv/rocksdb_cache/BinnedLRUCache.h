@@ -16,6 +16,7 @@
 #include "ShardedCache.h"
 
 #include "common/autovector.h"
+#include "include/assert.h"
 
 namespace rocksdb_cache {
 
@@ -114,7 +115,7 @@ struct BinnedLRUHandle {
   void SetHit() { flags |= 8; }
 
   void Free() {
-    assert((refs == 1 && InCache()) || (refs == 0 && !InCache()));
+    ceph_assert((refs == 1 && InCache()) || (refs == 0 && !InCache()));
     if (deleter) {
       (*deleter)(key(), value);
     }
@@ -142,7 +143,7 @@ class BinnedLRUHandleTable {
       BinnedLRUHandle* h = list_[i];
       while (h != nullptr) {
         auto n = h->next_hash;
-        assert(h->InCache());
+        ceph_assert(h->InCache());
         func(h);
         h = n;
       }

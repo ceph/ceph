@@ -47,7 +47,7 @@ int KineticStore::_test_init(CephContext *c)
 int KineticStore::open(ostream &out, const vector<ColumnFamily>& cfs)
 {
   if (!cfs.empty()) {
-    assert(0 == "Not implemented");
+    ceph_assert(0 == "Not implemented");
   }
   return do_open(out, false);
 }
@@ -55,7 +55,7 @@ int KineticStore::open(ostream &out, const vector<ColumnFamily>& cfs)
 int KineticStore::create_and_open(ostream &out, const vector<ColumnFamily>& cfs)
 {
   if (!cfs.empty()) {
-    assert(0 == "Not implemented");
+    ceph_assert(0 == "Not implemented");
   }
   return do_open(out, true);
 }
@@ -128,7 +128,7 @@ int KineticStore::submit_transaction(KeyValueDB::Transaction t)
 				 record);
       dout(30) << "kinetic after put of " << it->key << dendl;
     } else {
-      assert(it->type == KINETIC_OP_DELETE);
+      ceph_assert(it->type == KINETIC_OP_DELETE);
       dout(30) << "kinetic before delete" << dendl;
       status = kinetic_conn->Delete(it->key, "",
 				    kinetic::WriteMode::IGNORE_VERSION);

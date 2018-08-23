@@ -38,7 +38,7 @@
 static void split_key(const string& raw_key, string *prefix, string *key)
 {
   size_t pos = raw_key.find(KEY_DELIM, 0);
-  assert(pos != std::string::npos);
+  ceph_assert(pos != std::string::npos);
   *prefix = raw_key.substr(0, pos);
   *key = raw_key.substr(pos + 1, raw_key.length());
 }
@@ -177,14 +177,14 @@ int MemDB::do_open(ostream &out, bool create)
 
 int MemDB::open(ostream &out, const vector<ColumnFamily>& cfs) {
   if (!cfs.empty()) {
-    assert(0 == "Not implemented");
+    ceph_assert(0 == "Not implemented");
   }
   return do_open(out, false);
 }
 
 int MemDB::create_and_open(ostream &out, const vector<ColumnFamily>& cfs) {
   if (!cfs.empty()) {
-    assert(0 == "Not implemented");
+    ceph_assert(0 == "Not implemented");
   }
   return do_open(out, true);
 }
@@ -221,7 +221,7 @@ int MemDB::submit_transaction(KeyValueDB::Transaction t)
       _merge(merge_op);
     } else {
       ms_op_t rm_op = op.second;
-      assert(op.first == MDBTransactionImpl::DELETE);
+      ceph_assert(op.first == MDBTransactionImpl::DELETE);
       _rmkey(rm_op);
     }
   }
@@ -307,7 +307,7 @@ int MemDB::_setkey(ms_op_t &op)
     /*
      * delete and free existing key.
      */
-    assert(m_total_bytes >= bl_old.length());
+    ceph_assert(m_total_bytes >= bl_old.length());
     m_total_bytes -= bl_old.length();
     m_map.erase(key);
   }
@@ -324,7 +324,7 @@ int MemDB::_rmkey(ms_op_t &op)
 
   bufferlist bl_old;
   if (_get(op.first.first, op.first.second, &bl_old)) {
-    assert(m_total_bytes >= bl_old.length());
+    ceph_assert(m_total_bytes >= bl_old.length());
     m_total_bytes -= bl_old.length();
   }
   iterator_seq_no++;
@@ -359,7 +359,7 @@ int MemDB::_merge(ms_op_t &op)
    *  find the operator for this prefix
    */
   std::shared_ptr<MergeOperator> mop = _find_merge_op(prefix);
-  assert(mop);
+  ceph_assert(mop);
 
   /*
    * call the merge operator with value and non value
@@ -383,7 +383,7 @@ int MemDB::_merge(ms_op_t &op)
     bl_old.clear();
   }
 
-  assert((int64_t)m_total_bytes + bytes_adjusted >= 0);
+  ceph_assert((int64_t)m_total_bytes + bytes_adjusted >= 0);
   m_total_bytes += bytes_adjusted;
   iterator_seq_no++;
   return 0;
@@ -468,7 +468,7 @@ bool MemDB::MDBWholeSpaceIteratorImpl::iterator_validate() {
 
   if (this_seq_no != *global_seq_no) {
     auto key = m_key_value.first;
-    assert(!key.empty());
+    ceph_assert(!key.empty());
 
     bool restart_iter = false;
     if (!m_using_btree) {

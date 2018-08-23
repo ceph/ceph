@@ -153,7 +153,7 @@ int RocksDBStore::set_merge_operator(
   std::shared_ptr<KeyValueDB::MergeOperator> mop)
 {
   // If you fail here, it's because you can't do this on an open database
-  assert(db == nullptr);
+  ceph_assert(db == nullptr);
   merge_ops.push_back(std::make_pair(prefix,mop));
   return 0;
 }
@@ -301,7 +301,7 @@ int RocksDBStore::install_cf_mergeop(
   const string &cf_name,
   rocksdb::ColumnFamilyOptions *cf_opt)
 {
-  assert(cf_opt != nullptr);
+  ceph_assert(cf_opt != nullptr);
   cf_opt->merge_operator.reset();
   for (auto& i : merge_ops) {
     if (i.first == cf_name) {
@@ -570,7 +570,7 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing,
       }
     }
   }
-  assert(default_cf != nullptr);
+  ceph_assert(default_cf != nullptr);
   
   PerfCountersBuilder plb(g_ceph_context, "rocksdb", l_rocksdb_first, l_rocksdb_last);
   plb.add_u64_counter(l_rocksdb_gets, "get", "Gets");
@@ -1085,7 +1085,7 @@ int RocksDBStore::get(
     const string &key,
     bufferlist *out)
 {
-  assert(out && (out->length() == 0));
+  ceph_assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
   int r = 0;
   string value;
@@ -1122,7 +1122,7 @@ int RocksDBStore::get(
   size_t keylen,
   bufferlist *out)
 {
-  assert(out && (out->length() == 0));
+  ceph_assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
   int r = 0;
   string value;
@@ -1344,20 +1344,20 @@ RocksDBStore::RocksDBWholeSpaceIteratorImpl::~RocksDBWholeSpaceIteratorImpl()
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_first()
 {
   dbiter->SeekToFirst();
-  assert(!dbiter->status().IsIOError());
+  ceph_assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_first(const string &prefix)
 {
   rocksdb::Slice slice_prefix(prefix);
   dbiter->Seek(slice_prefix);
-  assert(!dbiter->status().IsIOError());
+  ceph_assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_last()
 {
   dbiter->SeekToLast();
-  assert(!dbiter->status().IsIOError());
+  ceph_assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::seek_to_last(const string &prefix)
@@ -1399,7 +1399,7 @@ int RocksDBStore::RocksDBWholeSpaceIteratorImpl::next()
   if (valid()) {
     dbiter->Next();
   }
-  assert(!dbiter->status().IsIOError());
+  ceph_assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::prev()
@@ -1407,7 +1407,7 @@ int RocksDBStore::RocksDBWholeSpaceIteratorImpl::prev()
   if (valid()) {
     dbiter->Prev();
   }
-  assert(!dbiter->status().IsIOError());
+  ceph_assert(!dbiter->status().IsIOError());
   return dbiter->status().ok() ? 0 : -1;
 }
 string RocksDBStore::RocksDBWholeSpaceIteratorImpl::key()
