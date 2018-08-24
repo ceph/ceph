@@ -465,7 +465,7 @@ Operations
 	      down scrubbing on an OSD that is busy handling client
 	      operations. ``be`` is the default and is the same
 	      priority as all other threads in the OSD. ``rt`` means
-	      the disk thread will have precendence over all other
+	      the disk thread will have precedence over all other
 	      threads in the OSD. Note: Only works with the Linux Kernel
 	      CFQ scheduler. Since Jewel scrubbing is no longer carried
 	      out by the disk iothread, see osd priority options instead.
@@ -520,7 +520,7 @@ Core Concepts
 The QoS support of Ceph is implemented using a queueing scheduler
 based on `the dmClock algorithm`_. This algorithm allocates the I/O
 resources of the Ceph cluster in proportion to weights, and enforces
-the constraits of minimum reservation and maximum limitation, so that
+the constraints of minimum reservation and maximum limitation, so that
 the services can compete for the resources fairly. Currently the
 *mclock_opclass* operation queue divides Ceph services involving I/O
 resources into following buckets:
@@ -604,7 +604,7 @@ these queues neither interact nor share information among them. The
 number of shards can be controlled with the configuration options
 ``osd_op_num_shards``, ``osd_op_num_shards_hdd``, and
 ``osd_op_num_shards_ssd``. A lower number of shards will increase the
-impact of the mClock queues, but may have other deliterious effects.
+impact of the mClock queues, but may have other deleterious effects.
 
 Second, requests are transferred from the operation queue to the
 operation sequencer, in which they go through the phases of
