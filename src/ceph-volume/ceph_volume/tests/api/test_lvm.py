@@ -578,6 +578,72 @@ class TestCreateLV(object):
         data_tag = ['lvchange', '--addtag', 'ceph.data_device=/path', '/path']
         assert capture.calls[2]['args'][0] == data_tag
 
+    def test_uses_uuid(self, monkeypatch, capture):
+        monkeypatch.setattr(process, 'run', capture)
+        monkeypatch.setattr(process, 'call', capture)
+        monkeypatch.setattr(api, 'get_lv', lambda *a, **kw: self.foo_volume)
+        api.create_lv('foo', 'foo_group', size='5G', tags={'ceph.type': 'data'}, uuid_name=True)
+        result = capture.calls[0]['args'][0][5]
+        assert result.startswith('foo-')
+        assert len(result) == 40
+
+
+class TestExtendVG(object):
+
+    def setup(self):
+        self.foo_volume = api.VolumeGroup(vg_name='foo', lv_tags='')
+
+    def test_uses_single_device_in_list(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.extend_vg(self.foo_volume, ['/dev/sda'])
+        expected = ['vgextend', '--force', '--yes', 'foo', '/dev/sda']
+        assert fake_run.calls[0]['args'][0] == expected
+
+    def test_uses_single_device(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.extend_vg(self.foo_volume, '/dev/sda')
+        expected = ['vgextend', '--force', '--yes', 'foo', '/dev/sda']
+        assert fake_run.calls[0]['args'][0] == expected
+
+    def test_uses_multiple_devices(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.extend_vg(self.foo_volume, ['/dev/sda', '/dev/sdb'])
+        expected = ['vgextend', '--force', '--yes', 'foo', '/dev/sda', '/dev/sdb']
+        assert fake_run.calls[0]['args'][0] == expected
+
+
+class TestCreateVG(object):
+
+    def setup(self):
+        self.foo_volume = api.VolumeGroup(vg_name='foo', lv_tags='')
+
+    def test_no_name(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.create_vg('/dev/sda')
+        result = fake_run.calls[0]['args'][0]
+        assert '/dev/sda' in result
+        assert result[-2].startswith('ceph-')
+
+    def test_devices_list(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.create_vg(['/dev/sda', '/dev/sdb'], name='ceph')
+        result = fake_run.calls[0]['args'][0]
+        expected = ['vgcreate', '--force', '--yes', 'ceph', '/dev/sda', '/dev/sdb']
+        assert result == expected
+
+    def test_name_prefix(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.create_vg('/dev/sda', name_prefix='master')
+        result = fake_run.calls[0]['args'][0]
+        assert '/dev/sda' in result
+        assert result[-2].startswith('master-')
+
+    def test_specific_name(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.create_vg('/dev/sda', name='master')
+        result = fake_run.calls[0]['args'][0]
+        assert '/dev/sda' in result
+        assert result[-2] == 'master'
 
 #
 # The following tests are pretty gnarly. VDO detection is very convoluted and
