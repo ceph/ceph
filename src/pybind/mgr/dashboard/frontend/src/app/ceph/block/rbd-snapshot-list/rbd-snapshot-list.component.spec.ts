@@ -3,8 +3,8 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import { BsModalRef, ModalModule } from 'ngx-bootstrap';
-import { throwError as observableThrowError } from 'rxjs';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { Subject, throwError as observableThrowError } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ApiModule } from '../../../shared/api/api.module';
@@ -41,7 +41,6 @@ describe('RbdSnapshotListComponent', () => {
     imports: [
       DataTableModule,
       ComponentsModule,
-      ModalModule.forRoot(),
       ToastModule.forRoot(),
       ServicesModule,
       ApiModule,
@@ -170,6 +169,32 @@ describe('RbdSnapshotListComponent', () => {
       expectImageTasks(component.snapshots[0], 'Updating');
       expectImageTasks(component.snapshots[1], 'Deleting');
       expectImageTasks(component.snapshots[2], 'Rolling back');
+    });
+  });
+
+  describe('snapshot modal dialog', () => {
+    beforeEach(() => {
+      component.poolName = 'pool01';
+      component.rbdName = 'image01';
+      spyOn(TestBed.get(BsModalService), 'show').and.callFake((content) => {
+        const ref = new BsModalRef();
+        ref.content = new content();
+        ref.content.onSubmit = new Subject();
+        return ref;
+      });
+    });
+
+    it('should display old snapshot name', () => {
+      component.openSnapshotModal('rbd/snap/edit', 'oldname');
+      expect(component.modalRef.content.snapName).toBe('oldname');
+      expect(component.modalRef.content.editing).toBeTruthy();
+    });
+
+    it('should display suggested snapshot name', () => {
+      component.openSnapshotModal('rbd/snap/create');
+      expect(component.modalRef.content.snapName).toMatch(
+        RegExp(`^${component.rbdName}-\\d+T\\d+Z\$`)
+      );
     });
   });
 });
