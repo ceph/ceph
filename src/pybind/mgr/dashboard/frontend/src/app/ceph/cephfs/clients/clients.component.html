@@ -11,12 +11,10 @@
   </ol>
 </nav>
 
-<fieldset>
-  <cd-view-cache [status]="viewCacheStatus"></cd-view-cache>
+<cd-view-cache [status]="viewCacheStatus"></cd-view-cache>
 
-  <cd-table [data]="clients.data"
-            [columns]="clients.columns"
-            (fetchData)="refresh()"
-            [header]="false">
-  </cd-table>
-</fieldset>
+<cd-table [data]="clients.data"
+          [columns]="clients.columns"
+          (fetchData)="refresh()"
+          [header]="false">
+</cd-table>
