@@ -28,21 +28,26 @@ def main(args):
         teuthology.setup_log_file(log_path)
 
     try:
-        results(args['--archive-dir'], args['--name'], args['--email'],
-                int(args['--timeout']), args['--dry-run'],
-                args['--subset'], args['--seed'])
+        if args['--seed']:
+            note_rerun_params(args['--subset'], args['--seed'])
+        else:
+            results(args['--archive-dir'], args['--name'], args['--email'],
+                    int(args['--timeout']), args['--dry-run'])
     except Exception:
-        log.exception('error generating results')
+        log.exception('error generating memo/results')
         raise
 
 
-def results(archive_dir, name, email, timeout, dry_run, subset, seed):
-    starttime = time.time()
-
+def note_rerun_params(subset, seed):
     if subset:
         log.info('subset: %r', subset)
     if seed:
         log.info('seed: %r', seed)
+
+
+def results(archive_dir, name, email, timeout, dry_run):
+    starttime = time.time()
+
     if timeout:
         log.info('Waiting up to %d seconds for tests to finish...', timeout)
 
