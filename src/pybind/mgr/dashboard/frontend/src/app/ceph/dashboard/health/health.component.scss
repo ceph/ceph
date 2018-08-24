@@ -1,17 +1,89 @@
-table.ceph-chartbox {
-  width: 100%;
+$popover-text-font-size: 10px;
 
-  td {
-    text-align: center;
-    font-weight: bold;
+.cd-col-5 {
+  width: 17%;
+  float: left;
+  margin-left: 1.75%;
+  margin-right: 1.15%;
+}
+
+@media (max-width: 1599px) {
+  .cd-col-5 {
+    width: 30%;
+    float: left;
+    margin-left: 2.5%;
+    margin-right: 0;
   }
 }
 
-.center-block {
-  width: 120px;
+@media (max-width: 991px) {
+  .cd-col-5 {
+    width: 45%;
+    float: left;
+    margin-left: 3%;
+    margin-right: 0;
+  }
 }
 
-.pie {
-  height: 120px;
-  width: 120px;
+@media (max-width: 767px) {
+  .cd-col-5 {
+    width: 100%;
+    float: unset;
+    margin-left: unset;
+    margin-right: unset;
+  }
+}
+
+.info-group {
+  margin-bottom: 20px;
+}
+
+::ng-deep .health-popover-wrapper {
+  position: relative;
+
+  .popover {
+    position: absolute;
+    width: 112%;
+    max-height: 16vh;
+    min-width: unset !important;
+    max-width: unset !important;
+
+    .popover-body {
+      max-width: 100%;
+      max-height: 16vh;
+      font-size: $popover-text-font-size;
+    }
+  }
+
+  @media (max-width: 1399px) {
+    .popover {
+      width: 118%;
+
+      .popover-body {
+        max-width: 100%;
+      }
+    }
+  }
+}
+
+::ng-deep .pg-status-popover-wrapper {
+  position: relative;
+
+  .popover {
+    position: absolute;
+    width: 116%;
+    max-height: 20vh;
+    min-width: unset !important;
+    max-width: unset !important;
+
+    .popover-body {
+      max-width: 100%;
+      max-height: 20vh;
+      font-size: $popover-text-font-size;
+    }
+  }
+}
+
+.logs-link {
+  text-align: center;
 }

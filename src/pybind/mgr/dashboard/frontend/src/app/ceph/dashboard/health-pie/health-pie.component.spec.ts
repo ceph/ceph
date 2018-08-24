@@ -19,10 +19,37 @@ describe('HealthPieComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(HealthPieComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('Set doughnut if nothing received', () => {
+    component.chartType = '';
+    fixture.detectChanges();
+
+    expect(component.chart.chartType).toEqual('doughnut');
+  });
+
+  it('Set doughnut if not allowed value received', () => {
+    component.chartType = 'badType';
+    fixture.detectChanges();
+
+    expect(component.chart.chartType).toEqual('doughnut');
+  });
+
+  it('Set doughnut if doughnut received', () => {
+    component.chartType = 'doughnut';
+    fixture.detectChanges();
+
+    expect(component.chart.chartType).toEqual('doughnut');
+  });
+
+  it('Set pie if pie received', () => {
+    component.chartType = 'pie';
+    fixture.detectChanges();
+
+    expect(component.chart.chartType).toEqual('pie');
   });
 });

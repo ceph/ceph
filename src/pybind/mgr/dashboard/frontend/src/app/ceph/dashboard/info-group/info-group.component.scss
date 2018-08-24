@@ -1,0 +1,21 @@
+@import '../../../../defaults';
+
+.info-group-title {
+  margin: 10px 10px 0px 10px;
+  font-size: 1vw;
+}
+
+.underline {
+  border-bottom: 1px solid $color-info-group-underline;
+  margin-top: 0px;
+  margin-left: 10px;
+  margin-right: 10px;
+  margin-bottom: 20px;
+  padding: 0px;
+}
+
+@media (max-width: 767px) {
+  .info-group-title {
+    font-size: 4vw;
+  }
+}
