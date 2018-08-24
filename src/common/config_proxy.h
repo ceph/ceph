@@ -4,7 +4,6 @@
 
 #include <type_traits>
 #include "common/config.h"
-#include "common/config_fwd.h"
 #include "common/config_obs.h"
 #include "common/config_obs_mgr.h"
 #include "common/Mutex.h"
@@ -17,6 +16,7 @@ class ConfigProxy {
    * The current values of all settings described by the schema
    */
   ConfigValues values;
+  using md_config_obs_t = ceph::md_config_obs_impl<ConfigProxy>;
   ObserverMgr<md_config_obs_t> obs_mgr;
   md_config_t config;
   /** A lock that protects the md_config_t internals. It is
