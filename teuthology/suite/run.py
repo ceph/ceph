@@ -291,6 +291,26 @@ class Run(object):
             base_args.extend(['--owner', self.args.owner])
         return base_args
 
+    def write_result(self):
+        arg = copy.deepcopy(self.base_args)
+        arg.append('--last-in-suite')
+        if self.base_config.email:
+            arg.extend(['--email', self.base_config.email])
+        if self.args.subset:
+            subset = '/'.join(str(i) for i in self.args.subset)
+            arg.extend(['--subset', subset])
+        arg.extend(['--seed', str(self.args.seed)])
+        if self.args.timeout:
+            arg.extend(['--timeout', self.args.timeout])
+        util.teuthology_schedule(
+            args=arg,
+            dry_run=self.args.dry_run,
+            verbose=self.args.verbose,
+            log_prefix="Results: ")
+        results_url = get_results_url(self.base_config.name)
+        if results_url:
+            log.info("Test results viewable at %s", results_url)
+
     def prepare_and_schedule(self):
         """
         Puts together some "base arguments" with which to execute
@@ -309,25 +329,7 @@ class Run(object):
         num_jobs = self.schedule_suite()
 
         if num_jobs:
-            arg = copy.deepcopy(self.base_args)
-            arg.append('--last-in-suite')
-            if self.base_config.email:
-                arg.extend(['--email', self.base_config.email])
-            if self.args.subset:
-                subset = '/'.join(str(i) for i in self.args.subset)
-                arg.extend(['--subset', subset])
-            arg.extend(['--seed', str(self.args.seed)])
-            if self.args.timeout:
-                arg.extend(['--timeout', self.args.timeout])
-            util.teuthology_schedule(
-                args=arg,
-                dry_run=self.args.dry_run,
-                verbose=self.args.verbose,
-                log_prefix="Results: ",
-            )
-            results_url = get_results_url(self.base_config.name)
-            if results_url:
-                log.info("Test results viewable at %s", results_url)
+            self.write_result()
 
     def collect_jobs(self, arch, configs, newest=False):
         jobs_to_schedule = []
