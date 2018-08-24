@@ -50,7 +50,15 @@ export class RbdSnapshotFormComponent implements OnInit {
   setSnapName(snapName) {
     this.snapName = snapName;
     this.snapshotForm.get('snapshotName').setValue(snapName);
-    this.editing = true;
+  }
+
+  /**
+   * Set the 'editing' flag. If set to TRUE, the modal dialog is in
+   * 'Edit' mode, otherwise in 'Create' mode.
+   * @param {boolean} editing
+   */
+  setEditing(editing: boolean = true) {
+    this.editing = editing;
   }
 
   editAction() {

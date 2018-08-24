@@ -1,6 +1,7 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import * as _ from 'lodash';
+import * as moment from 'moment';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap';
 import { of } from 'rxjs';
 
@@ -139,13 +140,20 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     );
   }
 
-  private openSnapshotModal(taskName: string, oldSnapshotName: string = null) {
+  private openSnapshotModal(taskName: string, snapName: string = null) {
     this.modalRef = this.modalService.show(RbdSnapshotFormComponent);
     this.modalRef.content.poolName = this.poolName;
     this.modalRef.content.imageName = this.rbdName;
-    if (oldSnapshotName) {
-      this.modalRef.content.setSnapName(this.selection.first().name);
+    if (snapName) {
+      this.modalRef.content.setEditing();
+    } else {
+      // Auto-create a name for the snapshot: <image_name>_<timestamp_ISO_8601>
+      // https://en.wikipedia.org/wiki/ISO_8601
+      snapName = `${this.rbdName}-${moment()
+        .utc()
+        .format('YYYYMMDD[T]HHmmss[Z]')}`;
     }
+    this.modalRef.content.setSnapName(snapName);
     this.modalRef.content.onSubmit.subscribe((snapshotName: string) => {
       const executingTask = new ExecutingTask();
       executingTask.name = taskName;
