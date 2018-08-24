@@ -18,6 +18,7 @@
 #include "include/rados/librados.hpp"
 #include "include/rados/rados_types.hpp"
 
+#include "acconfig.h"
 #ifdef WITH_LIBRADOSSTRIPER
  #include "include/radosstriper/libradosstriper.hpp"
  using namespace libradosstriper;
