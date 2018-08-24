@@ -4132,6 +4132,8 @@ void PG::reg_next_scrub()
 					       scrub_min_interval,
 					       scrub_max_interval,
 					       must);
+  dout(10) << __func__ << " pg " << pg_id << " register next scrub, scrub time "
+      << scrubber.scrub_reg_stamp << ", must = " << (int)must << dendl;
 }
 
 void PG::unreg_next_scrub()
