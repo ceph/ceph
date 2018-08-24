@@ -8,6 +8,7 @@ tasks:
       log-whitelist:
         - overall HEALTH_
         - \(MGR_DOWN\)
+        - \(MGR_INSIGHTS_WARNING\)
         - \(PG_
         - replacing it with standby
         - No standby daemons available
