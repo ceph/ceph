@@ -9,7 +9,7 @@ set(clay_srcs
 )
 
 add_library(ec_clay SHARED ${clay_srcs})
-add_dependencies(ec_clay ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
+#add_dependencies(ec_clay ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 set_target_properties(ec_clay PROPERTIES
   INSTALL_RPATH "")
 target_link_libraries(ec_clay json_spirit)

@@ -98,14 +98,7 @@ public:
   int is_repair(const set<int> &want_to_read,
                 const set<int> &available_chunks);
 
-  int minimum_to_repair(const set<int> &want_to_read,
-                        const set<int> &available_chunks,
-                        set<int> *minimum);
-								   
-  int repair(const set<int> &want_to_read,
-             const map<int, bufferlist> &chunks,
-             map<int, bufferlist> *recovered);
-							   
+ 					   
   int get_repair_sub_chunk_count(const set<int> &want_to_read);
   
   virtual int parse(ErasureCodeProfile &profile, std::ostream *ss);
@@ -113,30 +106,31 @@ public:
   unsigned get_alignment() const;
 
 private:
+  int minimum_to_repair(const set<int> &want_to_read,
+                        const set<int> &available_chunks,
+                        map<int, vector<pair<int, int>>> *minimum);
+								   
+  int repair(const set<int> &want_to_read,
+             const map<int, bufferlist> &chunks,
+             map<int, bufferlist> *recovered, int chunk_size);
 
   int decode_layered(set<int>& erased_chunks, std::map<int, bufferlist>* chunks);
+
   int repair_one_lost_chunk(map<int, bufferlist> &recovered_data, set<int> &aloof_nodes,
                             map<int, bufferlist> &helper_data, int repair_blocksize, 
-                            map<int,int> &repair_sub_chunks_ind);
+                            vector<pair<int,int>> &repair_sub_chunks_ind);
 
-  void get_repair_subchunks(const set<int> &to_repair,
-                            const set<int> &helper_chunks,
-                            int helper_chunk_ind,
-                            map<int, int> &repair_sub_chunks_ind);
+  void get_repair_subchunks(const int &lost_node,
+					   vector<pair<int, int>> &repair_sub_chunks_ind);
 
   int decode_erasures(const set<int>& erased_chunks, int z,
                       map<int, bufferlist>* chunks, int sc_size);
 
-  void group_repair_subchunks(map<int,int> &repair_subchunks, 
-                              vector<pair<int,int> > &grouped_subchunks);
-
   int decode_uncoupled(const set<int>& erasures, int z, int ss_size);
 
-  void set_planes_sequential_decoding_order(int* order, erasure_t* erasures);
+  void set_planes_sequential_decoding_order(int* order, set<int>& erasures);
 
-  int is_erasure_type_1(int ind, erasure_t* erasures, int* z_vec);
-
-  void recover_type1_erasure(map<int, bufferlist>& chunks, int x, int y, int z, 
+  void recover_type1_erasure(map<int, bufferlist>* chunks, int x, int y, int z, 
                              int* z_vec, int sc_size);
 
   void get_uncoupled_from_coupled(map<int, bufferlist>* chunks, int x, int y, int z, 
@@ -147,11 +141,7 @@ private:
 
   void get_plane_vector(int z, int* z_vec);
 
-  void get_weight_vector(erasure_t* erasures, int* weight_vec);
-
-  void get_erasure_coordinates(const set<int>& erasure_locations, erasure_t* erasures);
-
-  int get_hamming_weight(int* weight_vec);
+  int get_max_iscore(set<int>& erased_chunks);
 };
 
 #endif
