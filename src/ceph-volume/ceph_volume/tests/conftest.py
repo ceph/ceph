@@ -155,6 +155,7 @@ def device_info(monkeypatch):
         devices = devices if devices else {}
         lsblk = lsblk if lsblk else {}
         lv = Factory(**lv) if lv else None
+        monkeypatch.setattr("ceph_volume.sys_info.devices", {})
         monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda: devices)
         monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: lv)
         monkeypatch.setattr("ceph_volume.util.device.disk.lsblk", lambda path: lsblk)
