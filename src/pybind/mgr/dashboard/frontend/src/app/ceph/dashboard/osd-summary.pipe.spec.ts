@@ -11,17 +11,43 @@ describe('OsdSummaryPipe', () => {
     expect(pipe.transform(undefined)).toBe('');
   });
 
-  it('transforms with 1 up', () => {
+  it('transforms having 1 with 0 up and 1 in', () => {
     const value = {
       osds: [{ in: true, out: false }]
     };
-    expect(pipe.transform(value)).toBe('1 (0 up, 1 in)');
+    expect(pipe.transform(value)).toEqual([
+      {
+        content: '1 (0 up, 1 in',
+        style: { 'margin-right': '-5px', color: '' }
+      },
+      {
+        content: ', ',
+        style: { 'margin-right': '0', color: '' }
+      },
+      {
+        content: '1 down',
+        style: { 'margin-right': '-5px', color: OsdSummaryPipe.COLOR_ERROR }
+      },
+      {
+        content: ')',
+        style: { 'margin-right': '0', color: '' }
+      }
+    ]);
   });
 
-  it('transforms with 1 up and 1 in', () => {
+  it('transforms having 2 with 2 up and 1 in', () => {
     const value = {
-      osds: [{ in: true, up: false }, { in: false, up: true }]
+      osds: [{ in: true, up: true }, { in: false, up: true }]
     };
-    expect(pipe.transform(value)).toBe('2 (1 up, 1 in)');
+    expect(pipe.transform(value)).toEqual([
+      {
+        content: '2 (2 up, 1 in',
+        style: { 'margin-right': '-5px', color: '' }
+      },
+      {
+        content: ')',
+        style: { 'margin-right': '0', color: '' }
+      }
+    ]);
   });
 });

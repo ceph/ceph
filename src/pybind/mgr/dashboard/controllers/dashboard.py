@@ -8,6 +8,7 @@ from . import ApiController, Endpoint, BaseController
 from .. import mgr
 from ..security import Permission, Scope
 from ..services.ceph_service import CephService
+from ..services.tcmu_service import TcmuService
 from ..tools import NotificationQueue
 
 
@@ -65,6 +66,8 @@ class Dashboard(BaseController):
             # Not needed, skip the effort of transmitting this to UI
             del osd_map['pg_temp']
             result['osd_map'] = osd_map
+            result['scrub_status'] = CephService.get_scrub_status()
+            result['pg_info'] = CephService.get_pg_info()
 
         if self._has_permissions(Permission.READ, Scope.MANAGER):
             result['mgr_map'] = mgr.get("mgr_map")
@@ -77,6 +80,17 @@ class Dashboard(BaseController):
             df['stats']['total_objects'] = sum(
                 [p['stats']['objects'] for p in df['pools']])
             result['df'] = df
+
+            result['client_perf'] = CephService.get_client_perf()
+
+        if self._has_permissions(Permission.READ, Scope.HOSTS):
+            result['hosts'] = len(mgr.list_servers())
+
+        if self._has_permissions(Permission.READ, Scope.RGW):
+            result['rgw'] = len(CephService.get_service_list('rgw'))
+
+        if self._has_permissions(Permission.READ, Scope.ISCSI):
+            result['iscsi_daemons'] = TcmuService.get_iscsi_daemons_amount()
 
         return result
 

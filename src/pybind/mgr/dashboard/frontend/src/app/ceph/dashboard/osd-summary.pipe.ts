@@ -5,6 +5,8 @@ import * as _ from 'lodash';
   name: 'osdSummary'
 })
 export class OsdSummaryPipe implements PipeTransform {
+  static readonly COLOR_ERROR = '#ff0000';
+
   transform(value: any, args?: any): any {
     if (!value) {
       return '';
@@ -21,6 +23,30 @@ export class OsdSummaryPipe implements PipeTransform {
       }
     });
 
-    return value.osds.length + ' (' + upCount + ' up, ' + inCount + ' in)';
+    const osdSummary = [
+      {
+        content: `${value.osds.length} (${upCount} up, ${inCount} in`,
+        style: { 'margin-right': '-5px', color: '' }
+      }
+    ];
+
+    const downCount = value.osds.length - upCount;
+    if (downCount > 0) {
+      osdSummary.push({
+        content: ', ',
+        style: { 'margin-right': '0', color: '' }
+      });
+      osdSummary.push({
+        content: `${downCount} down`,
+        style: { 'margin-right': '-5px', color: OsdSummaryPipe.COLOR_ERROR }
+      });
+    }
+
+    osdSummary.push({
+      content: ')',
+      style: { 'margin-right': '0', color: '' }
+    });
+
+    return osdSummary;
   }
 }
