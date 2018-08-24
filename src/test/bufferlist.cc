@@ -2577,8 +2577,8 @@ TEST(BufferList, crc32c_append_perf) {
   // track usage of cached crcs
   buffer::track_cached_crc(true);
 
-  int base_cached = buffer::get_cached_crc();
-  int base_cached_adjusted = buffer::get_cached_crc_adjusted();
+  [[maybe_unused]] int base_cached = buffer::get_cached_crc();
+  [[maybe_unused]] int base_cached_adjusted = buffer::get_cached_crc_adjusted();
 
   bufferlist bla;
   bla.push_back(a);
