@@ -3,29 +3,25 @@
        heading="Details">
     <div class="row">
       <div class="col-sm-6">
-        <fieldset>
-          <legend i18n>Ranks</legend>
+        <legend i18n>Ranks</legend>
 
-          <cd-table [data]="ranks.data"
-                    [columns]="ranks.columns"
-                    (fetchData)="refresh()"
-                    [toolHeader]="false">
-          </cd-table>
-        </fieldset>
+        <cd-table [data]="ranks.data"
+                  [columns]="ranks.columns"
+                  (fetchData)="refresh()"
+                  [toolHeader]="false">
+        </cd-table>
 
         <cd-table-key-value [data]="standbys">
         </cd-table-key-value>
       </div>
 
       <div class="col-sm-6">
-        <fieldset>
-          <legend i18n>Pools</legend>
+        <legend i18n>Pools</legend>
 
-          <cd-table [data]="pools.data"
-                    [columns]="pools.columns"
-                    [toolHeader]="false">
-          </cd-table>
-        </fieldset>
+        <cd-table [data]="pools.data"
+                  [columns]="pools.columns"
+                  [toolHeader]="false">
+        </cd-table>
       </div>
     </div>
 
