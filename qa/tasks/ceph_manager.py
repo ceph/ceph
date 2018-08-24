@@ -1786,7 +1786,10 @@ class CephManager:
         """
         out = self.raw_cluster_cmd('pg', 'dump', '--format=json')
         j = json.loads('\n'.join(out.split('\n')[1:]))
-        return j['pg_stats']
+        try:
+            return j['pg_map']['pg_stats']
+        except KeyError:
+            return j['pg_stats']
 
     def get_pgids_to_force(self, backfill):
         """
