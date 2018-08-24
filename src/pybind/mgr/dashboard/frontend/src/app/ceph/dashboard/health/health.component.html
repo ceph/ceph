@@ -1,164 +1,264 @@
-<div *ngIf="contentData">
-  <div class="row">
-    <cd-info-card title="Health">
-      <ng-container i18n>Overall status: </ng-container>
-      <span [ngStyle]="contentData.health.status | healthColor">{{ contentData.health.status }}</span>
-      <ul>
-        <li *ngFor="let check of contentData.health.checks">
-          <span [ngStyle]="check.severity | healthColor">{{ check.type }}</span>: {{ check.summary.message }}
-        </li>
-      </ul>
+<div *ngIf="contentData" class="container-fluid">
+  <cd-info-group groupTitle="Status"
+                 i18n-groupTitle
+                 class="row info-group">
+
+    <cd-info-card cardTitle="Cluster Status"
+                  i18n-cardTitle
+                  class="col-sm-6 col-md-4 col-lg-3"
+                  [cardClass]="contentData.health.checks.length > 0 ? 'card-link' : ''"
+                  contentClass="content-highlight"
+                  (click)="contentData.health.checks.length > 0 ? healthChecksTarget.toggle() : ''">
+      <ng-template #healthChecks>
+        <p class="logs-link" i18n>
+          &rarr; See <a (click)="viewportScroller.scrollToAnchor('logs')">Logs</a> for more details.
+        </p>
+        <ul>
+          <li *ngFor="let check of contentData.health.checks">
+            <span [ngStyle]="check.severity | healthColor">{{ check.type }}</span>: {{ check.summary.message }}
+          </li>
+        </ul>
+      </ng-template>
+      <div class="health-popover-wrapper">
+        <div [ngStyle]="contentData.health.status | healthColor"
+              [popover]="contentData.health.checks.length > 0 ? healthChecks : ''"
+              triggers=""
+              #healthChecksTarget="bs-popover"
+              placement="bottom">
+          {{ contentData.health.status }}
+        </div>
+      </div>
     </cd-info-card>
 
-    <div class="col-md-6">
-      <!--STATS -->
-      <div class="row">
-        <cd-info-card title="MONITORS"
-                      imageClass="fa fa-database fa-fw"
-                      link="/monitor"
-                      contentClass="media-text"
-                      *ngIf="contentData.mon_status">
-          {{ contentData.mon_status | monSummary }}
-        </cd-info-card>
-
-        <cd-info-card title="OSDs"
-                      imageClass="fa fa-hdd-o fa-fw"
-                      link="/osd"
-                      contentClass="media-text"
-                      *ngIf="contentData.osd_map">
-          {{ contentData.osd_map | osdSummary }}
-        </cd-info-card>
-      </div>
-      <div class="row">
-        <cd-info-card title="METADATA SERVERS"
-                      imageClass="fa fa-folder fa-fw"
-                      contentClass="media-text"
-                      *ngIf="contentData.fs_map">
-          {{ contentData.fs_map | mdsSummary }}
-        </cd-info-card>
-
-        <cd-info-card title="MANAGER DAEMONS"
-                      imageClass="fa fa-cog fa-fw"
-                      contentClass="media-text"
-                      *ngIf="contentData.mgr_map">
-          {{ contentData.mgr_map | mgrSummary }}
-        </cd-info-card>
-      </div>
-    </div>
-  </div>
-
-  <div class="row">
-    <cd-info-card title="Usage"
-                  *ngIf="contentData.df?.stats?.total_objects">
-      <table class="ceph-chartbox">
-        <tr>
-          <td>
-            <span style="font-size: 45px;">{{ contentData.df.stats.total_objects | dimless }}</span>
-          </td>
-          <td>
-            <div class="center-block pie">
-              <cd-health-pie [data]="contentData"
-                             (prepareFn)="prepareRawUsage($event[0], $event[1])"></cd-health-pie>
-            </div>
-          </td>
-          <td>
-            <div class="center-block pie">
-              <cd-health-pie [data]="contentData"
-                             (prepareFn)="preparePoolUsage($event[0], $event[1])"></cd-health-pie>
-            </div>
-          </td>
-        </tr>
-        <tr>
-          <td i18n>Objects</td>
-          <td>
-            <ng-container i18n>Raw capacity</ng-container>
-            <br>
-            <ng-container i18n="disk used">({{ contentData.df.stats.total_used_bytes | dimlessBinary }} used)</ng-container>
-          </td>
-          <td i18n>Usage by pool</td>
-        </tr>
-      </table>
+    <cd-info-card cardTitle="Monitors"
+                  i18n-cardTitle
+                  link="/monitor"
+                  class="col-sm-6 col-md-4 col-lg-3"
+                  contentClass="content-highlight"
+                  *ngIf="contentData.mon_status">
+      {{ contentData.mon_status | monSummary }}
     </cd-info-card>
 
-    <cd-info-card title="Pools"
+    <cd-info-card cardTitle="OSDs"
+                  i18n-cardTitle
+                  link="/osd"
+                  class="col-sm-6 col-md-4 col-lg-3"
+                  contentClass="content-highlight"
+                  *ngIf="contentData.osd_map">
+      <span *ngFor="let result of (contentData.osd_map | osdSummary)" [ngStyle]="result.style">
+        {{ result.content }}
+      </span>
+    </cd-info-card>
+
+    <cd-info-card cardTitle="Manager Daemons"
+                  i18n-cardTitle
+                  class="col-sm-6 col-md-4 col-lg-3"
+                  contentClass="content-highlight"
+                  *ngIf="contentData.mgr_map">
+      {{ contentData.mgr_map | mgrSummary }}
+    </cd-info-card>
+
+    <cd-info-card cardTitle="Hosts"
+                  i18n-cardTitle
+                  link="/hosts"
+                  class="col-sm-6 col-md-4 col-lg-3"
+                  contentClass="content-medium content-highlight">
+      {{ contentData.hosts }}
+    </cd-info-card>
+
+    <cd-info-card cardTitle="Object Gateways"
+                  i18n-cardTitle
+                  link="/rgw/daemon"
+                  class="col-sm-6 col-md-4 col-lg-3"
+                  contentClass="content-medium content-highlight">
+      {{ contentData.rgw }}
+    </cd-info-card>
+    <cd-info-card cardTitle="Metadata Servers"
+                  i18n-cardTitle
+                  class="col-sm-6 col-md-4 col-lg-3"
+                  contentClass="content-highlight"
+                  *ngIf="contentData.fs_map">
+      {{ contentData.fs_map | mdsSummary }}
+    </cd-info-card>
+
+    <cd-info-card cardTitle="iSCSI Gateways"
+                  i18n-cardTitle
+                  link="/block/iscsi"
+                  class="col-sm-6 col-md-4 col-lg-3"
+                  contentClass="content-medium content-highlight">
+      {{ contentData.iscsi_daemons }}
+    </cd-info-card>
+  </cd-info-group>
+
+  <cd-info-group groupTitle="Performance"
+                 i18n-groupTitle
+                 class="row info-group">
+
+    <cd-info-card cardTitle="Client IOPS"
+                  i18n-cardTitle
+                  class="cd-col-5"
+                  cardClass="card-medium"
+                  contentClass="content-medium content-highlight"
+                  *ngIf="contentData.client_perf">
+      {{ (contentData.client_perf.read_op_per_sec + contentData.client_perf.write_op_per_sec) | round:1 }}
+    </cd-info-card>
+
+    <cd-info-card cardTitle="Client Throughput"
+                  i18n-cardTitle
+                  class="cd-col-5"
+                  cardClass="card-medium"
+                  contentClass="content-medium content-highlight"
+                  *ngIf="contentData.client_perf">
+      {{ ((contentData.client_perf.read_bytes_sec + contentData.client_perf.write_bytes_sec) | dimlessBinary) + '/s' }}
+    </cd-info-card>
+
+    <cd-info-card cardTitle="Client Read/Write"
+                  i18n-cardTitle
+                  class="cd-col-5"
+                  cardClass="card-medium"
+                  [contentClass]="(contentData.client_perf.read_op_per_sec + contentData.client_perf.write_op_per_sec) <= 0 ? 'content-medium content-highlight' : 'card-chart'"
+                  *ngIf="contentData.client_perf">
+      <cd-health-pie *ngIf="(contentData.client_perf.read_op_per_sec + contentData.client_perf.write_op_per_sec) > 0"
+                     [data]="contentData"
+                     [isBytesData]="false"
+                     chartType="pie"
+                     [displayLegend]="true"
+                     (prepareFn)="prepareReadWriteRatio($event[0], $event[1])">
+      </cd-health-pie>
+      <span *ngIf="(contentData.client_perf.read_op_per_sec + contentData.client_perf.write_op_per_sec) <= 0">
+        N/A
+      </span>
+    </cd-info-card>
+
+    <cd-info-card cardTitle="Client Recovery"
+                  i18n-cardTitle
+                  class="cd-col-5"
+                  cardClass="card-medium"
+                  contentClass="content-medium content-highlight"
+                  *ngIf="contentData.client_perf">
+      {{ (contentData.client_perf.recovering_bytes_per_sec | dimlessBinary) + '/s' }}
+    </cd-info-card>
+
+    <cd-info-card cardTitle="Scrub"
+                  i18n-cardTitle
+                  class="cd-col-5"
+                  cardClass="card-medium"
+                  contentClass="content-medium content-highlight"
+                  *ngIf="contentData.scrub_status">
+      {{ contentData.scrub_status }}
+    </cd-info-card>
+  </cd-info-group>
+
+  <cd-info-group groupTitle="Capacity"
+                 i18n-groupTitle
+                 class="row info-group">
+
+    <cd-info-card cardTitle="Pools"
+                  i18n-cardTitle
+                  link="/pool"
+                  class="cd-col-5"
+                  cardClass="card-medium"
+                  contentClass="content-medium content-highlight"
                   *ngIf="contentData.pools">
-      <table class="table table-condensed">
-        <thead>
-        <tr>
-          <th i18n>Name</th>
-          <th i18n>PG status</th>
-          <th i18n>Usage</th>
-          <th colspan="2"
-              i18n>Read</th>
-          <th colspan="2"
-              i18n>Write</th>
-        </tr>
-        </thead>
-        <tbody>
-        <tr *ngFor="let pool of contentData.pools">
-          <td>{{ pool.pool_name }}</td>
-          <td [ngStyle]="pool.pg_status | pgStatusStyle">
-            {{ pool.pg_status | pgStatus }}
-          </td>
-          <td>
-            <cd-usage-bar [totalBytes]="pool.stats.bytes_used.latest +  pool.stats.max_avail.latest" [usedBytes]="pool.stats.bytes_used.latest"></cd-usage-bar>
-          </td>
-          <td>
-            {{ pool.stats.rd_bytes.rate | dimless }}
-          </td>
-          <td>
-            {{ pool.stats.rd.rate | dimless }} ops
-          </td>
-          <td>
-            {{ pool.stats.wr_bytes.rate | dimless }}
-          </td>
-          <td>
-            {{ pool.stats.wr.rate | dimless }} ops
-          </td>
-        </tr>
-        </tbody>
-      </table>
+      {{ contentData.pools.length }}
     </cd-info-card>
-  </div>
 
-  <div class="row">
-    <div class="col-md-12">
-      <!-- LOGS -->
-      <div class="well"
-           *ngIf="contentData.clog || contentData.audit_log">
-        <fieldset>
-          <legend i18n>Logs</legend>
+    <cd-info-card cardTitle="Raw Capacity"
+                  i18n-cardTitle
+                  class="cd-col-5"
+                  cardClass="card-medium"
+                  contentClass="card-chart"
+                  *ngIf="contentData.mon_status">
+      <cd-health-pie [data]="contentData"
+                     [isBytesData]="true"
+                     [displayLegend]="true"
+                     (prepareFn)="prepareRawUsage($event[0], $event[1])">
+      </cd-health-pie>
+    </cd-info-card>
 
-          <tabset>
-            <tab heading="Cluster log"
-                 class="text-monospace"
-                 *ngIf="contentData.clog"
-                 i18n-heading>
-              <span *ngFor="let line of contentData.clog">
-                {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
-                <span [ngStyle]="line | logColor">
-                  {{ line.message }}
-                  <br>
-                </span>
-              </span>
-            </tab>
-            <tab heading="Audit log"
-                 class="text-monospace"
-                 *ngIf="contentData.audit_log"
-                 i18n-heading>
-              <span *ngFor="let line of contentData.audit_log">
-                {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
-                <span [ngStyle]="line | logColor">
-                  <span style="font-weight: bold;">
-                    {{ line.message }}
-                  </span>
-                  <br>
-                </span>
-              </span>
-            </tab>
-          </tabset>
-        </fieldset>
+    <cd-info-card cardTitle="Objects"
+                  i18n-cardTitle
+                  class="cd-col-5"
+                  cardClass="card-medium"
+                  contentClass="content-medium content-highlight"
+                  *ngIf="contentData.df?.stats?.total_objects">
+      {{ contentData.df?.stats?.total_objects }}
+    </cd-info-card>
+
+    <cd-info-card cardTitle="PGs per OSD"
+                  i18n-cardTitle
+                  class="cd-col-5"
+                  cardClass="card-medium"
+                  contentClass="content-medium content-highlight"
+                  *ngIf="contentData.pg_info">
+      {{ contentData.pg_info.pgs_per_osd | dimless }}
+    </cd-info-card>
+
+    <cd-info-card cardTitle="PG Status"
+                  i18n-cardTitle
+                  class="cd-col-5"
+                  cardClass="card-medium"
+                  contentClass="card-chart"
+                  (click)="pgStatusTarget.toggle()">
+      <ng-template #pgStatus>
+        <p class="logs-link" i18n>
+          &rarr; See <a (click)="viewportScroller.scrollToAnchor('logs')">Logs</a> for more details.
+        </p>
+        <ul>
+          <li *ngFor="let pgStatesText of contentData.pg_info.statuses | keyvalue">
+            {{ pgStatesText.key }}: {{ pgStatesText.value }}
+          </li>
+        </ul>
+      </ng-template>
+      <div class="pg-status-popover-wrapper">
+        <div [popover]="pgStatus"
+              triggers=""
+              #pgStatusTarget="bs-popover"
+              placement="bottom">
+          <cd-health-pie [data]="contentData"
+                         chartType="pie"
+                         [displayLegend]="true"
+                         (prepareFn)="preparePgStatus($event[0], $event[1])">
+          </cd-health-pie>
+        </div>
       </div>
-    </div>
-  </div>
+    </cd-info-card>
+  </cd-info-group>
+
+  <cd-info-group groupTitle="Logs"
+                 i18n-groupTitle
+                 class="row info-group"
+                 id="logs">
+
+    <cd-info-card cardTitle="Cluster"
+                  i18n-cardTitle
+                  class="col-md-12 col-lg-6"
+                  cardClass="card-medium"
+                  contentClass="no-center scroll text-monospace"
+                  *ngIf="contentData.clog">
+        <p *ngFor="let line of contentData.clog">
+          {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
+          <span [ngStyle]="line | logColor">
+            {{ line.message }}
+            <br>
+          </span>
+        </p>
+    </cd-info-card>
+    <cd-info-card cardTitle="Audit"
+                  i18n-cardTitle
+                  class="col-md-12 col-lg-6"
+                  cardClass="card-medium"
+                  contentClass="no-center scroll text-monospace"
+                  *ngIf="contentData.audit_log">
+        <p *ngFor="let line of contentData.audit_log">
+          {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
+          <span [ngStyle]="line | logColor">
+            <span style="font-weight: bold;">
+              {{ line.message }}
+            </span>
+            <br>
+          </span>
+        </p>
+    </cd-info-card>
+  </cd-info-group>
 </div>

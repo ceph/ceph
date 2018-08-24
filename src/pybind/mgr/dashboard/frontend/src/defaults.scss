@@ -27,6 +27,7 @@ $color-mild-gray: #777777;
 $color-blue-gray: #90949c;
 $color-grad-gray: #ededed;
 $color-light-gray: #d1d1d1;
+$color-soft-gray: #ddd;
 $color-white-gray: #eee;
 $color-off-white: #f5f5f5;
 $color-solid-white: #ffffff;
@@ -67,6 +68,15 @@ $color-login-checkbox-bg: $color-blue;
 $color-login-checkbox-border: $color-blue;
 $color-login-active-row-bg: $color-light-yellow;
 $color-login-active-row-text: $color-black;
+
+/*Landing Page*/
+
+/*InfoGroup*/
+$color-info-group-underline: $color-off-white;
+
+/*InfoCard*/
+$color-info-card-background: $color-off-white;
+$color-info-card-border: $color-soft-gray;
 
 /*Navigation*/
 $color-navbar-bg: $color-dark-gray;

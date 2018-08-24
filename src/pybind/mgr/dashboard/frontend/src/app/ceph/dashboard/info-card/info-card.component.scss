@@ -1,50 +1,195 @@
-.media {
-  display: block;
-  min-height: 60px;
-  width: 100%;
+@import '../../../../defaults';
 
-  .media-left {
-    border-top-left-radius: 2px;
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-    border-bottom-left-radius: 2px;
-    display: block;
-    float: left;
-    height: 60px;
-    width: 60px;
-    text-align: center;
-    font-size: 40px;
-    line-height: 60px;
-    padding-right: 0;
+$card-height: 8vw;
+$card-medium-height: 13vw;
+$logs-text-font-size: 10px;
 
-    .fa {
-      font-size: 45px;
-    }
+.card {
+  border: 0.5px solid $color-info-card-border;
+  border-radius: 3px;
+  background: $color-info-card-background;
+  box-shadow: 0 1px 1px rgba(3, 3, 3, 0.175);
+  margin: 0 -10px 20px;
+  padding: 0 20px;
+  width: auto;
+  height: auto;
+  margin-left: auto;
+  margin-right: auto;
+
+  min-height: $card-height;
+}
+
+.card-title {
+  font-size: 1.2vw;
+  margin: 20px 0;
+  padding: 0;
+}
+
+.card-body {
+  font-size: 1.25vw;
+  padding: 0 0 20px;
+  text-align: center;
+  padding-top: 2%;
+  padding-bottom: 2%;
+}
+
+.card-link {
+  cursor: pointer;
+}
+
+.content-highlight {
+  font-weight: bold;
+}
+
+.content-medium {
+  font-size: 1.7vw;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.card-medium {
+  min-height: $card-medium-height;
+}
+
+.scroll {
+  max-height: ($card-medium-height * 1.5);
+  overflow-y: auto;
+}
+
+.text-monospace {
+  font-size: $logs-text-font-size;
+  font-family: monospace;
+  text-align: left;
+}
+
+@media (max-width: 600px) {
+  .card-body {
+    margin-top: -10%;
   }
 
-  .media-body {
-    padding: 5px 10px;
-    margin-left: 60px;
-
-    .media-heading {
-      display: block;
-      font-size: 20px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-
-      .underline {
-        border-bottom: 1px solid #e5e5e5;
-        margin-top: 0px;
-        margin-bottom: 18px;
-        padding: 0px;
-      }
-    }
-
-    .media-text {
-      display: block;
-      font-weight: bold;
-      font-size: 18px;
-    }
+  .card-medium .card-body {
+    margin-top: -5%;
   }
+
+  .card-medium .card-chart {
+    margin-top: -2%;
+  }
+}
+
+@media (min-width: 601px) {
+  .card-body {
+    margin-top: -5%;
+  }
+
+  .card-medium .card-body {
+    margin-top: -2%;
+  }
+
+  .card-medium .card-chart {
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .card-title {
+    font-size: 4vw;
+  }
+
+  .card-body {
+    font-size: 4.5vw;
+  }
+
+  .card-medium .card-body {
+    font-size: 4.5vw;
+  }
+
+  .card-medium .text-monospace {
+    font-size: $logs-text-font-size;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  .card-title {
+    font-size: 2vw;
+  }
+
+  .card-medium .card-body {
+    font-size: 3vw;
+  }
+
+  .card-medium .text-monospace {
+    font-size: $logs-text-font-size;
+  }
+}
+
+@media (min-width: 768px) {
+  .card {
+    min-height: $card-height * 1.5;
+  }
+
+  .card-medium {
+    min-height: $card-medium-height * 1.9;
+  }
+
+  .card-medium .card-body {
+    margin-top: 22%;
+  }
+
+  .card-medium .card-chart {
+    margin-top: -5%;
+  }
+}
+
+@media (min-width: 992px) {
+  .card {
+    min-height: $card-height;
+  }
+
+  .card-medium {
+    min-height: $card-medium-height * 1.5;
+  }
+
+  .card-body {
+    margin-top: -10%;
+  }
+
+  .card-medium .card-body {
+    margin-top: 25%;
+  }
+
+  .card-medium .card-chart {
+    margin-top: 3%;
+  }
+}
+
+@media (min-width: 1200px) {
+  .card-medium {
+    min-height: $card-medium-height * 1.5;
+  }
+
+  .card-body {
+    margin-top: -2%;
+  }
+
+  .card-medium .card-body {
+    margin-top: 27%;
+  }
+
+  .card-medium .card-chart {
+    margin-top: 10%;
+  }
+}
+
+@media (min-width: 1600px) {
+  .card-medium {
+    min-height: $card-medium-height;
+  }
+
+  .card-body {
+    margin-top: 0;
+  }
+}
+
+.card-medium .no-center {
+  margin-top: 0;
 }

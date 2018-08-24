@@ -30,6 +30,25 @@ class SendCommandError(rados.Error):
 
 
 class CephService(object):
+
+    OSD_FLAG_NO_SCRUB = 'noscrub'
+    OSD_FLAG_NO_DEEP_SCRUB = 'nodeep-scrub'
+
+    POOL_STAT_CLIENT_IO_RATE = 'client_io_rate'
+    POOL_STAT_READ_BYTES_PER_SEC = 'read_bytes_sec'
+    POOL_STAT_READ_OP_PER_SEC = 'read_op_per_sec'
+    POOL_STAT_RECOVERY_BYTES_PER_SEC = 'recovering_bytes_per_sec'
+    POOL_STAT_RECOVERY_RATE = 'recovery_rate'
+    POOL_STAT_WRITE_BYTES_PER_SEC = 'write_bytes_sec'
+    POOL_STAT_WRITE_OP_PER_SEC = 'write_op_per_sec'
+
+    PG_STATUS_SCRUBBING = 'scrubbing'
+    PG_STATUS_DEEP_SCRUBBING = 'deep'
+
+    SCRUB_STATUS_DISABLED = 'Disabled'
+    SCRUB_STATUS_ACTIVE = 'Active'
+    SCRUB_STATUS_INACTIVE = 'Inactive'
+
     @classmethod
     def get_service_map(cls, service_name):
         service_map = {}
@@ -188,6 +207,70 @@ class CephService(object):
         if data and len(data) > 1:
             return differentiate(*data[-2:])
         return 0.0
+
+    @classmethod
+    def get_client_perf(cls):
+        pools_stats = mgr.get('osd_pool_stats')['pool_stats']
+
+        client_perf = {
+            cls.POOL_STAT_READ_BYTES_PER_SEC: 0,
+            cls.POOL_STAT_READ_OP_PER_SEC: 0,
+            cls.POOL_STAT_RECOVERY_BYTES_PER_SEC: 0,
+            cls.POOL_STAT_WRITE_BYTES_PER_SEC: 0,
+            cls.POOL_STAT_WRITE_OP_PER_SEC: 0,
+        }
+
+        for pool_stats in pools_stats:
+            client_io = pool_stats[cls.POOL_STAT_CLIENT_IO_RATE]
+            if cls.POOL_STAT_READ_BYTES_PER_SEC in client_io:
+                client_perf[cls.POOL_STAT_READ_BYTES_PER_SEC] +=\
+                    client_io[cls.POOL_STAT_READ_BYTES_PER_SEC]
+                client_perf[cls.POOL_STAT_READ_OP_PER_SEC] +=\
+                    client_io[cls.POOL_STAT_READ_OP_PER_SEC]
+                client_perf[cls.POOL_STAT_WRITE_BYTES_PER_SEC] +=\
+                    client_io[cls.POOL_STAT_WRITE_BYTES_PER_SEC]
+                client_perf[cls.POOL_STAT_WRITE_OP_PER_SEC] +=\
+                    client_io[cls.POOL_STAT_WRITE_OP_PER_SEC]
+
+            client_recovery = pool_stats[cls.POOL_STAT_RECOVERY_RATE]
+            if cls.POOL_STAT_RECOVERY_BYTES_PER_SEC in client_recovery:
+                client_perf[cls.POOL_STAT_RECOVERY_BYTES_PER_SEC] +=\
+                    client_recovery[cls.POOL_STAT_RECOVERY_BYTES_PER_SEC]
+
+        return client_perf
+
+    @classmethod
+    def get_scrub_status(cls):
+        enabled_flags = mgr.get('osd_map')['flags'].split(',')
+        if cls.OSD_FLAG_NO_SCRUB in enabled_flags or cls.OSD_FLAG_NO_DEEP_SCRUB in enabled_flags:
+            return cls.SCRUB_STATUS_DISABLED
+
+        grouped_pg_statuses = mgr.get('pg_summary')['all']
+        for grouped_pg_status in grouped_pg_statuses.keys():
+            if len(grouped_pg_status.split(cls.PG_STATUS_SCRUBBING)) > 1 \
+                    or len(grouped_pg_status.split(cls.PG_STATUS_DEEP_SCRUBBING)) > 1:
+                return cls.SCRUB_STATUS_ACTIVE
+
+        return cls.SCRUB_STATUS_INACTIVE
+
+    @classmethod
+    def get_pg_info(cls):
+        pg_summary = mgr.get('pg_summary')
+
+        pgs_per_osd = 0
+        total_osds = len(pg_summary['by_osd'])
+        if total_osds > 0:
+            total_pgs = 0
+            for _, osd_pg_statuses in pg_summary['by_osd'].items():
+                for _, pg_amount in osd_pg_statuses.items():
+                    total_pgs += pg_amount
+
+            pgs_per_osd = total_pgs / total_osds
+
+        return {
+            'statuses': pg_summary['all'],
+            'pgs_per_osd': pgs_per_osd,
+        }
 
 
 def differentiate(data1, data2):
