@@ -50,8 +50,8 @@ public:
       RWLock::RLocker snap_locker(image_ctx.snap_lock);
       if (m_object_num < m_head_num_objects &&
           m_snap_object_map != nullptr &&
-          !m_snap_object_map->object_may_exist(m_object_num) &&
-          !image_ctx.object_map->object_may_exist(m_object_num)) {
+          !image_ctx.object_map->object_may_exist(m_object_num) &&
+          !m_snap_object_map->object_may_exist(m_object_num)) {
         return 1;
       }
     }
