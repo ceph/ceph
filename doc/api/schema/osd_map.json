@@ -1,0 +1,107 @@
+{
+    "definitions": {
+        "datetime": {
+            "oneOf": [{
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}.\\d{6}$"
+            }, {
+                "type": "string",
+                "pattern": "^\\d{1,}.\\d{6}$"
+            }]
+        },
+        "netaddr": {
+            "oneOf": [{
+                "type": "string",
+                "pattern": "^\\d{1,3}.\\d{1,3}.\\d{1,3}.\\d{1,3}:\\d{1,5}/\\d{1,10}$"
+            }, {
+                "type": "string",
+                "pattern": "^-$"
+            }]
+        },
+        "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "erasure_code_profile": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": { "type": "string" }
+        }
+    },
+    "additionalProperties": false,
+    "required": [
+        "epoch",
+        "fsid",
+        "created",
+        "modified",
+        "flags",
+        "flags_num",
+        "flags_set",
+        "crush_version",
+        "full_ratio",
+        "backfillfull_ratio",
+        "nearfull_ratio",
+        "cluster_snapshot",
+        "pool_max",
+        "max_osd",
+        "require_min_compat_client",
+        "min_compat_client",
+        "require_osd_release",
+        "pools",
+        "osds",
+        "osd_xinfo",
+        "pg_upmap",
+        "pg_upmap_items",
+        "pg_temp",
+        "primary_temp",
+        "blacklist",
+        "erasure_code_profiles",
+        "removed_snaps_queue",
+        "new_removed_snaps",
+        "new_purged_snaps"
+    ],
+    "properties": {
+        "epoch": { "type": "number" },
+        "fsid": { "$ref": "#/definitions/uuid" },
+        "created": { "$ref": "#/definitions/datetime" },
+        "modified": { "$ref": "#/definitions/datetime" },
+        "flags": { "type": "string" },
+        "flags_num": { "type": "number" },
+        "flags_set": { "type": "array" },
+        "crush_version": { "type": "number"},
+        "full_ratio": { "type": "number"},
+        "backfillfull_ratio": { "type": "number"},
+        "nearfull_ratio": { "type": "number"},
+        "cluster_snapshot": { "type": "string" },
+        "pool_max": { "type": "number"},
+        "max_osd": { "type": "number"},
+        "require_min_compat_client": { "type": "string" },
+        "min_compat_client": { "type": "string" },
+        "require_osd_release": { "type": "string" },
+        "pools": { "type": "array" },
+        "osds": { "type": "array" },
+        "osd_xinfo": { "type": "array" },
+        "pg_upmap": { "type": "array" },
+        "pg_upmap_items": { "type": "array" },
+        "pg_temp": { "type": "array" },
+        "primary_temp": { "type": "array" },
+        "blacklist": {
+            "patternProperties": {
+                "^\\d{1,3}.\\d{1,3}.\\d{1,3}.\\d{1,3}:\\d{1,5}/\\d{1,10}$": {
+                    "$ref": "#/definitions/datetime"
+                },
+                "^-$": { "$ref": "#/definitions/datetime" }
+            },
+            "additionalProperties": false
+        },
+        "erasure_code_profiles": {
+            "type": "object",
+            "additionalProperties": {
+                "$ref": "#/definitions/erasure_code_profile"
+            }
+        },
+        "removed_snaps_queue": { "type": "array" },
+        "new_removed_snaps": { "type": "array" },
+        "new_purged_snaps": { "type": "array" }
+    }
+}

@@ -21,3 +21,9 @@ Monitor Map
 
 .. literalinclude:: schema/mon_map.json
   :language: json
+
+OSD Map
+=======
+
+.. literalinclude:: schema/osd_map.json
+  :language: json
