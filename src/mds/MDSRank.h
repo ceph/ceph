@@ -304,6 +304,10 @@ class MDSRank {
       finished_queue.push_back(c);
       progress_thread.signal();
     }
+    void queue_waiter_front(MDSInternalContextBase *c) {
+      finished_queue.push_back(c);
+      progress_thread.signal();
+    }
     void queue_waiters(MDSInternalContextBase::vec& ls) {
       MDSInternalContextBase::vec v;
       v.swap(ls);

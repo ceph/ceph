@@ -150,12 +150,13 @@ public:
       }
     }
   }
+  void clear_flushed() override {
+    state_flags &= ~FLUSHED;
+  }
   void remove_dirty() {
     start_flush();
     finish_flush();
-  }
-  void clear_flushed() override {
-    state_flags &= ~FLUSHED;
+    clear_flushed();
   }
 
   void infer_state_from_strong_rejoin(int rstate, bool locktoo) {
