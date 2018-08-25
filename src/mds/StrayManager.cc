@@ -264,9 +264,13 @@ void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *l
   }
 
   // drop inode
+  inodeno_t ino = in->ino();
   if (in->is_dirty())
     in->mark_clean();
-  in->mdcache->remove_inode(in);
+  mds->mdcache->remove_inode(in);
+
+  if (mds->is_stopping())
+    mds->mdcache->shutdown_export_stray_finish(ino);
 }
 
 void StrayManager::enqueue(CDentry *dn, bool trunc)
@@ -466,7 +470,7 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
 	return false;  // not until some snaps are deleted.
       }
 
-      in->mdcache->clear_dirty_bits_for_stray(in);
+      mds->mdcache->clear_dirty_bits_for_stray(in);
 
       if (!in->remote_parents.empty()) {
 	// unlink any stale remote snap dentry.
@@ -750,11 +754,15 @@ void StrayManager::_truncate_stray_logged(CDentry *dn, LogSegment *ls)
 
   dout(10) << __func__ << ": " << *dn << " " << *in << dendl;
 
+  in->pop_and_dirty_projected_inode(ls);
+
+  in->state_clear(CInode::STATE_PURGING);
   dn->state_clear(CDentry::STATE_PURGING | CDentry::STATE_PURGINGPINNED);
   dn->put(CDentry::PIN_PURGING);
 
-  in->pop_and_dirty_projected_inode(ls);
-
   eval_stray(dn);
+
+  if (!dn->state_test(CDentry::STATE_PURGING) &&  mds->is_stopping())
+    mds->mdcache->shutdown_export_stray_finish(in->ino());
 }
 
