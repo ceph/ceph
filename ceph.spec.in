@@ -50,14 +50,18 @@
 %endif
 %endif
 %bcond_with seastar
-%if 0%{?suse_version} >= 1500
+%if 0%{?fedora} || 0%{?suse_version} >= 1500
+# distros where py2 is _optional_
 %bcond_with python2
 %else
+# distros where py2 is _mandatory_
 %bcond_without python2
 %endif
-%if 0%{?fedora}
+%if 0%{?fedora} || 0%{?suse_version} >= 1500
+# distros that ship cmd2 and/or colorama
 %bcond_without cephfs_shell
 %else
+# distros that do _not_ ship cmd2/colorama
 %bcond_with cephfs_shell
 %endif
 %if 0%{without python2}
@@ -779,9 +783,7 @@ well as the RESTful interface. These have to do with querying the daemons for
 command-description information, validating user command input against those
 descriptions, and submitting the command to the appropriate daemon.
 
-# python3-cmd2 and python3-colorama are not available in RHEL/CentOS, openSUSE
-# or SLES
-%if 0%{?fedora}
+%if 0%{with cephfs_shell}
 %package -n cephfs-shell
 Summary:    Interactive shell for Ceph file system
 Requires:   python%{python3_pkgversion}-cmd2
@@ -1785,7 +1787,7 @@ fi
 %{python3_sitelib}/ceph_daemon.py
 %{python3_sitelib}/__pycache__/ceph_daemon.cpython*.py*
 
-%if 0%{?fedora}
+%if 0%{with cephfs_shell}
 %files -n cephfs-shell
 %{python3_sitelib}/cephfs_shell-*.egg-info
 %{_bindir}/cephfs-shell
