@@ -7006,7 +7006,7 @@ std::vector<Option> get_mds_options() {
     .set_description(""),
 
     Option("mds_max_export_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
-    .set_default(1_G)
+    .set_default(20_M)
     .set_description(""),
 
     Option("mds_kill_export_at", Option::TYPE_INT, Option::LEVEL_DEV)
