@@ -244,7 +244,7 @@ static void handle_fatal_signal(int signum)
 	  jf.dump_string("assert_file", g_assert_file);
 	}
 	if (g_assert_line) {
-	  jf.dump_unsigned("assert_file", g_assert_line);
+	  jf.dump_unsigned("assert_line", g_assert_line);
 	}
 	if (g_assert_thread_name[0]) {
 	  jf.dump_string("assert_thread_name", g_assert_thread_name);
