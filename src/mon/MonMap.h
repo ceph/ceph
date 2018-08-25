@@ -268,13 +268,15 @@ public:
       return p->second;
   }
 
-  int get_rank(const string& n) {
-    for (unsigned i = 0; i < ranks.size(); i++)
-      if (ranks[i] == n)
-	return i;
-    return -1;
+  int get_rank(const string& n) const {
+    if (auto found = std::find(ranks.begin(), ranks.end(), n);
+	found != ranks.end()) {
+      return std::distance(ranks.begin(), found);
+    } else {
+      return -1;
+    }
   }
-  int get_rank(const entity_addr_t& a) {
+  int get_rank(const entity_addr_t& a) const {
     string n = get_name(a);
     if (n.empty())
       return -1;
