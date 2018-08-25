@@ -200,11 +200,19 @@ extern int rgw_read_user_buckets(RGWRados *store,
 				 bool* is_truncated,
                                  uint64_t default_amount = 1000);
 
+struct rgw_ep_info {
+    RGWBucketEntryPoint &ep;
+    map<string, bufferlist>& attrs;
+    rgw_ep_info(RGWBucketEntryPoint &ep, map<string, bufferlist>& attrs)
+	: ep(ep), attrs(attrs) { }
+};
+
 extern int rgw_link_bucket(RGWRados* store,
                            const rgw_user& user_id,
                            rgw_bucket& bucket,
                            ceph::real_time creation_time,
-                           bool update_entrypoint = true);
+                           bool update_entrypoint = true,
+                           rgw_ep_info *pinfo = nullptr);
 extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
                              const string& tenant_name, const string& bucket_name, bool update_entrypoint = true);
 
