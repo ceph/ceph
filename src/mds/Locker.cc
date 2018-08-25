@@ -3565,7 +3565,8 @@ void Locker::remove_client_cap(CInode *in, client_t client)
  * Return true if any currently revoking caps exceed the
  * session_timeout threshold.
  */
-bool Locker::any_late_revoking_caps(xlist<Capability*> const &revoking) const
+bool Locker::any_late_revoking_caps(xlist<Capability*> const &revoking,
+                                    double timeout) const
 {
     xlist<Capability*>::const_iterator p = revoking.begin();
     if (p.end()) {
@@ -3574,7 +3575,7 @@ bool Locker::any_late_revoking_caps(xlist<Capability*> const &revoking) const
     } else {
       utime_t now = ceph_clock_now();
       utime_t age = now - (*p)->get_last_revoke_stamp();
-      if (age <= mds->mdsmap->get_session_timeout()) {
+      if (age <= timeout) {
           return false;
       } else {
           return true;
@@ -3582,22 +3583,18 @@ bool Locker::any_late_revoking_caps(xlist<Capability*> const &revoking) const
     }
 }
 
-
-void Locker::get_late_revoking_clients(std::list<client_t> *result) const
+void Locker::get_late_revoking_clients(std::list<client_t> *result,
+                                       double timeout) const
 {
-  if (!any_late_revoking_caps(revoking_caps)) {
+  if (!any_late_revoking_caps(revoking_caps, timeout)) {
     // Fast path: no misbehaving clients, execute in O(1)
     return;
   }
 
   // Slow path: execute in O(N_clients)
-  std::map<client_t, xlist<Capability*> >::const_iterator client_rc_iter;
-  for (client_rc_iter = revoking_caps_by_client.begin();
-       client_rc_iter != revoking_caps_by_client.end(); ++client_rc_iter) {
-    xlist<Capability*> const &client_rc = client_rc_iter->second;
-    bool any_late = any_late_revoking_caps(client_rc);
-    if (any_late) {
-        result->push_back(client_rc_iter->first);
+  for (auto &p : revoking_caps_by_client) {
+    if (any_late_revoking_caps(p.second, timeout)) {
+      result->push_back(p.first);
     }
   }
 }
