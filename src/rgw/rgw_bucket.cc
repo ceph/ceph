@@ -27,6 +27,9 @@
 // until everything is moved from rgw_common
 #include "rgw_common.h"
 
+// stolen from src/cls/version/cls_version.cc
+#define VERSION_ATTR "ceph.objclass.version"
+
 #include "cls/user/cls_user_types.h"
 
 #define dout_context g_ceph_context
@@ -184,7 +187,8 @@ int rgw_link_bucket(RGWRados* const store,
                     const rgw_user& user_id,
                     rgw_bucket& bucket,
                     ceph::real_time creation_time,
-                    bool update_entrypoint)
+                    bool update_entrypoint,
+                    rgw_ep_info *pinfo)
 {
   int ret;
   string& tenant_name = bucket.tenant;
@@ -202,14 +206,22 @@ int rgw_link_bucket(RGWRados* const store,
   else
     new_bucket.creation_time = creation_time;
 
-  map<string, bufferlist> attrs;
-  RGWObjectCtx obj_ctx(store);
+  map<string, bufferlist> attrs, *pattrs;
 
   if (update_entrypoint) {
-    ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, ep, &ot, NULL, &attrs);
-    if (ret < 0 && ret != -ENOENT) {
-      ldout(store->ctx(), 0) << "ERROR: store->get_bucket_entrypoint_info() returned: "
-                             << cpp_strerror(-ret) << dendl;
+    if (pinfo) {
+      ep = pinfo->ep;
+      pattrs = &pinfo->attrs;
+    } else {
+      RGWObjectCtx obj_ctx(store);
+
+      ret = store->get_bucket_entrypoint_info(obj_ctx,
+		tenant_name, bucket_name, ep, &ot, NULL, &attrs);
+      if (ret < 0 && ret != -ENOENT) {
+	ldout(store->ctx(), 0) << "ERROR: store->get_bucket_entrypoint_info() returned: "
+			       << cpp_strerror(-ret) << dendl;
+      }
+      pattrs = &attrs;
     }
   }
 
@@ -230,7 +242,7 @@ int rgw_link_bucket(RGWRados* const store,
   ep.linked = true;
   ep.owner = user_id;
   ep.bucket = bucket;
-  ret = store->put_bucket_entrypoint_info(tenant_name, bucket_name, ep, false, ot, real_time(), &attrs);
+  ret = store->put_bucket_entrypoint_info(tenant_name, bucket_name, ep, false, ot, real_time(), pattrs);
   if (ret < 0)
     goto done_err;
 
@@ -900,8 +912,22 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
       return r;
     }
 
+    RGWBucketEntryPoint ep;
+    ep.bucket = bucket_info.bucket;
+    ep.owner = user_info.user_id;
+    ep.creation_time = bucket_info.creation_time;
+    ep.linked = true;
+    map<string, bufferlist> ep_attrs;
+    // XXX I am not convinced this is at all necessary; but previous
+    //	versions would have found and copied VERSION_ATTR so I will
+    //	do likewise for now...  mdw 20180825
+    auto version_iter = attrs.find(VERSION_ATTR);
+    if (version_iter != attrs.end())
+      ep_attrs[VERSION_ATTR] = version_iter->second;
+    rgw_ep_info ep_data{ep, ep_attrs};
+
     r = rgw_link_bucket(store, user_info.user_id, bucket_info.bucket,
-                        ceph::real_time());
+                        ceph::real_time(), true, &ep_data);
     if (r < 0) {
       set_err_msg(err_msg, "failed to relink bucket");
       return r;
