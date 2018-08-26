@@ -11940,7 +11940,7 @@ void MDCache::show_cache()
     show_func(p.second);
 }
 
-int MDCache::cache_status(Formatter *f)
+void MDCache::cache_status(Formatter *f)
 {
   f->open_object_section("cache");
 
@@ -11949,7 +11949,6 @@ int MDCache::cache_status(Formatter *f)
   f->close_section();
 
   f->close_section();
-  return 0;
 }
 
 int MDCache::dump_cache(boost::string_view file_name)
