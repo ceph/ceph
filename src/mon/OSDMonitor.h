@@ -266,7 +266,7 @@ private:
   void _prune_update_trimmed(
       MonitorDBStore::TransactionRef tx,
       version_t first);
-  void prune_init();
+  void prune_init(osdmap_manifest_t& manifest);
   bool _prune_sanitize_options() const;
   bool is_prune_enabled() const;
   bool is_prune_supported() const;
