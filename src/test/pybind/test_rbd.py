@@ -325,6 +325,38 @@ def test_rename():
     rbd.rename(ioctx, image_name2, image_name)
     eq([image_name], rbd.list(ioctx))
 
+def test_pool_metadata():
+    rbd = RBD()
+    metadata = list(rbd.pool_metadata_list(ioctx))
+    eq(len(metadata), 0)
+    assert_raises(KeyError, rbd.pool_metadata_get, ioctx, "key1")
+    rbd.pool_metadata_set(ioctx, "key1", "value1")
+    rbd.pool_metadata_set(ioctx, "key2", "value2")
+    value = rbd.pool_metadata_get(ioctx, "key1")
+    eq(value, "value1")
+    value = rbd.pool_metadata_get(ioctx, "key2")
+    eq(value, "value2")
+    metadata = list(rbd.pool_metadata_list(ioctx))
+    eq(len(metadata), 2)
+    rbd.pool_metadata_remove(ioctx, "key1")
+    metadata = list(rbd.pool_metadata_list(ioctx))
+    eq(len(metadata), 1)
+    eq(metadata[0], ("key2", "value2"))
+    rbd.pool_metadata_remove(ioctx, "key2")
+    assert_raises(KeyError, rbd.pool_metadata_remove, ioctx, "key2")
+    metadata = list(rbd.pool_metadata_list(ioctx))
+    eq(len(metadata), 0)
+
+    N = 65
+    for i in xrange(N):
+        rbd.pool_metadata_set(ioctx, "key" + str(i), "X" * 1025)
+    metadata = list(rbd.pool_metadata_list(ioctx))
+    eq(len(metadata), N)
+    for i in xrange(N):
+        rbd.pool_metadata_remove(ioctx, "key" + str(i))
+        metadata = list(rbd.pool_metadata_list(ioctx))
+        eq(len(metadata), N - i - 1)
+
 def rand_data(size):
     return os.urandom(size)
 

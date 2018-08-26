@@ -32,6 +32,7 @@
 #include "librbd/api/Migration.h"
 #include "librbd/api/Mirror.h"
 #include "librbd/api/Namespace.h"
+#include "librbd/api/PoolMetadata.h"
 #include "librbd/api/Snapshot.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequestWQ.h"
@@ -993,6 +994,33 @@ namespace librbd {
     int r = librbd::api::Group<>::snap_rollback(group_ioctx, group_name,
                                                 snap_name, prog_ctx);
     tracepoint(librbd, group_snap_rollback_exit, r);
+    return r;
+  }
+
+  int RBD::pool_metadata_get(IoCtx& ioctx, const std::string &key,
+                             std::string *value)
+  {
+    int r = librbd::api::PoolMetadata<>::get(ioctx, key, value);
+    return r;
+  }
+
+  int RBD::pool_metadata_set(IoCtx& ioctx, const std::string &key,
+                             const std::string &value)
+  {
+    int r = librbd::api::PoolMetadata<>::set(ioctx, key, value);
+    return r;
+  }
+
+  int RBD::pool_metadata_remove(IoCtx& ioctx, const std::string &key)
+  {
+    int r = librbd::api::PoolMetadata<>::remove(ioctx, key);
+    return r;
+  }
+
+  int RBD::pool_metadata_list(IoCtx& ioctx, const std::string &start,
+                              uint64_t max, map<string, bufferlist> *pairs)
+  {
+    int r = librbd::api::PoolMetadata<>::list(ioctx, start, max, pairs);
     return r;
   }
 
@@ -3268,6 +3296,76 @@ extern "C" void rbd_migration_status_cleanup(rbd_image_migration_status_t *s)
   free(s->dest_image_name);
   free(s->dest_image_id);
   free(s->state_description);
+}
+
+extern "C" int rbd_pool_metadata_get(rados_ioctx_t p, const char *key,
+                                     char *value, size_t *vallen)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  string val_s;
+  int r = librbd::api::PoolMetadata<>::get(io_ctx, key, &val_s);
+  if (*vallen < val_s.size() + 1) {
+    r = -ERANGE;
+    *vallen = val_s.size() + 1;
+  } else {
+    strncpy(value, val_s.c_str(), val_s.size() + 1);
+  }
+
+  return r;
+}
+
+extern "C" int rbd_pool_metadata_set(rados_ioctx_t p, const char *key,
+                                     const char *value)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  int r = librbd::api::PoolMetadata<>::set(io_ctx, key, value);
+  return r;
+}
+
+extern "C" int rbd_pool_metadata_remove(rados_ioctx_t p, const char *key)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  int r = librbd::api::PoolMetadata<>::remove(io_ctx, key);
+  return r;
+}
+
+extern "C" int rbd_pool_metadata_list(rados_ioctx_t p, const char *start,
+                                      uint64_t max, char *key, size_t *key_len,
+                                      char *value, size_t *val_len)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  map<string, bufferlist> pairs;
+  int r = librbd::api::PoolMetadata<>::list(io_ctx, start, max, &pairs);
+  if (r < 0) {
+    return r;
+  }
+  size_t key_total_len = 0, val_total_len = 0;
+  for (auto &it : pairs) {
+    key_total_len += it.first.size() + 1;
+    val_total_len += it.second.length() + 1;
+  }
+  if (*key_len < key_total_len || *val_len < val_total_len) {
+    *key_len = key_total_len;
+    *val_len = val_total_len;
+    return -ERANGE;
+  }
+  *key_len = key_total_len;
+  *val_len = val_total_len;
+
+  char *key_p = key, *value_p = value;
+  for (auto &it : pairs) {
+    strncpy(key_p, it.first.c_str(), it.first.size() + 1);
+    key_p += it.first.size() + 1;
+    strncpy(value_p, it.second.c_str(), it.second.length());
+    value_p += it.second.length();
+    *value_p = '\0';
+    value_p++;
+  }
+  return 0;
 }
 
 extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image,

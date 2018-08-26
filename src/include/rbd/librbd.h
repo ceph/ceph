@@ -391,6 +391,18 @@ CEPH_RBD_API void rbd_mirror_image_status_list_cleanup(char **image_ids,
 CEPH_RBD_API int rbd_mirror_image_status_summary(rados_ioctx_t io_ctx,
     rbd_mirror_image_status_state_t *states, int *counts, size_t *maxlen);
 
+/* pool metadata */
+CEPH_RBD_API int rbd_pool_metadata_get(rados_ioctx_t io_ctx, const char *key,
+                                       char *value, size_t *val_len);
+CEPH_RBD_API int rbd_pool_metadata_set(rados_ioctx_t io_ctx, const char *key,
+                                       const char *value);
+CEPH_RBD_API int rbd_pool_metadata_remove(rados_ioctx_t io_ctx,
+                                          const char *key);
+CEPH_RBD_API int rbd_pool_metadata_list(rados_ioctx_t io_ctx, const char *start,
+                                        uint64_t max, char *keys,
+                                        size_t *key_len, char *values,
+                                        size_t *vals_len);
+
 CEPH_RBD_API int rbd_open(rados_ioctx_t io, const char *name,
                           rbd_image_t *image, const char *snap_name);
 CEPH_RBD_API int rbd_open_by_id(rados_ioctx_t io, const char *id,

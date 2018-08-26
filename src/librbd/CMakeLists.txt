@@ -31,6 +31,7 @@ set(librbd_internal_srcs
   api/Mirror.cc
   api/Namespace.cc
   api/Snapshot.cc
+  api/PoolMetadata.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
   cache/PassthroughImageCache.cc

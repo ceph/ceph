@@ -293,6 +293,15 @@ cdef extern from "rbd/librbd.h" nogil:
                                         rbd_mirror_image_status_state_t *states,
                                         int *counts, size_t *maxlen)
 
+    int rbd_pool_metadata_get(rados_ioctx_t io_ctx, const char *key,
+                              char *value, size_t *val_len)
+    int rbd_pool_metadata_set(rados_ioctx_t io_ctx, const char *key,
+                              const char *value)
+    int rbd_pool_metadata_remove(rados_ioctx_t io_ctx, const char *key)
+    int rbd_pool_metadata_list(rados_ioctx_t io_ctx, const char *start,
+                               uint64_t max, char *keys, size_t *key_len,
+                               char *values, size_t *vals_len)
+
     int rbd_open(rados_ioctx_t io, const char *name,
                  rbd_image_t *image, const char *snap_name)
     int rbd_open_by_id(rados_ioctx_t io, const char *image_id,
@@ -1567,6 +1576,91 @@ class RBD(object):
             free(states)
             free(counts)
 
+    def pool_metadata_get(self, ioctx, key):
+        """
+        Get pool metadata for the given key.
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :param key: metadata key
+        :type key: str
+        :returns: str - metadata value
+        """
+        key = cstr(key, 'key')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_key = key
+            size_t size = 4096
+            char *value = NULL
+            int ret
+        try:
+            while True:
+                value = <char *>realloc_chk(value, size)
+                with nogil:
+                    ret = rbd_pool_metadata_get(_ioctx, _key, value, &size)
+                if ret != -errno.ERANGE:
+                    break
+            if ret == -errno.ENOENT:
+                raise KeyError('no metadata %s' % (key))
+            if ret != 0:
+                raise make_ex(ret, 'error getting metadata %s' % (key))
+            return decode_cstr(value)
+        finally:
+            free(value)
+
+    def pool_metadata_set(self, ioctx, key, value):
+        """
+        Set pool metadata for the given key.
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :param key: metadata key
+        :type key: str
+        :param value: metadata value
+        :type value: str
+        """
+        key = cstr(key, 'key')
+        value = cstr(value, 'value')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_key = key
+            char *_value = value
+        with nogil:
+            ret = rbd_pool_metadata_set(_ioctx, _key, _value)
+
+        if ret != 0:
+            raise make_ex(ret, 'error setting metadata %s' % (key))
+
+    def pool_metadata_remove(self, ioctx, key):
+        """
+        Remove pool metadata for the given key.
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :param key: metadata key
+        :type key: str
+        :returns: str - metadata value
+        """
+        key = cstr(key, 'key')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_key = key
+        with nogil:
+            ret = rbd_pool_metadata_remove(_ioctx, _key)
+
+        if ret == -errno.ENOENT:
+            raise KeyError('no metadata %s' % (key))
+        if ret != 0:
+            raise make_ex(ret, 'error removing metadata %s' % (key))
+
+    def pool_metadata_list(self, ioctx):
+        """
+        List pool metadata.
+
+        :returns: :class:`PoolMetadataIterator`
+        """
+        return PoolMetadataIterator(ioctx)
+
     def group_create(self, ioctx, name):
         """
         Create a group.
@@ -1799,6 +1893,70 @@ cdef class MirrorImageStatusIterator(object):
         else:
             free(self.last_read)
             self.last_read = strdup("")
+
+cdef class PoolMetadataIterator(object):
+    """
+    Iterator over pool metadata list.
+
+    Yields ``(key, value)`` tuple.
+
+    * ``key`` (str) - metadata key
+    * ``value`` (str) - metadata value
+    """
+
+    cdef:
+        rados_ioctx_t ioctx
+        char *last_read
+        uint64_t max_read
+        object next_chunk
+
+    def __init__(self, ioctx):
+        self.ioctx = convert_ioctx(ioctx)
+        self.last_read = strdup("")
+        self.max_read = 32
+        self.get_next_chunk()
+
+    def __iter__(self):
+        while len(self.next_chunk) > 0:
+            for pair in self.next_chunk:
+                yield pair
+            if len(self.next_chunk) < self.max_read:
+                break
+            self.get_next_chunk()
+
+    def __dealloc__(self):
+        if self.last_read:
+            free(self.last_read)
+
+    def get_next_chunk(self):
+        cdef:
+            char *c_keys = NULL
+            size_t keys_size = 4096
+            char *c_vals = NULL
+            size_t vals_size = 4096
+        try:
+            while True:
+                c_keys = <char *>realloc_chk(c_keys, keys_size)
+                c_vals = <char *>realloc_chk(c_vals, vals_size)
+                with nogil:
+                    ret = rbd_pool_metadata_list(self.ioctx, self.last_read,
+                                                 self.max_read, c_keys, &keys_size,
+                                                 c_vals, &vals_size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error listing metadata')
+            keys = [decode_cstr(key) for key in
+                        c_keys[:keys_size].split(b'\0') if key]
+            vals = [decode_cstr(val) for val in
+                        c_vals[:vals_size].split(b'\0') if val]
+            if len(keys) > 0:
+                free(self.last_read)
+                self.last_read = strdup(keys[-1])
+            self.next_chunk = zip(keys, vals)
+        finally:
+            free(c_keys)
+            free(c_vals)
 
 cdef int diff_iterate_cb(uint64_t offset, size_t length, int write, void *cb) \
     except? -9000 with gil:
