@@ -3938,7 +3938,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
 
   unsigned old_caps = cap.issued;
   cap.cap_id = cap_id;
-  cap.issued |= issued;
+  cap.issued = issued;
   cap.implemented |= issued;
   cap.seq = seq;
   cap.issue_seq = seq;
