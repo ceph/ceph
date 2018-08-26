@@ -197,6 +197,30 @@ Commands
   The parent snapshot must be protected (see `rbd snap protect`).
   This requires image format 2.
 
+:command:`config image get` *image-spec* *key*
+  Get an image-level configuration override.
+
+:command:`config image list` [--format plain | json | xml] [--pretty-format] *image-spec* *key*
+  List image-level configuration overrides.
+
+:command:`config image set` *image-spec* *key* *value*
+  Set an image-level configuration override.
+
+:command:`config image remove` *image-spec* *key*
+  Remove an image-level configuration override.
+
+:command:`config pool get` *pool-name* *key*
+  Get a pool-level configuration override.
+
+:command:`config pool list` [--format plain | json | xml] [--pretty-format] *pool-name*
+  List pool-level configuration overrides.
+
+:command:`config pool set` *pool-name* *key* *value*
+  Set a pool-level configuration override.
+
+:command:`config pool remove` *pool-name* *key*
+  Remove a pool-level configuration override.
+
 :command:`cp` (*src-image-spec* | *src-snap-spec*) *dest-image-spec*
   Copy the content of a src-image into the newly created dest-image.
   dest-image will have the same size, object size, and image format as src-image.

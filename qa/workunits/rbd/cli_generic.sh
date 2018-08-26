@@ -772,11 +772,37 @@ test_migration() {
     ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
 }
 
+test_config() {
+    echo "testing config..."
+    remove_images
+
+    rbd config pool set rbd rbd_cache true
+    rbd config pool list rbd | grep '^rbd_cache * true * pool *$'
+    rbd config pool get rbd rbd_cache | grep '^true$'
+
+    rbd create $RBD_CREATE_ARGS -s 1 test1
+
+    rbd config image list rbd/test1 | grep '^rbd_cache * true * pool *$'
+    rbd config image set rbd/test1 rbd_cache false
+    rbd config image list rbd/test1 | grep '^rbd_cache * false * image *$'
+    rbd config image get rbd/test1 rbd_cache | grep '^false$'
+    rbd config image remove rbd/test1 rbd_cache
+    expect_fail rbd config image get rbd/test1 rbd_cache
+    rbd config image list rbd/test1 | grep '^rbd_cache * true * pool *$'
+
+    rbd config pool remove rbd rbd_cache
+    expect_fail rbd config pool get rbd rbd_cache
+    rbd config pool list rbd | grep '^rbd_cache * true * config *$'
+
+    rbd rm test1
+}
+
 test_pool_image_args
 test_rename
 test_ls
 test_remove
 test_migration
+test_config
 RBD_CREATE_ARGS=""
 test_others
 test_locking
