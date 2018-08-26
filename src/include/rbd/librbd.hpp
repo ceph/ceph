@@ -278,6 +278,14 @@ public:
   int namespace_list(IoCtx& io_ctx, std::vector<std::string>* namespace_names);
   int namespace_exists(IoCtx& io_ctx, const char *namespace_name, bool *exists);
 
+  int pool_metadata_get(IoCtx &io_ctx, const std::string &key,
+                        std::string *value);
+  int pool_metadata_set(IoCtx &io_ctx, const std::string &key,
+                        const std::string &value);
+  int pool_metadata_remove(IoCtx &io_ctx, const std::string &key);
+  int pool_metadata_list(IoCtx &io_ctx, const std::string &start, uint64_t max,
+                         std::map<std::string, ceph::bufferlist> *pairs);
+
 private:
   /* We don't allow assignment or copying */
   RBD(const RBD& rhs);

@@ -7037,6 +7037,168 @@ TEST_F(TestLibRBD, ZeroOverlapFlatten) {
   ASSERT_EQ(0, clone_image.flatten());
 }
 
+TEST_F(TestLibRBD, PoolMetadata)
+{
+  REQUIRE_FORMAT_V2();
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  char keys[1024];
+  char vals[1024];
+  size_t keys_len = sizeof(keys);
+  size_t vals_len = sizeof(vals);
+
+  memset_rand(keys, keys_len);
+  memset_rand(vals, vals_len);
+
+  ASSERT_EQ(0, rbd_pool_metadata_list(ioctx, "", 0, keys, &keys_len, vals,
+                                      &vals_len));
+  ASSERT_EQ(0U, keys_len);
+  ASSERT_EQ(0U, vals_len);
+
+  char value[1024];
+  size_t value_len = sizeof(value);
+  memset_rand(value, value_len);
+
+  ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "key1", "value1"));
+  ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "key2", "value2"));
+  ASSERT_EQ(0, rbd_pool_metadata_get(ioctx, "key1", value, &value_len));
+  ASSERT_STREQ(value, "value1");
+  value_len = 1;
+  ASSERT_EQ(-ERANGE, rbd_pool_metadata_get(ioctx, "key1", value, &value_len));
+  ASSERT_EQ(value_len, strlen("value1") + 1);
+
+  ASSERT_EQ(-ERANGE, rbd_pool_metadata_list(ioctx, "", 0, keys, &keys_len, vals,
+                                            &vals_len));
+  keys_len = sizeof(keys);
+  vals_len = sizeof(vals);
+  memset_rand(keys, keys_len);
+  memset_rand(vals, vals_len);
+  ASSERT_EQ(0, rbd_pool_metadata_list(ioctx, "", 0, keys, &keys_len, vals,
+                                      &vals_len));
+  ASSERT_EQ(keys_len, strlen("key1") + 1 + strlen("key2") + 1);
+  ASSERT_EQ(vals_len, strlen("value1") + 1 + strlen("value2") + 1);
+  ASSERT_STREQ(keys, "key1");
+  ASSERT_STREQ(keys + strlen(keys) + 1, "key2");
+  ASSERT_STREQ(vals, "value1");
+  ASSERT_STREQ(vals + strlen(vals) + 1, "value2");
+
+  ASSERT_EQ(0, rbd_pool_metadata_remove(ioctx, "key1"));
+  ASSERT_EQ(-ENOENT, rbd_pool_metadata_remove(ioctx, "key3"));
+  value_len = sizeof(value);
+  ASSERT_EQ(-ENOENT, rbd_pool_metadata_get(ioctx, "key3", value, &value_len));
+  ASSERT_EQ(0, rbd_pool_metadata_list(ioctx, "", 0, keys, &keys_len, vals,
+                                      &vals_len));
+  ASSERT_EQ(keys_len, strlen("key2") + 1);
+  ASSERT_EQ(vals_len, strlen("value2") + 1);
+  ASSERT_STREQ(keys, "key2");
+  ASSERT_STREQ(vals, "value2");
+
+  // test config setting
+  ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "conf_rbd_cache", "false"));
+  ASSERT_EQ(-EINVAL, rbd_pool_metadata_set(ioctx, "conf_rbd_cache", "INVALID"));
+  ASSERT_EQ(0, rbd_pool_metadata_remove(ioctx, "conf_rbd_cache"));
+
+  // test short buffer cases
+  ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "key1", "value1"));
+  ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "key3", "value3"));
+  ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "key4", "value4"));
+
+  keys_len = strlen("key1") + 1;
+  vals_len = strlen("value1") + 1;
+  memset_rand(keys, keys_len);
+  memset_rand(vals, vals_len);
+  ASSERT_EQ(0, rbd_pool_metadata_list(ioctx, "", 1, keys, &keys_len, vals,
+                                      &vals_len));
+  ASSERT_EQ(keys_len, strlen("key1") + 1);
+  ASSERT_EQ(vals_len, strlen("value1") + 1);
+  ASSERT_STREQ(keys, "key1");
+  ASSERT_STREQ(vals, "value1");
+
+  ASSERT_EQ(-ERANGE, rbd_pool_metadata_list(ioctx, "", 2, keys, &keys_len, vals,
+                                            &vals_len));
+  ASSERT_EQ(keys_len, strlen("key1") + 1 + strlen("key2") + 1);
+  ASSERT_EQ(vals_len, strlen("value1") + 1 + strlen("value2") + 1);
+
+  ASSERT_EQ(-ERANGE, rbd_pool_metadata_list(ioctx, "", 0, keys, &keys_len, vals,
+                                            &vals_len));
+  ASSERT_EQ(keys_len, strlen("key1") + 1 + strlen("key2") + 1 + strlen("key3") +
+            1 + strlen("key4") + 1);
+  ASSERT_EQ(vals_len, strlen("value1") + 1 + strlen("value2") + 1 +
+            strlen("value3") + 1 + strlen("value4") + 1);
+
+  // test `start` param
+  keys_len = sizeof(keys);
+  vals_len = sizeof(vals);
+  memset_rand(keys, keys_len);
+  memset_rand(vals, vals_len);
+  ASSERT_EQ(0, rbd_pool_metadata_list(ioctx, "key2", 0, keys, &keys_len, vals,
+                                      &vals_len));
+  ASSERT_EQ(keys_len, strlen("key3") + 1 + strlen("key4") + 1);
+  ASSERT_EQ(vals_len, strlen("value3") + 1 + strlen("value4") + 1);
+  ASSERT_STREQ(keys, "key3");
+  ASSERT_STREQ(vals, "value3");
+
+  //cleanup
+  ASSERT_EQ(0, rbd_pool_metadata_remove(ioctx, "key1"));
+  ASSERT_EQ(0, rbd_pool_metadata_remove(ioctx, "key2"));
+  ASSERT_EQ(0, rbd_pool_metadata_remove(ioctx, "key3"));
+  ASSERT_EQ(0, rbd_pool_metadata_remove(ioctx, "key4"));
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, PoolMetadataPP)
+{
+  REQUIRE_FORMAT_V2();
+
+  librbd::RBD rbd;
+  string value;
+  map<string, bufferlist> pairs;
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  ASSERT_EQ(0, rbd.pool_metadata_list(ioctx, "", 0, &pairs));
+  ASSERT_TRUE(pairs.empty());
+
+  ASSERT_EQ(0, rbd.pool_metadata_set(ioctx, "key1", "value1"));
+  ASSERT_EQ(0, rbd.pool_metadata_set(ioctx, "key2", "value2"));
+  ASSERT_EQ(0, rbd.pool_metadata_get(ioctx, "key1", &value));
+  ASSERT_EQ(value, "value1");
+  ASSERT_EQ(0, rbd.pool_metadata_list(ioctx, "", 0, &pairs));
+  ASSERT_EQ(2U, pairs.size());
+  ASSERT_EQ(0, strncmp("value1", pairs["key1"].c_str(), 6));
+  ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
+
+  ASSERT_EQ(0, rbd.pool_metadata_remove(ioctx, "key1"));
+  ASSERT_EQ(-ENOENT, rbd.pool_metadata_remove(ioctx, "key3"));
+  ASSERT_EQ(-ENOENT, rbd.pool_metadata_get(ioctx, "key3", &value));
+  pairs.clear();
+  ASSERT_EQ(0, rbd.pool_metadata_list(ioctx, "", 0, &pairs));
+  ASSERT_EQ(1U, pairs.size());
+  ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
+
+  // test `start` param
+  ASSERT_EQ(0, rbd.pool_metadata_set(ioctx, "key1", "value1"));
+  ASSERT_EQ(0, rbd.pool_metadata_set(ioctx, "key3", "value3"));
+
+  pairs.clear();
+  ASSERT_EQ(0, rbd.pool_metadata_list(ioctx, "key2", 0, &pairs));
+  ASSERT_EQ(1U, pairs.size());
+  ASSERT_EQ(0, strncmp("value3", pairs["key3"].c_str(), 6));
+
+  // test config setting
+  ASSERT_EQ(0, rbd.pool_metadata_set(ioctx, "conf_rbd_cache", "false"));
+  ASSERT_EQ(-EINVAL, rbd.pool_metadata_set(ioctx, "conf_rbd_cache", "INVALID"));
+  ASSERT_EQ(0, rbd.pool_metadata_remove(ioctx, "conf_rbd_cache"));
+
+  // cleanup
+  ASSERT_EQ(0, rbd.pool_metadata_remove(ioctx, "key1"));
+  ASSERT_EQ(0, rbd.pool_metadata_remove(ioctx, "key2"));
+  ASSERT_EQ(0, rbd.pool_metadata_remove(ioctx, "key3"));
+}
+
 // poorman's ceph_assert()
 namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,
