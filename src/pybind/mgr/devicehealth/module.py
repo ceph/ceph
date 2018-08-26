@@ -345,7 +345,7 @@ class Module(MgrModule):
         except rados.Error as e:
             # Do not proceed with writes if something unexpected
             # went wrong with the reads.
-            log.exception("Error reading OMAP: {0}".format(e))
+            self.log.exception("Error reading OMAP: {0}".format(e))
             return
 
         key = datetime.utcnow().strftime(TIME_FORMAT)
@@ -384,7 +384,7 @@ class Module(MgrModule):
             except rados.ObjectNotFound:
                 pass
             except rados.Error as e:
-                log.exception("RADOS error reading omap: {0}".format(e))
+                self.log.exception("RADOS error reading omap: {0}".format(e))
                 raise
 
         return 0, json.dumps(res, indent=4), ''
