@@ -114,6 +114,7 @@ class MonClient;
 class Finisher;
 class MMDSMap;
 class ScrubStack;
+class C_MDS_Send_Command_Reply;
 
 /**
  * The public part of this class's interface is what's exposed to all
@@ -131,6 +132,7 @@ class MDSRank {
   public:
 
     friend class C_Flush_Journal;
+    friend class C_Drop_Cache;
 
     mds_rank_t get_nodeid() const { return whoami; }
     int64_t get_metadata_pool();
@@ -472,6 +474,9 @@ class MDSRank {
         const cmdmap_t &cmdmap,
         std::ostream &ss);
 
+    void cache_drop_send_reply(Formatter *f, C_MDS_Send_Command_Reply *reply, int r);
+    void command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish);
+
   protected:
     Messenger    *messenger;
     MonClient    *monc;
@@ -586,6 +591,7 @@ public:
     int *r,
     std::stringstream *ds,
     std::stringstream *ss,
+    Context **run_later,
     bool *need_reply);
 
   void dump_sessions(const SessionFilter &filter, Formatter *f) const;

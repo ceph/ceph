@@ -140,7 +140,8 @@ public:
   void reconnect_tick();
   void recover_filelocks(CInode *in, bufferlist locks, int64_t client);
 
-  void recall_client_state(void);
+  void recall_client_state(double ratio, bool flush_client_session,
+                           MDSGatherBuilder *gather);
   void force_clients_readonly();
 
   // -- requests --
@@ -320,6 +321,7 @@ public:
 
 private:
   void reply_client_request(MDRequestRef& mdr, MClientReply *reply);
+  void flush_session(Session *session, MDSGatherBuilder *gather);
 };
 
 #endif
