@@ -1787,17 +1787,19 @@ void OSDMonitor::_prune_update_trimmed(
            << " last_pinned " << osdmap_manifest.get_last_pinned()
            << dendl;
 
-  if (!osdmap_manifest.is_pinned(first)) {
-    osdmap_manifest.pin(first);
+  osdmap_manifest_t manifest = osdmap_manifest;
+
+  if (!manifest.is_pinned(first)) {
+    manifest.pin(first);
   }
 
-  set<version_t>::iterator p_end = osdmap_manifest.pinned.find(first);
-  set<version_t>::iterator p = osdmap_manifest.pinned.begin();
-  osdmap_manifest.pinned.erase(p, p_end);
-  ceph_assert(osdmap_manifest.get_first_pinned() == first);
+  set<version_t>::iterator p_end = manifest.pinned.find(first);
+  set<version_t>::iterator p = manifest.pinned.begin();
+  manifest.pinned.erase(p, p_end);
+  ceph_assert(manifest.get_first_pinned() == first);
 
-  if (osdmap_manifest.get_last_pinned() == first+1 ||
-      osdmap_manifest.pinned.size() == 1) {
+  if (manifest.get_last_pinned() == first+1 ||
+      manifest.pinned.size() == 1) {
     // we reached the end of the line, as pinned maps go; clean up our
     // manifest, and let `should_prune()` decide whether we should prune
     // again.
@@ -1806,16 +1808,17 @@ void OSDMonitor::_prune_update_trimmed(
   }
 
   bufferlist bl;
-  osdmap_manifest.encode(bl);
+  manifest.encode(bl);
   tx->put(get_service_name(), "osdmap_manifest", bl);
 }
 
-void OSDMonitor::prune_init()
+void OSDMonitor::prune_init(osdmap_manifest_t& manifest)
 {
   dout(1) << __func__ << dendl;
 
   version_t pin_first;
 
+  // verify constrainsts on stable in-memory state
   if (!has_osdmap_manifest) {
     // we must have never pruned, OR if we pruned the state must no longer
     // be relevant (i.e., the state must have been removed alongside with
@@ -1841,7 +1844,7 @@ void OSDMonitor::prune_init()
     pin_first = osdmap_manifest.get_last_pinned();
   }
 
-  osdmap_manifest.pin(pin_first);
+  manifest.pin(pin_first);
 }
 
 bool OSDMonitor::_prune_sanitize_options() const
@@ -1926,17 +1929,19 @@ bool OSDMonitor::do_prune(MonitorDBStore::TransactionRef tx)
   // pinned maps, and then allow us to use another ceph-mon without these
   // capabilities, without having to repair the store.
 
+  osdmap_manifest_t manifest = osdmap_manifest;
+
   version_t first = get_first_committed();
   version_t last = get_last_committed();
 
   version_t last_to_pin = last - g_conf()->mon_min_osdmap_epochs;
-  version_t last_pinned = osdmap_manifest.get_last_pinned();
+  version_t last_pinned = manifest.get_last_pinned();
   uint64_t prune_interval =
     g_conf().get_val<uint64_t>("mon_osdmap_full_prune_interval");
   uint64_t txsize =
     g_conf().get_val<uint64_t>("mon_osdmap_full_prune_txsize");
 
-  prune_init();
+  prune_init(manifest);
 
   // we need to get rid of some osdmaps
 
@@ -1987,7 +1992,7 @@ bool OSDMonitor::do_prune(MonitorDBStore::TransactionRef tx)
 
   uint64_t num_pruned = 0;
   while (num_pruned + removal_interval <= txsize) { 
-    last_pinned = osdmap_manifest.get_last_pinned();
+    last_pinned = manifest.get_last_pinned();
 
     if (last_pinned + prune_interval > last_to_pin) {
       break;
@@ -1996,7 +2001,7 @@ bool OSDMonitor::do_prune(MonitorDBStore::TransactionRef tx)
 
     version_t next_pinned = last_pinned + prune_interval;
     ceph_assert(next_pinned <= last_to_pin);
-    osdmap_manifest.pin(next_pinned);
+    manifest.pin(next_pinned);
 
     dout(20) << __func__
 	     << " last_pinned " << last_pinned
@@ -2010,7 +2015,7 @@ bool OSDMonitor::do_prune(MonitorDBStore::TransactionRef tx)
     ceph_assert(map_exists(next_pinned));
 
     for (version_t v = last_pinned+1; v < next_pinned; ++v) {
-      ceph_assert(!osdmap_manifest.is_pinned(v));
+      ceph_assert(!manifest.is_pinned(v));
 
       dout(20) << __func__ << "   pruning full osdmap e" << v << dendl;
       string full_key = mon->store->combine_strings("full", v);
@@ -2022,7 +2027,7 @@ bool OSDMonitor::do_prune(MonitorDBStore::TransactionRef tx)
   ceph_assert(num_pruned > 0);
 
   bufferlist bl;
-  osdmap_manifest.encode(bl);
+  manifest.encode(bl);
   tx->put(get_service_name(), "osdmap_manifest", bl);
 
   return true;
