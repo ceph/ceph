@@ -2091,10 +2091,7 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
     }
   } else if (command == "cache status") {
     Mutex::Locker l(mds_lock);
-    int r = mdcache->cache_status(f);
-    if (r != 0) {
-      ss << "Failed to get cache status: " << cpp_strerror(r);
-    }
+    mdcache->cache_status(f);
   } else if (command == "dump tree") {
     command_dump_tree(cmdmap, ss, f);
   } else if (command == "dump loads") {
@@ -3038,10 +3035,9 @@ bool MDSRankDispatcher::handle_command(
       return true;
     }
 
-    Formatter *f = new JSONFormatter(true);
-    dump_sessions(filter, f);
-    f->flush(*ds);
-    delete f;
+    JSONFormatter f(true);
+    dump_sessions(filter, &f);
+    f.flush(*ds);
     return true;
   } else if (prefix == "session evict" || prefix == "client evict") {
     std::vector<std::string> filter_args;
@@ -3058,10 +3054,9 @@ bool MDSRankDispatcher::handle_command(
     *need_reply = false;
     return true;
   } else if (prefix == "damage ls") {
-    Formatter *f = new JSONFormatter(true);
-    damage_table.dump(f);
-    f->flush(*ds);
-    delete f;
+    JSONFormatter f(true);
+    damage_table.dump(&f);
+    f.flush(*ds);
     return true;
   } else if (prefix == "damage rm") {
     damage_entry_id_t id = 0;
