@@ -27,3 +27,4 @@ check_schema FSMap fs_map.json
 check_schema MDSMap mds_map.json
 check_schema MgrMap mgr_map.json
 check_schema ServiceMap service_map.json
+check_schema CrushWrapper crush_map.json

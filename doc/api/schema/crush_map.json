@@ -1,0 +1,77 @@
+{
+    "additionalProperties": false,
+    "required": [
+        "devices",
+        "types",
+        "buckets",
+        "rules",
+        "tunables"
+    ],
+    "properties": {
+        "devices": {
+            "type": "array"
+        },
+        "types": {
+            "type": "array"
+        },
+        "buckets": {
+            "type": "array"
+        },
+        "rules": {
+            "type": "array"
+        },
+        "tunables": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "choose_local_tries",
+                "choose_local_fallback_tries",
+                "choose_total_tries",
+                "chooseleaf_descend_once",
+                "chooseleaf_vary_r",
+                "chooseleaf_stable",
+                "straw_calc_version",
+                "allowed_bucket_algs",
+                "profile",
+                "optimal_tunables",
+                "legacy_tunables",
+                "minimum_required_version",
+                "require_feature_tunables",
+                "require_feature_tunables2",
+                "has_v2_rules",
+                "require_feature_tunables3",
+                "has_v3_rules",
+                "has_v4_buckets",
+                "require_feature_tunables5",
+                "has_v5_rules"
+            ],
+            "properties": {
+                "choose_local_tries": { "type": "number" },
+                "choose_local_fallback_tries": { "type": "number" },
+                "choose_total_tries": { "type": "number" },
+                "chooseleaf_descend_once": { "type": "number" },
+                "chooseleaf_vary_r": { "type": "number" },
+                "chooseleaf_stable": { "type": "number" },
+                "straw_calc_version": { "type": "number" },
+                "allowed_bucket_algs": { "type": "number" },
+                "profile": { "type": "string" },
+                "optimal_tunables": { "type": "number" },
+                "legacy_tunables": { "type": "number" },
+                "minimum_required_version": { "type": "string" },
+                "require_feature_tunables": { "type": "number" },
+                "require_feature_tunables2": { "type": "number" },
+                "has_v2_rules": { "type": "number" },
+                "require_feature_tunables3": { "type": "number" },
+                "has_v3_rules": { "type": "number" },
+                "has_v4_buckets": { "type": "number" },
+                "require_feature_tunables5": { "type": "number" },
+                "has_v5_rules": { "type": "number" }
+            }
+        },
+        "choose_args": {
+            "type": "object",
+            "additionalProperties": false
+        }
+    }
+}
+

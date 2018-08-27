@@ -59,3 +59,9 @@ Service Map
 
 .. literalinclude:: schema/service_map.json
   :language: json
+
+CRUSH Map
+=========
+
+.. literalinclude:: schema/crush_map.json
+  :language: json
