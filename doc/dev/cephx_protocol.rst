@@ -108,11 +108,10 @@ handler into the right place in the map.  Then we hit specialized code to deal w
 cases.  The case here is when we still need to authenticate to A (the 
 ``if (need & CEPH_ENTITY_TYPE_AUTH)`` branch).
 
-We now create a message of type ``CEPH_AUTH_UNKNOWN``.  We need to authenticate 
-this message with C's secret key, so we fetch that from the local key repository.  (It's 
-called a key server in the code, but it's not really a separate machine or processing entity.
-It's more like the place where locally used keys are kept.)  We create a 
-random challenge, whose purpose is to prevent replays.  We encrypt that challenge.  We already 
+We now create a message of type ``CEPHX_GET_AUTH_SESSION_KEY``.  We need to authenticate
+this message with C's secret key, so we fetch that from the local key repository.  We create
+a random challenge, whose purpose is to prevent replays.  We encrypt that challenge using
+``cephx_calc_client_server_challenge()``.  We already
 have a server challenge (a similar set of random bytes, but created by the server and sent to
 the client) from our pre-cephx stage.  We take both challenges and our secret key and 
 produce a combined encrypted challenge value, which goes into ``req.key``.
@@ -124,14 +123,16 @@ challenges, gets put into the message.  Then we return from this function, and t
 message is sent.
 
 We now switch over to the authenticator side, A.  The server receives the message that was 
-sent, of type ``CEPH_AUTH_UNKNOWN``.  The message gets handled in ``prep_auth()``, 
+sent, of type ``CEPH_GET_AUTH_SESSION_KEY``.  The message gets handled in ``prep_auth()``,
 in ``mon/AuthMonitor.cc``, which calls ``handle_request()`` is ``CephxServiceHandler.cc`` to 
 do most of the work.  This routine, also, handles multiple cases.  
 
 The control flow is determined by the ``request_type`` in the ``cephx_header`` associated 
-with the message.  Our case here is ``CEPH_AUTH_UNKNOWN``.  We need the 
+with the message.  Our case here is ``CEPH_GET_AUTH_SESSION_KEY``.  We need the
 secret key A shares with C, so we call ``get_secret()`` from out local key repository to get 
-it.  We should have set up a server challenge already with this client, so we make sure 
+it. (It's called a ``key_server`` in the code, but it's not really a separate machine or
+processing entity. It's more like the place where locally used keys are kept.)  We should
+have set up a server challenge already with this client, so we make sure
 we really do have one.  (This variable is specific to a ``CephxServiceHandler``, so there 
 is a different one for each such structure we create, presumably one per client A is 
 dealing with.)  If there is no challenge, we'll need to start over, since we need to 
