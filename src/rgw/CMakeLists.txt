@@ -42,6 +42,7 @@ set(librgw_common_srcs
   services/svc_quota.cc
   services/svc_rados.cc
   services/svc_sys_obj.cc
+  services/svc_sys_obj_core.cc
   services/svc_zone.cc
   services/svc_zone_utils.cc
   rgw_service.cc
