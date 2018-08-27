@@ -201,6 +201,9 @@ public:
     utime_t interval;
     interval.set_from_double(secs);
     Mutex::Locker l{lock};
+    if (done) {
+      return rval;
+    }
     cond.WaitInterval(lock, interval);
     return done ? rval : ETIMEDOUT;
   }
