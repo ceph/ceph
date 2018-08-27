@@ -547,6 +547,11 @@ void ExclusiveLock<I>::send_reacquire_lock() {
   if (m_cookie == m_new_cookie) {
     ldout(cct, 10) << this << " " << __func__ << ": "
                    << "skipping reacquire since cookie still valid" << dendl;
+
+    m_lock.Unlock();
+    m_image_ctx.image_watcher->notify_acquired_lock();
+    m_lock.Lock();
+
     complete_active_action(STATE_LOCKED, 0);
     return;
   }

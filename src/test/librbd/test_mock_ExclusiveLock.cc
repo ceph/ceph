@@ -758,5 +758,36 @@ TEST_F(TestMockExclusiveLock, ReacquireLockError) {
   ASSERT_FALSE(is_lock_owner(mock_image_ctx, exclusive_lock));
 }
 
+TEST_F(TestMockExclusiveLock, ReacquireWithSameCookie) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  MockExclusiveLockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLock exclusive_lock(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  MockAcquireRequest request_lock_acquire;
+  expect_acquire_lock(mock_image_ctx, request_lock_acquire, 0);
+  ASSERT_EQ(0, when_request_lock(mock_image_ctx, exclusive_lock));
+  ASSERT_TRUE(is_lock_owner(mock_image_ctx, exclusive_lock));
+
+  C_SaferCond reacquire_ctx;
+  expect_get_watch_handle(mock_image_ctx);
+  expect_notify_acquired_lock(mock_image_ctx);
+  {
+    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    exclusive_lock.reacquire_lock(&reacquire_ctx);
+  }
+  ASSERT_EQ(0, reacquire_ctx.wait());
+  ASSERT_TRUE(is_lock_owner(mock_image_ctx, exclusive_lock));
+
+  MockReleaseRequest shutdown_release;
+  expect_release_lock(mock_image_ctx, shutdown_release, 0, true);
+  ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
+  ASSERT_FALSE(is_lock_owner(mock_image_ctx, exclusive_lock));
+}
+
 } // namespace librbd
 
