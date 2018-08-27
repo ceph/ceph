@@ -2,7 +2,6 @@
 
 #include "log/Log.h"
 #include "common/Clock.h"
-#include "common/PrebufferedStreambuf.h"
 #include "include/coredumpctl.h"
 #include "SubsystemMap.h"
 

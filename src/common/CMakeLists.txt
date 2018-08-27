@@ -7,7 +7,6 @@ add_library(common_texttable_obj OBJECT
 set(common_srcs
   AsyncOpTracker.cc
   BackTrace.cc
-  CachedPrebufferedStreambuf.cc
   ConfUtils.cc
   Cycles.cc
   DecayCounter.cc
@@ -21,7 +20,6 @@ set(common_srcs
   Mutex.cc
   OutputDataSocket.cc
   PluginRegistry.cc
-  PrebufferedStreambuf.cc
   PriorityCache.cc
   Readahead.cc
   RefCountedObj.cc

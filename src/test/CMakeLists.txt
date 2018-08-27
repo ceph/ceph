@@ -630,13 +630,6 @@ if(WITH_LIBRADOSSTRIPER)
   target_link_libraries(unittest_striper global ${BLKID_LIBRARIES})
 endif()
 
-# unittest_prebufferedstreambuf
-add_executable(unittest_prebufferedstreambuf
-  test_prebufferedstreambuf.cc
-  )
-add_ceph_unittest(unittest_prebufferedstreambuf)
-target_link_libraries(unittest_prebufferedstreambuf global)
-
 # unittest_str_list
 add_executable(unittest_str_list
   test_str_list.cc
