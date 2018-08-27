@@ -498,6 +498,7 @@ struct rgw_bucket_index_marker_info {
 
 
 class RGWRemoteBucketLog : public RGWCoroutinesManager {
+  const DoutPrefixProvider *dpp;
   RGWRados *store;
   RGWRESTConn *conn{nullptr};
   string source_zone;
@@ -513,9 +514,14 @@ class RGWRemoteBucketLog : public RGWCoroutinesManager {
   RGWBucketSyncCR *sync_cr{nullptr};
 
 public:
-  RGWRemoteBucketLog(RGWRados *_store, RGWBucketSyncStatusManager *_sm,
-                     RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
-                                       status_manager(_sm), async_rados(_async_rados), http_manager(_http_manager) {}
+  RGWRemoteBucketLog(const DoutPrefixProvider *dpp, RGWRados *_store,
+                     RGWBucketSyncStatusManager *_sm,
+                     RGWAsyncRadosProcessor *_async_rados,
+                     RGWHTTPManager *_http_manager)
+    : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
+      dpp(dpp), store(_store), status_manager(_sm),
+      async_rados(_async_rados), http_manager(_http_manager)
+  {}
 
   int init(const string& _source_zone, RGWRESTConn *_conn,
            const rgw_bucket& bucket, int shard_id,
@@ -531,7 +537,7 @@ public:
   void wakeup();
 };
 
-class RGWBucketSyncStatusManager {
+class RGWBucketSyncStatusManager : public DoutPrefixProvider {
   RGWRados *store;
 
   RGWCoroutinesManager cr_mgr;
@@ -576,6 +582,11 @@ public:
 
   int read_sync_status();
   int run();
+
+  // implements DoutPrefixProvider
+  CephContext *get_cct() const override { return store->ctx(); }
+  unsigned get_subsys() const override;
+  std::ostream& gen_prefix(std::ostream& out) const override;
 };
 
 /// read the sync status of all bucket shards from the given source zone
