@@ -1,0 +1,65 @@
+<cd-modal [modalRef]="bsModalRef">
+  <ng-container class="modal-title"
+                i18n>Clone user
+  </ng-container>
+  <ng-container class="modal-content">
+    <form class="form-horizontal"
+          #frm="ngForm"
+          [formGroup]="formGroup"
+          novalidate>
+      <div class="modal-body">
+        <!-- Username -->
+        <div class="form-group">
+          <label class="control-label col-sm-3"
+                 for="username"
+                 i18n>Username
+          </label>
+          <div class="col-sm-9">
+            <input id="username"
+                   class="form-control"
+                   type="text"
+                   [readonly]="true"
+                   formControlName="username">
+          </div>
+        </div>
+        <!-- New Username -->
+        <div class="form-group"
+             [ngClass]="{'has-error': formGroup.showError('new_username', frm)}">
+          <label class="control-label col-sm-3"
+                 for="new_username"
+                 i18n>New username
+            <span class="required"></span>
+          </label>
+          <div class="col-sm-9">
+            <input id="new_username"
+                   class="form-control"
+                   type="text"
+                   formControlName="new_username"
+                   autofocus>
+            <span class="help-block"
+                  *ngIf="formGroup.showError('new_username', frm, 'required')"
+                  i18n>
+              This field is required.
+            </span>
+            <span class="help-block"
+                  *ngIf="formGroup.showError('new_username', frm, 'usernameExists')"
+                  i18n>
+              The chosen username is already in use.
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <cd-submit-button (submitAction)="onSubmit()"
+                          [form]="formGroup"
+                          i18n>Clone
+        </cd-submit-button>
+        <button class="btn btn-sm btn-default"
+                type="button"
+                (click)="onCancel()"
+                i18n>Cancel
+        </button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

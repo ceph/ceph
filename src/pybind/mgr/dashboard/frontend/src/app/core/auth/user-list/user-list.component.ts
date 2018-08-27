@@ -11,6 +11,7 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { UserCloneModalComponent } from '../user-clone-modal/user-clone-modal.component';
 
 @Component({
   selector: 'cd-user-list',
@@ -76,6 +77,24 @@ export class UserListComponent implements OnInit {
     this.selection = selection;
   }
 
+  cloneUser() {
+    const username = this.selection.first().username;
+    const modalRef = this.modalService.show(UserCloneModalComponent);
+    modalRef.content.setValues(username);
+    modalRef.content.submitAction.subscribe((new_username: string) => {
+      this.userService.clone(username, new_username).subscribe(() => {
+        // Reload user list.
+        this.getUsers();
+        // Display notification.
+        this.notificationService.show(
+          NotificationType.success,
+          'Clone User',
+          `User "${username}" has been cloned as "${new_username}".`
+        );
+      });
+    });
+  }
+
   deleteUser(username: string) {
     this.userService.delete(username).subscribe(
       () => {
@@ -83,8 +102,8 @@ export class UserListComponent implements OnInit {
         this.modalRef.hide();
         this.notificationService.show(
           NotificationType.success,
-          `User "${username}" has been deleted.`,
-          'Delete User'
+          'Delete User',
+          `User "${username}" has been deleted.`
         );
       },
       () => {
@@ -99,8 +118,8 @@ export class UserListComponent implements OnInit {
     if (sessionUsername === username) {
       this.notificationService.show(
         NotificationType.error,
-        `You are currently authenticated with user "${username}".`,
-        'Cannot Delete User'
+        'Cannot Delete User',
+        `You are currently logged in as "${username}".`
       );
       return;
     }

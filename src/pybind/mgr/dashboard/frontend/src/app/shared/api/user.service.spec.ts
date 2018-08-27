@@ -1,6 +1,8 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
+import { of as observableOf } from 'rxjs';
+
 import { configureTestBed } from '../../../testing/unit-test-helper';
 import { UserFormModel } from '../../core/auth/user-form/user-form.model';
 import { UserService } from './user.service';
@@ -40,6 +42,12 @@ describe('UserService', () => {
     expect(req.request.body).toEqual(user);
   });
 
+  it('should call clone', () => {
+    service.clone('user0', 'user1').subscribe();
+    const req = httpTesting.expectOne('api/user/user0/clone?new_username=user1');
+    expect(req.request.method).toBe('POST');
+  });
+
   it('should call delete', () => {
     service.delete('user0').subscribe();
     const req = httpTesting.expectOne('api/user/user0');
@@ -69,5 +77,27 @@ describe('UserService', () => {
     service.list().subscribe();
     const req = httpTesting.expectOne('api/user');
     expect(req.request.method).toBe('GET');
+  });
+
+  it('should call exists with an existent user', () => {
+    spyOn(service, 'list').and.returnValue(
+      observableOf([{ username: 'foo' }, { username: 'bar' }])
+    );
+    let result = null;
+    service.exists('foo').subscribe((res) => {
+      result = res;
+    });
+    expect(result).toBe(true);
+  });
+
+  it('should call exists with a non existent user', () => {
+    spyOn(service, 'list').and.returnValue(
+      observableOf([{ username: 'foo' }, { username: 'bar' }])
+    );
+    let result = null;
+    service.exists('baz').subscribe((res) => {
+      result = res;
+    });
+    expect(result).toBe(false);
   });
 });
