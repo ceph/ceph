@@ -185,6 +185,9 @@
       padding-bottom: 5px;
     }
     .datatable-body-row {
+      .label {
+        font-size: 0.9em;
+      }
       &.clickable:hover .datatable-row-group {
         background-color: $color-table-hover-row;
         transition-property: background;

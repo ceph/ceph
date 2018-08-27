@@ -17,9 +17,10 @@
     </cd-table-performance-counter>
   </tab>
   <tab heading="Histogram">
-    <h3 *ngIf="osd.loaded && osd.histogram_failed">
-      Histogram not available -> <span class="text-warning">{{ osd.histogram_failed }}</span>
-    </h3>
+    <cd-warning-panel i18n *ngIf="osd.loaded && osd.histogram_failed">
+      Histogram not available: {{ osd.histogram_failed }}
+    </cd-warning-panel>
+
     <div class="row" *ngIf="osd.loaded && osd.details.histogram">
       <div class="col-md-6">
         <h4>Writes</h4>

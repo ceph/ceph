@@ -55,7 +55,21 @@ class Osd(RESTController):
 
     @handle_send_command_error('osd')
     def get(self, svc_id):
-        histogram = CephService.send_command('osd', srv_spec=svc_id, prefix='perf histogram dump')
+        """
+        Returns collected data about an OSD.
+
+        :return: Returns the requested data. The `histogram` key man contain a
+                 string with an error that occurred when the OSD is down.
+        """
+        try:
+            histogram = CephService.send_command('osd', srv_spec=svc_id,
+                                                 prefix='perf histogram dump')
+        except SendCommandError as e:
+            if 'osd down' in e.message:
+                histogram = e.message
+            else:
+                raise
+
         return {
             'osd_map': self.get_osd_map()[svc_id],
             'osd_metadata': mgr.get_metadata('osd', svc_id),
