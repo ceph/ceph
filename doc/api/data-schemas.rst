@@ -47,3 +47,9 @@ MDS Map
 
 .. literalinclude:: schema/mds_map.json
   :language: json
+
+Manager Map
+===========
+
+.. literalinclude:: schema/mgr_map.json
+  :language: json
