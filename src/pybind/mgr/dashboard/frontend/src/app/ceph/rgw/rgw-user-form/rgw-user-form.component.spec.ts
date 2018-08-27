@@ -1,10 +1,10 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsModalService } from 'ngx-bootstrap/modal';
-import { of as observableOf } from 'rxjs';
+import { Observable, of as observableOf } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
@@ -123,41 +123,49 @@ describe('RgwUserFormComponent', () => {
     it('should validate user id (1/3)', () => {
       const validatorFn = component.userIdValidator();
       const ctrl = new FormControl('');
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
+      const validator$ = validatorFn(ctrl);
+      expect(validator$ instanceof Observable).toBeTruthy();
+      if (validator$ instanceof Observable) {
+        validator$.subscribe((resp) => {
           expect(resp).toBe(null);
         });
       }
     });
 
-    it('should validate user id (2/3)', () => {
-      const validatorFn = component.userIdValidator();
-      const ctrl = new FormControl('ab');
-      ctrl.markAsDirty();
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          expect(resp).toBe(null);
-        });
-      }
-    });
+    it(
+      'should validate user id (2/3)',
+      fakeAsync(() => {
+        const validatorFn = component.userIdValidator(0);
+        const ctrl = new FormControl('ab');
+        ctrl.markAsDirty();
+        const validator$ = validatorFn(ctrl);
+        expect(validator$ instanceof Observable).toBeTruthy();
+        if (validator$ instanceof Observable) {
+          validator$.subscribe((resp) => {
+            expect(resp).toBe(null);
+          });
+          tick();
+        }
+      })
+    );
 
-    it('should validate user id (3/3)', () => {
-      queryResult = ['abc'];
-      const validatorFn = component.userIdValidator();
-      const ctrl = new FormControl('abc');
-      ctrl.markAsDirty();
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          expect(resp instanceof Object).toBeTruthy();
-          expect(resp.userIdExists).toBeTruthy();
-        });
-      }
-    });
+    it(
+      'should validate user id (3/3)',
+      fakeAsync(() => {
+        queryResult = ['abc'];
+        const validatorFn = component.userIdValidator(0);
+        const ctrl = new FormControl('abc');
+        ctrl.markAsDirty();
+        const validator$ = validatorFn(ctrl);
+        expect(validator$ instanceof Observable).toBeTruthy();
+        if (validator$ instanceof Observable) {
+          validator$.subscribe((resp) => {
+            expect(resp instanceof Object).toBeTruthy();
+            expect(resp.userIdExists).toBeTruthy();
+          });
+          tick();
+        }
+      })
+    );
   });
 });
