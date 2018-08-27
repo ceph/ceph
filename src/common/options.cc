@@ -4710,7 +4710,7 @@ std::vector<Option> get_rgw_options() {
     .set_description("Should S3 authentication use Keystone."),
 
     Option("rgw_s3_auth_order", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-     .set_default("external, local, sts")
+     .set_default("sts, external, local")
      .set_description("Authentication strategy order to use for s3 authentication")
      .set_long_description(
 	  "Order of authentication strategies to try for s3 authentication, the allowed "

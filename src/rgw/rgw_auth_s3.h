@@ -228,6 +228,12 @@ public:
 
     auto auth_order = parse_auth_order(cct);
     engine_map_t engine_map;
+
+    /* STS Auth*/
+    if (! sts_engine.is_empty()) {
+      engine_map.insert(std::make_pair("sts", std::cref(sts_engine)));
+    }
+
     /* The external auth. */
     if (! external_engines.is_empty()) {
       engine_map.insert(std::make_pair("external", std::cref(external_engines)));
@@ -235,11 +241,6 @@ public:
     /* The local auth. */
     if (cct->_conf->rgw_s3_auth_use_rados) {
       engine_map.insert(std::make_pair("local", std::cref(local_engine)));
-    }
-
-    /* STS Auth*/
-    if (! sts_engine.is_empty()) {
-      engine_map.insert(std::make_pair("sts", std::cref(sts_engine)));
     }
 
     add_engines(auth_order, engine_map);

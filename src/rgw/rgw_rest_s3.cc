@@ -4141,12 +4141,6 @@ rgw::auth::s3::LDAPEngine::authenticate(
   const completer_factory_t& completer_factory,
   const req_state* const s) const
 {
-  //If LDAP is enabled and the request has a session token, then LDAP shouldn't authenticate it.
-  if (s->info.args.exists("X-Amz-Security-Token") ||
-      s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
-    return result_t::deny();
-  }
-
   /* boost filters and/or string_ref may throw on invalid input */
   rgw::RGWToken base64_token;
   try {
@@ -4192,12 +4186,6 @@ rgw::auth::s3::LocalEngine::authenticate(
   const completer_factory_t& completer_factory,
   const req_state* const s) const
 {
-  //If LocalAuth is enabled and the request has a session token, then LocalEngine shouldn't authenticate it.
-  if (s->info.args.exists("X-Amz-Security-Token") ||
-      s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
-    return result_t::deny();
-  }
-
   /* get the user info */
   RGWUserInfo user_info;
   /* TODO(rzarzynski): we need to have string-view taking variant. */
@@ -4306,6 +4294,11 @@ rgw::auth::s3::STSEngine::authenticate(
   const completer_factory_t& completer_factory,
   const req_state* const s) const
 {
+  if (! s->info.args.exists("X-Amz-Security-Token") &&
+      ! s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
+    return result_t::deny();
+  }
+
   STS::SessionToken token;
   if (int ret = get_session_token(session_token, token); ret < 0) {
     return result_t::deny(ret);
