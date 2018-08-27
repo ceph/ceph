@@ -29,6 +29,7 @@
 #include "SnapClient.h"
 #include "SnapServer.h"
 #include "MDBalancer.h"
+#include "Migrator.h"
 #include "Locker.h"
 #include "Server.h"
 #include "InoTable.h"
