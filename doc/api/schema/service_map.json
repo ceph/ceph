@@ -1,0 +1,57 @@
+{
+    "definitions": {
+        "service": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "daemons"
+            ],
+            "properties": {
+                "daemons": {
+                    "type": "object",
+                    "required": [
+                        "summary"
+                    ],
+                    "properties": {
+                        "summary": { "type": "string" }
+                    },
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                            "start_epoch",
+                            "start_stamp",
+                            "gid",
+                            "addr",
+                            "metadata"
+                        ],
+                        "properties": {
+                            "start_epoch": { "type": "number" },
+                            "start_stamp": { "$ref": "base.json#/definitions/datetime" },
+                            "gid": { "type": "number" },
+                            "addr": { "$ref": "base.json#/definitions/netaddr" },
+                            "metadata": {
+                                "type": "object",
+                                "additionalProperties": { "type": "string" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "additionalProperties": false,
+    "required": [
+        "epoch",
+        "modified",
+        "services"
+    ],
+    "properties": {
+        "epoch": { "type": "number" },
+        "modified": { "$ref": "base.json#/definitions/datetime" },
+        "services": {
+            "type": "object",
+            "additionalProperties": { "$ref": "service_map.json#/definitions/service" }
+        }
+    }
+}

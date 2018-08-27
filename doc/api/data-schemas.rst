@@ -53,3 +53,9 @@ Manager Map
 
 .. literalinclude:: schema/mgr_map.json
   :language: json
+
+Service Map
+===========
+
+.. literalinclude:: schema/service_map.json
+  :language: json
