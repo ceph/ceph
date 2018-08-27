@@ -41,6 +41,6 @@ On a Debian or Ubuntu system, you may also::
 
 	ceph-deploy purge {hostname [hostname] ...}
 
-The tool will unininstall ``ceph`` packages from the specified hosts.  Purge
+The tool will uninstall ``ceph`` packages from the specified hosts.  Purge
 additionally removes configuration files.
 
