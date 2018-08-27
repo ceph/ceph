@@ -12350,6 +12350,13 @@ void MDCache::enqueue_scrub(
 
   mdr->internal_op_finish = cs;
   enqueue_scrub_work(mdr);
+
+  // since recursive scrub is asynchronous, dump minimal output
+  // to not upset cli tools.
+  if (recursive) {
+    f->open_object_section("results");
+    f->close_section(); // results
+  }
 }
 
 void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
