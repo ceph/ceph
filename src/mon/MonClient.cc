@@ -81,7 +81,7 @@ int MonClient::get_monmap()
   ldout(cct, 10) << __func__ << dendl;
   Mutex::Locker l(monc_lock);
   
-  _sub_want("monmap", 0, 0);
+  sub.want("monmap", 0, 0);
   if (!_opened())
     _reopen_session();
 
@@ -358,7 +358,7 @@ void MonClient::handle_monmap(MMonMap *m)
   monmap.print(*_dout);
   *_dout << dendl;
 
-  _sub_got("monmap", monmap.get_epoch());
+  sub.got("monmap", monmap.get_epoch());
 
   if (!monmap.get_addr_name(peer, cur_mon)) {
     ldout(cct, 10) << "mon." << cur_mon << " went away" << dendl;
@@ -484,8 +484,8 @@ int MonClient::authenticate(double timeout)
     ldout(cct, 5) << "already authenticated" << dendl;
     return 0;
   }
-  _sub_want("monmap", monmap.get_epoch() ? monmap.get_epoch() + 1 : 0, 0);
-  _sub_want("config", 0, 0);
+  sub.want("monmap", monmap.get_epoch() ? monmap.get_epoch() + 1 : 0, 0);
+  sub.want("config", 0, 0);
   if (!_opened())
     _reopen_session();
 
@@ -652,14 +652,9 @@ void MonClient::_reopen_session(int rank)
     c.second.start(monmap.get_epoch(), entity_name, *auth_supported);
   }
 
-  for (map<string,ceph_mon_subscribe_item>::iterator p = sub_sent.begin();
-       p != sub_sent.end();
-       ++p) {
-    if (sub_new.count(p->first) == 0)
-      sub_new[p->first] = p->second;
-  }
-  if (!sub_new.empty())
+  if (sub.reload()) {
     _renew_subs();
+  }
 }
 
 MonConnection& MonClient::_add_conn(unsigned rank, uint64_t global_id)
@@ -788,12 +783,12 @@ void MonClient::tick()
     utime_t now = ceph_clock_now();
     auto cur_con = active_con->get_con();
     if (!cur_con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB)) {
-      ldout(cct, 10) << "renew subs? (now: " << now
-		     << "; renew after: " << sub_renew_after << ") -- "
-		     << (now > sub_renew_after ? "yes" : "no")
+      const bool maybe_renew = sub.need_renew();
+      ldout(cct, 10) << "renew subs? -- " << (maybe_renew ? "yes" : "no")
 		     << dendl;
-      if (now > sub_renew_after)
+      if (maybe_renew) {
 	_renew_subs();
+      }
     }
 
     cur_con->send_keepalive();
@@ -842,7 +837,7 @@ void MonClient::schedule_tick()
 void MonClient::_renew_subs()
 {
   assert(monc_lock.is_locked());
-  if (sub_new.empty()) {
+  if (!sub.have_new()) {
     ldout(cct, 10) << __func__ << " - empty" << dendl;
     return;
   }
@@ -851,33 +846,16 @@ void MonClient::_renew_subs()
   if (!_opened())
     _reopen_session();
   else {
-    if (sub_renew_sent == utime_t())
-      sub_renew_sent = ceph_clock_now();
-
     MMonSubscribe *m = new MMonSubscribe;
-    m->what = sub_new;
+    m->what = sub.get_subs();
     _send_mon_message(m);
-
-    // update sub_sent with sub_new
-    sub_new.insert(sub_sent.begin(), sub_sent.end());
-    std::swap(sub_new, sub_sent);
-    sub_new.clear();
+    sub.renewed();
   }
 }
 
 void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 {
-  if (sub_renew_sent != utime_t()) {
-    // NOTE: this is only needed for legacy (infernalis or older)
-    // mons; see tick().
-    sub_renew_after = sub_renew_sent;
-    sub_renew_after += m->interval / 2.0;
-    ldout(cct, 10) << __func__ << " sent " << sub_renew_sent << " renew after " << sub_renew_after << dendl;
-    sub_renew_sent = utime_t();
-  } else {
-    ldout(cct, 10) << __func__ << " sent " << sub_renew_sent << ", ignoring" << dendl;
-  }
-
+  sub.acked(m->interval);
   m->put();
 }
 

@@ -19,6 +19,7 @@
 #include "msg/Messenger.h"
 
 #include "MonMap.h"
+#include "MonSub.h"
 
 #include "common/Timer.h"
 #include "common/Finisher.h"
@@ -245,54 +246,11 @@ public:
    */
   void flush_log();
 
-  // mon subscriptions
 private:
-  map<string,ceph_mon_subscribe_item> sub_sent; // my subs, and current versions
-  map<string,ceph_mon_subscribe_item> sub_new;  // unsent new subs
-  utime_t sub_renew_sent, sub_renew_after;
-
+  // mon subscriptions
+  MonSub sub;
   void _renew_subs();
   void handle_subscribe_ack(MMonSubscribeAck* m);
-
-  bool _sub_want(const string &what, version_t start, unsigned flags) {
-    auto sub = sub_new.find(what);
-    if (sub != sub_new.end() &&
-        sub->second.start == start &&
-        sub->second.flags == flags) {
-      return false;
-    } else {
-      sub = sub_sent.find(what);
-      if (sub != sub_sent.end() &&
-	  sub->second.start == start &&
-	  sub->second.flags == flags)
-	return false;
-    }
-
-    sub_new[what].start = start;
-    sub_new[what].flags = flags;
-    return true;
-  }
-  void _sub_got(const string &what, version_t got) {
-    if (sub_new.count(what)) {
-      if (sub_new[what].start <= got) {
-	if (sub_new[what].flags & CEPH_SUBSCRIBE_ONETIME)
-	  sub_new.erase(what);
-	else
-	  sub_new[what].start = got + 1;
-      }
-    } else if (sub_sent.count(what)) {
-      if (sub_sent[what].start <= got) {
-	if (sub_sent[what].flags & CEPH_SUBSCRIBE_ONETIME)
-	  sub_sent.erase(what);
-	else
-	  sub_sent[what].start = got + 1;
-      }
-    }
-  }
-  void _sub_unwant(const string &what) {
-    sub_sent.erase(what);
-    sub_new.erase(what);
-  }
 
 public:
   void renew_subs() {
@@ -301,39 +259,19 @@ public:
   }
   bool sub_want(string what, version_t start, unsigned flags) {
     Mutex::Locker l(monc_lock);
-    return _sub_want(what, start, flags);
+    return sub.want(what, start, flags);
   }
   void sub_got(string what, version_t have) {
     Mutex::Locker l(monc_lock);
-    _sub_got(what, have);
+    sub.got(what, have);
   }
   void sub_unwant(string what) {
     Mutex::Locker l(monc_lock);
-    _sub_unwant(what);
+    sub.unwant(what);
   }
-  /**
-   * Increase the requested subscription start point. If you do increase
-   * the value, apply the passed-in flags as well; otherwise do nothing.
-   */
   bool sub_want_increment(string what, version_t start, unsigned flags) {
     Mutex::Locker l(monc_lock);
-    map<string,ceph_mon_subscribe_item>::iterator i = sub_new.find(what);
-    if (i != sub_new.end()) {
-      if (i->second.start >= start)
-	return false;
-      i->second.start = start;
-      i->second.flags = flags;
-      return true;
-    }
-
-    i = sub_sent.find(what);
-    if (i == sub_sent.end() || i->second.start < start) {
-      ceph_mon_subscribe_item& item = sub_new[what];
-      item.start = start;
-      item.flags = flags;
-      return true;
-    }
-    return false;
+    return sub.inc_want(what, start, flags);
   }
   
   std::unique_ptr<KeyRing> keyring;

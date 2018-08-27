@@ -318,6 +318,7 @@ set(libcommon_files
   mon/MonCap.cc
   mon/MonClient.cc
   mon/MonMap.cc
+  mon/MonSub.cc
   mgr/MgrClient.cc
   mgr/ServiceMap.cc
   osd/ECMsgTypes.cc
