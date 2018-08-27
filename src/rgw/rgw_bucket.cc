@@ -864,6 +864,9 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
     set_err_msg(err_msg, "specified bucket id does not match");
     return -EINVAL;
   }
+  rgw_bucket old_bucket = bucket;
+  bucket.tenant = tenant;
+
 
   const rgw_pool& root_pool = store->svc.zone->get_zone_params().domain_root;
   std::string bucket_entry;
@@ -872,42 +875,51 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
   RGWObjVersionTracker objv_tracker;
 
   map<string, bufferlist>::iterator aiter = attrs.find(RGW_ATTR_ACL);
-  if (aiter != attrs.end()) {
-    bufferlist aclbl = aiter->second;
-    RGWAccessControlPolicy policy;
-    ACLOwner owner;
-    try {
-     auto iter = aclbl.cbegin();
-     decode(policy, iter);
-     owner = policy.get_owner();
-    } catch (buffer::error& err) {
-      set_err_msg(err_msg, "couldn't decode policy");
-      return -EIO;
-    }
+  if (aiter == attrs.end()) {
+    // XXX why isn't this an error?  mdw 20180825
+    ldout(store->ctx(), 0) << "WARNING: bucket link will do nothing because no acl on bucket=" << bucket_name << dendl;
+    return 0;
+  }
+  bufferlist aclbl = aiter->second;
+  RGWAccessControlPolicy policy;
+  ACLOwner owner;
+  try {
+   auto iter = aclbl.cbegin();
+   decode(policy, iter);
+   owner = policy.get_owner();
+  } catch (buffer::error& err) {
+    set_err_msg(err_msg, "couldn't decode policy");
+    return -EIO;
+  }
 
-    int r = rgw_unlink_bucket(store, owner.get_id(), bucket.tenant, bucket.name, false);
-    if (r < 0) {
-      set_err_msg(err_msg, "could not unlink policy from user " + owner.get_id().to_str());
-      return r;
-    }
+  int r = rgw_unlink_bucket(store, owner.get_id(),
+	old_bucket.tenant, old_bucket.name, false);
+  if (r < 0) {
+    set_err_msg(err_msg, "could not unlink policy from user " + owner.get_id().to_str());
+    return r;
+  }
 
-    // now update the user for the bucket...
-    if (display_name.empty()) {
-      ldout(store->ctx(), 0) << "WARNING: user " << user_info.user_id << " has no display name set" << dendl;
-    }
-    policy.create_default(user_info.user_id, display_name);
+  // now update the user for the bucket...
+  if (display_name.empty()) {
+    ldout(store->ctx(), 0) << "WARNING: user " << user_info.user_id << " has no display name set" << dendl;
+  }
 
-    owner = policy.get_owner();
+  RGWAccessControlPolicy policy_instance;
+  policy_instance.create_default(user_info.user_id, display_name);
+  owner = policy_instance.get_owner();
+
+  aclbl.clear();
+  policy_instance.encode(aclbl);
+
+  if (bucket == old_bucket) {
     r = store->set_bucket_owner(bucket_info.bucket, owner);
     if (r < 0) {
       set_err_msg(err_msg, "failed to set bucket owner: " + cpp_strerror(-r));
       return r;
     }
 
-    // ...and encode the acl
-    aclbl.clear();
-    policy.encode(aclbl);
-
+    rgw_raw_obj obj_bucket_instance;
+    store->get_bucket_instance_obj(bucket, obj_bucket_instance);
     auto sysobj = obj_ctx.get_obj(obj);
     r = sysobj.wop()
               .set_objv_tracker(&objv_tracker)
@@ -916,43 +928,39 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
       set_err_msg(err_msg, "failed to set new acl");
       return r;
     }
-
-    RGWAccessControlPolicy policy_instance;
-    policy_instance.create_default(user_info.user_id, display_name);
-    aclbl.clear();
-    policy_instance.encode(aclbl);
-
-    rgw_raw_obj obj_bucket_instance;
-    store->get_bucket_instance_obj(bucket, obj_bucket_instance);
-    auto inst_sysobj = obj_ctx.get_obj(obj_bucket_instance);
-    r = inst_sysobj.wop()
-                   .set_objv_tracker(&objv_tracker)
-                   .write_attr(RGW_ATTR_ACL, aclbl, null_yield);
+  } else {
+    attrs[RGW_ATTR_ACL] = aclbl;
+    bucket_info.bucket.tenant = tenant;
+    bucket_info.owner = user_info.user_id;
+    r = store->put_bucket_instance_info(bucket_info, false, real_time(), &attrs);
     if (r < 0) {
-      set_err_msg(err_msg, "failed to set bucket policy");
+      set_err_msg(err_msg, "ERROR: failed writing bucket instance info: " + cpp_strerror(-r));
       return r;
     }
+  }
 
-    RGWBucketEntryPoint ep;
-    ep.bucket = bucket_info.bucket;
-    ep.owner = user_info.user_id;
-    ep.creation_time = bucket_info.creation_time;
-    ep.linked = true;
-    map<string, bufferlist> ep_attrs;
-    // XXX I am not convinced this is at all necessary; but previous
-    //	versions would have found and copied VERSION_ATTR so I will
-    //	do likewise for now...  mdw 20180825
-    auto version_iter = attrs.find(VERSION_ATTR);
-    if (version_iter != attrs.end())
-      ep_attrs[VERSION_ATTR] = version_iter->second;
-    rgw_ep_info ep_data{ep, ep_attrs};
+  RGWBucketEntryPoint ep;
+  ep.bucket = bucket_info.bucket;
+  ep.owner = user_info.user_id;
+  ep.creation_time = bucket_info.creation_time;
+  ep.linked = true;
+  map<string, bufferlist> ep_attrs;
+  // XXX I am not convinced this is at all necessary; but previous
+  //	versions would have found and copied VERSION_ATTR so I will
+  //	do likewise for now...  mdw 20180825
+  auto version_iter = attrs.find(VERSION_ATTR);
+  if (version_iter != attrs.end())
+    ep_attrs[VERSION_ATTR] = version_iter->second;
+  rgw_ep_info ep_data{ep, ep_attrs};
 
-    r = rgw_link_bucket(store, user_info.user_id, bucket_info.bucket,
-                        ceph::real_time(), true, &ep_data);
-    if (r < 0) {
-      set_err_msg(err_msg, "failed to relink bucket");
-      return r;
-    }
+  r = rgw_link_bucket(store, user_info.user_id, bucket_info.bucket,
+		      ceph::real_time(), true, &ep_data);
+  if (r < 0) {
+    set_err_msg(err_msg, "failed to relink bucket");
+    return r;
+  }
+  if (bucket != old_bucket) {
+	// howto remove old bucket ?
   }
 
   return 0;
