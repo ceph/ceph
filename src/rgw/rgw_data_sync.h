@@ -269,6 +269,7 @@ struct RGWDataSyncEnv {
 };
 
 class RGWRemoteDataLog : public RGWCoroutinesManager {
+  const DoutPrefixProvider *dpp;
   RGWRados *store;
   RGWAsyncRadosProcessor *async_rados;
   rgw::BucketChangeObserver *observer;
@@ -284,10 +285,11 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
   bool initialized;
 
 public:
-  RGWRemoteDataLog(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
+  RGWRemoteDataLog(const DoutPrefixProvider *dpp, RGWRados *_store,
+                   RGWAsyncRadosProcessor *async_rados,
                    rgw::BucketChangeObserver *observer)
     : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
-      store(_store), async_rados(async_rados), observer(observer),
+      dpp(dpp), store(_store), async_rados(async_rados), observer(observer),
       http_manager(store->ctx(), completion_mgr),
       lock("RGWRemoteDataLog::lock"), data_sync_cr(NULL),
       initialized(false) {}
@@ -307,7 +309,7 @@ public:
   void wakeup(int shard_id, set<string>& keys);
 };
 
-class RGWDataSyncStatusManager {
+class RGWDataSyncStatusManager : public DoutPrefixProvider {
   RGWRados *store;
   rgw_rados_ref ref;
 
@@ -331,13 +333,13 @@ public:
                            rgw::BucketChangeObserver *observer = nullptr)
     : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
       sync_module(nullptr),
-      source_log(store, async_rados, observer), num_shards(0) {}
+      source_log(this, store, async_rados, observer), num_shards(0) {}
   RGWDataSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
                            const string& _source_zone, const RGWSyncModuleInstanceRef& _sync_module,
                            rgw::BucketChangeObserver *observer = nullptr)
     : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
       sync_module(_sync_module),
-      source_log(store, async_rados, observer), num_shards(0) {}
+      source_log(this, store, async_rados, observer), num_shards(0) {}
   ~RGWDataSyncStatusManager() {
     finalize();
   }
@@ -376,6 +378,11 @@ public:
   void stop() {
     source_log.finish();
   }
+
+  // implements DoutPrefixProvider
+  CephContext *get_cct() const override { return store->ctx(); }
+  unsigned get_subsys() const override;
+  std::ostream& gen_prefix(std::ostream& out) const override;
 };
 
 class RGWBucketSyncStatusManager;
