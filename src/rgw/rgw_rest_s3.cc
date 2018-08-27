@@ -1436,7 +1436,7 @@ void RGWPutObj_ObjStore_S3::send_response()
       if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", &tmp) > 0) {
         s->formatter->dump_string("LastModified", buf);
       }
-      dump_etag(s, etag);
+      s->formatter->dump_string("ETag", etag);
       s->formatter->close_section();
       rgw_flush_formatter_and_reset(s, s->formatter);
       return;
