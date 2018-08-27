@@ -5875,7 +5875,7 @@ std::vector<Option> get_rgw_options() {
         "to consider it to be too slow and abort. Set it zero to disable this."),
 
     Option("rgw_curl_low_speed_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(30)
+    .set_default(300)
     .set_long_description(
         "It contains the time in number seconds that the transfer speed should be below "
         "the rgw_curl_low_speed_limit for the library to consider it too slow and abort. "
