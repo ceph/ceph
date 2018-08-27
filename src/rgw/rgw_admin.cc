@@ -58,6 +58,16 @@
 
 static RGWRados *store = NULL;
 
+static const DoutPrefixProvider* dpp() {
+  struct GlobalPrefix : public DoutPrefixProvider {
+    CephContext *get_cct() const override { return store->ctx(); }
+    unsigned get_subsys() const override { return dout_subsys; }
+    std::ostream& gen_prefix(std::ostream& out) const override { return out; }
+  };
+  static GlobalPrefix global_dpp;
+  return &global_dpp;
+}
+
 void usage()
 {
   cout << "usage: radosgw-admin <cmd> [options...]" << std::endl;
