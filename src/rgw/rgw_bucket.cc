@@ -873,6 +873,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
   rgw_make_bucket_entry_name(tenant, bucket_name, bucket_entry);
   rgw_raw_obj obj(root_pool, bucket_entry);
   RGWObjVersionTracker objv_tracker;
+  RGWObjVersionTracker old_version = bucket_info.objv_tracker;
 
   map<string, bufferlist>::iterator aiter = attrs.find(RGW_ATTR_ACL);
   if (aiter == attrs.end()) {
@@ -932,7 +933,8 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
     attrs[RGW_ATTR_ACL] = aclbl;
     bucket_info.bucket.tenant = tenant;
     bucket_info.owner = user_info.user_id;
-    r = store->put_bucket_instance_info(bucket_info, false, real_time(), &attrs);
+    bucket_info.objv_tracker.version_for_read()->ver = 0;
+    r = store->put_bucket_instance_info(bucket_info, true, real_time(), &attrs);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing bucket instance info: " + cpp_strerror(-r));
       return r;
@@ -960,7 +962,21 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
     return r;
   }
   if (bucket != old_bucket) {
-	// howto remove old bucket ?
+    RGWObjVersionTracker ep_version;
+    *ep_version.version_for_read() = bucket_info.ep_objv;
+    // like RGWRados::delete_bucket -- excepting no bucket_index work.
+    r = rgw_bucket_delete_bucket_obj(store, old_bucket.tenant, old_bucket.name, ep_version);
+    if (r < 0) {
+      set_err_msg(err_msg, "failed to unlink old bucket endpoint");
+      return r;
+    }
+    string entry = old_bucket.get_key();
+    r = rgw_bucket_instance_remove_entry(store, entry, &old_version);
+    if (r < 0) {
+      set_err_msg(err_msg, "failed to unlink old bucket info");
+      return r;
+    }
+
   }
 
   return 0;
