@@ -16,6 +16,14 @@ validated for each version of Ceph, which means that this documentation can be
 relied upon for surfacing changes to data source schemas that may affect users
 and applications that consume these data sources.
 
+Base Schema
+===========
+
+Common definitions used in other schemas.
+
+.. literalinclude:: schema/base.json
+  :language: json
+
 Monitor Map
 ===========
 

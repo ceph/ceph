@@ -1,27 +1,5 @@
 {
     "definitions": {
-        "datetime": {
-            "oneOf": [{
-                "type": "string",
-                "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}.\\d{6}$"
-            }, {
-                "type": "string",
-                "pattern": "^\\d{1,}.\\d{6}$"
-            }]
-        },
-        "netaddr": {
-            "oneOf": [{
-                "type": "string",
-                "pattern": "^\\d{1,3}.\\d{1,3}.\\d{1,3}.\\d{1,3}:\\d{1,5}/\\d{1,10}$"
-            }, {
-                "type": "string",
-                "pattern": "^-$"
-            }]
-        },
-        "uuid": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-        },
         "erasure_code_profile": {
             "type": "object",
             "minProperties": 1,
@@ -62,9 +40,9 @@
     ],
     "properties": {
         "epoch": { "type": "number" },
-        "fsid": { "$ref": "#/definitions/uuid" },
-        "created": { "$ref": "#/definitions/datetime" },
-        "modified": { "$ref": "#/definitions/datetime" },
+        "fsid": { "$ref": "base.json#/definitions/uuid" },
+        "created": { "$ref": "base.json#/definitions/datetime" },
+        "modified": { "$ref": "base.json#/definitions/datetime" },
         "flags": { "type": "string" },
         "flags_num": { "type": "number" },
         "flags_set": { "type": "array" },
@@ -88,16 +66,16 @@
         "blacklist": {
             "patternProperties": {
                 "^\\d{1,3}.\\d{1,3}.\\d{1,3}.\\d{1,3}:\\d{1,5}/\\d{1,10}$": {
-                    "$ref": "#/definitions/datetime"
+                    "$ref": "base.json#/definitions/datetime"
                 },
-                "^-$": { "$ref": "#/definitions/datetime" }
+                "^-$": { "$ref": "base.json#/definitions/datetime" }
             },
             "additionalProperties": false
         },
         "erasure_code_profiles": {
             "type": "object",
             "additionalProperties": {
-                "$ref": "#/definitions/erasure_code_profile"
+                "$ref": "osd_map.json#/definitions/erasure_code_profile"
             }
         },
         "removed_snaps_queue": { "type": "array" },

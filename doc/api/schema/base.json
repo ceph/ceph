@@ -1,0 +1,58 @@
+{
+    "definitions": {
+        "datetime": {
+            "oneOf": [{
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}.\\d{6}$"
+            }, {
+                "type": "string",
+                "pattern": "^\\d{1,}.\\d{6}$"
+            }]
+        },
+        "netaddr": {
+            "oneOf": [{
+                "type": "string",
+                "pattern": "^\\d{1,3}.\\d{1,3}.\\d{1,3}.\\d{1,3}:\\d{1,5}/\\d{1,10}$"
+            }, {
+                "type": "string",
+                "pattern": "^-$"
+            }]
+        },
+        "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "compatset": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "compat",
+                "ro_compat",
+                "incompat"
+            ],
+            "properties": {
+                "compat": {
+                    "type": "object",
+                    "patternProperties": {
+                        "feature_\\d{1,}": { "type": "string" }
+                    },
+                    "additionalProperties": false
+                },
+                "ro_compat": {
+                    "type": "object",
+                    "patternProperties": {
+                        "feature_\\d{1,}": { "type": "string" }
+                    },
+                    "additionalProperties": false
+                },
+                "incompat": {
+                    "type": "object",
+                    "patternProperties": {
+                        "feature_\\d{1,}": { "type": "string" }
+                    },
+                    "additionalProperties": false
+                }
+            }
+        }
+    }
+}

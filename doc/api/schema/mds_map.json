@@ -46,29 +46,7 @@
         "max_file_size": { "type": "number" },
         "last_failure": { "type": "number" },
         "last_failure_osd_epoch": { "type": "number" },
-        "compat": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-                "compat",
-                "ro_compat",
-                "incompat"
-            ],
-            "properties": {
-                "compat": {
-                    "type": "object",
-                    "additionalProperties": false
-                },
-                "ro_compat": {
-                    "type": "object",
-                    "additionalProperties": false
-                },
-                "incompat": {
-                    "type": "object",
-                    "additionalProperties": {"type": "string"}
-                }
-            }
-        },
+        "compat": { "$ref": "base.json#/definitions/compatset" },
         "max_mds": { "type": "number" },
         "in": {
             "type": "array"
