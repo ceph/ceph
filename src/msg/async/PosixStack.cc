@@ -182,7 +182,7 @@ class PosixServerSocketImpl : public ServerSocketImpl {
 };
 
 int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) {
-  assert(sock);
+  ceph_assert(sock);
   sockaddr_storage ss;
   socklen_t slen = sizeof(ss);
   int sd = ::accept(_fd, (sockaddr*)&ss, &slen);
@@ -203,7 +203,7 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
     return -errno;
   }
 
-  assert(NULL != out); //out should not be NULL in accept connection
+  ceph_assert(NULL != out); //out should not be NULL in accept connection
 
   out->set_type(addr_type);
   out->set_sockaddr((sockaddr*)&ss);

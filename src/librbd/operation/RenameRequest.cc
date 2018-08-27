@@ -135,7 +135,7 @@ void RenameRequest<I>::send_read_source_header() {
   librados::AioCompletion *rados_completion = this->create_callback_completion();
   int r = image_ctx.md_ctx.aio_operate(m_source_oid, rados_completion, &op,
                                        &m_header_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -152,7 +152,7 @@ void RenameRequest<I>::send_write_destination_header() {
 
   librados::AioCompletion *rados_completion = this->create_callback_completion();
   int r = image_ctx.md_ctx.aio_operate(m_dest_oid, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -180,7 +180,7 @@ void RenameRequest<I>::send_update_directory() {
 
   librados::AioCompletion *rados_completion = this->create_callback_completion();
   int r = image_ctx.md_ctx.aio_operate(RBD_DIRECTORY, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -196,7 +196,7 @@ void RenameRequest<I>::send_remove_source_header() {
 
   librados::AioCompletion *rados_completion = this->create_callback_completion();
   int r = image_ctx.md_ctx.aio_operate(m_source_oid, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 

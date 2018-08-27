@@ -293,7 +293,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
 AsyncMessenger::~AsyncMessenger()
 {
   delete reap_handler;
-  assert(!did_bind); // either we didn't bind or we shut down the Processor
+  ceph_assert(!did_bind); // either we didn't bind or we shut down the Processor
   local_connection->mark_down();
   for (auto &&p : processors)
     delete p;
@@ -392,7 +392,7 @@ int AsyncMessenger::bindv(const entity_addrvec_t &bind_addrs)
       // it, like port is used case. But if the first worker successfully to bind
       // but the second worker failed, it's not expected and we need to assert
       // here
-      assert(i == 0);
+      ceph_assert(i == 0);
       return r;
     }
     ++i;
@@ -404,7 +404,7 @@ int AsyncMessenger::bindv(const entity_addrvec_t &bind_addrs)
 int AsyncMessenger::rebind(const set<int>& avoid_ports)
 {
   ldout(cct,1) << __func__ << " rebind avoid " << avoid_ports << dendl;
-  assert(did_bind);
+  ceph_assert(did_bind);
 
   for (auto &&p : processors)
     p->stop();
@@ -428,7 +428,7 @@ int AsyncMessenger::rebind(const set<int>& avoid_ports)
   for (auto &&p : processors) {
     int r = p->bind(bind_addrs, avoid_ports, &bound_addrs);
     if (r) {
-      assert(i == 0);
+      ceph_assert(i == 0);
       return r;
     }
     ++i;
@@ -446,7 +446,7 @@ int AsyncMessenger::client_bind(const entity_addr_t &bind_addr)
     return 0;
   Mutex::Locker l(lock);
   if (did_bind) {
-    assert(my_addrs->legacy_addr() == bind_addr);
+    ceph_assert(my_addrs->legacy_addr() == bind_addr);
     return 0;
   }
   if (started) {
@@ -490,9 +490,9 @@ int AsyncMessenger::start()
   ldout(cct,1) << __func__ << " start" << dendl;
 
   // register at least one entity, first!
-  assert(my_name.type() >= 0);
+  ceph_assert(my_name.type() >= 0);
 
-  assert(!started);
+  ceph_assert(!started);
   started = true;
   stopped = false;
 
@@ -551,8 +551,8 @@ void AsyncMessenger::add_accept(Worker *w, ConnectedSocket cli_socket, entity_ad
 AsyncConnectionRef AsyncMessenger::create_connect(
   const entity_addrvec_t& addrs, int type)
 {
-  assert(lock.is_locked());
-  assert(addrs != *my_addrs);
+  ceph_assert(lock.is_locked());
+  ceph_assert(addrs != *my_addrs);
 
   ldout(cct, 10) << __func__ << " " << addrs
       << ", creating connection and registering" << dendl;
@@ -574,7 +574,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(
   AsyncConnectionRef conn = new AsyncConnection(cct, this, &dispatch_queue, w,
 						target.is_msgr2());
   conn->connect(addrs, type, target);
-  assert(!conns.count(addrs));
+  ceph_assert(!conns.count(addrs));
   conns[addrs] = conn;
   w->get_perf_counter()->inc(l_msgr_active_connections);
 
@@ -608,7 +608,7 @@ ConnectionRef AsyncMessenger::get_loopback_connection()
 int AsyncMessenger::_send_to(Message *m, int type, const entity_addrvec_t& addrs)
 {
   FUNCTRACE(cct);
-  assert(m);
+  ceph_assert(m);
 
   if (m->get_type() == CEPH_MSG_OSD_OP)
     OID_EVENT_TRACE(((MOSDOp *)m)->get_oid().name.c_str(), "SEND_MSG_OSD_OP");

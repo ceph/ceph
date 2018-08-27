@@ -86,7 +86,7 @@ public:
       std::lock_guard<std::mutex> l(lock);
       cond.notify_all();
       --num_running;
-      assert(num_running >= 0);
+      ceph_assert(num_running >= 0);
     } else {
       --num_running;
     }

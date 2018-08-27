@@ -111,7 +111,7 @@ void hobject_t::encode(bufferlist& bl) const
   encode(max, bl);
   encode(nspace, bl);
   encode(pool, bl);
-  assert(!max || (*this == hobject_t(hobject_t::get_max())));
+  ceph_assert(!max || (*this == hobject_t(hobject_t::get_max())));
   ENCODE_FINISH(bl);
 }
 
@@ -140,7 +140,7 @@ void hobject_t::decode(bufferlist::const_iterator& bl)
 	!max &&
 	oid.name.empty()) {
       pool = INT64_MIN;
-      assert(is_min());
+      ceph_assert(is_min());
     }
 
     // for compatibility with some earlier verisons which might encoded
@@ -440,7 +440,7 @@ void ghobject_t::decode(bufferlist::const_iterator& bl)
 	!hobj.max &&
 	hobj.oid.name.empty()) {
       hobj.pool = INT64_MIN;
-      assert(hobj.is_min());
+      ceph_assert(hobj.is_min());
     }
   }
   if (struct_v >= 5) {

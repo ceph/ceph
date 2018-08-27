@@ -534,9 +534,9 @@ public:
       Context **out_on_applied,
       Context **out_on_commit,
       Context **out_on_applied_sync) {
-      assert(out_on_applied);
-      assert(out_on_commit);
-      assert(out_on_applied_sync);
+      ceph_assert(out_on_applied);
+      ceph_assert(out_on_commit);
+      ceph_assert(out_on_applied_sync);
       list<Context *> on_applied, on_commit, on_applied_sync;
       for (auto& i : t) {
 	on_applied.splice(on_applied.end(), i.on_applied);
@@ -552,9 +552,9 @@ public:
       list<Context*> *out_on_applied,
       list<Context*> *out_on_commit,
       list<Context*> *out_on_applied_sync) {
-      assert(out_on_applied);
-      assert(out_on_commit);
-      assert(out_on_applied_sync);
+      ceph_assert(out_on_applied);
+      ceph_assert(out_on_commit);
+      ceph_assert(out_on_applied_sync);
       for (auto& i : t) {
 	out_on_applied->splice(out_on_applied->end(), i.on_applied);
 	out_on_commit->splice(out_on_commit->end(), i.on_commit);
@@ -619,17 +619,17 @@ public:
       case OP_ZERO:
       case OP_TRUNCATE:
       case OP_SETALLOCHINT:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         break;
 
       case OP_CLONERANGE2:
       case OP_CLONE:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         op->dest_oid = om[op->dest_oid];
@@ -642,24 +642,24 @@ public:
       case OP_COLL_SETATTRS:
       case OP_COLL_HINT:
       case OP_COLL_SET_BITS:
-        assert(op->cid < cm.size());
+        ceph_assert(op->cid < cm.size());
         op->cid = cm[op->cid];
         break;
 
       case OP_COLL_ADD:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_cid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_cid < om.size());
         op->cid = cm[op->cid];
         op->dest_cid = cm[op->dest_cid];
         op->oid = om[op->oid];
         break;
 
       case OP_COLL_MOVE_RENAME:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_cid < cm.size());
-        assert(op->dest_oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_cid < cm.size());
+        ceph_assert(op->dest_oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         op->dest_cid = cm[op->dest_cid];
@@ -667,23 +667,23 @@ public:
         break;
 
       case OP_TRY_RENAME:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         op->dest_oid = om[op->dest_oid];
 	break;
 
       case OP_SPLIT_COLLECTION2:
-        assert(op->cid < cm.size());
-	assert(op->dest_cid < cm.size());
+        ceph_assert(op->cid < cm.size());
+	ceph_assert(op->dest_cid < cm.size());
         op->cid = cm[op->cid];
         op->dest_cid = cm[op->dest_cid];
         break;
 
       default:
-        assert(0 == "Unknown OP");
+        ceph_abort_msg("Unknown OP");
       }
     }
     void _update_op_bl(
@@ -695,7 +695,7 @@ public:
       std::list<bufferptr>::iterator p;
 
       for(p = list.begin(); p != list.end(); ++p) {
-        assert(p->length() % sizeof(Op) == 0);
+        ceph_assert(p->length() % sizeof(Op) == 0);
 
         char* raw_p = p->c_str();
         char* raw_end = raw_p + p->length();
@@ -884,7 +884,7 @@ public:
         return ops > 0;
       }
       Op* decode_op() {
-        assert(ops > 0);
+        ceph_assert(ops > 0);
 
         Op* op = reinterpret_cast<Op*>(op_buffer_p);
         op_buffer_p += sizeof(Op);
@@ -926,11 +926,11 @@ public:
       }
 
       const ghobject_t &get_oid(__le32 oid_id) {
-        assert(oid_id < objects.size());
+        ceph_assert(oid_id < objects.size());
         return objects[oid_id];
       }
       const coll_t &get_cid(__le32 cid_id) {
-        assert(cid_id < colls.size());
+        ceph_assert(cid_id < colls.size());
         return colls[cid_id];
       }
       uint32_t get_fadvise_flags() const {
@@ -1029,7 +1029,7 @@ public:
       _op->len = len;
       encode(write_data, data_bl);
 
-      assert(len == write_data.length());
+      ceph_assert(len == write_data.length());
       data.fadvise_flags = data.fadvise_flags | flags;
       if (write_data.length() > data.largest_data_len) {
 	data.largest_data_len = write_data.length();

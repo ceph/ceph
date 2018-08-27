@@ -359,14 +359,14 @@ int KvStoreBench::test_teuthology_aio(next_gen_t distr,
 
   Mutex::Locker l(ops_in_flight_lock);
   for (int i = 0; i < ops; i++) {
-    assert(ops_in_flight <= max_ops_in_flight);
+    ceph_assert(ops_in_flight <= max_ops_in_flight);
     if (ops_in_flight == max_ops_in_flight) {
       int err = op_avail.Wait(ops_in_flight_lock);
       if (err < 0) {
 	ceph_abort();
 	return err;
       }
-      assert(ops_in_flight < max_ops_in_flight);
+      ceph_assert(ops_in_flight < max_ops_in_flight);
     }
     cout << "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t" << i + 1 << " / "
 	<< ops << std::endl;

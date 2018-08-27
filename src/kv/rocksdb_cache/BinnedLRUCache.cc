@@ -91,7 +91,7 @@ void BinnedLRUHandleTable::Resize() {
       count++;
     }
   }
-  assert(elems_ == count);
+  ceph_assert(elems_ == count);
   delete[] list_;
   list_ = new_list;
   length_ = new_length;
@@ -116,7 +116,7 @@ BinnedLRUCacheShard::BinnedLRUCacheShard(size_t capacity, bool strict_capacity_l
 BinnedLRUCacheShard::~BinnedLRUCacheShard() {}
 
 bool BinnedLRUCacheShard::Unref(BinnedLRUHandle* e) {
-  assert(e->refs > 0);
+  ceph_assert(e->refs > 0);
   e->refs--;
   return e->refs == 0;
 }
@@ -129,8 +129,8 @@ void BinnedLRUCacheShard::EraseUnRefEntries() {
     std::lock_guard<std::mutex> l(mutex_);
     while (lru_.next != &lru_) {
       BinnedLRUHandle* old = lru_.next;
-      assert(old->InCache());
-      assert(old->refs ==
+      ceph_assert(old->InCache());
+      ceph_assert(old->refs ==
              1);  // LRU list contains elements which may be evicted
       LRU_Remove(old);
       table_.Remove(old->key(), old->hash);
@@ -184,8 +184,8 @@ size_t BinnedLRUCacheShard::GetHighPriPoolUsage() const {
 }
 
 void BinnedLRUCacheShard::LRU_Remove(BinnedLRUHandle* e) {
-  assert(e->next != nullptr);
-  assert(e->prev != nullptr);
+  ceph_assert(e->next != nullptr);
+  ceph_assert(e->prev != nullptr);
   if (lru_low_pri_ == e) {
     lru_low_pri_ = e->prev;
   }
@@ -194,14 +194,14 @@ void BinnedLRUCacheShard::LRU_Remove(BinnedLRUHandle* e) {
   e->prev = e->next = nullptr;
   lru_usage_ -= e->charge;
   if (e->InHighPriPool()) {
-    assert(high_pri_pool_usage_ >= e->charge);
+    ceph_assert(high_pri_pool_usage_ >= e->charge);
     high_pri_pool_usage_ -= e->charge;
   }
 }
 
 void BinnedLRUCacheShard::LRU_Insert(BinnedLRUHandle* e) {
-  assert(e->next == nullptr);
-  assert(e->prev == nullptr);
+  ceph_assert(e->next == nullptr);
+  ceph_assert(e->prev == nullptr);
   if (high_pri_pool_ratio_ > 0 && e->IsHighPri()) {
     // Inset "e" to head of LRU list.
     e->next = &lru_;
@@ -228,7 +228,7 @@ void BinnedLRUCacheShard::MaintainPoolSize() {
   while (high_pri_pool_usage_ > high_pri_pool_capacity_) {
     // Overflow last entry in high-pri pool to low-pri pool.
     lru_low_pri_ = lru_low_pri_->next;
-    assert(lru_low_pri_ != &lru_);
+    ceph_assert(lru_low_pri_ != &lru_);
     lru_low_pri_->SetInHighPriPool(false);
     high_pri_pool_usage_ -= lru_low_pri_->charge;
   }
@@ -238,8 +238,8 @@ void BinnedLRUCacheShard::EvictFromLRU(size_t charge,
                                  ceph::autovector<BinnedLRUHandle*>* deleted) {
   while (usage_ + charge > capacity_ && lru_.next != &lru_) {
     BinnedLRUHandle* old = lru_.next;
-    assert(old->InCache());
-    assert(old->refs == 1);  // LRU list contains elements which may be evicted
+    ceph_assert(old->InCache());
+    ceph_assert(old->refs == 1);  // LRU list contains elements which may be evicted
     LRU_Remove(old);
     table_.Remove(old->key(), old->hash);
     old->SetInCache(false);
@@ -273,7 +273,7 @@ rocksdb::Cache::Handle* BinnedLRUCacheShard::Lookup(const rocksdb::Slice& key, u
   std::lock_guard<std::mutex> l(mutex_);
   BinnedLRUHandle* e = table_.Lookup(key, hash);
   if (e != nullptr) {
-    assert(e->InCache());
+    ceph_assert(e->InCache());
     if (e->refs == 1) {
       LRU_Remove(e);
     }
@@ -317,7 +317,7 @@ bool BinnedLRUCacheShard::Release(rocksdb::Cache::Handle* handle, bool force_era
       if (usage_ > capacity_ || force_erase) {
         // the cache is full
         // The LRU list must be empty since the cache is full
-        assert(!(usage_ > capacity_) || lru_.next == &lru_);
+        ceph_assert(!(usage_ > capacity_) || lru_.next == &lru_);
         // take this opportunity and remove the item
         table_.Remove(e->key(), e->hash);
         e->SetInCache(false);
@@ -447,7 +447,7 @@ size_t BinnedLRUCacheShard::GetUsage() const {
 
 size_t BinnedLRUCacheShard::GetPinnedUsage() const {
   std::lock_guard<std::mutex> l(mutex_);
-  assert(usage_ >= lru_usage_);
+  ceph_assert(usage_ >= lru_usage_);
   return usage_ - lru_usage_;
 }
 

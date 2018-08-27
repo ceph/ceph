@@ -34,7 +34,7 @@ struct ceph_data_stats
   { }
 
   void dump(Formatter *f) const {
-    assert(f != NULL);
+    ceph_assert(f != NULL);
     f->dump_int("total", byte_total);
     f->dump_int("used", byte_used);
     f->dump_int("avail", byte_avail);

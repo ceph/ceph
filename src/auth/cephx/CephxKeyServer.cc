@@ -351,7 +351,7 @@ int KeyServer::encode_secrets(Formatter *f, stringstream *ds) const
 
 void KeyServer::encode_formatted(string label, Formatter *f, bufferlist &bl)
 {
-  assert(f != NULL);
+  ceph_assert(f != NULL);
   f->open_object_section(label.c_str());
   encode_secrets(f, NULL);
   f->close_section();

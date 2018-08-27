@@ -44,8 +44,8 @@ DeepCopyRequest<I>::DeepCopyRequest(I *src_image_ctx, I *dst_image_ctx,
 
 template <typename I>
 DeepCopyRequest<I>::~DeepCopyRequest() {
-  assert(m_snapshot_copy_request == nullptr);
-  assert(m_image_copy_request == nullptr);
+  ceph_assert(m_snapshot_copy_request == nullptr);
+  ceph_assert(m_image_copy_request == nullptr);
 }
 
 template <typename I>
@@ -196,7 +196,7 @@ void DeepCopyRequest<I>::send_copy_object_map() {
     return;
   }
 
-  assert(m_dst_image_ctx->object_map != nullptr);
+  ceph_assert(m_dst_image_ctx->object_map != nullptr);
 
   ldout(m_cct, 20) << dendl;
 
@@ -218,7 +218,7 @@ void DeepCopyRequest<I>::send_copy_object_map() {
       handle_copy_object_map(r);
       finish_op_ctx->complete(0);
     });
-  assert(m_snap_seqs->count(m_snap_id_end) > 0);
+  ceph_assert(m_snap_seqs->count(m_snap_id_end) > 0);
   librados::snap_t copy_snap_id = (*m_snap_seqs)[m_snap_id_end];
   m_dst_image_ctx->object_map->rollback(copy_snap_id, ctx);
   m_dst_image_ctx->snap_lock.put_read();
@@ -229,7 +229,7 @@ template <typename I>
 void DeepCopyRequest<I>::handle_copy_object_map(int r) {
   ldout(m_cct, 20) << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
   send_refresh_object_map();
 }
 
@@ -262,7 +262,7 @@ template <typename I>
 void DeepCopyRequest<I>::handle_refresh_object_map(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
   {
     RWLock::WLocker snap_locker(m_dst_image_ctx->snap_lock);
     std::swap(m_dst_image_ctx->object_map, m_object_map);

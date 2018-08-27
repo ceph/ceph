@@ -149,12 +149,12 @@ void* echoclient(void *arg)
   sa.sin_port = htons(port);
   char addr[] = "127.0.0.1";
   int r = inet_pton(AF_INET, addr, &sa.sin_addr);
-  assert(r == 1);
+  ceph_assert(r == 1);
 
   int connect_sd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (connect_sd >= 0) {
     r = connect(connect_sd, (struct sockaddr*)&sa, sizeof(sa));
-    assert(r == 0);
+    ceph_assert(r == 0);
     int t = 0;
   
     do {

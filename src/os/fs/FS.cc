@@ -113,7 +113,7 @@ int FS::copy_file_range(int to_fd, uint64_t to_offset,
 			int from_fd,
 			uint64_t from_offset, uint64_t from_len)
 {
-  assert(0 == "write me");
+  ceph_abort_msg("write me");
 }
 
 int FS::zero(int fd, uint64_t offset, uint64_t length)

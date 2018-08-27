@@ -203,7 +203,7 @@ namespace rgw {
 
     inline RGWRados* get_store() { return store; }
 
-    virtual int execute() final { abort(); }
+    virtual int execute() final { ceph_abort(); }
     virtual int exec_start() = 0;
     virtual int exec_continue() = 0;
     virtual int exec_finish() = 0;

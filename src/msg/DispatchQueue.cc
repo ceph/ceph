@@ -216,7 +216,7 @@ void DispatchQueue::discard_queue(uint64_t id) {
   for (list<QueueItem>::iterator i = removed.begin();
        i != removed.end();
        ++i) {
-    assert(!(i->is_code())); // We don't discard id 0, ever!
+    ceph_assert(!(i->is_code())); // We don't discard id 0, ever!
     const Message::ref& m = i->get_message();
     remove_arrival(m);
     dispatch_throttle_release(m->get_dispatch_throttle_size());
@@ -225,8 +225,8 @@ void DispatchQueue::discard_queue(uint64_t id) {
 
 void DispatchQueue::start()
 {
-  assert(!stop);
-  assert(!dispatch_thread.is_started());
+  ceph_assert(!stop);
+  ceph_assert(!dispatch_thread.is_started());
   dispatch_thread.create("ms_dispatch");
   local_delivery_thread.create("ms_local");
 }

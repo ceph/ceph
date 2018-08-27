@@ -336,7 +336,7 @@ static int do_merge_diff(const char *first, const char *second,
         continue;
       }
     }
-    assert(f_off >= s_off);
+    ceph_assert(f_off >= s_off);
 
     if (f_off < s_off + s_len && f_len) {
       uint64_t delta = s_off + s_len - f_off;
@@ -363,7 +363,7 @@ static int do_merge_diff(const char *first, const char *second,
         continue;
       }
     }
-    assert(f_off >= s_off + s_len);
+    ceph_assert(f_off >= s_off + s_len);
     if (s_len) {
       r = accept_diff_body(sd, pd, s_tag, s_off, s_len);
       if (r < 0) {
@@ -374,7 +374,7 @@ static int do_merge_diff(const char *first, const char *second,
       s_len = 0;
       s_tag = 0;
     } else {
-      assert(f_end && s_end);
+      ceph_assert(f_end && s_end);
     }
     continue;
   }

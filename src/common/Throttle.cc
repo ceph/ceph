@@ -41,7 +41,7 @@ Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m,
 		   bool _use_perf)
   : cct(cct), name(n), max(m), use_perf(_use_perf)
 {
-  assert(m >= 0);
+  ceph_assert(m >= 0);
 
   if (!use_perf)
     return;
@@ -70,7 +70,7 @@ Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m,
 Throttle::~Throttle()
 {
   auto l = uniquely_lock(lock);
-  assert(conds.empty());
+  ceph_assert(conds.empty());
 }
 
 void Throttle::_reset_max(int64_t m)
@@ -122,7 +122,7 @@ bool Throttle::wait(int64_t m)
 
   auto l = uniquely_lock(lock);
   if (m) {
-    assert(m > 0);
+    ceph_assert(m > 0);
     _reset_max(m);
   }
   ldout(cct, 10) << "wait" << dendl;
@@ -134,7 +134,7 @@ int64_t Throttle::take(int64_t c)
   if (0 == max) {
     return 0;
   }
-  assert(c >= 0);
+  ceph_assert(c >= 0);
   ldout(cct, 10) << "take " << c << dendl;
   {
     auto l = uniquely_lock(lock);
@@ -154,7 +154,7 @@ bool Throttle::get(int64_t c, int64_t m)
     return false;
   }
 
-  assert(c >= 0);
+  ceph_assert(c >= 0);
   ldout(cct, 10) << "get " << c << " (" << count.load() << " -> " << (count.load() + c) << ")" << dendl;
   if (logger) {
     logger->inc(l_throttle_get_started);
@@ -163,7 +163,7 @@ bool Throttle::get(int64_t c, int64_t m)
   {
     auto l = uniquely_lock(lock);
     if (m) {
-      assert(m > 0);
+      ceph_assert(m > 0);
       _reset_max(m);
     }
     waited = _wait(c, l);
@@ -214,7 +214,7 @@ int64_t Throttle::put(int64_t c)
     return 0;
   }
 
-  assert(c >= 0);
+  ceph_assert(c >= 0);
   ldout(cct, 10) << "put " << c << " (" << count.load() << " -> "
 		 << (count.load()-c) << ")" << dendl;
   auto l = uniquely_lock(lock);
@@ -222,7 +222,7 @@ int64_t Throttle::put(int64_t c)
     if (!conds.empty())
       conds.front().notify_one();
     // if count goes negative, we failed somewhere!
-    assert(count >= c);
+    ceph_assert(count >= c);
     count -= c;
     if (logger) {
       logger->inc(l_throttle_put);
@@ -289,7 +289,7 @@ BackoffThrottle::BackoffThrottle(CephContext *cct, const std::string& n,
 BackoffThrottle::~BackoffThrottle()
 {
   auto l = uniquely_lock(lock);
-  assert(waiters.empty());
+  ceph_assert(waiters.empty());
 }
 
 bool BackoffThrottle::set_params(
@@ -456,7 +456,7 @@ std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
     } else {
       break;
     }
-    assert(ticket == waiters.begin());
+    ceph_assert(ticket == waiters.begin());
     delay = _get_delay(c) - (std::chrono::system_clock::now() - start);
   }
   waiters.pop_front();
@@ -477,7 +477,7 @@ std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
 uint64_t BackoffThrottle::put(uint64_t c)
 {
   locker l(lock);
-  assert(current >= c);
+  ceph_assert(current >= c);
   current -= c;
   _kick_waiters();
 
@@ -522,8 +522,8 @@ SimpleThrottle::SimpleThrottle(uint64_t max, bool ignore_enoent)
 SimpleThrottle::~SimpleThrottle()
 {
   auto l = uniquely_lock(m_lock);
-  assert(m_current == 0);
-  assert(waiters == 0);
+  ceph_assert(m_current == 0);
+  ceph_assert(waiters == 0);
 }
 
 void SimpleThrottle::start_op()
@@ -568,11 +568,11 @@ OrderedThrottle::OrderedThrottle(uint64_t max, bool ignore_enoent)
 
 OrderedThrottle::~OrderedThrottle() {
   auto l  = uniquely_lock(m_lock);
-  assert(waiters == 0);
+  ceph_assert(waiters == 0);
 }
 
 C_OrderedThrottle *OrderedThrottle::start_op(Context *on_finish) {
-  assert(on_finish);
+  ceph_assert(on_finish);
 
   auto l = uniquely_lock(m_lock);
   uint64_t tid = m_next_tid++;
@@ -593,7 +593,7 @@ C_OrderedThrottle *OrderedThrottle::start_op(Context *on_finish) {
 
 void OrderedThrottle::end_op(int r) {
   auto l = uniquely_lock(m_lock);
-  assert(m_current > 0);
+  ceph_assert(m_current > 0);
 
   if (r < 0 && m_ret_val == 0 && (r != -ENOENT || !m_ignore_enoent)) {
     m_ret_val = r;
@@ -606,7 +606,7 @@ void OrderedThrottle::finish_op(uint64_t tid, int r) {
   auto l = uniquely_lock(m_lock);
 
   auto it = m_tid_result.find(tid);
-  assert(it != m_tid_result.end());
+  ceph_assert(it != m_tid_result.end());
 
   it->second.finished = true;
   it->second.ret_val = r;

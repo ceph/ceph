@@ -70,7 +70,7 @@ public:
     pg_pool_t empty;
     // make an ec pool
     uint64_t pool_id = ++new_pool_inc.new_pool_max;
-    assert(pool_id == my_ec_pool);
+    ceph_assert(pool_id == my_ec_pool);
     pg_pool_t *p = new_pool_inc.get_new_pool(pool_id, &empty);
     p->size = 3;
     p->set_pg_num(64);
@@ -80,7 +80,7 @@ public:
     new_pool_inc.new_pool_names[pool_id] = "ec";
     // and a replicated pool
     pool_id = ++new_pool_inc.new_pool_max;
-    assert(pool_id == my_rep_pool);
+    ceph_assert(pool_id == my_rep_pool);
     p = new_pool_inc.get_new_pool(pool_id, &empty);
     p->size = 3;
     p->set_pg_num(64);

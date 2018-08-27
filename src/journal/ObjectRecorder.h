@@ -58,7 +58,7 @@ public:
   void claim_append_buffers(AppendBuffers *append_buffers);
 
   bool is_closed() const {
-    assert(m_lock->is_locked());
+    ceph_assert(m_lock->is_locked());
     return (m_object_closed && m_in_flight_appends.empty());
   }
   bool close();

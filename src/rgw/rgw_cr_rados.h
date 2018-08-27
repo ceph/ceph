@@ -82,7 +82,7 @@ protected:
     void _process(RGWAsyncRadosRequest *req, ThreadPool::TPHandle& handle) override;
     void _dump_queue();
     void _clear() override {
-      assert(processor->m_req_queue.empty());
+      ceph_assert(processor->m_req_queue.empty());
     }
   } req_wq;
 

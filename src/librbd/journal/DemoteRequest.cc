@@ -31,7 +31,7 @@ DemoteRequest<I>::DemoteRequest(I &image_ctx, Context *on_finish)
 
 template <typename I>
 DemoteRequest<I>::~DemoteRequest() {
-  assert(m_journaler == nullptr);
+  ceph_assert(m_journaler == nullptr);
 }
 
 template <typename I>

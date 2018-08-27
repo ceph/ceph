@@ -31,8 +31,8 @@ namespace {
       }
     }
     const string& get(unsigned r, unsigned c) const {
-      assert(r < row.size());
-      assert(c < row[r].size());
+      ceph_assert(r < row.size());
+      ceph_assert(c < row[r].size());
       return row[r][c];
     }
   };

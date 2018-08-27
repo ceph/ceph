@@ -98,7 +98,7 @@ public:
    */
   void abort(int rc)
   {
-    assert(rc != 0);
+    ceph_assert(rc != 0);
     abort_rc = rc;
   }
 

@@ -167,8 +167,8 @@ class C_OnFinisher : public Context {
   Finisher *fin;
 public:
   C_OnFinisher(Context *c, Finisher *f) : con(c), fin(f) {
-    assert(fin != NULL);
-    assert(con != NULL);
+    ceph_assert(fin != NULL);
+    ceph_assert(con != NULL);
   }
 
   ~C_OnFinisher() override {

@@ -26,7 +26,7 @@ public:
   static DetachChildRequest *s_instance;
   static DetachChildRequest *create(MockImageCtx &image_ctx,
                                     Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }

@@ -76,7 +76,7 @@ public:
     op.list_snaps(&m_snap_set, &m_snap_ret);
 
     int r = m_head_ctx.aio_operate(m_oid, rados_completion, &op, NULL);
-    assert(r == 0);
+    ceph_assert(r == 0);
     rados_completion->release();
   }
 
@@ -187,7 +187,7 @@ private:
         }
         opos += r->second;
       }
-      assert(opos == q->offset + q->length);
+      ceph_assert(opos == q->offset + q->length);
     }
   }
 
@@ -411,7 +411,7 @@ int DiffIterate<I>::execute() {
 template <typename I>
 int DiffIterate<I>::diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
                                     BitVector<2>* object_diff_state) {
-  assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(m_image_ctx.snap_lock.is_locked());
   CephContext* cct = m_image_ctx.cct;
 
   bool diff_from_start = (from_snap_id == 0);
@@ -433,7 +433,7 @@ int DiffIterate<I>::diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
     if (current_snap_id != CEPH_NOSNAP) {
       std::map<librados::snap_t, SnapInfo>::const_iterator snap_it =
         m_image_ctx.snap_info.find(current_snap_id);
-      assert(snap_it != m_image_ctx.snap_info.end());
+      ceph_assert(snap_it != m_image_ctx.snap_info.end());
       current_size = snap_it->second.size;
 
       ++snap_it;

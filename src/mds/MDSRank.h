@@ -391,7 +391,7 @@ class MDSRank {
       waiting_for_active_peer[who].push_back(c);
     }
     void wait_for_cluster_recovered(MDSInternalContextBase *c) {
-      assert(cluster_degraded);
+      ceph_assert(cluster_degraded);
       waiting_for_active_peer[MDS_RANK_NONE].push_back(c);
     }
 

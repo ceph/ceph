@@ -113,7 +113,7 @@ int chain_setxattr(
     pos  += chunk_size;
     ret = pos;
     i++;
-    assert(size == 0 || !ensure_single_attr);
+    ceph_assert(size == 0 || !ensure_single_attr);
   } while (size);
 
   if (ret >= 0 && !skip_chain_cleanup) {
@@ -157,7 +157,7 @@ int chain_fsetxattr(
     pos  += chunk_size;
     ret = pos;
     i++;
-    assert(size == 0 || !ensure_single_attr);
+    ceph_assert(size == 0 || !ensure_single_attr);
   } while (size);
 
   if (ret >= 0 && !skip_chain_cleanup) {

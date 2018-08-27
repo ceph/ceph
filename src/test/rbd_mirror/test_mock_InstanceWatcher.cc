@@ -34,17 +34,17 @@ struct ManagedLock<MockTestImageCtx> {
                              managed_lock::Mode  mode,
                              bool blacklist_on_break_lock,
                              uint32_t blacklist_expire_seconds) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
   ManagedLock() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
   ~ManagedLock() {
-    assert(s_instance == this);
+    ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
 
@@ -88,17 +88,17 @@ struct ImageSyncThrottler<librbd::MockTestImageCtx> {
   static ImageSyncThrottler* s_instance;
 
   static ImageSyncThrottler *create() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
   ImageSyncThrottler() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
   virtual ~ImageSyncThrottler() {
-    assert(s_instance == this);
+    ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
 

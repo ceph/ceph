@@ -75,7 +75,7 @@ namespace ceph {
     }
 
     void OpClassClientInfoMgr::add_rep_op_msg(int message_code) {
-      assert(message_code >= 0 && message_code < int(rep_op_msg_bitset_size));
+      ceph_assert(message_code >= 0 && message_code < int(rep_op_msg_bitset_size));
       rep_op_msg_bitset.set(message_code);
     }
 
@@ -89,7 +89,7 @@ namespace ceph {
 	// stores type as unsigned little endian, so be sure to
 	// convert to CPU byte ordering
 	boost::optional<OpRequestRef> op_ref_maybe = op.maybe_get_op();
-	assert(op_ref_maybe);
+	ceph_assert(op_ref_maybe);
 	__le16 mtype_le = (*op_ref_maybe)->get_req()->get_header().type;
 	__u16 mtype = le16_to_cpu(mtype_le);
 	if (rep_op_msg_bitset.test(mtype)) {

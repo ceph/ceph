@@ -205,7 +205,7 @@ public:
   bool call(std::string_view command, const cmdmap_t& cmdmap,
 	    std::string_view format, bufferlist& out) override {
     auto i = commands.find(command);
-    assert(i != commands.end());
+    ceph_assert(i != commands.end());
     Formatter *f = Formatter::create(format);
     stringstream ss;
     bool r = i->second->call(f, &ss);
@@ -270,7 +270,7 @@ bool PoolReplayer<I>::is_running() const {
 template <typename I>
 void PoolReplayer<I>::init()
 {
-  assert(!m_pool_replayer_thread.is_started());
+  ceph_assert(!m_pool_replayer_thread.is_started());
 
   // reset state
   m_stopping = false;
@@ -389,10 +389,10 @@ void PoolReplayer<I>::shut_down() {
   m_instance_watcher.reset();
   m_instance_replayer.reset();
 
-  assert(!m_image_map);
-  assert(!m_image_deleter);
-  assert(!m_local_pool_watcher);
-  assert(!m_remote_pool_watcher);
+  ceph_assert(!m_image_map);
+  ceph_assert(!m_image_deleter);
+  ceph_assert(!m_local_pool_watcher);
+  ceph_assert(!m_remote_pool_watcher);
   m_local_rados.reset();
   m_remote_rados.reset();
 }
@@ -489,7 +489,7 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
   cct->_conf.complain_about_parse_errors(cct);
 
   r = (*rados_ref)->init_with_context(cct);
-  assert(r == 0);
+  ceph_assert(r == 0);
   cct->put();
 
   r = (*rados_ref)->connect();
@@ -737,7 +737,7 @@ void PoolReplayer<I>::init_image_map(Context *on_finish) {
   dout(5) << dendl;
 
   Mutex::Locker locker(m_lock);
-  assert(!m_image_map);
+  ceph_assert(!m_image_map);
   m_image_map.reset(ImageMap<I>::create(m_local_io_ctx, m_threads,
                                         m_instance_watcher->get_instance_id(),
                                         m_image_map_listener));
@@ -769,7 +769,7 @@ void PoolReplayer<I>::init_local_pool_watcher(Context *on_finish) {
   dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
-  assert(!m_local_pool_watcher);
+  ceph_assert(!m_local_pool_watcher);
   m_local_pool_watcher.reset(PoolWatcher<I>::create(
     m_threads, m_local_io_ctx, m_local_pool_watcher_listener));
 
@@ -803,7 +803,7 @@ void PoolReplayer<I>::init_remote_pool_watcher(Context *on_finish) {
   dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
-  assert(!m_remote_pool_watcher);
+  ceph_assert(!m_remote_pool_watcher);
   m_remote_pool_watcher.reset(PoolWatcher<I>::create(
     m_threads, m_remote_io_ctx, m_remote_pool_watcher_listener));
 
@@ -835,7 +835,7 @@ void PoolReplayer<I>::init_image_deleter(Context *on_finish) {
   dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
-  assert(!m_image_deleter);
+  ceph_assert(!m_image_deleter);
 
   on_finish = new FunctionContext([this, on_finish](int r) {
       handle_init_image_deleter(r, on_finish);
@@ -889,7 +889,7 @@ void PoolReplayer<I>::handle_shut_down_image_deleter(
 
   {
     Mutex::Locker locker(m_lock);
-    assert(m_image_deleter);
+    ceph_assert(m_image_deleter);
     m_image_deleter.reset();
   }
 
@@ -928,7 +928,7 @@ void PoolReplayer<I>::handle_shut_down_pool_watchers(
 
   {
     Mutex::Locker locker(m_lock);
-    assert(m_local_pool_watcher);
+    ceph_assert(m_local_pool_watcher);
     m_local_pool_watcher.reset();
 
     if (m_remote_pool_watcher) {
@@ -955,7 +955,7 @@ void PoolReplayer<I>::wait_for_update_ops(Context *on_finish) {
 template <typename I>
 void PoolReplayer<I>::handle_wait_for_update_ops(int r, Context *on_finish) {
   dout(10) << "r=" << r << dendl;
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   shut_down_image_map(on_finish);
 }
@@ -987,7 +987,7 @@ void PoolReplayer<I>::handle_shut_down_image_map(int r, Context *on_finish) {
   }
 
   Mutex::Locker locker(m_lock);
-  assert(m_image_map);
+  ceph_assert(m_image_map);
   m_image_map.reset();
 
   m_instance_replayer->release_all(on_finish);
@@ -1028,7 +1028,7 @@ void PoolReplayer<I>::handle_remove_image(const std::string &mirror_uuid,
                                           const std::string &global_image_id,
                                           const std::string &instance_id,
                                           Context* on_finish) {
-  assert(!mirror_uuid.empty());
+  ceph_assert(!mirror_uuid.empty());
   dout(5) << "mirror_uuid=" << mirror_uuid << ", "
           << "global_image_id=" << global_image_id << ", "
           << "instance_id=" << instance_id << dendl;
@@ -1045,7 +1045,7 @@ void PoolReplayer<I>::handle_instances_added(const InstanceIds &instance_ids) {
     return;
   }
 
-  assert(m_image_map);
+  ceph_assert(m_image_map);
   m_image_map->update_instances_added(instance_ids);
 }
 
@@ -1058,7 +1058,7 @@ void PoolReplayer<I>::handle_instances_removed(
     return;
   }
 
-  assert(m_image_map);
+  ceph_assert(m_image_map);
   m_image_map->update_instances_removed(instance_ids);
 }
 

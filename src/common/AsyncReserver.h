@@ -60,9 +60,9 @@ class AsyncReserver {
   set<pair<unsigned,T>> preempt_by_prio;  ///< in_progress that can be preempted
 
   void preempt_one() {
-    assert(!preempt_by_prio.empty());
+    ceph_assert(!preempt_by_prio.empty());
     auto q = in_progress.find(preempt_by_prio.begin()->second);
-    assert(q != in_progress.end());
+    ceph_assert(q != in_progress.end());
     Reservation victim = q->second;
     rdout(10) << __func__ << " preempt " << victim << dendl;
     f->queue(victim.preempt);
@@ -91,7 +91,7 @@ class AsyncReserver {
       // choose highest priority queue
       auto it = queues.end();
       --it;
-      assert(!it->second.empty());
+      ceph_assert(!it->second.empty());
       if (it->first < min_priority) {
 	break;
       }
@@ -186,7 +186,7 @@ public:
     Mutex::Locker l(lock);
     Reservation r(item, prio, on_reserved, on_preempt);
     rdout(10) << __func__ << " queue " << r << dendl;
-    assert(!queue_pointers.count(item) &&
+    ceph_assert(!queue_pointers.count(item) &&
 	   !in_progress.count(item));
     queues[prio].push_back(r);
     queue_pointers.insert(make_pair(item,

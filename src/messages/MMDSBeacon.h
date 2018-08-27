@@ -121,7 +121,7 @@ struct MDSHealthMetric
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    assert(type != MDS_HEALTH_NULL);
+    ceph_assert(type != MDS_HEALTH_NULL);
     encode((uint16_t)type, bl);
     encode((uint8_t)sev, bl);
     encode(message, bl);
@@ -132,7 +132,7 @@ struct MDSHealthMetric
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode((uint16_t&)type, bl);
-    assert(type != MDS_HEALTH_NULL);
+    ceph_assert(type != MDS_HEALTH_NULL);
     decode((uint8_t&)sev, bl);
     decode(message, bl);
     decode(metadata, bl);

@@ -155,9 +155,9 @@ public:
       const hobject_t &hoid,
       int err,
       extent_map &&buffers) {
-      assert(objects_to_read);
+      ceph_assert(objects_to_read);
       --objects_to_read;
-      assert(!results.count(hoid));
+      ceph_assert(!results.count(hoid));
       results.emplace(hoid, make_pair(err, std::move(buffers)));
     }
     bool is_complete() const {

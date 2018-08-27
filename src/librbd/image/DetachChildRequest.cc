@@ -25,7 +25,7 @@ using util::create_rados_callback;
 
 template <typename I>
 DetachChildRequest<I>::~DetachChildRequest() {
-  assert(m_parent_image_ctx == nullptr);
+  ceph_assert(m_parent_image_ctx == nullptr);
 }
 
 template <typename I>
@@ -67,7 +67,7 @@ void DetachChildRequest<I>::clone_v2_child_detach() {
 
   librados::Rados rados(m_image_ctx.md_ctx);
   int r = rados.ioctx_create2(m_parent_spec.pool_id, m_parent_io_ctx);
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   // TODO support clone v2 parent namespaces
   m_parent_io_ctx.set_namespace(m_image_ctx.md_ctx.get_namespace());
@@ -78,7 +78,7 @@ void DetachChildRequest<I>::clone_v2_child_detach() {
     DetachChildRequest<I>,
     &DetachChildRequest<I>::handle_clone_v2_child_detach>(this);
   r = m_parent_io_ctx.aio_operate(m_parent_header_name, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -111,7 +111,7 @@ void DetachChildRequest<I>::clone_v2_get_snapshot() {
     &DetachChildRequest<I>::handle_clone_v2_get_snapshot>(this);
   int r = m_parent_io_ctx.aio_operate(m_parent_header_name, aio_comp, &op,
                                       &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -245,7 +245,7 @@ void DetachChildRequest<I>::clone_v1_remove_child() {
     DetachChildRequest<I>,
     &DetachChildRequest<I>::handle_clone_v1_remove_child>(this);
   int r = m_image_ctx.md_ctx.aio_operate(RBD_CHILDREN, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 

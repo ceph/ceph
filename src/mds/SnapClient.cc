@@ -51,7 +51,7 @@ void SnapClient::handle_query_result(const MMDSTableRequest::const_ref &m)
 
   switch (type) {
   case 'U': // uptodate
-    assert(cached_version == m->get_tid());
+    ceph_assert(cached_version == m->get_tid());
     break;
   case 'F': // full
     {
@@ -123,7 +123,7 @@ void SnapClient::notify_commit(version_t tid)
 {
   dout(10) << __func__ << " tid " << tid << dendl;
 
-  assert(cached_version == 0 || cached_version >= tid);
+  ceph_assert(cached_version == 0 || cached_version >= tid);
   if (cached_version == 0) {
     committing_tids.insert(tid);
   } else if (cached_pending_update.count(tid)) {
@@ -145,7 +145,7 @@ void SnapClient::refresh(version_t want, MDSInternalContextBase *onfinish)
 {
   dout(10) << __func__ << " want " << want << dendl;
 
-  assert(want >= cached_version);
+  ceph_assert(want >= cached_version);
   if (onfinish)
     waiting_for_version[want].push_back(onfinish);
 
@@ -175,7 +175,7 @@ void SnapClient::sync(MDSInternalContextBase *onfinish)
 
 void SnapClient::get_snaps(set<snapid_t>& result) const
 {
-  assert(cached_version > 0);
+  ceph_assert(cached_version > 0);
   for (auto& p : cached_snaps)
     result.insert(p.first);
 
@@ -192,7 +192,7 @@ void SnapClient::get_snaps(set<snapid_t>& result) const
 
 set<snapid_t> SnapClient::filter(const set<snapid_t>& snaps) const
 {
-  assert(cached_version > 0);
+  ceph_assert(cached_version > 0);
   if (snaps.empty())
     return snaps;
 
@@ -221,7 +221,7 @@ set<snapid_t> SnapClient::filter(const set<snapid_t>& snaps) const
 
 const SnapInfo* SnapClient::get_snap_info(snapid_t snapid) const
 {
-  assert(cached_version > 0);
+  ceph_assert(cached_version > 0);
 
   const SnapInfo* result = NULL;
   auto it = cached_snaps.find(snapid);
@@ -249,7 +249,7 @@ const SnapInfo* SnapClient::get_snap_info(snapid_t snapid) const
 void SnapClient::get_snap_infos(map<snapid_t, const SnapInfo*>& infomap,
 			        const set<snapid_t>& snaps) const
 {
-  assert(cached_version > 0);
+  ceph_assert(cached_version > 0);
 
   if (snaps.empty())
     return;

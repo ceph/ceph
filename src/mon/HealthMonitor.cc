@@ -205,7 +205,7 @@ bool HealthMonitor::check_member_health()
   get_fs_stats(stats.fs_stats, g_conf()->mon_data.c_str());
   map<string,uint64_t> extra;
   uint64_t store_size = mon->store->get_estimated_size(extra);
-  assert(store_size > 0);
+  ceph_assert(store_size > 0);
   stats.store_stats.bytes_total = store_size;
   stats.store_stats.bytes_sst = extra["sst"];
   stats.store_stats.bytes_log = extra["log"];

@@ -491,7 +491,7 @@ private:
       else if (r == -EAGAIN)
         cmon->dispatch(op);
       else
-	assert(0 == "bad C_Booted return value");
+	ceph_abort_msg("bad C_Booted return value");
     }
   };
 
@@ -508,7 +508,7 @@ private:
       else if (r == -EAGAIN)
 	osdmon->dispatch(op);
       else
-	assert(0 == "bad C_ReplyMap return value");
+	ceph_abort_msg("bad C_ReplyMap return value");
     }    
   };
   struct C_PoolOp : public C_MonOp {
@@ -529,7 +529,7 @@ private:
       else if (r == -EAGAIN)
 	osdmon->dispatch(op);
       else
-	assert(0 == "bad C_PoolOp return value");
+	ceph_abort_msg("bad C_PoolOp return value");
     }
   };
 

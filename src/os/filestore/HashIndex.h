@@ -97,7 +97,7 @@ private:
       using ceph::decode;
       __u8 v;
       decode(v, bl);
-      assert(v == 1);
+      ceph_assert(v == 1);
       decode(objs, bl);
       decode(subdirs, bl);
       decode(hash_level, bl);
@@ -154,7 +154,7 @@ private:
       using ceph::decode;
       __u8 v;
       decode(v, bl);
-      assert(v == 1);
+      ceph_assert(v == 1);
       decode(op, bl);
       decode(path, bl);
     }
@@ -386,7 +386,7 @@ private:
 
   /// Convert a number to hex string (upper case).
   static string to_hex(int n) {
-    assert(n >= 0 && n < 16);
+    ceph_assert(n >= 0 && n < 16);
     char c = (n <= 9 ? ('0' + n) : ('A' + n - 10));
     string str;
     str.append(1, c);

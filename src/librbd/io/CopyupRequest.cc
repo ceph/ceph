@@ -47,8 +47,8 @@ public:
     if (snap_id == CEPH_NOSNAP) {
       RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
       RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
-      assert(m_image_ctx.exclusive_lock->is_lock_owner());
-      assert(m_image_ctx.object_map != nullptr);
+      ceph_assert(m_image_ctx.exclusive_lock->is_lock_owner());
+      ceph_assert(m_image_ctx.object_map != nullptr);
       bool sent = m_image_ctx.object_map->aio_update<Context>(
         CEPH_NOSNAP, m_object_no, OBJECT_EXISTS, {}, m_trace, this);
       return (sent ? 0 : 1);
@@ -68,7 +68,7 @@ public:
 
     bool sent = m_image_ctx.object_map->aio_update<Context>(
       snap_id, m_object_no, state, {}, m_trace, this);
-    assert(sent);
+    ceph_assert(sent);
     return 0;
   }
 
@@ -95,7 +95,7 @@ CopyupRequest<I>::CopyupRequest(I *ictx, const std::string &oid,
 
 template <typename I>
 CopyupRequest<I>::~CopyupRequest() {
-  assert(m_pending_requests.empty());
+  ceph_assert(m_pending_requests.empty());
   m_async_op.finish_op();
 }
 
@@ -156,7 +156,7 @@ bool CopyupRequest<I>::send_copyup() {
     r = m_data_ctx.aio_operate(
       m_oid, comp, &copyup_op, 0, snaps,
       (m_trace.valid() ? m_trace.get_info() : nullptr));
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
 
@@ -178,7 +178,7 @@ bool CopyupRequest<I>::send_copyup() {
     r = m_ictx->data_ctx.aio_operate(
       m_oid, comp, &write_op, snapc.seq, snaps,
       (m_trace.valid() ? m_trace.get_info() : nullptr));
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
   return false;
@@ -221,7 +221,7 @@ bool CopyupRequest<I>::is_update_object_map_required(int r) {
   }
 
   auto it = m_ictx->migration_info.snap_map.find(CEPH_NOSNAP);
-  assert(it != m_ictx->migration_info.snap_map.end());
+  ceph_assert(it != m_ictx->migration_info.snap_map.end());
   return it->second[0] != CEPH_NOSNAP;
 }
 
@@ -304,12 +304,12 @@ bool CopyupRequest<I>::should_complete(int *r) {
 
   case STATE_OBJECT_MAP_HEAD:
     ldout(cct, 20) << "OBJECT_MAP_HEAD" << dendl;
-    assert(*r == 0);
+    ceph_assert(*r == 0);
     return send_object_map();
 
   case STATE_OBJECT_MAP:
     ldout(cct, 20) << "OBJECT_MAP" << dendl;
-    assert(*r == 0);
+    ceph_assert(*r == 0);
     if (!is_copyup_required()) {
       ldout(cct, 20) << "skipping copyup" << dendl;
       return true;
@@ -319,7 +319,7 @@ bool CopyupRequest<I>::should_complete(int *r) {
   case STATE_COPYUP:
     {
       Mutex::Locker locker(m_lock);
-      assert(m_pending_copyups > 0);
+      ceph_assert(m_pending_copyups > 0);
       pending_copyups = --m_pending_copyups;
     }
     ldout(cct, 20) << "COPYUP (" << pending_copyups << " pending)"
@@ -352,10 +352,10 @@ void CopyupRequest<I>::remove_from_list() {
 
 template <typename I>
 void CopyupRequest<I>::remove_from_list(Mutex &lock) {
-  assert(m_ictx->copyup_list_lock.is_locked());
+  ceph_assert(m_ictx->copyup_list_lock.is_locked());
 
   auto it = m_ictx->copyup_list.find(m_object_no);
-  assert(it != m_ictx->copyup_list.end());
+  ceph_assert(it != m_ictx->copyup_list.end());
   m_ictx->copyup_list.erase(it);
 }
 
@@ -371,7 +371,7 @@ bool CopyupRequest<I>::send_object_map_head() {
     RWLock::RLocker snap_locker(m_ictx->snap_lock);
     if (m_ictx->object_map != nullptr) {
       bool copy_on_read = m_pending_requests.empty();
-      assert(m_ictx->exclusive_lock->is_lock_owner());
+      ceph_assert(m_ictx->exclusive_lock->is_lock_owner());
 
       RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
 

@@ -149,7 +149,7 @@ int SnapMapper::get_snaps(
   const hobject_t &oid,
   object_snaps *out)
 {
-  assert(check(oid));
+  ceph_assert(check(oid));
   set<string> keys;
   map<string, bufferlist> got;
   keys.insert(to_object_key(oid));
@@ -168,7 +168,7 @@ int SnapMapper::get_snaps(
     dout(20) << __func__ << " " << oid << " " << out->snaps << dendl;
     if (out->snaps.empty()) {
       dout(1) << __func__ << " " << oid << " empty snapset" << dendl;
-      assert(!cct->_conf->osd_debug_verify_snaps);
+      ceph_assert(!cct->_conf->osd_debug_verify_snaps);
     }
   } else {
     dout(20) << __func__ << " " << oid << " (out == NULL)" << dendl;
@@ -181,7 +181,7 @@ void SnapMapper::clear_snaps(
   MapCacher::Transaction<std::string, bufferlist> *t)
 {
   dout(20) << __func__ << " " << oid << dendl;
-  assert(check(oid));
+  ceph_assert(check(oid));
   set<string> to_remove;
   to_remove.insert(to_object_key(oid));
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
@@ -197,7 +197,7 @@ void SnapMapper::set_snaps(
   const object_snaps &in,
   MapCacher::Transaction<std::string, bufferlist> *t)
 {
-  assert(check(oid));
+  ceph_assert(check(oid));
   map<string, bufferlist> to_set;
   bufferlist bl;
   encode(in, bl);
@@ -220,7 +220,7 @@ int SnapMapper::update_snaps(
   dout(20) << __func__ << " " << oid << " " << new_snaps
 	   << " was " << (old_snaps_check ? *old_snaps_check : set<snapid_t>())
 	   << dendl;
-  assert(check(oid));
+  ceph_assert(check(oid));
   if (new_snaps.empty())
     return remove_oid(oid, t);
 
@@ -229,7 +229,7 @@ int SnapMapper::update_snaps(
   if (r < 0)
     return r;
   if (old_snaps_check)
-    assert(out.snaps == *old_snaps_check);
+    ceph_assert(out.snaps == *old_snaps_check);
 
   object_snaps in(oid, new_snaps);
   set_snaps(oid, in, t);
@@ -257,15 +257,15 @@ void SnapMapper::add_oid(
   MapCacher::Transaction<std::string, bufferlist> *t)
 {
   dout(20) << __func__ << " " << oid << " " << snaps << dendl;
-  assert(!snaps.empty());
-  assert(check(oid));
+  ceph_assert(!snaps.empty());
+  ceph_assert(check(oid));
   {
     object_snaps out;
     int r = get_snaps(oid, &out);
     if (r != -ENOENT) {
       derr << __func__ << " found existing snaps mapped on " << oid
 	   << ", removing" << dendl;
-      assert(!cct->_conf->osd_debug_verify_snaps);
+      ceph_assert(!cct->_conf->osd_debug_verify_snaps);
       remove_oid(oid, t);
     }
   }
@@ -292,8 +292,8 @@ int SnapMapper::get_next_objects_to_trim(
   unsigned max,
   vector<hobject_t> *out)
 {
-  assert(out);
-  assert(out->empty());
+  ceph_assert(out);
+  ceph_assert(out->empty());
   int r = 0;
   for (set<string>::iterator i = prefixes.begin();
        i != prefixes.end() && out->size() < max && r == 0;
@@ -314,12 +314,12 @@ int SnapMapper::get_next_objects_to_trim(
 	break; // Done with this prefix
       }
 
-      assert(is_mapping(next.first));
+      ceph_assert(is_mapping(next.first));
 
       dout(20) << __func__ << " " << next.first << dendl;
       pair<snapid_t, hobject_t> next_decoded(from_raw(next));
-      assert(next_decoded.first == snap);
-      assert(check(next_decoded.second));
+      ceph_assert(next_decoded.first == snap);
+      ceph_assert(check(next_decoded.second));
 
       out->push_back(next_decoded.second);
       pos = next.first;
@@ -338,7 +338,7 @@ int SnapMapper::remove_oid(
   MapCacher::Transaction<std::string, bufferlist> *t)
 {
   dout(20) << __func__ << " " << oid << dendl;
-  assert(check(oid));
+  ceph_assert(check(oid));
   return _remove_oid(oid, t);
 }
 
@@ -373,7 +373,7 @@ int SnapMapper::get_snaps(
   const hobject_t &oid,
   std::set<snapid_t> *snaps)
 {
-  assert(check(oid));
+  ceph_assert(check(oid));
   object_snaps out;
   int r = get_snaps(oid, &out);
   if (r < 0)

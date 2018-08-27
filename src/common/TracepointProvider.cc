@@ -40,6 +40,6 @@ void TracepointProvider::verify_config(const ConfigProxy& conf) {
   }
 
   m_handle = dlopen(m_library.c_str(), RTLD_NOW | RTLD_NODELETE);
-  assert(m_handle);
+  ceph_assert(m_handle);
 }
 

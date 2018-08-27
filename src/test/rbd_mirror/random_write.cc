@@ -105,7 +105,7 @@ void write_image(librbd::Image &image) {
 
   uint64_t size = 0;
   image.size(&size);
-  assert(size != 0);
+  ceph_assert(size != 0);
 
   vector<uint64_t> thread_offset;
   uint64_t i;

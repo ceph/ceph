@@ -42,7 +42,7 @@ struct TierAgentState {
     case FLUSH_MODE_IDLE: return "idle";
     case FLUSH_MODE_LOW: return "low";
     case FLUSH_MODE_HIGH: return "high";
-    default: assert(0 == "bad flush mode");
+    default: ceph_abort_msg("bad flush mode");
     }
   }
   const char *get_flush_mode_name() const {
@@ -59,7 +59,7 @@ struct TierAgentState {
     case EVICT_MODE_IDLE: return "idle";
     case EVICT_MODE_SOME: return "some";
     case EVICT_MODE_FULL: return "full";
-    default: assert(0 == "bad evict mode");
+    default: ceph_abort_msg("bad evict mode");
     }
   }
   const char *get_evict_mode_name() const {

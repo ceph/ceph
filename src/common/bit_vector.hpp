@@ -107,7 +107,7 @@ public:
       uint64_t index;
       compute_index(m_offset, &index, &m_shift);
 
-      assert(index == m_index || index == m_index + 1);
+      ceph_assert(index == m_index || index == m_index + 1);
       if (index > m_index) {
         m_index = index;
         ++m_data_iterator;
@@ -304,8 +304,8 @@ uint64_t BitVector<_b>::get_header_length() const {
 template <uint8_t _b>
 void BitVector<_b>::encode_data(bufferlist& bl, uint64_t byte_offset,
 				uint64_t byte_length) const {
-  assert(byte_offset % BLOCK_SIZE == 0);
-  assert(byte_offset + byte_length == m_data.length() ||
+  ceph_assert(byte_offset % BLOCK_SIZE == 0);
+  ceph_assert(byte_offset + byte_length == m_data.length() ||
 	 byte_length % BLOCK_SIZE == 0);
 
   uint64_t end_offset = byte_offset + byte_length;
@@ -323,7 +323,7 @@ void BitVector<_b>::encode_data(bufferlist& bl, uint64_t byte_offset,
 
 template <uint8_t _b>
 void BitVector<_b>::decode_data(bufferlist::const_iterator& it, uint64_t byte_offset) {
-  assert(byte_offset % BLOCK_SIZE == 0);
+  ceph_assert(byte_offset % BLOCK_SIZE == 0);
   if (it.end()) {
     return;
   }
@@ -359,7 +359,7 @@ void BitVector<_b>::decode_data(bufferlist::const_iterator& it, uint64_t byte_of
     tail.substr_of(m_data, end_offset, m_data.length() - end_offset);
     data.append(tail);
   }
-  assert(data.length() == m_data.length());
+  ceph_assert(data.length() == m_data.length());
   data.swap(m_data);
 }
 
@@ -368,7 +368,7 @@ void BitVector<_b>::get_data_extents(uint64_t offset, uint64_t length,
 				     uint64_t *byte_offset,
 				     uint64_t *byte_length) const {
   // read BLOCK_SIZE-aligned chunks
-  assert(length > 0 && offset + length <= m_size);
+  ceph_assert(length > 0 && offset + length <= m_size);
   uint64_t shift;
   compute_index(offset, byte_offset, &shift);
   *byte_offset -= (*byte_offset % BLOCK_SIZE);
@@ -376,7 +376,7 @@ void BitVector<_b>::get_data_extents(uint64_t offset, uint64_t length,
   uint64_t end_offset;
   compute_index(offset + length - 1, &end_offset, &shift);
   end_offset += (BLOCK_SIZE - (end_offset % BLOCK_SIZE));
-  assert(*byte_offset <= end_offset);
+  ceph_assert(*byte_offset <= end_offset);
 
   *byte_length = end_offset - *byte_offset;
   if (*byte_offset + *byte_length > m_data.length()) {

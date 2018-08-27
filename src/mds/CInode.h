@@ -365,7 +365,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     scrub_infop->children_scrubbed = true;
   }
   void scrub_set_finisher(MDSInternalContextBase *c) {
-    assert(!scrub_infop->on_finish);
+    ceph_assert(!scrub_infop->on_finish);
     scrub_infop->on_finish = c;
   }
 
@@ -470,7 +470,7 @@ public:
       return &projected_nodes.back().inode;
   }
   mempool_inode *get_previous_projected_inode() {
-    assert(!projected_nodes.empty());
+    ceph_assert(!projected_nodes.empty());
     auto it = projected_nodes.rbegin();
     ++it;
     if (it != projected_nodes.rend())
@@ -721,11 +721,11 @@ public:
     close_dirfrags();
     close_snaprealm();
     clear_file_locks();
-    assert(num_projected_xattrs == 0);
-    assert(num_projected_srnodes == 0);
-    assert(num_caps_wanted == 0);
-    assert(num_subtree_roots == 0);
-    assert(num_exporting_dirs == 0);
+    ceph_assert(num_projected_xattrs == 0);
+    ceph_assert(num_projected_srnodes == 0);
+    ceph_assert(num_caps_wanted == 0);
+    ceph_assert(num_subtree_roots == 0);
+    ceph_assert(num_exporting_dirs == 0);
   }
   
 
@@ -833,7 +833,7 @@ public:
   void decode_store(bufferlist::const_iterator& bl);
 
   void encode_replica(mds_rank_t rep, bufferlist& bl, uint64_t features, bool need_recover) {
-    assert(is_auth());
+    ceph_assert(is_auth());
     
     // relax locks?
     if (!is_replicated())
@@ -884,7 +884,7 @@ public:
   void finish_export();
   void abort_export() {
     put(PIN_TEMPEXPORTING);
-    assert(state_test(STATE_EXPORTINGCAPS));
+    ceph_assert(state_test(STATE_EXPORTINGCAPS));
     state_clear(STATE_EXPORTINGCAPS);
     put(PIN_EXPORTINGCAPS);
   }
@@ -1090,9 +1090,9 @@ public:
 #endif
 		    << dendl;
 #ifdef MDS_REF_SET
-    assert(ref_map[by] > 0);
+    ceph_assert(ref_map[by] > 0);
 #endif
-    assert(ref > 0);
+    ceph_assert(ref > 0);
   }
   void bad_get(int by) override {
     generic_dout(0) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref
@@ -1101,7 +1101,7 @@ public:
 #endif
 		    << dendl;
 #ifdef MDS_REF_SET
-    assert(ref_map[by] >= 0);
+    ceph_assert(ref_map[by] >= 0);
 #endif
   }
   void first_get() override;
@@ -1112,12 +1112,12 @@ public:
   // -- hierarchy stuff --
 public:
   void set_primary_parent(CDentry *p) {
-    assert(parent == 0 ||
+    ceph_assert(parent == 0 ||
 	   g_conf().get_val<bool>("mds_hack_allow_loading_invalid_metadata"));
     parent = p;
   }
   void remove_primary_parent(CDentry *dn) {
-    assert(dn == parent);
+    ceph_assert(dn == parent);
     parent = 0;
   }
   void add_remote_parent(CDentry *p);
@@ -1130,7 +1130,7 @@ public:
     projected_parent.push_back(dn);
   }
   void pop_projected_parent() {
-    assert(projected_parent.size());
+    ceph_assert(projected_parent.size());
     parent = projected_parent.front();
     projected_parent.pop_front();
   }

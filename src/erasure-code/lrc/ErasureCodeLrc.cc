@@ -83,15 +83,15 @@ int ErasureCodeLrc::create_rule(const string &name,
   int ret;
   ret = crush.add_rule(rno, steps, pg_pool_t::TYPE_ERASURE,
 		       min_rep, max_rep);
-  assert(ret == rno);
+  ceph_assert(ret == rno);
   int step = 0;
 
   ret = crush.set_rule_step(rno, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   ret = crush.set_rule_step(rno, step++, CRUSH_RULE_SET_CHOOSE_TRIES, 100, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   ret = crush.set_rule_step(rno, step++, CRUSH_RULE_TAKE, root, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   // [ [ "choose", "rack", 2 ],
   //   [ "chooseleaf", "host", 5 ] ]
   for (vector<Step>::const_iterator i = rule_steps.begin();
@@ -105,10 +105,10 @@ int ErasureCodeLrc::create_rule(const string &name,
       return -EINVAL;
     }
     ret = crush.set_rule_step(rno, step++, op, i->n, type);
-    assert(ret == 0);
+    ceph_assert(ret == 0);
   }
   ret = crush.set_rule_step(rno, step++, CRUSH_RULE_EMIT, 0, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   crush.set_rule_name(rno, name);
   return rno;
 }

@@ -347,7 +347,7 @@ void OSDMonitor::create_initial()
     int r = ceph_release_from_name(
       g_conf()->mon_osd_initial_require_min_compat_client.c_str());
     if (r <= 0) {
-      assert(0 == "mon_osd_initial_require_min_compat_client is not valid");
+      ceph_abort_msg("mon_osd_initial_require_min_compat_client is not valid");
     }
     newmap.require_min_compat_client = r;
   }
@@ -378,7 +378,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   version_t version = get_last_committed();
   if (version == osdmap.epoch)
     return;
-  assert(version > osdmap.epoch);
+  ceph_assert(version > osdmap.epoch);
 
   dout(15) << "update_from_paxos paxos e " << version
 	   << ", my e " << osdmap.epoch << dendl;
@@ -431,7 +431,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       }
     }
 
-    assert(latest_full > 0);
+    ceph_assert(latest_full > 0);
     auto t(std::make_shared<MonitorDBStore::Transaction>());
     put_version_latest_full(t, latest_full);
     mon->store->apply_transaction(t);
@@ -442,7 +442,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   if ((latest_full > 0) && (latest_full > osdmap.epoch)) {
     bufferlist latest_bl;
     get_version_full(latest_full, latest_bl);
-    assert(latest_bl.length() != 0);
+    ceph_assert(latest_bl.length() != 0);
     dout(7) << __func__ << " loading latest full map e" << latest_full << dendl;
     osdmap = OSDMap();
     osdmap.decode(latest_bl);
@@ -467,14 +467,14 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   while (version > osdmap.epoch) {
     bufferlist inc_bl;
     int err = get_version(osdmap.epoch+1, inc_bl);
-    assert(err == 0);
-    assert(inc_bl.length());
+    ceph_assert(err == 0);
+    ceph_assert(inc_bl.length());
 
     dout(7) << "update_from_paxos  applying incremental " << osdmap.epoch+1
 	    << dendl;
     OSDMap::Incremental inc(inc_bl);
     err = osdmap.apply_incremental(inc);
-    assert(err == 0);
+    ceph_assert(err == 0);
 
     if (!t)
       t.reset(new MonitorDBStore::Transaction);
@@ -496,7 +496,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     get_version_full(osdmap.epoch, orig_full_bl);
     if (orig_full_bl.length()) {
       // the primary provided the full map
-      assert(inc.have_crc);
+      ceph_assert(inc.have_crc);
       if (inc.full_crc != osdmap.crc) {
 	// This will happen if the mons were running mixed versions in
 	// the past or some other circumstance made the full encoded
@@ -527,7 +527,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 	*_dout << dendl;
       }
     } else {
-      assert(!inc.have_crc);
+      ceph_assert(!inc.have_crc);
       put_version_full(t, osdmap.epoch, full_bl);
     }
     put_version_latest_full(t, osdmap.epoch);
@@ -1028,7 +1028,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   pending_inc.modified = ceph_clock_now();
 
   int r = pending_inc.propagate_snaps_to_tiers(cct, osdmap);
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   if (mapping_job) {
     if (!mapping_job->is_done()) {
@@ -1173,7 +1173,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
 	  // make sure FLAG_FULL is truly set, so we are safe not
 	  // to set a extra (redundant) FLAG_BACKFILLFULL flag
-	  assert(tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL));
+	  ceph_assert(tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL));
 	  continue;
 	}
 	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_BACKFILLFULL)) {
@@ -1216,7 +1216,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
 	  // make sure FLAG_FULL is truly set, so we are safe not
 	  // to set a extra (redundant) FLAG_NEARFULL flag
-	  assert(tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL));
+	  ceph_assert(tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_FULL));
 	  continue;
 	}
 	if (tmp.get_pg_pool(p)->has_flag(pg_pool_t::FLAG_NEARFULL)) {
@@ -1380,7 +1380,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	     << " features " << features << dendl;
 
     // the features should be a subset of the mon quorum's features!
-    assert((features & ~mon->get_quorum_con_features()) == 0);
+    ceph_assert((features & ~mon->get_quorum_con_features()) == 0);
 
     bufferlist fullbl;
     encode(tmp, fullbl, features | CEPH_FEATURE_RESERVED);
@@ -1393,7 +1393,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
 
   // encode
-  assert(get_last_committed() + 1 == pending_inc.epoch);
+  ceph_assert(get_last_committed() + 1 == pending_inc.epoch);
   bufferlist bl;
   encode(pending_inc, bl, features | CEPH_FEATURE_RESERVED);
 
@@ -1704,7 +1704,7 @@ void OSDMonitor::load_osdmap_manifest()
   int r = get_value("osdmap_manifest", manifest_bl);
   if (r < 0) {
     derr << __func__ << " unable to read osdmap version manifest" << dendl;
-    ceph_assert(0 == "error reading manifest");
+    ceph_abort_msg("error reading manifest");
   }
   osdmap_manifest.decode(manifest_bl);
   has_osdmap_manifest = true;
@@ -2174,13 +2174,13 @@ bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
        e <= std::min(last, m->get_full_last()) && max > 0;
        ++e, --max) {
     int r = get_version_full(e, features, reply->maps[e]);
-    assert(r >= 0);
+    ceph_assert(r >= 0);
   }
   for (epoch_t e = std::max(first, m->get_inc_first());
        e <= std::min(last, m->get_inc_last()) && max > 0;
        ++e, --max) {
     int r = get_version(e, features, reply->incremental_maps[e]);
-    assert(r >= 0);
+    ceph_assert(r >= 0);
   }
   reply->oldest_map = first;
   reply->newest_map = last;
@@ -2353,8 +2353,8 @@ bool OSDMonitor::prepare_mark_me_down(MonOpRequestRef op)
   MOSDMarkMeDown *m = static_cast<MOSDMarkMeDown*>(op->get_req());
   int target_osd = m->target_osd;
 
-  assert(osdmap.is_up(target_osd));
-  assert(osdmap.get_addrs(target_osd) == m->target_addrs);
+  ceph_assert(osdmap.is_up(target_osd));
+  ceph_assert(osdmap.get_addrs(target_osd) == m->target_addrs);
 
   mon->clog->info() << "osd." << target_osd << " marked itself down";
   pending_inc.new_state[target_osd] = CEPH_OSD_UP;
@@ -2516,7 +2516,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   // laggy.  this is clearly not true in all cases, but will sometimes
   // help us localize the grace correction to a subset of the system
   // (say, a rack with a bad switch) that is unhappy.
-  assert(fi.reporters.size());
+  ceph_assert(fi.reporters.size());
   for (map<int,failure_reporter_t>::iterator p = fi.reporters.begin();
 	p != fi.reporters.end();
 	++p) {
@@ -2596,8 +2596,8 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 
   int target_osd = m->get_target_osd();
   int reporter = m->get_orig_source().num();
-  assert(osdmap.is_up(target_osd));
-  assert(osdmap.get_addrs(target_osd) == m->get_target_addrs());
+  ceph_assert(osdmap.is_up(target_osd));
+  ceph_assert(osdmap.get_addrs(target_osd) == m->get_target_addrs());
 
   if (m->if_osd_failed()) {
     // calculate failure time
@@ -2720,7 +2720,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
-  assert(m->get_orig_source_inst().name.is_osd());
+  ceph_assert(m->get_orig_source_inst().name.is_osd());
 
   // check if osd has required features to boot
   if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
@@ -2826,7 +2826,7 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 	  << " hb_front_addrs " << m->hb_front_addrs
 	  << dendl;
 
-  assert(m->get_orig_source().is_osd());
+  ceph_assert(m->get_orig_source().is_osd());
   int from = m->get_orig_source().num();
 
   // does this osd exist?
@@ -2845,9 +2845,9 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
     dout(7) << __func__ << " was up, first marking down osd." << from << " "
 	    << osdmap.get_addrs(from) << dendl;
     // preprocess should have caught these;  if not, assert.
-    assert(osdmap.get_addrs(from) != m->get_orig_source_addrs() ||
+    ceph_assert(osdmap.get_addrs(from) != m->get_orig_source_addrs() ||
            osdmap.get_cluster_addrs(from) != m->cluster_addrs);
-    assert(osdmap.get_uuid(from) == m->sb.osd_fsid);
+    ceph_assert(osdmap.get_uuid(from) == m->sb.osd_fsid);
 
     if (pending_inc.new_state.count(from) == 0 ||
 	(pending_inc.new_state[from] & CEPH_OSD_UP) == 0) {
@@ -2877,7 +2877,7 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 	     << dendl;
     if (!osdmap.exists(from) || osdmap.get_uuid(from) != m->sb.osd_fsid) {
       // preprocess should have caught this;  if not, assert.
-      assert(!osdmap.exists(from) || osdmap.get_uuid(from).is_zero());
+      ceph_assert(!osdmap.exists(from) || osdmap.get_uuid(from).is_zero());
       pending_inc.new_uuid[from] = m->sb.osd_fsid;
     }
 
@@ -3495,14 +3495,14 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to, uint64_t featur
     bufferlist bl;
     int err = get_version(e, features, bl);
     if (err == 0) {
-      assert(bl.length());
+      ceph_assert(bl.length());
       // if (get_version(e, bl) > 0) {
       dout(20) << "build_incremental    inc " << e << " "
 	       << bl.length() << " bytes" << dendl;
       m->incremental_maps[e] = bl;
     } else {
-      assert(err == -ENOENT);
-      assert(!bl.length());
+      ceph_assert(err == -ENOENT);
+      ceph_assert(!bl.length());
       get_version_full(e, features, bl);
       if (bl.length() > 0) {
       //else if (get_version("full", e, bl) > 0) {
@@ -3529,7 +3529,7 @@ void OSDMonitor::send_incremental(MonOpRequestRef op, epoch_t first)
   op->mark_osdmon_event(__func__);
 
   MonSession *s = op->get_session();
-  assert(s);
+  ceph_assert(s);
 
   if (s->proxy_con) {
     // oh, we can tell the other mon to do it
@@ -3575,8 +3575,8 @@ void OSDMonitor::send_incremental(epoch_t first,
     first = get_first_committed();
     bufferlist bl;
     int err = get_version_full(first, features, bl);
-    assert(err == 0);
-    assert(bl.length());
+    ceph_assert(err == 0);
+    ceph_assert(bl.length());
     dout(20) << "send_incremental starting with base full "
 	     << first << " " << bl.length() << " bytes" << dendl;
     m->maps[first] = bl;
@@ -3798,7 +3798,7 @@ int OSDMonitor::get_full_from_pinned_map(version_t ver, bufferlist& bl)
         derr << __func__
              << "    osdmap crc mismatch! (osdmap crc " << tosdm.get_crc()
              << ", expected " << inc.full_crc << ")" << dendl;
-        ceph_assert(0 == "osdmap crc mismatch");
+        ceph_abort_msg("osdmap crc mismatch");
       }
     }
 
@@ -3906,7 +3906,7 @@ void OSDMonitor::check_pg_creates_subs()
   if (!osdmap.get_num_up_osds()) {
     return;
   }
-  assert(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB);
+  ceph_assert(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB);
   mon->with_session_map([this](const MonSessionMap& session_map) {
       auto pg_creates_subs = session_map.subs.find("osd_pg_creates");
       if (pg_creates_subs == session_map.subs.end()) {
@@ -3921,7 +3921,7 @@ void OSDMonitor::check_pg_creates_subs()
 void OSDMonitor::check_pg_creates_sub(Subscription *sub)
 {
   dout(20) << __func__ << " .. " << sub->session->name << dendl;
-  assert(sub->type == "osd_pg_creates");
+  ceph_assert(sub->type == "osd_pg_creates");
   // only send these if the OSD is up.  we will check_subs() when they do
   // come up so they will get the creates then.
   if (sub->session->name.is_osd() &&
@@ -3937,15 +3937,15 @@ void OSDMonitor::do_application_enable(int64_t pool_id,
 				       const std::string &app_key,
 				       const std::string &app_value)
 {
-  assert(paxos->is_plugged() && is_writeable());
+  ceph_assert(paxos->is_plugged() && is_writeable());
 
   dout(20) << __func__ << ": pool_id=" << pool_id << ", app_name=" << app_name
            << dendl;
 
-  assert(osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
+  ceph_assert(osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
 
   auto pp = osdmap.get_pg_pool(pool_id);
-  assert(pp != nullptr);
+  ceph_assert(pp != nullptr);
 
   pg_pool_t p = *pp;
   if (pending_inc.new_pools.count(pool_id)) {
@@ -4060,7 +4060,7 @@ epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next) cons
   auto creating_pgs_by_epoch = creating_pgs_by_osd_epoch.find(osd);
   if (creating_pgs_by_epoch == creating_pgs_by_osd_epoch.end())
     return next;
-  assert(!creating_pgs_by_epoch->second.empty());
+  ceph_assert(!creating_pgs_by_epoch->second.empty());
 
   MOSDPGCreate *oldm = nullptr; // for pre-mimic OSD compat
   MOSDPGCreate2 *m = nullptr;
@@ -4085,7 +4085,7 @@ epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next) cons
       // Need the create time from the monitor using its clock to set
       // last_scrub_stamp upon pg creation.
       auto create = creating_pgs.pgs.find(pg.pgid);
-      assert(create != creating_pgs.pgs.end());
+      ceph_assert(create != creating_pgs.pgs.end());
       if (old) {
 	if (!oldm) {
 	  oldm = new MOSDPGCreate(creating_pgs_epoch);
@@ -4419,8 +4419,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ss << "there is no map for epoch " << epoch;
       goto reply;
     }
-    assert(err == 0);
-    assert(osdmap_bl.length());
+    ceph_assert(err == 0);
+    ceph_assert(osdmap_bl.length());
 
     OSDMap *p;
     if (epoch == osdmap.get_epoch()) {
@@ -5017,7 +5017,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
             break;
           }
         }
-        assert(i != ALL_CHOICES.end());
+        ceph_assert(i != ALL_CHOICES.end());
 	switch(*it) {
 	  case PG_NUM:
 	    f->dump_int("pg_num", p->get_pg_num());
@@ -5275,7 +5275,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	      if (i->second == *it)
 		break;
 	    }
-	    assert(i != ALL_CHOICES.end());
+	    ceph_assert(i != ALL_CHOICES.end());
 	    ss << i->first << ": " <<
 	      (p->has_flag(pg_pool_t::get_flag_by_name(i->first)) ?
 	       "true" : "false") << "\n";
@@ -5305,7 +5305,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	      if (i->second == *it)
 		break;
 	    }
-	    assert(i != ALL_CHOICES.end());
+	    ceph_assert(i != ALL_CHOICES.end());
 	    {
 	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
 	      if (p->opts.is_set(key)) {
@@ -5331,7 +5331,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 
     int64_t poolid = osdmap.lookup_pg_pool_name(pool_name);
     if (poolid < 0) {
-      assert(poolid == -ENOENT);
+      ceph_assert(poolid == -ENOENT);
       ss << "unrecognized pool '" << pool_name << "'";
       r = -ENOENT;
       goto reply;
@@ -5709,7 +5709,7 @@ void OSDMonitor::set_pool_flags(int64_t pool_id, uint64_t flags)
 {
   pg_pool_t *pool = pending_inc.get_new_pool(pool_id,
     osdmap.get_pg_pool(pool_id));
-  assert(pool);
+  ceph_assert(pool);
   pool->set_flag(flags);
 }
 
@@ -5717,7 +5717,7 @@ void OSDMonitor::clear_pool_flags(int64_t pool_id, uint64_t flags)
 {
   pg_pool_t *pool = pending_inc.get_new_pool(pool_id,
     osdmap.get_pg_pool(pool_id));
-  assert(pool);
+  ceph_assert(pool);
   pool->unset_flag(flags);
 }
 
@@ -5842,7 +5842,7 @@ bool OSDMonitor::try_prune_purged_snaps()
       }
       if (pbegin && pbegin < end) {
 	// the tail of [begin,end) is purged; shorten the range
-	assert(pbegin > begin);
+	ceph_assert(pbegin > begin);
 	end = pbegin;
       }
       to_prune.insert(begin, end - begin);
@@ -6235,7 +6235,7 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 				   true);
   if (r)
     return r;
-  assert((*erasure_code_profile_map).count("plugin"));
+  ceph_assert((*erasure_code_profile_map).count("plugin"));
   string default_plugin = (*erasure_code_profile_map)["plugin"];
   map<string,string> user_map;
   for (vector<string>::const_iterator i = erasure_code_profile.begin();
@@ -6318,7 +6318,7 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
       if (it != profile.end()) {
 	string err_str;
 	stripe_unit = strict_iecstrtoll(it->second.c_str(), &err_str);
-	assert(err_str.empty());
+	ceph_assert(err_str.empty());
       }
       *stripe_width = data_chunks *
 	erasure_code->get_chunk_size(stripe_unit * data_chunks);
@@ -7114,7 +7114,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       }
       break;
     default:
-      assert(!"unknown type");
+      ceph_assert(!"unknown type");
     }
   } else {
     ss << "unrecognized variable '" << var << "'";
@@ -7334,7 +7334,7 @@ int OSDMonitor::prepare_command_osd_crush_remove(
   if (err < 0)
     return err;
 
-  assert(err == 0);
+  ceph_assert(err == 0);
   do_osd_crush_remove(newcrush);
 
   return 0;
@@ -7356,7 +7356,7 @@ int OSDMonitor::prepare_command_osd_remove(int32_t id)
 
 int32_t OSDMonitor::_allocate_osd_id(int32_t* existing_id)
 {
-  assert(existing_id);
+  ceph_assert(existing_id);
   *existing_id = -1;
 
   for (int32_t i = 0; i < osdmap.get_max_osd(); ++i) {
@@ -7382,7 +7382,7 @@ void OSDMonitor::do_osd_create(
     int32_t* new_id)
 {
   dout(10) << __func__ << " uuid " << uuid << dendl;
-  assert(new_id);
+  ceph_assert(new_id);
 
   // We presume validation has been performed prior to calling this
   // function. We assert with prejudice.
@@ -7392,7 +7392,7 @@ void OSDMonitor::do_osd_create(
   if (!uuid.is_zero()) {
     existing_id = osdmap.identify_osd(uuid);
     if (existing_id >= 0) {
-      assert(id < 0 || id == existing_id);
+      ceph_assert(id < 0 || id == existing_id);
       *new_id = existing_id;
       goto out;
     } else if (id >= 0) {
@@ -7408,12 +7408,12 @@ void OSDMonitor::do_osd_create(
   dout(10) << __func__ << " allocated id " << allocated_id
            << " existing id " << existing_id << dendl;
   if (existing_id >= 0) {
-    assert(existing_id < osdmap.get_max_osd());
-    assert(allocated_id < 0);
+    ceph_assert(existing_id < osdmap.get_max_osd());
+    ceph_assert(allocated_id < 0);
     pending_inc.new_weight[existing_id] = CEPH_OSD_OUT;
     *new_id = existing_id;
   } else if (allocated_id >= 0) {
-    assert(existing_id < 0);
+    ceph_assert(existing_id < 0);
     // raise max_osd
     if (pending_inc.new_max_osd < 0) {
       pending_inc.new_max_osd = osdmap.get_max_osd() + 1;
@@ -7421,9 +7421,9 @@ void OSDMonitor::do_osd_create(
       ++pending_inc.new_max_osd;
     }
     *new_id = pending_inc.new_max_osd - 1;
-    assert(*new_id == allocated_id);
+    ceph_assert(*new_id == allocated_id);
   } else {
-    assert(0 == "unexpected condition");
+    ceph_abort_msg("unexpected condition");
   }
 
 out:
@@ -7475,7 +7475,7 @@ int OSDMonitor::validate_osd_create(
   dout(10) << __func__ << " id " << id << " uuid " << uuid
            << " check_osd_exists " << check_osd_exists << dendl;
 
-  assert(existing_id);
+  ceph_assert(existing_id);
 
   if (id < 0 && uuid.is_zero()) {
     // we have nothing to validate
@@ -7499,7 +7499,7 @@ int OSDMonitor::validate_osd_create(
    * provided, but we will always guarantee the idempotency of `osd new`.
    */
 
-  assert(!uuid.is_zero());
+  ceph_assert(!uuid.is_zero());
   if (pending_inc.identify_osd(uuid) >= 0) {
     // osd is about to exist
     return -EAGAIN;
@@ -7542,7 +7542,7 @@ int OSDMonitor::prepare_command_osd_create(
     stringstream& ss)
 {
   dout(10) << __func__ << " id " << id << " uuid " << uuid << dendl;
-  assert(existing_id);
+  ceph_assert(existing_id);
   if (osdmap.is_destroyed(id)) {
     ss << "ceph osd create has been deprecated. Please use ceph osd new "
           "instead.";
@@ -7567,7 +7567,7 @@ int OSDMonitor::prepare_command_osd_new(
   string uuidstr;
   int64_t id = -1;
 
-  assert(paxos->is_plugged());
+  ceph_assert(paxos->is_plugged());
 
   dout(10) << __func__ << " " << op << dendl;
 
@@ -7622,7 +7622,7 @@ int OSDMonitor::prepare_command_osd_new(
   if (err == EEXIST) {
     // this is idempotent from the osdmon's point-of-view
     may_be_idempotent = true;
-    assert(existing_id >= 0);
+    ceph_assert(existing_id >= 0);
     id = existing_id;
   } else if (err < 0) {
     return err;
@@ -7649,7 +7649,7 @@ int OSDMonitor::prepare_command_osd_new(
       // find an `id`
       id = _allocate_osd_id(&existing_id);
       if (id < 0) {
-        assert(existing_id >= 0);
+        ceph_assert(existing_id >= 0);
         id = existing_id;
       }
       dout(10) << __func__ << " found id " << id << " to use" << dendl;
@@ -7659,8 +7659,8 @@ int OSDMonitor::prepare_command_osd_new(
       dout(10) << __func__ << " creating new osd." << id << dendl;
     }
   } else {
-    assert(id >= 0);
-    assert(osdmap.exists(id));
+    ceph_assert(id >= 0);
+    ceph_assert(osdmap.exists(id));
   }
 
   // we are now able to either create a brand new osd or reuse an existing
@@ -7671,7 +7671,7 @@ int OSDMonitor::prepare_command_osd_new(
   if (may_be_idempotent && params.empty()) {
     // nothing to do, really.
     dout(10) << __func__ << " idempotent and no params -- no op." << dendl;
-    assert(id >= 0);
+    ceph_assert(id >= 0);
     if (f) {
       f->open_object_section("created_osd");
       f->dump_int("osdid", id);
@@ -7732,7 +7732,7 @@ int OSDMonitor::prepare_command_osd_new(
     } else if (may_be_idempotent && err != EEXIST) {
       // for this to be idempotent, `id` should already be >= 0; no need
       // to use validate_id.
-      assert(id >= 0);
+      ceph_assert(id >= 0);
       ss << "osd." << id << " exists but secrets do not match";
       return -EEXIST;
     }
@@ -7743,14 +7743,14 @@ int OSDMonitor::prepare_command_osd_new(
       if (err < 0) {
         return err;
       } else if (may_be_idempotent && err != EEXIST) {
-        assert(id >= 0);
+        ceph_assert(id >= 0);
         ss << "osd." << id << " exists but dm-crypt key does not match.";
         return -EEXIST;
       }
     }
   }
-  assert(!has_secrets || !cephx_secret.empty());
-  assert(!has_lockbox || !lockbox_secret.empty());
+  ceph_assert(!has_secrets || !cephx_secret.empty());
+  ceph_assert(!has_lockbox || !lockbox_secret.empty());
 
   if (may_be_idempotent) {
     // we have nothing to do for either the osdmon or the authmon,
@@ -7758,7 +7758,7 @@ int OSDMonitor::prepare_command_osd_new(
     // touched. This is therefore an idempotent operation, and we can
     // just return right away.
     dout(10) << __func__ << " idempotent -- no op." << dendl;
-    assert(id >= 0);
+    ceph_assert(id >= 0);
     if (f) {
       f->open_object_section("created_osd");
       f->dump_int("osdid", id);
@@ -7768,28 +7768,28 @@ int OSDMonitor::prepare_command_osd_new(
     }
     return EEXIST;
   }
-  assert(!may_be_idempotent);
+  ceph_assert(!may_be_idempotent);
 
   // perform updates.
   if (has_secrets) {
-    assert(!cephx_secret.empty());
-    assert((lockbox_secret.empty() && dmcrypt_key.empty()) ||
+    ceph_assert(!cephx_secret.empty());
+    ceph_assert((lockbox_secret.empty() && dmcrypt_key.empty()) ||
            (!lockbox_secret.empty() && !dmcrypt_key.empty()));
 
     err = mon->authmon()->do_osd_new(cephx_entity,
         lockbox_entity,
         has_lockbox);
-    assert(0 == err);
+    ceph_assert(0 == err);
 
     if (has_lockbox) {
-      assert(nullptr != svc);
+      ceph_assert(nullptr != svc);
       svc->do_osd_new(uuid, dmcrypt_key);
     }
   }
 
   if (is_recreate_destroyed) {
-    assert(id >= 0);
-    assert(osdmap.is_destroyed(id));
+    ceph_assert(id >= 0);
+    ceph_assert(osdmap.is_destroyed(id));
     pending_inc.new_weight[id] = CEPH_OSD_OUT;
     pending_inc.new_state[id] |= CEPH_OSD_DESTROYED;
     if ((osdmap.get_state(id) & CEPH_OSD_NEW) == 0) {
@@ -7803,11 +7803,11 @@ int OSDMonitor::prepare_command_osd_new(
     }
     pending_inc.new_uuid[id] = uuid;
   } else {
-    assert(id >= 0);
+    ceph_assert(id >= 0);
     int32_t new_id = -1;
     do_osd_create(id, uuid, device_class, &new_id);
-    assert(new_id >= 0);
-    assert(id == new_id);
+    ceph_assert(new_id >= 0);
+    ceph_assert(id == new_id);
   }
 
   if (f) {
@@ -7882,7 +7882,7 @@ int OSDMonitor::prepare_command_osd_destroy(
     int32_t id,
     stringstream& ss)
 {
-  assert(paxos->is_plugged());
+  ceph_assert(paxos->is_plugged());
 
   // we check if the osd exists for the benefit of `osd purge`, which may
   // have previously removed the osd. If the osd does not exist, return
@@ -7925,14 +7925,14 @@ int OSDMonitor::prepare_command_osd_destroy(
   ConfigKeyService *svc = (ConfigKeyService*)mon->config_key_service;
   err = svc->validate_osd_destroy(id, uuid);
   if (err < 0) {
-    assert(err == -ENOENT);
+    ceph_assert(err == -ENOENT);
     err = 0;
     idempotent_cks = true;
   }
 
   if (!idempotent_auth) {
     err = mon->authmon()->do_osd_destroy(cephx_entity, lockbox_entity);
-    assert(0 == err);
+    ceph_assert(0 == err);
   }
 
   if (!idempotent_cks) {
@@ -7946,7 +7946,7 @@ int OSDMonitor::prepare_command_osd_destroy(
   // defying PaxosService and all laws of nature. Therefore, as we may
   // be used during 'osd purge', let's keep the caller responsible for
   // proposing.
-  assert(err == 0);
+  ceph_assert(err == 0);
   return 0;
 }
 
@@ -7954,10 +7954,10 @@ int OSDMonitor::prepare_command_osd_purge(
     int32_t id,
     stringstream& ss)
 {
-  assert(paxos->is_plugged());
+  ceph_assert(paxos->is_plugged());
   dout(10) << __func__ << " purging osd." << id << dendl;
 
-  assert(!osdmap.is_up(id));
+  ceph_assert(!osdmap.is_up(id));
 
   /*
    * This may look a bit weird, but this is what's going to happen:
@@ -8003,7 +8003,7 @@ int OSDMonitor::prepare_command_osd_purge(
       may_be_idempotent = false;
     }
   }
-  assert(0 == err);
+  ceph_assert(0 == err);
 
   if (may_be_idempotent && !osdmap.exists(id)) {
     dout(10) << __func__ << " osd." << id << " does not exist and "
@@ -8013,7 +8013,7 @@ int OSDMonitor::prepare_command_osd_purge(
 
   err = prepare_command_osd_remove(id);
   // we should not be busy, as we should have made sure this id is not up.
-  assert(0 == err);
+  ceph_assert(0 == err);
 
   do_osd_crush_remove(newcrush);
   return 0;
@@ -9332,7 +9332,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = 0;
     } else {
       int ruleno = newcrush.get_rule_id(name);
-      assert(ruleno >= 0);
+      ceph_assert(ruleno >= 0);
 
       // make sure it is not in use.
       // FIXME: this is ok in some situations, but let's not bother with that
@@ -9690,7 +9690,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = 0;
       goto reply;
     }
-    assert(osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
+    ceph_assert(osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
     if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
       ss << "Not advisable to continue since no OSDs are up. Pass "
 	 << "--yes-i-really-mean-it if you really wish to continue.";
@@ -9829,7 +9829,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	      ss << ", ";
             ss << "osd." << osd << " is still up; must be down before removal. ";
 	  } else {
-            assert(err == 0);
+            ceph_assert(err == 0);
 	    if (any) {
 	      ss << ", osd." << osd;
             } else {
@@ -9969,7 +9969,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           break;
 
         default:
-	  assert(0 == "invalid option");
+	  ceph_abort_msg("invalid option");
         }
       }
     }
@@ -10031,7 +10031,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           osdmap.get_noout_osds(&osds);
           break;
         default:
-          assert(0 == "invalid option");
+          ceph_abort_msg("invalid option");
         }
 
         // cancel any pending noup/nodown/noin/noout requests too
@@ -10069,7 +10069,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
             break;
 
           default:
-            assert(0 == "invalid option");
+            ceph_abort_msg("invalid option");
           }
         }
 
@@ -10137,7 +10137,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
             break;
 
           default:
-            assert(0 == "invalid option");
+            ceph_abort_msg("invalid option");
         }
       }
     }
@@ -10387,7 +10387,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       break;
 
     default:
-      assert(0 == "invalid option");
+      ceph_abort_msg("invalid option");
     }
 
     switch (option) {
@@ -10530,7 +10530,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       break;
 
     default:
-      assert(0 == "invalid option");
+      ceph_abort_msg("invalid option");
     }
 
     goto update;
@@ -10691,7 +10691,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     bool is_destroy = (prefix == "osd destroy-actual");
     if (!is_destroy) {
-      assert("osd purge-actual" == prefix ||
+      ceph_assert("osd purge-actual" == prefix ||
 	     "osd purge-new" == prefix);
     }
 
@@ -10731,7 +10731,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (is_destroy) {
       err = prepare_command_osd_destroy(id, ss);
       // we checked above that it should exist.
-      assert(err != -ENOENT);
+      ceph_assert(err != -ENOENT);
     } else {
       err = prepare_command_osd_purge(id, ss);
       if (err == -ENOENT) {
@@ -11302,9 +11302,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
-    assert(p);
+    ceph_assert(p);
     const pg_pool_t *tp = osdmap.get_pg_pool(tierpool_id);
-    assert(tp);
+    ceph_assert(tp);
 
     if (!_check_become_tier(tierpool_id, tp, pool_id, p, &err, &ss)) {
       goto reply;
@@ -11366,9 +11366,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
-    assert(p);
+    ceph_assert(p);
     const pg_pool_t *tp = osdmap.get_pg_pool(tierpool_id);
-    assert(tp);
+    ceph_assert(tp);
 
     if (!_check_remove_tier(pool_id, p, tp, &err, &ss)) {
       goto reply;
@@ -11430,9 +11430,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
-    assert(p);
+    ceph_assert(p);
     const pg_pool_t *overlay_p = osdmap.get_pg_pool(overlaypool_id);
-    assert(overlay_p);
+    ceph_assert(overlay_p);
     if (p->tiers.count(overlaypool_id) == 0) {
       ss << "tier pool '" << overlaypoolstr << "' is not a tier of '" << poolstr << "'";
       err = -EINVAL;
@@ -11475,7 +11475,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
-    assert(p);
+    ceph_assert(p);
     if (!p->has_read_tier()) {
       err = 0;
       ss << "there is now (or already was) no overlay for '" << poolstr << "'";
@@ -11520,7 +11520,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
-    assert(p);
+    ceph_assert(p);
     if (!p->is_tier()) {
       ss << "pool '" << poolstr << "' is not a tier";
       err = -EINVAL;
@@ -11647,7 +11647,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	<< "' to " << pg_pool_t::get_cache_mode_name(mode);
     if (mode == pg_pool_t::CACHEMODE_NONE) {
       const pg_pool_t *base_pool = osdmap.get_pg_pool(np->tier_of);
-      assert(base_pool);
+      ceph_assert(base_pool);
       if (base_pool->read_tier == pool_id ||
 	  base_pool->write_tier == pool_id)
 	ss <<" (WARNING: pool is still configured as read or write tier)";
@@ -11678,9 +11678,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
-    assert(p);
+    ceph_assert(p);
     const pg_pool_t *tp = osdmap.get_pg_pool(tierpool_id);
-    assert(tp);
+    ceph_assert(tp);
 
     if (!_check_become_tier(tierpool_id, tp, pool_id, p, &err, &ss)) {
       goto reply;
@@ -11779,7 +11779,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } else if (field == "max_bytes") {
       value = strict_iecstrtoll(val.c_str(), &tss);
     } else {
-      assert(0 == "unrecognized option");
+      ceph_abort_msg("unrecognized option");
     }
     if (!tss.empty()) {
       ss << "error parsing value '" << val << "': " << tss;
@@ -11793,7 +11793,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } else if (field == "max_bytes") {
       pi->quota_max_bytes = value;
     } else {
-      assert(0 == "unrecognized option");
+      ceph_abort_msg("unrecognized option");
     }
     ss << "set-quota " << field << " = " << value << " for pool " << poolstr;
     rs = ss.str();
@@ -12244,7 +12244,7 @@ bool OSDMonitor::_check_become_tier(
   }
 
   if (base_pool->tiers.count(tier_pool_id)) {
-    assert(tier_pool->tier_of == base_pool_id);
+    ceph_assert(tier_pool->tier_of == base_pool_id);
     *err = 0;
     *ss << "pool '" << tier_pool_name << "' is now (or already was) a tier of '"
       << base_pool_name << "'";

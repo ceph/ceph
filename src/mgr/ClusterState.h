@@ -115,7 +115,7 @@ public:
   void with_monmap(Args &&... args) const
   {
     Mutex::Locker l(lock);
-    assert(monc != nullptr);
+    ceph_assert(monc != nullptr);
     monc->with_monmap(std::forward<Args>(args)...);
   }
 
@@ -123,7 +123,7 @@ public:
   auto with_osdmap(Args &&... args) const ->
     decltype(objecter->with_osdmap(std::forward<Args>(args)...))
   {
-    assert(objecter != nullptr);
+    ceph_assert(objecter != nullptr);
     return objecter->with_osdmap(std::forward<Args>(args)...);
   }
 

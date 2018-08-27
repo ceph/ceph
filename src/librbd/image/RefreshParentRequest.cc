@@ -36,8 +36,8 @@ template <typename I>
 bool RefreshParentRequest<I>::is_refresh_required(
     I &child_image_ctx, const ParentInfo &parent_md,
     const MigrationInfo &migration_info) {
-  assert(child_image_ctx.snap_lock.is_locked());
-  assert(child_image_ctx.parent_lock.is_locked());
+  ceph_assert(child_image_ctx.snap_lock.is_locked());
+  ceph_assert(child_image_ctx.parent_lock.is_locked());
   return (is_open_required(child_image_ctx, parent_md, migration_info) ||
           is_close_required(child_image_ctx, parent_md, migration_info));
 }
@@ -81,8 +81,8 @@ void RefreshParentRequest<I>::send() {
 
 template <typename I>
 void RefreshParentRequest<I>::apply() {
-  assert(m_child_image_ctx.snap_lock.is_wlocked());
-  assert(m_child_image_ctx.parent_lock.is_wlocked());
+  ceph_assert(m_child_image_ctx.snap_lock.is_wlocked());
+  ceph_assert(m_child_image_ctx.parent_lock.is_wlocked());
   std::swap(m_child_image_ctx.parent, m_parent_image_ctx);
   std::swap(m_child_image_ctx.migration_parent, m_migration_parent_image_ctx);
 }
@@ -102,7 +102,7 @@ void RefreshParentRequest<I>::finalize(Context *on_finish) {
 
 template <typename I>
 void RefreshParentRequest<I>::send_open_parent() {
-  assert(m_parent_md.spec.pool_id >= 0);
+  ceph_assert(m_parent_md.spec.pool_id >= 0);
 
   CephContext *cct = m_child_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
@@ -172,8 +172,8 @@ Context *RefreshParentRequest<I>::handle_open_parent(int *result) {
 
 template <typename I>
 void RefreshParentRequest<I>::send_open_migration_parent() {
-  assert(m_parent_image_ctx != nullptr);
-  assert(!m_migration_info.empty());
+  ceph_assert(m_parent_image_ctx != nullptr);
+  ceph_assert(!m_migration_info.empty());
 
   CephContext *cct = m_child_image_ctx.cct;
   ParentSpec parent_spec;
@@ -279,7 +279,7 @@ Context *RefreshParentRequest<I>::handle_close_migration_parent(int *result) {
 
 template <typename I>
 void RefreshParentRequest<I>::send_close_parent() {
-  assert(m_parent_image_ctx != nullptr);
+  ceph_assert(m_parent_image_ctx != nullptr);
 
   CephContext *cct = m_child_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;

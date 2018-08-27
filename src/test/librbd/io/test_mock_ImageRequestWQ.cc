@@ -45,7 +45,7 @@ struct ImageDispatchSpec<librbd::MockTestImageCtx> {
       librbd::MockTestImageCtx &image_ctx, AioCompletion *aio_comp,
       Extents &&image_extents, bufferlist &&bl, int op_flags,
       const ZTracer::Trace &parent_trace) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->aio_comp = aio_comp;
     return s_instance;
   }
@@ -53,7 +53,7 @@ struct ImageDispatchSpec<librbd::MockTestImageCtx> {
   static ImageDispatchSpec* create_flush_request(
       librbd::MockTestImageCtx &image_ctx, AioCompletion *aio_comp,
       FlushSource flush_source, const ZTracer::Trace &parent_trace) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->aio_comp = aio_comp;
     return s_instance;
   }

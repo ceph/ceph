@@ -50,15 +50,15 @@ class DispatchQueue {
       return type != -1;
     }
     int get_code () const {
-      assert(is_code());
+      ceph_assert(is_code());
       return type;
     }
     const Message::ref& get_message() {
-      assert(!is_code());
+      ceph_assert(!is_code());
       return m;
     }
     Connection *get_connection() {
-      assert(is_code());
+      ceph_assert(is_code());
       return con.get();
     }
   };
@@ -82,7 +82,7 @@ class DispatchQueue {
   }
   void remove_arrival(const Message::ref& m) {
     auto it = marrival_map.find(m);
-    assert(it != marrival_map.end());
+    ceph_assert(it != marrival_map.end());
     marrival.erase(it->second);
     marrival_map.erase(it);
   }
@@ -234,9 +234,9 @@ class DispatchQueue {
       stop(false)
     {}
   ~DispatchQueue() {
-    assert(mqueue.empty());
-    assert(marrival.empty());
-    assert(local_messages.empty());
+    ceph_assert(mqueue.empty());
+    ceph_assert(marrival.empty());
+    ceph_assert(local_messages.empty());
   }
 };
 

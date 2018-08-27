@@ -193,7 +193,7 @@ int init_collections(std::unique_ptr<ObjectStore>& os,
 		      std::vector<Collection>& collections,
 		      uint64_t count)
 {
-  assert(count > 0);
+  ceph_assert(count > 0);
   collections.reserve(count);
 
   const int split_bits = cbits(count - 1);
@@ -381,7 +381,7 @@ Engine::Engine(thread_data* td)
 
 Engine::~Engine()
 {
-  assert(!ref_count);
+  ceph_assert(!ref_count);
 }
 
 struct Object {
@@ -583,7 +583,7 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
 
     // fill attrs if any
     if (o->oi_attr_len_high) {
-      assert(o->oi_attr_len_high >= o->oi_attr_len_low);
+      ceph_assert(o->oi_attr_len_high >= o->oi_attr_len_low);
       // fill with the garbage as we do not care of the actual content...
       job->one_for_all_data.set_length(
         ceph::util::generate_random_number(
@@ -591,7 +591,7 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
       attrset["_"] = job->one_for_all_data;
     }
     if (o->snapset_attr_len_high) {
-      assert(o->snapset_attr_len_high >= o->snapset_attr_len_low);
+      ceph_assert(o->snapset_attr_len_high >= o->snapset_attr_len_low);
       job->one_for_all_data.set_length(
         ceph::util::generate_random_number
 	  (o->snapset_attr_len_low, o->snapset_attr_len_high));
@@ -599,7 +599,7 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
 
     }
     if (o->_fastinfo_omap_len_high) {
-      assert(o->_fastinfo_omap_len_high >= o->_fastinfo_omap_len_low);
+      ceph_assert(o->_fastinfo_omap_len_high >= o->_fastinfo_omap_len_low);
       // fill with the garbage as we do not care of the actual content...
       job->one_for_all_data.set_length(
 	ceph::util::generate_random_number(
@@ -635,7 +635,7 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
       }
 
       if (o->pglog_omap_len_high) {
-	assert(o->pglog_omap_len_high >= o->pglog_omap_len_low);
+	ceph_assert(o->pglog_omap_len_high >= o->pglog_omap_len_low);
 	snprintf(ver_key, sizeof(ver_key),
 	  "0000000011.%020llu", (unsigned long long)pglog_ver_cnt);
 	// fill with the garbage as we do not care of the actual content...
@@ -646,7 +646,7 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
       }
       if (o->pglog_dup_omap_len_high) {
 	//insert dup
-	assert(o->pglog_dup_omap_len_high >= o->pglog_dup_omap_len_low);
+	ceph_assert(o->pglog_dup_omap_len_high >= o->pglog_dup_omap_len_low);
         for( auto i = pglog_trim_tail; i < pglog_trim_head; ++i) {
 	  snprintf(ver_key, sizeof(ver_key),
 	    "dup_0000000011.%020llu", (unsigned long long)i);

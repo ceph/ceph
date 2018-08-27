@@ -102,7 +102,7 @@ void lru_map<K, V>::_add(const K& key, V& value)
   while (entries.size() > max) {
     typename std::list<K>::reverse_iterator riter = entries_lru.rbegin();
     iter = entries.find(*riter);
-    // assert(iter != entries.end());
+    // ceph_assert(iter != entries.end());
     entries.erase(iter);
     entries_lru.pop_back();
   }

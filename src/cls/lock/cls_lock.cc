@@ -148,7 +148,7 @@ static int lock_obj(cls_method_context_t hctx,
   entity_inst_t inst;
   r = cls_get_request_origin(hctx, &inst);
   id.locker = inst.name;
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   /* check this early, before we check fail_if_exists, otherwise we might
    * remove the locker entry and not check it later */
@@ -287,7 +287,7 @@ static int unlock_op(cls_method_context_t hctx,
 
   entity_inst_t inst;
   int r = cls_get_request_origin(hctx, &inst);
-  assert(r == 0);
+  ceph_assert(r == 0);
   return remove_lock(hctx, op.name, inst.name, op.cookie);
 }
 
@@ -457,7 +457,7 @@ int assert_locked(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   entity_inst_t inst;
   r = cls_get_request_origin(hctx, &inst);
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   locker_id_t id;
   id.cookie = op.cookie;
@@ -529,7 +529,7 @@ int set_cookie(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   entity_inst_t inst;
   r = cls_get_request_origin(hctx, &inst);
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   locker_id_t id;
   id.cookie = op.cookie;

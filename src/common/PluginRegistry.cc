@@ -61,7 +61,7 @@ PluginRegistry::~PluginRegistry()
 
 int PluginRegistry::remove(const std::string& type, const std::string& name)
 {
-  assert(lock.is_locked());
+  ceph_assert(lock.is_locked());
 
   std::map<std::string,std::map<std::string,Plugin*> >::iterator i =
     plugins.find(type);
@@ -86,7 +86,7 @@ int PluginRegistry::add(const std::string& type,
 			const std::string& name,
 			Plugin* plugin)
 {
-  assert(lock.is_locked());
+  ceph_assert(lock.is_locked());
   if (plugins.count(type) &&
       plugins[type].count(name)) {
     return -EEXIST;
@@ -113,7 +113,7 @@ Plugin *PluginRegistry::get_with_load(const std::string& type,
 Plugin *PluginRegistry::get(const std::string& type,
 			    const std::string& name)
 {
-  assert(lock.is_locked());
+  ceph_assert(lock.is_locked());
   Plugin *ret = 0;
 
   std::map<std::string,Plugin*>::iterator j;
@@ -135,7 +135,7 @@ Plugin *PluginRegistry::get(const std::string& type,
 int PluginRegistry::load(const std::string &type,
 			 const std::string &name)
 {
-  assert(lock.is_locked());
+  ceph_assert(lock.is_locked());
   ldout(cct, 1) << __func__ << " " << type << " " << name << dendl;
 
   // std::string fname = cct->_conf->plugin_dir + "/" + type + "/" PLUGIN_PREFIX

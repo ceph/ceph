@@ -52,7 +52,7 @@ void LoadRequest<I>::image_map_list() {
 
   m_out_bl.clear();
   int r = m_ioctx.aio_operate(RBD_MIRROR_LEADER, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 

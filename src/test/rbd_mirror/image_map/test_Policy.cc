@@ -29,7 +29,7 @@ public:
     if (policy_type == "none" || policy_type == "simple") {
       m_policy = image_map::SimplePolicy::create(m_local_io_ctx);
     } else {
-      assert(false);
+      ceph_abort();
     }
 
     m_policy->init({});

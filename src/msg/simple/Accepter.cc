@@ -237,7 +237,7 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
       !bind_addr.is_blank_ip())
     msgr->learned_addr(bind_addr);
   else
-    assert(msgr->get_need_addr());  // should still be true.
+    ceph_assert(msgr->get_need_addr());  // should still be true.
 
   if (msgr->get_myaddr().get_port() == 0) {
     msgr->set_myaddrs(entity_addrvec_t(listen_addr));

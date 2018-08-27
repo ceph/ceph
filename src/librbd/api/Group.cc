@@ -37,7 +37,7 @@ namespace {
 template <typename I>
 snap_t get_group_snap_id(I* ictx,
                          const cls::rbd::SnapshotNamespace& in_snap_namespace) {
-  assert(ictx->snap_lock.is_locked());
+  ceph_assert(ictx->snap_lock.is_locked());
   auto it = ictx->snap_ids.lower_bound({in_snap_namespace, ""});
   if (it != ictx->snap_ids.end() && it->first.first == in_snap_namespace) {
     return it->second;

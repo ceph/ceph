@@ -76,7 +76,7 @@ void ObserverMgr<ConfigObs>::remove_observer(ConfigObs* observer)
       ++o;
     }
   }
-  assert(found_obs);
+  ceph_assert(found_obs);
 }
 
 template<class ConfigObs>

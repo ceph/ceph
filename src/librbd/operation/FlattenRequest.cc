@@ -31,7 +31,7 @@ public:
 
   int send() override {
     I &image_ctx = this->m_image_ctx;
-    assert(image_ctx.owner_lock.is_locked());
+    ceph_assert(image_ctx.owner_lock.is_locked());
     CephContext *cct = image_ctx.cct;
 
     if (image_ctx.exclusive_lock != nullptr &&
@@ -99,7 +99,7 @@ bool FlattenRequest<I>::should_complete(int r) {
 template <typename I>
 void FlattenRequest<I>::send_op() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " send" << dendl;
 
@@ -116,11 +116,11 @@ void FlattenRequest<I>::send_op() {
 template <typename I>
 bool FlattenRequest<I>::send_detach_child() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
   CephContext *cct = image_ctx.cct;
 
   // should have been canceled prior to releasing lock
-  assert(image_ctx.exclusive_lock == nullptr ||
+  ceph_assert(image_ctx.exclusive_lock == nullptr ||
          image_ctx.exclusive_lock->is_lock_owner());
 
   // if there are no snaps, remove from the children object as well
@@ -146,14 +146,14 @@ bool FlattenRequest<I>::send_detach_child() {
 template <typename I>
 bool FlattenRequest<I>::send_update_header() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
   CephContext *cct = image_ctx.cct;
 
   ldout(cct, 5) << this << " send_update_header" << dendl;
   m_state = STATE_UPDATE_HEADER;
 
   // should have been canceled prior to releasing lock
-  assert(image_ctx.exclusive_lock == nullptr ||
+  ceph_assert(image_ctx.exclusive_lock == nullptr ||
          image_ctx.exclusive_lock->is_lock_owner());
 
   {
@@ -173,7 +173,7 @@ bool FlattenRequest<I>::send_update_header() {
   librados::AioCompletion *rados_completion = this->create_callback_completion();
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid,
         				 rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
   return false;
 }

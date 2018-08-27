@@ -147,7 +147,7 @@ public:
 
   PaxosServiceMessage *claim_message() {
     // let whoever is claiming the message deal with putting it.
-    assert(msg);
+    ceph_assert(msg);
     msg_desc = stringify(*msg);
     PaxosServiceMessage *m = msg;
     msg = NULL;

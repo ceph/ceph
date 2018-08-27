@@ -145,7 +145,7 @@ public:
 
     /* a portal is an xio_context and event loop */
     ctx = xio_context_create(&ctx_params, 0 /* poll timeout */, -1 /* cpu hint */);
-    assert(ctx && "Whoops, failed to create portal/ctx");
+    ceph_assert(ctx && "Whoops, failed to create portal/ctx");
   }
 
   int bind(struct xio_session_ops *ops, const string &base_uri,
@@ -356,7 +356,7 @@ public:
     for (int i = 0; i < n; i++) {
       if (!portals[i]) {
         portals[i] = new XioPortal(msgr, nconns);
-        assert(portals[i] != nullptr);
+        ceph_assert(portals[i] != nullptr);
       }
     }
   }

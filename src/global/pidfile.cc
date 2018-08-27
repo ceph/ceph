@@ -222,7 +222,7 @@ int pidfile_write(const ConfigProxy& conf)
     return 0;
   }
 
-  assert(pfh == nullptr);
+  ceph_assert(pfh == nullptr);
 
   pfh = new pidfh();
   if (atexit(pidfile_remove)) {

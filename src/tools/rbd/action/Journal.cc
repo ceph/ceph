@@ -809,7 +809,7 @@ public:
 		<< std::endl;
       return false;
     }
-    assert(entry_size > 0);
+    ceph_assert(entry_size > 0);
     // Read entry.
     r = bl.read_fd(m_fd, entry_size);
     if (r < 0) {

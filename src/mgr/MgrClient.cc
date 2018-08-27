@@ -34,14 +34,14 @@ MgrClient::MgrClient(CephContext *cct_, Messenger *msgr_)
     : Dispatcher(cct_), cct(cct_), msgr(msgr_),
       timer(cct_, lock)
 {
-  assert(cct != nullptr);
+  ceph_assert(cct != nullptr);
 }
 
 void MgrClient::init()
 {
   Mutex::Locker l(lock);
 
-  assert(msgr != nullptr);
+  ceph_assert(msgr != nullptr);
 
   timer.init();
 }
@@ -107,7 +107,7 @@ bool MgrClient::ms_dispatch(Message *m)
 
 void MgrClient::reconnect()
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   if (session) {
     ldout(cct, 4) << "Terminating session with "
@@ -170,8 +170,8 @@ void MgrClient::reconnect()
   // resend any pending commands
   for (const auto &p : command_table.get_commands()) {
     MCommand *m = p.second.get_message({});
-    assert(session);
-    assert(session->con);
+    ceph_assert(session);
+    ceph_assert(session->con);
     session->con->send_message(m);
   }
 }
@@ -198,7 +198,7 @@ void MgrClient::_send_open()
 
 bool MgrClient::handle_mgr_map(MMgrMap *m)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   ldout(cct, 20) << *m << dendl;
 
@@ -249,8 +249,8 @@ void MgrClient::_send_stats()
 
 void MgrClient::_send_report()
 {
-  assert(lock.is_locked_by_me());
-  assert(session);
+  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(session);
   report_callback = nullptr;
 
   auto report = new MMgrReport();
@@ -368,7 +368,7 @@ void MgrClient::_send_pgstats()
 
 bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   ldout(cct, 20) << *m << dendl;
 
@@ -435,7 +435,7 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
 
 bool MgrClient::handle_command_reply(MCommandReply *m)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   ldout(cct, 20) << *m << dendl;
 

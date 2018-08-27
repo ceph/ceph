@@ -67,7 +67,7 @@ public:
                   uint64_t end_object_no, uint8_t new_state,
                   const boost::optional<uint8_t> &current_state,
                   const ZTracer::Trace &parent_trace, T *callback_object) {
-    assert(start_object_no < end_object_no);
+    ceph_assert(start_object_no < end_object_no);
     if (snap_id == CEPH_NOSNAP) {
       end_object_no = std::min(end_object_no, m_object_map.size());
       if (start_object_no >= end_object_no) {

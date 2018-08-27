@@ -411,7 +411,7 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
     if (m == m_end) {
       std::cerr << "Up rank " << u.first << " GID " << u.second << " not found!" << std::endl;
     }
-    assert(m != m_end);
+    ceph_assert(m != m_end);
     const mds_info_t &mds_info(m->second);
     if (mds_info.laggy()) {
       laggy.insert(mds_info.name);
@@ -805,7 +805,7 @@ void MDSMap::decode(bufferlist::const_iterator& p)
     decode(inline_data_enabled, p);
 
   if (ev >= 8) {
-    assert(struct_v >= 5);
+    ceph_assert(struct_v >= 5);
     decode(enabled, p);
     decode(fs_name, p);
   } else {

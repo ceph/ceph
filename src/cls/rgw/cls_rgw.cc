@@ -2945,7 +2945,7 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
   string user_key;
   bool truncated_status = false;
 
-  assert(truncated != nullptr);
+  ceph_assert(truncated != nullptr);
 
   if (!by_user) {
     usage_record_prefix_by_time(end, end_key);

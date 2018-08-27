@@ -91,7 +91,7 @@ private:
 
   void send_list_snaps() {
     I &image_ctx = this->m_image_ctx;
-    assert(image_ctx.owner_lock.is_locked());
+    ceph_assert(image_ctx.owner_lock.is_locked());
     ldout(image_ctx.cct, 5) << m_oid
 			    << " C_VerifyObjectCallback::send_list_snaps"
                             << dendl;
@@ -101,7 +101,7 @@ private:
 
     librados::AioCompletion *comp = util::create_rados_callback(this);
     int r = m_io_ctx.aio_operate(m_oid, comp, &op, NULL);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
 
@@ -137,7 +137,7 @@ private:
 
   uint64_t next_valid_snap_id(uint64_t snap_id) {
     I &image_ctx = this->m_image_ctx;
-    assert(image_ctx.snap_lock.is_locked());
+    ceph_assert(image_ctx.snap_lock.is_locked());
 
     std::map<librados::snap_t, SnapInfo>::iterator it =
       image_ctx.snap_info.lower_bound(snap_id);
@@ -153,11 +153,11 @@ private:
     RWLock::RLocker owner_locker(image_ctx.owner_lock);
 
     // should have been canceled prior to releasing lock
-    assert(image_ctx.exclusive_lock == nullptr ||
+    ceph_assert(image_ctx.exclusive_lock == nullptr ||
            image_ctx.exclusive_lock->is_lock_owner());
 
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    assert(image_ctx.object_map != nullptr);
+    ceph_assert(image_ctx.object_map != nullptr);
 
     RWLock::WLocker l(image_ctx.object_map_lock);
     uint8_t state = (*image_ctx.object_map)[m_object_no];
@@ -170,7 +170,7 @@ private:
     if (state != new_state) {
       int r = 0;
 
-      assert(m_handle_mismatch);
+      ceph_assert(m_handle_mismatch);
       r = m_handle_mismatch(image_ctx, m_object_no, state, new_state);
       if (r) {
 	lderr(cct) << "object map error: object "
@@ -237,7 +237,7 @@ bool ObjectMapIterateRequest<I>::should_complete(int r) {
 
 template <typename I>
 void ObjectMapIterateRequest<I>::send_verify_objects() {
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
   uint64_t snap_id;
@@ -264,7 +264,7 @@ void ObjectMapIterateRequest<I>::send_verify_objects() {
 
 template <typename I>
 uint64_t ObjectMapIterateRequest<I>::get_image_size() const {
-  assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(m_image_ctx.snap_lock.is_locked());
   if (m_image_ctx.snap_id == CEPH_NOSNAP) {
     if (!m_image_ctx.resize_reqs.empty()) {
       return m_image_ctx.resize_reqs.front()->get_image_size();
@@ -287,7 +287,7 @@ void ObjectMapIterateRequest<I>::send_invalidate_object_map() {
 					     true,
 					     this->create_callback_context());
 
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
   req->send();
 }

@@ -23,8 +23,8 @@ InvalidateRequest<I>* InvalidateRequest<I>::create(I &image_ctx,
 template <typename I>
 void InvalidateRequest<I>::send() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
-  assert(image_ctx.snap_lock.is_wlocked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.snap_lock.is_wlocked());
 
   uint64_t snap_flags;
   int r = image_ctx.get_flags(m_snap_id, &snap_flags);
@@ -65,7 +65,7 @@ void InvalidateRequest<I>::send() {
     this->create_callback_completion();
   r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, rados_completion,
                                      &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 

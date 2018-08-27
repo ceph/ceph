@@ -142,7 +142,7 @@ struct AioCompletion {
   void set_request_count(uint32_t num);
   void add_request() {
     lock.Lock();
-    assert(pending_count > 0);
+    ceph_assert(pending_count > 0);
     lock.Unlock();
     get();
   }
@@ -154,13 +154,13 @@ struct AioCompletion {
 
   void get() {
     lock.Lock();
-    assert(ref > 0);
+    ceph_assert(ref > 0);
     ref++;
     lock.Unlock();
   }
   void release() {
     lock.Lock();
-    assert(!released);
+    ceph_assert(!released);
     released = true;
     put_unlock();
   }
@@ -169,7 +169,7 @@ struct AioCompletion {
     put_unlock();
   }
   void put_unlock() {
-    assert(ref > 0);
+    ceph_assert(ref > 0);
     int n = --ref;
     lock.Unlock();
     if (!n) {
@@ -194,7 +194,7 @@ struct AioCompletion {
   }
   void unblock() {
     Mutex::Locker l(lock);
-    assert(blockers > 0);
+    ceph_assert(blockers > 0);
     --blockers;
     if (pending_count == 0 && blockers == 0) {
       finalize(rval);

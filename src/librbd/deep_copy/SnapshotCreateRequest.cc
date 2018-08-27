@@ -144,7 +144,7 @@ void SnapshotCreateRequest<I>::send_create_object_map() {
     });
   librados::AioCompletion *comp = create_rados_callback(ctx);
   int r = m_dst_image_ctx->md_ctx.aio_operate(object_map_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 

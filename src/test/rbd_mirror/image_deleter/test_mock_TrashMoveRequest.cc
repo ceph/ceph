@@ -27,7 +27,7 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
                                   const std::string &image_id,
                                   const char *snap, librados::IoCtx& p,
                                   bool read_only) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
@@ -50,7 +50,7 @@ struct Journal<librbd::MockTestImageCtx> {
                             std::string *mirror_uuid,
                             ContextWQ *work_queue,
                             Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->get_tag_owner(image_id, mirror_uuid, on_finish);
   }
 
@@ -70,7 +70,7 @@ struct TrashWatcher<MockTestImageCtx> {
   static void notify_image_added(librados::IoCtx&, const std::string& image_id,
                                  const cls::rbd::TrashImageSpec& spec,
                                  Context *ctx) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->notify_image_added(image_id, spec, ctx);
   }
 
@@ -97,7 +97,7 @@ struct ResetRequest<MockTestImageCtx> {
                               const std::string &client_id,
                               const std::string &mirror_uuid,
                               ContextWQ *op_work_queue, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -126,7 +126,7 @@ struct MoveRequest<MockTestImageCtx> {
                              const std::string& image_id,
                              const cls::rbd::TrashImageSpec& trash_image_spec,
                              Context* on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->construct(image_id, trash_image_spec);
     s_instance->on_finish = on_finish;
     return s_instance;

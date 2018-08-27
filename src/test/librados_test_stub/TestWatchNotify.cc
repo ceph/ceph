@@ -220,7 +220,7 @@ void TestWatchNotify::execute_unwatch(TestRadosClient *rados_client,
 
 TestWatchNotify::SharedWatcher TestWatchNotify::get_watcher(
     int64_t pool_id, const std::string& nspace, const std::string& oid) {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   auto it = m_file_watchers.find({pool_id, nspace, oid});
   if (it == m_file_watchers.end()) {
@@ -241,7 +241,7 @@ TestWatchNotify::SharedWatcher TestWatchNotify::get_watcher(
 }
 
 void TestWatchNotify::maybe_remove_watcher(SharedWatcher watcher) {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   // TODO
   if (watcher->watch_handles.empty() && watcher->notify_handles.empty()) {
@@ -324,7 +324,7 @@ void TestWatchNotify::ack_notify(TestRadosClient *rados_client, int64_t pool_id,
                                  const bufferlist &bl) {
   CephContext *cct = rados_client->cct();
 
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
   SharedWatcher watcher = get_watcher(pool_id, nspace, oid);
   if (!watcher) {
     ldout(cct, 1) << "oid=" << oid << ": not found" << dendl;
@@ -357,9 +357,9 @@ void TestWatchNotify::finish_notify(TestRadosClient *rados_client,
 
   ldout(cct, 20) << "oid=" << oid << ", notify_id=" << notify_id << dendl;
 
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
   SharedWatcher watcher = get_watcher(pool_id, nspace, oid);
-  assert(watcher);
+  ceph_assert(watcher);
 
   NotifyHandles::iterator it = watcher->notify_handles.find(notify_id);
   if (it == watcher->notify_handles.end()) {

@@ -86,22 +86,22 @@ public:
 
   explicit FakeIdentity(Principal&& id) : id(std::move(id)) {}
   uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
-    abort();
+    ceph_abort();
     return 0;
   };
 
   bool is_admin_of(const rgw_user& uid) const override {
-    abort();
+    ceph_abort();
     return false;
   }
 
   bool is_owner_of(const rgw_user& uid) const override {
-    abort();
+    ceph_abort();
     return false;
   }
 
   virtual uint32_t get_perm_mask() const override {
-    abort();
+    ceph_abort();
     return 0;
   }
 

@@ -67,12 +67,12 @@ void Cycles::init()
   old_cycles = 0;
   while (1) {
     if (gettimeofday(&start_time, NULL) != 0) {
-      assert(0 == "couldn't read clock");
+      ceph_abort_msg("couldn't read clock");
     }
     uint64_t start_cycles = rdtsc();
     while (1) {
       if (gettimeofday(&stop_time, NULL) != 0) {
-        assert(0 == "couldn't read clock");
+        ceph_abort_msg("couldn't read clock");
       }
       uint64_t stop_cycles = rdtsc();
       micros = (stop_time.tv_usec - start_time.tv_usec) +

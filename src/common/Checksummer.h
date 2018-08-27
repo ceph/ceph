@@ -207,15 +207,15 @@ public:
       size_t length,
       const bufferlist &bl,
       bufferptr* csum_data) {
-    assert(length % csum_block_size == 0);
+    ceph_assert(length % csum_block_size == 0);
     size_t blocks = length / csum_block_size;
     bufferlist::const_iterator p = bl.begin();
-    assert(bl.length() >= length);
+    ceph_assert(bl.length() >= length);
 
     typename Alg::state_t state;
     Alg::init(&state);
 
-    assert(csum_data->length() >= (offset + length) / csum_block_size *
+    ceph_assert(csum_data->length() >= (offset + length) / csum_block_size *
 	   sizeof(typename Alg::value_t));
 
     typename Alg::value_t *pv =
@@ -238,9 +238,9 @@ public:
     const bufferptr& csum_data,
     uint64_t *bad_csum=0
     ) {
-    assert(length % csum_block_size == 0);
+    ceph_assert(length % csum_block_size == 0);
     bufferlist::const_iterator p = bl.begin();
-    assert(bl.length() >= length);
+    ceph_assert(bl.length() >= length);
 
     typename Alg::state_t state;
     Alg::init(&state);

@@ -1013,7 +1013,7 @@ TEST(CrushWrapper, choose_args_compat) {
   item = 2;
   c.insert_item(g_ceph_context, item, weight, "osd.2", loc);
 
-  assert(c.add_simple_rule("rule1", "r11", "host", "",
+  ceph_assert(c.add_simple_rule("rule1", "r11", "host", "",
 			   "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
 
   int id = c.get_item_id("b1");
@@ -1023,7 +1023,7 @@ TEST(CrushWrapper, choose_args_compat) {
   weight_set.size = 1;
   weight_set.weights = &weights;
   int maxbuckets = c.get_max_buckets();
-  assert(maxbuckets > 0);
+  ceph_assert(maxbuckets > 0);
   crush_choose_arg choose_args[maxbuckets];
   memset(choose_args, '\0', sizeof(crush_choose_arg) * maxbuckets);
   choose_args[-1-id].ids_size = 0;
@@ -1085,7 +1085,7 @@ TEST(CrushWrapper, remove_root) {
   loc["root"] = "default";
   c.insert_item(g_ceph_context, item, weight, "osd.2", loc);
 
-  assert(c.add_simple_rule("rule1", "r11", "host", "",
+  ceph_assert(c.add_simple_rule("rule1", "r11", "host", "",
 			   "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("r11"));

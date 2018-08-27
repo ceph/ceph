@@ -108,7 +108,7 @@ public:
     }
 
     // inserting more items than defined columns is a coding error
-    assert(curcol + 1 <= col.size());
+    ceph_assert(curcol + 1 <= col.size());
 
     // get rendered width of item alone
     std::ostringstream oss;

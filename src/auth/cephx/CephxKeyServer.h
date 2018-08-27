@@ -151,7 +151,7 @@ struct KeyServerData {
       __u32 _op;
       decode(_op, bl);
       op = (IncrementalOp)_op;
-      assert(op >= AUTH_INC_NOP && op <= AUTH_INC_SET_ROTATING);
+      ceph_assert(op >= AUTH_INC_NOP && op <= AUTH_INC_SET_ROTATING);
       if (op == AUTH_INC_SET_ROTATING) {
 	decode(rotating_bl, bl);
       } else {

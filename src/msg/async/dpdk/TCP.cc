@@ -112,7 +112,7 @@ uint8_t tcp_option::fill(tcp_hdr* th, uint8_t options_size)
     new (off) tcp_option::eol;
     size += option_len::eol;
   }
-  assert(size == options_size);
+  ceph_assert(size == options_size);
 
   return size;
 }

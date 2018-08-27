@@ -113,7 +113,7 @@ public:
       dump_weak_refs(*_dout);
       *_dout << dendl;
       if (cct->_conf.get_val<bool>("debug_asserts_on_shutdown")) {
-	assert(weak_refs.empty());
+	ceph_assert(weak_refs.empty());
       }
     }
   }
@@ -260,7 +260,7 @@ public:
     if (!found || !next)
       return found;
     next->first = r.first;
-    assert(r.second);
+    ceph_assert(r.second);
     next->second = *(r.second);
     return found;
   }

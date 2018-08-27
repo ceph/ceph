@@ -98,7 +98,7 @@ protected:
     void _dump_queue();
 
     void _clear() override {
-      assert(process->m_req_queue.empty());
+      ceph_assert(process->m_req_queue.empty());
     }
   } req_wq;
 

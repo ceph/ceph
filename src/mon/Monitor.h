@@ -849,7 +849,7 @@ public:
       else if (r == -EAGAIN)
 	mon->dispatch_op(op);
       else
-	assert(0 == "bad C_Command return value");
+	ceph_abort_msg("bad C_Command return value");
     }
   };
 
@@ -866,7 +866,7 @@ public:
       else if (r == -ECANCELED)
         return;
       else
-	assert(0 == "bad C_RetryMessage return value");
+	ceph_abort_msg("bad C_RetryMessage return value");
     }
   };
 

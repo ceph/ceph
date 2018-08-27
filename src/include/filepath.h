@@ -134,7 +134,7 @@ class filepath {
 
   const string& last_dentry() const {
     if (bits.empty() && path.length() > 0) parse_bits();
-    assert(!bits.empty());
+    ceph_assert(!bits.empty());
     return bits[ bits.size()-1 ];
   }
 
@@ -186,7 +186,7 @@ class filepath {
     rebuild_path();
   }
   void append(const filepath& a) {
-    assert(a.pure_relative());
+    ceph_assert(a.pure_relative());
     for (unsigned i=0; i<a.depth(); i++) 
       push_dentry(a[i]);
   }

@@ -26,7 +26,7 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
                                   const std::string &image_id,
                                   librados::snap_t snap_id, librados::IoCtx& p,
                                   bool read_only) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
@@ -52,7 +52,7 @@ struct ObjectCopyRequest<librbd::MockTestImageCtx> {
       librbd::MockTestImageCtx *src_parent_image_ctx,
       librbd::MockTestImageCtx *dst_image_ctx, const SnapMap &snap_map,
       uint64_t object_number, bool flatten, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     Mutex::Locker locker(s_instance->lock);
     s_instance->snap_map = &snap_map;
     s_instance->object_contexts[object_number] = on_finish;
@@ -84,7 +84,7 @@ struct CloseRequest<MockTestImageCtx> {
   Context* on_finish = nullptr;
   static CloseRequest* s_instance;
   static CloseRequest* create(MockTestImageCtx *image_ctx, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -104,7 +104,7 @@ struct OpenRequest<MockTestImageCtx> {
   static OpenRequest* s_instance;
   static OpenRequest* create(MockTestImageCtx *image_ctx,
                              bool skip_open_parent, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }

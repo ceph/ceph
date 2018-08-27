@@ -373,7 +373,7 @@ int ActivePyModules::start_one(PyModuleRef py_module)
 {
   Mutex::Locker l(lock);
 
-  assert(modules.count(py_module->get_name()) == 0);
+  ceph_assert(modules.count(py_module->get_name()) == 0);
 
   modules[py_module->get_name()].reset(new ActivePyModule(py_module, clog));
   auto active_module = modules.at(py_module->get_name()).get();
@@ -485,7 +485,7 @@ PyObject *ActivePyModules::dispatch_remote(
     std::string *err)
 {
   auto mod_iter = modules.find(other_module);
-  assert(mod_iter != modules.end());
+  ceph_assert(mod_iter != modules.end());
 
   return mod_iter->second->dispatch_remote(method, args, kwargs, err);
 }
@@ -738,7 +738,7 @@ PyObject *construct_with_capsule(
     derr << "Failed to import python module:" << dendl;
     derr << handle_pyerror() << dendl;
   }
-  assert(module);
+  ceph_assert(module);
 
   PyObject *wrapper_type = PyObject_GetAttrString(
       module, (const char*)clsname.c_str());
@@ -746,11 +746,11 @@ PyObject *construct_with_capsule(
     derr << "Failed to get python type:" << dendl;
     derr << handle_pyerror() << dendl;
   }
-  assert(wrapper_type);
+  ceph_assert(wrapper_type);
 
   // Construct a capsule containing an OSDMap.
   auto wrapped_capsule = PyCapsule_New(wrapped, nullptr, nullptr);
-  assert(wrapped_capsule);
+  ceph_assert(wrapped_capsule);
 
   // Construct the python OSDMap
   auto pArgs = PyTuple_Pack(1, wrapped_capsule);
@@ -759,7 +759,7 @@ PyObject *construct_with_capsule(
     derr << "Failed to construct python OSDMap:" << dendl;
     derr << handle_pyerror() << dendl;
   }
-  assert(wrapper_instance != nullptr);
+  ceph_assert(wrapper_instance != nullptr);
   Py_DECREF(pArgs);
   Py_DECREF(wrapped_capsule);
 

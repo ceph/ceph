@@ -1533,7 +1533,7 @@ static void dump_shard(const shard_info_t& shard,
      || shard.has_obj_size_info_mismatch()) &&
         !shard.has_info_missing()) {
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(OI_ATTR);
-    assert(k != shard.attrs.end()); // Can't be missing
+    ceph_assert(k != shard.attrs.end()); // Can't be missing
     if (!shard.has_info_corrupted()) {
       object_info_t oi;
       bufferlist bl;
@@ -1552,7 +1552,7 @@ static void dump_shard(const shard_info_t& shard,
        || inc.has_snapset_inconsistency()) &&
        !shard.has_snapset_missing()) {
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(SS_ATTR);
-    assert(k != shard.attrs.end()); // Can't be missing
+    ceph_assert(k != shard.attrs.end()); // Can't be missing
     if (!shard.has_snapset_corrupted()) {
       SnapSet ss;
       bufferlist bl;
@@ -1571,7 +1571,7 @@ static void dump_shard(const shard_info_t& shard,
        || inc.has_hinfo_inconsistency()) &&
        !shard.has_hinfo_missing()) {
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(ECUtil::get_hinfo_key());
-    assert(k != shard.attrs.end()); // Can't be missing
+    ceph_assert(k != shard.attrs.end()); // Can't be missing
     if (!shard.has_hinfo_corrupted()) {
       ECUtil::HashInfo hi;
       bufferlist bl;
@@ -1660,7 +1660,7 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
       object_info_t oi;
       bufferlist bl;
       auto k = shard.attrs.find(OI_ATTR);
-      assert(k != shard.attrs.end()); // Can't be missing
+      ceph_assert(k != shard.attrs.end()); // Can't be missing
       auto bliter = k->second.cbegin();
       decode(oi, bliter);  // Can't be corrupted
       f.open_object_section("selected_object_info");
@@ -1798,7 +1798,7 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     }
     // It must be the same interval every time.  EAGAIN would
     // occur if interval changes.
-    assert(start.name.empty() || first_interval == interval);
+    ceph_assert(start.name.empty() || first_interval == interval);
     if (start.name.empty()) {
       first_interval = interval;
       formatter.open_object_section("info");
@@ -2237,7 +2237,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     cout << "selected snap " << snapid << " '" << name << "'" << std::endl;
   }
 
-  assert(!nargs.empty());
+  ceph_assert(!nargs.empty());
 
   // list pools?
   if (strcmp(nargs[0], "lspools") == 0) {

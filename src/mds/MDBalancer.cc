@@ -69,7 +69,7 @@ int MDBalancer::proc_message(const Message::const_ref &m)
 
   default:
     derr << " balancer unknown message " << m->get_type() << dendl_impl;
-    assert(0 == "balancer unknown message");
+    ceph_abort_msg("balancer unknown message");
   }
 
   return 0;
@@ -100,7 +100,7 @@ void MDBalancer::handle_export_pins(void)
   while (it != q.end()) {
     auto cur = it++;
     CInode *in = *cur;
-    assert(in->is_dir());
+    ceph_assert(in->is_dir());
     mds_rank_t export_pin = in->get_export_pin(false);
 
     bool remove = true;
@@ -548,7 +548,7 @@ void MDBalancer::queue_merge(CDir *dir)
 {
   const auto frag = dir->dirfrag();
   auto callback = [this, frag](int r) {
-    assert(frag.frag != frag_t());
+    ceph_assert(frag.frag != frag_t());
 
     // frag must be in this set because only one context is in flight
     // for a given frag at a time (because merge_pending is checked before
@@ -560,7 +560,7 @@ void MDBalancer::queue_merge(CDir *dir)
       dout(10) << "drop merge on " << frag << " because not in cache" << dendl;
       return;
     }
-    assert(dir->dirfrag() == frag);
+    ceph_assert(dir->dirfrag() == frag);
 
     if(!dir->is_auth()) {
       dout(10) << "drop merge on " << *dir << " because lost auth" << dendl;
@@ -900,7 +900,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 
 	if (dir->inode->is_base())
 	  continue;
-	assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
+	ceph_assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
 
 	if (pop <= amount-have) {
 	  dout(5) << "reexporting " << *dir << " pop " << pop
@@ -1010,7 +1010,7 @@ void MDBalancer::find_exports(CDir *dir,
     return;
   }
 
-  assert(dir->is_auth());
+  ceph_assert(dir->is_auth());
 
   double need = amount - have;
   if (need < amount * g_conf()->mds_bal_min_start)
@@ -1033,8 +1033,8 @@ void MDBalancer::find_exports(CDir *dir,
     CInode *in = *it;
     ++it;
 
-    assert(in->is_dir());
-    assert(in->get_parent_dir() == dir);
+    ceph_assert(in->is_dir());
+    ceph_assert(in->get_parent_dir() == dir);
 
     list<CDir*> dfls;
     in->get_nested_dirfrags(dfls);

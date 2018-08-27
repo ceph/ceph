@@ -43,7 +43,7 @@ ResizeRequest<I>::~ResizeRequest() {
   ResizeRequest *next_req = NULL;
   {
     RWLock::WLocker snap_locker(image_ctx.snap_lock);
-    assert(m_xlist_item.remove_myself());
+    ceph_assert(m_xlist_item.remove_myself());
     if (!image_ctx.resize_reqs.empty()) {
       next_req = image_ctx.resize_reqs.front();
     }
@@ -58,7 +58,7 @@ ResizeRequest<I>::~ResizeRequest() {
 template <typename I>
 void ResizeRequest<I>::send() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   {
     RWLock::WLocker snap_locker(image_ctx.snap_lock);
@@ -69,7 +69,7 @@ void ResizeRequest<I>::send() {
       }
     }
 
-    assert(image_ctx.resize_reqs.front() == this);
+    ceph_assert(image_ctx.resize_reqs.front() == this);
     m_original_size = image_ctx.size;
     compute_parent_overlap();
   }
@@ -80,7 +80,7 @@ void ResizeRequest<I>::send() {
 template <typename I>
 void ResizeRequest<I>::send_op() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   if (this->is_canceled()) {
     this->async_complete(-ERESTART);
@@ -278,7 +278,7 @@ Context *ResizeRequest<I>::send_grow_object_map() {
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
   // should have been canceled prior to releasing lock
-  assert(image_ctx.exclusive_lock == nullptr ||
+  ceph_assert(image_ctx.exclusive_lock == nullptr ||
          image_ctx.exclusive_lock->is_lock_owner());
 
   image_ctx.object_map->aio_resize(
@@ -295,7 +295,7 @@ Context *ResizeRequest<I>::handle_grow_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  assert(*result == 0);
+  ceph_assert(*result == 0);
   send_post_block_writes();
   return nullptr;
 }
@@ -320,7 +320,7 @@ Context *ResizeRequest<I>::send_shrink_object_map() {
                 << "new_size=" << m_new_size << dendl;
 
   // should have been canceled prior to releasing lock
-  assert(image_ctx.exclusive_lock == nullptr ||
+  ceph_assert(image_ctx.exclusive_lock == nullptr ||
          image_ctx.exclusive_lock->is_lock_owner());
 
   image_ctx.object_map->aio_resize(
@@ -338,7 +338,7 @@ Context *ResizeRequest<I>::handle_shrink_object_map(int *result) {
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
   update_size_and_overlap();
-  assert(*result == 0);
+  ceph_assert(*result == 0);
   return this->create_context_finisher(0);
 }
 
@@ -380,7 +380,7 @@ void ResizeRequest<I>::send_update_header() {
 
   // should have been canceled prior to releasing lock
   RWLock::RLocker owner_locker(image_ctx.owner_lock);
-  assert(image_ctx.exclusive_lock == nullptr ||
+  ceph_assert(image_ctx.exclusive_lock == nullptr ||
          image_ctx.exclusive_lock->is_lock_owner());
 
   librados::ObjectWriteOperation op;
@@ -398,7 +398,7 @@ void ResizeRequest<I>::send_update_header() {
     ResizeRequest<I>, &ResizeRequest<I>::handle_update_header>(this);
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid,
     				       rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 

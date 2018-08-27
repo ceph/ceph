@@ -70,8 +70,8 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
     version_t latest_ver = store.get("monmap", "last_committed");
     if (store.exists("monmap", latest_ver)) {
       int err = store.get("monmap", latest_ver, bl);
-      assert(err == 0);
-      assert(bl.length() > 0);
+      ceph_assert(err == 0);
+      ceph_assert(bl.length() > 0);
       dout(10) << __func__ << " read last committed monmap ver "
                << latest_ver << dendl;
       return 0;
@@ -83,8 +83,8 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
     dout(10) << __func__ << " detected aborted sync" << dendl;
     if (store.exists("mon_sync", "latest_monmap")) {
       int err = store.get("mon_sync", "latest_monmap", bl);
-      assert(err == 0);
-      assert(bl.length() > 0);
+      ceph_assert(err == 0);
+      ceph_assert(bl.length() > 0);
       dout(10) << __func__ << " read backup monmap" << dendl;
       return 0;
     }
@@ -93,8 +93,8 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
   if (store.exists("mkfs", "monmap")) {
     dout(10) << __func__ << " found mkfs monmap" << dendl;
     int err = store.get("mkfs", "monmap", bl);
-    assert(err == 0);
-    assert(bl.length() > 0);
+    ceph_assert(err == 0);
+    ceph_assert(bl.length() > 0);
     return 0;
   }
 
@@ -430,7 +430,7 @@ int main(int argc, const char **argv)
            << g_conf()->mon_data << "': " << cpp_strerror(r) << dendl;
       exit(1);
     }
-    assert(r == 0);
+    ceph_assert(r == 0);
 
     Monitor mon(g_ceph_context, g_conf()->name.get_id(), &store, 0, 0, &monmap);
     r = mon.mkfs(osdmapbl);

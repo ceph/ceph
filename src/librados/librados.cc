@@ -820,7 +820,7 @@ librados::ObjectCursor librados::NObjectIteratorImpl::get_cursor()
 
 void librados::NObjectIteratorImpl::set_filter(const bufferlist &bl)
 {
-  assert(ctx);
+  ceph_assert(ctx);
   ctx->nlc->filter = bl;
 }
 
@@ -900,18 +900,18 @@ bool librados::NObjectIterator::operator!=(const librados::NObjectIterator& rhs)
 }
 
 const librados::ListObject& librados::NObjectIterator::operator*() const {
-  assert(impl);
+  ceph_assert(impl);
   return *(impl->get_listobjectp());
 }
 
 const librados::ListObject* librados::NObjectIterator::operator->() const {
-  assert(impl);
+  ceph_assert(impl);
   return impl->get_listobjectp();
 }
 
 librados::NObjectIterator& librados::NObjectIterator::operator++()
 {
-  assert(impl);
+  ceph_assert(impl);
   impl->get_next();
   return *this;
 }
@@ -925,19 +925,19 @@ librados::NObjectIterator librados::NObjectIterator::operator++(int)
 
 uint32_t librados::NObjectIterator::seek(uint32_t pos)
 {
-  assert(impl);
+  ceph_assert(impl);
   return impl->seek(pos);
 }
 
 uint32_t librados::NObjectIterator::seek(const ObjectCursor& cursor)
 {
-  assert(impl);
+  ceph_assert(impl);
   return impl->seek(cursor);
 }
 
 librados::ObjectCursor librados::NObjectIterator::get_cursor()
 {
-  assert(impl);
+  ceph_assert(impl);
   return impl->get_cursor();
 }
 
@@ -948,13 +948,13 @@ void librados::NObjectIterator::set_filter(const bufferlist &bl)
 
 void librados::NObjectIterator::get_next()
 {
-  assert(impl);
+  ceph_assert(impl);
   impl->get_next();
 }
 
 uint32_t librados::NObjectIterator::get_pg_hash_position() const
 {
-  assert(impl);
+  ceph_assert(impl);
   return impl->get_pg_hash_position();
 }
 
@@ -2288,7 +2288,7 @@ librados::Rados::Rados() : client(NULL)
 librados::Rados::Rados(IoCtx &ioctx)
 {
   client = ioctx.io_ctx_impl->client;
-  assert(client != NULL);
+  ceph_assert(client != NULL);
   client->get();
 }
 
@@ -2799,7 +2799,7 @@ librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
 {
   AioCompletionImpl *c;
   int r = rados_aio_create_completion(cb_arg, cb_complete, cb_safe, (void**)&c);
-  assert(r == 0);
+  ceph_assert(r == 0);
   return new AioCompletion(c);
 }
 
@@ -3016,7 +3016,7 @@ extern "C" int rados_conf_parse_argv_remainder(rados_t cluster, int argc,
     return ret;
   }
   conf.apply_changes(NULL);
-  assert(args.size() <= (unsigned int)argc);
+  ceph_assert(args.size() <= (unsigned int)argc);
   for (i = 0; i < (unsigned int)argc; ++i) {
     if (i < args.size())
       remargv[i] = args[i];
@@ -4520,7 +4520,7 @@ extern "C" int rados_object_list(rados_ioctx_t io,
     rados_object_list_item *result_items,
     rados_object_list_cursor *next)
 {
-  assert(next);
+  ceph_assert(next);
 
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
 
@@ -4548,7 +4548,7 @@ extern "C" int rados_object_list(rados_ioctx_t io,
       &cond);
 
   hobject_t *next_hobj = (hobject_t*)(*next);
-  assert(next_hobj);
+  ceph_assert(next_hobj);
 
   int r = cond.wait();
   if (r < 0) {
@@ -4556,7 +4556,7 @@ extern "C" int rados_object_list(rados_ioctx_t io,
     return r;
   }
 
-  assert(result.size() <= result_item_count);  // Don't overflow!
+  ceph_assert(result.size() <= result_item_count);  // Don't overflow!
 
   int k = 0;
   for (std::list<librados::ListObjectImpl>::iterator i = result.begin();
@@ -4576,7 +4576,7 @@ extern "C" void rados_object_list_free(
     const size_t result_size,
     rados_object_list_item *results)
 {
-  assert(results);
+  ceph_assert(results);
 
   for (unsigned int i = 0; i < result_size; ++i) {
     rados_buffer_free(results[i].oid);
@@ -6506,12 +6506,12 @@ CEPH_RADOS_API void rados_object_list_slice(
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
 
-  assert(split_start);
-  assert(split_finish);
+  ceph_assert(split_start);
+  ceph_assert(split_finish);
   hobject_t *split_start_hobj = (hobject_t*)(*split_start);
   hobject_t *split_finish_hobj = (hobject_t*)(*split_finish);
-  assert(split_start_hobj);
-  assert(split_finish_hobj);
+  ceph_assert(split_start_hobj);
+  ceph_assert(split_finish_hobj);
   hobject_t *start_hobj = (hobject_t*)(start);
   hobject_t *finish_hobj = (hobject_t*)(finish);
 
@@ -6636,8 +6636,8 @@ int librados::IoCtx::object_list(const ObjectCursor &start,
                 std::vector<ObjectItem> *result,
                 ObjectCursor *next)
 {
-  assert(result != nullptr);
-  assert(next != nullptr);
+  ceph_assert(result != nullptr);
+  ceph_assert(next != nullptr);
   result->clear();
 
   C_SaferCond cond;
@@ -6682,8 +6682,8 @@ void librados::IoCtx::object_list_slice(
     ObjectCursor *split_start,
     ObjectCursor *split_finish)
 {
-  assert(split_start != nullptr);
-  assert(split_finish != nullptr);
+  ceph_assert(split_start != nullptr);
+  ceph_assert(split_finish != nullptr);
 
   io_ctx_impl->object_list_slice(
       *((hobject_t*)(start.c_cursor)),

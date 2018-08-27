@@ -47,7 +47,7 @@ public:
       m_prog_ctx(prog_ctx), m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())),
       m_lock(util::unique_lock_name("librbd::api::MigrationProgressContext",
                                     this)) {
-    assert(m_prog_ctx != nullptr);
+    ceph_assert(m_prog_ctx != nullptr);
   }
 
   ~MigrationProgressContext() {
@@ -99,7 +99,7 @@ private:
   void set_state_description() {
     ldout(m_cct, 20) << "state_description=" << m_state_description << dendl;
 
-    assert(m_lock.is_locked());
+    ceph_assert(m_lock.is_locked());
 
     librados::ObjectWriteOperation op;
     cls_client::migration_set_state(&op, m_state, m_state_description);
@@ -108,7 +108,7 @@ private:
     librados::AioCompletion *comp =
       create_rados_callback<klass, &klass::handle_set_state_description>(this);
     int r = m_io_ctx.aio_operate(m_header_oid, comp, &op);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
 
     m_in_flight_state_updates++;
@@ -810,7 +810,7 @@ int Migration<I>::abort() {
 
     ldout(m_cct, 10) << "removing dst image" << dendl;
 
-    assert(dst_image_ctx->ignore_migrating);
+    ceph_assert(dst_image_ctx->ignore_migrating);
 
     ThreadPool *thread_pool;
     ContextWQ *op_work_queue;
@@ -1261,7 +1261,7 @@ int Migration<I>::remove_group(I *image_ctx, group_info_t *group_info) {
     return -ENOENT;
   }
 
-  assert(!image_ctx->id.empty());
+  ceph_assert(!image_ctx->id.empty());
 
   ldout(m_cct, 10) << dendl;
 
@@ -1440,7 +1440,7 @@ int Migration<I>::remove_src_image() {
     }
   }
 
-  assert(m_src_image_ctx->ignore_migrating);
+  ceph_assert(m_src_image_ctx->ignore_migrating);
 
   ThreadPool *thread_pool;
   ContextWQ *op_work_queue;

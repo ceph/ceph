@@ -77,7 +77,7 @@ public:
       __u32 _type;
       decode(_type, bl);
       inc_type = (IncType)_type;
-      assert(inc_type >= GLOBAL_ID && inc_type <= AUTH_DATA);
+      ceph_assert(inc_type >= GLOBAL_ID && inc_type <= AUTH_DATA);
       if (_type == GLOBAL_ID) {
 	decode(max_global_id, bl);
       } else {

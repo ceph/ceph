@@ -120,7 +120,7 @@ public:
       else if (r == -ECANCELED)
         return;
       else
-	assert(0 == "bad C_RetryMessage return value");
+	ceph_abort_msg("bad C_RetryMessage return value");
     }
   };
 
@@ -231,7 +231,7 @@ public:
    * request on hold, for instance.
    */
   void request_proposal() {
-    assert(is_writeable());
+    ceph_assert(is_writeable());
 
     propose_pending();
   }
@@ -243,8 +243,8 @@ public:
    * set a flag stating we're waiting on a cross-proposal to be finished.
    */
   void request_proposal(PaxosService *other) {
-    assert(other != NULL);
-    assert(other->is_writeable());
+    ceph_assert(other != NULL);
+    ceph_assert(other->is_writeable());
 
     other->request_proposal();
   }

@@ -942,7 +942,7 @@ TEST(LibRGW, HIER1) {
 	  obj_stack.pop();
 	  break;
 	default:
-	  abort();
+	  ceph_abort();
 	};
       }
     }

@@ -267,8 +267,8 @@ public:
   }
 
   OSDMapRef get_osdmap() const {
-    assert(is_locked());
-    assert(osdmap_ref);
+    ceph_assert(is_locked());
+    ceph_assert(osdmap_ref);
     return osdmap_ref;
   }
   epoch_t get_osdmap_epoch() const {
@@ -283,8 +283,8 @@ public:
   void lock(bool no_lockdep = false) const;
   void unlock() const {
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
-    assert(!dirty_info);
-    assert(!dirty_big_info);
+    ceph_assert(!dirty_info);
+    ceph_assert(!dirty_big_info);
     _lock.Unlock();
   }
   bool is_locked() const {
@@ -328,7 +328,7 @@ public:
     return pg_whoami == primary;
   }
   bool pg_has_reset_since(epoch_t e) {
-    assert(is_locked());
+    ceph_assert(is_locked());
     return deleted || e < get_last_peering_reset();
   }
 
@@ -565,7 +565,7 @@ protected:
   void requeue_map_waiters();
 
   void update_osdmap_ref(OSDMapRef newmap) {
-    assert(_lock.is_locked_by_me());
+    ceph_assert(_lock.is_locked_by_me());
     osdmap_ref = std::move(newmap);
   }
 
@@ -626,8 +626,8 @@ protected:
 		   (l.other < r.other)));
       }
       friend ostream& operator<<(ostream& out, const loc_count_t& l) {
-	assert(l.up >= 0);
-	assert(l.other >= 0);
+	ceph_assert(l.up >= 0);
+	ceph_assert(l.other >= 0);
 	return out << "(" << l.up << "+" << l.other << ")";
       }
     };
@@ -682,7 +682,7 @@ protected:
       pgs_by_shard_id(s, pgsbs);
       for (auto shard: pgsbs) {
         auto p = missing_by_count[shard.first].find(_get_count(shard.second));
-        assert(p != missing_by_count[shard.first].end());
+        ceph_assert(p != missing_by_count[shard.first].end());
         if (--p->second == 0) {
 	  missing_by_count[shard.first].erase(p);
         }
@@ -815,7 +815,7 @@ protected:
 	  lgeneric_dout(pg->cct, 0) << this << " " << pg->info.pgid << " unexpected need for "
 				    << i->first << " have " << j->second
 				    << " tried to add " << i->second << dendl;
-	  assert(i->second.need == j->second.need);
+	  ceph_assert(i->second.need == j->second.need);
 	}
       }
     }
@@ -825,7 +825,7 @@ protected:
     }
     void revise_need(const hobject_t &hoid, eversion_t need) {
       auto it = needs_recovery_map.find(hoid);
-      assert(it != needs_recovery_map.end());
+      ceph_assert(it != needs_recovery_map.end());
       it->second.need = need;
     }
 
@@ -875,7 +875,7 @@ protected:
 	  if (i == self)
 	    continue;
 	  auto pmiter = pmissing.find(i);
-	  assert(pmiter != pmissing.end());
+	  ceph_assert(pmiter != pmissing.end());
 	  miter = pmiter->second.get_items().find(hoid);
 	  if (miter != pmiter->second.get_items().end()) {
 	    item = miter->second;
@@ -891,15 +891,15 @@ protected:
 	return;
       auto mliter =
 	missing_loc.insert(make_pair(hoid, set<pg_shard_t>())).first;
-      assert(info.last_backfill.is_max());
-      assert(info.last_update >= item->need);
+      ceph_assert(info.last_backfill.is_max());
+      ceph_assert(info.last_update >= item->need);
       if (!missing.is_missing(hoid))
 	mliter->second.insert(self);
       for (auto &&i: pmissing) {
 	if (i.first == self)
 	  continue;
 	auto pinfoiter = pinfo.find(i.first);
-	assert(pinfoiter != pinfo.end());
+	ceph_assert(pinfoiter != pinfo.end());
 	if (item->need <= pinfoiter->second.last_update &&
 	    hoid <= pinfoiter->second.last_backfill &&
 	    !i.second.is_missing(hoid))
@@ -1004,9 +1004,9 @@ public:
         handle(rctx.handle) {}
 
     void accept_buffered_messages(BufferedRecoveryMessages &m) {
-      assert(query_map);
-      assert(info_map);
-      assert(notify_list);
+      ceph_assert(query_map);
+      ceph_assert(info_map);
+      ceph_assert(notify_list);
       for (map<int, map<spg_t, pg_query_t> >::iterator i = m.query_map.begin();
 	   i != m.query_map.end();
 	   ++i) {
@@ -1039,7 +1039,7 @@ public:
 
     void send_notify(pg_shard_t to,
 		     const pg_notify_t &info, const PastIntervals &pi) {
-      assert(notify_list);
+      ceph_assert(notify_list);
       (*notify_list)[to.osd].push_back(make_pair(info, pi));
     }
   };
@@ -1158,7 +1158,7 @@ public:
 
     /// drop first entry, and adjust @begin accordingly
     void pop_front() {
-      assert(!objects.empty());
+      ceph_assert(!objects.empty());
       objects.erase(objects.begin());
       trim();
     }
@@ -1356,7 +1356,7 @@ protected:
 
   void calc_min_last_complete_ondisk() {
     eversion_t min = last_complete_ondisk;
-    assert(!acting_recovery_backfill.empty());
+    ceph_assert(!acting_recovery_backfill.empty());
     for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
 	 i != acting_recovery_backfill.end();
 	 ++i) {
@@ -1395,7 +1395,7 @@ protected:
       pg->get_pgbackend()->try_stash(hoid, v, t);
     }
     void rollback(const pg_log_entry_t &entry) override {
-      assert(entry.can_rollback());
+      ceph_assert(entry.can_rollback());
       pg->get_pgbackend()->rollback(entry, t);
     }
     void rollforward(const pg_log_entry_t &entry) override {
@@ -1969,27 +1969,27 @@ protected:
 
       /* Accessor functions for state methods */
       ObjectStore::Transaction* get_cur_transaction() {
-	assert(state->rctx);
-	assert(state->rctx->transaction);
+	ceph_assert(state->rctx);
+	ceph_assert(state->rctx->transaction);
 	return state->rctx->transaction;
       }
 
       void send_query(pg_shard_t to, const pg_query_t &query) {
-	assert(state->rctx);
-	assert(state->rctx->query_map);
+	ceph_assert(state->rctx);
+	ceph_assert(state->rctx->query_map);
 	(*state->rctx->query_map)[to.osd][spg_t(pg->info.pgid.pgid, to.shard)] =
 	  query;
       }
 
       map<int, map<spg_t, pg_query_t> > *get_query_map() {
-	assert(state->rctx);
-	assert(state->rctx->query_map);
+	ceph_assert(state->rctx);
+	ceph_assert(state->rctx->query_map);
 	return state->rctx->query_map;
       }
 
       map<int, vector<pair<pg_notify_t, PastIntervals> > > *get_info_map() {
-	assert(state->rctx);
-	assert(state->rctx->info_map);
+	ceph_assert(state->rctx);
+	ceph_assert(state->rctx->info_map);
 	return state->rctx->info_map;
       }
 
@@ -1997,7 +1997,7 @@ protected:
 
       void send_notify(pg_shard_t to,
 		       const pg_notify_t &info, const PastIntervals &pi) {
-	assert(state->rctx);
+	ceph_assert(state->rctx);
 	state->rctx->send_notify(to, info, pi);
       }
     };
@@ -2797,8 +2797,8 @@ protected:
 	break;
       }
     }
-    assert(up_primary.osd == new_up_primary);
-    assert(primary.osd == new_acting_primary);
+    ceph_assert(up_primary.osd == new_up_primary);
+    ceph_assert(primary.osd == new_acting_primary);
   }
 
   void set_role(int r) {
@@ -2871,9 +2871,9 @@ protected:
     eversion_t at_version(
       get_osdmap()->get_epoch(),
       projected_last_update.version+1);
-    assert(at_version > info.last_update);
-    assert(at_version > pg_log.get_head());
-    assert(at_version > projected_last_update);
+    ceph_assert(at_version > info.last_update);
+    ceph_assert(at_version > pg_log.get_head());
+    ceph_assert(at_version > projected_last_update);
     return at_version;
   }
 

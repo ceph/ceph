@@ -78,7 +78,7 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
 
     bufferlist bl;
     int err = get_version(version, bl);
-    assert(err == 0);
+    ceph_assert(err == 0);
 
     bool old_available = map.get_available();
     uint64_t old_gid = map.get_active_gid();
@@ -158,7 +158,7 @@ void MgrMonitor::post_paxos_update()
       prev_health_checks.resize(mon->paxos_service.size());
       send = true;
     }
-    assert(prev_health_checks.size() == mon->paxos_service.size());
+    ceph_assert(prev_health_checks.size() == mon->paxos_service.size());
     for (auto i = 0u; i < prev_health_checks.size(); i++) {
       const auto& curr = mon->paxos_service[i]->get_health_checks();
       if (!send && curr != prev_health_checks[i]) {
@@ -478,7 +478,7 @@ void MgrMonitor::check_sub(Subscription *sub)
       }
     }
   } else {
-    assert(sub->type == "mgrdigest");
+    ceph_assert(sub->type == "mgrdigest");
     if (sub->next == 0) {
       // new registration; cancel previous timer
       cancel_timer();
@@ -660,7 +660,7 @@ void MgrMonitor::on_restart()
 
 bool MgrMonitor::promote_standby()
 {
-  assert(pending_map.active_gid == 0);
+  ceph_assert(pending_map.active_gid == 0);
   if (pending_map.standbys.size()) {
     // Promote a replacement (arbitrary choice of standby)
     auto replacement_gid = pending_map.standbys.begin()->first;
@@ -1059,7 +1059,7 @@ int MgrMonitor::dump_metadata(const string& name, Formatter *f, ostream *err)
 
 void MgrMonitor::print_nodes(Formatter *f) const
 {
-  assert(f);
+  ceph_assert(f);
 
   std::map<string, list<string> > mgrs; // hostname => mgr
   auto ls = map.get_all_names();

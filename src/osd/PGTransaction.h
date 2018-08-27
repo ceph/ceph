@@ -223,18 +223,18 @@ public:
 	  left,
 	  [&](const BufferUpdate::Write &w) -> BufferUpdateType {
 	    auto r = boost::get<BufferUpdate::Write>(&right);
-	    assert(r && w.fadvise_flags == r->fadvise_flags);
+	    ceph_assert(r && w.fadvise_flags == r->fadvise_flags);
 	    bufferlist bl = w.buffer;
 	    bl.append(r->buffer);
 	    return BufferUpdate::Write{bl, w.fadvise_flags};
 	  },
 	  [&](const BufferUpdate::Zero &z) -> BufferUpdateType {
 	    auto r = boost::get<BufferUpdate::Zero>(&right);
-	    assert(r);
+	    ceph_assert(r);
 	    return BufferUpdate::Zero{z.len + r->len};
 	  },
 	  [&](const BufferUpdate::CloneRange &c) -> BufferUpdateType {
-	    assert(0 == "violates can_merge condition");
+	    ceph_abort_msg("violates can_merge condition");
 	    return left;
 	  });
       }
@@ -250,7 +250,7 @@ public:
 private:
   ObjectOperation &get_object_op_for_modify(const hobject_t &hoid) {
     auto &op = op_map[hoid];
-    assert(!op.is_delete());
+    ceph_assert(!op.is_delete());
     return op;
   }
   ObjectOperation &get_object_op(const hobject_t &hoid) {
@@ -259,7 +259,7 @@ private:
 public:
   void add_obc(
     ObjectContextRef obc) {
-    assert(obc);
+    ceph_assert(obc);
     obc_map[obc->obs.oi.soid] = obc;
   }
   /// Sets up state for new object
@@ -267,7 +267,7 @@ public:
     const hobject_t &hoid
     ) {
     auto &op = op_map[hoid];
-    assert(op.is_none() || op.is_delete());
+    ceph_assert(op.is_none() || op.is_delete());
     op.init_type = ObjectOperation::Init::Create();
   }
 
@@ -277,7 +277,7 @@ public:
     const hobject_t &source        ///< [in] obj to clone from
     ) {
     auto &op = op_map[target];
-    assert(op.is_none() || op.is_delete());
+    ceph_assert(op.is_none() || op.is_delete());
     op.init_type = ObjectOperation::Init::Clone{source};
   }
 
@@ -286,10 +286,10 @@ public:
     const hobject_t &target,       ///< [in] to, must not exist, be non-temp
     const hobject_t &source        ///< [in] source (must be a temp object)
     ) {
-    assert(source.is_temp());
-    assert(!target.is_temp());
+    ceph_assert(source.is_temp());
+    ceph_assert(!target.is_temp());
     auto &op = op_map[target];
-    assert(op.is_none() || op.is_delete());
+    ceph_assert(op.is_none() || op.is_delete());
 
     bool del_first = op.is_delete();
     auto iter = op_map.find(source);
@@ -308,11 +308,11 @@ public:
     ) {
     auto &op = get_object_op_for_modify(hoid);
     if (!op.is_fresh_object()) {
-      assert(!op.updated_snaps);
+      ceph_assert(!op.updated_snaps);
       op = ObjectOperation();
       op.delete_first = true;
     } else {
-      assert(!op.is_rename());
+      ceph_assert(!op.is_rename());
       op_map.erase(hoid); // make it a noop if it's a fresh object
     }
   }
@@ -323,9 +323,9 @@ public:
     const set<snapid_t> &new_snaps ///< [in] new snaps value
     ) {
     auto &op = get_object_op(hoid);
-    assert(!op.updated_snaps);
-    assert(op.buffer_updates.empty());
-    assert(!op.truncate);
+    ceph_assert(!op.updated_snaps);
+    ceph_assert(op.buffer_updates.empty());
+    ceph_assert(!op.truncate);
     op.updated_snaps = make_pair(
       old_snaps,
       new_snaps);
@@ -345,7 +345,7 @@ public:
     uint64_t off                   ///< [in] offset to truncate to
     ) {
     auto &op = get_object_op_for_modify(hoid);
-    assert(!op.updated_snaps);
+    ceph_assert(!op.updated_snaps);
     op.buffer_updates.erase(
       off,
       std::numeric_limits<uint64_t>::max() - off);
@@ -407,9 +407,9 @@ public:
     uint32_t fadvise_flags = 0     ///< [in] fadvise hint
     ) {
     auto &op = get_object_op_for_modify(hoid);
-    assert(!op.updated_snaps);
-    assert(len > 0);
-    assert(len == bl.length());
+    ceph_assert(!op.updated_snaps);
+    ceph_assert(len > 0);
+    ceph_assert(len == bl.length());
     op.buffer_updates.insert(
       off,
       len,
@@ -423,7 +423,7 @@ public:
     uint64_t tooff                 ///< [in] offset
     ) {
     auto &op = get_object_op_for_modify(to);
-    assert(!op.updated_snaps);
+    ceph_assert(!op.updated_snaps);
     op.buffer_updates.insert(
       tooff,
       len,
@@ -435,7 +435,7 @@ public:
     uint64_t len                   ///< [in] amount to zero
     ) {
     auto &op = get_object_op_for_modify(hoid);
-    assert(!op.updated_snaps);
+    ceph_assert(!op.updated_snaps);
     op.buffer_updates.insert(
       off,
       len,
@@ -567,7 +567,7 @@ public:
 	/* Internal node: push children onto stack, remove edge,
 	 * recurse.  When this node is encountered again, it'll
 	 * be a leaf */
-	assert(!diter->second.empty());
+	ceph_assert(!diter->second.empty());
 	stack.splice(stack.begin(), diter->second);
 	dgraph.erase(diter);
       }

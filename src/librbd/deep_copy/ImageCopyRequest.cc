@@ -163,7 +163,7 @@ void ImageCopyRequest<I>::send_object_copies() {
 
 template <typename I>
 void ImageCopyRequest<I>::send_next_object_copy() {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   if (m_canceled && m_ret_val == 0) {
     ldout(m_cct, 10) << "image copy canceled" << dendl;
@@ -197,7 +197,7 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
   bool complete;
   {
     Mutex::Locker locker(m_lock);
-    assert(m_current_ops > 0);
+    ceph_assert(m_current_ops > 0);
     --m_current_ops;
 
     if (r < 0 && r != -ENOENT) {
@@ -216,7 +216,7 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
         m_lock.Unlock();
         m_prog_ctx->update_progress(progress_object_no, m_end_object_no);
         m_lock.Lock();
-        assert(m_updating_progress);
+        ceph_assert(m_updating_progress);
         m_updating_progress = false;
       }
     }

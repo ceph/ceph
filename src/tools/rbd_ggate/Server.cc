@@ -26,7 +26,7 @@ void Server::run() {
   dout(10) << dendl;
 
   int r = start();
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   dout(20) << "entering run loop" << dendl;
 
@@ -55,7 +55,7 @@ void Server::stop() {
 
   {
     Mutex::Locker locker(m_lock);
-    assert(m_stopping);
+    ceph_assert(m_stopping);
   }
 
   m_reader_thread.join();
@@ -75,7 +75,7 @@ void Server::io_finish(IOContext *ctx) {
   dout(20) << ctx << dendl;
 
   Mutex::Locker locker(m_lock);
-  assert(ctx->item.is_on_list());
+  ceph_assert(ctx->item.is_on_list());
 
   ctx->item.remove_myself();
   m_io_finished.push_back(&ctx->item);
@@ -104,7 +104,7 @@ Server::IOContext *Server::wait_io_finish() {
 void Server::wait_clean() {
   dout(20) << dendl;
 
-  assert(!m_reader_thread.is_started());
+  ceph_assert(!m_reader_thread.is_started());
 
   Mutex::Locker locker(m_lock);
 

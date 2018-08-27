@@ -44,7 +44,7 @@ int Dumper::init(mds_role_t role_, const std::string &type)
   }
 
   auto fs =  fsmap->get_filesystem(role.fscid);
-  assert(fs != nullptr);
+  ceph_assert(fs != nullptr);
 
   if (type == "mdlog") {
     JournalPointer jp(role.rank, fs->mds_map.get_metadata_pool());
@@ -87,7 +87,7 @@ int Dumper::dump(const char *dump_file)
   int r = 0;
 
   auto fs =  fsmap->get_filesystem(role.fscid);
-  assert(fs != nullptr);
+  ceph_assert(fs != nullptr);
 
   Journaler journaler("dumper", ino, fs->mds_map.get_metadata_pool(),
                       CEPH_FS_ONDISK_MAGIC, objecter, 0, 0,
@@ -201,7 +201,7 @@ int Dumper::undump(const char *dump_file, bool force)
   cout << "undump " << dump_file << std::endl;
   
   auto fs =  fsmap->get_filesystem(role.fscid);
-  assert(fs != nullptr);
+  ceph_assert(fs != nullptr);
 
   int r = 0;
   // try get layout info from cluster
@@ -361,7 +361,7 @@ int Dumper::undump(const char *dump_file, bool force)
    * prezeroing behaviour */
   {
     uint32_t const object_size = h.layout.object_size;
-    assert(object_size > 0);
+    ceph_assert(object_size > 0);
     uint64_t last_obj = h.write_pos / object_size;
     uint64_t purge_count = 2;
     /* When the length is zero, the last_obj should be zeroed 

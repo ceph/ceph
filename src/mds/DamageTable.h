@@ -195,7 +195,7 @@ public:
   explicit DamageTable(const mds_rank_t rank_)
     : rank(rank_)
   {
-    assert(rank_ != MDS_RANK_NONE);
+    ceph_assert(rank_ != MDS_RANK_NONE);
   }
 
   void dump(Formatter *f) const;

@@ -267,7 +267,7 @@ private:
   TestOp *gen_op(RadosTestContext &context, TestOpType type)
   {
     string oid, oid2;
-    assert(context.oid_not_in_use.size());
+    ceph_assert(context.oid_not_in_use.size());
 
     switch (type) {
     case TEST_OP_READ:

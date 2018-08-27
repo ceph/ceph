@@ -64,7 +64,7 @@ class ServerDispatcher : public Dispatcher {
     }
     void _process_finish(Message *m) override { }
     void _clear() override {
-      assert(messages.empty());
+      ceph_assert(messages.empty());
     }
   } op_wq;
 

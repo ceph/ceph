@@ -77,7 +77,7 @@ public:
   C_IO_PurgeStrayPurged(StrayManager *sm_, CDentry *d, bool oh) : 
     StrayManagerIOContext(sm_), dn(d), only_head(oh) { }
   void finish(int r) override {
-    assert(r == 0 || r == -ENOENT);
+    ceph_assert(r == 0 || r == -ENOENT);
     sm->_purge_stray_purged(dn, only_head);
   }
   void print(ostream& out) const override {
@@ -92,7 +92,7 @@ void StrayManager::purge(CDentry *dn)
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
   CInode *in = dnl->get_inode();
   dout(10) << __func__ << " " << *dn << " " << *in << dendl;
-  assert(!dn->is_replicated());
+  ceph_assert(!dn->is_replicated());
 
   // CHEAT.  there's no real need to journal our intent to purge, since
   // that is implicit in the dentry's presence and non-use in the stray
@@ -117,7 +117,7 @@ void StrayManager::purge(CDentry *dn)
     } else {
       dout(10) << " NO realm, using null context" << dendl;
       snapc = &nullsnapc;
-      assert(in->last == CEPH_NOSNAP);
+      ceph_assert(in->last == CEPH_NOSNAP);
     }
 
     uint64_t to = 0;
@@ -203,7 +203,7 @@ void StrayManager::_purge_stray_purged(
       // is being purged (aside from it were 
 
       derr << "Rogue reference after purge to " << *dn << dendl;
-      assert(0 == "rogue reference to purging inode");
+      ceph_abort_msg("rogue reference to purging inode");
     }
 
     // kill dentry.
@@ -240,12 +240,12 @@ void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *l
   CInode *in = dn->get_linkage()->get_inode();
   dout(10) << "_purge_stray_logged " << *dn << " " << *in << dendl;
 
-  assert(!in->state_test(CInode::STATE_RECOVERING));
+  ceph_assert(!in->state_test(CInode::STATE_RECOVERING));
 
   bool new_dn = dn->is_new();
 
   // unlink
-  assert(dn->get_projected_linkage()->is_null());
+  ceph_assert(dn->get_projected_linkage()->is_null());
   dn->dir->unlink_inode(dn, !new_dn);
   dn->pop_projected_linkage();
   dn->mark_dirty(pdv, ls);
@@ -276,9 +276,9 @@ void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *l
 void StrayManager::enqueue(CDentry *dn, bool trunc)
 {
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
-  assert(dnl);
+  ceph_assert(dnl);
   CInode *in = dnl->get_inode();
-  assert(in);
+  ceph_assert(in);
 
   /* We consider a stray to be purging as soon as it is enqueued, to avoid
    * enqueing it twice */
@@ -323,7 +323,7 @@ class C_OpenSnapParents : public StrayManagerContext {
 
 void StrayManager::_enqueue(CDentry *dn, bool trunc)
 {
-  assert(started);
+  ceph_assert(started);
 
   CInode *in = dn->get_linkage()->get_inode();
   if (in->snaprealm &&
@@ -376,7 +376,7 @@ void StrayManager::advance_delayed()
 
 void StrayManager::set_num_strays(uint64_t num)
 {
-  assert(!started);
+  ceph_assert(!started);
   num_strays = num;
   logger->set(l_mdc_num_strays, num_strays);
 }
@@ -414,20 +414,20 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
 {
   dout(10) << "eval_stray " << *dn << dendl;
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
-  assert(dnl->is_primary());
+  ceph_assert(dnl->is_primary());
   dout(10) << " inode is " << *dnl->get_inode() << dendl;
   CInode *in = dnl->get_inode();
-  assert(in);
-  assert(!in->state_test(CInode::STATE_REJOINUNDEF));
+  ceph_assert(in);
+  ceph_assert(!in->state_test(CInode::STATE_REJOINUNDEF));
 
   // The only dentries elegible for purging are those
   // in the stray directories
-  assert(dn->get_dir()->get_inode()->is_stray());
+  ceph_assert(dn->get_dir()->get_inode()->is_stray());
 
   // Inode may not pass through this function if it
   // was already identified for purging (i.e. cannot
   // call eval_stray() after purge()
-  assert(!dn->state_test(CDentry::STATE_PURGING));
+  ceph_assert(!dn->state_test(CDentry::STATE_PURGING));
 
   if (!dn->is_auth()) {
     return false;
@@ -477,7 +477,7 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
 	for (auto it = in->remote_parents.begin(); it != in->remote_parents.end(); ) {
 	  CDentry *remote_dn = *it;
 	  ++it;
-	  assert(remote_dn->last != CEPH_NOSNAP);
+	  ceph_assert(remote_dn->last != CEPH_NOSNAP);
 	  remote_dn->unlink_remote(remote_dn->get_linkage());
 	}
       }
@@ -514,7 +514,7 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
               !in->old_inodes.empty()) {
       // A file with snapshots: we will truncate the HEAD revision
       // but leave the metadata intact.
-      assert(!in->is_dir());
+      ceph_assert(!in->is_dir());
       dout(20) << " file has past parents "
         << in->snaprealm << dendl;
       if (in->is_file() && in->get_projected_inode()->size > 0) {
@@ -565,7 +565,7 @@ void StrayManager::eval_remote(CDentry *remote_dn)
   dout(10) << __func__ << " " << *remote_dn << dendl;
 
   CDentry::linkage_t *dnl = remote_dn->get_projected_linkage();
-  assert(dnl->is_remote());
+  ceph_assert(dnl->is_remote());
   CInode *in = dnl->get_inode();
 
   if (!in) {
@@ -580,7 +580,7 @@ void StrayManager::eval_remote(CDentry *remote_dn)
 
   // refers to stray?
   CDentry *primary_dn = in->get_projected_parent_dn();
-  assert(primary_dn != NULL);
+  ceph_assert(primary_dn != NULL);
   if (primary_dn->get_dir()->get_inode()->is_stray()) {
     _eval_stray_remote(primary_dn, remote_dn);
   } else {
@@ -605,13 +605,13 @@ class C_RetryEvalRemote : public StrayManagerContext {
 void StrayManager::_eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn)
 {
   dout(20) << __func__ << " " << *stray_dn << dendl;
-  assert(stray_dn != NULL);
-  assert(stray_dn->get_dir()->get_inode()->is_stray());
+  ceph_assert(stray_dn != NULL);
+  ceph_assert(stray_dn->get_dir()->get_inode()->is_stray());
   CDentry::linkage_t *stray_dnl = stray_dn->get_projected_linkage();
-  assert(stray_dnl->is_primary());
+  ceph_assert(stray_dnl->is_primary());
   CInode *stray_in = stray_dnl->get_inode();
-  assert(stray_in->inode.nlink >= 1);
-  assert(stray_in->last == CEPH_NOSNAP);
+  ceph_assert(stray_in->inode.nlink >= 1);
+  ceph_assert(stray_in->last == CEPH_NOSNAP);
 
   /* If no remote_dn hinted, pick one arbitrarily */
   if (remote_dn == NULL) {
@@ -633,7 +633,7 @@ void StrayManager::_eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn)
       return;
     }
   }
-  assert(remote_dn->last == CEPH_NOSNAP);
+  ceph_assert(remote_dn->last == CEPH_NOSNAP);
   // NOTE: we repeat this check in _rename(), since our submission path is racey.
   if (!remote_dn->is_projected()) {
     if (remote_dn->is_auth()) {
@@ -679,9 +679,9 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
 void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
 {
   CInode *in = dn->get_projected_linkage()->get_inode();
-  assert(in);
+  ceph_assert(in);
   CInode *diri = dn->dir->get_inode();
-  assert(diri->is_stray());
+  ceph_assert(diri->is_stray());
   dout(10) << "migrate_stray from mds." << MDS_INO_STRAY_OWNER(diri->inode.ino)
 	   << " to mds." << to
 	   << " " << *dn << " " << *in << dendl;
@@ -691,7 +691,7 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
   // rename it to another mds.
   filepath src;
   dn->make_path(src);
-  assert(src.depth() == 2);
+  ceph_assert(src.depth() == 2);
 
   filepath dst(MDS_INO_MDSDIR(to));
   dst.push_dentry(src[0]);
@@ -711,19 +711,19 @@ StrayManager::StrayManager(MDSRank *mds, PurgeQueue &purge_queue_)
     num_strays_delayed(0), num_strays_enqueuing(0),
     purge_queue(purge_queue_)
 {
-  assert(mds != NULL);
+  ceph_assert(mds != NULL);
 }
 
 void StrayManager::truncate(CDentry *dn)
 {
   const CDentry::linkage_t *dnl = dn->get_projected_linkage();
   const CInode *in = dnl->get_inode();
-  assert(in);
+  ceph_assert(in);
   dout(10) << __func__ << ": " << *dn << " " << *in << dendl;
-  assert(!dn->is_replicated());
+  ceph_assert(!dn->is_replicated());
 
   const SnapRealm *realm = in->find_snaprealm();
-  assert(realm);
+  ceph_assert(realm);
   dout(10) << " realm " << *realm << dendl;
   const SnapContext *snapc = &realm->get_snap_context();
 
@@ -734,7 +734,7 @@ void StrayManager::truncate(CDentry *dn)
   // the file has ever been.
   to = std::max(in->inode.max_size_ever, to);
 
-  assert(to > 0);
+  ceph_assert(to > 0);
 
   PurgeItem item;
   item.action = PurgeItem::TRUNCATE_FILE;

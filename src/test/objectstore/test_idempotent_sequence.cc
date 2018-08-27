@@ -33,7 +33,7 @@
 #define dout_prefix *_dout << "test_idempotent_sequence "
 
 void usage(const char *name, std::string command = "") {
-  assert(name != NULL);
+  ceph_assert(name != NULL);
 
   std::string more = "cmd <args...>";
   std::string diff = "diff <filestoreA> <journalA> <filestoreB> <journalB>";

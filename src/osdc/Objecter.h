@@ -84,7 +84,7 @@ struct ObjectOperation {
   }
 
   void set_last_op_flags(int flags) {
-    assert(!ops.empty());
+    ceph_assert(!ops.empty());
     ops.rbegin()->op.flags = flags;
   }
 
@@ -1735,7 +1735,7 @@ public:
     }
     void finished_async() {
       unique_lock l(watch_lock);
-      assert(!watch_pending_async.empty());
+      ceph_assert(!watch_pending_async.empty());
       watch_pending_async.pop_front();
     }
 
@@ -1999,7 +1999,7 @@ private:
   int calc_op_budget(const vector<OSDOp>& ops);
   void _throttle_op(Op *op, shunique_lock& sul, int op_size = 0);
   int _take_op_budget(Op *op, shunique_lock& sul) {
-    assert(sul && sul.mutex() == &rwlock);
+    ceph_assert(sul && sul.mutex() == &rwlock);
     int op_budget = calc_op_budget(op->ops);
     if (keep_balanced_budget) {
       _throttle_op(op, sul, op_budget);
@@ -2013,7 +2013,7 @@ private:
   int take_linger_budget(LingerOp *info);
   friend class WatchContext; // to invoke put_up_budget_bytes
   void put_op_budget_bytes(int op_budget) {
-    assert(op_budget >= 0);
+    ceph_assert(op_budget >= 0);
     op_throttle_bytes.put(op_budget);
     op_throttle_ops.put(1);
   }
@@ -2225,7 +2225,7 @@ public:
   void osd_command(int osd, const std::vector<string>& cmd,
 		  const bufferlist& inbl, ceph_tid_t *ptid,
 		  bufferlist *poutbl, string *prs, Context *onfinish) {
-    assert(osd >= 0);
+    ceph_assert(osd >= 0);
     CommandOp *c = new CommandOp(
       osd,
       cmd,
@@ -3038,7 +3038,7 @@ public:
 	     bit != p->buffer_extents.end();
 	     ++bit)
 	  bl.copy(bit->first, bit->second, cur);
-	assert(cur.length() == p->length);
+	ceph_assert(cur.length() == p->length);
 	write_trunc(p->oid, p->oloc, p->offset, p->length,
 	      snapc, cur, mtime, flags, p->truncate_size, trunc_seq,
 	      oncommit ? gcom.new_sub():0,

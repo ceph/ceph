@@ -38,7 +38,7 @@ struct GetMirrorImageIdRequest<librbd::MockTestImageCtx> {
                                          const std::string& global_image_id,
                                          std::string* image_id,
                                          Context* on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->image_id = image_id;
     s_instance->on_finish = on_finish;
     return s_instance;
