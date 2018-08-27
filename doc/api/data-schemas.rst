@@ -33,3 +33,9 @@ Filesystem Map
 
 .. literalinclude:: schema/fs_map.json
   :language: json
+
+MDS Map
+=======
+
+.. literalinclude:: schema/mds_map.json
+  :language: json
