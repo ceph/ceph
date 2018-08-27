@@ -24,3 +24,4 @@ function check_schema {
 
 check_schema MonMap mon_map.json
 check_schema OSDMap osd_map.json
+check_schema FSMap fs_map.json

@@ -27,3 +27,9 @@ OSD Map
 
 .. literalinclude:: schema/osd_map.json
   :language: json
+
+Filesystem Map
+==============
+
+.. literalinclude:: schema/fs_map.json
+  :language: json

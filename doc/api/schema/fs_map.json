@@ -1,0 +1,166 @@
+{
+    "definitions": {
+        "mdsmap": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "epoch",
+                "flags",
+                "ever_allowed_features",
+                "explicitly_allowed_features",
+                "created",
+                "modified",
+                "tableserver",
+                "root",
+                "session_timeout",
+                "session_autoclose",
+                "min_compat_client",
+                "max_file_size",
+                "last_failure",
+                "last_failure_osd_epoch",
+                "compat",
+                "max_mds",
+                "in",
+                "up",
+                "failed",
+                "damaged",
+                "stopped",
+                "info",
+                "data_pools",
+                "metadata_pool",
+                "enabled",
+                "fs_name",
+                "balancer",
+                "standby_count_wanted"
+            ],
+            "properties": {
+                "epoch": { "type": "number" },
+                "flags": { "type": "number" },
+                "ever_allowed_features": { "type": "number" },
+                "explicitly_allowed_features": { "type": "number" },
+                "created": { "type": "string" },
+                "modified": { "type": "string" },
+                "tableserver": { "type": "number" },
+                "root": { "type": "number" },
+                "session_timeout": { "type": "number" },
+                "session_autoclose": { "type": "number" },
+                "min_compat_client": { "type": "string" },
+                "max_file_size": { "type": "number" },
+                "last_failure": { "type": "number" },
+                "last_failure_osd_epoch": { "type": "number" },
+                "compat": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                        "compat",
+                        "ro_compat",
+                        "incompat"
+                    ],
+                    "properties": {
+                        "compat": {
+                            "type": "object",
+                            "additionalProperties": false
+                        },
+                        "ro_compat": {
+                            "type": "object",
+                            "additionalProperties": false
+                        },
+                        "incompat": {
+                            "type": "object",
+                            "additionalProperties": {"type": "string"}
+                        }
+                    }
+                },
+                "max_mds": { "type": "number" },
+                "in": {
+                    "type": "array"
+                },
+                "up": {
+                    "type": "object",
+                    "additionalProperties": false
+                },
+                "failed": {
+                    "type": "array"
+                },
+                "damaged": {
+                    "type": "array"
+                },
+                "stopped": {
+                    "type": "array"
+                },
+                "info": {
+                    "type": "object",
+                    "additionalProperties": false
+                },
+                "data_pools": {
+                    "type": "array",
+                    "items": { "type": "number" }
+                },
+                "metadata_pool": { "type": "number" },
+                "enabled": { "type": "boolean" },
+                "fs_name": { "type": "string" },
+                "balancer": { "type": "string" },
+                "standby_count_wanted": { "type": "number" }
+            }
+        },
+        "filesystem": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "mdsmap",
+                "id"
+            ],
+            "properties": {
+                "mdsmap": { "$ref": "#/definitions/mdsmap" },
+                "id": { "type": "number" }
+            }
+        }
+    },
+    "additionalProperties": false,
+    "required": [
+        "epoch",
+        "default_fscid",
+        "compat",
+        "feature_flags",
+        "standbys",
+        "filesystems"
+    ],
+    "properties": {
+        "epoch": {"type": "number"},
+        "default_fscid": {"type": "number"},
+        "compat": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "compat",
+                "ro_compat",
+                "incompat"
+            ],
+            "properties": {
+                "compat": {
+                    "type": "object",
+                    "additionalProperties": false
+                },
+                "ro_compat": {
+                    "type": "object",
+                    "additionalProperties": false
+                },
+                "incompat": {
+                    "type": "object",
+                    "additionalProperties": {"type": "string"}
+                }
+            }
+        },
+        "feature_flags": {
+            "type": "object",
+            "additionalProperties": {"type": "boolean"}
+        },
+        "standbys": {
+            "type": "array"
+        },
+        "filesystems": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/filesystem" }
+        }
+    }
+}
