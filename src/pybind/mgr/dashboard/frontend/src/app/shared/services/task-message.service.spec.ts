@@ -35,6 +35,7 @@ describe('TaskManagerMessageService', () => {
   });
 
   describe('defined tasks messages', () => {
+    let defaultMsg: string;
     const testMessages = (operation: TaskMessageOperation, involves: string) => {
       expect(service.getRunningTitle(finishedTask)).toBe(operation.running + ' ' + involves);
       expect(service.getErrorTitle(finishedTask)).toBe(
@@ -62,8 +63,34 @@ describe('TaskManagerMessageService', () => {
       expect(service.getErrorMessage(finishedTask)).toBe(msg);
     };
 
+    describe('pool tasks', () => {
+      beforeEach(() => {
+        const metadata = {
+          pool_name: 'somePool'
+        };
+        defaultMsg = `pool '${metadata.pool_name}'`;
+        finishedTask.metadata = metadata;
+      });
+
+      it('tests pool/create messages', () => {
+        finishedTask.name = 'pool/create';
+        testCreate(defaultMsg);
+        testErrorCode(17, `Name is already used by ${defaultMsg}.`);
+      });
+
+      it('tests pool/edit messages', () => {
+        finishedTask.name = 'pool/edit';
+        testUpdate(defaultMsg);
+        testErrorCode(17, `Name is already used by ${defaultMsg}.`);
+      });
+
+      it('tests pool/delete messages', () => {
+        finishedTask.name = 'pool/delete';
+        testDelete(defaultMsg);
+      });
+    });
+
     describe('rbd tasks', () => {
-      let defaultMsg: string;
       let childMsg: string;
       let destinationMsg: string;
       let snapMsg: string;
