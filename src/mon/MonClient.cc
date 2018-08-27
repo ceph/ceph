@@ -1215,7 +1215,7 @@ void MonConnection::start(epoch_t epoch,
   con->send_keepalive();
 
   auto m = new MAuth;
-  m->protocol = 0;
+  m->protocol = CEPH_AUTH_UNKNOWN;
   m->monmap_epoch = epoch;
   __u8 struct_v = 1;
   encode(struct_v, m->auth_payload);
