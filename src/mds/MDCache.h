@@ -193,7 +193,7 @@ public:
    * on to StrayManager (i.e. this is a stray you've just created)
    */
   void notify_stray(CDentry *dn) {
-    assert(dn->get_dir()->get_inode()->is_stray());
+    ceph_assert(dn->get_dir()->get_inode()->is_stray());
     stray_manager.eval_stray(dn);
   }
 
@@ -334,7 +334,7 @@ public:
   CDir *get_subtree_root(CDir *dir);
   CDir *get_projected_subtree_root(CDir *dir);
   bool is_leaf_subtree(CDir *dir) {
-    assert(subtrees.count(dir));
+    ceph_assert(subtrees.count(dir));
     return subtrees[dir].empty();
   }
   void remove_subtree(CDir *dir);
@@ -501,7 +501,7 @@ public:
   void remove_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
     auto p = ambiguous_slave_updates.find(master);
     auto q = p->second.find(reqid);
-    assert(q != p->second.end());
+    ceph_assert(q != p->second.end());
     p->second.erase(q);
     if (p->second.empty())
       ambiguous_slave_updates.erase(p);
@@ -519,7 +519,7 @@ public:
     return my_ambiguous_imports.count(base);
   }
   void get_ambiguous_import_bounds(dirfrag_t base, vector<dirfrag_t>& bounds) {
-    assert(my_ambiguous_imports.count(base));
+    ceph_assert(my_ambiguous_imports.count(base));
     bounds = my_ambiguous_imports[base];
   }
   void cancel_ambiguous_import(CDir *);
@@ -623,8 +623,8 @@ public:
     return NULL;
   }
   void remove_replay_cap_reconnect(inodeno_t ino, client_t client) {
-    assert(cap_imports[ino].size() == 1);
-    assert(cap_imports[ino][client].size() == 1);
+    ceph_assert(cap_imports[ino].size() == 1);
+    ceph_assert(cap_imports[ino][client].size() == 1);
     cap_imports.erase(ino);
   }
   void wait_replay_cap_reconnect(inodeno_t ino, MDSInternalContextBase *c) {
@@ -1173,7 +1173,7 @@ private:
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, list<frag_t>& old_frags);
 public:
   void wait_for_uncommitted_fragment(dirfrag_t dirfrag, MDSInternalContextBase *c) {
-    assert(uncommitted_fragments.count(dirfrag));
+    ceph_assert(uncommitted_fragments.count(dirfrag));
     uncommitted_fragments[dirfrag].waiters.push_back(c);
   }
   void split_dir(CDir *dir, int byn);
@@ -1218,7 +1218,7 @@ public:
   void show_subtrees(int dbl=10);
 
   CInode *hack_pick_random_inode() {
-    assert(!inode_map.empty());
+    ceph_assert(!inode_map.empty());
     int n = rand() % inode_map.size();
     auto p = inode_map.begin();
     while (n--) ++p;

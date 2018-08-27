@@ -95,13 +95,13 @@ public:
       reqid(ri), attempt(att),
       slave_to_mds(slave_to) { }
   ~MutationImpl() override {
-    assert(locking == NULL);
-    assert(pins.empty());
-    assert(auth_pins.empty());
-    assert(xlocks.empty());
-    assert(rdlocks.empty());
-    assert(wrlocks.empty());
-    assert(remote_wrlocks.empty());
+    ceph_assert(locking == NULL);
+    ceph_assert(pins.empty());
+    ceph_assert(auth_pins.empty());
+    ceph_assert(xlocks.empty());
+    ceph_assert(rdlocks.empty());
+    ceph_assert(wrlocks.empty());
+    ceph_assert(remote_wrlocks.empty());
   }
 
   bool is_master() const { return slave_to_mds == MDS_RANK_NONE; }

@@ -29,7 +29,7 @@ class LockRequest<MockObjectMapImageCtx> {
 public:
   static LockRequest *s_instance;
   static LockRequest *create(MockObjectMapImageCtx &image_ctx, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -92,7 +92,7 @@ public:
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {
-      assert(object_map);
+      ceph_assert(object_map);
       object_map->set_crc_enabled(false);
 
       bufferlist bl;

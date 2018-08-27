@@ -82,7 +82,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
            << " summary v " << summary.version << dendl;
   if (version == summary.version)
     return;
-  assert(version >= summary.version);
+  ceph_assert(version >= summary.version);
 
   map<string,bufferlist> channel_blog;
 
@@ -91,7 +91,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
   if ((latest_full > 0) && (latest_full > summary.version)) {
     bufferlist latest_bl;
     get_version_full(latest_full, latest_bl);
-    assert(latest_bl.length() != 0);
+    ceph_assert(latest_bl.length() != 0);
     dout(7) << __func__ << " loading summary e" << latest_full << dendl;
     auto p = latest_bl.cbegin();
     decode(summary, p);
@@ -102,8 +102,8 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
   while (version > summary.version) {
     bufferlist bl;
     int err = get_version(summary.version+1, bl);
-    assert(err == 0);
-    assert(bl.length());
+    ceph_assert(err == 0);
+    ceph_assert(bl.length());
 
     auto p = bl.cbegin();
     __u8 v;
@@ -230,7 +230,7 @@ void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
 {
   dout(10) << __func__ << " log v " << summary.version << dendl;
-  assert(get_last_committed() == summary.version);
+  ceph_assert(get_last_committed() == summary.version);
 
   bufferlist summary_bl;
   encode(summary, summary_bl, mon->get_quorum_con_features());
@@ -593,7 +593,7 @@ void LogMonitor::check_sub(Subscription *s)
   dout(10) << __func__ << " client wants " << s->type << " ver " << s->next << dendl;
 
   int sub_level = sub_name_to_id(s->type);
-  assert(sub_level >= 0);
+  ceph_assert(sub_level >= 0);
 
   version_t summary_version = summary.version;
   if (s->next > summary_version) {
@@ -659,8 +659,8 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
   while (sv && sv <= summary_ver) {
     bufferlist bl;
     int err = get_version(sv, bl);
-    assert(err == 0);
-    assert(bl.length());
+    ceph_assert(err == 0);
+    ceph_assert(bl.length());
     auto p = bl.cbegin();
     __u8 v;
     decode(v,p);

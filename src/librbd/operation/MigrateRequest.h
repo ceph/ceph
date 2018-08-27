@@ -30,7 +30,7 @@ protected:
     return true;
   }
   journal::Event create_event(uint64_t op_tid) const override {
-    assert(0);
+    ceph_abort();
     return journal::UnknownEvent();
   }
 

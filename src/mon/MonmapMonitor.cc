@@ -67,8 +67,8 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
   // read and decode
   monmap_bl.clear();
   int ret = get_version(version, monmap_bl);
-  assert(ret == 0);
-  assert(monmap_bl.length());
+  ceph_assert(ret == 0);
+  ceph_assert(monmap_bl.length());
 
   dout(10) << __func__ << " got " << version << dendl;
   mon->monmap->decode(monmap_bl);
@@ -94,7 +94,7 @@ void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   dout(10) << __func__ << " epoch " << pending_map.epoch << dendl;
 
-  assert(mon->monmap->epoch + 1 == pending_map.epoch ||
+  ceph_assert(mon->monmap->epoch + 1 == pending_map.epoch ||
 	 pending_map.epoch == 1);  // special case mkfs!
   bufferlist bl;
   pending_map.encode(bl, mon->get_quorum_con_features());
@@ -122,7 +122,7 @@ class C_ApplyFeatures : public Context {
       // established them in the first place.
       return;
     } else {
-      assert(0 == "bad C_ApplyFeatures return value");
+      ceph_abort_msg("bad C_ApplyFeatures return value");
     }
   }
 };
@@ -135,11 +135,11 @@ void MonmapMonitor::apply_mon_features(const mon_feature_t& features)
     return;
   }
 
-  assert(is_writeable());
-  assert(features.contains_all(pending_map.persistent_features));
+  ceph_assert(is_writeable());
+  ceph_assert(features.contains_all(pending_map.persistent_features));
   // we should never hit this because `features` should be the result
   // of the quorum's supported features. But if it happens, die.
-  assert(ceph::features::mon::get_supported().contains_all(features));
+  ceph_assert(ceph::features::mon::get_supported().contains_all(features));
 
   mon_feature_t new_features =
     (pending_map.persistent_features ^
@@ -282,13 +282,13 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
         ss << "there is no map for epoch " << epoch;
         goto reply;
       }
-      assert(r == 0);
-      assert(bl.length() > 0);
+      ceph_assert(r == 0);
+      ceph_assert(bl.length() > 0);
       p = new MonMap;
       p->decode(bl);
     }
 
-    assert(p);
+    ceph_assert(p);
 
     if (prefix == "mon getmap") {
       p->encode(rdata, m->get_connection()->get_features());
@@ -480,7 +480,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
    * state, thus we are not bound by it.
    */
 
-  assert(mon->monmap);
+  ceph_assert(mon->monmap);
   MonMap &monmap = *mon->monmap;
 
 

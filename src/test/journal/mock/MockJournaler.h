@@ -23,7 +23,7 @@ struct Settings;
 struct MockFuture {
   static MockFuture *s_instance;
   static MockFuture &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 
@@ -53,7 +53,7 @@ struct MockFutureProxy {
 struct MockReplayEntry {
   static MockReplayEntry *s_instance;
   static MockReplayEntry &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 
@@ -78,7 +78,7 @@ struct MockReplayEntryProxy {
 struct MockJournaler {
   static MockJournaler *s_instance;
   static MockJournaler &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 

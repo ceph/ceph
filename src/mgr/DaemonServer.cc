@@ -364,7 +364,7 @@ void DaemonServer::tick()
 // fire after all modules have had a chance to set their health checks.
 void DaemonServer::schedule_tick_locked(double delay_sec)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   if (tick_event) {
     timer.cancel_event(tick_event);
@@ -608,7 +608,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
   }
 
   // Update the DaemonState
-  assert(daemon != nullptr);
+  ceph_assert(daemon != nullptr);
   {
     Mutex::Locker l(daemon->lock);
     auto &daemon_counters = daemon->perf_counters;
@@ -727,7 +727,7 @@ bool DaemonServer::handle_command(MCommand *m)
   std::stringstream ss;
   std::string prefix;
 
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   /**
    * The working data for processing an MCommand.  This lives in
@@ -914,7 +914,7 @@ bool DaemonServer::handle_command(MCommand *m)
       for (auto& q : p.second.daemons) {
 	f->open_object_section(q.first.c_str());
 	DaemonKey key(p.first, q.first);
-	assert(daemon_state.exists(key));
+	ceph_assert(daemon_state.exists(key));
 	auto daemon = daemon_state.get(key);
 	Mutex::Locker l(daemon->lock);
 	f->dump_stream("status_stamp") << daemon->service_status_stamp;
@@ -1215,7 +1215,7 @@ bool DaemonServer::handle_command(MCommand *m)
         if (!pool_name.empty()) {
           poolid = osdmap.lookup_pg_pool_name(pool_name);
           if (poolid < 0) {
-            assert(poolid == -ENOENT);
+            ceph_assert(poolid == -ENOENT);
             ss << "unrecognized pool '" << pool_name << "'";
             return -ENOENT;
           }
@@ -1533,7 +1533,7 @@ bool DaemonServer::handle_command(MCommand *m)
 		  }
 		  break;
 		default:
-		  assert(0 == "actual_op value is not supported");
+		  ceph_abort_msg("actual_op value is not supported");
 	      }
 
 	      parsed_pgs.push_back(std::move(parsed_pg));
@@ -2317,7 +2317,7 @@ void DaemonServer::handle_conf_change(const ConfigProxy& conf,
 
 void DaemonServer::_send_configure(ConnectionRef c)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   auto configure = new MMgrConfigure();
   configure->stats_period = g_conf().get_val<int64_t>("mgr_stats_period");

@@ -488,11 +488,11 @@ void ImageRequestWQ<I>::aio_compare_and_write(AioCompletion *c,
 
 template <typename I>
 void ImageRequestWQ<I>::shut_down(Context *on_shutdown) {
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
 
   {
     RWLock::WLocker locker(m_lock);
-    assert(!m_shutdown);
+    ceph_assert(!m_shutdown);
     m_shutdown = true;
 
     CephContext *cct = m_image_ctx.cct;
@@ -517,7 +517,7 @@ int ImageRequestWQ<I>::block_writes() {
 
 template <typename I>
 void ImageRequestWQ<I>::block_writes(Context *on_blocked) {
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
   {
@@ -543,7 +543,7 @@ void ImageRequestWQ<I>::unblock_writes() {
   Contexts waiter_contexts;
   {
     RWLock::WLocker locker(m_lock);
-    assert(m_write_blockers > 0);
+    ceph_assert(m_write_blockers > 0);
     --m_write_blockers;
 
     ldout(cct, 5) << &m_image_ctx << ", " << "num="
@@ -564,7 +564,7 @@ void ImageRequestWQ<I>::unblock_writes() {
 
 template <typename I>
 void ImageRequestWQ<I>::wait_on_writes_unblocked(Context *on_unblocked) {
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
   {
@@ -622,7 +622,7 @@ void ImageRequestWQ<I>::apply_qos_limit(uint64_t limit, const uint64_t flag) {
       break;
     }
   }
-  assert(throttle != nullptr);
+  ceph_assert(throttle != nullptr);
   throttle->set_max(limit);
   throttle->set_average(limit);
   if (limit)
@@ -636,7 +636,7 @@ void ImageRequestWQ<I>::handle_throttle_ready(int r, ImageDispatchSpec<I> *item,
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 15) << "r=" << r << ", " << "req=" << item << dendl;
 
-  assert(m_io_throttled.load() > 0);
+  ceph_assert(m_io_throttled.load() > 0);
   item->set_throttled(flag);
   if (item->were_all_throttled()) {
     this->requeue(item);
@@ -716,7 +716,7 @@ void *ImageRequestWQ<I>::_void_dequeue() {
 
   auto item = reinterpret_cast<ImageDispatchSpec<I> *>(
     ThreadPool::PointerWQ<ImageDispatchSpec<I> >::_void_dequeue());
-  assert(peek_item == item);
+  ceph_assert(peek_item == item);
 
   if (lock_required) {
     this->get_pool_lock().Unlock();
@@ -783,10 +783,10 @@ template <typename I>
 void ImageRequestWQ<I>::finish_queued_io(ImageDispatchSpec<I> *req) {
   RWLock::RLocker locker(m_lock);
   if (req->is_write_op()) {
-    assert(m_queued_writes > 0);
+    ceph_assert(m_queued_writes > 0);
     m_queued_writes--;
   } else {
-    assert(m_queued_reads > 0);
+    ceph_assert(m_queued_reads > 0);
     m_queued_reads--;
   }
 }
@@ -796,7 +796,7 @@ void ImageRequestWQ<I>::finish_in_flight_write() {
   bool writes_blocked = false;
   {
     RWLock::RLocker locker(m_lock);
-    assert(m_in_flight_writes > 0);
+    ceph_assert(m_in_flight_writes > 0);
     if (--m_in_flight_writes == 0 &&
         !m_write_blocker_contexts.empty()) {
       writes_blocked = true;
@@ -839,7 +839,7 @@ void ImageRequestWQ<I>::finish_in_flight_io() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << "completing shut down" << dendl;
 
-  assert(on_shutdown != nullptr);
+  ceph_assert(on_shutdown != nullptr);
   flush_image(m_image_ctx, on_shutdown);
 }
 
@@ -855,14 +855,14 @@ void ImageRequestWQ<I>::fail_in_flight_io(
 
 template <typename I>
 bool ImageRequestWQ<I>::is_lock_required(bool write_op) const {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
   return ((write_op && m_require_lock_on_write) ||
           (!write_op && m_require_lock_on_read));
 }
 
 template <typename I>
 void ImageRequestWQ<I>::queue(ImageDispatchSpec<I> *req) {
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
@@ -891,7 +891,7 @@ void ImageRequestWQ<I>::handle_acquire_lock(
     this->requeue(req);
   }
 
-  assert(m_io_blockers.load() > 0);
+  ceph_assert(m_io_blockers.load() > 0);
   --m_io_blockers;
   this->signal();
 }
@@ -910,7 +910,7 @@ void ImageRequestWQ<I>::handle_refreshed(
     this->requeue(req);
   }
 
-  assert(m_io_blockers.load() > 0);
+  ceph_assert(m_io_blockers.load() > 0);
   --m_io_blockers;
   this->signal();
 }

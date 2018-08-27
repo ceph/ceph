@@ -47,7 +47,7 @@ public:
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(snaps, p);
-    assert(p.end());
+    ceph_assert(p.end());
   }
 
 };

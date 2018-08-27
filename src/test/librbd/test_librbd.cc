@@ -5075,12 +5075,12 @@ TEST_F(TestLibRBD, ObjectMapConsistentSnap)
   thread writer([&image1](){
       librbd::image_info_t info;
       int r = image1.stat(info, sizeof(info));
-      assert(r == 0);
+      ceph_assert(r == 0);
       bufferlist bl;
       bl.append("foo");
       for (unsigned i = 0; i < info.num_objs; ++i) {
 	r = image1.write((1 << info.order) * i, bl.length(), bl);
-	assert(r == (int) bl.length());
+	ceph_assert(r == (int) bl.length());
       }
     });
   writer.join();
@@ -6995,7 +6995,7 @@ TEST_F(TestLibRBD, TestGetModifyTimestamp)
   rados_ioctx_destroy(ioctx);
 }
 
-// poorman's assert()
+// poorman's ceph_assert()
 namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,
 			  const char *func) {

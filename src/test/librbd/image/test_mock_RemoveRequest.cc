@@ -34,7 +34,7 @@ struct MockTestImageCtx : public MockImageCtx {
                                   const std::string &image_id,
                                   const char *snap, librados::IoCtx& p,
                                   bool read_only) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
@@ -59,7 +59,7 @@ public:
   static DetachChildRequest *s_instance;
   static DetachChildRequest *create(MockTestImageCtx &image_ctx,
                                     Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -87,7 +87,7 @@ public:
                                        cls::rbd::SnapshotNamespace sn,
                                        std::string name,
                                        uint64_t id, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -110,7 +110,7 @@ public:
   static TrimRequest *create(MockTestImageCtx &image_ctx, Context *on_finish,
                              uint64_t original_size, uint64_t new_size,
                              ProgressContext &prog_ctx) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -140,7 +140,7 @@ public:
   static RemoveRequest *create(IoCtx &ioctx, const std::string &imageid,
                                       const std::string &client_id,
                                       ContextWQ *op_work_queue, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -168,7 +168,7 @@ public:
 
   static DisableRequest *create(MockTestImageCtx *image_ctx, bool force,
                                 bool remove, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -195,7 +195,7 @@ public:
   static ListWatchersRequest *create(MockTestImageCtx &image_ctx, int flags,
                                      std::list<obj_watch_t> *watchers,
                                      Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }

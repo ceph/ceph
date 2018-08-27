@@ -353,7 +353,7 @@ public:
       return;
     }
 
-    assert(m_bufferlist.length() == static_cast<size_t>(r));
+    ceph_assert(m_bufferlist.length() == static_cast<size_t>(r));
     if (m_fd != STDOUT_FILENO) {
       if (m_bufferlist.is_zero()) {
         return;

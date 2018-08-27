@@ -28,7 +28,7 @@ void MutationImpl::pin(MDSCacheObject *o)
 
 void MutationImpl::unpin(MDSCacheObject *o)
 {
-  assert(pins.count(o));
+  ceph_assert(pins.count(o));
   o->put(MDSCacheObject::PIN_REQUEST);
   pins.erase(o);
 }
@@ -52,7 +52,7 @@ void MutationImpl::drop_pins()
 
 void MutationImpl::start_locking(SimpleLock *lock, int target)
 {
-  assert(locking == NULL);
+  ceph_assert(locking == NULL);
   pin(lock->get_parent());
   locking = lock;
   locking_target_mds = target;
@@ -60,7 +60,7 @@ void MutationImpl::start_locking(SimpleLock *lock, int target)
 
 void MutationImpl::finish_locking(SimpleLock *lock)
 {
-  assert(locking == lock);
+  ceph_assert(locking == lock);
   locking = NULL;
   locking_target_mds = -1;
 }
@@ -82,7 +82,7 @@ void MutationImpl::auth_pin(MDSCacheObject *object)
 
 void MutationImpl::auth_unpin(MDSCacheObject *object)
 {
-  assert(auth_pins.count(object));
+  ceph_assert(auth_pins.count(object));
   object->auth_unpin(this);
   auth_pins.erase(object);
 }
@@ -92,7 +92,7 @@ void MutationImpl::drop_local_auth_pins()
   for (set<MDSCacheObject*>::iterator it = auth_pins.begin();
        it != auth_pins.end();
        ++it) {
-    assert((*it)->is_auth());
+    ceph_assert((*it)->is_auth());
     (*it)->auth_unpin(this);
   }
   auth_pins.clear();
@@ -215,7 +215,7 @@ bool MDRequestImpl::did_ino_allocation() const
 
 bool MDRequestImpl::freeze_auth_pin(CInode *inode)
 {
-  assert(!more()->rename_inode || more()->rename_inode == inode);
+  ceph_assert(!more()->rename_inode || more()->rename_inode == inode);
   more()->rename_inode = inode;
   more()->is_freeze_authpin = true;
   auth_pin(inode);
@@ -229,7 +229,7 @@ bool MDRequestImpl::freeze_auth_pin(CInode *inode)
 
 void MDRequestImpl::unfreeze_auth_pin(bool clear_inode)
 {
-  assert(more()->is_freeze_authpin);
+  ceph_assert(more()->is_freeze_authpin);
   CInode *inode = more()->rename_inode;
   if (inode->is_frozen_auth_pin())
     inode->unfreeze_auth_pin();
@@ -248,8 +248,8 @@ void MDRequestImpl::set_remote_frozen_auth_pin(CInode *inode)
 
 void MDRequestImpl::set_ambiguous_auth(CInode *inode)
 {
-  assert(!more()->rename_inode || more()->rename_inode == inode);
-  assert(!more()->is_ambiguous_auth);
+  ceph_assert(!more()->rename_inode || more()->rename_inode == inode);
+  ceph_assert(!more()->is_ambiguous_auth);
 
   inode->set_ambiguous_auth();
   more()->rename_inode = inode;
@@ -259,7 +259,7 @@ void MDRequestImpl::set_ambiguous_auth(CInode *inode)
 void MDRequestImpl::clear_ambiguous_auth()
 {
   CInode *inode = more()->rename_inode;
-  assert(inode && more()->is_ambiguous_auth);
+  ceph_assert(inode && more()->is_ambiguous_auth);
   inode->clear_ambiguous_auth();
   more()->is_ambiguous_auth = false;
 }
@@ -295,13 +295,13 @@ const filepath& MDRequestImpl::get_filepath2()
 
 void MDRequestImpl::set_filepath(const filepath& fp)
 {
-  assert(!client_request);
+  ceph_assert(!client_request);
   more()->filepath1 = fp;
 }
 
 void MDRequestImpl::set_filepath2(const filepath& fp)
 {
-  assert(!client_request);
+  ceph_assert(!client_request);
   more()->filepath2 = fp;
 }
 

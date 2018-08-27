@@ -29,6 +29,8 @@
 #include "include/compat.h"
 #include "include/rbd/librbd.h"
 
+#include "include/assert.h"
+
 static int gotrados = 0;
 char *pool_name;
 char *mount_image_name;
@@ -111,7 +113,7 @@ enumerate_images(struct rbd_image_data *data)
 
 	ret = rbd_list(ioctx, ibuf, &ibuf_len);
 	if (ret == -ERANGE) {
-		assert(ibuf_len > 0);
+		ceph_assert(ibuf_len > 0);
 		ibuf = (char*) malloc(ibuf_len);
 		if (!ibuf) {
 			simple_err("Failed to get ibuf", -ENOMEM);
@@ -128,7 +130,7 @@ enumerate_images(struct rbd_image_data *data)
 		free(ibuf);
 		return;
 	}
-	assert(ret == (int)ibuf_len);
+	ceph_assert(ret == (int)ibuf_len);
 
 	fprintf(stderr, "pool %s: ", pool_name);
 	for (ip = ibuf; ip < &ibuf[ibuf_len]; ip += strlen(ip) + 1)  {

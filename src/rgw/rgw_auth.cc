@@ -140,7 +140,7 @@ strategy_handle_rejected(rgw::auth::Engine::result_t&& engine_result,
 
     default:
       /* Huh, memory corruption? */
-      abort();
+      ceph_abort();
   }
 }
 
@@ -164,7 +164,7 @@ strategy_handle_denied(rgw::auth::Engine::result_t&& engine_result,
 
     default:
       /* Huh, memory corruption? */
-      abort();
+      ceph_abort();
   }
 }
 
@@ -189,7 +189,7 @@ strategy_handle_granted(rgw::auth::Engine::result_t&& engine_result,
 
     default:
       /* Huh, memory corruption? */
-      abort();
+      ceph_abort();
   }
 }
 
@@ -240,7 +240,7 @@ rgw::auth::Strategy::authenticate(const req_state* const s) const
         break;
       }
       default: {
-        abort();
+        ceph_abort();
       }
     }
 

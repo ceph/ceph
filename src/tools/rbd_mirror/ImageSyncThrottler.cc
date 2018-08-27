@@ -42,8 +42,8 @@ ImageSyncThrottler<I>::~ImageSyncThrottler() {
   g_ceph_context->_conf.remove_observer(this);
 
   Mutex::Locker locker(m_lock);
-  assert(m_inflight_ops.empty());
-  assert(m_queue.empty());
+  ceph_assert(m_inflight_ops.empty());
+  ceph_assert(m_queue.empty());
 }
 
 template <typename I>
@@ -57,7 +57,7 @@ void ImageSyncThrottler<I>::start_op(const std::string &id, Context *on_start) {
       dout(20) << "duplicate for already started op " << id << dendl;
     } else if (m_max_concurrent_syncs == 0 ||
                m_inflight_ops.size() < m_max_concurrent_syncs) {
-      assert(m_queue.empty());
+      ceph_assert(m_queue.empty());
       m_inflight_ops.insert(id);
       dout(20) << "ready to start sync for " << id << " ["
                << m_inflight_ops.size() << "/" << m_max_concurrent_syncs << "]"

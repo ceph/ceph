@@ -36,7 +36,7 @@ void NotifyLockOwner::send_notify() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
   m_notifier.notify(m_bl, &m_notify_response, create_context_callback<
     NotifyLockOwner, &NotifyLockOwner::handle_notify>(this));
 }

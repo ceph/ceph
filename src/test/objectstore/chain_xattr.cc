@@ -325,7 +325,7 @@ list<string> get_xattrs(int fd)
   while (len > 0) {
     size_t next_len = strlen(buf);
     ret.push_back(string(buf, buf + next_len));
-    assert(len >= (int)(next_len + 1));
+    ceph_assert(len >= (int)(next_len + 1));
     buf += (next_len + 1);
     len -= (next_len + 1);
   }
@@ -348,7 +348,7 @@ TEST(chain_xattr, fskip_chain_cleanup_and_ensure_single_attr)
   const char *file = FILENAME;
   ::unlink(file);
   int fd = ::open(file, O_CREAT|O_RDWR|O_TRUNC, 0700);
-  assert(fd >= 0);
+  ceph_assert(fd >= 0);
 
   std::size_t existing_xattrs = get_xattrs(fd).size();
   char buf[800];
@@ -393,7 +393,7 @@ TEST(chain_xattr, skip_chain_cleanup_and_ensure_single_attr)
   const char *file = FILENAME;
   ::unlink(file);
   int fd = ::open(file, O_CREAT|O_RDWR|O_TRUNC, 0700);
-  assert(fd >= 0);
+  ceph_assert(fd >= 0);
   std::size_t existing_xattrs = get_xattrs(fd).size();
   ::close(fd);
 

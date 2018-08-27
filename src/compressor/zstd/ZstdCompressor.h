@@ -42,7 +42,7 @@ class ZstdCompressor : public Compressor {
     outbuf.pos = 0;
 
     while (left) {
-      assert(!p.end());
+      ceph_assert(!p.end());
       struct ZSTD_inBuffer_s inbuf;
       inbuf.pos = 0;
       inbuf.size = p.get_ptr_and_advance(left, (const char**)&inbuf.src);
@@ -53,7 +53,7 @@ class ZstdCompressor : public Compressor {
 	return -EINVAL;
       }
     }
-    assert(p.end());
+    ceph_assert(p.end());
 
     ZSTD_freeCStream(s);
 

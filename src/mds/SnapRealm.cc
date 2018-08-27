@@ -75,7 +75,7 @@ void SnapRealm::add_open_past_parent(SnapRealm *parent, snapid_t last)
 {
   auto p = open_past_parents.find(parent->inode->ino());
   if (p != open_past_parents.end()) {
-    assert(p->second.second.count(last) == 0);
+    ceph_assert(p->second.second.count(last) == 0);
     p->second.second.insert(last);
   } else {
     open_past_parents[parent->inode->ino()].first = parent;
@@ -89,9 +89,9 @@ void SnapRealm::add_open_past_parent(SnapRealm *parent, snapid_t last)
 void SnapRealm::remove_open_past_parent(inodeno_t ino, snapid_t last)
 {
   auto p = open_past_parents.find(ino);
-  assert(p != open_past_parents.end());
+  ceph_assert(p != open_past_parents.end());
   auto q = p->second.second.find(last);
-  assert(q != p->second.second.end());
+  ceph_assert(q != p->second.second.end());
   p->second.second.erase(q);
   --num_open_past_parents;
   if (p->second.second.empty()) {
@@ -153,7 +153,7 @@ bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, sn
   }
 
   if (!srnode.past_parent_snaps.empty())
-    assert(mdcache->mds->snapclient->get_cached_version() > 0);
+    ceph_assert(mdcache->mds->snapclient->get_cached_version() > 0);
 
   if (!srnode.past_parents.empty() &&
       mdcache->mds->allows_multimds_snaps()) {
@@ -163,7 +163,7 @@ bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, sn
   }
 
   // and my past parents too!
-  assert(srnode.past_parents.size() >= num_open_past_parents);
+  ceph_assert(srnode.past_parents.size() >= num_open_past_parents);
   if (srnode.past_parents.size() > num_open_past_parents) {
     for (map<snapid_t, snaplink_t>::iterator p = srnode.past_parents.begin();
 	 p != srnode.past_parents.end(); ) {
@@ -182,7 +182,7 @@ bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, sn
 	past_parents_dirty = true;
 	continue;
       }
-      assert(parent->snaprealm);  // hmm!
+      ceph_assert(parent->snaprealm);  // hmm!
       if (!parent->snaprealm->_open_parents(finish, p->second.first, p->first))
 	return false;
       auto q = open_past_parents.find(p->second.ino);
@@ -212,7 +212,7 @@ bool SnapRealm::have_past_parents_open(snapid_t first, snapid_t last) const
     return true;
 
   if (!srnode.past_parent_snaps.empty())
-    assert(mdcache->mds->snapclient->get_cached_version() > 0);
+    ceph_assert(mdcache->mds->snapclient->get_cached_version() > 0);
 
   if (!srnode.past_parents.empty() &&
       mdcache->mds->allows_multimds_snaps()) {
@@ -285,8 +285,8 @@ void SnapRealm::build_snap_set() const
     // include snaps for parents
     for (const auto& p : srnode.past_parents) {
       const CInode *oldparent = mdcache->get_inode(p.second.ino);
-      assert(oldparent);  // call open_parents first!
-      assert(oldparent->snaprealm);
+      ceph_assert(oldparent);  // call open_parents first!
+      ceph_assert(oldparent->snaprealm);
 
       const set<snapid_t>& snaps = oldparent->snaprealm->get_snaps();
       snapid_t last = 0;
@@ -313,7 +313,7 @@ void SnapRealm::build_snap_set() const
 
 void SnapRealm::check_cache() const
 {
-  assert(have_past_parents_open());
+  ceph_assert(have_past_parents_open());
   snapid_t seq;
   snapid_t last_created;
   snapid_t last_destroyed = mdcache->mds->snapclient->get_last_destroyed();
@@ -402,8 +402,8 @@ void SnapRealm::get_snap_info(map<snapid_t, const SnapInfo*>& infomap, snapid_t 
 	p != srnode.past_parents.end() && p->first >= first && p->second.first <= last;
 	++p) {
       CInode *oldparent = mdcache->get_inode(p->second.ino);
-      assert(oldparent);  // call open_parents first!
-      assert(oldparent->snaprealm);
+      ceph_assert(oldparent);  // call open_parents first!
+      ceph_assert(oldparent->snaprealm);
       oldparent->snaprealm->get_snap_info(infomap,
 					  std::max(first, p->second.first),
 					  std::min(last, p->first));
@@ -438,14 +438,14 @@ std::string_view SnapRealm::get_snapname(snapid_t snapid, inodeno_t atino)
     map<snapid_t,snaplink_t>::iterator p = srnode.past_parents.lower_bound(snapid);
     if (p != srnode.past_parents.end() && p->second.first <= snapid) {
       CInode *oldparent = mdcache->get_inode(p->second.ino);
-      assert(oldparent);  // call open_parents first!
-      assert(oldparent->snaprealm);
+      ceph_assert(oldparent);  // call open_parents first!
+      ceph_assert(oldparent->snaprealm);
       return oldparent->snaprealm->get_snapname(snapid, atino);
     }
   }
 
-  assert(srnode.current_parent_since <= snapid);
-  assert(parent);
+  ceph_assert(srnode.current_parent_since <= snapid);
+  ceph_assert(parent);
   return parent->get_snapname(snapid, atino);
 }
 
@@ -505,8 +505,8 @@ snapid_t SnapRealm::resolve_snapname(std::string_view n, inodeno_t atino, snapid
 	 p != srnode.past_parents.end() && p->first >= first && p->second.first <= last;
 	 ++p) {
       CInode *oldparent = mdcache->get_inode(p->second.ino);
-      assert(oldparent);  // call open_parents first!
-      assert(oldparent->snaprealm);
+      ceph_assert(oldparent);  // call open_parents first!
+      ceph_assert(oldparent->snaprealm);
       snapid_t r = oldparent->snaprealm->resolve_snapname(n, atino,
 							  std::max(first, p->second.first),
 							  std::min(last, p->first));
@@ -556,7 +556,7 @@ void SnapRealm::split_at(SnapRealm *child)
     } else {
       // no caps, nothing to move/split.
       dout(20) << " split no-op, no caps to move on file " << *child->inode << dendl;
-      assert(!child->inode->is_any_caps());
+      ceph_assert(!child->inode->is_any_caps());
     }
     return;
   }
@@ -601,7 +601,7 @@ void SnapRealm::merge_to(SnapRealm *newparent)
     newparent = parent;
   dout(10) << "merge to " << *newparent << " on " << *newparent->inode << dendl;
 
-  assert(open_past_children.empty());
+  ceph_assert(open_past_children.empty());
 
   dout(10) << " open_children are " << open_children << dendl;
   for (auto realm : open_children) {
@@ -617,7 +617,7 @@ void SnapRealm::merge_to(SnapRealm *newparent)
     ++p;
     in->move_to_realm(newparent);
   }
-  assert(inodes_with_caps.empty());
+  ceph_assert(inodes_with_caps.empty());
 
   // delete this
   inode->close_snaprealm();

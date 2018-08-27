@@ -232,7 +232,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
 
 void dump_services(Formatter* f, const map<string, list<int> >& services, const char* type)
 {
-  assert(f);
+  ceph_assert(f);
 
   f->open_object_section(type);
   for (map<string, list<int> >::const_iterator host = services.begin();
@@ -250,7 +250,7 @@ void dump_services(Formatter* f, const map<string, list<int> >& services, const 
 
 void dump_services(Formatter* f, const map<string, list<string> >& services, const char* type)
 {
-  assert(f);
+  ceph_assert(f);
 
   f->open_object_section(type);
   for (const auto& host : services) {

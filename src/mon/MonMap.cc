@@ -387,7 +387,7 @@ void MonMap::set_initial_members(CephContext *cct,
     if (removed)
       removed->insert(get_addr(i));
     remove(n);
-    assert(!contains(n));
+    ceph_assert(!contains(n));
   }
 
   // add missing initial members
@@ -408,7 +408,7 @@ void MonMap::set_initial_members(CephContext *cct,
 	lgeneric_dout(cct, 1) << " adding " << *p << " " << a << dendl;
 	add(*p, a);
       }
-      assert(contains(*p));
+      ceph_assert(contains(*p));
     }
   }
   calc_legacy_ranks();

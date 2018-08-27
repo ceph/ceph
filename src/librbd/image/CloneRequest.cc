@@ -117,7 +117,7 @@ void CloneRequest<I>::validate_options() {
 template <typename I>
 void CloneRequest<I>::open_parent() {
   ldout(m_cct, 20) << dendl;
-  assert(m_parent_snap_name.empty() ^ (m_parent_snap_id == CEPH_NOSNAP));
+  ceph_assert(m_parent_snap_name.empty() ^ (m_parent_snap_id == CEPH_NOSNAP));
 
   if (m_parent_snap_id != CEPH_NOSNAP) {
     m_parent_image_ctx = I::create("", m_parent_image_id, m_parent_snap_id,
@@ -232,7 +232,7 @@ void CloneRequest<I>::validate_child() {
 
   int r = m_ioctx.aio_operate(util::old_header_name(m_name), comp, &op,
                               &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -330,7 +330,7 @@ void CloneRequest<I>::set_parent() {
   librados::AioCompletion *comp =
     create_rados_callback<klass, &klass::handle_set_parent>(this);
   int r = m_imctx->md_ctx.aio_operate(m_imctx->header_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -364,7 +364,7 @@ void CloneRequest<I>::v2_set_op_feature() {
   auto aio_comp = create_rados_callback<
     CloneRequest<I>, &CloneRequest<I>::handle_v2_set_op_feature>(this);
   int r = m_ioctx.aio_operate(m_imctx->header_oid, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -393,7 +393,7 @@ void CloneRequest<I>::v2_child_attach() {
   auto aio_comp = create_rados_callback<
     CloneRequest<I>, &CloneRequest<I>::handle_v2_child_attach>(this);
   int r = m_parent_image_ctx->md_ctx.aio_operate(m_parent_image_ctx->header_oid, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -423,7 +423,7 @@ void CloneRequest<I>::v1_add_child() {
   librados::AioCompletion *comp =
     create_rados_callback<klass, &klass::handle_v1_add_child>(this);
   int r = m_ioctx.aio_operate(RBD_CHILDREN, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -539,7 +539,7 @@ void CloneRequest<I>::metadata_set() {
   librados::AioCompletion *comp =
     create_rados_callback<klass, &klass::handle_metadata_set>(this);
   int r = m_ioctx.aio_operate(m_imctx->header_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -632,7 +632,7 @@ template <typename I>
 void CloneRequest<I>::close_child() {
   ldout(m_cct, 20) << dendl;
 
-  assert(m_imctx != nullptr);
+  ceph_assert(m_imctx != nullptr);
 
   using klass = CloneRequest<I>;
   Context *ctx = create_async_context_callback(
@@ -691,7 +691,7 @@ void CloneRequest<I>::handle_remove_child(int r) {
 template <typename I>
 void CloneRequest<I>::close_parent() {
   ldout(m_cct, 20) << dendl;
-  assert(m_parent_image_ctx != nullptr);
+  ceph_assert(m_parent_image_ctx != nullptr);
 
   Context *ctx = create_async_context_callback(
     *m_parent_image_ctx, create_context_callback<

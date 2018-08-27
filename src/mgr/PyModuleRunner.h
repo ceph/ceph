@@ -70,7 +70,7 @@ public:
     // required to be <16 chars
     thread_name = py_module->get_name().substr(0, 15);
 
-    assert(py_module != nullptr);
+    ceph_assert(py_module != nullptr);
   }
 
   ~PyModuleRunner();

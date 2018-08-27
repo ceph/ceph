@@ -183,7 +183,7 @@ public:
   }
   iterator erase (iterator p) {
     if (map) {
-      assert(this == p.map);
+      ceph_assert(this == p.map);
       auto it = map->erase(p.it);
       if (map->empty()) {
         free_internal();

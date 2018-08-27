@@ -156,7 +156,7 @@ public:
 
   void set_legacy_client_fscid(fs_cluster_id_t fscid)
   {
-    assert(fscid == FS_CLUSTER_ID_NONE || filesystems.count(fscid));
+    ceph_assert(fscid == FS_CLUSTER_ID_NONE || filesystems.count(fscid));
     legacy_client_fscid = fscid;
   }
 
@@ -337,7 +337,7 @@ public:
     if (mds_roles.at(who) == FS_CLUSTER_ID_NONE) {
       auto &info = standby_daemons.at(who);
       fn(&info);
-      assert(info.state == MDSMap::STATE_STANDBY);
+      ceph_assert(info.state == MDSMap::STATE_STANDBY);
       standby_epochs[who] = epoch;
     } else {
       const auto &fs = filesystems[mds_roles.at(who)];

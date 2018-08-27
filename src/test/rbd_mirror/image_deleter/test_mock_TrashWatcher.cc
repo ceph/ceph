@@ -25,7 +25,7 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
 struct MockTrashWatcher {
   static MockTrashWatcher *s_instance;
   static MockTrashWatcher &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 
@@ -49,7 +49,7 @@ struct TrashWatcher<MockTestImageCtx> {
   }
 
   static TrashWatcher<MockTestImageCtx> &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 

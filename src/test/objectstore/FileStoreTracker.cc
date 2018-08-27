@@ -98,7 +98,7 @@ void FileStoreTracker::write(const pair<coll_t, string> &obj,
   for (uint64_t i = offset;
        i < offset + len;
        ++i, ++iter) {
-    assert(iter.valid());
+    ceph_assert(iter.valid());
     to_write.append(*iter);
   }
   out->t->write(coll_t(obj.first),
@@ -128,7 +128,7 @@ void FileStoreTracker::clone_range(const pair<coll_t, string> &from,
 				   OutTransaction *out) {
   Mutex::Locker l(lock);
   std::cerr << "CloningRange " << from << " to " << to << std::endl;
-  assert(from.first == to.first);
+  ceph_assert(from.first == to.first);
   ObjectContents from_contents = get_current_content(from);
   ObjectContents to_contents = get_current_content(to);
   if (!from_contents.exists()) {
@@ -159,7 +159,7 @@ void FileStoreTracker::clone(const pair<coll_t, string> &from,
 			     OutTransaction *out) {
   Mutex::Locker l(lock);
   std::cerr << "Cloning " << from << " to " << to << std::endl;
-  assert(from.first == to.first);
+  ceph_assert(from.first == to.first);
   if (from.second == to.second) {
     return;
   }
@@ -342,7 +342,7 @@ ObjectContents FileStoreTracker::get_current_content(
     auto bp = bl.cbegin();
     pair<uint64_t, bufferlist> val;
     decode(val, bp);
-    assert(seq_to_key(val.first) == iter->key());
+    ceph_assert(seq_to_key(val.first) == iter->key());
     bp = val.second.begin();
     return ObjectContents(bp);
   }
@@ -362,7 +362,7 @@ ObjectContents FileStoreTracker::get_content(
   auto bp = got.begin()->second.cbegin();
   decode(val, bp);
   bp = val.second.begin();
-  assert(val.first == version);
+  ceph_assert(val.first == version);
   return ObjectContents(bp);
 }
 
@@ -404,7 +404,7 @@ void FileStoreTracker::committed(const pair<coll_t, string> &obj,
 				 uint64_t seq) {
   Mutex::Locker l(lock);
   ObjStatus status = get_obj_status(obj, db);
-  assert(status.last_committed < seq);
+  ceph_assert(status.last_committed < seq);
   status.last_committed = seq;
   KeyValueDB::Transaction t = db->get_transaction();
   clear_obsolete(obj, status, db, t);
@@ -417,7 +417,7 @@ void FileStoreTracker::applied(const pair<coll_t, string> &obj,
   Mutex::Locker l(lock);
   std::cerr << "Applied " << obj << " version " << seq << std::endl;
   ObjStatus status = get_obj_status(obj, db);
-  assert(status.last_applied < seq);
+  ceph_assert(status.last_applied < seq);
   status.set_last_applied(seq, restart_seq);
   KeyValueDB::Transaction t = db->get_transaction();
   clear_obsolete(obj, status, db, t);

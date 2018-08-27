@@ -33,19 +33,19 @@ ObjectRecorder::ObjectRecorder(librados::IoCtx &ioctx, const std::string &oid,
     m_in_flight_flushes(false), m_aio_scheduled(false) {
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
-  assert(m_handler != NULL);
+  ceph_assert(m_handler != NULL);
 }
 
 ObjectRecorder::~ObjectRecorder() {
-  assert(m_append_task == NULL);
-  assert(m_append_buffers.empty());
-  assert(m_in_flight_tids.empty());
-  assert(m_in_flight_appends.empty());
-  assert(!m_aio_scheduled);
+  ceph_assert(m_append_task == NULL);
+  ceph_assert(m_append_buffers.empty());
+  ceph_assert(m_in_flight_tids.empty());
+  ceph_assert(m_in_flight_appends.empty());
+  ceph_assert(!m_aio_scheduled);
 }
 
 bool ObjectRecorder::append_unlock(AppendBuffers &&append_buffers) {
-  assert(m_lock->is_locked());
+  ceph_assert(m_lock->is_locked());
 
   FutureImplPtr last_flushed_future;
   bool schedule_append = false;
@@ -101,7 +101,7 @@ void ObjectRecorder::flush(Context *on_safe) {
       flush_appends(true);
     } else if (!m_in_flight_appends.empty()) {
       AppendBuffers &append_buffers = m_in_flight_appends.rbegin()->second;
-      assert(!append_buffers.empty());
+      ceph_assert(!append_buffers.empty());
       future = Future(append_buffers.rbegin()->first);
     }
   }
@@ -117,7 +117,7 @@ void ObjectRecorder::flush(const FutureImplPtr &future) {
   ldout(m_cct, 20) << __func__ << ": " << m_oid << " flushing " << *future
                    << dendl;
 
-  assert(m_lock->is_locked());
+  ceph_assert(m_lock->is_locked());
 
   if (future->get_flush_handler().get() != &m_flush_handler) {
     // if we don't own this future, re-issue the flush so that it hits the
@@ -139,10 +139,10 @@ void ObjectRecorder::flush(const FutureImplPtr &future) {
       break;
     }
   }
-  assert(r_it != m_append_buffers.rend());
+  ceph_assert(r_it != m_append_buffers.rend());
 
   auto it = (++r_it).base();
-  assert(it != m_append_buffers.end());
+  ceph_assert(it != m_append_buffers.end());
   ++it;
 
   AppendBuffers flush_buffers;
@@ -154,10 +154,10 @@ void ObjectRecorder::flush(const FutureImplPtr &future) {
 void ObjectRecorder::claim_append_buffers(AppendBuffers *append_buffers) {
   ldout(m_cct, 20) << __func__ << ": " << m_oid << dendl;
 
-  assert(m_lock->is_locked());
-  assert(m_in_flight_tids.empty());
-  assert(m_in_flight_appends.empty());
-  assert(m_object_closed || m_overflowed);
+  ceph_assert(m_lock->is_locked());
+  ceph_assert(m_in_flight_tids.empty());
+  ceph_assert(m_in_flight_appends.empty());
+  ceph_assert(m_object_closed || m_overflowed);
   append_buffers->splice(append_buffers->end(), m_append_buffers,
                          m_append_buffers.begin(), m_append_buffers.end());
 }
@@ -171,13 +171,13 @@ bool ObjectRecorder::close() {
 
   flush_appends(true);
 
-  assert(!m_object_closed);
+  ceph_assert(!m_object_closed);
   m_object_closed = true;
   return (m_in_flight_tids.empty() && !m_in_flight_flushes && !m_aio_scheduled);
 }
 
 void ObjectRecorder::handle_append_task() {
-  assert(m_timer_lock.is_locked());
+  ceph_assert(m_timer_lock.is_locked());
   m_append_task = NULL;
 
   Mutex::Locker locker(*m_lock);
@@ -204,7 +204,7 @@ void ObjectRecorder::schedule_append_task() {
 
 bool ObjectRecorder::append(const AppendBuffer &append_buffer,
                             bool *schedule_append) {
-  assert(m_lock->is_locked());
+  ceph_assert(m_lock->is_locked());
 
   bool flush_requested = false;
   if (!m_object_closed && !m_overflowed) {
@@ -221,7 +221,7 @@ bool ObjectRecorder::append(const AppendBuffer &append_buffer,
 }
 
 bool ObjectRecorder::flush_appends(bool force) {
-  assert(m_lock->is_locked());
+  ceph_assert(m_lock->is_locked());
   if (m_object_closed || m_overflowed) {
     return true;
   }
@@ -249,7 +249,7 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
   {
     m_lock->Lock();
     auto tid_iter = m_in_flight_tids.find(tid);
-    assert(tid_iter != m_in_flight_tids.end());
+    ceph_assert(tid_iter != m_in_flight_tids.end());
     m_in_flight_tids.erase(tid_iter);
 
     InFlightAppends::iterator iter = m_in_flight_appends.find(tid);
@@ -258,7 +258,7 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
         m_overflowed = true;
       } else {
         // must have seen an overflow on a previous append op
-        assert(r == -EOVERFLOW && m_overflowed);
+        ceph_assert(r == -EOVERFLOW && m_overflowed);
       }
 
       // notify of overflow once all in-flight ops are complete
@@ -271,9 +271,9 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
       return;
     }
 
-    assert(iter != m_in_flight_appends.end());
+    ceph_assert(iter != m_in_flight_appends.end());
     append_buffers.swap(iter->second);
-    assert(!append_buffers.empty());
+    ceph_assert(!append_buffers.empty());
 
     m_in_flight_appends.erase(iter);
     m_in_flight_flushes = true;
@@ -305,8 +305,8 @@ void ObjectRecorder::append_overflowed() {
   ldout(m_cct, 10) << __func__ << ": " << m_oid << " append overflowed"
                    << dendl;
 
-  assert(m_lock->is_locked());
-  assert(!m_in_flight_appends.empty());
+  ceph_assert(m_lock->is_locked());
+  ceph_assert(!m_in_flight_appends.empty());
 
   cancel_append_task();
 
@@ -335,8 +335,8 @@ void ObjectRecorder::append_overflowed() {
 }
 
 void ObjectRecorder::send_appends(AppendBuffers *append_buffers) {
-  assert(m_lock->is_locked());
-  assert(!append_buffers->empty());
+  ceph_assert(m_lock->is_locked());
+  ceph_assert(!append_buffers->empty());
 
   for (AppendBuffers::iterator it = append_buffers->begin();
        it != append_buffers->end(); ++it) {
@@ -388,7 +388,7 @@ void ObjectRecorder::send_appends_aio() {
     librados::Rados::aio_create_completion(gather_ctx->new_sub(), nullptr,
                                            utils::rados_ctx_callback);
   int r = m_ioctx.aio_operate(m_oid, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 
   {
@@ -415,7 +415,7 @@ void ObjectRecorder::send_appends_aio() {
 }
 
 void ObjectRecorder::notify_handler_unlock() {
-  assert(m_lock->is_locked());
+  ceph_assert(m_lock->is_locked());
   if (m_object_closed) {
     m_lock->Unlock();
     m_handler->closed(this);

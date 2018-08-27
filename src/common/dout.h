@@ -32,7 +32,7 @@ extern void dout_emergency(const std::string &str);
 class _bad_endl_use_dendl_t { public: _bad_endl_use_dendl_t(int) {} };
 static const _bad_endl_use_dendl_t endl = 0;
 inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
-  assert(0 && "you are using the wrong endl.. use std::endl or dendl");
+  ceph_abort_msg("you are using the wrong endl.. use std::endl or dendl");
   return out;
 }
 
@@ -109,10 +109,8 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 #define ldlog_p1(cct, sub, lvl)                 \
   (cct->_conf->subsys.should_gather((sub), (lvl)))
 
-// NOTE: depend on magic value in _ASSERT_H so that we detect when
-// /usr/include/assert.h clobbers our fancier version.
 #define dendl_impl std::flush;				\
-  _ASSERT_H->_log->submit_entry(_dout_e);		\
+  _dout_cct->_log->submit_entry(_dout_e);		\
     }						\
   } while (0)
 

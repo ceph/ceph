@@ -550,7 +550,7 @@ Cursor find_oldest_period(RGWRados *store)
       }
       ldout(cct, 20) << "find_oldest_period advancing to "
           "predecessor period " << predecessor << dendl;
-      assert(cursor.has_prev());
+      ceph_assert(cursor.has_prev());
     }
     cursor.prev();
   }
@@ -993,7 +993,7 @@ int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section,
   bufferlist logbl;
   encode(log_data, logbl);
 
-  assert(current_log); // must have called init()
+  ceph_assert(current_log); // must have called init()
   int ret = current_log->add_entry(handler, section, key, logbl);
   if (ret < 0)
     return ret;
@@ -1012,7 +1012,7 @@ int RGWMetadataManager::post_modify(RGWMetadataHandler *handler, const string& s
   bufferlist logbl;
   encode(log_data, logbl);
 
-  assert(current_log); // must have called init()
+  ceph_assert(current_log); // must have called init()
   int r = current_log->add_entry(handler, section, key, logbl);
   if (ret < 0)
     return ret;

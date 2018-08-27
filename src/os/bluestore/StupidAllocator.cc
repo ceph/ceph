@@ -173,7 +173,7 @@ int64_t StupidAllocator::allocate_int(
   }
 
   num_free -= *length;
-  assert(num_free >= 0);
+  ceph_assert(num_free >= 0);
   last_alloc = *offset + *length;
   return 0;
 }
@@ -250,7 +250,7 @@ uint64_t StupidAllocator::get_free()
 
 double StupidAllocator::get_fragmentation(uint64_t alloc_unit)
 {
-  assert(alloc_unit);
+  ceph_assert(alloc_unit);
   double res;
   uint64_t max_intervals = 0;
   uint64_t intervals = 0;
@@ -263,7 +263,7 @@ double StupidAllocator::get_fragmentation(uint64_t alloc_unit)
   }
   ldout(cct, 30) << __func__ << " " << intervals << "/" << max_intervals 
                  << dendl;
-  assert(intervals <= max_intervals);
+  ceph_assert(intervals <= max_intervals);
   if (!intervals || max_intervals <= 1) {
     return 0.0;
   }
@@ -333,9 +333,9 @@ void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
       rm.subtract(overlap);
     }
   }
-  assert(rm.empty());
+  ceph_assert(rm.empty());
   num_free -= length;
-  assert(num_free >= 0);
+  ceph_assert(num_free >= 0);
 }
 
 

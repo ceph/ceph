@@ -621,7 +621,7 @@ int AsyncMetadataList::_send_request()
     marker = mgr->get_marker(handle);
 
     if (!keys.empty()) {
-      assert(keys.size() == 1);
+      ceph_assert(keys.size() == 1);
       auto& key = keys.front();
       if (!callback(std::move(key), std::move(marker))) {
         return 0;
@@ -657,7 +657,7 @@ int AsyncMetadataList::_send_request()
     marker = mgr->get_marker(handle);
 
     if (!keys.empty()) {
-      assert(keys.size() == 1);
+      ceph_assert(keys.size() == 1);
       auto& key = keys.front();
       // stop at original marker
       if (marker >= start_marker) {
@@ -938,7 +938,7 @@ class RecentEventList {
   /// insert an event at the given point in time. this time must be at least as
   /// recent as the last inserted event
   void insert(T&& value, const time_point& now) {
-    // assert(events.empty() || now >= events.back().time)
+    // ceph_assert(events.empty() || now >= events.back().time)
     events.push_back(Event{std::move(value), now});
   }
 

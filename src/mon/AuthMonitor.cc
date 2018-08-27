@@ -96,7 +96,7 @@ bufferlist _encode_cap(const string& cap)
 void AuthMonitor::get_initial_keyring(KeyRing *keyring)
 {
   dout(10) << __func__ << dendl;
-  assert(keyring != nullptr);
+  ceph_assert(keyring != nullptr);
 
   bufferlist bl;
   int ret = mon->store->get("mkfs", "keyring", bl);
@@ -104,7 +104,7 @@ void AuthMonitor::get_initial_keyring(KeyRing *keyring)
     return;
   }
   // fail hard only if there's an error we're not expecting to see
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 
   auto p = bl.cbegin();
   decode(*keyring, p);
@@ -113,7 +113,7 @@ void AuthMonitor::get_initial_keyring(KeyRing *keyring)
 void _generate_bootstrap_keys(
     list<pair<EntityName,EntityAuth> >* auth_lst)
 {
-  assert(auth_lst != nullptr);
+  ceph_assert(auth_lst != nullptr);
 
   map<string,map<string,bufferlist> > bootstrap = {
     { "admin", {
@@ -153,7 +153,7 @@ void _generate_bootstrap_keys(
 void AuthMonitor::create_initial_keys(KeyRing *keyring)
 {
   dout(10) << __func__ << " with keyring" << dendl;
-  assert(keyring != nullptr);
+  ceph_assert(keyring != nullptr);
 
   list<pair<EntityName,EntityAuth> > auth_lst;
   _generate_bootstrap_keys(&auth_lst);
@@ -173,7 +173,7 @@ void AuthMonitor::create_initial()
   // initialize rotating keys
   last_rotating_ver = 0;
   check_rotate();
-  assert(pending_auth.size() == 1);
+  ceph_assert(pending_auth.size() == 1);
 
   if (mon->is_keyring_required()) {
     KeyRing keyring;
@@ -202,7 +202,7 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
   version_t keys_ver = mon->key_server.get_ver();
   if (version == keys_ver)
     return;
-  assert(version > keys_ver);
+  ceph_assert(version > keys_ver);
 
   version_t latest_full = get_version_latest_full();
 
@@ -212,8 +212,8 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
   if ((latest_full > 0) && (latest_full > keys_ver)) {
     bufferlist latest_bl;
     int err = get_version_full(latest_full, latest_bl);
-    assert(err == 0);
-    assert(latest_bl.length() != 0);
+    ceph_assert(err == 0);
+    ceph_assert(latest_bl.length() != 0);
     dout(7) << __func__ << " loading summary e " << latest_full << dendl;
     dout(7) << __func__ << " latest length " << latest_bl.length() << dendl;
     auto p = latest_bl.cbegin();
@@ -231,8 +231,8 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
   while (version > keys_ver) {
     bufferlist bl;
     int ret = get_version(keys_ver+1, bl);
-    assert(ret == 0);
-    assert(bl.length());
+    ceph_assert(ret == 0);
+    ceph_assert(bl.length());
 
     // reset if we are moving to initial state.  we will normally have
     // keys in here temporarily for bootstrapping that we need to
@@ -286,7 +286,7 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
 
 void AuthMonitor::increase_max_global_id()
 {
-  assert(mon->is_leader());
+  ceph_assert(mon->is_leader());
 
   max_global_id += g_conf()->mon_globalid_prealloc;
   dout(10) << "increasing max_global_id to " << max_global_id << dendl;
@@ -332,7 +332,7 @@ void AuthMonitor::encode_full(MonitorDBStore::TransactionRef t)
     return;
 
   dout(10) << __func__ << " auth v " << version << dendl;
-  assert(get_last_committed() == version);
+  ceph_assert(get_last_committed() == version);
 
   bufferlist full_bl;
   Mutex::Locker l(mon->key_server.get_lock());
@@ -582,7 +582,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 	return true;
       }
 
-      assert(!paxos_writable);
+      ceph_assert(!paxos_writable);
       return false;
     }
   }
@@ -787,7 +787,7 @@ int AuthMonitor::import_keyring(KeyRing& keyring)
       return -EINVAL;
     }
     int err = add_entity(p->first, p->second);
-    assert(err == 0);
+    ceph_assert(err == 0);
   }
   return 0;
 }
@@ -898,7 +898,7 @@ int AuthMonitor::validate_osd_destroy(
     EntityName& lockbox_entity,
     stringstream& ss)
 {
-  assert(paxos->is_plugged());
+  ceph_assert(paxos->is_plugged());
 
   dout(10) << __func__ << " id " << id << " uuid " << uuid << dendl;
 
@@ -931,7 +931,7 @@ int AuthMonitor::do_osd_destroy(
     const EntityName& cephx_entity,
     const EntityName& lockbox_entity)
 {
-  assert(paxos->is_plugged());
+  ceph_assert(paxos->is_plugged());
 
   dout(10) << __func__ << " cephx " << cephx_entity
                        << " lockbox " << lockbox_entity << dendl;
@@ -1048,7 +1048,7 @@ int AuthMonitor::validate_osd_new(
   }
 
   int err = _create_auth(cephx_entity.auth, cephx_secret, cephx_caps);
-  assert(0 == err);
+  ceph_assert(0 == err);
 
   bool cephx_is_idempotent = false, lockbox_is_idempotent = false;
   err = exists_and_matches_entity(cephx_entity, true, ss);
@@ -1057,19 +1057,19 @@ int AuthMonitor::validate_osd_new(
     if (err < 0) {
       return err;
     }
-    assert(0 == err);
+    ceph_assert(0 == err);
     cephx_is_idempotent = true;
   }
 
   if (has_lockbox) {
     err = _create_auth(lockbox_entity.auth, lockbox_secret, lockbox_caps);
-    assert(err == 0);
+    ceph_assert(err == 0);
     err = exists_and_matches_entity(lockbox_entity, true, ss);
     if (err != -ENOENT) {
       if (err < 0) {
         return err;
       }
-      assert(0 == err);
+      ceph_assert(0 == err);
       lockbox_is_idempotent = true;
     }
   }
@@ -1086,7 +1086,7 @@ int AuthMonitor::do_osd_new(
     const auth_entity_t& lockbox_entity,
     bool has_lockbox)
 {
-  assert(paxos->is_plugged());
+  ceph_assert(paxos->is_plugged());
 
   dout(10) << __func__ << " cephx " << cephx_entity.name
            << " lockbox ";
@@ -1104,13 +1104,13 @@ int AuthMonitor::do_osd_new(
 
   if (!cephx_exists) {
     int err = add_entity(cephx_entity.name, cephx_entity.auth);
-    assert(0 == err);
+    ceph_assert(0 == err);
   }
 
   if (has_lockbox &&
       !mon->key_server.contains(lockbox_entity.name)) {
     int err = add_entity(lockbox_entity.name, lockbox_entity.auth);
-    assert(0 == err);
+    ceph_assert(0 == err);
   }
 
   // given we have paxos plugged, this will not result in a proposal
@@ -1316,7 +1316,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
         goto done;
       }
       // no-op.
-      assert(err == 0);
+      ceph_assert(err == 0);
       goto done;
     }
     err = 0;
@@ -1330,7 +1330,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     new_inc.caps = new_caps;
 
     err = add_entity(auth_inc.name, new_inc);
-    assert(err == 0);
+    ceph_assert(err == 0);
 
     ss << "added key for " << auth_inc.name;
     getline(ss, rs);
@@ -1624,7 +1624,7 @@ bool AuthMonitor::prepare_global_id(MonOpRequestRef op)
 bool AuthMonitor::_upgrade_format_to_dumpling()
 {
   dout(1) << __func__ << " upgrading from format 0 to 1" << dendl;
-  assert(format_version == 0);
+  ceph_assert(format_version == 0);
 
   bool changed = false;
   map<EntityName, EntityAuth>::iterator p;
@@ -1684,7 +1684,7 @@ bool AuthMonitor::_upgrade_format_to_dumpling()
 bool AuthMonitor::_upgrade_format_to_luminous()
 {
   dout(1) << __func__ << " upgrading from format 1 to 2" << dendl;
-  assert(format_version == 1);
+  ceph_assert(format_version == 1);
 
   bool changed = false;
   map<EntityName, EntityAuth>::iterator p;
@@ -1745,7 +1745,7 @@ bool AuthMonitor::_upgrade_format_to_luminous()
   //  ceph-create-keys)
   EntityName bootstrap_mgr_name;
   int r = bootstrap_mgr_name.from_str("client.bootstrap-mgr");
-  assert(r);
+  ceph_assert(r);
   if (!mon->key_server.contains(bootstrap_mgr_name)) {
 
     EntityName name = bootstrap_mgr_name;
@@ -1761,7 +1761,7 @@ bool AuthMonitor::_upgrade_format_to_luminous()
 bool AuthMonitor::_upgrade_format_to_mimic()
 {
   dout(1) << __func__ << " upgrading from format 2 to 3" << dendl;
-  assert(format_version == 2);
+  ceph_assert(format_version == 2);
 
   list<pair<EntityName,EntityAuth> > auth_lst;
   _generate_bootstrap_keys(&auth_lst);
@@ -1772,7 +1772,7 @@ bool AuthMonitor::_upgrade_format_to_mimic()
       continue;
     }
     int err = add_entity(p.first, p.second);
-    assert(err == 0);
+    ceph_assert(err == 0);
     changed = true;
   }
 

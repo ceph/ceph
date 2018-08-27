@@ -27,8 +27,6 @@ extern "C" {
 
 #include "common/Mutex.h"
 
-#define BUG_ON(x) assert(!(x))
-
 namespace ceph {
   class Formatter;
 }
@@ -115,7 +113,7 @@ public:
       crush_destroy(crush);
     crush = crush_create();
     choose_args_clear();
-    assert(crush);
+    ceph_assert(crush);
     have_rmaps = false;
 
     set_tunables_default();
@@ -518,7 +516,7 @@ public:
     return c;
   }
   void get_devices_by_class(const string &name, set<int> *devices) const {
-    assert(devices);
+    ceph_assert(devices);
     devices->clear();
     if (!class_exists(name)) {
       return;
@@ -1101,7 +1099,7 @@ public:
   int add_rule(int ruleno, int len, int type, int minsize, int maxsize) {
     if (!crush) return -ENOENT;
     crush_rule *n = crush_make_rule(len, ruleno, type, minsize, maxsize);
-    assert(n);
+    ceph_assert(n);
     ruleno = crush_add_rule(crush, n, ruleno);
     return ruleno;
   }
@@ -1274,7 +1272,7 @@ public:
   int bucket_adjust_item_weight(CephContext *cct, struct crush_bucket *bucket, int item, int weight);
 
   void finalize() {
-    assert(crush);
+    ceph_assert(crush);
     crush_finalize(crush);
     if (!name_map.empty() &&
 	name_map.rbegin()->first >= crush->max_devices) {
@@ -1423,7 +1421,7 @@ public:
   bool create_choose_args(int64_t id, int positions) {
     if (choose_args.count(id))
       return false;
-    assert(positions);
+    ceph_assert(positions);
     auto &cmap = choose_args[id];
     cmap.args = static_cast<crush_choose_arg*>(calloc(sizeof(crush_choose_arg),
 					  crush->max_buckets));
@@ -1545,7 +1543,7 @@ public:
     vector<int> *out) const;
 
   bool check_crush_rule(int ruleset, int type, int size,  ostream& ss) {
-    assert(crush);
+    ceph_assert(crush);
 
     __u32 i;
     for (i = 0; i < crush->max_rules; i++) {

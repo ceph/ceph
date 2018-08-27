@@ -55,10 +55,10 @@ test_loop(Rados &cluster, std::string pool_name, std::string obj_name)
     uint64_t handle;
     WatchNotifyTestCtx ctx;
     ret = ioctx.watch(obj_name, 0, &handle, &ctx);
-    assert(!ret);
+    ceph_assert(!ret);
     bufferlist bl2;
     ret = ioctx.notify(obj_name, 0, bl2);
-    assert(!ret);
+    ceph_assert(!ret);
     TestAlarm alarm;
     sem_wait(&sem);
     ioctx.unwatch(obj_name, handle);

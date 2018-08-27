@@ -2532,7 +2532,7 @@ extern "C" int rbd_mirror_image_status_list(rados_ioctx_t p,
 
   size_t i = 0;
   for (auto &it : cpp_images) {
-    assert(i < max);
+    ceph_assert(i < max);
     const std::string &image_id = it.first;
     image_ids[i] = strdup(image_id.c_str());
     mirror_image_status_cpp_to_c(it.second, &images[i]);

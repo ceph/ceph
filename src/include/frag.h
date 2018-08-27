@@ -104,17 +104,17 @@ class frag_t {
   bool contains(frag_t sub) const { return ceph_frag_contains_frag(_enc, sub._enc); }
   bool is_root() const { return bits() == 0; }
   frag_t parent() const {
-    assert(bits() > 0);
+    ceph_assert(bits() > 0);
     return frag_t(ceph_frag_parent(_enc));
   }
 
   // splitting
   frag_t make_child(int i, int nb) const {
-    assert(i < (1<<nb));
+    ceph_assert(i < (1<<nb));
     return frag_t(ceph_frag_make_child(_enc, nb, i));
   }
   void split(int nb, std::list<frag_t>& fragments) const {
-    assert(nb > 0);
+    ceph_assert(nb > 0);
     unsigned nway = 1 << nb;
     for (unsigned i=0; i<nway; i++) 
       fragments.push_back(make_child(i, nb));
@@ -127,7 +127,7 @@ class frag_t {
   bool is_left() const { return ceph_frag_is_left_child(_enc); }
   bool is_right() const { return ceph_frag_is_right_child(_enc); }
   frag_t get_sibling() const {
-    assert(!is_root());
+    ceph_assert(!is_root());
     return frag_t(ceph_frag_sibling(_enc));
   }
 
@@ -135,7 +135,7 @@ class frag_t {
   bool is_leftmost() const { return ceph_frag_is_leftmost(_enc); }
   bool is_rightmost() const { return ceph_frag_is_rightmost(_enc); }
   frag_t next() const {
-    assert(!is_rightmost());
+    ceph_assert(!is_rightmost());
     return frag_t(ceph_frag_next(_enc));
   }
 
@@ -332,7 +332,7 @@ public:
   frag_t operator[](unsigned v) const {
     frag_t t;
     while (1) {
-      assert(t.contains(v));
+      ceph_assert(t.contains(v));
       int nb = get_split(t);
 
       // is this a leaf?
@@ -348,7 +348,7 @@ public:
 	  break;
 	}
       }
-      assert(i < nway);
+      ceph_assert(i < nway);
     }
   }
 
@@ -356,15 +356,15 @@ public:
   // ---------------
   // modifiers
   void split(frag_t x, int b, bool simplify=true) {
-    assert(is_leaf(x));
+    ceph_assert(is_leaf(x));
     _splits[x] = b;
     
     if (simplify)
       try_assimilate_children(get_branch_above(x));
   }
   void merge(frag_t x, int b, bool simplify=true) {
-    assert(!is_leaf(x));
-    assert(_splits[x] == b);
+    ceph_assert(!is_leaf(x));
+    ceph_assert(_splits[x] == b);
     _splits.erase(x);
 
     if (simplify)
@@ -404,7 +404,7 @@ public:
     lgeneric_dout(cct, 10) << "force_to_leaf " << x << " on " << _splits << dendl;
 
     frag_t parent = get_branch_or_leaf(x);
-    assert(parent.bits() <= x.bits());
+    ceph_assert(parent.bits() <= x.bits());
     lgeneric_dout(cct, 10) << "parent is " << parent << dendl;
 
     // do we need to split from parent to x?
@@ -416,10 +416,10 @@ public:
 	// easy: split parent (a leaf) by the difference
 	lgeneric_dout(cct, 10) << "splitting parent " << parent << " by spread " << spread << dendl;
 	split(parent, spread);
-	assert(is_leaf(x));
+	ceph_assert(is_leaf(x));
 	return true;
       }
-      assert(nb > spread);
+      ceph_assert(nb > spread);
       
       // add an intermediary split
       merge(parent, nb, false);
@@ -451,7 +451,7 @@ public:
     }
 
     lgeneric_dout(cct, 10) << "force_to_leaf done" << dendl;
-    assert(is_leaf(x));
+    ceph_assert(is_leaf(x));
     return true;
   }
 

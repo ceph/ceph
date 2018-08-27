@@ -27,7 +27,7 @@ struct XorMergeOperator : public KeyValueDB::MergeOperator {
     const char *ldata, size_t llen,
     const char *rdata, size_t rlen,
     std::string *new_value) override {
-    assert(llen == rlen);
+    ceph_assert(llen == rlen);
     *new_value = std::string(ldata, llen);
     for (size_t i = 0; i < rlen; ++i) {
       (*new_value)[i] ^= rdata[i];
@@ -62,7 +62,7 @@ int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
 				  KeyValueDB::Transaction txn)
 {
   bytes_per_block = granularity;
-  assert(isp2(bytes_per_block));
+  ceph_assert(isp2(bytes_per_block));
   size = p2align(new_size, bytes_per_block);
   blocks_per_key = cct->_conf->bluestore_freelist_blocks_per_key;
 
@@ -230,13 +230,13 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
     enumerate_p->lower_bound(string());
     // we assert that the first block is always allocated; it's true,
     // and it simplifies our lives a bit.
-    assert(enumerate_p->valid());
+    ceph_assert(enumerate_p->valid());
     string k = enumerate_p->key();
     const char *p = k.c_str();
     _key_decode_u64(p, &enumerate_offset);
     enumerate_bl = enumerate_p->value();
-    assert(enumerate_offset == 0);
-    assert(get_next_set_bit(enumerate_bl, 0) == 0);
+    ceph_assert(enumerate_offset == 0);
+    ceph_assert(get_next_set_bit(enumerate_bl, 0) == 0);
   }
 
   if (enumerate_offset >= size) {
@@ -423,7 +423,7 @@ void BitmapFreelistManager::_verify_range(uint64_t offset, uint64_t length,
 	first_key += bytes_per_key;
       }
     }
-    assert(first_key == last_key);
+    ceph_assert(first_key == last_key);
     {
       string k;
       make_offset_key(first_key, &k);
@@ -452,7 +452,7 @@ void BitmapFreelistManager::_verify_range(uint64_t offset, uint64_t length,
   }
   if (errors) {
     derr << __func__ << " saw " << errors << " errors" << dendl;
-    assert(0 == "bitmap freelist errors");
+    ceph_abort_msg("bitmap freelist errors");
   }
 }
 
@@ -479,8 +479,8 @@ void BitmapFreelistManager::_xor(
   KeyValueDB::Transaction txn)
 {
   // must be block aligned
-  assert((offset & block_mask) == offset);
-  assert((length & block_mask) == length);
+  ceph_assert((offset & block_mask) == offset);
+  ceph_assert((length & block_mask) == length);
 
   uint64_t first_key = offset & key_mask;
   uint64_t last_key = (offset + length - 1) & key_mask;
@@ -534,7 +534,7 @@ void BitmapFreelistManager::_xor(
       txn->merge(bitmap_prefix, k, all_set_bl);
       first_key += bytes_per_key;
     }
-    assert(first_key == last_key);
+    ceph_assert(first_key == last_key);
     {
       bufferptr p(blocks_per_key >> 3);
       p.zero();

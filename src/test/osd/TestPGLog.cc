@@ -311,7 +311,7 @@ public:
     proc_replica_log(
       oinfo, olog, omissing, pg_shard_t(1, shard_id_t(0)));
 
-    assert(oinfo.last_update >= log.tail);
+    ceph_assert(oinfo.last_update >= log.tail);
 
     if (!tcase.base.empty()) {
       ASSERT_EQ(tcase.base.rbegin()->version, oinfo.last_update);

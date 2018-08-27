@@ -57,7 +57,7 @@ void TestClassHandler::open_class(const std::string& name,
 }
 
 void TestClassHandler::open_all_classes() {
-  assert(m_class_handles.empty());
+  ceph_assert(m_class_handles.empty());
 
   const char* env = getenv("CEPH_LIB");
   std::string CEPH_LIB(env ? env : "lib");

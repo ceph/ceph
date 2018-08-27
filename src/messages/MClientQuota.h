@@ -45,7 +45,7 @@ public:
     decode(rstat.rfiles, p);
     decode(rstat.rsubdirs, p);
     decode(quota, p);
-    assert(p.end());
+    ceph_assert(p.end());
   }
 };
 

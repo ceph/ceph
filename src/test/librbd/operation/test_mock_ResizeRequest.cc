@@ -35,7 +35,7 @@ struct ImageDispatchSpec<MockImageCtx> {
   static ImageDispatchSpec* create_flush_request(
       MockImageCtx &image_ctx, AioCompletion *aio_comp,
       FlushSource flush_source, const ZTracer::Trace &parent_trace) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->aio_comp = aio_comp;
     return s_instance;
   }
@@ -60,7 +60,7 @@ public:
   static TrimRequest *create(MockImageCtx &image_ctx, Context *on_finish,
                              uint64_t original_size, uint64_t new_size,
                              ProgressContext &prog_ctx) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }

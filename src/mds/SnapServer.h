@@ -100,7 +100,7 @@ public:
 
   bool upgrade_format() {
     // upgraded from old filesystem
-    assert(last_snap > 0);
+    ceph_assert(last_snap > 0);
     bool upgraded = false;
     if (get_version() == 0) {
       // version 0 confuses snapclient code
@@ -123,7 +123,7 @@ public:
     else if (ino == MDS_INO_MDSDIR(rank))
       mdsdir_scrubbed = true;
     else
-      assert(0);
+      ceph_abort();
   }
   bool can_allow_multimds_snaps() const {
     return (root_scrubbed && mdsdir_scrubbed) ||

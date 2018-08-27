@@ -46,7 +46,7 @@ struct ImageRequest<MockTestImageCtx> {
   static void aio_read(MockTestImageCtx *ictx, AioCompletion *c,
                        Extents &&image_extents, ReadResult &&read_result,
                        int op_flags, const ZTracer::Trace &parent_trace) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->aio_read(c, image_extents);
   }
   MOCK_METHOD2(aio_read, void(AioCompletion *, const Extents&));
@@ -291,8 +291,8 @@ public:
                               Return(true)));
       } else {
         expect.WillOnce(DoAll(WithArg<6>(Invoke([&mock_image_ctx, snap_id, state](Context *ctx) {
-                                  assert(mock_image_ctx.image_ctx->snap_lock.is_locked());
-                                  assert(mock_image_ctx.image_ctx->object_map_lock.is_wlocked());
+                                  ceph_assert(mock_image_ctx.image_ctx->snap_lock.is_locked());
+                                  ceph_assert(mock_image_ctx.image_ctx->object_map_lock.is_wlocked());
                                   mock_image_ctx.image_ctx->object_map->aio_update<Context>(
                                     snap_id, 0, 1, state, boost::none, {}, ctx);
                                 })),

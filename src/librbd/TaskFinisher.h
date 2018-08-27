@@ -98,7 +98,7 @@ public:
     typename TaskContexts::iterator it = m_task_contexts.find(task);
     if (it != m_task_contexts.end()) {
       if (it->second.second != NULL) {
-        assert(m_safe_timer->cancel_event(it->second.second));
+        ceph_assert(m_safe_timer->cancel_event(it->second.second));
         delete it->second.first;
       } else {
         // task already scheduled on the finisher

@@ -186,11 +186,11 @@ class FakeDispatcher : public Dispatcher {
     lderr(g_ceph_context) << __func__ << " conn: " << m->get_connection() << " session " << s << " count: " << s->count << dendl;
     if (is_server) {
       if (loopback)
-        assert(m->get_source().is_osd());
+        ceph_assert(m->get_source().is_osd());
       else
         reply_message(m);
     } else if (loopback) {
-      assert(m->get_source().is_client());
+      ceph_assert(m->get_source().is_client());
     }
     m->put();
     Mutex::Locker l(lock);
@@ -1004,7 +1004,7 @@ class SyntheticWorkload {
       msgr->bind(bind_addr);
       msgr->add_dispatcher_head(&dispatcher);
 
-      assert(msgr);
+      ceph_assert(msgr);
       msgr->set_default_policy(srv_policy);
       available_servers.insert(msgr);
       msgr->start();
@@ -1020,7 +1020,7 @@ class SyntheticWorkload {
       }
       msgr->add_dispatcher_head(&dispatcher);
 
-      assert(msgr);
+      ceph_assert(msgr);
       msgr->set_default_policy(cli_policy);
       available_clients.insert(msgr);
       msgr->start();
@@ -1048,7 +1048,7 @@ class SyntheticWorkload {
       usleep(500);
       lock.Lock();
     }
-    assert(lock.is_locked());
+    ceph_assert(lock.is_locked());
     boost::uniform_int<> choose(0, available_connections.size() - 1);
     int index = choose(rng);
     map<ConnectionRef, pair<Messenger*, Messenger*> >::iterator i = available_connections.begin();
@@ -1159,7 +1159,7 @@ class SyntheticWorkload {
       if (i++ % 50 == 0)
         print_internal_state(true);
       if (timeout_us < 0)
-        assert(0 == " loop time exceed 5 mins, it looks we stuck into some problems!");
+        ceph_abort_msg(" loop time exceed 5 mins, it looks we stuck into some problems!");
     }
     for (set<Messenger*>::iterator it = available_servers.begin();
          it != available_servers.end(); ++it) {

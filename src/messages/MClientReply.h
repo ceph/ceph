@@ -314,7 +314,7 @@ public:
     decode(trace_bl, p);
     decode(extra_bl, p);
     decode(snapbl, p);
-    assert(p.end());
+    ceph_assert(p.end());
   }
   void encode_payload(uint64_t features) override {
     using ceph::encode;

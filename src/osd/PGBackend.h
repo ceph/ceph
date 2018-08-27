@@ -187,7 +187,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      }
      virtual const pg_missing_const_i &get_shard_missing(pg_shard_t peer) const {
        auto m = maybe_get_shard_missing(peer);
-       assert(m);
+       ceph_assert(m);
        return *m;
      }
 
@@ -198,7 +198,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        } else {
 	 map<pg_shard_t, pg_info_t>::const_iterator i =
 	   get_shard_info().find(peer);
-	 assert(i != get_shard_info().end());
+	 ceph_assert(i != get_shard_info().end());
 	 return i->second;
        }
      }

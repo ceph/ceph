@@ -23,7 +23,7 @@ struct ReadResult::SetClipLengthVisitor : public boost::static_visitor<void> {
   }
 
   void operator()(Linear &linear) const {
-    assert(length <= linear.buf_len);
+    ceph_assert(length <= linear.buf_len);
     linear.buf_len = length;
   }
 
@@ -66,7 +66,7 @@ struct ReadResult::AssembleResultVisitor : public boost::static_visitor<void> {
       it.copy(len, static_cast<char *>(vector.iov[idx].iov_base));
       offset += len;
     }
-    assert(offset == bl.length());
+    ceph_assert(offset == bl.length());
   }
 
   void operator()(Bufferlist &bufferlist) const {
@@ -94,7 +94,7 @@ void ReadResult::C_ImageReadRequest::finish(int r) {
     for (auto &image_extent : image_extents) {
       length += image_extent.second;
     }
-    assert(length == bl.length());
+    ceph_assert(length == bl.length());
 
     aio_completion->lock.Lock();
     aio_completion->read_result.m_destriper.add_partial_result(

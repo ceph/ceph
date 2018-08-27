@@ -38,7 +38,7 @@ struct C_CompleteFlushes : public Context {
 } // anonymous namespace
 
 void AsyncOperation::start_op(ImageCtx &image_ctx) {
-  assert(m_image_ctx == NULL);
+  ceph_assert(m_image_ctx == NULL);
   m_image_ctx = &image_ctx;
 
   ldout(m_image_ctx->cct, 20) << this << " " << __func__ << dendl;
@@ -53,7 +53,7 @@ void AsyncOperation::finish_op() {
     Mutex::Locker l(m_image_ctx->async_ops_lock);
     xlist<AsyncOperation *>::iterator iter(&m_xlist_item);
     ++iter;
-    assert(m_xlist_item.remove_myself());
+    ceph_assert(m_xlist_item.remove_myself());
 
     // linked list stored newest -> oldest ops
     if (!iter.end() && !m_flush_contexts.empty()) {
@@ -74,7 +74,7 @@ void AsyncOperation::finish_op() {
 }
 
 void AsyncOperation::add_flush_context(Context *on_finish) {
-  assert(m_image_ctx->async_ops_lock.is_locked());
+  ceph_assert(m_image_ctx->async_ops_lock.is_locked());
   ldout(m_image_ctx->cct, 20) << this << " " << __func__ << ": "
                               << "flush=" << on_finish << dendl;
   m_flush_contexts.push_back(on_finish);

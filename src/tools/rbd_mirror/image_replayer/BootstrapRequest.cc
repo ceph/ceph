@@ -72,7 +72,7 @@ BootstrapRequest<I>::BootstrapRequest(
 
 template <typename I>
 BootstrapRequest<I>::~BootstrapRequest() {
-  assert(m_remote_image_ctx == nullptr);
+  ceph_assert(m_remote_image_ctx == nullptr);
 }
 
 template <typename I>
@@ -168,7 +168,7 @@ void BootstrapRequest<I>::handle_open_remote_image(int r) {
 
   if (r < 0) {
     derr << ": failed to open remote image: " << cpp_strerror(r) << dendl;
-    assert(m_remote_image_ctx == nullptr);
+    ceph_assert(m_remote_image_ctx == nullptr);
     finish(r);
     return;
   }
@@ -291,18 +291,18 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r == -ENOENT) {
-    assert(*m_local_image_ctx == nullptr);
+    ceph_assert(*m_local_image_ctx == nullptr);
     dout(10) << ": local image missing" << dendl;
     unregister_client();
     return;
   } else if (r == -EREMOTEIO) {
-    assert(*m_local_image_ctx == nullptr);
+    ceph_assert(*m_local_image_ctx == nullptr);
     dout(10) << "local image is primary -- skipping image replay" << dendl;
     m_ret_val = r;
     close_remote_image();
     return;
   } else if (r < 0) {
-    assert(*m_local_image_ctx == nullptr);
+    ceph_assert(*m_local_image_ctx == nullptr);
     derr << ": failed to open local image: " << cpp_strerror(r) << dendl;
     m_ret_val = r;
     close_remote_image();
@@ -398,7 +398,7 @@ void BootstrapRequest<I>::register_client() {
 
   update_progress("REGISTER_CLIENT");
 
-  assert(m_local_image_id.empty());
+  ceph_assert(m_local_image_id.empty());
   librbd::journal::MirrorPeerClientMeta mirror_peer_client_meta;
   mirror_peer_client_meta.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
 
@@ -436,7 +436,7 @@ void BootstrapRequest<I>::update_client_image() {
   dout(20) << dendl;
   update_progress("UPDATE_CLIENT_IMAGE");
 
-  assert(m_local_image_id.empty());
+  ceph_assert(m_local_image_id.empty());
   m_local_image_id = librbd::util::generate_image_id<I>(m_local_io_ctx);
 
   librbd::journal::MirrorPeerClientMeta client_meta{m_local_image_id};
@@ -663,7 +663,7 @@ void BootstrapRequest<I>::image_sync() {
     if (m_canceled) {
       m_ret_val = -ECANCELED;
     } else {
-      assert(m_image_sync == nullptr);
+      ceph_assert(m_image_sync == nullptr);
 
       Context *ctx = create_context_callback<
         BootstrapRequest<I>, &BootstrapRequest<I>::handle_image_sync>(this);

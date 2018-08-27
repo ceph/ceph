@@ -288,7 +288,7 @@ public:
    * @param p The cluster protocol to use. Defined externally.
    */
   void set_default_send_priority(int p) {
-    assert(!started);
+    ceph_assert(!started);
     default_send_priority = p;
   }
   /**
@@ -566,16 +566,16 @@ public:
       } else {
 	blocked = true;
 	int r = pthread_sigmask(SIG_BLOCK, &pipe_mask, &existing_mask);
-	assert(r == 0);
+	ceph_assert(r == 0);
       }
     }
     ~sigpipe_stopper() {
       if (blocked) {
 	struct timespec nowait{0};
 	int r = sigtimedwait(&pipe_mask, 0, &nowait);
-	assert(r == EAGAIN || r == 0);
+	ceph_assert(r == EAGAIN || r == 0);
 	r = pthread_sigmask(SIG_SETMASK, &existing_mask, 0);
-	assert(r == 0);
+	ceph_assert(r == 0);
       }
     }
   };
@@ -632,7 +632,7 @@ public:
   /**
    *  Deliver a single Message. Send it to each Dispatcher
    *  in sequence until one of them handles it.
-   *  If none of our Dispatchers can handle it, assert(0).
+   *  If none of our Dispatchers can handle it, ceph_abort().
    *
    *  @param m The Message to deliver.
    */
@@ -644,7 +644,7 @@ public:
     }
     lsubdout(cct, ms, 0) << "ms_deliver_dispatch: unhandled message " << m << " " << *m << " from "
 			 << m->get_source_inst() << dendl;
-    assert(!cct->_conf->ms_die_on_unhandled_msg);
+    ceph_assert(!cct->_conf->ms_die_on_unhandled_msg);
   }
   void ms_deliver_dispatch(Message *m) {
     return ms_deliver_dispatch(Message::ref(m, false)); /* consume ref */

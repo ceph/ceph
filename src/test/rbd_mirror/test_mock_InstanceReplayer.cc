@@ -69,18 +69,18 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
     InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
     RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
     const std::string &global_image_id) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->global_image_id = global_image_id;
     return s_instance;
   }
 
   ImageReplayer() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
   virtual ~ImageReplayer() {
-    assert(s_instance == this);
+    ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
 
@@ -143,7 +143,7 @@ public:
     EXPECT_CALL(*mock_threads.timer, add_event_after(_, _))
       .WillOnce(DoAll(
         WithArg<1>(Invoke([this, &mock_threads, timer_ctx](Context *ctx) {
-          assert(mock_threads.timer_lock.is_locked());
+          ceph_assert(mock_threads.timer_lock.is_locked());
           if (timer_ctx != nullptr) {
             *timer_ctx = ctx;
             mock_threads.timer_cond.SignalOne();

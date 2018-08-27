@@ -429,7 +429,7 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
       ldout(cct, 0) << "verify_authorizer could not get service secret for service "
 	      << ceph_entity_type_name(service_id) << " secret_id=" << ticket.secret_id << dendl;
       if (cct->_conf->auth_debug && ticket.secret_id == 0)
-	assert(0 == "got secret_id=0");
+	ceph_abort_msg("got secret_id=0");
       return false;
     }
   }

@@ -22,6 +22,8 @@
 #include <boost/intrusive_ptr.hpp>
 #include <boost/intrusive/list.hpp>
 
+#include "include/assert.h"
+
 #include "common/async/completion.h"
 
 namespace ceph::async::detail {
@@ -110,9 +112,9 @@ class AsyncRequest : public LockRequest {
 
 inline SharedMutexImpl::~SharedMutexImpl()
 {
-  assert(state == Unlocked);
-  assert(shared_queue.empty());
-  assert(exclusive_queue.empty());
+  ceph_assert(state == Unlocked);
+  ceph_assert(shared_queue.empty());
+  ceph_assert(exclusive_queue.empty());
 }
 
 template <typename Mutex, typename CompletionToken>
@@ -185,7 +187,7 @@ void SharedMutexImpl::unlock()
   RequestList granted;
   {
     std::lock_guard lock{mutex};
-    assert(state == Exclusive);
+    ceph_assert(state == Exclusive);
 
     if (!exclusive_queue.empty()) {
       // grant next exclusive lock
@@ -274,7 +276,7 @@ inline bool SharedMutexImpl::try_lock_shared()
 inline void SharedMutexImpl::unlock_shared()
 {
   std::lock_guard lock{mutex};
-  assert(state != Unlocked && state <= MaxShared);
+  ceph_assert(state != Unlocked && state <= MaxShared);
 
   if (state == 1 && !exclusive_queue.empty()) {
     // grant next exclusive lock

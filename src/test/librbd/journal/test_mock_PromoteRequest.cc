@@ -36,7 +36,7 @@ struct OpenRequest<MockTestImageCtx> {
                              Mutex *lock, ImageClientMeta *client_meta,
                              uint64_t *tag_tid, journal::TagData *tag_data,
                              Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     client_meta->tag_class = 456;
     tag_data->mirror_uuid = Journal<>::ORPHAN_MIRROR_UUID;
     *tag_tid = 567;

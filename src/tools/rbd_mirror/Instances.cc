@@ -42,7 +42,7 @@ void Instances<I>::init(Context *on_finish) {
   dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
-  assert(m_on_finish == nullptr);
+  ceph_assert(m_on_finish == nullptr);
   m_on_finish = on_finish;
   get_instances();
 }
@@ -52,7 +52,7 @@ void Instances<I>::shut_down(Context *on_finish) {
   dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
-  assert(m_on_finish == nullptr);
+  ceph_assert(m_on_finish == nullptr);
   m_on_finish = on_finish;
 
   Context *ctx = new FunctionContext(
@@ -71,7 +71,7 @@ void Instances<I>::unblock_listener() {
   dout(5) << dendl;
 
   Mutex::Locker locker(m_lock);
-  assert(m_listener_blocked);
+  ceph_assert(m_listener_blocked);
   m_listener_blocked = false;
 
   InstanceIds added_instance_ids;
@@ -185,7 +185,7 @@ template <typename I>
 void Instances<I>::get_instances() {
   dout(10) << dendl;
 
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   Context *ctx = create_context_callback<
     Instances, &Instances<I>::handle_get_instances>(this);
@@ -215,7 +215,7 @@ template <typename I>
 void Instances<I>::wait_for_ops() {
   dout(10) << dendl;
 
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   Context *ctx = create_async_context_callback(
     m_threads->work_queue, create_context_callback<
@@ -228,7 +228,7 @@ template <typename I>
 void Instances<I>::handle_wait_for_ops(int r) {
   dout(10) << "r=" << r << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   Context *on_finish = nullptr;
   {
@@ -240,7 +240,7 @@ void Instances<I>::handle_wait_for_ops(int r) {
 
 template <typename I>
 void Instances<I>::remove_instances(const utime_t& time) {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   InstanceIds instance_ids;
   for (auto& instance_pair : m_instances) {
@@ -254,7 +254,7 @@ void Instances<I>::remove_instances(const utime_t& time) {
       instance_ids.push_back(instance_pair.first);
     }
   }
-  assert(!instance_ids.empty());
+  ceph_assert(!instance_ids.empty());
 
   dout(10) << "instance_ids=" << instance_ids << dendl;
   Context* ctx = new FunctionContext([this, instance_ids](int r) {
@@ -279,7 +279,7 @@ void Instances<I>::handle_remove_instances(
   Mutex::Locker locker(m_lock);
 
   dout(10) << "r=" << r << ", instance_ids=" << instance_ids << dendl;
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   // fire removed notification now that instaces have been blacklisted
   m_threads->work_queue->queue(
@@ -292,8 +292,8 @@ void Instances<I>::handle_remove_instances(
 
 template <typename I>
 void Instances<I>::cancel_remove_task() {
-  assert(m_threads->timer_lock.is_locked());
-  assert(m_lock.is_locked());
+  ceph_assert(m_threads->timer_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   if (m_timer_task == nullptr) {
     return;
@@ -302,7 +302,7 @@ void Instances<I>::cancel_remove_task() {
   dout(10) << dendl;
 
   bool canceled = m_threads->timer->cancel_event(m_timer_task);
-  assert(canceled);
+  ceph_assert(canceled);
   m_timer_task = nullptr;
 }
 
@@ -342,7 +342,7 @@ void Instances<I>::schedule_remove_task(const utime_t& time) {
   // schedule a time to fire when the oldest instance should be removed
   m_timer_task = new FunctionContext(
     [this, oldest_time](int r) {
-      assert(m_threads->timer_lock.is_locked());
+      ceph_assert(m_threads->timer_lock.is_locked());
       Mutex::Locker locker(m_lock);
       m_timer_task = nullptr;
 

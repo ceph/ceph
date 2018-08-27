@@ -514,10 +514,10 @@ bool operator!=(const std::vector<T, mempool::pool_allocator<pool_index, T>>& lh
 #define MEMPOOL_CLASS_HELPERS()						\
   void *operator new(size_t size);					\
   void *operator new[](size_t size) noexcept {				\
-    assert(0 == "no array new");					\
+    ceph_abort_msg("no array new");					\
     return nullptr; }							\
   void  operator delete(void *);					\
-  void  operator delete[](void *) { assert(0 == "no array delete"); }
+  void  operator delete[](void *) { ceph_abort_msg("no array delete"); }
 
 
 // Use this in some particular .cc file to match each class with a

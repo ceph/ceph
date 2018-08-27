@@ -371,7 +371,7 @@ Mutex& RGWHTTPClient::get_req_lock()
 
 void RGWHTTPClient::_set_write_paused(bool pause)
 {
-  assert(req_data->lock.is_locked());
+  ceph_assert(req_data->lock.is_locked());
   
   RGWHTTPManager *mgr = req_data->mgr;
   if (pause == req_data->write_paused) {
@@ -386,7 +386,7 @@ void RGWHTTPClient::_set_write_paused(bool pause)
 
 void RGWHTTPClient::_set_read_paused(bool pause)
 {
-  assert(req_data->lock.is_locked());
+  ceph_assert(req_data->lock.is_locked());
   
   RGWHTTPManager *mgr = req_data->mgr;
   if (pause == req_data->read_paused) {
@@ -470,7 +470,7 @@ int RGWHTTPClient::get_req_retcode()
  */
 int RGWHTTPClient::init_request(rgw_http_req_data *_req_data, bool send_data_hint)
 {
-  assert(!req_data);
+  ceph_assert(!req_data);
   _req_data->get();
   req_data = _req_data;
 
@@ -987,7 +987,7 @@ int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetSt
 {
   rgw_http_req_data *req_data = client->get_req_data();
 
-  assert(req_data->lock.is_locked());
+  ceph_assert(req_data->lock.is_locked());
 
   /* can only do that if threaded */
   if (!is_started) {

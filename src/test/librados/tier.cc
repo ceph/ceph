@@ -2391,7 +2391,7 @@ static int _get_pg_num(Rados& cluster, string pool_name)
     + string("\",\"var\": \"pg_num\",\"format\": \"json\"}");
   bufferlist outbl;
   int r = cluster.mon_command(cmd, inbl, &outbl, NULL);
-  assert(r >= 0);
+  ceph_assert(r >= 0);
   string outstr(outbl.c_str(), outbl.length());
   json_spirit::Value v;
   if (!json_spirit::read(outstr, v)) {
@@ -2414,7 +2414,7 @@ static int _get_pg_num(Rados& cluster, string pool_name)
 
 TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
   int num_pg = _get_pg_num(cluster, pool_name);
-  assert(num_pg > 0);
+  ceph_assert(num_pg > 0);
 
   // make it a tier
   bufferlist inbl;
@@ -5551,7 +5551,7 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetRead) {
 #if 0
 TEST_F(LibRadosTierECPP, HitSetWrite) {
   int num_pg = _get_pg_num(cluster, pool_name);
-  assert(num_pg > 0);
+  ceph_assert(num_pg > 0);
 
   // enable hitset tracking for this pool
   bufferlist inbl;

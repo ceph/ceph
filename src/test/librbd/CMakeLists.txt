@@ -108,6 +108,7 @@ target_link_libraries(unittest_librbd
   rbd_internal
   rbd_types
   osdc
+  ceph-common
   global
   ${UNITTEST_LIBS}
   radostest)
@@ -135,6 +136,7 @@ add_executable(ceph_test_librbd_api
   $<TARGET_OBJECTS:libradostest_obj>
   $<TARGET_OBJECTS:common_texttable_obj>)
 target_link_libraries(ceph_test_librbd_api
+  ceph-common
   librbd
   librados
   ${UNITTEST_LIBS})

@@ -285,7 +285,7 @@ void librados::IoCtxImpl::queue_aio_write(AioCompletionImpl *c)
 {
   get();
   aio_write_list_lock.Lock();
-  assert(c->io == this);
+  ceph_assert(c->io == this);
   c->aio_write_seq = ++aio_write_seq;
   ldout(client->cct, 20) << "queue_aio_write " << this << " completion " << c
 			 << " write_seq " << aio_write_seq << dendl;
@@ -297,7 +297,7 @@ void librados::IoCtxImpl::complete_aio_write(AioCompletionImpl *c)
 {
   ldout(client->cct, 20) << "complete_aio_write " << c << dendl;
   aio_write_list_lock.Lock();
-  assert(c->io == this);
+  ceph_assert(c->io == this);
   c->aio_write_list_item.remove_myself();
 
   map<ceph_tid_t, std::list<AioCompletionImpl*> >::iterator waiters = aio_write_waiters.begin();
@@ -1951,7 +1951,7 @@ librados::IoCtxImpl::C_aio_stat_Ack::C_aio_stat_Ack(AioCompletionImpl *_c,
 						    time_t *pm)
    : c(_c), pmtime(pm)
 {
-  assert(!c->io);
+  ceph_assert(!c->io);
   c->get();
 }
 
@@ -1979,7 +1979,7 @@ librados::IoCtxImpl::C_aio_stat2_Ack::C_aio_stat2_Ack(AioCompletionImpl *_c,
 						     struct timespec *pt)
    : c(_c), pts(pt)
 {
-  assert(!c->io);
+  ceph_assert(!c->io);
   c->get();
 }
 
@@ -2086,7 +2086,7 @@ int librados::IoCtxImpl::application_enable(const std::string& app_name,
   application_enable_async(app_name, force, c);
 
   int r = c->wait();
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   r = c->get_return_value();
   c->release();

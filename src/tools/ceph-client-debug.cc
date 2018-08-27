@@ -63,15 +63,15 @@ int lookup_trace(ceph_mount_info *client, inodeno_t const ino)
   } else {
     if (!inode->dentries.empty()) {
       Dentry *dn = *(inode->dentries.begin());
-      assert(dn->dir);
-      assert(dn->dir->parent_inode);
+      ceph_assert(dn->dir);
+      ceph_assert(dn->dir->parent_inode);
       r = lookup_trace(client, dn->dir->parent_inode->ino);
       if (r) {
         return r;
       }
     } else {
       // We reached the root of the tree
-      assert(inode->ino == CEPH_INO_ROOT);
+      ceph_assert(inode->ino == CEPH_INO_ROOT);
     }
   }
 

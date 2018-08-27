@@ -1,7 +1,8 @@
 #ifndef CEPH_ASSERT_H
 #define CEPH_ASSERT_H
 
-#include <stdlib.h>
+#include <cstdlib>
+#include <string>
 
 #if defined(__linux__)
 #include <features.h>
@@ -22,13 +23,11 @@
 # include "acconfig.h"
 #endif
 
-#ifdef __cplusplus
 class CephContext;
 
 namespace ceph {
 
 struct BackTrace;
-#endif
 
 /*
  * For GNU, test specific version features. Otherwise (e.g. LLVM) we'll use
@@ -62,9 +61,7 @@ struct BackTrace;
 # define __CEPH_ASSERT_FUNCTION ((__const char *) 0)
 #endif
 
-#ifdef __cplusplus
 extern void register_assert_context(CephContext *cct);
-#endif
 
 struct assert_data {
   const char *assertion;
@@ -82,23 +79,23 @@ extern void __ceph_assertf_fail(const char *assertion, const char *file, int lin
   __attribute__ ((__noreturn__));
 extern void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *function);
 
-#ifdef __cplusplus
-# define _CEPH_ASSERT_VOID_CAST static_cast<void>
-#else
-# define _CEPH_ASSERT_VOID_CAST (void)
-#endif
+[[noreturn]] void __ceph_abort(const char *file, int line, const char *func,
+                               const std::string& msg);
+
+[[noreturn]] void __ceph_abortf(const char *file, int line, const char *func,
+                                const char* msg, ...);
+
+#define _CEPH_ASSERT_VOID_CAST static_cast<void>
 
 #define assert_warn(expr)							\
   ((expr)								\
    ? _CEPH_ASSERT_VOID_CAST (0)					\
    : __ceph_assert_warn (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
 
-#ifdef __cplusplus
 }
 
 using namespace ceph;
 
-#endif
 
 /*
  * ceph_abort aborts the program with a nice backtrace.
@@ -106,37 +103,14 @@ using namespace ceph;
  * Currently, it's the same as assert(0), but we may one day make assert a
  * debug-only thing, like it is in many projects.
  */
-#define ceph_abort() abort()
+#define ceph_abort(msg, ...)                                            \
+  __ceph_abort( __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, "abort() called")
 
-#define ceph_abort_msg(cct, msg) {					\
-		lgeneric_derr(cct) << "abort: " << msg << dendl;	\
-		abort();						\
-	}
+#define ceph_abort_msg(msg)                                             \
+  __ceph_abort( __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, msg) 
 
-#endif
-
-// wipe any prior assert definition
-#ifdef assert
-# undef assert
-#endif
-
-// make _ASSERT_H something that *must* have a value other than what
-// /usr/include/assert.h gives it (nothing!), so that we detect when
-// our assert is clobbered.
-#undef _ASSERT_H
-#define _ASSERT_H _dout_cct
-
-// make __ASSERT_FUNCTION empty (/usr/include/assert.h makes it a function)
-// and make our encoding macros break if it non-empty.
-#undef __ASSERT_FUNCTION
-#define __ASSERT_FUNCTION
-
-#define assert(expr) \
-  do { static const ceph::assert_data assert_data_ctx = \
-   {__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION}; \
-   ((expr) \
-   ? _CEPH_ASSERT_VOID_CAST (0)	\
-   : __ceph_assert_fail(assert_data_ctx)); } while(false)
+#define ceph_abort_msgf(...)                                             \
+  __ceph_abortf( __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__)
 
 #define ceph_assert(expr)							\
   do { static const ceph::assert_data assert_data_ctx = \
@@ -171,3 +145,5 @@ using namespace ceph;
   ((expr)								\
    ? _CEPH_ASSERT_VOID_CAST (0)					\
    : __ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
+
+#endif

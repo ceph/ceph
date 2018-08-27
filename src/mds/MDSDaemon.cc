@@ -180,113 +180,113 @@ void MDSDaemon::set_up_admin_socket()
 {
   int r;
   AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
-  assert(asok_hook == nullptr);
+  ceph_assert(asok_hook == nullptr);
   asok_hook = new MDSSocketHook(this);
   r = admin_socket->register_command("status", "status", asok_hook,
 				     "high-level status of MDS");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dump_ops_in_flight",
 				     "dump_ops_in_flight", asok_hook,
 				     "show the ops currently in flight");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("ops",
 				     "ops", asok_hook,
 				     "show the ops currently in flight");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dump_blocked_ops", "dump_blocked_ops",
       asok_hook,
       "show the blocked ops currently in flight");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
 				     asok_hook,
 				     "show recent ops");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops_by_duration", "dump_historic_ops_by_duration",
 				     asok_hook,
 				     "show recent ops, sorted by op duration");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("scrub_path",
 				     "scrub_path name=path,type=CephString "
 				     "name=scrubops,type=CephChoices,"
 				     "strings=force|recursive|repair,n=N,req=false",
                                      asok_hook,
                                      "scrub an inode and output results");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("tag path",
                                      "tag path name=path,type=CephString"
                                      " name=tag,type=CephString",
                                      asok_hook,
                                      "Apply scrub tag recursively");
-   assert(r == 0);
+   ceph_assert(r == 0);
   r = admin_socket->register_command("flush_path",
                                      "flush_path name=path,type=CephString",
                                      asok_hook,
                                      "flush an inode (and its dirfrags)");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("export dir",
                                      "export dir "
                                      "name=path,type=CephString "
                                      "name=rank,type=CephInt",
                                      asok_hook,
                                      "migrate a subtree to named MDS");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dump cache",
                                      "dump cache name=path,type=CephString,req=false",
                                      asok_hook,
                                      "dump metadata cache (optionally to a file)");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("cache status",
                                      "cache status",
                                      asok_hook,
                                      "show cache status");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dump tree",
 				     "dump tree "
 				     "name=root,type=CephString,req=true "
 				     "name=depth,type=CephInt,req=false ",
 				     asok_hook,
 				     "dump metadata cache for subtree");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dump loads",
                                      "dump loads",
                                      asok_hook,
                                      "dump metadata loads");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dump snaps",
                                      "dump snaps name=server,type=CephChoices,strings=--server,req=false",
                                      asok_hook,
                                      "dump snapshots");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("session evict",
 				     "session evict name=client_id,type=CephString",
 				     asok_hook,
 				     "Evict a CephFS client");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("osdmap barrier",
 				     "osdmap barrier name=target_epoch,type=CephInt",
 				     asok_hook,
 				     "Wait until the MDS has this OSD map epoch");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("session ls",
 				     "session ls",
 				     asok_hook,
 				     "Enumerate connected CephFS clients");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("flush journal",
 				     "flush journal",
 				     asok_hook,
 				     "Flush the journal to the backing store");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("force_readonly",
 				     "force_readonly",
 				     asok_hook,
 				     "Force MDS to read-only mode");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("get subtrees",
 				     "get subtrees",
 				     asok_hook,
 				     "Return the subtree map");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dirfrag split",
 				     "dirfrag split "
                                      "name=path,type=CephString,req=true "
@@ -294,31 +294,31 @@ void MDSDaemon::set_up_admin_socket()
                                      "name=bits,type=CephInt,req=true ",
 				     asok_hook,
 				     "Fragment directory by path");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dirfrag merge",
 				     "dirfrag merge "
                                      "name=path,type=CephString,req=true "
                                      "name=frag,type=CephString,req=true",
 				     asok_hook,
 				     "De-fragment directory by path");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dirfrag ls",
 				     "dirfrag ls "
                                      "name=path,type=CephString,req=true",
 				     asok_hook,
 				     "List fragments in directory");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("openfiles ls",
                                      "openfiles ls",
                                      asok_hook,
                                      "List the opening files and their caps");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dump inode",
 				     "dump inode " 
                                      "name=number,type=CephInt,req=true",
 				     asok_hook,
 				     "dump inode by inode number");
-  assert(r == 0);
+  ceph_assert(r == 0);
 }
 
 void MDSDaemon::clean_up_admin_socket()
@@ -542,7 +542,7 @@ void MDSDaemon::reset_tick()
   tick_event = timer.add_event_after(
     g_conf()->mds_tick_interval,
     new FunctionContext([this](int) {
-	assert(mds_lock.is_locked_by_me());
+	ceph_assert(mds_lock.is_locked_by_me());
 	tick();
       }));
 }
@@ -564,7 +564,7 @@ void MDSDaemon::send_command_reply(const MCommand::const_ref &m, MDSRank *mds_ra
 {
   auto priv = m->get_connection()->get_priv();
   auto session = static_cast<Session *>(priv.get());
-  assert(session != NULL);
+  ceph_assert(session != NULL);
   // If someone is using a closed session for sending commands (e.g.
   // the ceph CLI) then we should feel free to clean up this connection
   // as soon as we've sent them a response.
@@ -576,7 +576,7 @@ void MDSDaemon::send_command_reply(const MCommand::const_ref &m, MDSRank *mds_ra
   if (!live_session) {
     // This session only existed to issue commands, so terminate it
     // as soon as we can.
-    assert(session->is_closed());
+    ceph_assert(session->is_closed());
     session->get_connection()->mark_disposable();
   }
   priv.reset();
@@ -591,7 +591,7 @@ void MDSDaemon::handle_command(const MCommand::const_ref &m)
 {
   auto priv = m->get_connection()->get_priv();
   auto session = static_cast<Session *>(priv.get());
-  assert(session != NULL);
+  ceph_assert(session != NULL);
 
   int r = 0;
   cmdmap_t cmdmap;
@@ -698,8 +698,8 @@ int MDSDaemon::_handle_command(
     Context **run_later,
     bool *need_reply)
 {
-  assert(outbl != NULL);
-  assert(outs != NULL);
+  ceph_assert(outbl != NULL);
+  ceph_assert(outs != NULL);
 
   class SuicideLater : public Context
   {
@@ -820,7 +820,7 @@ int MDSDaemon::_handle_command(
     // FIXME harmonize `session kill` with admin socket session evict
     int64_t session_id = 0;
     bool got = cmd_getval(cct, cmdmap, "session_id", session_id);
-    assert(got);
+    ceph_assert(got);
     bool killed = mds_rank->evict_client(session_id, false,
                                          g_conf()->mds_session_blacklist_on_evict,
                                          ss);
@@ -1018,7 +1018,7 @@ void MDSDaemon::_handle_mds_map(const MDSMap &mdsmap)
 
 void MDSDaemon::handle_signal(int signum)
 {
-  assert(signum == SIGINT || signum == SIGTERM);
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** got signal " << sig_str(signum) << " ***" << dendl;
   {
     Mutex::Locker l(mds_lock);
@@ -1031,10 +1031,10 @@ void MDSDaemon::handle_signal(int signum)
 
 void MDSDaemon::suicide()
 {
-  assert(mds_lock.is_locked());
+  ceph_assert(mds_lock.is_locked());
   
   // make sure we don't suicide twice
-  assert(stopping == false);
+  ceph_assert(stopping == false);
   stopping = true;
 
   dout(1) << "suicide! Wanted state "
@@ -1106,7 +1106,7 @@ void MDSDaemon::respawn()
     /* Print CWD for the user's interest */
     char buf[PATH_MAX];
     char *cwd = getcwd(buf, sizeof(buf));
-    assert(cwd);
+    ceph_assert(cwd);
     dout(1) << " cwd " << cwd << dendl;
 
     /* Fall back to a best-effort: just running in our CWD */

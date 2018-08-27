@@ -31,7 +31,7 @@ public:
       : tag(tag_), force(force_), recursive(recursive_), repair(repair_),
         formatter(f_), origin(nullptr)
   {
-    assert(formatter != nullptr);
+    ceph_assert(formatter != nullptr);
   }
 
   // Set after construction because it won't be known until we've

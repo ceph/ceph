@@ -47,7 +47,7 @@ public:
 	g_conf().set_val("compressor_zlib_isal", "false");
 	g_ceph_context->_conf.apply_changes(nullptr);
       } else {
-	assert(0 == "bad option");
+	ceph_abort_msg("bad option");
       }
     }
     cout << "[plugin " << plugin << " (" << GetParam() << ")]" << std::endl;

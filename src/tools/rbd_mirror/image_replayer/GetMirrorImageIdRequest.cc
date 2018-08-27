@@ -41,7 +41,7 @@ void GetMirrorImageIdRequest<I>::get_image_id() {
     &GetMirrorImageIdRequest<I>::handle_get_image_id>(
       this);
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 

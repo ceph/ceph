@@ -81,7 +81,7 @@ class Device {
   ~Device() {
     if (active_port) {
       delete active_port;
-      assert(ibv_close_device(ctxt) == 0);
+      ceph_assert(ibv_close_device(ctxt) == 0);
     }
   }
   const char* get_name() { return name;}
@@ -122,7 +122,7 @@ class DeviceList {
   }
 
   Device* get_device(const char* device_name) {
-    assert(devices);
+    ceph_assert(devices);
     for (int i = 0; i < num; ++i) {
       if (!strlen(device_name) || !strcmp(device_name, devices[i]->get_name())) {
         return devices[i];

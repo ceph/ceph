@@ -169,7 +169,7 @@ struct PGTempMap {
     void init_current() {
       if (it != end) {
 	current.first = it->first;
-	assert(it->second);
+	ceph_assert(it->second);
 	current.second.resize(*it->second);
 	int32_t *p = it->second + 1;
 	for (int n = 0; n < *it->second; ++n, ++p) {
@@ -455,7 +455,7 @@ public:
 
     /// filter out osds with any pending state changing
     size_t get_pending_state_osds(vector<int> *osds) {
-      assert(osds);
+      ceph_assert(osds);
       osds->clear();
 
       for (auto &p : new_state) {
@@ -717,27 +717,27 @@ public:
   static void calc_state_set(int state, set<string>& st);
 
   int get_state(int o) const {
-    assert(o < max_osd);
+    ceph_assert(o < max_osd);
     return osd_state[o];
   }
   int get_state(int o, set<string>& st) const {
-    assert(o < max_osd);
+    ceph_assert(o < max_osd);
     unsigned t = osd_state[o];
     calc_state_set(t, st);
     return osd_state[o];
   }
   void set_state(int o, unsigned s) {
-    assert(o < max_osd);
+    ceph_assert(o < max_osd);
     osd_state[o] = s;
   }
   void set_weight(int o, unsigned w) {
-    assert(o < max_osd);
+    ceph_assert(o < max_osd);
     osd_weight[o] = w;
     if (w)
       osd_state[o] |= CEPH_OSD_EXISTS;
   }
   unsigned get_weight(int o) const {
-    assert(o < max_osd);
+    ceph_assert(o < max_osd);
     return osd_weight[o];
   }
   float get_weightf(int o) const {
@@ -746,7 +746,7 @@ public:
   void adjust_osd_weights(const map<int,double>& weights, Incremental& inc) const;
 
   void set_primary_affinity(int o, int w) {
-    assert(o < max_osd);
+    ceph_assert(o < max_osd);
     if (!osd_primary_affinity)
       osd_primary_affinity.reset(
 	new mempool::osdmap::vector<__u32>(
@@ -754,7 +754,7 @@ public:
     (*osd_primary_affinity)[o] = w;
   }
   unsigned get_primary_affinity(int o) const {
-    assert(o < max_osd);
+    ceph_assert(o < max_osd);
     if (!osd_primary_affinity)
       return CEPH_OSD_DEFAULT_PRIMARY_AFFINITY;
     return (*osd_primary_affinity)[o];
@@ -833,7 +833,7 @@ public:
   }
 
   void get_noup_osds(vector<int> *osds) const {
-    assert(osds);
+    ceph_assert(osds);
     osds->clear();
 
     for (int i = 0; i < max_osd; i++) {
@@ -844,7 +844,7 @@ public:
   }
 
   void get_nodown_osds(vector<int> *osds) const {
-    assert(osds);
+    ceph_assert(osds);
     osds->clear();
 
     for (int i = 0; i < max_osd; i++) {
@@ -855,7 +855,7 @@ public:
   }
 
   void get_noin_osds(vector<int> *osds) const {
-    assert(osds);
+    ceph_assert(osds);
     osds->clear();
 
     for (int i = 0; i < max_osd; i++) {
@@ -866,7 +866,7 @@ public:
   }
 
   void get_noout_osds(vector<int> *osds) const {
-    assert(osds);
+    ceph_assert(osds);
     osds->clear();
 
     for (int i = 0; i < max_osd; i++) {
@@ -895,7 +895,7 @@ public:
   int find_osd_on_ip(const entity_addr_t& ip) const;
 
   const entity_addrvec_t& get_addrs(int osd) const {
-    assert(exists(osd));
+    ceph_assert(exists(osd));
     return osd_addrs->client_addrs[osd] ?
       *osd_addrs->client_addrs[osd] : _blank_addrvec;
   }
@@ -903,45 +903,45 @@ public:
     return get_addrs(osd);
   }
   const entity_addrvec_t &get_cluster_addrs(int osd) const {
-    assert(exists(osd));
+    ceph_assert(exists(osd));
     return osd_addrs->cluster_addrs[osd] ?
       *osd_addrs->cluster_addrs[osd] : _blank_addrvec;
   }
   const entity_addrvec_t &get_hb_back_addrs(int osd) const {
-    assert(exists(osd));
+    ceph_assert(exists(osd));
     return osd_addrs->hb_back_addrs[osd] ?
       *osd_addrs->hb_back_addrs[osd] : _blank_addrvec;
   }
   const entity_addrvec_t &get_hb_front_addrs(int osd) const {
-    assert(exists(osd));
+    ceph_assert(exists(osd));
     return osd_addrs->hb_front_addrs[osd] ?
       *osd_addrs->hb_front_addrs[osd] : _blank_addrvec;
   }
 
   const uuid_d& get_uuid(int osd) const {
-    assert(exists(osd));
+    ceph_assert(exists(osd));
     return (*osd_uuid)[osd];
   }
 
   const epoch_t& get_up_from(int osd) const {
-    assert(exists(osd));
+    ceph_assert(exists(osd));
     return osd_info[osd].up_from;
   }
   const epoch_t& get_up_thru(int osd) const {
-    assert(exists(osd));
+    ceph_assert(exists(osd));
     return osd_info[osd].up_thru;
   }
   const epoch_t& get_down_at(int osd) const {
-    assert(exists(osd));
+    ceph_assert(exists(osd));
     return osd_info[osd].down_at;
   }
   const osd_info_t& get_info(int osd) const {
-    assert(osd < max_osd);
+    ceph_assert(osd < max_osd);
     return osd_info[osd];
   }
 
   const osd_xinfo_t& get_xinfo(int osd) const {
-    assert(osd < max_osd);
+    ceph_assert(osd < max_osd);
     return osd_xinfo[osd];
   }
   
@@ -1042,7 +1042,7 @@ public:
 			    const object_locator_t& loc) const {
     pg_t pg;
     int ret = object_locator_to_pg(oid, loc, pg);
-    assert(ret == 0);
+    ceph_assert(ret == 0);
     return pg;
   }
 
@@ -1062,7 +1062,7 @@ public:
   int get_pg_num(int pg_pool) const
   {
     const pg_pool_t *pool = get_pg_pool(pg_pool);
-    assert(NULL != pool);
+    ceph_assert(NULL != pool);
     return pool->get_pg_num();
   }
 
@@ -1076,7 +1076,7 @@ public:
       return -ENOENT;
     }
     const pg_pool_t *p = get_pg_pool(pgid.pool());
-    assert(p);
+    ceph_assert(p);
     return p->get_min_size();
   }
 
@@ -1085,7 +1085,7 @@ public:
       return -ENOENT;
     }
     const pg_pool_t *p = get_pg_pool(pgid.pool());
-    assert(p);
+    ceph_assert(p);
     return p->get_size();
   }
 
@@ -1094,7 +1094,7 @@ public:
       return -ENOENT;
     }
     const pg_pool_t *p = get_pg_pool(pgid.pool());
-    assert(p);
+    ceph_assert(p);
     return p->get_crush_rule();
   }
 
@@ -1172,7 +1172,7 @@ public:
   }
   bool pg_is_ec(pg_t pg) const {
     auto i = pools.find(pg.pool());
-    assert(i != pools.end());
+    ceph_assert(i != pools.end());
     return i->second.is_erasure();
   }
   bool get_primary_shard(const pg_t& pgid, spg_t *out) const {
@@ -1246,7 +1246,7 @@ public:
     return pools;
   }
   void get_pool_ids_by_rule(int rule_id, set<int64_t> *pool_ids) const {
-    assert(pool_ids);
+    ceph_assert(pool_ids);
     for (auto &p: pools) {
       if (p.second.get_crush_rule() == rule_id) {
         pool_ids->insert(p.first);
@@ -1258,7 +1258,7 @@ public:
                            set<int64_t> *pool_ids) const;
   const string& get_pool_name(int64_t p) const {
     auto i = pool_name.find(p);
-    assert(i != pool_name.end());
+    ceph_assert(i != pool_name.end());
     return i->second;
   }
   const mempool::osdmap::map<int64_t,string>& get_pool_names() const {
@@ -1275,19 +1275,19 @@ public:
   }
   unsigned get_pg_size(pg_t pg) const {
     auto p = pools.find(pg.pool());
-    assert(p != pools.end());
+    ceph_assert(p != pools.end());
     return p->second.get_size();
   }
   int get_pg_type(pg_t pg) const {
     auto p = pools.find(pg.pool());
-    assert(p != pools.end());
+    ceph_assert(p != pools.end());
     return p->second.get_type();
   }
 
 
   pg_t raw_pg_to_pg(pg_t pg) const {
     auto p = pools.find(pg.pool());
-    assert(p != pools.end());
+    ceph_assert(p != pools.end());
     return p->second.raw_pg_to_pg(pg);
   }
 

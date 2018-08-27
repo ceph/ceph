@@ -52,11 +52,11 @@ RefreshRequest<I>::RefreshRequest(I &image_ctx, bool acquiring_lock,
 template <typename I>
 RefreshRequest<I>::~RefreshRequest() {
   // these require state machine to close
-  assert(m_exclusive_lock == nullptr);
-  assert(m_object_map == nullptr);
-  assert(m_journal == nullptr);
-  assert(m_refresh_parent == nullptr);
-  assert(!m_blocked_writes);
+  ceph_assert(m_exclusive_lock == nullptr);
+  ceph_assert(m_object_map == nullptr);
+  ceph_assert(m_journal == nullptr);
+  ceph_assert(m_refresh_parent == nullptr);
+  ceph_assert(!m_blocked_writes);
 }
 
 template <typename I>
@@ -166,7 +166,7 @@ void RefreshRequest<I>::send_v1_read_header() {
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
                                          &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -223,7 +223,7 @@ void RefreshRequest<I>::send_v1_get_snapshots() {
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
                                          &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -277,7 +277,7 @@ void RefreshRequest<I>::send_v1_get_locks() {
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
                                          &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -352,7 +352,7 @@ void RefreshRequest<I>::send_v2_get_mutable_metadata() {
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
                                          &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -474,7 +474,7 @@ void RefreshRequest<I>::send_v2_get_flags() {
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
                                          &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -533,7 +533,7 @@ void RefreshRequest<I>::send_v2_get_op_features() {
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
                                          &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -572,7 +572,7 @@ void RefreshRequest<I>::send_v2_get_group() {
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
                                          &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -622,7 +622,7 @@ void RefreshRequest<I>::send_v2_get_snapshots() {
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
                                          &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -671,7 +671,7 @@ void RefreshRequest<I>::send_v2_get_snapshots_legacy() {
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
                                          &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -727,7 +727,7 @@ void RefreshRequest<I>::send_v2_get_snap_timestamps() {
   m_out_bl.clear();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
 				  &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -1055,7 +1055,7 @@ Context *RefreshRequest<I>::handle_v2_finalize_refresh_parent(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  assert(m_refresh_parent != nullptr);
+  ceph_assert(m_refresh_parent != nullptr);
   delete m_refresh_parent;
   m_refresh_parent = nullptr;
 
@@ -1093,10 +1093,10 @@ Context *RefreshRequest<I>::handle_v2_shut_down_exclusive_lock(int *result) {
 
   {
     RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
-    assert(m_image_ctx.exclusive_lock == nullptr);
+    ceph_assert(m_image_ctx.exclusive_lock == nullptr);
   }
 
-  assert(m_exclusive_lock != nullptr);
+  ceph_assert(m_exclusive_lock != nullptr);
   delete m_exclusive_lock;
   m_exclusive_lock = nullptr;
 
@@ -1131,11 +1131,11 @@ Context *RefreshRequest<I>::handle_v2_close_journal(int *result) {
                << dendl;
   }
 
-  assert(m_journal != nullptr);
+  ceph_assert(m_journal != nullptr);
   delete m_journal;
   m_journal = nullptr;
 
-  assert(m_blocked_writes);
+  ceph_assert(m_blocked_writes);
   m_blocked_writes = false;
 
   m_image_ctx.io_work_queue->unblock_writes();
@@ -1164,8 +1164,8 @@ Context *RefreshRequest<I>::handle_v2_close_object_map(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  assert(*result == 0);
-  assert(m_object_map != nullptr);
+  ceph_assert(*result == 0);
+  ceph_assert(m_object_map != nullptr);
   delete m_object_map;
   m_object_map = nullptr;
 
@@ -1340,11 +1340,11 @@ void RefreshRequest<I>::apply() {
                                    m_image_ctx.snap_lock)) {
       // disabling exclusive lock will automatically handle closing
       // object map and journaling
-      assert(m_exclusive_lock == nullptr);
+      ceph_assert(m_exclusive_lock == nullptr);
       m_exclusive_lock = m_image_ctx.exclusive_lock;
     } else {
       if (m_exclusive_lock != nullptr) {
-        assert(m_image_ctx.exclusive_lock == nullptr);
+        ceph_assert(m_image_ctx.exclusive_lock == nullptr);
         std::swap(m_exclusive_lock, m_image_ctx.exclusive_lock);
       }
       if (!m_image_ctx.test_features(RBD_FEATURE_JOURNALING,
@@ -1394,7 +1394,7 @@ bool RefreshRequest<I>::get_migration_info(ParentInfo *parent_md,
   if (m_migration_spec.header_type != cls::rbd::MIGRATION_HEADER_TYPE_DST ||
       (m_migration_spec.state != cls::rbd::MIGRATION_STATE_PREPARED &&
        m_migration_spec.state != cls::rbd::MIGRATION_STATE_EXECUTING)) {
-    assert(m_migration_spec.header_type == cls::rbd::MIGRATION_HEADER_TYPE_SRC ||
+    ceph_assert(m_migration_spec.header_type == cls::rbd::MIGRATION_HEADER_TYPE_SRC ||
            m_migration_spec.pool_id == -1 ||
            m_migration_spec.state == cls::rbd::MIGRATION_STATE_EXECUTED);
 
