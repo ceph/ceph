@@ -87,7 +87,7 @@ daemons that are not running::
 	  1   ssd 1.00000      osd.1              down  1.00000 1.00000
 
 .. tip:: The ability to search through a well-designed CRUSH hierarchy may help
-   you troubleshoot your cluster by identifying the physcial locations faster.
+   you troubleshoot your cluster by identifying the physical locations faster.
 
 If an OSD is ``down``, start it:: 
 

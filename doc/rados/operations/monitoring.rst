@@ -206,7 +206,7 @@ on the number of replicas, clones and snapshots.
 - **OBJECTS:** The notional number of objects stored per pool.
 
 .. note:: The numbers in the **POOLS** section are notional. They are not 
-   inclusive of the number of replicas, shapshots or clones. As a result, 
+   inclusive of the number of replicas, snapshots or clones. As a result, 
    the sum of the **USED** and **%USED** amounts will not add up to the 
    **RAW USED** and **%RAW USED** amounts in the **GLOBAL** section of the 
    output.
