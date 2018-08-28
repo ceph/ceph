@@ -337,27 +337,25 @@ ADMIN_AUID = 0
 
 class Error(Exception):
     """ `Error` class, derived from `Exception` """
-    pass
-
-
-class InvalidArgumentError(Error):
-    pass
-
-
-class OSError(Error):
-    """ `OSError` class, derived from `Error` """
     def __init__(self, message, errno=None):
-        super(OSError, self).__init__(message)
+        super(Exception, self).__init__(message)
         self.errno = errno
 
     def __str__(self):
-        msg = super(OSError, self).__str__()
+        msg = super(Exception, self).__str__()
         if self.errno is None:
             return msg
         return '[errno {0}] {1}'.format(self.errno, msg)
 
     def __reduce__(self):
         return (self.__class__, (self.message, self.errno))
+
+class InvalidArgumentError(Error):
+    pass
+
+class OSError(Error):
+    """ `OSError` class, derived from `Error` """
+    pass
 
 class InterruptedOrTimeoutError(OSError):
     """ `InterruptedOrTimeoutError` class, derived from `OSError` """
