@@ -1378,6 +1378,20 @@ TEST_F(LibRadosMiscECPP, CompareExtentRange) {
   ASSERT_EQ(0, ioctx.operate("foo", &read2, nullptr));
 }
 
+TEST_F(LibRadosMisc, MinCompatOSD) {
+  int8_t require_osd_release;
+  ASSERT_EQ(0, rados_get_min_compatible_osd(cluster, &require_osd_release));
+  ASSERT_LE(-1, require_osd_release);
+  ASSERT_GT(CEPH_RELEASE_MAX, require_osd_release);
+}
+
+TEST_F(LibRadosMiscPP, MinCompatOSD) {
+  int8_t require_osd_release;
+  ASSERT_EQ(0, cluster.get_min_compatible_osd(&require_osd_release));
+  ASSERT_LE(-1, require_osd_release);
+  ASSERT_GT(CEPH_RELEASE_MAX, require_osd_release);
+}
+
 TEST_F(LibRadosMisc, MinCompatClient) {
   int8_t min_compat_client;
   int8_t require_min_compat_client;
