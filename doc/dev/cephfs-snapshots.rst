@@ -125,7 +125,7 @@ snapshots on any linkage of the inode.
 
 Multi-FS
 ---------
-Snapshots and multiiple filesystems don't interact well. Specifically, each
+Snapshots and multiple filesystems don't interact well. Specifically, each
 MDS cluster allocates `snapids` independently; if you have multiple filesystems
 sharing a single pool (via namespaces), their snapshots *will* collide and
 deleting one will result in missing file data for others. (This may even be
