@@ -4301,7 +4301,7 @@ rgw::auth::s3::STSEngine::authenticate(
 
   STS::SessionToken token;
   if (int ret = get_session_token(session_token, token); ret < 0) {
-    return result_t::deny(ret);
+    return result_t::reject(ret);
   }
   //Authentication
   //Check if the token has expired
@@ -4313,11 +4313,11 @@ rgw::auth::s3::STSEngine::authenticate(
         real_clock::time_point now = real_clock::now();
         if (now >= *exp) {
           ldout(cct, 0) << "ERROR: Token expired" << dendl;
-          return result_t::deny(-EPERM);
+          return result_t::reject(-EPERM);
         }
       } else {
         ldout(cct, 0) << "ERROR: Invalid expiration: " << expiration << dendl;
-        return result_t::deny(-EPERM);
+        return result_t::reject(-EPERM);
       }
     }
   }
@@ -4334,7 +4334,7 @@ rgw::auth::s3::STSEngine::authenticate(
   ldout(cct, 15) << "compare=" << compare << dendl;
 
   if (compare != 0) {
-    return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
+    return result_t::reject(-ERR_SIGNATURE_NO_MATCH);
   }
 
   // Get all the authorization info
@@ -4359,7 +4359,7 @@ rgw::auth::s3::STSEngine::authenticate(
     int ret = rgw_get_user_info_by_uid(store, token.user, user_info, NULL);
     if (ret < 0) {
       ldout(cct, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
-      return result_t::deny(-EPERM);
+      return result_t::reject(-EPERM);
     }
   }
 
