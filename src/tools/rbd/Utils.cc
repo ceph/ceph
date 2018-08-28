@@ -665,6 +665,21 @@ int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
     return r;
   }
 
+  if (!namespace_name.empty()) {
+    librbd::RBD rbd;
+    bool exists = false;
+    r = rbd.namespace_exists(*io_ctx, namespace_name.c_str(), &exists);
+    if (r < 0) {
+      std::cerr << "rbd: error asserting namespace: "
+                << cpp_strerror(r) << std::endl;
+      return r;
+    }
+    if (!exists) {
+      std::cerr << "rbd: namespace '" << namespace_name << "' does not exist."
+                << std::endl;
+      return -ENOENT;
+    }
+  }
   io_ctx->set_namespace(namespace_name);
   return 0;
 }
