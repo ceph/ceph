@@ -252,4 +252,8 @@ bool CephxClientHandler<lp>::need_tickets()
 }
 
 // explicitly instantiate only the classes we need
+#ifdef WITH_SEASTAR
+template class CephxClientHandler<LockPolicy::SINGLE>;
+#else
 template class CephxClientHandler<LockPolicy::MUTEX>;
+#endif
