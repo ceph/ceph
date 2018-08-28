@@ -79,4 +79,8 @@ KeyRing *RotatingKeyRing<lp>::get_keyring()
 }
 
 // explicitly instantiate only the classes we need
+#ifdef WITH_SEASTAR
+template class RotatingKeyRing<LockPolicy::SINGLE>;
+#else
 template class RotatingKeyRing<LockPolicy::MUTEX>;
+#endif
