@@ -13,11 +13,10 @@ devices in an efficient way?
 The process is similar to :ref:`ceph-volume-lvm-create`, and will do the
 preparation and activation at once, following the same workflow for each OSD.
 
-..
-  All the features that ``ceph-volume lvm create`` supports, like ``dmcrypt``,
-  avoiding ``systemd`` units from starting, defining bluestore or filestore,
-  are supported. Any fine-grained option that may affect a single OSD is not
-  supported, for example: specifying where journals should be placed.
+All the features that ``ceph-volume lvm create`` supports, like ``dmcrypt``,
+avoiding ``systemd`` units from starting, defining bluestore or filestore,
+are supported. Any fine-grained option that may affect a single OSD is not
+supported, for example: specifying where journals should be placed.
 
 
 .. _ceph-volume-lvm-batch_bluestore:
