@@ -18,12 +18,19 @@
 
 #include <type_traits>
 
+#include "include/assert.h"
+#ifdef WITH_SEASTAR
+#include <seastar/util/log.hh>
+#include "crimson/common/log.h"
+#include "crimson/common/config_proxy.h"
+#else
 #include "global/global_context.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/likely.h"
 #include "common/Clock.h"
 #include "log/Log.h"
+#endif
 
 extern void dout_emergency(const char * const str);
 extern void dout_emergency(const std::string &str);
@@ -69,6 +76,31 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 // generic macros
 #define dout_prefix *_dout
 
+#ifdef WITH_SEASTAR
+#define dout_impl(cct, sub, v)                                          \
+  do {                                                                  \
+    if (ceph::common::local_conf()->subsys.should_gather(sub, v)) {     \
+      seastar::logger& _logger = ceph::get_logger(sub);                 \
+      const auto _lv = v;                                               \
+      std::ostringstream _out;                                          \
+      std::ostream* _dout = &_out;
+#define dendl_impl                              \
+     "";                                        \
+      const std::string _s = _out.str();        \
+      if (_lv < 0) {                            \
+        _logger.error(_s.c_str());              \
+      } else if (_lv < 1) {                     \
+        _logger.warn(_s.c_str());               \
+      } else if (_lv < 5) {                     \
+        _logger.info(_s.c_str());               \
+      } else if (_lv < 10) {                    \
+        _logger.debug(_s.c_str());              \
+      } else {                                  \
+        _logger.trace(_s.c_str());              \
+      }                                         \
+    }                                           \
+  } while (0)
+#else
 #define dout_impl(cct, sub, v)						\
   do {									\
   const bool should_gather = [&](const auto cctX) {			\
@@ -93,6 +125,12 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
     auto _dout_cct = cct;						\
     std::ostream* _dout = &_dout_e->get_ostream();
 
+#define dendl_impl std::flush;				\
+    _dout_cct->_log->submit_entry(_dout_e);		\
+  }							\
+  } while (0)
+#endif	// WITH_SEASTAR
+
 #define lsubdout(cct, sub, v)  dout_impl(cct, ceph_subsys_##sub, v) dout_prefix
 #define ldout(cct, v)  dout_impl(cct, dout_subsys, v) dout_prefix
 #define lderr(cct) dout_impl(cct, ceph_subsys_, -1) dout_prefix
@@ -108,11 +146,6 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 
 #define ldlog_p1(cct, sub, lvl)                 \
   (cct->_conf->subsys.should_gather((sub), (lvl)))
-
-#define dendl_impl std::flush;				\
-  _dout_cct->_log->submit_entry(_dout_e);		\
-    }						\
-  } while (0)
 
 #define dendl dendl_impl
 
