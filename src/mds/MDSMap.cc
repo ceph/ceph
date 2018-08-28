@@ -875,12 +875,12 @@ bool MDSMap::state_transition_valid(DaemonState prev, DaemonState next)
         state_valid = false;
       }
     } else if (prev == MDSMap::STATE_REJOIN) {
-      if (next != MDSMap::STATE_ACTIVE
-          && next != MDSMap::STATE_CLIENTREPLAY
-          && next != MDSMap::STATE_STOPPED) {
+      if (next != MDSMap::STATE_ACTIVE &&
+	  next != MDSMap::STATE_CLIENTREPLAY &&
+	  next != MDSMap::STATE_STOPPED) {
         state_valid = false;
       }
-    } else if (prev >= MDSMap::STATE_RECONNECT && prev < MDSMap::STATE_ACTIVE) {
+    } else if (prev >= MDSMap::STATE_RESOLVE && prev < MDSMap::STATE_ACTIVE) {
       // Once I have entered replay, the only allowable transitions are to
       // the next next along in the sequence.
       if (next != prev + 1) {
