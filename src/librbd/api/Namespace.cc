@@ -50,7 +50,7 @@ int Namespace<I>::create(librados::IoCtx& io_ctx, const std::string& name)
 rollback:
   int ret_val = cls_client::namespace_remove(&default_ns_ctx, name);
   if (ret_val < 0) {
-    lderr(cct) << "failed to remove namespace: " << cpp_strerror(r) << dendl;
+    lderr(cct) << "failed to remove namespace: " << cpp_strerror(ret_val) << dendl;
   }
 
   return r;
