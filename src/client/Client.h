@@ -762,7 +762,7 @@ private:
   int _release_fh(Fh *fh);
   void _put_fh(Fh *fh);
 
-  int _do_remount(void);
+  int _do_remount(bool retry_on_error);
 
   struct C_Readahead : public Context {
     Client *client;
@@ -1255,6 +1255,9 @@ public:
   uint32_t get_deleg_timeout() { return deleg_timeout; }
   int set_deleg_timeout(uint32_t timeout);
   int ll_delegation(Fh *fh, unsigned cmd, ceph_deleg_cb_t cb, void *priv);
+
+private:
+  uint64_t retries_on_invalidate = 0;
 };
 
 /**
