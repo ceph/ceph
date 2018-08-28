@@ -16,6 +16,7 @@
 
 #include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <shared_mutex> // for std::shared_lock
 
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
