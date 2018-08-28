@@ -15,6 +15,7 @@
 #ifndef CEPH_MON_SESSION_H
 #define CEPH_MON_SESSION_H
 
+#include "global/global_context.h"
 #include "include/xlist.h"
 #include "msg/msg_types.h"
 #include "mon/mon_types.h"
