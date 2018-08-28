@@ -98,6 +98,22 @@ int RGWSI_SysObj::Obj::WOp::write(bufferlist& bl)
                     bl, objv_tracker, mtime);
 }
 
+int RGWSI_SysObj::Obj::WOp::write_data(bufferlist& bl)
+{
+  RGWSI_SysObj_Core *svc = source.core_svc;
+  rgw_raw_obj& obj = source.get_obj();
+
+  return svc->write_data(obj, bl, exclusive, objv_tracker);
+}
+
+int RGWSI_SysObj::Obj::WOp::write_attrs()
+{
+  RGWSI_SysObj_Core *svc = source.core_svc;
+  rgw_raw_obj& obj = source.get_obj();
+
+  return svc->set_attrs(obj, attrs, objv_tracker);
+}
+
 int RGWSI_SysObj::Pool::Op::list_prefixed_objs(const string& prefix, list<string> *result)
 {
   bool is_truncated;
