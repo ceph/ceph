@@ -36,10 +36,35 @@ on the input of devices:
 .. note:: Although operations in ``ceph-volume lvm create`` allow usage of
           ``block.wal`` it isn't supported with the ``batch`` sub-command
 
+
+.. _ceph-volume-lvm-batch_filestore:
+
+``filestore``
+-------------
+The :term:`filestore` objectstore can be used when creating multiple OSDs
+with the ``batch`` sub-command. It allows two different scenarios depending
+on the input of devices:
+
+#. Devices are all the same type (for example all spinning HDD or all SSDs):
+   1 OSD is created per device, collocating the journal in the same HDD.
+#. Devices are a mix of HDDS and SSDs: data is placed on the spinning device,
+   while the journal is created on the SSD using the sizing options from
+   ceph.conf and falling back to the default journal size of 5GB.
+
+
+When a mix of solid and spinning devices are used, ``ceph-volume`` will try to
+detect existing volume groups on the solid devices. If a VG is found, it will
+try to create the logical volume from there, otherwise raising an error if
+space is insufficient.
+
+If a raw solid device is used along with a device that has a volume group in
+addition to some spinning devices, ``ceph-volume`` will try to extend the
+existing volume group and then create a logical volume.
+
 .. _ceph-volume-lvm-batch_report:
 
 Reporting
----------
+=========
 When a call is received to create OSDs, the tool will prompt the user to
 continue if the pre-computed output is acceptable. This output is useful to
 understand the outcome of the received devices. Once confirmation is accepted,
