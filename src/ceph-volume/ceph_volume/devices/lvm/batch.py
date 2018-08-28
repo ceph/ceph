@@ -15,7 +15,7 @@ def device_formatter(devices):
     for path, details in devices:
         lines.append(device_list_template.format(
             path=path, size=details['human_readable_size'],
-            state='solid' if details.sys_api['rotational'] == '0' else 'rotational')
+            state='solid' if details['rotational'] == '0' else 'rotational')
         )
 
     return ''.join(lines)
