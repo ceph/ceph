@@ -42,8 +42,8 @@ test_others() {
     rbd export testimg1 /tmp/img3
 
     # info
-    rbd info testimg1 | grep 'size 128 MB'
-    rbd info --snap=snap1 testimg1 | grep 'size 256 MB'
+    rbd info testimg1 | grep 'size 128MiB'
+    rbd info --snap=snap1 testimg1 | grep 'size 256MiB'
 
     # export-diff
     rm -rf /tmp/diff-testimg1-1 /tmp/diff-testimg1-2
@@ -56,10 +56,10 @@ test_others() {
     rbd import-diff --sparse-size 8K /tmp/diff-testimg1-2 testimg-diff1
 
     # info
-    rbd info testimg1 | grep 'size 128 MB'
-    rbd info --snap=snap1 testimg1 | grep 'size 256 MB'
-    rbd info testimg-diff1 | grep 'size 128 MB'
-    rbd info --snap=snap1 testimg-diff1 | grep 'size 256 MB'
+    rbd info testimg1 | grep 'size 128MiB'
+    rbd info --snap=snap1 testimg1 | grep 'size 256MiB'
+    rbd info testimg-diff1 | grep 'size 128MiB'
+    rbd info --snap=snap1 testimg-diff1 | grep 'size 256MiB'
 
     # make copies
     rbd copy testimg1 --snap=snap1 testimg2
@@ -68,10 +68,10 @@ test_others() {
     rbd copy testimg-diff1 --sparse-size 768K testimg-diff3
 
     # verify the result
-    rbd info testimg2 | grep 'size 256 MB'
-    rbd info testimg3 | grep 'size 128 MB'
-    rbd info testimg-diff2 | grep 'size 256 MB'
-    rbd info testimg-diff3 | grep 'size 128 MB'
+    rbd info testimg2 | grep 'size 256MiB'
+    rbd info testimg3 | grep 'size 128MiB'
+    rbd info testimg-diff2 | grep 'size 256MiB'
+    rbd info testimg-diff3 | grep 'size 128MiB'
 
     rbd export testimg1 /tmp/img1.new
     rbd export testimg2 /tmp/img2.new
@@ -88,8 +88,8 @@ test_others() {
     # rollback
     rbd snap rollback --snap=snap1 testimg1
     rbd snap rollback --snap=snap1 testimg-diff1
-    rbd info testimg1 | grep 'size 256 MB'
-    rbd info testimg-diff1 | grep 'size 256 MB'
+    rbd info testimg1 | grep 'size 256MiB'
+    rbd info testimg-diff1 | grep 'size 256MiB'
     rbd export testimg1 /tmp/img1.snap1
     rbd export testimg-diff1 /tmp/img-diff1.snap1
     cmp /tmp/img2 /tmp/img1.snap1
@@ -147,8 +147,8 @@ test_ls() {
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
     # look for fields in output of ls -l without worrying about space
-    rbd ls -l | grep 'test1.*1024k.*1'
-    rbd ls -l | grep 'test2.*1024k.*1'
+    rbd ls -l | grep 'test1.*1MiB.*1'
+    rbd ls -l | grep 'test2.*1MiB.*1'
 
     rbd rm test1
     rbd rm test2
@@ -158,8 +158,8 @@ test_ls() {
     rbd ls | grep test1
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
-    rbd ls -l | grep 'test1.*1024k.*2'
-    rbd ls -l | grep 'test2.*1024k.*2'
+    rbd ls -l | grep 'test1.*1MiB.*2'
+    rbd ls -l | grep 'test2.*1MiB.*2'
 
     rbd rm test1
     rbd rm test2
@@ -169,8 +169,8 @@ test_ls() {
     rbd ls | grep test1
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
-    rbd ls -l | grep 'test1.*1024k.*2'
-    rbd ls -l | grep 'test2.*1024k.*1'
+    rbd ls -l | grep 'test1.*1MiB.*2'
+    rbd ls -l | grep 'test2.*1MiB.*1'
     remove_images
 	
     # test that many images can be shown by ls

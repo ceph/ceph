@@ -56,8 +56,8 @@ TODO: figure out why .* does not match the block_name_prefix line in rbd info.
 For now, use a more inclusive regex.
   $ rbd info foo
   rbd image 'foo':
-  \tsize 1024 MB in 256 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize 1GiB in 256 objects (esc)
+  \torder 22 (4MiB objects) (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   $ rbd info foo --format json | python -mjson.tool | sed 's/,$/, /'
@@ -84,8 +84,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info foo@snap
   rbd image 'foo':
-  \tsize 1024 MB in 256 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize 1GiB in 256 objects (esc)
+  \torder 22 (4MiB objects) (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   \tprotected: False (esc)
@@ -113,8 +113,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info bar
   rbd image 'bar':
-  \tsize 1024 MB in 256 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize 1GiB in 256 objects (esc)
+  \torder 22 (4MiB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
@@ -160,8 +160,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info bar@snap
   rbd image 'bar':
-  \tsize 512 MB in 128 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize 512MiB in 128 objects (esc)
+  \torder 22 (4MiB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
@@ -210,8 +210,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info bar@snap2
   rbd image 'bar':
-  \tsize 1024 MB in 256 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize 1GiB in 256 objects (esc)
+  \torder 22 (4MiB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
@@ -260,8 +260,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info baz
   rbd image 'baz':
-  \tsize 2048 MB in 512 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize 2GiB in 512 objects (esc)
+  \torder 22 (4MiB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering (esc)
@@ -299,8 +299,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info quux
   rbd image 'quux':
-  \tsize 1024 kB in 1 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize 1MiB in 1 objects (esc)
+  \torder 22 (4MiB objects) (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   $ rbd info quux --format json | python -mjson.tool | sed 's/,$/, /'
@@ -325,8 +325,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info rbd_other/child
   rbd image 'child':
-  \tsize 512 MB in 128 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize 512MiB in 128 objects (esc)
+  \torder 22 (4MiB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff (esc)
@@ -370,8 +370,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info rbd_other/child@snap
   rbd image 'child':
-  \tsize 512 MB in 128 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize 512MiB in 128 objects (esc)
+  \torder 22 (4MiB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff (esc)
@@ -379,7 +379,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \tcreate_timestamp:* (glob)
   \tprotected: False (esc)
   \tparent: rbd/bar@snap (esc)
-  \toverlap: 512 MB (esc)
+  \toverlap: 512MiB (esc)
   $ rbd info rbd_other/child@snap --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
@@ -432,8 +432,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info rbd_other/deep-flatten-child
   rbd image 'deep-flatten-child':
-  \tsize 512 MB in 128 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize 512MiB in 128 objects (esc)
+  \torder 22 (4MiB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
@@ -479,8 +479,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info rbd_other/deep-flatten-child@snap
   rbd image 'deep-flatten-child':
-  \tsize 512 MB in 128 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize 512MiB in 128 objects (esc)
+  \torder 22 (4MiB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
@@ -550,15 +550,15 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <name>quuy</name>
   </images>
   $ rbd list -l
-  NAME       SIZE PARENT FMT PROT LOCK 
-  foo       1024M          1           
-  foo@snap  1024M          1           
-  quux      1024k          1      excl 
-  bar       1024M          2           
-  bar@snap   512M          2 yes       
-  bar@snap2 1024M          2           
-  baz       2048M          2      shr  
-  quuy      2048M          2           
+  NAME        SIZE PARENT FMT PROT LOCK 
+  foo         1GiB          1           
+  foo@snap    1GiB          1           
+  quux        1MiB          1      excl 
+  bar         1GiB          2           
+  bar@snap  512MiB          2 yes       
+  bar@snap2   1GiB          2           
+  baz         2GiB          2      shr  
+  quuy        2GiB          2           
   $ rbd list -l --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
@@ -675,11 +675,11 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <name>deep-flatten-child</name>
   </images>
   $ rbd list rbd_other -l
-  NAME                    SIZE PARENT       FMT PROT LOCK 
-  child                   512M                2           
-  child@snap              512M rbd/bar@snap   2           
-  deep-flatten-child      512M                2           
-  deep-flatten-child@snap 512M                2           
+  NAME                      SIZE PARENT       FMT PROT LOCK 
+  child                   512MiB                2           
+  child@snap              512MiB rbd/bar@snap   2           
+  deep-flatten-child      512MiB                2           
+  deep-flatten-child@snap 512MiB                2           
   $ rbd list rbd_other -l --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
@@ -805,8 +805,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </id*> (glob)
   </locks>
   $ rbd snap list foo
-  SNAPID NAME    SIZE TIMESTAMP 
-      *snap*1024*MB* (glob)
+  SNAPID NAME SIZE TIMESTAMP 
+      *snap*1GiB* (glob)
   $ rbd snap list foo --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
@@ -826,9 +826,9 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </snapshot>
   </snapshots>
   $ rbd snap list bar
-  SNAPID NAME     SIZE TIMESTAMP                
-      *snap*512*MB* (glob)
-      *snap2*1024*MB* (glob)
+  SNAPID NAME    SIZE TIMESTAMP                
+      *snap*512MiB* (glob)
+      *snap2*1GiB* (glob)
   $ rbd snap list bar --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
@@ -866,7 +866,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   <snapshots></snapshots>
   $ rbd snap list rbd_other/child
   SNAPID NAME   SIZE TIMESTAMP                
-      *snap*512*MB* (glob)
+      *snap*512MiB* (glob)
   $ rbd snap list rbd_other/child --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
@@ -886,12 +886,12 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </snapshot>
   </snapshots>
   $ rbd disk-usage --pool rbd_other 2>/dev/null
-  NAME                    PROVISIONED  USED 
-  child@snap                     512M     0 
-  child                          512M 4096k 
-  deep-flatten-child@snap        512M     0 
-  deep-flatten-child             512M     0 
-  <TOTAL>                       1024M 4096k 
+  NAME                    PROVISIONED USED 
+  child@snap                   512MiB   0B 
+  child                        512MiB 4MiB 
+  deep-flatten-child@snap      512MiB   0B 
+  deep-flatten-child           512MiB   0B 
+  <TOTAL>                        1GiB 4MiB 
   $ rbd disk-usage --pool rbd_other --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "images": [

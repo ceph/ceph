@@ -163,7 +163,7 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
               << info.num_objs << " objects"
               << std::endl
               << "\torder " << info.order
-              << " (" << si_u_t(info.obj_size) << " objects)"
+              << " (" << byte_u_t(info.obj_size) << " objects)"
               << std::endl;
     if (!data_pool.empty()) {
       std::cout << "\tdata_pool: " << data_pool << std::endl;
