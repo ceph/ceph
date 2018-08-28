@@ -6849,9 +6849,9 @@ OSDService::ScrubJob::ScrubJob(CephContext* cct,
 }
 
 bool OSDService::ScrubJob::ScrubJob::operator<(const OSDService::ScrubJob& rhs) const {
-  if (sched_time < rhs.sched_time)
+  if (sched_time < rhs.sched_time && pgid < rhs.pgid)
     return true;
-  if (sched_time > rhs.sched_time)
+  if (sched_time > rhs.sched_time && pgid > rhs.pgid)
     return false;
   return pgid < rhs.pgid;
 }
