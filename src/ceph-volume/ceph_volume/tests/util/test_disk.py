@@ -1,4 +1,5 @@
 import os
+import pytest
 from ceph_volume.util import disk
 
 
@@ -288,3 +289,202 @@ class TestGetDevices(object):
             _dev_path=dev_path,
             _mapper_path=mapper_path)
         assert result[dev_sda_path]['rotational'] == '1'
+
+
+class TestSizeCalculations(object):
+
+    @pytest.mark.parametrize('aliases', [
+        ('b', 'bytes'),
+        ('kb', 'kilobytes'),
+        ('mb', 'megabytes'),
+        ('gb', 'gigabytes'),
+        ('tb', 'terabytes'),
+    ])
+    def test_aliases(self, aliases):
+        short_alias, long_alias = aliases
+        s = disk.Size(b=1)
+        short_alias = getattr(s, short_alias)
+        long_alias = getattr(s, long_alias)
+        assert short_alias == long_alias
+
+    @pytest.mark.parametrize('values', [
+        ('b', 857619069665.28),
+        ('kb', 837518622.72),
+        ('mb', 817889.28),
+        ('gb', 798.72),
+        ('tb', 0.78),
+    ])
+    def test_terabytes(self, values):
+        # regardless of the input value, all the other values correlate to each
+        # other the same, every time
+        unit, value = values
+        s = disk.Size(**{unit: value})
+        assert s.b == 857619069665.28
+        assert s.kb == 837518622.72
+        assert s.mb == 817889.28
+        assert s.gb == 798.72
+        assert s.tb == 0.78
+
+
+class TestSizeOperators(object):
+
+    @pytest.mark.parametrize('larger', [1025, 1024.1, 1024.001])
+    def test_gigabytes_is_smaller(self, larger):
+        assert disk.Size(gb=1) < disk.Size(mb=larger)
+
+    @pytest.mark.parametrize('smaller', [1023, 1023.9, 1023.001])
+    def test_gigabytes_is_larger(self, smaller):
+        assert disk.Size(gb=1) > disk.Size(mb=smaller)
+
+    @pytest.mark.parametrize('larger', [1025, 1024.1, 1024.001, 1024])
+    def test_gigabytes_is_smaller_or_equal(self, larger):
+        assert disk.Size(gb=1) <= disk.Size(mb=larger)
+
+    @pytest.mark.parametrize('smaller', [1023, 1023.9, 1023.001, 1024])
+    def test_gigabytes_is_larger_or_equal(self, smaller):
+        assert disk.Size(gb=1) >= disk.Size(mb=smaller)
+
+    @pytest.mark.parametrize('values', [
+        ('b', 857619069665.28),
+        ('kb', 837518622.72),
+        ('mb', 817889.28),
+        ('gb', 798.72),
+        ('tb', 0.78),
+    ])
+    def test_equality(self, values):
+        unit, value = values
+        s = disk.Size(**{unit: value})
+        # both tb and b, since b is always calculated regardless, and is useful
+        # when testing tb
+        assert disk.Size(tb=0.78) == s
+        assert disk.Size(b=857619069665.28) == s
+
+    @pytest.mark.parametrize('values', [
+        ('b', 857619069665.28),
+        ('kb', 837518622.72),
+        ('mb', 817889.28),
+        ('gb', 798.72),
+        ('tb', 0.78),
+    ])
+    def test_inequality(self, values):
+        unit, value = values
+        s = disk.Size(**{unit: value})
+        # both tb and b, since b is always calculated regardless, and is useful
+        # when testing tb
+        assert disk.Size(tb=1) != s
+        assert disk.Size(b=100) != s
+
+
+class TestSizeOperations(object):
+
+    def test_assignment_addition_with_size_objects(self):
+        result = disk.Size(mb=256) + disk.Size(gb=1)
+        assert result.gb == 1.25
+
+    def test_self_addition_with_size_objects(self):
+        base = disk.Size(mb=256)
+        base + disk.Size(gb=1)
+        assert base.gb == 1.25
+
+    def test_addition_with_non_size_objects(self):
+        with pytest.raises(TypeError):
+            disk.Size(mb=100) + 4
+
+    def test_assignment_subtraction_with_size_objects(self):
+        base = disk.Size(gb=1)
+        base - disk.Size(mb=256)
+        assert base.mb == 768
+
+    def test_subtraction_with_size_objects(self):
+        result = disk.Size(gb=1) - disk.Size(mb=256)
+        assert result.mb == 768
+
+    def test_subtraction_with_non_size_objects(self):
+        with pytest.raises(TypeError):
+            disk.Size(mb=100) - 4
+
+    def test_multiplication_with_size_objects(self):
+        with pytest.raises(TypeError):
+            disk.Size(mb=100) * disk.Size(mb=1)
+
+    def test_multiplication_with_non_size_objects(self):
+        base = disk.Size(gb=1)
+        base * 2
+        assert base.gb == 2
+
+    def test_division_with_size_objects(self):
+        with pytest.raises(TypeError):
+            disk.Size(gb=1) * disk.Size(mb=1)
+
+    def test_division_with_non_size_objects(self):
+        base = disk.Size(gb=1)
+        base / 2
+        assert base.mb == 512
+
+
+class TestSizeAttributes(object):
+
+    def test_attribute_does_not_exist(self):
+        with pytest.raises(AttributeError):
+            disk.Size(mb=1).exabytes
+
+
+class TestSizeFormatting(object):
+
+    def test_default_formatting_tb_to_b(self):
+        size = disk.Size(tb=0.0000000001)
+        result = "%s" % size
+        assert result == "109.95 B"
+
+    def test_default_formatting_tb_to_kb(self):
+        size = disk.Size(tb=0.00000001)
+        result = "%s" % size
+        assert result == "10.74 KB"
+
+    def test_default_formatting_tb_to_mb(self):
+        size = disk.Size(tb=0.000001)
+        result = "%s" % size
+        assert result == "1.05 MB"
+
+    def test_default_formatting_tb_to_gb(self):
+        size = disk.Size(tb=0.001)
+        result = "%s" % size
+        assert result == "1.02 GB"
+
+    def test_default_formatting_tb_to_tb(self):
+        size = disk.Size(tb=10)
+        result = "%s" % size
+        assert result == "10.00 TB"
+
+
+class TestSizeSpecificFormatting(object):
+
+    def test_formatting_b(self):
+        size = disk.Size(b=2048)
+        result = "%s" % size.b
+        assert "%s" % size.b == "%s" % size.bytes
+        assert result == "2048.00 B"
+
+    def test_formatting_kb(self):
+        size = disk.Size(kb=5700)
+        result = "%s" % size.kb
+        assert "%s" % size.kb == "%s" % size.kilobytes
+        assert result == "5700.00 KB"
+
+    def test_formatting_mb(self):
+        size = disk.Size(mb=4000)
+        result = "%s" % size.mb
+        assert "%s" % size.mb == "%s" % size.megabytes
+        assert result == "4000.00 MB"
+
+    def test_formatting_gb(self):
+        size = disk.Size(gb=77777)
+        result = "%s" % size.gb
+        assert "%s" % size.gb == "%s" % size.gigabytes
+        assert result == "77777.00 GB"
+
+    def test_formatting_tb(self):
+        size = disk.Size(tb=1027)
+        result = "%s" % size.tb
+        assert "%s" % size.tb == "%s" % size.terabytes
+        assert result == "1027.00 TB"

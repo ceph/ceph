@@ -1,7 +1,6 @@
 from __future__ import print_function
 import json
 import logging
-import uuid
 from textwrap import dedent
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import encryption as encryption_utils
@@ -192,12 +191,11 @@ class Prepare(object):
         """
         if disk.is_partition(arg) or disk.is_device(arg):
             # we must create a vg, and then a single lv
-            vg_name = "ceph-%s" % str(uuid.uuid4())
-            api.create_vg(vg_name, arg)
+            vg = api.create_vg(arg)
             lv_name = "osd-%s-%s" % (device_type, osd_fsid)
             return api.create_lv(
                 lv_name,
-                vg_name,  # the volume group
+                vg.name,  # the volume group
                 tags={'ceph.type': device_type})
         else:
             error = [
