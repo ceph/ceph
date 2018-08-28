@@ -1158,7 +1158,6 @@ class RGWDataSyncShardCR : public RGWCoroutine {
 
   std::string next_marker;
   list<rgw_data_change_log_entry> log_entries;
-  list<rgw_data_change_log_entry>::iterator log_iter;
   bool truncated;
 
   ceph::mutex inc_lock = ceph::make_mutex("RGWDataSyncShardCR::inc_lock");
@@ -1170,8 +1169,6 @@ class RGWDataSyncShardCR : public RGWCoroutine {
 
   set<string> modified_shards;
   set<string> current_modified;
-
-  set<string>::iterator modified_iter;
 
   int total_entries;
 
@@ -1403,42 +1400,63 @@ public:
           drain_all();
           return set_cr_error(-ECANCELED);
         }
+        // collect new async notifications
         current_modified.clear();
         inc_lock.lock();
         current_modified.swap(modified_shards);
         inc_lock.unlock();
 
-        if (current_modified.size() > 0) {
-          tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
-        }
-        /* process out of band updates */
-        for (modified_iter = current_modified.begin(); modified_iter != current_modified.end(); ++modified_iter) {
-          marker_handle = marker_tracker->start(*modified_iter);
-          if (!marker_handle) {
-            tn->log(20, SSTR("skipping async update on " << *modified_iter << ", already in progress"));
-          } else {
-            tn->log(20, SSTR("async update notification: " << *modified_iter));
-            spawn(new RGWDataSyncSingleEntryCR(sync_env, *modified_iter, marker_tracker, marker_handle, error_repo, false, tn), false);
-          }
-        }
-
         if (error_retry_time <= ceph::coarse_real_clock::now()) {
-          /* process bucket shards that previously failed */
+          // read bucket shards that previously failed
           omapkeys = std::make_shared<RGWRadosGetOmapKeysCR::Result>();
           yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, error_oid),
                                                error_marker, max_error_entries, omapkeys));
+          // ignore errors from RGWRadosGetOmapKeysCR
           error_entries = std::move(omapkeys->entries);
-          tn->log(20, SSTR("read error repo, got " << error_entries.size() << " entries"));
-          iter = error_entries.begin();
-          for (; iter != error_entries.end(); ++iter) {
-            error_marker = *iter;
-            marker_handle = marker_tracker->start(error_marker);
+        }
+
+        // read changed buckets from the remote datalog
+        tn->log(20, SSTR("shard_id=" << shard_id << " sync_marker=" << sync_marker.marker
+                         << " error_entries=" << error_entries.size()
+                         << " notifications=" << current_modified.size()));
+        yield call(new RGWReadRemoteDataLogShardCR(sync_env, shard_id, sync_marker.marker,
+                                                   &next_marker, &log_entries, &truncated));
+        if (retcode < 0 && retcode != -ENOENT) {
+          tn->log(0, SSTR("ERROR: failed to read remote data log info: ret=" << retcode));
+          stop_spawned_services();
+          drain_all();
+          return set_cr_error(retcode);
+        }
+
+        if (current_modified.size() > 0 || log_entries.size() > 0) {
+          tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
+        }
+
+        // spawn all bucket sync coroutines without yielding, so that duplicates
+        // don't force a retry in RGWDataSyncSingleEntryCR
+
+        /* process out of band updates */
+        for (const auto& key : current_modified) {
+          marker_handle = marker_tracker->start(key);
+          if (!marker_handle) {
+            tn->log(20, SSTR("skipping async update on " << key << ", already in progress"));
+          } else {
+            tn->log(20, SSTR("async update notification: " << key));
+            spawn(new RGWDataSyncSingleEntryCR(sync_env, key, marker_tracker, marker_handle, error_repo, false, tn), false);
+          }
+        }
+
+        if (omapkeys) {
+          /* process bucket shards that previously failed */
+          for (const auto& key : error_entries) {
+            marker_handle = marker_tracker->start(key);
             if (!marker_handle) {
-              tn->log(20, SSTR("skipping error entry " << error_marker << ", already in progress"));
+              tn->log(20, SSTR("skipping error entry " << key << ", already in progress"));
             } else {
-              tn->log(20, SSTR("handle error entry: " << error_marker));
-              spawn(new RGWDataSyncSingleEntryCR(sync_env, error_marker, marker_tracker, marker_handle, error_repo, true, tn), false);
+              tn->log(20, SSTR("handle error entry: " << key));
+              spawn(new RGWDataSyncSingleEntryCR(sync_env, key, marker_tracker, marker_handle, error_repo, true, tn), false);
             }
+            error_marker = key;
           }
           if (!omapkeys->more) {
             if (error_marker.empty() && error_entries.empty()) {
@@ -1453,34 +1471,19 @@ public:
             error_retry_time = ceph::coarse_real_clock::now() + make_timespan(retry_backoff_secs);
             error_marker.clear();
           }
-        }
-        omapkeys.reset();
-
-#define INCREMENTAL_MAX_ENTRIES 100
-        tn->log(20, SSTR("shard_id=" << shard_id << " sync_marker=" << sync_marker.marker));
-        yield call(new RGWReadRemoteDataLogShardCR(sync_env, shard_id, sync_marker.marker,
-                                                   &next_marker, &log_entries, &truncated));
-        if (retcode < 0 && retcode != -ENOENT) {
-          tn->log(0, SSTR("ERROR: failed to read remote data log info: ret=" << retcode));
-          stop_spawned_services();
-          drain_all();
-          return set_cr_error(retcode);
+          omapkeys.reset();
         }
 
-        if (log_entries.size() > 0) {
-          tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
-        }
-
-        for (log_iter = log_entries.begin(); log_iter != log_entries.end(); ++log_iter) {
-          tn->log(20, SSTR("shard_id=" << shard_id << " log_entry: " << log_iter->log_id << ":" << log_iter->log_timestamp << ":" << log_iter->entry.key));
-          marker_handle = marker_tracker->start(log_iter->entry.key, log_iter->log_id,
-                                                0, log_iter->log_timestamp);
+        for (const auto& e : log_entries) {
+          tn->log(20, SSTR("shard_id=" << shard_id << " log_entry: " << e.log_id << ":" << e.log_timestamp << ":" << e.entry.key));
+          marker_handle = marker_tracker->start(e.entry.key, e.log_id, 0, e.log_timestamp);
           if (!marker_handle) {
-            tn->log(20, SSTR("skipping sync of entry: " << log_iter->log_id << ":" << log_iter->entry.key << " sync already in progress for bucket shard"));
+            tn->log(20, SSTR("skipping sync of entry: " << e.log_id << ":" << e.entry.key << " sync already in progress for bucket shard"));
           } else {
-            spawn(new RGWDataSyncSingleEntryCR(sync_env, log_iter->entry.key, marker_tracker, marker_handle, error_repo, false, tn), false);
+            spawn(new RGWDataSyncSingleEntryCR(sync_env, e.entry.key, marker_tracker, marker_handle, error_repo, false, tn), false);
           }
         }
+
         while ((int)num_spawned() > spawn_window) {
           set_status() << "num_spawned() > spawn_window";
           yield wait_for_child();
