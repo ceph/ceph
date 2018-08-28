@@ -1256,7 +1256,7 @@ int MonConnection::_negotiate(MAuthReply *m,
   }
 
   auth.reset(
-    AuthClientHandler<LockPolicy::MUTEX>::create(cct,m->protocol, keyring));
+    AuthClientHandler::create(cct,m->protocol, keyring));
   if (!auth) {
     ldout(cct, 10) << "no handler for protocol " << m->protocol << dendl;
     if (m->result == -ENOTSUP) {
