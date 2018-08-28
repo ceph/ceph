@@ -6493,6 +6493,9 @@ std::vector<Option> get_mds_options() {
     .set_default(0)
     .set_description(""),
 
+    Option("mds_max_retries_on_remount_failure", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+     .set_default(5)
+     .set_description("number of consecutive failed remount attempts for invalidating kernel dcache after which client would abort."),
   });
 }
 
