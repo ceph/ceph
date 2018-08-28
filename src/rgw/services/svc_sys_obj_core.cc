@@ -279,6 +279,53 @@ int RGWSI_SysObj_Core::get_attr(rgw_raw_obj& obj,
   return 0;
 }
 
+int RGWSI_SysObj_Core::set_attrs(rgw_raw_obj& obj, 
+                                 map<string, bufferlist>& attrs,
+                                 RGWObjVersionTracker *objv_tracker) 
+{
+  RGWSI_RADOS::Obj rados_obj;
+  int r = get_rados_obj(zone_svc.get(), obj, &rados_obj);
+  if (r < 0) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
+    return r;
+  }
+
+  ObjectWriteOperation op;
+
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_write(&op);
+  }
+
+  map<string, bufferlist>::iterator iter;
+  if (rmattrs) {
+    for (iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
+      const string& name = iter->first;
+      op.rmxattr(name.c_str());
+    }
+  }
+
+  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    const string& name = iter->first;
+    bufferlist& bl = iter->second;
+
+    if (!bl.length())
+      continue;
+
+    op.setxattr(name.c_str(), bl);
+  }
+
+  if (!op.size())
+    return 0;
+
+  bufferlist bl;
+
+  r = rados_obj.operate(&op);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
 int RGWSI_SysObj_Core::omap_get_vals(rgw_raw_obj& obj,
                                      const string& marker,
                                      uint64_t count,
@@ -502,4 +549,40 @@ int RGWSI_SysObj_Core::write(rgw_raw_obj& obj,
   return 0;
 }
 
+
+int RGWSI_SysObj_Core::write_data(rgw_raw_obj& obj,
+                                  const bufferlist& bl,
+                                  bool exclusive,
+                                  RGWObjVersionTracker *objv_tracker)
+{
+  RGWSI_RADOS::Obj rados_obj;
+  int r = get_rados_obj(zone_svc.get(), obj, &rados_obj);
+  if (r < 0) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
+    return r;
+  }
+
+  ObjectWriteOperation op;
+
+  if (exclusive) {
+    op.create(true);
+  }
+
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_write(&op);
+  }
+  if (ofs == -1) {
+    op.write_full(bl);
+  } else {
+    op.write(ofs, bl);
+  }
+  r = rados_obj.operate(&op);
+  if (r < 0)
+    return r;
+
+  if (objv_tracker) {
+    objv_tracker->apply_write();
+  }
+  return 0;
+}
 

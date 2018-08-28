@@ -121,22 +121,11 @@ protected:
   std::map<std::string, RGWServiceInstance::dependency> get_deps() override;
   int load(const std::string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs) override;
 
-  virtual int get_rados_obj(RGWSI_Zone *zone_svc, rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
-
-  virtual int get_system_obj_state_impl(RGWSysObjectCtxBase *rctx, rgw_raw_obj& obj, RGWSysObjState **state, RGWObjVersionTracker *objv_tracker);
-  virtual int get_system_obj_state(RGWSysObjectCtxBase *rctx, rgw_raw_obj& obj, RGWSysObjState **state, RGWObjVersionTracker *objv_tracker);
+  int get_rados_obj(RGWSI_Zone *zone_svc, rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
 
   virtual int raw_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
                        map<string, bufferlist> *attrs, bufferlist *first_chunk,
                        RGWObjVersionTracker *objv_tracker);
-
-  virtual int stat(RGWSysObjectCtxBase& obj_ctx,
-                   GetObjState& state,
-                   rgw_raw_obj& obj,
-                   map<string, bufferlist> *attrs,
-                   real_time *lastmod,
-                   uint64_t *obj_size,
-                   RGWObjVersionTracker *objv_tracker);
 
   virtual int read(RGWSysObjectCtxBase& obj_ctx,
                    GetObjState& read_state,
@@ -145,18 +134,6 @@ protected:
                    bufferlist *bl, off_t ofs, off_t end,
                    map<string, bufferlist> *attrs,
                    boost::optional<obj_version>);
-
-  virtual int get_attr(rgw_raw_obj& obj, const char *name, bufferlist *dest);
-
-  virtual int omap_get_all(rgw_raw_obj& obj, std::map<string, bufferlist> *m);
-  virtual int omap_get_vals(rgw_raw_obj& obj,
-                            const string& marker,
-                            uint64_t count,
-                            std::map<string, bufferlist> *m,
-                            bool *pmore);
-  virtual int omap_set(rgw_raw_obj& obj, const std::string& key, bufferlist& bl, bool must_exist = false);
-  virtual int omap_set(rgw_raw_obj& obj, const map<std::string, bufferlist>& m, bool must_exist = false);
-  virtual int omap_del(rgw_raw_obj& obj, const std::string& key);
 
   virtual int remove(RGWSysObjectCtxBase& obj_ctx,
                      RGWObjVersionTracker *objv_tracker,
@@ -169,6 +146,39 @@ protected:
                     const bufferlist& data,
                     RGWObjVersionTracker *objv_tracker,
                     real_time set_mtime);
+
+  virtual int write_data(rgw_raw_obj& obj,
+                         const bufferlist& bl,
+                         bool exclusive,
+                         RGWObjVersionTracker *objv_tracker);
+
+  virtual int get_attr(rgw_raw_obj& obj, const char *name, bufferlist *dest);
+
+  virtual int set_attrs(rgw_raw_obj& obj, 
+                        map<string, bufferlist>& attrs,
+                        RGWObjVersionTracker *objv_tracker);
+
+  virtual int omap_get_all(rgw_raw_obj& obj, std::map<string, bufferlist> *m);
+  virtual int omap_get_vals(rgw_raw_obj& obj,
+                            const string& marker,
+                            uint64_t count,
+                            std::map<string, bufferlist> *m,
+                            bool *pmore);
+  virtual int omap_set(rgw_raw_obj& obj, const std::string& key, bufferlist& bl, bool must_exist = false);
+  virtual int omap_set(rgw_raw_obj& obj, const map<std::string, bufferlist>& m, bool must_exist = false);
+  virtual int omap_del(rgw_raw_obj& obj, const std::string& key);
+
+  /* wrappers */
+  int get_system_obj_state_impl(RGWSysObjectCtxBase *rctx, rgw_raw_obj& obj, RGWSysObjState **state, RGWObjVersionTracker *objv_tracker);
+  int get_system_obj_state(RGWSysObjectCtxBase *rctx, rgw_raw_obj& obj, RGWSysObjState **state, RGWObjVersionTracker *objv_tracker);
+
+  int stat(RGWSysObjectCtxBase& obj_ctx,
+           GetObjState& state,
+           rgw_raw_obj& obj,
+           map<string, bufferlist> *attrs,
+           real_time *lastmod,
+           uint64_t *obj_size,
+           RGWObjVersionTracker *objv_tracker);
 
 public:
   RGWSI_SysObj_Core(RGWService *svc, CephContext *cct): RGWServiceInstance(svc, cct) {}

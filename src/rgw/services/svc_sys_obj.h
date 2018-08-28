@@ -123,6 +123,9 @@ public:
 
       int remove();
       int write(bufferlist& bl);
+
+      int write_data(bufferlist& bl); /* write data only */
+      int write_attrs(); /* write attrs only */
     };
 
     struct OmapOp {
