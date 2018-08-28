@@ -123,7 +123,7 @@ int execute_list(const po::variables_map &vm,
 
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
-  std::string namespace_name = utils::get_namespace_name(vm, nullptr);
+  std::string namespace_name = utils::get_namespace_name(vm, &arg_index);
 
   at::Format::Formatter formatter;
   int r = utils::get_formatter(vm, &formatter);
