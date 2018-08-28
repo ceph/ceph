@@ -7,7 +7,8 @@ set(crimson_thread_srcs
   thread/ThreadPool.cc
   thread/Throttle.cc)
 set(crimson_common_srcs
-  common/config_proxy.cc)
+  common/config_proxy.cc
+  common/log.cc)
 add_library(crimson STATIC
   ${crimson_common_srcs}
   ${crimson_net_srcs}
