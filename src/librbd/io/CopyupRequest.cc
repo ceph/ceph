@@ -238,9 +238,8 @@ void CopyupRequest<I>::send()
   if (is_deep_copy()) {
     m_flatten = is_copyup_required() ? true : m_ictx->migration_info.flatten;
     auto req = deep_copy::ObjectCopyRequest<I>::create(
-        m_ictx->parent, m_ictx->migration_parent, m_ictx,
-        m_ictx->migration_info.snap_map, m_object_no, m_flatten,
-        util::create_context_callback(this));
+        m_ictx->parent, m_ictx, m_ictx->migration_info.snap_map, m_object_no,
+        m_flatten, util::create_context_callback(this));
     ldout(m_ictx->cct, 20) << "deep copy object req " << req
                            << ", object_no " << m_object_no
                            << ", flatten " << m_flatten
@@ -280,8 +279,7 @@ bool CopyupRequest<I>::should_complete(int *r) {
   case STATE_READ_FROM_PARENT:
     ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
     m_ictx->copyup_list_lock.Lock();
-    if (*r == -ENOENT && is_deep_copy() && m_ictx->migration_parent &&
-        !m_flatten && is_copyup_required()) {
+    if (*r == -ENOENT && is_deep_copy() && !m_flatten && is_copyup_required()) {
       ldout(cct, 5) << "restart deep copy with flatten" << dendl;
       m_ictx->copyup_list_lock.Unlock();
       send();
