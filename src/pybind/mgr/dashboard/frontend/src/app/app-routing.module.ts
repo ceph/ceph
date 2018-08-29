@@ -77,7 +77,7 @@ const routes: Routes = [
     path: 'configuration',
     component: ConfigurationComponent,
     canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Configuration Documentation' }
+    data: { breadcrumbs: 'Cluster/Configuration' }
   },
   {
     path: 'perf_counters/:type/:id',
