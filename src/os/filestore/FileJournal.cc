@@ -672,7 +672,9 @@ int FileJournal::read_header(header_t *hdr) const
   dout(10) << "read_header" << dendl;
   bufferlist bl;
 
-  buffer::ptr bp = buffer::create_page_aligned(block_size);
+  buffer::ptr bp = (block_size < CEPH_PAGE_SIZE)?
+    buffer::create_small_page_aligned(block_size):
+    buffer::create_page_aligned(block_size);
   char* bpdata = bp.c_str();
   int r = ::pread(fd, bpdata, bp.length(), 0);
 
@@ -727,7 +729,10 @@ bufferptr FileJournal::prepare_header()
     header.committed_up_to = journaled_seq;
   }
   encode(header, bl);
-  bufferptr bp = buffer::create_page_aligned(get_top());
+  unsigned len = get_top();
+  bufferptr bp = (len < CEPH_PAGE_SIZE)?
+    buffer::create_small_page_aligned(len):
+    buffer::create_page_aligned(len);
   // don't use bp.zero() here, because it also invalidates
   // crc cache (which is not yet populated anyway)
   char* data = bp.c_str();

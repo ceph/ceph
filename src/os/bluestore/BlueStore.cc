@@ -10248,7 +10248,9 @@ void BlueStore::_pad_zeros(
   size_t pad_count = 0;
   if (front_pad) {
     size_t front_copy = std::min<uint64_t>(chunk_size - front_pad, length);
-    bufferptr z = buffer::create_page_aligned(chunk_size);
+    bufferptr z = (chunk_size < CEPH_PAGE_SIZE)?
+      buffer::create_small_page_aligned(chunk_size):
+      buffer::create_page_aligned(chunk_size);
     z.zero(0, front_pad, false);
     pad_count += front_pad;
     bl->copy(0, front_copy, z.c_str() + front_pad);

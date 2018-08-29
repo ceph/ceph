@@ -72,8 +72,11 @@ class SnappyCompressor : public Compressor {
       return qat_accel.compress(src, dst);
 #endif
     BufferlistSource source(const_cast<bufferlist&>(src).begin(), src.length());
-    bufferptr ptr = buffer::create_page_aligned(
-      snappy::MaxCompressedLength(src.length()));
+    unsigned len = snappy::MaxCompressedLength(src.length());
+    bufferptr ptr = (len < CEPH_PAGE_SIZE)?
+      buffer::create_small_page_aligned(len):
+      buffer::create_page_aligned(len);
+
     snappy::UncheckedByteArraySink sink(ptr.c_str());
     snappy::Compress(&source, &sink);
     dst.append(ptr, 0, sink.CurrentDestination() - ptr.c_str());
