@@ -28,3 +28,5 @@ check_schema MDSMap mds_map.json
 check_schema MgrMap mgr_map.json
 check_schema ServiceMap service_map.json
 check_schema CrushWrapper crush_map.json
+check_schema object_stat_sum_t object_stat_sum.json
+check_schema object_stat_collection_t object_stat_collection.json

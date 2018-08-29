@@ -65,3 +65,15 @@ CRUSH Map
 
 .. literalinclude:: schema/crush_map.json
   :language: json
+
+object_stat_sum_t
+=================
+
+.. literalinclude:: schema/object_stat_sum.json
+  :language: json
+
+object_stat_collection_t
+========================
+
+.. literalinclude:: schema/object_stat_collection.json
+  :language: json
