@@ -45,13 +45,14 @@ class Module(MgrModule):
         :param f: f(time) return true to keep crash report
         :returns: crash reports for which f(time) returns true
         """
-        def inner((_, meta)):
+        def inner(pair):
+            _, meta = pair
             meta = json.loads(meta)
             time = self.time_from_string(meta["timestamp"])
             return f(time)
         matches = filter(inner, six.iteritems(
             self.get_store_prefix("crash/")))
-        return map(lambda (k, m): (k, json.loads(m)), matches)
+        return [(k, json.loads(m)) for k, m in matches]
 
     # command handlers
 
