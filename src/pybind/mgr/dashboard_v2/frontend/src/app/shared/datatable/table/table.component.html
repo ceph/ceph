@@ -1,0 +1,120 @@
+<div class="dataTables_wrapper">
+  <div class="dataTables_header clearfix"
+       *ngIf="toolHeader">
+    <!-- actions -->
+    <div class="oadatatableactions">
+      <ng-content select="table-actions"></ng-content>
+    </div>
+    <!-- end actions -->
+
+    <!-- search -->
+    <div class="input-group">
+      <span class="input-group-addon">
+        <i class="glyphicon glyphicon-search"></i>
+      </span>
+      <input class="form-control"
+             type="text"
+             [(ngModel)]="search"
+             (keyup)='updateFilter($event)'>
+      <span class="input-group-btn">
+        <button type="button"
+                class="btn btn-default clear-input tc_clearInputBtn"
+                (click)="updateFilter()">
+          <i class="icon-prepend fa fa-remove"></i>
+        </button>
+      </span>
+    </div>
+    <!-- end search -->
+
+    <!-- pagination limit -->
+    <div class="input-group dataTables_paginate">
+      <input class="form-control"
+             type="number"
+             min="1"
+             max="9999"
+             [value]="limit"
+             (click)="setLimit($event)"
+             (keyup)="setLimit($event)"
+             (blur)="setLimit($event)">
+    </div>
+    <!-- end pagination limit-->
+
+    <!-- show hide columns -->
+    <div class="widget-toolbar">
+      <div dropdown
+           class="dropdown tc_menuitem tc_menuitem_cluster">
+        <a dropdownToggle
+           class="btn btn-sm btn-default dropdown-toggle tc_columnBtn"
+           data-toggle="dropdown">
+          <i class="fa fa-lg fa-table"></i>
+        </a>
+        <ul *dropdownMenu
+            class="dropdown-menu">
+          <li *ngFor="let column of columns">
+            <label>
+              <input type="checkbox"
+                     (change)="toggleColumn($event)"
+                     [name]="column.prop"
+                     [checked]="!column.isHidden">
+              <span>{{ column.name }}</span>
+            </label>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <!-- end show hide columns -->
+
+    <!-- refresh button -->
+    <div class="widget-toolbar tc_refreshBtn">
+      <a (click)="refreshBtn()">
+        <i class="fa fa-lg fa-refresh"
+           [class.fa-spin]="updating || loadingIndicator"></i>
+      </a>
+    </div>
+    <!-- end refresh button -->
+  </div>
+  <ngx-datatable #table
+                 class="bootstrap oadatatable"
+                 [cssClasses]="paginationClasses"
+                 [selectionType]="selectionType"
+                 [selected]="selection.selected"
+                 (select)="onSelect()"
+                 [sorts]="sorts"
+                 [columns]="tableColumns"
+                 [columnMode]="columnMode"
+                 [rows]="rows"
+                 [rowClass]="getRowClass()"
+                 [headerHeight]="header ? 'auto' : 0"
+                 [footerHeight]="footer ? 'auto' : 0"
+                 [limit]="limit > 0 ? limit : undefined"
+                 [loadingIndicator]="loadingIndicator"
+                 [rowIdentity]="rowIdentity()"
+                 [rowHeight]="'auto'">
+  </ngx-datatable>
+</div>
+
+<!-- Table Details -->
+<ng-content select="[cdTableDetail]"></ng-content>
+
+<!-- cell templates that can be accessed from outside -->
+<ng-template #tableCellBoldTpl
+             let-value="value">
+  <strong>{{ value }}</strong>
+</ng-template>
+
+<ng-template #sparklineTpl
+             let-value="value">
+  <cd-sparkline [data]="value"></cd-sparkline>
+</ng-template>
+
+<ng-template #routerLinkTpl
+             let-row="row"
+             let-value="value">
+  <a [routerLink]="[row.cdLink]">{{ value }}</a>
+</ng-template>
+
+<ng-template #perSecondTpl
+             let-row="row"
+             let-value="value">
+  {{ value }} /s
+</ng-template>

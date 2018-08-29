@@ -1,0 +1,209 @@
+<div *ngIf="contentData">
+  <div class="row">
+    <!-- HEALTH -->
+    <div class="col-md-6">
+      <div class="well">
+        <fieldset>
+          <legend i18n>Health</legend>
+          <ng-container i18n>Overall status:</ng-container>
+          <span [ngStyle]="contentData.health.status | healthColor">{{ contentData.health.status }}</span>
+          <ul>
+            <li *ngFor="let check of contentData.health.checks">
+              <span [ngStyle]="check.severity | healthColor">{{ check.type }}</span>: {{ check.summary.message }}
+            </li>
+          </ul>
+        </fieldset>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <!--STATS -->
+      <div class="row">
+        <div class="col-md-6">
+          <div class="well">
+            <div class="media">
+              <div class="media-left">
+                <i class="fa fa-database fa-fw"></i>
+              </div>
+              <div class="media-body">
+                <span class="media-heading"
+                      i18n="ceph monitors">
+                  <a routerLink="/monitor/">Monitors</a>
+                </span>
+                <span class="media-text">{{ contentData.mon_status | monSummary }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="well">
+            <div class="media">
+              <div class="media-left">
+                <i class="fa fa-hdd-o fa-fw"></i>
+              </div>
+              <div class="media-body">
+                <span class="media-heading"
+                      i18n="ceph OSDs">
+                  <a routerLink="/osd/">OSDs</a>
+                </span>
+                <span class="media-text">{{ contentData.osd_map | osdSummary }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-md-6">
+          <div class="well">
+            <div class="media">
+              <div class="media-left">
+                <i class="fa fa-folder fa-fw"></i>
+              </div>
+              <div class="media-body">
+                <span class="media-heading"
+                      i18n>Metadata servers</span>
+                <span class="media-text">{{ contentData.fs_map | mdsSummary }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="well">
+            <div class="media">
+              <div class="media-left">
+                <i class="fa fa-cog fa-fw"></i>
+              </div>
+              <div class="media-body">
+                <span class="media-heading"
+                      i18n>Manager daemons</span>
+                <span class="media-text">{{ contentData.mgr_map | mgrSummary }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- USAGE -->
+    <div class="col-md-6">
+      <div class="well">
+        <fieldset class="usage">
+          <legend i18n>Usage</legend>
+
+          <table class="ceph-chartbox">
+            <tr>
+              <td>
+                <span style="font-size: 45px;">{{ contentData.df.stats.total_objects | dimless }}</span>
+              </td>
+              <td>
+                <div class="center-block pie">
+                  <cd-health-pie [data]="contentData"
+                                 (prepareFn)="prepareRawUsage($event[0], $event[1])"></cd-health-pie>
+                </div>
+              </td>
+              <td>
+                <div class="center-block pie">
+                  <cd-health-pie [data]="contentData"
+                                 (prepareFn)="preparePoolUsage($event[0], $event[1])"></cd-health-pie>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td i18n>Objects</td>
+              <td>
+                <ng-container i18n>Raw capacity</ng-container>
+                <br>
+                <ng-container i18n="disk used">({{ contentData.df.stats.total_used_bytes | dimlessBinary }} used)</ng-container>
+              </td>
+              <td i18n>Usage by pool</td>
+            </tr>
+          </table>
+        </fieldset>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="well">
+        <fieldset>
+          <legend i18n>Pools</legend>
+          <table class="table table-condensed">
+            <thead>
+              <tr>
+                <th i18n>Name</th>
+                <th i18n>PG status</th>
+                <th i18n>Usage</th>
+                <th colspan="2"
+                    i18n>Read</th>
+                <th colspan="2"
+                    i18n>Write</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let pool of contentData.pools">
+                <td>{{ pool.pool_name }}</td>
+                <td [ngStyle]="pool.pg_status | pgStatusStyle">
+                  {{ pool.pg_status | pgStatus }}
+                </td>
+                <td>
+                  {{ pool.stats.bytes_used.latest | dimlessBinary }} / {{ pool.stats.max_avail.latest | dimlessBinary }}
+                </td>
+                <td>
+                  {{ pool.stats.rd_bytes.rate | dimless }}
+                </td>
+                <td>
+                  {{ pool.stats.rd.rate | dimless }} ops
+                </td>
+                <td>
+                  {{ pool.stats.wr_bytes.rate | dimless }}
+                </td>
+                <td>
+                  {{ pool.stats.wr.rate | dimless }} ops
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </fieldset>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-12">
+      <!-- LOGS -->
+      <div class="well">
+        <fieldset>
+          <legend i18n>Logs</legend>
+
+          <tabset>
+            <tab heading="Cluster log"
+                 class="text-monospace"
+                 i18n-heading>
+              <span *ngFor="let line of contentData.clog">
+                {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
+                <span [ngStyle]="line | logColor">
+                  {{ line.message }}
+                  <br>
+                </span>
+              </span>
+            </tab>
+            <tab heading="Audit log"
+                 class="text-monospace"
+                 i18n-heading>
+              <span *ngFor="let line of contentData.audit_log">
+                {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
+                <span [ngStyle]="line | logColor">
+                  <span style="font-weight: bold;">
+                    {{ line.message }}
+                  </span>
+                  <br>
+                </span>
+              </span>
+            </tab>
+          </tabset>
+        </fieldset>
+      </div>
+    </div>
+  </div>
+</div>

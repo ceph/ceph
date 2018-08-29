@@ -1,0 +1,25 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">Cluster</li>
+    <li class="breadcrumb-item active">OSDs</li>
+  </ol>
+</nav>
+<cd-table [data]="osds"
+          (fetchData)="getOsdList()"
+          [columns]="columns"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)">
+  <cd-osd-details cdTableDetail
+                  [selection]="selection">
+  </cd-osd-details>
+</cd-table>
+
+<ng-template #statusColor
+             let-value="value">
+  <span *ngFor="let state of value; last as last">
+    <span [class.text-success]="'up' === state || 'in' === state"
+          [class.text-warning]="'down' === state || 'out' === state">
+      {{ state }}</span><span *ngIf="!last">, </span>
+    <!-- Has to be on the same line to prevent a space between state and comma. -->
+  </span>
+</ng-template>

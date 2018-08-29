@@ -1,0 +1,18 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li i18n
+        class="breadcrumb-item active"
+        aria-current="page">Object Gateway</li>
+  </ol>
+</nav>
+
+<cd-table [data]="daemons"
+          [columns]="columns"
+          columnMode="flex"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)"
+          (fetchData)="getDaemonList()">
+  <cd-rgw-daemon-details cdTableDetail
+                         [selection]="selection">
+  </cd-rgw-daemon-details>
+</cd-table>

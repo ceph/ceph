@@ -1,0 +1,69 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li i18n
+        class="breadcrumb-item">Filesystem</li>
+    <li class="breadcrumb-item active"
+        aria-current="page">{{ name }}</li>
+  </ol>
+</nav>
+
+<div class="row">
+  <div class="col-md-12">
+    <i class="fa fa-desktop"></i>
+    <a i18n
+       [routerLink]="['/cephfs/' + id + '/clients']">
+      <span style="font-weight:bold;">{{ clientCount }}</span>
+      Clients
+    </a>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-sm-6">
+    <fieldset>
+      <legend i18n>Ranks</legend>
+
+      <cd-table [data]="ranks.data"
+                [columns]="ranks.columns"
+                (fetchData)="refresh()"
+                [toolHeader]="false">
+      </cd-table>
+    </fieldset>
+
+    <cd-table-key-value [data]="standbys">
+    </cd-table-key-value>
+  </div>
+
+  <div class="col-sm-6">
+    <fieldset>
+      <legend i18n>Pools</legend>
+
+      <cd-table [data]="pools.data"
+                [columns]="pools.columns"
+                [toolHeader]="false">
+      </cd-table>
+
+    </fieldset>
+  </div>
+</div>
+
+<div class="row"
+     *ngFor="let mdsCounter of objectValues(mdsCounters); trackBy: trackByFn">
+  <div class="cold-md-12">
+    <cd-cephfs-chart [mdsCounter]="mdsCounter"></cd-cephfs-chart>
+  </div>
+</div>
+
+<!-- templates -->
+<ng-template #poolProgressTmpl
+             let-row="row">
+  <progressbar type="danger"
+               [value]="row.used * 100.0 / row.avail">
+  </progressbar>
+</ng-template>
+
+<ng-template #activityTmpl
+             let-row="row"
+             let-value="value">
+  {{ row.state === 'standby-replay' ? 'Evts' : 'Reqs' }}: {{ value | dimless }} /s
+</ng-template>

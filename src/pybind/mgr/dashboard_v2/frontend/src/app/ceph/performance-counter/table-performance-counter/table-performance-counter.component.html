@@ -1,0 +1,8 @@
+<cd-table [data]="counters"
+          [columns]="columns"
+          columnMode="flex"
+          (fetchData)="getCounters()">
+  <ng-template #valueTpl let-row="row">
+    {{ row.value | dimless }} {{ row.unit }}
+  </ng-template>
+</cd-table>

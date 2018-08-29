@@ -1,0 +1,11 @@
+$warning-background-color: #fff3cd;
+$oa-color-blue: #288cea;
+$oa-color-light-blue: #afd9ee;
+$bg-color-light-blue: #d9edf7;
+$border-color: 1px solid #d1d1d1;
+@mixin table-cell {
+  padding: 5px;
+  border: none;
+  border-left: $border-color;
+  border-bottom: $border-color;
+}

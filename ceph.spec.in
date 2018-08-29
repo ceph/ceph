@@ -200,6 +200,26 @@ BuildRequires:	python3-devel
 BuildRequires:	python3-setuptools
 BuildRequires:	python3-Cython
 %endif
+# distro-conditional make check dependencies
+%if 0%{with make_check}
+%if 0%{?fedora} || 0%{?rhel}
+BuildRequires:	python-cherrypy
+BuildRequires:	python-tox
+BuildRequires:	python-coverage
+%if 0%{?fedora}
+BuildRequires:	python-bcrypt
+%endif
+%if 0%{?rhel}
+BuildRequires:	py-bcrypt
+%endif
+%endif
+%if 0%{?suse_version}
+BuildRequires:	python-CherryPy
+BuildRequires:	python-bcrypt
+BuildRequires:	python-tox
+BuildRequires:	python-coverage
+%endif
+%endif
 # lttng and babeltrace for rbd-replay-prep
 %if %{with lttng}
 %if 0%{?fedora} || 0%{?rhel}
@@ -329,12 +349,19 @@ Requires:       python-cherrypy
 Requires:       python-jinja2
 Requires:       python-werkzeug
 Requires:       pyOpenSSL
+%if 0%{?fedora}
+Requires:	python-bcrypt
+%endif
+%if 0%{?rhel}
+Requires:	py-bcrypt
+%endif
 %endif
 %if 0%{?suse_version}
 Requires: 	python-CherryPy
 Requires:       python-Jinja2
 Requires:       python-Werkzeug
 Requires:       python-pyOpenSSL
+Requires:       python-bcrypt
 %endif
 Requires:       python-pecan
 %description mgr
@@ -826,6 +853,7 @@ cmake .. \
     -DCMAKE_INSTALL_INCLUDEDIR=%{_includedir} \
     -DWITH_MANPAGE=ON \
     -DWITH_PYTHON3=ON \
+    -DWITH_MGR_DASHBOARD_V2_FRONTEND=OFF \
     -DWITH_SYSTEMD=ON \
 %if 0%{?rhel} && ! 0%{?centos}
     -DWITH_SUBMAN=ON \
