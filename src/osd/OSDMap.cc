@@ -4247,15 +4247,14 @@ int OSDMap::calc_pg_upmaps(
   float start_deviation = 0;
   float end_deviation = 0;
   int num_changed = 0;
-  while (true) {
-    map<int,set<pg_t>> pgs_by_osd;
-    int total_pgs = 0;
-    float osd_weight_total = 0;
-    map<int,float> osd_weight;
-    for (auto& i : pools) {
-      if (!only_pools.empty() && !only_pools.count(i.first))
+  map<int,set<pg_t>> pgs_by_osd;
+  int total_pgs = 0;
+  float osd_weight_total = 0;
+  map<int,float> osd_weight;
+  for (auto& i : pools) {
+    if (!only_pools.empty() && !only_pools.count(i.first))
 	continue;
-      for (unsigned ps = 0; ps < i.second.get_pg_num(); ++ps) {
+    for (unsigned ps = 0; ps < i.second.get_pg_num(); ++ps) {
 	pg_t pg(ps, i.first);
 	vector<int> up;
 	tmp.pg_to_up_acting_osds(pg, &up, nullptr, nullptr, nullptr);
@@ -4263,43 +4262,43 @@ int OSDMap::calc_pg_upmaps(
 	  if (osd != CRUSH_ITEM_NONE)
 	    pgs_by_osd[osd].insert(pg);
 	}
-      }
-      total_pgs += i.second.get_size() * i.second.get_pg_num();
+    }
+    total_pgs += i.second.get_size() * i.second.get_pg_num();
 
-      map<int,float> pmap;
-      int ruleno = tmp.crush->find_rule(i.second.get_crush_rule(),
+    map<int,float> pmap;
+    int ruleno = tmp.crush->find_rule(i.second.get_crush_rule(),
 					i.second.get_type(),
 					i.second.get_size());
-      tmp.crush->get_rule_weight_osd_map(ruleno, &pmap);
-      ldout(cct,30) << __func__ << " pool " << i.first << " ruleno " << ruleno << dendl;
-      for (auto p : pmap) {
+    tmp.crush->get_rule_weight_osd_map(ruleno, &pmap);
+    ldout(cct,30) << __func__ << " pool " << i.first << " ruleno " << ruleno << dendl;
+    for (auto p : pmap) {
 	auto adjusted_weight = tmp.get_weightf(p.first) * p.second;
-        if (adjusted_weight == 0) {
-          continue;
-        }
+      if (adjusted_weight == 0) {
+        continue;
+      }
 	osd_weight[p.first] += adjusted_weight;
 	osd_weight_total += adjusted_weight;
-      }
     }
-    for (auto& i : osd_weight) {
-      int pgs = 0;
-      auto p = pgs_by_osd.find(i.first);
-      if (p != pgs_by_osd.end())
+  }
+  for (auto& i : osd_weight) {
+    int pgs = 0;
+    auto p = pgs_by_osd.find(i.first);
+    if (p != pgs_by_osd.end())
 	pgs = p->second.size();
-      else
+    else
 	pgs_by_osd.emplace(i.first, set<pg_t>());
-      ldout(cct, 20) << " osd." << i.first << " weight " << i.second
+    ldout(cct, 20) << " osd." << i.first << " weight " << i.second
 		     << " pgs " << pgs << dendl;
-    }
+  }
+  if (osd_weight_total == 0) {
+    lderr(cct) << __func__ << " abort due to osd_weight_total == 0" << dendl;
+    return 0;
+  }
+  float pgs_per_weight = total_pgs / osd_weight_total;
+  ldout(cct, 10) << " osd_weight_total " << osd_weight_total << dendl;
+  ldout(cct, 10) << " pgs_per_weight " << pgs_per_weight << dendl;
 
-    if (osd_weight_total == 0) {
-      lderr(cct) << __func__ << " abort due to osd_weight_total == 0" << dendl;
-      break;
-    }
-    float pgs_per_weight = total_pgs / osd_weight_total;
-    ldout(cct, 10) << " osd_weight_total " << osd_weight_total << dendl;
-    ldout(cct, 10) << " pgs_per_weight " << pgs_per_weight << dendl;
-
+  while (true) {
     // osd deviation
     float total_deviation = 0;
     map<int,float> osd_deviation;       // osd, deviation(pgs)
@@ -4371,6 +4370,10 @@ int OSDMap::calc_pg_upmaps(
 	    if (q.second == osd) {
 	      ldout(cct, 10) << "  dropping pg_upmap_items " << pg
 			     << " " << p->second << dendl;
+              for (auto i : p->second) {
+                pgs_by_osd[i.second].erase(pg);
+                pgs_by_osd[i.first].insert(pg);
+              }
 	      tmp.pg_upmap_items.erase(p);
 	      pending_inc->old_pg_upmap_items.insert(pg);
 	      ++num_changed;
@@ -4406,6 +4409,10 @@ int OSDMap::calc_pg_upmaps(
 	    rmi.push_back(make_pair(orig[i], out[i]));
 	  }
 	}
+        for (auto i : rmi) {
+          pgs_by_osd[i.first].erase(pg);
+          pgs_by_osd[i.second].insert(pg);
+        }
 	pending_inc->new_pg_upmap_items[pg] = rmi;
 	ldout(cct, 10) << "  " << pg << " pg_upmap_items " << rmi << dendl;
 	restart = true;
