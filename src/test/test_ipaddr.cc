@@ -698,7 +698,7 @@ TEST(pick_address, filtering)
 			   &one, &av);
     cout << av << std::endl;
     ASSERT_EQ(0, r);
-    ASSERT_EQ(1, av.v.size());
+    ASSERT_EQ(1u, av.v.size());
     ASSERT_EQ(string("[::]:0/0"), stringify(av.v[0]));
   }
   {
@@ -724,7 +724,7 @@ TEST(pick_address, filtering)
 			   &one, &av);
     cout << av << std::endl;
     ASSERT_EQ(0, r);
-    ASSERT_EQ(1, av.v.size());
+    ASSERT_EQ(1u, av.v.size());
     ASSERT_EQ(string("10.2.1.123:0/0"), stringify(av.v[0]));
     cct->_conf.set_val("public_network", "");
     cct->_conf.set_val("public_network_interface", "");
@@ -739,7 +739,7 @@ TEST(pick_address, filtering)
 			   &one, &av);
     cout << av << std::endl;
     ASSERT_EQ(0, r);
-    ASSERT_EQ(1, av.v.size());
+    ASSERT_EQ(1u, av.v.size());
     ASSERT_EQ(string("10.2.1.123:0/0"), stringify(av.v[0]));
     cct->_conf.set_val("public_network", "");
     cct->_conf.set_val("cluster_network", "");
@@ -754,7 +754,7 @@ TEST(pick_address, filtering)
 			   &one, &av);
     cout << av << std::endl;
     ASSERT_EQ(0, r);
-    ASSERT_EQ(1, av.v.size());
+    ASSERT_EQ(1u, av.v.size());
     ASSERT_EQ(string("10.1.1.2:0/0"), stringify(av.v[0]));
     cct->_conf.set_val("public_network", "");
     cct->_conf.set_val("cluster_network", "");
@@ -769,7 +769,7 @@ TEST(pick_address, filtering)
 			   &one, &av);
     cout << av << std::endl;
     ASSERT_EQ(0, r);
-    ASSERT_EQ(1, av.v.size());
+    ASSERT_EQ(1u, av.v.size());
     ASSERT_EQ(string("[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[0]));
     cct->_conf.set_val("public_network", "");
   }
@@ -784,7 +784,7 @@ TEST(pick_address, filtering)
 			   &one, &av);
     cout << av << std::endl;
     ASSERT_EQ(0, r);
-    ASSERT_EQ(2, av.v.size());
+    ASSERT_EQ(2u, av.v.size());
     ASSERT_EQ(string("[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[0]));
     ASSERT_EQ(string("10.2.1.123:0/0"), stringify(av.v[1]));
     cct->_conf.set_val("public_network", "");
@@ -802,7 +802,7 @@ TEST(pick_address, filtering)
 			   &one, &av);
     cout << av << std::endl;
     ASSERT_EQ(0, r);
-    ASSERT_EQ(2, av.v.size());
+    ASSERT_EQ(2u, av.v.size());
     ASSERT_EQ(string("10.2.1.123:0/0"), stringify(av.v[0]));
     ASSERT_EQ(string("[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[1]));
     cct->_conf.set_val("public_network", "");
@@ -819,7 +819,7 @@ TEST(pick_address, filtering)
 			   &one, &av);
     cout << av << std::endl;
     ASSERT_EQ(0, r);
-    ASSERT_EQ(2, av.v.size());
+    ASSERT_EQ(2u, av.v.size());
     ASSERT_EQ(string("msgr2:[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[0]));
     ASSERT_EQ(string("[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[1]));
     cct->_conf.set_val("public_network", "");
@@ -834,7 +834,7 @@ TEST(pick_address, filtering)
 			   &one, &av);
     cout << av << std::endl;
     ASSERT_EQ(0, r);
-    ASSERT_EQ(2, av.v.size());
+    ASSERT_EQ(2u, av.v.size());
     ASSERT_EQ(string("msgr2:0.0.0.0:0/0"), stringify(av.v[0]));
     ASSERT_EQ(string("0.0.0.0:0/0"), stringify(av.v[1]));
   }

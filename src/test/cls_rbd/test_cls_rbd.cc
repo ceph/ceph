@@ -2603,7 +2603,7 @@ TEST_F(TestClsRbd, op_features)
 
   uint64_t actual_op_features;
   ASSERT_EQ(0, op_features_get(&ioctx, oid, &actual_op_features));
-  ASSERT_EQ(0, actual_op_features);
+  ASSERT_EQ(0u, actual_op_features);
 
   uint64_t features;
   ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &features));
