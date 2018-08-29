@@ -101,7 +101,6 @@ public:
   bool handle_mgr_configure(MMgrConfigure *m);
   bool handle_command_reply(MCommandReply *m);
 
-  void send_report();
   void send_pgstats();
 
   void set_pgstats_cb(std::function<MPGStats*()> cb_)
@@ -121,6 +120,11 @@ public:
   int service_daemon_update_status(
     const std::map<std::string,std::string>& status);
   void update_osd_health(std::vector<OSDHealthMetric>&& metrics);
+
+private:
+  void _send_stats();
+  void _send_pgstats();
+  void _send_report();
 };
 
 #endif
