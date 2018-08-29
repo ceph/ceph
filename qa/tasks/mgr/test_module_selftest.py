@@ -231,15 +231,14 @@ class TestModuleSelftest(MgrTestCase):
         disabled/failed/recently-enabled modules.
         """
 
-        self._load_module("selftest")
-
         # Calling a command on a disabled module should return the proper
         # error code.
+        self._load_module("selftest")
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
-            "mgr", "module", "disable", "hello")
+            "mgr", "module", "disable", "selftest")
         with self.assertRaises(CommandFailedError) as exc_raised:
             self.mgr_cluster.mon_manager.raw_cluster_cmd(
-                "hello")
+                "mgr", "self-test", "run")
 
         self.assertEqual(exc_raised.exception.exitstatus, errno.EOPNOTSUPP)
 
@@ -252,9 +251,9 @@ class TestModuleSelftest(MgrTestCase):
 
         # Enabling a module and then immediately using ones of its commands
         # should work (#21683)
+        self._load_module("selftest")
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
-            "mgr", "module", "enable", "status")
-        self.mgr_cluster.mon_manager.raw_cluster_cmd("osd", "status")
+            "mgr", "self-test", "config", "get", "testkey")
 
         # Calling a command for a failed module should return the proper
         # error code.
