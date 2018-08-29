@@ -77,3 +77,9 @@ object_stat_collection_t
 
 .. literalinclude:: schema/object_stat_collection.json
   :language: json
+
+pool_stat_t
+===========
+
+.. literalinclude:: schema/pool_stat.json
+  :language: json
