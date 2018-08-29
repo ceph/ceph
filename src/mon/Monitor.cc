@@ -4124,17 +4124,6 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case CEPH_MSG_PING:
       handle_ping(op);
       return;
-
-    /* MMonGetMap may be used by clients to obtain a monmap *before*
-     * authenticating with the monitor.  We need to handle these without
-     * checking caps because, even on a cluster without cephx, we only set
-     * session caps *after* the auth handshake.  A good example of this
-     * is when a client calls MonClient::get_monmap_privately(), which does
-     * not authenticate when obtaining a monmap.
-     */
-    case CEPH_MSG_MON_GET_MAP:
-      handle_mon_get_map(op);
-      return;
   }
 
   if (!op->get_session()->authenticated) {
@@ -4145,6 +4134,10 @@ void Monitor::dispatch_op(MonOpRequestRef op)
   }
 
   switch (op->get_req()->get_type()) {
+    case CEPH_MSG_MON_GET_MAP:
+      handle_mon_get_map(op);
+      return;
+
     case MSG_GET_CONFIG:
       configmon()->handle_get_config(op);
       return;

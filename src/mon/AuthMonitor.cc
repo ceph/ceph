@@ -591,11 +591,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
     uint64_t auid = 0;
     if (start) {
       // new session
-
-      // always send the latest monmap.
-      if (m->monmap_epoch < mon->monmap->get_epoch())
-	mon->send_latest_monmap(m->get_connection().get());
-
       proto = s->auth_handler->start_session(entity_name, indata, response_bl, caps_info);
       ret = 0;
       if (caps_info.allow_all) {
@@ -633,6 +628,10 @@ reply:
   reply = new MAuthReply(proto, &response_bl, ret, s->global_id);
   mon->send_reply(op, reply);
   if (finished) {
+    // always send the latest monmap.
+    if (m->monmap_epoch < mon->monmap->get_epoch())
+      mon->send_latest_monmap(m->get_connection().get());
+
     mon->configmon()->check_sub(s);
   }
 done:
