@@ -45,7 +45,7 @@
               This field is required.
             </span>
             <span class="help-block"
-                  *ngIf="userForm.showError('user_id', frm, 'userIdExists')"
+                  *ngIf="userForm.showError('user_id', frm, 'notUnique')"
                   i18n>
               The chosen user ID is already in use.
             </span>
