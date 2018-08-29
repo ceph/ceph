@@ -7,6 +7,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/Utils.h"
+#include "librbd/image/DetachParentRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -40,7 +41,7 @@ void SetHeadRequest<I>::send_set_size() {
   m_image_ctx->snap_lock.get_read();
   if (m_image_ctx->size == m_size) {
     m_image_ctx->snap_lock.put_read();
-    send_remove_parent();
+    send_detach_parent();
     return;
   }
   m_image_ctx->snap_lock.put_read();
@@ -95,11 +96,11 @@ void SetHeadRequest<I>::handle_set_size(int r) {
     m_image_ctx->size = m_size;
   }
 
-  send_remove_parent();
+  send_detach_parent();
 }
 
 template <typename I>
-void SetHeadRequest<I>::send_remove_parent() {
+void SetHeadRequest<I>::send_detach_parent() {
   m_image_ctx->parent_lock.get_read();
   if (m_image_ctx->parent_md.spec.pool_id == -1 ||
       (m_image_ctx->parent_md.spec == m_parent_spec &&
@@ -111,10 +112,6 @@ void SetHeadRequest<I>::send_remove_parent() {
   m_image_ctx->parent_lock.put_read();
 
   ldout(m_cct, 20) << dendl;
-
-  librados::ObjectWriteOperation op;
-  librbd::cls_client::remove_parent(&op);
-
   auto finish_op_ctx = start_lock_op();
   if (finish_op_ctx == nullptr) {
     lderr(m_cct) << "lost exclusive lock" << dendl;
@@ -123,17 +120,15 @@ void SetHeadRequest<I>::send_remove_parent() {
   }
 
   auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
-      handle_remove_parent(r);
+      handle_detach_parent(r);
       finish_op_ctx->complete(0);
     });
-  librados::AioCompletion *comp = create_rados_callback(ctx);
-  int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op);
-  ceph_assert(r == 0);
-  comp->release();
+  auto req = image::DetachParentRequest<I>::create(*m_image_ctx, ctx);
+  req->send();
 }
 
 template <typename I>
-void SetHeadRequest<I>::handle_remove_parent(int r) {
+void SetHeadRequest<I>::handle_detach_parent(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
   if (r < 0) {
