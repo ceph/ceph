@@ -129,8 +129,8 @@ add_library(common-common-objs OBJECT
   ${common_srcs})
 # for options.cc
 target_compile_definitions(common-common-objs PRIVATE
-  "-DCEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
-  "-DCEPH_PKGLIBDIR=\"${CMAKE_INSTALL_FULL_PKGLIBDIR}\"")
+  "CEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
+  "CEPH_PKGLIBDIR=\"${CMAKE_INSTALL_FULL_PKGLIBDIR}\"")
 
 set(common_mountcephfs_srcs
   armor.c
