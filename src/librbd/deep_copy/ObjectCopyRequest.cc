@@ -41,13 +41,11 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
-                                        I *src_parent_image_ctx,
                                         I *dst_image_ctx,
                                         const SnapMap &snap_map,
                                         uint64_t dst_object_number,
                                         bool flatten, Context *on_finish)
   : m_src_image_ctx(src_image_ctx),
-    m_src_parent_image_ctx(src_parent_image_ctx),
     m_dst_image_ctx(dst_image_ctx), m_cct(dst_image_ctx->cct),
     m_snap_map(snap_map), m_dst_object_number(dst_object_number),
     m_flatten(flatten), m_on_finish(on_finish) {
@@ -229,27 +227,35 @@ void ObjectCopyRequest<I>::handle_read_object(int r) {
 
 template <typename I>
 void ObjectCopyRequest<I>::send_read_from_parent() {
+  m_src_image_ctx->snap_lock.get_read();
+  m_src_image_ctx->parent_lock.get_read();
   io::Extents image_extents;
   compute_read_from_parent_ops(&image_extents);
+  m_src_image_ctx->snap_lock.put_read();
+
   if (image_extents.empty()) {
+    m_src_image_ctx->parent_lock.put_read();
     handle_read_from_parent(0);
     return;
   }
 
   ldout(m_cct, 20) << dendl;
 
-  ceph_assert(m_src_parent_image_ctx != nullptr);
+  ceph_assert(m_src_image_ctx->parent != nullptr);
 
   auto ctx = create_context_callback<
     ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_read_from_parent>(this);
   auto comp = io::AioCompletion::create_and_start(
-    ctx, util::get_image_ctx(m_src_image_ctx), io::AIO_TYPE_READ);
+    ctx, util::get_image_ctx(m_src_image_ctx->parent), io::AIO_TYPE_READ);
   ldout(m_cct, 20) << "completion " << comp << ", extents " << image_extents
                    << dendl;
-  io::ImageRequest<I>::aio_read(m_src_parent_image_ctx, comp,
+
+  auto src_image_ctx = m_src_image_ctx;
+  io::ImageRequest<I>::aio_read(src_image_ctx->parent, comp,
                                 std::move(image_extents),
                                 io::ReadResult{&m_read_from_parent_data}, 0,
                                 ZTracer::Trace());
+  src_image_ctx->parent_lock.put_read();
 }
 
 template <typename I>
@@ -564,8 +570,12 @@ void ObjectCopyRequest<I>::compute_read_ops() {
   m_read_snaps = {};
   m_zero_interval = {};
 
+  m_src_image_ctx->parent_lock.get_read();
+  bool hide_parent = (m_src_image_ctx->parent != nullptr);
+  m_src_image_ctx->parent_lock.put_read();
+
   librados::snap_t src_copy_point_snap_id = m_snap_map.rbegin()->first;
-  bool prev_exists = m_src_parent_image_ctx != nullptr;
+  bool prev_exists = hide_parent;
   uint64_t prev_end_size = prev_exists ?
       m_src_image_ctx->layout.object_size : 0;
   librados::snap_t start_src_snap_id = 0;
@@ -589,12 +599,10 @@ void ObjectCopyRequest<I>::compute_read_ops() {
       exists = true;
       end_size = m_src_image_ctx->layout.object_size;
       clone_end_snap_id = end_src_snap_id;
-    }
-
-    if (!exists) {
+    } else if (!exists) {
       end_size = 0;
-      if (end_src_snap_id == m_snap_map.begin()->first &&
-          m_src_parent_image_ctx != nullptr && m_snap_set.clones.empty()) {
+      if (hide_parent && end_src_snap_id == m_snap_map.begin()->first &&
+          m_snap_set.clones.empty()) {
         ldout(m_cct, 20) << "no clones for existing object" << dendl;
         exists = true;
         diff.insert(0, m_src_image_ctx->layout.object_size);
@@ -686,8 +694,7 @@ void ObjectCopyRequest<I>::compute_read_ops() {
 
     prev_end_size = end_size;
     prev_exists = exists;
-    if (prev_exists && prev_end_size == 0 &&
-        m_src_parent_image_ctx != nullptr) {
+    if (hide_parent && prev_exists && prev_end_size == 0) {
       // hide parent
       prev_end_size = m_src_image_ctx->layout.object_size;
     }
@@ -702,11 +709,14 @@ void ObjectCopyRequest<I>::compute_read_ops() {
 template <typename I>
 void ObjectCopyRequest<I>::compute_read_from_parent_ops(
     io::Extents *parent_image_extents) {
+  assert(m_src_image_ctx->snap_lock.is_locked());
+  assert(m_src_image_ctx->parent_lock.is_locked());
+
   m_read_ops = {};
   m_zero_interval = {};
   parent_image_extents->clear();
 
-  if (m_src_parent_image_ctx == nullptr) {
+  if (m_src_image_ctx->parent == nullptr) {
     ldout(m_cct, 20) << "no parent" << dendl;
     return;
   }
@@ -732,9 +742,6 @@ void ObjectCopyRequest<I>::compute_read_from_parent_ops(
   ldout(m_cct, 20) << dendl;
 
   auto src_snap_seq = m_snap_map.begin()->first;
-
-  RWLock::RLocker snap_locker(m_src_image_ctx->snap_lock);
-  RWLock::RLocker parent_locker(m_src_image_ctx->parent_lock);
 
   uint64_t parent_overlap;
   int r = m_src_image_ctx->get_parent_overlap(src_snap_seq, &parent_overlap);
@@ -835,7 +842,10 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
 
   bool fast_diff = m_dst_image_ctx->test_features(RBD_FEATURE_FAST_DIFF);
   uint64_t prev_end_size = 0;
-  bool hide_parent = m_src_parent_image_ctx != nullptr;
+
+  m_src_image_ctx->parent_lock.get_read();
+  bool hide_parent = (m_src_image_ctx->parent != nullptr);
+  m_src_image_ctx->parent_lock.put_read();
 
   for (auto &it : m_dst_zero_interval) {
     auto src_snap_seq = it.first;
