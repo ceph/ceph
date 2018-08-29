@@ -20,7 +20,9 @@ int BrotliCompressor::compress(const bufferlist &in, bufferlist &out)
     size_t available_in = i->length();
     size_t max_comp_size = BrotliEncoderMaxCompressedSize(available_in);
     size_t available_out =  max_comp_size;
-    bufferptr ptr = buffer::create_page_aligned(max_comp_size);
+    bufferptr ptr = (max_comp_size < CEPH_PAGE_SIZE)?
+      buffer::create_small_page_aligned(max_comp_size):
+      buffer::create_page_aligned(max_comp_size);
     uint8_t* next_out = (uint8_t*)ptr.c_str();
     const uint8_t* next_in = (uint8_t*)i->c_str();
     ++i;
@@ -67,7 +69,9 @@ int BrotliCompressor::decompress(bufferlist::const_iterator &p,
     BrotliDecoderResult result = BROTLI_DECODER_RESULT_ERROR;
     do {
       size_t available_out = MAX_LEN;
-      bufferptr ptr = buffer::create_page_aligned(MAX_LEN);
+      bufferptr ptr = (MAX_LEN < CEPH_PAGE_SIZE)?
+        buffer::create_small_page_aligned(MAX_LEN):
+        buffer::create_page_aligned(MAX_LEN);
       uint8_t* next_out = (uint8_t*)ptr.c_str();
       result = BrotliDecoderDecompressStream(s,
                                              &available_in,
