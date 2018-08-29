@@ -20,7 +20,7 @@
       <ng-container *ngIf="contentData.health?.checks?.length > 0">
         <ng-template #healthChecks>
           <p class="logs-link"
-             i18n>&rarr; See <a (click)="viewportScroller.scrollToAnchor('logs')">Logs</a> for more details.</p>
+             i18n>&rarr; See <a routerLink="/logs">Logs</a> for more details.</p>
           <ul>
             <li *ngFor="let check of contentData.health.checks">
               <span [ngStyle]="check.severity | healthColor">{{ check.type }}</span>: {{ check.summary.message }}
@@ -238,7 +238,7 @@
                     *ngIf="contentData.pg_info">
         <ng-template #pgStatus>
           <p class="logs-link"
-             i18n>&rarr; See <a (click)="viewportScroller.scrollToAnchor('logs')">Logs</a> for more details.</p>
+             i18n>&rarr; See <a routerLink="/logs">Logs</a> for more details.</p>
           <ul>
             <li *ngFor="let pgStatesText of contentData.pg_info.statuses | keyvalue">
               {{ pgStatesText.key }}: {{ pgStatesText.value }}
@@ -259,43 +259,5 @@
         </div>
       </cd-info-card>
     </div>
-  </cd-info-group>
-
-  <cd-info-group groupTitle="Logs"
-                 i18n-groupTitle
-                 class="row info-group"
-                 id="logs"
-                 *ngIf="contentData.clog || contentData.audit_log">
-
-    <cd-info-card cardTitle="Cluster"
-                  i18n-cardTitle
-                  class="col-md-12 col-lg-6"
-                  cardClass="card-medium"
-                  contentClass="no-center scroll text-monospace"
-                  *ngIf="contentData.clog">
-      <p *ngFor="let line of contentData.clog">
-        {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
-        <span [ngStyle]="line | logColor">
-          {{ line.message }}
-          <br>
-        </span>
-      </p>
-    </cd-info-card>
-    <cd-info-card cardTitle="Audit"
-                  i18n-cardTitle
-                  class="col-md-12 col-lg-6"
-                  cardClass="card-medium"
-                  contentClass="no-center scroll text-monospace"
-                  *ngIf="contentData.audit_log">
-      <p *ngFor="let line of contentData.audit_log">
-        {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
-        <span [ngStyle]="line | logColor">
-          <span style="font-weight: bold;">
-            {{ line.message }}
-          </span>
-          <br>
-        </span>
-      </p>
-    </cd-info-card>
   </cd-info-group>
 </div>

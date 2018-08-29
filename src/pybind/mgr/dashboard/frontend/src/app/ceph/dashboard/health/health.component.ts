@@ -1,4 +1,3 @@
-import { ViewportScroller } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
@@ -15,11 +14,7 @@ export class HealthComponent implements OnInit, OnDestroy {
   contentData: any;
   interval: number;
 
-  constructor(
-    private dashboardService: DashboardService,
-    public viewportScroller: ViewportScroller,
-    private i18n: I18n
-  ) {}
+  constructor(private dashboardService: DashboardService, private i18n: I18n) {}
 
   ngOnInit() {
     this.getInfo();
