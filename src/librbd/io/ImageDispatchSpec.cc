@@ -92,7 +92,6 @@ struct ImageDispatchSpec<I>::TokenRequestedVisitor
     return 1;
   }
 
-  template <typename T>
   uint64_t operator()(const Flush&) const {
     return 0;
   }
