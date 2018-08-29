@@ -35,14 +35,7 @@ function(do_build_dpdk dpdk_dir)
     message(FATAL_ERROR "not able to build DPDK support: "
       "unknown arch \"${CMAKE_SYSTEM_PROCESSOR}\"")
   endif()
-
-  if(NOT TARGET dpdk::cflags)
-    add_library(dpdk::cflags INTERFACE IMPORTED)
-    if (rte_cflags)
-      set_target_properties(dpdk::cflags PROPERTIES
-        INTERFACE_COMPILE_OPTIONS "${rte_cflags}")
-    endif()
-  endif()
+  set(dpdk_rte_CFLAGS "${rte_cflags}" CACHE INTERNAL "")
   if(CMAKE_SYSTEM_NAME MATCHES "Linux")
     set(execenv "linuxapp")
   elseif(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
@@ -100,6 +93,15 @@ macro(build_dpdk)
   # create the directory so cmake won't complain when looking at the imported
   # target
   file(MAKE_DIRECTORY ${DPDK_INCLUDE_DIR})
+
+  if(NOT TARGET dpdk::cflags)
+    add_library(dpdk::cflags INTERFACE IMPORTED)
+    if (dpdk_rte_CFLAGS)
+      set_target_properties(dpdk::cflags PROPERTIES
+        INTERFACE_COMPILE_OPTIONS "${dpdk_rte_CFLAGS}")
+    endif()
+  endif()
+
   foreach(c
       bus_pci
       eal
@@ -117,8 +119,19 @@ macro(build_dpdk)
       INTERFACE_LINK_LIBRARIES dpdk::cflags
       IMPORTED_LOCATION "${dpdk_${c}_LIBRARY}")
     list(APPEND DPDK_LIBRARIES dpdk::${c})
+    list(APPEND DPDK_ARCHIVES "${dpdk_${c}_LIBRARY}")
   endforeach()
+
   add_library(dpdk::dpdk INTERFACE IMPORTED)
+  add_dependencies(dpdk::dpdk
+    ${DPDK_LIBRARIES})
+  # workaround for https://gitlab.kitware.com/cmake/cmake/issues/16947
   set_target_properties(dpdk::dpdk PROPERTIES
-    INTERFACE_LINK_LIBRARIES "${DPDK_LIBRARIES}")
+    INTERFACE_INCLUDE_DIRECTORIES ${DPDK_INCLUDE_DIR}
+    INTERFACE_LINK_LIBRARIES
+    "-Wl,--whole-archive $<JOIN:${DPDK_ARCHIVES}, > -Wl,--no-whole-archive")
+  if(dpdk_rte_CFLAGS)
+    set_target_properties(dpdk::dpdk PROPERTIES
+      INTERFACE_COMPILE_OPTIONS "${dpdk_rte_CFLAGS}")
+  endif()
 endmacro()
