@@ -96,6 +96,10 @@ def dmcrypt_close(mapping):
 
     :param mapping:
     """
+    if not os.path.exists(mapping):
+        logger.debug('device mapper path does not exist %s' % mapping)
+        logger.debug('will skip cryptsetup removal')
+        return
     process.run(['cryptsetup', 'remove', mapping])
 
 
