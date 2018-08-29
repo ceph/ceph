@@ -46,14 +46,15 @@ TEST(Queue, AsyncRequest)
         {0, 1, 1}, // auth: satisfy by priority
       };
       return &clients[static_cast<size_t>(client)];
-    });
+		  }, AtLimit::Reject
+		  );
 
   std::optional<error_code> ec1, ec2;
   std::optional<PhaseType> p1, p2;
 
   auto now = get_time();
-  queue.async_request(client_id::admin, {}, now, 0, capture(ec1, p1));
-  queue.async_request(client_id::auth, {}, now, 0, capture(ec2, p2));
+  queue.async_request(client_id::admin, {}, now, 1, capture(ec1, p1));
+  queue.async_request(client_id::auth, {}, now, 1, capture(ec2, p2));
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
 
@@ -97,16 +98,16 @@ TEST(Queue, RateLimit)
         {0, 1, 1}, // auth
       };
       return &clients[static_cast<size_t>(client)];
-    }, TagCalc::Immediate, AtLimit::Reject);
+    }, AtLimit::Reject);
 
   std::optional<error_code> ec1, ec2, ec3, ec4;
   std::optional<PhaseType> p1, p2, p3, p4;
 
   auto now = get_time();
-  queue.async_request(client_id::admin, {}, now, 0, capture(ec1, p1));
-  queue.async_request(client_id::admin, {}, now, 0, capture(ec2, p2));
-  queue.async_request(client_id::auth, {}, now, 0, capture(ec3, p3));
-  queue.async_request(client_id::auth, {}, now, 0, capture(ec4, p4));
+  queue.async_request(client_id::admin, {}, now, 1, capture(ec1, p1));
+  queue.async_request(client_id::admin, {}, now, 1, capture(ec2, p2));
+  queue.async_request(client_id::auth, {}, now, 1, capture(ec3, p3));
+  queue.async_request(client_id::auth, {}, now, 1, capture(ec4, p4));
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
   EXPECT_FALSE(ec3);
@@ -161,8 +162,8 @@ TEST(Queue, Cancel)
   std::optional<PhaseType> p1, p2;
 
   auto now = get_time();
-  queue.async_request(client_id::admin, {}, now, 0, capture(ec1, p1));
-  queue.async_request(client_id::auth, {}, now, 0, capture(ec2, p2));
+  queue.async_request(client_id::admin, {}, now, 1, capture(ec1, p1));
+  queue.async_request(client_id::auth, {}, now, 1, capture(ec2, p2));
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
 
@@ -209,8 +210,8 @@ TEST(Queue, CancelClient)
   std::optional<PhaseType> p1, p2;
 
   auto now = get_time();
-  queue.async_request(client_id::admin, {}, now, 0, capture(ec1, p1));
-  queue.async_request(client_id::auth, {}, now, 0, capture(ec2, p2));
+  queue.async_request(client_id::admin, {}, now, 1, capture(ec1, p1));
+  queue.async_request(client_id::auth, {}, now, 1, capture(ec2, p2));
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
 
@@ -262,8 +263,8 @@ TEST(Queue, CancelOnDestructor)
       });
 
     auto now = get_time();
-    queue.async_request(client_id::admin, {}, now, 0, capture(ec1, p1));
-    queue.async_request(client_id::auth, {}, now, 0, capture(ec2, p2));
+    queue.async_request(client_id::admin, {}, now, 1, capture(ec1, p1));
+    queue.async_request(client_id::auth, {}, now, 1, capture(ec2, p2));
 
     EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_qlen));
     EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_qlen));
@@ -320,8 +321,8 @@ TEST(Queue, CrossExecutorRequest)
   std::optional<PhaseType> p1, p2;
 
   auto now = get_time();
-  queue.async_request(client_id::admin, {}, now, 0, capture(ex2, ec1, p1));
-  queue.async_request(client_id::auth, {}, now, 0, capture(ex2, ec2, p2));
+  queue.async_request(client_id::admin, {}, now, 1, capture(ex2, ec1, p1));
+  queue.async_request(client_id::auth, {}, now, 1, capture(ex2, ec2, p2));
 
   EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_qlen));
   EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_qlen));
@@ -371,11 +372,11 @@ TEST(Queue, SpawnAsyncRequest)
       });
 
     error_code ec1, ec2;
-    auto p1 = queue.async_request(client_id::admin, {}, get_time(), 0, yield[ec1]);
+    auto p1 = queue.async_request(client_id::admin, {}, get_time(), 1, yield[ec1]);
     EXPECT_EQ(boost::system::errc::success, ec1);
     EXPECT_EQ(PhaseType::reservation, p1);
 
-    auto p2 = queue.async_request(client_id::auth, {}, get_time(), 0, yield[ec2]);
+    auto p2 = queue.async_request(client_id::auth, {}, get_time(), 1, yield[ec2]);
     EXPECT_EQ(boost::system::errc::success, ec2);
     EXPECT_EQ(PhaseType::priority, p2);
   });
