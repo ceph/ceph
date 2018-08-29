@@ -46,7 +46,7 @@ private:
    * DETACH_CHILD
    *    |
    *    v
-   * REMOVE_PARENT
+   * DETACH_PARENT
    *    |
    *    v
    * <finish>
@@ -64,8 +64,8 @@ private:
   void detach_child();
   void handle_detach_child(int r);
 
-  void remove_parent();
-  void handle_remove_parent(int r);
+  void detach_parent();
+  void handle_detach_parent(int r);
 
 };
 

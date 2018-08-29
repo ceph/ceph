@@ -6,6 +6,7 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/image/DetachChildRequest.h"
+#include "librbd/image/DetachParentRequest.h"
 #include "librbd/Types.h"
 #include "librbd/io/ObjectRequest.h"
 #include "common/dout.h"
@@ -147,7 +148,7 @@ void FlattenRequest<I>::detach_child() {
       !image_ctx.snaps.empty()) {
     image_ctx.snap_lock.put_read();
     image_ctx.owner_lock.put_read();
-    remove_parent();
+    detach_parent();
     return;
   }
   image_ctx.snap_lock.put_read();
@@ -173,11 +174,11 @@ void FlattenRequest<I>::handle_detach_child(int r) {
     return;
   }
 
-  remove_parent();
+  detach_parent();
 }
 
 template <typename I>
-void FlattenRequest<I>::remove_parent() {
+void FlattenRequest<I>::detach_parent() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << dendl;
@@ -200,25 +201,21 @@ void FlattenRequest<I>::remove_parent() {
   image_ctx.parent_lock.put_read();
 
   // remove parent from this (base) image
-  librados::ObjectWriteOperation op;
-  cls_client::remove_parent(&op);
-
-  auto aio_comp = create_rados_callback<
+  auto ctx = create_context_callback<
     FlattenRequest<I>,
-    &FlattenRequest<I>::handle_remove_parent>(this);
-  int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, aio_comp, &op);
-  ceph_assert(r == 0);
-  aio_comp->release();
+    &FlattenRequest<I>::handle_detach_parent>(this);
+  auto req = image::DetachParentRequest<I>::create(image_ctx, ctx);
+  req->send();
   image_ctx.owner_lock.put_read();
 }
 
 template <typename I>
-void FlattenRequest<I>::handle_remove_parent(int r) {
+void FlattenRequest<I>::handle_detach_parent(int r) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << "r=" << r << dendl;
 
-  if (r < 0 && r != -ENOENT) {
+  if (r < 0) {
     lderr(cct) << "remove parent encountered an error: " << cpp_strerror(r)
                << dendl;
   }

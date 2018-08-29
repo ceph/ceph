@@ -10,6 +10,7 @@
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "librbd/deep_copy/SetHeadRequest.h"
+#include "librbd/image/DetachParentRequest.h"
 
 namespace librbd {
 namespace {
@@ -21,6 +22,32 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
 };
 
 } // anonymous namespace
+
+namespace image {
+
+template <>
+class DetachParentRequest<MockTestImageCtx> {
+public:
+  static DetachParentRequest *s_instance;
+  static DetachParentRequest *create(MockTestImageCtx &image_ctx,
+                                     Context *on_finish) {
+    ceph_assert(s_instance != nullptr);
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  Context *on_finish = nullptr;
+
+  DetachParentRequest() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+DetachParentRequest<MockTestImageCtx> *DetachParentRequest<MockTestImageCtx>::s_instance;
+
+} // namespace image
 } // namespace librbd
 
 // template definitions
@@ -43,6 +70,7 @@ using ::testing::WithArg;
 class TestMockDeepCopySetHeadRequest : public TestMockFixture {
 public:
   typedef SetHeadRequest<librbd::MockTestImageCtx> MockSetHeadRequest;
+  typedef image::DetachParentRequest<MockTestImageCtx> MockDetachParentRequest;
 
   librbd::ImageCtx *m_image_ctx;
   ThreadPool *m_thread_pool;
@@ -74,10 +102,10 @@ public:
                   .WillOnce(Return(r));
   }
 
-  void expect_remove_parent(librbd::MockTestImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("remove_parent"), _, _, _))
-                  .WillOnce(Return(r));
+  void expect_detach_parent(MockImageCtx &mock_image_ctx,
+                            MockDetachParentRequest& mock_request, int r) {
+    EXPECT_CALL(mock_request, send())
+      .WillOnce(FinishRequest(&mock_request, r, &mock_image_ctx));
   }
 
   void expect_set_parent(librbd::MockTestImageCtx &mock_image_ctx, int r) {
@@ -134,7 +162,8 @@ TEST_F(TestMockDeepCopySetHeadRequest, RemoveParent) {
 
   InSequence seq;
   expect_start_op(mock_exclusive_lock);
-  expect_remove_parent(mock_image_ctx, 0);
+  MockDetachParentRequest mock_detach_parent;
+  expect_detach_parent(mock_image_ctx, mock_detach_parent, 0);
 
   C_SaferCond ctx;
   auto request = create_request(mock_image_ctx, m_image_ctx->size, {}, 0, &ctx);
@@ -151,7 +180,8 @@ TEST_F(TestMockDeepCopySetHeadRequest, RemoveParentError) {
 
   InSequence seq;
   expect_start_op(mock_exclusive_lock);
-  expect_remove_parent(mock_image_ctx, -EINVAL);
+  MockDetachParentRequest mock_detach_parent;
+  expect_detach_parent(mock_image_ctx, mock_detach_parent, -EINVAL);
 
   C_SaferCond ctx;
   auto request = create_request(mock_image_ctx, m_image_ctx->size, {}, 0, &ctx);
@@ -168,7 +198,8 @@ TEST_F(TestMockDeepCopySetHeadRequest, RemoveSetParent) {
 
   InSequence seq;
   expect_start_op(mock_exclusive_lock);
-  expect_remove_parent(mock_image_ctx, 0);
+  MockDetachParentRequest mock_detach_parent;
+  expect_detach_parent(mock_image_ctx, mock_detach_parent, 0);
   expect_start_op(mock_exclusive_lock);
   expect_set_parent(mock_image_ctx, 0);
 
