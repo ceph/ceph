@@ -55,7 +55,7 @@ more data migration than should be necessary, so it is not optimal.
 
 #. Wait for the data to migrate off the OSD in question::
 
-     while ! ceph osd safe-to-destroy $ID ; sleep 60 ; done
+     while ! ceph osd safe-to-destroy $ID ; do sleep 60 ; done
 
 #. Stop the OSD::
 
