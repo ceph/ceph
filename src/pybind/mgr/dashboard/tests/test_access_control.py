@@ -300,6 +300,38 @@ class AccessControlTest(unittest.TestCase):
     def test_create_user_with_system_role(self):
         self.test_create_user(rolename='administrator')
 
+    def test_clone_user(self):
+        username = 'test01'
+        self.test_create_user(username=username, rolename='read-only')
+        user = self.exec_cmd('ac-user-clone', username=username,
+                             new_username='test02')
+        pass_hash = password_hash('admin', user['password'])
+        self.assertDictEqual(user, {
+            'username': 'test02',
+            'password': pass_hash,
+            'name': '{} User'.format(username),
+            'email': '{}@user.com'.format(username),
+            'roles': ['read-only']
+        })
+        self.validate_persistent_user('test02', ['read-only'], pass_hash,
+                                      '{} User'.format(username),
+                                      '{}@user.com'.format(username))
+
+    def test_clone_user_nonexistent(self):
+        with self.assertRaises(CmdException) as ctx:
+            self.exec_cmd('ac-user-clone', username='test01',
+                          new_username='test02')
+        self.assertEqual(ctx.exception.retcode, -errno.ENOENT)
+        self.assertEqual(str(ctx.exception), "User 'test01' does not exist")
+
+    def test_clone_user_alreadyexists(self):
+        self.test_create_user()
+        with self.assertRaises(CmdException) as ctx:
+            self.exec_cmd('ac-user-clone', username='admin',
+                          new_username='admin')
+        self.assertEqual(ctx.exception.retcode, -errno.EEXIST)
+        self.assertEqual(str(ctx.exception), "User 'admin' already exists")
+
     def test_delete_user(self):
         self.test_create_user()
         out = self.exec_cmd('ac-user-delete', username='admin')

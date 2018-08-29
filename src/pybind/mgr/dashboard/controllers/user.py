@@ -65,6 +65,27 @@ class User(RESTController):
         ACCESS_CTRL_DB.save()
         return User._user_to_dict(user)
 
+    @RESTController.Resource('POST', path='/clone')
+    def clone(self, username, new_username):
+        if not username:
+            raise DashboardException(msg='Username is required',
+                                     code='username_required',
+                                     component='user')
+        if not new_username:
+            raise DashboardException(msg='New username is required',
+                                     code='new_username_required',
+                                     component='user')
+        try:
+            user = ACCESS_CTRL_DB.clone_user(username, new_username)
+        except UserAlreadyExists:
+            raise DashboardException(msg='Username already exists',
+                                     code='username_already_exists',
+                                     component='user')
+        except UserDoesNotExist:
+            raise cherrypy.HTTPError(404)
+        ACCESS_CTRL_DB.save()
+        return User._user_to_dict(user)
+
     def delete(self, username):
         session_username = cherrypy.session.get(Session.USERNAME)
         if session_username == username:

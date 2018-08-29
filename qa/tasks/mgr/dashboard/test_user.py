@@ -114,3 +114,33 @@ class UserTest(DashboardTestCase):
         self.assertStatus(400)
         self.assertError(code='role_does_not_exist',
                          component='user')
+
+    def test_clone_user(self):
+        self._create_user(username='test01',
+                          password='mypassword',
+                          name='test User',
+                          email='test01@email.com',
+                          roles=['read-only'])
+        self.assertStatus(201)
+        self._post('/api/user/test01/clone?new_username=test02')
+        self.assertStatus(200)
+        self.assertJsonBody({
+            'username': 'test02',
+            'name': 'test User',
+            'email': 'test01@email.com',
+            'roles': ['read-only']
+        })
+        self._delete('/api/user/test01')
+        self.assertStatus(204)
+        self._delete('/api/user/test02')
+        self.assertStatus(204)
+
+    def test_clone_user_nonexistent(self):
+        self._post('/api/user/test01/clone?new_username=test02')
+        self.assertStatus(404)
+
+    def test_clone_user_alreadyexists(self):
+        self._post('/api/user/admin/clone?new_username=admin')
+        self.assertStatus(400)
+        self.assertError(code='username_already_exists',
+                         component='user')

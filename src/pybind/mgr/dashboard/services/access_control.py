@@ -251,6 +251,19 @@ class AccessControlDB(object):
             self.users[username] = user
             return user
 
+    def clone_user(self, username, new_username):
+        logger.debug("AC: cloning user: username=%s, new_username=%s", username, new_username)
+        with self.lock:
+            if username not in self.users:
+                raise UserDoesNotExist(username)
+            user = self.users[username]
+            if new_username in self.users:
+                raise UserAlreadyExists(new_username)
+            new_user = User(new_username, user.password, user.name,
+                            user.email, user.roles)
+            self.users[new_username] = new_user
+            return new_user
+
     def get_user(self, username):
         with self.lock:
             if username not in self.users:
@@ -383,6 +396,13 @@ ACCESS_CONTROL_COMMANDS = [
                'name=name,type=CephString,req=false '
                'name=email,type=CephString,req=false',
         'desc': 'Create a user',
+        'perm': 'w'
+    },
+    {
+        'cmd': 'dashboard ac-user-clone '
+               'name=username,type=CephString '
+               'name=new_username,type=CephString',
+        'desc': 'Clone a user',
         'perm': 'w'
     },
     {
@@ -558,6 +578,18 @@ Username and password updated''', ''
 
         if role:
             user.set_roles([role])
+        ACCESS_CTRL_DB.save()
+        return 0, json.dumps(user.to_dict()), ''
+
+    elif cmd['prefix'] == 'dashboard ac-user-clone':
+        username = cmd['username']
+        new_username = cmd['new_username']
+        try:
+            user = ACCESS_CTRL_DB.clone_user(username, new_username)
+        except UserAlreadyExists as ex:
+            return -errno.EEXIST, '', str(ex)
+        except UserDoesNotExist as ex:
+            return -errno.ENOENT, '', str(ex)
         ACCESS_CTRL_DB.save()
         return 0, json.dumps(user.to_dict()), ''
 
