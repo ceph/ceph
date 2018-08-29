@@ -90,7 +90,7 @@ set(unittest_librbd_srcs
 add_executable(unittest_librbd
   ${unittest_librbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
-target_compile_definitions(unittest_librbd PUBLIC "-DTEST_LIBRBD_INTERNALS")
+target_compile_definitions(unittest_librbd PRIVATE "TEST_LIBRBD_INTERNALS")
 target_link_libraries(unittest_librbd
   cls_rbd
   cls_rbd_client
@@ -127,7 +127,7 @@ target_link_libraries(ceph_test_librbd
   librados
   ${UNITTEST_LIBS}
   radostest)
-target_compile_definitions(ceph_test_librbd PUBLIC "-DTEST_LIBRBD_INTERNALS")
+target_compile_definitions(ceph_test_librbd PRIVATE "TEST_LIBRBD_INTERNALS")
 
 add_executable(ceph_test_librbd_api
   test_support.cc
