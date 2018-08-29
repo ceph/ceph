@@ -44,6 +44,23 @@ public:
   virtual ~DoutPrefixProvider() {}
 };
 
+// a prefix provider that composes itself on top of another
+class DoutPrefixPipe : public DoutPrefixProvider {
+  const DoutPrefixProvider& dpp;
+ public:
+  DoutPrefixPipe(const DoutPrefixProvider& dpp) : dpp(dpp) {}
+
+  std::ostream& gen_prefix(std::ostream& out) const override final {
+    dpp.gen_prefix(out);
+    add_prefix(out);
+    return out;
+  }
+  CephContext *get_cct() const override { return dpp.get_cct(); }
+  unsigned get_subsys() const override { return dpp.get_subsys(); }
+
+  virtual void add_prefix(std::ostream& out) const = 0;
+};
+
 // helpers
 namespace ceph::dout {
 
