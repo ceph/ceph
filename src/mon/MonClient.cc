@@ -17,7 +17,6 @@
 #include "include/scope_guard.h"
 #include "include/stringify.h"
 
-#include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonMap.h"
