@@ -939,7 +939,11 @@ namespace buffer CEPH_BUFFER_API {
     int write_fd_zero_copy(int fd) const;
     template<typename VectorT>
     void prepare_iov(VectorT *piov) const {
+#ifdef __CEPH__
       ceph_assert(_buffers.size() <= IOV_MAX);
+#else
+      assert(_buffers.size() <= IOV_MAX);
+#endif
       piov->resize(_buffers.size());
       unsigned n = 0;
       for (auto& p : _buffers) {
