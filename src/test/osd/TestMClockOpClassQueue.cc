@@ -68,11 +68,11 @@ TEST_F(MClockOpClassQueueTest, TestSize) {
   ASSERT_TRUE(q.empty());
   ASSERT_EQ(0u, q.get_size_slow());
 
-  q.enqueue(client1, 12, 0, create_snaptrim(100, client1));
+  q.enqueue(client1, 12, 1, create_snaptrim(100, client1));
   q.enqueue_strict(client2, 12, create_snaptrim(101, client2));
-  q.enqueue(client2, 12, 0, create_snaptrim(102, client2));
+  q.enqueue(client2, 12, 1, create_snaptrim(102, client2));
   q.enqueue_strict(client3, 12, create_snaptrim(103, client3));
-  q.enqueue(client1, 12, 0, create_snaptrim(104, client1));
+  q.enqueue(client1, 12, 1, create_snaptrim(104, client1));
 
   ASSERT_FALSE(q.empty());
   ASSERT_EQ(5u, q.get_size_slow());
@@ -86,7 +86,7 @@ TEST_F(MClockOpClassQueueTest, TestSize) {
   ASSERT_FALSE(q.empty());
   ASSERT_EQ(2u, q.get_size_slow());
 
-  q.enqueue_front(client2, 12, 0, std::move(reqs.back()));
+  q.enqueue_front(client2, 12, 1, std::move(reqs.back()));
   reqs.pop_back();
 
   q.enqueue_strict_front(client3, 12, std::move(reqs.back()));
@@ -108,11 +108,11 @@ TEST_F(MClockOpClassQueueTest, TestSize) {
 
 
 TEST_F(MClockOpClassQueueTest, TestEnqueue) {
-  q.enqueue(client1, 12, 0, create_snaptrim(100, client1));
-  q.enqueue(client2, 12, 0, create_snaptrim(101, client2));
-  q.enqueue(client2, 12, 0, create_snaptrim(102, client2));
-  q.enqueue(client3, 12, 0, create_snaptrim(103, client3));
-  q.enqueue(client1, 12, 0, create_snaptrim(104, client1));
+  q.enqueue(client1, 12, 1, create_snaptrim(100, client1));
+  q.enqueue(client2, 12, 1, create_snaptrim(101, client2));
+  q.enqueue(client2, 12, 1, create_snaptrim(102, client2));
+  q.enqueue(client3, 12, 1, create_snaptrim(103, client3));
+  q.enqueue(client1, 12, 1, create_snaptrim(104, client1));
 
   Request r = q.dequeue();
   ASSERT_EQ(100u, r.get_map_epoch());
@@ -156,11 +156,11 @@ TEST_F(MClockOpClassQueueTest, TestEnqueueStrict) {
 
 
 TEST_F(MClockOpClassQueueTest, TestRemoveByClass) {
-  q.enqueue(client1, 12, 0, create_snaptrim(100, client1));
+  q.enqueue(client1, 12, 1, create_snaptrim(100, client1));
   q.enqueue_strict(client2, 12, create_snaptrim(101, client2));
-  q.enqueue(client2, 12, 0, create_snaptrim(102, client2));
+  q.enqueue(client2, 12, 1, create_snaptrim(102, client2));
   q.enqueue_strict(client3, 12, create_snaptrim(103, client3));
-  q.enqueue(client1, 12, 0, create_snaptrim(104, client1));
+  q.enqueue(client1, 12, 1, create_snaptrim(104, client1));
 
   std::list<Request> filtered_out;
   q.remove_by_class(client2, &filtered_out);
