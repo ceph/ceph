@@ -631,13 +631,13 @@ TEST(LibCephFS, StatDirNlink) {
   ASSERT_GT(fd, 0);
   struct ceph_statx stx;
   ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-  ASSERT_EQ(stx.stx_nlink, 2);
+  ASSERT_EQ(stx.stx_nlink, 2u);
 
   {
     char test_dir2[296];
     sprintf(test_dir2, "%s/.", test_dir1);
     ASSERT_EQ(ceph_statx(cmount, test_dir2, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-    ASSERT_EQ(stx.stx_nlink, 2);
+    ASSERT_EQ(stx.stx_nlink, 2u);
   }
 
   {
@@ -645,33 +645,33 @@ TEST(LibCephFS, StatDirNlink) {
     sprintf(test_dir2, "%s/1", test_dir1);
     ASSERT_EQ(ceph_mkdir(cmount, test_dir2, 0700), 0);
     ASSERT_EQ(ceph_statx(cmount, test_dir2, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-    ASSERT_EQ(stx.stx_nlink, 2);
+    ASSERT_EQ(stx.stx_nlink, 2u);
       ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-      ASSERT_EQ(stx.stx_nlink, 3);
+      ASSERT_EQ(stx.stx_nlink, 3u);
     sprintf(test_dir2, "%s/2", test_dir1);
     ASSERT_EQ(ceph_mkdir(cmount, test_dir2, 0700), 0);
       ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-      ASSERT_EQ(stx.stx_nlink, 4);
+      ASSERT_EQ(stx.stx_nlink, 4u);
     sprintf(test_dir2, "%s/1/1", test_dir1);
     ASSERT_EQ(ceph_mkdir(cmount, test_dir2, 0700), 0);
       ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-      ASSERT_EQ(stx.stx_nlink, 4);
+      ASSERT_EQ(stx.stx_nlink, 4u);
     ASSERT_EQ(ceph_rmdir(cmount, test_dir2), 0);
       ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-      ASSERT_EQ(stx.stx_nlink, 4);
+      ASSERT_EQ(stx.stx_nlink, 4u);
     sprintf(test_dir2, "%s/1", test_dir1);
     ASSERT_EQ(ceph_rmdir(cmount, test_dir2), 0);
       ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-      ASSERT_EQ(stx.stx_nlink, 3);
+      ASSERT_EQ(stx.stx_nlink, 3u);
     sprintf(test_dir2, "%s/2", test_dir1);
     ASSERT_EQ(ceph_rmdir(cmount, test_dir2), 0);
       ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-      ASSERT_EQ(stx.stx_nlink, 2);
+      ASSERT_EQ(stx.stx_nlink, 2u);
   }
 
   ASSERT_EQ(ceph_rmdir(cmount, test_dir1), 0);
   ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
-  ASSERT_EQ(stx.stx_nlink, 0);
+  ASSERT_EQ(stx.stx_nlink, 0u);
 
   ceph_close(cmount, fd);
 

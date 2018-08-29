@@ -648,8 +648,8 @@ TEST_F(CReadOpsTest, Omap) {
   rados_release_read_op(rop);
   EXPECT_EQ(0, r_vals);
   EXPECT_EQ(0, r_keys);
-  EXPECT_EQ(1, rados_omap_iter_size(iter_vals));
-  EXPECT_EQ(1, rados_omap_iter_size(iter_keys));
+  EXPECT_EQ(1u, rados_omap_iter_size(iter_vals));
+  EXPECT_EQ(1u, rados_omap_iter_size(iter_keys));
 
   compare_omap_vals(&keys[2], &vals[2], &lens[2], 1, iter_vals);
   compare_omap_vals(&keys[2], &vals[0], &lens[0], 1, iter_keys);
