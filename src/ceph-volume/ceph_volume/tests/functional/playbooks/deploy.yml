@@ -104,13 +104,15 @@
       synchronize:
         src: "{{ toxinidir}}/../../../../ceph_volume"
         dest: "/usr/lib/python2.7/site-packages"
+        use_ssh_args: true
       when: ansible_os_family == "RedHat"
 
     - name: rsync ceph-volume to test nodes on ubuntu
       synchronize:
         src: "{{ toxinidir}}/../../../../ceph_volume"
         dest: "/usr/lib/python2.7/dist-packages"
-      when: ansible_os_family == "Ubuntu"
+        use_ssh_args: true
+      when: ansible_os_family == "Debian"
 
 - hosts: osds
   gather_facts: false

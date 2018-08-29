@@ -181,7 +181,7 @@ class MixedType(object):
             osds.append(osd)
 
         self.computed['vgs'] = [{
-            'devices': [d['path'] for d in self.ssds],
+            'devices': [d.abspath for d in self.ssds],
             'parts': self.db_lvs,
             'percentages': self.vg_extents['percentages'],
             'sizes': self.vg_extents['sizes'],

@@ -137,7 +137,7 @@ class Batch(object):
             raise RuntimeError('report format must be "pretty" or "json"')
 
     def execute(self, args):
-        strategy = get_strategy(self.get_filtered_devices(args.devices), args)
+        strategy = get_strategy(args)
         if not args.yes:
             strategy.report_pretty()
             terminal.info('The above OSDs would be created if the operation continues')
