@@ -46,6 +46,19 @@ class Zap(object):
     def __init__(self, argv):
         self.argv = argv
 
+    def unmount_lv(self, lv):
+        if lv.tags.get('ceph.cluster_name') and lv.tags.get('ceph.osd_id'):
+            lv_path = "/var/lib/ceph/osd/{}-{}".format(lv.tags['ceph.cluster_name'], lv.tags['ceph.osd_id'])
+        else:
+            lv_path = lv.path
+        dmcrypt_uuid = lv.lv_uuid
+        dmcrypt = lv.encrypted
+        if system.path_is_mounted(lv_path):
+            mlogger.info("Unmounting %s", lv_path)
+            system.unmount(lv_path)
+        if dmcrypt and dmcrypt_uuid:
+            self.dmcrypt_close(dmcrypt_uuid)
+
     @decorators.needs_root
     def zap(self, args):
         device = args.device
@@ -56,63 +69,51 @@ class Zap(object):
         if lv:
             # we are zapping a logical volume
             path = lv.lv_path
+            self.unmount_lv(lv)
         else:
             # we are zapping a partition
             #TODO: ensure device is a partition
             path = device
+            # check to if it is encrypted to close
+            partuuid = disk.get_partuuid(device)
+            if encryption.status("/dev/mapper/{}".format(partuuid)):
+                dmcrypt_uuid = partuuid
+                self.dmcrypt_close(dmcrypt_uuid)
 
         mlogger.info("Zapping: %s", path)
 
         # check if there was a pv created with the
         # name of device
-        pv = api.get_pv(pv_name=device)
-        if pv:
+        pvs = api.PVolumes()
+        pvs.filter(pv_name=device)
+        vgs = set([pv.vg_name for pv in pvs])
+        for pv in pvs:
             vg_name = pv.vg_name
-            lv = api.get_lv(vg_name=vg_name)
+            lv = api.get_lv(vg_name=vg_name, lv_uuid=pv.lv_uuid)
 
-        dmcrypt = False
-        dmcrypt_uuid = None
-        if lv:
-            if lv.tags.get('ceph.cluster_name') and lv.tags.get('ceph.osd_id'):
-                lv_path = "/var/lib/ceph/osd/{}-{}".format(lv.tags['ceph.cluster_name'], lv.tags['ceph.osd_id'])
-            else:
-                lv_path = lv.path
-            dmcrypt_uuid = lv.lv_uuid
-            dmcrypt = lv.encrypted
-            if system.path_is_mounted(lv_path):
-                mlogger.info("Unmounting %s", lv_path)
-                system.unmount(lv_path)
-        else:
-            # we're most likely dealing with a partition here, check to
-            # see if it was encrypted
-            partuuid = disk.get_partuuid(device)
-            if encryption.status("/dev/mapper/{}".format(partuuid)):
-                dmcrypt_uuid = partuuid
-                dmcrypt = True
+            if lv:
+                self.unmount_lv(lv)
 
-        if dmcrypt and dmcrypt_uuid:
-            dmcrypt_path = "/dev/mapper/{}".format(dmcrypt_uuid)
-            mlogger.info("Closing encrypted path %s", dmcrypt_path)
-            encryption.dmcrypt_close(dmcrypt_path)
-
-        if args.destroy and pv:
-            logger.info("Found a physical volume created from %s, will destroy all it's vgs and lvs", device)
-            vg_name = pv.vg_name
-            mlogger.info("Destroying volume group %s because --destroy was given", vg_name)
-            api.remove_vg(vg_name)
+        if args.destroy:
+            for vg_name in vgs:
+                mlogger.info("Destroying volume group %s because --destroy was given", vg_name)
+                api.remove_vg(vg_name)
             mlogger.info("Destroying physical volume %s because --destroy was given", device)
             api.remove_pv(device)
-        elif args.destroy and not pv:
-            mlogger.info("Skipping --destroy because no associated physical volumes are found for %s", device)
 
         wipefs(path)
         zap_data(path)
 
-        if lv and not pv:
+        if lv and not pvs:
             # remove all lvm metadata
             lv.clear_tags()
 
         terminal.success("Zapping successful for: %s" % path)
+
+    def dmcrypt_close(self, dmcrypt_uuid):
+        dmcrypt_path = "/dev/mapper/{}".format(dmcrypt_uuid)
+        mlogger.info("Closing encrypted path %s", dmcrypt_path)
+        encryption.dmcrypt_close(dmcrypt_path)
 
     def main(self):
         sub_command_help = dedent("""
