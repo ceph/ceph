@@ -121,6 +121,7 @@ enum {
   l_osd_push_outb,
 
   l_osd_rop,
+  l_osd_rbytes,
 
   l_osd_loadavg,
   l_osd_buf,
