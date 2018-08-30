@@ -100,9 +100,13 @@ void PGLog::IndexedLog::trim(
 
     // reset complete_to to the beginning of the log
     if (reset_complete_to) {
-      lgeneric_subdout(cct, osd, 20) << " moving complete_to " << " to "
-                      << log.begin()->version << dendl;
       complete_to = log.begin();
+      if (complete_to != log.end()) {
+        lgeneric_subdout(cct, osd, 20) << " moving complete_to to "
+                                       << log.begin()->version << dendl;
+      } else {
+        lgeneric_subdout(cct, osd, 20) << " log is now empty" << dendl;
+      }
     }
   }
 
