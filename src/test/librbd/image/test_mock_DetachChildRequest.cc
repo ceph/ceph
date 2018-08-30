@@ -71,7 +71,7 @@ public:
     auto rados_client = (*io_ctx_impl)->get_mock_rados_client();
 
     EXPECT_CALL(*rados_client, create_ioctx(_, _))
-      .WillOnce(Return(*io_ctx_impl));
+      .WillOnce(DoAll(GetReference(*io_ctx_impl), Return(*io_ctx_impl)));
   }
 
   void expect_child_detach(MockImageCtx &mock_image_ctx,
