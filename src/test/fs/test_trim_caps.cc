@@ -16,8 +16,8 @@ int main(int argc, char *argv[])
 {
 	char buf;
 	int pipefd[2];
-	int rc = pipe(pipefd);
-    assert(rc >= 0);
+	int rc [[maybe_unused]] = pipe(pipefd);
+        assert(rc >= 0);
 
 	pid_t pid = fork();
 	assert(pid >= 0);
@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
 	ceph_create(&cmount, "admin");
 	ceph_conf_read_file(cmount, NULL);
 
-	int ret = ceph_mount(cmount, NULL);
+	int ret [[maybe_unused]] = ceph_mount(cmount, NULL);
 	assert(ret >= 0);
 
 	if (pid == 0) {
@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
 		struct ceph_statx stx;
 		ret = ceph_statx(cmount, "1", &stx, 0, 0);
 		assert(ret >= 0);
-		uint64_t orig_ino = stx.stx_ino;
+		uint64_t orig_ino [[maybe_unused]] = stx.stx_ino;
 
 
 		ret = ceph_mkdir(cmount, "2", 0755);
