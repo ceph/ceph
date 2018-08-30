@@ -14,13 +14,14 @@ from six import iteritems
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
 DEFAULTS = {
-    'enable_monitoring': str(True),
+    'enable_monitoring': str(False),
     'scrape_frequency': str(86400),
     'retention_period': str(86400 * 14),
     'pool_name': 'device_health_metrics',
     'mark_out_threshold': str(86400*14),
     'warn_threshold': str(86400*14*2),
     'self_heal': str(True),
+    'sleep_interval': str(600),
 }
 
 DEVICE_HEALTH = 'DEVICE_HEALTH'
@@ -42,6 +43,7 @@ class Module(MgrModule):
         {'name': 'mark_out_threshold'},
         {'name': 'warn_threshold'},
         {'name': 'self_heal'},
+        {'name': 'sleep_interval'},
     ]
 
     COMMANDS = [
@@ -74,6 +76,16 @@ class Module(MgrModule):
         {
             "cmd": "device check-health",
             "desc": "Check life expectancy of devices",
+            "perm": "rw",
+        },
+        {
+            "cmd": "device monitoring on",
+            "desc": "Enable device health monitoring",
+            "perm": "rw",
+        },
+        {
+            "cmd": "device monitoring off",
+            "desc": "Disable device health monitoring",
             "perm": "rw",
         },
     ]
@@ -118,6 +130,14 @@ class Module(MgrModule):
             return self.show_device_metrics(cmd['devid'], cmd.get('sample'))
         elif cmd['prefix'] == 'device check-health':
             return self.check_health()
+        elif cmd['prefix'] == 'device monitoring on':
+            self.set_config('enable_monitoring', 'true')
+            self.event.set()
+            return 0, '', ''
+        elif cmd['prefix'] == 'device monitoring off':
+            self.set_config('enable_monitoring', 'false')
+            self.set_health_checks({})  # avoid stuck health alerts
+            return 0, '', ''
         else:
             # mgr should respect our self.COMMANDS and not call us for
             # any prefix we don't advertise
@@ -140,34 +160,56 @@ class Module(MgrModule):
             assert before != after
 
     def refresh_config(self):
-        self.enable_monitoring = self.get_config('enable_monitoring',
-                                                 '') is not '' or 'false'
         for opt, value in iteritems(DEFAULTS):
             setattr(self, opt, self.get_config(opt) or value)
+            self.log.debug(' %s = %s', opt, getattr(self, opt))
 
     def serve(self):
         self.log.info("Starting")
+
+        last_scrape = None
+        ls = self.get_store('last_scrape')
+        if ls:
+            try:
+                last_scrape = datetime.strptime(ls, TIME_FORMAT)
+            except ValueError as e:
+                pass
+        self.log.debug('Last scrape %s', last_scrape)
+
         while self.run:
             self.refresh_config()
 
-            # TODO normalize/align sleep interval
-            sleep_interval = int(self.scrape_frequency)
+            if self.enable_monitoring == 'true' or self.enable_monitoring == 'True':
+                self.log.debug('Running')
+                self.check_health()
 
+                now = datetime.utcnow()
+                if not last_scrape:
+                    next_scrape = now
+                else:
+                    # align to scrape interval
+                    scrape_frequency = int(self.scrape_frequency) or 86400
+                    seconds = (last_scrape - datetime.utcfromtimestamp(0)).total_seconds()
+                    seconds -= seconds % scrape_frequency
+                    seconds += scrape_frequency
+                    next_scrape = datetime.utcfromtimestamp(seconds)
+                if last_scrape:
+                    self.log.debug('Last scrape %s, next scrape due %s',
+                                   last_scrape.strftime(TIME_FORMAT),
+                                   next_scrape.strftime(TIME_FORMAT))
+                else:
+                    self.log.debug('Last scrape never, next scrape due %s',
+                                   next_scrape.strftime(TIME_FORMAT))
+                if now >= next_scrape:
+                    self.scrape_all()
+                    last_scrape = now
+                    self.set_store('last_scrape', last_scrape.strftime(TIME_FORMAT))
+
+            # sleep
+            sleep_interval = int(self.sleep_interval) or 60
             self.log.debug('Sleeping for %d seconds', sleep_interval)
             ret = self.event.wait(sleep_interval)
             self.event.clear()
-
-            # in case 'wait' was interrupted, it could mean config was changed
-            # by the user; go back and read config vars
-            if ret:
-                continue
-
-            self.log.debug('Waking up [%s]',
-                           "active" if self.enable_monitoring else "inactive")
-            if not self.enable_monitoring:
-                continue
-            self.log.debug('Running')
-            self.check_health()
 
     def shutdown(self):
         self.log.info('Stopping')
@@ -282,7 +324,7 @@ class Module(MgrModule):
                     osd_id, outb))
 
     def put_device_metrics(self, ioctx, devid, data):
-        old_key = datetime.now() - timedelta(
+        old_key = datetime.utcnow() - timedelta(
             seconds=int(self.retention_period))
         prune = old_key.strftime(TIME_FORMAT)
         self.log.debug('put_device_metrics device %s prune %s' %
@@ -303,10 +345,10 @@ class Module(MgrModule):
         except rados.Error as e:
             # Do not proceed with writes if something unexpected
             # went wrong with the reads.
-            log.exception("Error reading OMAP: {0}".format(e))
+            self.log.exception("Error reading OMAP: {0}".format(e))
             return
 
-        key = datetime.now().strftime(TIME_FORMAT)
+        key = datetime.utcnow().strftime(TIME_FORMAT)
         self.log.debug('put_device_metrics device %s key %s = %s, erase %s' %
                        (devid, key, data, erase))
         with rados.WriteOpCtx() as op:
@@ -342,7 +384,7 @@ class Module(MgrModule):
             except rados.ObjectNotFound:
                 pass
             except rados.Error as e:
-                log.exception("RADOS error reading omap: {0}".format(e))
+                self.log.exception("RADOS error reading omap: {0}".format(e))
                 raise
 
         return 0, json.dumps(res, indent=4), ''
@@ -361,7 +403,7 @@ class Module(MgrModule):
         devs = self.get("devices")
         osds_in = {}
         osds_out = {}
-        now = datetime.now()
+        now = datetime.utcnow()
         osdmap = self.get("osd_map")
         assert osdmap is not None
         for dev in devs['devices']:
