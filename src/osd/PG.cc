@@ -4139,7 +4139,7 @@ void PG::reg_next_scrub()
 void PG::unreg_next_scrub()
 {
   if (is_primary()) {
-    osd->unreg_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
+    osd->unreg_pg_scrub(info.pgid);
     scrubber.scrub_reg_stamp = utime_t();
   }
 }

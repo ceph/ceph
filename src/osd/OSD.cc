@@ -6826,7 +6826,8 @@ OSDService::ScrubJob::ScrubJob(CephContext* cct,
   : cct(cct),
     pgid(pg),
     sched_time(timestamp),
-    deadline(timestamp)
+    deadline(timestamp),
+    must(must)
 {
   // if not explicitly requested, postpone the scrub with a random delay
   if (!must) {
@@ -6849,6 +6850,10 @@ OSDService::ScrubJob::ScrubJob(CephContext* cct,
 }
 
 bool OSDService::ScrubJob::ScrubJob::operator<(const OSDService::ScrubJob& rhs) const {
+  if (must && !rhs.must)
+    return true;
+  if (!must && rhs.must)
+    return false;
   if (sched_time < rhs.sched_time)
     return true;
   if (sched_time > rhs.sched_time)

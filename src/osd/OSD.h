@@ -450,6 +450,7 @@ public:
     utime_t sched_time;
     /// the hard upper bound of scrub time
     utime_t deadline;
+    bool must;
     ScrubJob() : cct(nullptr) {}
     explicit ScrubJob(CephContext* cct, const spg_t& pg,
 		      const utime_t& timestamp,
@@ -469,10 +470,16 @@ public:
     sched_scrub_pg.insert(scrub);
     return scrub.sched_time;
   }
-  void unreg_pg_scrub(spg_t pgid, utime_t t) {
+  void unreg_pg_scrub(spg_t pgid) {
     Mutex::Locker l(sched_scrub_lock);
-    size_t removed = sched_scrub_pg.erase(ScrubJob(cct, pgid, t));
-    ceph_assert(removed);
+    set<ScrubJob>::iterator f;
+    for (f = sched_scrub_pg.begin(); f != sched_scrub_pg.end(); ++f) {
+      if (f->pgid == pgid) {
+        break;
+      }
+    }
+    ceph_assert(f != sched_scrub_pg.end());
+    sched_scrub_pg.erase(f);
   }
   bool first_scrub_stamp(ScrubJob *out) {
     Mutex::Locker l(sched_scrub_lock);
