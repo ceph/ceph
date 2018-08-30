@@ -2826,22 +2826,22 @@ void PGMap::get_health_checks(
   // PG_NOT_SCRUBBED
   // PG_NOT_DEEP_SCRUBBED
   {
-    if (cct->_conf->mon_warn_not_scrubbed ||
-        cct->_conf->mon_warn_not_deep_scrubbed) {
+    if (cct->_conf->mon_warn_pg_not_scrubbed ||
+        cct->_conf->mon_warn_pg_not_deep_scrubbed) {
       list<string> detail, deep_detail;
       int detail_max = max, deep_detail_max = max;
       int detail_more = 0, deep_detail_more = 0;
       int detail_total = 0, deep_detail_total = 0;
-      const double age = cct->_conf->mon_warn_not_scrubbed +
-        cct->_conf->mon_scrub_interval;
+      const double age = cct->_conf->mon_warn_pg_not_scrubbed +
+        cct->_conf->osd_scrub_max_interval;
       utime_t cutoff = now;
       cutoff -= age;
-      const double deep_age = cct->_conf->mon_warn_not_deep_scrubbed +
+      const double deep_age = cct->_conf->mon_warn_pg_not_deep_scrubbed +
         cct->_conf->osd_deep_scrub_interval;
       utime_t deep_cutoff = now;
       deep_cutoff -= deep_age;
       for (auto& p : pg_stat) {
-        if (cct->_conf->mon_warn_not_scrubbed &&
+        if (cct->_conf->mon_warn_pg_not_scrubbed &&
             p.second.last_scrub_stamp < cutoff) {
           if (detail_max > 0) {
             ostringstream ss;
@@ -2854,7 +2854,7 @@ void PGMap::get_health_checks(
           }
           ++detail_total;
         }
-        if (cct->_conf->mon_warn_not_deep_scrubbed &&
+        if (cct->_conf->mon_warn_pg_not_deep_scrubbed &&
             p.second.last_deep_scrub_stamp < deep_cutoff) {
           if (deep_detail_max > 0) {
             ostringstream ss;

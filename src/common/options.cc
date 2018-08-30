@@ -1624,11 +1624,11 @@ std::vector<Option> get_global_options() {
     .set_default(15_G)
     .set_description(""),
 
-    Option("mon_warn_not_scrubbed", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_warn_pg_not_scrubbed", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description(""),
 
-    Option("mon_warn_not_deep_scrubbed", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_warn_pg_not_deep_scrubbed", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description(""),
 

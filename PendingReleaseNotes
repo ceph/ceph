@@ -8,6 +8,12 @@
 * Nautilus is not supported on any distros still running upstart so upstart
   specific files and references have been removed.
 
+* Configuration values mon_warn_not_scrubbed/mon_warn_not_deep_scrubbed have been
+  renamed.  They are now mon_warn_pg_not_scrubbed/mon_warn_pg_not_deep_scrubbed
+  respectively.  This is to clarify that these warnings are related to pg scrubbing
+  NOT the mon scrub mechanism.  These options are disabled by default, but
+  if they are present in your ceph.conf please update the names.
+
 >=13.1.0
 --------
 
