@@ -691,7 +691,7 @@ seastar::future<> SocketConnection::handle_connect_reply(msgr_tag_t tag)
       missing) {
     return fault();
   }
-  if (h.reply.tag == CEPH_MSGR_TAG_SEQ) {
+  if (tag == CEPH_MSGR_TAG_SEQ) {
     return in.read_exactly(sizeof(seq_num_t))
       .then([this] (auto buf) {
         auto acked_seq = reinterpret_cast<const seq_num_t*>(buf.get());
@@ -704,7 +704,7 @@ seastar::future<> SocketConnection::handle_connect_reply(msgr_tag_t tag)
         return handle_connect_reply(CEPH_MSGR_TAG_READY);
       });
   }
-  if (h.reply.tag == CEPH_MSGR_TAG_READY) {
+  if (tag == CEPH_MSGR_TAG_READY) {
     // hooray!
     h.peer_global_seq = h.reply.global_seq;
     policy.lossy = h.reply.flags & CEPH_MSG_CONNECT_LOSSY;
