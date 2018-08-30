@@ -801,8 +801,7 @@ seastar::future<> SocketConnection::client_handshake(entity_type_t peer_type,
       validate_peer_addr(saddr, peer_addr);
 
       if (my_addr != caddr) {
-        // take peer's address for me, but preserve my port/nonce
-        caddr.set_port(my_addr.get_port());
+        // take peer's address for me, but preserve my nonce
         caddr.nonce = my_addr.nonce;
         my_addr = caddr;
       }
