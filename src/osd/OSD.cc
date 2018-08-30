@@ -4158,6 +4158,7 @@ void OSD::build_initial_pg_history(
  * and same_primary_since.
  */
 bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
+                             const OSDMapRef& osdmap,
 			     const vector<int>& currentup,
 			     int currentupprimary,
 			     const vector<int>& currentacting,
@@ -8625,7 +8626,7 @@ void OSD::handle_pg_query_nopg(const MQuery& q)
   // same primary?
   pg_history_t history = q.query.history;
   bool valid_history = project_pg_history(
-    pgid, history, q.query.epoch_sent,
+    pgid, history, q.query.epoch_sent, osdmap,
     up, up_primary, acting, acting_primary);
 
   if (!valid_history ||
