@@ -526,9 +526,10 @@ seastar::future<>
 SocketConnection::send_connect_reply_ready(msgr_tag_t tag,
                                            bufferlist&& authorizer_reply)
 {
+  h.global_seq = get_messenger()->get_global_seq();
   h.reply.tag = tag;
   h.reply.features = policy.features_supported;
-  h.reply.global_seq = get_messenger()->get_global_seq();
+  h.reply.global_seq = h.global_seq;
   h.reply.connect_seq = h.connect_seq;
   h.reply.flags = 0;
   if (policy.lossy) {
@@ -820,6 +821,7 @@ seastar::future<> SocketConnection::client_handshake(entity_type_t peer_type,
       bufferlist bl;
       bl.append(buffer::create_static(banner_size, banner));
       ::encode(my_addr, bl, 0);
+      h.global_seq = get_messenger()->get_global_seq();
       return out.write(std::move(bl)).then([this] { return out.flush(); });
     }).then([=] {
       return seastar::do_until([=] { return state == state_t::open; },
