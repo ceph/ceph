@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import re
+
 import cherrypy
 import requests
 from six.moves.urllib.parse import urlparse  # pylint: disable=import-error
@@ -134,4 +136,10 @@ class GrafanaProxy(BaseController):
         cherrypy.response.headers['Content-Type'] = response.headers[
             'Content-Type']
 
-        return response.content
+        content = response.content
+        if re.search(r'grafana\.\w+\.css', response.text):
+            content += """
+           body { background-color: #000000; };
+           """
+
+        return content
