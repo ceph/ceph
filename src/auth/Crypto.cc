@@ -23,6 +23,7 @@
 #include "include/assert.h"
 #include "common/Clock.h"
 #include "common/armor.h"
+#include "common/ceph_context.h"
 #include "common/ceph_crypto.h"
 #include "common/hex.h"
 #include "common/safe_io.h"

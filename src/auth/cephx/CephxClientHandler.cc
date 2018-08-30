@@ -20,6 +20,7 @@
 
 #include "auth/KeyRing.h"
 #include "include/random.h"
+#include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/dout.h"
 
