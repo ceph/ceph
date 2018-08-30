@@ -81,11 +81,7 @@ export class UserListComponent implements OnInit {
       () => {
         this.getUsers();
         this.modalRef.hide();
-        this.notificationService.show(
-          NotificationType.success,
-          `User "${username}" has been deleted.`,
-          'Delete User'
-        );
+        this.notificationService.show(NotificationType.success, `Deleted user "${username}"`);
       },
       () => {
         this.modalRef.content.stopLoadingSpinner();
@@ -99,8 +95,8 @@ export class UserListComponent implements OnInit {
     if (sessionUsername === username) {
       this.notificationService.show(
         NotificationType.error,
-        `You are currently authenticated with user "${username}".`,
-        'Cannot Delete User'
+        `Failed to delete user "${username}"`,
+        `You are currently logged in as "${username}".`
       );
       return;
     }

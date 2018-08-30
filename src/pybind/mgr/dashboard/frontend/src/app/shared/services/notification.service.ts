@@ -67,7 +67,8 @@ export class NotificationService {
    * Method for showing a notification.
    * @param {NotificationType} type toastr type
    * @param {string} title
-   * @param {string} [message]
+   * @param {string} [message] The message to be displayed. Note, use this field
+   *   for error notifications only.
    * @param {*} [options] toastr compatible options, used when creating a toastr
    * @memberof NotificationService
    * @returns The timeout ID that is set to be able to cancel the notification.

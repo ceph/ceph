@@ -132,8 +132,7 @@ export class UserFormComponent implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          `User "${userFormModel.username}" has been created.`,
-          'Create User'
+          `Created user "${userFormModel.username}"`
         );
         this.router.navigate(['/users']);
       },
@@ -209,8 +208,7 @@ export class UserFormComponent implements OnInit {
         } else {
           this.notificationService.show(
             NotificationType.success,
-            `User "${userFormModel.username}" has been updated.`,
-            'Edit User'
+            `Updated user "${userFormModel.username}"`
           );
           this.router.navigate(['/users']);
         }
