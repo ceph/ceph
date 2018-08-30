@@ -1045,6 +1045,8 @@ CEPH_RBD_API int rbd_namespace_remove(rados_ioctx_t io,
                                       const char *namespace_name);
 CEPH_RBD_API int rbd_namespace_list(rados_ioctx_t io, char *namespace_names,
                                     size_t *size);
+CEPH_RBD_API int rbd_namespace_exists(rados_ioctx_t io, const char *namespace_name,
+                                      bool *exists);
 
 #ifdef __cplusplus
 }
