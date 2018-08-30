@@ -5598,7 +5598,7 @@ std::vector<Option> get_rgw_options() {
     .set_default(".rgw.root")
     .set_description("Period root pool")
     .set_long_description(
-        "The realm root pool, is the pool where the RGW realm configuration located."
+        "The period root pool, is the pool where the RGW period configuration located."
     )
     .add_see_also({"rgw_zonegroup_root_pool", "rgw_zone_root_pool", "rgw_realm_root_pool"}),
 
