@@ -115,7 +115,8 @@ struct MockImageCtx {
       enable_alloc_hint(image_ctx.enable_alloc_hint),
       ignore_migrating(image_ctx.ignore_migrating),
       mtime_update_interval(image_ctx.mtime_update_interval),
-      atime_update_interval(image_ctx.atime_update_interval)
+      atime_update_interval(image_ctx.atime_update_interval),
+      cache(image_ctx.cache)
   {
     md_ctx.dup(image_ctx.md_ctx);
     data_ctx.dup(image_ctx.data_ctx);
