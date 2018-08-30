@@ -104,8 +104,8 @@
                                (NOTE: required to specify formatting of date
                                to "YYYY-MM-DD-hh")
     log rm                     remove log object
-    usage show                 show usage (by user, date range)
-    usage trim                 trim usage (by user, date range)
+    usage show                 show usage (by user, by bucket, date range)
+    usage trim                 trim usage (by user, by bucket, date range)
     usage clear                reset all the usage stats for the cluster
     gc list                    dump expired garbage collection objects (specify
                                --include-all to list all entries, including unexpired)

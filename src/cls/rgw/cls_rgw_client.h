@@ -498,12 +498,11 @@ void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist
 void cls_rgw_suggest_changes(librados::ObjectWriteOperation& o, bufferlist& updates);
 
 /* usage logging */
-int cls_rgw_usage_log_read(librados::IoCtx& io_ctx, string& oid, string& user,
-                           uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
-                           string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage,
-                           bool *is_truncated);
+int cls_rgw_usage_log_read(librados::IoCtx& io_ctx, const string& oid, const string& user, const string& bucket,
+                           uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries, string& read_iter,
+			   map<rgw_user_bucket, rgw_usage_log_entry>& usage, bool *is_truncated);
 
-int cls_rgw_usage_log_trim(librados::IoCtx& io_ctx, const string& oid, string& user,
+int cls_rgw_usage_log_trim(librados::IoCtx& io_ctx, const string& oid, const string& user, const string& bucket,
                            uint64_t start_epoch, uint64_t end_epoch);
 
 void cls_rgw_usage_log_clear(librados::ObjectWriteOperation& op);
