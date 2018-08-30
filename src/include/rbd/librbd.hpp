@@ -271,6 +271,7 @@ public:
   int namespace_create(IoCtx& ioctx, const char *namespace_name);
   int namespace_remove(IoCtx& ioctx, const char *namespace_name);
   int namespace_list(IoCtx& io_ctx, std::vector<std::string>* namespace_names);
+  int namespace_exists(IoCtx& io_ctx, const char *namespace_name, bool *exists);
 
 private:
   /* We don't allow assignment or copying */
