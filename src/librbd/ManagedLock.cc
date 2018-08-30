@@ -696,11 +696,12 @@ void ManagedLock<I>::handle_release_lock(int r) {
   Mutex::Locker locker(m_lock);
   assert(m_state == STATE_RELEASING);
 
-  if (r >= 0) {
+  if (r >= 0 || r == -EBLACKLISTED || r == -ENOENT) {
     m_cookie = "";
+    m_post_next_state = STATE_UNLOCKED;
+  } else {
+    m_post_next_state = STATE_LOCKED;
   }
-
-  m_post_next_state = r < 0 ? STATE_LOCKED : STATE_UNLOCKED;
 
   m_work_queue->queue(new FunctionContext([this, r](int ret) {
     post_release_lock_handler(false, r, create_context_callback<
