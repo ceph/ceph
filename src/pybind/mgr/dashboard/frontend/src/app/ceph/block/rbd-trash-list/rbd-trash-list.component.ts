@@ -8,11 +8,15 @@ import { RbdService } from '../../../shared/api/rbd.service';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
+import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { ExecutingTask } from '../../../shared/models/executing-task';
+import { Permission } from '../../../shared/models/permissions';
 import { CdDatePipe } from '../../../shared/pipes/cd-date.pipe';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
+import { RbdTrashRestoreModalComponent } from '../rbd-trash-restore-modal/rbd-trash-restore-modal.component';
 
 @Component({
   selector: 'cd-rbd-trash-list',
@@ -30,16 +34,29 @@ export class RbdTrashListComponent implements OnInit {
   executingTasks: ExecutingTask[] = [];
   images: any;
   modalRef: BsModalRef;
+  permission: Permission;
   retries: number;
   selection = new CdTableSelection();
+  tableActions: CdTableAction[];
   viewCacheStatusList: any[];
 
   constructor(
+    private authStorageService: AuthStorageService,
     private rbdService: RbdService,
     private modalService: BsModalService,
     private cdDatePipe: CdDatePipe,
     private taskListService: TaskListService
-  ) {}
+  ) {
+    this.permission = this.authStorageService.getPermissions().rbdImage;
+
+    const restoreAction: CdTableAction = {
+      permission: 'update',
+      icon: 'fa-undo',
+      click: () => this.restoreModal(),
+      name: 'Restore'
+    };
+    this.tableActions = [restoreAction];
+  }
 
   ngOnInit() {
     this.columns = [
@@ -128,5 +145,16 @@ export class RbdTrashListComponent implements OnInit {
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  restoreModal() {
+    const initialState = {
+      metaType: 'RBD',
+      poolName: this.selection.first().pool_name,
+      imageName: this.selection.first().name,
+      imageId: this.selection.first().id
+    };
+
+    this.modalRef = this.modalService.show(RbdTrashRestoreModalComponent, { initialState });
   }
 }
