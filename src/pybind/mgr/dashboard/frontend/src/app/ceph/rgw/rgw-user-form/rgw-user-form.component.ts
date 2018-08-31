@@ -177,7 +177,7 @@ export class RgwUserFormComponent implements OnInit {
               value[type + '_quota_max_size'] = null;
             } else {
               value[type + '_quota_max_size_unlimited'] = false;
-              value[type + '_quota_max_size'] = quota.max_size;
+              value[type + '_quota_max_size'] = `${quota.max_size} B`;
             }
             if (quota.max_objects < 0) {
               value[type + '_quota_max_objects_unlimited'] = true;
