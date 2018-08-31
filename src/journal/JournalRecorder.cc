@@ -50,10 +50,12 @@ JournalRecorder::JournalRecorder(librados::IoCtx &ioctx,
                                  const std::string &object_oid_prefix,
                                  const JournalMetadataPtr& journal_metadata,
                                  uint32_t flush_interval, uint64_t flush_bytes,
-                                 double flush_age)
+                                 double flush_age,
+                                 uint64_t max_in_flight_appends)
   : m_cct(NULL), m_object_oid_prefix(object_oid_prefix),
     m_journal_metadata(journal_metadata), m_flush_interval(flush_interval),
-    m_flush_bytes(flush_bytes), m_flush_age(flush_age), m_listener(this),
+    m_flush_bytes(flush_bytes), m_flush_age(flush_age),
+    m_max_in_flight_appends(max_in_flight_appends), m_listener(this),
     m_object_handler(this), m_lock("JournalerRecorder::m_lock"),
     m_current_set(m_journal_metadata->get_active_set()) {
 
@@ -253,7 +255,7 @@ ObjectRecorderPtr JournalRecorder::create_object_recorder(
     object_number, lock, m_journal_metadata->get_work_queue(),
     m_journal_metadata->get_timer(), m_journal_metadata->get_timer_lock(),
     &m_object_handler, m_journal_metadata->get_order(), m_flush_interval,
-    m_flush_bytes, m_flush_age));
+    m_flush_bytes, m_flush_age, m_max_in_flight_appends));
   return object_recorder;
 }
 
