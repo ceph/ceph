@@ -1,3 +1,5 @@
+.. _object-gateway:
+
 =====================
  Ceph Object Gateway
 =====================
