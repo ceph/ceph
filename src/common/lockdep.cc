@@ -12,6 +12,7 @@
  *
  */
 #include "lockdep.h"
+#include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/valgrind.h"
 

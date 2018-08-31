@@ -22,9 +22,7 @@
 extern "C" {
 #include "crush/hash.h"
 }
-#include "PG.h"
 #include "OSDMap.h"
-#include "PGBackend.h"
 
 const char *ceph_osd_flag_name(unsigned flag)
 {
