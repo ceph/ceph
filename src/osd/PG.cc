@@ -6743,10 +6743,6 @@ void PG::_delete_some(ObjectStore::Transaction *t)
       _init(*t, info.pgid, &pool.info);
       dirty_info = true;
       dirty_big_info = true;
-
-#warning remove me before final merge
-      // REMOVE ME: trigger log error to ensure we exercise this in testing
-      osd->clog->error() << info.pgid << " delete merge race";
     } else {
       deleted = true;
 
