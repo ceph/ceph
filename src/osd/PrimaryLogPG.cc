@@ -8520,6 +8520,7 @@ void PrimaryLogPG::apply_stats(
   const object_stat_sum_t &delta_stats) {
 
   info.stats.stats.add(delta_stats);
+  info.stats.stats.floor(0);
 
   for (set<pg_shard_t>::iterator i = backfill_targets.begin();
        i != backfill_targets.end();
