@@ -385,7 +385,8 @@ function unfound_erasure_coded() {
 	ceph -s | grep "1/1 objects unfound" && break
 	sleep 1
     done
-    ceph -s|grep "4 osds: 4 up, 4 in" || return 1
+    ceph -s|grep "4 up" || return 1
+    ceph -s|grep "4 in" || return 1
     ceph -s|grep "1/1 objects unfound" || return 1
 
     teardown $dir || return 1
