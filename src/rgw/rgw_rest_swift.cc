@@ -1105,6 +1105,20 @@ void RGWCopyObj_ObjStore_SWIFT::send_response()
   }
 }
 
+int RGWGetObj_ObjStore_SWIFT::verify_permission()
+{
+  op_ret = RGWGetObj_ObjStore::verify_permission();
+
+  /* We have to differentiate error codes depending on whether user is
+   * anonymous (401 Unauthorized) or he doesn't have necessary permissions
+   * (403 Forbidden). */
+  if (s->auth_identity->is_anonymous() && op_ret == -EACCES) {
+    return -EPERM;
+  } else {
+    return op_ret;
+  }
+}
+
 int RGWGetObj_ObjStore_SWIFT::get_params()
 {
   const string& mm = s->info.args.get("multipart-manifest");
