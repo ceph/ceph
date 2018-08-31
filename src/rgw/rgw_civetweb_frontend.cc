@@ -15,30 +15,33 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+namespace dmc = rgw::dmclock;
+
 RGWCivetWebFrontend::RGWCivetWebFrontend(RGWProcessEnv& env,
 					 RGWFrontendConfig *conf,
 					 CephContext *cct,
-					 rgw::dmclock::ClientCounters& dmclock_counters,
-					 rgw::dmclock::ClientConfig& dmclock_clients)
+					 dmc::optional_scheduler_ctx& sched_ctx)
   : conf(conf),
     ctx(nullptr),
     env(env)
 {
-  namespace dmc = rgw::dmclock;
-  // TODO: keep track of server ready state and use that here civetweb
-  // internally tracks in the ctx the threads used and free, while it is
-  // expected with the current implementation that the threads waiting on the
-  // queue would still show up in the "used" queue, it might be a useful thing
-  // to make decisions on in the future. Also while reconfiguring we should
-  // probably set this to false
-  auto server_ready_f = []() -> bool { return true; };
 
-  scheduler.reset(new dmc::SyncScheduler(cct,
-					 std::ref(dmclock_counters),
-					 std::ref(dmclock_clients),
-					 server_ready_f,
-					 std::ref(dmc::SyncScheduler::handle_request_cb),
-					 rgw::dmclock::AtLimit::Reject));
+
+  if (sched_ctx) {
+    // TODO: keep track of server ready state and use that here civetweb
+    // internally tracks in the ctx the threads used and free, while it is
+    // expected with the current implementation that the threads waiting on the
+    // queue would still show up in the "used" queue, it might be a useful thing
+    // to make decisions on in the future. Also while reconfiguring we should
+    // probably set this to false
+    auto server_ready_f = []() -> bool { return true; };
+    scheduler.reset(new dmc::SyncScheduler(cct,
+					   std::ref(sched_ctx.get_counters()),
+					   sched_ctx.get_clients(),
+					   server_ready_f,
+					   std::ref(dmc::SyncScheduler::handle_request_cb),
+					   dmc::AtLimit::Reject));
+  }
 
 }
 
@@ -63,7 +66,7 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
 
   RGWRequest req(env.store->get_new_req_id());
   int http_ret = 0;
-  assert (scheduler != nullptr);
+  //assert (scheduler != nullptr);
   int ret = process_request(env.store, env.rest, &req, env.uri_prefix,
                             *env.auth_registry, &client_io, env.olog,
                             null_yield, nullptr, scheduler.get() ,&http_ret);

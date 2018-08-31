@@ -21,8 +21,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 namespace rgw::dmclock {
-  class ClientConfig;
-  class ClientCounters;
+  class optional_scheduler_ctx;
 }
 
 class RGWFrontendConfig {
@@ -115,8 +114,7 @@ public:
   RGWCivetWebFrontend(RGWProcessEnv& env,
                       RGWFrontendConfig *conf,
                       CephContext *cct,
-                      rgw::dmclock::ClientCounters& dmclock_counters,
-                      rgw::dmclock::ClientConfig& dmclock_clients);
+		      rgw::dmclock::optional_scheduler_ctx& sched_ctx);
 
   int init() override {
     return 0;

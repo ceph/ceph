@@ -253,6 +253,24 @@ class ClientCounters {
   }
 };
 
+/// a simple wrapper to hold client config. objects needed to construct a
+/// scheduler instance, the primary utility of this being to optionally
+/// construct scheduler only when configured in the frontends.
+class optional_scheduler_ctx {
+  std::optional<ClientConfig> clients;
+  std::optional<ClientCounters> counters;
+public:
+  optional_scheduler_ctx(CephContext *cct) {
+    if(cct->_conf.get_val<bool>("rgw_dmclock_enabled")){
+      clients.emplace(ClientConfig(cct));
+      counters.emplace(ClientCounters(cct));
+    }
+  }
+  operator bool() const noexcept { return counters && clients; }
+  // both the get functions below will throw
+  ClientCounters& get_counters() { return counters.value(); }
+  ClientConfig& get_clients() { return clients.value(); }
+};
 } // namespace rgw::dmclock
 
 #endif // RGW_DMCLOCK_SCHEDULER_H
