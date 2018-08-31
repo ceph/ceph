@@ -647,22 +647,23 @@ void ConfigMonitor::load_config()
     }
 
     string section_name;
-    if (key.find("mgr") == 0) {
-      name = key.substr(key.find('/') + 1);    
-      MaskedOption mopt(new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN));
+    if (key.find("/mgr/") != std::string::npos) {
+      // mgr module option, "something/mgr/foo"
+      name = key.substr(key.find("/mgr/") + 1);
+      MaskedOption mopt(new Option(name, Option::TYPE_STR,
+				   Option::LEVEL_UNKNOWN));
       mopt.raw_value = value;      
       Section *section = &config_map.global;;
       section_name = "mgr";
-      if (section_name.size()) {
-	if (section_name.find('.') != std::string::npos) {
-	  section = &config_map.by_id[section_name];
-	} else {
-	  section = &config_map.by_type[section_name];
-	}
+      if (section_name.find('.') != std::string::npos) {
+	section = &config_map.by_id[section_name];
+      } else {
+	section = &config_map.by_type[section_name];
       }
       section->options.insert(make_pair(name, std::move(mopt)));
       ++num;      
     } else {
+      // normal option
       const Option *opt = g_conf().find_option(name);
       if (!opt) {
 	dout(10) << __func__ << " unrecognized option '" << name << "'" << dendl;
