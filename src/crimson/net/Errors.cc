@@ -25,6 +25,8 @@ const std::error_category& net_category()
 
     std::string message(int ev) const override {
       switch (static_cast<error>(ev)) {
+        case error::success:
+          return "success";
         case error::bad_connect_banner:
           return "bad connect banner";
         case error::bad_peer_address:
