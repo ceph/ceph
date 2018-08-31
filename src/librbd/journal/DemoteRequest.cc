@@ -135,7 +135,7 @@ void DemoteRequest<I>::append_event() {
   bufferlist event_entry_bl;
   encode(event_entry, event_entry_bl);
 
-  m_journaler->start_append(0, 0, 0);
+  m_journaler->start_append(0, 0, 0, 0);
   m_future = m_journaler->append(m_tag_tid, event_entry_bl);
 
   auto ctx = create_context_callback<

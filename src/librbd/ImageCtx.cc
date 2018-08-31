@@ -793,6 +793,7 @@ public:
         "rbd_journal_object_flush_interval", false)(
         "rbd_journal_object_flush_bytes", false)(
         "rbd_journal_object_flush_age", false)(
+        "rbd_journal_object_max_in_flight_appends", false)(
         "rbd_journal_pool", false)(
         "rbd_journal_max_payload_bytes", false)(
         "rbd_journal_max_concurrent_object_sets", false)(
@@ -862,6 +863,7 @@ public:
     ASSIGN_OPTION(journal_object_flush_interval, int64_t);
     ASSIGN_OPTION(journal_object_flush_bytes, Option::size_t);
     ASSIGN_OPTION(journal_object_flush_age, double);
+    ASSIGN_OPTION(journal_object_max_in_flight_appends, uint64_t);
     ASSIGN_OPTION(journal_max_payload_bytes, Option::size_t);
     ASSIGN_OPTION(journal_max_concurrent_object_sets, int64_t);
     ASSIGN_OPTION(mirroring_resync_after_disconnect, bool);
