@@ -262,15 +262,17 @@ class AsioFrontend {
 
  public:
   AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf,
-               rgw::dmclock::ClientCounters& dmclock_counters,
-               rgw::dmclock::ClientConfig& dmclock_clients)
+	       rgw::dmclock::optional_scheduler_ctx& sched_ctx)
     : env(env), conf(conf), pause_mutex(context.get_executor())
   {
-    scheduler.reset(new rgw::dmclock::AsyncScheduler(ctx(), context,
-						     std::ref(dmclock_counters),
-						     &dmclock_clients,
-						     std::ref(dmclock_clients),
-						     rgw::dmclock::AtLimit::Reject));
+    if (sched_ctx){
+      scheduler.reset(new rgw::dmclock::AsyncScheduler(ctx(), context,
+						       std::ref(sched_ctx.get_counters()),
+						       &(sched_ctx.get_clients()),
+						       sched_ctx.get_clients(),
+						       rgw::dmclock::AtLimit::Reject));
+    }
+
   }
 
   int init();
@@ -660,16 +662,14 @@ void AsioFrontend::unpause(RGWRados* const store,
 class RGWAsioFrontend::Impl : public AsioFrontend {
  public:
   Impl(const RGWProcessEnv& env, RGWFrontendConfig* conf,
-       rgw::dmclock::ClientCounters& dmclock_counters,
-       rgw::dmclock::ClientConfig& dmclock_clients)
-    : AsioFrontend(env, conf, dmclock_counters, dmclock_clients) {}
+       rgw::dmclock::optional_scheduler_ctx& sched_ctx)
+    : AsioFrontend(env, conf, sched_ctx) {}
 };
 
 RGWAsioFrontend::RGWAsioFrontend(const RGWProcessEnv& env,
                                  RGWFrontendConfig* conf,
-                                 rgw::dmclock::ClientCounters& dmclock_counters,
-                                 rgw::dmclock::ClientConfig& dmclock_clients)
-  : impl(new Impl(env, conf, dmclock_counters, dmclock_clients))
+				 rgw::dmclock::optional_scheduler_ctx& sched_ctx)
+  : impl(new Impl(env, conf, sched_ctx))
 {
 }
 
