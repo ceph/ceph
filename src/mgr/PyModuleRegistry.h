@@ -106,15 +106,6 @@ public:
   void active_shutdown();
   void shutdown();
 
-  template<typename Callback, typename...Args>
-  void with_active_modules(Callback&& cb, Args&&...args) const
-  {
-    Mutex::Locker l(lock);
-    ceph_assert(active_modules != nullptr);
-
-    std::forward<Callback>(cb)(*active_modules, std::forward<Args>(args)...);
-  }
-
   std::vector<MonCommand> get_commands() const;
   std::vector<ModuleCommand> get_py_commands() const;
 
