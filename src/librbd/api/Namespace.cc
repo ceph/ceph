@@ -50,7 +50,7 @@ int Namespace<I>::create(librados::IoCtx& io_ctx, const std::string& name)
 rollback:
   int ret_val = cls_client::namespace_remove(&default_ns_ctx, name);
   if (ret_val < 0) {
-    lderr(cct) << "failed to remove namespace: " << cpp_strerror(r) << dendl;
+    lderr(cct) << "failed to remove namespace: " << cpp_strerror(ret_val) << dendl;
   }
 
   return r;
@@ -151,6 +151,34 @@ int Namespace<I>::list(IoCtx& io_ctx, vector<string> *names)
     }
     r = name_list.size();
   } while (r == max_read);
+
+  return 0;
+}
+
+template <typename I>
+int Namespace<I>::exists(librados::IoCtx& io_ctx, const std::string& name, bool *exists)
+{
+  CephContext *cct = (CephContext *)io_ctx.cct();
+  ldout(cct, 5) << "name=" << name << dendl;
+
+  if (name.empty()) {
+    return -EINVAL;
+  }
+
+  librados::IoCtx ns_ctx;
+  ns_ctx.dup(io_ctx);
+  ns_ctx.set_namespace(name);
+
+  int r = librbd::cls_client::dir_state_assert(&ns_ctx, RBD_DIRECTORY,
+                                               cls::rbd::DIRECTORY_STATE_READY);
+  if (r == 0) {
+    *exists = true;
+  } else if (r == -ENOENT) {
+    *exists = false;
+  } else {
+    lderr(cct) << "error asserting namespace: " << cpp_strerror(r) << dendl;
+    return r;
+  }
 
   return 0;
 }
