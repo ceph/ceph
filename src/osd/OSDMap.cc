@@ -3689,9 +3689,16 @@ void OSDMap::print_summary(Formatter *f, ostream& out,
     f->dump_unsigned("num_remapped_pgs", get_num_pg_temp());
     f->close_section();
   } else {
+    utime_t now = ceph_clock_now();
     out << get_num_osds() << " osds: "
-	<< get_num_up_osds() << " up, "
-	<< get_num_in_osds() << " in";
+	<< get_num_up_osds() << " up";
+    if (last_up_change != utime_t()) {
+      out << " (since " << utimespan_str(now - last_up_change) << ")";
+    }
+    out << ", " << get_num_in_osds() << " in";
+    if (last_in_change != utime_t()) {
+      out << " (since " << utimespan_str(now - last_in_change) << ")";
+    }
     if (extra)
       out << "; epoch: e" << get_epoch();
     if (get_num_pg_temp())

@@ -1658,7 +1658,7 @@ function test_mon_osd()
   ceph osd perf
   ceph osd blocked-by
 
-  ceph osd stat | grep up,
+  ceph osd stat | grep up
 }
 
 function test_mon_crush()
