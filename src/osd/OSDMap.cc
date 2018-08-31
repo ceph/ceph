@@ -514,7 +514,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(8, 7, bl);
 
   {
-    uint8_t v = 7;
+    uint8_t v = 8;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -565,6 +565,10 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     if (v >= 6) {
       encode(new_removed_snaps, bl);
       encode(new_purged_snaps, bl);
+    }
+    if (v >= 8) {
+      encode(new_last_up_change, bl);
+      encode(new_last_in_change, bl);
     }
     ENCODE_FINISH(bl); // client-usable data
   }
@@ -763,7 +767,7 @@ void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
     return;
   }
   {
-    DECODE_START(7, bl); // client-usable data
+    DECODE_START(8, bl); // client-usable data
     decode(fsid, bl);
     decode(epoch, bl);
     decode(modified, bl);
@@ -809,6 +813,10 @@ void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
     if (struct_v >= 6) {
       decode(new_removed_snaps, bl);
       decode(new_purged_snaps, bl);
+    }
+    if (struct_v >= 8) {
+      decode(new_last_up_change, bl);
+      decode(new_last_in_change, bl);
     }
     DECODE_FINISH(bl); // client-usable data
   }
@@ -904,6 +912,8 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->dump_int("epoch", epoch);
   f->dump_stream("fsid") << fsid;
   f->dump_stream("modified") << modified;
+  f->dump_stream("new_last_up_change") << new_last_up_change;
+  f->dump_stream("new_last_in_change") << new_last_in_change;
   f->dump_int("new_pool_max", new_pool_max);
   f->dump_int("new_flags", new_flags);
   f->dump_float("new_full_ratio", new_full_ratio);
@@ -1910,6 +1920,13 @@ int OSDMap::apply_incremental(const Incremental &inc)
     }
   }
 
+  if (inc.new_last_up_change != utime_t()) {
+    last_up_change = inc.new_last_up_change;
+  }
+  if (inc.new_last_in_change != utime_t()) {
+    last_in_change = inc.new_last_in_change;
+  }
+
   for (const auto &pname : inc.new_pool_names) {
     auto pool_name_entry = pool_name.find(pname.first);
     if (pool_name_entry != pool_name.end()) {
@@ -2640,7 +2657,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t v = 8;
+    uint8_t v = 9;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -2717,6 +2734,10 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     if (v >= 7) {
       encode(new_removed_snaps, bl);
       encode(new_purged_snaps, bl);
+    }
+    if (v >= 9) {
+      encode(last_up_change, bl);
+      encode(last_in_change, bl);
     }
     ENCODE_FINISH(bl); // client-usable data
   }
@@ -2951,7 +2972,7 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
    * Since we made it past that hurdle, we can use our normal paths.
    */
   {
-    DECODE_START(8, bl); // client-usable data
+    DECODE_START(9, bl); // client-usable data
     // base
     decode(fsid, bl);
     decode(epoch, bl);
@@ -3012,6 +3033,10 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
     if (struct_v >= 7) {
       decode(new_removed_snaps, bl);
       decode(new_purged_snaps, bl);
+    }
+    if (struct_v >= 9) {
+      decode(last_up_change, bl);
+      decode(last_in_change, bl);
     }
     DECODE_FINISH(bl); // client-usable data
   }
@@ -3136,6 +3161,8 @@ void OSDMap::dump(Formatter *f) const
   f->dump_stream("fsid") << get_fsid();
   f->dump_stream("created") << get_created();
   f->dump_stream("modified") << get_modified();
+  f->dump_stream("last_up_change") << last_up_change;
+  f->dump_stream("last_in_change") << last_in_change;
   f->dump_string("flags", get_flag_string());
   f->dump_unsigned("flags_num", flags);
   f->open_array_section("flags_set");
