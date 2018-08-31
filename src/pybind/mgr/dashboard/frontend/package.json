@@ -27,7 +27,8 @@
     ],
     "coverageReporters": [
       "text",
-      "cobertura"
+      "cobertura",
+      "html"
     ],
     "modulePathIgnorePatterns": [
       "<rootDir>/coverage/"
