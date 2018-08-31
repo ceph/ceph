@@ -965,11 +965,8 @@ int set_protection_status(cls_method_context_t hctx, bufferlist *in,
   }
 
   snap.protection_status = status;
-  bufferlist snapshot_bl;
-  encode(snap, snapshot_bl);
-  r = cls_cxx_map_set_val(hctx, snapshot_key, &snapshot_bl);
+  r = write_key(hctx, snapshot_key, snap, get_encode_features(hctx));
   if (r < 0) {
-    CLS_ERR("error writing snapshot metadata: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -1298,19 +1295,13 @@ int set_flags(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
               flags, mask);
 
   if (snap_id == CEPH_NOSNAP) {
-    bufferlist bl;
-    encode(flags, bl);
-    r = cls_cxx_map_set_val(hctx, "flags", &bl);
+    r = write_key(hctx, "flags", flags);
   } else {
     snap_meta.flags = flags;
-
-    bufferlist bl;
-    encode(snap_meta, bl);
-    r = cls_cxx_map_set_val(hctx, snap_meta_key, &bl);
+    r = write_key(hctx, snap_meta_key, snap_meta, get_encode_features(hctx));
   }
 
   if (r < 0) {
-    CLS_ERR("error updating flags: %s", cpp_strerror(r).c_str());
     return r;
   }
   return 0;
@@ -1541,7 +1532,8 @@ int remove_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
         std::string snap_key;
         key_from_snap_id(snap_meta_copy.id, &snap_key);
-        int r = write_key(hctx, snap_key, snap_meta_copy);
+        int r = write_key(hctx, snap_key, snap_meta_copy,
+                          get_encode_features(hctx));
         if (r < 0) {
           return r;
         }
@@ -2116,7 +2108,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   bufferlist snap_metabl, snap_seqbl;
-  encode(snap_meta, snap_metabl);
+  encode(snap_meta, snap_metabl, get_encode_features(hctx));
   encode(snap_meta.id, snap_seqbl);
 
   string snapshot_key;
@@ -2203,12 +2195,8 @@ int snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   snap_meta.name = dst_snap_name;
-  bufferlist snap_metabl;
-  encode(snap_meta, snap_metabl);
-
-  r = cls_cxx_map_set_val(hctx, src_snap_key, &snap_metabl);
+  r = write_key(hctx, src_snap_key, snap_meta, get_encode_features(hctx));
   if (r < 0) {
-    CLS_ERR("error writing snapshot metadata: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -2364,7 +2352,7 @@ int snapshot_trash_add(cls_method_context_t hctx, bufferlist *in,
   uuid_gen.generate_random();
   snap.name = uuid_gen.to_string();
 
-  r = write_key(hctx, snapshot_key, snap);
+  r = write_key(hctx, snapshot_key, snap, get_encode_features(hctx));
   if (r < 0) {
     return r;
   }
@@ -3628,7 +3616,7 @@ int child_attach(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   ++snap.child_count;
-  r = write_key(hctx, snapshot_key, snap);
+  r = write_key(hctx, snapshot_key, snap, get_encode_features(hctx));
   if (r < 0) {
     CLS_ERR("error writing snapshot: %s", cpp_strerror(r).c_str());
     return r;
@@ -3705,7 +3693,7 @@ int child_detach(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   --snap.child_count;
-  r = write_key(hctx, snapshot_key, snap);
+  r = write_key(hctx, snapshot_key, snap, get_encode_features(hctx));
   if (r < 0) {
     CLS_ERR("error writing snapshot: %s", cpp_strerror(r).c_str());
     return r;

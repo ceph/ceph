@@ -113,25 +113,27 @@ struct cls_rbd_snap {
   cls::rbd::SnapshotNamespace snapshot_namespace = {
     cls::rbd::UserSnapshotNamespace{}};
   uint32_t child_count = 0;
+  std::optional<uint64_t> parent_overlap = std::nullopt;
 
   /// true if we have a parent
   bool has_parent() const {
     return parent.exists();
   }
 
-  void encode(bufferlist& bl) const {
-    ENCODE_START(7, 1, bl);
+  void encode(bufferlist& bl, uint64_t features) const {
+    ENCODE_START(8, 1, bl);
     encode(id, bl);
     encode(name, bl);
     encode(image_size, bl);
     uint64_t features = 0;
     encode(features, bl); // unused -- preserve ABI
-    encode(parent, bl, 0);
+    encode(parent, bl, features);
     encode(protection_status, bl);
     encode(flags, bl);
     encode(snapshot_namespace, bl);
     encode(timestamp, bl);
     encode(child_count, bl);
+    encode(parent_overlap, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& p) {
@@ -159,6 +161,9 @@ struct cls_rbd_snap {
     if (struct_v >= 7) {
       decode(child_count, p);
     }
+    if (struct_v >= 8) {
+      decode(parent_overlap, p);
+    }
     DECODE_FINISH(p);
   }
   void dump(Formatter *f) const {
@@ -184,6 +189,9 @@ struct cls_rbd_snap {
       ceph_abort();
     }
     f->dump_unsigned("child_count", child_count);
+    if (parent_overlap) {
+      f->dump_unsigned("parent_overlap", *parent_overlap);
+    }
   }
   static void generate_test_instances(list<cls_rbd_snap*>& o) {
     o.push_back(new cls_rbd_snap);
@@ -205,6 +213,6 @@ struct cls_rbd_snap {
     o.push_back(t);
   }
 };
-WRITE_CLASS_ENCODER(cls_rbd_snap)
+WRITE_CLASS_ENCODER_FEATURES(cls_rbd_snap)
 
 #endif // __CEPH_CLS_RBD_H
