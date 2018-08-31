@@ -196,12 +196,6 @@ template <typename I>
 void ObjectCopyRequest<I>::handle_read_object(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  if (r == -ENOENT && m_read_whole_object) {
-    ldout(m_cct, 5) << "object missing when forced to read whole object"
-                    << dendl;
-    r = 0;
-  }
-
   if (r == -ENOENT) {
     m_retry_snap_set = m_snap_set;
     m_retry_missing_read = true;
