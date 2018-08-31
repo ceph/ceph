@@ -71,7 +71,7 @@ function check() {
     local primary_start=${9:-}
     local primary_end=${10:-}
 
-    local log=$(grep -l +backfilling $dir/osd.*.log)
+    local log=$(grep -l +backfilling $dir/osd.$primary.log)
     test -n "$log" || return 1
     if [ "$(echo "$log" | wc -w)" != "1" ];
     then
@@ -458,15 +458,21 @@ function TEST_backfill_remapped() {
     ceph osd out osd.${primary}
     ceph osd pool set $poolname size 2
     sleep 2
+
+    # primary may change due to invalidating the old pg_temp, which was [1,2,0],
+    # but up_primary (3) chooses [0,1] for acting.
+    local new_primary=$(get_primary $poolname obj1)
+
     ceph osd unset nobackfill
     ceph tell osd.$(get_primary $poolname obj1) debug kick_recovery_wq 0
+
     sleep 2
 
     wait_for_clean || return 1
 
     local misplaced=$(expr $objects \* 2)
 
-    check $dir $PG $primary replicated 0 0 $misplaced $objects || return 1
+    check $dir $PG $new_primary replicated 0 0 $misplaced $objects || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
