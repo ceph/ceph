@@ -107,4 +107,12 @@ export class RbdService {
       { observe: 'response' }
     );
   }
+
+  restoreTrash(poolName, imageId, newImageName) {
+    return this.http.post(
+      `api/block/image/trash/${poolName}/${imageId}/restore`,
+      { new_image_name: newImageName },
+      { observe: 'response' }
+    );
+  }
 }
