@@ -964,19 +964,6 @@ void ECBackend::handle_sub_read(
       i != op.to_read.end();
       ++i) {
     int r = 0;
-    ECUtil::HashInfoRef hinfo;
-    int subchunk_size = sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
-    if (!get_parent()->get_pool().allows_ecoverwrites()) {
-
-      hinfo = get_hash_info(i->first);
-      if (!hinfo) {
-	r = -EIO;
-	get_parent()->clog_error() << "Corruption detected: object " << i->first
-                                   << " is missing hash_info";
-	dout(5) << __func__ << ": No hinfo for " << i->first << dendl;
-	goto error;
-      }
-    }
     for (auto j = i->second.begin(); j != i->second.end(); ++j) {
       bufferlist bl;
       if ((op.subchunks.find(i->first)->second.size() == 1) && 
@@ -991,7 +978,11 @@ void ECBackend::handle_sub_read(
 	  bl, j->get<2>()); // Allow EIO return
       } else {
         dout(25) << __func__ << " case2: going to do fragmented read." << dendl;
-        for (int m = 0; m < (int)j->get<1>(); m += sinfo.get_chunk_size()) {
+        int subchunk_size =
+          sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
+        bool error = false;
+        for (int m = 0; m < (int)j->get<1>() && !error;
+             m += sinfo.get_chunk_size()) {
           for (auto &&k:op.subchunks.find(i->first)->second) {
             bufferlist bl0;
             r = store->read(
@@ -1000,10 +991,14 @@ void ECBackend::handle_sub_read(
                 j->get<0>() + m + (k.first)*subchunk_size,
                 (k.second)*subchunk_size,
                 bl0, j->get<2>());
+            if (r < 0) {
+              error = true;
+              break;
+            }
             bl.claim_append(bl0);
           }
         }
-     }
+      }
 
       if (r < 0) {
 	get_parent()->clog_error() << "Error " << r
@@ -1026,6 +1021,16 @@ void ECBackend::handle_sub_read(
 	// are read in sections, so the digest check here won't be done here.
 	// Do NOT check osd_read_eio_on_bad_digest here.  We need to report
 	// the state of our chunk in case other chunks could substitute.
+        ECUtil::HashInfoRef hinfo;
+        hinfo = get_hash_info(i->first);
+        if (!hinfo) {
+          r = -EIO;
+          get_parent()->clog_error() << "Corruption detected: object "
+                                     << i->first
+                                     << " is missing hash_info";
+          dout(5) << __func__ << ": No hinfo for " << i->first << dendl;
+          goto error;
+        }
 	assert(hinfo->has_chunk_hash());
 	if ((bl.length() == hinfo->get_total_chunk_size()) &&
 	    (j->get<0>() == 0)) {
