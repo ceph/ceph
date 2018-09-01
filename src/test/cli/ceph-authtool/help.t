@@ -16,8 +16,6 @@
     --import-keyring FILE         will import the content of a given keyring
                                   into the keyringfile
     -n NAME, --name NAME          specify entityname to operate on
-    -u AUID, --set-uid AUID       sets the auid (authenticated user id) for the
-                                  specified entityname
     -a BASE64, --add-key BASE64   will add an encoded key to the keyring
     --cap SUBSYSTEM CAPABILITY    will set the capability for given subsystem
     --caps CAPSFILE               will set all of capabilities associated with a

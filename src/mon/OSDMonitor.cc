@@ -100,7 +100,7 @@ bool is_osd_writable(const OSDCapGrant& grant, const std::string* pool_name) {
     auto& match = grant.match;
     if (match.is_match_all()) {
       return true;
-    } else if (pool_name != nullptr && match.auid < 0 &&
+    } else if (pool_name != nullptr &&
                !match.pool_namespace.pool_name.empty() &&
                match.pool_namespace.pool_name == *pool_name) {
       return true;
@@ -4342,7 +4342,7 @@ namespace {
     NODELETE, NOPGCHANGE, NOSIZECHANGE,
     WRITE_FADVISE_DONTNEED, NOSCRUB, NODEEP_SCRUB,
     HIT_SET_TYPE, HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
-    USE_GMT_HITSET, AUID, TARGET_MAX_OBJECTS, TARGET_MAX_BYTES,
+    USE_GMT_HITSET, TARGET_MAX_OBJECTS, TARGET_MAX_BYTES,
     CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_DIRTY_HIGH_RATIO,
     CACHE_TARGET_FULL_RATIO,
     CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
@@ -4784,24 +4784,20 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     goto reply;
 
   } else if (prefix == "osd lspools") {
-    int64_t auid;
-    cmd_getval_throws(cct, cmdmap, "auid", auid, int64_t(0));
     if (f)
       f->open_array_section("pools");
     for (map<int64_t, pg_pool_t>::iterator p = osdmap.pools.begin();
 	 p != osdmap.pools.end();
 	 ++p) {
-      if (!auid || p->second.auid == (uint64_t)auid) {
-	if (f) {
-	  f->open_object_section("pool");
-	  f->dump_int("poolnum", p->first);
-	  f->dump_string("poolname", osdmap.pool_name[p->first]);
-	  f->close_section();
-	} else {
-	  ds << p->first << ' ' << osdmap.pool_name[p->first];
-	  if (next(p) != osdmap.pools.end()) {
-	    ds << '\n';
-	  }
+      if (f) {
+	f->open_object_section("pool");
+	f->dump_int("poolnum", p->first);
+	f->dump_string("poolname", osdmap.pool_name[p->first]);
+	f->close_section();
+      } else {
+	ds << p->first << ' ' << osdmap.pool_name[p->first];
+	if (next(p) != osdmap.pools.end()) {
+	  ds << '\n';
 	}
       }
     }
@@ -4919,7 +4915,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"hit_set_type", HIT_SET_TYPE}, {"hit_set_period", HIT_SET_PERIOD},
       {"hit_set_count", HIT_SET_COUNT}, {"hit_set_fpp", HIT_SET_FPP},
       {"use_gmt_hitset", USE_GMT_HITSET},
-      {"auid", AUID}, {"target_max_objects", TARGET_MAX_OBJECTS},
+      {"target_max_objects", TARGET_MAX_OBJECTS},
       {"target_max_bytes", TARGET_MAX_BYTES},
       {"cache_target_dirty_ratio", CACHE_TARGET_DIRTY_RATIO},
       {"cache_target_dirty_high_ratio", CACHE_TARGET_DIRTY_HIGH_RATIO},
@@ -5029,9 +5025,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    break;
 	  case PGP_NUM:
 	    f->dump_int("pgp_num", p->get_pgp_num());
-	    break;
-	  case AUID:
-	    f->dump_int("auid", p->get_auid());
 	    break;
 	  case SIZE:
 	    f->dump_int("size", p->get_size());
@@ -5180,9 +5173,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    break;
 	  case PGP_NUM:
 	    ss << "pgp_num: " << p->get_pgp_num() << "\n";
-	    break;
-	  case AUID:
-	    ss << "auid: " << p->get_auid() << "\n";
 	    break;
 	  case SIZE:
 	    ss << "size: " << p->get_size() << "\n";
@@ -5952,16 +5942,10 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   stringstream ss;
   string rule_name;
   int ret = 0;
-  if (m->auid)
-    ret =  prepare_new_pool(m->name, m->auid, m->crush_rule, rule_name,
-			    0, 0,
-                            erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
-  else
-    ret = prepare_new_pool(m->name, session->auid, m->crush_rule, rule_name,
-			    0, 0,
-                            erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
+  ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
+			 0, 0,
+			 erasure_code_profile,
+			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
 
   if (ret < 0) {
     dout(10) << __func__ << " got " << ret << " " << ss.str() << dendl;
@@ -6460,7 +6444,6 @@ int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
 
 /**
  * @param name The name of the new pool
- * @param auid The auid of the pool owner. Can be -1
  * @param crush_rule The crush rule to use. If <0, will use the system default
  * @param crush_rule_name The crush rule to use, if crush_rulset <0
  * @param pg_num The pg_num to use. If set to 0, will use the system default
@@ -6473,7 +6456,7 @@ int OSDMonitor::check_pg_num(int64_t pool, int pg_num, int size, ostream *ss)
  *
  * @return 0 on success, negative errno on failure.
  */
-int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
+int OSDMonitor::prepare_new_pool(string& name,
 				 int crush_rule,
 				 const string &crush_rule_name,
                                  unsigned pg_num, unsigned pgp_num,
@@ -6609,7 +6592,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   pi->set_pg_num(pg_num);
   pi->set_pgp_num(pgp_num);
   pi->last_change = pending_inc.epoch;
-  pi->auid = auid;
+  pi->auid = 0;
   if (pool_type == pg_pool_t::TYPE_ERASURE) {
       pi->erasure_code_profile = erasure_code_profile;
   } else {
@@ -6757,12 +6740,6 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
        }
     }
     p.min_size = n;
-  } else if (var == "auid") {
-    if (interr.length()) {
-      ss << "error parsing integer value '" << val << "': " << interr;
-      return -EINVAL;
-    }
-    p.auid = n;
   } else if (var == "pg_num") {
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pg_num change is disabled; you must unset nopgchange flag for the pool first";
@@ -11170,7 +11147,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     else if (fast_read_param > 0)
       fast_read = FAST_READ_ON;
     
-    err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
+    err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
 			   pg_num, pgp_num,
@@ -12157,11 +12134,8 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
     break;
 
   case POOL_OP_AUID_CHANGE:
-    if (pp.auid != m->auid) {
-      pp.auid = m->auid;
-      changed = true;
-    }
-    break;
+    _pool_op_reply(op, -EOPNOTSUPP, osdmap.get_epoch());
+    return false;
 
   default:
     ceph_abort();

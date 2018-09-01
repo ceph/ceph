@@ -198,6 +198,8 @@ void AuthMonitor::create_initial()
 void AuthMonitor::update_from_paxos(bool *need_bootstrap)
 {
   dout(10) << __func__ << dendl;
+  load_health();
+
   version_t version = get_last_committed();
   version_t keys_ver = mon->key_server.get_ver();
   if (version == keys_ver)
@@ -322,6 +324,52 @@ void AuthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   version_t version = get_last_committed() + 1;
   put_version(t, version, bl);
   put_last_committed(t, version);
+
+  // health
+  health_check_map_t next;
+  map<string,list<string>> bad_detail;  // entity -> details
+  for (auto i = mon->key_server.secrets_begin();
+       i != mon->key_server.secrets_end();
+       ++i) {
+    for (auto& p : i->second.caps) {
+      ostringstream ss;
+      if (!valid_caps(p.first, p.second, &ss)) {
+	ostringstream ss2;
+	ss2 << i->first << " " << ss.str();
+	bad_detail[i->first.to_str()].push_back(ss2.str());
+      }
+    }
+  }
+  for (auto& inc : pending_auth) {
+    if (inc.inc_type == AUTH_DATA) {
+      KeyServerData::Incremental auth_inc;
+      auto iter = inc.auth_data.cbegin();
+      decode(auth_inc, iter);
+      if (auth_inc.op == KeyServerData::AUTH_INC_DEL) {
+	bad_detail.erase(auth_inc.name.to_str());
+      } else if (auth_inc.op == KeyServerData::AUTH_INC_ADD) {
+	for (auto& p : auth_inc.auth.caps) {
+	  ostringstream ss;
+	  if (!valid_caps(p.first, p.second, &ss)) {
+	    ostringstream ss2;
+	    ss2 << auth_inc.name << " " << ss.str();
+	    bad_detail[auth_inc.name.to_str()].push_back(ss2.str());
+	  }
+	}
+      }
+    }
+  }
+  if (bad_detail.size()) {
+    ostringstream ss;
+    ss << bad_detail.size() << " auth entities have invalid capabilities";
+    health_check_t *check = &next.add("AUTH_BAD_CAPS", HEALTH_ERR, ss.str());
+    for (auto& i : bad_detail) {
+      for (auto& j : i.second) {
+	check->detail.push_back(j);
+      }
+    }
+  }
+  encode_health(next, t);
 }
 
 void AuthMonitor::encode_full(MonitorDBStore::TransactionRef t)
@@ -588,7 +636,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   }
 
   try {
-    uint64_t auid = 0;
     if (start) {
       // new session
       proto = s->auth_handler->start_session(entity_name, indata, response_bl, caps_info);
@@ -599,7 +646,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       }
     } else {
       // request
-      ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info, &auid);
+      ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info);
     }
     if (ret == -EIO) {
       wait_for_active(op, new C_RetryMessage(this,op));
@@ -615,7 +662,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 	str.clear();
       }
       s->caps.parse(str, NULL);
-      s->auid = auid;
       s->authenticated = true;
       finished = true;
     }

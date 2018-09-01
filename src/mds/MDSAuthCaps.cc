@@ -335,8 +335,9 @@ bool MDSAuthCaps::parse(CephContext *c, std::string_view str, ostream *err)
     grants.clear();
 
     if (err)
-      *err << "MDSAuthCaps parse failed, stopped at '" << std::string(iter, end)
-           << "' of '" << str << "'\n";
+      *err << "mds capability parse failed, stopped at '"
+	   << std::string(iter, end)
+           << "' of '" << str << "'";
     return false; 
   }
 }

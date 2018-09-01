@@ -40,6 +40,24 @@
   (good) purpose: the OSD should always check heartbeats on both the
   public and cluster networks.
 
+* The ``rados`` tool's ``mkpool`` and ``rmpool`` commands have been
+  removed because they are redundant; please use the ``ceph osd pool
+  create`` and ``ceph osd pool rm`` commands instead.
+
+* The ``auid`` property for cephx users and RADOS pools has been
+  removed.  This was an undocumented and partially implemented
+  capability that allowed cephx users to map capabilities to RADOS
+  pools that they "owned".  Because there are no users we have removed
+  this support.  If any cephx capabilities exist in the cluster that
+  restrict based on auid then they will no longer parse, and the
+  cluster will report a health warning like::
+
+    AUTH_BAD_CAPS 1 auth entities have invalid capabilities
+        client.bad osd capability parse failed, stopped at 'allow rwx auid 123' of 'allow rwx auid 123'
+
+  The capability can be adjusted with the ``ceph auth caps`` command. For example,::
+
+    ceph auth caps client.bad osd 'allow rwx pool foo'
 
 
 
@@ -52,3 +70,4 @@ Upgrading from Luminous
 * During the upgrade from luminous to nautilus, it will not be possible to create
   a new OSD using a luminous ceph-osd daemon after the monitors have been
   upgraded to nautilus.
+
