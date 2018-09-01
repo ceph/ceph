@@ -3927,7 +3927,7 @@ int Objecter::delete_selfmanaged_snap(int64_t pool, snapid_t snap,
   return 0;
 }
 
-int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
+int Objecter::create_pool(string& name, Context *onfinish,
 			  int crush_rule)
 {
   unique_lock wl(rwlock);
@@ -3945,7 +3945,6 @@ int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_CREATE;
   pool_ops[op->tid] = op;
-  op->auid = auid;
   op->crush_rule = crush_rule;
 
   pool_op_submit(op);
@@ -3990,32 +3989,6 @@ void Objecter::_do_delete_pool(int64_t pool, Context *onfinish)
   pool_op_submit(op);
 }
 
-/**
- * change the auid owner of a pool by contacting the monitor.
- * This requires the current connection to have write permissions
- * on both the pool's current auid and the new (parameter) auid.
- * Uses the standard Context callback when done.
- */
-int Objecter::change_pool_auid(int64_t pool, Context *onfinish, uint64_t auid)
-{
-  unique_lock wl(rwlock);
-  ldout(cct, 10) << "change_pool_auid " << pool << " to " << auid << dendl;
-  PoolOp *op = new PoolOp;
-  if (!op) return -ENOMEM;
-  op->tid = ++last_tid;
-  op->pool = pool;
-  op->name = "change_pool_auid";
-  op->onfinish = onfinish;
-  op->pool_op = POOL_OP_AUID_CHANGE;
-  op->auid = auid;
-  pool_ops[op->tid] = op;
-
-  logger->set(l_osdc_poolop_active, pool_ops.size());
-
-  pool_op_submit(op);
-  return 0;
-}
-
 void Objecter::pool_op_submit(PoolOp *op)
 {
   // rwlock is locked
@@ -4034,7 +4007,7 @@ void Objecter::_pool_op_submit(PoolOp *op)
   ldout(cct, 10) << "pool_op_submit " << op->tid << dendl;
   MPoolOp *m = new MPoolOp(monc->get_fsid(), op->tid, op->pool,
 			   op->name, op->pool_op,
-			   op->auid, last_seen_osdmap_version);
+			   last_seen_osdmap_version);
   if (op->snapid) m->snapid = op->snapid;
   if (op->crush_rule) m->crush_rule = op->crush_rule;
   monc->send_mon_message(m);
@@ -4640,7 +4613,6 @@ void Objecter::dump_pool_ops(Formatter *fmt) const
     fmt->dump_int("pool", op->pool);
     fmt->dump_string("name", op->name);
     fmt->dump_int("operation_type", op->pool_op);
-    fmt->dump_unsigned("auid", op->auid);
     fmt->dump_unsigned("crush_rule", op->crush_rule);
     fmt->dump_stream("snapid") << op->snapid;
     fmt->dump_stream("last_sent") << op->last_submit;

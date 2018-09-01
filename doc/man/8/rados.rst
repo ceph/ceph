@@ -72,12 +72,6 @@ Global commands
   Show utilization statistics, including disk usage (bytes) and object
   counts, over the entire system and broken down by pool.
 
-:command:`mkpool` *foo*
-  Create a pool with name foo.
-
-:command:`rmpool` *foo* [ *foo* --yes-i-really-really-mean-it ]
-  Delete the pool foo (and all its data).
-
 :command:`list-inconsistent-pg` *pool*
   List inconsistent PGs in given pool.
 

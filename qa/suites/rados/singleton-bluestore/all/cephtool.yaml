@@ -36,6 +36,7 @@ tasks:
     - \(SMALLER_PGP_NUM\)
     - \(POOL_NEARFULL\)
     - \(POOL_APP_NOT_ENABLED\)
+    - \(AUTH_BAD_CAPS\)
 - workunit:
     clients:
       all:

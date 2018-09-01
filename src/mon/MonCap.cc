@@ -613,10 +613,11 @@ bool MonCap::parse(const string& str, ostream *err)
 
   if (err) {
     if (iter != end)
-      *err << "moncap parse failed, stopped at '" << std::string(iter, end)
-	   << "' of '" << str << "'\n";
+      *err << "mon capability parse failed, stopped at '"
+	   << std::string(iter, end)
+	   << "' of '" << str << "'";
     else
-      *err << "moncap parse failed, stopped at end of '" << str << "'\n";
+      *err << "mon capability parse failed, stopped at end of '" << str << "'";
   }
 
   return false; 

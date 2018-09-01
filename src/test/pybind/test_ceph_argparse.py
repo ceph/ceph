@@ -570,10 +570,8 @@ class TestOSD(TestArgparse):
 
     def test_lspools(self):
         self.assert_valid_command(['osd', 'lspools'])
-        self.assert_valid_command(['osd', 'lspools', '1'])
-        self.assert_valid_command(['osd', 'lspools', '-1'])
         assert_equal({}, validate_command(sigdict, ['osd', 'lspools',
-                                                    '1', 'toomany']))
+                                                    'toomany']))
 
     def test_blacklist_ls(self):
         self.assert_valid_command(['osd', 'blacklist', 'ls'])
@@ -1026,7 +1024,7 @@ class TestOSD(TestArgparse):
 
     def test_pool_get(self):
         for var in ('size', 'min_size',
-                    'pg_num', 'pgp_num', 'crush_rule', 'auid', 'fast_read',
+                    'pg_num', 'pgp_num', 'crush_rule', 'fast_read',
                     'scrub_min_interval', 'scrub_max_interval',
                     'deep_scrub_interval', 'recovery_priority',
                     'recovery_op_priority'):
@@ -1046,7 +1044,7 @@ class TestOSD(TestArgparse):
     def test_pool_set(self):
         for var in ('size', 'min_size',
                     'pg_num', 'pgp_num', 'crush_rule',
-                    'hashpspool', 'auid', 'fast_read',
+                    'hashpspool', 'fast_read',
                     'scrub_min_interval', 'scrub_max_interval',
                     'deep_scrub_interval', 'recovery_priority',
                     'recovery_op_priority'):
