@@ -18,6 +18,8 @@ def task(ctx, config):
        - ldap_server:
            [client.0]
 
+    Note: the ldap server runs on a teuthology client, so the client
+          references in this file are ldap server references.
     """
 
     log.info('in ldap_server')
@@ -67,3 +69,9 @@ def task(ctx, config):
                      'user-mod',
                      'newuser',
                      '--password'])
+    #client.run(args=['sudo', 'useradd', 'rgw'])
+    #client.run(args=['echo', 't0pSecret\nt0pSecret', run.Raw('|'), 'sudo',
+    #                 'passwd', 'rgw'])
+    #client.run(args=['sudo', 'useradd', 'newuser'])
+    #client.run(args=['echo', 't0pSecret\nt0pSecret', run.Raw('|'), 'sudo',
+    #                 'passwd', 'newuser'])

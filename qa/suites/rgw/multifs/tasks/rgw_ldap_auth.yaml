@@ -1,0 +1,6 @@
+tasks:
+- install:
+- ceph:
+- rgw: [client.0]
+- ldap_server: [client.1]
+- ldap_client: [client.0]
