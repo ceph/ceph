@@ -2411,16 +2411,12 @@ struct pg_info_t {
   bool is_empty() const { return last_update.version == 0; }
   bool dne() const { return history.epoch_created == 0; }
 
+  bool has_missing() const { return last_complete != last_update; }
   bool is_incomplete() const { return !last_backfill.is_max(); }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
-  bool overlaps_with(const pg_info_t &oinfo) const {
-    return last_update > oinfo.log_tail ?
-      oinfo.last_update >= log_tail :
-      last_update >= oinfo.log_tail;
-  }
   static void generate_test_instances(list<pg_info_t*>& o);
 };
 WRITE_CLASS_ENCODER(pg_info_t)

@@ -1208,6 +1208,22 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
       continue;
     }
 
+    if (!p->second.has_missing() && best->second.has_missing()) {
+      dout(10) << __func__ << " prefer osd." << p->first
+               << " because it is complete while best has missing"
+               << dendl;
+      best = p;
+      continue;
+    } else if (p->second.has_missing() && !best->second.has_missing()) {
+      dout(10) << __func__ << " skipping osd." << p->first
+               << " because it has missing while best is complete"
+               << dendl;
+      continue;
+    } else {
+      // both are complete or have missing
+      // fall through
+    }
+
     // prefer current primary (usually the caller), all things being equal
     if (p->first == pg_whoami) {
       dout(10) << "calc_acting prefer osd." << p->first
@@ -1296,6 +1312,7 @@ void PG::calc_ec_acting(
  */
 void PG::calc_replicated_acting(
   map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+  uint64_t force_auth_primary_missing_objects,
   unsigned size,
   const vector<int> &acting,
   const vector<int> &up,
@@ -1305,6 +1322,7 @@ void PG::calc_replicated_acting(
   vector<int> *want,
   set<pg_shard_t> *backfill,
   set<pg_shard_t> *acting_backfill,
+  const OSDMapRef osdmap,
   ostream &ss)
 {
   pg_shard_t auth_log_shard_id = auth_log_shard->first;
@@ -1314,12 +1332,37 @@ void PG::calc_replicated_acting(
      << (restrict_to_up_acting ? " restrict_to_up_acting" : "") << std::endl;
   
   // select primary
-  map<pg_shard_t,pg_info_t>::const_iterator primary = all_info.find(up_primary);
+  auto primary = all_info.find(up_primary);
   if (up.size() &&
       !primary->second.is_incomplete() &&
       primary->second.last_update >=
         auth_log_shard->second.log_tail) {
-    ss << "up_primary: " << up_primary << ") selected as primary" << std::endl;
+    if (HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS)) {
+      auto approx_missing_objects =
+        primary->second.stats.stats.sum.num_objects_missing;
+      auto auth_version = auth_log_shard->second.last_update.version;
+      auto primary_version = primary->second.last_update.version;
+      if (auth_version > primary_version) {
+        approx_missing_objects += auth_version - primary_version;
+      } else {
+        approx_missing_objects += primary_version - auth_version;
+      }
+      if ((uint64_t)approx_missing_objects >
+          force_auth_primary_missing_objects) {
+        primary = auth_log_shard;
+        ss << "up_primary: " << up_primary << ") has approximate "
+           << approx_missing_objects
+           << "(>" << force_auth_primary_missing_objects <<") "
+           << "missing objects, osd." << auth_log_shard_id
+           << " selected as primary instead"
+           << std::endl;
+      } else {
+        ss << "up_primary: " << up_primary << ") selected as primary"
+           << std::endl;
+      }
+    } else {
+      ss << "up_primary: " << up_primary << ") selected as primary" << std::endl;
+    }
   } else {
     ceph_assert(!auth_log_shard->second.is_incomplete());
     ss << "up[0] needs backfill, osd." << auth_log_shard_id
@@ -1331,52 +1374,47 @@ void PG::calc_replicated_acting(
      << " with " << primary->second << std::endl;
   want->push_back(primary->first.osd);
   acting_backfill->insert(primary->first);
-  unsigned usable = 1;
+
+  /* We include auth_log_shard->second.log_tail because in GetLog,
+   * we will request logs back to the min last_update over our
+   * acting_backfill set, which will result in our log being extended
+   * as far backwards as necessary to pick up any peers which can
+   * be log recovered by auth_log_shard's log */
+  eversion_t oldest_auth_log_entry =
+    std::min(primary->second.log_tail, auth_log_shard->second.log_tail);
 
   // select replicas that have log contiguity with primary.
   // prefer up, then acting, then any peer_info osds
-  eversion_t oldest_auth_log_entry =
-    std::min(primary->second.log_tail, auth_log_shard->second.log_tail);
-  for (vector<int>::const_iterator i = up.begin();
-       i != up.end();
-       ++i) {
-    pg_shard_t up_cand = pg_shard_t(*i, shard_id_t::NO_SHARD);
+  for (auto i : up) {
+    pg_shard_t up_cand = pg_shard_t(i, shard_id_t::NO_SHARD);
     if (up_cand == primary->first)
       continue;
     const pg_info_t &cur_info = all_info.find(up_cand)->second;
     if (cur_info.is_incomplete() ||
         cur_info.last_update < oldest_auth_log_entry) {
-      /* We include auth_log_shard->second.log_tail because in GetLog,
-       * we will request logs back to the min last_update over our
-       * acting_backfill set, which will result in our log being extended
-       * as far backwards as necessary to pick up any peers which can
-       * be log recovered by auth_log_shard's log */
       ss << " shard " << up_cand << " (up) backfill " << cur_info << std::endl;
       backfill->insert(up_cand);
       acting_backfill->insert(up_cand);
     } else {
-      want->push_back(*i);
+      want->push_back(i);
       acting_backfill->insert(up_cand);
-      usable++;
-      ss << " osd." << *i << " (up) accepted " << cur_info << std::endl;
+      ss << " osd." << i << " (up) accepted " << cur_info << std::endl;
     }
   }
 
-  if (usable >= size) {
+  if (want->size() >= size) {
     return;
   }
 
   std::vector<std::pair<eversion_t, int>> candidate_by_last_update;
   candidate_by_last_update.reserve(acting.size());
   // This no longer has backfill OSDs, but they are covered above.
-  for (vector<int>::const_iterator i = acting.begin();
-       i != acting.end();
-       ++i) {
-    pg_shard_t acting_cand(*i, shard_id_t::NO_SHARD);
+  for (auto i : acting) {
+    pg_shard_t acting_cand(i, shard_id_t::NO_SHARD);
     // skip up osds we already considered above
     if (acting_cand == primary->first)
       continue;
-    vector<int>::const_iterator up_it = find(up.begin(), up.end(), *i);
+    vector<int>::const_iterator up_it = find(up.begin(), up.end(), i);
     if (up_it != up.end())
       continue;
 
@@ -1386,27 +1424,25 @@ void PG::calc_replicated_acting(
       ss << " shard " << acting_cand << " (acting) REJECTED "
 	 << cur_info << std::endl;
     } else {
-      candidate_by_last_update.push_back(make_pair(cur_info.last_update, *i));
+      candidate_by_last_update.push_back(make_pair(cur_info.last_update, i));
     }
   }
 
+  auto sort_by_eversion =[](const std::pair<eversion_t, int> &lhs,
+                            const std::pair<eversion_t, int> &rhs) {
+    return lhs.first > rhs.first;
+  };
   // sort by last_update, in descending order.
-  std::sort(candidate_by_last_update.begin(), candidate_by_last_update.end(),
-    [](const std::pair<eversion_t, int> &lhs,
-       const std::pair<eversion_t, int> &rhs) {
-      return lhs.first > rhs.first;
-    }
-  );
-
+  std::sort(candidate_by_last_update.begin(),
+            candidate_by_last_update.end(), sort_by_eversion);
   for (auto &p: candidate_by_last_update) {
-    ceph_assert(usable < size);
+    ceph_assert(want->size() < size);
     want->push_back(p.second);
     pg_shard_t s = pg_shard_t(p.second, shard_id_t::NO_SHARD);
     acting_backfill->insert(s);
     ss << " shard " << s << " (acting) accepted "
        << all_info.find(s)->second << std::endl;
-    usable++;
-    if (usable >= size) {
+    if (want->size() >= size) {
       return;
     }
   }
@@ -1416,27 +1452,26 @@ void PG::calc_replicated_acting(
   }
   candidate_by_last_update.clear();
   candidate_by_last_update.reserve(all_info.size()); // overestimate but fine
-  for (map<pg_shard_t,pg_info_t>::const_iterator i = all_info.begin();
-       i != all_info.end();
-       ++i) {
+  // continue to search stray to find more suitable peers
+  for (auto &i : all_info) {
     // skip up osds we already considered above
-    if (i->first == primary->first)
+    if (i.first == primary->first)
       continue;
-    vector<int>::const_iterator up_it = find(up.begin(), up.end(), i->first.osd);
+    vector<int>::const_iterator up_it = find(up.begin(), up.end(), i.first.osd);
     if (up_it != up.end())
       continue;
     vector<int>::const_iterator acting_it = find(
-      acting.begin(), acting.end(), i->first.osd);
+      acting.begin(), acting.end(), i.first.osd);
     if (acting_it != acting.end())
       continue;
 
-    if (i->second.is_incomplete() ||
-	i->second.last_update < oldest_auth_log_entry) {
-      ss << " shard " << i->first << " (stray) REJECTED "
-	 << i->second << std::endl;
+    if (i.second.is_incomplete() ||
+	i.second.last_update < oldest_auth_log_entry) {
+      ss << " shard " << i.first << " (stray) REJECTED " << i.second
+         << std::endl;
     } else {
       candidate_by_last_update.push_back(
-        make_pair(i->second.last_update, i->first.osd));
+        make_pair(i.second.last_update, i.first.osd));
     }
   }
 
@@ -1446,22 +1481,17 @@ void PG::calc_replicated_acting(
   }
 
   // sort by last_update, in descending order.
-  std::sort(candidate_by_last_update.begin(), candidate_by_last_update.end(),
-    [](const std::pair<eversion_t, int> &lhs,
-       const std::pair<eversion_t, int> &rhs) {
-      return lhs.first > rhs.first;
-    }
-  );
+  std::sort(candidate_by_last_update.begin(),
+            candidate_by_last_update.end(), sort_by_eversion);
 
   for (auto &p: candidate_by_last_update) {
-    ceph_assert(usable < size);
+    ceph_assert(want->size() < size);
     want->push_back(p.second);
     pg_shard_t s = pg_shard_t(p.second, shard_id_t::NO_SHARD);
     acting_backfill->insert(s);
     ss << " shard " << s << " (stray) accepted "
        << all_info.find(s)->second << std::endl;
-    usable++;
-    if (usable >= size) {
+    if (want->size() >= size) {
       return;
     }
   }
@@ -1667,6 +1697,8 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   if (!pool.info.is_erasure())
     calc_replicated_acting(
       auth_log_shard,
+      cct->_conf.get_val<uint64_t>(
+        "osd_force_auth_primary_missing_objects"),
       get_osdmap()->get_pg_size(info.pgid.pgid),
       acting,
       up,
@@ -1676,6 +1708,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
       &want,
       &want_backfill,
       &want_acting_backfill,
+      get_osdmap(),
       ss);
   else
     calc_ec_acting(
@@ -1874,6 +1907,7 @@ void PG::activate(ObjectStore::Transaction& t,
     pg_log.reset_recovery_pointers();
   } else {
     dout(10) << "activate - not complete, " << missing << dendl;
+    info.stats.stats.sum.num_objects_missing = missing.num_missing();
     pg_log.activate_not_complete(info);
   }
     
