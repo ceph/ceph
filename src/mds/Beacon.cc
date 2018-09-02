@@ -252,8 +252,10 @@ bool Beacon::is_laggy()
   auto now = clock::now();
   auto since = std::chrono::duration<double>(now-last_acked_stamp).count();
   if (since > g_conf()->mds_beacon_grace) {
-    dout(1) << "is_laggy " << since << " > " << g_conf()->mds_beacon_grace
-	    << " since last acked beacon" << dendl;
+    if (!laggy) {
+      dout(1) << "MDS connection to Monitors appears to be laggy; " << since
+	      << "s since last acked beacon" << dendl;
+    }
     laggy = true;
     auto last_reconnect = std::chrono::duration<double>(now-last_mon_reconnect).count();
     if (since > (g_conf()->mds_beacon_grace*2) && last_reconnect > g_conf()->mds_beacon_interval) {
