@@ -272,8 +272,10 @@ bool Beacon::is_laggy()
   utime_t now = ceph_clock_now();
   utime_t since = now - last_acked_stamp;
   if (since > g_conf->mds_beacon_grace) {
-    dout(1) << "is_laggy " << since << " > " << g_conf->mds_beacon_grace
-	    << " since last acked beacon" << dendl;
+    if (!was_laggy) {
+      dout(1) << "MDS connection to Monitors appears to be laggy; " << since
+	      << "s since last acked beacon" << dendl;
+    }
     was_laggy = true;
     if (since > (g_conf->mds_beacon_grace*2) &&
 	now > last_mon_reconnect + g_conf->mds_beacon_interval) {
