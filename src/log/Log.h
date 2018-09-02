@@ -50,6 +50,9 @@ class Log : private Thread
 
   std::shared_ptr<Graylog> m_graylog;
 
+  char* m_log_buf;   ///< coalescing buffer
+  int m_log_buf_pos; ///< where we're at within coalescing buffer
+
   bool m_stop;
 
   int m_max_new, m_max_recent;
@@ -58,6 +61,8 @@ class Log : private Thread
 
   void *entry() override;
 
+  void _log_safe_write(const char* what, size_t write_len);
+  void _flush_logbuf();
   void _flush(EntryQueue *q, EntryQueue *requeue, bool crash);
 
   void _log_message(const char *s, bool crash);
