@@ -428,6 +428,16 @@ int execute_list_images(const po::variables_map &vm,
   if (r < 0)
     return r;
 
+  std::sort(images.begin(), images.end(),
+    [](const librbd::group_image_info_t &lhs,
+       const librbd::group_image_info_t &rhs) {
+      if (lhs.pool != rhs.pool) {
+        return lhs.pool < rhs.pool;
+      }
+      return lhs.name < rhs.name;
+    }
+  );
+
   if (f)
     f->open_array_section("images");
 
