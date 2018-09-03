@@ -21,6 +21,7 @@
 #include "MonMap.h"
 #include "MonSub.h"
 
+#include "common/lock_policy.h"
 #include "common/Timer.h"
 #include "common/Finisher.h"
 #include "common/config.h"
