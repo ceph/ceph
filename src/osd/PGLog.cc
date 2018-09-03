@@ -50,14 +50,9 @@ void PGLog::IndexedLog::trim(
   set<string>* trimmed_dups,
   eversion_t *write_from_dups)
 {
-  if (complete_to != log.end() &&
-      complete_to->version <= s) {
-    generic_dout(0) << " bad trim to " << s << " when complete_to is "
-		    << complete_to->version
-		    << " on " << *this << dendl;
-  }
-
   assert(s <= can_rollback_to);
+  if (complete_to != log.end())
+    lgeneric_subdout(cct, osd, 20) << " complete_to " << complete_to->version << dendl;
 
   auto earliest_dup_version =
     log.rbegin()->version.version < cct->_conf->osd_pg_log_dups_tracked
@@ -68,17 +63,17 @@ void PGLog::IndexedLog::trim(
     const pg_log_entry_t &e = *log.begin();
     if (e.version > s)
       break;
-    generic_dout(20) << "trim " << e << dendl;
+    lgeneric_subdout(cct, osd, 20) << "trim " << e << dendl;
     if (trimmed)
       trimmed->insert(e.version);
 
     unindex(e);         // remove from index,
 
     // add to dup list
-    generic_dout(20) << "earliest_dup_version = " << earliest_dup_version << dendl;
+    lgeneric_subdout(cct, osd, 20) << "earliest_dup_version = " << earliest_dup_version << dendl;
     if (e.version.version >= earliest_dup_version) {
       if (write_from_dups != nullptr && *write_from_dups > e.version) {
-	generic_dout(20) << "updating write_from_dups from " << *write_from_dups << " to " << e.version << dendl;
+	lgeneric_subdout(cct, osd, 20) << "updating write_from_dups from " << *write_from_dups << " to " << e.version << dendl;
 	*write_from_dups = e.version;
       }
       dups.push_back(pg_log_dup_t(e));
@@ -91,6 +86,10 @@ void PGLog::IndexedLog::trim(
       }
     }
 
+    bool reset_complete_to = false;
+    // we are trimming past complete_to, so reset complete_to
+    if (complete_to != log.end() && e.version >= complete_to->version)
+      reset_complete_to = true;
     if (rollback_info_trimmed_to_riter == log.rend() ||
 	e.version == rollback_info_trimmed_to_riter->version) {
       log.pop_front();
@@ -98,13 +97,24 @@ void PGLog::IndexedLog::trim(
     } else {
       log.pop_front();
     }
+
+    // reset complete_to to the beginning of the log
+    if (reset_complete_to) {
+      complete_to = log.begin();
+      if (complete_to != log.end()) {
+        lgeneric_subdout(cct, osd, 20) << " moving complete_to to "
+                                       << log.begin()->version << dendl;
+      } else {
+        lgeneric_subdout(cct, osd, 20) << " log is now empty" << dendl;
+      }
+    }
   }
 
   while (!dups.empty()) {
     const auto& e = *dups.begin();
     if (e.version.version >= earliest_dup_version)
       break;
-    generic_dout(20) << "trim dup " << e << dendl;
+    lgeneric_subdout(cct, osd, 20) << "trim dup " << e << dendl;
     if (trimmed_dups)
       trimmed_dups->insert(e.get_key_name());
     if (indexed_data & PGLOG_INDEXED_DUPS) {
@@ -172,6 +182,8 @@ void PGLog::trim(
     dout(10) << "trim " << log << " to " << trim_to << dendl;
     log.trim(cct, trim_to, &trimmed, &trimmed_dups, &write_from_dups);
     info.log_tail = log.tail;
+    if (log.complete_to != log.log.end())
+      dout(10) << " after trim complete_to " << log.complete_to->version << dendl;
   }
 }
 
