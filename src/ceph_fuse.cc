@@ -94,7 +94,8 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   for (auto i = args.begin(); i != args.end();) {
     if (ceph_argparse_double_dash(args, i)) {
-      break;
+      cerr << "-- not allowed with ceph-fuse" << std::endl;
+      exit(0);
     } else if (ceph_argparse_flag(args, i, "--localize-reads", (char*)nullptr)) {
       cerr << "setting CEPH_OSD_FLAG_LOCALIZE_READS" << std::endl;
       filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
