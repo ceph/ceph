@@ -678,15 +678,10 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
 
 bool PrimaryLogPG::is_degraded_on_async_recovery_target(const hobject_t& soid)
 {
-  for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-       i != acting_recovery_backfill.end();
-       ++i) {
-    if (*i == get_primary()) continue;
-    pg_shard_t peer = *i;
-    auto peer_missing_entry = peer_missing.find(peer);
+  for (auto &i: async_recovery_targets) {
+    auto peer_missing_entry = peer_missing.find(i);
     if (peer_missing_entry != peer_missing.end() &&
-        peer_missing_entry->second.get_items().count(soid) &&
-        async_recovery_targets.count(peer)) {
+        peer_missing_entry->second.get_items().count(soid)) {
       dout(30) << __func__ << " " << soid << dendl;
       return true;
     }
