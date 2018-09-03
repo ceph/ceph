@@ -152,6 +152,19 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
     (*m)["hostname"] = u.nodename;
     (*m)["arch"] = u.machine;
   }
+
+  // but wait, am i in a container?
+  if (const char *pod_name = getenv("POD_NAME")) {
+    (*m)["pod_name"] = pod_name;
+    if (const char *node_name = getenv("NODE_NAME")) {
+      (*m)["container_hostname"] = u.nodename;
+      (*m)["hostname"] = node_name;
+    }
+  }
+  if (const char *ns = getenv("POD_NAMESPACE")) {
+    (*m)["pod_namespace"] = ns;
+  }
+
 #ifdef __APPLE__
   // memory
   {

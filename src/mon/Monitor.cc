@@ -4795,6 +4795,10 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
   MonSession *s = op->get_session();
   ceph_assert(s);
 
+  if (m->hostname.size()) {
+    s->remote_host = m->hostname;
+  }
+
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        ++p) {
