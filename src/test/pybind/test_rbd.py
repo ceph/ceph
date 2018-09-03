@@ -1923,6 +1923,37 @@ class TestGroups(object):
         eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
         self.group.rename_snap(snap_name, new_snap_name)
         eq([new_snap_name], [snap['name'] for snap in self.group.list_snaps()])
+        self.group.remove_snap(new_snap_name)
+        eq([], list(self.group.list_snaps()))
+
+    def test_group_snap_rollback(self):
+        eq([], list(self.group.list_images()))
+        self.group.add_image(ioctx, image_name)
+        with Image(ioctx, image_name) as image:
+            image.write(b'\0' * 256, 0)
+            read = image.read(0, 256)
+            eq(read, b'\0' * 256)
+
+        global snap_name
+        eq([], list(self.group.list_snaps()))
+        self.group.create_snap(snap_name)
+        eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
+
+        with Image(ioctx, image_name) as image:
+            data = rand_data(256)
+            image.write(data, 0)
+            read = image.read(0, 256)
+            eq(read, data)
+
+        self.group.rollback_to_snap(snap_name)
+        with Image(ioctx, image_name) as image:
+            read = image.read(0, 256)
+            eq(read, b'\0' * 256)
+
+        self.group.remove_image(ioctx, image_name)
+        eq([], list(self.group.list_images()))
+        self.group.remove_snap(snap_name)
+        eq([], list(self.group.list_snaps()))
 
 @with_setup(create_image, remove_image)
 def test_rename():
