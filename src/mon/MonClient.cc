@@ -32,6 +32,7 @@
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 #include "common/errno.h"
+#include "common/hostname.h"
 #include "common/LogClient.h"
 
 #include "MonClient.h"
@@ -847,6 +848,7 @@ void MonClient::_renew_subs()
   else {
     MMonSubscribe *m = new MMonSubscribe;
     m->what = sub.get_subs();
+    m->hostname = ceph_get_short_hostname();
     _send_mon_message(m);
     sub.renewed();
   }
