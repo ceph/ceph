@@ -1130,7 +1130,7 @@ public:
         sync_env->observer->on_bucket_changed(bs.bucket.get_key());
       }
       /* FIXME: what do do in case of error */
-      if (marker_tracker && !entry_marker.empty()) {
+      if (sync_status == 0 && marker_tracker && !entry_marker.empty()) {
         /* update marker */
         yield call(marker_tracker->finish(entry_marker));
       }
