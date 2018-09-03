@@ -94,7 +94,6 @@ export class RoleListComponent implements OnInit {
     const name = this.selection.first().name;
     this.modalRef.content.setUp({
       metaType: 'Role',
-      pattern: `${name}`,
       deletionMethod: () => this.deleteRole(name),
       modalRef: this.modalRef
     });

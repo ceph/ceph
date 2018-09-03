@@ -256,7 +256,6 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     this.modalRef = this.modalService.show(DeletionModalComponent);
     this.modalRef.content.setUp({
       metaType: 'RBD snapshot',
-      pattern: snapshotName,
       deletionMethod: () => this._asyncTask('deleteSnapshot', 'rbd/snap/delete', snapshotName),
       modalRef: this.modalRef
     });

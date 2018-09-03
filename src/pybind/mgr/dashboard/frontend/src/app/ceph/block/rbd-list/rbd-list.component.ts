@@ -201,7 +201,6 @@ export class RbdListComponent implements OnInit {
     this.modalRef = this.modalService.show(DeletionModalComponent);
     this.modalRef.content.setUp({
       metaType: 'RBD',
-      pattern: `${poolName}/${imageName}`,
       deletionObserver: () =>
         this.taskWrapper.wrapTaskAroundCall({
           task: new FinishedTask('rbd/delete', {
