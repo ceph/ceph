@@ -17,27 +17,23 @@ export class DeletionModalComponent implements OnInit {
   submitButton: SubmitButtonComponent;
   description: TemplateRef<any>;
   metaType: string;
-  pattern = 'yes';
   deletionObserver: () => Observable<any>;
   deletionMethod: Function;
   modalRef: BsModalRef;
 
   deletionForm: CdFormGroup;
-  confirmation: FormControl;
 
   // Parameters are destructed here than assigned to specific types and marked as optional
   setUp({
     modalRef,
     metaType,
     deletionMethod,
-    pattern,
     deletionObserver,
     description
   }: {
     modalRef: BsModalRef;
     metaType: string;
     deletionMethod?: Function;
-    pattern?: string;
     deletionObserver?: () => Observable<any>;
     description?: TemplateRef<any>;
   }) {
@@ -51,28 +47,14 @@ export class DeletionModalComponent implements OnInit {
     this.metaType = metaType;
     this.modalRef = modalRef;
     this.deletionMethod = deletionMethod;
-    this.pattern = pattern || this.pattern;
     this.deletionObserver = deletionObserver;
     this.description = description;
   }
 
   ngOnInit() {
-    this.confirmation = new FormControl('', {
-      validators: [Validators.required],
-      updateOn: 'blur'
-    });
     this.deletionForm = new CdFormGroup({
-      confirmation: this.confirmation
+      confirmation: new FormControl(false, [Validators.requiredTrue])
     });
-  }
-
-  updateConfirmation($e) {
-    if ($e.key !== 'Enter') {
-      return;
-    }
-    this.confirmation.setValue($e.target.value);
-    this.confirmation.markAsDirty();
-    this.confirmation.updateValueAndValidity();
   }
 
   deletionCall() {
@@ -93,9 +75,5 @@ export class DeletionModalComponent implements OnInit {
 
   stopLoadingSpinner() {
     this.deletionForm.setErrors({ cdSubmitButton: true });
-  }
-
-  escapeRegExp(text) {
-    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 }

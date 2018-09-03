@@ -5,6 +5,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ChartsModule } from 'ng2-charts/ng2-charts';
 import { AlertModule, ModalModule, PopoverModule, TooltipModule } from 'ngx-bootstrap';
 
+import { DirectivesModule } from '../directives/directives.module';
 import { PipesModule } from '../pipes/pipes.module';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { DeletionModalComponent } from './deletion-modal/deletion-modal.component';
@@ -31,7 +32,8 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     ChartsModule,
     ReactiveFormsModule,
     PipesModule,
-    ModalModule.forRoot()
+    ModalModule.forRoot(),
+    DirectivesModule
   ],
   declarations: [
     ViewCacheComponent,
