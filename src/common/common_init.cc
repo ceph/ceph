@@ -27,6 +27,7 @@
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
+#ifndef WITH_SEASTAR
 CephContext *common_preinit(const CephInitParameters &iparams,
 			    enum code_environment_t code_env, int flags)
 {
@@ -71,6 +72,7 @@ CephContext *common_preinit(const CephInitParameters &iparams,
 
   return cct;
 }
+#endif	// #ifndef WITH_SEASTAR
 
 void complain_about_parse_errors(CephContext *cct,
 				 std::deque<std::string> *parse_errors)
@@ -92,6 +94,8 @@ void complain_about_parse_errors(CephContext *cct,
     ++cur_err;
   }
 }
+
+#ifndef WITH_SEASTAR
 
 /* Please be sure that this can safely be called multiple times by the
  * same application. */
@@ -133,3 +137,5 @@ void common_init_finish(CephContext *cct)
     }
   }
 }
+
+#endif	// #ifndef WITH_SEASTAR
