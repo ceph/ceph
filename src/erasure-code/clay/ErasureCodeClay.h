@@ -49,10 +49,9 @@ public:
   std::string directory;
   
   explicit ErasureCodeClay(const std::string &dir)
-    :DEFAULT_K("6"),
-    DEFAULT_M("4"),
-    DEFAULT_W("8"),
-    k(0), m(0), w(0),
+    :DEFAULT_K("4"),
+    DEFAULT_M("2"),
+    k(0), m(0), w(8),
     directory(dir)
   {
   }
@@ -97,8 +96,7 @@ public:
   
   int is_repair(const set<int> &want_to_read,
                 const set<int> &available_chunks);
-
- 					   
+	   
   int get_repair_sub_chunk_count(const set<int> &want_to_read);
   
   virtual int parse(ErasureCodeProfile &profile, std::ostream *ss);
@@ -121,7 +119,7 @@ private:
                             vector<pair<int,int>> &repair_sub_chunks_ind);
 
   void get_repair_subchunks(const int &lost_node,
-					   vector<pair<int, int>> &repair_sub_chunks_ind);
+					   vector<pair<int, int>> &repair_sub_chunks_ind);	
 
   int decode_erasures(const set<int>& erased_chunks, int z,
                       map<int, bufferlist>* chunks, int sc_size);

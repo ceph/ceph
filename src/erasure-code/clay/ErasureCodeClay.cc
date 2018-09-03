@@ -61,7 +61,9 @@ int ErasureCodeClay::init(ErasureCodeProfile &profile,
   if (r)
     return r;
 
-  ErasureCode::init(profile, ss);
+  r = ErasureCode::init(profile, ss);
+  if (r)
+    return r;
   ErasureCodePluginRegistry &registry = ErasureCodePluginRegistry::instance();
   r = registry.factory(mds.profile["plugin"],
 		       directory,
@@ -195,45 +197,75 @@ int ErasureCodeClay::parse(ErasureCodeProfile &profile,
   err = ErasureCode::parse(profile, ss);
   err |= to_int("k", profile, &k, DEFAULT_K, ss);
   err |= to_int("m", profile, &m, DEFAULT_M, ss);
-  err |= to_int("w", profile, &w, DEFAULT_W, ss);
   
   err |= sanity_check_k(k, ss);
 
   err |= to_int("d", profile, &d, std::to_string(k+m-1), ss);
 
-  //check for mds block input
+  //check for scalar_mds in profile input
   if (profile.find("scalar_mds") == profile.end() ||
       profile.find("scalar_mds")->second.size() == 0) {
     mds.profile["plugin"] = "jerasure";
     pft.profile["plugin"] = "jerasure";
-    *ss << "scalar_mds not found in profile picking default jerasure" << std::endl;
   } else {
     std::string p = profile.find("scalar_mds")->second;
-    *ss << "recieved scalar_mds as " << p << std::endl;
-
     if ((p == "jerasure") || (p == "isa") || (p == "shec")) {
       mds.profile["plugin"] = p;
       pft.profile["plugin"] = p;
-    }
-    else {
-      mds.profile["plugin"] = "jerasure";
-      pft.profile["plugin"] = "jerasure";
-      *ss << "scalar_mds " << p << "is not currently supported, using the default jerasure" << std::endl;
+    } else {
+        *ss << "scalar_mds " << mds.profile["plugin"] <<
+               "is not currently supported, use one of 'jerasure',"<<
+               " 'isa', 'shec'" << std::endl;
+        err = -EINVAL;
+        return err;
     }
   }
 
   if (profile.find("technique") == profile.end() ||
       profile.find("technique")->second.size() == 0) {
-    mds.profile["technique"] = "reed_sol_van";
-    pft.profile["technique"] = "reed_sol_van";
-    *ss << "technique not found in profile picking default reed_sol_van" << std::endl;
+    if ((mds.profile["plugin"]=="jerasure") || (mds.profile["plugin"]=="isa") ) {
+      mds.profile["technique"] = "reed_sol_van";
+      pft.profile["technique"] = "reed_sol_van";
+    } else {
+      mds.profile["technique"] = "single";
+      pft.profile["technique"] = "single";
+    }
   } else {
     std::string p = profile.find("technique")->second;
-    *ss << "recieved technique as " << p << std::endl;
-    mds.profile["technique"] = p;
-    pft.profile["technique"] = p;
+    if (mds.profile["plugin"] == "jerasure") {
+      if ( (p == "reed_sol_van") || (p == "reed_sol_r6_op") || (p == "cauchy_orig") 
+           || (p == "cauchy_good") || (p == "liber8tion")) {
+        mds.profile["technique"] = p;
+        pft.profile["technique"] = p;
+      } else {
+        *ss << "technique " << p << "is not currently supported, use one of "<< 
+               "reed_sol_van', 'reed_sol_r6_op','cauchy_orig'," <<
+               "'cauchy_good','liber8tion'"<< std::endl;
+        err = -EINVAL;
+        return err;
+      }
+    } else if (mds.profile["plugin"] == "isa") {
+      if ( (p == "reed_sol_van") || (p == "cauchy")) {
+        mds.profile["technique"] = p;
+        pft.profile["technique"] = p;
+      } else {
+        *ss << "technique " << p << "is not currently supported, use one of"<<
+               "'reed_sol_van','cauchy'"<< std::endl;
+        err = -EINVAL;
+        return err;
+      }
+    } else {
+      if ( (p == "single") || (p == "multiple")) {
+        mds.profile["technique"] = p;
+        pft.profile["technique"] = p;
+      } else {
+        *ss << "technique " << p << "is not currently supported, use one of"<<
+               "'single','multiple'"<< std::endl;
+        err = -EINVAL;
+        return err;
+      }
+    } 
   }
-  
   if ((d < k) || (d > k+m-1)) {
     *ss << "value of d " << d
         << " must be within [ " << k << "," << k+m-1 << "]" << std::endl;
@@ -244,8 +276,6 @@ int ErasureCodeClay::parse(ErasureCodeProfile &profile,
   q = d-k+1;
   if ((k+m)%q) {
     nu = q - (k+m)%q;
-    *ss << "Clay: (k+m)%q=" << (k+m)%q
-	<< "q doesn't divide k+m, to use shortening" << std::endl;
   } else {
     nu = 0;
   }
@@ -255,6 +285,10 @@ int ErasureCodeClay::parse(ErasureCodeProfile &profile,
     return err;
   }
   
+  if (mds.profile["plugin"] == "shec") {
+    mds.profile["c"] = '2';
+    pft.profile["c"] = '2';
+  }
   mds.profile["k"] = std::to_string(k+nu);
   mds.profile["m"] = std::to_string(m);
   mds.profile["w"] = '8';
@@ -262,13 +296,13 @@ int ErasureCodeClay::parse(ErasureCodeProfile &profile,
   pft.profile["k"] = '2';
   pft.profile["m"] = '2';
   pft.profile["w"] = '8';
-  
-  dout(10) << __func__ << " k:" << k << " m: " << m << " w:" << w << dendl;
     
   t = (k+m+nu)/q;
   sub_chunk_no = pow_int(q, t); 
 
-  return 0;
+  dout(10) << __func__ << " (q,t,nu)=("<<q<<","<<t<<","<<nu<<")"<<dendl;
+
+  return err;
 }
 
 int ErasureCodeClay::is_repair(const set<int> &want_to_read,
