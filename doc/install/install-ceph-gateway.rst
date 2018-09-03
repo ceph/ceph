@@ -173,6 +173,13 @@ non-ssl connections are hosted by a single rgw instance. For eg::
  [client.rgw.gateway-node1]
  rgw_frontends = civetweb port=80+443s ssl_certificate=/etc/ceph/private/keyandcert.pem
 
+Additional Civetweb Configuration Options
+-----------------------------------------
+Some additional configuration options can be adjusted for the embedded Civetweb web server
+in the **Client RADOS Gateway** section of the ``/etc/ceph/ceph.conf`` file.
+
+A list of supported options, including an example, can be found in the `RadosGW frontends site`_.
+ 
 
 Migrating from Apache to Civetweb
 ---------------------------------
@@ -607,3 +614,4 @@ The output should be::
  my-new-bucket
 
 .. _Preflight:  ../../start/quick-start-preflight
+.. _RadosGW frontends site: ../../radosgw/frontends
