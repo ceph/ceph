@@ -72,6 +72,7 @@ To use this plugin you can either install it in your IDE, if supported, or use
 it via the cli.
 
 We added 2 npm scripts to help running prettier commands:
+
 - ``npm run prettier``, will run prettier formatter on all frontend files
 - ``npm run prettier:lint``, will check all frontend files against prettier linter
 
@@ -84,6 +85,14 @@ Create ``unit-test-configuration.ts`` file based on
 
 Run ``npm run test`` to execute the unit tests via `Jest
 <https://facebook.github.io/jest/>`_.
+
+If you get errors on all tests, it could be because `Jest
+<https://facebook.github.io/jest/>`_ or something else was updated.
+There are a few ways how you can try to resolve this:
+
+- Remove all modules with ``rm -rf dist node_modules`` and run ``npm install``
+  again in order to reinstall them
+- Clear the cache of jest by running ``npx jest --clearCache``
 
 Running End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
