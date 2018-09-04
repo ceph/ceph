@@ -383,7 +383,7 @@ int MetaTool::_show_meta(inode_meta_t& inode_meta, const string& fn){
         }
     }catch (const buffer::error &err){
         cerr << "corrupt decode in snap_blob" 
-             << ": " << err << std::endl;
+             << ": " << err.what() << std::endl;
         return -1;
     }
     
@@ -503,7 +503,7 @@ int MetaTool::list_meta(meta_op &op){
         ::decode(got_fnode, p);
     }catch (const buffer::error &err){
         cerr << "corrupt fnode header in " << oid
-             << ": " << err << std::endl;
+             << ": " << err.what() << std::endl;
         return -1;
     }
 
@@ -551,7 +551,7 @@ int MetaTool::list_meta(meta_op &op){
             }
         } catch (const buffer::error &err) {
             derr << "Corrupt dentry '" << dname << "' : "
-                 << err << "(" << "" << ")" << dendl;
+                 << err.what() << "(" << "" << ")" << dendl;
             return -1;
         }  
     }
@@ -580,7 +580,7 @@ int MetaTool::list_meta(meta_op &op){
                 }
             } catch (const buffer::error &err) {
                 derr << "Corrupt dentry '" << dname << "' : "
-                     << err << "(" << "" << ")" << dendl;
+                     << err.what() << "(" << "" << ")" << dendl;
                 return -1;
             }
         }    
@@ -788,7 +788,7 @@ int MetaTool::show_child(std::string_view key,
             }
         }catch (const buffer::error &err){
             cerr << "corrupt decode in snap_blob" 
-                 << ": " << err << std::endl;
+                 << ": " << err.what() << std::endl;
         }
         f->close_section();
         f->close_section();

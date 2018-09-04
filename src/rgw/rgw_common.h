@@ -1905,7 +1905,7 @@ struct rgw_obj {
         } else {
           ssize_t pos = key.name.find('_', 1);
           if (pos < 0) {
-            throw buffer::error();
+            throw buffer::malformed_input();
           }
           key.name = key.name.substr(pos + 1);
         }
