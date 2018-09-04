@@ -56,12 +56,12 @@ struct thick_provision_writer {
   {
     // If error cases occur, the code is aborted, because
     // constructor cannot return error value.
-    assert(g_ceph_context != nullptr);
+    ceph_assert(g_ceph_context != nullptr);
     bl.append_zero(block_size);
 
     librbd::image_info_t info;
     int r = image->stat(info, sizeof(info));
-    assert(r >= 0);
+    ceph_assert(r >= 0);
     uint64_t order;
     if (info.order == 0) {
       order = g_conf().get_val<int64_t>("rbd_default_order");
@@ -180,9 +180,9 @@ int thick_write(const std::string &image_name,librados::IoCtx &io_ctx,
 
   // To prevent writesame from discarding data, thick_write sets
   // the rbd_discard_on_zeroed_write_same option to false.
-  assert(g_ceph_context != nullptr);
+  ceph_assert(g_ceph_context != nullptr);
   r = g_conf().set_val("rbd_discard_on_zeroed_write_same", "false");
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = utils::open_image(io_ctx, image_name, false, &image);
   if (r < 0) {
     return r;

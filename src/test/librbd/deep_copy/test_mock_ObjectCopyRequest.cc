@@ -25,6 +25,8 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
   explicit MockTestImageCtx(librbd::ImageCtx &image_ctx)
     : librbd::MockImageCtx(image_ctx) {
   }
+
+  MockTestImageCtx *parent = nullptr;
 };
 
 } // anonymous namespace
@@ -46,7 +48,7 @@ struct ImageRequest<MockTestImageCtx> {
   static void aio_read(MockTestImageCtx *ictx, AioCompletion *c,
                        Extents &&image_extents, ReadResult &&read_result,
                        int op_flags, const ZTracer::Trace &parent_trace) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->aio_read(c, image_extents);
   }
   MOCK_METHOD2(aio_read, void(AioCompletion *, const Extents&));
@@ -206,9 +208,8 @@ public:
       librbd::MockTestImageCtx &mock_dst_image_ctx, Context *on_finish) {
     expect_get_object_name(mock_dst_image_ctx);
     expect_get_object_count(mock_dst_image_ctx);
-    return new MockObjectCopyRequest(&mock_src_image_ctx, nullptr,
-                                     &mock_dst_image_ctx, m_snap_map, 0, false,
-                                     on_finish);
+    return new MockObjectCopyRequest(&mock_src_image_ctx, &mock_dst_image_ctx,
+                                     m_snap_map, 0, false, on_finish);
   }
 
   void expect_set_snap_read(librados::MockTestMemIoCtxImpl &mock_io_ctx,
@@ -291,8 +292,8 @@ public:
                               Return(true)));
       } else {
         expect.WillOnce(DoAll(WithArg<6>(Invoke([&mock_image_ctx, snap_id, state](Context *ctx) {
-                                  assert(mock_image_ctx.image_ctx->snap_lock.is_locked());
-                                  assert(mock_image_ctx.image_ctx->object_map_lock.is_wlocked());
+                                  ceph_assert(mock_image_ctx.image_ctx->snap_lock.is_locked());
+                                  ceph_assert(mock_image_ctx.image_ctx->object_map_lock.is_wlocked());
                                   mock_image_ctx.image_ctx->object_map->aio_update<Context>(
                                     snap_id, 0, 1, state, boost::none, {}, ctx);
                                 })),

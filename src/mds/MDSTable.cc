@@ -41,7 +41,7 @@ class MDSTableIOContext : public MDSIOContextBase
     MDSRank *get_mds() override {return ida->mds;}
   public:
     explicit MDSTableIOContext(MDSTable *ida_) : ida(ida_) {
-      assert(ida != NULL);
+      ceph_assert(ida != NULL);
     }
 };
 
@@ -69,7 +69,7 @@ void MDSTable::save(MDSInternalContextBase *onfinish, version_t v)
   }
   
   dout(10) << "save v " << version << dendl;
-  assert(is_active());
+  ceph_assert(is_active());
   
   bufferlist bl;
   encode(version, bl);
@@ -154,7 +154,7 @@ void MDSTable::load(MDSInternalContextBase *onfinish)
 { 
   dout(10) << "load" << dendl;
 
-  assert(is_undef());
+  ceph_assert(is_undef());
   state = STATE_OPENING;
 
   C_IO_MT_Load *c = new C_IO_MT_Load(this, onfinish);
@@ -166,7 +166,7 @@ void MDSTable::load(MDSInternalContextBase *onfinish)
 
 void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
 {
-  assert(is_opening());
+  ceph_assert(is_opening());
   state = STATE_ACTIVE;
   if (r == -EBLACKLISTED) {
     mds->respawn();
@@ -177,7 +177,7 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
     mds->clog->error() << "error reading table object '" << get_object_name()
                        << "' " << r << " (" << cpp_strerror(r) << ")";
     mds->damaged();
-    assert(r >= 0);  // Should be unreachable because damaged() calls respawn()
+    ceph_assert(r >= 0);  // Should be unreachable because damaged() calls respawn()
   }
 
   dout(10) << "load_2 got " << bl.length() << " bytes" << dendl;
@@ -192,7 +192,7 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
     mds->clog->error() << "error decoding table object '" << get_object_name()
                        << "': " << e.what();
     mds->damaged();
-    assert(r >= 0);  // Should be unreachable because damaged() calls respawn()
+    ceph_assert(r >= 0);  // Should be unreachable because damaged() calls respawn()
   }
 
   if (onfinish) {

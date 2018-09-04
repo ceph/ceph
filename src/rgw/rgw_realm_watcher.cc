@@ -123,7 +123,7 @@ int RGWRealmWatcher::watch_start(RGWRealm& realm)
 
 int RGWRealmWatcher::watch_restart()
 {
-  assert(!watch_oid.empty());
+  ceph_assert(!watch_oid.empty());
   int r = pool_ctx.unwatch2(watch_handle);
   if (r < 0) {
     lderr(cct) << "Failed to unwatch on " << watch_oid

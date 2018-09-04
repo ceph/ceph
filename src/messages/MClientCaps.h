@@ -222,7 +222,7 @@ public:
     }
     decode_nohead(head.snap_trace_len, snapbl, p);
 
-    assert(middle.length() == head.xattr_len);
+    ceph_assert(middle.length() == head.xattr_len);
     if (head.xattr_len)
       xattrbl = middle;
 

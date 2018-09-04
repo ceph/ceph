@@ -38,7 +38,7 @@ PyModuleRunner::~PyModuleRunner()
 
 int PyModuleRunner::serve()
 {
-  assert(pClassInstance != nullptr);
+  ceph_assert(pClassInstance != nullptr);
 
   // This method is called from a separate OS thread (i.e. a thread not
   // created by Python), so tell Gil to wrap this in a new thread state.
@@ -75,7 +75,7 @@ int PyModuleRunner::serve()
 
 void PyModuleRunner::shutdown()
 {
-  assert(pClassInstance != nullptr);
+  ceph_assert(pClassInstance != nullptr);
 
   Gil gil(py_module->pMyThreadState, true);
 

@@ -13,6 +13,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "include/assert.h"
+
 // A vector that leverages pre-allocated stack-based array to achieve better
 // performance for array with small amount of items.
 //
@@ -97,7 +99,7 @@ class autovector {
     }
 
     difference_type operator-(const self_type& other) const {
-      assert(vect_ == other.vect_);
+      ceph_assert(vect_ == other.vect_);
       return index_ - other.index_;
     }
 
@@ -117,51 +119,51 @@ class autovector {
 
     // -- Reference
     reference operator*() {
-      assert(vect_->size() >= index_);
+      ceph_assert(vect_->size() >= index_);
       return (*vect_)[index_];
     }
 
     const_reference operator*() const {
-      assert(vect_->size() >= index_);
+      ceph_assert(vect_->size() >= index_);
       return (*vect_)[index_];
     }
 
     pointer operator->() {
-      assert(vect_->size() >= index_);
+      ceph_assert(vect_->size() >= index_);
       return &(*vect_)[index_];
     }
 
     const_pointer operator->() const {
-      assert(vect_->size() >= index_);
+      ceph_assert(vect_->size() >= index_);
       return &(*vect_)[index_];
     }
 
 
     // -- Logical Operators
     bool operator==(const self_type& other) const {
-      assert(vect_ == other.vect_);
+      ceph_assert(vect_ == other.vect_);
       return index_ == other.index_;
     }
 
     bool operator!=(const self_type& other) const { return !(*this == other); }
 
     bool operator>(const self_type& other) const {
-      assert(vect_ == other.vect_);
+      ceph_assert(vect_ == other.vect_);
       return index_ > other.index_;
     }
 
     bool operator<(const self_type& other) const {
-      assert(vect_ == other.vect_);
+      ceph_assert(vect_ == other.vect_);
       return index_ < other.index_;
     }
 
     bool operator>=(const self_type& other) const {
-      assert(vect_ == other.vect_);
+      ceph_assert(vect_ == other.vect_);
       return index_ >= other.index_;
     }
 
     bool operator<=(const self_type& other) const {
-      assert(vect_ == other.vect_);
+      ceph_assert(vect_ == other.vect_);
       return index_ <= other.index_;
     }
 
@@ -209,42 +211,42 @@ class autovector {
   bool empty() const { return size() == 0; }
 
   const_reference operator[](size_type n) const {
-    assert(n < size());
+    ceph_assert(n < size());
     return n < kSize ? values_[n] : vect_[n - kSize];
   }
 
   reference operator[](size_type n) {
-    assert(n < size());
+    ceph_assert(n < size());
     return n < kSize ? values_[n] : vect_[n - kSize];
   }
 
   const_reference at(size_type n) const {
-    assert(n < size());
+    ceph_assert(n < size());
     return (*this)[n];
   }
 
   reference at(size_type n) {
-    assert(n < size());
+    ceph_assert(n < size());
     return (*this)[n];
   }
 
   reference front() {
-    assert(!empty());
+    ceph_assert(!empty());
     return *begin();
   }
 
   const_reference front() const {
-    assert(!empty());
+    ceph_assert(!empty());
     return *begin();
   }
 
   reference back() {
-    assert(!empty());
+    ceph_assert(!empty());
     return *(end() - 1);
   }
 
   const_reference back() const {
-    assert(!empty());
+    ceph_assert(!empty());
     return *(end() - 1);
   }
 
@@ -271,7 +273,7 @@ class autovector {
   }
 
   void pop_back() {
-    assert(!empty());
+    ceph_assert(!empty());
     if (!vect_.empty()) {
       vect_.pop_back();
     } else {

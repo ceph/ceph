@@ -27,7 +27,7 @@ SetHeadRequest<I>::SetHeadRequest(I *image_ctx, uint64_t size,
   : m_image_ctx(image_ctx), m_size(size), m_parent_spec(spec),
     m_parent_overlap(parent_overlap), m_on_finish(on_finish),
     m_cct(image_ctx->cct) {
-  assert(m_parent_overlap <= m_size);
+  ceph_assert(m_parent_overlap <= m_size);
 }
 
 template <typename I>
@@ -68,7 +68,7 @@ void SetHeadRequest<I>::send_set_size() {
     });
   librados::AioCompletion *comp = create_rados_callback(ctx);
   int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -128,7 +128,7 @@ void SetHeadRequest<I>::send_remove_parent() {
     });
   librados::AioCompletion *comp = create_rados_callback(ctx);
   int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -181,7 +181,7 @@ void SetHeadRequest<I>::send_set_parent() {
     });
   librados::AioCompletion *comp = create_rados_callback(ctx);
   int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 

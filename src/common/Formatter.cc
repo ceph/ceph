@@ -225,7 +225,7 @@ void JSONFormatter::open_object_section_in_ns(const char *name, const char *ns)
 
 void JSONFormatter::close_section()
 {
-  assert(!m_stack.empty());
+  ceph_assert(!m_stack.empty());
   finish_pending_string();
 
   struct json_formatter_stack_entry_d& entry = m_stack.back();
@@ -391,7 +391,7 @@ void XMLFormatter::open_array_section_in_ns(const char *name, const char *ns)
 
 void XMLFormatter::close_section()
 {
-  assert(!m_sections.empty());
+  ceph_assert(!m_sections.empty());
   finish_pending_string();
 
   std::string section = m_sections.back();

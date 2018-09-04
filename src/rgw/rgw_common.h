@@ -621,7 +621,6 @@ enum RGWUserSourceType
 
 struct RGWUserInfo
 {
-  uint64_t auid;
   rgw_user user_id;
   string display_name;
   string user_email;
@@ -643,8 +642,7 @@ struct RGWUserInfo
   set<string> mfa_ids;
 
   RGWUserInfo()
-    : auid(0),
-      suspended(0),
+    : suspended(0),
       max_buckets(RGW_DEFAULT_MAX_BUCKETS),
       op_mask(RGW_OP_TYPE_ALL),
       admin(0),
@@ -661,7 +659,7 @@ struct RGWUserInfo
 
   void encode(bufferlist& bl) const {
      ENCODE_START(20, 9, bl);
-     encode(auid, bl);
+     encode((uint64_t)0, bl); // old auid
      string access_key;
      string secret_key;
      if (!access_keys.empty()) {
@@ -706,8 +704,10 @@ struct RGWUserInfo
   }
   void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(20, 9, 9, bl);
-     if (struct_v >= 2) decode(auid, bl);
-     else auid = CEPH_AUTH_UID_DEFAULT;
+     if (struct_v >= 2) {
+       uint64_t old_auid;
+       decode(old_auid, bl);
+     }
      string access_key;
      string secret_key;
     decode(access_key, bl);

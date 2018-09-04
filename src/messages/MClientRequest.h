@@ -103,14 +103,14 @@ public:
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
   epoch_t get_mdsmap_epoch() const { return head.mdsmap_epoch; }
   epoch_t get_osdmap_epoch() const {
-    assert(head.op == CEPH_MDS_OP_SETXATTR);
+    ceph_assert(head.op == CEPH_MDS_OP_SETXATTR);
     if (header.version >= 3)
       return head.args.setxattr.osdmap_epoch;
     else
       return 0;
   }
   void set_osdmap_epoch(epoch_t e) {
-    assert(head.op == CEPH_MDS_OP_SETXATTR);
+    ceph_assert(head.op == CEPH_MDS_OP_SETXATTR);
     head.args.setxattr.osdmap_epoch = e;
   }
 

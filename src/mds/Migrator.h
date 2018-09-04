@@ -260,18 +260,18 @@ public:
 
   int get_import_state(dirfrag_t df) const {
     map<dirfrag_t, import_state_t>::const_iterator it = import_state.find(df);
-    assert(it != import_state.end());
+    ceph_assert(it != import_state.end());
     return it->second.state;
   }
   int get_import_peer(dirfrag_t df) const {
     map<dirfrag_t, import_state_t>::const_iterator it = import_state.find(df);
-    assert(it != import_state.end());
+    ceph_assert(it != import_state.end());
     return it->second.peer;
   }
 
   int get_export_state(CDir *dir) const {
     map<CDir*, export_state_t>::const_iterator it = export_state.find(dir);
-    assert(it != export_state.end());
+    ceph_assert(it != export_state.end());
     return it->second.state;
   }
   // this returns true if we are export @dir,
@@ -280,21 +280,21 @@ public:
   // only returns meaningful results during EXPORT_WARNING state.
   bool export_has_warned(CDir *dir, mds_rank_t who) {
     map<CDir*, export_state_t>::iterator it = export_state.find(dir);
-    assert(it != export_state.end());
-    assert(it->second.state == EXPORT_WARNING);
+    ceph_assert(it != export_state.end());
+    ceph_assert(it->second.state == EXPORT_WARNING);
     return (it->second.warning_ack_waiting.count(who) == 0);
   }
 
   bool export_has_notified(CDir *dir, mds_rank_t who) const {
     map<CDir*, export_state_t>::const_iterator it = export_state.find(dir);
-    assert(it != export_state.end());
-    assert(it->second.state == EXPORT_NOTIFYING);
+    ceph_assert(it != export_state.end());
+    ceph_assert(it->second.state == EXPORT_NOTIFYING);
     return (it->second.notify_ack_waiting.count(who) == 0);
   }
 
   void export_freeze_inc_num_waiters(CDir *dir) {
     map<CDir*, export_state_t>::iterator it = export_state.find(dir);
-    assert(it != export_state.end());
+    ceph_assert(it != export_state.end());
     it->second.num_remote_waiters++;
   }
   void find_stale_export_freeze();

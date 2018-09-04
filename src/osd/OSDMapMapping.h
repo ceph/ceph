@@ -28,7 +28,7 @@ public:
 
     Job(const OSDMap *om) : start(ceph_clock_now()), osdmap(om) {}
     virtual ~Job() {
-      assert(shards == 0);
+      ceph_assert(shards == 0);
     }
 
     // child must implement this
@@ -142,7 +142,7 @@ protected:
     void _process(Item *i, ThreadPool::TPHandle &h) override;
 
     void _clear() override {
-      assert(_empty());
+      ceph_assert(_empty());
     }
 
     bool _empty() override {
@@ -286,8 +286,8 @@ public:
 	   std::vector<int> *acting,
 	   int *acting_primary) const {
     auto p = pools.find(pgid.pool());
-    assert(p != pools.end());
-    assert(pgid.ps() < p->second.pg_num);
+    ceph_assert(p != pools.end());
+    ceph_assert(pgid.ps() < p->second.pg_num);
     p->second.get(pgid.ps(), up, up_primary, acting, acting_primary);
   }
 
@@ -295,8 +295,8 @@ public:
 			     int *acting_primary,
 			     spg_t *spgid) {
     auto p = pools.find(pgid.pool());
-    assert(p != pools.end());
-    assert(pgid.ps() < p->second.pg_num);
+    ceph_assert(p != pools.end());
+    ceph_assert(pgid.ps() < p->second.pg_num);
     vector<int> acting;
     p->second.get(pgid.ps(), nullptr, nullptr, &acting, acting_primary);
     if (p->second.erasure) {
@@ -314,7 +314,7 @@ public:
   }
 
   const mempool::osdmap_mapping::vector<pg_t>& get_osd_acting_pgs(unsigned osd) {
-    assert(osd < acting_rmap.size());
+    ceph_assert(osd < acting_rmap.size());
     return acting_rmap[osd];
   }
 

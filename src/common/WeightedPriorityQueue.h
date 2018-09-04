@@ -21,6 +21,8 @@
 #include <boost/intrusive/rbtree.hpp>
 #include <boost/intrusive/avl_set.hpp>
 
+#include "include/assert.h"
+
 namespace bi = boost::intrusive;
 
 template <typename T, typename S>
@@ -84,11 +86,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       }
       //Get the cost of the next item to dequeue
       unsigned get_cost() const {
-        assert(!empty());
+        ceph_assert(!empty());
         return lp.begin()->cost;
       }
       T pop() {
-	assert(!lp.empty());
+	ceph_assert(!lp.empty());
 	T ret = std::move(lp.begin()->item);
         lp.erase_and_dispose(lp.begin(), DelItem<ListPair>());
         return ret;
@@ -151,7 +153,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	ret.first->insert(cost, std::move(item), front);
       }
       unsigned get_cost() const {
-        assert(!empty());
+        ceph_assert(!empty());
         return next->get_cost();
       }
       T pop() {
@@ -312,7 +314,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       normal.insert(p, cl, cost, std::move(item), true);
     }
     T dequeue() override {
-      assert(strict.size + normal.size > 0);
+      ceph_assert(strict.size + normal.size > 0);
       if (!strict.empty()) {
 	return strict.pop(true);
       }

@@ -646,7 +646,7 @@ public:
 
     cerr << "using path " << strpath << std::endl;
     KeyValueDB *store = KeyValueDB::create(g_ceph_context, "leveldb", strpath);
-    assert(!store->create_and_open(cerr));
+    ceph_assert(!store->create_and_open(cerr));
 
     db.reset(new DBObjectMap(g_ceph_context, store));
     tester.db = db.get();
@@ -1051,7 +1051,7 @@ TEST_F(ObjectMapTest, RandomTestNoDeletesXattrs) {
 string num_to_key(unsigned i) {
   char buf[100];
   int ret = snprintf(buf, sizeof(buf), "%010u", i);
-  assert(ret > 0);
+  ceph_assert(ret > 0);
   return string(buf, ret);
 }
 

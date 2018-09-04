@@ -94,7 +94,7 @@ void PreReleaseRequest<I>::handle_cancel_op_requests(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << "r=" << r << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   send_block_writes();
 }
@@ -205,7 +205,7 @@ void PreReleaseRequest<I>::handle_flush_notifies(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
   send_close_journal();
 }
 
@@ -272,7 +272,7 @@ void PreReleaseRequest<I>::handle_close_object_map(int r) {
   ldout(cct, 10) << "r=" << r << dendl;
 
   // object map shouldn't return errors
-  assert(r == 0);
+  ceph_assert(r == 0);
   delete m_object_map;
 
   send_unlock();

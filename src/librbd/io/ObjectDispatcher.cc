@@ -186,7 +186,7 @@ ObjectDispatcher<I>::ObjectDispatcher(I* image_ctx)
 
 template <typename I>
 ObjectDispatcher<I>::~ObjectDispatcher() {
-  assert(m_object_dispatches.empty());
+  ceph_assert(m_object_dispatches.empty());
 }
 
 template <typename I>
@@ -214,11 +214,11 @@ void ObjectDispatcher<I>::register_object_dispatch(
   ldout(cct, 5) << "object_dispatch_layer=" << type << dendl;
 
   RWLock::WLocker locker(m_lock);
-  assert(type < OBJECT_DISPATCH_LAYER_LAST);
+  ceph_assert(type < OBJECT_DISPATCH_LAYER_LAST);
 
   auto result = m_object_dispatches.insert(
     {type, {object_dispatch, new AsyncOpTracker()}});
-  assert(result.second);
+  ceph_assert(result.second);
 }
 
 template <typename I>
@@ -226,13 +226,13 @@ void ObjectDispatcher<I>::shut_down_object_dispatch(
     ObjectDispatchLayer object_dispatch_layer, Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << "object_dispatch_layer=" << object_dispatch_layer << dendl;
-  assert(object_dispatch_layer + 1 < OBJECT_DISPATCH_LAYER_LAST);
+  ceph_assert(object_dispatch_layer + 1 < OBJECT_DISPATCH_LAYER_LAST);
 
   ObjectDispatchMeta object_dispatch_meta;
   {
     RWLock::WLocker locker(m_lock);
     auto it = m_object_dispatches.find(object_dispatch_layer);
-    assert(it != m_object_dispatches.end());
+    ceph_assert(it != m_object_dispatches.end());
 
     object_dispatch_meta = it->second;
     m_object_dispatches.erase(it);
@@ -306,7 +306,7 @@ void ObjectDispatcher<I>::send(ObjectDispatchSpec* object_dispatch_spec) {
   ldout(cct, 20) << "object_dispatch_spec=" << object_dispatch_spec << dendl;
 
   auto object_dispatch_layer = object_dispatch_spec->object_dispatch_layer;
-  assert(object_dispatch_layer + 1 < OBJECT_DISPATCH_LAYER_LAST);
+  ceph_assert(object_dispatch_layer + 1 < OBJECT_DISPATCH_LAYER_LAST);
 
   // apply the IO request to all layers -- this method will be re-invoked
   // by the dispatch layer if continuing / restarting the IO

@@ -158,11 +158,11 @@ public:
   }
 
   ImageCtx::~ImageCtx() {
-    assert(image_watcher == NULL);
-    assert(exclusive_lock == NULL);
-    assert(object_map == NULL);
-    assert(journal == NULL);
-    assert(asok_hook == NULL);
+    ceph_assert(image_watcher == NULL);
+    ceph_assert(exclusive_lock == NULL);
+    ceph_assert(object_map == NULL);
+    ceph_assert(journal == NULL);
+    ceph_assert(asok_hook == NULL);
 
     if (perfcounter) {
       perf_stop();
@@ -183,8 +183,8 @@ public:
   }
 
   void ImageCtx::init() {
-    assert(!header_oid.empty());
-    assert(old_format || !id.empty());
+    ceph_assert(!header_oid.empty());
+    ceph_assert(old_format || !id.empty());
 
     asok_hook = new LibrbdAdminSocketHook(this);
 
@@ -198,7 +198,7 @@ public:
     trace_endpoint.copy_name(pname);
     perf_start(pname);
 
-    assert(image_watcher == NULL);
+    ceph_assert(image_watcher == NULL);
     image_watcher = new ImageWatcher<>(*this);
   }
 
@@ -298,7 +298,7 @@ public:
   }
 
   void ImageCtx::perf_stop() {
-    assert(perfcounter);
+    ceph_assert(perfcounter);
     cct->get_perfcounters_collection()->remove(perfcounter);
     delete perfcounter;
   }
@@ -320,7 +320,7 @@ public:
   }
 
   int ImageCtx::snap_set(uint64_t in_snap_id) {
-    assert(snap_lock.is_wlocked());
+    ceph_assert(snap_lock.is_wlocked());
     auto it = snap_info.find(in_snap_id);
     if (in_snap_id != CEPH_NOSNAP && it != snap_info.end()) {
       snap_id = in_snap_id;
@@ -335,7 +335,7 @@ public:
 
   void ImageCtx::snap_unset()
   {
-    assert(snap_lock.is_wlocked());
+    ceph_assert(snap_lock.is_wlocked());
     snap_id = CEPH_NOSNAP;
     snap_namespace = {};
     snap_name = "";
@@ -346,7 +346,7 @@ public:
   snap_t ImageCtx::get_snap_id(const cls::rbd::SnapshotNamespace& in_snap_namespace,
                                const string& in_snap_name) const
   {
-    assert(snap_lock.is_locked());
+    ceph_assert(snap_lock.is_locked());
     auto it = snap_ids.find({in_snap_namespace, in_snap_name});
     if (it != snap_ids.end()) {
       return it->second;
@@ -356,7 +356,7 @@ public:
 
   const SnapInfo* ImageCtx::get_snap_info(snap_t in_snap_id) const
   {
-    assert(snap_lock.is_locked());
+    ceph_assert(snap_lock.is_locked());
     map<snap_t, SnapInfo>::const_iterator it =
       snap_info.find(in_snap_id);
     if (it != snap_info.end())
@@ -367,7 +367,7 @@ public:
   int ImageCtx::get_snap_name(snap_t in_snap_id,
 			      string *out_snap_name) const
   {
-    assert(snap_lock.is_locked());
+    ceph_assert(snap_lock.is_locked());
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
       *out_snap_name = info->name;
@@ -379,7 +379,7 @@ public:
   int ImageCtx::get_snap_namespace(snap_t in_snap_id,
 				   cls::rbd::SnapshotNamespace *out_snap_namespace) const
   {
-    assert(snap_lock.is_locked());
+    ceph_assert(snap_lock.is_locked());
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
       *out_snap_namespace = info->snap_namespace;
@@ -401,7 +401,7 @@ public:
 
   uint64_t ImageCtx::get_current_size() const
   {
-    assert(snap_lock.is_locked());
+    ceph_assert(snap_lock.is_locked());
     return size;
   }
 
@@ -448,20 +448,20 @@ public:
 
   void ImageCtx::set_access_timestamp(utime_t at)
   {
-    assert(timestamp_lock.is_wlocked());
+    ceph_assert(timestamp_lock.is_wlocked());
     access_timestamp = at;
   }
 
   void ImageCtx::set_modify_timestamp(utime_t mt)
   {
-    assert(timestamp_lock.is_locked());
+    ceph_assert(timestamp_lock.is_locked());
     modify_timestamp = mt;
   }
 
   int ImageCtx::is_snap_protected(snap_t in_snap_id,
 				  bool *is_protected) const
   {
-    assert(snap_lock.is_locked());
+    ceph_assert(snap_lock.is_locked());
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
       *is_protected =
@@ -474,7 +474,7 @@ public:
   int ImageCtx::is_snap_unprotected(snap_t in_snap_id,
 				    bool *is_unprotected) const
   {
-    assert(snap_lock.is_locked());
+    ceph_assert(snap_lock.is_locked());
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
       *is_unprotected =
@@ -490,7 +490,7 @@ public:
 			  const ParentInfo &parent, uint8_t protection_status,
                           uint64_t flags, utime_t timestamp)
   {
-    assert(snap_lock.is_wlocked());
+    ceph_assert(snap_lock.is_wlocked());
     snaps.push_back(id);
     SnapInfo info(in_snap_name, in_snap_namespace,
 		  in_size, parent, protection_status, flags, timestamp);
@@ -502,7 +502,7 @@ public:
 			 string in_snap_name,
 			 snap_t id)
   {
-    assert(snap_lock.is_wlocked());
+    ceph_assert(snap_lock.is_wlocked());
     snaps.erase(std::remove(snaps.begin(), snaps.end(), id), snaps.end());
     snap_info.erase(id);
     snap_ids.erase({in_snap_namespace, in_snap_name});
@@ -510,7 +510,7 @@ public:
 
   uint64_t ImageCtx::get_image_size(snap_t in_snap_id) const
   {
-    assert(snap_lock.is_locked());
+    ceph_assert(snap_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
       if (!resize_reqs.empty() &&
           resize_reqs.front()->shrinking()) {
@@ -527,7 +527,7 @@ public:
   }
 
   uint64_t ImageCtx::get_object_count(snap_t in_snap_id) const {
-    assert(snap_lock.is_locked());
+    ceph_assert(snap_lock.is_locked());
     uint64_t image_size = get_image_size(in_snap_id);
     return Striper::get_num_objects(layout, image_size);
   }
@@ -541,7 +541,7 @@ public:
   bool ImageCtx::test_features(uint64_t in_features,
                                const RWLock &in_snap_lock) const
   {
-    assert(snap_lock.is_locked());
+    ceph_assert(snap_lock.is_locked());
     return ((features & in_features) == in_features);
   }
 
@@ -554,13 +554,13 @@ public:
   bool ImageCtx::test_op_features(uint64_t in_op_features,
                                   const RWLock &in_snap_lock) const
   {
-    assert(snap_lock.is_locked());
+    ceph_assert(snap_lock.is_locked());
     return ((op_features & in_op_features) == in_op_features);
   }
 
   int ImageCtx::get_flags(librados::snap_t _snap_id, uint64_t *_flags) const
   {
-    assert(snap_lock.is_locked());
+    ceph_assert(snap_lock.is_locked());
     if (_snap_id == CEPH_NOSNAP) {
       *_flags = flags;
       return 0;
@@ -582,7 +582,7 @@ public:
   int ImageCtx::test_flags(uint64_t flags, const RWLock &in_snap_lock,
                            bool *flags_set) const
   {
-    assert(snap_lock.is_locked());
+    ceph_assert(snap_lock.is_locked());
     uint64_t snap_flags;
     int r = get_flags(snap_id, &snap_flags);
     if (r < 0) {
@@ -594,7 +594,7 @@ public:
 
   int ImageCtx::update_flags(snap_t in_snap_id, uint64_t flag, bool enabled)
   {
-    assert(snap_lock.is_wlocked());
+    ceph_assert(snap_lock.is_wlocked());
     uint64_t *_flags;
     if (in_snap_id == CEPH_NOSNAP) {
       _flags = &flags;
@@ -616,8 +616,8 @@ public:
 
   const ParentInfo* ImageCtx::get_parent_info(snap_t in_snap_id) const
   {
-    assert(snap_lock.is_locked());
-    assert(parent_lock.is_locked());
+    ceph_assert(snap_lock.is_locked());
+    ceph_assert(parent_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP)
       return &parent_md;
     const SnapInfo *info = get_snap_info(in_snap_id);
@@ -652,7 +652,7 @@ public:
 
   int ImageCtx::get_parent_overlap(snap_t in_snap_id, uint64_t *overlap) const
   {
-    assert(snap_lock.is_locked());
+    ceph_assert(snap_lock.is_locked());
     const ParentInfo *info = get_parent_info(in_snap_id);
     if (info) {
       *overlap = info->overlap;
@@ -662,7 +662,7 @@ public:
   }
 
   void ImageCtx::register_watch(Context *on_finish) {
-    assert(image_watcher != NULL);
+    ceph_assert(image_watcher != NULL);
     image_watcher->register_watch(on_finish);
   }
 
@@ -793,6 +793,7 @@ public:
         "rbd_journal_object_flush_interval", false)(
         "rbd_journal_object_flush_bytes", false)(
         "rbd_journal_object_flush_age", false)(
+        "rbd_journal_object_max_in_flight_appends", false)(
         "rbd_journal_pool", false)(
         "rbd_journal_max_payload_bytes", false)(
         "rbd_journal_max_concurrent_object_sets", false)(
@@ -862,6 +863,7 @@ public:
     ASSIGN_OPTION(journal_object_flush_interval, int64_t);
     ASSIGN_OPTION(journal_object_flush_bytes, Option::size_t);
     ASSIGN_OPTION(journal_object_flush_age, double);
+    ASSIGN_OPTION(journal_object_max_in_flight_appends, uint64_t);
     ASSIGN_OPTION(journal_max_payload_bytes, Option::size_t);
     ASSIGN_OPTION(journal_max_concurrent_object_sets, int64_t);
     ASSIGN_OPTION(mirroring_resync_after_disconnect, bool);
@@ -927,27 +929,27 @@ public:
   }
 
   exclusive_lock::Policy *ImageCtx::get_exclusive_lock_policy() const {
-    assert(owner_lock.is_locked());
-    assert(exclusive_lock_policy != nullptr);
+    ceph_assert(owner_lock.is_locked());
+    ceph_assert(exclusive_lock_policy != nullptr);
     return exclusive_lock_policy;
   }
 
   void ImageCtx::set_exclusive_lock_policy(exclusive_lock::Policy *policy) {
-    assert(owner_lock.is_wlocked());
-    assert(policy != nullptr);
+    ceph_assert(owner_lock.is_wlocked());
+    ceph_assert(policy != nullptr);
     delete exclusive_lock_policy;
     exclusive_lock_policy = policy;
   }
 
   journal::Policy *ImageCtx::get_journal_policy() const {
-    assert(snap_lock.is_locked());
-    assert(journal_policy != nullptr);
+    ceph_assert(snap_lock.is_locked());
+    ceph_assert(journal_policy != nullptr);
     return journal_policy;
   }
 
   void ImageCtx::set_journal_policy(journal::Policy *policy) {
-    assert(snap_lock.is_wlocked());
-    assert(policy != nullptr);
+    ceph_assert(snap_lock.is_wlocked());
+    ceph_assert(policy != nullptr);
     delete journal_policy;
     journal_policy = policy;
   }

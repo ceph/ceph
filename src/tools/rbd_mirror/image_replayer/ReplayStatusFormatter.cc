@@ -89,7 +89,7 @@ bool ReplayStatusFormatter<I>::get_or_send_update(std::string *description,
 
   {
     Mutex::Locker locker(m_lock);
-    assert(m_on_finish == on_finish);
+    ceph_assert(m_on_finish == on_finish);
     m_on_finish = nullptr;
   }
 
@@ -162,7 +162,7 @@ void ReplayStatusFormatter<I>::send_update_tag_cache(uint64_t master_tag_tid,
       std::swap(m_on_finish, on_finish);
     }
 
-    assert(on_finish);
+    ceph_assert(on_finish);
     on_finish->complete(0);
     return;
   }

@@ -32,7 +32,7 @@ private:
 public:
   RefCountedObject(CephContext *c = NULL, int n=1) : nref(n), cct(c) {}
   virtual ~RefCountedObject() {
-    assert(nref == 0);
+    ceph_assert(nref == 0);
   }
   
   const RefCountedObject *get() const {

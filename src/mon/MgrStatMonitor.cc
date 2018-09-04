@@ -45,7 +45,7 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
   bufferlist bl;
   get_version(version, bl);
   if (version) {
-    assert(bl.length());
+    ceph_assert(bl.length());
     try {
       auto p = bl.cbegin();
       decode(digest, p);
@@ -117,7 +117,7 @@ void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   dout(10) << " " << version << dendl;
   bufferlist bl;
   encode(pending_digest, bl, mon->get_quorum_con_features());
-  assert(pending_service_map_bl.length());
+  ceph_assert(pending_service_map_bl.length());
   bl.append(pending_service_map_bl);
   put_version(t, version, bl);
   put_last_committed(t, version);

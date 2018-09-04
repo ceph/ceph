@@ -543,7 +543,7 @@ struct inode_t {
 
   bool is_truncating() const { return (truncate_pending > 0); }
   void truncate(uint64_t old_size, uint64_t new_size) {
-    assert(new_size < old_size);
+    ceph_assert(new_size < old_size);
     if (old_size > max_size_ever)
       max_size_ever = old_size;
     truncate_from = old_size;
@@ -861,7 +861,7 @@ void inode_t<Allocator>::generate_test_instances(list<inode_t*>& ls)
 template<template<typename> class Allocator>
 int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent) const
 {
-  assert(ino == other.ino);
+  ceph_assert(ino == other.ino);
   *divergent = false;
   if (version == other.version) {
     if (rdev != other.rdev ||
@@ -899,7 +899,7 @@ int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent
     *divergent = !older_is_consistent(other);
     return 1;
   } else {
-    assert(version < other.version);
+    ceph_assert(version < other.version);
     *divergent = !other.older_is_consistent(*this);
     return -1;
   }
@@ -1225,7 +1225,7 @@ struct dentry_key_t {
   }
   static void decode_helper(std::string_view key, string& nm, snapid_t& sn) {
     size_t i = key.find_last_of('_');
-    assert(i != string::npos);
+    ceph_assert(i != string::npos);
     if (key.compare(i+1, std::string_view::npos, "head") == 0) {
       // name_head
       sn = CEPH_NOSNAP;

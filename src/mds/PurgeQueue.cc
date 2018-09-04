@@ -97,9 +97,9 @@ PurgeQueue::PurgeQueue(
     delayed_flush(nullptr),
     recovered(false)
 {
-  assert(cct != nullptr);
-  assert(on_error != nullptr);
-  assert(objecter != nullptr);
+  ceph_assert(cct != nullptr);
+  ceph_assert(on_error != nullptr);
+  ceph_assert(objecter != nullptr);
   journaler.set_write_error_handler(on_error);
 }
 
@@ -129,7 +129,7 @@ void PurgeQueue::init()
 {
   Mutex::Locker l(lock);
 
-  assert(logger != nullptr);
+  ceph_assert(logger != nullptr);
 
   finisher.start();
   timer.init();
@@ -208,7 +208,7 @@ void PurgeQueue::wait_for_recovery(Context* c)
 
 void PurgeQueue::_recover()
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   // Journaler::is_readable() adjusts write_pos if partial entry is encountered
   while (1) {
@@ -241,7 +241,7 @@ void PurgeQueue::_recover()
 
     bufferlist bl;
     bool readable = journaler.try_read_entry(bl);
-    assert(readable);  // we checked earlier
+    ceph_assert(readable);  // we checked earlier
   }
 }
 
@@ -273,7 +273,7 @@ void PurgeQueue::push(const PurgeItem &pi, Context *completion)
   Mutex::Locker l(lock);
 
   // Callers should have waited for open() before using us
-  assert(!journaler.is_readonly());
+  ceph_assert(!journaler.is_readonly());
 
   bufferlist bl;
 
@@ -363,7 +363,7 @@ bool PurgeQueue::can_consume()
 
 bool PurgeQueue::_consume()
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   bool could_consume = false;
   while(can_consume()) {
@@ -404,7 +404,7 @@ bool PurgeQueue::_consume()
     // The journaler is readable: consume an entry
     bufferlist bl;
     bool readable = journaler.try_read_entry(bl);
-    assert(readable);  // we checked earlier
+    ceph_assert(readable);  // we checked earlier
 
     dout(20) << " decoding entry" << dendl;
     PurgeItem item;
@@ -429,7 +429,7 @@ void PurgeQueue::_execute_item(
     const PurgeItem &item,
     uint64_t expire_to)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   in_flight[expire_to] = item;
   logger->set(l_pq_executing, in_flight.size());
@@ -504,7 +504,7 @@ void PurgeQueue::_execute_item(
     logger->set(l_pq_executing, in_flight.size());
     return;
   }
-  assert(gather.has_subs());
+  ceph_assert(gather.has_subs());
 
   gather.set_finisher(new C_OnFinisher(
                       new FunctionContext([this, expire_to](int r){
@@ -531,12 +531,12 @@ void PurgeQueue::_execute_item(
 void PurgeQueue::_execute_item_complete(
     uint64_t expire_to)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
   dout(10) << "complete at 0x" << std::hex << expire_to << std::dec << dendl;
-  assert(in_flight.count(expire_to) == 1);
+  ceph_assert(in_flight.count(expire_to) == 1);
 
   auto iter = in_flight.find(expire_to);
-  assert(iter != in_flight.end());
+  ceph_assert(iter != in_flight.end());
   if (iter == in_flight.begin()) {
     uint64_t pos = expire_to;
     if (!pending_expire.empty()) {
@@ -635,9 +635,9 @@ bool PurgeQueue::drain(
     size_t *in_flight_count
     )
 {
-  assert(progress != nullptr);
-  assert(progress_total != nullptr);
-  assert(in_flight_count != nullptr);
+  ceph_assert(progress != nullptr);
+  ceph_assert(progress_total != nullptr);
+  ceph_assert(in_flight_count != nullptr);
 
   const bool done = in_flight.empty() && (
       journaler.get_read_pos() == journaler.get_write_pos());

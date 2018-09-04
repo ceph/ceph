@@ -371,11 +371,11 @@ int OmapBench::test_write_objects_in_parallel(omap_generator_t omap_gen) {
 
   Mutex::Locker l(thread_is_free_lock);
   for (int i = 0; i < objects; i++) {
-    assert(busythreads_count <= threads);
+    ceph_assert(busythreads_count <= threads);
     //wait for a writer to be free
     if (busythreads_count == threads) {
       int err = thread_is_free.Wait(thread_is_free_lock);
-      assert(busythreads_count < threads);
+      ceph_assert(busythreads_count < threads);
       if (err < 0) {
 	return err;
       }

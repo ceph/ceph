@@ -71,7 +71,7 @@ Mutex::Mutex(const std::string &n, bool r, bool ld,
 }
 
 Mutex::~Mutex() {
-  assert(nlock == 0);
+  ceph_assert(nlock == 0);
 
   // helgrind gets confused by condition wakeups leading to mutex destruction
   ANNOTATE_BENIGN_RACE_SIZED(&_m, sizeof(_m), "Mutex primitive");
@@ -107,7 +107,7 @@ void Mutex::Lock(bool no_lockdep) {
     r = pthread_mutex_lock(&_m);
   }
 
-  assert(r == 0);
+  ceph_assert(r == 0);
   if (lockdep && g_lockdep) _locked();
   _post_lock();
 
@@ -119,5 +119,5 @@ void Mutex::Unlock() {
   _pre_unlock();
   if (lockdep && g_lockdep) _will_unlock();
   int r = pthread_mutex_unlock(&_m);
-  assert(r == 0);
+  ceph_assert(r == 0);
 }

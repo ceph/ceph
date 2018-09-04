@@ -164,9 +164,9 @@ protected:
   virtual void last_put() {}
   virtual void bad_put(int by) {
 #ifdef MDS_REF_SET
-    assert(ref_map[by] > 0);
+    ceph_assert(ref_map[by] > 0);
 #endif
-    assert(ref > 0);
+    ceph_assert(ref > 0);
   }
   virtual void _put() {}
   void put(int by) {
@@ -191,7 +191,7 @@ protected:
   virtual void first_get() {}
   virtual void bad_get(int by) {
 #ifdef MDS_REF_SET
-    assert(by < 0 || ref_map[by] == 0);
+    ceph_assert(by < 0 || ref_map[by] == 0);
 #endif
     ceph_abort();
   }
@@ -276,11 +276,11 @@ protected:
     get_replicas()[mds] = nonce;
   }
   unsigned get_replica_nonce(mds_rank_t mds) {
-    assert(get_replicas().count(mds));
+    ceph_assert(get_replicas().count(mds));
     return get_replicas()[mds];
   }
   void remove_replica(mds_rank_t mds) {
-    assert(get_replicas().count(mds));
+    ceph_assert(get_replicas().count(mds));
     get_replicas().erase(mds);
     if (get_replicas().empty()) {
       put(PIN_REPLICATED);

@@ -51,13 +51,13 @@ void ceph::crypto::init(CephContext *cct)
                                      SECMOD_DB, &init_params, flags);
   }
   pthread_mutex_unlock(&crypto_init_mutex);
-  assert(crypto_context != NULL);
+  ceph_assert(crypto_context != NULL);
 }
 
 void ceph::crypto::shutdown(bool shared)
 {
   pthread_mutex_lock(&crypto_init_mutex);
-  assert(crypto_refs > 0);
+  ceph_assert(crypto_refs > 0);
   if (--crypto_refs == 0) {
     NSS_ShutdownContext(crypto_context);
     if (!shared) {

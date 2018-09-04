@@ -43,7 +43,7 @@ struct CreateRequest<librbd::MockTestImageCtx> {
                                bool skip_mirror_enable,
                                MockContextWQ *op_work_queue,
                                Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     EXPECT_FALSE(non_primary_global_image_id.empty());
     EXPECT_FALSE(primary_mirror_uuid.empty());
     EXPECT_FALSE(skip_mirror_enable);
@@ -81,7 +81,7 @@ struct CloneRequest<librbd::MockTestImageCtx> {
 			      const std::string &primary_mirror_uuid,
 			      MockContextWQ *op_work_queue,
                               Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     s_instance->construct();
     return s_instance;
@@ -116,14 +116,14 @@ struct CloseImageRequest<librbd::MockTestImageCtx> {
 
   static CloseImageRequest* create(librbd::MockTestImageCtx **image_ctx,
                                    Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->construct(*image_ctx);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
 
   CloseImageRequest() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
   ~CloseImageRequest() {
@@ -144,7 +144,7 @@ struct OpenImageRequest<librbd::MockTestImageCtx> {
                                   librbd::MockTestImageCtx **image_ctx,
                                   const std::string &image_id,
                                   bool read_only, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->image_ctx = image_ctx;
     s_instance->on_finish = on_finish;
     s_instance->construct(io_ctx, image_id);
@@ -152,7 +152,7 @@ struct OpenImageRequest<librbd::MockTestImageCtx> {
   }
 
   OpenImageRequest() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
   ~OpenImageRequest() {

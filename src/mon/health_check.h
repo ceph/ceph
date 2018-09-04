@@ -103,7 +103,7 @@ struct health_check_map_t {
   health_check_t& add(const std::string& code,
 		      health_status_t severity,
 		      const std::string& summary) {
-    assert(checks.count(code) == 0);
+    ceph_assert(checks.count(code) == 0);
     health_check_t& r = checks[code];
     r.severity = severity;
     r.summary = summary;

@@ -43,14 +43,14 @@ struct RefreshParentRequest<MockRefreshImageCtx> {
                                       const ParentInfo &parent_md,
                                       const MigrationInfo &migration_info,
                                       Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
   static bool is_refresh_required(MockRefreshImageCtx &mock_image_ctx,
                                   const ParentInfo& parent_md,
                                   const MigrationInfo &migration_info) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance->is_refresh_required();
   }
 
@@ -80,7 +80,7 @@ struct ImageDispatchSpec<librbd::MockRefreshImageCtx> {
   static ImageDispatchSpec* create_flush_request(
       librbd::MockRefreshImageCtx &image_ctx, AioCompletion *aio_comp,
       FlushSource flush_source, const ZTracer::Trace &parent_trace) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->aio_comp = aio_comp;
     return s_instance;
   }

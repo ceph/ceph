@@ -359,7 +359,7 @@ int main(int argc, const char **argv)
     if (r > 0) {
       print_inc_upmaps(pending_inc, upmap_fd);
       r = osdmap.apply_incremental(pending_inc);
-      assert(r == 0);
+      ceph_assert(r == 0);
     }
   }
   if (upmap) {
@@ -388,7 +388,7 @@ int main(int argc, const char **argv)
       print_inc_upmaps(pending_inc, upmap_fd);
       if (upmap_save) {
 	int r = osdmap.apply_incremental(pending_inc);
-	assert(r == 0);
+	ceph_assert(r == 0);
 	modified = true;
       }
     } else {

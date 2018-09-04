@@ -78,7 +78,7 @@ class LogSegment {
 
   void wait_for_expiry(MDSInternalContextBase *c)
   {
-    assert(c != NULL);
+    ceph_assert(c != NULL);
     expiry_waiters.push_back(c);
   }
 

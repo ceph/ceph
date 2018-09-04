@@ -110,7 +110,7 @@ public:
   void with_active_modules(Callback&& cb, Args&&...args) const
   {
     Mutex::Locker l(lock);
-    assert(active_modules != nullptr);
+    ceph_assert(active_modules != nullptr);
 
     std::forward<Callback>(cb)(*active_modules, std::forward<Args>(args)...);
   }
@@ -170,7 +170,7 @@ public:
 
   std::map<std::string, std::string> get_services() const
   {
-    assert(active_modules);
+    ceph_assert(active_modules);
     return active_modules->get_services();
   }
   // <<< (end of ActivePyModules cheeky call-throughs)

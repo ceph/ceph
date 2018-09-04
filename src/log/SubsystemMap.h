@@ -86,13 +86,13 @@ public:
     }
   }
   bool should_gather(const unsigned sub, int level) const {
-    assert(sub < m_subsys.size());
+    ceph_assert(sub < m_subsys.size());
     return level <= static_cast<int>(m_gather_levels[sub]);
   }
 
   void set_log_level(unsigned subsys, uint8_t log)
   {
-    assert(subsys < m_subsys.size());
+    ceph_assert(subsys < m_subsys.size());
     m_subsys[subsys].log_level = log;
     m_gather_levels[subsys] = \
       std::max(log, m_subsys[subsys].gather_level);
@@ -100,7 +100,7 @@ public:
 
   void set_gather_level(unsigned subsys, uint8_t gather)
   {
-    assert(subsys < m_subsys.size());
+    ceph_assert(subsys < m_subsys.size());
     m_subsys[subsys].gather_level = gather;
     m_gather_levels[subsys] = \
       std::max(m_subsys[subsys].log_level, gather);

@@ -40,7 +40,7 @@ TestIoCtxImpl::TestIoCtxImpl(const TestIoCtxImpl& rhs)
 }
 
 TestIoCtxImpl::~TestIoCtxImpl() {
-  assert(m_pending_ops == 0);
+  ceph_assert(m_pending_ops == 0);
 }
 
 void TestObjectOperationImpl::get() {

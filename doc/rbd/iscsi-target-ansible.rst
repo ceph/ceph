@@ -160,7 +160,7 @@ On the Ansible installer node, perform the following steps.
 
    .. note::
     For more information on using the ``gwcli`` command to install and configure
-    a Ceph iSCSI gateaway, see the `Configuring the iSCSI Target using the Command Line Interface`_
+    a Ceph iSCSI gateway, see the `Configuring the iSCSI Target using the Command Line Interface`_
     section.
 
    .. important::

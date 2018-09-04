@@ -23,9 +23,9 @@ string get_temp_bdev(uint64_t size)
   string fn = "ceph_test_bluefs.tmp.block." + stringify(getpid())
     + "." + stringify(++n);
   int fd = ::open(fn.c_str(), O_CREAT|O_RDWR|O_TRUNC, 0644);
-  assert(fd >= 0);
+  ceph_assert(fd >= 0);
   int r = ::ftruncate(fd, size);
-  assert(r >= 0);
+  ceph_assert(r >= 0);
   ::close(fd);
   return fn;
 }

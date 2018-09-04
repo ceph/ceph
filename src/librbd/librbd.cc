@@ -630,6 +630,11 @@ namespace librbd {
     return librbd::api::Namespace<>::list(io_ctx, namespace_names);
   }
 
+  int RBD::namespace_exists(IoCtx& io_ctx, const char *namespace_name,
+                            bool *exists) {
+    return librbd::api::Namespace<>::exists(io_ctx, namespace_name, exists);
+  }
+
   int RBD::list(IoCtx& io_ctx, vector<string>& names)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
@@ -2532,7 +2537,7 @@ extern "C" int rbd_mirror_image_status_list(rados_ioctx_t p,
 
   size_t i = 0;
   for (auto &it : cpp_images) {
-    assert(i < max);
+    ceph_assert(i < max);
     const std::string &image_id = it.first;
     image_ids[i] = strdup(image_id.c_str());
     mirror_image_status_cpp_to_c(it.second, &images[i]);
@@ -2897,6 +2902,15 @@ extern "C" int rbd_namespace_list(rados_ioctx_t io, char *names, size_t *size) {
   }
 
   return (int)expected_size;
+}
+
+extern "C" int rbd_namespace_exists(rados_ioctx_t io,
+                                    const char *namespace_name,
+                                    bool *exists) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(io, io_ctx);
+
+  return librbd::api::Namespace<>::exists(io_ctx, namespace_name, exists);
 }
 
 extern "C" int rbd_copy(rbd_image_t image, rados_ioctx_t dest_p,

@@ -432,7 +432,7 @@ int replay_journal(rados_ioctx_t ioctx, const char *image_name,
                 return r;
         }
 
-        replay_journaler.start_append(0, 0, 0);
+        replay_journaler.start_append(0, 0, 0, 0);
 
         C_SaferCond replay_ctx;
         ReplayHandler replay_handler(&journaler, &replay_journaler,
@@ -575,7 +575,7 @@ __librbd_open(const char *name, struct rbd_ctx *ctx)
 	rbd_image_t image;
 	int ret;
 
-	assert(!ctx->name && !ctx->image &&
+	ceph_assert(!ctx->name && !ctx->image &&
 	       !ctx->krbd_name && ctx->krbd_fd < 0);
 
 	ret = rbd_open(ioctx, name, &image, NULL);
@@ -603,7 +603,7 @@ __librbd_close(struct rbd_ctx *ctx)
 {
 	int ret;
 
-	assert(ctx->name && ctx->image);
+	ceph_assert(ctx->name && ctx->image);
 
 	ret = rbd_close(ctx->image);
 	if (ret < 0) {
@@ -797,16 +797,16 @@ __librbd_deep_copy(struct rbd_ctx *ctx, const char *src_snapname,
         };
 	ret = rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
                                            features);
-	assert(ret == 0);
+	ceph_assert(ret == 0);
 	ret = rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
                                            *order);
-	assert(ret == 0);
+	ceph_assert(ret == 0);
 	ret = rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
                                            stripe_unit);
-	assert(ret == 0);
+	ceph_assert(ret == 0);
 	ret = rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
                                            stripe_count);
-	assert(ret == 0);
+	ceph_assert(ret == 0);
 
 	ret = rbd_snap_set(ctx->image, src_snapname);
 	if (ret < 0) {
@@ -968,7 +968,7 @@ krbd_open(const char *name, struct rbd_ctx *ctx)
 	if (ret < 0)
 		return ret;
 
-	ret = krbd_map(krbd, pool, name, "", "", &devnode);
+	ret = krbd_map(krbd, pool, "", name, "", "", &devnode);
 	if (ret < 0) {
 		prt("krbd_map(%s) failed\n", name);
 		return ret;
@@ -992,7 +992,7 @@ krbd_close(struct rbd_ctx *ctx)
 {
 	int ret;
 
-	assert(ctx->krbd_name && ctx->krbd_fd >= 0);
+	ceph_assert(ctx->krbd_name && ctx->krbd_fd >= 0);
 
 	if (close(ctx->krbd_fd) < 0) {
 		ret = -errno;
@@ -1148,7 +1148,7 @@ krbd_resize(struct rbd_ctx *ctx, uint64_t size)
 {
 	int ret;
 
-	assert(size % truncbdy == 0);
+	ceph_assert(size % truncbdy == 0);
 
 	/*
 	 * When krbd detects a size change, it calls revalidate_disk(),
@@ -1279,7 +1279,7 @@ nbd_close(struct rbd_ctx *ctx)
 {
 	int r;
 
-	assert(ctx->krbd_name && ctx->krbd_fd >= 0);
+	ceph_assert(ctx->krbd_name && ctx->krbd_fd >= 0);
 
 	if (close(ctx->krbd_fd) < 0) {
 		r = -errno;
@@ -1415,7 +1415,7 @@ ggate_close(struct rbd_ctx *ctx)
 {
 	int r;
 
-	assert(ctx->krbd_name && ctx->krbd_fd >= 0);
+	ceph_assert(ctx->krbd_name && ctx->krbd_fd >= 0);
 
 	if (close(ctx->krbd_fd) < 0) {
 		r = -errno;
@@ -1547,7 +1547,7 @@ ggate_resize(struct rbd_ctx *ctx, uint64_t size)
 {
 	int ret;
 
-	assert(size % truncbdy == 0);
+	ceph_assert(size % truncbdy == 0);
 
 	ret = __ggate_flush(ctx, false);
 	if (ret < 0) {
@@ -2481,7 +2481,7 @@ do_clone()
 	clone_imagename(imagename, sizeof(imagename), num_clones);
 	clone_imagename(lastimagename, sizeof(lastimagename),
 			num_clones - 1);
-	assert(strcmp(lastimagename, ctx.name) == 0);
+	ceph_assert(strcmp(lastimagename, ctx.name) == 0);
 
 	ret = ops->clone(&ctx, "snap", imagename, &order, stripe_unit,
 			 stripe_count);
@@ -2509,7 +2509,7 @@ do_clone()
 				newsize = 0;
 			}
 
-			assert(newsize != (uint64_t)file_size);
+			ceph_assert(newsize != (uint64_t)file_size);
 			prt("truncating image %s from 0x%llx (overlap 0x%llx) to 0x%llx\n",
 			    ctx.name, file_size, overlap, newsize);
 

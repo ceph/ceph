@@ -271,7 +271,7 @@ public:
     stringstream hostpid;
     hostpid << hostname_cstr << getpid() << "-";
     prefix = hostpid.str();
-    assert(!initialized);
+    ceph_assert(!initialized);
     initialized = true;
     return 0;
   }
@@ -285,7 +285,7 @@ public:
 
   void loop(TestOpGenerator *gen)
   {
-    assert(initialized);
+    ceph_assert(initialized);
     list<TestOp*> inflight;
     state_lock.Lock();
 
@@ -349,12 +349,12 @@ public:
   }
 
   TestWatchContext *watch(const string &oid) {
-    assert(!watches.count(oid));
+    ceph_assert(!watches.count(oid));
     return (watches[oid] = new TestWatchContext);
   }
 
   void unwatch(const string &oid) {
-    assert(watches.count(oid));
+    ceph_assert(watches.count(oid));
     delete watches[oid];
     watches.erase(oid);
   }
@@ -473,7 +473,7 @@ public:
 
   void remove_object(const string &oid)
   {
-    assert(!get_watch_context(oid));
+    ceph_assert(!get_watch_context(oid));
     ObjectDesc new_obj;
     pool_obj_cont[current_snap].erase(oid);
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
@@ -525,9 +525,9 @@ public:
   void remove_snap(int snap)
   {
     map<int, map<string,ObjectDesc> >::iterator next_iter = pool_obj_cont.find(snap);
-    assert(next_iter != pool_obj_cont.end());
+    ceph_assert(next_iter != pool_obj_cont.end());
     map<int, map<string,ObjectDesc> >::iterator current_iter = next_iter++;
-    assert(current_iter != pool_obj_cont.end());
+    ceph_assert(current_iter != pool_obj_cont.end());
     map<string,ObjectDesc> &current = current_iter->second;
     map<string,ObjectDesc> &next = next_iter->second;
     for (map<string,ObjectDesc>::iterator i = current.begin();
@@ -551,7 +551,7 @@ public:
 
   void roll_back(const string &oid, int snap)
   {
-    assert(!get_watch_context(oid));
+    ceph_assert(!get_watch_context(oid));
     ObjectDesc contents;
     find_object(oid, &contents, snap);
     contents.dirty = true;
@@ -797,12 +797,12 @@ public:
 	0;
       bool requires;
       int r = context->io_ctx.pool_requires_alignment2(&requires);
-      assert(r == 0);
+      ceph_assert(r == 0);
       uint64_t alignment = 0;
       if (requires) {
         r = context->io_ctx.pool_required_alignment2(&alignment);
-        assert(r == 0);
-        assert(alignment != 0);
+        ceph_assert(r == 0);
+        ceph_assert(alignment != 0);
       }
       cont_gen = new AppendGenerator(
 	prev_length,
@@ -833,8 +833,8 @@ public:
 	 ++i, ++tid) {
       gen_pos.seek(i->first);
       bufferlist to_write = gen_pos.gen_bl_advance(i->second);
-      assert(to_write.length() == i->second);
-      assert(to_write.length() > 0);
+      ceph_assert(to_write.length() == i->second);
+      ceph_assert(to_write.length() > 0);
       std::cout << num << ":  writing " << context->prefix+oid
 		<< " from " << i->first
 		<< " to " << i->first + i->second << " tid " << tid << std::endl;
@@ -893,7 +893,7 @@ public:
 
   void _finish(CallbackInfo *info) override
   {
-    assert(info);
+    ceph_assert(info);
     context->state_lock.Lock();
     uint64_t tid = info->id;
 
@@ -906,14 +906,14 @@ public:
     }
     last_acked_tid = tid;
 
-    assert(!done);
+    ceph_assert(!done);
     waiting_on--;
     if (waiting_on == 0) {
       uint64_t version = 0;
       for (set<librados::AioCompletion *>::iterator i = waiting.begin();
 	   i != waiting.end();
 	   ) {
-	assert((*i)->is_complete());
+	ceph_assert((*i)->is_complete());
 	if (int err = (*i)->get_return_value()) {
 	  cerr << "Error: oid " << oid << " write returned error code "
 	       << err << std::endl;
@@ -929,12 +929,12 @@ public:
 	cerr << "Error: racing read on " << oid << " returned version "
 	     << rcompletion->get_version64() << " rather than version "
 	     << version << std::endl;
-	assert(0 == "racing read got wrong version");
+	ceph_abort_msg("racing read got wrong version");
       }
 
       {
 	ObjectDesc old_value;
-	assert(context->find_object(oid, &old_value, -1));
+	ceph_assert(context->find_object(oid, &old_value, -1));
 	if (old_value.deleted())
 	  std::cout << num << ":  left oid " << oid << " deleted" << std::endl;
 	else
@@ -1016,8 +1016,8 @@ public:
 	 ++i, ++tid) {
       gen_pos.seek(i->first);
       bufferlist to_write = gen_pos.gen_bl_advance(i->second);
-      assert(to_write.length() == i->second);
-      assert(to_write.length() > 0);
+      ceph_assert(to_write.length() == i->second);
+      ceph_assert(to_write.length() > 0);
       std::cout << num << ":  writing " << context->prefix+oid
 		<< " from " << i->first
 		<< " to " << i->first + i->second << " tid " << tid << std::endl;
@@ -1070,7 +1070,7 @@ public:
 
   void _finish(CallbackInfo *info) override
   {
-    assert(info);
+    ceph_assert(info);
     context->state_lock.Lock();
     uint64_t tid = info->id;
 
@@ -1083,14 +1083,14 @@ public:
     }
     last_acked_tid = tid;
 
-    assert(!done);
+    ceph_assert(!done);
     waiting_on--;
     if (waiting_on == 0) {
       uint64_t version = 0;
       for (set<librados::AioCompletion *>::iterator i = waiting.begin();
 	   i != waiting.end();
 	   ) {
-	assert((*i)->is_complete());
+	ceph_assert((*i)->is_complete());
 	if (int err = (*i)->get_return_value()) {
 	  cerr << "Error: oid " << oid << " writesame returned error code "
 	       << err << std::endl;
@@ -1106,12 +1106,12 @@ public:
 	cerr << "Error: racing read on " << oid << " returned version "
 	     << rcompletion->get_version64() << " rather than version "
 	     << version << std::endl;
-	assert(0 == "racing read got wrong version");
+	ceph_abort_msg("racing read got wrong version");
       }
 
       {
 	ObjectDesc old_value;
-	assert(context->find_object(oid, &old_value, -1));
+	ceph_assert(context->find_object(oid, &old_value, -1));
 	if (old_value.deleted())
 	  std::cout << num << ":  left oid " << oid << " deleted" << std::endl;
 	else
@@ -1290,7 +1290,7 @@ public:
 
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
-    assert(context->find_object(oid, &old_value, snap));
+    ceph_assert(context->find_object(oid, &old_value, snap));
     if (old_value.deleted())
       std::cout << num << ":  expect deleted" << std::endl;
     else
@@ -1299,7 +1299,7 @@ public:
     TestWatchContext *ctx = context->get_watch_context(oid);
     context->state_lock.Unlock();
     if (ctx) {
-      assert(old_value.exists);
+      ceph_assert(old_value.exists);
       TestAlarm alarm;
       std::cerr << num << ":  about to start" << std::endl;
       ctx->start();
@@ -1343,7 +1343,7 @@ public:
     if (balance_reads)
       flags |= librados::OPERATION_BALANCE_READS;
 
-    assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[0], &op,
+    ceph_assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[0], &op,
 					flags, NULL));
     waiting_on++;
  
@@ -1352,7 +1352,7 @@ public:
     for (uint32_t i = 1; i < 3; ++i) {
       librados::ObjectReadOperation pipeline_op;
       _do_read(pipeline_op, i);
-      assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[i], &pipeline_op, 0));
+      ceph_assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[i], &pipeline_op, 0));
       waiting_on++;
     }
 
@@ -1365,8 +1365,8 @@ public:
   void _finish(CallbackInfo *info) override
   {
     Mutex::Locker l(context->state_lock);
-    assert(!done);
-    assert(waiting_on > 0);
+    ceph_assert(!done);
+    ceph_assert(waiting_on > 0);
     if (--waiting_on) {
       return;
     }
@@ -1376,7 +1376,7 @@ public:
     int retval = completions[0]->get_return_value();
     for (vector<librados::AioCompletion *>::iterator it = completions.begin();
          it != completions.end(); ++it) {
-      assert((*it)->is_complete());
+      ceph_assert((*it)->is_complete());
       uint64_t version = (*it)->get_version64();
       int err = (*it)->get_return_value();
       if (err != retval) {
@@ -1393,7 +1393,7 @@ public:
       } else if (version != old_value.version) {
 	cerr << num << ": oid " << oid << " version is " << version
 	     << " and expected " << old_value.version << std::endl;
-	assert(version == old_value.version);
+	ceph_assert(version == old_value.version);
       }
     }
     if (!retval) {
@@ -1404,7 +1404,7 @@ public:
 	  cerr << num << ": Error: did not find header attr, has_contents: "
 	       << old_value.has_contents()
 	       << std::endl;
-	  assert(!old_value.has_contents());
+	  ceph_assert(!old_value.has_contents());
 	}
       } else {
 	headerbl = iter->second;
@@ -1412,7 +1412,7 @@ public:
       }
       if (old_value.deleted()) {
 	std::cout << num << ":  expect deleted" << std::endl;
-	assert(0 == "expected deleted");
+	ceph_abort_msg("expected deleted");
       } else {
 	std::cout << num << ":  expect " << old_value.most_recent() << std::endl;
       }
@@ -1465,23 +1465,23 @@ public:
 	  cerr << num << ": oid " << oid << " header does not match, old size: "
 	       << old_value.header.length() << " new size " << header.length()
 	       << std::endl;
-	  assert(old_value.header == header);
+	  ceph_assert(old_value.header == header);
 	}
 	if (omap.size() != old_value.attrs.size()) {
 	  cerr << num << ": oid " << oid << " omap.size() is " << omap.size()
 	       << " and old is " << old_value.attrs.size() << std::endl;
-	  assert(omap.size() == old_value.attrs.size());
+	  ceph_assert(omap.size() == old_value.attrs.size());
 	}
 	if (omap_keys.size() != old_value.attrs.size()) {
 	  cerr << num << ": oid " << oid << " omap.size() is " << omap_keys.size()
 	       << " and old is " << old_value.attrs.size() << std::endl;
-	  assert(omap_keys.size() == old_value.attrs.size());
+	  ceph_assert(omap_keys.size() == old_value.attrs.size());
 	}
       }
       if (xattrs.size() != old_value.attrs.size()) {
 	cerr << num << ": oid " << oid << " xattrs.size() is " << xattrs.size()
 	     << " and old is " << old_value.attrs.size() << std::endl;
-	assert(xattrs.size() == old_value.attrs.size());
+	ceph_assert(xattrs.size() == old_value.attrs.size());
       }
       for (map<string, ContDesc>::iterator iter = old_value.attrs.begin();
 	   iter != old_value.attrs.end();
@@ -1490,23 +1490,23 @@ public:
 	  iter->second);
 	if (!context->no_omap) {
 	  map<string, bufferlist>::iterator omap_iter = omap.find(iter->first);
-	  assert(omap_iter != omap.end());
-	  assert(bl.length() == omap_iter->second.length());
+	  ceph_assert(omap_iter != omap.end());
+	  ceph_assert(bl.length() == omap_iter->second.length());
 	  bufferlist::iterator k = bl.begin();
 	  for(bufferlist::iterator l = omap_iter->second.begin();
 	      !k.end() && !l.end();
 	      ++k, ++l) {
-	    assert(*l == *k);
+	    ceph_assert(*l == *k);
 	  }
 	}
 	map<string, bufferlist>::iterator xattr_iter = xattrs.find(iter->first);
-	assert(xattr_iter != xattrs.end());
-	assert(bl.length() == xattr_iter->second.length());
+	ceph_assert(xattr_iter != xattrs.end());
+	ceph_assert(bl.length() == xattr_iter->second.length());
 	bufferlist::iterator k = bl.begin();
 	for (bufferlist::iterator j = xattr_iter->second.begin();
 	     !k.end() && !j.end();
 	     ++j, ++k) {
-	  assert(*j == *k);
+	  ceph_assert(*j == *k);
 	}
       }
       if (!context->no_omap) {
@@ -1514,17 +1514,17 @@ public:
 	     i != omap_requested_keys.end();
 	     ++i) {
 	  if (!omap_returned_values.count(*i))
-	    assert(!old_value.attrs.count(*i));
+	    ceph_assert(!old_value.attrs.count(*i));
 	  if (!old_value.attrs.count(*i))
-	    assert(!omap_returned_values.count(*i));
+	    ceph_assert(!omap_returned_values.count(*i));
 	}
 	for (map<string, bufferlist>::iterator i = omap_returned_values.begin();
 	     i != omap_returned_values.end();
 	     ++i) {
-	  assert(omap_requested_keys.count(i->first));
-	  assert(omap.count(i->first));
-	  assert(old_value.attrs.count(i->first));
-	  assert(i->second == omap[i->first]);
+	  ceph_assert(omap_requested_keys.count(i->first));
+	  ceph_assert(omap.count(i->first));
+	  ceph_assert(old_value.attrs.count(i->first));
+	  ceph_assert(i->second == omap[i->first]);
 	}
       }
     }
@@ -1571,10 +1571,10 @@ public:
 	cerr << "snap_create returned " << ret << std::endl;
 	ceph_abort();
       }
-      assert(!context->io_ctx.snap_lookup(snapname.c_str(), &snap));
+      ceph_assert(!context->io_ctx.snap_lookup(snapname.c_str(), &snap));
 
     } else {
-      assert(!context->io_ctx.selfmanaged_snap_create(&snap));
+      ceph_assert(!context->io_ctx.selfmanaged_snap_create(&snap));
     }
 
     context->state_lock.Lock();
@@ -1628,10 +1628,10 @@ public:
     if (context->pool_snaps) {
       string snapname;
 
-      assert(!context->io_ctx.snap_get_name(snap, &snapname));
-      assert(!context->io_ctx.snap_remove(snapname.c_str()));
+      ceph_assert(!context->io_ctx.snap_get_name(snap, &snapname));
+      ceph_assert(!context->io_ctx.snap_remove(snapname.c_str()));
      } else {
-      assert(!context->io_ctx.selfmanaged_snap_remove(snap));
+      ceph_assert(!context->io_ctx.selfmanaged_snap_remove(snap));
 
       vector<uint64_t> snapset(context->snaps.size());
       int j = 0;
@@ -1825,7 +1825,7 @@ public:
     uint64_t tid = info->id;
     cout << num << ":  finishing rollback tid " << tid
 	 << " to " << context->prefix + oid << std::endl;
-    assert((int)(info->id) > last_finished);
+    ceph_assert((int)(info->id) > last_finished);
     last_finished = info->id;
 
     int r;
@@ -1934,7 +1934,7 @@ public:
 
     if (info->id == 0) {
       // copy_from
-      assert(comp->is_complete());
+      ceph_assert(comp->is_complete());
       cout << num << ":  finishing copy_from to " << context->prefix + oid << std::endl;
       if ((r = comp->get_return_value())) {
 	if (r == -ENOENT && src_value.deleted()) {
@@ -1945,13 +1945,13 @@ public:
 	  ceph_abort();
 	}
       } else {
-	assert(!version || comp->get_version64() == version);
+	ceph_assert(!version || comp->get_version64() == version);
 	version = comp->get_version64();
 	context->update_object_version(oid, comp->get_version64());
       }
     } else if (info->id == 1) {
       // racing read
-      assert(comp_racing_read->is_complete());
+      ceph_assert(comp_racing_read->is_complete());
       cout << num << ":  finishing copy_from racing read to " << context->prefix + oid << std::endl;
       if ((r = comp_racing_read->get_return_value())) {
 	if (!(r == -ENOENT && src_value.deleted())) {
@@ -1959,8 +1959,8 @@ public:
 	       << r << std::endl;
 	}
       } else {
-	assert(comp_racing_read->get_return_value() == 0);
-	assert(!version || comp_racing_read->get_version64() == version);
+	ceph_assert(comp_racing_read->get_return_value() == 0);
+	ceph_assert(!version || comp_racing_read->get_version64() == version);
 	version = comp_racing_read->get_version64();
       }
     }
@@ -2092,7 +2092,7 @@ public:
     TestWatchContext *ctx = context->get_watch_context(oid);
     context->state_lock.Unlock();
     if (ctx) {
-      assert(old_value.exists);
+      ceph_assert(old_value.exists);
       TestAlarm alarm;
       std::cerr << num << ":  about to start" << std::endl;
       ctx->start();
@@ -2115,12 +2115,12 @@ public:
     if (balance_reads)
       flags |= librados::OPERATION_BALANCE_READS;
 
-    assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[0], &op,
+    ceph_assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[0], &op,
 					flags, NULL));
     waiting_on++;
 
     _do_read(op, tgt_offset, length, 1);
-    assert(!context->io_ctx.aio_operate(context->prefix+tgt_oid, completions[1], &op,
+    ceph_assert(!context->io_ctx.aio_operate(context->prefix+tgt_oid, completions[1], &op,
 					flags, NULL));
 
     waiting_on++;
@@ -2130,8 +2130,8 @@ public:
   void _finish(CallbackInfo *info) override
   {
     Mutex::Locker l(context->state_lock);
-    assert(!done);
-    assert(waiting_on > 0);
+    ceph_assert(!done);
+    ceph_assert(waiting_on > 0);
     if (--waiting_on) {
       return;
     }
@@ -2143,7 +2143,7 @@ public:
     context->find_object(tgt_oid, &tgt_value);
 
     for (int i = 0; i < 2; i++) {
-      assert(completions[i]->is_complete()); 
+      ceph_assert(completions[i]->is_complete()); 
       int err = completions[i]->get_return_value();
       if (err != retval) {
         cerr << num << ": Error: oid " << oid << " read returned different error codes: "
@@ -2162,7 +2162,7 @@ public:
     if (!retval) {
       if (old_value.deleted()) {
 	std::cout << num << ":  expect deleted" << std::endl;
-	assert(0 == "expected deleted");
+	ceph_abort_msg("expected deleted");
       } else {
 	std::cout << num << ":  expect " << old_value.most_recent() << std::endl;
       }
@@ -2265,7 +2265,7 @@ public:
     Mutex::Locker l(context->state_lock);
 
     if (info->id == 0) {
-      assert(comp->is_complete());
+      ceph_assert(comp->is_complete());
       cout << num << ":  finishing copy op to oid " << oid << std::endl;
       if ((r = comp->get_return_value())) {
 	cerr << "Error: oid " << oid << " write returned error code "
@@ -2351,7 +2351,7 @@ public:
     Mutex::Locker l(context->state_lock);
 
     if (info->id == 0) {
-      assert(comp->is_complete());
+      ceph_assert(comp->is_complete());
       cout << num << ":  finishing set_chunk to oid " << oid << std::endl;
       if ((r = comp->get_return_value())) {
 	if (r == -ENOENT && src_value.deleted()) {
@@ -2526,7 +2526,7 @@ public:
     Mutex::Locker l(context->state_lock);
 
     if (info->id == 0) {
-      assert(comp->is_complete());
+      ceph_assert(comp->is_complete());
       cout << num << ":  finishing set_redirect to oid " << oid << std::endl;
       if ((r = comp->get_return_value())) {
 	if (r == -ENOENT && src_value.deleted()) {
@@ -2657,14 +2657,14 @@ public:
     op.tier_promote();
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
 					&op);
-    assert(!r);
+    ceph_assert(!r);
   }
 
   void _finish(CallbackInfo *info) override
   {
     context->state_lock.Lock();
-    assert(!done);
-    assert(completion->is_complete());
+    ceph_assert(!done);
+    ceph_assert(completion->is_complete());
 
     ObjectDesc oid_value;
     context->find_object(oid, &oid_value);
@@ -2673,7 +2673,7 @@ public:
     if (r == 0) {
       // sucess
     } else {
-      assert(0 == "shouldn't happen");
+      ceph_abort_msg("shouldn't happen");
     }
     context->update_object_version(oid, completion->get_version64());
     context->find_object(oid, &oid_value);
@@ -2719,7 +2719,7 @@ public:
     comp1 = context->rados.aio_create_completion((void*) cb_arg, NULL,
 						 &write_callback);
     int r = context->io_ctx.hit_set_list(hash, comp1, &ls);
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 
   void _finish(CallbackInfo *info) override {
@@ -2740,7 +2740,7 @@ public:
 	comp2 = context->rados.aio_create_completion((void*) cb_arg, NULL,
 						     &write_callback);
 	r = context->io_ctx.hit_set_get(hash, comp2, p->second, &bl);
-	assert(r == 0);
+	ceph_assert(r == 0);
       }
     } else {
       int r = comp2->get_return_value();
@@ -2753,7 +2753,7 @@ public:
 	     << std::endl;
       } else {
 	// FIXME: we could verify that we did in fact race with a trim...
-	assert(r == -ENOENT);
+	ceph_assert(r == -ENOENT);
       }
       done = true;
     }
@@ -2802,14 +2802,14 @@ public:
     op.undirty();
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
 					&op, 0);
-    assert(!r);
+    ceph_assert(!r);
   }
 
   void _finish(CallbackInfo *info) override
   {
     context->state_lock.Lock();
-    assert(!done);
-    assert(completion->is_complete());
+    ceph_assert(!done);
+    ceph_assert(completion->is_complete());
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     context->update_object_version(oid, completion->get_version64());
@@ -2879,7 +2879,7 @@ public:
     op.is_dirty(&dirty, NULL);
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
 					&op, 0);
-    assert(!r);
+    ceph_assert(!r);
 
     if (snap >= 0) {
       context->io_ctx.snap_set_read(0);
@@ -2889,22 +2889,22 @@ public:
   void _finish(CallbackInfo *info) override
   {
     context->state_lock.Lock();
-    assert(!done);
-    assert(completion->is_complete());
+    ceph_assert(!done);
+    ceph_assert(completion->is_complete());
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
 
-    assert(context->find_object(oid, &old_value, snap));
+    ceph_assert(context->find_object(oid, &old_value, snap));
 
     int r = completion->get_return_value();
     if (r == 0) {
       cout << num << ":  " << (dirty ? "dirty" : "clean") << std::endl;
-      assert(!old_value.deleted());
-      assert(dirty == old_value.dirty);
+      ceph_assert(!old_value.deleted());
+      ceph_assert(dirty == old_value.dirty);
     } else {
       cout << num << ":  got " << r << std::endl;
-      assert(r == -ENOENT);
-      assert(old_value.deleted());
+      ceph_assert(r == -ENOENT);
+      ceph_assert(old_value.deleted());
     }
     context->kick();
     done = true;
@@ -2988,7 +2988,7 @@ public:
     }
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
 					&op, flags, NULL);
-    assert(!r);
+    ceph_assert(!r);
 
     if (snap >= 0) {
       context->io_ctx.snap_set_read(0);
@@ -2998,8 +2998,8 @@ public:
   void _finish(CallbackInfo *info) override
   {
     context->state_lock.Lock();
-    assert(!done);
-    assert(completion->is_complete());
+    ceph_assert(!done);
+    ceph_assert(completion->is_complete());
     context->oid_flushing.erase(oid);
     context->oid_not_flushing.insert(oid);
     int r = completion->get_return_value();
@@ -3007,13 +3007,13 @@ public:
     if (r == 0) {
       context->update_object_version(oid, 0, snap);
     } else if (r == -EBUSY) {
-      assert(can_fail);
+      ceph_assert(can_fail);
     } else if (r == -EINVAL) {
       // caching not enabled?
     } else if (r == -ENOENT) {
       // may have raced with a remove?
     } else {
-      assert(0 == "shouldn't happen");
+      ceph_abort_msg("shouldn't happen");
     }
     context->kick();
     done = true;
@@ -3075,7 +3075,7 @@ public:
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
 					&op, librados::OPERATION_IGNORE_CACHE,
 					NULL);
-    assert(!r);
+    ceph_assert(!r);
 
     if (snap >= 0) {
       context->io_ctx.snap_set_read(0);
@@ -3085,8 +3085,8 @@ public:
   void _finish(CallbackInfo *info) override
   {
     context->state_lock.Lock();
-    assert(!done);
-    assert(completion->is_complete());
+    ceph_assert(!done);
+    ceph_assert(completion->is_complete());
 
     int r = completion->get_return_value();
     cout << num << ":  got " << cpp_strerror(r) << std::endl;
@@ -3099,7 +3099,7 @@ public:
     } else if (r == -ENOENT) {
       // may have raced with a remove?
     } else {
-      assert(0 == "shouldn't happen");
+      ceph_abort_msg("shouldn't happen");
     }
     context->kick();
     done = true;

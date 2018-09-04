@@ -35,7 +35,7 @@ struct MockImageCtx {
                               const std::string &image_id,
                               const char *snap, librados::IoCtx& p,
                               bool read_only) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
   MOCK_METHOD0(destroy, void());
@@ -102,6 +102,8 @@ struct MockImageCtx {
       journal_object_flush_interval(image_ctx.journal_object_flush_interval),
       journal_object_flush_bytes(image_ctx.journal_object_flush_bytes),
       journal_object_flush_age(image_ctx.journal_object_flush_age),
+      journal_object_max_in_flight_appends(
+          image_ctx.journal_object_max_in_flight_appends),
       journal_pool(image_ctx.journal_pool),
       journal_max_payload_bytes(image_ctx.journal_max_payload_bytes),
       journal_max_concurrent_object_sets(
@@ -322,6 +324,7 @@ struct MockImageCtx {
   int journal_object_flush_interval;
   uint64_t journal_object_flush_bytes;
   double journal_object_flush_age;
+  uint64_t journal_object_max_in_flight_appends;
   std::string journal_pool;
   uint32_t journal_max_payload_bytes;
   int journal_max_concurrent_object_sets;

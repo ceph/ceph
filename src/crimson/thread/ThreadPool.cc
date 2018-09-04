@@ -4,6 +4,8 @@
 #include "crimson/net/Config.h"
 #include "include/intarith.h"
 
+#include "include/assert.h"
+
 namespace ceph::thread {
 
 ThreadPool::ThreadPool(size_t n_threads,
@@ -34,7 +36,7 @@ void ThreadPool::pin(unsigned cpu_id)
   CPU_SET(cpu_id, &cs);
   [[maybe_unused]] auto r = pthread_setaffinity_np(pthread_self(),
                                                    sizeof(cs), &cs);
-  assert(r == 0);
+  ceph_assert(r == 0);
 }
 
 void ThreadPool::loop()

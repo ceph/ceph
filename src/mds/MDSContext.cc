@@ -25,8 +25,8 @@ void MDSInternalContextBase::complete(int r) {
   MDSRank *mds = get_mds();
 
   dout(10) << "MDSInternalContextBase::complete: " << typeid(*this).name() << dendl;
-  assert(mds != NULL);
-  assert(mds->mds_lock.is_locked_by_me());
+  ceph_assert(mds != NULL);
+  ceph_assert(mds->mds_lock.is_locked_by_me());
   MDSContext::complete(r);
 }
 
@@ -100,7 +100,7 @@ void MDSIOContextBase::complete(int r) {
   MDSRank *mds = get_mds();
 
   dout(10) << "MDSIOContextBase::complete: " << typeid(*this).name() << dendl;
-  assert(mds != NULL);
+  ceph_assert(mds != NULL);
   Mutex::Locker l(mds->mds_lock);
 
   if (mds->is_daemon_stopping()) {

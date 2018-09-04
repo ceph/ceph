@@ -26,14 +26,14 @@ struct MockTestImageCtx : public MockImageCtx {
                                   const std::string &image_id,
                                   const char *snap, librados::IoCtx& p,
                                   bool read_only) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
   static MockTestImageCtx* create(const std::string &image_name,
                                   const std::string &image_id,
                                   librados::snap_t snap_id, IoCtx& p,
                                   bool read_only) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
@@ -60,7 +60,7 @@ struct CreateRequest<MockTestImageCtx> {
                                bool skip_mirror_enable,
                                ContextWQ *op_work_queue,
                                Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -81,7 +81,7 @@ struct RefreshRequest<MockTestImageCtx> {
   static RefreshRequest* create(MockTestImageCtx &image_ctx,
                                 bool acquiring_lock, bool skip_open_parent,
                                 Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -106,7 +106,7 @@ struct RemoveRequest<MockTestImageCtx> {
                                ProgressContext &prog_ctx,
                                ContextWQ *op_work_queue,
                                Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -133,7 +133,7 @@ struct EnableRequest<MockTestImageCtx> {
                                const std::string &non_primary_global_image_id,
                                MockContextWQ *op_work_queue,
                                Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }

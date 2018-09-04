@@ -1,8 +1,7 @@
-import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import * as _ from 'lodash';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap';
-import { Subscription } from 'rxjs';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
@@ -12,13 +11,12 @@ import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { ExecutingTask } from '../../../shared/models/executing-task';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permission } from '../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { SummaryService } from '../../../shared/services/summary.service';
+import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { RbdParentModel } from '../rbd-form/rbd-parent.model';
 import { RbdModel } from './rbd-model';
@@ -26,9 +24,10 @@ import { RbdModel } from './rbd-model';
 @Component({
   selector: 'cd-rbd-list',
   templateUrl: './rbd-list.component.html',
-  styleUrls: ['./rbd-list.component.scss']
+  styleUrls: ['./rbd-list.component.scss'],
+  providers: [TaskListService]
 })
-export class RbdListComponent implements OnInit, OnDestroy {
+export class RbdListComponent implements OnInit {
   @ViewChild(TableComponent)
   table: TableComponent;
   @ViewChild('usageTpl')
@@ -47,18 +46,33 @@ export class RbdListComponent implements OnInit, OnDestroy {
   viewCacheStatusList: any[];
   selection = new CdTableSelection();
 
-  summaryDataSubscription: Subscription;
-
   modalRef: BsModalRef;
+
+  builders = {
+    'rbd/create': (metadata) =>
+      this.createRbdFromTask(metadata['pool_name'], metadata['image_name']),
+    'rbd/clone': (metadata) =>
+      this.createRbdFromTask(metadata['child_pool_name'], metadata['child_image_name']),
+    'rbd/copy': (metadata) =>
+      this.createRbdFromTask(metadata['dest_pool_name'], metadata['dest_image_name'])
+  };
+
+  private createRbdFromTask(pool: string, name: string): RbdModel {
+    const model = new RbdModel();
+    model.id = '-1';
+    model.name = name;
+    model.pool_name = pool;
+    return model;
+  }
 
   constructor(
     private authStorageService: AuthStorageService,
     private rbdService: RbdService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private dimlessPipe: DimlessPipe,
-    private summaryService: SummaryService,
     private modalService: BsModalService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private taskListService: TaskListService
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
   }
@@ -119,132 +133,62 @@ export class RbdListComponent implements OnInit, OnDestroy {
       }
     ];
 
-    this.summaryDataSubscription = this.summaryService.subscribe(
-      (data: any) => {
-        if (data) {
-          this.loadImages(data.executing_tasks);
-        }
-      },
-      () => {
-        this.table.reset(); // Disable loading indicator.
-        this.viewCacheStatusList = [{ status: ViewCacheStatus.ValueException }];
-      }
+    this.taskListService.init(
+      () => this.rbdService.list(),
+      (resp) => this.prepareResponse(resp),
+      (images) => (this.images = images),
+      () => this.onFetchError(),
+      this.taskFilter,
+      this.itemFilter,
+      this.builders
     );
   }
 
-  ngOnDestroy() {
-    if (this.summaryDataSubscription) {
-      this.summaryDataSubscription.unsubscribe();
-    }
+  onFetchError() {
+    this.table.reset(); // Disable loading indicator.
+    this.viewCacheStatusList = [{ status: ViewCacheStatus.ValueException }];
   }
 
-  loadImages(executingTasks) {
-    this.rbdService.list().subscribe(
-      (resp: any[]) => {
-        let images = [];
-        const viewCacheStatusMap = {};
-        resp.forEach((pool) => {
-          if (_.isUndefined(viewCacheStatusMap[pool.status])) {
-            viewCacheStatusMap[pool.status] = [];
-          }
-          viewCacheStatusMap[pool.status].push(pool.pool_name);
-          images = images.concat(pool.value);
-        });
-        const viewCacheStatusList = [];
-        _.forEach(viewCacheStatusMap, (value: any, key) => {
-          viewCacheStatusList.push({
-            status: parseInt(key, 10),
-            statusFor:
-              (value.length > 1 ? 'pools ' : 'pool ') +
-              '<strong>' +
-              value.join('</strong>, <strong>') +
-              '</strong>'
-          });
-        });
-        this.viewCacheStatusList = viewCacheStatusList;
-        images.forEach((image) => {
-          image.executingTasks = this._getExecutingTasks(
-            executingTasks,
-            image.pool_name,
-            image.name
-          );
-        });
-        this.images = this.merge(images, executingTasks);
-      },
-      () => {
-        this.table.reset(); // Disable loading indicator.
-        this.viewCacheStatusList = [{ status: ViewCacheStatus.ValueException }];
+  prepareResponse(resp: any[]): any[] {
+    let images = [];
+    const viewCacheStatusMap = {};
+    resp.forEach((pool) => {
+      if (_.isUndefined(viewCacheStatusMap[pool.status])) {
+        viewCacheStatusMap[pool.status] = [];
       }
-    );
-  }
-
-  _getExecutingTasks(executingTasks: ExecutingTask[], poolName, imageName): ExecutingTask[] {
-    const result: ExecutingTask[] = [];
-    executingTasks.forEach((executingTask) => {
-      if (
-        executingTask.name === 'rbd/snap/create' ||
-        executingTask.name === 'rbd/snap/delete' ||
-        executingTask.name === 'rbd/snap/edit' ||
-        executingTask.name === 'rbd/snap/rollback'
-      ) {
-        if (
-          poolName === executingTask.metadata['pool_name'] &&
-          imageName === executingTask.metadata['image_name']
-        ) {
-          result.push(executingTask);
-        }
-      }
+      viewCacheStatusMap[pool.status].push(pool.pool_name);
+      images = images.concat(pool.value);
     });
-    return result;
-  }
-
-  private merge(rbds: RbdModel[], executingTasks: ExecutingTask[] = []) {
-    const resultRBDs = _.clone(rbds);
-    executingTasks.forEach((executingTask) => {
-      const rbdExecuting = resultRBDs.find((rbd) => {
-        return (
-          rbd.pool_name === executingTask.metadata['pool_name'] &&
-          rbd.name === executingTask.metadata['image_name']
-        );
+    const viewCacheStatusList = [];
+    _.forEach(viewCacheStatusMap, (value: any, key) => {
+      viewCacheStatusList.push({
+        status: parseInt(key, 10),
+        statusFor:
+          (value.length > 1 ? 'pools ' : 'pool ') +
+          '<strong>' +
+          value.join('</strong>, <strong>') +
+          '</strong>'
       });
-      if (rbdExecuting) {
-        if (executingTask.name === 'rbd/delete') {
-          rbdExecuting.cdExecuting = 'deleting';
-        } else if (executingTask.name === 'rbd/edit') {
-          rbdExecuting.cdExecuting = 'updating';
-        } else if (executingTask.name === 'rbd/flatten') {
-          rbdExecuting.cdExecuting = 'flattening';
-        }
-      } else if (executingTask.name === 'rbd/create') {
-        const rbdModel = new RbdModel();
-        rbdModel.name = executingTask.metadata['image_name'];
-        rbdModel.pool_name = executingTask.metadata['pool_name'];
-        rbdModel.cdExecuting = 'creating';
-        this.pushIfNotExists(resultRBDs, rbdModel);
-      } else if (executingTask.name === 'rbd/clone') {
-        const rbdModel = new RbdModel();
-        rbdModel.name = executingTask.metadata['child_image_name'];
-        rbdModel.pool_name = executingTask.metadata['child_pool_name'];
-        rbdModel.cdExecuting = 'cloning';
-        this.pushIfNotExists(resultRBDs, rbdModel);
-      } else if (executingTask.name === 'rbd/copy') {
-        const rbdModel = new RbdModel();
-        rbdModel.name = executingTask.metadata['dest_image_name'];
-        rbdModel.pool_name = executingTask.metadata['dest_pool_name'];
-        rbdModel.cdExecuting = 'copying';
-        this.pushIfNotExists(resultRBDs, rbdModel);
-      }
     });
-    return resultRBDs;
+    this.viewCacheStatusList = viewCacheStatusList;
+    return images;
   }
 
-  private pushIfNotExists(resultRBDs: RbdModel[], rbdModel: RbdModel) {
-    const exists = resultRBDs.some((resultRBD) => {
-      return resultRBD.name === rbdModel.name && resultRBD.pool_name === rbdModel.pool_name;
-    });
-    if (!exists) {
-      resultRBDs.push(rbdModel);
-    }
+  itemFilter(entry, task) {
+    return (
+      entry.pool_name === task.metadata['pool_name'] && entry.name === task.metadata['image_name']
+    );
+  }
+
+  taskFilter(task) {
+    return [
+      'rbd/clone',
+      'rbd/copy',
+      'rbd/create',
+      'rbd/delete',
+      'rbd/edit',
+      'rbd/flatten'
+    ].includes(task.name);
   }
 
   updateSelection(selection: CdTableSelection) {

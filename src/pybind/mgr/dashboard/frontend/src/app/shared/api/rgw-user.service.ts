@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import * as _ from 'lodash';
-import { forkJoin as observableForkJoin, of as observableOf } from 'rxjs';
+import { forkJoin as observableForkJoin, Observable, of as observableOf } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 
 import { cdEncode } from '../decorators/cd-encode';
@@ -127,7 +127,7 @@ export class RgwUserService {
    * @param {string} uid The user ID to check.
    * @return {Observable<boolean>}
    */
-  exists(uid: string) {
+  exists(uid: string): Observable<boolean> {
     return this.enumerate().pipe(
       mergeMap((resp: string[]) => {
         const index = _.indexOf(resp, uid);

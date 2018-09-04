@@ -36,7 +36,7 @@ public:
                                 uint64_t size,
                                 const librbd::ParentSpec &parent_spec,
                                 uint64_t parent_overlap, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }

@@ -36,7 +36,7 @@ ClusterWatcher::ClusterWatcher(RadosRef cluster, Mutex &lock,
 
 const ClusterWatcher::PoolPeers& ClusterWatcher::get_pool_peers() const
 {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
   return m_pool_peers;
 }
 

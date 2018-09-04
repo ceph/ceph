@@ -100,6 +100,12 @@ const char * ceph_osd_op_flag_name(unsigned flag)
     case CEPH_OSD_OP_FLAG_FADVISE_NOCACHE:
       name = "fadvise_nocache";
       break;
+    case CEPH_OSD_OP_FLAG_WITH_REFERENCE:
+      name = "with_reference";
+      break;
+    case CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE:
+      name = "bypass_clean_cache";
+      break;
     default:
       name = "???";
   };
@@ -180,7 +186,7 @@ void osd_reqid_t::generate_test_instances(list<osd_reqid_t*>& o)
 void object_locator_t::encode(bufferlist& bl) const
 {
   // verify that nobody's corrupted the locator
-  assert(hash == -1 || key.empty());
+  ceph_assert(hash == -1 || key.empty());
   __u8 encode_compat = 3;
   ENCODE_START(6, encode_compat, bl);
   encode(pool, bl);
@@ -217,7 +223,7 @@ void object_locator_t::decode(bufferlist::const_iterator& p)
     hash = -1;
   DECODE_FINISH(p);
   // verify that nobody's corrupted the locator
-  assert(hash == -1 || key.empty());
+  ceph_assert(hash == -1 || key.empty());
 }
 
 void object_locator_t::dump(Formatter *f) const
@@ -501,7 +507,7 @@ pg_t pg_t::get_ancestor(unsigned old_pg_num) const
 
 bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *children) const
 {
-  assert(m_seed < old_pg_num);
+  ceph_assert(m_seed < old_pg_num);
   if (new_pg_num <= old_pg_num)
     return false;
 
@@ -542,11 +548,11 @@ bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *childre
 unsigned pg_t::get_split_bits(unsigned pg_num) const {
   if (pg_num == 1)
     return 0;
-  assert(pg_num > 1);
+  ceph_assert(pg_num > 1);
 
   // Find unique p such that pg_num \in [2^(p-1), 2^p)
   unsigned p = cbits(pg_num);
-  assert(p); // silence coverity #751330 
+  ceph_assert(p); // silence coverity #751330 
 
   if ((m_seed % (1<<(p-1))) < (pg_num % (1<<(p-1))))
     return p;
@@ -557,7 +563,7 @@ unsigned pg_t::get_split_bits(unsigned pg_num) const {
 pg_t pg_t::get_parent() const
 {
   unsigned bits = cbits(m_seed);
-  assert(bits);
+  ceph_assert(bits);
   pg_t retval = *this;
   retval.m_seed &= ~((~0)<<(bits - 1));
   return retval;
@@ -578,7 +584,7 @@ hobject_t pg_t::get_hobj_end(unsigned pg_num) const
   uint64_t rev_start = hobject_t::_reverse_bits(m_seed);
   uint64_t rev_end = (rev_start | (0xffffffff >> bits)) + 1;
   if (rev_end >= 0x100000000) {
-    assert(rev_end == 0x100000000);
+    ceph_assert(rev_end == 0x100000000);
     return hobject_t::get_max();
   } else {
     return hobject_t(object_t(), string(), CEPH_NOSNAP,
@@ -640,7 +646,7 @@ void coll_t::calc_str()
     _str = pgid.calc_name(_str_buff + spg_t::calc_name_buf_size - 1, "PMET_");
     break;
   default:
-    assert(0 == "unknown collection type");
+    ceph_abort_msg("unknown collection type");
   }
 }
 
@@ -651,7 +657,7 @@ bool coll_t::parse(const std::string& s)
     pgid = spg_t();
     removal_seq = 0;
     calc_str();
-    assert(s == _str);
+    ceph_assert(s == _str);
     return true;
   }
   if (s.find("_head") == s.length() - 5 &&
@@ -659,7 +665,7 @@ bool coll_t::parse(const std::string& s)
     type = TYPE_PG;
     removal_seq = 0;
     calc_str();
-    assert(s == _str);
+    ceph_assert(s == _str);
     return true;
   }
   if (s.find("_TEMP") == s.length() - 5 &&
@@ -667,7 +673,7 @@ bool coll_t::parse(const std::string& s)
     type = TYPE_PG_TEMP;
     removal_seq = 0;
     calc_str();
-    assert(s == _str);
+    ceph_assert(s == _str);
     return true;
   }
   return false;
@@ -1034,7 +1040,7 @@ bool pool_opts_t::is_opt_name(const std::string& name) {
 
 pool_opts_t::opt_desc_t pool_opts_t::get_opt_desc(const std::string& name) {
     opt_mapping_t::iterator i = opt_mapping.find(name);
-    assert(i != opt_mapping.end());
+    ceph_assert(i != opt_mapping.end());
     return i->second;
 }
 
@@ -1044,7 +1050,7 @@ bool pool_opts_t::is_set(pool_opts_t::key_t key) const {
 
 const pool_opts_t::value_t& pool_opts_t::get(pool_opts_t::key_t key) const {
   opts_t::const_iterator i = opts.find(key);
-  assert(i != opts.end());
+  ceph_assert(i != opts.end());
   return i->second;
 }
 
@@ -1152,7 +1158,7 @@ void pool_opts_t::decode(bufferlist::const_iterator& bl) {
       decode(d, bl);
       opts[static_cast<key_t>(k)] = d;
     } else {
-      assert(!"invalid type");
+      ceph_assert(!"invalid type");
     }
   }
   DECODE_FINISH(bl);
@@ -1350,7 +1356,7 @@ snapid_t pg_pool_t::snap_exists(const char *s) const
 
 void pg_pool_t::add_snap(const char *n, utime_t stamp)
 {
-  assert(!is_unmanaged_snaps_mode());
+  ceph_assert(!is_unmanaged_snaps_mode());
   flags |= FLAG_POOL_SNAPS;
   snapid_t s = get_snap_seq() + 1;
   snap_seq = s;
@@ -1361,7 +1367,7 @@ void pg_pool_t::add_snap(const char *n, utime_t stamp)
 
 void pg_pool_t::add_unmanaged_snap(uint64_t& snapid)
 {
-  assert(!is_pool_snaps_mode());
+  ceph_assert(!is_pool_snaps_mode());
   if (snap_seq == 0) {
     // kludge for pre-mimic tracking of pool vs selfmanaged snaps.  after
     // mimic this field is not decoded but our flag is set; pre-mimic, we
@@ -1375,14 +1381,14 @@ void pg_pool_t::add_unmanaged_snap(uint64_t& snapid)
 
 void pg_pool_t::remove_snap(snapid_t s)
 {
-  assert(snaps.count(s));
+  ceph_assert(snaps.count(s));
   snaps.erase(s);
   snap_seq = snap_seq + 1;
 }
 
 void pg_pool_t::remove_unmanaged_snap(snapid_t s)
 {
-  assert(is_unmanaged_snaps_mode());
+  ceph_assert(is_unmanaged_snaps_mode());
   removed_snaps.insert(s);
   snap_seq = snap_seq + 1;
   // try to add in the new seq, just to try to keep the interval_set contiguous
@@ -3170,7 +3176,7 @@ public:
     bool ec_pool, const PastIntervals::pg_interval_t &interval) override {
     if (first == 0)
       first = interval.first;
-    assert(interval.last > last);
+    ceph_assert(interval.last > last);
     last = interval.last;
     set<pg_shard_t> acting;
     for (unsigned i = 0; i < interval.acting.size(); ++i) {
@@ -3322,7 +3328,7 @@ void PastIntervals::decode(bufferlist::const_iterator &bl)
   case 0:
     break;
   case 1:
-    assert(0 == "pi_simple_rep support removed post-luminous");
+    ceph_abort_msg("pi_simple_rep support removed post-luminous");
     break;
   case 2:
     past_intervals.reset(new pi_compact_rep);
@@ -3482,8 +3488,8 @@ bool PastIntervals::check_new_interval(
   //  NOTE: a change in the up set primary triggers an interval
   //  change, even though the interval members in the pg_interval_t
   //  do not change.
-  assert(past_intervals);
-  assert(past_intervals->past_intervals);
+  ceph_assert(past_intervals);
+  ceph_assert(past_intervals->past_intervals);
   if (is_new_interval(
 	old_acting_primary,
 	new_acting_primary,
@@ -3499,7 +3505,7 @@ bool PastIntervals::check_new_interval(
     pg_interval_t i;
     i.first = same_interval_since;
     i.last = osdmap->get_epoch() - 1;
-    assert(i.first <= i.last);
+    ceph_assert(i.first <= i.last);
     i.acting = old_acting;
     i.up = old_up;
     i.primary = old_acting_primary;
@@ -3511,7 +3517,7 @@ bool PastIntervals::check_new_interval(
       if (*p != CRUSH_ITEM_NONE)
 	++num_acting;
 
-    assert(lastmap->get_pools().count(pgid.pool()));
+    ceph_assert(lastmap->get_pools().count(pgid.pool()));
     const pg_pool_t& old_pg_pool = lastmap->get_pools().find(pgid.pool())->second;
     set<pg_shard_t> old_acting_shards;
     old_pg_pool.convert_to_pg_shards(old_acting, &old_acting_shards);
@@ -3745,12 +3751,12 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	break;
       }
       default:
-	assert(0 == "Invalid rollback code");
+	ceph_abort_msg("Invalid rollback code");
       }
       DECODE_FINISH(bp);
     }
   } catch (...) {
-    assert(0 == "Invalid encoding");
+    ceph_abort_msg("Invalid encoding");
   }
 }
 
@@ -4246,7 +4252,7 @@ void pg_log_t::copy_after(const pg_log_t &other, eversion_t v)
   for (list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
        i != other.log.rend();
        ++i) {
-    assert(i->version > other.tail);
+    ceph_assert(i->version > other.tail);
     if (i->version <= v) {
       // make tail accurate.
       tail = i->version;
@@ -4260,12 +4266,12 @@ void pg_log_t::copy_range(const pg_log_t &other, eversion_t from, eversion_t to)
 {
   can_rollback_to = other.can_rollback_to;
   list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
-  assert(i != other.log.rend());
+  ceph_assert(i != other.log.rend());
   while (i->version > to) {
     ++i;
-    assert(i != other.log.rend());
+    ceph_assert(i != other.log.rend());
   }
-  assert(i->version == to);
+  ceph_assert(i->version == to);
   head = to;
   for ( ; i != other.log.rend(); ++i) {
     if (i->version <= from) {
@@ -4873,11 +4879,11 @@ void SnapSet::from_snap_set(const librados::snap_set_t& ss, bool legacy)
 
 uint64_t SnapSet::get_clone_bytes(snapid_t clone) const
 {
-  assert(clone_size.count(clone));
+  ceph_assert(clone_size.count(clone));
   uint64_t size = clone_size.find(clone)->second;
-  assert(clone_overlap.count(clone));
+  ceph_assert(clone_overlap.count(clone));
   const interval_set<uint64_t> &overlap = clone_overlap.find(clone)->second;
-  assert(size >= (uint64_t)overlap.size());
+  ceph_assert(size >= (uint64_t)overlap.size());
   return size - overlap.size();
 }
 
@@ -5664,7 +5670,7 @@ uint64_t PushOp::cost(CephContext *cct) const
 
 void ScrubMap::merge_incr(const ScrubMap &l)
 {
-  assert(valid_through == l.incr_since);
+  ceph_assert(valid_through == l.incr_since);
   valid_through = l.valid_through;
 
   for (map<hobject_t,object>::const_iterator p = l.objects.begin();

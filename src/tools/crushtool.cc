@@ -61,7 +61,7 @@ static int get_fd_data(int fd, bufferlist &bl)
     total += bytes;
   } while(true);
 
-  assert(bl.length() == total);
+  ceph_assert(bl.length() == total);
   return 0;
 }
 
@@ -1101,7 +1101,7 @@ int main(int argc, const char **argv)
       return 0;
     }
     int ruleno = crush.get_rule_id(rule_name);
-    assert(ruleno >= 0);
+    ceph_assert(ruleno >= 0);
     int r = crush.remove_rule(ruleno);
     if (r < 0) {
       cerr << "fail to remove rule " << rule_name << std::endl;

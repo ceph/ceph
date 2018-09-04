@@ -5,7 +5,10 @@
 #define CEPH_COMMON_SLOPPYCRCMAP_H
 
 #include "include/encoding.h"
-#include "common/Formatter.h"
+
+namespace ceph {
+class Formatter;
+}
 
 /**
  * SloppyCRCMap
@@ -65,7 +68,7 @@ public:
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<SloppyCRCMap*>& ls);
 };
 WRITE_CLASS_ENCODER(SloppyCRCMap)

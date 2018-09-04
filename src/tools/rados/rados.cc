@@ -72,16 +72,11 @@ void usage(ostream& out)
 "usage: rados [options] [commands]\n"
 "POOL COMMANDS\n"
 "   lspools                          list pools\n"
-"   mkpool <pool-name> [123[ 4]]     create pool <pool-name>'\n"
-"                                    [with auid 123[and using crush rule 4]]\n"
 "   cppool <pool-name> <dest-pool>   copy content of a pool\n"
-"   rmpool <pool-name> [<pool-name> --yes-i-really-really-mean-it]\n"
-"                                    remove pool <pool-name>'\n"
 "   purge <pool-name> --yes-i-really-really-mean-it\n"
 "                                    remove all objects from pool <pool-name> without removing it\n"
 "   df                               show per-pool and total usage\n"
 "   ls                               list objects in pool\n\n"
-"   chown 123                        change the pool owner to auid 123\n"
 "\n"
 "POOL SNAP COMMANDS\n"
 "   lssnap                           list snaps\n"
@@ -1533,7 +1528,7 @@ static void dump_shard(const shard_info_t& shard,
      || shard.has_obj_size_info_mismatch()) &&
         !shard.has_info_missing()) {
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(OI_ATTR);
-    assert(k != shard.attrs.end()); // Can't be missing
+    ceph_assert(k != shard.attrs.end()); // Can't be missing
     if (!shard.has_info_corrupted()) {
       object_info_t oi;
       bufferlist bl;
@@ -1552,7 +1547,7 @@ static void dump_shard(const shard_info_t& shard,
        || inc.has_snapset_inconsistency()) &&
        !shard.has_snapset_missing()) {
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(SS_ATTR);
-    assert(k != shard.attrs.end()); // Can't be missing
+    ceph_assert(k != shard.attrs.end()); // Can't be missing
     if (!shard.has_snapset_corrupted()) {
       SnapSet ss;
       bufferlist bl;
@@ -1571,7 +1566,7 @@ static void dump_shard(const shard_info_t& shard,
        || inc.has_hinfo_inconsistency()) &&
        !shard.has_hinfo_missing()) {
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(ECUtil::get_hinfo_key());
-    assert(k != shard.attrs.end()); // Can't be missing
+    ceph_assert(k != shard.attrs.end()); // Can't be missing
     if (!shard.has_hinfo_corrupted()) {
       ECUtil::HashInfo hi;
       bufferlist bl;
@@ -1660,7 +1655,7 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
       object_info_t oi;
       bufferlist bl;
       auto k = shard.attrs.find(OI_ATTR);
-      assert(k != shard.attrs.end()); // Can't be missing
+      ceph_assert(k != shard.attrs.end()); // Can't be missing
       auto bliter = k->second.cbegin();
       decode(oi, bliter);  // Can't be corrupted
       f.open_object_section("selected_object_info");
@@ -1798,7 +1793,7 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     }
     // It must be the same interval every time.  EAGAIN would
     // occur if interval changes.
-    assert(start.name.empty() || first_interval == interval);
+    ceph_assert(start.name.empty() || first_interval == interval);
     if (start.name.empty()) {
       first_interval = interval;
       formatter.open_object_section("info");
@@ -2125,7 +2120,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
 
   if (create_pool) {
-    ret = rados.pool_create(pool_name, 0, 0);
+    ret = rados.pool_create(pool_name);
     if (ret < 0) {
       cerr << "error creating pool " << pool_name << ": "
 	   << cpp_strerror(ret) << std::endl;
@@ -2237,7 +2232,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     cout << "selected snap " << snapid << " '" << name << "'" << std::endl;
   }
 
-  assert(!nargs.empty());
+  ceph_assert(!nargs.empty());
 
   // list pools?
   if (strcmp(nargs[0], "lspools") == 0) {
@@ -2446,24 +2441,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     if (!stdout)
       delete outstream;
-  }
-  else if (strcmp(nargs[0], "chown") == 0) {
-    if (!pool_name || nargs.size() < 2)
-      usage_exit();
-
-    char* endptr = NULL;
-    uint64_t new_auid = strtol(nargs[1], &endptr, 10);
-    if (*endptr) {
-      cerr << "Invalid value for new-auid: '" << nargs[1] << "'" << std::endl;
-      ret = -1;
-      goto out;
-    }
-    ret = io_ctx.set_auid(new_auid);
-    if (ret < 0) {
-      cerr << "error changing auid on pool " << io_ctx.get_pool_name() << ':'
-	   << cpp_strerror(ret) << std::endl;
-    } else cerr << "changed auid on pool " << io_ctx.get_pool_name()
-		<< " to " << new_auid << std::endl;
   }
   else if (strcmp(nargs[0], "mapext") == 0) {
     if (!pool_name || nargs.size() < 2)
@@ -3043,38 +3020,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ret = 0;
   }
 
-  else if (strcmp(nargs[0], "mkpool") == 0) {
-    int auid = 0;
-    __u8 crush_rule = 0;
-    if (nargs.size() < 2)
-      usage_exit();
-    if (nargs.size() > 2) {
-      char* endptr = NULL;
-      auid = strtol(nargs[2], &endptr, 10);
-      if (*endptr) {
-	cerr << "Invalid value for auid: '" << nargs[2] << "'" << std::endl;
-	ret = -EINVAL;
-	goto out;
-      }
-      cerr << "setting auid:" << auid << std::endl;
-      if (nargs.size() > 3) {
-	crush_rule = (__u8)strtol(nargs[3], &endptr, 10);
-	if (*endptr) {
-	  cerr << "Invalid value for crush-rule: '" << nargs[3] << "'" << std::endl;
-	  ret = -EINVAL;
-	  goto out;
-	}
-	cerr << "using crush rule " << (int)crush_rule << std::endl;
-      }
-    }
-    ret = rados.pool_create(nargs[1], auid, crush_rule);
-    if (ret < 0) {
-      cerr << "error creating pool " << nargs[1] << ": "
-	   << cpp_strerror(ret) << std::endl;
-      goto out;
-    }
-    cout << "successfully created pool " << nargs[1] << std::endl;
-  }
   else if (strcmp(nargs[0], "cppool") == 0) {
     bool force = nargs.size() == 4 && !strcmp(nargs[3], "--yes-i-really-mean-it");
     if (nargs.size() != 3 && !(nargs.size() == 4 && force))
@@ -3110,30 +3055,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
     cout << "successfully copied pool " << nargs[1] << std::endl;
-  }
-  else if (strcmp(nargs[0], "rmpool") == 0) {
-    if (nargs.size() < 2)
-      usage_exit();
-    if (nargs.size() < 4 ||
-	strcmp(nargs[1], nargs[2]) != 0 ||
-	strcmp(nargs[3], "--yes-i-really-really-mean-it") != 0) {
-      cerr << "WARNING:\n"
-	   << "  This will PERMANENTLY DESTROY an entire pool of objects with no way back.\n"
-	   << "  To confirm, pass the pool to remove twice, followed by\n"
-	   << "  --yes-i-really-really-mean-it" << std::endl;
-      ret = -1;
-      goto out;
-    }
-    ret = rados.pool_delete(nargs[1]);
-    if (ret >= 0) {
-      cout << "successfully deleted pool " << nargs[1] << std::endl;
-    } else {
-      cerr << "pool " << nargs[1] << " could not be removed" << std::endl;
-      if (ret == -EPERM) {
-	cerr << "Check your monitor configuration - `mon allow pool delete` is set to false by default,"
-	     << " change it to true to allow deletion of pools" << std::endl;
-      }
-    }
   }
   else if (strcmp(nargs[0], "purge") == 0) {
     if (nargs.size() < 2)

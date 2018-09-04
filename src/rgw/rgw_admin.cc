@@ -2542,7 +2542,7 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
                      time_t *pofs)
 {
 #define MAX_TOTP_SKEW_HOURS (24 * 7)
-  assert(pins.size() == 2);
+  ceph_assert(pins.size() == 2);
 
   time_t start_time = ceph::real_clock::to_time_t(now);
   time_t time_ofs = 0, time_ofs_abs = 0;
@@ -2751,7 +2751,6 @@ int main(int argc, const char **argv)
   std::string val;
   std::ostringstream errs;
   string err;
-  long long tmp = 0;
 
   string source_zone_name;
   string source_zone; /* zone id */
@@ -2845,11 +2844,6 @@ int main(int argc, const char **argv)
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &commit, NULL, "--commit", (char*)NULL)) {
       // do nothing
-    } else if (ceph_argparse_witharg(args, i, &tmp, errs, "-a", "--auth-uid", (char*)NULL)) {
-      if (!errs.str().empty()) {
-	cerr << errs.str() << std::endl;
-	exit(EXIT_FAILURE);
-      }
     } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-size", (char*)NULL)) {
       min_rewrite_size = (uint64_t)atoll(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--max-rewrite-size", (char*)NULL)) {

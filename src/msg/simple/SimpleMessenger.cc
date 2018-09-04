@@ -63,9 +63,9 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
  */
 SimpleMessenger::~SimpleMessenger()
 {
-  assert(!did_bind); // either we didn't bind or we shut down the Accepter
-  assert(rank_pipe.empty()); // we don't have any running Pipes.
-  assert(!reaper_started); // the reaper thread is stopped
+  ceph_assert(!did_bind); // either we didn't bind or we shut down the Accepter
+  ceph_assert(rank_pipe.empty()); // we don't have any running Pipes.
+  ceph_assert(!reaper_started); // the reaper thread is stopped
 }
 
 void SimpleMessenger::ready()
@@ -151,7 +151,7 @@ bool SimpleMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
 {
   bool ret = false;
   auto addr = addrs.legacy_addr();
-  assert(my_addr == my_addrs->front());
+  ceph_assert(my_addr == my_addrs->front());
   if (my_addr.is_blank_ip()) {
     ldout(cct,1) << __func__ << " " << addr << dendl;
     entity_addr_t t = my_addr;
@@ -164,7 +164,7 @@ bool SimpleMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
   } else {
     ldout(cct,1) << __func__ << " " << addr << " no-op" << dendl;
   }
-  assert(my_addr == my_addrs->front());
+  ceph_assert(my_addr == my_addrs->front());
   return ret;
 }
 
@@ -243,7 +243,7 @@ void SimpleMessenger::reaper_entry()
 void SimpleMessenger::reaper()
 {
   ldout(cct,10) << "reaper" << dendl;
-  assert(lock.is_locked());
+  ceph_assert(lock.is_locked());
 
   while (!pipe_reap_queue.empty()) {
     Pipe *p = pipe_reap_queue.front();
@@ -257,11 +257,11 @@ void SimpleMessenger::reaper()
       // or accept() may have switch the Connection to a different
       // Pipe... but make sure!
       bool cleared = p->connection_state->clear_pipe(p);
-      assert(!cleared);
+      ceph_assert(!cleared);
     }
     p->pipe_lock.Unlock();
     p->unregister_pipe();
-    assert(pipes.count(p));
+    ceph_assert(pipes.count(p));
     pipes.erase(p);
 
     // drop msgr lock while joining thread; the delay through could be
@@ -295,7 +295,7 @@ bool SimpleMessenger::is_connected(Connection *con)
   if (con) {
     Pipe *p = static_cast<Pipe *>(static_cast<PipeConnection*>(con)->get_pipe());
     if (p) {
-      assert(p->msgr == this);
+      ceph_assert(p->msgr == this);
       r = p->is_connected();
       p->put();
     }
@@ -325,7 +325,7 @@ int SimpleMessenger::bind(const entity_addr_t &bind_addr)
 int SimpleMessenger::rebind(const set<int>& avoid_ports)
 {
   ldout(cct,1) << "rebind avoid " << avoid_ports << dendl;
-  assert(did_bind);
+  ceph_assert(did_bind);
   accepter.stop();
   mark_down_all();
   return accepter.rebind(avoid_ports);
@@ -338,7 +338,7 @@ int SimpleMessenger::client_bind(const entity_addr_t &bind_addr)
     return 0;
   Mutex::Locker l(lock);
   if (did_bind) {
-    assert(*my_addrs == entity_addrvec_t(bind_addr));
+    ceph_assert(*my_addrs == entity_addrvec_t(bind_addr));
     return 0;
   }
   if (started) {
@@ -358,9 +358,9 @@ int SimpleMessenger::start()
   ldout(cct,1) << "messenger.start" << dendl;
 
   // register at least one entity, first!
-  assert(my_name.type() >= 0);
+  ceph_assert(my_name.type() >= 0);
 
-  assert(!started);
+  ceph_assert(!started);
   started = true;
   stopped = false;
 
@@ -398,8 +398,8 @@ Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr,
 				    PipeConnection *con,
 				    Message *first)
 {
-  assert(lock.is_locked());
-  assert(addr != my_addr);
+  ceph_assert(lock.is_locked());
+  ceph_assert(addr != my_addr);
   
   ldout(cct,10) << "connect_rank to " << addr << ", creating pipe and registering" << dendl;
   
@@ -560,7 +560,7 @@ int SimpleMessenger::send_keepalive(Connection *con)
     static_cast<PipeConnection*>(con)->get_pipe());
   if (pipe) {
     ldout(cct,20) << "send_keepalive con " << con << ", have pipe." << dendl;
-    assert(pipe->msgr == this);
+    ceph_assert(pipe->msgr == this);
     pipe->pipe_lock.Lock();
     pipe->_send_keepalive();
     pipe->pipe_lock.Unlock();
@@ -709,7 +709,7 @@ void SimpleMessenger::mark_down(Connection *con)
   Pipe *p = static_cast<Pipe *>(static_cast<PipeConnection*>(con)->get_pipe());
   if (p) {
     ldout(cct,1) << "mark_down " << con << " -- " << p << dendl;
-    assert(p->msgr == this);
+    ceph_assert(p->msgr == this);
     p->unregister_pipe();
     p->pipe_lock.Lock();
     p->stop();
@@ -732,7 +732,7 @@ void SimpleMessenger::mark_disposable(Connection *con)
   Pipe *p = static_cast<Pipe *>(static_cast<PipeConnection*>(con)->get_pipe());
   if (p) {
     ldout(cct,1) << "mark_disposable " << con << " -- " << p << dendl;
-    assert(p->msgr == this);
+    ceph_assert(p->msgr == this);
     p->pipe_lock.Lock();
     p->policy.lossy = true;
     p->pipe_lock.Unlock();

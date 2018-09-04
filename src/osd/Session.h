@@ -130,7 +130,6 @@ struct Backoff : public RefCountedObject {
 struct Session : public RefCountedObject {
   EntityName entity_name;
   OSDCap caps;
-  int64_t auid;
   ConnectionRef con;
   entity_addr_t socket_addr;
   WatchConState wstate;
@@ -152,7 +151,7 @@ struct Session : public RefCountedObject {
 
   explicit Session(CephContext *cct, Connection *con_) :
     RefCountedObject(cct),
-    auid(-1), con(con_),
+    con(con_),
     socket_addr(con_->get_peer_socket_addr()),
     wstate(cct),
     session_dispatch_lock("Session::session_dispatch_lock"),
@@ -176,7 +175,7 @@ struct Session : public RefCountedObject {
       return nullptr;
     }
     Mutex::Locker l(backoff_lock);
-    assert(!backoff_count == backoffs.empty());
+    ceph_assert(!backoff_count == backoffs.empty());
     auto i = backoffs.find(pgid);
     if (i == backoffs.end()) {
       return nullptr;
@@ -204,7 +203,7 @@ struct Session : public RefCountedObject {
 
   void add_backoff(BackoffRef b) {
     Mutex::Locker l(backoff_lock);
-    assert(!backoff_count == backoffs.empty());
+    ceph_assert(!backoff_count == backoffs.empty());
     backoffs[b->pgid][b->begin].insert(b);
     ++backoff_count;
   }
@@ -212,8 +211,8 @@ struct Session : public RefCountedObject {
   // called by PG::release_*_backoffs and PG::clear_backoffs()
   void rm_backoff(BackoffRef b) {
     Mutex::Locker l(backoff_lock);
-    assert(b->lock.is_locked_by_me());
-    assert(b->session == this);
+    ceph_assert(b->lock.is_locked_by_me());
+    ceph_assert(b->session == this);
     auto i = backoffs.find(b->pgid);
     if (i != backoffs.end()) {
       // may race with clear_backoffs()
@@ -232,7 +231,7 @@ struct Session : public RefCountedObject {
 	}
       }
     }
-    assert(!backoff_count == backoffs.empty());
+    ceph_assert(!backoff_count == backoffs.empty());
   }
   void clear_backoffs();
 };

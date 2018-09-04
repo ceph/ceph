@@ -240,7 +240,7 @@ private:
    */
   void _do_delayed_flush()
   {
-    assert(delay_flush_event != NULL);
+    ceph_assert(delay_flush_event != NULL);
     lock_guard l(lock);
     delay_flush_event = NULL;
     _do_flush();
@@ -369,7 +369,7 @@ private:
 
   // only init_headers when following or first reading off-disk
   void init_headers(Header& h) {
-    assert(readonly ||
+    ceph_assert(readonly ||
 	   state == STATE_READHEAD ||
 	   state == STATE_REREADHEAD);
     last_written = last_committed = h;
@@ -426,7 +426,7 @@ public:
    */
   void reset() {
     lock_guard l(lock);
-    assert(state == STATE_ACTIVE);
+    ceph_assert(state == STATE_ACTIVE);
 
     readonly = true;
     delay_flush_event = NULL;
@@ -442,7 +442,7 @@ public:
     requested_pos = 0;
     received_pos = 0;
     fetch_len = 0;
-    assert(!on_readable);
+    ceph_assert(!on_readable);
     expire_pos = 0;
     trimming_pos = 0;
     trimmed_pos = 0;
@@ -475,7 +475,7 @@ public:
   void set_read_pos(uint64_t p) {
     lock_guard l(lock);
     // we can't cope w/ in-progress read right now.
-    assert(requested_pos == received_pos);
+    ceph_assert(requested_pos == received_pos);
     read_pos = requested_pos = received_pos = p;
     read_buf.clear();
   }
@@ -500,7 +500,7 @@ public:
   void trim_tail() {
     lock_guard l(lock);
 
-    assert(!readonly);
+    ceph_assert(!readonly);
     _issue_prezero();
   }
 

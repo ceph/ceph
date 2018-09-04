@@ -24,7 +24,7 @@ struct MockTestImageCtx : public MockImageCtx {
 struct MockManagedLock {
   static MockManagedLock *s_instance;
   static MockManagedLock &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 
@@ -191,17 +191,17 @@ struct MirrorStatusWatcher<librbd::MockTestImageCtx> {
 
   static MirrorStatusWatcher *create(librados::IoCtx &io_ctx,
                                      ContextWQ *work_queue) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
   MirrorStatusWatcher() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
   ~MirrorStatusWatcher() {
-    assert(s_instance == this);
+    ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
 
@@ -220,17 +220,17 @@ struct Instances<librbd::MockTestImageCtx> {
                            librados::IoCtx &ioctx,
                            const std::string& instance_id,
                            instances::Listener&) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
   Instances() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
   ~Instances() {
-    assert(s_instance == this);
+    ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
 
@@ -266,12 +266,12 @@ struct MockListener : public leader_watcher::Listener {
   static MockListener* s_instance;
 
   MockListener() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
   ~MockListener() override {
-    assert(s_instance == this);
+    ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
 

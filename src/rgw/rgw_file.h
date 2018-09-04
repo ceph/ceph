@@ -637,7 +637,7 @@ namespace rgw {
       DECODE_START(2, bl);
       uint32_t fh_type;
       decode(fh_type, bl);
-      assert(fh.fh_type == fh_type);
+      ceph_assert(fh.fh_type == fh_type);
       decode(state.dev, bl);
       decode(state.size, bl);
       decode(state.nlink, bl);
@@ -1266,7 +1266,7 @@ public:
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
     // framework promises to call op_init after parent init
-    assert(rados_ctx);
+    ceph_assert(rados_ctx);
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
@@ -1402,7 +1402,7 @@ public:
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
     // framework promises to call op_init after parent init
-    assert(rados_ctx);
+    ceph_assert(rados_ctx);
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
@@ -1436,7 +1436,7 @@ public:
   int operator()(const boost::string_ref name, const rgw_obj_key& marker,
 		uint8_t type) {
 
-    assert(name.length() > 0); // XXX
+    ceph_assert(name.length() > 0); // XXX
 
     /* hash offset of name in parent (short name) for NFS readdir cookie */
     uint64_t off = XXH64(name.data(), name.length(), fh_key::seed);
@@ -1574,7 +1574,7 @@ public:
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
     // framework promises to call op_init after parent init
-    assert(rados_ctx);
+    ceph_assert(rados_ctx);
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
@@ -1659,7 +1659,7 @@ public:
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
     // framework promises to call op_init after parent init
-    assert(rados_ctx);
+    ceph_assert(rados_ctx);
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
@@ -1723,7 +1723,7 @@ public:
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
     // framework promises to call op_init after parent init
-    assert(rados_ctx);
+    ceph_assert(rados_ctx);
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
@@ -1781,7 +1781,7 @@ public:
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
     // framework promises to call op_init after parent init
-    assert(rados_ctx);
+    ceph_assert(rados_ctx);
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
 
@@ -1879,7 +1879,7 @@ public:
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
     // framework promises to call op_init after parent init
-    assert(rados_ctx);
+    ceph_assert(rados_ctx);
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
@@ -1965,7 +1965,7 @@ public:
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
     // framework promises to call op_init after parent init
-    assert(rados_ctx);
+    ceph_assert(rados_ctx);
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
@@ -2047,7 +2047,7 @@ public:
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
     // framework promises to call op_init after parent init
-    assert(rados_ctx);
+    ceph_assert(rados_ctx);
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
@@ -2128,7 +2128,7 @@ public:
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
     // framework promises to call op_init after parent init
-    assert(rados_ctx);
+    ceph_assert(rados_ctx);
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
@@ -2198,7 +2198,7 @@ public:
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
     // framework promises to call op_init after parent init
-    assert(rados_ctx);
+    ceph_assert(rados_ctx);
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
@@ -2321,7 +2321,7 @@ public:
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
     // framework promises to call op_init after parent init
-    assert(rados_ctx);
+    ceph_assert(rados_ctx);
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
@@ -2429,7 +2429,7 @@ public:
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
     // framework promises to call op_init after parent init
-    assert(rados_ctx);
+    ceph_assert(rados_ctx);
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
 
@@ -2512,7 +2512,7 @@ public:
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
     // framework promises to call op_init after parent init
-    assert(rados_ctx);
+    ceph_assert(rados_ctx);
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;
@@ -2565,7 +2565,7 @@ public:
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
     // framework promises to call op_init after parent init
-    assert(rados_ctx);
+    ceph_assert(rados_ctx);
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
     return 0;

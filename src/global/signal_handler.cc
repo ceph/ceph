@@ -244,7 +244,7 @@ static void handle_fatal_signal(int signum)
 	  jf.dump_string("assert_file", g_assert_file);
 	}
 	if (g_assert_line) {
-	  jf.dump_unsigned("assert_file", g_assert_line);
+	  jf.dump_unsigned("assert_line", g_assert_line);
 	}
 	if (g_assert_thread_name[0]) {
 	  jf.dump_string("assert_thread_name", g_assert_thread_name);
@@ -407,9 +407,9 @@ struct SignalHandler : public Thread {
   {
     // create signal pipe
     int r = pipe(pipefd);
-    assert(r == 0);
+    ceph_assert(r == 0);
     r = fcntl(pipefd[0], F_SETFL, O_NONBLOCK);
-    assert(r == 0);
+    ceph_assert(r == 0);
 
     // create thread
     create("signal_handler");
@@ -421,7 +421,7 @@ struct SignalHandler : public Thread {
 
   void signal_thread() {
     int r = write(pipefd[1], "\0", 1);
-    assert(r == 1);
+    ceph_assert(r == 1);
   }
 
   void shutdown() {
@@ -509,9 +509,9 @@ struct SignalHandler : public Thread {
     // defined.  We can do this without the lock because we will never
     // have the signal handler defined without the handlers entry also
     // being filled in.
-    assert(handlers[signum]);
+    ceph_assert(handlers[signum]);
     int r = write(handlers[signum]->pipefd[1], " ", 1);
-    assert(r == 1);
+    ceph_assert(r == 1);
   }
 
   void queue_signal_info(int signum, siginfo_t *siginfo, void * content) {
@@ -519,10 +519,10 @@ struct SignalHandler : public Thread {
     // defined.  We can do this without the lock because we will never
     // have the signal handler defined without the handlers entry also
     // being filled in.
-    assert(handlers[signum]);
+    ceph_assert(handlers[signum]);
     memcpy(&handlers[signum]->info_t, siginfo, sizeof(siginfo_t));
     int r = write(handlers[signum]->pipefd[1], " ", 1);
-    assert(r == 1);
+    ceph_assert(r == 1);
   }
 
   void register_handler(int signum, signal_handler_t handler, bool oneshot);
@@ -539,14 +539,14 @@ void SignalHandler::register_handler(int signum, signal_handler_t handler, bool 
 {
   int r;
 
-  assert(signum >= 0 && signum < 32);
+  ceph_assert(signum >= 0 && signum < 32);
 
   safe_handler *h = new safe_handler;
 
   r = pipe(h->pipefd);
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = fcntl(h->pipefd[0], F_SETFL, O_NONBLOCK);
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   h->handler = handler;
   lock.Lock();
@@ -565,15 +565,15 @@ void SignalHandler::register_handler(int signum, signal_handler_t handler, bool 
   sigfillset(&act.sa_mask);  // mask all signals in the handler
   act.sa_flags = SA_SIGINFO | (oneshot ? SA_RESETHAND : 0);
   int ret = sigaction(signum, &act, &oldact);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 }
 
 void SignalHandler::unregister_handler(int signum, signal_handler_t handler)
 {
-  assert(signum >= 0 && signum < 32);
+  ceph_assert(signum >= 0 && signum < 32);
   safe_handler *h = handlers[signum];
-  assert(h);
-  assert(h->handler == handler);
+  ceph_assert(h);
+  ceph_assert(h->handler == handler);
 
   // restore to default
   signal(signum, SIG_DFL);
@@ -594,38 +594,38 @@ void SignalHandler::unregister_handler(int signum, signal_handler_t handler)
 
 void init_async_signal_handler()
 {
-  assert(!g_signal_handler);
+  ceph_assert(!g_signal_handler);
   g_signal_handler = new SignalHandler;
 }
 
 void shutdown_async_signal_handler()
 {
-  assert(g_signal_handler);
+  ceph_assert(g_signal_handler);
   delete g_signal_handler;
   g_signal_handler = NULL;
 }
 
 void queue_async_signal(int signum)
 {
-  assert(g_signal_handler);
+  ceph_assert(g_signal_handler);
   g_signal_handler->queue_signal(signum);
 }
 
 void register_async_signal_handler(int signum, signal_handler_t handler)
 {
-  assert(g_signal_handler);
+  ceph_assert(g_signal_handler);
   g_signal_handler->register_handler(signum, handler, false);
 }
 
 void register_async_signal_handler_oneshot(int signum, signal_handler_t handler)
 {
-  assert(g_signal_handler);
+  ceph_assert(g_signal_handler);
   g_signal_handler->register_handler(signum, handler, true);
 }
 
 void unregister_async_signal_handler(int signum, signal_handler_t handler)
 {
-  assert(g_signal_handler);
+  ceph_assert(g_signal_handler);
   g_signal_handler->unregister_handler(signum, handler);
 }
 

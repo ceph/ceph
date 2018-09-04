@@ -121,6 +121,7 @@ enum {
   l_osd_push_outb,
 
   l_osd_rop,
+  l_osd_rbytes,
 
   l_osd_loadavg,
   l_osd_buf,
@@ -371,8 +372,8 @@ public:
     Mutex::Locker l(pre_publish_lock);
     map<epoch_t, unsigned>::iterator i =
       map_reservations.find(osdmap->get_epoch());
-    assert(i != map_reservations.end());
-    assert(i->second > 0);
+    ceph_assert(i != map_reservations.end());
+    ceph_assert(i->second > 0);
     if (--(i->second) == 0) {
       map_reservations.erase(i);
     }
@@ -381,7 +382,7 @@ public:
   /// blocks until there are no reserved maps prior to next_osdmap
   void await_reserved_maps() {
     Mutex::Locker l(pre_publish_lock);
-    assert(next_osdmap);
+    ceph_assert(next_osdmap);
     while (true) {
       map<epoch_t, unsigned>::const_iterator i = map_reservations.cbegin();
       if (i == map_reservations.cend() || i->first >= next_osdmap->get_epoch()) {
@@ -472,7 +473,7 @@ public:
   void unreg_pg_scrub(spg_t pgid, utime_t t) {
     Mutex::Locker l(sched_scrub_lock);
     size_t removed = sched_scrub_pg.erase(ScrubJob(cct, pgid, t));
-    assert(removed);
+    ceph_assert(removed);
   }
   bool first_scrub_stamp(ScrubJob *out) {
     Mutex::Locker l(sched_scrub_lock);
@@ -498,7 +499,7 @@ public:
   }
 
   void dumps_scrub(Formatter *f) {
-    assert(f != nullptr);
+    ceph_assert(f != nullptr);
     Mutex::Locker l(sched_scrub_lock);
 
     f->open_array_section("scrubs");
@@ -564,7 +565,7 @@ public:
   void _dequeue(PG *pg, uint64_t old_priority) {
     set<PGRef>& oq = agent_queue[old_priority];
     set<PGRef>::iterator p = oq.find(pg);
-    assert(p != oq.end());
+    ceph_assert(p != oq.end());
     if (p == agent_queue_pos)
       ++agent_queue_pos;
     oq.erase(p);
@@ -584,7 +585,7 @@ public:
   /// adjust priority for an enagled pg
   void agent_adjust_pg(PG *pg, uint64_t old_priority, uint64_t new_priority) {
     Mutex::Locker l(agent_lock);
-    assert(new_priority != old_priority);
+    ceph_assert(new_priority != old_priority);
     _enqueue(pg, new_priority);
     _dequeue(pg, old_priority);
   }
@@ -604,7 +605,7 @@ public:
   /// note finish or cancellation of an async (evict) op
   void agent_finish_evict_op() {
     Mutex::Locker l(agent_lock);
-    assert(agent_ops > 0);
+    ceph_assert(agent_ops > 0);
     --agent_ops;
     agent_cond.Signal();
   }
@@ -613,16 +614,16 @@ public:
   void agent_start_op(const hobject_t& oid) {
     Mutex::Locker l(agent_lock);
     ++agent_ops;
-    assert(agent_oids.count(oid) == 0);
+    ceph_assert(agent_oids.count(oid) == 0);
     agent_oids.insert(oid);
   }
 
   /// note finish or cancellation of an async (flush) op
   void agent_finish_op(const hobject_t& oid) {
     Mutex::Locker l(agent_lock);
-    assert(agent_ops > 0);
+    ceph_assert(agent_ops > 0);
     --agent_ops;
-    assert(agent_oids.count(oid) == 1);
+    ceph_assert(agent_oids.count(oid) == 1);
     agent_oids.erase(oid);
     agent_cond.Signal();
   }
@@ -817,7 +818,7 @@ public:
   OSDMapRef try_get_map(epoch_t e);
   OSDMapRef get_map(epoch_t e) {
     OSDMapRef ret(try_get_map(e));
-    assert(ret);
+    ceph_assert(ret);
     return ret;
   }
   OSDMapRef add_map(OSDMap *o) {
@@ -1629,7 +1630,7 @@ private:
   list<OpRequestRef> finished;
   
   void take_waiters(list<OpRequestRef>& ls) {
-    assert(osd_lock.is_locked());
+    ceph_assert(osd_lock.is_locked());
     finished.splice(finished.end(), ls);
   }
   void do_waiters();
@@ -1730,7 +1731,7 @@ protected:
 
 	char queue_name[32] = {0};
 	snprintf(queue_name, sizeof(queue_name), "%s%" PRIu32, "OSD:ShardedOpWQ:", i);
-	assert(NULL != sdata);
+	ceph_assert(NULL != sdata);
 
 	sdata->shard_lock.Lock();
 	f->open_object_section(queue_name);
@@ -1743,7 +1744,7 @@ protected:
     bool is_shard_empty(uint32_t thread_index) override {
       uint32_t shard_index = thread_index % osd->num_shards;
       auto &&sdata = osd->shards[shard_index];
-      assert(sdata);
+      ceph_assert(sdata);
       Mutex::Locker l(sdata->shard_lock);
       return sdata->pqueue->empty();
     }

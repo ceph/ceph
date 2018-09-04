@@ -58,7 +58,7 @@ public:
     : py_modules(py_modules_), python_completion(ev),
       tag(tag_), pThreadState(ts_)
   {
-    assert(python_completion != nullptr);
+    ceph_assert(python_completion != nullptr);
     Py_INCREF(python_completion);
   }
 
@@ -75,7 +75,7 @@ public:
 
   void finish(int r) override
   {
-    assert(python_completion != nullptr);
+    ceph_assert(python_completion != nullptr);
 
     dout(10) << "MonCommandCompletion::finish()" << dendl;
     {
@@ -85,7 +85,7 @@ public:
       Gil gil(pThreadState, true);
 
       auto set_fn = PyObject_GetAttrString(python_completion, "complete");
-      assert(set_fn != nullptr);
+      ceph_assert(set_fn != nullptr);
 
       auto pyR = PyInt_FromLong(r);
       auto pyOutBl = PyString_FromString(outbl.to_str().c_str());
@@ -131,7 +131,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
   if (set_fn == nullptr) {
     ceph_abort();  // TODO raise python exception instead
   } else {
-    assert(PyCallable_Check(set_fn));
+    ceph_assert(PyCallable_Check(set_fn));
   }
   Py_DECREF(set_fn);
 
@@ -472,7 +472,7 @@ ceph_log(BaseMgrModule *self, PyObject *args)
     return nullptr;
   }
 
-  assert(self->this_module);
+  ceph_assert(self->this_module);
 
   self->this_module->log(level, record);
 
@@ -696,10 +696,10 @@ BaseMgrModule_init(BaseMgrModule *self, PyObject *args, PyObject *kwds)
 
     self->py_modules = static_cast<ActivePyModules*>(PyCapsule_GetPointer(
         py_modules_capsule, nullptr));
-    assert(self->py_modules);
+    ceph_assert(self->py_modules);
     self->this_module = static_cast<ActivePyModule*>(PyCapsule_GetPointer(
         this_module_capsule, nullptr));
-    assert(self->this_module);
+    ceph_assert(self->this_module);
 
     return 0;
 }

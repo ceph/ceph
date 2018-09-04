@@ -3217,6 +3217,10 @@ std::vector<Option> get_global_options() {
     .set_default(100)
     .set_description(""),
 
+    Option("osd_force_auth_primary_missing_objects", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(100)
+    .set_description("Approximate missing objects above which to force auth_log_shard to be primary temporarily"),
+
     Option("osd_async_recovery_min_pg_log_entries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
     .set_description("Number of entries difference above which to use asynchronous recovery when appropriate"),
@@ -5598,7 +5602,7 @@ std::vector<Option> get_rgw_options() {
     .set_default(".rgw.root")
     .set_description("Period root pool")
     .set_long_description(
-        "The realm root pool, is the pool where the RGW realm configuration located."
+        "The period root pool, is the pool where the RGW period configuration located."
     )
     .add_see_also({"rgw_zonegroup_root_pool", "rgw_zone_root_pool", "rgw_realm_root_pool"}),
 
@@ -6592,6 +6596,10 @@ static std::vector<Option> get_rbd_options() {
     Option("rbd_journal_object_flush_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("maximum age (in seconds) for pending commits"),
+
+    Option("rbd_journal_object_max_in_flight_appends", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("maximum number of in-flight appends per journal object"),
 
     Option("rbd_journal_pool", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")

@@ -94,7 +94,7 @@ void DPDKWorker::initialize()
     while (create_stage <= WAIT_DEVICE_STAGE)
       cond.Wait(lock);
   }
-  assert(sdev);
+  ceph_assert(sdev);
   if (i < sdev->hw_queues_count()) {
     auto qp = sdev->init_local_queue(cct, &center, cct->_conf->ms_dpdk_hugepages, i);
     std::map<unsigned, float> cpu_weights;
@@ -200,8 +200,8 @@ DPDKWorker::Impl::Impl(CephContext *cct, unsigned i, EventCenter *c, std::shared
 int DPDKWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
                        ServerSocket *sock)
 {
-  assert(sa.get_family() == AF_INET);
-  assert(sock);
+  ceph_assert(sa.get_family() == AF_INET);
+  ceph_assert(sock);
 
   ldout(cct, 10) << __func__ << " addr " << sa << dendl;
   // vector<AvailableIPAddress> tuples;
@@ -231,7 +231,7 @@ int DPDKWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
 
 int DPDKWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket)
 {
-  // assert(addr.get_family() == AF_INET);
+  // ceph_assert(addr.get_family() == AF_INET);
   int r =  tcpv4_connect(_impl->_inet.get_tcp(), addr, socket);
   ldout(cct, 10) << __func__ << " addr " << addr << dendl;
   return r;
@@ -250,7 +250,7 @@ void DPDKStack::spawn_worker(unsigned i, std::function<void ()> &&func)
   }
   // if dpdk::eal::init already called by NVMEDevice, we will select 1..n
   // cores
-  assert(rte_lcore_count() >= i + 1);
+  ceph_assert(rte_lcore_count() >= i + 1);
   unsigned core_id;
   RTE_LCORE_FOREACH_SLAVE(core_id) {
     if (i-- == 0) {

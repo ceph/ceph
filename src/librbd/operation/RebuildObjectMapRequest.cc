@@ -93,11 +93,11 @@ bool RebuildObjectMapRequest<I>::should_complete(int r) {
 
 template <typename I>
 void RebuildObjectMapRequest<I>::send_resize_object_map() {
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
   m_image_ctx.snap_lock.get_read();
-  assert(m_image_ctx.object_map != nullptr);
+  ceph_assert(m_image_ctx.object_map != nullptr);
 
   uint64_t size = get_image_size();
   uint64_t num_objects = Striper::get_num_objects(m_image_ctx.layout, size);
@@ -112,7 +112,7 @@ void RebuildObjectMapRequest<I>::send_resize_object_map() {
   m_state = STATE_RESIZE_OBJECT_MAP;
 
   // should have been canceled prior to releasing lock
-  assert(m_image_ctx.exclusive_lock == nullptr ||
+  ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
          m_image_ctx.exclusive_lock->is_lock_owner());
 
   m_image_ctx.object_map->aio_resize(size, OBJECT_NONEXISTENT,
@@ -127,7 +127,7 @@ void RebuildObjectMapRequest<I>::send_trim_image() {
   RWLock::RLocker l(m_image_ctx.owner_lock);
 
   // should have been canceled prior to releasing lock
-  assert(m_image_ctx.exclusive_lock == nullptr ||
+  ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
          m_image_ctx.exclusive_lock->is_lock_owner());
   ldout(cct, 5) << this << " send_trim_image" << dendl;
   m_state = STATE_TRIM_IMAGE;
@@ -136,7 +136,7 @@ void RebuildObjectMapRequest<I>::send_trim_image() {
   uint64_t orig_size;
   {
     RWLock::RLocker l(m_image_ctx.snap_lock);
-    assert(m_image_ctx.object_map != nullptr);
+    ceph_assert(m_image_ctx.object_map != nullptr);
 
     new_size = get_image_size();
     orig_size = m_image_ctx.get_object_size() *
@@ -173,7 +173,7 @@ bool update_object_map(I& image_ctx, uint64_t object_no, uint8_t current_state,
 
 template <typename I>
 void RebuildObjectMapRequest<I>::send_verify_objects() {
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
   m_state = STATE_VERIFY_OBJECTS;
@@ -189,27 +189,27 @@ void RebuildObjectMapRequest<I>::send_verify_objects() {
 
 template <typename I>
 void RebuildObjectMapRequest<I>::send_save_object_map() {
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
   ldout(cct, 5) << this << " send_save_object_map" << dendl;
   m_state = STATE_SAVE_OBJECT_MAP;
 
   // should have been canceled prior to releasing lock
-  assert(m_image_ctx.exclusive_lock == nullptr ||
+  ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
          m_image_ctx.exclusive_lock->is_lock_owner());
 
   RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-  assert(m_image_ctx.object_map != nullptr);
+  ceph_assert(m_image_ctx.object_map != nullptr);
   m_image_ctx.object_map->aio_save(this->create_callback_context());
 }
 
 template <typename I>
 void RebuildObjectMapRequest<I>::send_update_header() {
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
 
   // should have been canceled prior to releasing lock
-  assert(m_image_ctx.exclusive_lock == nullptr ||
+  ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
          m_image_ctx.exclusive_lock->is_lock_owner());
 
   ldout(m_image_ctx.cct, 5) << this << " send_update_header" << dendl;
@@ -222,7 +222,7 @@ void RebuildObjectMapRequest<I>::send_update_header() {
 
   librados::AioCompletion *comp = this->create_callback_completion();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
@@ -231,7 +231,7 @@ void RebuildObjectMapRequest<I>::send_update_header() {
 
 template <typename I>
 uint64_t RebuildObjectMapRequest<I>::get_image_size() const {
-  assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(m_image_ctx.snap_lock.is_locked());
   if (m_image_ctx.snap_id == CEPH_NOSNAP) {
     if (!m_image_ctx.resize_reqs.empty()) {
       return m_image_ctx.resize_reqs.front()->get_image_size();

@@ -70,8 +70,8 @@ public:
   AllocTracker(uint64_t capacity, uint64_t alloc_unit)
     : u1(0, capacity)
   {
-    assert(alloc_unit >= 0x100);
-    assert(capacity <= (uint64_t(1) << 48)); // we use 5 octets (bytes 1 - 5) to store
+    ceph_assert(alloc_unit >= 0x100);
+    ceph_assert(capacity <= (uint64_t(1) << 48)); // we use 5 octets (bytes 1 - 5) to store
 				 // offset to save the required space.
 				 // This supports capacity up to 281 TB
 
@@ -89,9 +89,9 @@ public:
 
   bool push(uint64_t offs, uint32_t len)
   {
-    assert((len & 0xff) == 0);
-    assert((offs & 0xff) == 0);
-    assert((offs & 0xffff000000000000) == 0);
+    ceph_assert((len & 0xff) == 0);
+    ceph_assert((offs & 0xff) == 0);
+    ceph_assert((offs & 0xffff000000000000) == 0);
 
     if (head + 1 == tail)
       return false;

@@ -266,7 +266,7 @@ private:
   void _prune_update_trimmed(
       MonitorDBStore::TransactionRef tx,
       version_t first);
-  void prune_init();
+  void prune_init(osdmap_manifest_t& manifest);
   bool _prune_sanitize_options() const;
   bool is_prune_enabled() const;
   bool is_prune_supported() const;
@@ -446,7 +446,7 @@ private:
 				unsigned *stripe_width,
 				ostream *ss);
   int check_pg_num(int64_t pool, int pg_num, int size, ostream* ss);
-  int prepare_new_pool(string& name, uint64_t auid,
+  int prepare_new_pool(string& name,
 		       int crush_rule,
 		       const string &crush_rule_name,
                        unsigned pg_num, unsigned pgp_num,
@@ -491,7 +491,7 @@ private:
       else if (r == -EAGAIN)
         cmon->dispatch(op);
       else
-	assert(0 == "bad C_Booted return value");
+	ceph_abort_msg("bad C_Booted return value");
     }
   };
 
@@ -508,7 +508,7 @@ private:
       else if (r == -EAGAIN)
 	osdmon->dispatch(op);
       else
-	assert(0 == "bad C_ReplyMap return value");
+	ceph_abort_msg("bad C_ReplyMap return value");
     }    
   };
   struct C_PoolOp : public C_MonOp {
@@ -529,7 +529,7 @@ private:
       else if (r == -EAGAIN)
 	osdmon->dispatch(op);
       else
-	assert(0 == "bad C_PoolOp return value");
+	ceph_abort_msg("bad C_PoolOp return value");
     }
   };
 

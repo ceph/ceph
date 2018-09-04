@@ -285,7 +285,7 @@ load_from_buffer(const char *buf, size_t sz, std::deque<std::string> *errors,
 
   section_iter_t::value_type vt("global", ConfSection());
   pair < section_iter_t, bool > vr(sections.insert(vt));
-  assert(vr.second);
+  ceph_assert(vr.second);
   section_iter_t cur_section = vr.first;
   std::string acc;
 
@@ -589,6 +589,6 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
 	ceph_abort();
 	break;
     }
-    assert(c != '\0'); // We better not go past the end of the input string.
+    ceph_assert(c != '\0'); // We better not go past the end of the input string.
   }
 }

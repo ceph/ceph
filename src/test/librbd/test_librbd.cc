@@ -5075,12 +5075,12 @@ TEST_F(TestLibRBD, ObjectMapConsistentSnap)
   thread writer([&image1](){
       librbd::image_info_t info;
       int r = image1.stat(info, sizeof(info));
-      assert(r == 0);
+      ceph_assert(r == 0);
       bufferlist bl;
       bl.append("foo");
       for (unsigned i = 0; i < info.num_objs; ++i) {
 	r = image1.write((1 << info.order) * i, bl.length(), bl);
-	assert(r == (int) bl.length());
+	ceph_assert(r == (int) bl.length());
       }
     });
   writer.join();
@@ -6752,6 +6752,11 @@ TEST_F(TestLibRBD, Namespaces) {
   ASSERT_EQ(2U, cpp_names.size());
   ASSERT_EQ("name1", cpp_names[0]);
   ASSERT_EQ("name3", cpp_names[1]);
+  bool exists;
+  ASSERT_EQ(0, rbd_namespace_exists(ioctx, "name2", &exists));
+  ASSERT_FALSE(exists);
+  ASSERT_EQ(0, rbd_namespace_exists(ioctx, "name3", &exists));
+  ASSERT_TRUE(exists);
   rados_ioctx_destroy(ioctx);
 }
 
@@ -6776,6 +6781,11 @@ TEST_F(TestLibRBD, NamespacesPP) {
   ASSERT_EQ(2U, names.size());
   ASSERT_EQ("name1", names[0]);
   ASSERT_EQ("name3", names[1]);
+  bool exists;
+  ASSERT_EQ(0, rbd.namespace_exists(ioctx, "name2", &exists));
+  ASSERT_FALSE(exists);
+  ASSERT_EQ(0, rbd.namespace_exists(ioctx, "name3", &exists));
+  ASSERT_TRUE(exists);
 
   librados::IoCtx ns_io_ctx;
   ns_io_ctx.dup(ioctx);
@@ -6995,7 +7005,7 @@ TEST_F(TestLibRBD, TestGetModifyTimestamp)
   rados_ioctx_destroy(ioctx);
 }
 
-// poorman's assert()
+// poorman's ceph_assert()
 namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,
 			  const char *func) {

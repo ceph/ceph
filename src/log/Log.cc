@@ -61,16 +61,16 @@ Log::Log(const SubsystemMap *s)
   int ret;
 
   ret = pthread_mutex_init(&m_flush_mutex, NULL);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 
   ret = pthread_mutex_init(&m_queue_mutex, NULL);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 
   ret = pthread_cond_init(&m_cond_loggers, NULL);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 
   ret = pthread_cond_init(&m_cond_flusher, NULL);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 
   m_log_buf = (char*)malloc(MAX_LOG_BUF);
 
@@ -86,7 +86,7 @@ Log::~Log()
     *m_indirect_this = NULL;
   }
 
-  assert(!is_started());
+  ceph_assert(!is_started());
   if (m_fd >= 0)
     VOID_TEMP_FAILURE_RETRY(::close(m_fd));
   free(m_log_buf);
@@ -384,7 +384,7 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 			(unsigned long)e->m_thread, e->m_prio);
 
       line_used += e->snprintf(line + line_used, line_size - line_used - 1);
-      assert(line_used < line_size - 1);
+      ceph_assert(line_used < line_size - 1);
 
       if (do_syslog) {
         syslog(LOG_USER|LOG_INFO, "%s", line);
@@ -489,7 +489,7 @@ void Log::dump_recent()
 
 void Log::start()
 {
-  assert(!is_started());
+  ceph_assert(!is_started());
   pthread_mutex_lock(&m_queue_mutex);
   m_stop = false;
   pthread_mutex_unlock(&m_queue_mutex);

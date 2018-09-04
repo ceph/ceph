@@ -380,7 +380,7 @@ struct pg_t {
 
   old_pg_t get_old_pg() const {
     old_pg_t o;
-    assert(m_pool < 0xffffffffull);
+    ceph_assert(m_pool < 0xffffffffull);
     o.v.pool = m_pool;
     o.v.ps = m_seed;
     o.v.preferred = (__s16)-1;
@@ -711,7 +711,7 @@ public:
   // get a TEMP collection that corresponds to the current collection,
   // which we presume is a pg collection.
   coll_t get_temp() const {
-    assert(type == TYPE_PG);
+    ceph_assert(type == TYPE_PG);
     return coll_t(TYPE_PG_TEMP, pgid, 0);
   }
 
@@ -1305,7 +1305,7 @@ struct pg_pool_t {
     case CACHEMODE_READPROXY:
       return true;
     default:
-      assert(0 == "implement me");
+      ceph_abort_msg("implement me");
     }
   }
 
@@ -1532,7 +1532,7 @@ public:
     case TYPE_ERASURE:
       return false;
     default:
-      assert(0 == "unhandled pool type");
+      ceph_abort_msg("unhandled pool type");
     }
   }
 
@@ -2411,16 +2411,12 @@ struct pg_info_t {
   bool is_empty() const { return last_update.version == 0; }
   bool dne() const { return history.epoch_created == 0; }
 
+  bool has_missing() const { return last_complete != last_update; }
   bool is_incomplete() const { return !last_backfill.is_max(); }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
-  bool overlaps_with(const pg_info_t &oinfo) const {
-    return last_update > oinfo.log_tail ?
-      oinfo.last_update >= log_tail :
-      last_update >= oinfo.log_tail;
-  }
   static void generate_test_instances(list<pg_info_t*>& o);
 };
 WRITE_CLASS_ENCODER(pg_info_t)
@@ -2614,7 +2610,7 @@ struct pg_notify_t {
     : query_epoch(query_epoch),
       epoch_sent(epoch_sent),
       info(info), to(to), from(from) {
-    assert(from == info.pgid.shard);
+    ceph_assert(from == info.pgid.shard);
   }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &p);
@@ -2692,8 +2688,8 @@ public:
     virtual bool has_full_intervals() const { return false; }
     virtual void iterate_all_intervals(
       std::function<void(const pg_interval_t &)> &&f) const {
-      assert(!has_full_intervals());
-      assert(0 == "not valid for this implementation");
+      ceph_assert(!has_full_intervals());
+      ceph_abort_msg("not valid for this implementation");
     }
 
     virtual ~interval_rep() {}
@@ -2707,7 +2703,7 @@ private:
 
 public:
   void add_interval(bool ec_pool, const pg_interval_t &interval) {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     return past_intervals->add_interval(ec_pool, interval);
   }
 
@@ -2726,7 +2722,7 @@ public:
   void decode(bufferlist::const_iterator &bl);
 
   void dump(Formatter *f) const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     past_intervals->dump(f);
   }
   static void generate_test_instances(list<PastIntervals *> & o);
@@ -2802,11 +2798,11 @@ public:
   void iterate_mayberw_back_to(
     epoch_t les,
     F &&f) const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     past_intervals->iterate_mayberw_back_to(les, std::forward<F>(f));
   }
   void clear() {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     past_intervals->clear();
   }
 
@@ -2815,12 +2811,12 @@ public:
    * of state contained
    */
   size_t size() const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     return past_intervals->size();
   }
 
   bool empty() const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     return past_intervals->empty();
   }
 
@@ -2836,7 +2832,7 @@ public:
   set<pg_shard_t> get_might_have_unfound(
     pg_shard_t pg_whoami,
     bool ec_pool) const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     auto ret = past_intervals->get_all_participants(ec_pool);
     ret.erase(pg_whoami);
     return ret;
@@ -2847,7 +2843,7 @@ public:
    */
   set<pg_shard_t> get_all_probe(
     bool ec_pool) const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     return past_intervals->get_all_participants(ec_pool);
   }
 
@@ -2855,7 +2851,7 @@ public:
    * past_interval set.
    */
   pair<epoch_t, epoch_t> get_bounds() const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     return past_intervals->get_bounds();
   }
 
@@ -3068,7 +3064,7 @@ PastIntervals::PriorSet::PriorSet(
 	// fixme: how do we identify a "clean" shutdown anyway?
 	ldpp_dout(dpp, 10) << "build_prior  possibly went active+rw,"
 			   << " insufficient up; including down osds" << dendl;
-	assert(!candidate_blocked_by.empty());
+	ceph_assert(!candidate_blocked_by.empty());
 	pg_down = true;
 	blocked_by.insert(
 	  candidate_blocked_by.begin(),
@@ -3124,7 +3120,7 @@ struct pg_query_t {
       history(h),
       epoch_sent(epoch_sent),
       to(to), from(from) {
-    assert(t != LOG);
+    ceph_assert(t != LOG);
   }
   pg_query_t(
     int t,
@@ -3135,7 +3131,7 @@ struct pg_query_t {
     epoch_t epoch_sent)
     : type(t), since(s), history(h),
       epoch_sent(epoch_sent), to(to), from(from) {
-    assert(t == LOG);
+    ceph_assert(t == LOG);
   }
   
   void encode(bufferlist &bl, uint64_t features) const;
@@ -3281,8 +3277,8 @@ public:
   }
   void rollback_extents(
     version_t gen, const vector<pair<uint64_t, uint64_t> > &extents) {
-    assert(can_local_rollback);
-    assert(!rollback_info_completed);
+    ceph_assert(can_local_rollback);
+    ceph_assert(!rollback_info_completed);
     if (max_required_version < 2)
       max_required_version = 2;
     ENCODE_START(2, 2, bl);
@@ -3602,7 +3598,7 @@ public:
     }
 
   mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
-    assert(newhead >= tail);
+    ceph_assert(newhead >= tail);
 
     mempool::osd_pglog::list<pg_log_entry_t>::iterator p = log.end();
     mempool::osd_pglog::list<pg_log_entry_t> divergent;
@@ -3627,7 +3623,7 @@ public:
 	divergent.splice(divergent.begin(), log, p, log.end());
 	break;
       }
-      assert(p->version > newhead);
+      ceph_assert(p->version > newhead);
     }
     head = newhead;
 
@@ -3897,7 +3893,7 @@ public:
       return eversion_t();
     }
     auto it = missing.find(rmissing.begin()->second);
-    assert(it != missing.end());
+    ceph_assert(it != missing.end());
     return it->second.need;
   }
 
@@ -3929,7 +3925,7 @@ public:
       missing_it->second.set_delete(e.is_delete());
     } else {
       // not missing, we must have prior_version (if any)
-      assert(!is_missing_divergent_item);
+      ceph_assert(!is_missing_divergent_item);
       missing[e.soid] = item(e.version, e.prior_version, e.is_delete());
     }
     rmissing[e.version.version] = e.soid;
@@ -3977,8 +3973,8 @@ public:
 
   void got(const hobject_t& oid, eversion_t v) {
     std::map<hobject_t, item>::iterator p = missing.find(oid);
-    assert(p != missing.end());
-    assert(p->second.need <= v || p->second.is_delete());
+    ceph_assert(p != missing.end());
+    ceph_assert(p->second.need <= v || p->second.is_delete());
     got(p);
   }
 
@@ -4257,7 +4253,7 @@ struct pg_ls_response_t {
     using ceph::decode;
     __u8 v;
     decode(v, bl);
-    assert(v == 1);
+    ceph_assert(v == 1);
     decode(handle, bl);
     decode(entries, bl);
   }

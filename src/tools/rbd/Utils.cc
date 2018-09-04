@@ -495,7 +495,7 @@ int get_image_options(const boost::program_options::variables_map &vm,
 
     if (format_specified) {
       int r = g_conf().set_val("rbd_default_format", stringify(format));
-      assert(r == 0);
+      ceph_assert(r == 0);
       opts->set(RBD_IMAGE_OPTION_FORMAT, format);
     }
   }
@@ -539,7 +539,7 @@ int get_journal_options(const boost::program_options::variables_map &vm,
     opts->set(RBD_IMAGE_OPTION_JOURNAL_ORDER, order);
 
     int r = g_conf().set_val("rbd_journal_order", stringify(order));
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
   if (vm.count(at::JOURNAL_SPLAY_WIDTH)) {
     opts->set(RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH,
@@ -548,7 +548,7 @@ int get_journal_options(const boost::program_options::variables_map &vm,
     int r = g_conf().set_val("rbd_journal_splay_width",
 			    stringify(
 			      vm[at::JOURNAL_SPLAY_WIDTH].as<uint64_t>()));
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
   if (vm.count(at::JOURNAL_POOL)) {
     opts->set(RBD_IMAGE_OPTION_JOURNAL_POOL,
@@ -556,7 +556,7 @@ int get_journal_options(const boost::program_options::variables_map &vm,
 
     int r = g_conf().set_val("rbd_journal_pool",
 			    vm[at::JOURNAL_POOL].as<std::string>());
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 
   return 0;
@@ -665,6 +665,21 @@ int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
     return r;
   }
 
+  if (!namespace_name.empty()) {
+    librbd::RBD rbd;
+    bool exists = false;
+    r = rbd.namespace_exists(*io_ctx, namespace_name.c_str(), &exists);
+    if (r < 0) {
+      std::cerr << "rbd: error asserting namespace: "
+                << cpp_strerror(r) << std::endl;
+      return r;
+    }
+    if (!exists) {
+      std::cerr << "rbd: namespace '" << namespace_name << "' does not exist."
+                << std::endl;
+      return -ENOENT;
+    }
+  }
   io_ctx->set_namespace(namespace_name);
   return 0;
 }
@@ -757,7 +772,7 @@ void calc_sparse_extent(const bufferptr &bp,
                         bool *zeroed) {
   if (sparse_size == 0) {
     // sparse writes are disabled -- write the full extent
-    assert(buffer_offset == 0);
+    ceph_assert(buffer_offset == 0);
     *write_length = buffer_length;
     *zeroed = false;
     return;
@@ -775,7 +790,7 @@ void calc_sparse_extent(const bufferptr &bp,
     if (original_offset == buffer_offset) {
       *zeroed = extent_is_zero;
     } else if (*zeroed != extent_is_zero) {
-      assert(*write_length > 0);
+      ceph_assert(*write_length > 0);
       return;
     }
 

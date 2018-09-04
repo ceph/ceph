@@ -809,7 +809,7 @@ public:
 		<< std::endl;
       return false;
     }
-    assert(entry_size > 0);
+    ceph_assert(entry_size > 0);
     // Read entry.
     r = bl.read_fd(m_fd, entry_size);
     if (r < 0) {
@@ -832,7 +832,7 @@ public:
     if (r < 0) {
       return r;
     }
-    m_journaler.start_append(0, 0, 0);
+    m_journaler.start_append(0, 0, 0, 0);
 
     int r1 = 0;
     bufferlist bl;
