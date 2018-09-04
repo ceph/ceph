@@ -138,16 +138,17 @@ public:
 
 class RGWAsyncPutSystemObjAttrs : public RGWAsyncRadosRequest {
   RGWRados *store;
-  RGWObjVersionTracker *objv_tracker;
   rgw_raw_obj obj;
-  map<string, bufferlist> *attrs;
+  map<string, bufferlist> attrs;
 
 protected:
   int _send_request() override;
 public:
   RGWAsyncPutSystemObjAttrs(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-                       map<string, bufferlist> *_attrs);
+                       map<string, bufferlist> _attrs);
+
+  RGWObjVersionTracker objv_tracker;
 };
 
 class RGWAsyncLockSystemObj : public RGWAsyncRadosRequest {
@@ -333,21 +334,19 @@ public:
 class RGWSimpleRadosWriteAttrsCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
-
+  RGWObjVersionTracker *objv_tracker;
   rgw_raw_obj obj;
-
   map<string, bufferlist> attrs;
-
-  RGWAsyncPutSystemObjAttrs *req;
+  RGWAsyncPutSystemObjAttrs *req = nullptr;
 
 public:
-  RGWSimpleRadosWriteAttrsCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-		      const rgw_raw_obj& _obj,
-		      map<string, bufferlist>& _attrs) : RGWSimpleCoroutine(_store->ctx()),
-                                                async_rados(_async_rados),
-						store(_store),
-						obj(_obj),
-                                                attrs(_attrs), req(NULL) {
+  RGWSimpleRadosWriteAttrsCR(RGWAsyncRadosProcessor *_async_rados,
+                             RGWRados *_store, const rgw_raw_obj& _obj,
+                             map<string, bufferlist> _attrs,
+                             RGWObjVersionTracker *objv_tracker = nullptr)
+    : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados),
+      store(_store), objv_tracker(objv_tracker), obj(_obj),
+      attrs(std::move(_attrs)) {
   }
   ~RGWSimpleRadosWriteAttrsCR() override {
     request_cleanup();
@@ -362,12 +361,15 @@ public:
 
   int send_request() override {
     req = new RGWAsyncPutSystemObjAttrs(this, stack->create_completion_notifier(),
-			           store, NULL, obj, &attrs);
+			           store, objv_tracker, obj, std::move(attrs));
     async_rados->queue(req);
     return 0;
   }
 
   int request_complete() override {
+    if (objv_tracker) { // copy the updated version
+      *objv_tracker = req->objv_tracker;
+    }
     return req->get_ret_status();
   }
 };

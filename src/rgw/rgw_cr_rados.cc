@@ -138,14 +138,14 @@ RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletio
 
 int RGWAsyncPutSystemObjAttrs::_send_request()
 {
-  return store->system_obj_set_attrs(NULL, obj, *attrs, NULL, objv_tracker);
+  return store->system_obj_set_attrs(nullptr, obj, attrs, nullptr, &objv_tracker);
 }
 
 RGWAsyncPutSystemObjAttrs::RGWAsyncPutSystemObjAttrs(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                      RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-                     map<string, bufferlist> *_attrs) : RGWAsyncRadosRequest(caller, cn), store(_store),
-                                                       objv_tracker(_objv_tracker), obj(_obj),
-                                                       attrs(_attrs)
+                     map<string, bufferlist> _attrs)
+  : RGWAsyncRadosRequest(caller, cn), store(_store),
+    obj(_obj), attrs(std::move(_attrs))
 {
 }
 
