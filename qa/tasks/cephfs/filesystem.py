@@ -1228,6 +1228,9 @@ class Filesystem(MDSCluster):
         """
         return ""
 
+    def _make_rank(self, rank):
+        return "{}:{}".format(self.name, rank)
+
     def _run_tool(self, tool, args, rank=None, quiet=False):
         # Tests frequently have [client] configuration that jacks up
         # the objecter log level (unlikely to be interesting here)
@@ -1238,7 +1241,7 @@ class Filesystem(MDSCluster):
             base_args = [os.path.join(self._prefix, tool), '--debug-mds=4', '--debug-objecter=1']
 
         if rank is not None:
-            base_args.extend(["--rank", "%d" % rank])
+            base_args.extend(["--rank", "%s" % str(rank)])
 
         t1 = datetime.datetime.now()
         r = self.tool_remote.run(
@@ -1260,11 +1263,12 @@ class Filesystem(MDSCluster):
         mds_id = self.mds_ids[0]
         return self.mds_daemons[mds_id].remote
 
-    def journal_tool(self, args, rank=None, quiet=False):
+    def journal_tool(self, args, rank, quiet=False):
         """
-        Invoke cephfs-journal-tool with the passed arguments, and return its stdout
+        Invoke cephfs-journal-tool with the passed arguments for a rank, and return its stdout
         """
-        return self._run_tool("cephfs-journal-tool", args, rank, quiet)
+        fs_rank = self._make_rank(rank)
+        return self._run_tool("cephfs-journal-tool", args, fs_rank, quiet)
 
     def table_tool(self, args, quiet=False):
         """
