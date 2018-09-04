@@ -242,10 +242,10 @@ class TestForwardScrub(CephFSTestCase):
         # is all that will be in the InoTable in memory)
 
         self.fs.journal_tool(["event", "splice",
-            "--inode={0}".format(inos["./file2_sixmegs"]), "summary"])
+                              "--inode={0}".format(inos["./file2_sixmegs"]), "summary"], 0)
 
         self.fs.journal_tool(["event", "splice",
-            "--inode={0}".format(inos["./file3_sixmegs"]), "summary"])
+                              "--inode={0}".format(inos["./file3_sixmegs"]), "summary"], 0)
 
         # Revert to old inotable.
         for key, value in inotable_copy.iteritems():
