@@ -54,6 +54,7 @@ set(unittest_librbd_srcs
   exclusive_lock/test_mock_PreAcquireRequest.cc
   exclusive_lock/test_mock_PostAcquireRequest.cc
   exclusive_lock/test_mock_PreReleaseRequest.cc
+  image/test_mock_AttachParentRequest.cc
   image/test_mock_CloneRequest.cc
   image/test_mock_DetachChildRequest.cc
   image/test_mock_DetachParentRequest.cc
