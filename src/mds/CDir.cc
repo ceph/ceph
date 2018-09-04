@@ -1915,9 +1915,9 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       decode(got_fnode, p);
     } catch (const buffer::error &err) {
       derr << "Corrupt fnode in dirfrag " << dirfrag()
-        << ": " << err << dendl;
+	   << ": " << err.what() << dendl;
       clog->warn() << "Corrupt fnode header in " << dirfrag() << ": "
-		  << err << " (" << get_path() << ")";
+		   << err.what() << " (" << get_path() << ")";
       go_bad(complete);
       return;
     }
@@ -1983,7 +1983,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     } catch (const buffer::error &err) {
       cache->mds->clog->warn() << "Corrupt dentry '" << dname << "' in "
                                   "dir frag " << dirfrag() << ": "
-                               << err << "(" << get_path() << ")";
+                               << err.what() << "(" << get_path() << ")";
 
       // Remember that this dentry is damaged.  Subsequent operations
       // that try to act directly on it will get their EIOs, but this

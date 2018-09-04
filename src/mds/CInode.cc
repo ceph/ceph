@@ -1287,7 +1287,7 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
       fin->complete(0);
     }
   } catch (buffer::error &err) {
-    derr << "Corrupt inode " << ino() << ": " << err << dendl;
+    derr << "Corrupt inode " << ino() << ": " << err.what() << dendl;
     fin->complete(-EINVAL);
     return;
   }
