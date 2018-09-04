@@ -26,6 +26,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
+#include "librbd/api/Config.h"
 #include "librbd/api/DiffIterate.h"
 #include "librbd/api/Group.h"
 #include "librbd/api/Image.h"
@@ -200,6 +201,18 @@ void trash_image_info_cpp_to_c(const librbd::trash_image_info_t &cpp_info,
   c_info->source = cpp_info.source;
   c_info->deletion_time = cpp_info.deletion_time;
   c_info->deferment_end_time = cpp_info.deferment_end_time;
+}
+
+void config_option_cpp_to_c(const librbd::config_option_t &cpp_option,
+                            rbd_config_option_t *c_option) {
+  c_option->name = strdup(cpp_option.name.c_str());
+  c_option->value = strdup(cpp_option.value.c_str());
+  c_option->source = cpp_option.source;
+}
+
+void config_option_cleanup(rbd_config_option_t &option) {
+    free(option.name);
+    free(option.value);
 }
 
 struct C_MirrorImageGetInfo : public Context {
@@ -1022,6 +1035,10 @@ namespace librbd {
   {
     int r = librbd::api::PoolMetadata<>::list(ioctx, start, max, pairs);
     return r;
+  }
+
+  int RBD::config_list(IoCtx& io_ctx, std::vector<config_option_t> *options) {
+    return librbd::api::Config<>::list(io_ctx, options);
   }
 
   RBD::AioCompletion::AioCompletion(void *cb_arg, callback_t complete_cb)
@@ -2402,6 +2419,11 @@ namespace librbd {
     return r;
   }
 
+  int Image::config_list(std::vector<config_option_t> *options) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::api::Config<>::list(ictx, options);
+  }
+
 } // namespace librbd
 
 extern "C" void rbd_version(int *major, int *minor, int *extra)
@@ -3366,6 +3388,37 @@ extern "C" int rbd_pool_metadata_list(rados_ioctx_t p, const char *start,
     value_p++;
   }
   return 0;
+}
+
+extern "C" int rbd_config_pool_list(rados_ioctx_t p,
+                                    rbd_config_option_t *options,
+                                    int *max_options) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  std::vector<librbd::config_option_t> option_vector;
+  int r = librbd::api::Config<>::list(io_ctx, &option_vector);
+  if (r < 0) {
+    return r;
+  }
+
+  if (*max_options < static_cast<int>(option_vector.size())) {
+    *max_options = static_cast<int>(option_vector.size());
+    return -ERANGE;
+  }
+
+  for (int i = 0; i < static_cast<int>(option_vector.size()); ++i) {
+    config_option_cpp_to_c(option_vector[i], &options[i]);
+  }
+  *max_options = static_cast<int>(option_vector.size());
+  return 0;
+}
+
+extern "C" void rbd_config_pool_list_cleanup(rbd_config_option_t *options,
+                                             int max_options) {
+  for (int i = 0; i < max_options; ++i) {
+    config_option_cleanup(options[i]);
+  }
 }
 
 extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image,
@@ -5537,5 +5590,35 @@ extern "C" void rbd_watchers_list_cleanup(rbd_image_watcher_t *watchers,
 					  size_t num_watchers) {
   for (size_t i = 0; i < num_watchers; ++i) {
     free(watchers[i].addr);
+  }
+}
+
+extern "C" int rbd_config_image_list(rbd_image_t image,
+                                     rbd_config_option_t *options,
+                                     int *max_options) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx*)image;
+
+  std::vector<librbd::config_option_t> option_vector;
+  int r = librbd::api::Config<>::list(ictx, &option_vector);
+  if (r < 0) {
+    return r;
+  }
+
+  if (*max_options < static_cast<int>(option_vector.size())) {
+    *max_options = static_cast<int>(option_vector.size());
+    return -ERANGE;
+  }
+
+  for (int i = 0; i < static_cast<int>(option_vector.size()); ++i) {
+    config_option_cpp_to_c(option_vector[i], &options[i]);
+  }
+  *max_options = static_cast<int>(option_vector.size());
+  return 0;
+}
+
+extern "C" void rbd_config_image_list_cleanup(rbd_config_option_t *options,
+                                              int max_options) {
+  for (int i = 0; i < max_options; ++i) {
+    config_option_cleanup(options[i]);
   }
 }
