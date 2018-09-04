@@ -10,6 +10,7 @@
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "librbd/deep_copy/SetHeadRequest.h"
+#include "librbd/image/AttachParentRequest.h"
 #include "librbd/image/DetachParentRequest.h"
 
 namespace librbd {
@@ -24,6 +25,28 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
 } // anonymous namespace
 
 namespace image {
+
+template <>
+struct AttachParentRequest<MockTestImageCtx> {
+  Context* on_finish = nullptr;
+  static AttachParentRequest* s_instance;
+  static AttachParentRequest* create(MockTestImageCtx&,
+                                     const cls::rbd::ParentImageSpec& pspec,
+                                     uint64_t parent_overlap,
+                                     Context *on_finish) {
+    ceph_assert(s_instance != nullptr);
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  MOCK_METHOD0(send, void());
+
+  AttachParentRequest() {
+    s_instance = this;
+  }
+};
+
+AttachParentRequest<MockTestImageCtx>* AttachParentRequest<MockTestImageCtx>::s_instance = nullptr;
 
 template <>
 class DetachParentRequest<MockTestImageCtx> {
@@ -70,6 +93,7 @@ using ::testing::WithArg;
 class TestMockDeepCopySetHeadRequest : public TestMockFixture {
 public:
   typedef SetHeadRequest<librbd::MockTestImageCtx> MockSetHeadRequest;
+  typedef image::AttachParentRequest<MockTestImageCtx> MockAttachParentRequest;
   typedef image::DetachParentRequest<MockTestImageCtx> MockDetachParentRequest;
 
   librbd::ImageCtx *m_image_ctx;
@@ -108,10 +132,10 @@ public:
       .WillOnce(FinishRequest(&mock_request, r, &mock_image_ctx));
   }
 
-  void expect_set_parent(librbd::MockTestImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("set_parent"), _, _, _))
-                  .WillOnce(Return(r));
+  void expect_attach_parent(MockImageCtx &mock_image_ctx,
+                            MockAttachParentRequest& mock_request, int r) {
+    EXPECT_CALL(mock_request, send())
+      .WillOnce(FinishRequest(&mock_request, r, &mock_image_ctx));
   }
 
   MockSetHeadRequest *create_request(
@@ -201,7 +225,8 @@ TEST_F(TestMockDeepCopySetHeadRequest, RemoveSetParent) {
   MockDetachParentRequest mock_detach_parent;
   expect_detach_parent(mock_image_ctx, mock_detach_parent, 0);
   expect_start_op(mock_exclusive_lock);
-  expect_set_parent(mock_image_ctx, 0);
+  MockAttachParentRequest mock_attach_parent;
+  expect_attach_parent(mock_image_ctx, mock_attach_parent, 0);
 
   C_SaferCond ctx;
   auto request = create_request(mock_image_ctx, m_image_ctx->size,
@@ -217,7 +242,8 @@ TEST_F(TestMockDeepCopySetHeadRequest, SetParentSpec) {
 
   InSequence seq;
   expect_start_op(mock_exclusive_lock);
-  expect_set_parent(mock_image_ctx, 0);
+  MockAttachParentRequest mock_attach_parent;
+  expect_attach_parent(mock_image_ctx, mock_attach_parent, 0);
 
   C_SaferCond ctx;
   auto request = create_request(mock_image_ctx, m_image_ctx->size,
@@ -253,7 +279,8 @@ TEST_F(TestMockDeepCopySetHeadRequest, SetParentError) {
 
   InSequence seq;
   expect_start_op(mock_exclusive_lock);
-  expect_set_parent(mock_image_ctx, -ESTALE);
+  MockAttachParentRequest mock_attach_parent;
+  expect_attach_parent(mock_image_ctx, mock_attach_parent, -ESTALE);
 
   C_SaferCond ctx;
   auto request = create_request(mock_image_ctx, m_image_ctx->size,

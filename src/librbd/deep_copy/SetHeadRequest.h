@@ -49,7 +49,7 @@ private:
    * DETACH_PARENT
    *    |
    *    v (skip if not needed)
-   * SET_PARENT
+   * ATTACH_PARENT
    *    |
    *    v
    * <finish>
@@ -71,8 +71,8 @@ private:
   void send_detach_parent();
   void handle_detach_parent(int r);
 
-  void send_set_parent();
-  void handle_set_parent(int r);
+  void send_attach_parent();
+  void handle_attach_parent(int r);
 
   Context *start_lock_op();
 
