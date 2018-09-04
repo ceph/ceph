@@ -952,7 +952,7 @@ int main(int argc, char **argv) {
         }
       } catch (const buffer::error &err) {
         std::cerr << "Could not decode for human readable output (you may still"
-                     " use non-readable mode).  Detail: " << err << std::endl;
+	  " use non-readable mode).  Detail: " << err.what() << std::endl;
       }
 
       out.append(ss);
