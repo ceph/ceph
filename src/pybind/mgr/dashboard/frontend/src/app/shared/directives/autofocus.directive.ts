@@ -1,16 +1,17 @@
-import { Directive, ElementRef, OnInit } from '@angular/core';
+import { AfterViewInit, Directive, ElementRef } from '@angular/core';
+
+import * as _ from 'lodash';
 
 @Directive({
   selector: '[autofocus]' // tslint:disable-line
 })
-export class AutofocusDirective implements OnInit {
+export class AutofocusDirective implements AfterViewInit {
   constructor(private elementRef: ElementRef) {}
 
-  ngOnInit() {
-    setTimeout(() => {
-      if (this.elementRef && this.elementRef.nativeElement) {
-        this.elementRef.nativeElement.focus();
-      }
-    }, 0);
+  ngAfterViewInit() {
+    const el: HTMLInputElement = this.elementRef.nativeElement;
+    if (_.isFunction(el.focus)) {
+      el.focus();
+    }
   }
 }
