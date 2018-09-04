@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 
 import json
+from time import sleep
 
 from .helper import DashboardTestCase, JObj, JAny, JList, JLeaf, JTuple
 
@@ -10,6 +11,9 @@ from .helper import DashboardTestCase, JObj, JAny, JList, JLeaf, JTuple
 class OsdTest(DashboardTestCase):
 
     AUTH_ROLES = ['cluster-manager']
+
+    def tearDown(self):
+        self._post('/api/osd/0/mark_in')
 
     @DashboardTestCase.RunAs('test', 'test', ['block-manager'])
     def test_access_permissions(self):
@@ -49,6 +53,60 @@ class OsdTest(DashboardTestCase):
         self.assertStatus(200)
 
         self._post('/api/osd/0/scrub?deep=True')
+        self.assertStatus(200)
+
+    def test_mark_out_and_in(self):
+        self._post('/api/osd/0/mark_out')
+        self.assertStatus(200)
+
+        self._post('/api/osd/0/mark_in')
+        self.assertStatus(200)
+
+    def test_mark_down(self):
+        self._post('/api/osd/0/mark_down')
+        self.assertStatus(200)
+
+    def test_reweight(self):
+        self._post('/api/osd/0/reweight', {'weight': 0.4})
+        self.assertStatus(200)
+
+        def get_reweight_value():
+            self._get('/api/osd/0')
+            response = self.jsonBody()
+            if 'osd_map' in response and 'weight' in response['osd_map']:
+                return round(response['osd_map']['weight'], 1)
+        self.wait_until_equal(get_reweight_value, 0.4, 10)
+        self.assertStatus(200)
+
+        # Undo
+        self._post('/api/osd/0/reweight', {'weight': 1})
+
+    def test_create_lost_destroy_remove(self):
+        # Create
+        self._post('/api/osd', {
+            'uuid': 'f860ca2e-757d-48ce-b74a-87052cad563f',
+            'svc_id': 5
+        })
+        self.assertStatus(201)
+        # Lost
+        self._post('/api/osd/5/mark_lost')
+        self.assertStatus(200)
+        # Destroy
+        self._post('/api/osd/5/destroy')
+        self.assertStatus(200)
+        # Remove
+        self._post('/api/osd/5/remove')
+        self.assertStatus(200)
+
+    def test_safe_to_destroy(self):
+        self._get('/api/osd/5/safe_to_destroy')
+        self.assertStatus(200)
+        self.assertJsonBody({'safe-to-destroy': True})
+
+        def get_destroy_status():
+            self._get('/api/osd/0/safe_to_destroy')
+            return self.jsonBody()['safe-to-destroy']
+        self.wait_until_equal(get_destroy_status, False, 10)
         self.assertStatus(200)
 
 
