@@ -32,7 +32,7 @@ Mark out and replace
 --------------------
 
 The simplest approach is to mark out each device in turn, wait for the
-data to rereplicate across the cluster, reprovision the OSD, and mark
+data to replicate across the cluster, reprovision the OSD, and mark
 it back in again.  It is simple and easy to automate.  However, it requires
 more data migration than should be necessary, so it is not optimal.
 
