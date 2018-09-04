@@ -682,8 +682,8 @@ bool PGBackend::be_compare_scrub_objects(
     auto can_attr = candidate.attrs.find(OI_ATTR);
     auto auth_attr = auth.attrs.find(OI_ATTR);
 
-    assert(auth_attr != auth.attrs.end());
-    assert(can_attr != candidate.attrs.end());
+    ceph_assert(auth_attr != auth.attrs.end());
+    ceph_assert(can_attr != candidate.attrs.end());
 
     can_bl.push_back(can_attr->second);
     auth_bl.push_back(auth_attr->second);
@@ -702,8 +702,8 @@ bool PGBackend::be_compare_scrub_objects(
       auto can_attr = candidate.attrs.find(SS_ATTR);
       auto auth_attr = auth.attrs.find(SS_ATTR);
 
-      assert(auth_attr != auth.attrs.end());
-      assert(can_attr != candidate.attrs.end());
+      ceph_assert(auth_attr != auth.attrs.end());
+      ceph_assert(can_attr != candidate.attrs.end());
 
       can_bl.push_back(can_attr->second);
       auth_bl.push_back(auth_attr->second);
@@ -723,8 +723,8 @@ bool PGBackend::be_compare_scrub_objects(
       auto can_hi = candidate.attrs.find(ECUtil::get_hinfo_key());
       auto auth_hi = auth.attrs.find(ECUtil::get_hinfo_key());
 
-      assert(auth_hi != auth.attrs.end());
-      assert(can_hi != candidate.attrs.end());
+      ceph_assert(auth_hi != auth.attrs.end());
+      ceph_assert(can_hi != candidate.attrs.end());
 
       can_bl.push_back(can_hi->second);
       auth_bl.push_back(auth_hi->second);
