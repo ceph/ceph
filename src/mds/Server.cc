@@ -1122,7 +1122,7 @@ void Server::infer_supported_features(Session *session, client_metadata_t& clien
 
   if (supported >= 0) {
     unsigned long value = (1UL << (supported + 1)) - 1;
-    client_metadata.features = std::move(feature_bitset_t(value));
+    client_metadata.features = feature_bitset_t(value);
     dout(10) << __func__ << " got '" << client_metadata.features << "'" << dendl;
   }
 }
