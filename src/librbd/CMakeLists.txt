@@ -24,6 +24,7 @@ set(librbd_internal_srcs
   TrashWatcher.cc
   Utils.cc
   Watcher.cc
+  api/Config.cc
   api/DiffIterate.cc
   api/Group.cc
   api/Image.cc

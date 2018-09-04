@@ -7096,6 +7096,7 @@ TEST_F(TestLibRBD, PoolMetadata)
   ASSERT_STREQ(vals, "value2");
 
   // test config setting
+  ASSERT_EQ(-EINVAL, rbd_pool_metadata_set(ioctx, "conf_UNKNOWN", "false"));
   ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "conf_rbd_cache", "false"));
   ASSERT_EQ(-EINVAL, rbd_pool_metadata_set(ioctx, "conf_rbd_cache", "INVALID"));
   ASSERT_EQ(0, rbd_pool_metadata_remove(ioctx, "conf_rbd_cache"));
@@ -7189,6 +7190,7 @@ TEST_F(TestLibRBD, PoolMetadataPP)
   ASSERT_EQ(0, strncmp("value3", pairs["key3"].c_str(), 6));
 
   // test config setting
+  ASSERT_EQ(-EINVAL, rbd.pool_metadata_set(ioctx, "conf_UNKNOWN", "false"));
   ASSERT_EQ(0, rbd.pool_metadata_set(ioctx, "conf_rbd_cache", "false"));
   ASSERT_EQ(-EINVAL, rbd.pool_metadata_set(ioctx, "conf_rbd_cache", "INVALID"));
   ASSERT_EQ(0, rbd.pool_metadata_remove(ioctx, "conf_rbd_cache"));
@@ -7197,6 +7199,167 @@ TEST_F(TestLibRBD, PoolMetadataPP)
   ASSERT_EQ(0, rbd.pool_metadata_remove(ioctx, "key1"));
   ASSERT_EQ(0, rbd.pool_metadata_remove(ioctx, "key2"));
   ASSERT_EQ(0, rbd.pool_metadata_remove(ioctx, "key3"));
+}
+
+TEST_F(TestLibRBD, Config)
+{
+  REQUIRE_FORMAT_V2();
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "conf_rbd_cache", "false"));
+
+  rbd_config_option_t options[1024];
+  int max_options = 0;
+  ASSERT_EQ(-ERANGE, rbd_config_pool_list(ioctx, options, &max_options));
+  ASSERT_EQ(0, rbd_config_pool_list(ioctx, options, &max_options));
+  ASSERT_GT(max_options, 0);
+  ASSERT_LT(max_options, 1024);
+  for (int i = 0; i < max_options; i++) {
+    if (options[i].name == std::string("rbd_cache")) {
+      ASSERT_EQ(options[i].source, RBD_CONFIG_SOURCE_POOL);
+      ASSERT_STREQ("false", options[i].value);
+    } else {
+      ASSERT_EQ(options[i].source, RBD_CONFIG_SOURCE_CONFIG);
+    }
+  }
+  rbd_config_pool_list_cleanup(options, max_options);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  ASSERT_EQ(0, rbd_config_image_list(image, options, &max_options));
+  for (int i = 0; i < max_options; i++) {
+    if (options[i].name == std::string("rbd_cache")) {
+      ASSERT_EQ(options[i].source, RBD_CONFIG_SOURCE_POOL);
+      ASSERT_STREQ("false", options[i].value);
+    } else {
+      ASSERT_EQ(options[i].source, RBD_CONFIG_SOURCE_CONFIG);
+    }
+  }
+  rbd_config_image_list_cleanup(options, max_options);
+
+  ASSERT_EQ(0, rbd_metadata_set(image, "conf_rbd_cache", "true"));
+
+  ASSERT_EQ(0, rbd_config_image_list(image, options, &max_options));
+  for (int i = 0; i < max_options; i++) {
+    if (options[i].name == std::string("rbd_cache")) {
+      ASSERT_EQ(options[i].source, RBD_CONFIG_SOURCE_IMAGE);
+      ASSERT_STREQ("true", options[i].value);
+    } else {
+      ASSERT_EQ(options[i].source, RBD_CONFIG_SOURCE_CONFIG);
+    }
+  }
+  rbd_config_image_list_cleanup(options, max_options);
+
+  ASSERT_EQ(0, rbd_metadata_remove(image, "conf_rbd_cache"));
+
+  ASSERT_EQ(0, rbd_config_image_list(image, options, &max_options));
+  for (int i = 0; i < max_options; i++) {
+    if (options[i].name == std::string("rbd_cache")) {
+      ASSERT_EQ(options[i].source, RBD_CONFIG_SOURCE_POOL);
+      ASSERT_STREQ("false", options[i].value);
+    } else {
+      ASSERT_EQ(options[i].source, RBD_CONFIG_SOURCE_CONFIG);
+    }
+  }
+  rbd_config_image_list_cleanup(options, max_options);
+
+  ASSERT_EQ(0, rbd_close(image));
+
+  ASSERT_EQ(0, rbd_pool_metadata_remove(ioctx, "conf_rbd_cache"));
+
+  ASSERT_EQ(-ERANGE, rbd_config_pool_list(ioctx, options, &max_options));
+  ASSERT_EQ(0, rbd_config_pool_list(ioctx, options, &max_options));
+  for (int i = 0; i < max_options; i++) {
+    ASSERT_EQ(options[i].source, RBD_CONFIG_SOURCE_CONFIG);
+  }
+  rbd_config_pool_list_cleanup(options, max_options);
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, ConfigPP)
+{
+  REQUIRE_FORMAT_V2();
+
+  librbd::RBD rbd;
+  string value;
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  ASSERT_EQ(0, rbd.pool_metadata_set(ioctx, "conf_rbd_cache", "false"));
+
+  std::vector<librbd::config_option_t> options;
+  ASSERT_EQ(0, rbd.config_list(ioctx, &options));
+  for (auto &option : options) {
+    if (option.name == std::string("rbd_cache")) {
+      ASSERT_EQ(option.source, RBD_CONFIG_SOURCE_POOL);
+      ASSERT_EQ("false", option.value);
+    } else {
+      ASSERT_EQ(option.source, RBD_CONFIG_SOURCE_CONFIG);
+    }
+  }
+
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+
+  options.clear();
+  ASSERT_EQ(0, image.config_list(&options));
+  for (auto &option : options) {
+    if (option.name == std::string("rbd_cache")) {
+      ASSERT_EQ(option.source, RBD_CONFIG_SOURCE_POOL);
+      ASSERT_EQ("false", option.value);
+    } else {
+      ASSERT_EQ(option.source, RBD_CONFIG_SOURCE_CONFIG);
+    }
+  }
+
+  ASSERT_EQ(0, image.metadata_set("conf_rbd_cache", "true"));
+
+  options.clear();
+  ASSERT_EQ(0, image.config_list(&options));
+  for (auto &option : options) {
+    if (option.name == std::string("rbd_cache")) {
+      ASSERT_EQ(option.source, RBD_CONFIG_SOURCE_IMAGE);
+      ASSERT_EQ("true", option.value);
+    } else {
+      ASSERT_EQ(option.source, RBD_CONFIG_SOURCE_CONFIG);
+    }
+  }
+
+  ASSERT_EQ(0, image.metadata_remove("conf_rbd_cache"));
+
+  options.clear();
+  ASSERT_EQ(0, image.config_list(&options));
+  for (auto &option : options) {
+    if (option.name == std::string("rbd_cache")) {
+      ASSERT_EQ(option.source, RBD_CONFIG_SOURCE_POOL);
+      ASSERT_EQ("false", option.value);
+    } else {
+      ASSERT_EQ(option.source, RBD_CONFIG_SOURCE_CONFIG);
+    }
+  }
+
+  ASSERT_EQ(0, rbd.pool_metadata_remove(ioctx, "conf_rbd_cache"));
+
+  options.clear();
+  ASSERT_EQ(0, rbd.config_list(ioctx, &options));
+  for (auto &option : options) {
+    ASSERT_EQ(option.source, RBD_CONFIG_SOURCE_CONFIG);
+  }
 }
 
 // poorman's ceph_assert()
