@@ -3650,7 +3650,6 @@ public:
     for (int i = 0; i < num_shards; ++i) {
       Mutex::Locker l(*locks[i]);
       for (auto c : completions[i]) {
-        Mutex::Locker cl(c->lock);
         c->stop();
       }
     }
