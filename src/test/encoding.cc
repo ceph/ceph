@@ -320,8 +320,8 @@ TEST(EncodingRoundTrip, Integers) {
 }
 
 const char* expected_what[] = {
-  "buffer::malformed_input: void lame_decoder(int) no longer understand old encoding version 100 < 200",
-  "buffer::malformed_input: void lame_decoder(int) decode past end of struct encoding",
+  "void lame_decoder(int) no longer understand old encoding version 100 < 200: Malformed input",
+  "void lame_decoder(int) decode past end of struct encoding: Malformed input"
 };
 
 void lame_decoder(int which) {
