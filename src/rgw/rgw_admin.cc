@@ -2751,7 +2751,6 @@ int main(int argc, const char **argv)
   std::string val;
   std::ostringstream errs;
   string err;
-  long long tmp = 0;
 
   string source_zone_name;
   string source_zone; /* zone id */
