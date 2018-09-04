@@ -135,7 +135,7 @@ weight).
 Replacing an OSD
 ----------------
 
-When disks fail, or if an admnistrator wants to reprovision OSDs with a new
+When disks fail, or if an administrator wants to reprovision OSDs with a new
 backend, for instance, for switching from FileStore to BlueStore, OSDs need to
 be replaced. Unlike `Removing the OSD`_, replaced OSD's id and CRUSH map entry
 need to be keep intact after the OSD is destroyed for replacement.
