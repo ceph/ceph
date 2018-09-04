@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-
+import re
 from . import ApiController, RESTController, UpdatePermission
 from .. import mgr, logger
 from ..security import Scope
-from ..services.ceph_service import CephService
+from ..services.ceph_service import CephService, SendCommandError
 from ..services.exception import handle_send_command_error
 from ..tools import str_to_bool
 
@@ -63,6 +63,107 @@ class Osd(RESTController):
     def scrub(self, svc_id, deep=False):
         api_scrub = "osd deep-scrub" if str_to_bool(deep) else "osd scrub"
         CephService.send_command("mon", api_scrub, who=svc_id)
+
+    @RESTController.Resource('POST')
+    def mark_out(self, svc_id):
+        CephService.send_command('mon', 'osd out', ids=[svc_id])
+
+    @RESTController.Resource('POST')
+    def mark_in(self, svc_id):
+        CephService.send_command('mon', 'osd in', ids=[svc_id])
+
+    @RESTController.Resource('POST')
+    def mark_down(self, svc_id):
+        CephService.send_command('mon', 'osd down', ids=[svc_id])
+
+    @RESTController.Resource('POST')
+    def reweight(self, svc_id, weight):
+        """
+        Reweights the OSD temporarily.
+
+        Note that ‘ceph osd reweight’ is not a persistent setting. When an OSD
+        gets marked out, the osd weight will be set to 0. When it gets marked
+        in again, the weight will be changed to 1.
+
+        Because of this ‘ceph osd reweight’ is a temporary solution. You should
+        only use it to keep your cluster running while you’re ordering more
+        hardware.
+
+        - Craig Lewis (http://lists.ceph.com/pipermail/ceph-users-ceph.com/2014-June/040967.html)
+        """
+        CephService.send_command(
+            'mon',
+            'osd reweight',
+            id=int(svc_id),
+            weight=float(weight))
+
+    @RESTController.Resource('POST')
+    def mark_lost(self, svc_id):
+        """
+        Note: osd must be marked `down` before marking lost.
+        """
+        CephService.send_command(
+            'mon',
+            'osd lost',
+            id=int(svc_id),
+            sure='--yes-i-really-mean-it')
+
+    def create(self, uuid=None, svc_id=None):
+        """
+        :param uuid: Will be set automatically if the OSD starts up.
+        :param id: The ID is only used if a valid uuid is given.
+        :return:
+        """
+        result = CephService.send_command(
+            'mon', 'osd create', id=svc_id, uuid=uuid)
+        return {
+            'result': result,
+            'svc_id': svc_id,
+            'uuid': uuid,
+        }
+
+    @RESTController.Resource('POST')
+    def remove(self, svc_id):
+        """
+        Note: osd must be marked `down` before removal.
+        """
+        CephService.send_command('mon', 'osd rm', ids=[svc_id])
+
+    @RESTController.Resource('POST')
+    def destroy(self, svc_id):
+        """
+        Mark osd as being destroyed. Keeps the ID intact (allowing reuse), but
+        removes cephx keys, config-key data and lockbox keys, rendering data
+        permanently unreadable.
+
+        The osd must be marked down before being destroyed.
+        """
+        CephService.send_command(
+            'mon', 'osd destroy-actual', id=int(svc_id), sure='--yes-i-really-mean-it')
+
+    @RESTController.Resource('GET')
+    def safe_to_destroy(self, svc_id):
+        """
+        :type svc_id: int|[int]
+        """
+        if not isinstance(svc_id, list):
+            svc_id = [svc_id]
+        svc_id = list(map(str, svc_id))
+        try:
+            CephService.send_command(
+                'mon', 'osd safe-to-destroy', ids=svc_id, target=('mgr', ''))
+            return {'safe-to-destroy': True}
+        except SendCommandError as e:
+            match = re.match(
+                r'OSD\(s\) (\d+) have (\d+) pgs currently mapped to them',
+                e.message)
+            if match:
+                return {
+                    'message': e.message,
+                    'safe-to-destroy': False
+                }
+            else:
+                raise e
 
 
 @ApiController('/osd/flags', Scope.OSD)
