@@ -19,6 +19,7 @@
 
 #include <string>
 #include <map>
+#include <set>
 #include <memory>
 
 #include "common/LogClient.h"

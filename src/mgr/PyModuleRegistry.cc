@@ -71,12 +71,9 @@ void PyModuleRegistry::init()
   for (const auto& module_name : module_names) {
     dout(1) << "Loading python module '" << module_name << "'" << dendl;
 
-    const bool always_on = always_on_modules.find(module_name) !=
-      always_on_modules.end();
-
     // Everything starts disabled, set enabled flag on module
     // when we see first MgrMap
-    auto mod = std::make_shared<PyModule>(module_name, always_on);
+    auto mod = std::make_shared<PyModule>(module_name);
     int r = mod->load(pMainThreadState);
     if (r != 0) {
       // Don't use handle_pyerror() here; we don't have the GIL
@@ -111,11 +108,14 @@ bool PyModuleRegistry::handle_mgr_map(const MgrMap &mgr_map_)
     for (const auto &[module_name, module] : modules) {
       const bool enabled = (mgr_map.modules.count(module_name) > 0);
       module->set_enabled(enabled);
+      const bool always_on = (mgr_map.get_always_on_modules().count(module_name) > 0);
+      module->set_always_on(always_on);
     }
 
     return false;
   } else {
-    bool modules_changed = mgr_map_.modules != mgr_map.modules;
+    bool modules_changed = mgr_map_.modules != mgr_map.modules ||
+      mgr_map_.always_on_modules != mgr_map.always_on_modules;
     mgr_map = mgr_map_;
 
     if (standby_modules != nullptr) {
@@ -374,7 +374,7 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
     }
 
     // report failed always_on modules as health errors
-    for (const auto& name : always_on_modules) {
+    for (const auto& name : mgr_map.get_always_on_modules()) {
       if (!active_modules->module_exists(name)) {
         if (failed_modules.find(name) == failed_modules.end() &&
             dependency_modules.find(name) == dependency_modules.end()) {

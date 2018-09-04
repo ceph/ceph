@@ -57,12 +57,14 @@ class PyModule
   mutable Mutex lock{"PyModule::lock"};
 private:
   const std::string module_name;
-  const bool always_on;
   std::string get_site_packages();
   int load_subclass_of(const char* class_name, PyObject** py_class);
 
   // Did the MgrMap identify this module as one that should run?
   bool enabled = false;
+
+  // Did the MgrMap flag this module as always on?
+  bool always_on = false;
 
   // Did we successfully import this python module and look up symbols?
   // (i.e. is it possible to instantiate a MgrModule subclass instance?)
@@ -97,8 +99,8 @@ public:
   PyObject *pClass = nullptr;
   PyObject *pStandbyClass = nullptr;
 
-  explicit PyModule(const std::string &module_name_, bool always_on)
-    : module_name(module_name_), always_on(always_on)
+  explicit PyModule(const std::string &module_name_)
+    : module_name(module_name_)
   {
   }
 
@@ -118,6 +120,10 @@ public:
   void set_enabled(const bool enabled_)
   {
     enabled = enabled_;
+  }
+
+  void set_always_on(const bool always_on_) {
+    always_on = always_on_;
   }
 
   /**
