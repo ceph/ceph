@@ -25,7 +25,7 @@ calculated automatically. Here are a few values commonly used:
 
 - For calculating ``pg_num`` value by yourself please take help of `pgcalc`_ tool
 
-As the number of OSDs increases, chosing the right value for pg_num
+As the number of OSDs increases, choosing the right value for pg_num
 becomes more important because it has a significant influence on the
 behavior of the cluster as well as the durability of the data when
 something goes wrong (i.e. the probability that a catastrophic event
