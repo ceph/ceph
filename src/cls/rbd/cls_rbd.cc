@@ -200,7 +200,42 @@ static bool is_valid_id(const string &id) {
   return true;
 }
 
+/**
+ * verify that the header object exists
+ *
+ * @return 0 if the object exists, -ENOENT if it does not, or other error
+ */
+static int check_exists(cls_method_context_t hctx)
+{
+  uint64_t size;
+  time_t mtime;
+  return cls_cxx_stat(hctx, &size, &mtime);
+}
+
 namespace image {
+
+/**
+ * check that given feature(s) are set
+ *
+ * @param hctx context
+ * @param need features needed
+ * @return 0 if features are set, negative error (like ENOEXEC) otherwise
+ */
+int require_feature(cls_method_context_t hctx, uint64_t need)
+{
+  uint64_t features;
+  int r = read_key(hctx, "features", &features);
+  if (r == -ENOENT)   // this implies it's an old-style image with no features
+    return -ENOEXEC;
+  if (r < 0)
+    return r;
+  if ((features & need) != need) {
+    CLS_LOG(10, "require_feature missing feature %llx, have %llx",
+            (unsigned long long)need, (unsigned long long)features);
+    return -ENOEXEC;
+  }
+  return 0;
+}
 
 std::string snap_children_key_from_snap_id(snapid_t snap_id)
 {
@@ -263,44 +298,6 @@ int set_op_features(cls_method_context_t hctx, uint64_t op_features,
       return r;
     }
   }
-
-  return 0;
-}
-
-template<typename L>
-int snapshot_iterate(cls_method_context_t hctx, L& lambda) {
-  int max_read = RBD_MAX_KEYS_READ;
-  string last_read = RBD_SNAP_KEY_PREFIX;
-  bool more = false;
-  do {
-    map<string, bufferlist> vals;
-    int r = cls_cxx_map_get_vals(hctx, last_read, RBD_SNAP_KEY_PREFIX,
-			         max_read, &vals, &more);
-    if (r < 0) {
-      return r;
-    }
-
-    cls_rbd_snap snap_meta;
-    for (auto& val : vals) {
-      auto iter = val.second.cbegin();
-      try {
-	decode(snap_meta, iter);
-      } catch (const buffer::error &err) {
-	CLS_ERR("error decoding snapshot metadata for snap : %s",
-	        val.first.c_str());
-	return -EIO;
-      }
-
-      r = lambda(snap_meta);
-      if (r < 0) {
-        return r;
-      }
-    }
-
-    if (!vals.empty()) {
-      last_read = vals.rbegin()->first;
-    }
-  } while (more);
 
   return 0;
 }
@@ -483,6 +480,225 @@ int remove_migration(cls_method_context_t hctx) {
   return 0;
 }
 
+namespace snapshot {
+
+template<typename L>
+int iterate(cls_method_context_t hctx, L& lambda) {
+  int max_read = RBD_MAX_KEYS_READ;
+  string last_read = RBD_SNAP_KEY_PREFIX;
+  bool more = false;
+  do {
+    map<string, bufferlist> vals;
+    int r = cls_cxx_map_get_vals(hctx, last_read, RBD_SNAP_KEY_PREFIX,
+			         max_read, &vals, &more);
+    if (r < 0) {
+      return r;
+    }
+
+    cls_rbd_snap snap_meta;
+    for (auto& val : vals) {
+      auto iter = val.second.cbegin();
+      try {
+	decode(snap_meta, iter);
+      } catch (const buffer::error &err) {
+	CLS_ERR("error decoding snapshot metadata for snap : %s",
+	        val.first.c_str());
+	return -EIO;
+      }
+
+      r = lambda(snap_meta);
+      if (r < 0) {
+        return r;
+      }
+    }
+
+    if (!vals.empty()) {
+      last_read = vals.rbegin()->first;
+    }
+  } while (more);
+
+  return 0;
+}
+
+int write(cls_method_context_t hctx, const std::string& snap_key,
+          cls_rbd_snap&& snap) {
+  int r;
+  uint64_t encode_features = get_encode_features(hctx);
+  if (snap.migrate_parent_format(encode_features)) {
+    // ensure the normalized parent link exists before removing it from the
+    // snapshot record
+    cls_rbd_parent on_disk_parent;
+    r = read_key(hctx, "parent", &on_disk_parent);
+    if (r < 0 && r != -ENOENT) {
+      return r;
+    }
+
+    if (!on_disk_parent.exists()) {
+      on_disk_parent = snap.parent;
+      on_disk_parent.head_overlap = std::nullopt;
+
+      r = write_key(hctx, "parent", on_disk_parent, encode_features);
+      if (r < 0) {
+        return r;
+      }
+    }
+
+    // only store the parent overlap in the snapshot
+    snap.parent_overlap = snap.parent.head_overlap;
+    snap.parent = {};
+  }
+
+  r = write_key(hctx, snap_key, snap, encode_features);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+} // namespace snapshot
+
+namespace parent {
+
+int attach(cls_method_context_t hctx, cls_rbd_parent parent) {
+  int r = check_exists(hctx);
+  if (r < 0) {
+    CLS_LOG(20, "cls_rbd::image::parent::attach: child doesn't exist");
+    return r;
+  }
+
+  r = image::require_feature(hctx, RBD_FEATURE_LAYERING);
+  if (r < 0) {
+    CLS_LOG(20, "cls_rbd::image::parent::attach: child does not support "
+                "layering");
+    return r;
+  }
+
+  CLS_LOG(20, "cls_rbd::image::parent::attach: pool=%" PRIi64 ", ns=%s, id=%s, "
+              "snapid=%" PRIu64 ", size=%" PRIu64,
+          parent.pool_id, parent.pool_namespace.c_str(),
+          parent.image_id.c_str(), parent.snap_id.val,
+          parent.head_overlap.value_or(0ULL));
+  if (!parent.exists() || parent.head_overlap.value_or(0ULL) == 0ULL) {
+    return -EINVAL;
+  }
+
+  // make sure there isn't already a parent
+  cls_rbd_parent on_disk_parent;
+  r = read_key(hctx, "parent", &on_disk_parent);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  auto on_disk_parent_without_overlap{on_disk_parent};
+  on_disk_parent_without_overlap.head_overlap = parent.head_overlap;
+
+  if (r == 0 &&
+      (on_disk_parent.head_overlap ||
+       on_disk_parent_without_overlap != parent)) {
+    CLS_LOG(20, "cls_rbd::parent::attach: existing legacy parent "
+                "pool=%" PRIi64 ", ns=%s, id=%s, snapid=%" PRIu64 ", "
+                "overlap=%" PRIu64,
+            on_disk_parent.pool_id, on_disk_parent.pool_namespace.c_str(),
+            on_disk_parent.image_id.c_str(), on_disk_parent.snap_id.val,
+            on_disk_parent.head_overlap.value_or(0ULL));
+    return -EEXIST;
+  }
+
+  // our overlap is the min of our size and the parent's size.
+  uint64_t our_size;
+  r = read_key(hctx, "size", &our_size);
+  if (r < 0) {
+    return r;
+  }
+
+  parent.head_overlap = std::min(*parent.head_overlap, our_size);
+
+  r = write_key(hctx, "parent", parent, get_encode_features(hctx));
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int detach(cls_method_context_t hctx) {
+  int r = check_exists(hctx);
+  if (r < 0) {
+    CLS_LOG(20, "cls_rbd::parent::detach: child doesn't exist");
+    return r;
+  }
+
+  uint64_t features;
+  r = read_key(hctx, "features", &features);
+  if (r == -ENOENT || ((features & RBD_FEATURE_LAYERING) == 0)) {
+    CLS_LOG(20, "cls_rbd::image::parent::detach: child does not support "
+                "layering");
+    return -ENOEXEC;
+  } else if (r < 0) {
+    return r;
+  }
+
+  cls_rbd_parent on_disk_parent;
+  r = read_key(hctx, "parent", &on_disk_parent);
+  if (r < 0) {
+    return r;
+  } else if (!on_disk_parent.head_overlap) {
+    return -ENOENT;
+  }
+
+  auto detach_lambda = [hctx, features](const cls_rbd_snap& snap_meta) {
+    if (snap_meta.parent.pool_id != -1 || snap_meta.parent_overlap) {
+      if ((features & RBD_FEATURE_DEEP_FLATTEN) != 0ULL) {
+        // remove parent reference from snapshot
+        cls_rbd_snap snap_meta_copy = snap_meta;
+        snap_meta_copy.parent = {};
+        snap_meta_copy.parent_overlap = std::nullopt;
+
+        std::string snap_key;
+        key_from_snap_id(snap_meta_copy.id, &snap_key);
+        int r = snapshot::write(hctx, snap_key, std::move(snap_meta_copy));
+        if (r < 0) {
+          return r;
+        }
+      } else {
+        return -EEXIST;
+      }
+    }
+    return 0;
+  };
+
+  r = snapshot::iterate(hctx, detach_lambda);
+  bool has_child_snaps = (r == -EEXIST);
+  if (r < 0 && r != -EEXIST) {
+    return r;
+  }
+
+  int8_t require_osd_release = cls_get_required_osd_release(hctx);
+  if (has_child_snaps && require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+    // remove overlap from HEAD revision but keep spec for snapshots
+    on_disk_parent.head_overlap = std::nullopt;
+    r = write_key(hctx, "parent", on_disk_parent, get_encode_features(hctx));
+    if (r < 0) {
+      return r;
+    }
+  } else {
+    r = remove_key(hctx, "parent");
+    if (r < 0 && r != -ENOENT) {
+      return r;
+    }
+  }
+
+  if (!has_child_snaps) {
+    // disable clone child op feature if no longer associated
+    r = set_op_features(hctx, 0, RBD_OPERATION_FEATURE_CLONE_CHILD);
+    if (r < 0) {
+      return r;
+    }
+  }
+  return 0;
+}
+
+} // namespace parent
 } // namespace image
 
 /**
@@ -707,29 +923,6 @@ int set_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 }
 
 /**
- * check that given feature(s) are set
- *
- * @param hctx context
- * @param need features needed
- * @return 0 if features are set, negative error (like ENOEXEC) otherwise
- */
-int require_feature(cls_method_context_t hctx, uint64_t need)
-{
-  uint64_t features;
-  int r = read_key(hctx, "features", &features);
-  if (r == -ENOENT)   // this implies it's an old-style image with no features
-    return -ENOEXEC;
-  if (r < 0)
-    return r;
-  if ((features & need) != need) {
-    CLS_LOG(10, "require_feature missing feature %llx, have %llx",
-            (unsigned long long)need, (unsigned long long)features);
-    return -ENOEXEC;
-  }
-  return 0;
-}
-
-/**
  * Input:
  * @param snap_id which snapshot to query, or CEPH_NOSNAP (uint64_t)
  *
@@ -841,18 +1034,6 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 }
 
 /**
- * verify that the header object exists
- *
- * @return 0 if the object exists, -ENOENT if it does not, or other error
- */
-int check_exists(cls_method_context_t hctx)
-{
-  uint64_t size;
-  time_t mtime;
-  return cls_cxx_stat(hctx, &size, &mtime);
-}
-
-/**
  * get the current protection status of the specified snapshot
  *
  * Input:
@@ -937,7 +1118,7 @@ int set_protection_status(cls_method_context_t hctx, bufferlist *in,
   if (r < 0)
     return r;
 
-  r = require_feature(hctx, RBD_FEATURE_LAYERING);
+  r = image::require_feature(hctx, RBD_FEATURE_LAYERING);
   if (r < 0) {
     CLS_LOG(20, "image does not support layering");
     return r;
@@ -965,7 +1146,7 @@ int set_protection_status(cls_method_context_t hctx, bufferlist *in,
   }
 
   snap.protection_status = status;
-  r = write_key(hctx, snapshot_key, snap, get_encode_features(hctx));
+  r = image::snapshot::write(hctx, snapshot_key, std::move(snap));
   if (r < 0) {
     return r;
   }
@@ -993,7 +1174,7 @@ int get_stripe_unit_count(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
   CLS_LOG(20, "get_stripe_unit_count");
 
-  r = require_feature(hctx, RBD_FEATURE_STRIPINGV2);
+  r = image::require_feature(hctx, RBD_FEATURE_STRIPINGV2);
   if (r < 0)
     return r;
 
@@ -1056,7 +1237,7 @@ int set_stripe_unit_count(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
   CLS_LOG(20, "set_stripe_unit_count");
 
-  r = require_feature(hctx, RBD_FEATURE_STRIPINGV2);
+  r = image::require_feature(hctx, RBD_FEATURE_STRIPINGV2);
   if (r < 0)
     return r;
 
@@ -1298,7 +1479,7 @@ int set_flags(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     r = write_key(hctx, "flags", flags);
   } else {
     snap_meta.flags = flags;
-    r = write_key(hctx, snap_meta_key, snap_meta, get_encode_features(hctx));
+    r = image::snapshot::write(hctx, snap_meta_key, std::move(snap_meta));
   }
 
   if (r < 0) {
@@ -1390,26 +1571,45 @@ int get_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   int r = check_exists(hctx);
-  if (r < 0)
+  if (r < 0) {
     return r;
+  }
 
-  CLS_LOG(20, "get_parent snap_id=%llu", (unsigned long long)snap_id);
+  CLS_LOG(20, "get_parent snap_id=%" PRIu64, snap_id);
 
   cls_rbd_parent parent;
-  r = require_feature(hctx, RBD_FEATURE_LAYERING);
+  r = image::require_feature(hctx, RBD_FEATURE_LAYERING);
   if (r == 0) {
-    if (snap_id == CEPH_NOSNAP) {
-      r = read_key(hctx, "parent", &parent);
-      if (r < 0 && r != -ENOENT)
-	return r;
-    } else {
+    r = read_key(hctx, "parent", &parent);
+    if (r < 0 && r != -ENOENT) {
+      return r;
+    }
+
+    if (snap_id != CEPH_NOSNAP) {
       cls_rbd_snap snap;
-      string snapshot_key;
+      std::string snapshot_key;
       key_from_snap_id(snap_id, &snapshot_key);
       r = read_key(hctx, snapshot_key, &snap);
-      if (r < 0 && r != -ENOENT)
+      if (r < 0 && r != -ENOENT) {
 	return r;
-      parent = snap.parent;
+      }
+
+      if (snap.parent.exists()) {
+        // legacy format where full parent spec is written within
+        // each snapshot record
+        parent = snap.parent;
+      } else if (snap.parent_overlap) {
+        // normalized parent reference
+        if (!parent.exists()) {
+          CLS_ERR("get_parent: snap_id=%" PRIu64 ": invalid parent spec",
+                  snap_id);
+          return -EINVAL;
+        }
+        parent.head_overlap = *snap.parent_overlap;
+      } else {
+        // snapshot doesn't have associated parent
+        parent = {};
+      }
     }
   }
 
@@ -1433,65 +1633,22 @@ int get_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  */
 int set_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  int64_t pool;
-  string id;
-  snapid_t snapid;
-  uint64_t size;
-
+  cls_rbd_parent parent;
   auto iter = in->cbegin();
   try {
-    decode(pool, iter);
-    decode(id, iter);
-    decode(snapid, iter);
-    decode(size, iter);
+    decode(parent.pool_id, iter);
+    decode(parent.image_id, iter);
+    decode(parent.snap_id, iter);
+
+    uint64_t overlap;
+    decode(overlap, iter);
+    parent.head_overlap = overlap;
   } catch (const buffer::error &err) {
     CLS_LOG(20, "cls_rbd::set_parent: invalid decode");
     return -EINVAL;
   }
 
-  int r = check_exists(hctx);
-  if (r < 0) {
-    CLS_LOG(20, "cls_rbd::set_parent: child already exists");
-    return r;
-  }
-
-  r = require_feature(hctx, RBD_FEATURE_LAYERING);
-  if (r < 0) {
-    CLS_LOG(20, "cls_rbd::set_parent: child does not support layering");
-    return r;
-  }
-
-  CLS_LOG(20, "set_parent pool=%llu id=%s snapid=%llu size=%llu",
-	  (unsigned long long)pool, id.c_str(), (unsigned long long)snapid.val,
-	  (unsigned long long)size);
-
-  if (pool < 0 || id.length() == 0 || snapid == CEPH_NOSNAP || size == 0) {
-    return -EINVAL;
-  }
-
-  // make sure there isn't already a parent
-  cls_rbd_parent parent;
-  r = read_key(hctx, "parent", &parent);
-  if (r == 0) {
-    CLS_LOG(20, "set_parent existing parent pool=%llu id=%s snapid=%llu"
-            "overlap=%llu", (unsigned long long)parent.pool_id,
-            parent.image_id.c_str(),
-	    (unsigned long long)parent.snap_id.val,
-	    (unsigned long long)parent.head_overlap.value_or(0ULL));
-    return -EEXIST;
-  }
-
-  // our overlap is the min of our size and the parent's size.
-  uint64_t our_size;
-  r = read_key(hctx, "size", &our_size);
-  if (r < 0)
-    return r;
-
-  parent.pool_id = pool;
-  parent.image_id = id;
-  parent.snap_id = snapid;
-  parent.head_overlap = std::min(our_size, size);
-  r = write_key(hctx, "parent", parent, get_encode_features(hctx));
+  int r = image::parent::attach(hctx, parent);
   if (r < 0) {
     return r;
   }
@@ -1509,64 +1666,9 @@ int set_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  */
 int remove_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  int r = check_exists(hctx);
-  if (r < 0)
-    return r;
-
-  r = require_feature(hctx, RBD_FEATURE_LAYERING);
-  if (r < 0)
-    return r;
-
-  uint64_t features;
-  r = read_key(hctx, "features", &features);
+  int r = image::parent::detach(hctx);
   if (r < 0) {
     return r;
-  }
-
-  auto flatten_lambda = [hctx, features](const cls_rbd_snap& snap_meta) {
-    if (snap_meta.parent.pool_id != -1) {
-      if ((features & RBD_FEATURE_DEEP_FLATTEN) != 0ULL) {
-        // remove parent reference from snapshot
-        cls_rbd_snap snap_meta_copy = snap_meta;
-        snap_meta_copy.parent = cls_rbd_parent();
-
-        std::string snap_key;
-        key_from_snap_id(snap_meta_copy.id, &snap_key);
-        int r = write_key(hctx, snap_key, snap_meta_copy,
-                          get_encode_features(hctx));
-        if (r < 0) {
-          return r;
-        }
-      } else {
-        return -EEXIST;
-      }
-    }
-    return 0;
-  };
-
-  r = image::snapshot_iterate(hctx, flatten_lambda);
-  bool has_child_snaps = (r == -EEXIST);
-  if (r < 0 && r != -EEXIST) {
-    return r;
-  }
-
-  cls_rbd_parent parent;
-  r = read_key(hctx, "parent", &parent);
-  if (r < 0)
-    return r;
-
-  r = cls_cxx_map_remove_key(hctx, "parent");
-  if (r < 0) {
-    CLS_ERR("error removing parent: %s", cpp_strerror(r).c_str());
-    return r;
-  }
-
-  if (!has_child_snaps) {
-    // disable clone child op feature if no longer associated
-    r = image::set_op_features(hctx, 0, RBD_OPERATION_FEATURE_CLONE_CHILD);
-    if (r < 0) {
-      return r;
-    }
   }
 
   return 0;
@@ -2093,7 +2195,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       return 0;
     };
 
-  r = image::snapshot_iterate(hctx, pre_check_lambda);
+  r = image::snapshot::iterate(hctx, pre_check_lambda);
   if (r < 0) {
     return r;
   }
@@ -2101,25 +2203,12 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   // snapshot inherits parent, if any
   cls_rbd_parent parent;
   r = read_key(hctx, "parent", &parent);
-  if (r < 0 && r != -ENOENT)
+  if (r < 0 && r != -ENOENT) {
     return r;
-  if (r == 0) {
-    snap_meta.parent = parent;
   }
-
-  bufferlist snap_metabl, snap_seqbl;
-  encode(snap_meta, snap_metabl, get_encode_features(hctx));
-  encode(snap_meta.id, snap_seqbl);
-
-  string snapshot_key;
-  key_from_snap_id(snap_meta.id, &snapshot_key);
-  map<string, bufferlist> vals;
-  vals["snap_seq"] = snap_seqbl;
-  vals[snapshot_key] = snap_metabl;
-  r = cls_cxx_map_set_vals(hctx, &vals);
-  if (r < 0) {
-    CLS_ERR("error writing snapshot metadata: %s", cpp_strerror(r).c_str());
-    return r;
+  if (r == 0) {
+    // write helper method will convert to normalized format if required
+    snap_meta.parent = parent;
   }
 
   if (cls::rbd::get_snap_namespace_type(snap_meta.snapshot_namespace) ==
@@ -2130,6 +2219,18 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     if (r < 0) {
       return r;
     }
+  }
+
+  r = write_key(hctx, "snap_seq", snap_meta.id);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string snapshot_key;
+  key_from_snap_id(snap_meta.id, &snapshot_key);
+  r = image::snapshot::write(hctx, snapshot_key, std::move(snap_meta));
+  if (r < 0) {
+    return r;
   }
 
   return 0;
@@ -2174,7 +2275,7 @@ int snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     }
     return 0;
   };
-  r = image::snapshot_iterate(hctx, duplicate_name_lambda);
+  r = image::snapshot::iterate(hctx, duplicate_name_lambda);
   if (r < 0) {
     return r;
   }
@@ -2195,7 +2296,7 @@ int snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   snap_meta.name = dst_snap_name;
-  r = write_key(hctx, src_snap_key, snap_meta, get_encode_features(hctx));
+  r = image::snapshot::write(hctx, src_snap_key, std::move(snap_meta));
   if (r < 0) {
     return r;
   }
@@ -2253,21 +2354,22 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   bool has_child_snaps = false;
   bool has_trash_snaps = false;
-  auto remove_lambda =
-    [snap_id, &has_child_snaps, &has_trash_snaps](const cls_rbd_snap& snap_meta) {
-      if (snap_meta.id != snap_id) {
-        if (snap_meta.parent.pool_id != -1) {
-          has_child_snaps = true;
-        }
-        if (cls::rbd::get_snap_namespace_type(snap_meta.snapshot_namespace) ==
-              cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
-          has_trash_snaps = true;
-        }
+  auto remove_lambda = [snap_id, &has_child_snaps, &has_trash_snaps](
+      const cls_rbd_snap& snap_meta) {
+    if (snap_meta.id != snap_id) {
+      if (snap_meta.parent.pool_id != -1 || snap_meta.parent_overlap) {
+        has_child_snaps = true;
       }
-      return 0;
-    };
 
-  r = image::snapshot_iterate(hctx, remove_lambda);
+      if (cls::rbd::get_snap_namespace_type(snap_meta.snapshot_namespace) ==
+            cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
+        has_trash_snaps = true;
+      }
+    }
+    return 0;
+  };
+
+  r = image::snapshot::iterate(hctx, remove_lambda);
   if (r < 0) {
     return r;
   }
@@ -2277,10 +2379,21 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   if (r < 0 && r != -ENOENT) {
     return r;
   }
-  bool has_parent = (r >= 0 && parent.pool_id != -1);
+
+  bool has_parent = (r >= 0 && parent.exists());
+  bool is_head_child = (has_parent && parent.head_overlap);
+  int8_t require_osd_release = cls_get_required_osd_release(hctx);
+  if (has_parent && !is_head_child && !has_child_snaps &&
+      require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+    // remove the unused parent image spec
+    r = remove_key(hctx, "parent");
+    if (r < 0 && r != -ENOENT) {
+      return r;
+    }
+  }
 
   uint64_t op_features_mask = 0ULL;
-  if (!has_child_snaps && !has_parent) {
+  if (!has_child_snaps && !is_head_child) {
     // disable clone child op feature if no longer associated
     op_features_mask |= RBD_OPERATION_FEATURE_CLONE_CHILD;
   }
@@ -2352,7 +2465,7 @@ int snapshot_trash_add(cls_method_context_t hctx, bufferlist *in,
   uuid_gen.generate_random();
   snap.name = uuid_gen.to_string();
 
-  r = write_key(hctx, snapshot_key, snap, get_encode_features(hctx));
+  r = image::snapshot::write(hctx, snapshot_key, std::move(snap));
   if (r < 0) {
     return r;
   }
@@ -3616,9 +3729,8 @@ int child_attach(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   ++snap.child_count;
-  r = write_key(hctx, snapshot_key, snap, get_encode_features(hctx));
+  r = image::snapshot::write(hctx, snapshot_key, std::move(snap));
   if (r < 0) {
-    CLS_ERR("error writing snapshot: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -3693,9 +3805,8 @@ int child_detach(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   --snap.child_count;
-  r = write_key(hctx, snapshot_key, snap, get_encode_features(hctx));
+  r = image::snapshot::write(hctx, snapshot_key, std::move(snap));
   if (r < 0) {
-    CLS_ERR("error writing snapshot: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -3707,7 +3818,7 @@ int child_detach(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       return 0;
     };
 
-    r = image::snapshot_iterate(hctx, clone_in_use_lambda);
+    r = image::snapshot::iterate(hctx, clone_in_use_lambda);
     if (r < 0 && r != -EEXIST) {
       return r;
     }
