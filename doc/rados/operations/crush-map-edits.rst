@@ -73,7 +73,7 @@ There are six main sections to a CRUSH Map.
 
 #. **buckets:** Once you define bucket types, you must define each node
    in the hierarchy, its type, and which devices or other nodes it
-   containes.
+   contains.
 
 #. **rules:** Rules define policy about how data is distributed across
    devices in the hierarchy.
@@ -95,7 +95,7 @@ cluster.  Devices are identified by an id (a non-negative integer) and
 a name, normally ``osd.N`` where ``N`` is the device id.
 
 Devices may also have a *device class* associated with them (e.g.,
-``hdd`` or ``ssd``), allowing them to be conveniently targetted by a
+``hdd`` or ``ssd``), allowing them to be conveniently targeted by a
 crush rule.
 
 ::
