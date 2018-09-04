@@ -2368,18 +2368,18 @@ bool PG::set_force_backfill(bool b)
 {
   bool did = false;
   if (b) {
-    if (!(state & PG_STATE_FORCED_RECOVERY) &&
+    if (!(state & PG_STATE_FORCED_BACKFILL) &&
 	(state & (PG_STATE_DEGRADED |
 		  PG_STATE_BACKFILL_WAIT |
 		  PG_STATE_BACKFILLING))) {
       dout(10) << __func__ << " set" << dendl;
-      state_set(PG_STATE_FORCED_RECOVERY);
+      state_set(PG_STATE_FORCED_BACKFILL);
       publish_stats_to_osd();
       did = true;
     }
-  } else if (state & PG_STATE_FORCED_RECOVERY) {
+  } else if (state & PG_STATE_FORCED_BACKFILL) {
     dout(10) << __func__ << " clear" << dendl;
-    state_clear(PG_STATE_FORCED_RECOVERY);
+    state_clear(PG_STATE_FORCED_BACKFILL);
     publish_stats_to_osd();
     did = true;
   }
