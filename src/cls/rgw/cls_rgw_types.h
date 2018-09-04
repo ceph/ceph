@@ -304,7 +304,7 @@ void decode_packed_val(T& val, ceph::buffer::list::const_iterator& bl)
       }
       break;
     default:
-      throw ceph::buffer::error();
+      throw ceph::buffer::malformed_input();
   }
 }
 

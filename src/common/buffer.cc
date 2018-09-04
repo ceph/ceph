@@ -27,12 +27,14 @@
 #include "armor.h"
 #include "common/environment.h"
 #include "common/errno.h"
+#include "common/error_code.h"
 #include "common/safe_io.h"
 #include "common/strtol.h"
 #include "common/likely.h"
 #include "common/valgrind.h"
 #include "common/deleter.h"
 #include "common/RWLock.h"
+#include "common/error_code.h"
 #include "include/spinlock.h"
 #include "include/scope_guard.h"
 
@@ -74,21 +76,6 @@ static ceph::spinlock debug_lock;
   int buffer::get_missed_crc() {
     return buffer_missed_crc;
   }
-
-  const char * buffer::error::what() const throw () {
-    return "buffer::exception";
-  }
-  const char * buffer::bad_alloc::what() const throw () {
-    return "buffer::bad_alloc";
-  }
-  const char * buffer::end_of_buffer::what() const throw () {
-    return "buffer::end_of_buffer";
-  }
-  const char * buffer::malformed_input::what() const throw () {
-    return buf;
-  }
-  buffer::error_code::error_code(int error) :
-    buffer::malformed_input(cpp_strerror(error).c_str()), code(error) {}
 
   /*
    * raw_combined is always placed within a single allocation along
@@ -639,6 +626,19 @@ static ceph::spinlock debug_lock;
     // FIPS zeroization audit 20191115: this memset is not security related.
     memset(c_str()+o, 0, l);
   }
+
+  template<bool B>
+  buffer::ptr::iterator_impl<B>& buffer::ptr::iterator_impl<B>::operator +=(size_t len) {
+    pos += len;
+    if (pos > end_ptr)
+      throw end_of_buffer();
+    return *this;
+  }
+
+  template buffer::ptr::iterator_impl<false>&
+  buffer::ptr::iterator_impl<false>::operator +=(size_t len);
+  template buffer::ptr::iterator_impl<true>&
+  buffer::ptr::iterator_impl<true>::operator +=(size_t len);
 
   // -- buffer::list::iterator --
   /*
@@ -2177,11 +2177,6 @@ std::ostream& buffer::operator<<(std::ostream& out, const buffer::list& bl) {
   return out;
 }
 
-std::ostream& buffer::operator<<(std::ostream& out, const buffer::error& e)
-{
-  return out << e.what();
-}
-
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_malloc, buffer_raw_malloc,
 			      buffer_meta);
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_posix_aligned,
@@ -2192,3 +2187,93 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_claimed_char, buffer_raw_claimed_char,
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_static, buffer_raw_static,
 			      buffer_meta);
 
+
+namespace ceph::buffer {
+inline namespace v15_2_0 {
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnon-virtual-dtor"
+class buffer_error_category : public ceph::converting_category {
+public:
+  buffer_error_category(){}
+  const char* name() const noexcept override;
+  const char* message(int ev, char*, std::size_t) const noexcept override;
+  std::string message(int ev) const override;
+  boost::system::error_condition default_error_condition(int ev) const noexcept
+    override;
+  using ceph::converting_category::equivalent;
+  bool equivalent(int ev, const boost::system::error_condition& c) const
+    noexcept override;
+  int from_code(int ev) const noexcept override;
+};
+#pragma GCC diagnostic pop
+#pragma clang diagnostic pop
+
+const char* buffer_error_category::name() const noexcept {
+  return "buffer";
+}
+
+const char*
+buffer_error_category::message(int ev, char*, std::size_t) const noexcept {
+  using ceph::buffer::errc;
+  if (ev == 0)
+    return "No error";
+
+  switch (static_cast<errc>(ev)) {
+  case errc::bad_alloc:
+    return "Bad allocation";
+
+  case errc::end_of_buffer:
+    return "End of buffer";
+
+  case errc::malformed_input:
+    return "Malformed input";
+  }
+
+  return "Unknown error";
+}
+
+std::string buffer_error_category::message(int ev) const {
+  return message(ev, nullptr, 0);
+}
+
+boost::system::error_condition
+buffer_error_category::default_error_condition(int ev)const noexcept {
+  using ceph::buffer::errc;
+  switch (static_cast<errc>(ev)) {
+  case errc::bad_alloc:
+    return boost::system::errc::not_enough_memory;
+  case errc::end_of_buffer:
+  case errc::malformed_input:
+    return boost::system::errc::io_error;
+  }
+  return { ev, *this };
+}
+
+bool buffer_error_category::equivalent(int ev, const boost::system::error_condition& c) const noexcept {
+  return default_error_condition(ev) == c;
+}
+
+int buffer_error_category::from_code(int ev) const noexcept {
+  using ceph::buffer::errc;
+  switch (static_cast<errc>(ev)) {
+  case errc::bad_alloc:
+    return -ENOMEM;
+
+  case errc::end_of_buffer:
+    return -EIO;
+
+  case errc::malformed_input:
+    return -EIO;
+  }
+  return -EDOM;
+}
+
+const boost::system::error_category& buffer_category() noexcept {
+  static const buffer_error_category c;
+  return c;
+}
+}
+}
