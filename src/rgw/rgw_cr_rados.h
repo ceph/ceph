@@ -122,7 +122,6 @@ public:
 
 class RGWAsyncPutSystemObj : public RGWAsyncRadosRequest {
   RGWRados *store;
-  RGWObjVersionTracker *objv_tracker;
   rgw_raw_obj obj;
   bool exclusive;
   bufferlist bl;
@@ -131,8 +130,10 @@ protected:
   int _send_request() override;
 public:
   RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
-                       RGWObjVersionTracker *_objv_tracker, rgw_raw_obj& _obj,
-                       bool _exclusive, bufferlist& _bl);
+                       RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
+                       bool _exclusive, bufferlist _bl);
+
+  RGWObjVersionTracker objv_tracker;
 };
 
 class RGWAsyncPutSystemObjAttrs : public RGWAsyncRadosRequest {
@@ -290,10 +291,8 @@ class RGWSimpleRadosWriteCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
   bufferlist bl;
-
   rgw_raw_obj obj;
   RGWObjVersionTracker *objv_tracker;
-
   RGWAsyncPutSystemObj *req{nullptr};
 
 public:
@@ -318,12 +317,15 @@ public:
 
   int send_request() override {
     req = new RGWAsyncPutSystemObj(this, stack->create_completion_notifier(),
-			           store, objv_tracker, obj, false, bl);
+			           store, objv_tracker, obj, false, std::move(bl));
     async_rados->queue(req);
     return 0;
   }
 
   int request_complete() override {
+    if (objv_tracker) { // copy the updated version
+      *objv_tracker = req->objv_tracker;
+    }
     return req->get_ret_status();
   }
 };
