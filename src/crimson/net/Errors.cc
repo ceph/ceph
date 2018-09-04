@@ -25,6 +25,8 @@ const std::error_category& net_category()
 
     std::string message(int ev) const override {
       switch (static_cast<error>(ev)) {
+        case error::success:
+          return "success";
         case error::bad_connect_banner:
           return "bad connect banner";
         case error::bad_peer_address:
@@ -61,6 +63,9 @@ const std::error_category& net_category()
     }
 
     bool equivalent(int code, const std::error_condition& cond) const noexcept override {
+      if (error_category::equivalent(code, cond)) {
+        return true;
+      }
       switch (static_cast<error>(code)) {
         case error::connection_aborted:
           return cond == std::errc::connection_aborted
@@ -77,6 +82,9 @@ const std::error_category& net_category()
     }
 
     bool equivalent(const std::error_code& code, int cond) const noexcept override {
+      if (error_category::equivalent(code, cond)) {
+        return true;
+      }
       switch (static_cast<error>(cond)) {
         case error::connection_aborted:
           return code == std::errc::connection_aborted
