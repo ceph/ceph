@@ -654,7 +654,7 @@ Usage::
 
 	ceph osd crush remove <name> {<ancestor>}
 
-Subcommand ``rename-bucket`` renames buchket <srcname> to <stname>
+Subcommand ``rename-bucket`` renames buchket <srcname> to <dstname>
 
 Usage::
 
