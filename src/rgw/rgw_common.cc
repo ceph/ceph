@@ -95,6 +95,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_BUCKET_POLICY, {404, "NoSuchBucketPolicy"}},
     { ERR_NO_SUCH_USER, {404, "NoSuchUser"}},
     { ERR_NO_ROLE_FOUND, {404, "NoSuchEntity"}},
+    { ERR_NO_CORS_FOUND, {404, "NoSuchCORSConfiguration"}},
     { ERR_NO_SUCH_SUBUSER, {404, "NoSuchSubUser"}},
     { ERR_METHOD_NOT_ALLOWED, {405, "MethodNotAllowed" }},
     { ETIMEDOUT, {408, "RequestTimeout" }},
