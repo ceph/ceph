@@ -120,6 +120,11 @@ struct cls_rbd_snap {
     return parent.exists();
   }
 
+  bool migrate_parent_format(uint64_t features) const {
+    return (((features & CEPH_FEATURE_SERVER_NAUTILUS) != 0) &&
+            (parent.exists()));
+  }
+
   void encode(bufferlist& bl, uint64_t features) const {
     ENCODE_START(8, 1, bl);
     encode(id, bl);
