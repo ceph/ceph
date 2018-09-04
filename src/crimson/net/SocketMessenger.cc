@@ -45,7 +45,7 @@ seastar::future<> SocketMessenger::dispatch(ConnectionRef conn)
   std::ignore = i;
   ceph_assert(added);
 
-  return seastar::repeat([=] {
+  return seastar::keep_doing([=] {
       return conn->read_message()
         .then([=] (MessageRef msg) {
           if (msg) {
@@ -53,8 +53,6 @@ seastar::future<> SocketMessenger::dispatch(ConnectionRef conn)
 	  } else {
 	    return seastar::now();
 	  }
-        }).then([] {
-          return seastar::stop_iteration::no;
         });
     }).handle_exception_type([=] (const std::system_error& e) {
       if (e.code() == error::connection_aborted ||
@@ -96,7 +94,7 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
 
   // start listening if bind() was called
   if (listener) {
-    seastar::repeat([this] {
+    seastar::keep_doing([this] {
         return listener->accept()
           .then([this] (seastar::connected_socket socket,
                         seastar::socket_address paddr) {
@@ -104,7 +102,6 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
             accept(std::move(socket), paddr)
               .handle_exception([] (std::exception_ptr eptr) {});
             // don't wait before accepting another
-            return seastar::stop_iteration::no;
           });
       }).handle_exception_type([this] (const std::system_error& e) {
         // stop gracefully on connection_aborted
