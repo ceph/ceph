@@ -2155,7 +2155,7 @@ TEST(LibCephFS, OperationsOnDotDot) {
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
-  char c_dir[1024], c_dir_dot[1024], c_dir_dotdot[1024];
+  char c_dir[512], c_dir_dot[1024], c_dir_dotdot[1024];
   char c_non_existent_dir[1024], c_non_existent_dirs[1024];
   char c_temp[1024];
 
