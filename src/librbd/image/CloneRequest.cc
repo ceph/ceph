@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 #include "librbd/ImageState.h"
+#include "librbd/image/AttachParentRequest.h"
 #include "librbd/image/CloneRequest.h"
 #include "librbd/image/CreateRequest.h"
 #include "librbd/image/RemoveRequest.h"
@@ -316,30 +317,27 @@ void CloneRequest<I>::handle_open_child(int r) {
     return;
   }
 
-  set_parent();
+  attach_parent();
 }
 
 template <typename I>
-void CloneRequest<I>::set_parent() {
+void CloneRequest<I>::attach_parent() {
   ldout(m_cct, 20) << dendl;
 
-  librados::ObjectWriteOperation op;
-  librbd::cls_client::set_parent(&op, m_pspec, m_size);
-
-  using klass = CloneRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_set_parent>(this);
-  int r = m_imctx->md_ctx.aio_operate(m_imctx->header_oid, comp, &op);
-  ceph_assert(r == 0);
-  comp->release();
+  auto ctx = create_context_callback<
+    CloneRequest<I>, &CloneRequest<I>::handle_attach_parent>(this);
+  auto req = AttachParentRequest<I>::create(
+    *m_imctx, {m_pspec.pool_id, "", m_pspec.image_id, m_pspec.snap_id},
+    m_size, ctx);
+  req->send();
 }
 
 template <typename I>
-void CloneRequest<I>::handle_set_parent(int r) {
+void CloneRequest<I>::handle_attach_parent(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(m_cct) << "couldn't set parent: " << cpp_strerror(r) << dendl;
+    lderr(m_cct) << "failed to attach parent: " << cpp_strerror(r) << dendl;
     m_r_saved = r;
     close_child();
     return;

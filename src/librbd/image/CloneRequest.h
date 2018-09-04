@@ -149,8 +149,8 @@ private:
   void open_child();
   void handle_open_child(int r);
 
-  void set_parent();
-  void handle_set_parent(int r);
+  void attach_parent();
+  void handle_attach_parent(int r);
 
   void v2_set_op_feature();
   void handle_v2_set_op_feature(int r);
