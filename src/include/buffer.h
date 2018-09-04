@@ -54,6 +54,7 @@
 #include "crc32c.h"
 #include "buffer_fwd.h"
 
+
 #ifdef __CEPH__
 # include "include/ceph_assert.h"
 #else
@@ -101,32 +102,12 @@ struct unique_leakable_ptr : public std::unique_ptr<T, ceph::nop_delete<T>> {
 namespace buffer CEPH_BUFFER_API {
 inline namespace v15_2_0 {
 
-  /*
-   * exceptions
-   */
-
-  struct error : public std::exception{
-    const char *what() const throw () override;
-  };
-  struct bad_alloc : public error {
-    const char *what() const throw () override;
-  };
-  struct end_of_buffer : public error {
-    const char *what() const throw () override;
-  };
-  struct malformed_input : public error {
-    explicit malformed_input(const std::string& w) {
-      snprintf(buf, sizeof(buf), "buffer::malformed_input: %s", w.c_str());
-    }
-    const char *what() const throw () override;
-  private:
-    char buf[256];
-  };
-  struct error_code : public malformed_input {
-    explicit error_code(int error);
-    int code;
-  };
-
+/// Actual definitions in common/error_code.h
+struct error;
+struct bad_alloc;
+struct end_of_buffer;
+struct malformed_input;
+struct error_code;
 
   /// count of cached crc hits (matching input)
   int get_cached_crc();
@@ -227,12 +208,7 @@ inline namespace v15_2_0 {
 	}
       }
 
-      iterator_impl& operator+=(size_t len) {
-	pos += len;
-	if (pos > end_ptr)
-	  throw end_of_buffer();
-        return *this;
-      }
+      iterator_impl& operator+=(size_t len);
 
       const char *get_pos() {
 	return pos;
@@ -1271,8 +1247,6 @@ std::ostream& operator<<(std::ostream& out, const buffer::raw &r);
 
 std::ostream& operator<<(std::ostream& out, const buffer::list& bl);
 
-std::ostream& operator<<(std::ostream& out, const buffer::error& e);
-
 inline bufferhash& operator<<(bufferhash& l, const bufferlist &r) {
   l.update(r);
   return l;
@@ -1281,5 +1255,6 @@ inline bufferhash& operator<<(bufferhash& l, const bufferlist &r) {
 } // namespace buffer
 
 } // namespace ceph
+
 
 #endif
