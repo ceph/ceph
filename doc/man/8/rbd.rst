@@ -347,7 +347,7 @@ Commands
   Flag image journal client as disconnected.
 
 :command:`journal export` [--verbose] [--no-error] *src-journal-spec* *path-name*
-  Export image journal to path (use - for stdout). It can be make a bakcup
+  Export image journal to path (use - for stdout). It can be make a backup
   of the image journal especially before attempting dangerous operations.
 
   Note that this command may not always work if the journal is badly corrupted.
