@@ -334,6 +334,27 @@ bool HealthMonitor::check_leader_health()
     }
   }
 
+  // MON_NUM_EVEN
+  {
+    int num_mons = mon->monmap->size();
+    if (!(num_mons & 1)) {
+      ostringstream ss;
+      ss << "Mon map contains an even number of mons (" << num_mons << ")";
+      auto& d = next.add("MON_NUM_EVEN", HEALTH_WARN, ss.str());
+      ostringstream detail;
+      detail << "Ceph requires a majority of the monitors to be online to function"
+             << ", the current configuration can tolerate ";
+      if (num_mons == 2) {
+        detail << "no monitor failures";
+      } else if (num_mons == 4) {
+        detail << "only 1 monitor failure";
+      } else {
+        detail << "only " << (num_mons / 2 - 1) << " monitor failures";
+      }
+      d.detail.push_back(detail.str());
+    }
+  }
+
   // MON_CLOCK_SKEW
   if (!mon->timecheck_skews.empty()) {
     list<string> warns;
