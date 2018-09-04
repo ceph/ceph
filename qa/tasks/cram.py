@@ -62,11 +62,9 @@ def task(ctx, config):
     if refspec is None:
         refspec = 'HEAD'
 
-    # hack: the git_url is always ceph-ci or ceph
-    git_url = teuth_config.get_ceph_git_url()
-    repo_name = 'ceph.git'
-    if git_url.count('ceph-ci'):
-        repo_name = 'ceph-ci.git'
+    git_url = teuth_config.get_ceph_qa_suite_git_url()
+    if git_url.endswith('.git'):
+        git_url = git_url[:-4]
 
     try:
         for client, tests in clients.iteritems():
@@ -83,7 +81,7 @@ def task(ctx, config):
                     ],
                 )
             for test in tests:
-                url = test.format(repo=repo_name, branch=refspec)
+                url = test.format(gh_url=git_url, branch=refspec)
                 log.info('fetching test %s for %s', url, client)
                 assert test.endswith('.t'), 'tests must end in .t'
                 remote.run(
