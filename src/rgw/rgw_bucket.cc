@@ -3576,7 +3576,8 @@ int RGWBucketCtl::chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_in
           decode(policy, bl);
           owner = policy.get_owner();
         } catch (buffer::error& err) {
-          ldout(store->ctx(), 0) << "ERROR: decode policy failed" << err << dendl;
+          ldout(store->ctx(), 0) << "ERROR: decode policy failed" << err.what()
+				 << dendl;
           return -EIO;
         }
 
