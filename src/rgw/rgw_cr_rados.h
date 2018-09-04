@@ -102,21 +102,22 @@ public:
 
 class RGWAsyncGetSystemObj : public RGWAsyncRadosRequest {
   RGWRados *store;
-  RGWObjectCtx *obj_ctx;
+  RGWObjectCtx obj_ctx;
   RGWRados::SystemObject::Read::GetObjState read_state;
-  RGWObjVersionTracker *objv_tracker;
+  RGWObjVersionTracker objv_tracker;
   rgw_raw_obj obj;
-  bufferlist *pbl;
-  map<string, bufferlist> *pattrs;
   off_t ofs;
   off_t end;
+  const bool want_attrs;
 protected:
   int _send_request() override;
 public:
-  RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store, RGWObjectCtx *_obj_ctx,
+  RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-                       bufferlist *_pbl, off_t _ofs, off_t _end);
-  void set_read_attrs(map<string, bufferlist> *_pattrs) { pattrs = _pattrs; }
+                       off_t _ofs, off_t _end, bool want_attrs);
+
+  bufferlist bl;
+  map<string, bufferlist> attrs;
 };
 
 class RGWAsyncPutSystemObj : public RGWAsyncRadosRequest {
@@ -181,18 +182,11 @@ template <class T>
 class RGWSimpleRadosReadCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
-  RGWObjectCtx obj_ctx;
-  bufferlist bl;
-
   rgw_raw_obj obj;
-
-  map<string, bufferlist> *pattrs{nullptr};
-
   T *result;
   /// on ENOENT, call handle_data() with an empty object instead of failing
   const bool empty_on_enoent;
   RGWObjVersionTracker *objv_tracker;
-
   RGWAsyncGetSystemObj *req{nullptr};
 
 public:
@@ -201,7 +195,7 @@ public:
 		      T *_result, bool empty_on_enoent = true,
 		      RGWObjVersionTracker *objv_tracker = nullptr)
     : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
-      obj_ctx(store), obj(_obj), result(_result),
+      obj(_obj), result(_result),
       empty_on_enoent(empty_on_enoent), objv_tracker(objv_tracker) {}
   ~RGWSimpleRadosReadCR() override {
     request_cleanup();
@@ -226,12 +220,7 @@ template <class T>
 int RGWSimpleRadosReadCR<T>::send_request()
 {
   req = new RGWAsyncGetSystemObj(this, stack->create_completion_notifier(),
-			         store, &obj_ctx, objv_tracker,
-				 obj,
-				 &bl, 0, -1);
-  if (pattrs) {
-    req->set_read_attrs(pattrs);
-  }
+			         store, objv_tracker, obj, 0, -1, false);
   async_rados->queue(req);
   return 0;
 }
@@ -248,7 +237,7 @@ int RGWSimpleRadosReadCR<T>::request_complete()
       return ret;
     }
     try {
-      bufferlist::iterator iter = bl.begin();
+      bufferlist::iterator iter = req->bl.begin();
       if (iter.end()) {
         // allow successful reads with empty buffers. ReadSyncStatus coroutines
         // depend on this to be able to read without locking, because the
@@ -269,13 +258,8 @@ int RGWSimpleRadosReadCR<T>::request_complete()
 class RGWSimpleRadosReadAttrsCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
-  RGWObjectCtx obj_ctx;
-  bufferlist bl;
-
   rgw_raw_obj obj;
-
   map<string, bufferlist> *pattrs;
-
   RGWAsyncGetSystemObj *req;
 
 public:
@@ -283,7 +267,6 @@ public:
 		      const rgw_raw_obj& _obj,
 		      map<string, bufferlist> *_pattrs) : RGWSimpleCoroutine(_store->ctx()),
                                                 async_rados(_async_rados), store(_store),
-                                                obj_ctx(store),
 						obj(_obj),
                                                 pattrs(_pattrs),
                                                 req(NULL) { }
