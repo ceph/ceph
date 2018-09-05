@@ -1165,14 +1165,14 @@ void *RGWHTTPManager::reqs_thread_entry()
 
   RWLock::WLocker rl(reqs_lock);
   for (auto r : unregistered_reqs) {
-    _finish_request(r, -ECANCELED);
+    _unlink_request(r);
   }
 
   unregistered_reqs.clear();
 
   auto all_reqs = std::move(reqs);
   for (auto iter : all_reqs) {
-    _finish_request(iter.second, -ECANCELED);
+    _unlink_request(iter.second);
   }
 
   reqs.clear();
