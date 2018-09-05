@@ -174,18 +174,19 @@ describe('CdValidators', () => {
 
   describe('match', () => {
     let form: FormGroup;
+    let x: FormControl;
+    let y: FormControl;
 
     beforeEach(() => {
+      x = new FormControl('aaa');
+      y = new FormControl('aaa');
       form = new FormGroup({
-        x: new FormControl(),
-        y: new FormControl()
+        x: x,
+        y: y
       });
     });
 
     it('should error when values are different', () => {
-      const x = form.get('x');
-      const y = form.get('y');
-      x.setValue('aaa');
       y.setValue('aab');
       CdValidators.match('x', 'y')(form);
       expect(x.hasError('match')).toBeFalsy();
@@ -193,13 +194,26 @@ describe('CdValidators', () => {
     });
 
     it('should not error when values are equal', () => {
-      const x = form.get('x');
-      const y = form.get('y');
-      x.setValue('aaa');
-      y.setValue('aaa');
       CdValidators.match('x', 'y')(form);
       expect(x.hasError('match')).toBeFalsy();
       expect(y.hasError('match')).toBeFalsy();
+    });
+
+    it('should unset error when values are equal', () => {
+      y.setErrors({ match: true });
+      CdValidators.match('x', 'y')(form);
+      expect(x.hasError('match')).toBeFalsy();
+      expect(y.hasError('match')).toBeFalsy();
+      expect(y.valid).toBeTruthy();
+    });
+
+    it('should keep other existing errors', () => {
+      y.setErrors({ match: true, notUnique: true });
+      CdValidators.match('x', 'y')(form);
+      expect(x.hasError('match')).toBeFalsy();
+      expect(y.hasError('match')).toBeFalsy();
+      expect(y.hasError('notUnique')).toBeTruthy();
+      expect(y.valid).toBeFalsy();
     });
   });
 
