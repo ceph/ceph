@@ -12,6 +12,8 @@ class RGWSI_Zone;
 class RGWSI_SysObj;
 class RGWSysObjectCtx;
 
+struct rgw_cache_entry_info;
+
 class RGWS_SysObj : public RGWService
 {
 public:
@@ -59,6 +61,7 @@ public:
       boost::optional<obj_version> refresh_version{boost::none};
       ceph::real_time *lastmod{nullptr};
       uint64_t *obj_size{nullptr};
+      rgw_cache_entry_info *cache_info{nullptr};
 
       ROp& set_last_mod(ceph::real_time *_lastmod) {
         lastmod = _lastmod;
@@ -77,6 +80,11 @@ public:
 
       ROp& set_refresh_version(const obj_version& rf) {
         refresh_version = rf;
+        return *this;
+      }
+
+      ROp& set_cache_info(rgw_cache_entry_info *ci) {
+        cache_info = ci;
         return *this;
       }
 

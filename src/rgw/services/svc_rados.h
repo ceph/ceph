@@ -92,6 +92,10 @@ public:
     int operate(librados::ObjectReadOperation *op, bufferlist *pbl);
     int aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op);
 
+    int watch(uint64_t *handle, librados::WatchCtx2 *ctx);
+    int aio_watch(librados::AioCompletion *c, uint64_t *handle, librados::WatchCtx2 *ctx);
+    int unwatch(uint64_t handle);
+
     uint64_t get_last_version();
   };
 

@@ -68,6 +68,7 @@ int RGWSI_SysObj::Obj::ROp::read(int64_t ofs, int64_t end, bufferlist *bl)
                    objv_tracker,
                    obj, bl, ofs, end,
                    attrs,
+                   cache_info,
                    refresh_version);
 }
 
@@ -111,7 +112,7 @@ int RGWSI_SysObj::Obj::WOp::write_attrs()
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
 
-  return svc->set_attrs(obj, attrs, objv_tracker);
+  return svc->set_attrs(obj, attrs, nullptr, objv_tracker);
 }
 
 int RGWSI_SysObj::Pool::Op::list_prefixed_objs(const string& prefix, list<string> *result)

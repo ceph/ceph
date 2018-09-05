@@ -4,12 +4,16 @@
 
 
 #include "rgw/rgw_service.h"
+#include "rgw/rgw_cache.h"
 
-#include "svc_rados.h"
+#include "svc_sys_obj_core.h"
 
 
 class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 {
+  ObjectCache cache;
+
+  void normalize_pool_and_obj(rgw_pool& src_pool, const string& src_obj, rgw_pool& dst_pool, string& dst_obj);
 protected:
   std::map<std::string, RGWServiceInstance::dependency> get_deps() override;
   int load(const std::string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs) override;
@@ -24,12 +28,14 @@ protected:
            rgw_raw_obj& obj,
            bufferlist *bl, off_t ofs, off_t end,
            map<string, bufferlist> *attrs,
+           rgw_cache_entry_info *cache_info,
            boost::optional<obj_version>) override;
 
   int get_attr(rgw_raw_obj& obj, const char *name, bufferlist *dest) override;
 
   int set_attrs(rgw_raw_obj& obj, 
                 map<string, bufferlist>& attrs,
+                map<string, bufferlist> *rmattrs,
                 RGWObjVersionTracker *objv_tracker);
 
   int remove(RGWSysObjectCtxBase& obj_ctx,
@@ -57,9 +63,9 @@ protected:
                bufferlist& bl);
 
 public:
-  RGWSI_SysObj_Cache(RGWService *svc, CephContext *cct): RGW_SysObj_Core(svc, cct) {}
+  RGWSI_SysObj_Cache(RGWService *svc, CephContext *cct) : RGWSI_SysObj_Core(svc, cct) {}
 
-  int call_list(const std::optional<std::string>& filter, Formatter* f);
+  void call_list(const std::optional<std::string>& filter, Formatter* f);
   int call_inspect(const std::string& target, Formatter* f);
   int call_erase(const std::string& target);
   int call_zap();
