@@ -65,7 +65,7 @@
     zonegroup add              add a zone to a zonegroup
     zonegroup create           create a new zone group info
     zonegroup default          set default zone group
-    zonegroup rm               remove a zone group info
+    zonegroup delete           remove a zone group info
     zonegroup get              show zone group info
     zonegroup modify           modify an existing zonegroup
     zonegroup set              set zone group info (requires infile)
