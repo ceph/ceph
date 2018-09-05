@@ -12,7 +12,7 @@ User Management
 
 Ceph Object Storage user management refers to users of the Ceph Object Storage
 service (i.e., not the Ceph Object Gateway as a user of the Ceph Storage
-Cluster). You must create a user, access key and secret to enable end users to
+Cluster). You must create a user, access key and secret key to enable end users to
 interact with Ceph Object Gateway services.
 
 There are two user types: 
@@ -32,7 +32,7 @@ There are two user types:
 
 You can create, modify, view, suspend and remove users and subusers. In addition
 to user and subuser IDs, you may add a display name and an email address for a
-user.  You can specify a key and secret, or generate a key and secret
+user.  You can specify a access key and secret key, or generate a access key and secret key
 automatically. When generating or specifying keys, note that user IDs correspond
 to an S3 key type and subuser IDs correspond to a swift key type. Swift keys
 also have access levels of ``read``, ``write``, ``readwrite`` and ``full``.
