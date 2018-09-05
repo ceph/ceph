@@ -668,7 +668,7 @@ get_migration_state() {
 test_migration() {
     echo "testing migration..."
     remove_images
-    rados mkpool rbd2
+    ceph osd pool create rbd2 8
     rbd pool init rbd2
 
     # Convert to new format
