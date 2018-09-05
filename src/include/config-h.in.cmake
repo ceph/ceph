@@ -336,6 +336,9 @@
 /* Defined if boost::context is available */
 #cmakedefine HAVE_BOOST_CONTEXT
 
+/* Defined if libradosstriper is enabled: */
+#cmakedefine WITH_LIBRADOSSTRIPER
+
 /* Defined if OpenSSL is available for the rgw beast frontend */
 #cmakedefine WITH_RADOSGW_BEAST_OPENSSL
 
