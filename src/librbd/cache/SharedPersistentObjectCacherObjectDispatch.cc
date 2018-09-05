@@ -33,6 +33,7 @@ SharedPersistentObjectCacherObjectDispatch<I>::~SharedPersistentObjectCacherObje
     delete m_cache_client;
 }
 
+// TODO if connect fails, init will return error to high layer.
 template <typename I>
 void SharedPersistentObjectCacherObjectDispatch<I>::init() {
   auto cct = m_image_ctx->cct;
@@ -44,11 +45,11 @@ void SharedPersistentObjectCacherObjectDispatch<I>::init() {
     return;
   }
 
-  ldout(cct, 20) << "parent image: setup SRO cache client = " << dendl;
+  ldout(cct, 5) << "parent image: setup SRO cache client = " << dendl;
 
-  std::string controller_path = "/tmp/rbd_shared_readonly_cache_demo";
-  m_cache_client = new rbd::cache::CacheClient(io_service, controller_path.c_str(),
-    ([&](std::string s){client_handle_request(s);}));
+  std::string controller_path = ((CephContext*)cct)->_conf.get_val<std::string>("rbd_shared_cache_sock");
+  m_cache_client = new rbd::cache::CacheClient(controller_path.c_str(),
+    ([&](std::string s){client_handle_request(s);}), m_image_ctx->cct);
 
   int ret = m_cache_client->connect();
   if (ret < 0) {
@@ -78,10 +79,21 @@ bool SharedPersistentObjectCacherObjectDispatch<I>::read(
     io::ExtentMap* extent_map, int* object_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
+
   // IO chained in reverse order
+
+  // Now, policy is : when session have any error, later all read will dispatched to  rados layer.
+  if(!m_cache_client->is_session_work()) {
+    *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
+    on_dispatched->complete(0);
+    return true;
+    // TODO : domain socket have error, all read operation will dispatched to rados layer.
+  }
+
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
                  << object_len << dendl;
+
 
   on_dispatched = util::create_async_context_callback(*m_image_ctx,
                                                       on_dispatched);
@@ -89,7 +101,7 @@ bool SharedPersistentObjectCacherObjectDispatch<I>::read(
     handle_read_cache(cache, oid, object_off, object_len, read_data, dispatch_result, on_dispatched);
   });
 
-  if (m_cache_client && m_cache_client->connected && m_object_store) {
+  if (m_cache_client && m_cache_client->is_session_work() && m_object_store) {
     m_cache_client->lookup_object(m_image_ctx->data_ctx.get_pool_name(),
       m_image_ctx->id, oid, ctx);
   }
@@ -109,6 +121,7 @@ int SharedPersistentObjectCacherObjectDispatch<I>::handle_read_cache(
   // try to read from parent image
   if (cache) {
     int r = m_object_store->read_object(oid, read_data, object_off, object_len, on_dispatched);
+    //int r = object_len;
     if (r != 0) {
       *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
       //TODO(): complete in syncfile
@@ -123,7 +136,6 @@ int SharedPersistentObjectCacherObjectDispatch<I>::handle_read_cache(
     return false;
   }
 }
-
 template <typename I>
 void SharedPersistentObjectCacherObjectDispatch<I>::client_handle_request(std::string msg) {
   auto cct = m_image_ctx->cct;
@@ -133,7 +145,7 @@ void SharedPersistentObjectCacherObjectDispatch<I>::client_handle_request(std::s
 
   switch (io_ctx->type) {
     case rbd::cache::RBDSC_REGISTER_REPLY: {
-      // open cache handler for volume        
+      // open cache handler for volume
       ldout(cct, 20) << "SRO cache client open cache handler" << dendl;
       m_object_store = new SharedPersistentObjectCacher<I>(m_image_ctx, m_image_ctx->shared_cache_path);
 
@@ -153,7 +165,7 @@ void SharedPersistentObjectCacherObjectDispatch<I>::client_handle_request(std::s
     }
     default: ldout(cct, 20) << "nothing" << io_ctx->type <<dendl;
       break;
-    
+
   }
 }
 

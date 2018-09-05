@@ -55,6 +55,8 @@ struct rbdsc_req_type_t {
   }
 };
 
+static const int RBDSC_MSG_LEN = sizeof(rbdsc_req_type_t);
+
 } // namespace cache
 } // namespace rbd
 #endif

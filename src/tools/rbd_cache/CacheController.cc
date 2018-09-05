@@ -65,12 +65,12 @@ void CacheController::handle_signal(int signum){}
 void CacheController::run() {
   try {
     //TODO(): use new socket path
-    std::string controller_path = "/tmp/rbd_shared_readonly_cache_demo";
+    std::string controller_path = m_cct->_conf.get_val<std::string>("rbd_shared_cache_sock");
     std::remove(controller_path.c_str()); 
     
-    m_cache_server = new CacheServer(io_service, controller_path,
-      ([&](uint64_t p, std::string s){handle_request(p, s);}));
-    io_service.run();
+    m_cache_server = new CacheServer(controller_path,
+      ([&](uint64_t p, std::string s){handle_request(p, s);}), m_cct);
+    m_cache_server->run();
   } catch (std::exception& e) {
     std::cerr << "Exception: " << e.what() << "\n";
   }
@@ -105,7 +105,8 @@ void CacheController::handle_request(uint64_t session_id, std::string msg){
 
       break;
     }
-    
+    std::cout<<"can't recongize request"<<std::endl;
+    assert(0); // TODO replace it.
   }
 }
 

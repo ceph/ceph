@@ -41,7 +41,6 @@ class CacheController {
   void handle_request(uint64_t sesstion_id, std::string msg);
 
  private:
-  boost::asio::io_service io_service;
   CacheServer *m_cache_server;
   std::vector<const char*> m_args;
   CephContext *m_cct;

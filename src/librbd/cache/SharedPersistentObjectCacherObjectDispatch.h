@@ -118,12 +118,11 @@ private:
       uint64_t object_len, ceph::bufferlist* read_data,
       io::DispatchResult* dispatch_result,
       Context* on_dispatched);
+  void client_handle_request(std::string msg);
 
   ImageCtxT* m_image_ctx;
 
-  void client_handle_request(std::string msg);
   rbd::cache::CacheClient *m_cache_client = nullptr;
-  boost::asio::io_service io_service;
 };
 
 } // namespace cache

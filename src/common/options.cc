@@ -6523,6 +6523,10 @@ static std::vector<Option> get_rbd_options() {
     .set_default("/tmp")
     .set_description("shared ssd caching data dir"),
 
+    Option("rbd_shared_cache_sock", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/tmp/rbd_shared_ro_cache_sock")
+    .set_description("shared ssd caching domain socket"),
+
     Option("rbd_shared_cache_entries", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(4096)
     .set_description("shared ssd caching data entries"),
