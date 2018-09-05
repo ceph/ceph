@@ -749,7 +749,7 @@ test_migration() {
     done
 
     remove_images
-    rados rmpool rbd2 rbd2 --yes-i-really-really-mean-it
+    ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
 }
 
 test_pool_image_args
