@@ -108,16 +108,30 @@ export class CdValidators {
   }
 
   /**
-   * Validate if control1 and control2 have the same value.
-   * Error will be added to control2.
-   *
-   * @param {string} control1
-   * @param {string} control2
+   * Validator that requires that both specified controls have the same value.
+   * Error will be added to the `path2` control.
+   * @param {string} path1 A dot-delimited string that define the path to the control.
+   * @param {string} path2 A dot-delimited string that define the path to the control.
+   * @return {ValidatorFn} Returns a validator function that always returns `null`.
+   *   If the validation fails an error map with the `match` property will be set
+   *   on the `path2` control.
    */
-  static match(control1: string, control2: string): ValidatorFn {
+  static match(path1: string, path2: string): ValidatorFn {
     return (control: AbstractControl): { [key: string]: any } => {
-      if (control.get(control1).value !== control.get(control2).value) {
-        control.get(control2).setErrors({ ['match']: true });
+      const ctrl1 = control.get(path1);
+      const ctrl2 = control.get(path2);
+      if (ctrl1.value !== ctrl2.value) {
+        ctrl2.setErrors({ match: true });
+      } else {
+        const hasError = ctrl2.hasError('match');
+        if (hasError) {
+          // Remove the 'match' error. If no more errors exists, then set
+          // the error value to 'null', otherwise the field is still marked
+          // as invalid.
+          const errors = ctrl2.errors;
+          _.unset(errors, 'match');
+          ctrl2.setErrors(_.isEmpty(_.keys(errors)) ? null : errors);
+        }
       }
       return null;
     };
