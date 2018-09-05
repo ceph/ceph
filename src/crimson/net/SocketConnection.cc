@@ -27,11 +27,19 @@
 #include "auth/AuthSessionHandler.h"
 #include "msg/Message.h"
 
+#include "crimson/common/log.h"
+
 using namespace ceph::net;
 
 template <typename T>
 seastar::net::packet make_static_packet(const T& value) {
     return { reinterpret_cast<const char*>(&value), sizeof(value) };
+}
+
+namespace {
+  seastar::logger& logger() {
+    return ceph::get_logger(ceph_subsys_ms);
+  }
 }
 
 SocketConnection::SocketConnection(Messenger *messenger,
@@ -663,6 +671,7 @@ seastar::future<> SocketConnection::handle_connect_reply(msgr_tag_t tag)
     return fault();
   case CEPH_MSGR_TAG_BADAUTHORIZER:
     if (h.got_bad_auth) {
+      logger().error("{} got bad authorizer", __func__);
       throw std::system_error(make_error_code(error::negotiation_failure));
     }
     h.got_bad_auth = true;
@@ -724,6 +733,7 @@ seastar::future<> SocketConnection::handle_connect_reply(msgr_tag_t tag)
     return seastar::now();
   } else {
     // unknown tag
+    logger().error("{} got unknown tag", __func__, int(tag));
     throw std::system_error(make_error_code(error::negotiation_failure));
   }
 }
@@ -789,6 +799,7 @@ seastar::future<> SocketConnection::connect(entity_type_t peer_type,
       if (h.authorizer) {
         auto reply = bl.cbegin();
         if (!h.authorizer->verify_reply(reply)) {
+          logger().error("{} authorizer failed to verify reply", __func__);
           throw std::system_error(make_error_code(error::negotiation_failure));
         }
       }
