@@ -42,7 +42,7 @@ Usage :
         put [options] <source_path> [target_path]
 
 * source_path - local file/directory path to be copied to cephfs.
-    * if `.` copies all the file/directories in the local workind directory.
+    * if `.` copies all the file/directories in the local working directory.
     * if `-`  Reads the input from stdin. 
 
 * target_path - remote directory path where the files/directories are to be copied to.
@@ -62,7 +62,7 @@ Usage :
     get [options] <source_path> [target_path]
 
 * source_path - remote file/directory path which is to be copied to local file system.
-    * if `.` copies all the file/directories in the remote workind directory.
+    * if `.` copies all the file/directories in the remote working directory.
                     
 * target_path - local directory path where the files/directories are to be copied to.
     * if `.` files/directories are copied to the local working directory. 
@@ -236,7 +236,7 @@ Usage:
     pyscript <script_path> [script_arguments]
 
 * Console commands can be executed inside this script with cmd ("your command")
-  However, you cannot run nested "py" or "pyscript" commands from withinthis script
+  However, you cannot run nested "py" or "pyscript" commands from within this script
   Paths or arguments that contain spaces must be enclosed in quotes
 
 py
