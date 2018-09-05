@@ -2372,13 +2372,13 @@ int RGWPutCORS_ObjStore_S3::get_params()
   }
 
   if (!data || !parser.parse(data, len, 1)) {
-    return -EINVAL;
+    return -ERR_MALFORMED_XML;
   }
   cors_config =
     static_cast<RGWCORSConfiguration_S3 *>(parser.find_first(
 					     "CORSConfiguration"));
   if (!cors_config) {
-    return -EINVAL;
+    return -ERR_MALFORMED_XML;
   }
 
 #define CORS_RULES_MAX_NUM      100
