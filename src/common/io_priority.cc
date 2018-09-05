@@ -32,10 +32,10 @@ pid_t ceph_gettid(void)
 #endif
 }
 
-int ceph_ioprio_set(int whence, int who, int ioprio)
+int ceph_ioprio_set(int whence, int ioprio)
 {
 #ifdef __linux__
-  return syscall(SYS_ioprio_set, whence, who, ioprio);
+  return syscall(SYS_ioprio_set, whence, 0, ioprio);
 #else
   return -ENOSYS;
 #endif

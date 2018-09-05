@@ -44,7 +44,6 @@ static int _set_affinity(int id)
 
 Thread::Thread()
   : thread_id(0),
-    pid(0),
     ioprio_class(-1),
     ioprio_priority(-1),
     cpuid(-1),
@@ -63,19 +62,15 @@ void *Thread::_entry_func(void *arg) {
 
 void *Thread::entry_wrapper()
 {
-  int p = ceph_gettid(); // may return -ENOSYS on other platforms
-  if (p > 0)
-    pid = p;
-  if (pid &&
-      ioprio_class >= 0 &&
-      ioprio_priority >= 0) {
-    ceph_ioprio_set(IOPRIO_WHO_PROCESS,
-		    pid,
-		    IOPRIO_PRIO_VALUE(ioprio_class, ioprio_priority));
-  }
-  if (pid && cpuid >= 0)
+  // may return -ENOSYS on other platforms
+  if (ceph_gettid() > 0) {
+    if (ioprio_class >= 0 &&
+	ioprio_priority >= 0) {
+      ceph_ioprio_set(IOPRIO_WHO_PROCESS,
+	  IOPRIO_PRIO_VALUE(ioprio_class, ioprio_priority));
+    }
     _set_affinity(cpuid);
-
+  }
   ceph_pthread_setname(pthread_self(), thread_name);
   return entry();
 }
@@ -139,10 +134,15 @@ int Thread::try_create(size_t stacksize)
   return r;
 }
 
-void Thread::create(const char *name, size_t stacksize)
+void Thread::create(const char *name, int ioprio_class,
+		    int ioprio_priority, int cpuid,
+		    size_t stacksize)
 {
   ceph_assert(strlen(name) < 16);
   thread_name = name;
+  ioprio_class = ioprio_class;
+  ioprio_priority = ioprio_priority;
+  cpuid = cpuid;
 
   int ret = try_create(stacksize);
   if (ret != 0) {
@@ -177,27 +177,6 @@ int Thread::join(void **prval)
 int Thread::detach()
 {
   return pthread_detach(thread_id);
-}
-
-int Thread::set_ioprio(int cls, int prio)
-{
-  // fixme, maybe: this can race with create()
-  ioprio_class = cls;
-  ioprio_priority = prio;
-  if (pid && cls >= 0 && prio >= 0)
-    return ceph_ioprio_set(IOPRIO_WHO_PROCESS,
-			   pid,
-			   IOPRIO_PRIO_VALUE(cls, prio));
-  return 0;
-}
-
-int Thread::set_affinity(int id)
-{
-  int r = 0;
-  cpuid = id;
-  if (pid && ceph_gettid() == pid)
-    r = _set_affinity(id);
-  return r;
 }
 
 // Functions for std::thread

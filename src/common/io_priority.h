@@ -37,7 +37,7 @@ extern pid_t ceph_gettid();
 # define IOPRIO_CLASS_IDLE 3
 #endif
 
-extern int ceph_ioprio_set(int whence, int who, int ioprio);
+extern int ceph_ioprio_set(int whence, int ioprio);
 
 extern int ceph_ioprio_string_to_class(const std::string& s);
 
