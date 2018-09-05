@@ -119,6 +119,11 @@ namespace librbd {
     int get_children(librados::IoCtx *ioctx, const std::string &oid,
                       const ParentSpec &pspec, set<string>& children);
 
+    void snapshot_info_get_start(librados::ObjectReadOperation* op,
+                                 snapid_t snap_id);
+    int snapshot_info_get_finish(bufferlist::iterator* it,
+                                 cls::rbd::SnapshotInfo* snap_info);
+
     void snapshot_get_start(librados::ObjectReadOperation *op,
                             const std::vector<snapid_t> &ids);
     int snapshot_get_finish(bufferlist::iterator *it,

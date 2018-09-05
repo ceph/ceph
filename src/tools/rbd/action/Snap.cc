@@ -88,11 +88,16 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
       break;
     }
 
+    int get_trash_res = -ENOENT;
+    std::string trash_original_name;
     int get_group_res = -ENOENT;
     librbd::snap_group_namespace_t group_snap;
     if (snap_namespace == RBD_SNAP_NAMESPACE_TYPE_GROUP) {
       get_group_res = image.snap_get_group_namespace(s->id, &group_snap,
                                                      sizeof(group_snap));
+    } else if (snap_namespace == RBD_SNAP_NAMESPACE_TYPE_TRASH) {
+      get_trash_res = image.snap_get_trash_namespace(
+        s->id, &trash_original_name);
     }
 
     if (f) {
@@ -109,7 +114,9 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
 	  f->dump_string("pool", pool_name);
 	  f->dump_string("group", group_snap.group_name);
 	  f->dump_string("group snap", group_snap.group_snap_name);
-	}
+	} else if (get_trash_res == 0) {
+          f->dump_string("original_name", trash_original_name);
+        }
 	f->close_section();
       }
       f->close_section();
@@ -125,6 +132,8 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
 	  oss << " (" << pool_name << "/"
 		      << group_snap.group_name << "@"
 		      << group_snap.group_snap_name << ")";
+        } else if (get_trash_res == 0) {
+          oss << " (" << trash_original_name << ")";
         }
 
 	t << oss.str();
@@ -376,8 +385,9 @@ int execute_create(const po::variables_map &vm,
 void get_remove_arguments(po::options_description *positional,
                           po::options_description *options) {
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
-  at::add_no_progress_option(options);
   at::add_image_id_option(options);
+  at::add_snap_id_option(options);
+  at::add_no_progress_option(options);
 
   options->add_options()
     ("force", po::bool_switch(), "flatten children and unprotect snapshot if needed.");
@@ -390,10 +400,18 @@ int execute_remove(const po::variables_map &vm,
   std::string image_name;
   std::string snap_name;
   std::string image_id;
+  uint64_t snap_id = CEPH_NOSNAP;
   bool force = vm["force"].as<bool>();
+  bool no_progress = vm[at::NO_PROGRESS].as<bool>();
 
   if (vm.count(at::IMAGE_ID)) {
     image_id = vm[at::IMAGE_ID].as<std::string>();
+  }
+
+  auto snap_presence = utils::SNAPSHOT_PRESENCE_REQUIRED;
+  if (vm.count(at::SNAPSHOT_ID)) {
+    snap_id = vm[at::SNAPSHOT_ID].as<uint64_t>();
+    snap_presence = utils::SNAPSHOT_PRESENCE_PERMITTED;
   }
 
   bool has_image_spec = utils::check_if_image_spec_present(
@@ -410,16 +428,26 @@ int execute_remove(const po::variables_map &vm,
     r = utils::get_pool_image_snapshot_names(vm, at::ARGUMENT_MODIFIER_NONE,
                                              &arg_index, &pool_name,
                                              &image_name, &snap_name,
-                                             utils::SNAPSHOT_PRESENCE_REQUIRED,
+                                             snap_presence,
                                              utils::SPEC_VALIDATION_NONE);
   } else {
     r = utils::get_pool_snapshot_names(vm, at::ARGUMENT_MODIFIER_NONE,
                                        &arg_index, &pool_name, &snap_name,
-                                       utils::SNAPSHOT_PRESENCE_REQUIRED,
+                                       snap_presence,
                                        utils::SPEC_VALIDATION_NONE);
   }
   if (r < 0) {
     return r;
+  }
+
+  if (!snap_name.empty() && snap_id != CEPH_NOSNAP) {
+    std::cerr << "rbd: trying to access snapshot using both name and id."
+              << std::endl;
+    return -EINVAL;
+  } else if ((force || no_progress) && snap_id != CEPH_NOSNAP) {
+    std::cerr << "rbd: force and no-progress options not permitted when "
+              << "removing by id." << std::endl;
+    return -EINVAL;
   }
 
   librados::Rados rados;
@@ -440,11 +468,18 @@ int execute_remove(const po::variables_map &vm,
     return r;
   }
 
-  r = do_remove_snap(image, snap_name.c_str(), force, vm[at::NO_PROGRESS].as<bool>());
+  if (!snap_name.empty()) {
+    r = do_remove_snap(image, snap_name.c_str(), force, no_progress);
+  } else {
+    r = image.snap_remove_by_id(snap_id);
+  }
+
   if (r < 0) {
     if (r == -EBUSY) {
-      std::cerr << "rbd: snapshot '" << snap_name << "' "
-                << "is protected from removal." << std::endl;
+      std::cerr << "rbd: snapshot "
+                << (snap_name.empty() ? std::string("id ") + stringify(snap_id) :
+                                        std::string("'") + snap_name + "'")
+                << " is protected from removal." << std::endl;
     } else {
       std::cerr << "rbd: failed to remove snapshot: " << cpp_strerror(r)
                 << std::endl;
