@@ -73,7 +73,9 @@ class AgentRunner(Thread):
                         'diskprediction_password'),
                     port=self._module_inst.get_configuration('diskprediction_port'),
                     cert_context=self._module_inst.get_configuration('diskprediction_cert_context'),
-                    mgr_inst=self._module_inst)
+                    mgr_inst=self._module_inst,
+                    ssl_target_name=self._module_inst.get_configuration('diskprediction_ssl_target_name_override'),
+                    default_authority=self._module_inst.get_configuration('diskprediction_default_authority'))
                 self._obj_sender = GRPcClient(conf)
             else:
                 from .common.localpredictor import LocalPredictor, gen_configuration

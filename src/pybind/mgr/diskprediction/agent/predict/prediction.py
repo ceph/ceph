@@ -162,7 +162,6 @@ class PredictionAgent(BaseAgent):
                         host_domain_id, tmp['disk_domain_id'])
                 }
                 # Update osd life-expectancy
-                dev_id = ''
                 predicted = None
                 life_expectancy_day_min = None
                 life_expectancy_day_max = None
@@ -184,18 +183,8 @@ class PredictionAgent(BaseAgent):
                         predicted = None
                         life_expectancy_day_min = None
                         life_expectancy_day_max = None
-                check_dev_id = ''
-                if model:
-                    check_dev_id += str(model).upper()
-                if serial_number:
-                    check_dev_id += (' %s' % serial_number).upper()
-                check_dev_id = check_dev_id.replace(' ', '_')
-                for dev_n, dev_info in devs_info.iteritems():
-                    if dev_info.get('dev_id', '').find(check_dev_id) >= 0:
-                        dev_id = dev_info['dev_id']
-                        break
 
-                if predicted and dev_id and life_expectancy_day_min:
+                if predicted and tmp['disk_domain_id'] and life_expectancy_day_min:
                     from_date = None
                     to_date = None
                     try:
@@ -205,19 +194,19 @@ class PredictionAgent(BaseAgent):
                         if life_expectancy_day_max:
                             to_date = self._convert_timestamp(predicted, life_expectancy_day_max)
 
-                        obj_api.set_device_life_expectancy(dev_id, from_date, to_date)
+                        obj_api.set_device_life_expectancy(tmp['disk_domain_id'], from_date, to_date)
                         self._logger.info(
                             'succeed to set device {} life expectancy from: {}, to: {}'.format(
-                                dev_id, from_date, to_date))
+                                tmp['disk_domain_id'], from_date, to_date))
                     except Exception as e:
                         self._logger.error(
                             'failed to set device {} life expectancy from: {}, to: {}, {}'.format(
-                                dev_id, from_date, to_date, str(e)))
+                                tmp['disk_domain_id'], from_date, to_date, str(e)))
                 else:
-                    if dev_id:
-                        obj_api.reset_device_life_expectancy(dev_id)
-                if dev_id:
-                    result[dev_id] = disk_info
+                    if tmp['disk_domain_id']:
+                        obj_api.reset_device_life_expectancy(tmp['disk_domain_id'])
+                if tmp['disk_domain_id']:
+                    result[tmp['disk_domain_id']] = disk_info
 
         return result
 

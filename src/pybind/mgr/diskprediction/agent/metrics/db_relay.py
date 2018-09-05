@@ -447,22 +447,7 @@ class DBRelayAgent(MetricsAgent):
             osd_node = self._osd_nodes[str(osd_id)]
             for dev_name, s_val in osds_smart.iteritems():
                 data = DBRelay()
-                serial_number = s_val.get('serial_number')
-                wwn = s_val.get('wwn', {})
-                wwpn = ''
-                if wwn:
-                    wwpn = '%06X%X' % (wwn.get('oui', 0), wwn.get('id', 0))
-                    for k in wwn.keys():
-                        if k in ['naa', 't10', 'eui', 'iqn']:
-                            wwpn = ('%X%s' % (wwn[k], wwpn)).lower()
-                            break
-
-                if wwpn:
-                    disk_domain_id = str(wwpn)
-                elif serial_number:
-                    disk_domain_id = str(serial_number)
-                else:
-                    disk_domain_id = str(dev_name)
+                disk_domain_id = str(dev_name)
                 try:
                     if isinstance(s_val.get('user_capacity'), dict):
                         user_capacity = \
@@ -534,6 +519,7 @@ class DBRelayAgent(MetricsAgent):
             rbd_list = db.get_rbd_list(pool_name=pool_name)
             for rbd_data in rbd_list:
                 image_name = rbd_data.get('name')
+                # Sometimes get stuck on query rbd objects info
                 rbd_info = db.get_rbd_info(pool_name, image_name)
                 rbd_id = rbd_info.get('id')
                 rbd_size = rbd_info.get('size')
@@ -622,4 +608,3 @@ class DBRelayAgent(MetricsAgent):
         self._host_contains_mds()
         self._osd_contains_pg()
         self._osd_contains_disk()
-        self._rbd_contains_pg()

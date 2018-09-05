@@ -12,14 +12,14 @@ import client_pb2_grpc
 
 def gen_configuration(**kwargs):
     configuration = {
-        'host': kwargs.get('host', 'api.federator.ai'),
+        'host': kwargs.get('host', 'api.diskprophet.com'),
         'user': kwargs.get('user'),
         'password': kwargs.get('password'),
         'port': kwargs.get('port', 31400),
         'mgr_inst': kwargs.get('mgr_inst', None),
         'cert_context': kwargs.get('cert_context'),
-        'ssl_target_name': kwargs.get('ssl_target_name', 'api.federator.ai'),
-        'default_authority': kwargs.get('default_authority', 'api.federator.ai')}
+        'ssl_target_name': kwargs.get('ssl_target_name', 'api.diskprophet.com'),
+        'default_authority': kwargs.get('default_authority', 'api.diskprophet.com')}
     return configuration
 
 

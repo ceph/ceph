@@ -10,10 +10,10 @@ function will return a string to indicate disk failure status: "Good",
 
 An example code is as follows:
 
-# >>> model = DiskFailurePredictor.DiskFailurePredictor()
-# >>> status = model.initialize("./models")
-# >>> if status:
-# >>>     model.predict(disk_days)
+>>> model = DiskFailurePredictor.DiskFailurePredictor()
+>>> status = model.initialize("./models")
+>>> if status:
+>>>     model.predict(disk_days)
 'Bad'
 
 
@@ -22,6 +22,7 @@ http://www.prophetstor.com/
 
 """
 
+from __future__ import print_function
 import os
 import json
 from sklearn.externals import joblib
@@ -40,6 +41,7 @@ class DiskFailurePredictor(object):
     """
 
     CONFIG_FILE = "config.json"
+    EXCLUDED_ATTRS = ['smart_9_raw', 'smart_241_raw', 'smart_242_raw']
 
     def __init__(self):
         """
@@ -75,6 +77,37 @@ class DiskFailurePredictor(object):
                 return "Missing model file: " + model_path
 
         self.model_dirpath = model_dirpath
+
+    def __preprocess(self, disk_days):
+        """
+        Preprocess disk attributes.
+
+        Args:
+            disk_days: Refer to function predict(...).
+
+        Returns:
+            new_disk_days: Processed disk days.
+        """
+
+        req_attrs = []
+        new_disk_days = []
+
+        attr_list = set.intersection(*[set(disk_day.keys())
+                                       for disk_day in disk_days])
+        for attr in attr_list:
+            if (attr.startswith('smart_') and attr.endswith('_raw')) and \
+                    attr not in self.EXCLUDED_ATTRS:
+                req_attrs.append(attr)
+
+        for disk_day in disk_days:
+            new_disk_day = {}
+            for attr in req_attrs:
+                if float(disk_day[attr]) >= 0.0:
+                    new_disk_day[attr] = disk_day[attr]
+
+            new_disk_days.append(new_disk_day)
+
+        return new_disk_days
 
     @staticmethod
     def __get_diff_attrs(disk_days):
@@ -132,7 +165,8 @@ class DiskFailurePredictor(object):
         max_score = max(scores)
 
         # Skip if too few matched attributes.
-        if len(attr_list) > 3 * max_score or max_score < 3:
+        if max_score < 3:
+            print("Too few matched attributes")
             return None
 
         best_models = {}
@@ -198,7 +232,8 @@ class DiskFailurePredictor(object):
 
         all_pred = []
 
-        attr_list, diff_data = DiskFailurePredictor.__get_diff_attrs(disk_days)
+        proc_disk_days = self.__preprocess(disk_days)
+        attr_list, diff_data = DiskFailurePredictor.__get_diff_attrs(proc_disk_days)
         modellist = self.__get_best_models(attr_list)
         if modellist is None:
             return "Unknown"
@@ -207,14 +242,16 @@ class DiskFailurePredictor(object):
             model_attrlist = modellist[modelpath]
             ordered_data = DiskFailurePredictor.__get_ordered_attrs(
                 diff_data, model_attrlist)
+
             clf = joblib.load(modelpath)
             pred = clf.predict(ordered_data)
 
             all_pred.append(1 if any(pred) else 0)
 
-        if 3 ** sum(all_pred) >= len(modellist):
+        score = 2 ** sum(all_pred) - len(modellist)
+        if score > 10:
             return "Bad"
-        elif any(all_pred):
+        elif score > 4:
             return "Warning"
         else:
             return "Good"

@@ -58,11 +58,11 @@ class Module(MgrModule):
         },
         {
             'name': 'diskprediction_ssl_target_name_override',
-            'default': 'api.federator.ai'
+            'default': 'api.diskprophet.com'
         },
         {
             'name': 'diskprediction_default_authority',
-            'default': 'api.federator.ai'
+            'default': 'api.diskprophet.com'
         }
     ]
 

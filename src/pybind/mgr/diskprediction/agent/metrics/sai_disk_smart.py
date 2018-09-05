@@ -86,13 +86,13 @@ class SAIDiskSmartAgent(MetricsAgent):
                                 int(s_val['temperature']['drive_trip'])
                         if s_val.get('elements_grown_list') is not None:
                             smart_data.fields['ElementsInGrownDefectList_raw'] = int(s_val['elements_grown_list'])
-                        if s_val.get('hours_powered_up') is not None:
-                            smart_data.fields['9_raw'] = int(round(float(s_val['hours_powered_up'])))
-                        if s_val.get('percentage_used_endurance_indicator') is not None:
+                        if s_val.get('power_on_time', {}).get('hours') is not None:
+                            smart_data.fields['9_raw'] = int(s_val['power_on_time']['hours'])
+                        if s_val.get('scsi_percentage_used_endurance_indicator') is not None:
                             smart_data.fields['PercentageUsedEnduranceIndicator_raw'] = \
-                                int(s_val['percentage_used_endurance_indicator'])
-                        if s_val.get('error_counter_log') is not None:
-                            s_err_counter = s_val['error_counter_log']
+                                int(s_val['scsi_percentage_used_endurance_indicator'])
+                        if s_val.get('scsi_error_counter_log') is not None:
+                            s_err_counter = s_val['scsi_error_counter_log']
                             for s_key in s_err_counter.keys():
                                 if s_key.lower() in ['read', 'write']:
                                     for s1_key in s_err_counter[s_key].keys():

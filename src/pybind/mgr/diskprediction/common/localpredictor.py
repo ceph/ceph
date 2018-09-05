@@ -97,8 +97,8 @@ class LocalPredictor:
                             else:
                                 dev_smart['smart_%s_raw' % attr.get('id')] = \
                                     attr.get('raw', {}).get('value', 0)
-                if s_val.get('hours_powered_up') is not None:
-                    dev_smart['smart_9_raw'] = int(s_val['hours_powered_up'])
+                if s_val.get('power_on_time', {}).get('hours') is not None:
+                    dev_smart['smart_9_raw'] = int(s_val['power_on_time']['hours'])
                 if dev_smart:
                     predict_datas.append(dev_smart)
 
