@@ -3,11 +3,11 @@
 ======================================
 
 The following settings may added to the Ceph configuration file (i.e., usually
-``ceph.conf``) under the ``[client.radosgw.{instance-name}]`` section. The
+``ceph.conf``) under the ``[client.rgw.{instance-name}]`` section. The
 settings may contain default values. If you do not specify each setting in the
 Ceph configuration file, the default value will be set automatically.
 
-Configuration variables set under the ``[client.radosgw.{instance-name}]``
+Configuration variables set under the ``[client.rgw.{instance-name}]``
 section will not apply to rgw or radosgw-admin commands without an instance-name
 specified in the command. Thus variables meant to be applied to all RGW
 instances or all radosgw-admin commands can be put into the ``[global]`` or the
@@ -429,7 +429,7 @@ Multisite Settings
 .. versionadded:: Jewel
 
 You may include the following settings in your Ceph configuration
-file under each ``[client.radosgw.{instance-name}]`` instance.
+file under each ``[client.rgw.{instance-name}]`` instance.
 
 
 ``rgw zone``
