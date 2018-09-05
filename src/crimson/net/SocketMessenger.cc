@@ -71,6 +71,7 @@ seastar::future<> SocketMessenger::accept(seastar::connected_socket socket,
 {
   // allocate the connection
   entity_addr_t peer_addr;
+  peer_addr.set_type(entity_addr_t::TYPE_DEFAULT);
   peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
   ConnectionRef conn = new SocketConnection(this, get_myaddr(),
                                             peer_addr, std::move(socket));

@@ -29,7 +29,6 @@ using SocketPolicy = ceph::net::Policy<ceph::thread::Throttle>;
 class SocketMessenger final : public Messenger {
   boost::optional<seastar::server_socket> listener;
   Dispatcher *dispatcher = nullptr;
-  uint32_t global_seq = 0;
   std::map<entity_addr_t, ConnectionRef> connections;
   using Throttle = ceph::thread::Throttle;
   ceph::net::PolicySet<Throttle> policy_set;
