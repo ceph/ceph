@@ -121,8 +121,11 @@
     mdlog trim                 trim metadata log (use start-date, end-date or
                                start-marker, end-marker)
     mdlog status               read metadata log status
+    mdlog autotrim             auto trim metadata log
     bilog list                 list bucket index log
     bilog trim                 trim bucket index log (use start-marker, end-marker)
+    bilog status               read bucket index log status
+    bilog autotrim             auto trim bucket index log
     datalog list               list data log
     datalog trim               trim data log
     datalog status             read data log status
