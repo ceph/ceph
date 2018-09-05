@@ -19,7 +19,6 @@
 #include "msg/Message.h"
 
 #include "MOSDOp.h"
-#include "os/ObjectStore.h"
 #include "common/errno.h"
 
 /*
