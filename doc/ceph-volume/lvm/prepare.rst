@@ -309,7 +309,7 @@ To recap the ``prepare`` process for :term:`bluestore`:
 #. ``block``, ``block.wal``, and ``block.db`` are symlinked if defined.
 #. monmap is fetched for activation
 #. Data directory is populated by ``ceph-osd``
-#. Logical Volumes are are assigned all the Ceph metadata using lvm tags
+#. Logical Volumes are assigned all the Ceph metadata using lvm tags
 
 
 And the ``prepare`` process for :term:`filestore`:
