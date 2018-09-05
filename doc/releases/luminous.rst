@@ -1,3 +1,138 @@
+v12.2.8 Luminous
+================
+
+This is the eighth bug fix release of the Luminous v12.2.x long term stable
+release series. This release contains several bugfixes across all the components
+and we recommend all users upgrade.
+
+Upgrade Notes from previous luminous releases
+---------------------------------------------
+
+When upgrading from v12.2.5 or v12.2.6 please note that upgrade caveats from
+12.2.5 will apply to any _newer_ luminous version including 12.2.8. Please read
+the notes at luminous-12-2-5-upgrades_ .
+
+For the cluster that installed the broken 12.2.6 release, 12.2.7 fixed the
+regression and introduced a workaround option `osd distrust data digest = true`,
+but 12.2.7 clusters still generated health warnings like ::
+
+  [ERR] 11.288 shard 207: soid  11:1155c332:::rbd_data.207dce238e1f29.0000000000000527:head data_digest 0xc8997a5b != data_digest 0x2ca15853
+
+
+12.2.8 improves the deep scrub code to automatically repair these
+inconsistencies. Once the entire cluster has been upgraded and then fully deep
+scrubbed, and all such inconsistencies are resolved, it will be safe to disable
+the `osd distrust data digest = true` workaround option.
+
+Notable Changes
+---------------
+
+- *OSD*
+
+  * Scrub repair is enhanced to handle data digest mismatch info on
+    replicas as long as all replicas' digests match each other.
+
+- *RGW*
+
+  * Options `rgw curl low speed limit` and `rgw curl low speed time`
+    are added to control the lower speed limits and times below which
+    the requests are considered too slow to be aborted and can help
+    mitigate data sync getting blocked during network issues
+
+  * Option `rgw s3 auth order` configurable added which takes a comma
+    seperated list of order to try for s3 authentication when external
+    engines are involved.
+
+Changelog
+---------
+* bluestore: set correctly shard for existed Collection (`issue#24761 <http://tracker.ceph.com/issues/24761>`_, `pr#22860 <https://github.com/ceph/ceph/pull/22860>`_, Jianpeng Ma)
+* build/ops: Boost system library is no longer required to compile and link example librados program (`issue#25054 <http://tracker.ceph.com/issues/25054>`_, `pr#23202 <https://github.com/ceph/ceph/pull/23202>`_, Nathan Cutler)
+* build/ops: Bring back diff -y for non-FreeBSD (`issue#24396 <http://tracker.ceph.com/issues/24396>`_, `issue#21664 <http://tracker.ceph.com/issues/21664>`_, `pr#22848 <https://github.com/ceph/ceph/pull/22848>`_, Sage Weil, David Zafman)
+* build/ops: install-deps.sh fails on newest openSUSE Leap (`issue#25064 <http://tracker.ceph.com/issues/25064>`_, `pr#23179 <https://github.com/ceph/ceph/pull/23179>`_, Kyr Shatskyy)
+* build/ops: Mimic build fails with -DWITH_RADOSGW=0 (`issue#24437 <http://tracker.ceph.com/issues/24437>`_, `pr#22864 <https://github.com/ceph/ceph/pull/22864>`_, Dan Mick)
+* build/ops: order rbdmap.service before remote-fs-pre.target (`issue#24713 <http://tracker.ceph.com/issues/24713>`_, `pr#22844 <https://github.com/ceph/ceph/pull/22844>`_, Ilya Dryomov)
+* build/ops: rpm: silence osd block chown (`issue#25152 <http://tracker.ceph.com/issues/25152>`_, `pr#23313 <https://github.com/ceph/ceph/pull/23313>`_, Dan van der Ster)
+* cephfs-journal-tool: Fix purging when importing an zero-length journal (`issue#24239 <http://tracker.ceph.com/issues/24239>`_, `pr#22980 <https://github.com/ceph/ceph/pull/22980>`_, yupeng chen, zhongyan gu)
+* cephfs: MDSMonitor: uncommitted state exposed to clients/mdss (`issue#23768 <http://tracker.ceph.com/issues/23768>`_, `pr#23013 <https://github.com/ceph/ceph/pull/23013>`_, Patrick Donnelly)
+* ceph-fuse mount failed because no mds (`issue#22205 <http://tracker.ceph.com/issues/22205>`_, `pr#22895 <https://github.com/ceph/ceph/pull/22895>`_, liyan)
+* ceph-volume add a __release__ string, to help version-conditional calls (`issue#25170 <http://tracker.ceph.com/issues/25170>`_, `pr#23331 <https://github.com/ceph/ceph/pull/23331>`_, Alfredo Deza)
+* ceph-volume: adds test for `ceph-volume lvm list /dev/sda` (`issue#24784 <http://tracker.ceph.com/issues/24784>`_, `issue#24957 <http://tracker.ceph.com/issues/24957>`_, `pr#23350 <https://github.com/ceph/ceph/pull/23350>`_, Andrew Schoen)
+* ceph-volume: do not use stdin in luminous (`issue#25173 <http://tracker.ceph.com/issues/25173>`_, `issue#23260 <http://tracker.ceph.com/issues/23260>`_, `pr#23367 <https://github.com/ceph/ceph/pull/23367>`_, Alfredo Deza)
+* ceph-volume enable the ceph-osd during lvm activation (`issue#24152 <http://tracker.ceph.com/issues/24152>`_, `pr#23394 <https://github.com/ceph/ceph/pull/23394>`_, Dan van der Ster, Alfredo Deza)
+* ceph-volume expand on the LVM API to create multiple LVs at different sizes (`issue#24020 <http://tracker.ceph.com/issues/24020>`_, `pr#23395 <https://github.com/ceph/ceph/pull/23395>`_, Alfredo Deza)
+* ceph-volume lvm.activate conditional mon-config on prime-osd-dir (`issue#25216 <http://tracker.ceph.com/issues/25216>`_, `pr#23397 <https://github.com/ceph/ceph/pull/23397>`_, Alfredo Deza)
+* ceph-volume lvm.batch remove non-existent sys_api property (`issue#34310 <http://tracker.ceph.com/issues/34310>`_, `pr#23811 <https://github.com/ceph/ceph/pull/23811>`_, Alfredo Deza)
+* ceph-volume lvm.listing only include devices if they exist (`issue#24952 <http://tracker.ceph.com/issues/24952>`_, `pr#23150 <https://github.com/ceph/ceph/pull/23150>`_, Alfredo Deza)
+* ceph-volume: process.call with stdin in Python 3 fix (`issue#24993 <http://tracker.ceph.com/issues/24993>`_, `pr#23238 <https://github.com/ceph/ceph/pull/23238>`_, Alfredo Deza)
+* ceph-volume: PVolumes.get() should return one PV when using name or uuid (`issue#24784 <http://tracker.ceph.com/issues/24784>`_, `pr#23329 <https://github.com/ceph/ceph/pull/23329>`_, Andrew Schoen)
+* ceph-volume: refuse to zap mapper devices (`issue#24504 <http://tracker.ceph.com/issues/24504>`_, `pr#23374 <https://github.com/ceph/ceph/pull/23374>`_, Andrew Schoen)
+* ceph-volume: tests.functional inherit SSH_ARGS from ansible (`issue#34311 <http://tracker.ceph.com/issues/34311>`_, `pr#23813 <https://github.com/ceph/ceph/pull/23813>`_, Alfredo Deza)
+* ceph-volume tests/functional run lvm list after OSD provisioning (`issue#24961 <http://tracker.ceph.com/issues/24961>`_, `pr#23147 <https://github.com/ceph/ceph/pull/23147>`_, Alfredo Deza)
+* ceph-volume: unmount lvs correctly before zapping (`issue#24796 <http://tracker.ceph.com/issues/24796>`_, `pr#23128 <https://github.com/ceph/ceph/pull/23128>`_, Andrew Schoen)
+* ceph-volume: update batch documentation to explain filestore strategies (`issue#34309 <http://tracker.ceph.com/issues/34309>`_, `pr#23825 <https://github.com/ceph/ceph/pull/23825>`_, Alfredo Deza)
+* change default filestore_merge_threshold to -10 (`issue#24686 <http://tracker.ceph.com/issues/24686>`_, `pr#22814 <https://github.com/ceph/ceph/pull/22814>`_, Douglas Fuller)
+* client: add inst to asok status output (`issue#24724 <http://tracker.ceph.com/issues/24724>`_, `pr#23107 <https://github.com/ceph/ceph/pull/23107>`_, Patrick Donnelly)
+* client: fixup parallel calls to ceph_ll_lookup_inode() in NFS FASL (`issue#22683 <http://tracker.ceph.com/issues/22683>`_, `pr#23012 <https://github.com/ceph/ceph/pull/23012>`_, huanwen ren)
+* client: increase verbosity level for log messages in helper methods (`issue#21014 <http://tracker.ceph.com/issues/21014>`_, `pr#23014 <https://github.com/ceph/ceph/pull/23014>`_, Rishabh Dave)
+* client:  update inode fields according to issued caps (`issue#24269 <http://tracker.ceph.com/issues/24269>`_, `pr#22783 <https://github.com/ceph/ceph/pull/22783>`_, "Yan, Zheng")
+* common: Abort in OSDMap::decode() during qa/standalone/erasure-code/test-erasure-eio.sh (`issue#23492 <http://tracker.ceph.com/issues/23492>`_, `pr#23025 <https://github.com/ceph/ceph/pull/23025>`_, Sage Weil)
+* common/DecayCounter: set last_decay to current time when decoding decay counter (`issue#24440 <http://tracker.ceph.com/issues/24440>`_, `pr#22779 <https://github.com/ceph/ceph/pull/22779>`_, Zhi Zhang)
+* doc: ceph-bluestore-tool manpage not getting rendered correctly (`issue#24800 <http://tracker.ceph.com/issues/24800>`_, `pr#23177 <https://github.com/ceph/ceph/pull/23177>`_, Nathan Cutler)
+* filestore: add pgid in filestore pg dir split log message (`issue#24878 <http://tracker.ceph.com/issues/24878>`_, `pr#23454 <https://github.com/ceph/ceph/pull/23454>`_, Vikhyat Umrao)
+* let "ceph status" use base 10 when printing numbers not sizes (`issue#22095 <http://tracker.ceph.com/issues/22095>`_, `pr#22680 <https://github.com/ceph/ceph/pull/22680>`_, Jan Fajerski, Kefu Chai)
+* librados: fix buffer overflow for aio_exec python binding (`issue#23964 <http://tracker.ceph.com/issues/23964>`_, `pr#22708 <https://github.com/ceph/ceph/pull/22708>`_, Aleksei Gutikov)
+* librbd: force 'invalid object map' flag on-disk update (`issue#24434 <http://tracker.ceph.com/issues/24434>`_, `pr#22753 <https://github.com/ceph/ceph/pull/22753>`_, Mykola Golub)
+* librbd: utilize the journal disabled policy when removing images (`issue#23512 <http://tracker.ceph.com/issues/23512>`_, `pr#23595 <https://github.com/ceph/ceph/pull/23595>`_, Jason Dillaman)
+* mds: don't report slow request for blocked filelock request (`issue#22428 <http://tracker.ceph.com/issues/22428>`_, `pr#22782 <https://github.com/ceph/ceph/pull/22782>`_, "Yan, Zheng")
+* mds: dump recent events on respawn (`issue#24853 <http://tracker.ceph.com/issues/24853>`_, `pr#23213 <https://github.com/ceph/ceph/pull/23213>`_, Patrick Donnelly)
+* mds: handle discontinuous mdsmap (`issue#24856 <http://tracker.ceph.com/issues/24856>`_, `pr#23169 <https://github.com/ceph/ceph/pull/23169>`_, "Yan, Zheng")
+* mds: increase debug level for dropped client cap msg (`issue#24855 <http://tracker.ceph.com/issues/24855>`_, `pr#23214 <https://github.com/ceph/ceph/pull/23214>`_, Patrick Donnelly)
+* mds: low wrlock efficiency due to dirfrags traversal (`issue#24467 <http://tracker.ceph.com/issues/24467>`_, `pr#22885 <https://github.com/ceph/ceph/pull/22885>`_, Xuehan Xu)
+* mds: print mdsmap processed at low debug level (`issue#24852 <http://tracker.ceph.com/issues/24852>`_, `pr#23212 <https://github.com/ceph/ceph/pull/23212>`_, Patrick Donnelly)
+* mds: scrub doesn't always return JSON results (`issue#23958 <http://tracker.ceph.com/issues/23958>`_, `pr#23222 <https://github.com/ceph/ceph/pull/23222>`_, Venky Shankar)
+* mds: unset deleted vars in shutdown_pass (`issue#23766 <http://tracker.ceph.com/issues/23766>`_, `pr#23015 <https://github.com/ceph/ceph/pull/23015>`_, Patrick Donnelly)
+* mgr: add units to performance counters (`issue#22747 <http://tracker.ceph.com/issues/22747>`_, `pr#23266 <https://github.com/ceph/ceph/pull/23266>`_, Ernesto Puerta, Rubab Syed)
+* mgr: ceph osd safe-to-destroy crashes the mgr (`issue#23249 <http://tracker.ceph.com/issues/23249>`_, `pr#22806 <https://github.com/ceph/ceph/pull/22806>`_, Sage Weil)
+* mgr/MgrClient: Protect daemon_health_metrics (`issue#23352 <http://tracker.ceph.com/issues/23352>`_, `pr#23459 <https://github.com/ceph/ceph/pull/23459>`_, Kjetil Joergensen, Brad Hubbard)
+* mon: Add option to view IP addresses of clients in output of 'ceph features' (`issue#21315 <http://tracker.ceph.com/issues/21315>`_, `pr#22773 <https://github.com/ceph/ceph/pull/22773>`_, Paul Emmerich)
+* mon/HealthMonitor: do not send MMonHealthChecks to pre-luminous mon (`issue#24481 <http://tracker.ceph.com/issues/24481>`_, `pr#22655 <https://github.com/ceph/ceph/pull/22655>`_, Sage Weil)
+* os/bluestore: fix flush_commit locking (`issue#21480 <http://tracker.ceph.com/issues/21480>`_, `pr#22904 <https://github.com/ceph/ceph/pull/22904>`_, Sage Weil)
+* os/bluestore: fix incomplete faulty range marking when doing compression (`issue#21480 <http://tracker.ceph.com/issues/21480>`_, `pr#22909 <https://github.com/ceph/ceph/pull/22909>`_, Igor Fedotov)
+* os/bluestore: fix races on SharedBlob::coll in ~SharedBlob (`issue#24859 <http://tracker.ceph.com/issues/24859>`_, `pr#23064 <https://github.com/ceph/ceph/pull/23064>`_, Radoslaw Zarzynski)
+* osdc: Fix the wrong BufferHead offset (`issue#24484 <http://tracker.ceph.com/issues/24484>`_, `pr#22865 <https://github.com/ceph/ceph/pull/22865>`_, dongdong tao)
+* osd: do_sparse_read(): Verify checksum earlier so we will try to repair and missed backport (`issue#24875 <http://tracker.ceph.com/issues/24875>`_, `pr#23379 <https://github.com/ceph/ceph/pull/23379>`_, xie xingguo, David Zafman)
+* osd: eternal stuck PG in 'unfound_recovery' (`issue#24373 <http://tracker.ceph.com/issues/24373>`_, `pr#22546 <https://github.com/ceph/ceph/pull/22546>`_, Sage Weil)
+* osd: may get empty info at recovery (`issue#24588 <http://tracker.ceph.com/issues/24588>`_, `pr#22862 <https://github.com/ceph/ceph/pull/22862>`_, Sage Weil)
+* osd/OSDMap: CRUSH_TUNABLES5 added in jewel, not kraken (`issue#25057 <http://tracker.ceph.com/issues/25057>`_, `pr#23227 <https://github.com/ceph/ceph/pull/23227>`_, Sage Weil)
+* osd/Session: fix invalid iterator dereference in Sessoin::have_backoff() (`issue#24486 <http://tracker.ceph.com/issues/24486>`_, `pr#22729 <https://github.com/ceph/ceph/pull/22729>`_, Sage Weil)
+* pjd: cd: too many arguments (`issue#24307 <http://tracker.ceph.com/issues/24307>`_, `pr#22883 <https://github.com/ceph/ceph/pull/22883>`_, Neha Ojha)
+* PurgeQueue sometimes ignores Journaler errors (`issue#24533 <http://tracker.ceph.com/issues/24533>`_, `pr#22811 <https://github.com/ceph/ceph/pull/22811>`_, John Spray)
+* pybind: pybind/mgr/mgr_module: make rados handle available to all modules (`issue#24788 <http://tracker.ceph.com/issues/24788>`_, `issue#25102 <http://tracker.ceph.com/issues/25102>`_, `pr#23235 <https://github.com/ceph/ceph/pull/23235>`_, Ernesto Puerta, Sage Weil)
+* pybind: Python bindings use iteritems method which is not Python 3 compatible (`issue#24779 <http://tracker.ceph.com/issues/24779>`_, `pr#22918 <https://github.com/ceph/ceph/pull/22918>`_, Nathan Cutler, Kefu Chai)
+* pybind: rados.pyx: make all exceptions accept keyword arguments (`issue#24033 <http://tracker.ceph.com/issues/24033>`_, `pr#22979 <https://github.com/ceph/ceph/pull/22979>`_, Rishabh Dave)
+* rbd: fix issues in IEC unit handling (`issue#26927 <http://tracker.ceph.com/issues/26927>`_, `issue#26928 <http://tracker.ceph.com/issues/26928>`_, `pr#23776 <https://github.com/ceph/ceph/pull/23776>`_, Jason Dillaman)
+* repeated eviction of idle client until some IO happens (`issue#24052 <http://tracker.ceph.com/issues/24052>`_, `pr#22780 <https://github.com/ceph/ceph/pull/22780>`_, "Yan, Zheng")
+* rgw: add curl_low_speed_limit and curl_low_speed_time config to avoid the thread hangs in data sync (`issue#25019 <http://tracker.ceph.com/issues/25019>`_, `pr#23144 <https://github.com/ceph/ceph/pull/23144>`_, Mark Kogan, Zhang Shaowen)
+* rgw: add unit test for cls bi list command (`issue#24483 <http://tracker.ceph.com/issues/24483>`_, `pr#22846 <https://github.com/ceph/ceph/pull/22846>`_, Orit Wasserman, Xinying Song)
+* rgw: do not ignore EEXIST in RGWPutObj::execute (`issue#22790 <http://tracker.ceph.com/issues/22790>`_, `pr#23207 <https://github.com/ceph/ceph/pull/23207>`_, Matt Benjamin)
+* rgw: fail to recover index from crash luminous backport (`issue#24640 <http://tracker.ceph.com/issues/24640>`_, `issue#24280 <http://tracker.ceph.com/issues/24280>`_, `pr#23130 <https://github.com/ceph/ceph/pull/23130>`_, Tianshan Qu)
+* rgw: fix gc may cause a large number of read traffic (`issue#24767 <http://tracker.ceph.com/issues/24767>`_, `pr#22984 <https://github.com/ceph/ceph/pull/22984>`_, Xin Liao)
+* rgw: fix the bug of radowgw-admin zonegroup set requires realm (`issue#21583 <http://tracker.ceph.com/issues/21583>`_, `pr#22767 <https://github.com/ceph/ceph/pull/22767>`_, lvshanchun)
+* rgw: have a configurable authentication order (`issue#23089 <http://tracker.ceph.com/issues/23089>`_, `pr#23501 <https://github.com/ceph/ceph/pull/23501>`_, Abhishek Lekshmanan)
+* rgw: index complete miss zones_trace set (`issue#24590 <http://tracker.ceph.com/issues/24590>`_, `pr#22820 <https://github.com/ceph/ceph/pull/22820>`_, Tianshan Qu)
+* rgw: Invalid Access-Control-Request-Request may bypass validate_cors_rule_method (`issue#24223 <http://tracker.ceph.com/issues/24223>`_, `pr#22934 <https://github.com/ceph/ceph/pull/22934>`_, Jeegn Chen)
+* rgw: meta and data notify thread miss stop cr manager (`issue#24589 <http://tracker.ceph.com/issues/24589>`_, `pr#22822 <https://github.com/ceph/ceph/pull/22822>`_, Tianshan Qu)
+* rgw-multisite: endless loop in RGWBucketShardIncrementalSyncCR (`issue#24603 <http://tracker.ceph.com/issues/24603>`_, `pr#22817 <https://github.com/ceph/ceph/pull/22817>`_, cfanz)
+* rgw performance regression for luminous 12.2.4 (`issue#23379 <http://tracker.ceph.com/issues/23379>`_, `pr#22930 <https://github.com/ceph/ceph/pull/22930>`_, Mark Kogan)
+* rgw: radogw-admin reshard status command should print text for reshar… (`issue#23257 <http://tracker.ceph.com/issues/23257>`_, `pr#23019 <https://github.com/ceph/ceph/pull/23019>`_, Orit Wasserman)
+* rgw: "radosgw-admin objects expire" always returns ok even if the pro… (`issue#24592 <http://tracker.ceph.com/issues/24592>`_, `pr#23000 <https://github.com/ceph/ceph/pull/23000>`_, Zhang Shaowen)
+* rgw: require --yes-i-really-mean-it to run radosgw-admin orphans find (`issue#24146 <http://tracker.ceph.com/issues/24146>`_, `pr#22985 <https://github.com/ceph/ceph/pull/22985>`_, Matt Benjamin)
+* rgw: REST admin metadata API paging failure bucket & bucket.instance: InvalidArgument (`issue#23099 <http://tracker.ceph.com/issues/23099>`_, `pr#22932 <https://github.com/ceph/ceph/pull/22932>`_, Matt Benjamin)
+* rgw: set cr state if aio_read err return in RGWCloneMetaLogCoroutine (`issue#24566 <http://tracker.ceph.com/issues/24566>`_, `pr#22942 <https://github.com/ceph/ceph/pull/22942>`_, Tianshan Qu)
+* spdk: fix ceph-osd crash when activate SPDK (`issue#24371 <http://tracker.ceph.com/issues/24371>`_, `pr#22686 <https://github.com/ceph/ceph/pull/22686>`_, tone-zhang)
+* tools/ceph-objectstore-tool: split filestore directories offline to target hash level (`issue#21366 <http://tracker.ceph.com/issues/21366>`_, `pr#23418 <https://github.com/ceph/ceph/pull/23418>`_, Zhi Zhang)
+
+
 v12.2.7 Luminous
 ================
 
@@ -9,6 +144,8 @@ all users upgrade.
 :note: The v12.2.6 release has serious known regressions.  If you installed this release, please see the upgrade procedure below.
 
 :note: The v12.2.5 release has a potential data corruption issue with erasure coded pools.  If you ran v12.2.5 with erasure coding, please see below.
+
+.. _luminous-12-2-5-upgrades:
 
 Upgrading from v12.2.6
 ----------------------
