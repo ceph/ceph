@@ -40,6 +40,15 @@ public:
       return -ERESTART;
     }
 
+    {
+      RWLock::RLocker snap_lock(image_ctx.snap_lock);
+      if (image_ctx.object_map != nullptr &&
+          !image_ctx.object_map->object_may_not_exist(m_object_no)) {
+        // can skip because the object already exists
+        return 1;
+      }
+    }
+
     bufferlist bl;
     string oid = image_ctx.get_object_name(m_object_no);
     auto req = new io::ObjectWriteRequest<I>(&image_ctx, oid, m_object_no, 0,
