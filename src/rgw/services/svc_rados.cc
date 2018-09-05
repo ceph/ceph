@@ -163,6 +163,21 @@ int RGWSI_RADOS::Obj::aio_operate(librados::AioCompletion *c, librados::ObjectWr
   return ref.ioctx.aio_operate(ref.oid, c, op);
 }
 
+int RGWSI_RADOS::Obj::watch(uint64_t *handle, librados::WatchCtx2 *ctx)
+{
+  return ref.ioctx.watch2(ref.oid, handle, ctx);
+}
+
+int RGWSI_RADOS::Obj::aio_watch(AioCompletion *c, uint64_t *handle, librados::WatchCtx2 *ctx)
+{
+  return ref.ioctx.aio_watch(ref.oid, c, handle, ctx);
+}
+
+int RGWSI_RADOS::Obj::unwatch(uint64_t handle)
+{
+  return ref.ioctx.unwatch2(handle);
+}
+
 uint64_t RGWSI_RADOS::Obj::get_last_version()
 {
   return ref.ioctx.get_last_version();

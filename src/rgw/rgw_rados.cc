@@ -605,176 +605,6 @@ void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
 }
 
 
-int RGWRados::watch(const string& oid, uint64_t *watch_handle, librados::WatchCtx2 *ctx) {
-  int r = control_pool_ctx.watch2(oid, watch_handle, ctx);
-  if (r < 0)
-    return r;
-  return 0;
-}
-
-int RGWRados::aio_watch(const string& oid, uint64_t *watch_handle, librados::WatchCtx2 *ctx, librados::AioCompletion *c) {
-  int r = control_pool_ctx.aio_watch2(oid, c, watch_handle, ctx, 0);
-  if (r < 0)
-    return r;
-  return 0;
-}
-
-int RGWRados::unwatch(uint64_t watch_handle)
-{
-  int r = control_pool_ctx.unwatch2(watch_handle);
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: rados->unwatch2() returned r=" << r << dendl;
-    return r;
-  }
-  r = rados[0].watch_flush();
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: rados->watch_flush() returned r=" << r << dendl;
-    return r;
-  }
-  return 0;
-}
-
-void RGWRados::add_watcher(int i)
-{
-  ldout(cct, 20) << "add_watcher() i=" << i << dendl;
-  Mutex::Locker l(watchers_lock);
-  watchers_set.insert(i);
-  if (watchers_set.size() ==  (size_t)num_watchers) {
-    ldout(cct, 2) << "all " << num_watchers << " watchers are set, enabling cache" << dendl;
-    set_cache_enabled(true);
-  }
-}
-
-void RGWRados::remove_watcher(int i)
-{
-  ldout(cct, 20) << "remove_watcher() i=" << i << dendl;
-  Mutex::Locker l(watchers_lock);
-  size_t orig_size = watchers_set.size();
-  watchers_set.erase(i);
-  if (orig_size == (size_t)num_watchers &&
-      watchers_set.size() < orig_size) { /* actually removed */
-    ldout(cct, 2) << "removed watcher, disabling cache" << dendl;
-    set_cache_enabled(false);
-  }
-}
-
-class RGWWatcher : public librados::WatchCtx2 {
-  RGWRados *rados;
-  int index;
-  string oid;
-  uint64_t watch_handle;
-  int register_ret{0};
-  librados::AioCompletion *register_completion{nullptr};
-
-  class C_ReinitWatch : public Context {
-    RGWWatcher *watcher;
-    public:
-      explicit C_ReinitWatch(RGWWatcher *_watcher) : watcher(_watcher) {}
-      void finish(int r) override {
-        watcher->reinit();
-      }
-  };
-public:
-  RGWWatcher(RGWRados *r, int i, const string& o) : rados(r), index(i), oid(o), watch_handle(0) {}
-  void handle_notify(uint64_t notify_id,
-		     uint64_t cookie,
-		     uint64_t notifier_id,
-		     bufferlist& bl) override {
-    ldout(rados->ctx(), 10) << "RGWWatcher::handle_notify() "
-			    << " notify_id " << notify_id
-			    << " cookie " << cookie
-			    << " notifier " << notifier_id
-			    << " bl.length()=" << bl.length() << dendl;
-
-    if (unlikely(rados->inject_notify_timeout_probability == 1) ||
-	(rados->inject_notify_timeout_probability > 0 &&
-	 (rados->inject_notify_timeout_probability >
-	  ceph::util::generate_random_number(0.0, 1.0)))) {
-      ldout(rados->ctx(), 0)
-	<< "RGWWatcher::handle_notify() dropping notification! "
-	<< "If this isn't what you want, set "
-	<< "rgw_inject_notify_timeout_probability to zero!" << dendl;
-      return;
-    }
-
-
-
-    rados->watch_cb(notify_id, cookie, notifier_id, bl);
-
-    bufferlist reply_bl; // empty reply payload
-    rados->control_pool_ctx.notify_ack(oid, notify_id, cookie, reply_bl);
-  }
-  void handle_error(uint64_t cookie, int err) override {
-    lderr(rados->ctx()) << "RGWWatcher::handle_error cookie " << cookie
-			<< " err " << cpp_strerror(err) << dendl;
-    rados->remove_watcher(index);
-    rados->schedule_context(new C_ReinitWatch(this));
-  }
-
-  void reinit() {
-    int ret = unregister_watch();
-    if (ret < 0) {
-      ldout(rados->ctx(), 0) << "ERROR: unregister_watch() returned ret=" << ret << dendl;
-      return;
-    }
-    ret = register_watch();
-    if (ret < 0) {
-      ldout(rados->ctx(), 0) << "ERROR: register_watch() returned ret=" << ret << dendl;
-      return;
-    }
-  }
-
-  int unregister_watch() {
-    int r = rados->unwatch(watch_handle);
-    if (r < 0) {
-      return r;
-    }
-    rados->remove_watcher(index);
-    return 0;
-  }
-
-  int register_watch_async() {
-    if (register_completion) {
-      register_completion->release();
-      register_completion = nullptr;
-    }
-    register_completion = librados::Rados::aio_create_completion(nullptr, nullptr, nullptr);
-    register_ret = rados->aio_watch(oid, &watch_handle, this, register_completion);
-    if (register_ret < 0) {
-      register_completion->release();
-      return register_ret;
-    }
-    return 0;
-  }
-
-  int register_watch_finish() {
-    if (register_ret < 0) {
-      return register_ret;
-    }
-    if (!register_completion) {
-      return -EINVAL;
-    }
-    register_completion->wait_for_safe();
-    int r = register_completion->get_return_value();
-    register_completion->release();
-    register_completion = nullptr;
-    if (r < 0) {
-      return r;
-    }
-    rados->add_watcher(index);
-    return 0;
-  }
-
-  int register_watch() {
-    int r = rados->watch(oid, &watch_handle, this);
-    if (r < 0) {
-      return r;
-    }
-    rados->add_watcher(index);
-    return 0;
-  }
-};
-
 class RGWMetaNotifierManager : public RGWCoroutinesManager {
   RGWRados *store;
   RGWHTTPManager http_manager;
@@ -1698,14 +1528,6 @@ int RGWRados::init_complete()
   period_history.reset(new RGWPeriodHistory(cct, period_puller.get(),
                                             svc.zone->get_current_period()));
 
-  if (need_watch_notify()) {
-    ret = init_watch();
-    if (ret < 0) {
-      lderr(cct) << "ERROR: failed to initialize watch: " << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-  }
-
   ret = open_root_pool_ctx();
   if (ret < 0)
     return ret;
@@ -1924,18 +1746,6 @@ int RGWRados::initialize()
   return init_complete();
 }
 
-void RGWRados::finalize_watch()
-{
-  for (int i = 0; i < num_watchers; i++) {
-    RGWWatcher *watcher = watchers[i];
-    watcher->unregister_watch();
-    delete watcher;
-  }
-
-  delete[] notify_oids;
-  delete[] watchers;
-}
-
 void RGWRados::schedule_context(Context *c) {
   finisher->queue(c);
 }
@@ -1989,80 +1799,6 @@ int RGWRados::open_objexp_pool_ctx()
 int RGWRados::open_reshard_pool_ctx()
 {
   return rgw_init_ioctx(get_rados_handle(), svc.zone->get_zone_params().reshard_pool, reshard_pool_ctx, true);
-}
-
-int RGWRados::init_watch()
-{
-#warning needs to be part of the sysobj/cache service
-  int r = rgw_init_ioctx(&rados[0], svc.zone->get_zone_params().control_pool, control_pool_ctx, true);
-  if (r < 0) {
-    return r;
-  }
-
-  num_watchers = cct->_conf->rgw_num_control_oids;
-
-  bool compat_oid = (num_watchers == 0);
-
-  if (num_watchers <= 0)
-    num_watchers = 1;
-
-  notify_oids = new string[num_watchers];
-  watchers = new RGWWatcher *[num_watchers];
-
-  int error = 0;
-
-  for (int i=0; i < num_watchers; i++) {
-    string& notify_oid = notify_oids[i];
-    notify_oid = notify_oid_prefix;
-    if (!compat_oid) {
-      char buf[16];
-      snprintf(buf, sizeof(buf), ".%d", i);
-      notify_oid.append(buf);
-    }
-    r = control_pool_ctx.create(notify_oid, false);
-    if (r < 0 && r != -EEXIST)
-      return r;
-
-    RGWWatcher *watcher = new RGWWatcher(this, i, notify_oid);
-    watchers[i] = watcher;
-
-    r = watcher->register_watch_async();
-    if (r < 0) {
-      ldout(cct, 0) << "WARNING: register_watch_aio() returned " << r << dendl;
-      error = r;
-      continue;
-    }
-  }
-
-  for (int i = 0; i < num_watchers; ++i) {
-    int r = watchers[i]->register_watch_finish();
-    if (r < 0) {
-      ldout(cct, 0) << "WARNING: async watch returned " << r << dendl;
-      error = r;
-    }
-  }
-
-  if (error < 0) {
-    return error;
-  }
-
-  watch_initialized = true;
-
-  set_cache_enabled(true);
-
-  return 0;
-}
-
-void RGWRados::pick_control_oid(const string& key, string& notify_oid)
-{
-  uint32_t r = ceph_str_hash_linux(key.c_str(), key.size());
-
-  int i = r % num_watchers;
-  char buf[16];
-  snprintf(buf, sizeof(buf), ".%d", i);
-
-  notify_oid = notify_oid_prefix;
-  notify_oid.append(buf);
 }
 
 int RGWRados::open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx)
@@ -9264,29 +9000,20 @@ int RGWRados::append_async(rgw_raw_obj& obj, size_t size, bufferlist& bl)
 
 int RGWRados::distribute(const string& key, bufferlist& bl)
 {
-  /*
-   * we were called before watch was initialized. This can only happen if we're updating some system
-   * config object (e.g., zone info) during init. Don't try to distribute the cache info for these
-   * objects, they're currently only read on startup anyway.
-   */
-  if (!watch_initialized)
-    return 0;
-
-  string notify_oid;
-  pick_control_oid(key, notify_oid);
+  RGWSI_RADOS::Obj notify_obj = pick_control_obj(key);
 
   ldout(cct, 10) << "distributing notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
   return robust_notify(notify_oid, bl);
 }
 
-int RGWRados::robust_notify(const string& notify_oid, bufferlist& bl)
+int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl)
 {
   // The reply of every machine that acks goes in here.
   boost::container::flat_set<std::pair<uint64_t, uint64_t>> acks;
   bufferlist rbl;
 
   // First, try to send, without being fancy about it.
-  auto r = control_pool_ctx.notify2(notify_oid, bl, 0, &rbl);
+  auto r = notify_obj.notify(bl, 0, &rbl);
 
   // If that doesn't work, get serious.
   if (r < 0) {
@@ -9326,7 +9053,7 @@ int RGWRados::robust_notify(const string& notify_oid, bufferlist& bl)
       rbl.clear();
       // Reset the timeouts, we're only concerned with new ones.
       timeouts.clear();
-      r = control_pool_ctx.notify2(notify_oid, bl, 0, &rbl);
+      r = notify_obj.notify(bl, 0, &rbl);
       if (r < 0) {
 	ldout(cct, 1) << "robust_notify: retry " << tries << " failed: "
 		      << cpp_strerror(-r) << dendl;

@@ -202,6 +202,7 @@ int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
                             rgw_raw_obj& obj,
                             bufferlist *bl, off_t ofs, off_t end,
                             map<string, bufferlist> *attrs,
+                            rgw_cache_entry_info *cache_info,
                             boost::optional<obj_version>)
 {
   uint64_t len;
@@ -281,6 +282,7 @@ int RGWSI_SysObj_Core::get_attr(rgw_raw_obj& obj,
 
 int RGWSI_SysObj_Core::set_attrs(rgw_raw_obj& obj, 
                                  map<string, bufferlist>& attrs,
+                                 map<string, bufferlist> *rmattrs,
                                  RGWObjVersionTracker *objv_tracker) 
 {
   RGWSI_RADOS::Obj rados_obj;
@@ -290,7 +292,7 @@ int RGWSI_SysObj_Core::set_attrs(rgw_raw_obj& obj,
     return r;
   }
 
-  ObjectWriteOperation op;
+  librados::ObjectWriteOperation op;
 
   if (objv_tracker) {
     objv_tracker->prepare_op_for_write(&op);
@@ -562,7 +564,7 @@ int RGWSI_SysObj_Core::write_data(rgw_raw_obj& obj,
     return r;
   }
 
-  ObjectWriteOperation op;
+  librados::ObjectWriteOperation op;
 
   if (exclusive) {
     op.create(true);
@@ -571,11 +573,7 @@ int RGWSI_SysObj_Core::write_data(rgw_raw_obj& obj,
   if (objv_tracker) {
     objv_tracker->prepare_op_for_write(&op);
   }
-  if (ofs == -1) {
-    op.write_full(bl);
-  } else {
-    op.write(ofs, bl);
-  }
+  op.write_full(bl);
   r = rados_obj.operate(&op);
   if (r < 0)
     return r;

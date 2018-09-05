@@ -1216,7 +1216,6 @@ class RGWRados : public AdminSocketHook
 
   std::atomic<int64_t> max_req_id = { 0 };
   Mutex lock;
-  Mutex watchers_lock;
   SafeTimer *timer;
 
   RGWGC *gc;
@@ -1242,12 +1241,7 @@ class RGWRados : public AdminSocketHook
   Mutex meta_sync_thread_lock;
   Mutex data_sync_thread_lock;
 
-  int num_watchers;
-  RGWWatcher **watchers;
-  std::set<int> watchers_set;
   librados::IoCtx root_pool_ctx;      // .rgw
-  librados::IoCtx control_pool_ctx;   // .rgw.control
-  bool watch_initialized;
 
   double inject_notify_timeout_probability = 0;
   unsigned max_notify_retries = 0;
@@ -1312,13 +1306,11 @@ protected:
   RGWServiceRegistryRef svc_registry;
   RGWIndexCompletionManager *index_completion_manager{nullptr};
 public:
-  RGWRados() : lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
+  RGWRados() : lock("rados_timer_lock"), timer(NULL),
                gc(NULL), lc(NULL), obj_expirer(NULL), use_gc_thread(false), use_lc_thread(false), quota_threads(false),
                run_sync_thread(false), run_reshard_thread(false), async_rados(nullptr), meta_notifier(NULL),
                data_notifier(NULL), meta_sync_processor_thread(NULL),
                meta_sync_thread_lock("meta_sync_thread_lock"), data_sync_thread_lock("data_sync_thread_lock"),
-               num_watchers(0), watchers(NULL),
-               watch_initialized(false),
                bucket_id_lock("rados_bucket_id"),
                bucket_index_max_shards(0),
                max_bucket_id(0), cct(NULL),

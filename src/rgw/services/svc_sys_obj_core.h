@@ -9,6 +9,8 @@
 
 class RGWSI_Zone;
 
+struct rgw_cache_entry_info;
+
 struct RGWSysObjState {
   rgw_raw_obj obj;
   bool has_attrs{false};
@@ -133,6 +135,7 @@ protected:
                    rgw_raw_obj& obj,
                    bufferlist *bl, off_t ofs, off_t end,
                    map<string, bufferlist> *attrs,
+                   rgw_cache_entry_info *cache_info,
                    boost::optional<obj_version>);
 
   virtual int remove(RGWSysObjectCtxBase& obj_ctx,
@@ -156,6 +159,7 @@ protected:
 
   virtual int set_attrs(rgw_raw_obj& obj, 
                         map<string, bufferlist>& attrs,
+                        map<string, bufferlist> *rmattrs,
                         RGWObjVersionTracker *objv_tracker);
 
   virtual int omap_get_all(rgw_raw_obj& obj, std::map<string, bufferlist> *m);
