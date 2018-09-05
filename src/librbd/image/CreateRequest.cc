@@ -768,8 +768,9 @@ void CreateRequest<I>::complete(int r) {
   }
 
   m_data_io_ctx.close();
-  m_on_finish->complete(r);
+  auto on_finish = m_on_finish;
   delete this;
+  on_finish->complete(r);
 }
 
 // cleanup
