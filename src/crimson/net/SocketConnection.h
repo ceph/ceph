@@ -15,6 +15,7 @@
 #pragma once
 
 #include <seastar/core/reactor.hh>
+#include <seastar/core/shared_future.hh>
 
 #include "msg/Policy.h"
 #include "Connection.h"
@@ -30,6 +31,9 @@ class SocketConnection : public Connection {
   seastar::output_stream<char> out;
 
   state_t state = state_t::none;
+
+  /// become valid only when state is state_t::closed
+  seastar::shared_future<> close_ready;
 
   /// buffer state for read()
   struct Reader {
