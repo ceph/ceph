@@ -152,7 +152,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         lang/cython \
         devel/py-virtualenv \
         databases/leveldb \
-        net/openldap-client \
+        net/openldap24-client \
         security/nss \
         archivers/snappy \
         archivers/liblz4 \
