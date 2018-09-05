@@ -278,7 +278,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::init()
   if (ready) {
     return 0;
   }
-  assert(!parent_iter);
+  ceph_assert(!parent_iter);
   if (header->parent) {
     Header parent = map->lookup_parent(header);
     if (!parent) {
@@ -288,11 +288,11 @@ int DBObjectMap::DBObjectMapIteratorImpl::init()
     parent_iter = std::make_shared<DBObjectMapIteratorImpl>(map, parent);
   }
   key_iter = map->db->get_iterator(map->user_prefix(header));
-  assert(key_iter);
+  ceph_assert(key_iter);
   complete_iter = map->db->get_iterator(map->complete_prefix(header));
-  assert(complete_iter);
+  ceph_assert(complete_iter);
   cur_iter = key_iter;
-  assert(cur_iter);
+  ceph_assert(cur_iter);
   ready = true;
   return 0;
 }
@@ -391,7 +391,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::upper_bound(const string &after)
 bool DBObjectMap::DBObjectMapIteratorImpl::valid()
 {
   bool valid = !invalid && ready;
-  assert(!valid || cur_iter->valid());
+  ceph_assert(!valid || cur_iter->valid());
   return valid;
 }
 
@@ -405,8 +405,8 @@ bool DBObjectMap::DBObjectMapIteratorImpl::valid_parent()
 
 int DBObjectMap::DBObjectMapIteratorImpl::next(bool validate)
 {
-  assert(cur_iter->valid());
-  assert(valid());
+  ceph_assert(cur_iter->valid());
+  ceph_assert(valid());
   cur_iter->next();
   return adjust();
 }
@@ -417,7 +417,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::next_parent()
   if (r < 0)
     return r;
   while (parent_iter && parent_iter->valid() && !on_parent()) {
-    assert(valid());
+    ceph_assert(valid());
     r = lower_bound(parent_iter->key());
     if (r < 0)
       return r;
@@ -449,8 +449,8 @@ int DBObjectMap::DBObjectMapIteratorImpl::in_complete_region(const string &to_te
       return false;
   }
 
-  assert(complete_iter->key() <= to_test);
-  assert(complete_iter->value().length() >= 1);
+  ceph_assert(complete_iter->key() <= to_test);
+  ceph_assert(complete_iter->value().length() >= 1);
   string _end(complete_iter->value().c_str(),
 	      complete_iter->value().length() - 1);
   if (_end.empty() || _end > to_test) {
@@ -461,7 +461,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::in_complete_region(const string &to_te
     return true;
   } else {
     complete_iter->next();
-    assert(!complete_iter->valid() || complete_iter->key() > to_test);
+    ceph_assert(!complete_iter->valid() || complete_iter->key() > to_test);
     return false;
   }
 }
@@ -495,7 +495,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::adjust()
   } else {
     invalid = true;
   }
-  assert(invalid || cur_iter->valid());
+  ceph_assert(invalid || cur_iter->valid());
   return 0;
 }
 
@@ -601,7 +601,7 @@ int DBObjectMap::clear(const ghobject_t &oid,
   if (check_spos(oid, header, spos))
     return 0;
   remove_map_header(hl, oid, header, t);
-  assert(header->num_children > 0);
+  ceph_assert(header->num_children > 0);
   header->num_children--;
   int r = _clear(header, t);
   if (r < 0)
@@ -624,7 +624,7 @@ int DBObjectMap::_clear(Header header,
     if (!parent) {
       return -EINVAL;
     }
-    assert(parent->num_children > 0);
+    ceph_assert(parent->num_children > 0);
     parent->num_children--;
     header.swap(parent);
   }
@@ -659,7 +659,7 @@ int DBObjectMap::rm_keys(const ghobject_t &oid,
     return db->submit_transaction(t);
   }
 
-  assert(state.legacy);
+  ceph_assert(state.legacy);
 
   {
     // We only get here for legacy (v2) stores
@@ -712,7 +712,7 @@ int DBObjectMap::clear_keys_header(const ghobject_t &oid,
 
   // remove current header
   remove_map_header(hl, oid, header, t);
-  assert(header->num_children > 0);
+  ceph_assert(header->num_children > 0);
   header->num_children--;
   int r = _clear(header, t);
   if (r < 0)
@@ -1045,7 +1045,7 @@ void DBObjectMap::set_state()
   KeyValueDB::Transaction t = db->get_transaction();
   write_state(t);
   int ret = db->submit_transaction_sync(t);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   dout(1) << __func__ << " done" << dendl;
   return;
 }
@@ -1107,7 +1107,7 @@ int DBObjectMap::sync(const ghobject_t *oid,
 		      const SequencerPosition *spos) {
   KeyValueDB::Transaction t = db->get_transaction();
   if (oid) {
-    assert(spos);
+    ceph_assert(spos);
     MapHeaderLock hl(this, *oid);
     Header header = lookup_map_header(hl, *oid);
     if (header) {
@@ -1134,7 +1134,7 @@ int DBObjectMap::sync(const ghobject_t *oid,
 }
 
 int DBObjectMap::write_state(KeyValueDB::Transaction _t) {
-  assert(header_lock.is_locked_by_me());
+  ceph_assert(header_lock.is_locked_by_me());
   dout(20) << "dbobjectmap: seq is " << state.seq << dendl;
   KeyValueDB::Transaction t = _t ? _t : db->get_transaction();
   bufferlist bl;
@@ -1150,13 +1150,13 @@ DBObjectMap::Header DBObjectMap::_lookup_map_header(
   const MapHeaderLock &l,
   const ghobject_t &oid)
 {
-  assert(l.get_locked() == oid);
+  ceph_assert(l.get_locked() == oid);
 
   _Header *header = new _Header();
   {
     Mutex::Locker l(cache_lock);
     if (caches.lookup(oid, header)) {
-      assert(!in_use.count(header->seq));
+      ceph_assert(!in_use.count(header->seq));
       in_use.insert(header->seq);
       return Header(header, RemoveOnDelete(this));
     }
@@ -1178,7 +1178,7 @@ DBObjectMap::Header DBObjectMap::_lookup_map_header(
     caches.add(oid, *ret);
   }
 
-  assert(!in_use.count(header->seq));
+  ceph_assert(!in_use.count(header->seq));
   in_use.insert(header->seq);
   return ret;
 }
@@ -1194,7 +1194,7 @@ DBObjectMap::Header DBObjectMap::_generate_new_header(const ghobject_t &oid,
   }
   header->num_children = 1;
   header->oid = oid;
-  assert(!in_use.count(header->seq));
+  ceph_assert(!in_use.count(header->seq));
   in_use.insert(header->seq);
 
   write_state();
@@ -1225,7 +1225,7 @@ DBObjectMap::Header DBObjectMap::lookup_parent(Header input)
   Header header = Header(new _Header(), RemoveOnDelete(this));
   bufferlist::iterator iter = out.begin()->second.begin();
   header->decode(iter);
-  assert(header->seq == input->parent);
+  ceph_assert(header->seq == input->parent);
   dout(20) << "lookup_parent: parent seq is " << header->seq << " with parent "
        << header->parent << dendl;
   in_use.insert(header->seq);
@@ -1273,7 +1273,7 @@ void DBObjectMap::remove_map_header(
   Header header,
   KeyValueDB::Transaction t)
 {
-  assert(l.get_locked() == oid);
+  ceph_assert(l.get_locked() == oid);
   dout(20) << "remove_map_header: removing " << header->seq
 	   << " oid " << oid << dendl;
   set<string> to_remove;
@@ -1290,7 +1290,7 @@ void DBObjectMap::set_map_header(
   const ghobject_t &oid, _Header header,
   KeyValueDB::Transaction t)
 {
-  assert(l.get_locked() == oid);
+  ceph_assert(l.get_locked() == oid);
   dout(20) << "set_map_header: setting " << header.seq
 	   << " oid " << oid << " parent seq "
 	   << header.parent << dendl;

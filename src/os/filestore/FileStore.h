@@ -239,8 +239,8 @@ private:
     bool _get_max_uncompleted(
       uint64_t *seq ///< [out] max uncompleted seq
       ) {
-      assert(qlock.is_locked());
-      assert(seq);
+      ceph_assert(qlock.is_locked());
+      ceph_assert(seq);
       *seq = 0;
       if (q.empty() && jq.empty())
 	return true;
@@ -257,8 +257,8 @@ private:
     bool _get_min_uncompleted(
       uint64_t *seq ///< [out] min uncompleted seq
       ) {
-      assert(qlock.is_locked());
-      assert(seq);
+      ceph_assert(qlock.is_locked());
+      ceph_assert(seq);
       *seq = 0;
       if (q.empty() && jq.empty())
 	return true;
@@ -306,13 +306,13 @@ private:
     void wait_for_apply(const ghobject_t& oid);
     Op *peek_queue() {
       Mutex::Locker l(qlock);
-      assert(apply_lock.is_locked());
+      ceph_assert(apply_lock.is_locked());
       return q.front();
     }
 
     Op *dequeue(list<Context*> *to_queue) {
-      assert(to_queue);
-      assert(apply_lock.is_locked());
+      ceph_assert(to_queue);
+      ceph_assert(apply_lock.is_locked());
       Mutex::Locker l(qlock);
       Op *o = q.front();
       q.pop_front();
@@ -363,7 +363,7 @@ private:
         id(i),
 	osr_name(osr_name_str.c_str()) {}
     ~OpSequencer() override {
-      assert(q.empty());
+      ceph_assert(q.empty());
     }
   };
   typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
@@ -415,7 +415,7 @@ private:
       store->_finish_op(osr);
     }
     void _clear() override {
-      assert(store->op_queue.empty());
+      ceph_assert(store->op_queue.empty());
     }
   } op_wq;
 
@@ -658,7 +658,7 @@ public:
   void inject_mdata_error(const ghobject_t &oid) override;
 
   void compact() override {
-    assert(object_map);
+    ceph_assert(object_map);
     object_map->compact();
   }
 

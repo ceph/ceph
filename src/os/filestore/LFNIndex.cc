@@ -436,7 +436,7 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
       } else {
 	string long_name = lfn_generate_object_name(obj);
 	if (!lfn_must_hash(long_name)) {
-	  assert(long_name == short_name);
+	  ceph_assert(long_name == short_name);
 	}
 	if (index_version == HASH_INDEX_TAG)
 	  get_hobject_from_oinfo(to_list_path.c_str(), short_name.c_str(), &obj);
@@ -560,7 +560,7 @@ string LFNIndex::lfn_generate_object_name_keyless(const ghobject_t &oid)
   char *end = s + sizeof(s);
   char *t = s;
 
-  assert(oid.generation == ghobject_t::NO_GEN);
+  ceph_assert(oid.generation == ghobject_t::NO_GEN);
   const char *i = oid.hobj.oid.name.c_str();
   // Escape subdir prefix
   if (oid.hobj.oid.name.substr(0, 4) == "DIR_") {
@@ -675,7 +675,7 @@ string LFNIndex::lfn_generate_object_name_poolless(const ghobject_t &oid)
   if (index_version == HASH_INDEX_TAG)
     return lfn_generate_object_name_keyless(oid);
 
-  assert(oid.generation == ghobject_t::NO_GEN);
+  ceph_assert(oid.generation == ghobject_t::NO_GEN);
   string full_name;
   string::const_iterator i = oid.hobj.oid.name.begin();
   if (oid.hobj.oid.name.substr(0, 4) == "DIR_") {
@@ -764,7 +764,7 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
 	*hardlink = 0;
       return 0;
     }
-    assert(r > 0);
+    ceph_assert(r > 0);
     string lfn(bp.c_str(), bp.length());
     if (lfn == full_name) {
       if (mangled_name)
@@ -1292,7 +1292,7 @@ void LFNIndex::build_filename(const char *old_filename, int i, char *filename, i
 {
   char hash[FILENAME_HASH_LEN + 1];
 
-  assert(len >= FILENAME_SHORT_LEN + 4);
+  ceph_assert(len >= FILENAME_SHORT_LEN + 4);
 
   strncpy(filename, old_filename, FILENAME_PREFIX_LEN);
   filename[FILENAME_PREFIX_LEN] = '\0';
@@ -1323,7 +1323,7 @@ bool LFNIndex::short_name_matches(const char *short_name, const char *cand_long_
 
   int index = -1;
   char buf[FILENAME_SHORT_LEN + 4];
-  assert((end - suffix) < (int)sizeof(buf));
+  ceph_assert((end - suffix) < (int)sizeof(buf));
   int r = sscanf(suffix, "_%d_%s", &index, buf);
   if (r < 2)
     return false;
@@ -1336,7 +1336,7 @@ bool LFNIndex::short_name_matches(const char *short_name, const char *cand_long_
 string LFNIndex::lfn_get_short_name(const ghobject_t &oid, int i)
 {
   string long_name = lfn_generate_object_name(oid);
-  assert(lfn_must_hash(long_name));
+  ceph_assert(lfn_must_hash(long_name));
   char buf[FILENAME_SHORT_LEN + 4];
   build_filename(long_name.c_str(), i, buf, sizeof(buf));
   return string(buf);

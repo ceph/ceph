@@ -216,7 +216,7 @@ public:
     }
 
     void truncate(uint32_t newlen) {
-      assert(newlen < length);
+      ceph_assert(newlen < length);
       if (data.length()) {
 	bufferlist t;
 	t.substr_of(data, 0, newlen);
@@ -245,6 +245,10 @@ public:
 
   /// map logical extent range (object) onto buffers
   struct BufferSpace {
+    enum {
+      BYPASS_CLEAN_CACHE = 0x1,  // bypass clean cache
+    };
+
     typedef boost::intrusive::list<
       Buffer,
       boost::intrusive::member_hook<
@@ -261,8 +265,8 @@ public:
     state_list_t writing;   ///< writing buffers, sorted by seq, ascending
 
     ~BufferSpace() {
-      assert(buffer_map.empty());
-      assert(writing.empty());
+      ceph_assert(buffer_map.empty());
+      ceph_assert(writing.empty());
     }
 
     void _add_buffer(Cache* cache, Buffer *b, int level, Buffer *near) {
@@ -278,7 +282,7 @@ public:
             ++it;
           }
 
-          assert(it->seq >= b->seq);
+          ceph_assert(it->seq >= b->seq);
           // note that this will insert b before it
           // hence the order is maintained
           writing.insert(it, *b);
@@ -294,7 +298,7 @@ public:
     }
     void _rm_buffer(Cache* cache,
 		    map<uint32_t, std::unique_ptr<Buffer>>::iterator p) {
-      assert(p != buffer_map.end());
+      ceph_assert(p != buffer_map.end());
       cache->_audit("_rm_buffer start");
       if (p->second->is_writing()) {
         writing.erase(writing.iterator_to(*p->second));
@@ -344,7 +348,8 @@ public:
 
     void read(Cache* cache, uint32_t offset, uint32_t length,
 	      BlueStore::ready_regions_t& res,
-	      interval_set<uint32_t>& res_intervals);
+	      interval_set<uint32_t>& res_intervals,
+	      int flags = 0);
 
     void truncate(Cache* cache, uint32_t offset) {
       discard(cache, offset, (uint32_t)-1 - offset);
@@ -357,7 +362,7 @@ public:
       f->open_array_section("buffers");
       for (auto& i : buffer_map) {
 	f->open_object_section("buffer");
-	assert(i.first == i.second->offset);
+	ceph_assert(i.first == i.second->offset);
 	i.second->dump(f);
 	f->close_section();
       }
@@ -454,7 +459,7 @@ public:
 
     void remove(SharedBlob *sb) {
       std::lock_guard<std::mutex> l(lock);
-      assert(sb->get_parent() == this);
+      ceph_assert(sb->get_parent() == this);
       // only remove if it still points to us
       auto p = sb_map.find(sb->get_sbid());
       if (p != sb_map.end() &&
@@ -574,7 +579,7 @@ public:
       if (blob_bl.length() == 0 ) {
 	encode(blob, blob_bl);
       } else {
-	assert(blob_bl.length());
+	ceph_assert(blob_bl.length());
       }
     }
     void bound_encode(
@@ -674,7 +679,7 @@ public:
     }
 
     void assign_blob(const BlobRef& b) {
-      assert(!blob);
+      ceph_assert(!blob);
       blob = b;
       blob->shared_blob->get_cache()->add_extent();
     }
@@ -801,7 +806,7 @@ public:
 
     BlobRef get_spanning_blob(int id) {
       auto p = spanning_blob_map.find(id);
-      assert(p != spanning_blob_map.end());
+      ceph_assert(p != spanning_blob_map.end());
       return p->second;
     }
 
@@ -844,7 +849,7 @@ public:
 	return false;
       }
       int s = seek_shard(offset);
-      assert(s >= 0);
+      ceph_assert(s >= 0);
       if (s == (int)shards.size() - 1) {
 	return false; // last shard
       }
@@ -1176,7 +1181,7 @@ public:
       buffer_size += b->length;
     }
     void _rm_buffer(Buffer *b) override {
-      assert(buffer_size >= b->length);
+      ceph_assert(buffer_size >= b->length);
       buffer_size -= b->length;
       auto q = buffer_lru.iterator_to(*b);
       buffer_lru.erase(q);
@@ -1186,7 +1191,7 @@ public:
       _add_buffer(b, 0, nullptr);
     }
     void _adjust_buffer_size(Buffer *b, int64_t delta) override {
-      assert((int64_t)buffer_size + delta >= 0);
+      ceph_assert((int64_t)buffer_size + delta >= 0);
       buffer_size += delta;
     }
     void _touch_buffer(Buffer *b) override {
@@ -1280,7 +1285,7 @@ public:
 	break;
       case BUFFER_WARM_OUT:
 	// move from warm_out to hot LRU
-	assert(0 == "this happens via discard hint");
+	ceph_assert(0 == "this happens via discard hint");
 	break;
       case BUFFER_HOT:
 	// move to front of hot LRU
@@ -1703,7 +1708,7 @@ public:
 	store(store), cid(c) {
     }
     ~OpSequencer() {
-      assert(q.empty());
+      ceph_assert(q.empty());
     }
 
     void queue_new(TransContext *txc) {
@@ -1726,7 +1731,7 @@ public:
 
     bool _is_all_kv_submitted() {
       // caller must hold qlock & q.empty() must not empty
-      assert(!q.empty());
+      ceph_assert(!q.empty());
       TransContext *txc = &q.back();
       if (txc->state >= TransContext::STATE_KV_SUBMITTED) {
 	return true;
@@ -1944,7 +1949,7 @@ private:
 	lock("BlueStore::MempoolThread::lock") {}
     void *entry() override;
     void init() {
-      assert(stop == false);
+      ceph_assert(stop == false);
       create("bstore_mempool");
     }
     void shutdown() {
@@ -2369,7 +2374,7 @@ public:
 			   uint64_t offset);
 
   void compact() override {
-    assert(db);
+    ceph_assert(db);
     db->compact();
   }
   bool has_builtin_csum() const override {
@@ -2709,9 +2714,9 @@ public:
     void init(uint64_t total,
 	      uint64_t min_alloc_size,
 	      uint64_t mem_cap = DEF_MEM_CAP) {
-      assert(!granularity); // not initialized yet
-      assert(min_alloc_size && isp2(min_alloc_size));
-      assert(mem_cap);
+      ceph_assert(!granularity); // not initialized yet
+      ceph_assert(min_alloc_size && isp2(min_alloc_size));
+      ceph_assert(mem_cap);
       
       total = round_up_to(total, min_alloc_size);
       granularity = total * BLOOM_FILTER_TABLE_SIZE * 2 / mem_cap;
@@ -2739,10 +2744,10 @@ public:
     }
     inline void set_used(uint64_t offset, uint64_t len,
 			 const coll_t& cid, const ghobject_t& oid) {
-      assert(granularity); // initialized
+      ceph_assert(granularity); // initialized
       
       // can't call this func after filter_out has been apllied
-      assert(!was_filtered_out);
+      ceph_assert(!was_filtered_out);
       if (!len) {
 	return;
       }
@@ -2760,7 +2765,7 @@ public:
 
     // determines if collection's present after filtering-out 
     inline bool is_used(const coll_t& cid) const {
-      assert(was_filtered_out);
+      ceph_assert(was_filtered_out);
       for(auto& bf : collections_bfs) {
         if (bf.contains(get_hash(cid))) {
           return true;
@@ -2770,7 +2775,7 @@ public:
     }
     // determines if object's present after filtering-out 
     inline bool is_used(const ghobject_t& oid) const {
-      assert(was_filtered_out);
+      ceph_assert(was_filtered_out);
       for(auto& bf : objects_bfs) {
         if (bf.contains(oid.hobj.get_hash())) {
           return true;
@@ -2780,8 +2785,8 @@ public:
     }
     // determines if collection's present before filtering-out 
     inline bool is_used(const coll_t& cid, uint64_t offs) const {
-      assert(granularity); // initialized
-      assert(!was_filtered_out);
+      ceph_assert(granularity); // initialized
+      ceph_assert(!was_filtered_out);
       auto &bf = collections_bfs[offs / granularity];
       if (bf.contains(get_hash(cid))) {
         return true;
@@ -2790,8 +2795,8 @@ public:
     }
     // determines if object's present before filtering-out 
     inline bool is_used(const ghobject_t& oid, uint64_t offs) const {
-      assert(granularity); // initialized
-      assert(!was_filtered_out);
+      ceph_assert(granularity); // initialized
+      ceph_assert(!was_filtered_out);
       auto &bf = objects_bfs[offs / granularity];
       if (bf.contains(oid.hobj.get_hash())) {
         return true;
