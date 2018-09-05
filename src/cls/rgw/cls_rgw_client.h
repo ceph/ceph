@@ -502,6 +502,10 @@ int cls_rgw_usage_log_read(librados::IoCtx& io_ctx, string& oid, string& user,
                            uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
                            string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage,
                            bool *is_truncated);
+int cls_rgw_usage_log_read_total(librados::IoCtx& io_ctx, string& oid, string& user,
+                                 uint32_t max_entries, string& read_iter,
+                                 map<rgw_user_bucket, rgw_usage_log_entry>& usage,
+                                 bool *is_truncated);
 
 int cls_rgw_usage_log_trim(librados::IoCtx& io_ctx, const string& oid, string& user,
                            uint64_t start_epoch, uint64_t end_epoch);

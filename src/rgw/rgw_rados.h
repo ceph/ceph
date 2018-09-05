@@ -2595,6 +2595,8 @@ public:
   int log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info);
   int read_usage(const rgw_user& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
                  bool *is_truncated, RGWUsageIter& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage);
+  int read_total_usage(const rgw_user& user, uint32_t max_entries, bool *is_truncated,
+                       RGWUsageIter& usage_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage);
   int trim_usage(rgw_user& user, uint64_t start_epoch, uint64_t end_epoch);
 
   int create_pool(const rgw_pool& pool);

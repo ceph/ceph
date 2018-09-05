@@ -5183,6 +5183,51 @@ next:
   return 0;
 }
 
+int RGWRados::read_total_usage(const rgw_user& user, uint32_t max_entries, bool *is_truncated,
+    RGWUsageIter& usage_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage)
+{
+  uint32_t num = max_entries;
+  string hash, first_hash;
+  string user_str = user.to_str();
+  usage_log_hash(cct, user_str, first_hash, 0);
+  if (usage_iter.index) {
+    usage_log_hash(cct, user_str, hash, usage_iter.index);
+  } else {
+    hash = first_hash;
+  }
+  usage.clear();
+
+  do {
+    map<rgw_user_bucket, rgw_usage_log_entry> ret_usage;
+    map<rgw_user_bucket, rgw_usage_log_entry>::iterator iter;
+
+    rgw_raw_obj obj(get_zone_params().usage_log_pool, hash);
+    rgw_rados_ref ref;
+    int ret = get_raw_obj_ref(obj, &ref);
+    if (ret < 0) {
+      return ret;
+    }
+    *is_truncated = false;
+    ret = cls_rgw_usage_log_read_total(ref.ioctx, ref.oid, user_str, max_entries,
+        usage_iter.read_iter, ret_usage, is_truncated);
+    if (ret == -ENOENT) {
+      goto next;
+    }
+
+    num -= ret_usage.size();
+    for (iter = ret_usage.begin(); iter != ret_usage.end(); ++iter) {
+      usage[iter->first].aggregate(iter->second);
+    }
+
+next:
+    if (!*is_truncated) {
+      usage_iter.read_iter.clear();
+      usage_log_hash(cct, user_str, hash, ++usage_iter.index);
+    }
+  } while (num && !*is_truncated && hash != first_hash);
+  return 0;
+}
+
 int RGWRados::trim_usage(rgw_user& user, uint64_t start_epoch, uint64_t end_epoch)
 {
   uint32_t index = 0;

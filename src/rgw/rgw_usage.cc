@@ -47,6 +47,61 @@ int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
   flusher.start(0);
 
   formatter->open_object_section("usage");
+  if (!show_log_entries && !show_log_sum) { // not show entries and sum means to show total
+    string last_owner;
+    bool user_section_open = false;
+    int ret = 0;
+    formatter->open_array_section("entries");
+    while (is_truncated) {
+      ret = store->read_total_usage(uid, max_entries, &is_truncated, usage_iter, usage);
+      if (ret == -ENOENT) {
+        ret = 0;
+        is_truncated = false;
+      }
+      if (ret < 0) {
+        break;
+      }
+      map<rgw_user_bucket, rgw_usage_log_entry>::iterator iter;
+      for (iter = usage.begin(); iter != usage.end(); ++iter) {
+        const rgw_user_bucket& ub = iter->first;
+        const rgw_usage_log_entry& entry = iter->second;
+        if (!ub.user.empty() && ub.user.compare(last_owner) != 0) {
+          if (user_section_open) {
+            formatter->close_section();
+            formatter->close_section();
+          }
+          formatter->open_object_section("user");
+          formatter->dump_string("user", ub.user);
+          formatter->open_array_section("buckets");
+          user_section_open = true;
+          last_owner = ub.user;
+        }
+        formatter->open_object_section("bucket");
+        formatter->dump_string("bucket", ub.bucket);
+        utime_t ut(entry.epoch, 0);
+        ut.gmtime(formatter->dump_stream("time"));
+        formatter->dump_int("epoch", entry.epoch);
+        string owner = entry.owner.to_str();
+        string payer = entry.payer.to_str();
+        formatter->dump_string("owner", owner);
+        if (!payer.empty() && payer != owner) {
+          formatter->dump_string("payer", payer);
+        }
+        dump_usage_categories_info(formatter, entry, categories);
+        formatter->close_section(); // bucket
+        flusher.flush();
+      }
+    }
+    if (user_section_open) {
+      formatter->close_section(); // buckets
+      formatter->close_section(); //user
+    }
+    formatter->close_section(); // entries
+    formatter->close_section(); // usage
+    flusher.flush();
+    return ret;
+  }
+
   if (show_log_entries) {
     formatter->open_array_section("entries");
   }

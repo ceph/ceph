@@ -624,6 +624,38 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, string& oid, string& user,
   return 0;
 }
 
+int cls_rgw_usage_log_read_total(IoCtx& io_ctx, string& oid, string& user, uint32_t max_entries,
+    string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage, bool *is_truncated)
+{
+  if (is_truncated) {
+    *is_truncated = false;
+  }
+  bufferlist in, out;
+  rgw_cls_usage_log_read_op call;
+  call.owner = user;
+  call.max_entries = max_entries;
+  call.iter = read_iter;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_USER_USAGE_LOG_READ_TOTAL, in, out);
+  if (r < 0) {
+    return r;
+  }
+
+  try {
+    rgw_cls_usage_log_read_ret result;
+    bufferlist::iterator iter = out.begin();
+    ::decode(result, iter);
+    read_iter = result.next_iter;
+    if (is_truncated) {
+      *is_truncated = result.truncated;
+    }
+    usage = result.usage;
+  } catch (buffer::error& e) {
+    return -EINVAL;
+  }
+  return 0;
+}
+
 int cls_rgw_usage_log_trim(IoCtx& io_ctx, const string& oid, string& user,
 			   uint64_t start_epoch, uint64_t end_epoch)
 {

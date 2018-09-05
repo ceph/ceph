@@ -38,6 +38,7 @@
 /* usage logging */
 #define RGW_USER_USAGE_LOG_ADD "user_usage_log_add"
 #define RGW_USER_USAGE_LOG_READ "user_usage_log_read"
+#define RGW_USER_USAGE_LOG_READ_TOTAL "user_usage_log_read_total"
 #define RGW_USER_USAGE_LOG_TRIM "user_usage_log_trim"
 
 /* garbage collection */

@@ -2842,6 +2842,12 @@ static void usage_record_prefix_by_user(string& user, uint64_t epoch, string& ke
   key = buf;
 }
 
+static void usage_record_prefix_total(string& user, string& key)
+{
+  key = "usage_total_";
+  key += user;
+}
+
 static void usage_record_name_by_time(uint64_t epoch, const string& user, string& bucket, string& key)
 {
   char buf[32 + user.size() + bucket.size()];
@@ -2853,6 +2859,13 @@ static void usage_record_name_by_user(const string& user, uint64_t epoch, string
 {
   char buf[32 + user.size() + bucket.size()];
   snprintf(buf, sizeof(buf), "%s_%011llu_%s", user.c_str(), (long long unsigned)epoch, bucket.c_str());
+  key = buf;
+}
+
+static void usage_record_name_total(const string& user, string& bucket, string& key)
+{
+  char buf[16 + user.size() + bucket.size()];
+  snprintf(buf, sizeof(buf), "usage_total_%s_%s", user.c_str(), bucket.c_str());
   key = buf;
 }
 
@@ -2922,6 +2935,30 @@ int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist
     ret = cls_cxx_map_set_val(hctx, key_by_user, &new_record_bl);
     if (ret < 0)
       return ret;
+
+    // Add the total usage log for radosgw_exporter
+    string key_total;
+    usage_record_name_total(puser->to_str(), entry.bucket, key_total);
+    bufferlist current_total_bl;
+    ret = cls_cxx_map_get_val(hctx, key_total, &current_total_bl);
+    if (ret < 0 && ret != -ENOENT) {
+      CLS_LOG(1, "ERROR: rgw_user_usage_log_add(): cls_cxx_map_read_key returned %d\n", ret);
+      return -EINVAL;
+    }
+    if (ret >= 0) {
+      rgw_usage_log_entry e;
+      ret = usage_record_decode(current_total_bl, e);
+      if (ret < 0) {
+        return ret;
+      }
+      entry.aggregate(e);
+    }
+    bufferlist total_bl;
+    ::encode(entry, total_bl);
+    ret = cls_cxx_map_set_val(hctx, key_total, &total_bl);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   return 0;
@@ -3061,6 +3098,58 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
   if (ret_info.truncated)
     ret_info.next_iter = iter;
 
+  ::encode(ret_info, *out);
+  return 0;
+}
+
+int rgw_user_usage_log_read_total(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(10, "rgw_user_usage_log_read_total()");
+  bufferlist::iterator in_iter = in->begin();
+  rgw_cls_usage_log_read_op op;
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_user_usage_log_read_total(): failed to decode request\n");
+    return -EINVAL;
+  }
+  rgw_cls_usage_log_read_ret ret_info;
+  map<rgw_user_bucket, rgw_usage_log_entry> *usage = &ret_info.usage;
+  string iter = op.iter;
+  uint32_t max_entries = op.max_entries;
+  if (ret_info.truncated) {
+    ret_info.truncated = false;
+  }
+  map<string, bufferlist> keys;
+  string start_key, filter_prefix;
+  usage_record_prefix_total(op.owner, start_key);
+  int ret = cls_cxx_map_get_vals(hctx, start_key, filter_prefix, max_entries, &keys, &ret_info.truncated);
+  if (ret < 0) {
+    return ret;
+  }
+
+  uint32_t current_index = 0, num_keys = keys.size();
+  for (map<string, bufferlist>::iterator i = keys.begin(); i != keys.end(); ++i, ++current_index) {
+    rgw_usage_log_entry e;
+    ret = usage_record_decode(i->second, e);
+    if (ret < 0) {
+      return ret;
+    }
+    const string& key = i->first;
+    ret = usage_log_read_cb(hctx, key, e, (void *)usage);
+    if (ret < 0) {
+      return ret;
+    }
+    if (current_index == num_keys - 1) {
+      iter = key;
+    }
+  }
+  if (ret < 0) {
+    return ret;
+  }
+  if (ret_info.truncated) {
+    ret_info.next_iter = iter;
+  }
   ::encode(ret_info, *out);
   return 0;
 }
@@ -3857,6 +3946,7 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_dir_suggest_changes;
   cls_method_handle_t h_rgw_user_usage_log_add;
   cls_method_handle_t h_rgw_user_usage_log_read;
+  cls_method_handle_t h_rgw_user_usage_log_read_total;
   cls_method_handle_t h_rgw_user_usage_log_trim;
   cls_method_handle_t h_rgw_gc_set_entry;
   cls_method_handle_t h_rgw_gc_list;
@@ -3913,6 +4003,7 @@ CLS_INIT(rgw)
   /* usage logging */
   cls_register_cxx_method(h_class, RGW_USER_USAGE_LOG_ADD, CLS_METHOD_RD | CLS_METHOD_WR, rgw_user_usage_log_add, &h_rgw_user_usage_log_add);
   cls_register_cxx_method(h_class, RGW_USER_USAGE_LOG_READ, CLS_METHOD_RD, rgw_user_usage_log_read, &h_rgw_user_usage_log_read);
+  cls_register_cxx_method(h_class, RGW_USER_USAGE_LOG_READ_TOTAL, CLS_METHOD_RD, rgw_user_usage_log_read_total, &h_rgw_user_usage_log_read_total);
   cls_register_cxx_method(h_class, RGW_USER_USAGE_LOG_TRIM, CLS_METHOD_RD | CLS_METHOD_WR, rgw_user_usage_log_trim, &h_rgw_user_usage_log_trim);
 
   /* garbage collection */
