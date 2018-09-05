@@ -86,10 +86,9 @@ function(do_build_dpdk dpdk_dir)
   ExternalProject_Add_StepTargets(dpdk-ext configure patch-config build)
 endfunction()
 
-macro(build_dpdk)
-  set(DPDK_DIR ${CMAKE_BINARY_DIR}/src/dpdk)
-  do_build_dpdk(${DPDK_DIR})
-  set(DPDK_INCLUDE_DIR ${DPDK_DIR}/include)
+function(build_dpdk dpdk_dir)
+  do_build_dpdk(${dpdk_dir})
+  set(DPDK_INCLUDE_DIR ${dpdk_dir}/include)
   # create the directory so cmake won't complain when looking at the imported
   # target
   file(MAKE_DIRECTORY ${DPDK_INCLUDE_DIR})
@@ -113,7 +112,7 @@ macro(build_dpdk)
     add_library(dpdk::${c} STATIC IMPORTED)
     add_dependencies(dpdk::${c} dpdk-ext)
     set(dpdk_${c}_LIBRARY
-      "${DPDK_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}rte_${c}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+      "${dpdk_dir}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}rte_${c}${CMAKE_STATIC_LIBRARY_SUFFIX}")
     set_target_properties(dpdk::${c} PROPERTIES
       INTERFACE_INCLUDE_DIRECTORIES ${DPDK_INCLUDE_DIR}
       INTERFACE_LINK_LIBRARIES dpdk::cflags
@@ -134,4 +133,4 @@ macro(build_dpdk)
     set_target_properties(dpdk::dpdk PROPERTIES
       INTERFACE_COMPILE_OPTIONS "${dpdk_rte_CFLAGS}")
   endif()
-endmacro()
+endfunction()
