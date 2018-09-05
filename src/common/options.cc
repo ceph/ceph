@@ -5050,6 +5050,11 @@ std::vector<Option> get_rgw_options() {
           "concurrency of lifecycle maintenance, but requires multiple RGW processes "
           "running on the zone to be utilized."),
 
+    Option("rgw_lc_max_rules", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1000)
+    .set_description("Max number of lifecycle rules set on one bucket")
+    .set_long_description("Number of lifecycle rules set on one bucket should be limited."),
+
     Option("rgw_lc_debug_interval", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(-1)
     .set_description(""),
