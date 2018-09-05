@@ -7987,6 +7987,8 @@ int RGWRados::Object::Delete::delete_obj()
       }
 
       result.version_id = marker.get_instance();
+      if (result.version_id.empty())
+        result.version_id = "null";
       result.delete_marker = true;
 
       struct rgw_bucket_dir_entry_meta meta;
