@@ -2212,26 +2212,7 @@ public:
   int update_containers_stats(map<string, RGWBucketEnt>& m);
   int append_async(rgw_raw_obj& obj, size_t size, bufferlist& bl);
 
-  int watch(const string& oid, uint64_t *watch_handle, librados::WatchCtx2 *ctx);
-  int aio_watch(const string& oid, uint64_t *watch_handle, librados::WatchCtx2 *ctx, librados::AioCompletion *c);
-  int unwatch(uint64_t watch_handle);
-  void add_watcher(int i);
-  void remove_watcher(int i);
-  virtual bool need_watch_notify() { return false; }
-  int init_watch();
-  void finalize_watch();
-  int distribute(const string& key, bufferlist& bl);
-private:
-  int robust_notify(const string& notify_oid, bufferlist& bl);
 public:
-  virtual int watch_cb(uint64_t notify_id,
-		       uint64_t cookie,
-		       uint64_t notifier_id,
-		       bufferlist& bl) { return 0; }
-  void pick_control_oid(const string& key, string& notify_oid);
-
-  virtual void set_cache_enabled(bool state) {}
-
   void set_atomic(void *ctx, rgw_obj& obj) {
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
     rctx->obj.set_atomic(obj);
@@ -2285,15 +2266,6 @@ public:
 	    bufferlist& out) override final;
 
 protected:
-  void cache_list_dump_helper(Formatter* f,
-			      const std::string& name,
-			      const ceph::real_time mtime,
-			      const std::uint64_t size) {
-    f->dump_string("name", name);
-    f->dump_string("mtime", ceph::to_iso_8601(mtime));
-    f->dump_unsigned("size", size);
-  }
-
   // `call_list` must iterate over all cache entries and call
   // `cache_list_dump_helper` with the supplied Formatter on any that
   // include `filter` as a substring.
