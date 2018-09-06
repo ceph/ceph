@@ -104,9 +104,10 @@ Watcher::~Watcher() {
 void Watcher::register_watch(Context *on_finish) {
   ldout(m_cct, 10) << dendl;
 
-  RWLock::RLocker watch_locker(m_watch_lock);
+  RWLock::WLocker watch_locker(m_watch_lock);
   ceph_assert(is_unregistered(m_watch_lock));
   m_watch_state = WATCH_STATE_REGISTERING;
+  m_watch_blacklisted = false;
 
   librados::AioCompletion *aio_comp = create_rados_callback(
     new C_RegisterWatch(this, on_finish));
@@ -137,6 +138,8 @@ void Watcher::handle_register_watch(int r, Context *on_finish) {
       lderr(m_cct) << "re-registering watch after error" << dendl;
       m_watch_state = WATCH_STATE_REWATCHING;
       watch_error = true;
+    } else {
+      m_watch_blacklisted = (r == -EBLACKLISTED);
     }
   }
 
@@ -165,11 +168,13 @@ void Watcher::unregister_watch(Context *on_finish) {
       return;
     } else if (is_registered(m_watch_lock)) {
       librados::AioCompletion *aio_comp = create_rados_callback(
-                        new C_UnwatchAndFlush(m_ioctx, on_finish));
+        new C_UnwatchAndFlush(m_ioctx, on_finish));
       int r = m_ioctx.aio_unwatch(m_watch_handle, aio_comp);
       ceph_assert(r == 0);
       aio_comp->release();
+
       m_watch_handle = 0;
+      m_watch_blacklisted = false;
       return;
     }
   }
@@ -225,6 +230,9 @@ void Watcher::handle_error(uint64_t handle, int err) {
 
   if (is_registered(m_watch_lock)) {
     m_watch_state = WATCH_STATE_REWATCHING;
+    if (err == -EBLACKLISTED) {
+      m_watch_blacklisted = true;
+    }
 
     FunctionContext *ctx = new FunctionContext(
         boost::bind(&Watcher::rewatch, this));
@@ -271,12 +279,14 @@ void Watcher::handle_rewatch(int r) {
     RWLock::WLocker watch_locker(m_watch_lock);
     ceph_assert(m_watch_state == WATCH_STATE_REWATCHING);
 
+    m_watch_blacklisted = false;
     if (m_unregister_watch_ctx != nullptr) {
       ldout(m_cct, 10) << "image is closing, skip rewatch" << dendl;
       m_watch_state = WATCH_STATE_IDLE;
       std::swap(unregister_watch_ctx, m_unregister_watch_ctx);
     } else if (r  == -EBLACKLISTED) {
       lderr(m_cct) << "client blacklisted" << dendl;
+      m_watch_blacklisted = true;
     } else if (r == -ENOENT) {
       ldout(m_cct, 5) << "object does not exist" << dendl;
     } else if (r < 0) {
