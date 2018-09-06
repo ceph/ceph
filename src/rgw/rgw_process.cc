@@ -14,6 +14,8 @@
 #include "rgw_client_io.h"
 #include "rgw_opa.h"
 
+#include "services/svc_zone_utils.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 void RGWProcess::RGWWQ::_dump_queue()
@@ -149,8 +151,8 @@ int process_request(RGWRados* const store,
     return ret;
   }
 
-  s->req_id = store->unique_id(req->id);
-  s->trans_id = store->unique_trans_id(req->id);
+  s->req_id = store->svc.zone_utils->unique_id(req->id);
+  s->trans_id = store->svc.zone_utils->unique_trans_id(req->id);
   s->host_id = store->host_id;
 
   ldpp_dout(s, 2) << "initializing for trans_id = " << s->trans_id << dendl;

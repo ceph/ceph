@@ -190,3 +190,8 @@ int RGWSI_SysObj::Obj::OmapOp::del(const std::string& key)
 
   return svc->omap_del(obj, key);
 }
+
+RGWSI_Zone *RGWSI_SysObj::get_zone_svc()
+{
+  return core_svc->get_zone_svc();
+}

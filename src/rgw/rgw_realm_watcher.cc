@@ -5,6 +5,7 @@
 
 #include "rgw_realm_watcher.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 

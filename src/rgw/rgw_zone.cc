@@ -1,6 +1,45 @@
-#include "rgw_zone.h"
+#include "common/errno.h"
 
+#include "rgw_zone.h"
+#include "rgw_realm_watcher.h"
+#include "rgw_meta_sync_status.h"
+
+#include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
+
+#define dout_subsys ceph_subsys_rgw
+
+namespace rgw_zone_defaults {
+
+std::string zone_info_oid_prefix = "zone_info.";
+std::string zone_names_oid_prefix = "zone_names.";
+std::string region_info_oid_prefix = "region_info.";
+std::string realm_names_oid_prefix = "realms_names.";
+std::string zone_group_info_oid_prefix = "zonegroup_info.";
+std::string realm_info_oid_prefix = "realms.";
+std::string default_region_info_oid = "default.region";
+std::string default_zone_group_info_oid = "default.zonegroup";
+std::string period_info_oid_prefix = "periods.";
+std::string period_latest_epoch_info_oid = ".latest_epoch";
+std::string region_map_oid = "region_map";
+std::string default_realm_info_oid = "default.realm";
+std::string default_zonegroup_name = "default";
+std::string default_zone_name = "default";
+std::string zonegroup_names_oid_prefix = "zonegroups_names.";
+std::string RGW_DEFAULT_ZONE_ROOT_POOL = "rgw.root";
+std::string RGW_DEFAULT_ZONEGROUP_ROOT_POOL = "rgw.root";
+std::string RGW_DEFAULT_REALM_ROOT_POOL = "rgw.root";
+std::string RGW_DEFAULT_PERIOD_ROOT_POOL = "rgw.root";
+std::string default_bucket_index_pool_suffix = "rgw.buckets.index";
+std::string default_storage_extra_pool_suffix = "rgw.buckets.non-ec";
+std::string avail_pools = ".pools.avail";
+std::string default_storage_pool_suffix = "rgw.buckets.data";
+
+}
+
+using namespace rgw_zone_defaults;
+
+#define FIRST_EPOCH 1
 
 void RGWDefaultZoneGroupInfo::dump(Formatter *f) const {
   encode_json("default_zonegroup", default_zonegroup, f);
@@ -37,7 +76,7 @@ int RGWZoneGroup::create_default(bool old_format)
 
   RGWZoneParams zone_params(default_zone_name);
 
-  int r = zone_params.init(cct, zone_svc, false);
+  int r = zone_params.init(cct, sysobj_svc, false);
   if (r < 0) {
     ldout(cct, 0) << "create_default: error initializing zone params: " << cpp_strerror(-r) << dendl;
     return r;
@@ -50,7 +89,7 @@ int RGWZoneGroup::create_default(bool old_format)
   } else if (r == -EEXIST) {
     ldout(cct, 10) << "zone_params::create_default() returned -EEXIST, we raced with another default zone_params creation" << dendl;
     zone_params.clear_id();
-    r = zone_params.init(cct, zone_svc);
+    r = zone_params.init(cct, sysobj_svc);
     if (r < 0) {
       ldout(cct, 0) << "create_default: error in init existing zone params: " << cpp_strerror(-r) << dendl;
       return r;
@@ -73,7 +112,7 @@ int RGWZoneGroup::create_default(bool old_format)
   if (r == -EEXIST) {
     ldout(cct, 10) << "create_default() returned -EEXIST, we raced with another zonegroup creation" << dendl;
     id.clear();
-    r = init(cct, zone_svc);
+    r = init(cct, sysobj_svc);
     if (r < 0) {
       return r;
     }
@@ -181,9 +220,9 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bo
                     << ",  valid sync modules: " 
                     << store->get_sync_modules_manager()->get_registered_module_names()
                     << dendl;
-#endif
       return -ENOENT;
     }
+#endif
   }
 
   if (psync_from_all) {
@@ -232,7 +271,7 @@ void RGWZoneGroup::post_process_params()
     zone.log_data = log_data;
 
     RGWZoneParams zone_params(zone.id, zone.name);
-    int ret = zone_params.init(cct, zone_svc);
+    int ret = zone_params.init(cct, sysobj_svc);
     if (ret < 0) {
       ldout(cct, 0) << "WARNING: could not read zone params for zone id=" << zone.id << " name=" << zone.name << dendl;
       continue;
@@ -275,7 +314,7 @@ int RGWZoneGroup::read_default_id(string& default_id, bool old_format)
   if (realm_id.empty()) {
     /* try using default realm */
     RGWRealm realm;
-    int ret = realm.init(cct, zone_svc);
+    int ret = realm.init(cct, sysobj_svc);
     // no default realm exist
     if (ret < 0) {
       return read_id(default_zonegroup_name, default_id);
@@ -291,7 +330,7 @@ int RGWZoneGroup::set_as_default(bool exclusive)
   if (realm_id.empty()) {
     /* try using default realm */
     RGWRealm realm;
-    int ret = realm.init(cct, zone_svc);
+    int ret = realm.init(cct, sysobj_svc);
     if (ret < 0) {
       ldout(cct, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
       return -EINVAL;
@@ -302,10 +341,16 @@ int RGWZoneGroup::set_as_default(bool exclusive)
   return RGWSystemMetaObj::set_as_default(exclusive);
 }
 
-int RGWSystemMetaObj::init(CephContext *_cct, RGWSI_Zone *_zone_svc, bool setup_obj, bool old_format)
+void RGWSystemMetaObj::reinit_instance(CephContext *_cct, RGWSI_SysObj *_sysobj_svc)
 {
   cct = _cct;
-  zone_svc = _zone_svc;
+  sysobj_svc = _sysobj_svc;
+  zone_svc = _sysobj_svc->get_zone_svc();
+}
+
+int RGWSystemMetaObj::init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, bool setup_obj, bool old_format)
+{
+  reinit_instance(_cct, _sysobj_svc);
 
   if (!setup_obj)
     return 0;
@@ -343,9 +388,10 @@ int RGWSystemMetaObj::read_default(RGWDefaultSystemMetaObjInfo& default_info, co
   using ceph::decode;
   auto pool = get_pool(cct);
   bufferlist bl;
-  RGWSysObjectCtx obj_ctx = sysobj_svc->get_obj_ctx();
 
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  int ret = sysobj.rop().read(&bl);
   if (ret < 0)
     return ret;
 
@@ -392,8 +438,11 @@ int RGWSystemMetaObj::set_as_default(bool exclusive)
 
   encode(default_info, bl);
 
-  int ret = rgw_put_system_obj(store, pool, oid, bl,
-                               exclusive, NULL, real_time(), NULL);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  int ret = sysobj.wop()
+                  .set_exclusive(exclusive)
+		  .write(bl);
   if (ret < 0)
     return ret;
 
@@ -408,9 +457,9 @@ int RGWSystemMetaObj::read_id(const string& obj_name, string& object_id)
 
   string oid = get_names_oid_prefix() + obj_name;
 
-  RGWSysObjectCtx obj_ctx = sysobj_svc->get_obj_ctx();
-
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  int ret = sysobj.rop().read(&bl);
   if (ret < 0) {
     return ret;
   }
@@ -431,6 +480,8 @@ int RGWSystemMetaObj::delete_obj(bool old_format)
 {
   rgw_pool pool(get_pool(cct));
 
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+
   /* check to see if obj is the default */
   RGWDefaultSystemMetaObjInfo default_info;
   int ret = read_default(default_info, get_default_oid(old_format));
@@ -439,7 +490,8 @@ int RGWSystemMetaObj::delete_obj(bool old_format)
   if (default_info.default_id == id || (old_format && default_info.default_id == name)) {
     string oid = get_default_oid(old_format);
     rgw_raw_obj default_named_obj(pool, oid);
-    ret = store->delete_system_obj(default_named_obj);
+    auto sysobj = sysobj_svc->get_obj(obj_ctx, default_named_obj);
+    ret = sysobj.wop().remove();
     if (ret < 0) {
       ldout(cct, 0) << "Error delete default obj name  " << name << ": " << cpp_strerror(-ret) << dendl;
       return ret;
@@ -448,7 +500,8 @@ int RGWSystemMetaObj::delete_obj(bool old_format)
   if (!old_format) {
     string oid  = get_names_oid_prefix() + name;
     rgw_raw_obj object_name(pool, oid);
-    ret = store->delete_system_obj(object_name);
+    auto sysobj = sysobj_svc->get_obj(obj_ctx, object_name);
+    ret = sysobj.wop().remove();
     if (ret < 0) {
       ldout(cct, 0) << "Error delete obj name  " << name << ": " << cpp_strerror(-ret) << dendl;
       return ret;
@@ -463,7 +516,8 @@ int RGWSystemMetaObj::delete_obj(bool old_format)
   }
 
   rgw_raw_obj object_id(pool, oid);
-  ret = store->delete_system_obj(object_id);
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, object_id);
+  ret = sysobj.wop().remove();
   if (ret < 0) {
     ldout(cct, 0) << "Error delete object id " << id << ": " << cpp_strerror(-ret) << dendl;
   }
@@ -482,7 +536,11 @@ int RGWSystemMetaObj::store_name(bool exclusive)
   bufferlist bl;
   using ceph::encode;
   encode(nameToId, bl);
-  return rgw_put_system_obj(store, pool, oid, bl, exclusive, NULL, real_time(), NULL);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  return sysobj.wop()
+               .set_exclusive(exclusive)
+	       .write(bl);
 }
 
 int RGWSystemMetaObj::rename(const string& new_name)
@@ -512,7 +570,9 @@ int RGWSystemMetaObj::rename(const string& new_name)
   rgw_pool pool(get_pool(cct));
   string oid = get_names_oid_prefix() + old_name;
   rgw_raw_obj old_name_obj(pool, oid);
-  ret = store->delete_system_obj(old_name_obj);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, old_name_obj);
+  ret = sysobj.wop().remove();
   if (ret < 0) {
     ldout(cct, 0) << "Error delete old obj name  " << old_name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -529,9 +589,9 @@ int RGWSystemMetaObj::read_info(const string& obj_id, bool old_format)
 
   string oid = get_info_oid_prefix(old_format) + obj_id;
 
-  RGWSysObjectCtx obj_ctx = sysobj_svc->get_obj_ctx();
-
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, oid});
+  int ret = sysobj.rop().read(&bl);
   if (ret < 0) {
     ldout(cct, 0) << "failed reading obj info from " << pool << ":" << oid << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -600,7 +660,11 @@ int RGWSystemMetaObj::store_info(bool exclusive)
   bufferlist bl;
   using ceph::encode;
   encode(*this, bl);
-  return rgw_put_system_obj(store, pool, oid, bl, exclusive, NULL, real_time(), NULL);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, oid});
+  return sysobj.wop()
+               .set_exclusive(exclusive)
+	       .write(bl);
 }
 
 int RGWSystemMetaObj::write(bool exclusive)
@@ -639,7 +703,7 @@ int RGWRealm::create(bool exclusive)
   RGWPeriod period;
   if (current_period.empty()) {
     /* create new period for the realm */
-    ret = period.init(cct, store, id, name, false);
+    ret = period.init(cct, sysobj_svc, id, name, false);
     if (ret < 0 ) {
       return ret;
     }
@@ -650,7 +714,7 @@ int RGWRealm::create(bool exclusive)
     }
   } else {
     period = RGWPeriod(current_period, 0);
-    int ret = period.init(cct, store, id, name);
+    int ret = period.init(cct, sysobj_svc, id, name);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to init period " << current_period << dendl;
       return ret;
@@ -685,15 +749,20 @@ int RGWRealm::create_control(bool exclusive)
   auto pool = rgw_pool{get_pool(cct)};
   auto oid = get_control_oid();
   bufferlist bl;
-  return rgw_put_system_obj(store, pool, oid, bl, exclusive,
-                            nullptr, real_time(), nullptr);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, oid});
+  return sysobj.wop()
+               .set_exclusive(exclusive)
+	       .write(bl);
 }
 
 int RGWRealm::delete_control()
 {
   auto pool = rgw_pool{get_pool(cct)};
   auto obj = rgw_raw_obj{pool, get_control_oid()};
-  return store->delete_system_obj(obj);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, obj);
+  return sysobj.wop().remove();
 }
 
 rgw_pool RGWRealm::get_pool(CephContext *cct)
@@ -809,15 +878,15 @@ rgw_pool RGWPeriodConfig::get_pool(CephContext *cct)
   return {pool_name};
 }
 
-int RGWPeriodConfig::read(RGWRados *store, const std::string& realm_id)
+int RGWPeriodConfig::read(RGWSI_SysObj *sysobj_svc, const std::string& realm_id)
 {
-  RGWSysObjectCtx obj_ctx = sysobj_svc->get_obj_ctx();
-
-  const auto& pool = get_pool(store->ctx());
+  const auto& pool = get_pool(sysobj_svc->ctx());
   const auto& oid = get_oid(realm_id);
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, nullptr, nullptr);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, oid});
+  int ret = sysobj.rop().read(&bl);
   if (ret < 0) {
     return ret;
   }
@@ -831,43 +900,47 @@ int RGWPeriodConfig::read(RGWRados *store, const std::string& realm_id)
   return 0;
 }
 
-int RGWPeriodConfig::write(RGWRados *store, const std::string& realm_id)
+int RGWPeriodConfig::write(RGWSI_SysObj *sysobj_svc, const std::string& realm_id)
 {
-  const auto& pool = get_pool(store->ctx());
+  const auto& pool = get_pool(sysobj_svc->ctx());
   const auto& oid = get_oid(realm_id);
   bufferlist bl;
   using ceph::encode;
   encode(*this, bl);
-  return rgw_put_system_obj(store, pool, oid, bl,
-                            false, nullptr, real_time(), nullptr);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, oid});
+  return sysobj.wop()
+               .set_exclusive(false)
+	       .write(bl);
 }
 
-int RGWPeriod::init(CephContext *_cct, RGWRados *_store, const string& period_realm_id,
+int RGWPeriod::init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, const string& period_realm_id,
 		    const string& period_realm_name, bool setup_obj)
 {
   cct = _cct;
-  store = _store;
+  sysobj_svc = _sysobj_svc;
+
   realm_id = period_realm_id;
   realm_name = period_realm_name;
 
   if (!setup_obj)
     return 0;
 
-  return init(_cct, _store, setup_obj);
+  return init(_cct, _sysobj_svc, setup_obj);
 }
 
 
-int RGWPeriod::init(CephContext *_cct, RGWRados *_store, bool setup_obj)
+int RGWPeriod::init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, bool setup_obj)
 {
   cct = _cct;
-  store = _store;
+  sysobj_svc = _sysobj_svc;
 
   if (!setup_obj)
     return 0;
 
   if (id.empty()) {
     RGWRealm realm(realm_id, realm_name);
-    int ret = realm.init(cct, store);
+    int ret = realm.init(cct, sysobj_svc);
     if (ret < 0) {
       ldout(cct, 0) << "RGWPeriod::init failed to init realm " << realm_name  << " id " << realm_id << " : " <<
 	cpp_strerror(-ret) << dendl;
@@ -905,29 +978,6 @@ int RGWPeriod::get_zonegroup(RGWZoneGroup& zonegroup, const string& zonegroup_id
   return -ENOENT;
 }
 
-bool RGWRados::get_redirect_zone_endpoint(string *endpoint)
-{
-  if (zone_public_config.redirect_zone.empty()) {
-    return false;
-  }
-
-  auto iter = zone_conn_map.find(zone_public_config.redirect_zone);
-  if (iter == zone_conn_map.end()) {
-    ldout(cct, 0) << "ERROR: cannot find entry for redirect zone: " << zone_public_config.redirect_zone << dendl;
-    return false;
-  }
-
-  RGWRESTConn *conn = iter->second;
-
-  int ret = conn->get_url(*endpoint);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: redirect zone, conn->get_endpoint() returned ret=" << ret << dendl;
-    return false;
-  }
-
-  return true;
-}
-
 const string& RGWPeriod::get_latest_epoch_oid()
 {
   if (cct->_conf->rgw_period_latest_epoch_info_oid.empty()) {
@@ -963,9 +1013,9 @@ int RGWPeriod::read_latest_epoch(RGWPeriodLatestEpochInfo& info,
 
   rgw_pool pool(get_pool(cct));
   bufferlist bl;
-  RGWSysObjectCtx obj_ctx = sysobj_svc->get_obj_ctx();
-
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, objv, nullptr);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, oid});
+  int ret = sysobj.rop().read(&bl);
   if (ret < 0) {
     ldout(cct, 1) << "error read_lastest_epoch " << pool << ":" << oid << dendl;
     return ret;
@@ -1023,8 +1073,11 @@ int RGWPeriod::set_latest_epoch(epoch_t epoch, bool exclusive,
   using ceph::encode;
   encode(info, bl);
 
-  return rgw_put_system_obj(store, pool, oid, bl,
-                            exclusive, objv, real_time(), nullptr);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  return sysobj.wop()
+               .set_exclusive(exclusive)
+               .write(bl);
 }
 
 int RGWPeriod::update_latest_epoch(epoch_t epoch)
@@ -1080,7 +1133,9 @@ int RGWPeriod::delete_obj()
   for (epoch_t e = 1; e <= epoch; e++) {
     RGWPeriod p{get_id(), e};
     rgw_raw_obj oid{pool, p.get_period_oid()};
-    int ret = store->delete_system_obj(oid);
+    auto obj_ctx = sysobj_svc->init_obj_ctx();
+    auto sysobj = sysobj_svc->get_obj(obj_ctx, oid);
+    int ret = sysobj.wop().remove();
     if (ret < 0) {
       ldout(cct, 0) << "WARNING: failed to delete period object " << oid
           << ": " << cpp_strerror(-ret) << dendl;
@@ -1089,7 +1144,9 @@ int RGWPeriod::delete_obj()
 
   // delete the .latest_epoch object
   rgw_raw_obj oid{pool, get_period_oid_prefix() + get_latest_epoch_oid()};
-  int ret = store->delete_system_obj(oid);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, oid);
+  int ret = sysobj.wop().remove();
   if (ret < 0) {
     ldout(cct, 0) << "WARNING: failed to delete period object " << oid
         << ": " << cpp_strerror(-ret) << dendl;
@@ -1103,10 +1160,9 @@ int RGWPeriod::read_info()
 
   bufferlist bl;
 
-  RGWSysObjectCtx obj_ctx = sysobj_svc->get_obj_ctx();
-
-
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, get_period_oid(), bl, NULL, NULL);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, get_period_oid()});
+  int ret = sysobj.rop().read(&bl);
   if (ret < 0) {
     ldout(cct, 0) << "failed reading obj info from " << pool << ":" << get_period_oid() << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -1162,8 +1218,11 @@ int RGWPeriod::store_info(bool exclusive)
   using ceph::encode;
   encode(*this, bl);
 
-  return rgw_put_system_obj(store, pool, oid, bl,
-                            exclusive, NULL, real_time(), NULL);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
+  return sysobj.wop()
+               .set_exclusive(exclusive)
+               .write(bl);
 }
 
 rgw_pool RGWPeriod::get_pool(CephContext *cct)
@@ -1190,9 +1249,10 @@ int RGWPeriod::add_zonegroup(const RGWZoneGroup& zonegroup)
 
 int RGWPeriod::update()
 {
+  auto zone_svc = sysobj_svc->get_zone_svc();
   ldout(cct, 20) << __func__ << " realm " << realm_id << " period " << get_id() << dendl;
   list<string> zonegroups;
-  int ret = store->list_zonegroups(zonegroups);
+  int ret = zone_svc->list_zonegroups(zonegroups);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to list zonegroups: " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -1204,7 +1264,7 @@ int RGWPeriod::update()
 
   for (auto& iter : zonegroups) {
     RGWZoneGroup zg(string(), iter);
-    ret = zg.init(cct, store);
+    ret = zg.init(cct, sysobj_svc);
     if (ret < 0) {
       ldout(cct, 0) << "WARNING: zg.init() failed: " << cpp_strerror(-ret) << dendl;
       continue;
@@ -1231,7 +1291,7 @@ int RGWPeriod::update()
     }
   }
 
-  ret = period_config.read(store, realm_id);
+  ret = period_config.read(sysobj_svc, realm_id);
   if (ret < 0 && ret != -ENOENT) {
     ldout(cct, 0) << "ERROR: failed to read period config: "
         << cpp_strerror(ret) << dendl;
@@ -1244,7 +1304,7 @@ int RGWPeriod::reflect()
 {
   for (auto& iter : period_map.zonegroups) {
     RGWZoneGroup& zg = iter.second;
-    zg.reinit_instance(cct, store);
+    zg.reinit_instance(cct, sysobj_svc);
     int r = zg.write(false);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: failed to store zonegroup info for zonegroup=" << iter.first << ": " << cpp_strerror(-r) << dendl;
@@ -1260,7 +1320,7 @@ int RGWPeriod::reflect()
     }
   }
 
-  int r = period_config.write(store, realm_id);
+  int r = period_config.write(sysobj_svc, realm_id);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to store period config: "
         << cpp_strerror(-r) << dendl;
@@ -1343,11 +1403,12 @@ int RGWPeriod::update_sync_status(const RGWPeriod &current_period,
 int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period,
                       std::ostream& error_stream, bool force_if_stale)
 {
+  auto zone_svc = sysobj_svc->get_zone_svc();
   ldout(cct, 20) << __func__ << " realm " << realm.get_id() << " period " << current_period.get_id() << dendl;
   // gateway must be in the master zone to commit
-  if (master_zone != store->get_zone_params().get_id()) {
+  if (master_zone != zone_svc->get_zone_params().get_id()) {
     error_stream << "Cannot commit period on zone "
-        << store->get_zone_params().get_id() << ", it must be sent to "
+        << zone_svc->get_zone_params().get_id() << ", it must be sent to "
         "the period's master zone " << master_zone << '.' << std::endl;
     return -EINVAL;
   }
@@ -1453,14 +1514,14 @@ int RGWZoneParams::create_default(bool old_format)
 
 
 int get_zones_pool_set(CephContext* cct,
-                       RGWRados* store,
+                       RGWSI_SysObj* sysobj_svc,
                        const list<string>& zones,
                        const string& my_zone_id,
                        set<rgw_pool>& pool_names)
 {
   for(auto const& iter : zones) {
     RGWZoneParams zone(iter);
-    int r = zone.init(cct, store);
+    int r = zone.init(cct, sysobj_svc);
     if (r < 0) {
       ldout(cct, 0) << "Error: init zone " << iter << ":" << cpp_strerror(-r) << dendl;
       return r;
@@ -1523,13 +1584,13 @@ int RGWZoneParams::fix_pool_names()
 {
 
   list<string> zones;
-  int r = store->list_zones(zones);
+  int r = zone_svc->list_zones(zones);
   if (r < 0) {
     ldout(cct, 10) << "WARNING: store->list_zones() returned r=" << r << dendl;
   }
 
   set<rgw_pool> pools;
-  r = get_zones_pool_set(cct, store, zones, id, pools);
+  r = get_zones_pool_set(cct, zone_svc, zones, id, pools);
   if (r < 0) {
     ldout(cct, 0) << "Error: get_zones_pool_names" << r << dendl;
     return r;
@@ -1569,9 +1630,11 @@ int RGWZoneParams::create(bool exclusive)
 {
   /* check for old pools config */
   rgw_raw_obj obj(domain_root, avail_pools);
-  int r = store->raw_obj_stat(obj, NULL, NULL, NULL, NULL, NULL, NULL);
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, obj);
+  int r = sysobj.rop().stat();
   if (r < 0) {
-    ldout(store->ctx(), 10) << "couldn't find old data placement pools config, setting up new ones for the zone" << dendl;
+    ldout(cct, 10) << "couldn't find old data placement pools config, setting up new ones for the zone" << dendl;
     /* a new system, let's set new placement info */
     RGWZonePlacementInfo default_placement;
     default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
@@ -1633,13 +1696,13 @@ const string& RGWZoneParams::get_predefined_name(CephContext *cct) {
   return cct->_conf->rgw_zone;
 }
 
-int RGWZoneParams::init(CephContext *cct, RGWRados *store, bool setup_obj, bool old_format)
+int RGWZoneParams::init(CephContext *cct, RGWSI_SysObj *sysobj_svc, bool setup_obj, bool old_format)
 {
   if (name.empty()) {
     name = cct->_conf->rgw_zone;
   }
 
-  return RGWSystemMetaObj::init(cct, store, setup_obj, old_format);
+  return RGWSystemMetaObj::init(cct, sysobj_svc, setup_obj, old_format);
 }
 
 int RGWZoneParams::read_default_id(string& default_id, bool old_format)
@@ -1647,7 +1710,7 @@ int RGWZoneParams::read_default_id(string& default_id, bool old_format)
   if (realm_id.empty()) {
     /* try using default realm */
     RGWRealm realm;
-    int ret = realm.init(cct, store);
+    int ret = realm.init(cct, sysobj_svc);
     //no default realm exist
     if (ret < 0) {
       return read_id(default_zone_name, default_id);
@@ -1664,7 +1727,7 @@ int RGWZoneParams::set_as_default(bool exclusive)
   if (realm_id.empty()) {
     /* try using default realm */
     RGWRealm realm;
-    int ret = realm.init(cct, store);
+    int ret = realm.init(cct, sysobj_svc);
     if (ret < 0) {
       ldout(cct, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
       return -EINVAL;
@@ -1788,11 +1851,11 @@ uint32_t RGWPeriodMap::get_zone_short_id(const string& zone_id) const
   return i->second;
 }
 
-int RGWZoneGroupMap::read(CephContext *cct, RGWRados *store)
+int RGWZoneGroupMap::read(CephContext *cct, RGWSI_SysObj *sysobj_svc)
 {
 
   RGWPeriod period;
-  int ret = period.init(cct, store);
+  int ret = period.init(cct, sysobj_svc);
   if (ret < 0) {
     cerr << "failed to read current period info: " << cpp_strerror(ret);
     return ret;

@@ -25,6 +25,10 @@
 #include "rgw_request.h"
 #include "rgw_process.h"
 
+#include "rgw_zone.h"
+
+#include "services/svc_zone.h"
+
 #include <array>
 #include <sstream>
 #include <memory>
@@ -703,7 +707,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
     policy.create_default(s->user->user_id, s->user->display_name);
   }
 
-  location_constraint = store->get_zonegroup().api_name;
+  location_constraint = store->svc.zone->get_zonegroup().api_name;
   get_rmattrs_from_headers(s, CONT_PUT_ATTR_PREFIX,
                            CONT_REMOVE_ATTR_PREFIX, rmattr_names);
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
@@ -1898,7 +1902,7 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
   }
 
   formatter.open_array_section("policies");
-  RGWZoneGroup& zonegroup = store.get_zonegroup();
+  RGWZoneGroup& zonegroup = store.svc.zone->get_zonegroup();
 
   for (const auto& placement_targets : zonegroup.placement_targets) {
     formatter.open_object_section("policy");
