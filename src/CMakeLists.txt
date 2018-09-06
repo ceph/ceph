@@ -307,6 +307,9 @@ if(WITH_SEASTAR)
     endif()
   endmacro ()
   add_subdirectory(seastar)
+  # create the directory so cmake won't complain when looking at the imported
+  # target: Seastar exports this directory created at build-time
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen")
   add_subdirectory(crimson)
 endif()
 
