@@ -132,7 +132,7 @@ void ManagedLock<I>::shut_down(Context *on_shut_down) {
 
   if (m_state == STATE_WAITING_FOR_REGISTER) {
     // abort stalled acquire lock state
-    ldout(m_cct, 10) << "woke up waiting acquire" << dendl;
+    ldout(m_cct, 10) << "woke up waiting (re)acquire" << dendl;
     Action active_action = get_active_action();
     ceph_assert(active_action == ACTION_TRY_LOCK ||
                 active_action == ACTION_ACQUIRE_LOCK);
@@ -206,7 +206,7 @@ void ManagedLock<I>::reacquire_lock(Context *on_reacquired) {
 
     if (m_state == STATE_WAITING_FOR_REGISTER) {
       // restart the acquire lock process now that watch is valid
-      ldout(m_cct, 10) << "woke up waiting acquire" << dendl;
+      ldout(m_cct, 10) << "woke up waiting (re)acquire" << dendl;
       Action active_action = get_active_action();
       ceph_assert(active_action == ACTION_TRY_LOCK ||
                   active_action == ACTION_ACQUIRE_LOCK);
@@ -467,14 +467,20 @@ void ManagedLock<I>::send_acquire_lock() {
   }
 
   ldout(m_cct, 10) << dendl;
-  m_state = STATE_ACQUIRING;
 
   uint64_t watch_handle = m_watcher->get_watch_handle();
   if (watch_handle == 0) {
     lderr(m_cct) << "watcher not registered - delaying request" << dendl;
     m_state = STATE_WAITING_FOR_REGISTER;
+
+    // shut down might race w/ release/re-acquire of the lock
+    if (is_state_shutdown()) {
+      complete_active_action(STATE_UNLOCKED, -ESHUTDOWN);
+    }
     return;
   }
+
+  m_state = STATE_ACQUIRING;
   m_cookie = encode_lock_cookie(watch_handle);
 
   m_work_queue->queue(new FunctionContext([this](int r) {
@@ -523,13 +529,6 @@ void ManagedLock<I>::handle_acquire_lock(int r) {
 }
 
 template <typename I>
-void ManagedLock<I>::handle_no_op_reacquire_lock(int r) {
-  ldout(m_cct, 10) << "r=" << r << dendl;
-  ceph_assert(r >= 0);
-  complete_active_action(STATE_LOCKED, 0);
-}
-
-template <typename I>
 void ManagedLock<I>::handle_post_acquire_lock(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
@@ -568,13 +567,20 @@ void ManagedLock<I>::send_reacquire_lock() {
     return;
   }
 
+  ldout(m_cct, 10) << dendl;
+  m_state = STATE_REACQUIRING;
+
   uint64_t watch_handle = m_watcher->get_watch_handle();
   if (watch_handle == 0) {
-     // watch (re)failed while recovering
-     lderr(m_cct) << "aborting reacquire due to invalid watch handle"
-                  << dendl;
-     complete_active_action(STATE_LOCKED, 0);
-     return;
+    // watch (re)failed while recovering
+    lderr(m_cct) << "aborting reacquire due to invalid watch handle"
+                 << dendl;
+
+    // treat double-watch failure as a lost lock and invoke the
+    // release/acquire handlers
+    release_acquire_lock();
+    complete_active_action(STATE_LOCKED, 0);
+    return;
   }
 
   m_new_cookie = encode_lock_cookie(watch_handle);
@@ -586,9 +592,6 @@ void ManagedLock<I>::send_reacquire_lock() {
     post_reacquire_lock_handler(0, ctx);
     return;
   }
-
-  ldout(m_cct, 10) << dendl;
-  m_state = STATE_REACQUIRING;
 
   auto ctx = create_context_callback<
     ManagedLock, &ManagedLock<I>::handle_reacquire_lock>(this);
@@ -617,36 +620,45 @@ void ManagedLock<I>::handle_reacquire_lock(int r) {
                    << dendl;
     }
 
-    if (!is_state_shutdown()) {
-      // queue a release and re-acquire of the lock since cookie cannot
-      // be updated on older OSDs
-      execute_action(ACTION_RELEASE_LOCK, nullptr);
-
-      ceph_assert(!m_actions_contexts.empty());
-      ActionContexts &action_contexts(m_actions_contexts.front());
-
-      // reacquire completes when the request lock completes
-      Contexts contexts;
-      std::swap(contexts, action_contexts.second);
-      if (contexts.empty()) {
-        execute_action(ACTION_ACQUIRE_LOCK, nullptr);
-      } else {
-        for (auto ctx : contexts) {
-          ctx = new FunctionContext([ctx, r](int acquire_ret_val) {
-              if (acquire_ret_val >= 0) {
-                acquire_ret_val = r;
-              }
-              ctx->complete(acquire_ret_val);
-            });
-          execute_action(ACTION_ACQUIRE_LOCK, ctx);
-        }
-      }
-    }
+    release_acquire_lock();
   } else {
     m_cookie = m_new_cookie;
   }
 
-  complete_active_action(STATE_LOCKED, r);
+  complete_active_action(STATE_LOCKED, 0);
+}
+
+template <typename I>
+void ManagedLock<I>::handle_no_op_reacquire_lock(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+  ceph_assert(m_state == STATE_REACQUIRING);
+  ceph_assert(r >= 0);
+  complete_active_action(STATE_LOCKED, 0);
+}
+
+template <typename I>
+void ManagedLock<I>::release_acquire_lock() {
+  assert(m_lock.is_locked());
+
+  if (!is_state_shutdown()) {
+    // queue a release and re-acquire of the lock since cookie cannot
+    // be updated on older OSDs
+    execute_action(ACTION_RELEASE_LOCK, nullptr);
+
+    ceph_assert(!m_actions_contexts.empty());
+    ActionContexts &action_contexts(m_actions_contexts.front());
+
+    // reacquire completes when the request lock completes
+    Contexts contexts;
+    std::swap(contexts, action_contexts.second);
+    if (contexts.empty()) {
+      execute_action(ACTION_ACQUIRE_LOCK, nullptr);
+    } else {
+      for (auto ctx : contexts) {
+        execute_action(ACTION_ACQUIRE_LOCK, ctx);
+      }
+    }
+  }
 }
 
 template <typename I>

@@ -55,7 +55,7 @@ public:
   void acquire_lock(Context *on_acquired);
   void try_acquire_lock(Context *on_acquired);
   void release_lock(Context *on_released);
-  void reacquire_lock(Context *on_reacquired = nullptr);
+  void reacquire_lock(Context *on_reacquired);
   void get_locker(managed_lock::Locker *locker, Context *on_finish);
   void break_lock(const managed_lock::Locker &locker, bool force_break_lock,
                   Context *on_finish);
@@ -247,6 +247,7 @@ private:
 
   void send_reacquire_lock();
   void handle_reacquire_lock(int r);
+  void release_acquire_lock();
 
   void send_release_lock();
   void handle_pre_release_lock(int r);
