@@ -315,15 +315,16 @@ void ImageSync<I>::send_copy_object_map() {
   dout(20) << ": snap_id=" << snap_id << ", "
            << "snap_name=" << sync_point.snap_name << dendl;
 
+  int r = -EROFS;
   Context *finish_op_ctx = nullptr;
   if (m_local_image_ctx->exclusive_lock != nullptr) {
-    finish_op_ctx = m_local_image_ctx->exclusive_lock->start_op();
+    finish_op_ctx = m_local_image_ctx->exclusive_lock->start_op(&r);
   }
   if (finish_op_ctx == nullptr) {
     derr << ": lost exclusive lock" << dendl;
     m_local_image_ctx->snap_lock.put_read();
     m_local_image_ctx->owner_lock.put_read();
-    finish(-EROFS);
+    finish(r);
     return;
   }
 

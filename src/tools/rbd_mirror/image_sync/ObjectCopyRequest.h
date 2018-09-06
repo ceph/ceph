@@ -138,7 +138,7 @@ private:
   void send_update_object_map();
   void handle_update_object_map(int r);
 
-  Context *start_local_op(RWLock &owner_lock);
+  Context *start_local_op(RWLock &owner_lock, int *r);
 
   void compute_diffs();
   void finish(int r);
