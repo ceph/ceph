@@ -1221,7 +1221,7 @@ Get Bucket Info
 ===============
 
 Get information about a subset of the existing buckets. If ``uid`` is specified
-without ``bucket`` then all buckets beloning to the user will be returned. If
+without ``bucket`` then all buckets belonging to the user will be returned. If
 ``bucket`` alone is specified, information for that particular bucket will be
 retrieved.
 
