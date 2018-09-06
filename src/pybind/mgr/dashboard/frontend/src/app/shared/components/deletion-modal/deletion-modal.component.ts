@@ -15,57 +15,34 @@ import { SubmitButtonComponent } from '../submit-button/submit-button.component'
 export class DeletionModalComponent implements OnInit {
   @ViewChild(SubmitButtonComponent)
   submitButton: SubmitButtonComponent;
-  description: TemplateRef<any>;
-  metaType: string;
-  deletionObserver: () => Observable<any>;
-  deletionMethod: Function;
-  modalRef: BsModalRef;
-
+  bodyTemplate: TemplateRef<any>;
+  submitActionObservable: () => Observable<any>;
+  submitAction: Function;
   deletionForm: CdFormGroup;
+  itemDescription: 'entry';
+  actionDescription = 'delete';
 
-  // Parameters are destructed here than assigned to specific types and marked as optional
-  setUp({
-    modalRef,
-    metaType,
-    deletionMethod,
-    deletionObserver,
-    description
-  }: {
-    modalRef: BsModalRef;
-    metaType: string;
-    deletionMethod?: Function;
-    deletionObserver?: () => Observable<any>;
-    description?: TemplateRef<any>;
-  }) {
-    if (!modalRef) {
-      throw new Error('No modal reference');
-    } else if (!metaType) {
-      throw new Error('No meta type');
-    } else if (!(deletionMethod || deletionObserver)) {
-      throw new Error('No deletion method');
-    }
-    this.metaType = metaType;
-    this.modalRef = modalRef;
-    this.deletionMethod = deletionMethod;
-    this.deletionObserver = deletionObserver;
-    this.description = description;
-  }
+  constructor(public modalRef: BsModalRef) {}
 
   ngOnInit() {
     this.deletionForm = new CdFormGroup({
       confirmation: new FormControl(false, [Validators.requiredTrue])
     });
+
+    if (!(this.submitAction || this.submitActionObservable)) {
+      throw new Error('No submit action defined');
+    }
   }
 
-  deletionCall() {
-    if (this.deletionObserver) {
-      this.deletionObserver().subscribe(
-        undefined,
+  callSubmitAction() {
+    if (this.submitActionObservable) {
+      this.submitActionObservable().subscribe(
+        null,
         this.stopLoadingSpinner.bind(this),
         this.hideModal.bind(this)
       );
     } else {
-      this.deletionMethod();
+      this.submitAction();
     }
   }
 
