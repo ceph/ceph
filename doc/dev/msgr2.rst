@@ -227,21 +227,31 @@ an established session.
 
     entity_addrvec_t addr(s)
     __u8   my type (CEPH_ENTITY_TYPE_*)
-    __le32 protocol version
+    __le64 gid (numeric part of osd.0, client.123456, ...)
     __le64 features supported (CEPH_FEATURE_* bitmask)
     __le64 features required (CEPH_FEATURE_* bitmask)
     __le64 flags (CEPH_MSG_CONNECT_* bitmask)
     __le64 cookie (a client identifier, assigned by the sender. unique on the sender.)
 
-  - client will send first, server will reply with same.
+  - client will send first, server will reply with same.  if this is a
+    new session, the client and server can proceed to the message exchange.
+  - type.gid (entity_name_t) is set here.  this means we don't need it
+    in the header of every message.  it also means that we can't send
+    messages "from" other entity_name_t's.  the current
+    implementations set this at the top of _send_message etc so this
+    shouldn't break any existing functionality.  implementation will
+    likely want to mask this against what the authenticated credential
+    allows.
+  - we've dropped the 'protocol_version' field from msgr1
+  - for lossy sessions, cookie is meaningless.  for lossless sessions,
+    we assign a local value that identifies the local Connection
+    state.  when we receive this from a peer, we make a note of their
+    cookie, so that on reconnect we can reattach (see below).
 
-* TAG_IDENT_MISSING_FEATURES (server only): complain about a TAG_IDENT with too few features::
+* TAG_IDENT_MISSING_FEATURES (server only): complain about a TAG_IDENT
+  with too few features::
 
-    __le64 features we require that peer didn't advertise
-
-* TAG_IDENT_BAD_PROTOCOL (server only): complain about an old protocol version::
-
-    __le32 protocol_version (our protocol version)
+    __le64 features we require that the peer didn't advertise
 
 * TAG_RECONNECT (client only): reconnect to an established session::
 
@@ -253,6 +263,9 @@ an established session.
 * TAG_RECONNECT_OK (server only): acknowledge a reconnect attempt::
 
     __le64 msg_seq (last msg seq received)
+
+  - once the client receives this, the client can proceed to message exchange.
+  - once the server sends this, the server can proceed to message exchange.
 
 * TAG_RECONNECT_RETRY_SESSION (server only): fail reconnect due to stale connect_seq
 
@@ -267,17 +280,22 @@ an established session.
 Message exchange
 ----------------
 
-Once a session is stablished, we can exchange messages.
+Once a session is established, we can exchange messages.
 
 * TAG_MSG: a message::
 
     ceph_msg_header2
     front
     middle
+    data_pre_padding
     data
 
-  - The ceph_msg_header is modified in ceph_msg_header2 to include an
+  - The ceph_msg_header2 is modified from ceph_msg_header to include an
     ack_seq.  This avoids the need for a TAG_ACK message most of the time.
+  - The ceph_msg_header2 is modified from ceph_msg_header to remove teh
+    src field, which we now get from the message flow handshake (TAG_IDENT).
+  - The ceph_msg_header2 specifies the data_pre_padding, which can be used to
+    adjust the alignment of the data payload.  (NOTE: is this is useful?)
 
 * TAG_ACK: acknowledge receipt of message(s)::
 
@@ -297,14 +315,12 @@ Once a session is stablished, we can exchange messages.
 
   - Time stamp is from the TAG_KEEPALIVE2 we are responding to.
 
-* TAG_CLOSE: terminate a stream
+* TAG_CLOSE: terminate a connection
 
-  Indicates that a stream should be terminated. This is equivalent to
-  a hangup or reset (i.e., should trigger ms_handle_reset).  It isn't
-  strictly necessary or useful if there is only a single stream as we
-  could just disconnect the TCP connection, although one could
-  certainly use it creatively (e.g., reset the stream state and retry
-  an authentication handshake).
+  Indicates that a connection should be terminated. This is equivalent
+  to a hangup or reset (i.e., should trigger ms_handle_reset).  It
+  isn't strictly necessary or useful as we could just disconnect the
+  TCP connection.
 
 
 Example of protocol interaction (WIP)
@@ -323,26 +339,20 @@ _____________________________________
                 |                   |
                 |  send new stream  |
                 |------------------>|
-                | set method        |
-                |------------------>|
-                |             +-----|
-                | auth request|     |
-                |-------------+---->|
-                |             |     |
-                |<------------+     |
-                |   bad method      |
-                |                   |
-                | set method        |
-                |------------------>|
                 | auth request      |
                 |------------------>|
                 |<------------------|
-                |       auth reply  |
+                |   bad method      |
                 |                   |
-                | auth done         |
+                | auth request      |
                 |------------------>|
                 |<------------------|
-                |   auth done ack   |
+                |         auth more |
+                |                   |
+                | auth more         |
+                |------------------>|
+                |<------------------|
+                |         auth done |
                 |                   |
 
 
