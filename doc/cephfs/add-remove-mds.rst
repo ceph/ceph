@@ -10,20 +10,20 @@ See `MDS Config Reference`_ for details on configuring metadata servers.
 Add a Metadata Server
 =====================
 
-#. Create an mds data point ``/var/lib/ceph/mds/mds.<your-mds-id>``.
+#. Create an mds data point ``/var/lib/ceph/mds/ceph-{$id}``.
 
 #. Edit ``ceph.conf`` and add MDS section. ::
 
-	[mds.<your-mds-id>]
+	[mds.{$id}]
 	host = {hostname}
 
 #. Create the authentication key, if you use CephX. ::
 
-	$ sudo ceph auth get-or-create mds.<your-mds-id> mon 'profile mds' mgr 'profile mds' mds 'allow *' osd 'allow *' > /var/lib/ceph/mds/ceph-<your-mds-id>/keying
+	$ sudo ceph auth get-or-create mds.{$id} mon 'profile mds' mgr 'profile mds' mds 'allow *' osd 'allow *' > /var/lib/ceph/mds/ceph-{$id}/keyring
 
 #. Start the service. ::
 
-	$ sudo service ceph start mds.<your-mds-id>
+	$ sudo service ceph start mds.{$id}
 
 #. The status of the cluster shows: ::
 
@@ -46,6 +46,6 @@ the following method.
 
 	$ ceph mds fail <mds name>
 
-#. Remove the ``/var/lib/ceph/mds/mds.<your-mds-id>`` directory on the old Metadata server.
+#. Remove the ``/var/lib/ceph/mds/ceph-{$id}`` directory on the old Metadata server.
 
 .. _MDS Config Reference: ../mds-config-ref
