@@ -1,0 +1,12 @@
+---
+
+# Allows to always include a 'setup.yml' file in functional tests, and execute
+# only on the ones that actually need it
+
+- hosts: all
+  gather_facts: no
+
+  tasks:
+
+    - debug:
+        msg: "This is an empty setup playbook. The current scenario didn't need any work done"
