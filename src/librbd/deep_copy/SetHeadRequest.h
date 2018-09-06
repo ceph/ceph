@@ -74,7 +74,7 @@ private:
   void send_set_parent();
   void handle_set_parent(int r);
 
-  Context *start_lock_op();
+  Context *start_lock_op(int* r);
 
   void finish(int r);
 };

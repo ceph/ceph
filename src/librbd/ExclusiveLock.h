@@ -24,14 +24,13 @@ public:
   void block_requests(int r);
   void unblock_requests();
 
-  int get_unlocked_op_error() const;
-
   void init(uint64_t features, Context *on_init);
   void shut_down(Context *on_shutdown);
 
   void handle_peer_notification(int r);
 
-  Context *start_op();
+  int get_unlocked_op_error() const;
+  Context *start_op(int* ret_val);
 
 protected:
   void shutdown_handler(int r, Context *on_finish) override;

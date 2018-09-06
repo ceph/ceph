@@ -55,10 +55,11 @@ void SetHeadRequest<I>::send_set_size() {
   librados::ObjectWriteOperation op;
   librbd::cls_client::set_size(&op, m_size);
 
-  auto finish_op_ctx = start_lock_op();
+  int r;
+  auto finish_op_ctx = start_lock_op(&r);
   if (finish_op_ctx == nullptr) {
     lderr(m_cct) << "lost exclusive lock" << dendl;
-    finish(-EROFS);
+    finish(r);
     return;
   }
 
@@ -67,7 +68,7 @@ void SetHeadRequest<I>::send_set_size() {
       finish_op_ctx->complete(0);
     });
   librados::AioCompletion *comp = create_rados_callback(ctx);
-  int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op);
+  r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op);
   assert(r == 0);
   comp->release();
 }
@@ -115,10 +116,11 @@ void SetHeadRequest<I>::send_remove_parent() {
   librados::ObjectWriteOperation op;
   librbd::cls_client::remove_parent(&op);
 
-  auto finish_op_ctx = start_lock_op();
+  int r;
+  auto finish_op_ctx = start_lock_op(&r);
   if (finish_op_ctx == nullptr) {
     lderr(m_cct) << "lost exclusive lock" << dendl;
-    finish(-EROFS);
+    finish(r);
     return;
   }
 
@@ -127,7 +129,7 @@ void SetHeadRequest<I>::send_remove_parent() {
       finish_op_ctx->complete(0);
     });
   librados::AioCompletion *comp = create_rados_callback(ctx);
-  int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op);
+  r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op);
   assert(r == 0);
   comp->release();
 }
@@ -168,10 +170,11 @@ void SetHeadRequest<I>::send_set_parent() {
   librados::ObjectWriteOperation op;
   librbd::cls_client::set_parent(&op, m_parent_spec, m_parent_overlap);
 
-  auto finish_op_ctx = start_lock_op();
+  int r;
+  auto finish_op_ctx = start_lock_op(&r);
   if (finish_op_ctx == nullptr) {
     lderr(m_cct) << "lost exclusive lock" << dendl;
-    finish(-EROFS);
+    finish(r);
     return;
   }
 
@@ -180,7 +183,7 @@ void SetHeadRequest<I>::send_set_parent() {
       finish_op_ctx->complete(0);
     });
   librados::AioCompletion *comp = create_rados_callback(ctx);
-  int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op);
+  r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op);
   assert(r == 0);
   comp->release();
 }
@@ -206,12 +209,12 @@ void SetHeadRequest<I>::handle_set_parent(int r) {
 }
 
 template <typename I>
-Context *SetHeadRequest<I>::start_lock_op() {
+Context *SetHeadRequest<I>::start_lock_op(int* r) {
   RWLock::RLocker owner_locker(m_image_ctx->owner_lock);
   if (m_image_ctx->exclusive_lock == nullptr) {
     return new FunctionContext([](int r) {});
   }
-  return m_image_ctx->exclusive_lock->start_op();
+  return m_image_ctx->exclusive_lock->start_op(r);
 }
 
 template <typename I>
