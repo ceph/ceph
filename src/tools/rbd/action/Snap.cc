@@ -270,11 +270,6 @@ int do_set_limit(librbd::Image& image, uint64_t limit)
   return image.snap_set_limit(limit);
 }
 
-int do_clear_limit(librbd::Image& image)
-{
-  return image.snap_set_limit(UINT64_MAX);
-}
-
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
@@ -770,7 +765,7 @@ int execute_clear_limit(const po::variables_map &vm,
       return r;
   }
 
-  r = do_clear_limit(image);
+  r = do_set_limit(image, UINT64_MAX);
   if (r < 0) {
     std::cerr << "rbd: clearing snapshot limit failed: " << cpp_strerror(r)
 	      << std::endl;
