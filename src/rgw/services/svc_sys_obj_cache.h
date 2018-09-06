@@ -8,10 +8,18 @@
 
 #include "svc_sys_obj_core.h"
 
+class RGWSI_Notify;
+
+class RGWSI_SysObj_Cache_CB;
 
 class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 {
+  friend class RGWSI_SysObj_Cache_CB;
+
+  std::shared_ptr<RGWSI_Notify> notify_svc;
   ObjectCache cache;
+
+  std::shared_ptr<RGWSI_SysObj_Cache_CB> cb;
 
   void normalize_pool_and_obj(rgw_pool& src_pool, const string& src_obj, rgw_pool& dst_pool, string& dst_obj);
 protected:
@@ -62,8 +70,16 @@ protected:
                uint64_t notifier_id,
                bufferlist& bl);
 
+  void set_enabled(bool status);
+
 public:
-  RGWSI_SysObj_Cache(RGWService *svc, CephContext *cct) : RGWSI_SysObj_Core(svc, cct) {}
+  RGWSI_SysObj_Cache(RGWService *svc, CephContext *cct) : RGWSI_SysObj_Core(svc, cct) {
+    cache.set_ctx(cct);
+  }
+
+  bool chain_cache_entry(std::initializer_list<rgw_cache_entry_info *> cache_info_entries,
+                         RGWChainedCache::Entry *chained_entry);
+  void register_chained_cache(RGWChainedCache *cc);
 
   void call_list(const std::optional<std::string>& filter, Formatter* f);
   int call_inspect(const std::string& target, Formatter* f);

@@ -1361,9 +1361,6 @@ void RGWRados::finalize()
   if (finisher) {
     finisher->stop();
   }
-  if (need_watch_notify()) {
-    finalize_watch();
-  }
   if (finisher) {
     /* delete finisher only after cleaning up watches, as watch error path might call
      * into finisher. We stop finisher before finalizing watch to make sure we don't
@@ -8998,113 +8995,6 @@ int RGWRados::append_async(rgw_raw_obj& obj, size_t size, bufferlist& bl)
   return r;
 }
 
-int RGWRados::distribute(const string& key, bufferlist& bl)
-{
-  RGWSI_RADOS::Obj notify_obj = pick_control_obj(key);
-
-  ldout(cct, 10) << "distributing notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
-  return robust_notify(notify_oid, bl);
-}
-
-int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl)
-{
-  // The reply of every machine that acks goes in here.
-  boost::container::flat_set<std::pair<uint64_t, uint64_t>> acks;
-  bufferlist rbl;
-
-  // First, try to send, without being fancy about it.
-  auto r = notify_obj.notify(bl, 0, &rbl);
-
-  // If that doesn't work, get serious.
-  if (r < 0) {
-    ldout(cct, 1) << "robust_notify: If at first you don't succeed: "
-		  << cpp_strerror(-r) << dendl;
-
-
-    auto p = rbl.cbegin();
-    // Gather up the replies to the first attempt.
-    try {
-      uint32_t num_acks;
-      decode(num_acks, p);
-      // Doing this ourselves since we don't care about the payload;
-      for (auto i = 0u; i < num_acks; ++i) {
-	std::pair<uint64_t, uint64_t> id;
-	decode(id, p);
-	acks.insert(id);
-	ldout(cct, 20) << "robust_notify: acked by " << id << dendl;
-	uint32_t blen;
-	decode(blen, p);
-	p.advance(blen);
-      }
-    } catch (const buffer::error& e) {
-      ldout(cct, 0) << "robust_notify: notify response parse failed: "
-		    << e.what() << dendl;
-      acks.clear(); // Throw away junk on failed parse.
-    }
-
-
-    // Every machine that fails to reply and hasn't acked a previous
-    // attempt goes in here.
-    boost::container::flat_set<std::pair<uint64_t, uint64_t>> timeouts;
-
-    auto tries = 1u;
-    while (r < 0 && tries < max_notify_retries) {
-      ++tries;
-      rbl.clear();
-      // Reset the timeouts, we're only concerned with new ones.
-      timeouts.clear();
-      r = notify_obj.notify(bl, 0, &rbl);
-      if (r < 0) {
-	ldout(cct, 1) << "robust_notify: retry " << tries << " failed: "
-		      << cpp_strerror(-r) << dendl;
-	p = rbl.begin();
-	try {
-	  uint32_t num_acks;
-	  decode(num_acks, p);
-	  // Not only do we not care about the payload, but we don't
-	  // want to empty the container; we just want to augment it
-	  // with any new members.
-	  for (auto i = 0u; i < num_acks; ++i) {
-	    std::pair<uint64_t, uint64_t> id;
-	    decode(id, p);
-	    auto ir = acks.insert(id);
-	    if (ir.second) {
-	      ldout(cct, 20) << "robust_notify: acked by " << id << dendl;
-	    }
-	    uint32_t blen;
-	    decode(blen, p);
-	    p.advance(blen);
-	  }
-
-	  uint32_t num_timeouts;
-	  decode(num_timeouts, p);
-	  for (auto i = 0u; i < num_timeouts; ++i) {
-	    std::pair<uint64_t, uint64_t> id;
-	    decode(id, p);
-	    // Only track timeouts from hosts that haven't acked previously.
-	    if (acks.find(id) != acks.cend()) {
-	      ldout(cct, 20) << "robust_notify: " << id << " timed out."
-			     << dendl;
-	      timeouts.insert(id);
-	    }
-	  }
-	} catch (const buffer::error& e) {
-	  ldout(cct, 0) << "robust_notify: notify response parse failed: "
-			<< e.what() << dendl;
-	  continue;
-	}
-	// If we got a good parse and timeouts is empty, that means
-	// everyone who timed out in one call received the update in a
-	// previous one.
-	if (timeouts.empty()) {
-	  r = 0;
-	}
-      }
-    }
-  }
-  return r;
-}
-
 int RGWRados::pool_iterate_begin(const rgw_pool& pool, RGWPoolIterCtx& ctx)
 {
   librados::IoCtx& io_ctx = ctx.io_ctx;
@@ -10751,23 +10641,35 @@ bool RGWRados::call(std::string_view command, const cmdmap_t& cmdmap,
   return false;
 }
 
-void RGWRados::call_list(const std::optional<std::string>&,
-                         ceph::Formatter*)
+void RGWRados::call_list(const std::optional<std::string>& s,
+                         ceph::Formatter *f)
 {
-  return;
+  if (!svc.cache) {
+    return;
+  }
+  svc.cache->call_list(s, f);
 }
 
-bool RGWRados::call_inspect(const std::string&, Formatter*)
+bool RGWRados::call_inspect(const std::string& s, Formatter *f)
 {
-  return false;
+  if (!svc.cache) {
+    return false;
+  }
+  return svc.cache->call_inspec(s, f);
 }
 
-bool RGWRados::call_erase(const std::string&) {
-  return false;
+bool RGWRados::call_erase(const std::string& s) {
+  if (!svc.cache) {
+    return false;
+  }
+  return svc.cache->call_erase(s);
 }
 
 void RGWRados::call_zap() {
-  return;
+  if (svc.cache) {
+    return;
+  }
+  svc.cache->call_zap();
 }
 
 string RGWRados::get_mfa_oid(const rgw_user& user)

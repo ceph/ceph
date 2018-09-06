@@ -21,13 +21,16 @@ public:
 
 class RGWSI_Notify : public RGWServiceInstance
 {
+public:
+  class CB;
+private:
   std::shared_ptr<RGWSI_Zone> zone_svc;
   std::shared_ptr<RGWSI_RADOS> rados_svc;
 
   std::map<std::string, RGWServiceInstance::dependency> get_deps() override;
   int load(const std::string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs) override;
 
-  Mutex watchers_lock{"watchers_lock"};
+  RWLock watchers_lock{"watchers_lock"};
   rgw_pool control_pool;
 
   int num_watchers{0};
@@ -43,20 +46,41 @@ class RGWSI_Notify : public RGWServiceInstance
   string get_control_oid(int i);
   RGWSI_RADOS::Obj pick_control_obj(const string& key);
 
+  CB *cb{nullptr};
+
   int init_watch();
   void finalize_watch();
 
   int init() override;
   void shutdown() override;
 
-  int watch(RGWSI_RADOS::Obj& obj, uint64_t *watch_handle, librados::WatchCtx2 *ctx);
-  int aio_watch(const string& oid, uint64_t *watch_handle, librados::WatchCtx2 *ctx, librados::AioCompletion *c);
   int unwatch(RGWSI_RADOS::Obj& obj, uint64_t watch_handle);
   void add_watcher(int i);
   void remove_watcher(int i);
+
+  int watch_cb(uint64_t notify_id,
+               uint64_t cookie,
+               uint64_t notifier_id,
+               bufferlist& bl);
+  void set_enabled(bool status);
+
+  int robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl);
 public:
   RGWSI_Notify(RGWService *svc, CephContext *cct): RGWServiceInstance(svc, cct) {}
 
+  class CB {
+    public:
+      virtual ~CB() {}
+      virtual int watch_cb(uint64_t notify_id,
+                           uint64_t cookie,
+                           uint64_t notifier_id,
+                           bufferlist& bl) = 0;
+      virtual void set_enabled(bool status) = 0;
+  };
+
+  int distribute(const string& key, bufferlist& bl);
+
+  void register_watch_cb(CB *cb);
 };
 
 #endif

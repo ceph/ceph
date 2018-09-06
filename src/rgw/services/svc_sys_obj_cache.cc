@@ -1,7 +1,51 @@
 #include "svc_sys_obj_cache.h"
 #include "svc_zone.h"
+#include "svc_notify.h"
 
 #define dout_subsys ceph_subsys_rgw
+
+class RGWSI_SysObj_Cache_CB : public RGWSI_Notify::CB
+{
+  RGWSI_SysObj_Cache *svc;
+public:
+  RGWSI_SysObj_Cache_CB(RGWSI_SysObj_Cache *_svc) : svc(_svc) {}
+  int watch_cb(uint64_t notify_id,
+               uint64_t cookie,
+               uint64_t notifier_id,
+               bufferlist& bl) {
+    return svc->watch_cb(notify_id, cookie, notifier_id, bl);
+  }
+
+  void set_enabled(bool status) {
+    svc->set_enabled(status);
+  }
+};
+
+std::map<string, RGWServiceInstance::dependency> RGWSI_SysObj_Cache::get_deps()
+{
+  map<string, RGWServiceInstance::dependency> deps = RGWSI_SysObj_Core::get_deps();
+
+  deps["cache_notify_dep"] = { .name = "notify",
+                               .conf = "{}" };
+  return deps;
+}
+
+int RGWSI_SysObj_Cache::load(const string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs)
+{
+  int r = RGWSI_SysObj_Core::load(conf, dep_refs);
+  if (r < 0) {
+    return r;
+  }
+
+  notify_svc = static_pointer_cast<RGWSI_Notify>(dep_refs["cache_notify_dep"]);
+  assert(notify_svc);
+
+  cb.reset(new RGWSI_SysObj_Cache_CB(this));
+
+  notify_svc->register_watch_cb(cb.get());
+
+  return 0;
+}
 
 static string normal_name(rgw_pool& pool, const std::string& oid) {
   std::string buf;
@@ -35,7 +79,10 @@ int RGWSI_SysObj_Cache::remove(RGWSysObjectCtxBase& obj_ctx,
   cache.remove(name);
 
   ObjectCacheInfo info;
-  distribute_cache(name, obj, info, REMOVE_OBJ);
+  int r = distribute_cache(name, obj, info, REMOVE_OBJ);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to distribute cache: r=" << r << dendl;
+  }
 
   return RGWSI_SysObj_Core::remove(obj_ctx, objv_tracker, obj);
 }
@@ -212,11 +259,13 @@ int RGWSI_SysObj_Cache::write_data(rgw_raw_obj& obj,
   rgw_pool pool;
   string oid;
   normalize_pool_and_obj(obj.pool, obj.oid, pool, oid);
+
   ObjectCacheInfo info;
   info.data = data;
   info.meta.size = data.length();
   info.status = 0;
   info.flags = CACHE_FLAG_DATA;
+
   if (objv_tracker) {
     info.version = objv_tracker->write_version;
     info.flags |= CACHE_FLAG_OBJV;
@@ -305,7 +354,7 @@ int RGWSI_SysObj_Cache::distribute_cache(const string& normal_name, rgw_raw_obj&
   info.obj = obj;
   bufferlist bl;
   encode(info, bl);
-  return T::distribute(normal_name, bl);
+  return notify_svc->distribute(normal_name, bl);
 }
 
 int RGWSI_SysObj_Cache::watch_cb(uint64_t notify_id,
@@ -346,13 +395,39 @@ int RGWSI_SysObj_Cache::watch_cb(uint64_t notify_id,
   return 0;
 }
 
+void RGWSI_SysObj_Cache::set_enabled(bool status)
+{
+  cache.set_enabled(status);
+}
+
+bool RGWSI_SysObj_Cache::chain_cache_entry(std::initializer_list<rgw_cache_entry_info *> cache_info_entries,
+                                           RGWChainedCache::Entry *chained_entry)
+{
+  return cache.chain_cache_entry(cache_info_entries, chained_entry);
+}
+
+void RGWSI_SysObj_Cache::register_chained_cache(RGWChainedCache *cc)
+{
+  cache.chain_cache(cc);
+}
+
+static void cache_list_dump_helper(Formatter* f,
+                                   const std::string& name,
+                                   const ceph::real_time mtime,
+                                   const std::uint64_t size)
+{
+  f->dump_string("name", name);
+  f->dump_string("mtime", ceph::to_iso_8601(mtime));
+  f->dump_unsigned("size", size);
+}
+
 void RGWSI_SysObj_Cache::call_list(const std::optional<std::string>& filter, Formatter* f)
 {
   cache.for_each(
     [this, &filter, f] (const string& name, const ObjectCacheEntry& entry) {
       if (!filter || name.find(*filter) != name.npos) {
-	T::cache_list_dump_helper(f, name, entry.info.meta.mtime,
-				  entry.info.meta.size);
+	cache_list_dump_helper(f, name, entry.info.meta.mtime,
+                               entry.info.meta.size);
       }
     });
 }
@@ -378,4 +453,5 @@ int RGWSI_SysObj_Cache::call_erase(const std::string& target)
 int RGWSI_SysObj_Cache::call_zap()
 {
   cache.invalidate_all();
+  return 0;
 }
