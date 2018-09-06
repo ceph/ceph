@@ -349,6 +349,16 @@ int RGWMetaSyncStatusManager::init()
   return 0;
 }
 
+unsigned RGWMetaSyncStatusManager::get_subsys() const
+{
+  return dout_subsys;
+}
+
+std::ostream&  RGWMetaSyncStatusManager::gen_prefix(std::ostream& out) const
+{
+  return out << "meta sync: ";
+}
+
 void RGWMetaSyncEnv::init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
                           RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
                           RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer) {
@@ -1989,6 +1999,7 @@ public:
 };
 
 void RGWRemoteMetaLog::init_sync_env(RGWMetaSyncEnv *env) {
+  env->dpp = dpp;
   env->cct = store->ctx();
   env->store = store;
   env->conn = conn;
