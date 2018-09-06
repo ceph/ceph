@@ -716,7 +716,10 @@ using namespace ceph;
   }
 
   buffer::raw* buffer::create_page_aligned(unsigned len) {
-    return create_aligned(len, CEPH_PAGE_SIZE);
+    if (len < CEPH_PAGE_SIZE) {
+      return create_aligned(len, 0x1000);
+    } else
+      return create_aligned(len, CEPH_PAGE_SIZE);
   }
 
   buffer::raw* buffer::create_zero_copy(unsigned len, int fd, int64_t *offset) {
