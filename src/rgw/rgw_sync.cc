@@ -539,7 +539,6 @@ public:
 
   int send_request() override {
     RGWRESTConn *conn = sync_env->conn;
-    RGWRados *store = sync_env->store;
 
     char buf[32];
     snprintf(buf, sizeof(buf), "%d", shard_id);
