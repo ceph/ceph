@@ -164,7 +164,7 @@ void SnapshotCreateRequest<I>::send_create_snap() {
 
   // should have been canceled prior to releasing lock
   ceph_assert(image_ctx.exclusive_lock == nullptr ||
-         image_ctx.exclusive_lock->is_lock_owner());
+              image_ctx.exclusive_lock->is_lock_owner());
 
   // save current size / parent info for creating snapshot record in ImageCtx
   m_size = image_ctx.size;
@@ -291,7 +291,7 @@ void SnapshotCreateRequest<I>::update_snap_context() {
 
   // should have been canceled prior to releasing lock
   ceph_assert(image_ctx.exclusive_lock == nullptr ||
-         image_ctx.exclusive_lock->is_lock_owner());
+              image_ctx.exclusive_lock->is_lock_owner());
 
   // immediately add a reference to the new snapshot
   utime_t snap_time = ceph_clock_now();

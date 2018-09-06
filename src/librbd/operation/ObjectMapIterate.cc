@@ -154,7 +154,7 @@ private:
 
     // should have been canceled prior to releasing lock
     ceph_assert(image_ctx.exclusive_lock == nullptr ||
-           image_ctx.exclusive_lock->is_lock_owner());
+                image_ctx.exclusive_lock->is_lock_owner());
 
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
     ceph_assert(image_ctx.object_map != nullptr);
