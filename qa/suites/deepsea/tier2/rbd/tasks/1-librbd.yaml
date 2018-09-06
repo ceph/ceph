@@ -1,7 +1,7 @@
 overrides:
   deepsea:
     exec:
-    - suites/ceph-test/librbd.sh
+    - suites/basic/health-ok.sh --client-nodes=1 --min-nodes=2 --rbd
 tasks:
 # the "exec" task runs commands as root
 - exec:
@@ -9,3 +9,9 @@ tasks:
       - "zypper --non-interactive --no-gpg-checks refresh"
       - "zypper --non-interactive install --no-recommends ceph-test"
       - "ceph_test_librbd"
+      - "chmod a+r /etc/ceph/ceph.client.admin.keyring"
+# the "workunit" task runs commands as the user "ubuntu"
+- workunit:
+    clients:
+      client.0:
+        - rbd/cli_generic.sh
