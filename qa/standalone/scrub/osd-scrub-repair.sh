@@ -5268,6 +5268,115 @@ function TEST_periodic_scrub_replicated() {
     rados list-inconsistent-obj $pg | jq '.' | grep -qv $objname || return 1
 }
 
+function TEST_scrub_waiting_warning() {
+    local dir=$1
+    local poolname=psr_pool
+    local objname=WOBJ
+    local PGS=50
+    local OSDS=3
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_mgr $dir x --mon_warn_pg_scrubs_overdue_ratio=0.01 || return 1
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0 --osd_scrub_sleep=40.0"
+    for o in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $o $ceph_osd_args || return 1
+    done
+
+    create_pool $poolname $PGS $PGS || return 1
+    wait_for_clean || return 1
+
+    poolid=$(ceph osd dump | grep "^pool.*[']${poolname}[']" | awk '{ print $2 }')
+
+    ceph osd set noscrub
+    ceph osd set nodeep-scrub
+
+    # This should be PG creation time on all pgs
+    local last_scrub=$(get_last_scrub_stamp ${poolid}.0)
+    for i in $(seq 0 $(expr $PGS / 2 - 1))
+    do
+      pg="${poolid}.$(printf "%x" ${i})"
+      # Fake a schedule scrub on both osd instead of finding the primary
+      for o in $(seq 0 $(expr $OSDS - 1))
+      do
+        CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.$o) \
+             trigger_scrub $pg || return 1
+      done
+    done
+
+    for i in $(seq $(expr $PGS / 2) $(expr $PGS - 1))
+    do
+      pg="${poolid}.$(printf "%x" ${i})"
+      ceph pg scrub $pg
+    done
+
+    sleep 30
+    flush_pg_stats
+    ceph status --format=json-pretty | jq '.health.checks'
+    health="$(ceph status --format=json-pretty | jq '.health.checks.OSD_ALL_SCRUBS_OVERDUE')"
+    if [ "$health" = "null" ]; then
+      echo "ERROR: no OSD_ALL_SCRUBS_OVERDUE set"
+      return 1
+    fi
+    severity=$(echo "$health" | jq '.severity')
+    if [ "$severity" != '"HEALTH_WARN"' ]; then
+      echo "ERROR: Incorrect severity OSD_ALL_SCRUBS_OVERDUE not HEALTH_WARN"
+      return 1
+    fi
+    message=$(echo "$health" | jq '.summary.message')
+    if [ "$message" != '"50 scrub(s) overdue"' ]; then
+      echo "ERROR: message is '$message' not expected result"
+      return 1
+    fi
+    health="$(ceph status --format=json-pretty | jq '.health.checks.OSD_SCHED_OSD_SCRUBS_OVERDUE')"
+    if [ "$health" = "null" ]; then
+      echo "ERROR: no OSD_SCHED_OSD_SCRUBS_OVERDUE set"
+      return 1
+    fi
+    severity=$(echo "$health" | jq '.severity')
+    if [ "$severity" != '"HEALTH_WARN"' ]; then
+      echo "ERROR: Incorrect severity for OSD_SCHED_OSD_SCRUBS_OVERDUE not HEALTH_WARN"
+      return 1
+    fi
+    message=$(echo "$health" | jq '.summary.message')
+    if [ "$message" != '"Per osd scheduled scrub(s) overdue osd.2(6), osd.0(5), osd.1(14)"' ]; then
+      echo "ERROR: message is '$message' not expected result"
+      return 1
+    fi
+
+    for o in $(seq 0 $(expr $OSDS - 1))
+    do
+      CEPH_ARGS="" ceph --admin-daemon $(get_asok_path osd.$o) config set osd_scrub_sleep 0.0
+    done
+
+    ceph osd unset noscrub
+    ceph osd unset nodeep-scrub
+
+    for i in $(seq 0 $(expr $PGS - 1))
+    do
+      pg="${poolid}.$(printf "%x" ${i})"
+      wait_for_scrub $pg "$last_scrub"
+    done
+
+    sleep 5
+    flush_pg_stats
+
+    health="$(ceph status --format=json-pretty | jq '.health.checks.OSD_ALL_SCRUBS_OVERDUE')"
+    if [ "$health" != "null" ]; then
+      echo "ERROR: OSD_ALL_SCRUBS_OVERDUE not cleared"
+      return 1
+    fi
+    health="$(ceph status --format=json-pretty | jq '.health.checks.OSD_SCHED_OSD_SCRUBS_OVERDUE')"
+    if [ "$health" != "null" ]; then
+      echo "ERROR: OSD_SCHED_OSD_SCRUBS_OVERDUE not cleared"
+      return 1
+    fi
+
+    return 0
+}
+
 #
 # Corrupt snapset in replicated pool
 #
