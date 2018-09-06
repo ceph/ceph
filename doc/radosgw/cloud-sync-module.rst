@@ -176,7 +176,7 @@ A list of profiles. Each profile contains the following:
 S3 Specific Configurables:
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Currently cloud sync will only work with backends that are compatible with AWS S3. There are are
+Currently cloud sync will only work with backends that are compatible with AWS S3. There are
 a few configurables that can be used to tweak its behavior when accessing these cloud services:
 
 ::
