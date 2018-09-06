@@ -176,7 +176,7 @@ private:
   void send_update_object_map();
   void handle_update_object_map(int r);
 
-  Context *start_lock_op(RWLock &owner_lock);
+  Context *start_lock_op(RWLock &owner_lock, int* r);
 
   uint64_t src_to_dst_object_offset(uint64_t objectno, uint64_t offset);
 

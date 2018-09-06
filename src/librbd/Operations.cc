@@ -227,14 +227,15 @@ struct C_InvokeAsyncRequest : public Context {
     ldout(cct, 20) << __func__ << ": r=" << r << dendl;
 
     if (r < 0) {
-      complete(-EROFS);
+      complete(r == -EBLACKLISTED ? -EBLACKLISTED : -EROFS);
       return;
     }
 
     // context can complete before owner_lock is unlocked
     RWLock &owner_lock(image_ctx.owner_lock);
     owner_lock.get_read();
-    if (image_ctx.exclusive_lock->is_lock_owner()) {
+    if (image_ctx.exclusive_lock == nullptr ||
+        image_ctx.exclusive_lock->is_lock_owner()) {
       send_local_request();
       owner_lock.put_read();
       return;
@@ -801,7 +802,7 @@ int Operations<I>::snap_rollback(const cls::rbd::SnapshotNamespace& snap_namespa
 
     r = prepare_image_update(false);
     if (r < 0) {
-      return -EROFS;
+      return r;
     }
 
     execute_snap_rollback(snap_namespace, snap_name, prog_ctx, &cond_ctx);
@@ -1374,7 +1375,7 @@ int Operations<I>::update_features(uint64_t features, bool enabled) {
       RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
       r = prepare_image_update(true);
       if (r < 0) {
-        return -EROFS;
+        return r;
       }
 
       execute_update_features(features, enabled, &cond_ctx, 0);
@@ -1495,10 +1496,6 @@ template <typename I>
 int Operations<I>::metadata_remove(const std::string &key) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": key=" << key << dendl;
-
-  if (m_image_ctx.read_only) {
-    return -EROFS;
-  }
 
   int r = m_image_ctx.state->refresh_if_required();
   if (r < 0) {
@@ -1673,11 +1670,14 @@ int Operations<I>::prepare_image_update(bool request_lock) {
     m_image_ctx.exclusive_lock->unblock_requests();
   }
 
+  if (r == -EAGAIN || r == -EBUSY) {
+    r = 0;
+  }
   if (r < 0) {
     return r;
   } else if (m_image_ctx.exclusive_lock != nullptr &&
              !m_image_ctx.exclusive_lock->is_lock_owner()) {
-    return -EROFS;
+    return m_image_ctx.exclusive_lock->get_unlocked_op_error();
   }
 
   return 0;

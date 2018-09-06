@@ -151,10 +151,10 @@ void SnapshotPurgeRequest<I>::snap_unprotect() {
            << "snap_namespace=" << m_snap_namespace << ", "
            << "snap_name=" << m_snap_name << dendl;
 
-  auto finish_op_ctx = start_lock_op();
+  auto finish_op_ctx = start_lock_op(&r);
   if (finish_op_ctx == nullptr) {
     derr << "lost exclusive lock" << dendl;
-    m_ret_val = -EROFS;
+    m_ret_val = r;
     close_image();
     return;
   }
@@ -205,10 +205,11 @@ void SnapshotPurgeRequest<I>::snap_remove() {
            << "snap_namespace=" << m_snap_namespace << ", "
            << "snap_name=" << m_snap_name << dendl;
 
-  auto finish_op_ctx = start_lock_op();
+  int r;
+  auto finish_op_ctx = start_lock_op(&r);
   if (finish_op_ctx == nullptr) {
     derr << "lost exclusive lock" << dendl;
-    m_ret_val = -EROFS;
+    m_ret_val = r;
     close_image();
     return;
   }
@@ -277,9 +278,9 @@ void SnapshotPurgeRequest<I>::finish(int r) {
 }
 
 template <typename I>
-Context *SnapshotPurgeRequest<I>::start_lock_op() {
+Context *SnapshotPurgeRequest<I>::start_lock_op(int* r) {
   RWLock::RLocker owner_locker(m_image_ctx->owner_lock);
-  return m_image_ctx->exclusive_lock->start_op();
+  return m_image_ctx->exclusive_lock->start_op(r);
 }
 
 } // namespace image_deleter
