@@ -2973,7 +2973,10 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   if (legacy_change || unpaused || force_resend) {
     return RECALC_OP_TARGET_NEED_RESEND;
   }
-  if (split && con && con->has_features(CEPH_FEATUREMASK_RESEND_ON_SPLIT)) {
+  if (split &&
+      (osdmap->require_osd_release >= CEPH_RELEASE_LUMINOUS ||
+       HAVE_FEATURE(osdmap->get_xinfo(acting_primary).features,
+		    RESEND_ON_SPLIT))) {
     return RECALC_OP_TARGET_NEED_RESEND;
   }
   return RECALC_OP_TARGET_NO_ACTION;
