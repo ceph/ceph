@@ -132,7 +132,11 @@ bool MDSDaemon::asok_command(std::string_view command, const cmdmap_t& cmdmap,
       dout(1) << "Can't run that command on an inactive MDS!" << dendl;
       f->dump_string("error", "mds_not_active");
     } else {
-      handled = mds_rank->handle_asok_command(command, cmdmap, f, ss);
+      try {
+	handled = mds_rank->handle_asok_command(command, cmdmap, f, ss);
+      } catch (const bad_cmd_get& e) {
+	ss << e.what();
+      }
     }
   }
   f->flush(ss);
@@ -616,7 +620,12 @@ void MDSDaemon::handle_command(const MCommand::const_ref &m)
     r = -EINVAL;
     outs = ss.str();
   } else {
-    r = _handle_command(cmdmap, m, &outbl, &outs, &run_after, &need_reply);
+    try {
+      r = _handle_command(cmdmap, m, &outbl, &outs, &run_after, &need_reply);
+    } catch (const bad_cmd_get& e) {
+      outs = e.what();
+      r = -EINVAL;
+    }
   }
   priv.reset();
 
@@ -850,12 +859,18 @@ int MDSDaemon::_handle_command(
       r = -EINVAL;
     }
     else {
-      bool handled = mds_rank->handle_command(cmdmap, m, &r, &ds, &ss,
-					      need_reply);
-      if (!handled) {
-        // MDSDaemon doesn't know this command
-        ss << "unrecognized command! " << prefix;
-        r = -EINVAL;
+      bool handled;
+      try {
+	handled = mds_rank->handle_command(cmdmap, m, &r, &ds, &ss,
+					   need_reply);
+	if (!handled) {
+	  // MDSDaemon doesn't know this command
+	  ss << "unrecognized command! " << prefix;
+	  r = -EINVAL;
+	}
+      } catch (const bad_cmd_get& e) {
+	ss << e.what();
+	r = -EINVAL;
       }
     }
   }

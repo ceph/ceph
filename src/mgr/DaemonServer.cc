@@ -719,86 +719,86 @@ bool DaemonServer::_allowed_command(
   return capable;
 }
 
+/**
+ * The working data for processing an MCommand.  This lives in
+ * a class to enable passing it into other threads for processing
+ * outside of the thread/locks that called handle_command.
+ */
+class CommandContext {
+public:
+  MCommand *m;
+  bufferlist odata;
+  cmdmap_t cmdmap;
+
+  explicit CommandContext(MCommand *m_)
+    : m(m_) {
+  }
+
+  ~CommandContext() {
+    m->put();
+  }
+
+  void reply(int r, const std::stringstream &ss) {
+    reply(r, ss.str());
+  }
+
+  void reply(int r, const std::string &rs) {
+    // Let the connection drop as soon as we've sent our response
+    ConnectionRef con = m->get_connection();
+    if (con) {
+      con->mark_disposable();
+    }
+
+    if (r == 0) {
+      dout(4) << __func__ << " success" << dendl;
+    } else {
+      derr << __func__ << " " << cpp_strerror(r) << " " << rs << dendl;
+    }
+    if (con) {
+      MCommandReply *reply = new MCommandReply(r, rs);
+      reply->set_tid(m->get_tid());
+      reply->set_data(odata);
+      con->send_message(reply);
+    }
+  }
+};
+
+/**
+ * A context for receiving a bufferlist/error string from a background
+ * function and then calling back to a CommandContext when it's done
+ */
+class ReplyOnFinish : public Context {
+  std::shared_ptr<CommandContext> cmdctx;
+
+public:
+  bufferlist from_mon;
+  string outs;
+
+  explicit ReplyOnFinish(const std::shared_ptr<CommandContext> &cmdctx_)
+    : cmdctx(cmdctx_)
+    {}
+  void finish(int r) override {
+    cmdctx->odata.claim_append(from_mon);
+    cmdctx->reply(r, outs);
+  }
+};
+
 bool DaemonServer::handle_command(MCommand *m)
 {
   Mutex::Locker l(lock);
-  int r = 0;
-  std::stringstream ss;
-  std::string prefix;
-
-  ceph_assert(lock.is_locked_by_me());
-
-  /**
-   * The working data for processing an MCommand.  This lives in
-   * a class to enable passing it into other threads for processing
-   * outside of the thread/locks that called handle_command.
-   */
-  class CommandContext
-  {
-    public:
-    MCommand *m;
-    bufferlist odata;
-    cmdmap_t cmdmap;
-
-    explicit CommandContext(MCommand *m_)
-      : m(m_)
-    {
-    }
-
-    ~CommandContext()
-    {
-      m->put();
-    }
-
-    void reply(int r, const std::stringstream &ss)
-    {
-      reply(r, ss.str());
-    }
-
-    void reply(int r, const std::string &rs)
-    {
-      // Let the connection drop as soon as we've sent our response
-      ConnectionRef con = m->get_connection();
-      if (con) {
-        con->mark_disposable();
-      }
-
-      if (r == 0) {
-        dout(4) << __func__ << " success" << dendl;
-      } else {
-        derr << __func__ << " " << cpp_strerror(r) << " " << rs << dendl;
-      }
-      if (con) {
-        MCommandReply *reply = new MCommandReply(r, rs);
-        reply->set_tid(m->get_tid());
-        reply->set_data(odata);
-        con->send_message(reply);
-      }
-    }
-  };
-
-  /**
-   * A context for receiving a bufferlist/error string from a background
-   * function and then calling back to a CommandContext when it's done
-   */
-  class ReplyOnFinish : public Context {
-    std::shared_ptr<CommandContext> cmdctx;
-
-  public:
-    bufferlist from_mon;
-    string outs;
-
-    explicit ReplyOnFinish(const std::shared_ptr<CommandContext> &cmdctx_)
-      : cmdctx(cmdctx_)
-    {}
-    void finish(int r) override {
-      cmdctx->odata.claim_append(from_mon);
-      cmdctx->reply(r, outs);
-    }
-  };
-
   std::shared_ptr<CommandContext> cmdctx = std::make_shared<CommandContext>(m);
+  try {
+    return _handle_command(m, cmdctx);
+  } catch (const bad_cmd_get& e) {
+    cmdctx->reply(-EINVAL, e.what());
+    return true;
+  }
+}
 
+bool DaemonServer::_handle_command(
+  MCommand *m,
+  std::shared_ptr<CommandContext>& cmdctx)
+{
   auto priv = m->get_connection()->get_priv();
   auto session = static_cast<MgrSession*>(priv.get());
   if (!session) {
@@ -810,6 +810,8 @@ bool DaemonServer::handle_command(MCommand *m)
   std::string format;
   boost::scoped_ptr<Formatter> f;
   map<string,string> param_str_map;
+  std::stringstream ss;
+  int r = 0;
 
   if (!cmdmap_from_json(m->cmd, &(cmdctx->cmdmap), ss)) {
     cmdctx->reply(-EINVAL, ss);
@@ -821,6 +823,7 @@ bool DaemonServer::handle_command(MCommand *m)
     f.reset(Formatter::create(format));
   }
 
+  string prefix;
   cmd_getval(cct, cmdctx->cmdmap, "prefix", prefix);
 
   dout(4) << "decoded " << cmdctx->cmdmap.size() << dendl;

@@ -43,13 +43,13 @@ class FlagSetHandler : public FileSystemCommandHandler
       std::stringstream &ss) override
   {
     string flag_name;
-    cmd_getval_throws(g_ceph_context, cmdmap, "flag_name", flag_name);
+    cmd_getval(g_ceph_context, cmdmap, "flag_name", flag_name);
 
     string flag_val;
-    cmd_getval_throws(g_ceph_context, cmdmap, "val", flag_val);
+    cmd_getval(g_ceph_context, cmdmap, "val", flag_val);
 
     string confirm;
-    cmd_getval_throws(g_ceph_context, cmdmap, "confirm", confirm);
+    cmd_getval(g_ceph_context, cmdmap, "confirm", confirm);
 
     if (flag_name == "enable_multiple") {
       bool flag_bool = false;
@@ -98,7 +98,7 @@ class FsNewHandler : public FileSystemCommandHandler
     ceph_assert(m_paxos->is_plugged());
 
     string metadata_name;
-    cmd_getval_throws(g_ceph_context, cmdmap, "metadata", metadata_name);
+    cmd_getval(g_ceph_context, cmdmap, "metadata", metadata_name);
     int64_t metadata = mon->osdmon()->osdmap.lookup_pg_pool_name(metadata_name);
     if (metadata < 0) {
       ss << "pool '" << metadata_name << "' does not exist";
@@ -106,7 +106,7 @@ class FsNewHandler : public FileSystemCommandHandler
     }
 
     string data_name;
-    cmd_getval_throws(g_ceph_context, cmdmap, "data", data_name);
+    cmd_getval(g_ceph_context, cmdmap, "data", data_name);
     int64_t data = mon->osdmon()->osdmap.lookup_pg_pool_name(data_name);
     if (data < 0) {
       ss << "pool '" << data_name << "' does not exist";
@@ -118,7 +118,7 @@ class FsNewHandler : public FileSystemCommandHandler
     }
 
     string fs_name;
-    cmd_getval_throws(g_ceph_context, cmdmap, "fs_name", fs_name);
+    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
     if (fs_name.empty()) {
         // Ensure fs name is not empty so that we can implement
         // commmands that refer to FS by name in future.
@@ -140,7 +140,7 @@ class FsNewHandler : public FileSystemCommandHandler
     }
 
     string force_str;
-    cmd_getval_throws(g_ceph_context,cmdmap, "force", force_str);
+    cmd_getval(g_ceph_context,cmdmap, "force", force_str);
     bool force = (force_str == "--force");
     const pool_stat_t *stat = mon->mgrstatmon()->get_pool_stat(metadata);
     if (stat) {
@@ -165,7 +165,7 @@ class FsNewHandler : public FileSystemCommandHandler
       string sure;
       if ((std::find(data_pools.begin(), data_pools.end(), data) != data_pools.end()
 	   || fs->mds_map.get_metadata_pool() == metadata)
-	  && ((!cmd_getval_throws(g_ceph_context, cmdmap, "sure", sure)
+	  && ((!cmd_getval(g_ceph_context, cmdmap, "sure", sure)
 	       || sure != "--allow-dangerous-metadata-overlay"))) {
 	ss << "Filesystem '" << fs_name
 	   << "' is already using one of the specified RADOS pools. This should ONLY be done in emergencies and after careful reading of the documentation. Pass --allow-dangerous-metadata-overlay to permit this.";
@@ -241,7 +241,7 @@ public:
       std::stringstream &ss) override
   {
     std::string fs_name;
-    if (!cmd_getval_throws(g_ceph_context, cmdmap, "fs_name", fs_name) || fs_name.empty()) {
+    if (!cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name) || fs_name.empty()) {
       ss << "Missing filesystem name";
       return -EINVAL;
     }
@@ -253,14 +253,14 @@ public:
     }
 
     string var;
-    if (!cmd_getval_throws(g_ceph_context, cmdmap, "var", var) || var.empty()) {
+    if (!cmd_getval(g_ceph_context, cmdmap, "var", var) || var.empty()) {
       ss << "Invalid variable";
       return -EINVAL;
     }
     string val;
     string interr;
     int64_t n = 0;
-    if (!cmd_getval_throws(g_ceph_context, cmdmap, "val", val)) {
+    if (!cmd_getval(g_ceph_context, cmdmap, "val", val)) {
       return -EINVAL;
     }
     // we got a string.  see if it contains an int.
@@ -304,7 +304,7 @@ public:
 
       if (enable_inline) {
 	string confirm;
-	if (!cmd_getval_throws(g_ceph_context, cmdmap, "confirm", confirm) ||
+	if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
 	    confirm != "--yes-i-really-mean-it") {
 	  ss << EXPERIMENTAL_WARNING;
 	  return -EPERM;
@@ -396,7 +396,7 @@ public:
       }
 
       string confirm;
-      if (!cmd_getval_throws(g_ceph_context, cmdmap, "confirm", confirm) ||
+      if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
 	  confirm != "--yes-i-am-really-a-mds") {
 	ss << "Warning! This command is for MDS only. Do not run it manually";
 	return -EPERM;
@@ -571,10 +571,10 @@ class AddDataPoolHandler : public FileSystemCommandHandler
     ceph_assert(m_paxos->is_plugged());
 
     string poolname;
-    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolname);
+    cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
 
     std::string fs_name;
-    if (!cmd_getval_throws(g_ceph_context, cmdmap, "fs_name", fs_name)
+    if (!cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name)
         || fs_name.empty()) {
       ss << "Missing filesystem name";
       return -EINVAL;
@@ -648,7 +648,7 @@ class SetDefaultHandler : public FileSystemCommandHandler
       std::stringstream &ss) override
   {
     std::string fs_name;
-    cmd_getval_throws(g_ceph_context, cmdmap, "fs_name", fs_name);
+    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
     auto fs = fsmap.get_filesystem(fs_name);
     if (fs == nullptr) {
         ss << "filesystem '" << fs_name << "' does not exist";
@@ -678,7 +678,7 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
     // (redundant while there is only one FS, but command
     //  syntax should apply to multi-FS future)
     string fs_name;
-    cmd_getval_throws(g_ceph_context, cmdmap, "fs_name", fs_name);
+    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
     auto fs = fsmap.get_filesystem(fs_name);
     if (fs == nullptr) {
         // Consider absence success to make deletes idempotent
@@ -694,7 +694,7 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
 
     // Check for confirmation flag
     string sure;
-    cmd_getval_throws(g_ceph_context, cmdmap, "sure", sure);
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     if (sure != "--yes-i-really-mean-it") {
       ss << "this is a DESTRUCTIVE operation and will make data in your filesystem permanently" \
             " inaccessible.  Add --yes-i-really-mean-it if you are sure you wish to continue.";
@@ -739,7 +739,7 @@ class ResetFilesystemHandler : public FileSystemCommandHandler
       std::stringstream &ss) override
   {
     string fs_name;
-    cmd_getval_throws(g_ceph_context, cmdmap, "fs_name", fs_name);
+    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
     auto fs = fsmap.get_filesystem(fs_name);
     if (fs == nullptr) {
         ss << "filesystem '" << fs_name << "' does not exist";
@@ -756,7 +756,7 @@ class ResetFilesystemHandler : public FileSystemCommandHandler
 
     // Check for confirmation flag
     string sure;
-    cmd_getval_throws(g_ceph_context, cmdmap, "sure", sure);
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     if (sure != "--yes-i-really-mean-it") {
       ss << "this is a potentially destructive operation, only for use by experts in disaster recovery.  "
         "Add --yes-i-really-mean-it if you are sure you wish to continue.";
@@ -784,10 +784,10 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
       std::stringstream &ss) override
   {
     string poolname;
-    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolname);
+    cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
 
     std::string fs_name;
-    if (!cmd_getval_throws(g_ceph_context, cmdmap, "fs_name", fs_name)
+    if (!cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name)
         || fs_name.empty()) {
       ss << "Missing filesystem name";
       return -EINVAL;
