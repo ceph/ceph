@@ -213,7 +213,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
   {
     ceph_assert(ictx->owner_lock.is_locked());
     ceph_assert(ictx->exclusive_lock == nullptr ||
-	   ictx->exclusive_lock->is_lock_owner());
+                ictx->exclusive_lock->is_lock_owner());
 
     C_SaferCond ctx;
     ictx->snap_lock.get_read();

@@ -81,7 +81,7 @@ template <typename I>
 ManagedLock<I>::~ManagedLock() {
   Mutex::Locker locker(m_lock);
   ceph_assert(m_state == STATE_SHUTDOWN || m_state == STATE_UNLOCKED ||
-         m_state == STATE_UNINITIALIZED);
+              m_state == STATE_UNINITIALIZED);
   if (m_state == STATE_UNINITIALIZED) {
     // never initialized -- ensure any in-flight ops are complete
     // since we wouldn't expect shut_down to be invoked
@@ -135,7 +135,7 @@ void ManagedLock<I>::shut_down(Context *on_shut_down) {
     ldout(m_cct, 10) << "woke up waiting acquire" << dendl;
     Action active_action = get_active_action();
     ceph_assert(active_action == ACTION_TRY_LOCK ||
-           active_action == ACTION_ACQUIRE_LOCK);
+                active_action == ACTION_ACQUIRE_LOCK);
     complete_active_action(STATE_UNLOCKED, -ESHUTDOWN);
   }
 
@@ -209,7 +209,7 @@ void ManagedLock<I>::reacquire_lock(Context *on_reacquired) {
       ldout(m_cct, 10) << "woke up waiting acquire" << dendl;
       Action active_action = get_active_action();
       ceph_assert(active_action == ACTION_TRY_LOCK ||
-             active_action == ACTION_ACQUIRE_LOCK);
+                  active_action == ACTION_ACQUIRE_LOCK);
       execute_next_action();
     } else if (!is_state_shutdown() &&
                (m_state == STATE_LOCKED ||
