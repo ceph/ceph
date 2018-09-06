@@ -51,6 +51,9 @@ class SingleType(object):
         # validate minimum size for all devices
         validators.minimum_device_size(self.devices)
 
+        # make sure that data devices do not have any LVs
+        validators.no_lvm_membership(self.hdds)
+
     def compute(self):
         """
         Go through the rules needed to properly size the lvs, return
@@ -230,6 +233,9 @@ class MixedType(object):
         """
         # validate minimum size for all devices
         validators.minimum_device_size(self.devices)
+
+        # make sure that data devices do not have any LVs
+        validators.no_lvm_membership(self.hdds)
 
         # add all the size available in solid drives and divide it by the
         # expected number of osds, the expected output should be larger than
