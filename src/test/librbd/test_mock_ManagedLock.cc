@@ -199,7 +199,6 @@ public:
                              ContextWQ *work_queue,
                              MockReacquireRequest &mock_reacquire_request,
                              int r) {
-    expect_get_watch_handle(watcher, 98765);
     EXPECT_CALL(mock_reacquire_request, send())
                   .WillOnce(QueueRequest(&mock_reacquire_request, r, work_queue));
   }
@@ -526,7 +525,74 @@ TEST_F(TestMockManagedLock, ReacquireLock) {
 
   MockReacquireRequest mock_reacquire_request;
   C_SaferCond reacquire_ctx;
+  expect_get_watch_handle(*mock_image_ctx.image_watcher, 98765);
   expect_reacquire_lock(*mock_image_ctx.image_watcher, ictx->op_work_queue, mock_reacquire_request, 0);
+  managed_lock.reacquire_lock(&reacquire_ctx);
+  ASSERT_EQ(0, reacquire_ctx.wait());
+
+  MockReleaseRequest shutdown_release;
+  expect_release_lock(ictx->op_work_queue, shutdown_release, 0);
+  ASSERT_EQ(0, when_shut_down(managed_lock));
+  ASSERT_FALSE(is_lock_owner(managed_lock));
+}
+
+TEST_F(TestMockManagedLock, AttemptReacquireBlacklistedLock) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockManagedLockImageCtx mock_image_ctx(*ictx);
+  MockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+                               ictx->header_oid, mock_image_ctx.image_watcher,
+                               librbd::managed_lock::EXCLUSIVE, true, 0);
+  InSequence seq;
+
+  MockAcquireRequest request_lock_acquire;
+  expect_acquire_lock(*mock_image_ctx.image_watcher, ictx->op_work_queue,
+                      request_lock_acquire, 0);
+  ASSERT_EQ(0, when_acquire_lock(managed_lock));
+  ASSERT_TRUE(is_lock_owner(managed_lock));
+
+  expect_get_watch_handle(*mock_image_ctx.image_watcher, 0);
+
+  MockReleaseRequest request_release;
+  expect_release_lock(ictx->op_work_queue, request_release, 0);
+
+  expect_get_watch_handle(*mock_image_ctx.image_watcher, 0);
+
+  managed_lock.reacquire_lock(nullptr);
+
+  ASSERT_EQ(0, when_shut_down(managed_lock));
+  ASSERT_FALSE(is_lock_owner(managed_lock));
+}
+
+TEST_F(TestMockManagedLock, ReacquireBlacklistedLock) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockManagedLockImageCtx mock_image_ctx(*ictx);
+  MockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+                               ictx->header_oid, mock_image_ctx.image_watcher,
+                               librbd::managed_lock::EXCLUSIVE, true, 0);
+  InSequence seq;
+
+  MockAcquireRequest request_lock_acquire;
+  expect_acquire_lock(*mock_image_ctx.image_watcher, ictx->op_work_queue,
+                      request_lock_acquire, 0);
+  ASSERT_EQ(0, when_acquire_lock(managed_lock));
+  ASSERT_TRUE(is_lock_owner(managed_lock));
+
+  expect_get_watch_handle(*mock_image_ctx.image_watcher, 0);
+
+  MockReleaseRequest request_release;
+  expect_release_lock(ictx->op_work_queue, request_release, 0);
+
+  MockAcquireRequest request_lock_reacquire;
+  expect_acquire_lock(*mock_image_ctx.image_watcher, ictx->op_work_queue,
+                      request_lock_reacquire, 0);
+  ASSERT_EQ(0, when_acquire_lock(managed_lock));
+  ASSERT_TRUE(is_lock_owner(managed_lock));
+
+  C_SaferCond reacquire_ctx;
   managed_lock.reacquire_lock(&reacquire_ctx);
   ASSERT_EQ(0, reacquire_ctx.wait());
 
@@ -553,6 +619,7 @@ TEST_F(TestMockManagedLock, ReacquireLockError) {
 
   MockReacquireRequest mock_reacquire_request;
   C_SaferCond reacquire_ctx;
+  expect_get_watch_handle(*mock_image_ctx.image_watcher, 98765);
   expect_reacquire_lock(*mock_image_ctx.image_watcher, ictx->op_work_queue, mock_reacquire_request, -EOPNOTSUPP);
 
   MockReleaseRequest reacquire_lock_release;
@@ -562,7 +629,7 @@ TEST_F(TestMockManagedLock, ReacquireLockError) {
   expect_acquire_lock(*mock_image_ctx.image_watcher, ictx->op_work_queue, reacquire_lock_acquire, 0);
 
   managed_lock.reacquire_lock(&reacquire_ctx);
-  ASSERT_EQ(-EOPNOTSUPP, reacquire_ctx.wait());
+  ASSERT_EQ(0, reacquire_ctx.wait());
 
   MockReleaseRequest shutdown_release;
   expect_release_lock(ictx->op_work_queue, shutdown_release, 0);
