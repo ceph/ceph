@@ -23,3 +23,10 @@ ceph_conf_overrides:
   global:
     osd_pool_default_pg_num: 8
     osd_pool_default_size: 1
+
+# The following is only needed for testing purposes and is not part of
+# ceph-ansible supported variables
+
+osd_ids:
+  - 0
+  - 1
