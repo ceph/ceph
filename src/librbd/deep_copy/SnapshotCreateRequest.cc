@@ -68,10 +68,11 @@ template <typename I>
 void SnapshotCreateRequest<I>::send_create_snap() {
   ldout(m_cct, 20) << "snap_name=" << m_snap_name << dendl;
 
-  auto finish_op_ctx = start_lock_op();
+  int r;
+  auto finish_op_ctx = start_lock_op(&r);
   if (finish_op_ctx == nullptr) {
     lderr(m_cct) << "lost exclusive lock" << dendl;
-    finish(-EROFS);
+    finish(r);
     return;
   }
 
@@ -131,10 +132,11 @@ void SnapshotCreateRequest<I>::send_create_object_map() {
   librados::ObjectWriteOperation op;
   librbd::cls_client::object_map_resize(&op, object_count, OBJECT_NONEXISTENT);
 
-  auto finish_op_ctx = start_lock_op();
+  int r;
+  auto finish_op_ctx = start_lock_op(&r);
   if (finish_op_ctx == nullptr) {
     lderr(m_cct) << "lost exclusive lock" << dendl;
-    finish(-EROFS);
+    finish(r);
     return;
   }
 
@@ -143,7 +145,7 @@ void SnapshotCreateRequest<I>::send_create_object_map() {
       finish_op_ctx->complete(0);
     });
   librados::AioCompletion *comp = create_rados_callback(ctx);
-  int r = m_dst_image_ctx->md_ctx.aio_operate(object_map_oid, comp, &op);
+  r = m_dst_image_ctx->md_ctx.aio_operate(object_map_oid, comp, &op);
   ceph_assert(r == 0);
   comp->release();
 }
@@ -163,12 +165,12 @@ void SnapshotCreateRequest<I>::handle_create_object_map(int r) {
 }
 
 template <typename I>
-Context *SnapshotCreateRequest<I>::start_lock_op() {
+Context *SnapshotCreateRequest<I>::start_lock_op(int* r) {
   RWLock::RLocker owner_locker(m_dst_image_ctx->owner_lock);
   if (m_dst_image_ctx->exclusive_lock == nullptr) {
     return new FunctionContext([](int r) {});
   }
-  return m_dst_image_ctx->exclusive_lock->start_op();
+  return m_dst_image_ctx->exclusive_lock->start_op(r);
 }
 
 template <typename I>

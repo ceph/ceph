@@ -137,11 +137,12 @@ void ExclusiveLock<I>::handle_peer_notification(int r) {
 }
 
 template <typename I>
-Context *ExclusiveLock<I>::start_op() {
+Context *ExclusiveLock<I>::start_op(int* ret_val) {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
   Mutex::Locker locker(ML<I>::m_lock);
 
   if (!accept_ops(ML<I>::m_lock)) {
+    *ret_val = get_unlocked_op_error();
     return nullptr;
   }
 
