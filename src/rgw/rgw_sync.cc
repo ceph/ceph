@@ -240,11 +240,11 @@ int RGWRemoteMetaLog::read_log_info(rgw_mdlog_info *log_info)
 
   int ret = conn->get_json_resource("/admin/log", pairs, *log_info);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to fetch mdlog info" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to fetch mdlog info" << dendl;
     return ret;
   }
 
-  ldout(store->ctx(), 20) << "remote mdlog, num_shards=" << log_info->num_shards << dendl;
+  ldpp_dout(dpp, 20) << "remote mdlog, num_shards=" << log_info->num_shards << dendl;
 
   return 0;
 }
@@ -279,7 +279,7 @@ int RGWRemoteMetaLog::init()
 
   int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
 
@@ -2019,7 +2019,7 @@ int RGWRemoteMetaLog::read_sync_status(rgw_meta_sync_status *sync_status)
   RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
   int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
   RGWMetaSyncEnv sync_env_local = sync_env;
@@ -2115,13 +2115,13 @@ int RGWRemoteMetaLog::run_sync()
   rgw_mdlog_info mdlog_info;
   for (;;) {
     if (going_down) {
-      ldout(store->ctx(), 1) << __func__ << "(): going down" << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "(): going down" << dendl;
       return 0;
     }
     r = read_log_info(&mdlog_info);
     if (r == -EIO || r == -ENOENT) {
       // keep retrying if master isn't alive or hasn't initialized the log
-      ldout(store->ctx(), 10) << __func__ << "(): waiting for master.." << dendl;
+      ldpp_dout(dpp, 10) << __func__ << "(): waiting for master.." << dendl;
       backoff.backoff_sleep();
       continue;
     }
@@ -2136,12 +2136,12 @@ int RGWRemoteMetaLog::run_sync()
   rgw_meta_sync_status sync_status;
   do {
     if (going_down) {
-      ldout(store->ctx(), 1) << __func__ << "(): going down" << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "(): going down" << dendl;
       return 0;
     }
     r = run(new RGWReadSyncStatusCoroutine(&sync_env, &sync_status));
     if (r < 0 && r != -ENOENT) {
-      ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to fetch sync status r=" << r << dendl;
       return r;
     }
 
@@ -2159,14 +2159,14 @@ int RGWRemoteMetaLog::run_sync()
           reason = SSTR("sync_info realm epoch is behind: " << sync_status.sync_info.realm_epoch << " < " << mdlog_info.realm_epoch);
         }
         tn->log(1, "initialize sync (reason: " + reason + ")");
-        ldout(store->ctx(), 1) << "epoch=" << sync_status.sync_info.realm_epoch
+        ldpp_dout(dpp, 1) << "epoch=" << sync_status.sync_info.realm_epoch
            << " in sync status comes before remote's oldest mdlog epoch="
            << mdlog_info.realm_epoch << ", restarting sync" << dendl;
       }
     }
 
     if (sync_status.sync_info.state == rgw_meta_sync_info::StateInit) {
-      ldout(store->ctx(), 20) << __func__ << "(): init" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "(): init" << dendl;
       sync_status.sync_info.num_shards = mdlog_info.num_shards;
       auto cursor = store->period_history->get_current();
       if (cursor) {
@@ -2181,7 +2181,7 @@ int RGWRemoteMetaLog::run_sync()
       }
       backoff.reset();
       if (r < 0) {
-        ldout(store->ctx(), 0) << "ERROR: failed to init sync status r=" << r << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: failed to init sync status r=" << r << dendl;
         return r;
       }
     }
