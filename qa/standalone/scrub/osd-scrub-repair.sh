@@ -5555,6 +5555,67 @@ EOF
     teardown $dir || return 1
 }
 
+function TEST_request_scrub_priority() {
+    local dir=$1
+    local poolname=psr_pool
+    local objname=POBJ
+    local OBJECTS=64
+    local PGS=8
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mgr $dir x || return 1
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0"
+    run_osd $dir 0 $ceph_osd_args || return 1
+
+    create_pool $poolname $PGS $PGS || return 1
+    wait_for_clean || return 1
+
+    local osd=0
+    add_something $dir $poolname $objname noscrub || return 1
+    local primary=$(get_primary $poolname $objname)
+    local pg=$(get_pg $poolname $objname)
+    poolid=$(ceph osd dump | grep "^pool.*[']${poolname}[']" | awk '{ print $2 }')
+
+    local otherpgs
+    for i in $(seq 0 $(expr $PGS - 1))
+    do
+        opg="${poolid}.${i}"
+        if [ "$opg" = "$pg" ]; then
+          continue
+        fi
+        otherpgs="${otherpgs}${opg} "
+        local other_last_scrub=$(get_last_scrub_stamp $pg)
+        # Fake a schedule scrub
+        CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
+             trigger_scrub $opg || return 1
+    done
+
+    sleep 15
+    flush_pg_stats
+
+    # Request a regular scrub and it will be done
+    local last_scrub=$(get_last_scrub_stamp $pg)
+    ceph pg scrub $pg
+
+    ceph osd unset noscrub || return 1
+    ceph osd unset nodeep-scrub || return 1
+
+    wait_for_scrub $pg "$last_scrub"
+
+    for opg in $otherpgs $pg
+    do
+        wait_for_scrub $opg "$other_last_scrub"
+    done
+
+    # Verify that the requested scrub ran first
+    grep "log_channel.*scrub ok" $dir/osd.${primary}.log | head -1 | sed 's/.*[[]DBG[]]//' | grep -q $pg || return 1
+
+    return 0
+}
+
+
 main osd-scrub-repair "$@"
 
 # Local Variables:
