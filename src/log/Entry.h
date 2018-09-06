@@ -107,7 +107,7 @@ public:
   }
 
 private:
-  boost::container::small_vector<char, 4096> str;
+  boost::container::small_vector<char, 1024> str;
 };
 
 }
