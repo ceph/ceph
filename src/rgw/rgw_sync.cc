@@ -2566,7 +2566,7 @@ connection_map make_peer_connections(RGWRados *store,
   for (auto& g : zonegroups) {
     for (auto& z : g.second.zones) {
       std::unique_ptr<RGWRESTConn> conn{
-        new RGWRESTConn(store->ctx(), store->svc.zone.get(), z.first, z.second.endpoints)};
+        new RGWRESTConn(store->ctx(), store->svc.zone, z.first, z.second.endpoints)};
       connections.emplace(z.first, std::move(conn));
     }
   }

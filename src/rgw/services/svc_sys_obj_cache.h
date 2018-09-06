@@ -12,6 +12,14 @@ class RGWSI_Notify;
 
 class RGWSI_SysObj_Cache_CB;
 
+class RGWS_SysObj_Cache : public RGWService
+{
+public:
+  RGWS_SysObj_Cache(CephContext *cct) : RGWService(cct, "sysobj_cache") {}
+
+  int create_instance(const std::string& conf, RGWServiceInstanceRef *instance) override;
+};
+
 class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 {
   friend class RGWSI_SysObj_Cache_CB;

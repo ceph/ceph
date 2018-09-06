@@ -2,6 +2,7 @@
 #include "common/errno.h"
 
 #include "svc_notify.h"
+#include "svc_finisher.h"
 #include "svc_zone.h"
 #include "svc_rados.h"
 
@@ -10,6 +11,12 @@
 #define dout_subsys ceph_subsys_rgw
 
 static string notify_oid_prefix = "notify";
+
+int RGWS_Notify::create_instance(const string& conf, RGWServiceInstanceRef *instance)
+{
+  instance->reset(new RGWSI_Notify(this, cct));
+  return 0;
+}
 
 class RGWWatcher : public librados::WatchCtx2 {
   CephContext *cct;
@@ -127,11 +134,16 @@ public:
   }
 };
 
-int RGWS_Notify::create_instance(const string& conf, RGWServiceInstanceRef *instance)
+
+class RGWSI_Notify_ShutdownCB : public RGWSI_Finisher::ShutdownCB
 {
-  instance->reset(new RGWSI_Notify(this, cct));
-  return 0;
-}
+  RGWSI_Notify *svc;
+public:
+  RGWSI_Notify_ShutdownCB(RGWSI_Notify *_svc) : svc(_svc) {}
+  void call() override {
+    svc->shutdown();
+  }
+};
 
 std::map<string, RGWServiceInstance::dependency> RGWSI_Notify::get_deps()
 {
@@ -139,6 +151,8 @@ std::map<string, RGWServiceInstance::dependency> RGWSI_Notify::get_deps()
   deps["zone_dep"] = { .name = "zone",
                        .conf = "{}" };
   deps["rados_dep"] = { .name = "rados",
+                        .conf = "{}" };
+  deps["finisher_dep"] = { .name = "finisher",
                         .conf = "{}" };
   return deps;
 }
@@ -149,6 +163,8 @@ int RGWSI_Notify::load(const string& conf, std::map<std::string, RGWServiceInsta
   assert(zone_svc);
   rados_svc = static_pointer_cast<RGWSI_RADOS>(dep_refs["rados_dep"]);
   assert(rados_svc);
+  finisher_svc = static_pointer_cast<RGWSI_Finisher>(dep_refs["finisher_dep"]);
+  assert(finisher_svc);
   return 0;
 }
 
@@ -230,6 +246,10 @@ int RGWSI_Notify::init_watch()
 
 void RGWSI_Notify::finalize_watch()
 {
+  if (finalized) {
+    return;
+  }
+
   for (int i = 0; i < num_watchers; i++) {
     RGWWatcher *watcher = watchers[i];
     watcher->unregister_watch();
@@ -249,11 +269,15 @@ int RGWSI_Notify::init()
     return ret;
   }
 
+  shutdown_cb = new RGWSI_Notify_ShutdownCB(this);
+  finisher_svc->register_caller(shutdown_cb, &finisher_handle);
+
   return 0;
 }
 
 void RGWSI_Notify::shutdown()
 {
+  finisher_svc->unregister_caller(finisher_handle);
   finalize_watch();
 }
 
@@ -427,4 +451,9 @@ void RGWSI_Notify::register_watch_cb(CB *_cb)
 {
   RWLock::WLocker l(watchers_lock);
   cb = _cb;
+}
+
+void RGWSI_Notify::schedule_context(Context *c)
+{
+  finisher_svc->schedule_context(c);
 }

@@ -4,6 +4,12 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+int RGWS_SysObj_Cache::create_instance(const string& conf, RGWServiceInstanceRef *instance)
+{
+  instance->reset(new RGWSI_SysObj_Cache(this, cct));
+  return 0;
+}
+
 class RGWSI_SysObj_Cache_CB : public RGWSI_Notify::CB
 {
   RGWSI_SysObj_Cache *svc;

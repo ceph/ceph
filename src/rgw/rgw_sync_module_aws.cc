@@ -639,7 +639,7 @@ struct AWSSyncConfig {
     auto& root_conf = root_profile->conn_conf;
 
     root_profile->conn.reset(new S3RESTConn(sync_env->cct,
-                                           sync_env->store->svc.zone.get(),
+                                           sync_env->store->svc.zone,
                                            id,
                                            { root_conf->endpoint },
                                            root_conf->key,
@@ -649,7 +649,7 @@ struct AWSSyncConfig {
       auto& c = i.second;
 
       c->conn.reset(new S3RESTConn(sync_env->cct,
-                                   sync_env->store->svc.zone.get(),
+                                   sync_env->store->svc.zone,
                                    id,
                                    { c->conn_conf->endpoint },
                                    c->conn_conf->key,
