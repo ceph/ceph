@@ -1023,7 +1023,7 @@ void ImageWatcher<I>::handle_rewatch_complete(int r) {
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
     if (m_image_ctx.exclusive_lock != nullptr) {
       // update the lock cookie with the new watch handle
-      m_image_ctx.exclusive_lock->reacquire_lock();
+      m_image_ctx.exclusive_lock->reacquire_lock(nullptr);
     }
   }
 
