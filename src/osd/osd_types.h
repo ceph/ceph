@@ -925,6 +925,9 @@ struct osd_stat_t {
 
   uint32_t num_pgs = 0;
 
+  uint32_t sched_scrubs_overdue = 0;
+  uint32_t total_scrubs_overdue = 0;
+
   void add(const osd_stat_t& o) {
     kb += o.kb;
     kb_used += o.kb_used;
@@ -937,6 +940,8 @@ struct osd_stat_t {
     op_queue_age_hist.add(o.op_queue_age_hist);
     os_perf_stat.add(o.os_perf_stat);
     num_pgs += o.num_pgs;
+    sched_scrubs_overdue += o.sched_scrubs_overdue;
+    total_scrubs_overdue += o.total_scrubs_overdue;
   }
   void sub(const osd_stat_t& o) {
     kb -= o.kb;
@@ -950,6 +955,8 @@ struct osd_stat_t {
     op_queue_age_hist.sub(o.op_queue_age_hist);
     os_perf_stat.sub(o.os_perf_stat);
     num_pgs -= o.num_pgs;
+    sched_scrubs_overdue -= o.sched_scrubs_overdue;
+    total_scrubs_overdue -= o.total_scrubs_overdue;
   }
 
   void dump(Formatter *f) const;

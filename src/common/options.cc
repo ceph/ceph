@@ -1632,6 +1632,12 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description(""),
 
+    Option("mon_warn_pg_scrubs_overdue_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(.25)
+    .set_description("Warn when any osd has this percentage of pgs or this percentage of all pgs with scrubs overdue. "
+                     "The value of osd_max_scrubs is also accounted for.")
+    .add_see_also("osd_max_scrubs"),
+
     Option("mon_scrub_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1_day)
     .set_description(""),

@@ -4411,6 +4411,8 @@ void OSD::maybe_update_heartbeat_peers()
     _remove_heartbeat_peer(*p);
   }
 
+  service.set_scrubs_overdue(service.scrub_overdue_length());
+
   dout(10) << "maybe_update_heartbeat_peers " << heartbeat_peers.size() << " peers, extras " << extras << dendl;
 }
 

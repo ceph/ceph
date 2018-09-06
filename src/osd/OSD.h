@@ -503,6 +503,23 @@ public:
     *out = *iter;
     return true;
   }
+  pair<uint32_t, uint32_t> scrub_overdue_length() {
+    uint32_t total_count = 0;
+    uint32_t sched_count = 0;
+    utime_t now = ceph_clock_now();
+    Mutex::Locker l(sched_scrub_lock);
+    for (auto &i : sched_scrub_pg) {
+      // Any overdue sched scrubs or user requests which look overdue are
+      // counted in total_count
+      if (i.deadline < now) {
+        ++total_count;
+        // Only overdue sched scrubs are counted in sched_count
+        if (!i.must)
+            ++sched_count;
+      }
+    }
+    return pair<uint32_t, uint32_t>(sched_count, total_count);
+  }
 
   void dumps_scrub(Formatter *f) {
     ceph_assert(f != nullptr);
@@ -900,6 +917,11 @@ public:
   uint64_t get_osd_stat_seq() {
     Mutex::Locker l(stat_lock);
     return osd_stat.seq;
+  }
+  void set_scrubs_overdue(pair<uint32_t, uint32_t> so) {
+    Mutex::Locker l(stat_lock);
+    osd_stat.sched_scrubs_overdue = so.first;
+    osd_stat.total_scrubs_overdue = so.second;
   }
 
   // -- OSD Full Status --

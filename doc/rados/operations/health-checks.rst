@@ -612,3 +612,15 @@ happen if they are misplaced or degraded (see *PG_AVAILABILITY* and
 You can manually initiate a scrub of a clean PG with::
 
   ceph pg deep-scrub <pgid>
+
+OSD_ALL_SCRUBS_OVERDUE
+----------------------
+
+If the ratio of overdue scrubs to total pgs is greater than
+``mon_warn_pg_scrubs_overdue_ratio`` this warning is triggered.
+
+OSD_PER_OSD_SCRUBS_OVERDUE
+--------------------------
+
+On each OSD if the ratio of overdue scheduled scrubs to OSD's total pgs is
+greater than ``mon_warn_pg_scrubs_overdue_ratio`` this warning is triggered.

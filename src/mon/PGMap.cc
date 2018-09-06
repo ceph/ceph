@@ -2901,6 +2901,36 @@ void PGMap::get_health_checks(
     }
   }
 
+  // SCRUBS_OVERDUE
+  {
+    if (cct->_conf->mon_warn_pg_scrubs_overdue_ratio && cct->_conf->osd_max_scrubs) {
+      float ratio = cct->_conf->mon_warn_pg_scrubs_overdue_ratio;
+      if (ratio >= 1)
+        ratio /= 100;
+      uint32_t overdue = get_osd_sum().total_scrubs_overdue;
+      uint32_t threshold = ((sum_pg_up / num_in) * ratio) / cct->_conf->osd_max_scrubs;
+      if (overdue > threshold) {
+        ostringstream ss;
+        ss << overdue << " scrub(s) overdue";
+        checks->add("OSD_ALL_SCRUBS_OVERDUE", HEALTH_WARN, ss.str());
+      }
+      ostringstream ss;
+      for (auto& a: osd_stat) {
+        uint32_t overdue = a.second.sched_scrubs_overdue;
+        uint32_t threshold = (a.second.num_pgs * ratio) / cct->_conf->osd_max_scrubs;
+        if (overdue > threshold) {
+          if (ss.str().length() == 0)
+            ss << "Per osd scheduled scrub(s) overdue ";
+          else
+            ss << ", ";
+          ss << "osd." << a.first << "(" << overdue << ")";
+        }
+      }
+      if (ss.str().length() != 0)
+        checks->add("OSD_SCHED_OSD_SCRUBS_OVERDUE", HEALTH_WARN, ss.str());
+    }
+  }
+
   // POOL_APP
   if (g_conf().get_val<bool>("mon_warn_on_pool_no_app")) {
     list<string> detail;

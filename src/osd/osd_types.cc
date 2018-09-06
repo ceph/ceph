@@ -353,11 +353,13 @@ void osd_stat_t::dump(Formatter *f) const
   f->open_object_section("perf_stat");
   os_perf_stat.dump(f);
   f->close_section();
+  f->dump_unsigned("sched_scrubs_overdue", sched_scrubs_overdue);
+  f->dump_unsigned("total_scrubs_overdue", total_scrubs_overdue);
 }
 
 void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(8, 2, bl);
+  ENCODE_START(9, 2, bl);
   encode(kb, bl);
   encode(kb_used, bl);
   encode(kb_avail, bl);
@@ -373,12 +375,14 @@ void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
   encode(kb_used_data, bl);
   encode(kb_used_omap, bl);
   encode(kb_used_meta, bl);
+  encode(sched_scrubs_overdue, bl);
+  encode(total_scrubs_overdue, bl);
   ENCODE_FINISH(bl);
 }
 
 void osd_stat_t::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(9, 2, 2, bl);
   decode(kb, bl);
   decode(kb_used, bl);
   decode(kb_avail, bl);
@@ -406,6 +410,13 @@ void osd_stat_t::decode(bufferlist::const_iterator &bl)
     kb_used_data = kb_used;
     kb_used_omap = 0;
     kb_used_meta = 0;
+  }
+  if (struct_v >= 9) {
+    decode(sched_scrubs_overdue, bl);
+    decode(total_scrubs_overdue, bl);
+  } else {
+    sched_scrubs_overdue = 0;
+    total_scrubs_overdue = 0;
   }
   DECODE_FINISH(bl);
 }
