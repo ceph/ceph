@@ -2,4 +2,4 @@ tasks:
 - cram:
     clients:
       client.0:
-      - '{gh_url}/raw/{branch}/qa/rbd/krbd_blkroset.t'
+      - qa/rbd/krbd_blkroset.t
