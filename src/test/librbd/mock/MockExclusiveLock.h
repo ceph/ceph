@@ -29,6 +29,7 @@ struct MockExclusiveLock {
 
   MOCK_METHOD0(accept_requests, bool());
   MOCK_METHOD0(accept_ops, bool());
+  MOCK_METHOD0(get_unlocked_op_error, int());
 
   MOCK_METHOD0(start_op, Context*());
 };
