@@ -18,6 +18,8 @@
 
 #include "SimpleLock.h"
 
+#include "MDSContext.h"
+
 class ScatterLock : public SimpleLock {
 
   struct more_bits_t {
@@ -49,7 +51,7 @@ public:
   ScatterLock(MDSCacheObject *o, LockType *lt) :
     SimpleLock(o, lt) {}
   ~ScatterLock() override {
-    assert(!_more);
+    ceph_assert(!_more);
   }
 
   bool is_scatterlock() const override {
@@ -79,8 +81,8 @@ public:
 
   void set_xlock_snap_sync(MDSInternalContextBase *c)
   {
-    assert(get_type() == CEPH_LOCK_IFILE);
-    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE);
+    ceph_assert(get_type() == CEPH_LOCK_IFILE);
+    ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE);
     state = LOCK_XLOCKSNAP;
     add_waiter(WAIT_STABLE, c);
   }
@@ -148,12 +150,13 @@ public:
       }
     }
   }
+  void clear_flushed() override {
+    state_flags &= ~FLUSHED;
+  }
   void remove_dirty() {
     start_flush();
     finish_flush();
-  }
-  void clear_flushed() override {
-    state_flags &= ~FLUSHED;
+    clear_flushed();
   }
 
   void infer_state_from_strong_rejoin(int rstate, bool locktoo) {
@@ -194,7 +197,7 @@ public:
     encode(s, bl);
   }
 
-  void decode_state_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters, bool survivor) {
+  void decode_state_rejoin(bufferlist::const_iterator& p, MDSInternalContextBase::vec& waiters, bool survivor) {
     SimpleLock::decode_state_rejoin(p, waiters, survivor);
     if (is_flushing()) {
       set_dirty();

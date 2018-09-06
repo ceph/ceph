@@ -3,16 +3,19 @@
 
 #include "msg/Message.h"
 
-struct MClientQuota : public Message {
+class MClientQuota : public MessageInstance<MClientQuota> {
+public:
+  friend factory;
+
   inodeno_t ino;
   nest_info_t rstat;
   quota_info_t quota;
 
+protected:
   MClientQuota() :
-    Message(CEPH_MSG_CLIENT_QUOTA),
+    MessageInstance(CEPH_MSG_CLIENT_QUOTA),
     ino(0)
   {}
-private:
   ~MClientQuota() override {}
 
 public:
@@ -20,7 +23,8 @@ public:
   void print(ostream& out) const override {
     out << "client_quota(";
     out << " [" << ino << "] ";
-    out << rstat;
+    out << rstat << " ";
+    out << quota;
     out << ")";
   }
 
@@ -34,14 +38,14 @@ public:
     encode(quota, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(ino, p);
     decode(rstat.rctime, p);
     decode(rstat.rbytes, p);
     decode(rstat.rfiles, p);
     decode(rstat.rsubdirs, p);
     decode(quota, p);
-    assert(p.end());
+    ceph_assert(p.end());
   }
 };
 

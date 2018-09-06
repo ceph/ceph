@@ -43,14 +43,14 @@ JournalTrimmer::JournalTrimmer(librados::IoCtx &ioctx,
 }
 
 JournalTrimmer::~JournalTrimmer() {
-  assert(m_shutdown);
+  ceph_assert(m_shutdown);
 }
 
 void JournalTrimmer::shut_down(Context *on_finish) {
   ldout(m_cct, 20) << __func__ << dendl;
   {
     Mutex::Locker locker(m_lock);
-    assert(!m_shutdown);
+    ceph_assert(!m_shutdown);
     m_shutdown = true;
   }
 
@@ -103,7 +103,7 @@ void JournalTrimmer::committed(uint64_t commit_tid) {
 }
 
 void JournalTrimmer::trim_objects(uint64_t minimum_set) {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   ldout(m_cct, 20) << __func__ << ": min_set=" << minimum_set << dendl;
   if (minimum_set <= m_journal_metadata->get_minimum_set()) {
@@ -121,7 +121,7 @@ void JournalTrimmer::trim_objects(uint64_t minimum_set) {
 }
 
 void JournalTrimmer::remove_set(uint64_t object_set) {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   m_async_op_tracker.start_op();
   uint8_t splay_width = m_journal_metadata->get_splay_width();
@@ -140,7 +140,7 @@ void JournalTrimmer::remove_set(uint64_t object_set) {
       librados::Rados::aio_create_completion(ctx, NULL,
                                              utils::rados_ctx_callback);
     int r = m_ioctx.aio_remove(oid, comp);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
 }

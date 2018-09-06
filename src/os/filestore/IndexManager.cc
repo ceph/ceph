@@ -12,7 +12,6 @@
  *
  */
 
-#include "include/memory.h"
 #include "include/unordered_map.h"
 
 #if defined(__FreeBSD__)
@@ -56,7 +55,7 @@ static int get_version(const char *path, uint32_t *version) {
   bp.set_length(r);
   bufferlist bl;
   bl.push_back(bp);
-  bufferlist::iterator i = bl.begin();
+  auto i = bl.cbegin();
   decode(*version, i);
   return 0;
 }

@@ -10,10 +10,10 @@ namespace rbd_replay {
 BufferReader::BufferReader(int fd, size_t min_bytes, size_t max_bytes)
   : m_fd(fd), m_min_bytes(min_bytes), m_max_bytes(max_bytes),
     m_bl_it(m_bl.begin()), m_eof_reached(false) {
-  assert(m_min_bytes <= m_max_bytes);
+  ceph_assert(m_min_bytes <= m_max_bytes);
 }
 
-int BufferReader::fetch(bufferlist::iterator **it) {
+int BufferReader::fetch(bufferlist::const_iterator **it) {
   if (m_bl_it.get_remaining() < m_min_bytes) {
     ssize_t bytes_to_read = round_up_to(m_max_bytes - m_bl_it.get_remaining(),
                                         CEPH_PAGE_SIZE);
@@ -25,7 +25,7 @@ int BufferReader::fetch(bufferlist::iterator **it) {
       if (r == 0) {
 	m_eof_reached = true;
       }
-      assert(r <= bytes_to_read);
+      ceph_assert(r <= bytes_to_read);
       bytes_to_read -= r;
     }
   }

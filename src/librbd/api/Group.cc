@@ -37,7 +37,7 @@ namespace {
 template <typename I>
 snap_t get_group_snap_id(I* ictx,
                          const cls::rbd::SnapshotNamespace& in_snap_namespace) {
-  assert(ictx->snap_lock.is_locked());
+  ceph_assert(ictx->snap_lock.is_locked());
   auto it = ictx->snap_ids.lower_bound({in_snap_namespace, ""});
   if (it != ictx->snap_ids.end() && it->first.first == in_snap_namespace) {
     return it->second;
@@ -228,13 +228,14 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
     if (r < 0) {
       ldout(cct, 1) << "Failed to create io context for image" << dendl;
     }
+    image_io_ctx.set_namespace(group_ioctx.get_namespace());
 
     librbd::ImageCtx* image_ctx = new ImageCtx("", group_snap.snaps[i].image_id,
 					       nullptr, image_io_ctx, false);
 
     C_SaferCond* on_finish = new C_SaferCond;
 
-    image_ctx->state->open(false, on_finish);
+    image_ctx->state->open(0, on_finish);
 
     ictxs.push_back(image_ctx);
     on_finishes.push_back(on_finish);
@@ -425,6 +426,8 @@ int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
       lderr(cct) << "error creating image_ioctx" << dendl;
       return r;
     }
+    image_ioctx.set_namespace(io_ctx.get_namespace());
+
     r = group_image_remove(io_ctx, group_id, image_ioctx, image.spec.image_id);
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "error removing image from a group" << dendl;
@@ -495,6 +498,11 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
 		 << " group name " << group_name << " image "
 		 << &image_ioctx << " name " << image_name << dendl;
+
+  if (group_ioctx.get_namespace() != image_ioctx.get_namespace()) {
+    lderr(cct) << "group and image cannot be in different namespaces" << dendl;
+    return -EINVAL;
+  }
 
   string group_id;
 
@@ -570,6 +578,11 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx, const char *group_name,
 		<< " group name " << group_name << " image "
 		<< &image_ioctx << " name " << image_name << dendl;
 
+  if (group_ioctx.get_namespace() != image_ioctx.get_namespace()) {
+    lderr(cct) << "group and image cannot be in different namespaces" << dendl;
+    return -EINVAL;
+  }
+
   string group_id;
 
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY, group_name,
@@ -618,6 +631,8 @@ int Group<I>::image_list(librados::IoCtx& group_ioctx,
     if (r < 0) {
       return r;
     }
+    ioctx.set_namespace(group_ioctx.get_namespace());
+
     std::string image_name;
     r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY,
 				 image_id.spec.image_id, &image_name);
@@ -676,6 +691,7 @@ int Group<I>::image_get_group(I *ictx, group_info_t *group_info)
     r = rados.ioctx_create2(ictx->group_spec.pool_id, ioctx);
     if (r < 0)
       return r;
+    ioctx.set_namespace(ictx->md_ctx.get_namespace());
 
     std::string group_name;
     r = cls_client::dir_get_name(&ioctx, RBD_GROUP_DIRECTORY,
@@ -762,6 +778,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
     if (r < 0) {
       ldout(cct, 1) << "Failed to create io context for image" << dendl;
     }
+    image_io_ctx.set_namespace(group_ioctx.get_namespace());
 
     ldout(cct, 20) << "Opening image with id " << image.spec.image_id << dendl;
 
@@ -770,7 +787,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
 
     C_SaferCond* on_finish = new C_SaferCond;
 
-    image_ctx->state->open(false, on_finish);
+    image_ctx->state->open(0, on_finish);
 
     ictxs.push_back(image_ctx);
     on_finishes.push_back(on_finish);

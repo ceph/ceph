@@ -26,7 +26,6 @@
 
 #include "include/types.h"
 #include "common/Clock.h"
-#include "msg/Message.h"
 #include "include/health.h"
 
 #include "common/config.h"
@@ -35,29 +34,6 @@
 #include "include/ceph_features.h"
 #include "common/Formatter.h"
 #include "mds/mdstypes.h"
-
-/*
-
- boot  --> standby, creating, or starting.
-
-
- dne  ---->   creating  ----->   active*
- ^ ^___________/                /  ^ ^
- |                             /  /  |
- destroying                   /  /   |
-   ^                         /  /    |
-   |                        /  /     |
- stopped <---- stopping* <-/  /      |
-      \                      /       |
-        ----- starting* ----/        |
-                                     |
- failed                              |
-    \                                |
-     \--> replay*  --> reconnect* --> rejoin*
-
-     * = can fail
-
-*/
 
 class CephContext;
 class health_check_map_t;
@@ -78,7 +54,11 @@ class health_check_map_t;
 class MDSMap {
 public:
   /* These states are the union of the set of possible states of an MDS daemon,
-   * and the set of possible states of an MDS rank */
+   * and the set of possible states of an MDS rank. See
+   * doc/cephfs/mds-states.rst for state descriptions,
+   * doc/cephfs/mds-state-diagram.svg for a visual state diagram, and
+   * doc/cephfs/mds-state-diagram.dot to update mds-state-diagram.svg.
+   */
   typedef enum {
     // States of an MDS daemon not currently holding a rank
     // ====================================================
@@ -126,7 +106,7 @@ public:
     int32_t inc;
     MDSMap::DaemonState state;
     version_t state_seq;
-    entity_addr_t addr;
+    entity_addrvec_t addrs;
     utime_t laggy_since;
     mds_rank_t standby_for_rank;
     std::string standby_for_name;
@@ -145,13 +125,15 @@ public:
     bool laggy() const { return !(laggy_since == utime_t()); }
     void clear_laggy() { laggy_since = utime_t(); }
 
-    entity_inst_t get_inst() const { return entity_inst_t(entity_name_t::MDS(rank), addr); }
+    entity_addrvec_t get_addrs() const {
+      return addrs;
+    }
 
     void encode(bufferlist& bl, uint64_t features) const {
       if ((features & CEPH_FEATURE_MDSENC) == 0 ) encode_unversioned(bl);
       else encode_versioned(bl, features);
     }
-    void decode(bufferlist::iterator& p);
+    void decode(bufferlist::const_iterator& p);
     void dump(Formatter *f) const;
     void print_summary(ostream &out) const;
 
@@ -186,6 +168,8 @@ protected:
   __u32 session_timeout = 60;
   __u32 session_autoclose = 300;
   uint64_t max_file_size = 1ULL<<40; /* 1TB */
+
+  int8_t min_compat_client = -1;
 
   std::vector<int64_t> data_pools;  // file data pools available to clients (via an ioctl).  first is the default.
   int64_t cas_pool = -1;            // where CAS objects go
@@ -247,6 +231,9 @@ public:
 
   uint64_t get_max_filesize() const { return max_file_size; }
   void set_max_filesize(uint64_t m) { max_file_size = m; }
+
+  uint8_t get_min_compat_client() const { return min_compat_client; }
+  void set_min_compat_client(uint8_t version) { min_compat_client = version; }
   
   int get_flags() const { return flags; }
   bool test_flag(int f) const { return flags & f; }
@@ -291,7 +278,7 @@ public:
   mds_rank_t get_old_max_mds() const { return old_max_mds; }
 
   mds_rank_t get_standby_count_wanted(mds_rank_t standby_daemon_count) const {
-    assert(standby_daemon_count >= 0);
+    ceph_assert(standby_daemon_count >= 0);
     std::set<mds_rank_t> s;
     get_standby_replay_mds_set(s);
     mds_rank_t standbys_avail = (mds_rank_t)s.size()+standby_daemon_count;
@@ -326,7 +313,7 @@ public:
     return mds_info.at(gid);
   }
   const mds_info_t& get_mds_info(mds_rank_t m) const {
-    assert(up.count(m) && mds_info.count(up.at(m)));
+    ceph_assert(up.count(m) && mds_info.count(up.at(m)));
     return mds_info.at(up.at(m));
   }
   mds_gid_t find_mds_gid_by_name(std::string_view s) const {
@@ -404,7 +391,7 @@ public:
 	   ++p) {
 	std::map<mds_gid_t, mds_info_t>::const_iterator q =
 	  mds_info.find(p->second);
-	assert(q != mds_info.end());
+	ceph_assert(q != mds_info.end());
 	if (first) {
 	  cached_up_features = q->second.mds_features;
 	  first = false;
@@ -421,7 +408,7 @@ public:
    */
   void get_down_mds_set(std::set<mds_rank_t> *s) const
   {
-    assert(s != NULL);
+    ceph_assert(s != NULL);
     s->insert(failed.begin(), failed.end());
     s->insert(damaged.begin(), damaged.end());
   }
@@ -617,30 +604,10 @@ public:
    * Get the MDS daemon entity_inst_t for a rank
    * known to be up.
    */
-  const entity_inst_t get_inst(mds_rank_t m) {
-    assert(up.count(m));
-    return mds_info[up[m]].get_inst();
-  }
-  const entity_addr_t get_addr(mds_rank_t m) {
-    assert(up.count(m));
-    return mds_info[up[m]].addr;
+  entity_addrvec_t get_addrs(mds_rank_t m) const {
+    return mds_info.at(up.at(m)).get_addrs();
   }
 
-  /**
-   * Get the MDS daemon entity_inst_t for a rank,
-   * if it is up.
-   * 
-   * @return true if the rank was up and the inst
-   *         was populated, else false.
-   */
-  bool get_inst(mds_rank_t m, entity_inst_t& inst) {
-    if (up.count(m)) {
-      inst = get_inst(m);
-      return true;
-    } 
-    return false;
-  }
-  
   mds_rank_t get_rank_gid(mds_gid_t gid) const {
     if (mds_info.count(gid)) {
       return mds_info.at(gid).rank;
@@ -656,9 +623,9 @@ public:
     return -1;
   }
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& p);
-  void decode(bufferlist& bl) {
-    bufferlist::iterator p = bl.begin();
+  void decode(bufferlist::const_iterator& p);
+  void decode(const bufferlist& bl) {
+    auto p = bl.cbegin();
     decode(p);
   }
   void sanitize(const std::function<bool(int64_t pool)>& pool_exists);

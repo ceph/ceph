@@ -50,12 +50,10 @@ class LZ4Compressor : public Compressor {
     int pos = 0;
     const char *data;
     unsigned num = src.get_num_buffers();
-    uint32_t origin_len;
-    int compressed_len;
     encode((uint32_t)num, dst);
     while (left) {
-      origin_len = p.get_ptr_and_advance(left, &data);
-      compressed_len = LZ4_compress_fast_continue(
+      uint32_t origin_len = p.get_ptr_and_advance(left, &data);
+      int compressed_len = LZ4_compress_fast_continue(
         &lz4_stream, data, outptr.c_str()+pos, origin_len,
         outptr.length()-pos, 1);
       if (compressed_len <= 0)
@@ -65,7 +63,7 @@ class LZ4Compressor : public Compressor {
       encode(origin_len, dst);
       encode((uint32_t)compressed_len, dst);
     }
-    assert(p.end());
+    ceph_assert(p.end());
 
     dst.append(outptr, 0, pos);
     return 0;
@@ -76,11 +74,11 @@ class LZ4Compressor : public Compressor {
     if (qat_enabled)
       return qat_accel.decompress(src, dst);
 #endif
-    bufferlist::iterator i = const_cast<bufferlist&>(src).begin();
+    auto i = std::cbegin(src);
     return decompress(i, src.length(), dst);
   }
 
-  int decompress(bufferlist::iterator &p,
+  int decompress(bufferlist::const_iterator &p,
 		 size_t compressed_len,
 		 bufferlist &dst) override {
 #ifdef HAVE_QATZIP

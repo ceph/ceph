@@ -4,12 +4,12 @@
 import time
 
 from .helper import ControllerTestCase
-from ..controllers import ApiController, RESTController, Task
+from ..controllers import Controller, RESTController, Task
 from ..controllers.task import Task as TaskController
 from ..tools import NotificationQueue, TaskManager
 
 
-@ApiController('test/task')
+@Controller('/test/task', secure=False)
 class TaskTest(RESTController):
     sleep_time = 0.0
 
@@ -29,14 +29,19 @@ class TaskTest(RESTController):
         time.sleep(TaskTest.sleep_time)
 
     @Task('task/foo', ['{param}'])
-    @RESTController.collection(['POST'])
+    @RESTController.Collection('POST')
     def foo(self, param):
         return {'my_param': param}
 
     @Task('task/bar', ['{key}', '{param}'])
-    @RESTController.resource(['PUT'])
+    @RESTController.Resource('PUT')
     def bar(self, key, param=None):
         return {'my_param': param, 'key': key}
+
+    @Task('task/query', ['{param}'])
+    @RESTController.Collection('POST', query_params=['param'])
+    def query(self, param=None):
+        return {'my_param': param}
 
 
 class TaskControllerTest(ControllerTestCase):
@@ -45,6 +50,7 @@ class TaskControllerTest(ControllerTestCase):
         # pylint: disable=protected-access
         NotificationQueue.start_queue()
         TaskManager.init()
+        TaskTest._cp_config['tools.authenticate.on'] = False
         TaskController._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([TaskTest, TaskController])
 
@@ -74,3 +80,7 @@ class TaskControllerTest(ControllerTestCase):
     def test_bar_task(self):
         self._task_put('/test/task/3/bar', {'param': 'hello'})
         self.assertJsonBody({'my_param': 'hello', 'key': '3'})
+
+    def test_query_param(self):
+        self._task_post('/test/task/query')
+        self.assertJsonBody({'my_param': None})

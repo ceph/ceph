@@ -41,6 +41,9 @@ Limitations
    the directory the client is restricted too (e.g., ``/home/user``)
    or something nested beneath it.
 
+#. *Snapshot file data which has since been deleted or changed does not count
+   towards the quota.* See also: http://tracker.ceph.com/issues/24284
+
 Configuration
 -------------
 

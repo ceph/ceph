@@ -11,26 +11,9 @@
 // ----
 // LogEntryKey
 
-void LogEntryKey::encode(bufferlist& bl, uint64_t features) const
-{
-  using ceph::encode;
-  encode(who, bl, features);
-  encode(stamp, bl);
-  encode(seq, bl);
-}
-
-void LogEntryKey::decode(bufferlist::iterator& bl)
-{
-  using ceph::decode;
-  decode(who, bl);
-  decode(stamp, bl);
-  decode(seq, bl);
-  _calc_hash();
-}
-
 void LogEntryKey::dump(Formatter *f) const
 {
-  f->dump_stream("who") << who;
+  f->dump_stream("rank") << rank;
   f->dump_stream("stamp") << stamp;
   f->dump_unsigned("seq", seq);
 }
@@ -38,7 +21,7 @@ void LogEntryKey::dump(Formatter *f) const
 void LogEntryKey::generate_test_instances(list<LogEntryKey*>& o)
 {
   o.push_back(new LogEntryKey);
-  o.push_back(new LogEntryKey(entity_inst_t(), utime_t(1,2), 34));
+  o.push_back(new LogEntryKey(entity_name_t::CLIENT(1234), utime_t(1,2), 34));
 }
 
 clog_type LogEntry::str_to_level(std::string const &str)
@@ -199,8 +182,9 @@ void LogEntry::log_to_syslog(string level, string facility)
   int l = clog_type_to_syslog_level(prio);
   if (l <= min) {
     int f = string_to_syslog_facility(facility);
-    syslog(l | f, "%s %llu : %s",
-	   stringify(who).c_str(),
+    syslog(l | f, "%s %s %llu : %s",
+	   name.to_cstr(),
+	   stringify(rank).c_str(),
 	   (long long unsigned)seq,
 	   msg.c_str());
   }
@@ -208,46 +192,81 @@ void LogEntry::log_to_syslog(string level, string facility)
 
 void LogEntry::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(4, 2, bl);
+  if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+    ENCODE_START(4, 2, bl);
+    __u16 t = prio;
+    entity_inst_t who;
+    who.name = rank;
+    who.addr = addrs.legacy_addr();
+    encode(who, bl, features);
+    encode(stamp, bl);
+    encode(seq, bl);
+    encode(t, bl);
+    encode(msg, bl);
+    encode(channel, bl);
+    encode(name, bl);
+    ENCODE_FINISH(bl);
+    return;
+  }
+  ENCODE_START(5, 5, bl);
   __u16 t = prio;
-  encode(who, bl, features);
+  encode(name, bl);
+  encode(rank, bl);
+  encode(addrs, bl, features);
   encode(stamp, bl);
   encode(seq, bl);
   encode(t, bl);
   encode(msg, bl);
   encode(channel, bl);
-  encode(name, bl);
   ENCODE_FINISH(bl);
 }
 
-void LogEntry::decode(bufferlist::iterator& bl)
+void LogEntry::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
-  __u16 t;
-  decode(who, bl);
-  decode(stamp, bl);
-  decode(seq, bl);
-  decode(t, bl);
-  prio = (clog_type)t;
-  decode(msg, bl);
-  if (struct_v >= 3) {
-    decode(channel, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
+  if (struct_v < 5) {
+    __u16 t;
+    entity_inst_t who;
+    decode(who, bl);
+    rank = who.name;
+    addrs.v.clear();
+    addrs.v.push_back(who.addr);
+    decode(stamp, bl);
+    decode(seq, bl);
+    decode(t, bl);
+    prio = (clog_type)t;
+    decode(msg, bl);
+    if (struct_v >= 3) {
+      decode(channel, bl);
+    } else {
+      // prior to having logging channels we only had a cluster log.
+      // Ensure we keep that appearance when the other party has no
+      // clue of what a 'channel' is.
+      channel = CLOG_CHANNEL_CLUSTER;
+    }
+    if (struct_v >= 4) {
+      decode(name, bl);
+    }
   } else {
-    // prior to having logging channels we only had a cluster log.
-    // Ensure we keep that appearance when the other party has no
-    // clue of what a 'channel' is.
-    channel = CLOG_CHANNEL_CLUSTER;
-  }
-  if (struct_v >= 4) {
+    __u16 t;
     decode(name, bl);
+    decode(rank, bl);
+    decode(addrs, bl);
+    decode(stamp, bl);
+    decode(seq, bl);
+    decode(t, bl);
+    prio = (clog_type)t;
+    decode(msg, bl);
+    decode(channel, bl);
   }
   DECODE_FINISH(bl);
 }
 
 void LogEntry::dump(Formatter *f) const
 {
-  f->dump_stream("who") << who;
   f->dump_stream("name") << name;
+  f->dump_stream("rank") << rank;
+  f->dump_object("addrs", addrs);
   f->dump_stream("stamp") << stamp;
   f->dump_unsigned("seq", seq);
   f->dump_string("channel", channel);
@@ -310,7 +329,7 @@ void LogSummary::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void LogSummary::decode(bufferlist::iterator& bl)
+void LogSummary::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(version, bl);

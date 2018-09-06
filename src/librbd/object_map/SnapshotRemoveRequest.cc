@@ -43,15 +43,15 @@ std::ostream& operator<<(std::ostream& os,
 } // anonymous namespace
 
 void SnapshotRemoveRequest::send() {
-  assert(m_image_ctx.owner_lock.is_locked());
-  assert(m_image_ctx.snap_lock.is_wlocked());
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.snap_lock.is_wlocked());
 
   if ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) != 0) {
     compute_next_snap_id();
 
     uint64_t flags;
     int r = m_image_ctx.get_flags(m_snap_id, &flags);
-    assert(r == 0);
+    ceph_assert(r == 0);
 
     if ((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0) {
       send_invalidate_next_map();
@@ -78,7 +78,7 @@ bool SnapshotRemoveRequest::should_complete(int r) {
     }
 
     if (r == 0) {
-      bufferlist::iterator it = m_out_bl.begin();
+      auto it = m_out_bl.cbegin();
       r = cls_client::object_map_load_finish(&it, &m_snap_object_map);
     }
     if (r < 0) {
@@ -123,7 +123,7 @@ void SnapshotRemoveRequest::send_load_map() {
   librados::AioCompletion *rados_completion = create_callback_completion();
   int r = m_image_ctx.md_ctx.aio_operate(snap_oid, rados_completion, &op,
                                          &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -141,13 +141,13 @@ void SnapshotRemoveRequest::send_remove_snapshot() {
 
   librados::AioCompletion *rados_completion = create_callback_completion();
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
 void SnapshotRemoveRequest::send_invalidate_next_map() {
-  assert(m_image_ctx.owner_lock.is_locked());
-  assert(m_image_ctx.snap_lock.is_wlocked());
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.snap_lock.is_wlocked());
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
@@ -170,17 +170,17 @@ void SnapshotRemoveRequest::send_remove_map() {
 
   librados::AioCompletion *rados_completion = create_callback_completion();
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
 void SnapshotRemoveRequest::compute_next_snap_id() {
-  assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(m_image_ctx.snap_lock.is_locked());
 
   m_next_snap_id = CEPH_NOSNAP;
   std::map<librados::snap_t, SnapInfo>::const_iterator it =
     m_image_ctx.snap_info.find(m_snap_id);
-  assert(it != m_image_ctx.snap_info.end());
+  ceph_assert(it != m_image_ctx.snap_info.end());
 
   ++it;
   if (it != m_image_ctx.snap_info.end()) {

@@ -86,22 +86,22 @@ public:
 
   explicit FakeIdentity(Principal&& id) : id(std::move(id)) {}
   uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
-    abort();
+    ceph_abort();
     return 0;
   };
 
   bool is_admin_of(const rgw_user& uid) const override {
-    abort();
+    ceph_abort();
     return false;
   }
 
   bool is_owner_of(const rgw_user& uid) const override {
-    abort();
+    ceph_abort();
     return false;
   }
 
   virtual uint32_t get_perm_mask() const override {
-    abort();
+    ceph_abort();
     return 0;
   }
 
@@ -588,13 +588,13 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   RGWRados rgw_rados;
   rgw_env.set("REMOTE_ADDR", "192.168.1.1");
   rgw_env.set("HTTP_HOST", "1.2.3.4");
-  req_state rgw_req_state(cct.get(), &rgw_env, &user);
+  req_state rgw_req_state(cct.get(), &rgw_env, &user, 0);
   Environment iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
   auto ip = iam_env.find("aws:SourceIp");
   ASSERT_NE(ip, iam_env.end());
   EXPECT_EQ(ip->second, "192.168.1.1");
 
-  ASSERT_EQ(cct.get()->_conf->set_val("rgw_remote_addr_param", "SOME_VAR"), 0);
+  ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "SOME_VAR"), 0);
   EXPECT_EQ(cct.get()->_conf->rgw_remote_addr_param, "SOME_VAR");
   iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
   ip = iam_env.find("aws:SourceIp");
@@ -606,7 +606,7 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   ASSERT_NE(ip, iam_env.end());
   EXPECT_EQ(ip->second, "192.168.1.2");
 
-  ASSERT_EQ(cct.get()->_conf->set_val("rgw_remote_addr_param", "HTTP_X_FORWARDED_FOR"), 0);
+  ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "HTTP_X_FORWARDED_FOR"), 0);
   rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.3");
   iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
   ip = iam_env.find("aws:SourceIp");

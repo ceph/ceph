@@ -183,7 +183,7 @@ public:
   }
   iterator erase (iterator p) {
     if (map) {
-      assert(this == p.map);
+      ceph_assert(this == p.map);
       auto it = map->erase(p.it);
       if (map->empty()) {
         free_internal();
@@ -311,7 +311,7 @@ public:
     else
       encode((uint32_t)0, bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     using ceph::decode;
     using ceph::decode_nohead;
     uint32_t n;
@@ -334,7 +334,7 @@ inline void encode(const compact_map_base<Key, T, Map>& m, bufferlist& bl,
   m.encode(bl, features);
 }
 template<class Key, class T, class Map>
-inline void decode(compact_map_base<Key, T, Map>& m, bufferlist::iterator& p) {
+inline void decode(compact_map_base<Key, T, Map>& m, bufferlist::const_iterator& p) {
   m.decode(p);
 }
 

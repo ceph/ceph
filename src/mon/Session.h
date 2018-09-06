@@ -15,6 +15,7 @@
 #ifndef CEPH_MON_SESSION_H
 #define CEPH_MON_SESSION_H
 
+#include "global/global_context.h"
 #include "include/xlist.h"
 #include "msg/msg_types.h"
 #include "mon/mon_types.h"
@@ -42,41 +43,39 @@ struct MonSession : public RefCountedObject {
   ConnectionRef con;
   int con_type = 0;
   uint64_t con_features = 0;  // zero if AnonConnection
-  entity_inst_t inst;
+  entity_name_t name;
+  entity_addrvec_t addrs;
+  entity_addr_t socket_addr;
   utime_t session_timeout;
-  bool closed;
+  bool closed = false;
   xlist<MonSession*>::item item;
   set<uint64_t> routed_request_tids;
   MonCap caps;
-  uint64_t auid;
-  uint64_t global_id;
+  uint64_t global_id = 0;
 
   bool authenticated = false;  ///< true if auth handshake is complete
 
   map<string, Subscription*> sub_map;
-  epoch_t osd_epoch;		// the osdmap epoch sent to the mon client
+  epoch_t osd_epoch = 0;       ///< the osdmap epoch sent to the mon client
 
-  AuthServiceHandler *auth_handler;
+  AuthServiceHandler *auth_handler = nullptr;
   EntityName entity_name;
 
   ConnectionRef proxy_con;
-  uint64_t proxy_tid;
+  uint64_t proxy_tid = 0;
 
   string remote_host;                ///< remote host name
   map<string,string> last_config;    ///< most recently shared config
   bool any_config = false;
 
-  MonSession(const entity_inst_t& i, Connection *c) :
+  MonSession(const entity_name_t& n, const entity_addrvec_t& av, Connection *c) :
     RefCountedObject(g_ceph_context),
     con(c),
     con_type(c->get_peer_type()),
-    con_features(0),
-    inst(i), closed(false), item(this),
-    auid(0),
-    global_id(0),
-    osd_epoch(0),
-    auth_handler(NULL),
-    proxy_con(NULL), proxy_tid(0) {
+    name(n),
+    addrs(av),
+    socket_addr(c->get_peer_socket_addr()),
+    item(this) {
     if (c->get_messenger()) {
       // only fill in features if this is a non-anonymous connection
       con_features = c->get_features();
@@ -85,8 +84,8 @@ struct MonSession : public RefCountedObject {
   ~MonSession() override {
     //generic_dout(0) << "~MonSession " << this << dendl;
     // we should have been removed before we get destructed; see MonSessionMap::remove_session()
-    assert(!item.is_on_list());
-    assert(sub_map.empty());
+    ceph_assert(!item.is_on_list());
+    ceph_assert(sub_map.empty());
     delete auth_handler;
   }
 
@@ -97,7 +96,12 @@ struct MonSession : public RefCountedObject {
       CEPH_ENTITY_TYPE_MON,
       entity_name,
       service, "", args,
-      mask & MON_CAP_R, mask & MON_CAP_W, mask & MON_CAP_X);
+      mask & MON_CAP_R, mask & MON_CAP_W, mask & MON_CAP_X,
+      get_peer_socket_addr());
+  }
+
+  const entity_addr_t& get_peer_socket_addr() {
+    return socket_addr;
   }
 };
 
@@ -111,7 +115,7 @@ struct MonSessionMap {
   MonSessionMap() {}
   ~MonSessionMap() {
     while (!subs.empty()) {
-      assert(subs.begin()->second->empty());
+      ceph_assert(subs.begin()->second->empty());
       delete subs.begin()->second;
       subs.erase(subs.begin());
     }
@@ -122,16 +126,16 @@ struct MonSessionMap {
   }
 
   void remove_session(MonSession *s) {
-    assert(!s->closed);
+    ceph_assert(!s->closed);
     for (map<string,Subscription*>::iterator p = s->sub_map.begin(); p != s->sub_map.end(); ++p) {
       p->second->type_item.remove_myself();
       delete p->second;
     }
     s->sub_map.clear();
     s->item.remove_myself();
-    if (s->inst.name.is_osd()) {
-      for (multimap<int,MonSession*>::iterator p = by_osd.find(s->inst.name.num());
-	   p->first == s->inst.name.num();
+    if (s->name.is_osd()) {
+      for (multimap<int,MonSession*>::iterator p = by_osd.find(s->name.num());
+	   p->first == s->name.num();
 	   ++p)
 	if (p->second == s) {
 	  by_osd.erase(p);
@@ -145,12 +149,14 @@ struct MonSessionMap {
     s->put();
   }
 
-  MonSession *new_session(const entity_inst_t& i, Connection *c) {
-    MonSession *s = new MonSession(i, c);
-    assert(s);
+  MonSession *new_session(const entity_name_t& n,
+			  const entity_addrvec_t& av,
+			  Connection *c) {
+    MonSession *s = new MonSession(n, av, c);
+    ceph_assert(s);
     sessions.push_back(&s->item);
-    if (i.name.is_osd())
-      by_osd.insert(pair<int,MonSession*>(i.name.num(), s));
+    if (n.is_osd())
+      by_osd.insert(pair<int,MonSession*>(n.num(), s));
     if (s->con_features) {
       feature_map.add(s->con_type, s->con_features);
     }
@@ -180,7 +186,7 @@ struct MonSessionMap {
     while (backward || forward) {
       if (backward) {
         if (osdmap->is_up(b->first) &&
-	    osdmap->get_addr(b->first) == b->second->con->get_peer_addr()) {
+	    osdmap->get_addrs(b->first) == b->second->con->get_peer_addrs()) {
           s = b->second;
           break;
         }
@@ -229,8 +235,10 @@ struct MonSessionMap {
 
 inline ostream& operator<<(ostream& out, const MonSession& s)
 {
-  out << "MonSession(" << s.inst << " is " << (s.closed ? "closed" : "open")
-      << " " << s.caps << ", features 0x" << std::hex << s.con_features << std::dec
+  out << "MonSession(" << s.name << " " << s.addrs
+      << " is " << (s.closed ? "closed" : "open")
+      << " " << s.caps
+      << ", features 0x" << std::hex << s.con_features << std::dec
       <<  " (" << ceph_release_name(ceph_release_from_features(s.con_features))
       << "))";
   return out;

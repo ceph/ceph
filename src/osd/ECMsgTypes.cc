@@ -34,7 +34,7 @@ void ECSubWrite::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void ECSubWrite::decode(bufferlist::iterator &bl)
+void ECSubWrite::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(4, bl);
   decode(from, bl);
@@ -122,7 +122,7 @@ void ECSubWriteReply::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void ECSubWriteReply::decode(bufferlist::iterator &bl)
+void ECSubWriteReply::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(1, bl);
   decode(from, bl);
@@ -195,7 +195,7 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void ECSubRead::decode(bufferlist::iterator &bl)
+void ECSubRead::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(3, bl);
   decode(from, bl);
@@ -305,7 +305,7 @@ void ECSubReadReply::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void ECSubReadReply::decode(bufferlist::iterator &bl)
+void ECSubReadReply::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(1, bl);
   decode(from, bl);

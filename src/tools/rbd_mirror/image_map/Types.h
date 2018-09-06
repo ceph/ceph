@@ -73,7 +73,7 @@ struct PolicyMetaNone {
   void encode(bufferlist& bl) const {
   }
 
-  void decode(__u8 version, bufferlist::iterator& it) {
+  void decode(__u8 version, bufferlist::const_iterator& it) {
   }
 
   void dump(Formatter *f) const {
@@ -87,10 +87,10 @@ struct PolicyMetaUnknown {
   }
 
   void encode(bufferlist& bl) const {
-    assert(false);
+    ceph_abort();
   }
 
-  void decode(__u8 version, bufferlist::iterator& it) {
+  void decode(__u8 version, bufferlist::const_iterator& it) {
   }
 
   void dump(Formatter *f) const {
@@ -113,7 +113,7 @@ struct PolicyData {
   PolicyMetaType get_policy_meta_type() const;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<PolicyData *> &o);

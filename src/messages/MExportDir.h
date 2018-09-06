@@ -19,19 +19,20 @@
 #include "msg/Message.h"
 
 
-class MExportDir : public Message {
- public:  
+class MExportDir : public MessageInstance<MExportDir> {
+public:
+  friend factory;
   dirfrag_t dirfrag;
   bufferlist export_data;
   vector<dirfrag_t> bounds;
   bufferlist client_map;
 
-  MExportDir() : Message(MSG_MDS_EXPORTDIR) {}
+protected:
+  MExportDir() : MessageInstance(MSG_MDS_EXPORTDIR) {}
   MExportDir(dirfrag_t df, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIR), dirfrag(df) {
+    MessageInstance(MSG_MDS_EXPORTDIR), dirfrag(df) {
     set_tid(tid);
   }
-private:
   ~MExportDir() override {}
 
 public:
@@ -52,7 +53,7 @@ public:
     encode(client_map, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(dirfrag, p);
     decode(bounds, p);
     decode(export_data, p);

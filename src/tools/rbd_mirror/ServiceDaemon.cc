@@ -208,7 +208,7 @@ void ServiceDaemon<I>::schedule_update_status() {
 template <typename I>
 void ServiceDaemon<I>::update_status() {
   dout(20) << dendl;
-  assert(m_threads->timer_lock.is_locked());
+  ceph_assert(m_threads->timer_lock.is_locked());
 
   ceph::JSONFormatter f;
   {

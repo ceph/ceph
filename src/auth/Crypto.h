@@ -17,7 +17,6 @@
 
 #include "include/types.h"
 #include "include/utime.h"
-#include "include/memory.h"
 #include "include/buffer.h"
 
 #include <string>
@@ -44,7 +43,29 @@ class CryptoRandom {
  */
 class CryptoKeyHandler {
 public:
-  bufferptr secret;
+  // The maximum size of a single block for all descendants of the class.
+  static constexpr std::size_t MAX_BLOCK_SIZE {16};
+
+  // A descendant pick-ups one from these and passes it to the ctor template.
+  typedef std::integral_constant<std::size_t,  0> BLOCK_SIZE_0B;
+  typedef std::integral_constant<std::size_t, 16> BLOCK_SIZE_16B;
+
+  struct in_slice_t {
+    const std::size_t length;
+    const unsigned char* const buf;
+  };
+
+  struct out_slice_t {
+    const std::size_t max_length;
+    unsigned char* const buf;
+  };
+
+  ceph::bufferptr secret;
+
+  template <class BlockSizeT>
+  CryptoKeyHandler(BlockSizeT) {
+    static_assert(BlockSizeT::value <= MAX_BLOCK_SIZE);
+  }
 
   virtual ~CryptoKeyHandler() {}
 
@@ -52,6 +73,13 @@ public:
 		       bufferlist& out, std::string *error) const = 0;
   virtual int decrypt(const bufferlist& in,
 		       bufferlist& out, std::string *error) const = 0;
+
+  // TODO: provide nullptr in the out::buf to get/estimate size requirements?
+  // Or maybe dedicated methods?
+  virtual std::size_t encrypt(const in_slice_t& in,
+			      const out_slice_t& out) const;
+  virtual std::size_t decrypt(const in_slice_t& in,
+			      const out_slice_t& out) const;
 };
 
 /*
@@ -65,7 +93,7 @@ protected:
 
   // cache a pointer to the implementation-specific key handler, so we
   // don't have to create it for every crypto operation.
-  mutable ceph::shared_ptr<CryptoKeyHandler> ckh;
+  mutable std::shared_ptr<CryptoKeyHandler> ckh;
 
   int _set_secret(int type, const bufferptr& s);
 
@@ -79,7 +107,7 @@ public:
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
 
   int get_type() const { return type; }
   utime_t get_created() const { return created; }
@@ -107,7 +135,7 @@ public:
     e.append(s);
     bufferlist bl;
     bl.decode_base64(e);
-    bufferlist::iterator p = bl.begin();
+    auto p = std::cbegin(bl);
     decode(p);
   }
 
@@ -118,13 +146,31 @@ public:
   int create(CephContext *cct, int type);
   int encrypt(CephContext *cct, const bufferlist& in, bufferlist& out,
 	       std::string *error) const {
-    assert(ckh); // Bad key?
+    ceph_assert(ckh); // Bad key?
     return ckh->encrypt(in, out, error);
   }
   int decrypt(CephContext *cct, const bufferlist& in, bufferlist& out,
 	       std::string *error) const {
-    assert(ckh); // Bad key?
+    ceph_assert(ckh); // Bad key?
     return ckh->decrypt(in, out, error);
+  }
+
+  using in_slice_t = CryptoKeyHandler::in_slice_t;
+  using out_slice_t = CryptoKeyHandler::out_slice_t;
+
+  std::size_t encrypt(CephContext*, const in_slice_t& in,
+		      const out_slice_t& out) {
+    ceph_assert(ckh);
+    return ckh->encrypt(in, out);
+  }
+  std::size_t decrypt(CephContext*, const in_slice_t& in,
+		      const out_slice_t& out) {
+    ceph_assert(ckh);
+    return ckh->encrypt(in, out);
+  }
+
+  static constexpr std::size_t get_max_outbuf_size(std::size_t want_size) {
+    return want_size + CryptoKeyHandler::MAX_BLOCK_SIZE;
   }
 
   void to_str(std::string& s) const;

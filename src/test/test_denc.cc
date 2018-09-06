@@ -30,7 +30,7 @@ template<typename T>
 void test_encode_decode(T v) {
   bufferlist bl;
   encode(v, bl);
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   T out;
   decode(out, p);
   ASSERT_EQ(v, out);
@@ -67,7 +67,7 @@ template<typename T>
 void test_encode_decode_featured(T v) {
   bufferlist bl;
   encode(v, bl, 123);
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   T out;
   decode(out, p);
   ASSERT_EQ(v, out);
@@ -123,7 +123,7 @@ struct denc_counter_t {
     p.append("a", 1);
     ++counts.num_encode;
   }
-  void decode(buffer::ptr::iterator &p) {
+  void decode(buffer::ptr::const_iterator &p) {
     p.advance(1);
     ++counts.num_decode;
   }
@@ -139,7 +139,7 @@ struct denc_counter_bounded_t {
     p.append("a", 1);
     ++counts.num_encode;
   }
-  void decode(buffer::ptr::iterator &p) {
+  void decode(buffer::ptr::const_iterator &p) {
     p.advance(1);
     ++counts.num_decode;
   }
@@ -186,7 +186,7 @@ struct legacy_t {
     using ceph::encode;
     encode(a, bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     using ceph::decode;
     decode(a, p);
   }
@@ -629,7 +629,7 @@ struct Legacy {
     n_denc++;
     denc(v.value, p);
   }
-  void decode(buffer::list::iterator& p) {
+  void decode(buffer::list::const_iterator& p) {
     n_decode++;
     using ceph::decode;
     decode(value, p);
@@ -655,7 +655,7 @@ bufferlist Legacy::encode_n(unsigned n, const vector<unsigned>& segments) {
   auto p = bl.begin();
 
   auto sum = std::accumulate(segments.begin(), segments.end(), 0u);
-  assert(sum != 0u);
+  ceph_assert(sum != 0u);
   for (auto i : segments) {
     buffer::ptr seg;
     p.copy_deep(bl.length() * i / sum, seg);
@@ -676,7 +676,7 @@ TEST(denc, no_copy_if_segmented_and_lengthy)
     bufferlist segmented = Legacy::encode_n(N_COPIES, segs);
     ASSERT_GT(segmented.get_num_buffers(), 1u);
     ASSERT_LT(segmented.length(), CEPH_PAGE_SIZE);
-    auto p = segmented.begin();
+    auto p = segmented.cbegin();
     vector<Legacy> v;
     // denc() is shared by encode() and decode(), so reset() right before
     // decode()
@@ -693,7 +693,7 @@ TEST(denc, no_copy_if_segmented_and_lengthy)
     bufferlist segmented = Legacy::encode_n(N_COPIES, segs);
     ASSERT_EQ(segmented.get_num_buffers(), 1u);
     ASSERT_GT(segmented.length(), CEPH_PAGE_SIZE);
-    auto p = segmented.begin();
+    auto p = segmented.cbegin();
     vector<Legacy> v;
     Legacy::reset();
     decode(v, p);
@@ -711,7 +711,7 @@ TEST(denc, no_copy_if_segmented_and_lengthy)
     segmented.append(small_bl);
     ASSERT_GT(segmented.get_num_buffers(), 1u);
     ASSERT_GT(segmented.length(), CEPH_PAGE_SIZE);
-    auto p = segmented.begin();
+    auto p = segmented.cbegin();
     p.advance(large_bl.length());
     ASSERT_LT(segmented.length() - p.get_off(), CEPH_PAGE_SIZE);
     vector<Legacy> v;
@@ -729,7 +729,7 @@ TEST(denc, no_copy_if_segmented_and_lengthy)
     segmented.append(large_bl);
     ASSERT_GT(segmented.get_num_buffers(), 1u);
     ASSERT_GT(segmented.length(), CEPH_PAGE_SIZE);
-    auto p = segmented.begin();
+    auto p = segmented.cbegin();
     p.advance(small_bl.length());
     ASSERT_GT(segmented.length() - p.get_off(), CEPH_PAGE_SIZE);
     vector<Legacy> v;

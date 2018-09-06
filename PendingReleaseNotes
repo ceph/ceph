@@ -1,3 +1,13 @@
+14.0.1
+------
+
+* The 'ceph osd rm' command has been deprecated.  Users should use
+  'ceph osd destroy' or 'ceph osd purge' (but after first confirming it is
+  safe to do so via the 'ceph osd safe-to-destroy' command).
+
+* Nautilus is not supported on any distros still running upstart so upstart
+  specific files and references have been removed.
+
 >=13.1.0
 --------
 
@@ -5,3 +15,59 @@
   an Telegraf Agent over TCP, UDP or a UNIX Socket. Telegraf can then
   send the statistics to databases like InfluxDB, ElasticSearch, Graphite
   and many more.
+
+* The graylog fields naming the originator of a log event have
+  changed: the string-form name is now included (e.g., ``"name":
+  "mgr.foo"``), and the rank-form name is now in a nested section
+  (e.g., ``"rank": {"type": "mgr", "num": 43243}``).
+
+* If the cluster log is directed at syslog, the entries are now
+  prefixed by both the string-form name and the rank-form name (e.g.,
+  ``mgr.x mgr.12345 ...`` instead of just ``mgr.12345 ...``).
+
+* The JSON output of the ``osd find`` command has replaced the ``ip``
+  field with an ``addrs`` section to reflect that OSDs may bind to
+  multiple addresses.
+
+* CephFS clients without the 's' flag in their authentication capability
+  string will no longer be able to create/delete snapshots. To allow
+  ``client.foo`` to create/delete snapshots in the ``bar`` directory of
+  filesystem ``cephfs_a``, use command:
+
+    - ``ceph auth caps client.foo mon 'allow r' osd 'allow rw tag cephfs data=cephfs_a' mds 'allow rw, allow rws path=/bar'``
+
+* The ``osd_heartbeat_addr`` option has been removed as it served no
+  (good) purpose: the OSD should always check heartbeats on both the
+  public and cluster networks.
+
+* The ``rados`` tool's ``mkpool`` and ``rmpool`` commands have been
+  removed because they are redundant; please use the ``ceph osd pool
+  create`` and ``ceph osd pool rm`` commands instead.
+
+* The ``auid`` property for cephx users and RADOS pools has been
+  removed.  This was an undocumented and partially implemented
+  capability that allowed cephx users to map capabilities to RADOS
+  pools that they "owned".  Because there are no users we have removed
+  this support.  If any cephx capabilities exist in the cluster that
+  restrict based on auid then they will no longer parse, and the
+  cluster will report a health warning like::
+
+    AUTH_BAD_CAPS 1 auth entities have invalid capabilities
+        client.bad osd capability parse failed, stopped at 'allow rwx auid 123' of 'allow rwx auid 123'
+
+  The capability can be adjusted with the ``ceph auth caps`` command. For example,::
+
+    ceph auth caps client.bad osd 'allow rwx pool foo'
+
+
+
+
+
+
+Upgrading from Luminous
+-----------------------
+
+* During the upgrade from luminous to nautilus, it will not be possible to create
+  a new OSD using a luminous ceph-osd daemon after the monitors have been
+  upgraded to nautilus.
+

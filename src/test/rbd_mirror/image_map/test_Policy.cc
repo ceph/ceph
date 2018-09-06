@@ -24,12 +24,12 @@ public:
                                   "0"));
 
     CephContext *cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
-    std::string policy_type = cct->_conf->get_val<string>("rbd_mirror_image_policy_type");
+    std::string policy_type = cct->_conf.get_val<string>("rbd_mirror_image_policy_type");
 
-    if (policy_type == "simple") {
+    if (policy_type == "none" || policy_type == "simple") {
       m_policy = image_map::SimplePolicy::create(m_local_io_ctx);
     } else {
-      assert(false);
+      ceph_abort();
     }
 
     m_policy->init({});
@@ -144,6 +144,9 @@ TEST_F(TestImageMapPolicy, ShuffleImageRemoveInstance) {
     "global id 1", "global id 2", "global id 3", "global id 4", "global id 5"
   };
 
+  std::set<std::string> shuffle_global_image_ids;
+  m_policy->add_instances({stringify(m_local_io_ctx.get_instance_id())},
+                          &shuffle_global_image_ids);
   for (auto const &global_image_id : global_image_ids) {
     // map image
     map_image(global_image_id);
@@ -152,7 +155,6 @@ TEST_F(TestImageMapPolicy, ShuffleImageRemoveInstance) {
     ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
   }
 
-  std::set<std::string> shuffle_global_image_ids;
   m_policy->add_instances({"9876"}, &shuffle_global_image_ids);
 
   for (auto const &global_image_id : shuffle_global_image_ids) {
@@ -247,6 +249,9 @@ TEST_F(TestImageMapPolicy, ReshuffleWithMapFailure) {
     "global id 6"
   };
 
+  std::set<std::string> shuffle_global_image_ids;
+  m_policy->add_instances({stringify(m_local_io_ctx.get_instance_id())},
+                          &shuffle_global_image_ids);
   for (auto const &global_image_id : global_image_ids) {
     // map image
     map_image(global_image_id);
@@ -255,7 +260,6 @@ TEST_F(TestImageMapPolicy, ReshuffleWithMapFailure) {
     ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
   }
 
-  std::set<std::string> shuffle_global_image_ids;
   m_policy->add_instances({"9876"}, &shuffle_global_image_ids);
   ASSERT_FALSE(shuffle_global_image_ids.empty());
 
@@ -292,6 +296,9 @@ TEST_F(TestImageMapPolicy, ShuffleFailureAndRemove) {
     "global id 6"
   };
 
+  std::set<std::string> shuffle_global_image_ids;
+  m_policy->add_instances({stringify(m_local_io_ctx.get_instance_id())},
+                          &shuffle_global_image_ids);
   for (auto const &global_image_id : global_image_ids) {
     // map image
     map_image(global_image_id);
@@ -300,7 +307,6 @@ TEST_F(TestImageMapPolicy, ShuffleFailureAndRemove) {
     ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
   }
 
-  std::set<std::string> shuffle_global_image_ids;
   m_policy->add_instances({"9876"}, &shuffle_global_image_ids);
   ASSERT_FALSE(shuffle_global_image_ids.empty());
 

@@ -125,8 +125,8 @@ struct libradosstriper::MultiAioCompletionImpl {
     lock.Unlock();
   }
   void _get() {
-    assert(lock.is_locked());
-    assert(ref > 0);
+    ceph_assert(lock.is_locked());
+    ceph_assert(ref > 0);
     ++ref;
   }
   void put() {
@@ -134,7 +134,7 @@ struct libradosstriper::MultiAioCompletionImpl {
     put_unlock();
   }
   void put_unlock() {
-    assert(ref > 0);
+    ceph_assert(ref > 0);
     int n = --ref;
     lock.Unlock();
     if (!n)
@@ -155,7 +155,7 @@ struct libradosstriper::MultiAioCompletionImpl {
     lock.Unlock();
   }
   void complete() {
-    assert(lock.is_locked());
+    ceph_assert(lock.is_locked());
     if (callback_complete) {
       callback_complete(this, callback_complete_arg);
       callback_complete = 0;
@@ -163,7 +163,7 @@ struct libradosstriper::MultiAioCompletionImpl {
     cond.Signal();
   }
   void safe() {
-    assert(lock.is_locked());
+    ceph_assert(lock.is_locked());
     if (callback_safe) {
       callback_safe(this, callback_safe_arg);
       callback_safe = 0;

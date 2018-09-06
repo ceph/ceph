@@ -9,7 +9,7 @@ Uploaders: Ken Dreyer <kdreyer@redhat.com>,
            Alfredo Deza <adeza@redhat.com>,
 Build-Depends: bc,
                btrfs-tools,
-               cmake,
+               cmake (>= 3.5),
                cpio,
                cryptsetup-bin | cryptsetup,
                cython,
@@ -35,6 +35,7 @@ Build-Depends: bc,
                libfuse-dev,
                libgoogle-perftools-dev [i386 amd64 arm64],
                libibverbs-dev,
+               librdmacm-dev,
                libkeyutils-dev,
                libldap2-dev,
                libleveldb-dev,
@@ -56,6 +57,7 @@ Build-Depends: bc,
                python-nose,
                python-pecan,
                python-bcrypt,
+               python-six,
                python-tox,
                python-coverage,
                python-prettytable,
@@ -214,7 +216,6 @@ Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
-Recommends: ceph-common,
 Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
 Breaks: ceph (<< 10), ceph-test (<< 12.2.2-14)
 Description: monitor server for the ceph storage system
@@ -244,10 +245,10 @@ Package: ceph-osd
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          lvm2,
+	 sudo,
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
-Recommends: ceph-common (= ${binary:Version}),
 Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
 Breaks: ceph (<< 10), ceph-test (<< 12.2.2-14)
 Description: OSD server for the ceph storage system
@@ -276,7 +277,7 @@ Package: ceph-fuse
 Architecture: linux-any
 Depends: ${misc:Depends},
          ${shlibs:Depends},
-Recommends: fuse,
+         fuse,
 Description: FUSE-based client for the Ceph distributed file system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -393,6 +394,7 @@ Package: ceph-common
 Architecture: linux-any
 Depends: librbd1 (= ${binary:Version}),
          python-cephfs (= ${binary:Version}),
+         python-ceph-argparse (= ${binary:Version}),
          python-prettytable,
          python-rados (= ${binary:Version}),
          python-rbd (= ${binary:Version}),
@@ -890,6 +892,7 @@ Package: python-rgw
 Architecture: linux-any
 Section: python
 Depends: librgw2 (>= ${binary:Version}),
+         python-rados (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
@@ -924,6 +927,7 @@ Package: python3-rgw
 Architecture: linux-any
 Section: python
 Depends: librgw2 (>= ${binary:Version}),
+         python3-rados (= ${binary:Version}),
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends},
@@ -956,6 +960,8 @@ Package: python-cephfs
 Architecture: linux-any
 Section: python
 Depends: libcephfs2 (= ${binary:Version}),
+         python-rados (= ${binary:Version}),
+         python-ceph-argparse (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
@@ -990,6 +996,8 @@ Package: python3-cephfs
 Architecture: linux-any
 Section: python
 Depends: libcephfs2 (= ${binary:Version}),
+         python3-rados (= ${binary:Version}),
+         python3-ceph-argparse (= ${binary:Version}),
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends},
@@ -1018,8 +1026,23 @@ Description: Python 3 libraries for the Ceph libcephfs library
  .
  This package contains the debugging symbols for python3-cephfs.
 
+Package: python-ceph-argparse
+Architecture: all
+Section: python
+Depends: ${misc:Depends},
+         ${python:Depends},
+Replaces: ceph-common (<< 14.0.0)
+Breaks: ceph-common (<< 14.0.0)
+Description: Python 2 utility libraries for Ceph CLI
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains types and routines for Python 2 used by the
+ Ceph CLI as well as the RESTful interface.
+
 Package: python3-ceph-argparse
-Architecture: linux-any
+Architecture: all
 Section: python
 Depends: ${misc:Depends},
          ${python3:Depends},
@@ -1055,3 +1078,16 @@ Depends: librados-dev (= ${binary:Version}) ${misc:Depends},
 Description: RADOS object class development kit.
  .
  This package contains development files needed for building RADOS object class plugins.
+
+Package: cephfs-shell
+Architecture: all
+Depends: ${misc:Depends}
+         ${python3:Depends}
+Description: interactive shell for the Ceph distributed file system
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is an interactive tool that
+ allows accessing a Ceph file system without mounting it by providing
+ a nice pseudo-shell which works like an FTP client.
+ .
+ This package contains a CLI for interacting with the CephFS.

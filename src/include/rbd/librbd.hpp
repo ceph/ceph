@@ -128,6 +128,19 @@ namespace librbd {
     uint64_t cookie;
   } image_watcher_t;
 
+  typedef rbd_image_migration_state_t image_migration_state_t;
+
+  typedef struct {
+    int64_t source_pool_id;
+    std::string source_image_name;
+    std::string source_image_id;
+    int64_t dest_pool_id;
+    std::string dest_image_name;
+    std::string dest_image_id;
+    image_migration_state_t state;
+    std::string state_description;
+  } image_migration_status_t;
+
 class CEPH_RBD_API RBD
 {
 public:
@@ -195,6 +208,22 @@ public:
                                  bool force, ProgressContext &pctx);
   int trash_restore(IoCtx &io_ctx, const char *id, const char *name);
 
+  // Migration
+  int migration_prepare(IoCtx& io_ctx, const char *image_name,
+                        IoCtx& dest_io_ctx, const char *dest_image_name,
+                        ImageOptions& opts);
+  int migration_execute(IoCtx& io_ctx, const char *image_name);
+  int migration_execute_with_progress(IoCtx& io_ctx, const char *image_name,
+                                      ProgressContext &prog_ctx);
+  int migration_abort(IoCtx& io_ctx, const char *image_name);
+  int migration_abort_with_progress(IoCtx& io_ctx, const char *image_name,
+                                    ProgressContext &prog_ctx);
+  int migration_commit(IoCtx& io_ctx, const char *image_name);
+  int migration_commit_with_progress(IoCtx& io_ctx, const char *image_name,
+                                     ProgressContext &prog_ctx);
+  int migration_status(IoCtx& io_ctx, const char *image_name,
+                       image_migration_status_t *status, size_t status_size);
+
   // RBD pool mirroring support functions
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
   int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
@@ -238,6 +267,11 @@ public:
   int group_snap_list(IoCtx& group_ioctx, const char *group_name,
                       std::vector<group_snap_info_t> *snaps,
                       size_t group_snap_info_size);
+
+  int namespace_create(IoCtx& ioctx, const char *namespace_name);
+  int namespace_remove(IoCtx& ioctx, const char *namespace_name);
+  int namespace_list(IoCtx& io_ctx, std::vector<std::string>* namespace_names);
+  int namespace_exists(IoCtx& io_ctx, const char *namespace_name, bool *exists);
 
 private:
   /* We don't allow assignment or copying */
@@ -345,6 +379,8 @@ public:
   uint64_t get_stripe_count() const;
 
   int get_create_timestamp(struct timespec *timestamp);
+  int get_access_timestamp(struct timespec *timestamp);
+  int get_modify_timestamp(struct timespec *timestamp);
 
   int flatten();
   int flatten_with_progress(ProgressContext &prog_ctx);
@@ -375,6 +411,7 @@ public:
   int snap_create(const char *snapname);
   int snap_remove(const char *snapname);
   int snap_remove2(const char *snapname, uint32_t flags, ProgressContext& pctx);
+  int snap_remove_by_id(uint64_t snap_id);
   int snap_rollback(const char *snap_name);
   int snap_rollback_with_progress(const char *snap_name, ProgressContext& pctx);
   int snap_protect(const char *snap_name);
@@ -391,6 +428,7 @@ public:
   int snap_get_group_namespace(uint64_t snap_id,
                                snap_group_namespace_t *group_namespace,
                                size_t snap_group_namespace_size);
+  int snap_get_trash_namespace(uint64_t snap_id, std::string* original_name);
 
   /* I/O */
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);

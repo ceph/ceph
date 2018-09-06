@@ -26,6 +26,7 @@
 #include "common/perf_histogram.h"
 #include "include/utime.h"
 #include "common/Mutex.h"
+#include "common/ceph_context.h"
 #include "common/ceph_time.h"
 
 class CephContext;
@@ -43,8 +44,8 @@ enum perfcounter_type_d : uint8_t
 
 enum unit_t : uint8_t
 {
-  BYTES,
-  NONE
+  UNIT_BYTES,
+  UNIT_NONE
 };
 
 /* Class for constructing a PerfCounters object.
@@ -78,15 +79,15 @@ public:
   };
   void add_u64(int key, const char *name,
 	       const char *description=NULL, const char *nick = NULL,
-	       int prio=0, int unit=NONE);
+	       int prio=0, int unit=UNIT_NONE);
   void add_u64_counter(int key, const char *name,
 		       const char *description=NULL,
 		       const char *nick = NULL,
-		       int prio=0, int unit=NONE);
+		       int prio=0, int unit=UNIT_NONE);
   void add_u64_avg(int key, const char *name,
 		   const char *description=NULL,
 		   const char *nick = NULL,
-		   int prio=0, int unit=NONE);
+		   int prio=0, int unit=UNIT_NONE);
   void add_time(int key, const char *name,
 		const char *description=NULL,
 		const char *nick = NULL,
@@ -101,7 +102,7 @@ public:
     PerfHistogramCommon::axis_config_d y_axis_config,
     const char *description=NULL,
     const char* nick = NULL,
-    int prio=0, int unit=NONE);
+    int prio=0, int unit=UNIT_NONE);
 
   void set_prio_default(int prio_)
   {
@@ -113,7 +114,7 @@ private:
   PerfCountersBuilder(const PerfCountersBuilder &rhs);
   PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
   void add_impl(int idx, const char *name,
-                const char *description, const char *nick, int prio, int ty, int unit=NONE,
+                const char *description, const char *nick, int prio, int ty, int unit=UNIT_NONE,
                 unique_ptr<PerfHistogram<>> histogram = nullptr);
 
   PerfCounters *m_perf_counters;
@@ -156,7 +157,7 @@ public:
         description(NULL),
         nick(NULL),
 	 type(PERFCOUNTER_NONE),
-	 unit(NONE)
+	 unit(UNIT_NONE)
     {}
     perf_counter_data_any_d(const perf_counter_data_any_d& other)
       : name(other.name),

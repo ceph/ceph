@@ -1447,7 +1447,7 @@ TEST(BlueStoreRepairer, StoreSpaceTracker)
 {
   BlueStoreRepairer::StoreSpaceTracker bmap0;
   bmap0.init((uint64_t)4096 * 1024 * 1024 * 1024, 0x1000);
-  ASSERT_EQ(bmap0.granularity, 2 * 1024 * 1024);
+  ASSERT_EQ(bmap0.granularity, 2 * 1024 * 1024U);
   ASSERT_EQ(bmap0.collections_bfs.size(), 2048 * 1024);
   ASSERT_EQ(bmap0.objects_bfs.size(), 2048 * 1024);
 
@@ -1526,7 +1526,7 @@ TEST(BlueStoreRepairer, StoreSpaceTracker)
   extents.insert(0xa001,1);
   extents.insert(0xa0000,0xff8);
 
-  ASSERT_EQ(bmap.filter_out(extents), 3);
+  ASSERT_EQ(3u, bmap.filter_out(extents));
   ASSERT_TRUE(bmap.is_used(cid));
   ASSERT_TRUE(bmap.is_used(hoid));
 }

@@ -102,8 +102,8 @@ void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen) {
 librados::TestRadosClient *create_rados_client() {
   CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
   CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
-  cct->_conf->parse_env();
-  cct->_conf->apply_changes(nullptr);
+  cct->_conf.parse_env();
+  cct->_conf.apply_changes(nullptr);
 
   auto rados_client =
     librados_test_stub::get_cluster()->create_rados_client(cct);
@@ -145,27 +145,27 @@ extern "C" int rados_conf_set(rados_t cluster, const char *option,
   librados::TestRadosClient *impl =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   CephContext *cct = impl->cct();
-  return cct->_conf->set_val(option, value);
+  return cct->_conf.set_val(option, value);
 }
 
 extern "C" int rados_conf_parse_env(rados_t cluster, const char *var) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
-  md_config_t *conf = client->cct()->_conf;
-  conf->parse_env(var);
-  conf->apply_changes(NULL);
+  auto& conf = client->cct()->_conf;
+  conf.parse_env(var);
+  conf.apply_changes(NULL);
   return 0;
 }
 
 extern "C" int rados_conf_read_file(rados_t cluster, const char *path) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
-  md_config_t *conf = client->cct()->_conf;
-  int ret = conf->parse_config_files(path, NULL, 0);
+  auto& conf = client->cct()->_conf;
+  int ret = conf.parse_config_files(path, NULL, 0);
   if (ret == 0) {
-    conf->parse_env();
-    conf->apply_changes(NULL);
-    conf->complain_about_parse_errors(client->cct());
+    conf.parse_env();
+    conf.apply_changes(NULL);
+    conf.complain_about_parse_errors(client->cct());
   } else if (ret == -ENOENT) {
     // ignore missing client config
     return 0;
@@ -733,6 +733,16 @@ int IoCtx::application_metadata_list(const std::string& app_name,
   return -EOPNOTSUPP;
 }
 
+void IoCtx::set_namespace(const std::string& nspace) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  ctx->set_namespace(nspace);
+}
+
+std::string IoCtx::get_namespace() const {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->get_namespace();
+}
+
 static int save_operation_result(int result, int *pval) {
   if (pval != NULL) {
     *pval = result;
@@ -935,7 +945,7 @@ Rados::Rados(IoCtx& ioctx) {
   impl->get();
 
   client = reinterpret_cast<RadosClient*>(impl);
-  assert(client != NULL);
+  ceph_assert(client != NULL);
 }
 
 Rados::~Rados() {
@@ -948,7 +958,7 @@ AioCompletion *Rados::aio_create_completion(void *cb_arg,
   AioCompletionImpl *c;
   int r = rados_aio_create_completion(cb_arg, cb_complete, cb_safe,
       reinterpret_cast<void**>(&c));
-  assert(r == 0);
+  ceph_assert(r == 0);
   return new AioCompletion(c);
 }
 
@@ -982,7 +992,7 @@ int Rados::conf_get(const char *option, std::string &val) {
   CephContext *cct = impl->cct();
 
   char *str = NULL;
-  int ret = cct->_conf->get_val(option, &str, -1);
+  int ret = cct->_conf.get_val(option, &str, -1);
   if (ret != 0) {
     free(str);
     return ret;
@@ -1343,6 +1353,19 @@ uint64_t cls_get_features(cls_method_context_t hctx) {
 
 uint64_t cls_get_client_features(cls_method_context_t hctx) {
   return CEPH_FEATURES_SUPPORTED_DEFAULT;
+}
+
+int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  librados::snap_set_t snapset;
+  int r = ctx->io_ctx_impl->list_snaps(ctx->oid, &snapset);
+  if (r < 0) {
+    return r;
+  }
+
+  *snap_seq = snapset.seq;
+  return 0;
 }
 
 int cls_log(int level, const char *format, ...) {

@@ -1,17 +1,12 @@
 import { Component, EventEmitter, Output } from '@angular/core';
-import {
-  AbstractControl,
-  FormBuilder,
-  FormGroup,
-  ValidationErrors,
-  ValidatorFn,
-  Validators
-} from '@angular/forms';
+import { AbstractControl, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal/bs-modal-ref.service';
 
-import { CdValidators, isEmptyInputValue } from '../../../shared/validators/cd-validators';
+import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
+import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import { CdValidators, isEmptyInputValue } from '../../../shared/forms/cd-validators';
 import { RgwUserSubuser } from '../models/rgw-user-subuser';
 
 @Component({
@@ -20,47 +15,30 @@ import { RgwUserSubuser } from '../models/rgw-user-subuser';
   styleUrls: ['./rgw-user-subuser-modal.component.scss']
 })
 export class RgwUserSubuserModalComponent {
-
   /**
    * The event that is triggered when the 'Add' or 'Update' button
    * has been pressed.
    */
-  @Output() submitAction = new EventEmitter();
+  @Output()
+  submitAction = new EventEmitter();
 
-  formGroup: FormGroup;
+  formGroup: CdFormGroup;
   editing = true;
   subusers: RgwUserSubuser[] = [];
 
-  constructor(private formBuilder: FormBuilder,
-              public bsModalRef: BsModalRef) {
+  constructor(private formBuilder: CdFormBuilder, public bsModalRef: BsModalRef) {
     this.createForm();
     this.listenToChanges();
   }
 
   createForm() {
     this.formGroup = this.formBuilder.group({
-      'uid': [
-        null
-      ],
-      'subuid': [
-        null,
-        [
-          Validators.required,
-          this.subuserValidator()
-        ]
-      ],
-      'perm': [
-        null,
-        [Validators.required]
-      ],
+      uid: [null],
+      subuid: [null, [Validators.required, this.subuserValidator()]],
+      perm: [null, [Validators.required]],
       // Swift key
-      'generate_secret': [
-        true
-      ],
-      'secret_key': [
-        null,
-        [CdValidators.requiredIf({'generate_secret': false})]
-      ]
+      generate_secret: [true],
+      secret_key: [null, [CdValidators.requiredIf({ generate_secret: false })]]
     });
   }
 
@@ -70,7 +48,7 @@ export class RgwUserSubuserModalComponent {
     // validated again if the status of their prerequisites have been changed.
     this.formGroup.get('generate_secret').valueChanges.subscribe(() => {
       ['secret_key'].forEach((path) => {
-        this.formGroup.get(path).updateValueAndValidity({onlySelf: true});
+        this.formGroup.get(path).updateValueAndValidity({ onlySelf: true });
       });
     });
   }
@@ -90,7 +68,7 @@ export class RgwUserSubuserModalComponent {
       const found = self.subusers.some((subuser) => {
         return _.isEqual(self.getSubuserName(subuser.id), control.value);
       });
-      return found ? {'subuserIdExists': true} : null;
+      return found ? { subuserIdExists: true } : null;
     };
   }
 
@@ -125,11 +103,11 @@ export class RgwUserSubuserModalComponent {
    */
   setValues(uid: string, subuser: string = '', permissions: string = '') {
     this.formGroup.setValue({
-      'uid': uid,
-      'subuid': this.getSubuserName(subuser),
-      'perm': permissions,
-      'generate_secret': true,
-      'secret_key': null
+      uid: uid,
+      subuid: this.getSubuserName(subuser),
+      perm: permissions,
+      generate_secret: true,
+      secret_key: null
     });
   }
 
@@ -144,7 +122,7 @@ export class RgwUserSubuserModalComponent {
     // Get the values from the form and create an object that is sent
     // by the triggered submit action event.
     const values = this.formGroup.value;
-    const subuser = new RgwUserSubuser;
+    const subuser = new RgwUserSubuser();
     subuser.id = `${values.uid}:${values.subuid}`;
     subuser.permissions = values.perm;
     subuser.generate_secret = values.generate_secret;

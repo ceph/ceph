@@ -73,7 +73,7 @@ void file_layout_t::encode(bufferlist& bl, uint64_t features) const
   using ceph::encode;
   if ((features & CEPH_FEATURE_FS_FILE_LAYOUT_V2) == 0) {
     ceph_file_layout fl;
-    assert((stripe_unit & 0xff) == 0);  // first byte must be 0
+    ceph_assert((stripe_unit & 0xff) == 0);  // first byte must be 0
     to_legacy(&fl);
     encode(fl, bl);
     return;
@@ -88,7 +88,7 @@ void file_layout_t::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void file_layout_t::decode(bufferlist::iterator& p)
+void file_layout_t::decode(bufferlist::const_iterator& p)
 {
   using ceph::decode;
   if (*p == 0) {

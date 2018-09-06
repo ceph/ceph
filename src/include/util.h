@@ -34,7 +34,7 @@ struct ceph_data_stats
   { }
 
   void dump(Formatter *f) const {
-    assert(f != NULL);
+    ceph_assert(f != NULL);
     f->dump_int("total", byte_total);
     f->dump_int("used", byte_used);
     f->dump_int("avail", byte_avail);
@@ -50,7 +50,7 @@ struct ceph_data_stats
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     decode(byte_total, p);
     decode(byte_used, p);

@@ -19,6 +19,7 @@
 #include <type_traits>
 
 #include "global/global_context.h"
+#include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/likely.h"
 #include "common/Clock.h"
@@ -31,7 +32,7 @@ extern void dout_emergency(const std::string &str);
 class _bad_endl_use_dendl_t { public: _bad_endl_use_dendl_t(int) {} };
 static const _bad_endl_use_dendl_t endl = 0;
 inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
-  assert(0 && "you are using the wrong endl.. use std::endl or dendl");
+  ceph_abort_msg("you are using the wrong endl.. use std::endl or dendl");
   return out;
 }
 
@@ -97,9 +98,9 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 #define lderr(cct) dout_impl(cct, ceph_subsys_, -1) dout_prefix
 
 #define ldpp_dout(dpp, v) 						\
-  if (dpp) 								\
-    dout_impl(dpp->get_cct(), ceph::dout::need_dynamic(dpp->get_subsys()), v)				\
-    dpp->gen_prefix(*_dout)
+  if (decltype(auto) pdpp = (dpp); pdpp) /* workaround -Wnonnull-compare for 'this' */ \
+    dout_impl(pdpp->get_cct(), ceph::dout::need_dynamic(pdpp->get_subsys()), v) \
+      pdpp->gen_prefix(*_dout)
 
 #define lgeneric_subdout(cct, sub, v) dout_impl(cct, ceph_subsys_##sub, v) *_dout
 #define lgeneric_dout(cct, v) dout_impl(cct, ceph_subsys_, v) *_dout
@@ -108,10 +109,8 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 #define ldlog_p1(cct, sub, lvl)                 \
   (cct->_conf->subsys.should_gather((sub), (lvl)))
 
-// NOTE: depend on magic value in _ASSERT_H so that we detect when
-// /usr/include/assert.h clobbers our fancier version.
 #define dendl_impl std::flush;				\
-  _ASSERT_H->_log->submit_entry(_dout_e);		\
+  _dout_cct->_log->submit_entry(_dout_e);		\
     }						\
   } while (0)
 

@@ -36,8 +36,8 @@ void OpenFileTable::get_ref(CInode *in)
   do {
     auto p = anchor_map.find(in->ino());
     if (p != anchor_map.end()) {
-      assert(in->state_test(CInode::STATE_TRACKEDBYOFT));
-      assert(p->second.nref > 0);
+      ceph_assert(in->state_test(CInode::STATE_TRACKEDBYOFT));
+      ceph_assert(p->second.nref > 0);
       p->second.nref++;
       break;
     }
@@ -48,13 +48,13 @@ void OpenFileTable::get_ref(CInode *in)
     auto ret = anchor_map.emplace(std::piecewise_construct, std::forward_as_tuple(in->ino()),
 				  std::forward_as_tuple(in->ino(), (pin ? pin->ino() : inodeno_t(0)),
 				  (dn ? dn->get_name() : string()), in->d_type(), 1));
-    assert(ret.second == true);
+    ceph_assert(ret.second == true);
     in->state_set(CInode::STATE_TRACKEDBYOFT);
 
     auto ret1 = dirty_items.emplace(in->ino(), (int)DIRTY_NEW);
     if (!ret1.second) {
       int omap_idx = ret1.first->second;
-      assert(omap_idx >= 0);
+      ceph_assert(omap_idx >= 0);
       ret.first->second.omap_idx = omap_idx;
     }
 
@@ -65,10 +65,10 @@ void OpenFileTable::get_ref(CInode *in)
 void OpenFileTable::put_ref(CInode *in)
 {
   do {
-    assert(in->state_test(CInode::STATE_TRACKEDBYOFT));
+    ceph_assert(in->state_test(CInode::STATE_TRACKEDBYOFT));
     auto p = anchor_map.find(in->ino());
-    assert(p != anchor_map.end());
-    assert(p->second.nref > 0);
+    ceph_assert(p != anchor_map.end());
+    ceph_assert(p->second.nref > 0);
 
     if (p->second.nref > 1) {
       p->second.nref--;
@@ -78,11 +78,11 @@ void OpenFileTable::put_ref(CInode *in)
     CDentry *dn = in->get_parent_dn();
     CInode *pin = dn ? dn->get_dir()->get_inode() : nullptr;
     if (dn) {
-      assert(p->second.dirino == pin->ino());
-      assert(p->second.d_name == dn->get_name());
+      ceph_assert(p->second.dirino == pin->ino());
+      ceph_assert(p->second.d_name == dn->get_name());
     } else {
-      assert(p->second.dirino == inodeno_t(0));
-      assert(p->second.d_name == "");
+      ceph_assert(p->second.dirino == inodeno_t(0));
+      ceph_assert(p->second.d_name == "");
     }
 
     int omap_idx = p->second.omap_idx;
@@ -92,10 +92,10 @@ void OpenFileTable::put_ref(CInode *in)
     auto ret = dirty_items.emplace(in->ino(), omap_idx);
     if (!ret.second) {
       if (ret.first->second == DIRTY_NEW) {
-	assert(omap_idx < 0);
+	ceph_assert(omap_idx < 0);
 	dirty_items.erase(ret.first);
       } else {
-	assert(omap_idx >= 0);
+	ceph_assert(omap_idx >= 0);
 	ret.first->second = omap_idx;
       }
     }
@@ -109,7 +109,7 @@ void OpenFileTable::add_inode(CInode *in)
   dout(10) << __func__ << " " << *in << dendl;
   if (!in->is_dir()) {
     auto p = anchor_map.find(in->ino());
-    assert(p == anchor_map.end());
+    ceph_assert(p == anchor_map.end());
   }
   get_ref(in);
 }
@@ -119,8 +119,8 @@ void OpenFileTable::remove_inode(CInode *in)
   dout(10) << __func__ << " " << *in << dendl;
   if (!in->is_dir()) {
     auto p = anchor_map.find(in->ino());
-    assert(p != anchor_map.end());
-    assert(p->second.nref == 1);
+    ceph_assert(p != anchor_map.end());
+    ceph_assert(p->second.nref == 1);
   }
   put_ref(in);
 }
@@ -128,10 +128,10 @@ void OpenFileTable::remove_inode(CInode *in)
 void OpenFileTable::add_dirfrag(CDir *dir)
 {
   dout(10) << __func__ << " " << *dir << dendl;
-  assert(!dir->state_test(CDir::STATE_TRACKEDBYOFT));
+  ceph_assert(!dir->state_test(CDir::STATE_TRACKEDBYOFT));
   dir->state_set(CDir::STATE_TRACKEDBYOFT);
   auto ret = dirfrags.insert(dir->dirfrag());
-  assert(ret.second);
+  ceph_assert(ret.second);
   get_ref(dir->get_inode());
   dirty_items.emplace(dir->ino(), (int)DIRTY_UNDEF);
 }
@@ -139,10 +139,10 @@ void OpenFileTable::add_dirfrag(CDir *dir)
 void OpenFileTable::remove_dirfrag(CDir *dir)
 {
   dout(10) << __func__ << " " << *dir << dendl;
-  assert(dir->state_test(CDir::STATE_TRACKEDBYOFT));
+  ceph_assert(dir->state_test(CDir::STATE_TRACKEDBYOFT));
   dir->state_clear(CDir::STATE_TRACKEDBYOFT);
   auto p = dirfrags.find(dir->dirfrag());
-  assert(p != dirfrags.end());
+  ceph_assert(p != dirfrags.end());
   dirfrags.erase(p);
   dirty_items.emplace(dir->ino(), (int)DIRTY_UNDEF);
   put_ref(dir->get_inode());
@@ -152,10 +152,10 @@ void OpenFileTable::notify_link(CInode *in)
 {
   dout(10) << __func__ << " " << *in << dendl;
   auto p = anchor_map.find(in->ino());
-  assert(p != anchor_map.end());
-  assert(p->second.nref > 0);
-  assert(p->second.dirino == inodeno_t(0));
-  assert(p->second.d_name == "");
+  ceph_assert(p != anchor_map.end());
+  ceph_assert(p->second.nref > 0);
+  ceph_assert(p->second.dirino == inodeno_t(0));
+  ceph_assert(p->second.d_name == "");
 
   CDentry *dn = in->get_parent_dn();
   CInode *pin = dn->get_dir()->get_inode();
@@ -171,13 +171,13 @@ void OpenFileTable::notify_unlink(CInode *in)
 {
   dout(10) << __func__ << " " << *in << dendl;
   auto p = anchor_map.find(in->ino());
-  assert(p != anchor_map.end());
-  assert(p->second.nref > 0);
+  ceph_assert(p != anchor_map.end());
+  ceph_assert(p->second.nref > 0);
 
   CDentry *dn = in->get_parent_dn();
   CInode *pin = dn->get_dir()->get_inode();
-  assert(p->second.dirino == pin->ino());
-  assert(p->second.d_name == dn->get_name());
+  ceph_assert(p->second.dirino == pin->ino());
+  ceph_assert(p->second.d_name == dn->get_name());
 
   p->second.dirino = inodeno_t(0);
   p->second.d_name = "";
@@ -195,9 +195,13 @@ object_t OpenFileTable::get_object_name(unsigned idx) const
 
 void OpenFileTable::_encode_header(bufferlist &bl, int j_state)
 {
+  std::string_view magic = CEPH_FS_ONDISK_MAGIC;
+  encode(magic, bl);
+  ENCODE_START(1, 1, bl);
   encode(omap_version, bl);
   encode(omap_num_objs, bl);
   encode((__u8)j_state, bl);
+  ENCODE_FINISH(bl);
 }
 
 class C_IO_OFT_Save : public MDSIOContextBase {
@@ -212,6 +216,9 @@ public:
   void finish(int r) {
     oft->_commit_finish(r, log_seq, fin);
   }
+  void print(ostream& out) const override {
+    out << "openfiles_save";
+  }
 };
 
 void OpenFileTable::_commit_finish(int r, uint64_t log_seq, MDSInternalContextBase *fin)
@@ -222,8 +229,8 @@ void OpenFileTable::_commit_finish(int r, uint64_t log_seq, MDSInternalContextBa
     return;
   }
 
-  assert(log_seq <= committing_log_seq);
-  assert(log_seq >= committed_log_seq);
+  ceph_assert(log_seq <= committing_log_seq);
+  ceph_assert(log_seq >= committed_log_seq);
   committed_log_seq = log_seq;
   num_pending_commit--;
 
@@ -246,6 +253,9 @@ public:
   }
   void finish(int r) {
     oft->_journal_finish(r, log_seq, fin, ops_map);
+  }
+  void print(ostream& out) const override {
+    out << "openfiles_journal";
   }
 };
 
@@ -280,9 +290,9 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
 {
   dout(10) << __func__ << " log_seq " << log_seq << dendl;
 
-  assert(num_pending_commit == 0);
+  ceph_assert(num_pending_commit == 0);
   num_pending_commit++;
-  assert(log_seq >= committing_log_seq);
+  ceph_assert(log_seq >= committing_log_seq);
   committing_log_seq = log_seq;
 
   omap_version++;
@@ -292,7 +302,6 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
   SnapContext snapc;
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
 
-  const unsigned max_items_per_obj = 1024 * 1024;
   const unsigned max_write_size = mds->mdcache->max_dir_commit_size;
 
   struct omap_update_ctl {
@@ -321,7 +330,7 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
       if (journal_state == JOURNAL_NONE)
 	journal_state = JOURNAL_START;
       else
-	assert(journal_state == JOURNAL_START);
+	ceph_assert(journal_state == JOURNAL_START);
 
       bufferlist header;
       _encode_header(header, journal_state);
@@ -425,7 +434,7 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
     if (first_commit) {
       auto q = loaded_anchor_map.find(it.first);
       if (q != loaded_anchor_map.end()) {
-	assert(p != anchor_map.end());
+	ceph_assert(p != anchor_map.end());
 	p->second.omap_idx = q->second.omap_idx;
 	bool same = p->second == q->second;
 	if (same) {
@@ -453,14 +462,15 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
     if (p != anchor_map.end()) {
       omap_idx = p->second.omap_idx;
       if (omap_idx < 0) {
-	assert(it.second == DIRTY_NEW);
+	ceph_assert(it.second == DIRTY_NEW);
 	// find omap object to store the key
 	for (unsigned i = first_free_idx; i < omap_num_objs; i++) {
-	  if (omap_num_items[i] < max_items_per_obj)
+	  if (omap_num_items[i] < MAX_ITEMS_PER_OBJ)
 	    omap_idx = i;
 	}
 	if (omap_idx < 0) {
 	  ++omap_num_objs;
+	  ceph_assert(omap_num_objs <= MAX_OBJECTS);
 	  omap_num_items.resize(omap_num_objs);
 	  omap_updates.resize(omap_num_objs);
 	  omap_updates.back().clear = true;
@@ -474,9 +484,9 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
     } else {
       omap_idx = it.second;
       unsigned& count = omap_num_items.at(omap_idx);
-      assert(count > 0);
+      ceph_assert(count > 0);
       --count;
-      if ((unsigned)omap_idx < first_free_idx && count < max_items_per_obj)
+      if ((unsigned)omap_idx < first_free_idx && count < MAX_ITEMS_PER_OBJ)
 	first_free_idx = omap_idx;
     }
     auto& ctl = omap_updates.at(omap_idx);
@@ -508,7 +518,7 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
 
       int omap_idx = it.second.omap_idx;
       unsigned& count = omap_num_items.at(omap_idx);
-      assert(count > 0);
+      ceph_assert(count > 0);
       --count;
 
       auto& ctl = omap_updates.at(omap_idx);
@@ -539,7 +549,7 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
       if (omap_num_items[i] > 0)
 	used_objs = i + 1;
     }
-    assert(total_items == anchor_map.size());
+    ceph_assert(total_items == anchor_map.size());
     // adjust omap object count
     if (used_objs < omap_num_objs) {
       omap_num_objs = used_objs;
@@ -549,8 +559,8 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
     // does not change.
     if (!journaled && old_num_objs == omap_num_objs &&
 	objs_to_write.size() <= 1) {
-      assert(journal_state == JOURNAL_NONE);
-      assert(!gather.has_subs());
+      ceph_assert(journal_state == JOURNAL_NONE);
+      ceph_assert(!gather.has_subs());
 
       unsigned omap_idx = objs_to_write.empty() ? 0 : objs_to_write.front();
       create_op_func(omap_idx, true);
@@ -568,19 +578,19 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
   }
 
   if (journal_state == JOURNAL_START) {
-    assert(gather.has_subs());
+    ceph_assert(gather.has_subs());
     journal_state = JOURNAL_FINISH;
   } else {
     // only object count changes
-    assert(journal_state == JOURNAL_NONE);
-    assert(!gather.has_subs());
+    ceph_assert(journal_state == JOURNAL_NONE);
+    ceph_assert(!gather.has_subs());
   }
 
   for (unsigned omap_idx = 0; omap_idx < omap_updates.size(); omap_idx++) {
     auto& ctl = omap_updates[omap_idx];
-    assert(ctl.to_update.empty() && ctl.to_remove.empty());
+    ceph_assert(ctl.to_update.empty() && ctl.to_remove.empty());
     if (ctl.journal_idx == 0)
-      assert(ctl.journaled_update.empty() && ctl.journaled_remove.empty());
+      ceph_assert(ctl.journaled_update.empty() && ctl.journaled_remove.empty());
 
     bool first = true;
     for (auto& it : ctl.journaled_update) {
@@ -616,7 +626,7 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
       create_op_func(omap_idx, first);
   }
 
-  assert(!ops_map.empty());
+  ceph_assert(!ops_map.empty());
   if (journal_state == JOURNAL_FINISH) {
     gather.set_finisher(new C_OnFinisher(new C_IO_OFT_Journal(this, log_seq, c, ops_map),
 					 mds->finisher));
@@ -642,8 +652,11 @@ public:
 
   C_IO_OFT_Load(OpenFileTable *t, unsigned i, bool f) :
     oft(t), index(i), first(f) {}
-  void finish(int r) {
+  void finish(int r) override {
     oft->_load_finish(r, header_r, values_r, index, first, more, header_bl, values);
+  }
+  void print(ostream& out) const override {
+    out << "openfiles_load";
   }
 };
 
@@ -653,8 +666,11 @@ protected:
   MDSRank *get_mds() override { return oft->mds; }
 public:
   C_IO_OFT_Recover(OpenFileTable *t) : oft(t) {}
-  void finish(int r) {
+  void finish(int r) override {
     oft->_recover_finish(r);
+  }
+  void print(ostream& out) const override {
+    out << "openfiles_recover";
   }
 };
 
@@ -682,7 +698,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
   int err = -EINVAL;
 
   auto decode_func = [this](unsigned idx, inodeno_t ino, bufferlist &bl) {
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
 
     size_t count = loaded_anchor_map.size();
     auto it = loaded_anchor_map.emplace_hint(loaded_anchor_map.end(),
@@ -691,7 +707,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 					    std::make_tuple());
     RecoveredAnchor& anchor = it->second;
     decode(anchor, p);
-    assert(ino == anchor.ino);
+    ceph_assert(ino == anchor.ino);
     anchor.omap_idx = idx;
     anchor.auth = MDS_RANK_NONE;
 
@@ -712,13 +728,43 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 
   try {
     if (first) {
-      bufferlist::iterator p = header_bl.begin();
+      auto p = header_bl.cbegin();
+
+      string magic;
       version_t version;
       unsigned num_objs;
       __u8 jstate;
-      decode(version, p);
-      decode(num_objs, p);
-      decode(jstate, p);
+
+      if (header_bl.length() == 13) {
+	// obsolete format.
+	decode(version, p);
+	decode(num_objs, p);
+	decode(jstate, p);
+      } else {
+	decode(magic, p);
+	if (magic != CEPH_FS_ONDISK_MAGIC) {
+	  std::ostringstream oss;
+	  oss << "invalid magic '" << magic << "'";
+	  throw buffer::malformed_input(oss.str());
+	}
+
+	DECODE_START(1, p);
+	decode(version, p);
+	decode(num_objs, p);
+	decode(jstate, p);
+	DECODE_FINISH(p);
+      }
+
+      if (num_objs > MAX_OBJECTS) {
+	  std::ostringstream oss;
+	  oss << "invalid object count '" << num_objs << "'";
+	  throw buffer::malformed_input(oss.str());
+      }
+      if (jstate > JOURNAL_FINISH) {
+	  std::ostringstream oss;
+	  oss << "invalid journal state '" << jstate << "'";
+	  throw buffer::malformed_input(oss.str());
+      }
 
       if (version > omap_version) {
 	omap_version = version;
@@ -726,7 +772,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 	omap_num_items.resize(omap_num_objs);
 	journal_state = jstate;
       } else if (version == omap_version) {
-	assert(omap_num_objs == num_objs);
+	ceph_assert(omap_num_objs == num_objs);
 	if (jstate > journal_state)
 	  journal_state = jstate;
       }
@@ -793,7 +839,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 	for (auto& it : loaded_journal) {
 	  if (journal_state != JOURNAL_FINISH)
 	    continue;
-	  bufferlist::iterator p = it.second.begin();
+	  auto p = it.second.cbegin();
 	  version_t version;
 	  std::map<string, bufferlist> to_update;
 	  std::set<string> to_remove;
@@ -812,10 +858,10 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 	  for (auto& q : to_remove) {
 	    inodeno_t ino;
 	    sscanf(q.c_str(), "%llx",(unsigned long long*)&ino.val);
-	    assert(ino.val > 0);
+	    ceph_assert(ino.val > 0);
 	    if (loaded_anchor_map.erase(ino)) {
 	      unsigned& count = omap_num_items[omap_idx];
-	      assert(count > 0);
+	      ceph_assert(count > 0);
 	      --count;
 	    }
 	    auto r = loaded_dirfrags.lower_bound(dirfrag_t(ino, 0));
@@ -881,7 +927,7 @@ out:
 void OpenFileTable::load(MDSInternalContextBase *onload)
 {
   dout(10) << __func__ << dendl;
-  assert(!load_done);
+  ceph_assert(!load_done);
   if (onload)
     waiting_for_load.push_back(onload);
 
@@ -945,7 +991,7 @@ void OpenFileTable::_open_ino_finish(inodeno_t ino, int r)
 {
   if (prefetch_state == DIR_INODES && r >= 0 && ino != inodeno_t(0)) {
     auto p = loaded_anchor_map.find(ino);
-    assert(p != loaded_anchor_map.end());
+    ceph_assert(p != loaded_anchor_map.end());
     p->second.auth = mds_rank_t(r);
   }
 
@@ -964,7 +1010,7 @@ void OpenFileTable::_open_ino_finish(inodeno_t ino, int r)
       finish_contexts(g_ceph_context, waiting_for_prefetch);
       waiting_for_prefetch.clear();
     } else {
-      assert(0);
+      ceph_abort();
     }
   }
 }
@@ -972,7 +1018,7 @@ void OpenFileTable::_open_ino_finish(inodeno_t ino, int r)
 void OpenFileTable::_prefetch_dirfrags()
 {
   dout(10) << __func__ << dendl;
-  assert(prefetch_state == DIRFRAGS);
+  ceph_assert(prefetch_state == DIRFRAGS);
 
   MDCache *mdcache = mds->mdcache;
   list<CDir*> fetch_queue;
@@ -1011,10 +1057,14 @@ void OpenFileTable::_prefetch_dirfrags()
   }
 
   MDSGatherBuilder gather(g_ceph_context);
+  int num_opening_dirfrags = 0;
   for (auto dir : fetch_queue) {
     if (dir->state_test(CDir::STATE_REJOINUNDEF))
-      assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
+      ceph_assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
     dir->fetch(gather.new_sub());
+
+    if (!(++num_opening_dirfrags % 1000))
+      mds->heartbeat_reset();
   }
 
   auto finish_func = [this](int r) {
@@ -1034,7 +1084,7 @@ void OpenFileTable::_prefetch_dirfrags()
 void OpenFileTable::_prefetch_inodes()
 {
   dout(10) << __func__ << " state " << prefetch_state << dendl;
-  assert(!num_opening_inodes);
+  ceph_assert(!num_opening_inodes);
   num_opening_inodes = 1;
 
   int64_t pool;
@@ -1043,7 +1093,7 @@ void OpenFileTable::_prefetch_inodes()
   else if (prefetch_state == FILE_INODES)
     pool = mds->mdsmap->get_first_data_pool();
   else
-    assert(0);
+    ceph_abort();
 
   MDCache *mdcache = mds->mdcache;
 
@@ -1077,6 +1127,9 @@ void OpenFileTable::_prefetch_inodes()
 
     num_opening_inodes++;
     mdcache->open_ino(it.first, pool, new C_OFT_OpenInoFinish(this, it.first), false);
+
+    if (!(num_opening_inodes % 1000))
+      mds->heartbeat_reset();
   }
 
   _open_ino_finish(inodeno_t(0), 0);
@@ -1085,7 +1138,7 @@ void OpenFileTable::_prefetch_inodes()
 bool OpenFileTable::prefetch_inodes()
 {
   dout(10) << __func__ << dendl;
-  assert(!prefetch_state);
+  ceph_assert(!prefetch_state);
   prefetch_state = DIR_INODES;
 
   if (!load_done) {

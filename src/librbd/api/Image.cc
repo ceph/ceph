@@ -119,6 +119,7 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
                  << dendl;
       return r;
     }
+    ioctx.set_namespace(ictx->md_ctx.get_namespace());
 
     set<string> image_ids;
     r = cls_client::get_children(&ioctx, RBD_CHILDREN, parent_spec,
@@ -134,7 +135,10 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
   // retrieve clone v2 children attached to this snapshot
   IoCtx parent_io_ctx;
   r = rados.ioctx_create2(parent_spec.pool_id, parent_io_ctx);
-  assert(r == 0);
+  ceph_assert(r == 0);
+
+  // TODO support clone v2 parent namespaces
+  parent_io_ctx.set_namespace(ictx->md_ctx.get_namespace());
 
   cls::rbd::ChildImageSpecs child_images;
   r = cls_client::children_list(&parent_io_ctx,
@@ -153,6 +157,9 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
                     << dendl;
       continue;
     }
+
+    // TODO support clone v2 child namespaces
+    io_ctx.set_namespace(ictx->md_ctx.get_namespace());
 
     PoolSpec pool_spec = {child_image.pool_id, io_ctx.get_pool_name()};
     (*pool_image_ids)[pool_spec].insert(child_image.image_id);
@@ -174,7 +181,7 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
   uint64_t src_size;
   {
     RWLock::RLocker snap_locker(src->snap_lock);
-    features = src->features;
+    features = (src->features & ~RBD_FEATURES_IMPLICIT_ENABLE);
     src_size = src->get_image_size(src->snap_id);
   }
   uint64_t format = 2;
@@ -205,8 +212,15 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
     return -ENOSYS;
   }
 
+  uint64_t flatten = 0;
+  if (opts.get(RBD_IMAGE_OPTION_FLATTEN, &flatten) == 0) {
+    opts.unset(RBD_IMAGE_OPTION_FLATTEN);
+  }
+
   ParentSpec parent_spec;
-  {
+  if (flatten > 0) {
+    parent_spec.pool_id = -1;
+  } else {
     RWLock::RLocker snap_locker(src->snap_lock);
     RWLock::RLocker parent_locker(src->parent_lock);
 
@@ -230,38 +244,17 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
                  << cpp_strerror(r) << dendl;
       return r;
     }
-    ImageCtx *src_parent_image_ctx =
-      new ImageCtx("", parent_spec.image_id, nullptr, parent_io_ctx, false);
-    r = src_parent_image_ctx->state->open(true);
-    if (r < 0) {
-      if (r != -ENOENT) {
-        lderr(cct) << "failed to open source parent image: "
-                   << cpp_strerror(r) << dendl;
-      }
-      return r;
-    }
 
-    C_SaferCond cond;
-    src_parent_image_ctx->state->snap_set(parent_spec.snap_id, &cond);
-    r = cond.wait();
-    if (r < 0) {
-      if (r != -ENOENT) {
-        lderr(cct) << "failed to set snapshot: " << cpp_strerror(r) << dendl;
-      }
-      return r;
-    }
+    // TODO support clone v2 parent namespaces
+    parent_io_ctx.set_namespace(dest_md_ctx.get_namespace());
 
     C_SaferCond ctx;
     std::string dest_id = util::generate_image_id(dest_md_ctx);
     auto *req = image::CloneRequest<I>::create(
-      src_parent_image_ctx, dest_md_ctx, destname, dest_id, opts,
-      "", "", src->op_work_queue, &ctx);
+      parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id, dest_md_ctx,
+      destname, dest_id, opts, "", "", src->op_work_queue, &ctx);
     req->send();
     r = ctx.wait();
-    int close_r = src_parent_image_ctx->state->close();
-    if (r == 0 && close_r < 0) {
-      r = close_r;
-    }
   }
   if (r < 0) {
     lderr(cct) << "header creation failed" << dendl;
@@ -269,9 +262,9 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
   }
   opts.set(RBD_IMAGE_OPTION_ORDER, static_cast<uint64_t>(order));
 
-  ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL,
+  ImageCtx *dest = new librbd::ImageCtx(destname, "", nullptr,
                                         dest_md_ctx, false);
-  r = dest->state->open(false);
+  r = dest->state->open(0);
   if (r < 0) {
     lderr(cct) << "failed to read newly created header" << dendl;
     return r;
@@ -297,7 +290,7 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
     return r;
   }
 
-  r = deep_copy(src, dest, prog_ctx);
+  r = deep_copy(src, dest, flatten > 0, prog_ctx);
 
   int close_r = dest->state->close();
   if (r == 0 && close_r < 0) {
@@ -307,7 +300,8 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
 }
 
 template <typename I>
-int Image<I>::deep_copy(I *src, I *dest, ProgressContext &prog_ctx) {
+int Image<I>::deep_copy(I *src, I *dest, bool flatten,
+                        ProgressContext &prog_ctx) {
   CephContext *cct = src->cct;
   librados::snap_t snap_id_start = 0;
   librados::snap_t snap_id_end;
@@ -323,8 +317,8 @@ int Image<I>::deep_copy(I *src, I *dest, ProgressContext &prog_ctx) {
   C_SaferCond cond;
   SnapSeqs snap_seqs;
   auto req = DeepCopyRequest<>::create(src, dest, snap_id_start, snap_id_end,
-                                       boost::none, op_work_queue, &snap_seqs,
-                                       &prog_ctx, &cond);
+                                       flatten, boost::none, op_work_queue,
+                                       &snap_seqs, &prog_ctx, &cond);
   req->send();
   int r = cond.wait();
   if (r < 0) {

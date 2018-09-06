@@ -37,7 +37,7 @@ public:
                                 uint64_t size,
                                 const librbd::ParentSpec &parent_spec,
                                 uint64_t parent_overlap, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -59,7 +59,7 @@ struct SnapshotCreateRequest<librbd::MockTestImageCtx> {
                                        const librbd::ParentSpec &parent_spec,
                                        uint64_t parent_overlap,
                                        Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -135,6 +135,10 @@ public:
 
   void expect_test_features(librbd::MockImageCtx &mock_image_ctx) {
     EXPECT_CALL(mock_image_ctx, test_features(_, _))
+      .WillRepeatedly(WithArg<0>(Invoke([&mock_image_ctx](uint64_t features) {
+              return (mock_image_ctx.features & features) != 0;
+            })));
+    EXPECT_CALL(mock_image_ctx, test_features(_))
       .WillRepeatedly(WithArg<0>(Invoke([&mock_image_ctx](uint64_t features) {
               return (mock_image_ctx.features & features) != 0;
             })));
@@ -223,8 +227,8 @@ public:
       librbd::MockTestImageCtx &mock_dst_image_ctx, Context *on_finish,
       librados::snap_t snap_id_end = CEPH_NOSNAP) {
     return new MockSnapshotCopyRequest(&mock_src_image_ctx, &mock_dst_image_ctx,
-                                       snap_id_end, m_work_queue, &m_snap_seqs,
-                                       on_finish);
+                                       snap_id_end, false, m_work_queue,
+                                       &m_snap_seqs, on_finish);
   }
 
   int create_snap(librbd::ImageCtx *image_ctx, const std::string &snap_name,

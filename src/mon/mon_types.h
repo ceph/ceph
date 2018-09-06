@@ -73,9 +73,9 @@ struct FeatureMap {
       return;
     }
     auto p = m.find(type);
-    assert(p != m.end());
+    ceph_assert(p != m.end());
     auto q = p->second.find(features);
-    assert(q != p->second.end());
+    ceph_assert(q != p->second.end());
     if (--q->second == 0) {
       p->second.erase(q);
       if (p->second.empty()) {
@@ -100,7 +100,7 @@ struct FeatureMap {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     DECODE_START(1, p);
     decode(m, p);
     DECODE_FINISH(p);
@@ -148,7 +148,7 @@ struct LevelDBStoreStats {
   {}
 
   void dump(Formatter *f) const {
-    assert(f != NULL);
+    ceph_assert(f != NULL);
     f->dump_int("bytes_total", bytes_total);
     f->dump_int("bytes_sst", bytes_sst);
     f->dump_int("bytes_log", bytes_log);
@@ -166,7 +166,7 @@ struct LevelDBStoreStats {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     decode(bytes_total, p);
     decode(bytes_sst, p);
@@ -197,7 +197,7 @@ struct DataStats {
   LevelDBStoreStats store_stats;
 
   void dump(Formatter *f) const {
-    assert(f != NULL);
+    ceph_assert(f != NULL);
     f->dump_int("kb_total", (fs_stats.byte_total/1024));
     f->dump_int("kb_used", (fs_stats.byte_used/1024));
     f->dump_int("kb_avail", (fs_stats.byte_avail/1024));
@@ -218,7 +218,7 @@ struct DataStats {
     encode(store_stats, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     // we moved from having fields in kb to fields in byte
     if (struct_v > 2) {
@@ -258,7 +258,7 @@ struct ScrubResult {
     encode(prefix_keys, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     DECODE_START(1, p);
     decode(prefix_crc, p);
     decode(prefix_keys, p);
@@ -318,8 +318,8 @@ inline const char *ceph_mon_feature_name(uint64_t b)
 
 class mon_feature_t {
 
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   // mon-specific features
   uint64_t features;
@@ -479,7 +479,7 @@ public:
     encode(features, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     DECODE_START(COMPAT_VERSION, p);
     decode(features, p);
     DECODE_FINISH(p);
@@ -494,6 +494,7 @@ namespace ceph {
       constexpr mon_feature_t FEATURE_LUMINOUS(   (1ULL << 1));
       constexpr mon_feature_t FEATURE_MIMIC(      (1ULL << 2));
       constexpr mon_feature_t FEATURE_OSDMAP_PRUNE (1ULL << 3);
+      constexpr mon_feature_t FEATURE_NAUTILUS(    (1ULL << 4));
 
       constexpr mon_feature_t FEATURE_RESERVED(   (1ULL << 63));
       constexpr mon_feature_t FEATURE_NONE(       (0ULL));
@@ -509,6 +510,7 @@ namespace ceph {
 	  FEATURE_LUMINOUS |
 	  FEATURE_MIMIC |
           FEATURE_OSDMAP_PRUNE |
+	  FEATURE_NAUTILUS |
 	  FEATURE_NONE
 	  );
       }
@@ -527,6 +529,7 @@ namespace ceph {
 	  FEATURE_KRAKEN |
 	  FEATURE_LUMINOUS |
 	  FEATURE_MIMIC |
+	  FEATURE_NAUTILUS |
 	  FEATURE_OSDMAP_PRUNE |
 	  FEATURE_NONE
 	  );
@@ -555,6 +558,8 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
     return "mimic";
   } else if (f == FEATURE_OSDMAP_PRUNE) {
     return "osdmap-prune";
+  } else if (f == FEATURE_NAUTILUS) {
+    return "nautilus";
   } else if (f == FEATURE_RESERVED) {
     return "reserved";
   }
@@ -571,6 +576,8 @@ inline mon_feature_t ceph::features::mon::get_feature_by_name(const std::string 
     return FEATURE_MIMIC;
   } else if (n == "osdmap-prune") {
     return FEATURE_OSDMAP_PRUNE;
+  } else if (n == "nautilus") {
+    return FEATURE_NAUTILUS;
   } else if (n == "reserved") {
     return FEATURE_RESERVED;
   }

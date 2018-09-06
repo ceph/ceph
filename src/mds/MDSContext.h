@@ -16,7 +16,12 @@
 #ifndef MDS_CONTEXT_H
 #define MDS_CONTEXT_H
 
+#include <vector>
+#include <deque>
+
 #include "include/Context.h"
+#include "include/elist.h"
+#include "common/ceph_time.h"
 
 class MDSRank;
 
@@ -42,6 +47,14 @@ protected:
 class MDSInternalContextBase : public MDSContext
 {
 public:
+    template<template<typename> class A>
+    using vec_alloc = std::vector<MDSInternalContextBase *, A<MDSInternalContextBase *>>;
+    using vec = vec_alloc<std::allocator>;
+
+    template<template<typename> class A>
+    using que_alloc = std::deque<MDSInternalContextBase *, A<MDSInternalContextBase *>>;
+    using que = que_alloc<std::allocator>;
+
     void complete(int r) override;
 };
 
@@ -56,7 +69,7 @@ protected:
 
 public:
   explicit MDSInternalContext(MDSRank *mds_) : mds(mds_) {
-    assert(mds != NULL);
+    ceph_assert(mds != NULL);
   }
 };
 
@@ -70,15 +83,32 @@ protected:
   MDSRank *mds;
   Context *fin;
   MDSRank *get_mds() override;
+  void finish(int r) override;
 public:
   MDSInternalContextWrapper(MDSRank *m, Context *c) : mds(m), fin(c) {}
-  void finish(int r) override;
 };
 
 class MDSIOContextBase : public MDSContext
 {
 public:
+  MDSIOContextBase(bool track=true);
+  virtual ~MDSIOContextBase();
+  MDSIOContextBase(const MDSIOContextBase&) = delete;
+  MDSIOContextBase& operator=(const MDSIOContextBase&) = delete;
+
   void complete(int r) override;
+
+  virtual void print(ostream& out) const = 0;
+
+  static bool check_ios_in_flight(ceph::coarse_mono_time cutoff,
+				  std::string& slow_count,
+				  ceph::coarse_mono_time& oldest);
+private:
+  ceph::coarse_mono_time created_at;
+  elist<MDSIOContextBase*>::item list_item;
+
+  static elist<MDSIOContextBase*> ctx_list;
+  static ceph::spinlock ctx_list_lock;
 };
 
 /**
@@ -95,6 +125,9 @@ public:
   void complete(int r) final;
   void set_write_pos(uint64_t wp) { write_pos = wp; }
   virtual void pre_finish(int r) {}
+  void print(ostream& out) const override {
+    out << "log_event(" << write_pos << ")";
+  }
 };
 
 /**
@@ -109,7 +142,7 @@ protected:
 
 public:
   explicit MDSIOContext(MDSRank *mds_) : mds(mds_) {
-    assert(mds != NULL);
+    ceph_assert(mds != NULL);
   }
 };
 
@@ -126,6 +159,9 @@ protected:
 public:
   MDSIOContextWrapper(MDSRank *m, Context *c) : mds(m), fin(c) {}
   void finish(int r) override;
+  void print(ostream& out) const override {
+    out << "io_context_wrapper(" << fin << ")";
+  }
 };
 
 /**
@@ -156,7 +192,7 @@ protected:
 public:
   C_IO_Wrapper(MDSRank *mds_, MDSInternalContextBase *wrapped_) :
     MDSIOContext(mds_), async(true), wrapped(wrapped_) {
-    assert(wrapped != NULL);
+    ceph_assert(wrapped != NULL);
   }
 
   ~C_IO_Wrapper() override {
@@ -166,6 +202,9 @@ public:
     }
   }
   void complete(int r) final;
+  void print(ostream& out) const override {
+    out << "io_wrapper(" << wrapped << ")";
+  }
 };
 
 
@@ -189,5 +228,7 @@ protected:
 
 
 typedef C_GatherBuilderBase<MDSInternalContextBase, MDSGather> MDSGatherBuilder;
+
+using MDSContextFactory = ContextFactory<MDSInternalContextBase>;
 
 #endif  // MDS_CONTEXT_H

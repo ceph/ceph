@@ -27,7 +27,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx server " << entity_name << ": "
 
-int CephxServiceHandler::start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps)
+int CephxServiceHandler::start_session(EntityName& name, bufferlist::const_iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps)
 {
   entity_name = name;
 
@@ -42,7 +42,7 @@ int CephxServiceHandler::start_session(EntityName& name, bufferlist::iterator& i
   return CEPH_AUTH_CEPHX;
 }
 
-int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, uint64_t *auid)
+int CephxServiceHandler::handle_request(bufferlist::const_iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps)
 {
   int ret = 0;
 
@@ -110,10 +110,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       info.ticket.init_timestamps(ceph_clock_now(), cct->_conf->auth_mon_ticket_ttl);
       info.ticket.name = entity_name;
       info.ticket.global_id = global_id;
-      info.ticket.auid = eauth.auid;
       info.validity += cct->_conf->auth_mon_ticket_ttl;
-
-      if (auid) *auid = eauth.auid;
 
       key_server->generate_secret(session_key);
 
@@ -153,7 +150,9 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 
       bufferlist tmp_bl;
       CephXServiceTicketInfo auth_ticket_info;
-      if (!cephx_verify_authorizer(cct, key_server, indata, auth_ticket_info, tmp_bl)) {
+      // note: no challenge here.
+      if (!cephx_verify_authorizer(cct, key_server, indata, auth_ticket_info, nullptr,
+				   tmp_bl)) {
         ret = -EPERM;
 	break;
       }

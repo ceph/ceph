@@ -114,7 +114,7 @@ class AsyncConnection : public Connection {
     Message *m = 0;
     if (!out_q.empty()) {
       map<int, list<pair<bufferlist, Message*> > >::reverse_iterator it = out_q.rbegin();
-      assert(!it->second.empty());
+      ceph_assert(!it->second.empty());
       list<pair<bufferlist, Message*> >::iterator p = it->second.begin();
       m = p->second;
       if (bl)
@@ -152,8 +152,8 @@ class AsyncConnection : public Connection {
       : msgr(omsgr), center(c), dispatch_queue(q), conn_id(cid),
         stop_dispatch(false) { }
     ~DelayedDelivery() override {
-      assert(register_time_events.empty());
-      assert(delay_queue.empty());
+      ceph_assert(register_time_events.empty());
+      ceph_assert(delay_queue.empty());
     }
     void set_center(EventCenter *c) { center = c; }
     void do_request(uint64_t id) override;
@@ -183,7 +183,8 @@ class AsyncConnection : public Connection {
   } *delay_state;
 
  public:
-  AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q, Worker *w);
+  AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
+		  Worker *w, bool is_msgr2);
   ~AsyncConnection() override;
   void maybe_start_delay_thread();
 
@@ -194,10 +195,11 @@ class AsyncConnection : public Connection {
   }
 
   // Only call when AsyncConnection first construct
-  void connect(const entity_addr_t& addr, int type) {
+  void connect(const entity_addrvec_t& addrs, int type, entity_addr_t& target) {
     set_peer_type(type);
-    set_peer_addr(addr);
+    set_peer_addrs(addrs);
     policy = msgr->get_policy(type);
+    target_addr = target;
     _connect();
   }
   // Only call when AsyncConnection first construct
@@ -209,6 +211,9 @@ class AsyncConnection : public Connection {
   void mark_disposable() override {
     std::lock_guard<std::mutex> l(lock);
     policy.lossy = true;
+  }
+  entity_addr_t get_peer_socket_addr() const override {
+    return target_addr;
   }
   
  private:
@@ -350,7 +355,9 @@ class AsyncConnection : public Connection {
   bufferlist authorizer_buf;
   ceph_msg_connect_reply connect_reply;
   // Accepting state
+  bool msgr2 = false;
   entity_addr_t socket_addr;
+  entity_addr_t target_addr;  // which of the peer_addrs we're using
   CryptoKey session_key;
   bool replacing;    // when replacing process happened, we will reply connect
                      // side with RETRY tag and accept side will clear replaced
@@ -367,7 +374,8 @@ class AsyncConnection : public Connection {
   uint64_t state_offset;
   Worker *worker;
   EventCenter *center;
-  ceph::shared_ptr<AuthSessionHandler> session_security;
+  std::shared_ptr<AuthSessionHandler> session_security;
+  std::unique_ptr<AuthAuthorizerChallenge> authorizer_challenge; // accept side
 
  public:
   // used by eventcallback

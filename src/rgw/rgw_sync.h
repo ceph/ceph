@@ -43,7 +43,7 @@ struct rgw_mdlog_entry {
     name = le.name;
     timestamp = le.timestamp.to_real_time();
     try {
-      bufferlist::iterator iter = le.data.begin();
+      auto iter = le.data.cbegin();
       decode(log_data, iter);
     } catch (buffer::error& err) {
       return false;
@@ -96,7 +96,7 @@ struct rgw_sync_error_info {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(source_zone, bl);
     decode(error_code, bl);

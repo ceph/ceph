@@ -142,8 +142,7 @@ public:
   void pre_exec() override;
   void execute() override;
 
-  virtual void send_response() override = 0;
-  virtual const string name() override { return "metadata_search"; }
+  const char* name() const override { return "metadata_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_METADATA_SEARCH; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };

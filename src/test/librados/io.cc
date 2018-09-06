@@ -330,7 +330,7 @@ TEST_F(LibRadosIoPP, Checksum) {
   bufferlist csum_bl;
   ASSERT_EQ(0, ioctx.checksum("foo", LIBRADOS_CHECKSUM_TYPE_CRC32C,
 			      init_value_bl, sizeof(buf), 0, 0, &csum_bl));
-  auto csum_bl_it = csum_bl.begin();
+  auto csum_bl_it = csum_bl.cbegin();
   uint32_t csum_count;
   decode(csum_count, csum_bl_it);
   ASSERT_EQ(1U, csum_count);

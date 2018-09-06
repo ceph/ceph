@@ -32,7 +32,7 @@ void pow2_hist_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void pow2_hist_t::decode(bufferlist::iterator& p)
+void pow2_hist_t::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(h, p);

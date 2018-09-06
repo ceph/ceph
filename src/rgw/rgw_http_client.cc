@@ -371,7 +371,7 @@ Mutex& RGWHTTPClient::get_req_lock()
 
 void RGWHTTPClient::_set_write_paused(bool pause)
 {
-  assert(req_data->lock.is_locked());
+  ceph_assert(req_data->lock.is_locked());
   
   RGWHTTPManager *mgr = req_data->mgr;
   if (pause == req_data->write_paused) {
@@ -386,7 +386,7 @@ void RGWHTTPClient::_set_write_paused(bool pause)
 
 void RGWHTTPClient::_set_read_paused(bool pause)
 {
-  assert(req_data->lock.is_locked());
+  ceph_assert(req_data->lock.is_locked());
   
   RGWHTTPManager *mgr = req_data->mgr;
   if (pause == req_data->read_paused) {
@@ -470,7 +470,7 @@ int RGWHTTPClient::get_req_retcode()
  */
 int RGWHTTPClient::init_request(rgw_http_req_data *_req_data, bool send_data_hint)
 {
-  assert(!req_data);
+  ceph_assert(!req_data);
   _req_data->get();
   req_data = _req_data;
 
@@ -493,6 +493,8 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data, bool send_data_hin
   curl_easy_setopt(easy_handle, CURLOPT_WRITEFUNCTION, receive_http_data);
   curl_easy_setopt(easy_handle, CURLOPT_WRITEDATA, (void *)req_data);
   curl_easy_setopt(easy_handle, CURLOPT_ERRORBUFFER, (void *)req_data->error_buf);
+  curl_easy_setopt(easy_handle, CURLOPT_LOW_SPEED_TIME, cct->_conf->rgw_curl_low_speed_time);
+  curl_easy_setopt(easy_handle, CURLOPT_LOW_SPEED_LIMIT, cct->_conf->rgw_curl_low_speed_limit);
   if (h) {
     curl_easy_setopt(easy_handle, CURLOPT_HTTPHEADER, (void *)h);
   }
@@ -985,7 +987,7 @@ int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetSt
 {
   rgw_http_req_data *req_data = client->get_req_data();
 
-  assert(req_data->lock.is_locked());
+  ceph_assert(req_data->lock.is_locked());
 
   /* can only do that if threaded */
   if (!is_started) {
@@ -1149,6 +1151,9 @@ void *RGWHTTPManager::reqs_thread_entry()
         switch (result) {
           case CURLE_OK:
             break;
+          case CURLE_OPERATION_TIMEDOUT:
+            dout(0) << "WARNING: curl operation timed out, network average transfer speed less than " 
+              << cct->_conf->rgw_curl_low_speed_limit << " Bytes per second during " << cct->_conf->rgw_curl_low_speed_time << " seconds." << dendl;
           default:
             dout(20) << "ERROR: msg->data.result=" << result << " req_data->id=" << id << " http_status=" << http_status << dendl;
 	    break;

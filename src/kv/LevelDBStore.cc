@@ -9,8 +9,6 @@
 
 using std::string;
 
-#include "include/memory.h"
-
 #include "common/debug.h"
 #include "common/perf_counters.h"
 
@@ -50,27 +48,27 @@ int LevelDBStore::init(string option_str)
 {
   // init defaults.  caller can override these if they want
   // prior to calling open.
-  options.write_buffer_size = g_conf->leveldb_write_buffer_size;
-  options.cache_size = g_conf->leveldb_cache_size;
-  options.block_size = g_conf->leveldb_block_size;
-  options.bloom_size = g_conf->leveldb_bloom_size;
-  options.compression_enabled = g_conf->leveldb_compression;
-  options.paranoid_checks = g_conf->leveldb_paranoid;
-  options.max_open_files = g_conf->leveldb_max_open_files;
-  options.log_file = g_conf->leveldb_log;
+  options.write_buffer_size = g_conf()->leveldb_write_buffer_size;
+  options.cache_size = g_conf()->leveldb_cache_size;
+  options.block_size = g_conf()->leveldb_block_size;
+  options.bloom_size = g_conf()->leveldb_bloom_size;
+  options.compression_enabled = g_conf()->leveldb_compression;
+  options.paranoid_checks = g_conf()->leveldb_paranoid;
+  options.max_open_files = g_conf()->leveldb_max_open_files;
+  options.log_file = g_conf()->leveldb_log;
   return 0;
 }
 
 int LevelDBStore::open(ostream &out, const vector<ColumnFamily>& cfs)  {
   if (!cfs.empty()) {
-    assert(0 == "Not implemented");
+    ceph_abort_msg("Not implemented");
   }
   return do_open(out, false);
 }
 
 int LevelDBStore::create_and_open(ostream &out, const vector<ColumnFamily>& cfs) {
   if (!cfs.empty()) {
-    assert(0 == "Not implemented");
+    ceph_abort_msg("Not implemented");
   }
   return do_open(out, true);
 }
@@ -95,7 +93,7 @@ int LevelDBStore::load_leveldb_options(bool create_if_missing, leveldb::Options 
     filterpolicy.reset(_filterpolicy);
     ldoptions.filter_policy = filterpolicy.get();
 #else
-    assert(0 == "bloom size set but installed leveldb doesn't support bloom filters");
+    ceph_abort_msg(0 == "bloom size set but installed leveldb doesn't support bloom filters");
 #endif
   }
   if (options.compression_enabled)
@@ -109,7 +107,7 @@ int LevelDBStore::load_leveldb_options(bool create_if_missing, leveldb::Options 
   ldoptions.paranoid_checks = options.paranoid_checks;
   ldoptions.create_if_missing = create_if_missing;
 
-  if (g_conf->leveldb_log_to_ceph_log) {
+  if (g_conf()->leveldb_log_to_ceph_log) {
     ceph_logger = new CephLevelDBLogger(g_ceph_context);
     ldoptions.info_log = ceph_logger;
   }
@@ -151,7 +149,7 @@ int LevelDBStore::do_open(ostream &out, bool create_if_missing)
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 
-  if (g_conf->leveldb_compact_on_mount) {
+  if (g_conf()->leveldb_compact_on_mount) {
     derr << "Compacting leveldb store..." << dendl;
     compact();
     derr << "Finished compacting leveldb store" << dendl;
@@ -325,7 +323,7 @@ int LevelDBStore::get(const string &prefix,
       const string &key,
       bufferlist *out)
 {
-  assert(out && (out->length() == 0));
+  ceph_assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
   int r = 0;
   string value, k;
@@ -394,7 +392,11 @@ void LevelDBStore::compact_thread_entry()
       logger->set(l_leveldb_compact_queue_len, compact_queue.size());
       compact_queue_lock.Unlock();
       logger->inc(l_leveldb_compact_range);
-      compact_range(range.first, range.second);
+      if (range.first.empty() && range.second.empty()) {
+        compact();
+      } else {
+        compact_range(range.first, range.second);
+      }
       compact_queue_lock.Lock();
       continue;
     }

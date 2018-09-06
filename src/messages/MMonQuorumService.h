@@ -16,18 +16,15 @@
 
 #include "msg/Message.h"
 
-struct MMonQuorumService : public Message
-{
-  epoch_t epoch;
-  version_t round;
-
-  MMonQuorumService(int type, int head=1, int compat=1) :
-    Message(type, head, compat),
-    epoch(0),
-    round(0)
-  { }
+class MMonQuorumService : public MessageSubType<MMonQuorumService> {
+public:
+  epoch_t epoch = 0;
+  version_t round = 0;
 
 protected:
+template<typename... Args>
+  MMonQuorumService(Args&&... args) : MessageSubType(std::forward<Args>(args)...) {}
+
   ~MMonQuorumService() override { }
 
 public:
@@ -54,17 +51,17 @@ public:
     encode(round, payload);
   }
 
-  void service_decode(bufferlist::iterator &p) {
+  void service_decode(bufferlist::const_iterator &p) {
     decode(epoch, p);
     decode(round, p);
   }
 
   void encode_payload(uint64_t features) override {
-    assert(0 == "MMonQuorumService message must always be a base class");
+    ceph_abort_msg("MMonQuorumService message must always be a base class");
   }
 
   void decode_payload() override {
-    assert(0 == "MMonQuorumService message must always be a base class");
+    ceph_abort_msg("MMonQuorumService message must always be a base class");
   }
 
   const char *get_type_name() const override { return "quorum_service"; }

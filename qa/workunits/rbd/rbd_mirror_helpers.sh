@@ -65,6 +65,15 @@
 #     ../qa/workunits/rbd/rbd_mirror.sh cleanup
 #
 
+if type xmlstarlet > /dev/null 2>&1; then
+    XMLSTARLET=xmlstarlet
+elif type xml > /dev/null 2>&1; then
+    XMLSTARLET=xml
+else
+    echo "Missing xmlstarlet binary!"
+    exit 1
+fi
+
 RBD_MIRROR_INSTANCES=${RBD_MIRROR_INSTANCES:-2}
 
 CLUSTER1=cluster1
@@ -223,6 +232,7 @@ setup_cluster()
 [client.${MIRROR_USER_ID_PREFIX}${instance}]
     admin socket = ${TEMPDIR}/rbd-mirror.\$cluster-\$name.asok
     pid file = ${TEMPDIR}/rbd-mirror.\$cluster-\$name.pid
+    log file = ${TEMPDIR}/rbd-mirror.${cluster}_daemon.${instance}.log
 EOF
     done
 }
@@ -326,7 +336,6 @@ start_mirror()
     rbd-mirror \
 	--cluster ${cluster} \
         --id ${MIRROR_USER_ID_PREFIX}${instance} \
-	--log-file=${TEMPDIR}/rbd-mirror.${cluster}_daemon.${instance}.log \
 	--rbd-mirror-delete-retry-interval=5 \
 	--rbd-mirror-image-state-check-interval=5 \
 	--rbd-mirror-journal-poll-age=1 \
@@ -397,14 +406,19 @@ admin_daemons()
     local cluster_instance=$1 ; shift
     local cluster="${cluster_instance%:*}"
     local instance="${cluster_instance##*:}"
+    local loop_instance
 
-    if [ "${instance}" != "${cluster_instance}" ]; then
-	admin_daemon "${cluster}:${instance}" $@
-    else
-        for instance in `seq 0 ${LAST_MIRROR_INSTANCE}`; do
+    for s in 0 1 2 4 8 8 8 8 8 8 8 8 16 16; do
+	sleep ${s}
+	if [ "${instance}" != "${cluster_instance}" ]; then
 	    admin_daemon "${cluster}:${instance}" $@ && return 0
-        done
-    fi
+	else
+	    for loop_instance in `seq 0 ${LAST_MIRROR_INSTANCE}`; do
+		admin_daemon "${cluster}:${loop_instance}" $@ && return 0
+	    done
+	fi
+    done
+    return 1
 }
 
 all_admin_daemons()
@@ -412,7 +426,7 @@ all_admin_daemons()
     local cluster=$1 ; shift
 
     for instance in `seq 0 ${LAST_MIRROR_INSTANCE}`; do
-	admin_daemon "${cluster}" $@
+	admin_daemon "${cluster}:${instance}" $@
     done
 }
 
@@ -429,7 +443,7 @@ status()
 	for image_pool in ${POOL} ${PARENT_POOL}
 	do
 	    echo "${cluster} ${image_pool} images"
-	    rbd --cluster ${cluster} -p ${image_pool} ls
+	    rbd --cluster ${cluster} -p ${image_pool} ls -l
 	    echo
 
 	    echo "${cluster} ${image_pool} mirror pool status"
@@ -512,11 +526,7 @@ flush()
        cmd="${cmd} ${pool}/${image}"
     fi
 
-    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16; do
-	sleep ${s}
-	admin_daemons "${cluster}" ${cmd} && return 0
-    done
-    return 1
+    admin_daemons "${cluster}" ${cmd}
 }
 
 test_image_replay_state()
@@ -885,7 +895,8 @@ compare_image_snapshots()
     local rmt_export=${TEMPDIR}/${CLUSTER2}-${pool}-${image}.export
     local loc_export=${TEMPDIR}/${CLUSTER1}-${pool}-${image}.export
 
-    for snap_name in $(rbd --cluster ${CLUSTER1} -p ${pool} snap list ${image}); do
+    for snap_name in $(rbd --cluster ${CLUSTER1} -p ${pool} --format xml \
+                           snap list ${image} | $XMLSTARLET sel -t -v "//snapshot/name"); do
         rm -f ${rmt_export} ${loc_export}
         rbd --cluster ${CLUSTER2} -p ${pool} export ${image}@${snap_name} ${rmt_export}
         rbd --cluster ${CLUSTER1} -p ${pool} export ${image}@${snap_name} ${loc_export}

@@ -18,9 +18,11 @@
 #include "messages/MMonQuorumService.h"
 #include "mon/mon_types.h"
 
-struct MMonHealth : public MMonQuorumService
-{
-  static const int HEAD_VERSION = 1;
+class MMonHealth : public MessageInstance<MMonHealth, MMonQuorumService> {
+public:
+  friend factory;
+
+  static constexpr int HEAD_VERSION = 1;
 
   int service_type = 0;
   int service_op = 0;
@@ -28,7 +30,7 @@ struct MMonHealth : public MMonQuorumService
   // service specific data
   DataStats data_stats;
 
-  MMonHealth() : MMonQuorumService(MSG_MON_HEALTH, HEAD_VERSION) { }
+  MMonHealth() : MessageInstance(MSG_MON_HEALTH, HEAD_VERSION) { }
 
 private:
   ~MMonHealth() override { }
@@ -43,7 +45,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     service_decode(p);
     decode(service_type, p);
     decode(service_op, p);

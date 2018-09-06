@@ -13,6 +13,7 @@
 #include <mutex>
 
 #include "include/Context.h"
+#include "common/ThrottleInterface.h"
 #include "common/Timer.h"
 #include "common/convenience.h"
 #include "common/perf_counters.h"
@@ -25,7 +26,7 @@
  * excessive requests for more of them are delayed, until some slots are put
  * back, so @p get_current() drops below the limit after fulfills the requests.
  */
-class Throttle {
+class Throttle final : public ThrottleInterface {
   CephContext *cct;
   const std::string name;
   PerfCountersRef logger;
@@ -36,7 +37,7 @@ class Throttle {
 
 public:
   Throttle(CephContext *cct, const std::string& n, int64_t m = 0, bool _use_perf = true);
-  ~Throttle();
+  ~Throttle() override;
 
 private:
   void _reset_max(int64_t m);
@@ -87,7 +88,7 @@ public:
    * @param c number of slots to take
    * @returns the total number of taken slots
    */
-  int64_t take(int64_t c = 1);
+  int64_t take(int64_t c = 1) override;
 
   /**
    * get the specified amount of slots from the stock, but will wait if the
@@ -111,7 +112,7 @@ public:
    * @param c number of slots to return
    * @returns number of requests being hold after this
    */
-  int64_t put(int64_t c = 1);
+  int64_t put(int64_t c = 1) override;
    /**
    * reset the zero to the stock
    */
@@ -372,27 +373,39 @@ public:
   		    SafeTimer *timer, Mutex *timer_lock);
   
   ~TokenBucketThrottle();
+
+  template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
+  void add_blocker(uint64_t c, T *handler, I *item, uint64_t flag) {
+    Context *ctx = new FunctionContext([handler, item, flag](int r) {
+      (handler->*MF)(r, item, flag);
+      });
+    m_blockers.emplace_back(c, ctx);
+  }
   
-  template <typename T, typename I, void(T::*MF)(int, I*)>
-  bool get(uint64_t c, T *handler, I *item) {
+  template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
+  bool get(uint64_t c, T *handler, I *item, uint64_t flag) {
     if (0 == m_throttle.max)
       return false;
   
-    bool waited = false;
-  
+    bool wait = false;
+    uint64_t got = 0;
     Mutex::Locker lock(m_lock);
-    uint64_t got = m_throttle.get(c);
-    if (got < c) {
-      // Not enough tokens, add a blocker for it.
-      Context *ctx = new FunctionContext([handler, item](int r) {
-  	(handler->*MF)(r, item);
-        });
-      m_blockers.emplace_back(c - got, ctx);
-      waited = true;
+    if (!m_blockers.empty()) {
+      // Keep the order of requests, add item after previous blocked requests.
+      wait = true;
+    } else {
+      got = m_throttle.get(c);
+      if (got < c) {
+        // Not enough tokens, add a blocker for it.
+        wait = true;
+      }
     }
-    return waited;
+
+    if (wait)
+      add_blocker<T, I, MF>(c - got, handler, item, flag);
+
+    return wait;
   }
-  
   
   void set_max(uint64_t m);
   void set_average(uint64_t avg);

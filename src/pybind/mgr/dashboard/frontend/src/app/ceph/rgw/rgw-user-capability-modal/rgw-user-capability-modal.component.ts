@@ -1,9 +1,11 @@
 import { Component, EventEmitter, Output } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Validators } from '@angular/forms';
 
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal/bs-modal-ref.service';
 
+import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
+import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { RgwUserCapability } from '../models/rgw-user-capability';
 
 @Component({
@@ -12,32 +14,25 @@ import { RgwUserCapability } from '../models/rgw-user-capability';
   styleUrls: ['./rgw-user-capability-modal.component.scss']
 })
 export class RgwUserCapabilityModalComponent {
-
   /**
    * The event that is triggered when the 'Add' or 'Update' button
    * has been pressed.
    */
-  @Output() submitAction = new EventEmitter();
+  @Output()
+  submitAction = new EventEmitter();
 
-  formGroup: FormGroup;
+  formGroup: CdFormGroup;
   editing = true;
   types: string[] = [];
 
-  constructor(private formBuilder: FormBuilder,
-              public bsModalRef: BsModalRef) {
+  constructor(private formBuilder: CdFormBuilder, public bsModalRef: BsModalRef) {
     this.createForm();
   }
 
   createForm() {
     this.formGroup = this.formBuilder.group({
-      'type': [
-        null,
-        [Validators.required]
-      ],
-      'perm': [
-        null,
-        [Validators.required]
-      ]
+      type: [null, [Validators.required]],
+      perm: [null, [Validators.required]]
     });
   }
 
@@ -56,8 +51,8 @@ export class RgwUserCapabilityModalComponent {
    */
   setValues(type: string, perm: string) {
     this.formGroup.setValue({
-      'type': type,
-      'perm': perm
+      type: type,
+      perm: perm
     });
   }
 

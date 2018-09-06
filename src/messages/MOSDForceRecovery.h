@@ -31,21 +31,23 @@ static const int OFR_BACKFILL = 2;
 // cancel priority boost, requeue if necessary
 static const int OFR_CANCEL = 4;
 
-struct MOSDForceRecovery : public Message {
+class MOSDForceRecovery : public MessageInstance<MOSDForceRecovery> {
+public:
+  friend factory;
 
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 2;
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 2;
 
   uuid_d fsid;
   vector<spg_t> forced_pgs;
   uint8_t options = 0;
 
-  MOSDForceRecovery() : Message(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDForceRecovery() : MessageInstance(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDForceRecovery(const uuid_d& f, char opts) :
-    Message(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), options(opts) {}
   MOSDForceRecovery(const uuid_d& f, vector<spg_t>& pgs, char opts) :
-    Message(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), forced_pgs(pgs), options(opts) {}
 private:
   ~MOSDForceRecovery() {}
@@ -88,7 +90,7 @@ public:
     encode(options, payload);
   }
   void decode_payload() {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     if (header.version == 1) {
       vector<pg_t> pgs;
       decode(fsid, p);

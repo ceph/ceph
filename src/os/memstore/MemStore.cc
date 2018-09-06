@@ -24,7 +24,6 @@
 #include "include/types.h"
 #include "include/stringify.h"
 #include "include/unordered_map.h"
-#include "include/memory.h"
 #include "common/errno.h"
 #include "MemStore.h"
 #include "include/compat.h"
@@ -69,7 +68,7 @@ int MemStore::_save()
     dout(20) << __func__ << " coll " << p->first << " " << p->second << dendl;
     collections.insert(p->first);
     bufferlist bl;
-    assert(p->second);
+    ceph_assert(p->second);
     p->second->encode(bl);
     string fn = path + "/" + stringify(p->first);
     int r = bl.write_file(fn.c_str());
@@ -147,7 +146,7 @@ int MemStore::_load()
     return r;
 
   set<coll_t> collections;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   decode(collections, p);
 
   for (set<coll_t>::iterator q = collections.begin();
@@ -159,7 +158,7 @@ int MemStore::_load()
     if (r < 0)
       return r;
     CollectionRef c(new Collection(cct, *q));
-    bufferlist::iterator p = cbl.begin();
+    auto p = cbl.cbegin();
     c->decode(p);
     coll_map[*q] = c;
     used_bytes += c->used_bytes();
@@ -173,17 +172,17 @@ int MemStore::_load()
 void MemStore::set_fsid(uuid_d u)
 {
   int r = write_meta("fsid", stringify(u));
-  assert(r >= 0);
+  ceph_assert(r >= 0);
 }
 
 uuid_d MemStore::get_fsid()
 {
   string fsid_str;
   int r = read_meta("fsid", &fsid_str);
-  assert(r >= 0);
+  ceph_assert(r >= 0);
   uuid_d uuid;
   bool b = uuid.parse(fsid_str.c_str());
-  assert(b);
+  ceph_assert(b);
   return uuid;
 }
 
@@ -802,7 +801,7 @@ void MemStore::_do_transaction(Transaction& t)
         uint32_t type = op->hint_type;
         bufferlist hint;
         i.decode_bl(hint);
-        bufferlist::iterator hiter = hint.begin();
+        auto hiter = hint.cbegin();
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;
@@ -841,7 +840,7 @@ void MemStore::_do_transaction(Transaction& t)
       break;
 
     case Transaction::OP_COLL_MOVE:
-      assert(0 == "deprecated");
+      ceph_abort_msg("deprecated");
       break;
 
     case Transaction::OP_COLL_MOVE_RENAME:
@@ -869,19 +868,19 @@ void MemStore::_do_transaction(Transaction& t)
 
     case Transaction::OP_COLL_SETATTR:
       {
-	assert(0 == "not implemented");
+	ceph_abort_msg("not implemented");
       }
       break;
 
     case Transaction::OP_COLL_RMATTR:
       {
-	assert(0 == "not implemented");
+	ceph_abort_msg("not implemented");
       }
       break;
 
     case Transaction::OP_COLL_RENAME:
       {
-	assert(0 == "not implemented");
+	ceph_abort_msg("not implemented");
       }
       break;
 
@@ -930,7 +929,7 @@ void MemStore::_do_transaction(Transaction& t)
       }
       break;
     case Transaction::OP_SPLIT_COLLECTION:
-      assert(0 == "deprecated");
+      ceph_abort_msg("deprecated");
       break;
     case Transaction::OP_SPLIT_COLLECTION2:
       {
@@ -993,7 +992,7 @@ void MemStore::_do_transaction(Transaction& t)
 	f.close_section();
 	f.flush(*_dout);
 	*_dout << dendl;
-	assert(0 == "unexpected error");
+	ceph_abort_msg("unexpected error");
       }
     }
 
@@ -1018,7 +1017,7 @@ int MemStore::_write(const coll_t& cid, const ghobject_t& oid,
 {
   dout(10) << __func__ << " " << cid << " " << oid << " "
 	   << offset << "~" << len << dendl;
-  assert(len == bl.length());
+  ceph_assert(len == bl.length());
 
   CollectionRef c = get_collection(cid);
   if (!c)
@@ -1214,7 +1213,7 @@ int MemStore::_omap_setkeys(const coll_t& cid, const ghobject_t &oid,
   if (!o)
     return -ENOENT;
   std::lock_guard<std::mutex> lock(o->omap_mutex);
-  bufferlist::iterator p = aset_bl.begin();
+  auto p = aset_bl.cbegin();
   __u32 num;
   decode(num, p);
   while (num--) {
@@ -1237,7 +1236,7 @@ int MemStore::_omap_rmkeys(const coll_t& cid, const ghobject_t &oid,
   if (!o)
     return -ENOENT;
   std::lock_guard<std::mutex> lock(o->omap_mutex);
-  bufferlist::iterator p = keys_bl.begin();
+  auto p = keys_bl.cbegin();
   __u32 num;
   decode(num, p);
   while (num--) {
@@ -1291,7 +1290,7 @@ int MemStore::_create_collection(const coll_t& cid, int bits)
   if (!result.second)
     return -EEXIST;
   auto p = new_coll_map.find(cid);
-  assert(p != new_coll_map.end());
+  ceph_assert(p != new_coll_map.end());
   result.first->second = p->second;
   result.first->second->bits = bits;
   new_coll_map.erase(p);
@@ -1351,7 +1350,7 @@ int MemStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& ol
     return -ENOENT;
 
   // note: c and oc may be the same
-  assert(&(*c) == &(*oc));
+  ceph_assert(&(*c) == &(*oc));
   c->lock.get_write();
 
   int r = -EEXIST;
@@ -1401,7 +1400,7 @@ int MemStore::_split_collection(const coll_t& cid, uint32_t bits, uint32_t match
   }
 
   sc->bits = bits;
-  assert(dc->bits == (int)bits);
+  ceph_assert(dc->bits == (int)bits);
 
   return 0;
 }
@@ -1424,7 +1423,7 @@ struct BufferlistObject : public MemStore::Object {
     encode_base(bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) override {
+  void decode(bufferlist::const_iterator& p) override {
     DECODE_START(1, p);
     decode(data, p);
     decode_base(p);
@@ -1533,7 +1532,7 @@ struct MemStore::PageSetObject : public Object {
     encode_base(bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) override {
+  void decode(bufferlist::const_iterator& p) override {
     DECODE_START(1, p);
     decode(data_len, p);
     data.decode(p);

@@ -66,7 +66,7 @@ public:
     return desc;
   }
 };
-typedef ceph::shared_ptr<PGPeeringEvent> PGPeeringEventRef;
+typedef std::shared_ptr<PGPeeringEvent> PGPeeringEventRef;
 
 struct MInfoRec : boost::statechart::event< MInfoRec > {
   pg_shard_t from;

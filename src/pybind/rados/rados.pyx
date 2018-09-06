@@ -130,6 +130,7 @@ cdef extern from "rados/librados.h" nogil:
     int rados_create_with_context(rados_t *cluster, rados_config_t cct)
     int rados_connect(rados_t cluster)
     void rados_shutdown(rados_t cluster)
+    uint64_t rados_get_instance_id(rados_t cluster)
     int rados_conf_read_file(rados_t cluster, const char *path)
     int rados_conf_parse_argv_remainder(rados_t cluster, int argc, const char **argv, const char **remargv)
     int rados_conf_parse_env(rados_t cluster, const char *var)
@@ -140,9 +141,7 @@ cdef extern from "rados/librados.h" nogil:
     int64_t rados_pool_lookup(rados_t cluster, const char *pool_name)
     int rados_pool_reverse_lookup(rados_t cluster, int64_t id, char *buf, size_t maxlen)
     int rados_pool_create(rados_t cluster, const char *pool_name)
-    int rados_pool_create_with_auid(rados_t cluster, const char *pool_name, uint64_t auid)
     int rados_pool_create_with_crush_rule(rados_t cluster, const char *pool_name, uint8_t crush_rule_num)
-    int rados_pool_create_with_all(rados_t cluster, const char *pool_name, uint64_t auid, uint8_t crush_rule_num)
     int rados_pool_get_base_tier(rados_t cluster, int64_t pool, int64_t *base_tier)
     int rados_pool_list(rados_t cluster, char *buf, size_t len)
     int rados_pool_delete(rados_t cluster, const char *pool_name)
@@ -200,7 +199,6 @@ cdef extern from "rados/librados.h" nogil:
     int rados_ioctx_create(rados_t cluster, const char *pool_name, rados_ioctx_t *ioctx)
     int rados_ioctx_create2(rados_t cluster, int64_t pool_id, rados_ioctx_t *ioctx)
     void rados_ioctx_destroy(rados_ioctx_t io)
-    int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid)
     void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key)
     void rados_ioctx_set_namespace(rados_ioctx_t io, const char * nspace)
 
@@ -234,6 +232,17 @@ cdef extern from "rados/librados.h" nogil:
     void rados_ioctx_snap_set_read(rados_ioctx_t io, rados_snap_t snap)
     int rados_ioctx_snap_list(rados_ioctx_t io, rados_snap_t * snaps, int maxlen)
     int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id, time_t * t)
+
+    int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io,
+                                            rados_snap_t *snapid)
+    int rados_ioctx_selfmanaged_snap_remove(rados_ioctx_t io,
+                                            rados_snap_t snapid)
+    int rados_ioctx_selfmanaged_snap_set_write_ctx(rados_ioctx_t io,
+                                                   rados_snap_t snap_seq,
+                                                   rados_snap_t *snap,
+                                                   int num_snaps)
+    int rados_ioctx_selfmanaged_snap_rollback(rados_ioctx_t io, const char *oid,
+                                              rados_snap_t snapid)
 
     int rados_lock_exclusive(rados_ioctx_t io, const char * oid, const char * name,
                              const char * cookie, const char * desc,
@@ -282,6 +291,7 @@ cdef extern from "rados/librados.h" nogil:
     void rados_write_op_create(rados_write_op_t write_op, int exclusive, const char *category)
     void rados_write_op_append(rados_write_op_t write_op, const char *buffer, size_t len)
     void rados_write_op_write_full(rados_write_op_t write_op, const char *buffer, size_t len)
+    void rados_write_op_assert_version(rados_write_op_t write_op, uint64_t ver)
     void rados_write_op_write(rados_write_op_t write_op, const char *buffer, size_t len, uint64_t offset)
     void rados_write_op_remove(rados_write_op_t write_op)
     void rados_write_op_truncate(rados_write_op_t write_op, uint64_t offset)
@@ -882,6 +892,15 @@ Rados object in state %s." % self.state)
             raise make_ex(ret, "error connecting to the cluster")
         self.state = "connected"
 
+    def get_instance_id(self):
+        """
+        Get a global id for current instance
+        """
+        self.require_state("connected")
+        with nogil:
+            ret = rados_get_instance_id(self.cluster)
+        return ret;
+
     def get_cluster_stats(self):
         """
         Read usage info about the cluster
@@ -1002,19 +1021,15 @@ Rados object in state %s." % self.state)
         finally:
             free(name)
 
-    @requires(('pool_name', str_type), ('auid', opt(int)), ('crush_rule', opt(int)))
-    def create_pool(self, pool_name, auid=None, crush_rule=None):
+    @requires(('pool_name', str_type), ('crush_rule', opt(int)))
+    def create_pool(self, pool_name, crush_rule=None):
         """
         Create a pool:
-        - with default settings: if auid=None and crush_rule=None
-        - owned by a specific auid: auid given and crush_rule=None
-        - with a specific CRUSH rule: if auid=None and crush_rule given
-        - with a specific CRUSH rule and auid: if auid and crush_rule given
+        - with default settings: if crush_rule=None
+        - with a specific CRUSH rule: crush_rule given
 
         :param pool_name: name of the pool to create
         :type pool_name: str
-        :param auid: the id of the owner of the new pool
-        :type auid: int
         :param crush_rule: rule to use for placement in the new pool
         :type crush_rule: int
 
@@ -1026,24 +1041,14 @@ Rados object in state %s." % self.state)
         cdef:
             char *_pool_name = pool_name
             uint8_t _crush_rule
-            uint64_t _auid
 
-        if auid is None and crush_rule is None:
+        if crush_rule is None:
             with nogil:
                 ret = rados_pool_create(self.cluster, _pool_name)
-        elif auid is None:
+        else:
             _crush_rule = crush_rule
             with nogil:
                 ret = rados_pool_create_with_crush_rule(self.cluster, _pool_name, _crush_rule)
-        elif crush_rule is None:
-            _auid = auid
-            with nogil:
-                ret = rados_pool_create_with_auid(self.cluster, _pool_name, _auid)
-        else:
-            _auid = auid
-            _crush_rule = crush_rule
-            with nogil:
-                ret = rados_pool_create_with_all(self.cluster, _pool_name, _auid, _crush_rule)
         if ret < 0:
             raise make_ex(ret, "error creating pool '%s'" % pool_name)
 
@@ -1999,6 +2004,19 @@ cdef class WriteOp(object):
         with nogil:
             rados_write_op_write(self.write_op, _to_write, length, _offset)
 
+    @requires(('version', int))
+    def assert_version(self, version):
+        """
+        Check if object's version is the expected one.
+        :param version: expected version of the object
+        :param type: int
+        """
+        cdef:
+            uint64_t _version = version
+
+        with nogil:
+            rados_write_op_assert_version(self.write_op, _version)
+
     @requires(('offset', int), ('length', int))
     def zero(self, offset, length):
         """
@@ -2508,26 +2526,6 @@ cdef class Ioctx(object):
         """
         if self.state != "open":
             raise IoctxStateError("The pool is %s" % self.state)
-
-    def change_auid(self, auid):
-        """
-        Attempt to change an io context's associated auid "owner."
-
-        Requires that you have write permission on both the current and new
-        auid.
-
-        :raises: :class:`Error`
-        """
-        self.require_ioctx_open()
-
-        cdef:
-            uint64_t _auid = auid
-
-        with nogil:
-            ret = rados_ioctx_pool_set_auid(self.io, _auid)
-        if ret < 0:
-            raise make_ex(ret, "error changing auid of '%s' to %d"
-                          % (self.name, auid))
 
     @requires(('loc_key', str_type))
     def set_locator_key(self, loc_key):
@@ -3182,6 +3180,101 @@ returned %d, but should return zero on success." % (self.name, ret))
         if ret != 0:
             raise make_ex(ret, "Failed to rollback %s" % oid)
 
+    def create_self_managed_snap(self):
+        """
+        Creates a self-managed snapshot
+
+        :returns: snap id on success
+
+        :raises: :class:`Error`
+        """
+        self.require_ioctx_open()
+        cdef:
+            rados_snap_t _snap_id
+        with nogil:
+            ret = rados_ioctx_selfmanaged_snap_create(self.io, &_snap_id)
+        if ret != 0:
+            raise make_ex(ret, "Failed to create self-managed snapshot")
+        return int(_snap_id)
+
+    @requires(('snap_id', int))
+    def remove_self_managed_snap(self, snap_id):
+        """
+        Removes a self-managed snapshot
+
+        :param snap_id: the name of the snapshot
+        :type snap_id: int
+
+        :raises: :class:`TypeError`
+        :raises: :class:`Error`
+        """
+        self.require_ioctx_open()
+        cdef:
+            rados_snap_t _snap_id = snap_id
+        with nogil:
+            ret = rados_ioctx_selfmanaged_snap_remove(self.io, _snap_id)
+        if ret != 0:
+            raise make_ex(ret, "Failed to remove self-managed snapshot")
+
+    def set_self_managed_snap_write(self, snaps):
+        """
+        Updates the write context to the specified self-managed
+        snapshot ids.
+
+        :param snaps: all associated self-managed snapshot ids
+        :type snaps: list
+
+        :raises: :class:`TypeError`
+        :raises: :class:`Error`
+        """
+        self.require_ioctx_open()
+        sorted_snaps = []
+        snap_seq = 0
+        if snaps:
+            sorted_snaps = sorted([int(x) for x in snaps], reverse=True)
+            snap_seq = sorted_snaps[0]
+
+        cdef:
+            rados_snap_t _snap_seq = snap_seq
+            rados_snap_t *_snaps = NULL
+            int _num_snaps = len(sorted_snaps)
+        try:
+            _snaps = <rados_snap_t *>malloc(_num_snaps * sizeof(rados_snap_t))
+            for i in range(len(sorted_snaps)):
+                _snaps[i] = sorted_snaps[i]
+            with nogil:
+                ret = rados_ioctx_selfmanaged_snap_set_write_ctx(self.io,
+                                                                 _snap_seq,
+                                                                 _snaps,
+                                                                 _num_snaps)
+            if ret != 0:
+                raise make_ex(ret, "Failed to update snapshot write context")
+        finally:
+            free(_snaps)
+
+    @requires(('oid', str_type), ('snap_id', int))
+    def rollback_self_managed_snap(self, oid, snap_id):
+        """
+        Rolls an specific object back to a self-managed snapshot revision
+
+        :param oid: the name of the object
+        :type oid: str
+        :param snap_id: the name of the snapshot
+        :type snap_id: int
+
+        :raises: :class:`TypeError`
+        :raises: :class:`Error`
+        """
+        self.require_ioctx_open()
+        oid = cstr(oid, 'oid')
+        cdef:
+            char *_oid = oid
+            rados_snap_t _snap_id = snap_id
+        with nogil:
+            ret = rados_ioctx_selfmanaged_snap_rollback(self.io, _oid, _snap_id)
+        if ret != 0:
+            raise make_ex(ret, "Failed to rollback %s" % oid)
+
     def get_last_version(self):
         """
         Return the version of the last object read or written to.
@@ -3405,14 +3498,13 @@ returned %d, but should return zero on success." % (self.name, ret))
             ReadOp _read_op = read_op
             rados_omap_iter_t iter_addr = NULL
             int _max_return = max_return
-            int prval = 0
 
         with nogil:
             rados_read_op_omap_get_vals2(_read_op.read_op, _start_after, _filter_prefix,
-                                         _max_return, &iter_addr, NULL, &prval)
+                                         _max_return, &iter_addr, NULL, NULL)
         it = OmapIterator(self)
         it.ctx = iter_addr
-        return it, int(prval)
+        return it, 0   # 0 is meaningless; there for backward-compat
 
     @requires(('read_op', ReadOp), ('start_after', str_type), ('max_return', int))
     def get_omap_keys(self, read_op, start_after, max_return):
@@ -3432,14 +3524,13 @@ returned %d, but should return zero on success." % (self.name, ret))
             ReadOp _read_op = read_op
             rados_omap_iter_t iter_addr = NULL
             int _max_return = max_return
-            int prval = 0
 
         with nogil:
             rados_read_op_omap_get_keys2(_read_op.read_op, _start_after,
-                                         _max_return, &iter_addr, NULL, &prval)
+                                         _max_return, &iter_addr, NULL, NULL)
         it = OmapIterator(self)
         it.ctx = iter_addr
-        return it, int(prval)
+        return it, 0   # 0 is meaningless; there for backward-compat
 
     @requires(('read_op', ReadOp), ('keys', tuple))
     def get_omap_vals_by_keys(self, read_op, keys):
@@ -3457,16 +3548,15 @@ returned %d, but should return zero on success." % (self.name, ret))
             rados_omap_iter_t iter_addr
             char **_keys = to_bytes_array(keys)
             size_t key_num = len(keys)
-            int prval = 0
 
         try:
             with nogil:
                 rados_read_op_omap_get_vals_by_keys(_read_op.read_op,
                                                     <const char**>_keys,
-                                                    key_num, &iter_addr,  &prval)
+                                                    key_num, &iter_addr, NULL)
             it = OmapIterator(self)
             it.ctx = iter_addr
-            return it, int(prval)
+            return it, 0   # 0 is meaningless; there for backward-compat
         finally:
             free(_keys)
 

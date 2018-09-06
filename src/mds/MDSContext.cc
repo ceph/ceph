@@ -25,8 +25,8 @@ void MDSInternalContextBase::complete(int r) {
   MDSRank *mds = get_mds();
 
   dout(10) << "MDSInternalContextBase::complete: " << typeid(*this).name() << dendl;
-  assert(mds != NULL);
-  assert(mds->mds_lock.is_locked_by_me());
+  ceph_assert(mds != NULL);
+  ceph_assert(mds->mds_lock.is_locked_by_me());
   MDSContext::complete(r);
 }
 
@@ -45,12 +45,64 @@ void MDSInternalContextWrapper::finish(int r)
   fin->complete(r);
 }
 
+elist<MDSIOContextBase*> MDSIOContextBase::ctx_list(member_offset(MDSIOContextBase, list_item));
+ceph::spinlock MDSIOContextBase::ctx_list_lock;
+
+MDSIOContextBase::MDSIOContextBase(bool track)
+{
+  created_at = ceph::coarse_mono_clock::now();
+  if (track) {
+    ctx_list_lock.lock();
+    ctx_list.push_back(&list_item);
+    ctx_list_lock.unlock();
+  }
+}
+
+MDSIOContextBase::~MDSIOContextBase()
+{
+  ctx_list_lock.lock();
+  list_item.remove_myself();
+  ctx_list_lock.unlock();
+}
+
+bool MDSIOContextBase::check_ios_in_flight(ceph::coarse_mono_time cutoff,
+					   std::string& slow_count,
+					   ceph::coarse_mono_time& oldest)
+{
+  static const unsigned MAX_COUNT = 100;
+  unsigned slow = 0;
+
+  ctx_list_lock.lock();
+  for (elist<MDSIOContextBase*>::iterator p = ctx_list.begin(); !p.end(); ++p) {
+    MDSIOContextBase *c = *p;
+    if (c->created_at >= cutoff)
+      break;
+    ++slow;
+    if (slow > MAX_COUNT)
+      break;
+    if (slow == 1)
+      oldest = c->created_at;
+  }
+  ctx_list_lock.unlock();
+
+  if (slow > 0) {
+    if (slow > MAX_COUNT)
+      slow_count = std::to_string(MAX_COUNT) + "+";
+    else
+      slow_count = std::to_string(slow);
+    return true;
+  } else {
+    return false;
+  }
+}
+
 void MDSIOContextBase::complete(int r) {
   MDSRank *mds = get_mds();
 
   dout(10) << "MDSIOContextBase::complete: " << typeid(*this).name() << dendl;
-  assert(mds != NULL);
+  ceph_assert(mds != NULL);
   Mutex::Locker l(mds->mds_lock);
+
   if (mds->is_daemon_stopping()) {
     dout(4) << "MDSIOContextBase::complete: dropping for stopping "
             << typeid(*this).name() << dendl;

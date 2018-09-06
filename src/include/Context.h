@@ -24,7 +24,6 @@
 #include <memory>
 
 #include "include/assert.h"
-#include "include/memory.h"
 
 #define mydout(cct, v) lgeneric_subdout(cct, context, v)
 
@@ -119,7 +118,7 @@ struct RunOnDelete {
       to_run->complete(0);
   }
 };
-typedef ceph::shared_ptr<RunOnDelete> RunOnDeleteRef;
+typedef std::shared_ptr<RunOnDelete> RunOnDeleteRef;
 
 template <typename T>
 struct LambdaContext : public Context {
@@ -150,42 +149,18 @@ GenContextURef<T> make_gen_lambda_context(F &&f) {
 /*
  * finish and destroy a list of Contexts
  */
-template<class A>
-inline void finish_contexts(CephContext *cct, std::list<A*>& finished, 
-                            int result = 0)
+template<class C>
+inline void finish_contexts(CephContext *cct, C& finished, int result = 0)
 {
   if (finished.empty())
     return;
 
-  list<A*> ls;
-  ls.swap(finished); // swap out of place to avoid weird loops
-
-  if (cct)
-    mydout(cct, 10) << ls.size() << " contexts to finish with " << result << dendl;
-  typename std::list<A*>::iterator it;
-  for (it = ls.begin(); it != ls.end(); it++) {
-    A *c = *it;
-    if (cct)
-      mydout(cct,10) << "---- " << c << dendl;
-    c->complete(result);
-  }
-}
-
-inline void finish_contexts(CephContext *cct, std::vector<Context*>& finished, 
-                            int result = 0)
-{
-  if (finished.empty())
-    return;
-
-  vector<Context*> ls;
+  C ls;
   ls.swap(finished); // swap out of place to avoid weird loops
 
   if (cct)
     mydout(cct,10) << ls.size() << " contexts to finish with " << result << dendl;
-  for (std::vector<Context*>::iterator it = ls.begin(); 
-       it != ls.end(); 
-       it++) {
-    Context *c = *it;
+  for (Context* c : ls) {
     if (cct)
       mydout(cct,10) << "---- " << c << dendl;
     c->complete(result);
@@ -221,11 +196,11 @@ struct C_Lock : public Context {
  * ContextType must be an ancestor class of ContextInstanceType, or the same class.
  * ContextInstanceType must be default-constructable.
  */
-template <class ContextType, class ContextInstanceType>
+template <class ContextType, class ContextInstanceType, class Container = std::list<ContextType *>>
 class C_ContextsBase : public ContextInstanceType {
 public:
   CephContext *cct;
-  std::list<ContextType*> contexts;
+  Container contexts;
 
   C_ContextsBase(CephContext *cct_)
     : cct(cct_)
@@ -239,23 +214,14 @@ public:
   void add(ContextType* c) {
     contexts.push_back(c);
   }
-  void take(std::list<ContextType*>& ls) {
-    contexts.splice(contexts.end(), ls);
-  }
-  bool sync_complete(int r) override {
-    auto p = contexts.begin();
-    while (p != contexts.end()) {
-      if ((*p)->sync_complete(r)) {
-	p = contexts.erase(p);
-      } else {
-	++p;
-      }
+  void take(Container& ls) {
+    Container c;
+    c.swap(ls);
+    if constexpr (std::is_same_v<Container, std::list<ContextType *>>) {
+      contexts.splice(contexts.end(), c);
+    } else {
+      contexts.insert(contexts.end(), c.begin(), c.end());
     }
-    if (contexts.empty()) {
-      delete this;
-      return true;
-    }
-    return false;
   }
   void complete(int r) override {
     // Neuter any ContextInstanceType custom complete(), because although
@@ -267,7 +233,8 @@ public:
   }
   bool empty() { return contexts.empty(); }
 
-  static ContextType *list_to_context(list<ContextType *> &cs) {
+  template<class C>
+  static ContextType *list_to_context(C& cs) {
     if (cs.size() == 0) {
       return 0;
     } else if (cs.size() == 1) {
@@ -309,7 +276,7 @@ private:
   void sub_finish(ContextType* sub, int r) {
     lock.Lock();
 #ifdef DEBUG_GATHER
-    assert(waitfor.count(sub));
+    ceph_assert(waitfor.count(sub));
     waitfor.erase(sub);
 #endif
     --sub_existing_count;
@@ -371,12 +338,12 @@ public:
   }
   void set_finisher(ContextType *onfinish_) {
     Mutex::Locker l(lock);
-    assert(!onfinish);
+    ceph_assert(!onfinish);
     onfinish = onfinish_;
   }
   void activate() {
     lock.Lock();
-    assert(activated == false);
+    ceph_assert(activated == false);
     activated = true;
     if (sub_existing_count != 0) {
       lock.Unlock();
@@ -387,7 +354,7 @@ public:
   }
   ContextType *new_sub() {
     Mutex::Locker l(lock);
-    assert(activated == false);
+    ceph_assert(activated == false);
     sub_created_count++;
     sub_existing_count++;
     ContextType *s = new C_GatherSub(this);
@@ -458,7 +425,7 @@ public:
   }
   ~C_GatherBuilderBase() {
     if (c_gather) {
-      assert(activated); // Don't forget to activate your C_Gather!
+      ceph_assert(activated); // Don't forget to activate your C_Gather!
     }
     else {
       delete finisher;
@@ -473,7 +440,7 @@ public:
   void activate() {
     if (!c_gather)
       return;
-    assert(finisher != NULL);
+    ceph_assert(finisher != NULL);
     activated = true;
     c_gather->activate();
   }
@@ -489,13 +456,13 @@ public:
     return (c_gather != NULL);
   }
   int num_subs_created() {
-    assert(!activated);
+    ceph_assert(!activated);
     if (c_gather == NULL)
       return 0;
     return c_gather->get_sub_created_count();
   }
   int num_subs_remaining() {
-    assert(!activated);
+    ceph_assert(!activated);
     if (c_gather == NULL)
       return 0;
     return c_gather->get_sub_existing_count();
@@ -523,6 +490,13 @@ public:
   }
 private:
   boost::function<void(int)> m_callback;
+};
+
+template <class ContextType>
+class ContextFactory {
+public:
+  virtual ~ContextFactory() {}
+  virtual ContextType *build() = 0;
 };
 
 #undef mydout

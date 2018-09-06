@@ -17,6 +17,7 @@
 
 #include <chrono>
 #include <iostream>
+#include <string>
 #include <sys/time.h>
 
 #include "include/assert.h"
@@ -279,6 +280,14 @@ namespace ceph {
 #endif
 	return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
       }
+
+      static bool is_zero(const time_point& t) {
+        return (t == time_point::min());
+      }
+
+      static time_point zero() {
+        return time_point::min();
+      }
     };
 
     // So that our subtractions produce negative spans rather than
@@ -468,6 +477,8 @@ inline timespan to_timespan(signedspan z) {
   ceph_assert(z >= signedspan::zero());
   return std::chrono::duration_cast<timespan>(z);
 }
+
+std::string timespan_str(timespan t);
 
 // detects presence of Clock::to_timespec() and from_timespec()
 template <typename Clock, typename = std::void_t<>>

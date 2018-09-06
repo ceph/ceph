@@ -244,7 +244,7 @@ class interval_set {
 
   void intersection_size_asym(const interval_set &s, const interval_set &l) {
     typename decltype(m)::const_iterator ps = s.m.begin(), pl;
-    assert(ps != s.m.end());
+    ceph_assert(ps != s.m.end());
     T offset = ps->first;
     bool first = true;
     typename decltype(m)::iterator mi = m.begin();
@@ -280,7 +280,7 @@ class interval_set {
 
       T start = std::max<T>(ps->first, pl->first);
       T en = std::min<T>(ps->first + ps->second, offset);
-      assert(en > start);
+      ceph_assert(en > start);
       typename decltype(m)::value_type i{start, en - start};
       mi = m.insert(mi, i);
       _size += i.second;
@@ -340,7 +340,7 @@ class interval_set {
   void encode(bufferlist::contiguous_appender& p) const {
     denc(m, p);
   }
-  void decode(bufferptr::iterator& p) {
+  void decode(bufferptr::const_iterator& p) {
     denc(m, p);
     _size = 0;
     for (const auto& i : m) {
@@ -358,7 +358,7 @@ class interval_set {
   void encode_nohead(bufferlist::contiguous_appender& p) const {
     denc_traits<Map>::encode_nohead(m, p);
   }
-  void decode_nohead(int n, bufferptr::iterator& p) {
+  void decode_nohead(int n, bufferptr::const_iterator& p) {
     denc_traits<Map>::decode_nohead(n, m, p);
     _size = 0;
     for (const auto& i : m) {
@@ -376,7 +376,7 @@ class interval_set {
     if (p == m.end()) return false;
     if (p->first > i) return false;
     if (p->first+p->second <= i) return false;
-    assert(p->first <= i && p->first+p->second > i);
+    ceph_assert(p->first <= i && p->first+p->second > i);
     if (pstart)
       *pstart = p->first;
     if (plen)
@@ -388,7 +388,7 @@ class interval_set {
     if (p == m.end()) return false;
     if (p->first > start) return false;
     if (p->first+p->second <= start) return false;
-    assert(p->first <= start && p->first+p->second > start);
+    ceph_assert(p->first <= start && p->first+p->second > start);
     if (p->first+p->second < start+len) return false;
     return true;
   }
@@ -406,12 +406,12 @@ class interval_set {
     return m.empty();
   }
   T range_start() const {
-    assert(!empty());
+    ceph_assert(!empty());
     typename Map::const_iterator p = m.begin();
     return p->first;
   }
   T range_end() const {
-    assert(!empty());
+    ceph_assert(!empty());
     typename Map::const_iterator p = m.end();
     p--;
     return p->first+p->second;
@@ -419,20 +419,20 @@ class interval_set {
 
   // interval start after p (where p not in set)
   bool starts_after(T i) const {
-    assert(!contains(i));
+    ceph_assert(!contains(i));
     typename Map::const_iterator p = find_inc(i);
     if (p == m.end()) return false;
     return true;
   }
   T start_after(T i) const {
-    assert(!contains(i));
+    ceph_assert(!contains(i));
     typename Map::const_iterator p = find_inc(i);
     return p->first;
   }
 
   // interval end that contains start
   T end_after(T start) const {
-    assert(contains(start));
+    ceph_assert(contains(start));
     typename Map::const_iterator p = find_inc(start);
     return p->first+p->second;
   }
@@ -443,7 +443,7 @@ class interval_set {
 
   void insert(T start, T len, T *pstart=0, T *plen=0) {
     //cout << "insert " << start << "~" << len << endl;
-    assert(len > 0);
+    ceph_assert(len > 0);
     _size += len;
     typename Map::iterator p = find_adj_m(start);
     if (p == m.end()) {
@@ -486,7 +486,7 @@ class interval_set {
           m.erase(p);
           m[start] = len + psecond;  // append to front
         } else {
-          assert(p->first > start+len);
+          ceph_assert(p->first > start+len);
 	  if (pstart)
 	    *pstart = start;
 	  if (plen)
@@ -504,7 +504,7 @@ class interval_set {
   
   void erase(iterator &i) {
     _size -= i.get_len();
-    assert(_size >= 0);
+    ceph_assert(_size >= 0);
     m.erase(i._iter);
   }
 
@@ -517,13 +517,13 @@ class interval_set {
     typename Map::iterator p = find_inc_m(start);
 
     _size -= len;
-    assert(_size >= 0);
+    ceph_assert(_size >= 0);
 
-    assert(p != m.end());
-    assert(p->first <= start);
+    ceph_assert(p != m.end());
+    ceph_assert(p->first <= start);
 
     T before = start - p->first;
-    assert(p->second >= before+len);
+    ceph_assert(p->second >= before+len);
     T after = p->second - before - len;
     if (before) {
       if (claim && claim(p->first, before)) {
@@ -560,8 +560,8 @@ class interval_set {
 
 
   void intersection_of(const interval_set &a, const interval_set &b) {
-    assert(&a != this);
-    assert(&b != this);
+    ceph_assert(&a != this);
+    ceph_assert(&b != this);
     clear();
 
     const interval_set *s, *l;
@@ -610,7 +610,7 @@ class interval_set {
 
       T start = std::max(pa->first, pb->first);
       T en = std::min(pa->first+pa->second, pb->first+pb->second);
-      assert(en > start);
+      ceph_assert(en > start);
       typename decltype(m)::value_type i{start, en - start};
       mi = m.insert(mi, i);
       _size += i.second;
@@ -627,8 +627,8 @@ class interval_set {
   }
 
   void union_of(const interval_set &a, const interval_set &b) {
-    assert(&a != this);
-    assert(&b != this);
+    ceph_assert(&a != this);
+    ceph_assert(&b != this);
     clear();
     
     //cout << "union_of" << endl;
@@ -744,7 +744,7 @@ struct denc_traits<interval_set<T,Map>> {
 		     bufferlist::contiguous_appender& p) {
     v.encode(p);
   }
-  static void decode(interval_set<T,Map>& v, bufferptr::iterator& p) {
+  static void decode(interval_set<T,Map>& v, bufferptr::const_iterator& p) {
     v.decode(p);
   }
   template<typename U=T>
@@ -757,7 +757,7 @@ struct denc_traits<interval_set<T,Map>> {
     v.encode_nohead(p);
   }
   static void decode_nohead(size_t n, interval_set<T,Map>& v,
-			    bufferptr::iterator& p) {
+			    bufferptr::const_iterator& p) {
     v.decode_nohead(n, p);
   }
 };

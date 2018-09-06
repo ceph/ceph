@@ -9,9 +9,7 @@
 Synopsis
 ========
 
-| **rados** [ -m *monaddr* ] [ mkpool | rmpool *foo* ] [ -p | --pool
-  *pool* ] [ -s | --snap *snap* ] [ -i *infile* ] [ -o *outfile* ]
-  *command* ...
+| **rados** [ *options* ] [ *command* ]
 
 
 Description
@@ -74,12 +72,6 @@ Global commands
   Show utilization statistics, including disk usage (bytes) and object
   counts, over the entire system and broken down by pool.
 
-:command:`mkpool` *foo*
-  Create a pool with name foo.
-
-:command:`rmpool` *foo* [ *foo* --yes-i-really-really-mean-it ]
-  Delete the pool foo (and all its data).
-
 :command:`list-inconsistent-pg` *pool*
   List inconsistent PGs in given pool.
 
@@ -88,6 +80,7 @@ Global commands
 
 :command:`list-inconsistent-snapset` *pgid*
   List inconsistent snapsets in given PG.
+
 
 Pool specific commands
 ======================
@@ -184,6 +177,13 @@ Pool specific commands
 
 :command:`setomapheader` *name* *value*
   Set the value of the object map header of object name.
+
+:command:`export` *filename*
+  Serialize pool contents to a file or standard output.\n"
+
+:command:`import` [--dry-run] [--no-overwrite] < filename | - >
+  Load pool contents from a file or standard input
+
 
 Examples
 ========

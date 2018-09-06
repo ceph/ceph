@@ -16,7 +16,7 @@ void inode_backpointer_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void inode_backpointer_t::decode(bufferlist::iterator& bl)
+void inode_backpointer_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(dirino, bl);
@@ -25,7 +25,7 @@ void inode_backpointer_t::decode(bufferlist::iterator& bl)
   DECODE_FINISH(bl);
 }
 
-void inode_backpointer_t::decode_old(bufferlist::iterator& bl)
+void inode_backpointer_t::decode_old(bufferlist::const_iterator& bl)
 {
   using ceph::decode;
   decode(dirino, bl);
@@ -64,7 +64,7 @@ void inode_backtrace_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void inode_backtrace_t::decode(bufferlist::iterator& bl)
+void inode_backtrace_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
   if (struct_v < 3)

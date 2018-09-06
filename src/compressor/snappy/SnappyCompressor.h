@@ -22,11 +22,11 @@
 #include "include/buffer.h"
 
 class CEPH_BUFFER_API BufferlistSource : public snappy::Source {
-  bufferlist::iterator pb;
+  bufferlist::const_iterator pb;
   size_t remaining;
 
  public:
-  explicit BufferlistSource(bufferlist::iterator _pb, size_t _input_len)
+  explicit BufferlistSource(bufferlist::const_iterator _pb, size_t _input_len)
     : pb(_pb),
       remaining(_input_len) {
     remaining = std::min(remaining, (size_t)pb.get_remaining());
@@ -45,12 +45,12 @@ class CEPH_BUFFER_API BufferlistSource : public snappy::Source {
     return data;
   }
   void Skip(size_t n) override {
-    assert(n <= remaining);
+    ceph_assert(n <= remaining);
     pb.advance(n);
     remaining -= n;
   }
 
-  bufferlist::iterator get_pos() const {
+  bufferlist::const_iterator get_pos() const {
     return pb;
   }
 };
@@ -85,11 +85,11 @@ class SnappyCompressor : public Compressor {
     if (qat_enabled)
       return qat_accel.decompress(src, dst);
 #endif
-    bufferlist::iterator i = const_cast<bufferlist&>(src).begin();
+    auto i = src.begin();
     return decompress(i, src.length(), dst);
   }
 
-  int decompress(bufferlist::iterator &p,
+  int decompress(bufferlist::const_iterator &p,
 		 size_t compressed_len,
 		 bufferlist &dst) override {
 #ifdef HAVE_QATZIP

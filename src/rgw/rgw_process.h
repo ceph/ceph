@@ -98,7 +98,7 @@ protected:
     void _dump_queue();
 
     void _clear() override {
-      assert(process->m_req_queue.empty());
+      ceph_assert(process->m_req_queue.empty());
     }
   } req_wq;
 
@@ -117,8 +117,8 @@ public:
       conf(conf),
       sock_fd(-1),
       uri_prefix(pe->uri_prefix),
-      req_wq(this, g_conf->rgw_op_thread_timeout,
-	     g_conf->rgw_op_thread_suicide_timeout, &m_tp) {
+      req_wq(this, g_conf()->rgw_op_thread_timeout,
+	     g_conf()->rgw_op_thread_suicide_timeout, &m_tp) {
   }
   
   virtual ~RGWProcess() = default;

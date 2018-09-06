@@ -15,9 +15,6 @@ on each machine that will be a iSCSI gateway:
 -  python kmod
 -  python pyudev
 -  python gobject
--  python kmod
--  python pyudev
--  python gobject
 -  python urwid
 -  python pyparsing
 -  python rados
@@ -126,7 +123,7 @@ on each machine that will be a iSCSI gateway:
 
        > git clone https://github.com/ceph/ceph-iscsi-config.git
        > cd ceph-iscsi-config
-       > python setup.py install
+       > python setup.py install --install-scripts=/usr/bin
        > cp usr/lib/systemd/system/rbd-target-gw.service /lib/systemd/system
 
    Enable and start the daemon:
@@ -145,7 +142,7 @@ on each machine that will be a iSCSI gateway:
 
        > git clone https://github.com/ceph/ceph-iscsi-cli.git
        > cd ceph-iscsi-cli
-       > python setup.py install
+       > python setup.py install --install-scripts=/usr/bin
        > cp usr/lib/systemd/system/rbd-target-api.service /lib/systemd/system
 
 

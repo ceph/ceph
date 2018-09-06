@@ -25,7 +25,7 @@ void kstore_cnode_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void kstore_cnode_t::decode(bufferlist::iterator& p)
+void kstore_cnode_t::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(bits, p);
@@ -61,7 +61,7 @@ void kstore_onode_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void kstore_onode_t::decode(bufferlist::iterator& p)
+void kstore_onode_t::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(nid, p);

@@ -12,11 +12,17 @@
  *
  */
 
+#include <sys/utsname.h>
+
 #include "include/compat.h"
 #include "pthread.h"
 
 #include "common/BackTrace.h"
 #include "common/debug.h"
+#include "common/safe_io.h"
+#include "common/version.h"
+
+#include "include/uuid.h"
 #include "global/pidfile.h"
 #include "global/signal_handler.h"
 
@@ -88,6 +94,49 @@ static void reraise_fatal(int signum)
   exit(1);
 }
 
+
+// /etc/os-release looks like
+//
+//   NAME=Fedora
+//   VERSION="28 (Server Edition)"
+//   ID=fedora
+//   VERSION_ID=28
+//
+// or
+//
+//   NAME="Ubuntu"
+//   VERSION="16.04.3 LTS (Xenial Xerus)"
+//   ID=ubuntu
+//   ID_LIKE=debian
+//
+// get_from_os_release("FOO=bar\nTHIS=\"that\"\n", "FOO=", ...) will
+// write "bar\0" to out buffer, which is assumed to be as large as the input
+// file.
+static int parse_from_os_release(
+  const char *file, const char *key,
+  char *out)
+{
+  const char *p = strstr(file, key);
+  if (!p) {
+    return -1;
+  }
+  const char *start = p + strlen(key);
+  const char *end = strchr(start, '\n');
+  if (!end) {
+    return -1;
+  }
+  if (*start == '"' && *(end - 1) == '"') {
+    ++start;
+    --end;
+  }
+  if (start >= end) {
+    return -1;
+  }
+  memcpy(out, start, end - start);
+  out[end - start] = 0;
+  return 0;
+}
+
 static void handle_fatal_signal(int signum)
 {
   // This code may itself trigger a SIGSEGV if the heap is corrupt. In that
@@ -114,10 +163,108 @@ static void handle_fatal_signal(int signum)
   // TODO: don't use an ostringstream here. It could call malloc(), which we
   // don't want inside a signal handler.
   // Also fix the backtrace code not to allocate memory.
-  BackTrace bt(0);
+  BackTrace bt(1);
   ostringstream oss;
   bt.print(oss);
   dout_emergency(oss.str());
+
+  char base[PATH_MAX] = { 0 };
+  if (g_ceph_context &&
+      g_ceph_context->_conf->crash_dir.size()) {
+    // -- crash dump --
+    // id
+    ostringstream idss;
+    utime_t now = ceph_clock_now();
+    now.gmtime(idss);
+    uuid_d uuid;
+    uuid.generate_random();
+    idss << "_" << uuid;
+    string id = idss.str();
+    std::replace(id.begin(), id.end(), ' ', '_');
+
+    snprintf(base, sizeof(base), "%s/%s",
+	     g_ceph_context->_conf->crash_dir.c_str(),
+	     id.c_str());
+    int r = ::mkdir(base, 0700);
+    if (r >= 0) {
+      char fn[PATH_MAX*2];
+      snprintf(fn, sizeof(fn)-1, "%s/meta", base);
+      int fd = ::open(fn, O_CREAT|O_WRONLY, 0600);
+      if (fd >= 0) {
+	JSONFormatter jf(true);
+	jf.open_object_section("crash");
+	jf.dump_string("crash_id", id);
+	now.gmtime(jf.dump_stream("timestamp"));
+	jf.dump_string("entity_name", g_ceph_context->_conf->name.to_str());
+	jf.dump_string("ceph_version", ceph_version_to_str());
+
+	struct utsname u;
+	r = uname(&u);
+	if (r >= 0) {
+	  jf.dump_string("utsname_hostname", u.nodename);
+	  jf.dump_string("utsname_sysname", u.sysname);
+	  jf.dump_string("utsname_release", u.release);
+	  jf.dump_string("utsname_version", u.version);
+	  jf.dump_string("utsname_machine", u.machine);
+	}
+#if defined(__linux__)
+	// os-release
+	int in = ::open("/etc/os-release", O_RDONLY);
+	if (in >= 0) {
+	  char buf[4096];
+	  r = safe_read(in, buf, sizeof(buf)-1);
+	  if (r >= 0) {
+	    buf[r] = 0;
+	    char v[4096];
+	    if (parse_from_os_release(buf, "NAME=", v) >= 0) {
+	      jf.dump_string("os_name", v);
+	    }
+	    if (parse_from_os_release(buf, "ID=", v) >= 0) {
+	      jf.dump_string("os_id", v);
+	    }
+	    if (parse_from_os_release(buf, "VERSION_ID=", v) >= 0) {
+	      jf.dump_string("os_version_id", v);
+	    }
+	    if (parse_from_os_release(buf, "VERSION=", v) >= 0) {
+	      jf.dump_string("os_version", v);
+	    }
+	  }
+	  ::close(in);
+	}
+#endif
+
+	// assert?
+	if (g_assert_condition) {
+	  jf.dump_string("assert_condition", g_assert_condition);
+	}
+	if (g_assert_func) {
+	  jf.dump_string("assert_func", g_assert_func);
+	}
+	if (g_assert_file) {
+	  jf.dump_string("assert_file", g_assert_file);
+	}
+	if (g_assert_line) {
+	  jf.dump_unsigned("assert_line", g_assert_line);
+	}
+	if (g_assert_thread_name[0]) {
+	  jf.dump_string("assert_thread_name", g_assert_thread_name);
+	}
+
+	// backtrace
+	bt.dump(&jf);
+
+	jf.close_section();
+	ostringstream oss;
+	jf.flush(oss);
+	string s = oss.str();
+	r = safe_write(fd, s.c_str(), s.size());
+	(void)r;
+	::close(fd);
+      }
+      snprintf(fn, sizeof(fn)-1, "%s/done", base);
+      ::creat(fn, 0444);
+    }
+  }
 
   // avoid recursion back into logging code if that is where
   // we got the SEGV.
@@ -133,6 +280,14 @@ static void handle_fatal_signal(int signum)
 	   << dendl;
 
     g_ceph_context->_log->dump_recent();
+
+    if (base[0]) {
+      char fn[PATH_MAX*2];
+      snprintf(fn, sizeof(fn)-1, "%s/log", base);
+      g_ceph_context->_log->set_log_file(fn);
+      g_ceph_context->_log->reopen_log_file();
+      g_ceph_context->_log->dump_recent();
+    }
   }
 
   reraise_fatal(signum);
@@ -252,9 +407,9 @@ struct SignalHandler : public Thread {
   {
     // create signal pipe
     int r = pipe(pipefd);
-    assert(r == 0);
+    ceph_assert(r == 0);
     r = fcntl(pipefd[0], F_SETFL, O_NONBLOCK);
-    assert(r == 0);
+    ceph_assert(r == 0);
 
     // create thread
     create("signal_handler");
@@ -266,7 +421,7 @@ struct SignalHandler : public Thread {
 
   void signal_thread() {
     int r = write(pipefd[1], "\0", 1);
-    assert(r == 1);
+    ceph_assert(r == 1);
   }
 
   void shutdown() {
@@ -354,9 +509,9 @@ struct SignalHandler : public Thread {
     // defined.  We can do this without the lock because we will never
     // have the signal handler defined without the handlers entry also
     // being filled in.
-    assert(handlers[signum]);
+    ceph_assert(handlers[signum]);
     int r = write(handlers[signum]->pipefd[1], " ", 1);
-    assert(r == 1);
+    ceph_assert(r == 1);
   }
 
   void queue_signal_info(int signum, siginfo_t *siginfo, void * content) {
@@ -364,10 +519,10 @@ struct SignalHandler : public Thread {
     // defined.  We can do this without the lock because we will never
     // have the signal handler defined without the handlers entry also
     // being filled in.
-    assert(handlers[signum]);
+    ceph_assert(handlers[signum]);
     memcpy(&handlers[signum]->info_t, siginfo, sizeof(siginfo_t));
     int r = write(handlers[signum]->pipefd[1], " ", 1);
-    assert(r == 1);
+    ceph_assert(r == 1);
   }
 
   void register_handler(int signum, signal_handler_t handler, bool oneshot);
@@ -384,14 +539,14 @@ void SignalHandler::register_handler(int signum, signal_handler_t handler, bool 
 {
   int r;
 
-  assert(signum >= 0 && signum < 32);
+  ceph_assert(signum >= 0 && signum < 32);
 
   safe_handler *h = new safe_handler;
 
   r = pipe(h->pipefd);
-  assert(r == 0);
+  ceph_assert(r == 0);
   r = fcntl(h->pipefd[0], F_SETFL, O_NONBLOCK);
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   h->handler = handler;
   lock.Lock();
@@ -410,15 +565,15 @@ void SignalHandler::register_handler(int signum, signal_handler_t handler, bool 
   sigfillset(&act.sa_mask);  // mask all signals in the handler
   act.sa_flags = SA_SIGINFO | (oneshot ? SA_RESETHAND : 0);
   int ret = sigaction(signum, &act, &oldact);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 }
 
 void SignalHandler::unregister_handler(int signum, signal_handler_t handler)
 {
-  assert(signum >= 0 && signum < 32);
+  ceph_assert(signum >= 0 && signum < 32);
   safe_handler *h = handlers[signum];
-  assert(h);
-  assert(h->handler == handler);
+  ceph_assert(h);
+  ceph_assert(h->handler == handler);
 
   // restore to default
   signal(signum, SIG_DFL);
@@ -439,38 +594,38 @@ void SignalHandler::unregister_handler(int signum, signal_handler_t handler)
 
 void init_async_signal_handler()
 {
-  assert(!g_signal_handler);
+  ceph_assert(!g_signal_handler);
   g_signal_handler = new SignalHandler;
 }
 
 void shutdown_async_signal_handler()
 {
-  assert(g_signal_handler);
+  ceph_assert(g_signal_handler);
   delete g_signal_handler;
   g_signal_handler = NULL;
 }
 
 void queue_async_signal(int signum)
 {
-  assert(g_signal_handler);
+  ceph_assert(g_signal_handler);
   g_signal_handler->queue_signal(signum);
 }
 
 void register_async_signal_handler(int signum, signal_handler_t handler)
 {
-  assert(g_signal_handler);
+  ceph_assert(g_signal_handler);
   g_signal_handler->register_handler(signum, handler, false);
 }
 
 void register_async_signal_handler_oneshot(int signum, signal_handler_t handler)
 {
-  assert(g_signal_handler);
+  ceph_assert(g_signal_handler);
   g_signal_handler->register_handler(signum, handler, true);
 }
 
 void unregister_async_signal_handler(int signum, signal_handler_t handler)
 {
-  assert(g_signal_handler);
+  ceph_assert(g_signal_handler);
   g_signal_handler->unregister_handler(signum, handler);
 }
 

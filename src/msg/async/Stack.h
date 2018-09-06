@@ -47,6 +47,8 @@ struct SocketOptions {
 /// \cond internal
 class ServerSocketImpl {
  public:
+  int addr_type = 0;
+  ServerSocketImpl(int t) : addr_type(t) {}
   virtual ~ServerSocketImpl() {}
   virtual int accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) = 0;
   virtual void abort_accept() = 0;
@@ -228,8 +230,8 @@ class Worker {
 
     plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
     plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
-    plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes", NULL, 0, unit_t(BYTES));
-    plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network sent bytes", NULL, 0, unit_t(BYTES));
+    plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes", NULL, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network sent bytes", NULL, 0, unit_t(UNIT_BYTES));
     plb.add_u64_counter(l_msgr_active_connections, "msgr_active_connections", "Active connection number");
     plb.add_u64_counter(l_msgr_created_connections, "msgr_created_connections", "Created connection number");
 
@@ -258,7 +260,7 @@ class Worker {
   PerfCounters *get_perf_counter() { return perf_logger; }
   void release_worker() {
     int oldref = references.fetch_sub(1);
-    assert(oldref > 0);
+    ceph_assert(oldref > 0);
   }
   void init_done() {
     init_lock.lock();

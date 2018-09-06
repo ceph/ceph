@@ -66,6 +66,28 @@ void validate_path(CephContext *cct, const string& path, bool bluefs)
   }
 }
 
+const char* find_device_path(
+  int id,
+  CephContext *cct,
+  const vector<string>& devs)
+{
+  for (auto& i : devs) {
+    bluestore_bdev_label_t label;
+    int r = BlueStore::_read_bdev_label(cct, i, &label);
+    if (r < 0) {
+      cerr << "unable to read label for " << i << ": "
+	   << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if ((id == BlueFS::BDEV_SLOW && label.description == "main") ||
+        (id == BlueFS::BDEV_DB && label.description == "bluefs db") ||
+        (id == BlueFS::BDEV_WAL && label.description == "bluefs wal")) {
+      return i.c_str();
+    }
+  }
+  return nullptr;
+}
+
 void add_devices(
   BlueFS *fs,
   CephContext *cct,
@@ -112,26 +134,6 @@ void add_devices(
   }
 }
 
-void log_dump(
-  CephContext *cct,
-  const string& path,
-  const vector<string>& devs)
-{
-  validate_path(cct, path, true);
-  BlueFS *fs = new BlueFS(cct);
-  
-  add_devices(fs, cct, devs);
-
-  int r = fs->log_dump(cct, path, devs);
-  if (r < 0) {
-    cerr << "log_dump failed" << ": "
-         << cpp_strerror(r) << std::endl;
-    exit(EXIT_FAILURE);
-  }
-
-  delete fs;
-}
-
 BlueFS *open_bluefs(
   CephContext *cct,
   const string& path,
@@ -149,6 +151,22 @@ BlueFS *open_bluefs(
     exit(EXIT_FAILURE);
   }
   return fs;
+}
+
+void log_dump(
+  CephContext *cct,
+  const string& path,
+  const vector<string>& devs)
+{
+  BlueFS* fs = open_bluefs(cct, path, devs);
+  int r = fs->log_dump();
+  if (r < 0) {
+    cerr << "log_dump failed" << ": "
+         << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  delete fs;
 }
 
 void inferring_bluefs_devices(vector<string>& devs, std::string& path)
@@ -292,9 +310,10 @@ int main(int argc, char **argv)
   for (auto& i : ceph_option_strings) {
     args.push_back(i.c_str());
   }
-
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+
   common_init_finish(cct.get());
 
   if (action == "fsck" ||
@@ -310,8 +329,12 @@ int main(int argc, char **argv)
     if (r < 0) {
       cerr << "error from fsck: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
+    } else if (r > 0) {
+      cerr << action << " found " << r << " error(s)" << std::endl;
+      exit(EXIT_FAILURE);
+    } else {
+      cout << action << " success" << std::endl;
     }
-    cout << action << " success" << std::endl;
   }
   else if (action == "prime-osd-dir") {
     bluestore_bdev_label_t label;
@@ -331,7 +354,6 @@ int main(int argc, char **argv)
     for (auto kk : {
 	"whoami",
 	  "osd_key",
-	  "path_block", "path_block.db", "path_block.wal",
 	  "ceph_fsid",
 	  "fsid",
 	  "type",
@@ -349,49 +371,20 @@ int main(int argc, char **argv)
 	v += label.meta["whoami"];
 	v += "]\nkey = " + i->second;
       }
-      if (k.find("path_") == 0) {
-	p = path + "/" + k.substr(5);
-	int r = ::symlink(v.c_str(), p.c_str());
-	if (r < 0 && errno == EEXIST) {
-	  struct stat st;
-	  r = ::stat(p.c_str(), &st);
-	  if (r == 0 && S_ISLNK(st.st_mode)) {
-	    char target[PATH_MAX];
-	    r = ::readlink(p.c_str(), target, sizeof(target));
-	    if (r > 0) {
-	      if (v == target) {
-		r = 0;  // already matches our target
-	      } else {
-		::unlink(p.c_str());
-		r = ::symlink(v.c_str(), p.c_str());
-	      }
-	    } else {
-	      cerr << "error reading existing link at " << p << ": " << cpp_strerror(errno)
-		   << std::endl;
-	    }
-	  }
-	}
-	if (r < 0) {
-	  cerr << "error symlinking " << p << ": " << cpp_strerror(errno)
-	       << std::endl;
-	  exit(EXIT_FAILURE);
-	}
-      } else {
-	v += "\n";
-	int fd = ::open(p.c_str(), O_CREAT|O_TRUNC|O_WRONLY, 0600);
-	if (fd < 0) {
-	  cerr << "error writing " << p << ": " << cpp_strerror(errno)
-	       << std::endl;
-	  exit(EXIT_FAILURE);
-	}
-	int r = safe_write(fd, v.c_str(), v.size());
-	if (r < 0) {
-	  cerr << "error writing to " << p << ": " << cpp_strerror(errno)
-	       << std::endl;
-	  exit(EXIT_FAILURE);
-	}
-	::close(fd);
+      v += "\n";
+      int fd = ::open(p.c_str(), O_CREAT|O_TRUNC|O_WRONLY, 0600);
+      if (fd < 0) {
+	cerr << "error writing " << p << ": " << cpp_strerror(errno)
+	     << std::endl;
+	exit(EXIT_FAILURE);
       }
+      int r = safe_write(fd, v.c_str(), v.size());
+      if (r < 0) {
+	cerr << "error writing to " << p << ": " << cpp_strerror(errno)
+	     << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      ::close(fd);
     }
   }
   else if (action == "show-label") {
@@ -420,7 +413,22 @@ int main(int argc, char **argv)
 	   << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
-    label.meta[key] = value;
+    if (key == "size") {
+      label.size = strtoull(value.c_str(), nullptr, 10);
+    } else if (key =="osd_uuid") {
+      label.osd_uuid.parse(value.c_str());
+    } else if (key =="btime") {
+      uint64_t epoch;
+      uint64_t nsec;
+      int r = utime_t::parse_date(value.c_str(), &epoch, &nsec);
+      if (r == 0) {
+	label.btime = utime_t(epoch, nsec);
+      }
+    } else if (key =="description") {
+      label.description = value;
+    } else {
+      label.meta[key] = value;
+    }
     r = BlueStore::_write_bdev_label(cct.get(), devs.front(), label);
     if (r < 0) {
       cerr << "unable to write label for " << devs.front() << ": "
@@ -467,6 +475,27 @@ int main(int argc, char **argv)
 	cout << "expanding dev " << devid << " from 0x" << std::hex
 	     << end << " to 0x" << size << std::dec << std::endl;
 	fs->add_block_extent(devid, end, size-end);
+	const char* path = find_device_path(devid, cct.get(), devs);
+	if (path == nullptr) {
+	  cerr << "Can't find device path for dev " << devid << std::endl;
+	  continue;
+	}
+	bluestore_bdev_label_t label;
+	int r = BlueStore::_read_bdev_label(cct.get(), path, &label);
+	if (r < 0) {
+	  cerr << "unable to read label for " << path << ": "
+		<< cpp_strerror(r) << std::endl;
+	  continue;
+	}
+        label.size = size;
+	r = BlueStore::_write_bdev_label(cct.get(), path, label);
+	if (r < 0) {
+	  cerr << "unable to write label for " << path << ": "
+		<< cpp_strerror(r) << std::endl;
+	  continue;
+	}
+	cout << "dev " << devid << " size label updated to "
+	      << size << std::endl;
       }
     }
     delete fs;

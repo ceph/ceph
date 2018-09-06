@@ -11,8 +11,8 @@ from cherrypy._cptools import HandlerWrapperTool
 from cherrypy.test import helper
 
 from .. import logger
-from ..controllers.auth import Auth
 from ..controllers import json_error_page, generate_controller_routes
+from ..services.auth import AuthManagerTool
 from ..services.exception import dashboard_exception_handler
 from ..tools import SessionExpireAtBrowserCloseTool
 
@@ -23,15 +23,22 @@ class ControllerTestCase(helper.CPWebCase):
         if not isinstance(ctrl_classes, list):
             ctrl_classes = [ctrl_classes]
         mapper = cherrypy.dispatch.RoutesDispatcher()
+        endpoint_list = []
         for ctrl in ctrl_classes:
-            generate_controller_routes(ctrl, mapper, base_url)
+            inst = ctrl()
+            for endpoint in ctrl.endpoints():
+                endpoint.inst = inst
+                endpoint_list.append(endpoint)
+        endpoint_list = sorted(endpoint_list, key=lambda e: e.url)
+        for endpoint in endpoint_list:
+            generate_controller_routes(endpoint, mapper, base_url)
         if base_url == '':
             base_url = '/'
         cherrypy.tree.mount(None, config={
             base_url: {'request.dispatch': mapper}})
 
     def __init__(self, *args, **kwargs):
-        cherrypy.tools.authenticate = cherrypy.Tool('before_handler', Auth.check_auth)
+        cherrypy.tools.authenticate = AuthManagerTool()
         cherrypy.tools.session_expire_at_browser_close = SessionExpireAtBrowserCloseTool()
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
                                                                         priority=31)
@@ -91,7 +98,7 @@ class ControllerTestCase(helper.CPWebCase):
                     logger.info("task (%s, %s) is still executing", self.task_name,
                                 self.task_metadata)
                     time.sleep(1)
-                    self.tc._get('/task?name={}'.format(self.task_name))
+                    self.tc._get('/api/task?name={}'.format(self.task_name))
                     res = self.tc.jsonBody()
                     for task in res['finished_tasks']:
                         if task['metadata'] == self.task_metadata:
@@ -147,4 +154,11 @@ class ControllerTestCase(helper.CPWebCase):
             if msg is None:
                 msg = 'expected body:\n%r\n\nactual body:\n%r' % (
                     data, json_body)
+            self._handlewebError(msg)
+
+    def assertInJsonBody(self, data, msg=None):
+        json_body = self.jsonBody()
+        if data not in json_body:
+            if msg is None:
+                msg = 'expected %r to be in %r' % (data, json_body)
             self._handlewebError(msg)

@@ -32,7 +32,7 @@ int execute_init(const po::variables_map &vm,
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  int r = utils::init(pool_name, &rados, &io_ctx);
+  int r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }

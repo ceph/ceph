@@ -72,6 +72,7 @@ void CreateRequest<I>::get_pool_id() {
     complete(r);
     return;
   }
+  data_ioctx.set_namespace(m_ioctx.get_namespace());
 
   m_pool_id = data_ioctx.get_id();
   create_journal();

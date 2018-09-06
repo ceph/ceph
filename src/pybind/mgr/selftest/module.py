@@ -60,6 +60,16 @@ class Module(MgrModule):
                 "desc": "Peek at a configuration value (localized variant)",
                 "perm": "rw"
             },
+            {
+                "cmd": "mgr self-test remote",
+                "desc": "Test inter-module calls",
+                "perm": "rw"
+            },
+            {
+                "cmd": "mgr self-test module name=module,type=CephString",
+                "desc": "Run another module's self_test() method",
+                "perm": "rw"
+            },
             ]
 
     def __init__(self, *args, **kwargs):
@@ -67,7 +77,7 @@ class Module(MgrModule):
         self._event = threading.Event()
         self._workload = None
 
-    def handle_command(self, command):
+    def handle_command(self, inbuf, command):
         if command['prefix'] == 'mgr self-test run':
             self._self_test()
             return 0, '', 'Self-test succeeded'
@@ -93,6 +103,16 @@ class Module(MgrModule):
             return 0, str(self.get_config(command['key'])), ''
         elif command['prefix'] == 'mgr self-test config get_localized':
             return 0, str(self.get_localized_config(command['key'])), ''
+        elif command['prefix'] == 'mgr self-test remote':
+            self._test_remote_calls()
+            return 0, '', 'Successfully called'
+        elif command['prefix'] == 'mgr self-test module':
+            try:
+                r = self.remote(command['module'], "self_test")
+            except RuntimeError as e:
+                return -1, '', "Test failed: {0}".format(e.message)
+            else:
+                return 0, str(r), "Self-test OK"
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
@@ -134,7 +154,9 @@ class Module(MgrModule):
                 "mgr_map"
                 ]
         for obj in objects:
-            self.get(obj)
+            assert self.get(obj) is not None
+
+        assert self.get("__OBJ_DNE__") is None
 
         servers = self.list_servers()
         for server in servers:
@@ -163,11 +185,8 @@ class Module(MgrModule):
         self.set_store("testkey", "testvalue")
         assert self.get_store("testkey") == "testvalue"
 
-        self.set_store_json("testjsonkey", {"testblob": 2})
-        assert self.get_store_json("testjsonkey") == {"testblob": 2}
-
         assert sorted(self.get_store_prefix("test").keys()) == sorted(
-                list({"testkey", "testjsonkey"} | existing_keys))
+                list({"testkey"} | existing_keys))
 
 
     def _self_test_perf_counters(self):
@@ -206,6 +225,39 @@ class Module(MgrModule):
         #inc.set_crush_compat_weight_set_weights
 
         self.log.info("Finished self-test procedure.")
+
+    def _test_remote_calls(self):
+        # Test making valid call
+        self.remote("influx", "handle_command", "", {"prefix": "influx self-test"})
+
+        # Test calling module that exists but isn't enabled
+        mgr_map = self.get("mgr_map")
+        all_modules = [m['name'] for m in mgr_map['available_modules']]
+        disabled_modules = set(all_modules) - set(mgr_map['modules'])
+        disabled_module = list(disabled_modules)[0]
+        try:
+            self.remote(disabled_module, "handle_command", {"prefix": "influx self-test"})
+        except ImportError:
+            pass
+        else:
+            raise RuntimeError("ImportError not raised for disabled module")
+
+        # Test calling module that doesn't exist
+        try:
+            self.remote("idontexist", "handle_command", {"prefix": "influx self-test"})
+        except ImportError:
+            pass
+        else:
+            raise RuntimeError("ImportError not raised for nonexistent module")
+
+        # Test calling method that doesn't exist
+        try:
+            self.remote("influx", "idontexist", {"prefix": "influx self-test"})
+        except NameError:
+            pass
+        else:
+            raise RuntimeError("KeyError not raised")
+
 
     def shutdown(self):
         self._workload = self.SHUTDOWN

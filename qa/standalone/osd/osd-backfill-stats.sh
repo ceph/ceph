@@ -73,6 +73,11 @@ function check() {
 
     local log=$(grep -l +backfilling $dir/osd.*.log)
     test -n "$log" || return 1
+    if [ "$(echo "$log" | wc -w)" != "1" ];
+    then
+      echo "Test setup failure, a single OSD should have performed backfill"
+      return 1
+    fi
 
     local addp=" "
     if [ "$type" = "erasure" ];
@@ -706,7 +711,7 @@ function TEST_backfill_ec_down_out() {
 }
 
 
-main recout "$@"
+main osd-backfill-stats "$@"
 
 # Local Variables:
 # compile-command: "make -j4 && ../qa/run-standalone.sh osd-backfill-stats.sh"

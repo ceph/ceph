@@ -11,6 +11,8 @@
 #include <iostream>
 #include <boost/program_options.hpp>
 
+#include "common/Clock.h"
+
 namespace rbd {
 namespace action {
 namespace info {
@@ -72,6 +74,14 @@ static void format_flags(Formatter *f, uint64_t flags)
     {RBD_FLAG_OBJECT_MAP_INVALID, "object map invalid"},
     {RBD_FLAG_FAST_DIFF_INVALID, "fast diff invalid"}};
   format_bitmask(f, "flag", mapping, flags);
+}
+
+void format_timestamp(struct timespec timestamp, std::string &timestamp_str) {
+  if(timestamp.tv_sec != 0) {
+    time_t ts = timestamp.tv_sec;
+    timestamp_str = ctime(&ts);
+    timestamp_str = timestamp_str.substr(0, timestamp_str.length() - 1);
+  }
 }
 
 static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
@@ -180,19 +190,30 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
       group_pool = group_io_ctx.get_pool_name();
     }
 
-    group_string = group_pool + "/" + group_info.name;
+    group_string = group_pool + "/";
+    if (!io_ctx.get_namespace().empty()) {
+      group_string += io_ctx.get_namespace() + "/";
+    }
+    group_string += group_info.name;
   }
 
   struct timespec create_timestamp;
   image.get_create_timestamp(&create_timestamp);
 
-  string create_timestamp_str = "";
-  if(create_timestamp.tv_sec != 0) {
-    time_t timestamp = create_timestamp.tv_sec;
-    create_timestamp_str = ctime(&timestamp);
-    create_timestamp_str = create_timestamp_str.substr(0,
-        create_timestamp_str.length() - 1);
-  }
+  std::string create_timestamp_str = "";
+  format_timestamp(create_timestamp, create_timestamp_str);
+
+  struct timespec access_timestamp;
+  image.get_access_timestamp(&access_timestamp);
+
+  std::string access_timestamp_str = "";
+  format_timestamp(access_timestamp, access_timestamp_str);
+
+  struct timespec modify_timestamp;
+  image.get_modify_timestamp(&modify_timestamp);
+
+  std::string modify_timestamp_str = "";
+  format_timestamp(modify_timestamp, modify_timestamp_str);
 
   if (f) {
     f->open_object_section("image");
@@ -254,6 +275,24 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
     }
   }
 
+  if (!access_timestamp_str.empty()) {
+    if (f) {
+      f->dump_string("access_timestamp", access_timestamp_str);
+    } else {
+      std::cout << "\taccess_timestamp: " << access_timestamp_str
+                << std::endl;
+    }
+  }
+
+  if (!modify_timestamp_str.empty()) {
+    if (f) {
+      f->dump_string("modify_timestamp", modify_timestamp_str);
+    } else {
+      std::cout << "\tmodify_timestamp: " << modify_timestamp_str
+                << std::endl;
+    }
+  }
+
   // snapshot info, if present
   if (!snapname.empty()) {
     if (f) {
@@ -291,13 +330,19 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
       if (trash_image_info_valid) {
         f->dump_string("trash", parent_id);
       }
+      if ((features & RBD_FEATURE_MIGRATING) != 0) {
+        f->dump_bool("migration_source", true);
+      }
       f->dump_unsigned("overlap", overlap);
       f->close_section();
     } else {
       std::cout << "\tparent: " << parent_pool << "/" << parent_name
-                << "@" << parent_snapname;
+                << (parent_snapname.empty() ? "" : "@") << parent_snapname;
       if (trash_image_info_valid) {
         std::cout << " (trash " << parent_id << ")";
+      }
+      if ((features & RBD_FEATURE_MIGRATING) != 0) {
+        std::cout << " (migration source)";
       }
       std::cout << std::endl;
       std::cout << "\toverlap: " << byte_u_t(overlap) << std::endl;
@@ -366,6 +411,7 @@ int execute(const po::variables_map &vm,
             const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   std::string image_id;
@@ -374,30 +420,18 @@ int execute(const po::variables_map &vm,
     image_id = vm[at::IMAGE_ID].as<std::string>();
   }
 
-  bool has_image_spec = utils::check_if_image_spec_present(
-      vm, at::ARGUMENT_MODIFIER_NONE, arg_index);
+  int r = utils::get_pool_image_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, image_id.empty(),
+    utils::SNAPSHOT_PRESENCE_PERMITTED, utils::SPEC_VALIDATION_NONE);
+  if (r < 0) {
+    return r;
+  }
 
-  if (!image_id.empty() && has_image_spec) {
+  if (!image_id.empty() && !image_name.empty()) {
     std::cerr << "rbd: trying to access image using both name and id. "
               << std::endl;
     return -EINVAL;
-  }
-
-  int r;
-  if (image_id.empty()) {
-    r = utils::get_pool_image_snapshot_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                             &arg_index, &pool_name,
-                                             &image_name, &snap_name,
-                                             utils::SNAPSHOT_PRESENCE_PERMITTED,
-                                             utils::SPEC_VALIDATION_NONE);
-  } else {
-    r = utils::get_pool_snapshot_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                       &arg_index, &pool_name, &snap_name,
-                                       utils::SNAPSHOT_PRESENCE_PERMITTED,
-                                       utils::SPEC_VALIDATION_NONE);
-  }
-  if (r < 0) {
-    return r;
   }
 
   at::Format::Formatter formatter;
@@ -409,8 +443,9 @@ int execute(const po::variables_map &vm,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, image_id, snap_name,
-                                 true, &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name,
+                                 image_id, snap_name, true, &rados, &io_ctx,
+                                 &image);
   if (r < 0) {
     return r;
   }

@@ -19,6 +19,7 @@ class Options(object):
         GRAFANA_API_PORT = (3000, int)
     """
     ENABLE_BROWSABLE_API = (True, bool)
+    REST_REQUESTS_TIMEOUT = (45, int)
 
     # RGW settings
     RGW_API_HOST = ('', str)
@@ -28,6 +29,14 @@ class Options(object):
     RGW_API_ADMIN_RESOURCE = ('admin', str)
     RGW_API_SCHEME = ('http', str)
     RGW_API_USER_ID = ('', str)
+    RGW_API_SSL_VERIFY = (True, bool)
+
+    # Grafana settings
+    GRAFANA_API_URL = ('http://localhost:3000', str)
+    GRAFANA_API_USERNAME = ('admin', str)
+    GRAFANA_API_PASSWORD = ('admin', str)
+    GRAFANA_API_TOKEN = ('', str)
+    GRAFANA_API_AUTH_METHOD = ('', str)  # Either 'password' or 'token'
 
     @staticmethod
     def has_default_value(name):
@@ -38,13 +47,22 @@ class Options(object):
 class SettingsMeta(type):
     def __getattr__(cls, attr):
         default, stype = getattr(Options, attr)
-        return stype(mgr.get_config(attr, default))
+        if stype == bool and str(mgr.get_config(attr,
+                                                default)).lower() == 'false':
+            value = False
+        else:
+            value = stype(mgr.get_config(attr, default))
+        return value
 
     def __setattr__(cls, attr, value):
         if not attr.startswith('_') and hasattr(Options, attr):
             mgr.set_config(attr, str(value))
         else:
             setattr(SettingsMeta, attr, value)
+
+    def __delattr__(self, attr):
+        if not attr.startswith('_') and hasattr(Options, attr):
+            mgr.set_config(attr, None)
 
 
 # pylint: disable=no-init
@@ -63,8 +81,10 @@ def _options_command_map():
             continue
         key_get = 'dashboard get-{}'.format(option.lower().replace('_', '-'))
         key_set = 'dashboard set-{}'.format(option.lower().replace('_', '-'))
+        key_reset = 'dashboard reset-{}'.format(option.lower().replace('_', '-'))
         cmd_map[key_get] = {'name': option, 'type': None}
         cmd_map[key_set] = {'name': option, 'type': value[1]}
+        cmd_map[key_reset] = {'name': option, 'type': None}
     return cmd_map
 
 
@@ -85,17 +105,25 @@ def options_command_list():
 
     cmd_list = []
     for cmd, opt in _OPTIONS_COMMAND_MAP.items():
-        if not opt['type']:
+        if cmd.startswith('dashboard get'):
             cmd_list.append({
                 'cmd': '{}'.format(cmd),
                 'desc': 'Get the {} option value'.format(opt['name']),
                 'perm': 'r'
             })
-        else:
+        elif cmd.startswith('dashboard set'):
             cmd_list.append({
                 'cmd': '{} name=value,type={}'
                        .format(cmd, py2ceph(opt['type'])),
                 'desc': 'Set the {} option value'.format(opt['name']),
+                'perm': 'w'
+            })
+        elif cmd.startswith('dashboard reset'):
+            desc = 'Reset the {} option to its default value'.format(
+                opt['name'])
+            cmd_list.append({
+                'cmd': '{}'.format(cmd),
+                'desc': desc,
                 'perm': 'w'
             })
 
@@ -117,13 +145,19 @@ def options_schema_list():
 
 def handle_option_command(cmd):
     if cmd['prefix'] not in _OPTIONS_COMMAND_MAP:
-        return (-errno.ENOSYS, '', "Command not found '{}'".format(cmd['prefix']))
+        return -errno.ENOSYS, '', "Command not found '{}'".format(cmd['prefix'])
 
     opt = _OPTIONS_COMMAND_MAP[cmd['prefix']]
-    if not opt['type']:
-        # get option
-        return 0, str(getattr(Settings, opt['name'])), ''
 
-    # set option
-    setattr(Settings, opt['name'], opt['type'](cmd['value']))
-    return 0, 'Option {} updated'.format(opt['name']), ''
+    if cmd['prefix'].startswith('dashboard reset'):
+        delattr(Settings, opt['name'])
+        return 0, 'Option {} reset to default value "{}"'.format(
+            opt['name'], getattr(Settings, opt['name'])), ''
+    elif cmd['prefix'].startswith('dashboard get'):
+        return 0, str(getattr(Settings, opt['name'])), ''
+    elif cmd['prefix'].startswith('dashboard set'):
+        value = opt['type'](cmd['value'])
+        if opt['type'] == bool and cmd['value'].lower() == 'false':
+            value = False
+        setattr(Settings, opt['name'], value)
+        return 0, 'Option {} updated'.format(opt['name']), ''

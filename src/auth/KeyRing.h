@@ -24,7 +24,7 @@ class KeyRing : public KeyStore {
 
   int set_modifier(const char *type, const char *val, EntityName& name, map<string, bufferlist>& caps);
 public:
-  void decode_plaintext(bufferlist::iterator& bl);
+  void decode_plaintext(bufferlist::const_iterator& bl);
   /* Create a KeyRing from a Ceph context.
    * We will use the configuration stored inside the context. */
   int from_ceph_context(CephContext *cct);
@@ -90,16 +90,13 @@ public:
   void set_caps(EntityName& name, map<string, bufferlist>& caps) {
     keys[name].caps = caps;
   }
-  void set_uid(EntityName& ename, uint64_t auid) {
-    keys[ename].auid = auid;
-  }
   void set_key(EntityName& ename, CryptoKey& key) {
     keys[ename].key = key;
   }
   void import(CephContext *cct, KeyRing& other);
 
   // encoders
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
 
   void encode_plaintext(bufferlist& bl);
   void encode_formatted(string label, Formatter *f, bufferlist& bl);
@@ -108,7 +105,7 @@ public:
 // don't use WRITE_CLASS_ENCODER macro because we don't have an encode
 // macro.  don't juse encode_plaintext in that case because it is not
 // wrappable; it assumes it gets the entire bufferlist.
-static inline void decode(KeyRing& kr, bufferlist::iterator& p) {
+static inline void decode(KeyRing& kr, bufferlist::const_iterator& p) {
   kr.decode(p);
 }
 

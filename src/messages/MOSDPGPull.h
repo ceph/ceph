@@ -17,9 +17,12 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGPull : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 2;
+class MOSDPGPull : public MessageInstance<MOSDPGPull, MOSDFastDispatchOp> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 2;
 
   vector<PullOp> pulls;
 
@@ -47,7 +50,7 @@ public:
   }
 
   MOSDPGPull()
-    : MOSDFastDispatchOp(MSG_OSD_PG_PULL, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_PULL, HEAD_VERSION, COMPAT_VERSION),
       cost(0)
     {}
 
@@ -65,7 +68,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(pgid.pgid, p);
     decode(map_epoch, p);
     decode(pulls, p);

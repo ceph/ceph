@@ -26,8 +26,9 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class ImageMap {
 public:
   static ImageMap *create(librados::IoCtx &ioctx, Threads<ImageCtxT> *threads,
+                          const std::string& instance_id,
                           image_map::Listener &listener) {
-    return new ImageMap(ioctx, threads, listener);
+    return new ImageMap(ioctx, threads, instance_id, listener);
   }
 
   ~ImageMap();
@@ -51,7 +52,7 @@ private:
   struct C_NotifyInstance;
 
   ImageMap(librados::IoCtx &ioctx, Threads<ImageCtxT> *threads,
-           image_map::Listener &listener);
+           const std::string& instance_id, image_map::Listener &listener);
 
   struct Update {
     std::string global_image_id;
@@ -82,6 +83,7 @@ private:
 
   librados::IoCtx &m_ioctx;
   Threads<ImageCtxT> *m_threads;
+  std::string m_instance_id;
   image_map::Listener &m_listener;
 
   std::unique_ptr<image_map::Policy> m_policy; // our mapping policy
@@ -95,6 +97,8 @@ private:
   std::map<std::string, std::set<std::string> > m_peer_map;
 
   std::set<std::string> m_global_image_ids;
+
+  Context *m_rebalance_task = nullptr;
 
   struct C_LoadMap : Context {
     ImageMap *image_map;
@@ -143,9 +147,13 @@ private:
   void schedule_action(const std::string &global_image_id);
 
   void schedule_update_task();
+  void schedule_update_task(const Mutex &timer_lock);
   void process_updates();
   void update_image_mapping(Updates&& map_updates,
                             std::set<std::string>&& map_removals);
+
+  void rebalance();
+  void schedule_rebalance_task();
 
   void notify_listener_acquire_release_images(const Updates &acquire, const Updates &release);
   void notify_listener_remove_images(const std::string &peer_uuid, const Updates &remove);
@@ -154,6 +162,11 @@ private:
                            const std::set<std::string> &global_image_ids);
   void update_images_removed(const std::string &peer_uuid,
                              const std::set<std::string> &global_image_ids);
+
+  void filter_instance_ids(const std::vector<std::string> &instance_ids,
+                           std::vector<std::string> *filtered_instance_ids,
+                           bool removal) const;
+
 };
 
 } // namespace mirror

@@ -106,7 +106,7 @@ public:
   bool call(std::string_view command, const cmdmap_t& cmdmap,
 	    std::string_view format, bufferlist& out) override {
     Commands::const_iterator i = commands.find(command);
-    assert(i != commands.end());
+    ceph_assert(i != commands.end());
     Formatter *f = Formatter::create(format);
     stringstream ss;
     bool r = i->second->call(f, &ss);
@@ -179,7 +179,7 @@ void ImageDeleter<I>::shut_down(Context* on_finish) {
 template <typename I>
 void ImageDeleter<I>::shut_down_trash_watcher(Context* on_finish) {
   dout(10) << dendl;
-  assert(m_trash_watcher);
+  ceph_assert(m_trash_watcher);
   auto ctx = new FunctionContext([this, on_finish](int r) {
       delete m_trash_watcher;
       m_trash_watcher = nullptr;
@@ -209,7 +209,7 @@ void ImageDeleter<I>::cancel_all_deletions(Context* on_finish) {
   {
     Mutex::Locker locker(m_lock);
     // wake up any external state machines waiting on deletions
-    assert(m_in_flight_delete_queue.empty());
+    ceph_assert(m_in_flight_delete_queue.empty());
     for (auto& queue : {&m_delete_queue, &m_retry_delete_queue}) {
       for (auto& info : *queue) {
         notify_on_delete(info->image_id, -ECANCELED);
@@ -279,7 +279,7 @@ void ImageDeleter<I>::enqueue_failed_delete(DeleteInfoRef* delete_info,
 template <typename I>
 typename ImageDeleter<I>::DeleteInfoRef
 ImageDeleter<I>::find_delete_info(const std::string &image_id) {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
   DeleteQueue delete_queues[] = {m_in_flight_delete_queue,
                                  m_retry_delete_queue,
                                  m_delete_queue};
@@ -356,7 +356,7 @@ template <typename I>
 void ImageDeleter<I>::remove_images() {
   dout(10) << dendl;
 
-  uint64_t max_concurrent_deletions = g_ceph_context->_conf->get_val<uint64_t>(
+  uint64_t max_concurrent_deletions = g_ceph_context->_conf.get_val<uint64_t>(
     "rbd_mirror_concurrent_image_deletions");
 
   Mutex::Locker locker(m_lock);
@@ -369,7 +369,7 @@ void ImageDeleter<I>::remove_images() {
     DeleteInfoRef delete_info = m_delete_queue.front();
     m_delete_queue.pop_front();
 
-    assert(delete_info);
+    ceph_assert(delete_info);
     remove_image(delete_info);
   }
 }
@@ -377,7 +377,7 @@ void ImageDeleter<I>::remove_images() {
 template <typename I>
 void ImageDeleter<I>::remove_image(DeleteInfoRef delete_info) {
   dout(10) << "info=" << *delete_info << dendl;
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   m_in_flight_delete_queue.push_back(delete_info);
   m_async_op_tracker.start_op();
@@ -400,10 +400,10 @@ void ImageDeleter<I>::handle_remove_image(DeleteInfoRef delete_info,
 
   {
     Mutex::Locker locker(m_lock);
-    assert(m_lock.is_locked());
+    ceph_assert(m_lock.is_locked());
     auto it = std::find(m_in_flight_delete_queue.begin(),
                         m_in_flight_delete_queue.end(), delete_info);
-    assert(it != m_in_flight_delete_queue.end());
+    ceph_assert(it != m_in_flight_delete_queue.end());
     m_in_flight_delete_queue.erase(it);
   }
 
@@ -414,7 +414,7 @@ void ImageDeleter<I>::handle_remove_image(DeleteInfoRef delete_info,
                  image_deleter::ERROR_RESULT_RETRY_IMMEDIATELY) {
       enqueue_failed_delete(&delete_info, r, m_busy_interval);
     } else {
-      double failed_interval = g_ceph_context->_conf->get_val<double>(
+      double failed_interval = g_ceph_context->_conf.get_val<double>(
         "rbd_mirror_delete_retry_interval");
       enqueue_failed_delete(&delete_info, r, failed_interval);
     }
@@ -428,8 +428,8 @@ void ImageDeleter<I>::handle_remove_image(DeleteInfoRef delete_info,
 
 template <typename I>
 void ImageDeleter<I>::schedule_retry_timer() {
-  assert(m_threads->timer_lock.is_locked());
-  assert(m_lock.is_locked());
+  ceph_assert(m_threads->timer_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
   if (!m_running || m_timer_ctx != nullptr || m_retry_delete_queue.empty()) {
     return;
   }
@@ -445,25 +445,25 @@ void ImageDeleter<I>::schedule_retry_timer() {
 template <typename I>
 void ImageDeleter<I>::cancel_retry_timer() {
   dout(10) << dendl;
-  assert(m_threads->timer_lock.is_locked());
+  ceph_assert(m_threads->timer_lock.is_locked());
   if (m_timer_ctx != nullptr) {
     bool canceled = m_threads->timer->cancel_event(m_timer_ctx);
     m_timer_ctx = nullptr;
-    assert(canceled);
+    ceph_assert(canceled);
   }
 }
 
 template <typename I>
 void ImageDeleter<I>::handle_retry_timer() {
   dout(10) << dendl;
-  assert(m_threads->timer_lock.is_locked());
+  ceph_assert(m_threads->timer_lock.is_locked());
   Mutex::Locker locker(m_lock);
 
-  assert(m_timer_ctx != nullptr);
+  ceph_assert(m_timer_ctx != nullptr);
   m_timer_ctx = nullptr;
 
-  assert(m_running);
-  assert(!m_retry_delete_queue.empty());
+  ceph_assert(m_running);
+  ceph_assert(!m_retry_delete_queue.empty());
 
   // move all ready-to-ready items back to main queue
   utime_t now = ceph_clock_now();

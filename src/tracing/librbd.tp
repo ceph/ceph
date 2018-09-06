@@ -1097,6 +1097,114 @@ TRACEPOINT_EVENT(librbd, rename_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, migration_prepare_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        uint64_t, id,
+        const char*, image_name,
+        const char*, dest_pool_name,
+        uint64_t, dest_id,
+        const char*, dest_image_name,
+        void*, opts),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(uint64_t, id, id)
+        ctf_string(image_name, image_name)
+        ctf_string(dest_pool_name, dest_pool_name)
+        ctf_integer(uint64_t, dest_id, dest_id)
+        ctf_string(dest_image_name, dest_image_name)
+        ctf_integer_hex(void*, opts, opts)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, migration_prepare_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, migration_execute_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, pool_id,
+        const char*, image_name),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, pool_id, pool_id)
+        ctf_string(image_name, image_name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, migration_execute_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, migration_abort_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, pool_id,
+        const char*, image_name),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, pool_id, pool_id)
+        ctf_string(image_name, image_name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, migration_abort_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, migration_commit_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, pool_id,
+        const char*, image_name),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, pool_id, pool_id)
+        ctf_string(image_name, image_name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, migration_commit_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, migration_status_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, pool_id,
+        const char*, image_name),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, pool_id, pool_id)
+        ctf_string(image_name, image_name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, migration_status_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, discard_enter,
     TP_ARGS(
         void*, imagectx,
@@ -2050,6 +2158,51 @@ TRACEPOINT_EVENT(librbd, get_create_timestamp_exit,
         ctf_integer(uint64_t, timestamp, timestamp->tv_sec)
     )
 )
+
+TRACEPOINT_EVENT(librbd, get_access_timestamp_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name,
+        char, read_only),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+        ctf_integer(char, read_only, read_only)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, get_access_timestamp_exit,
+    TP_ARGS(
+        int, retval,
+        struct timespec*, timestamp),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, timestamp, timestamp->tv_sec)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, get_modify_timestamp_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name,
+        char, read_only),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+        ctf_integer(char, read_only, read_only)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, get_modify_timestamp_exit,
+    TP_ARGS(
+        int, retval,
+        struct timespec*, timestamp),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, timestamp, timestamp->tv_sec)
+    )
+)
+
 
 TRACEPOINT_EVENT(librbd, get_features_enter,
     TP_ARGS(

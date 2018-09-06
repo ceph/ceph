@@ -38,17 +38,15 @@ function(gperf_generate input output)
     )
 endfunction()
 
-set(rgw_a_srcs
+set(librgw_common_srcs
   rgw_acl.cc
   rgw_acl_s3.cc
   rgw_acl_swift.cc
   rgw_auth.cc
-  rgw_auth_keystone.cc
   rgw_auth_s3.cc
   rgw_basic_types.cc
   rgw_bucket.cc
   rgw_cache.cc
-  rgw_client_io.cc
   rgw_common.cc
   rgw_compression.cc
   rgw_cors.cc
@@ -57,15 +55,11 @@ set(rgw_a_srcs
   rgw_env.cc
   rgw_es_query.cc
   rgw_formats.cc
-  rgw_frontend.cc
   rgw_gc.cc
   rgw_http_client.cc
-  rgw_http_client_curl.cc
   rgw_json_enc.cc
   rgw_keystone.cc
   rgw_ldap.cc
-  rgw_loadgen.cc
-  rgw_log.cc
   rgw_lc.cc
   rgw_lc_s3.cc
   rgw_metadata.cc
@@ -73,7 +67,6 @@ set(rgw_a_srcs
   rgw_multi_del.cc
   rgw_sync.cc
   rgw_data_sync.cc
-  rgw_otp.cc
   rgw_sync_module.cc
   rgw_sync_module_aws.cc
   rgw_sync_module_es.cc
@@ -83,26 +76,19 @@ set(rgw_a_srcs
   rgw_sync_trace.cc
   rgw_period_history.cc
   rgw_period_puller.cc
-  rgw_period_pusher.cc
-  rgw_realm_reloader.cc
-  rgw_realm_watcher.cc
   rgw_reshard.cc
   rgw_coroutine.cc
   rgw_cr_rados.cc
   rgw_cr_rest.cc
   rgw_object_expirer_core.cc
   rgw_op.cc
-  rgw_os_lib.cc
+  rgw_otp.cc
   rgw_policy_s3.cc
-  rgw_process.cc
   rgw_quota.cc
   rgw_rados.cc
-  rgw_request.cc
   rgw_resolve.cc
-  rgw_rest_bucket.cc
   rgw_rest.cc
   rgw_rest_client.cc
-  rgw_rest_config.cc
   rgw_rest_conn.cc
   rgw_rest_log.cc
   rgw_rest_metadata.cc
@@ -110,16 +96,11 @@ set(rgw_a_srcs
   rgw_rest_realm.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
-  rgw_rest_swift.cc
-  rgw_rest_usage.cc
-  rgw_rest_user.cc
   rgw_role.cc
   rgw_string.cc
-  rgw_swift_auth.cc
   rgw_tag.cc
   rgw_tag_s3.cc
   rgw_tools.cc
-  rgw_usage.cc
   rgw_user.cc
   rgw_website.cc
   rgw_xml.cc
@@ -127,7 +108,40 @@ set(rgw_a_srcs
   rgw_torrent.cc
   rgw_crypt.cc
   rgw_crypt_sanitize.cc
-  rgw_iam_policy.cc)
+  rgw_iam_policy.cc
+)
+add_library(rgw_common OBJECT ${librgw_common_srcs})
+
+if(WITH_LTTNG)
+  # rgw/rgw_op.cc includes "tracing/rgw_op.h"
+  # rgw/rgw_rados.cc includes "tracing/rgw_rados.h"
+  add_dependencies(rgw_common rgw_op-tp rgw_rados-tp)
+endif()
+
+set(rgw_a_srcs
+  rgw_auth_keystone.cc
+  rgw_client_io.cc
+  rgw_frontend.cc
+  rgw_http_client_curl.cc
+  rgw_loadgen.cc
+  rgw_log.cc
+  rgw_period_pusher.cc
+  rgw_realm_reloader.cc
+  rgw_realm_watcher.cc
+  rgw_os_lib.cc
+  rgw_process.cc
+  rgw_rest_bucket.cc
+  rgw_rest_config.cc
+  rgw_rest_log.cc
+  rgw_rest_metadata.cc
+  rgw_rest_opstate.cc
+  rgw_rest_realm.cc
+  rgw_rest_swift.cc
+  rgw_rest_usage.cc
+  rgw_rest_user.cc
+  rgw_swift_auth.cc
+  rgw_usage.cc
+  rgw_opa.cc)
 
 gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf
   rgw_iam_policy_keywords.frag.cc)
@@ -140,15 +154,13 @@ if (WITH_RADOSGW_FCGI_FRONTEND)
   list(APPEND rgw_a_srcs rgw_fcgi.cc)
 endif()
 
-add_library(rgw_a STATIC ${rgw_a_srcs})
+add_library(rgw_a STATIC
+    ${rgw_a_srcs}
+    $<TARGET_OBJECTS:rgw_common>)
 
 add_dependencies(rgw_a civetweb_h)
 
 target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
-
-if(WITH_LTTNG)
-  add_dependencies(rgw_a rgw_op-tp rgw_rados-tp)
-endif()
 
 target_link_libraries(rgw_a librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
@@ -156,7 +168,7 @@ target_link_libraries(rgw_a librados cls_otp_client cls_lock_client cls_rgw_clie
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS}
-  oath)
+  OATH::OATH)
 
 if (WITH_RADOSGW_BEAST_FRONTEND)
   target_compile_definitions(rgw_a PUBLIC BOOST_COROUTINES_NO_DEPRECATION_WARNING)
@@ -198,7 +210,7 @@ target_link_libraries(radosgw radosgw_a librados
 # radosgw depends on cls libraries at runtime, but not as link dependencies
 add_dependencies(radosgw cls_rgw cls_lock cls_refcount
   cls_log cls_statelog cls_timeindex
-  cls_version cls_user)
+  cls_version cls_user cls_otp)
 install(TARGETS radosgw DESTINATION bin)
 
 set(radosgw_admin_srcs
@@ -265,3 +277,33 @@ target_link_libraries(rgw PRIVATE
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)
 install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+set(librgw_admin_user_srcs
+  librgw_admin_user.cc
+  rgw_admin_user.cc
+)
+add_library(rgw_admin_user SHARED
+    ${librgw_admin_user_srcs}
+    $<TARGET_OBJECTS:rgw_common>)
+
+add_dependencies(rgw_admin_user civetweb_h)
+
+target_link_libraries(rgw_admin_user PRIVATE
+  librados
+  cls_rgw_client
+  cls_otp_client
+  cls_lock_client
+  cls_refcount_client
+  cls_log_client
+  cls_statelog_client
+  cls_timeindex_client
+  cls_version_client
+  cls_user_client
+  global
+  ${CURL_LIBRARIES}
+  ${EXPAT_LIBRARIES}
+  ${OPENLDAP_LIBRARIES}
+  )
+set_target_properties(rgw_admin_user PROPERTIES OUTPUT_NAME rgw_admin_user VERSION 1.0.0
+  SOVERSION 0)
+install(TARGETS rgw_admin_user DESTINATION ${CMAKE_INSTALL_LIBDIR})

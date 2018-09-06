@@ -69,6 +69,7 @@ namespace librbd {
                                         // a format librados can understand
     std::map<librados::snap_t, SnapInfo> snap_info;
     std::map<std::pair<cls::rbd::SnapshotNamespace, std::string>, librados::snap_t> snap_ids;
+    uint64_t open_snap_id = CEPH_NOSNAP;
     uint64_t snap_id;
     bool snap_exists; // false if our snap_id was deleted
     // whether the image was opened read-only. cannot be changed after opening
@@ -90,7 +91,7 @@ namespace librbd {
      * Lock ordering:
      *
      * owner_lock, md_lock, snap_lock, parent_lock,
-     * object_map_lock, async_op_lock
+     * object_map_lock, async_op_lock, timestamp_lock
      */
     RWLock owner_lock; // protects exclusive lock leadership updates
     RWLock md_lock; // protects access to the mutable image metadata that
@@ -103,6 +104,7 @@ namespace librbd {
                    // lockers
     RWLock snap_lock; // protects snapshot-related member variables,
                       // features (and associated helper classes), and flags
+    RWLock timestamp_lock;
     RWLock parent_lock; // protects parent_md and parent
     RWLock object_map_lock; // protects object map updates and object_map itself
     Mutex async_ops_lock; // protects async_ops and async_requests
@@ -122,12 +124,15 @@ namespace librbd {
     ParentInfo parent_md;
     ImageCtx *parent;
     ImageCtx *child = nullptr;
+    MigrationInfo migration_info;
     cls::rbd::GroupSpec group_spec;
     uint64_t stripe_unit, stripe_count;
     uint64_t flags;
     uint64_t op_features = 0;
     bool operations_disabled = false;
     utime_t create_timestamp;
+    utime_t access_timestamp;
+    utime_t modify_timestamp;
 
     file_layout_t layout;
 
@@ -157,6 +162,8 @@ namespace librbd {
     EventSocket event_socket;
 
     ContextWQ *op_work_queue;
+
+    bool ignore_migrating = false;
 
     // Configuration
     static const string METADATA_CONF_PREFIX;
@@ -189,6 +196,7 @@ namespace librbd {
     int journal_object_flush_interval;
     uint64_t journal_object_flush_bytes;
     double journal_object_flush_age;
+    uint64_t journal_object_max_in_flight_appends;
     std::string journal_pool;
     uint32_t journal_max_payload_bytes;
     int journal_max_concurrent_object_sets;
@@ -197,7 +205,14 @@ namespace librbd {
     int mirroring_replay_delay;
     bool skip_partial_discard;
     bool blkin_trace_all;
+    uint64_t mtime_update_interval;
+    uint64_t atime_update_interval;
     uint64_t qos_iops_limit;
+    uint64_t qos_bps_limit;
+    uint64_t qos_read_iops_limit;
+    uint64_t qos_write_iops_limit;
+    uint64_t qos_read_bps_limit;
+    uint64_t qos_write_bps_limit;
 
     LibrbdAdminSocketHook *asok_hook;
 
@@ -215,6 +230,12 @@ namespace librbd {
                             const char *snap, IoCtx& p, bool read_only) {
       return new ImageCtx(image_name, image_id, snap, p, read_only);
     }
+    static ImageCtx* create(const std::string &image_name,
+                            const std::string &image_id,
+                            librados::snap_t snap_id, IoCtx& p,
+                            bool read_only) {
+      return new ImageCtx(image_name, image_id, snap_id, p, read_only);
+    }
     void destroy() {
       delete this;
     }
@@ -226,6 +247,8 @@ namespace librbd {
      */
     ImageCtx(const std::string &image_name, const std::string &image_id,
 	     const char *snap, IoCtx& p, bool read_only);
+    ImageCtx(const std::string &image_name, const std::string &image_id,
+	     librados::snap_t snap_id, IoCtx& p, bool read_only);
     ~ImageCtx();
     void init();
     void shutdown();
@@ -257,6 +280,11 @@ namespace librbd {
     uint64_t get_stripe_count() const;
     uint64_t get_stripe_period() const;
     utime_t get_create_timestamp() const;
+    utime_t get_access_timestamp() const;
+    utime_t get_modify_timestamp() const;
+
+    void set_access_timestamp(utime_t at);
+    void set_modify_timestamp(utime_t at);
 
     void add_snap(cls::rbd::SnapshotNamespace in_snap_namespace,
 		  std::string in_snap_name,
@@ -315,6 +343,8 @@ namespace librbd {
 
     journal::Policy *get_journal_policy() const;
     void set_journal_policy(journal::Policy *policy);
+
+    bool is_writeback_cache_enabled() const;
 
     static void get_thread_pool_instance(CephContext *cct,
                                          ThreadPool **thread_pool,

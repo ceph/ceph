@@ -161,7 +161,7 @@ struct ceph_sockaddr_storage {
     ::encode_raw(ss, bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     struct ceph_sockaddr_storage ss;
     ::decode_raw(ss, bl);
     ss.ss_family = ntohs(ss.ss_family);
@@ -197,7 +197,7 @@ static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
   encode(ss, bl);
 #endif
 }
-static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
+static inline void decode(sockaddr_storage& a, bufferlist::const_iterator& bl) {
 #if defined(__linux__)
   ::decode_raw(a, bl);
   a.ss_family = ntohs(a.ss_family);
@@ -268,6 +268,8 @@ struct entity_addr_t {
 
   uint32_t get_type() const { return type; }
   void set_type(uint32_t t) { type = t; }
+  bool is_legacy() const { return type == TYPE_LEGACY; }
+  bool is_msgr2() const { return type == TYPE_MSGR2; }
 
   __u32 get_nonce() const { return nonce; }
   void set_nonce(__u32 n) { nonce = n; }
@@ -414,7 +416,7 @@ struct entity_addr_t {
 
   bool parse(const char *s, const char **end = 0);
 
-  void decode_legacy_addr_after_marker(bufferlist::iterator& bl)
+  void decode_legacy_addr_after_marker(bufferlist::const_iterator& bl)
   {
     using ceph::decode;
     __u8 marker;
@@ -459,7 +461,7 @@ struct entity_addr_t {
     }
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     __u8 marker;
     decode(marker, bl);
@@ -532,15 +534,120 @@ namespace std {
 struct entity_addrvec_t {
   vector<entity_addr_t> v;
 
+  entity_addrvec_t() {}
+  explicit entity_addrvec_t(const entity_addr_t& a) : v({ a }) {}
+
   unsigned size() const { return v.size(); }
   bool empty() const { return v.empty(); }
 
+  entity_addr_t legacy_addr() const {
+    for (auto& a : v) {
+      if (a.type == entity_addr_t::TYPE_LEGACY) {
+	return a;
+      }
+    }
+    return entity_addr_t();
+  }
+  entity_addr_t front() const {
+    if (!v.empty()) {
+      return v.front();
+    }
+    return entity_addr_t();
+  }
+  entity_addr_t legacy_or_front_addr() const {
+    for (auto& a : v) {
+      if (a.type == entity_addr_t::TYPE_LEGACY) {
+	return a;
+      }
+    }
+    if (!v.empty()) {
+      return v.front();
+    }
+    return entity_addr_t();
+  }
+
+  bool parse(const char *s, const char **end = 0);
+
+  void get_ports(set<int> *ports) const {
+    for (auto& a : v) {
+      ports->insert(a.get_port());
+    }
+  }
+  set<int> get_ports() const {
+    set<int> r;
+    get_ports(&r);
+    return r;
+  }
+
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<entity_addrvec_t*>& ls);
+
+  bool probably_equals(const entity_addrvec_t& o) const {
+    if (o.v.size() != v.size()) {
+      return false;
+    }
+    for (unsigned i = 0; i < v.size(); ++i) {
+      if (!v[i].probably_equals(o.v[i])) {
+	return false;
+      }
+    }
+    return true;
+  }
+  bool contains(const entity_addr_t& a) const {
+    for (auto& i : v) {
+      if (a == i) {
+	return true;
+      }
+    }
+    return false;
+  }
+  bool is_same_host(const entity_addr_t& a) const {
+    for (auto& i : v) {
+      if (i.is_same_host(a)) {
+	return true;
+      }
+    }
+    return false;
+  }
+
+  friend ostream& operator<<(ostream& out, const entity_addrvec_t& av) {
+    if (av.v.empty()) {
+      return out;
+    } else if (av.v.size() == 1) {
+      return out << av.v[0];
+    } else {
+      return out << av.v;
+    }
+  }
+
+  friend bool operator==(const entity_addrvec_t& l, const entity_addrvec_t& r) {
+    return l.v == r.v;
+  }
+  friend bool operator!=(const entity_addrvec_t& l, const entity_addrvec_t& r) {
+    return l.v != r.v;
+  }
+  friend bool operator<(const entity_addrvec_t& l, const entity_addrvec_t& r) {
+    return l.v < r.v;  // see lexicographical_compare()
+  }
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_addrvec_t);
+
+namespace std {
+  template<> struct hash< entity_addrvec_t >
+  {
+    size_t operator()( const entity_addrvec_t& x ) const
+    {
+      static blobhash H;
+      size_t r = 0;
+      for (auto& i : x.v) {
+	r += H((const char*)&i, sizeof(i));
+      }
+      return r;
+    }
+  };
+} // namespace std
 
 /*
  * a particular entity instance
@@ -563,7 +670,7 @@ struct entity_inst_t {
     encode(name, bl);
     encode(addr, bl, features);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     decode(name, bl);
     decode(addr, bl);

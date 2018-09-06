@@ -51,7 +51,7 @@ struct object_t {
     using ceph::encode;
     encode(name, bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     using ceph::decode;
     decode(name, bl);
   }
@@ -124,7 +124,7 @@ struct snapid_t {
 };
 
 inline void encode(snapid_t i, bufferlist &bl) { encode(i.val, bl); }
-inline void decode(snapid_t &i, bufferlist::iterator &p) { decode(i.val, p); }
+inline void decode(snapid_t &i, bufferlist::const_iterator &p) { decode(i.val, p); }
 
 template<>
 struct denc_traits<snapid_t> {
@@ -138,7 +138,7 @@ struct denc_traits<snapid_t> {
   static void encode(const snapid_t &o, buffer::list::contiguous_appender& p) {
     denc(o.val, p);
   }
-  static void decode(snapid_t& o, buffer::ptr::iterator &p) {
+  static void decode(snapid_t& o, buffer::ptr::const_iterator &p) {
     denc(o.val, p);
   }
 };
@@ -172,7 +172,7 @@ struct sobject_t {
     encode(oid, bl);
     encode(snap, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     decode(oid, bl);
     decode(snap, bl);

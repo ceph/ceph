@@ -16,10 +16,12 @@
 #include "msg/Message.h"
 #include "mon/mon_types.h"
 
-class MMonScrub : public Message
-{
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 2;
+class MMonScrub : public MessageInstance<MMonScrub> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 2;
 
 public:
   typedef enum {
@@ -31,7 +33,7 @@ public:
     switch (op) {
     case OP_SCRUB: return "scrub";
     case OP_RESULT: return "result";
-    default: assert(0 == "unknown op type"); return NULL;
+    default: ceph_abort_msg("unknown op type"); return NULL;
     }
   }
 
@@ -42,12 +44,12 @@ public:
   pair<string,string> key;
 
   MMonScrub()
-    : Message(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       num_keys(-1)
   { }
 
   MMonScrub(op_type_t op, version_t v, int32_t num_keys)
-    : Message(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       op(op), version(v), num_keys(num_keys)
   { }
 
@@ -74,7 +76,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     uint8_t o;
     decode(o, p);
     op = (op_type_t)o;

@@ -8,11 +8,11 @@
 #include <set>
 #include <map>
 #include <string>
-#include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 #include "include/encoding.h"
 #include "common/Formatter.h"
 #include "common/perf_counters.h"
+#include "common/PriorityCache.h"
 
 using std::string;
 using std::vector;
@@ -21,7 +21,7 @@ using std::vector;
  *
  * Kyoto Cabinet or LevelDB should implement this
  */
-class KeyValueDB {
+class KeyValueDB : public PriorityCache::PriCache {
 public:
   /*
    *  See RocksDB's definition of a column family(CF) and how to use it.
@@ -52,7 +52,7 @@ public:
       const std::string &prefix,      ///< [in] prefix, or CF name
       bufferlist& to_set_bl           ///< [in] encoded key/values to set
       ) {
-      bufferlist::iterator p = to_set_bl.begin();
+      auto p = std::cbegin(to_set_bl);
       uint32_t num;
       decode(num, p);
       while (num--) {
@@ -83,7 +83,7 @@ public:
       const std::string &prefix,     ///< [in] Prefix or CF to search for
       bufferlist &keys_bl            ///< [in] Keys to remove
     ) {
-      bufferlist::iterator p = keys_bl.begin();
+      auto p = std::cbegin(keys_bl);
       uint32_t num;
       decode(num, p);
       while (num--) {
@@ -142,11 +142,11 @@ public:
       const std::string &prefix,   ///< [in] Prefix/CF ==> MUST match some established merge operator
       const std::string &key,      ///< [in] Key to be merged
       const bufferlist  &value     ///< [in] value to be merged into key
-    ) { assert(0 == "Not implemented"); }
+    ) { ceph_abort_msg("Not implemented"); }
 
     virtual ~TransactionImpl() {}
   };
-  typedef ceph::shared_ptr< TransactionImpl > Transaction;
+  typedef std::shared_ptr< TransactionImpl > Transaction;
 
   /// create a new instance
   static KeyValueDB *create(CephContext *cct, const std::string& type,
@@ -232,7 +232,7 @@ public:
       }
     }
   };
-  typedef ceph::shared_ptr< IteratorImpl > Iterator;
+  typedef std::shared_ptr< IteratorImpl > Iterator;
 
   // This is the low-level iterator implemented by the underlying KV store.
   class WholeSpaceIteratorImpl {
@@ -267,9 +267,12 @@ public:
     }
     virtual ~WholeSpaceIteratorImpl() { }
   };
-  typedef ceph::shared_ptr< WholeSpaceIteratorImpl > WholeSpaceIterator;
+  typedef std::shared_ptr< WholeSpaceIteratorImpl > WholeSpaceIterator;
 
 private:
+  int64_t cache_bytes[PriorityCache::Priority::LAST+1] = { 0 };
+  double cache_ratio = 0;
+
   // This class filters a WholeSpaceIterator by a prefix.
   class PrefixIteratorImpl : public IteratorImpl {
     const std::string prefix;
@@ -359,10 +362,72 @@ public:
     return -EOPNOTSUPP;
   }
 
+  // PriCache
+
+  virtual int64_t request_cache_bytes(PriorityCache::Priority pri, uint64_t chunk_bytes) const {
+    return -EOPNOTSUPP;
+  }
+
+  virtual int64_t get_cache_bytes(PriorityCache::Priority pri) const {
+    return cache_bytes[pri];
+  }
+
+  virtual int64_t get_cache_bytes() const {
+    int64_t total = 0;
+
+    for (int i = 0; i < PriorityCache::Priority::LAST + 1; i++) {
+      PriorityCache::Priority pri = static_cast<PriorityCache::Priority>(i);
+      total += get_cache_bytes(pri);
+    }
+    return total;
+  }
+
+  virtual void set_cache_bytes(PriorityCache::Priority pri, int64_t bytes) {
+    cache_bytes[pri] = bytes;
+  }
+
+  virtual void add_cache_bytes(PriorityCache::Priority pri, int64_t bytes) {
+    cache_bytes[pri] += bytes;
+  }
+
+  virtual int64_t commit_cache_size() {
+    return -EOPNOTSUPP;
+  }
+
+  virtual double get_cache_ratio() const {
+    return cache_ratio;
+  }
+
+  virtual void set_cache_ratio(double ratio) {
+    cache_ratio = ratio;
+  }
+
+  virtual string get_cache_name() const {
+    return "Unknown KeyValueDB Cache";
+  } 
+
+  // End PriCache
+
+  virtual int set_cache_high_pri_pool_ratio(double ratio) {
+    return -EOPNOTSUPP;
+  }
+
+  virtual int64_t get_cache_usage() const {
+    return -EOPNOTSUPP;
+  }
+
   virtual ~KeyValueDB() {}
+
+  /// estimate space utilization for a prefix (in bytes)
+  virtual int64_t estimate_prefix_size(const string& prefix) {
+    return 0;
+  }
 
   /// compact the underlying store
   virtual void compact() {}
+
+  /// compact the underlying store in async mode
+  virtual void compact_async() {}
 
   /// compact db for all keys with a given prefix
   virtual void compact_prefix(const std::string& prefix) {}
@@ -387,7 +452,7 @@ public:
       const char *rdata, size_t rlen,
       std::string *new_value) = 0;
     /// We use each operator name and each prefix to construct the overall RocksDB operator name for consistency check at open time.
-    virtual string name() const = 0;
+    virtual const char *name() const = 0;
 
     virtual ~MergeOperator() {}
   };

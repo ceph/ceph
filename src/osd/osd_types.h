@@ -158,7 +158,7 @@ struct pg_shard_t {
   }
   string get_osd() const { return (osd == NO_OSD ? "NONE" : to_string(osd)); }
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const {
     f->dump_unsigned("osd", osd);
     if (shard != shard_id_t::NO_SHARD) {
@@ -262,7 +262,7 @@ struct object_locator_t {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<object_locator_t*>& o);
 };
@@ -316,7 +316,7 @@ public:
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<request_redirect_t*>& o);
 };
@@ -355,7 +355,7 @@ struct old_pg_t {
   void encode(bufferlist& bl) const {
     ::encode_raw(v, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     ::decode_raw(v, bl);
   }
 };
@@ -380,7 +380,7 @@ struct pg_t {
 
   old_pg_t get_old_pg() const {
     old_pg_t o;
-    assert(m_pool < 0xffffffffull);
+    ceph_assert(m_pool < 0xffffffffull);
     o.v.pool = m_pool;
     o.v.ps = m_seed;
     o.v.preferred = (__s16)-1;
@@ -436,7 +436,7 @@ struct pg_t {
     encode(m_seed, bl);
     encode((int32_t)-1, bl); // was preferred
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     __u8 v;
     decode(v, bl);
@@ -444,7 +444,7 @@ struct pg_t {
     decode(m_seed, bl);
     bl.advance(sizeof(int32_t)); // was preferred
   }
-  void decode_old(bufferlist::iterator& bl) {
+  void decode_old(bufferlist::const_iterator& bl) {
     using ceph::decode;
     old_pg_t opg;
     decode(opg, bl);
@@ -553,7 +553,7 @@ struct spg_t {
     encode(shard, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(pgid, bl);
     decode(shard, bl);
@@ -693,7 +693,7 @@ public:
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   size_t encoded_size() const;
 
   inline bool operator==(const coll_t& rhs) const {
@@ -711,7 +711,7 @@ public:
   // get a TEMP collection that corresponds to the current collection,
   // which we presume is a pg collection.
   coll_t get_temp() const {
-    assert(type == TYPE_PG);
+    ceph_assert(type == TYPE_PG);
     return coll_t(TYPE_PG_TEMP, pgid, 0);
   }
 
@@ -831,7 +831,7 @@ public:
     encode(epoch, bl);
 #endif
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
 #if defined(CEPH_LITTLE_ENDIAN)
     bl.copy(sizeof(version_t) + sizeof(epoch_t), (char *)this);
 #else
@@ -841,7 +841,7 @@ public:
 #endif
   }
   void decode(bufferlist& bl) {
-    bufferlist::iterator p = bl.begin();
+    auto p = std::cbegin(bl);
     decode(p);
   }
 };
@@ -897,7 +897,7 @@ struct objectstore_perf_stat_t {
   }
   void dump(Formatter *f) const;
   void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   static void generate_test_instances(std::list<objectstore_perf_stat_t*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
@@ -906,9 +906,15 @@ WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
  * aggregate stats for an osd
  */
 struct osd_stat_t {
-  int64_t kb, kb_used, kb_avail;
+  int64_t kb = 0;            ///< total device size
+  int64_t kb_used = 0;       ///< total used
+  int64_t kb_used_data = 0;  ///< total used by object data
+  int64_t kb_used_omap = 0;  ///< total used by omap data
+  int64_t kb_used_meta = 0;  ///< total used by internal metadata
+  int64_t kb_avail = 0;      ///< total available/free
+
   vector<int> hb_peers;
-  int32_t snap_trim_queue_len, num_snap_trimming;
+  int32_t snap_trim_queue_len = 0, num_snap_trimming = 0;
 
   pow2_hist_t op_queue_age_hist;
 
@@ -919,12 +925,12 @@ struct osd_stat_t {
 
   uint32_t num_pgs = 0;
 
-  osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
-		 snap_trim_queue_len(0), num_snap_trimming(0) {}
-
   void add(const osd_stat_t& o) {
     kb += o.kb;
     kb_used += o.kb_used;
+    kb_used_data += o.kb_used_data;
+    kb_used_omap += o.kb_used_omap;
+    kb_used_meta += o.kb_used_meta;
     kb_avail += o.kb_avail;
     snap_trim_queue_len += o.snap_trim_queue_len;
     num_snap_trimming += o.num_snap_trimming;
@@ -935,6 +941,9 @@ struct osd_stat_t {
   void sub(const osd_stat_t& o) {
     kb -= o.kb;
     kb_used -= o.kb_used;
+    kb_used_data -= o.kb_used_data;
+    kb_used_omap -= o.kb_used_omap;
+    kb_used_meta -= o.kb_used_meta;
     kb_avail -= o.kb_avail;
     snap_trim_queue_len -= o.snap_trim_queue_len;
     num_snap_trimming -= o.num_snap_trimming;
@@ -945,7 +954,7 @@ struct osd_stat_t {
 
   void dump(Formatter *f) const;
   void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   static void generate_test_instances(std::list<osd_stat_t*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(osd_stat_t)
@@ -953,6 +962,9 @@ WRITE_CLASS_ENCODER_FEATURES(osd_stat_t)
 inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
   return l.kb == r.kb &&
     l.kb_used == r.kb_used &&
+    l.kb_used_data == r.kb_used_data &&
+    l.kb_used_omap == r.kb_used_omap &&
+    l.kb_used_meta == r.kb_used_meta &&
     l.kb_avail == r.kb_avail &&
     l.snap_trim_queue_len == r.snap_trim_queue_len &&
     l.num_snap_trimming == r.num_snap_trimming &&
@@ -965,10 +977,12 @@ inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
   return !(l == r);
 }
 
-
-
 inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
-  return out << "osd_stat(" << byte_u_t(s.kb_used << 10) << " used, "
+  return out << "osd_stat("
+	     << byte_u_t(s.kb_used << 10) << " used ("
+	     << byte_u_t(s.kb_used_data << 10) << " data, "
+	     << byte_u_t(s.kb_used_omap << 10) << " omap, "
+	     << byte_u_t(s.kb_used_meta << 10) << " meta), "
 	     << byte_u_t(s.kb_avail << 10) << " avail, "
 	     << byte_u_t(s.kb << 10) << " total, "
 	     << "peers " << s.hb_peers
@@ -1029,7 +1043,7 @@ struct pool_snap_info_t {
 
   void dump(Formatter *f) const;
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   static void generate_test_instances(list<pool_snap_info_t*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(pool_snap_info_t)
@@ -1114,7 +1128,7 @@ public:
 
   void dump(Formatter *f) const;
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
 
 private:
   typedef std::map<key_t, value_t> opts_t;
@@ -1291,7 +1305,7 @@ struct pg_pool_t {
     case CACHEMODE_READPROXY:
       return true;
     default:
-      assert(0 == "implement me");
+      ceph_abort_msg("implement me");
     }
   }
 
@@ -1518,7 +1532,7 @@ public:
     case TYPE_ERASURE:
       return false;
     default:
-      assert(0 == "unhandled pool type");
+      ceph_abort_msg("unhandled pool type");
     }
   }
 
@@ -1613,7 +1627,7 @@ public:
   uint32_t get_random_pg_position(pg_t pgid, uint32_t seed) const;
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
 
   static void generate_test_instances(list<pg_pool_t*>& o);
 };
@@ -1867,7 +1881,7 @@ struct object_stat_sum_t {
       "object_stat_sum_t have padding");
   }
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   static void generate_test_instances(list<object_stat_sum_t*>& o);
 };
 WRITE_CLASS_ENCODER(object_stat_sum_t)
@@ -1891,7 +1905,7 @@ struct object_stat_collection_t {
 
   void dump(Formatter *f) const;
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   static void generate_test_instances(list<object_stat_collection_t*>& o);
 
   bool is_zero() const {
@@ -2058,7 +2072,7 @@ struct pg_stat_t {
   void dump(Formatter *f) const;
   void dump_brief(Formatter *f) const;
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   static void generate_test_instances(list<pg_stat_t*>& o);
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
@@ -2115,7 +2129,7 @@ struct pool_stat_t {
 
   void dump(Formatter *f) const;
   void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   static void generate_test_instances(list<pool_stat_t*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(pool_stat_t)
@@ -2147,7 +2161,7 @@ struct pg_hit_set_info_t {
     : using_gmt(using_gmt) {}
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_hit_set_info_t*>& o);
 };
@@ -2171,7 +2185,7 @@ struct pg_hit_set_history_t {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_hit_set_history_t*>& o);
 };
@@ -2307,7 +2321,7 @@ struct pg_history_t {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_history_t*>& o);
 };
@@ -2397,16 +2411,12 @@ struct pg_info_t {
   bool is_empty() const { return last_update.version == 0; }
   bool dne() const { return history.epoch_created == 0; }
 
+  bool has_missing() const { return last_complete != last_update; }
   bool is_incomplete() const { return !last_backfill.is_max(); }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
-  bool overlaps_with(const pg_info_t &oinfo) const {
-    return last_update > oinfo.log_tail ?
-      oinfo.last_update >= log_tail :
-      last_update >= oinfo.log_tail;
-  }
   static void generate_test_instances(list<pg_info_t*>& o);
 };
 WRITE_CLASS_ENCODER(pg_info_t)
@@ -2553,7 +2563,7 @@ struct pg_fast_info_t {
     encode(stats.stats.sum.num_objects_dirty, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     DECODE_START(1, p);
     decode(last_update, p);
     decode(last_complete, p);
@@ -2600,10 +2610,10 @@ struct pg_notify_t {
     : query_epoch(query_epoch),
       epoch_sent(epoch_sent),
       info(info), to(to), from(from) {
-    assert(from == info.pgid.shard);
+    ceph_assert(from == info.pgid.shard);
   }
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &p);
+  void decode(bufferlist::const_iterator &p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_notify_t*> &o);
 };
@@ -2645,7 +2655,7 @@ public:
       {}
 
     void encode(bufferlist& bl) const;
-    void decode(bufferlist::iterator& bl);
+    void decode(bufferlist::const_iterator& bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<pg_interval_t*>& o);
   };
@@ -2669,18 +2679,17 @@ public:
     virtual unique_ptr<interval_rep> clone() const = 0;
     virtual ostream &print(ostream &out) const = 0;
     virtual void encode(bufferlist &bl) const = 0;
-    virtual void decode(bufferlist::iterator &bl) = 0;
+    virtual void decode(bufferlist::const_iterator &bl) = 0;
     virtual void dump(Formatter *f) const = 0;
     virtual void iterate_mayberw_back_to(
-      bool ec_pool,
       epoch_t les,
       std::function<void(epoch_t, const set<pg_shard_t> &)> &&f) const = 0;
 
     virtual bool has_full_intervals() const { return false; }
     virtual void iterate_all_intervals(
       std::function<void(const pg_interval_t &)> &&f) const {
-      assert(!has_full_intervals());
-      assert(0 == "not valid for this implementation");
+      ceph_assert(!has_full_intervals());
+      ceph_abort_msg("not valid for this implementation");
     }
 
     virtual ~interval_rep() {}
@@ -2694,7 +2703,7 @@ private:
 
 public:
   void add_interval(bool ec_pool, const pg_interval_t &interval) {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     return past_intervals->add_interval(ec_pool, interval);
   }
 
@@ -2710,10 +2719,10 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
 
   void dump(Formatter *f) const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     past_intervals->dump(f);
   }
   static void generate_test_instances(list<PastIntervals *> & o);
@@ -2755,8 +2764,8 @@ public:
     int new_up_primary,                         ///< [in] up primary of osdmap
     const vector<int> &old_up,                  ///< [in] up as of lastmap
     const vector<int> &new_up,                  ///< [in] up as of osdmap
-    ceph::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
-    ceph::shared_ptr<const OSDMap> lastmap, ///< [in] last map
+    std::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
+    std::shared_ptr<const OSDMap> lastmap, ///< [in] last map
     pg_t pgid                                   ///< [in] pgid for pg
     );
 
@@ -2775,8 +2784,8 @@ public:
     const vector<int> &new_up,                  ///< [in] up as of osdmap
     epoch_t same_interval_since,                ///< [in] as of osdmap
     epoch_t last_epoch_clean,                   ///< [in] current
-    ceph::shared_ptr<const OSDMap> osdmap,      ///< [in] current map
-    ceph::shared_ptr<const OSDMap> lastmap,     ///< [in] last map
+    std::shared_ptr<const OSDMap> osdmap,      ///< [in] current map
+    std::shared_ptr<const OSDMap> lastmap,     ///< [in] last map
     pg_t pgid,                                  ///< [in] pgid for pg
     IsPGRecoverablePredicate *could_have_gone_active, /// [in] predicate whether the pg can be active
     PastIntervals *past_intervals,              ///< [out] intervals
@@ -2787,14 +2796,13 @@ public:
 
   template <typename F>
   void iterate_mayberw_back_to(
-    bool ec_pool,
     epoch_t les,
     F &&f) const {
-    assert(past_intervals);
-    past_intervals->iterate_mayberw_back_to(ec_pool, les, std::forward<F>(f));
+    ceph_assert(past_intervals);
+    past_intervals->iterate_mayberw_back_to(les, std::forward<F>(f));
   }
   void clear() {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     past_intervals->clear();
   }
 
@@ -2803,12 +2811,12 @@ public:
    * of state contained
    */
   size_t size() const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     return past_intervals->size();
   }
 
   bool empty() const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     return past_intervals->empty();
   }
 
@@ -2824,7 +2832,7 @@ public:
   set<pg_shard_t> get_might_have_unfound(
     pg_shard_t pg_whoami,
     bool ec_pool) const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     auto ret = past_intervals->get_all_participants(ec_pool);
     ret.erase(pg_whoami);
     return ret;
@@ -2835,7 +2843,7 @@ public:
    */
   set<pg_shard_t> get_all_probe(
     bool ec_pool) const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     return past_intervals->get_all_participants(ec_pool);
   }
 
@@ -2843,7 +2851,7 @@ public:
    * past_interval set.
    */
   pair<epoch_t, epoch_t> get_bounds() const {
-    assert(past_intervals);
+    ceph_assert(past_intervals);
     return past_intervals->get_bounds();
   }
 
@@ -3006,7 +3014,6 @@ PastIntervals::PriorSet::PriorSet(
   }
 
   past_intervals.iterate_mayberw_back_to(
-    ec_pool,
     last_epoch_started,
     [&](epoch_t start, const set<pg_shard_t> &acting) {
       ldpp_dout(dpp, 10) << "build_prior maybe_rw interval:" << start
@@ -3057,7 +3064,7 @@ PastIntervals::PriorSet::PriorSet(
 	// fixme: how do we identify a "clean" shutdown anyway?
 	ldpp_dout(dpp, 10) << "build_prior  possibly went active+rw,"
 			   << " insufficient up; including down osds" << dendl;
-	assert(!candidate_blocked_by.empty());
+	ceph_assert(!candidate_blocked_by.empty());
 	pg_down = true;
 	blocked_by.insert(
 	  candidate_blocked_by.begin(),
@@ -3113,7 +3120,7 @@ struct pg_query_t {
       history(h),
       epoch_sent(epoch_sent),
       to(to), from(from) {
-    assert(t != LOG);
+    ceph_assert(t != LOG);
   }
   pg_query_t(
     int t,
@@ -3124,11 +3131,11 @@ struct pg_query_t {
     epoch_t epoch_sent)
     : type(t), since(s), history(h),
       epoch_sent(epoch_sent), to(to), from(from) {
-    assert(t == LOG);
+    ceph_assert(t == LOG);
   }
   
   void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_query_t*>& o);
@@ -3270,8 +3277,8 @@ public:
   }
   void rollback_extents(
     version_t gen, const vector<pair<uint64_t, uint64_t> > &extents) {
-    assert(can_local_rollback);
-    assert(!rollback_info_completed);
+    ceph_assert(can_local_rollback);
+    ceph_assert(!rollback_info_completed);
     if (max_required_version < 2)
       max_required_version = 2;
     ENCODE_START(2, 2, bl);
@@ -3307,7 +3314,7 @@ public:
       bl.rebuild();
   }
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ObjectModDesc*>& o);
 };
@@ -3435,10 +3442,10 @@ struct pg_log_entry_t {
 
   string get_key_name() const;
   void encode_with_checksum(bufferlist& bl) const;
-  void decode_with_checksum(bufferlist::iterator& p);
+  void decode_with_checksum(bufferlist::const_iterator& p);
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_log_entry_t*>& o);
 
@@ -3468,7 +3475,7 @@ struct pg_log_dup_t {
 
   string get_key_name() const;
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_log_dup_t*>& o);
 
@@ -3591,7 +3598,7 @@ public:
     }
 
   mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
-    assert(newhead >= tail);
+    ceph_assert(newhead >= tail);
 
     mempool::osd_pglog::list<pg_log_entry_t>::iterator p = log.end();
     mempool::osd_pglog::list<pg_log_entry_t> divergent;
@@ -3616,7 +3623,7 @@ public:
 	divergent.splice(divergent.begin(), log, p, log.end());
 	break;
       }
-      assert(p->version > newhead);
+      ceph_assert(p->version > newhead);
     }
     head = newhead;
 
@@ -3673,7 +3680,7 @@ public:
   ostream& print(ostream& out) const;
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl, int64_t pool = -1);
+  void decode(bufferlist::const_iterator &bl, int64_t pool = -1);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_log_t*>& o);
 };
@@ -3723,7 +3730,7 @@ struct pg_missing_item {
       encode(have, bl);
     }
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     eversion_t e;
     decode(e, bl);
@@ -3886,7 +3893,7 @@ public:
       return eversion_t();
     }
     auto it = missing.find(rmissing.begin()->second);
-    assert(it != missing.end());
+    ceph_assert(it != missing.end());
     return it->second.need;
   }
 
@@ -3918,7 +3925,7 @@ public:
       missing_it->second.set_delete(e.is_delete());
     } else {
       // not missing, we must have prior_version (if any)
-      assert(!is_missing_divergent_item);
+      ceph_assert(!is_missing_divergent_item);
       missing[e.soid] = item(e.version, e.prior_version, e.is_delete());
     }
     rmissing[e.version.version] = e.soid;
@@ -3966,8 +3973,8 @@ public:
 
   void got(const hobject_t& oid, eversion_t v) {
     std::map<hobject_t, item>::iterator p = missing.find(oid);
-    assert(p != missing.end());
-    assert(p->second.need <= v || p->second.is_delete());
+    ceph_assert(p != missing.end());
+    ceph_assert(p->second.need <= v || p->second.is_delete());
     got(p);
   }
 
@@ -4009,7 +4016,7 @@ public:
     encode(may_include_deletes, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl, int64_t pool = -1) {
+  void decode(bufferlist::const_iterator &bl, int64_t pool = -1) {
     for (auto const &i: missing)
       tracker.changed(i.first);
     DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
@@ -4141,7 +4148,7 @@ void encode(
   ENCODE_DUMP_POST(cl);
 }
 template <bool TrackChanges>
-void decode(pg_missing_set<TrackChanges> &c, bufferlist::iterator &p) {
+void decode(pg_missing_set<TrackChanges> &c, bufferlist::const_iterator &p) {
   c.decode(p);
 }
 template <bool TrackChanges>
@@ -4178,7 +4185,7 @@ struct pg_nls_response_t {
     }
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(handle, bl);
     __u32 n;
@@ -4242,11 +4249,11 @@ struct pg_ls_response_t {
     encode(handle, bl);
     encode(entries, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     __u8 v;
     decode(v, bl);
-    assert(v == 1);
+    ceph_assert(v == 1);
     decode(handle, bl);
     decode(entries, bl);
   }
@@ -4298,7 +4305,7 @@ struct object_copy_cursor_t {
 
   static void generate_test_instances(list<object_copy_cursor_t*>& o);
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(object_copy_cursor_t)
@@ -4352,7 +4359,7 @@ public:
 
   static void generate_test_instances(list<object_copy_data_t*>& o);
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER_FEATURES(object_copy_data_t)
@@ -4371,7 +4378,7 @@ struct pg_create_t {
     : created(c), parent(p), split_bits(s) {}
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_create_t*>& o);
 };
@@ -4448,7 +4455,7 @@ public:
   }
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<OSDSuperblock*>& o);
 };
@@ -4487,7 +4494,7 @@ struct SnapSet {
 
   SnapSet() : seq(0) {}
   explicit SnapSet(bufferlist& bl) {
-    bufferlist::iterator p = bl.begin();
+    auto p = std::cbegin(bl);
     decode(p);
   }
 
@@ -4498,7 +4505,7 @@ struct SnapSet {
   uint64_t get_clone_bytes(snapid_t clone) const;
     
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<SnapSet*>& o);  
 
@@ -4536,7 +4543,7 @@ struct watch_info_t {
   watch_info_t(uint64_t c, uint32_t t, const entity_addr_t& a) : cookie(c), timeout_seconds(t), addr(a) {}
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<watch_info_t*>& o);
 };
@@ -4594,7 +4601,7 @@ struct chunk_info_t {
     return r;
   }
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   friend ostream& operator<<(ostream& out, const chunk_info_t& ci);
 };
@@ -4643,7 +4650,7 @@ struct object_manifest_t {
   }
   static void generate_test_instances(list<object_manifest_t*>& o);
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   friend ostream& operator<<(ostream& out, const object_info_t& oi);
 };
@@ -4786,9 +4793,9 @@ struct object_info_t {
   }
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void decode(bufferlist& bl) {
-    bufferlist::iterator p = bl.begin();
+    auto p = std::cbegin(bl);
     decode(p);
   }
   void dump(Formatter *f) const;
@@ -4835,7 +4842,7 @@ struct ObjectRecoveryInfo {
 
   static void generate_test_instances(list<ObjectRecoveryInfo*>& o);
   void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::iterator &bl, int64_t pool = -1);
+  void decode(bufferlist::const_iterator &bl, int64_t pool = -1);
   ostream &print(ostream &out) const;
   void dump(Formatter *f) const;
 };
@@ -4864,7 +4871,7 @@ struct ObjectRecoveryProgress {
 
   static void generate_test_instances(list<ObjectRecoveryProgress*>& o);
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   ostream &print(ostream &out) const;
   void dump(Formatter *f) const;
 };
@@ -4876,7 +4883,7 @@ struct PushReplyOp {
 
   static void generate_test_instances(list<PushReplyOp*>& o);
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   ostream &print(ostream &out) const;
   void dump(Formatter *f) const;
 
@@ -4893,7 +4900,7 @@ struct PullOp {
 
   static void generate_test_instances(list<PullOp*>& o);
   void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   ostream &print(ostream &out) const;
   void dump(Formatter *f) const;
 
@@ -4917,7 +4924,7 @@ struct PushOp {
 
   static void generate_test_instances(list<PushOp*>& o);
   void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   ostream &print(ostream &out) const;
   void dump(Formatter *f) const;
 
@@ -4955,7 +4962,7 @@ struct ScrubMap {
       ec_size_mismatch(false), large_omap_object_found(false) {}
 
     void encode(bufferlist& bl) const;
-    void decode(bufferlist::iterator& bl);
+    void decode(bufferlist::const_iterator& bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<object*>& o);
   };
@@ -4967,6 +4974,9 @@ struct ScrubMap {
   bool has_large_omap_object_errors:1;
 
   void merge_incr(const ScrubMap &l);
+  void clear_from(const hobject_t& start) {
+    objects.erase(objects.lower_bound(start), objects.end());
+  }
   void insert(const ScrubMap &r) {
     objects.insert(r.objects.begin(), r.objects.end());
   }
@@ -4978,7 +4988,7 @@ struct ScrubMap {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl, int64_t pool=-1);
+  void decode(bufferlist::const_iterator& bl, int64_t pool=-1);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ScrubMap*>& o);
 };
@@ -5115,7 +5125,7 @@ struct watch_item_t {
     encode(addr, bl, features);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(2, bl);
     decode(name, bl);
     decode(cookie, bl);
@@ -5145,7 +5155,7 @@ struct obj_list_watch_response_t {
     encode(entries, bl, features);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entries, bl);
     DECODE_FINISH(bl);
@@ -5201,7 +5211,7 @@ struct clone_info {
     encode(size, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(cloneid, bl);
     decode(snaps, bl);
@@ -5261,7 +5271,7 @@ struct obj_list_snap_response_t {
     encode(seq, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(clones, bl);
     if (struct_v >= 2)
@@ -5332,14 +5342,18 @@ struct PromoteCounter {
  */
 struct store_statfs_t
 {
-  uint64_t total = 0;                  // Total bytes
-  uint64_t available = 0;              // Free bytes available
+  uint64_t total = 0;                  ///< Total bytes
+  uint64_t available = 0;              ///< Free bytes available
 
-  int64_t allocated = 0;               // Bytes allocated by the store
-  int64_t stored = 0;                  // Bytes actually stored by the user
-  int64_t compressed = 0;              // Bytes stored after compression
-  int64_t compressed_allocated = 0;    // Bytes allocated for compressed data
-  int64_t compressed_original = 0;     // Bytes that were successfully compressed
+  int64_t allocated = 0;               ///< Bytes allocated by the store
+
+  int64_t data_stored = 0;                ///< Bytes actually stored by the user
+  int64_t data_compressed = 0;            ///< Bytes stored after compression
+  int64_t data_compressed_allocated = 0;  ///< Bytes allocated for compressed data
+  int64_t data_compressed_original = 0;   ///< Bytes that were compressed
+
+  int64_t omap_allocated = 0;         ///< approx usage of omap data
+  int64_t internal_metadata = 0;      ///< approx usage of internal metadata
 
   void reset() {
     *this = store_statfs_t();

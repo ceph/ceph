@@ -20,14 +20,16 @@
 #include <vector>
 #include <string>
 
-class MMonCommand : public PaxosServiceMessage {
- public:
+class MMonCommand : public MessageInstance<MMonCommand, PaxosServiceMessage> {
+public:
+  friend factory;
+
   uuid_d fsid;
   std::vector<std::string> cmd;
 
-  MMonCommand() : PaxosServiceMessage(MSG_MON_COMMAND, 0) {}
+  MMonCommand() : MessageInstance(MSG_MON_COMMAND, 0) {}
   MMonCommand(const uuid_d &f)
-    : PaxosServiceMessage(MSG_MON_COMMAND, 0),
+    : MessageInstance(MSG_MON_COMMAND, 0),
       fsid(f)
   { }
 
@@ -52,7 +54,7 @@ public:
     encode(cmd, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(fsid, p);
     decode(cmd, p);

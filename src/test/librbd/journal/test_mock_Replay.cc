@@ -33,7 +33,7 @@ struct ImageRequest<MockReplayImageCtx> {
   static void aio_write(MockReplayImageCtx *ictx, AioCompletion *c,
                         Extents &&image_extents, bufferlist &&bl,
                         int op_flags, const ZTracer::Trace &parent_trace) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->aio_write(c, image_extents, bl, op_flags);
   }
 
@@ -42,14 +42,14 @@ struct ImageRequest<MockReplayImageCtx> {
   static void aio_discard(MockReplayImageCtx *ictx, AioCompletion *c,
                           Extents&& image_extents, bool skip_partial_discard,
                           const ZTracer::Trace &parent_trace) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->aio_discard(c, image_extents, skip_partial_discard);
   }
 
   MOCK_METHOD1(aio_flush, void(AioCompletion *c));
   static void aio_flush(MockReplayImageCtx *ictx, AioCompletion *c,
                         FlushSource, const ZTracer::Trace &parent_trace) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->aio_flush(c);
   }
 
@@ -59,7 +59,7 @@ struct ImageRequest<MockReplayImageCtx> {
   static void aio_writesame(MockReplayImageCtx *ictx, AioCompletion *c,
                             Extents&& image_extents, bufferlist &&bl,
                             int op_flags, const ZTracer::Trace &parent_trace) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->aio_writesame(c, image_extents, bl, op_flags);
   }
 
@@ -70,7 +70,7 @@ struct ImageRequest<MockReplayImageCtx> {
                                     Extents &&image_extents, bufferlist &&cmp_bl,
                                     bufferlist &&bl, uint64_t *mismatch_offset,
                                     int op_flags, const ZTracer::Trace &parent_trace) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->aio_compare_and_write(c, image_extents, cmp_bl, bl,
                                       mismatch_offset, op_flags);
   }
@@ -293,18 +293,24 @@ public:
     }
   }
 
+  void expect_writeback_cache_enabled(MockReplayImageCtx &mock_image_ctx,
+                                      bool enabled) {
+    EXPECT_CALL(mock_image_ctx, is_writeback_cache_enabled())
+      .WillRepeatedly(Return(enabled));
+  }
+
   void when_process(MockJournalReplay &mock_journal_replay,
                     EventEntry &&event_entry, Context *on_ready,
                     Context *on_safe) {
     bufferlist bl;
     encode(event_entry, bl);
 
-    bufferlist::iterator it = bl.begin();
+    auto it = bl.cbegin();
     when_process(mock_journal_replay, &it, on_ready, on_safe);
   }
 
   void when_process(MockJournalReplay &mock_journal_replay,
-                    bufferlist::iterator *it, Context *on_ready,
+                    bufferlist::const_iterator *it, Context *on_ready,
                     Context *on_safe) {
     EventEntry event_entry;
     int r = mock_journal_replay.decode(it, &event_entry);
@@ -372,6 +378,7 @@ TEST_F(TestMockJournalReplay, AioDiscard) {
 
   MockJournalReplay mock_journal_replay(mock_image_ctx);
   MockIoImageRequest mock_io_image_request;
+  expect_writeback_cache_enabled(mock_image_ctx, true);
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -405,6 +412,7 @@ TEST_F(TestMockJournalReplay, AioWrite) {
 
   MockJournalReplay mock_journal_replay(mock_image_ctx);
   MockIoImageRequest mock_io_image_request;
+  expect_writeback_cache_enabled(mock_image_ctx, true);
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -469,6 +477,7 @@ TEST_F(TestMockJournalReplay, AioWriteSame) {
 
   MockJournalReplay mock_journal_replay(mock_image_ctx);
   MockIoImageRequest mock_io_image_request;
+  expect_writeback_cache_enabled(mock_image_ctx, true);
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -505,6 +514,7 @@ TEST_F(TestMockJournalReplay, AioCompareAndWrite) {
   MockJournalReplay mock_compare_and_write_journal_replay(mock_image_ctx);
   MockJournalReplay mock_mis_compare_and_write_journal_replay(mock_image_ctx);
   MockIoImageRequest mock_io_image_request;
+  expect_writeback_cache_enabled(mock_image_ctx, true);
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -565,6 +575,7 @@ TEST_F(TestMockJournalReplay, IOError) {
 
   MockJournalReplay mock_journal_replay(mock_image_ctx);
   MockIoImageRequest mock_io_image_request;
+  expect_writeback_cache_enabled(mock_image_ctx, true);
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -598,6 +609,7 @@ TEST_F(TestMockJournalReplay, SoftFlushIO) {
 
   MockJournalReplay mock_journal_replay(mock_image_ctx);
   MockIoImageRequest mock_io_image_request;
+  expect_writeback_cache_enabled(mock_image_ctx, true);
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -642,6 +654,7 @@ TEST_F(TestMockJournalReplay, PauseIO) {
 
   MockJournalReplay mock_journal_replay(mock_image_ctx);
   MockIoImageRequest mock_io_image_request;
+  expect_writeback_cache_enabled(mock_image_ctx, true);
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -677,6 +690,8 @@ TEST_F(TestMockJournalReplay, PauseIO) {
 }
 
 TEST_F(TestMockJournalReplay, Flush) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -688,6 +703,7 @@ TEST_F(TestMockJournalReplay, Flush) {
 
   MockJournalReplay mock_journal_replay(mock_image_ctx);
   MockIoImageRequest mock_io_image_request;
+  expect_writeback_cache_enabled(mock_image_ctx, true);
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -790,6 +806,8 @@ TEST_F(TestMockJournalReplay, BlockedOpFinishError) {
 }
 
 TEST_F(TestMockJournalReplay, MissingOpFinishEvent) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -849,6 +867,8 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEvent) {
 }
 
 TEST_F(TestMockJournalReplay, MissingOpFinishEventCancelOps) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -901,6 +921,8 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEventCancelOps) {
 }
 
 TEST_F(TestMockJournalReplay, UnknownOpFinishEvent) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -1820,7 +1842,7 @@ TEST_F(TestMockJournalReplay, UnknownEvent) {
   encode(static_cast<uint32_t>(-1), bl);
   ENCODE_FINISH(bl);
 
-  bufferlist::iterator it = bl.begin();
+  auto it = bl.cbegin();
   C_SaferCond on_ready;
   C_SaferCond on_safe;
   when_process(mock_journal_replay, &it, &on_ready, &on_safe);
@@ -2011,6 +2033,38 @@ TEST_F(TestMockJournalReplay, LockLostBeforeExecuteOp) {
   ASSERT_EQ(-ECANCELED, on_start_safe.wait());
   ASSERT_EQ(0, on_finish_ready.wait());
   ASSERT_EQ(-ECANCELED, on_finish_safe.wait());
+}
+
+TEST_F(TestMockJournalReplay, WritebackCacheDisabled) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockReplayImageCtx mock_image_ctx(*ictx);
+
+  MockExclusiveLock mock_exclusive_lock;
+  mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+  expect_accept_ops(mock_exclusive_lock, true);
+
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  MockIoImageRequest mock_io_image_request;
+  expect_writeback_cache_enabled(mock_image_ctx, false);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  io::AioCompletion *aio_comp;
+  C_SaferCond on_ready;
+  C_SaferCond on_safe;
+  expect_aio_discard(mock_io_image_request, &aio_comp, 123, 456, false);
+  when_process(mock_journal_replay,
+               EventEntry{AioDiscardEvent(123, 456, false)},
+               &on_ready, &on_safe);
+
+  when_complete(mock_image_ctx, aio_comp, 0);
+  ASSERT_EQ(0, on_ready.wait());
+  ASSERT_EQ(0, on_safe.wait());
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay, false));
 }
 
 } // namespace journal

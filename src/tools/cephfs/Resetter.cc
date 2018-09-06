@@ -35,7 +35,7 @@ int Resetter::init(mds_role_t role_, const std::string &type, bool hard)
   }
 
   auto fs = fsmap->get_filesystem(role.fscid);
-  assert(nullptr != fs);
+  ceph_assert(nullptr != fs);
 
   is_mdlog = false;
   if (type == "mdlog") {
@@ -77,7 +77,7 @@ int Resetter::reset()
   int r;
 
   auto fs =  fsmap->get_filesystem(role.fscid);
-  assert(fs != nullptr);
+  ceph_assert(fs != nullptr);
 
   Journaler journaler("resetter", ino,
       fs->mds_map.get_metadata_pool(),
@@ -159,7 +159,7 @@ int Resetter::reset_hard()
 
   file_layout_t default_log_layout = MDCache::gen_default_log_layout(
       fsmap->get_filesystem(role.fscid)->mds_map);
-  journaler.create(&default_log_layout, g_conf->mds_journal_format);
+  journaler.create(&default_log_layout, g_conf()->mds_journal_format);
 
   C_SaferCond cond;
   {
@@ -194,7 +194,7 @@ int Resetter::reset_hard()
 
 int Resetter::_write_reset_event(Journaler *journaler)
 {
-  assert(journaler != NULL);
+  ceph_assert(journaler != NULL);
 
   LogEvent *le = new EResetJournal;
 

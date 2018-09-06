@@ -20,13 +20,15 @@
 #include "include/types.h"
 
 
-class MMDSResolveAck : public Message {
- public:
+class MMDSResolveAck : public MessageInstance<MMDSResolveAck> {
+public:
+  friend factory;
+
   map<metareqid_t, bufferlist> commit;
   vector<metareqid_t> abort;
 
-  MMDSResolveAck() : Message(MSG_MDS_RESOLVEACK) {}
-private:
+protected:
+  MMDSResolveAck() : MessageInstance(MSG_MDS_RESOLVEACK) {}
   ~MMDSResolveAck() override {}
 
 public:
@@ -52,7 +54,7 @@ public:
   }
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(commit, p);
     decode(abort, p);
   }

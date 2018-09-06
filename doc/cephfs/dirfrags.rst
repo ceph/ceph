@@ -8,7 +8,7 @@ or very busy.  This splits up the metadata so that it can be shared
 between multiple MDS daemons, and between multiple objects in the
 metadata pool.
 
-In normal operation, directory fragmentation is invisbible to
+In normal operation, directory fragmentation is invisible to
 users and administrators, and all the configuration settings mentioned
 here should be left at their default values.
 
@@ -43,7 +43,7 @@ following sections.
 Size thresholds
 ===============
 
-A directory fragment is elegible for splitting when its size exceeds
+A directory fragment is eligible for splitting when its size exceeds
 ``mds_bal_split_size`` (default 10000).  Ordinarily this split is
 delayed by ``mds_bal_fragment_interval``, but if the fragment size
 exceeds a factor of ``mds_bal_fragment_fast_factor`` the split size,
@@ -59,7 +59,7 @@ this is set to 10 times the split size, giving a dirfrag size limit of
 100000.  Increasing this limit may lead to oversized directory fragment
 objects in the metadata pool, which the OSDs may not be able to handle.
 
-A directory fragment is elegible for merging when its size is less
+A directory fragment is eligible for merging when its size is less
 than ``mds_bal_merge_size``.  There is no merge equivalent of the
 "fast splitting" explained above: fast splitting exists to avoid
 creating oversized directory fragments, there is no equivalent issue

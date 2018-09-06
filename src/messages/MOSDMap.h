@@ -20,10 +20,12 @@
 #include "osd/OSDMap.h"
 #include "include/ceph_features.h"
 
-class MOSDMap : public Message {
-
-  static const int HEAD_VERSION = 4;
-  static const int COMPAT_VERSION = 3;
+class MOSDMap : public MessageInstance<MOSDMap> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 4;
+  static constexpr int COMPAT_VERSION = 3;
 
  public:
   uuid_d fsid;
@@ -63,9 +65,9 @@ class MOSDMap : public Message {
   }
 
 
-  MOSDMap() : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION) { }
+  MOSDMap() : MessageInstance(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDMap(const uuid_d &f, const uint64_t features)
-    : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION),
       fsid(f), encode_features(features),
       oldest_map(0), newest_map(0) { }
 private:
@@ -73,7 +75,7 @@ private:
 public:
   // marshalling
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(fsid, p);
     decode(incremental_maps, p);
     decode(maps, p);
@@ -113,7 +115,7 @@ public:
 	   p != incremental_maps.end();
 	   ++p) {
 	OSDMap::Incremental inc;
-	bufferlist::iterator q = p->second.begin();
+	auto q = p->second.cbegin();
 	inc.decode(q);
 	// always encode with subset of osdmaps canonical features
 	uint64_t f = inc.encode_features & features;
@@ -128,7 +130,7 @@ public:
 	if (inc.crush.length()) {
 	  // embedded crush map
 	  CrushWrapper c;
-	  auto p = inc.crush.begin();
+	  auto p = inc.crush.cbegin();
 	  c.decode(p);
 	  inc.crush.clear();
 	  c.encode(inc.crush, f);

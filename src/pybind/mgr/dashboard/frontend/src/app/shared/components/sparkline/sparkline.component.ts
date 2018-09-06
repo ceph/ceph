@@ -2,6 +2,7 @@ import { Component, ElementRef, OnChanges, OnInit, SimpleChanges, ViewChild } fr
 import { Input } from '@angular/core';
 
 import { ChartTooltip } from '../../../shared/models/chart-tooltip';
+import { DimlessBinaryPipe } from '../../pipes/dimless-binary.pipe';
 
 @Component({
   selector: 'cd-sparkline',
@@ -9,15 +10,20 @@ import { ChartTooltip } from '../../../shared/models/chart-tooltip';
   styleUrls: ['./sparkline.component.scss']
 })
 export class SparklineComponent implements OnInit, OnChanges {
-  @ViewChild('sparkCanvas') chartCanvasRef: ElementRef;
-  @ViewChild('sparkTooltip') chartTooltipRef: ElementRef;
+  @ViewChild('sparkCanvas')
+  chartCanvasRef: ElementRef;
+  @ViewChild('sparkTooltip')
+  chartTooltipRef: ElementRef;
 
-  @Input() data: any;
+  @Input()
+  data: any;
   @Input()
   style = {
     height: '30px',
     width: '100px'
   };
+  @Input()
+  isBinary: boolean;
 
   public colors: Array<any> = [
     {
@@ -48,7 +54,16 @@ export class SparklineComponent implements OnInit, OnChanges {
       enabled: false,
       mode: 'index',
       intersect: false,
-      custom: undefined
+      custom: undefined,
+      callbacks: {
+        label: (tooltipItem) => {
+          if (this.isBinary) {
+            return this.dimlessBinaryPipe.transform(tooltipItem.yLabel);
+          } else {
+            return tooltipItem.yLabel;
+          }
+        }
+      }
     },
     scales: {
       yAxes: [
@@ -72,11 +87,11 @@ export class SparklineComponent implements OnInit, OnChanges {
 
   public labels: Array<any> = [];
 
-  constructor() {}
+  constructor(private dimlessBinaryPipe: DimlessBinaryPipe) {}
 
   ngOnInit() {
     const getStyleTop = (tooltip, positionY) => {
-      return (tooltip.caretY - tooltip.height - tooltip.yPadding - 5) + 'px';
+      return tooltip.caretY - tooltip.height - tooltip.yPadding - 5 + 'px';
     };
 
     const getStyleLeft = (tooltip, positionX) => {
@@ -95,7 +110,7 @@ export class SparklineComponent implements OnInit, OnChanges {
       borderColor: this.colors[0].pointBorderColor
     };
 
-    this.options.tooltips.custom = tooltip => {
+    this.options.tooltips.custom = (tooltip) => {
       chartTooltip.customTooltips(tooltip);
     };
   }

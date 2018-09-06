@@ -19,6 +19,7 @@
 #include "PyModule.h"
 
 #include "common/debug.h"
+#include "common/errno.h"
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 
@@ -82,8 +83,8 @@ std::string peek_pyerror()
 {
   PyObject *ptype, *pvalue, *ptraceback;
   PyErr_Fetch(&ptype, &pvalue, &ptraceback);
-  assert(ptype);
-  assert(pvalue);
+  ceph_assert(ptype);
+  ceph_assert(pvalue);
   PyObject *pvalue_str = PyObject_Str(pvalue);
   std::string exc_msg = PyString_AsString(pvalue_str);
   Py_DECREF(pvalue_str);
@@ -188,12 +189,12 @@ std::string PyModule::get_site_packages()
   // CPython doesn't auto-add site-packages dirs to sys.path for us,
   // but it does provide a module that we can ask for them.
   auto site_module = PyImport_ImportModule("site");
-  assert(site_module);
+  ceph_assert(site_module);
 
   auto site_packages_fn = PyObject_GetAttrString(site_module, "getsitepackages");
   if (site_packages_fn != nullptr) {
     auto site_packages_list = PyObject_CallObject(site_packages_fn, nullptr);
-    assert(site_packages_list);
+    ceph_assert(site_packages_list);
 
     auto n = PyList_Size(site_packages_list);
     for (Py_ssize_t i = 0; i < n; ++i) {
@@ -211,7 +212,7 @@ std::string PyModule::get_site_packages()
     // run inside virtualenvs :-/
 
     auto site_packages_fn = PyObject_GetAttrString(site_module, "addsitepackages");
-    assert(site_packages_fn);
+    ceph_assert(site_packages_fn);
 
     auto known_paths = PySet_New(nullptr);
     auto pArgs = PyTuple_Pack(1, known_paths);
@@ -221,9 +222,9 @@ std::string PyModule::get_site_packages()
     Py_DECREF(site_packages_fn);
 
     auto sys_module = PyImport_ImportModule("sys");
-    assert(sys_module);
+    ceph_assert(sys_module);
     auto sys_path = PyObject_GetAttrString(sys_module, "path");
-    assert(sys_path);
+    ceph_assert(sys_path);
 
     dout(1) << "sys.path:" << dendl;
     auto n = PyList_Size(sys_path);
@@ -289,7 +290,7 @@ void PyModule::init_ceph_module()
 #else
   PyObject *ceph_module = Py_InitModule("ceph_module", module_methods);
 #endif
-  assert(ceph_module != nullptr);
+  ceph_assert(ceph_module != nullptr);
   std::map<const char*, PyTypeObject*> classes{
     {{"BaseMgrModule", &BaseMgrModuleType},
      {"BaseMgrStandbyModule", &BaseMgrStandbyModuleType},
@@ -300,7 +301,7 @@ void PyModule::init_ceph_module()
   for (auto [name, type] : classes) {
     type->tp_new = PyType_GenericNew;
     if (PyType_Ready(type) < 0) {
-      assert(0);
+      ceph_abort();
     }
     Py_INCREF(type);
 
@@ -313,7 +314,7 @@ void PyModule::init_ceph_module()
 
 int PyModule::load(PyThreadState *pMainThreadState)
 {
-  assert(pMainThreadState != nullptr);
+  ceph_assert(pMainThreadState != nullptr);
 
   // Configure sub-interpreter
   {
@@ -337,7 +338,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
 #endif
       // Configure sys.path to include mgr_module_path
       string paths = (":" + get_site_packages() +
-		      ":" + g_conf->get_val<std::string>("mgr_module_path"));
+		      ":" + g_conf().get_val<std::string>("mgr_module_path"));
 #if PY_MAJOR_VERSION >= 3
       wstring sys_path(Py_GetPath() + wstring(begin(paths), end(paths)));
       PySys_SetPath(const_cast<wchar_t*>(sys_path.c_str()));
@@ -453,7 +454,7 @@ int PyModule::walk_dict_list(
   const size_t list_size = PyList_Size(command_list);
   for (size_t i = 0; i < list_size; ++i) {
     PyObject *command = PyList_GetItem(command_list, i);
-    assert(command != nullptr);
+    ceph_assert(command != nullptr);
 
     if (!PyDict_Check(command)) {
       derr << "Module " << get_name() << " has non-dict entry "
@@ -477,17 +478,17 @@ int PyModule::load_commands()
     ModuleCommand command;
 
     PyObject *pCmd = PyDict_GetItemString(pCommand, "cmd");
-    assert(pCmd != nullptr);
+    ceph_assert(pCmd != nullptr);
     command.cmdstring = PyString_AsString(pCmd);
 
     dout(20) << "loaded command " << command.cmdstring << dendl;
 
     PyObject *pDesc = PyDict_GetItemString(pCommand, "desc");
-    assert(pDesc != nullptr);
+    ceph_assert(pDesc != nullptr);
     command.helpstring = PyString_AsString(pDesc);
 
     PyObject *pPerm = PyDict_GetItemString(pCommand, "perm");
-    assert(pPerm != nullptr);
+    ceph_assert(pPerm != nullptr);
     command.perm = PyString_AsString(pPerm);
 
     command.polling = false;
@@ -515,7 +516,7 @@ int PyModule::load_options()
 {
   int r = walk_dict_list("OPTIONS", [this](PyObject *pOption) -> int {
     PyObject *pName = PyDict_GetItemString(pOption, "name");
-    assert(pName != nullptr);
+    ceph_assert(pName != nullptr);
 
     ModuleOption option;
     option.name = PyString_AsString(pName);

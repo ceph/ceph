@@ -81,7 +81,7 @@ namespace librbd {
 namespace {
 
 int validate_pool(IoCtx &io_ctx, CephContext *cct) {
-  if (!cct->_conf->get_val<bool>("rbd_validate_pool")) {
+  if (!cct->_conf.get_val<bool>("rbd_validate_pool")) {
     return 0;
   }
 
@@ -211,8 +211,8 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 
   void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx)
   {
-    assert(ictx->owner_lock.is_locked());
-    assert(ictx->exclusive_lock == nullptr ||
+    ceph_assert(ictx->owner_lock.is_locked());
+    ceph_assert(ictx->exclusive_lock == nullptr ||
 	   ictx->exclusive_lock->is_lock_owner());
 
     C_SaferCond ctx;
@@ -244,8 +244,14 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       off += r;
     } while (r == READ_SIZE);
 
+    static_assert(sizeof(RBD_HEADER_TEXT) == sizeof(RBD_MIGRATE_HEADER_TEXT),
+                  "length of rbd headers must be the same");
+
     if (header.length() < sizeof(RBD_HEADER_TEXT) ||
-	memcmp(RBD_HEADER_TEXT, header.c_str(), sizeof(RBD_HEADER_TEXT))) {
+        (memcmp(RBD_HEADER_TEXT, header.c_str(),
+                sizeof(RBD_HEADER_TEXT)) != 0 &&
+         memcmp(RBD_MIGRATE_HEADER_TEXT, header.c_str(),
+                sizeof(RBD_MIGRATE_HEADER_TEXT)) != 0)) {
       CephContext *cct = (CephContext *)io_ctx.cct();
       lderr(cct) << "unrecognized header format" << dendl;
       return -ENXIO;
@@ -311,6 +317,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     {RBD_IMAGE_OPTION_FEATURES_SET, UINT64},
     {RBD_IMAGE_OPTION_FEATURES_CLEAR, UINT64},
     {RBD_IMAGE_OPTION_DATA_POOL, STR},
+    {RBD_IMAGE_OPTION_FLATTEN, UINT64},
   };
 
   std::string image_option_name(int optname) {
@@ -337,6 +344,8 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       return "features_clear";
     case RBD_IMAGE_OPTION_DATA_POOL:
       return "data_pool";
+    case RBD_IMAGE_OPTION_FLATTEN:
+      return "flatten";
     default:
       return "unknown (" + stringify(optname) + ")";
     }
@@ -485,7 +494,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       IMAGE_OPTIONS_TYPE_MAPPING.find(optname);
 
     if (i == IMAGE_OPTIONS_TYPE_MAPPING.end()) {
-      assert((*opts_)->find(optname) == (*opts_)->end());
+      ceph_assert((*opts_)->find(optname) == (*opts_)->end());
       return -EINVAL;
     }
 
@@ -529,7 +538,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 
     // old format images are in a tmap
     if (bl.length()) {
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       bufferlist header;
       map<string,bufferlist> m;
       decode(header, p);
@@ -589,9 +598,12 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
         return r;
       }
 
+      // TODO support clone v2 child namespaces
+      ioctx.set_namespace(ictx->md_ctx.get_namespace());
+
       for (auto &id_it : info.second) {
-	ImageCtx *imctx = new ImageCtx("", id_it, NULL, ioctx, false);
-	int r = imctx->state->open(false);
+	ImageCtx *imctx = new ImageCtx("", id_it, nullptr, ioctx, false);
+	int r = imctx->state->open(0);
 	if (r < 0) {
 	  lderr(cct) << "error opening image: "
 		     << cpp_strerror(r) << dendl;
@@ -622,7 +634,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
         }
       }
       pctx.update_progress(++i, size);
-      assert(i <= size);
+      ceph_assert(i <= size);
     }
 
     return 0;
@@ -657,6 +669,9 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
                    << dendl;
         return r;
       }
+
+      // TODO support clone v2 child namespaces
+      ioctx.set_namespace(ictx->md_ctx.get_namespace());
 
       for (auto &id_it : info.second) {
         string name;
@@ -743,6 +758,11 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       return r;
     }
 
+    if (!io_ctx.get_namespace().empty()) {
+      lderr(cct) << "attempting to add v1 image to namespace" << dendl;
+      return -EINVAL;
+    }
+
     ldout(cct, 2) << "adding rbd image to directory..." << dendl;
     r = tmap_set(io_ctx, imgname);
     if (r < 0) {
@@ -786,12 +806,12 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     ImageOptions opts;
 
     int r = opts.set(RBD_IMAGE_OPTION_ORDER, order_);
-    assert(r == 0);
+    ceph_assert(r == 0);
 
     r = create(io_ctx, imgname, "", size, opts, "", "", false);
 
     int r1 = opts.get(RBD_IMAGE_OPTION_ORDER, &order_);
-    assert(r1 == 0);
+    ceph_assert(r1 == 0);
     *order = order_;
 
     return r;
@@ -810,20 +830,20 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     int r;
 
     r = opts.set(RBD_IMAGE_OPTION_FORMAT, format);
-    assert(r == 0);
+    ceph_assert(r == 0);
     r = opts.set(RBD_IMAGE_OPTION_FEATURES, features);
-    assert(r == 0);
+    ceph_assert(r == 0);
     r = opts.set(RBD_IMAGE_OPTION_ORDER, order_);
-    assert(r == 0);
+    ceph_assert(r == 0);
     r = opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
-    assert(r == 0);
+    ceph_assert(r == 0);
     r = opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
-    assert(r == 0);
+    ceph_assert(r == 0);
 
     r = create(io_ctx, imgname, "", size, opts, "", "", false);
 
     int r1 = opts.get(RBD_IMAGE_OPTION_ORDER, &order_);
-    assert(r1 == 0);
+    ceph_assert(r1 == 0);
     *order = order_;
 
     return r;
@@ -842,13 +862,19 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     }
 
     CephContext *cct = (CephContext *)io_ctx.cct();
+    uint64_t flatten;
+    if (opts.get(RBD_IMAGE_OPTION_FLATTEN, &flatten) == 0) {
+      lderr(cct) << "create does not support 'flatten' image option" << dendl;
+      return -EINVAL;
+    }
+
     ldout(cct, 10) << __func__ << " name=" << image_name << ", "
 		   << "id= " << id << ", "
 		   << "size=" << size << ", opts=" << opts << dendl;
 
     uint64_t format;
     if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0)
-      format = cct->_conf->get_val<int64_t>("rbd_default_format");
+      format = cct->_conf.get_val<int64_t>("rbd_default_format");
     bool old_format = format == 1;
 
     // make sure it doesn't already exist, in either format
@@ -865,7 +891,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 
     uint64_t order = 0;
     if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0 || order == 0) {
-      order = cct->_conf->get_val<int64_t>("rbd_default_order");
+      order = cct->_conf.get_val<int64_t>("rbd_default_order");
     }
     r = image::CreateRequest<>::validate_order(cct, order);
     if (r < 0) {
@@ -894,7 +920,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     }
 
     int r1 = opts.set(RBD_IMAGE_OPTION_ORDER, order);
-    assert(r1 == 0);
+    ceph_assert(r1 == 0);
 
     return r;
   }
@@ -915,57 +941,59 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
     opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
 
-    int r = clone(p_ioctx, p_name, p_snap_name, c_ioctx, c_name, opts);
+    int r = clone(p_ioctx, nullptr, p_name, p_snap_name, c_ioctx, nullptr,
+                  c_name, opts, "", "");
     opts.get(RBD_IMAGE_OPTION_ORDER, &order);
     *c_order = order;
     return r;
   }
 
-  int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
-	    IoCtx& c_ioctx, const char *c_name, ImageOptions& c_opts)
+  int clone(IoCtx& p_ioctx, const char *p_id, const char *p_name,
+            const char *p_snap_name, IoCtx& c_ioctx, const char *c_id,
+            const char *c_name, ImageOptions& c_opts,
+            const std::string &non_primary_global_image_id,
+            const std::string &primary_mirror_uuid)
   {
+    ceph_assert((p_id == nullptr) ^ (p_name == nullptr));
+
     CephContext *cct = (CephContext *)p_ioctx.cct();
-    if (p_snap_name == NULL) {
+    if (p_snap_name == nullptr) {
       lderr(cct) << "image to be cloned must be a snapshot" << dendl;
       return -EINVAL;
     }
 
-    // make sure parent snapshot exists
-    ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx, true);
-    int r = p_imctx->state->open(false);
-    if (r < 0) {
-      lderr(cct) << "error opening parent image: "
-		 << cpp_strerror(r) << dendl;
-      return r;
+    uint64_t flatten;
+    if (c_opts.get(RBD_IMAGE_OPTION_FLATTEN, &flatten) == 0) {
+      lderr(cct) << "clone does not support 'flatten' image option" << dendl;
+      return -EINVAL;
     }
 
-    r = clone(p_imctx, c_ioctx, c_name, "", c_opts, "", "");
-
-    int close_r = p_imctx->state->close();
-    if (r == 0 && close_r < 0) {
-      r = close_r;
+    int r;
+    std::string parent_id;
+    if (p_id == nullptr) {
+      r = cls_client::dir_get_id(&p_ioctx, RBD_DIRECTORY, p_name,
+                                 &parent_id);
+      if (r < 0) {
+        if (r != -ENOENT) {
+          lderr(cct) << "failed to retrieve parent image id: "
+                     << cpp_strerror(r) << dendl;
+        }
+        return r;
+      }
+    } else {
+      parent_id = p_id;
     }
 
-    if (r < 0) {
-      return r;
-    }
-    return 0;
-  }
-
-  int clone(ImageCtx *p_imctx, IoCtx& c_ioctx, const std::string &c_name,
-            const std::string &c_id, ImageOptions& c_opts,
-            const std::string &non_primary_global_image_id,
-            const std::string &primary_mirror_uuid)
-  {
-    std::string id(c_id);
-    if (id.empty()) {
-      id = util::generate_image_id(c_ioctx);
+    std::string clone_id;
+    if (c_id == nullptr) {
+      clone_id = util::generate_image_id(c_ioctx);
+    } else {
+      clone_id = c_id;
     }
 
-    CephContext *cct = (CephContext *)c_ioctx.cct();
     ldout(cct, 10) << __func__ << " "
 		   << "c_name=" << c_name << ", "
-		   << "c_id= " << c_id << ", "
+		   << "c_id= " << clone_id << ", "
 		   << "c_opts=" << c_opts << dendl;
 
     ThreadPool *thread_pool;
@@ -974,11 +1002,17 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 
     C_SaferCond cond;
     auto *req = image::CloneRequest<>::create(
-      p_imctx, c_ioctx, c_name, id, c_opts,
-      non_primary_global_image_id, primary_mirror_uuid, op_work_queue, &cond);
+      p_ioctx, parent_id, p_snap_name, CEPH_NOSNAP, c_ioctx, c_name, clone_id,
+      c_opts, non_primary_global_image_id, primary_mirror_uuid, op_work_queue,
+      &cond);
     req->send();
 
-    return cond.wait();
+    r = cond.wait();
+    if (r < 0) {
+      return r;
+    }
+
+    return 0;
   }
 
   int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
@@ -988,7 +1022,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 		   << dstname << dendl;
 
     ImageCtx *ictx = new ImageCtx(srcname, "", "", io_ctx, false);
-    int r = ictx->state->open(false);
+    int r = ictx->state->open(0);
     if (r < 0) {
       lderr(cct) << "error opening source image: " << cpp_strerror(r) << dendl;
       return r;
@@ -1090,7 +1124,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       }
     }
 
-    if (parent_snap_name) {
+    if (parent_snap_name && parent_spec.snap_id != CEPH_NOSNAP) {
       RWLock::RLocker l(ictx->parent->snap_lock);
       r = ictx->parent->get_snap_name(parent_spec.snap_id,
 				      parent_snap_name);
@@ -1366,7 +1400,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 
     ImageCtx *ictx = new ImageCtx((image_id.empty() ? image_name : ""),
                                   image_id, nullptr, io_ctx, false);
-    r = ictx->state->open(true);
+    r = ictx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT);
     if (r == -ENOENT) {
       return r;
     } else if (r < 0) {
@@ -1392,6 +1426,12 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       }
     }
     ictx->owner_lock.put_read();
+
+    if (!ictx->migration_info.empty()) {
+      lderr(cct) << "cannot move migrating image to trash" << dendl;
+      ictx->state->close();
+      return -EINVAL;
+    }
 
     utime_t delete_time{ceph_clock_now()};
     utime_t deferment_end_time{delete_time};
@@ -1692,7 +1732,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
   int snap_get_timestamp(ImageCtx *ictx, uint64_t snap_id, struct timespec *timestamp)
   {
     std::map<librados::snap_t, SnapInfo>::iterator snap_it = ictx->snap_info.find(snap_id);
-    assert(snap_it != ictx->snap_info.end());
+    ceph_assert(snap_it != ictx->snap_info.end());
     utime_t time = snap_it->second.timestamp;
     time.to_timespec(timestamp);
     return 0;
@@ -1728,6 +1768,12 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 	   ImageOptions& opts, ProgressContext &prog_ctx, size_t sparse_size)
   {
     CephContext *cct = (CephContext *)dest_md_ctx.cct();
+    uint64_t flatten;
+    if (opts.get(RBD_IMAGE_OPTION_FLATTEN, &flatten) == 0) {
+      lderr(cct) << "copy does not support 'flatten' image option" << dendl;
+      return -EINVAL;
+    }
+
     ldout(cct, 20) << "copy " << src->name
 		   << (src->snap_name.length() ? "@" + src->snap_name : "")
 		   << " -> " << destname << " opts = " << opts << dendl;
@@ -1767,9 +1813,9 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     }
     opts.set(RBD_IMAGE_OPTION_ORDER, static_cast<uint64_t>(order));
 
-    ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL,
-					  dest_md_ctx, false);
-    r = dest->state->open(false);
+    ImageCtx *dest = new librbd::ImageCtx(destname, "", nullptr, dest_md_ctx,
+                                          false);
+    r = dest->state->open(0);
     if (r < 0) {
       lderr(cct) << "failed to read newly created header" << dendl;
       return r;
@@ -1813,7 +1859,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 	m_throttle->end_op(r);
 	return;
       }
-      assert(m_bl->length() == (size_t)r);
+      ceph_assert(m_bl->length() == (size_t)r);
 
       if (m_bl->is_zero()) {
 	delete m_bl;
@@ -1861,7 +1907,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 	}
       }
       delete m_bl;
-      assert(gather_ctx->get_sub_created_count() > 0);
+      ceph_assert(gather_ctx->get_sub_created_count() > 0);
       gather_ctx->activate();
     }
 
@@ -2196,7 +2242,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
   // validate extent against image size; clip to image size if necessary
   int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len)
   {
-    assert(ictx->snap_lock.is_locked());
+    ceph_assert(ictx->snap_lock.is_locked());
     uint64_t image_size = ictx->get_image_size(ictx->snap_id);
     bool snap_exists = ictx->snap_exists;
 

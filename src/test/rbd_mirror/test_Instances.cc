@@ -35,7 +35,7 @@ public:
     void handle(const InstanceIds& instance_ids, Instance* instance) {
       std::unique_lock<std::mutex> locker(lock);
       for (auto& instance_id : instance_ids) {
-        assert(instance->count > 0);
+        ceph_assert(instance->count > 0);
         --instance->count;
 
         instance->ids.insert(instance_id);
@@ -58,15 +58,18 @@ public:
     TestFixture::SetUp();
     m_local_io_ctx.remove(RBD_MIRROR_LEADER);
     EXPECT_EQ(0, m_local_io_ctx.create(RBD_MIRROR_LEADER, true));
+
+    m_instance_id = stringify(m_local_io_ctx.get_instance_id());
   }
 
   Listener m_listener;
+  std::string m_instance_id;
 };
 
 TEST_F(TestInstances, InitShutdown)
 {
   m_listener.add.count = 1;
-  Instances<> instances(m_threads, m_local_io_ctx, m_listener);
+  Instances<> instances(m_threads, m_local_io_ctx, m_instance_id, m_listener);
 
   std::string instance_id = "instance_id";
   ASSERT_EQ(0, librbd::cls_client::mirror_instances_add(&m_local_io_ctx,
@@ -89,7 +92,7 @@ TEST_F(TestInstances, InitShutdown)
 
 TEST_F(TestInstances, InitEnoent)
 {
-  Instances<> instances(m_threads, m_local_io_ctx, m_listener);
+  Instances<> instances(m_threads, m_local_io_ctx, m_instance_id, m_listener);
 
   m_local_io_ctx.remove(RBD_MIRROR_LEADER);
 
@@ -113,7 +116,7 @@ TEST_F(TestInstances, NotifyRemove)
 
   m_listener.add.count = 2;
   m_listener.remove.count = 1;
-  Instances<> instances(m_threads, m_local_io_ctx, m_listener);
+  Instances<> instances(m_threads, m_local_io_ctx, m_instance_id, m_listener);
 
   std::string instance_id1 = "instance_id1";
   std::string instance_id2 = "instance_id2";

@@ -49,7 +49,7 @@ public:
     return fd != -1;
   }
   MonitorDBStore::TransactionRef cur() {
-    assert(valid());
+    ceph_assert(valid());
     return t;
   }
   unsigned num() { return idx; }
@@ -69,7 +69,7 @@ public:
       fd = -1;
       return;
     }
-    bufferlist::iterator bliter = bl.begin();
+    auto bliter = bl.cbegin();
     uint8_t ver, ver2;
     decode(ver, bliter);
     decode(ver2, bliter);
@@ -88,7 +88,7 @@ public:
       fd = -1;
       return;
     }
-    bliter = bl.begin();
+    bliter = bl.cbegin();
     t.reset(new MonitorDBStore::Transaction);
     t->decode(bliter);
   }
@@ -133,7 +133,7 @@ int parse_cmd_args(
   // and that's what 'desc_all' is all about.
   //
 
-  assert(desc != NULL);
+  ceph_assert(desc != NULL);
 
   po::options_description desc_all;
   desc_all.add(*desc);
@@ -237,7 +237,7 @@ void usage(const char *n, po::options_description &d)
 }
 
 int update_osdmap(MonitorDBStore& store, version_t ver, bool copy,
-		  ceph::shared_ptr<CrushWrapper> crush,
+		  std::shared_ptr<CrushWrapper> crush,
 		  MonitorDBStore::Transaction* t) {
   const string prefix("osdmap");
 
@@ -285,7 +285,7 @@ int update_osdmap(MonitorDBStore& store, version_t ver, bool copy,
       fullmap.encode(inc.fullmap);
     }
   }
-  assert(osdmap.have_crc());
+  ceph_assert(osdmap.have_crc());
   inc.full_crc = osdmap.get_crc();
   bl.clear();
   // be consistent with OSDMonitor::update_from_paxos()
@@ -320,7 +320,7 @@ int rewrite_transaction(MonitorDBStore& store, int version,
 
   // load/extract the crush map
   int r = 0;
-  ceph::shared_ptr<CrushWrapper> crush(new CrushWrapper);
+  std::shared_ptr<CrushWrapper> crush(new CrushWrapper);
   if (crush_file.empty()) {
     bufferlist bl;
     r = store.get(prefix, store.combine_strings("full", good_version), bl);
@@ -339,7 +339,7 @@ int rewrite_transaction(MonitorDBStore& store, int version,
       std::cerr << err << ": " << cpp_strerror(r) << std::endl;
       return r;
     }
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     crush->decode(p);
   }
 
@@ -347,7 +347,7 @@ int rewrite_transaction(MonitorDBStore& store, int version,
   // (good_version, last_committed]
   // with the good crush map.
   // XXX: may need to break this into several paxos versions?
-  assert(good_version < last_committed);
+  ceph_assert(good_version < last_committed);
   for (version_t v = good_version + 1; v <= last_committed; v++) {
     cout << "rewriting epoch #" << v << "/" << last_committed << std::endl;
     r = update_osdmap(store, v, false, crush, t);
@@ -477,7 +477,7 @@ int inflate_pgmap(MonitorDBStore& st, unsigned n, bool can_be_trimmed) {
     }
     bufferlist pg_bl = i->value();
     pg_stat_t ps;
-    bufferlist::iterator p = pg_bl.begin();
+    auto p = pg_bl.cbegin();
     decode(ps, p);
     // will update the last_epoch_clean of all the pgs.
     pg_stat[pgid] = ps;
@@ -603,7 +603,7 @@ static int update_mgrmap(MonitorDBStore& st)
     // mgr expects epoch > 1
     map.epoch++;
     auto initial_modules =
-      get_str_vec(g_ceph_context->_conf->get_val<string>("mgr_initial_modules"));
+      get_str_vec(g_ceph_context->_conf.get_val<string>("mgr_initial_modules"));
     copy(begin(initial_modules),
 	 end(initial_modules),
 	 inserter(map.modules, end(map.modules)));
@@ -840,8 +840,7 @@ int main(int argc, char **argv) {
     CODE_ENVIRONMENT_UTILITY,
     CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
-  g_conf = g_ceph_context->_conf;
+  cct->_conf.apply_changes(nullptr);
 
   // this is where we'll write *whatever*, on a per-command basis.
   // not all commands require some place to write their things.
@@ -970,14 +969,14 @@ int main(int argc, char **argv) {
           fs_map.print(ss);
         } else if (map_type == "mgr") {
           MgrMap mgr_map;
-          auto p = bl.begin();
+          auto p = bl.cbegin();
           mgr_map.decode(p);
           JSONFormatter f;
           f.dump_object("mgrmap", mgr_map);
           f.flush(ss);
         } else if (map_type == "crushmap") {
           CrushWrapper cw;
-          bufferlist::iterator it = bl.begin();
+          auto it = bl.cbegin();
           cw.decode(it);
           CrushCompiler cc(cw, std::cerr, 0);
           cc.decompile(ss);

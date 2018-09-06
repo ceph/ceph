@@ -17,18 +17,24 @@
 
 #include "msg/Message.h"
 
-struct MMDSOpenIno : public Message {
+class MMDSOpenIno : public MessageInstance<MMDSOpenIno> {
+public:
+  friend factory;
+
   inodeno_t ino;
   vector<inode_backpointer_t> ancestors;
 
-  MMDSOpenIno() : Message(MSG_MDS_OPENINO) {}
+protected:
+  MMDSOpenIno() : MessageInstance(MSG_MDS_OPENINO) {}
   MMDSOpenIno(ceph_tid_t t, inodeno_t i, vector<inode_backpointer_t>* pa) :
-    Message(MSG_MDS_OPENINO), ino(i) {
+    MessageInstance(MSG_MDS_OPENINO), ino(i) {
     header.tid = t;
     if (pa)
       ancestors = *pa;
   }
+  ~MMDSOpenIno() override {}
 
+public:
   const char *get_type_name() const override { return "openino"; }
   void print(ostream &out) const override {
     out << "openino(" << header.tid << " " << ino << " " << ancestors << ")";
@@ -40,7 +46,7 @@ struct MMDSOpenIno : public Message {
     encode(ancestors, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(ino, p);
     decode(ancestors, p);
   }

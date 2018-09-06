@@ -17,7 +17,10 @@
 
 #include "msg/Message.h"
 
-struct MClientSnap : public Message {
+class MClientSnap : public MessageInstance<MClientSnap> {
+public:
+  friend factory;
+
   ceph_mds_snap_head head;
   bufferlist bl;
   
@@ -25,12 +28,12 @@ struct MClientSnap : public Message {
   vector<inodeno_t> split_inos;
   vector<inodeno_t> split_realms;
 
+protected:
   MClientSnap(int o=0) : 
-    Message(CEPH_MSG_CLIENT_SNAP) {
+    MessageInstance(CEPH_MSG_CLIENT_SNAP) {
     memset(&head, 0, sizeof(head));
     head.op = o;
   }
-private:
   ~MClientSnap() override {}
 
 public:  
@@ -54,12 +57,12 @@ public:
     encode_nohead(bl, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(head, p);
     decode_nohead(head.num_split_inos, split_inos, p);
     decode_nohead(head.num_split_realms, split_realms, p);
     decode_nohead(head.trace_len, bl, p);
-    assert(p.end());
+    ceph_assert(p.end());
   }
 
 };

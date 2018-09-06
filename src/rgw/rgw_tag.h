@@ -22,7 +22,7 @@ class RGWObjTags
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
     decode(tag_map,bl);
     DECODE_FINISH(bl);

@@ -1,5 +1,5 @@
 import { HTTP_INTERCEPTORS, HttpClientModule } from '@angular/common/http';
-import { NgModule } from '@angular/core';
+import { ErrorHandler, NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
@@ -11,6 +11,7 @@ import { AppComponent } from './app.component';
 import { CephModule } from './ceph/ceph.module';
 import { CoreModule } from './core/core.module';
 import { ApiInterceptorService } from './shared/services/api-interceptor.service';
+import { JsErrorHandler } from './shared/services/js-error-handler.service';
 import { SharedModule } from './shared/shared.module';
 
 export class CustomOption extends ToastOptions {
@@ -21,9 +22,7 @@ export class CustomOption extends ToastOptions {
 }
 
 @NgModule({
-  declarations: [
-    AppComponent
-  ],
+  declarations: [AppComponent],
   imports: [
     HttpClientModule,
     BrowserModule,
@@ -40,6 +39,10 @@ export class CustomOption extends ToastOptions {
   exports: [SharedModule],
   providers: [
     {
+      provide: ErrorHandler,
+      useClass: JsErrorHandler
+    },
+    {
       provide: HTTP_INTERCEPTORS,
       useClass: ApiInterceptorService,
       multi: true
@@ -47,8 +50,8 @@ export class CustomOption extends ToastOptions {
     {
       provide: ToastOptions,
       useClass: CustomOption
-    },
+    }
   ],
   bootstrap: [AppComponent]
 })
-export class AppModule { }
+export class AppModule {}

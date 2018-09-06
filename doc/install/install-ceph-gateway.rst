@@ -264,7 +264,7 @@ system-wide value. You can also set it for each instance in your Ceph
 configuration file.
 
 Once you have changed your bucket sharding configuration in your Ceph
-configuration file, restart your gateway. On Red Hat Enteprise Linux execute::
+configuration file, restart your gateway. On Red Hat Enterprise Linux execute::
 
  sudo systemctl restart ceph-radosgw.service
 
@@ -375,7 +375,6 @@ The output of the command will be something like the following::
 	 "email": "",
 	 "suspended": 0,
 	 "max_buckets": 1000,
-	 "auid": 0,
 	 "subusers": [],
 	 "keys": [{
 		 "user": "testuser",
@@ -436,7 +435,6 @@ The output will be something like the following::
 	 "email": "",
 	 "suspended": 0,
 	 "max_buckets": 1000,
-	 "auid": 0,
 	 "subusers": [{
 		 "id": "testuser:swift",
 		 "permissions": "full-control"
@@ -480,7 +478,6 @@ The output will be something like the following::
 	 "email": "",
 	 "suspended": 0,
 	 "max_buckets": 1000,
-	 "auid": 0,
 	 "subusers": [{
 		 "id": "testuser:swift",
 		 "permissions": "full-control"

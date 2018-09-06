@@ -132,7 +132,7 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
 
 static void handle_signal(int signum)
 {
-  assert(signum == SIGINT || signum == SIGTERM);
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
   dout(20) << __func__ << ": " << "sending NBD_DISCONNECT" << dendl;
   if (ioctl(nbd, NBD_DISCONNECT) < 0) {
@@ -202,7 +202,7 @@ private:
   void io_finish(IOContext *ctx)
   {
     Mutex::Locker l(lock);
-    assert(ctx->item.is_on_list());
+    ceph_assert(ctx->item.is_on_list());
     ctx->item.remove_myself();
     io_finished.push_back(&ctx->item);
     cond.Signal();
@@ -225,13 +225,13 @@ private:
 
   void wait_clean()
   {
-    assert(!reader_thread.is_started());
+    ceph_assert(!reader_thread.is_started());
     Mutex::Locker l(lock);
     while(!io_pending.empty())
       cond.Wait(lock);
 
     while(!io_finished.empty()) {
-      ceph::unique_ptr<IOContext> free_ctx(io_finished.front());
+      std::unique_ptr<IOContext> free_ctx(io_finished.front());
       io_finished.pop_front();
     }
   }
@@ -274,7 +274,7 @@ private:
   void reader_entry()
   {
     while (!terminated) {
-      ceph::unique_ptr<IOContext> ctx(new IOContext());
+      std::unique_ptr<IOContext> ctx(new IOContext());
       ctx->server = this;
 
       dout(20) << __func__ << ": waiting for nbd request" << dendl;
@@ -350,7 +350,7 @@ private:
   {
     while (!terminated) {
       dout(20) << __func__ << ": waiting for io request" << dendl;
-      ceph::unique_ptr<IOContext> ctx(wait_io_finish());
+      std::unique_ptr<IOContext> ctx(wait_io_finish());
       if (!ctx) {
 	dout(20) << __func__ << ": no io requests, terminating" << dendl;
         return;
@@ -453,7 +453,7 @@ std::ostream &operator<<(std::ostream &os, const NBDServer::IOContext &ctx) {
   }
 
   os << ctx.request.from << "~" << ctx.request.len << " "
-     << ntohl(ctx.reply.error) << "]";
+     << std::dec << ntohl(ctx.reply.error) << "]";
 
   return os;
 }
@@ -677,7 +677,7 @@ static int do_map(int argc, const char *argv[], Config *cfg)
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_DAEMON,
                          CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
-  g_ceph_context->_conf->set_val_or_die("pid_file", "");
+  g_ceph_context->_conf.set_val_or_die("pid_file", "");
 
   if (global_init_prefork(g_ceph_context) >= 0) {
     std::string err;
@@ -860,7 +860,7 @@ static int do_map(int argc, const char *argv[], Config *cfg)
 
     cout << cfg->devpath << std::endl;
 
-    if (g_conf->daemonize) {
+    if (g_conf()->daemonize) {
       global_init_postfork_finish(g_ceph_context);
       forker.daemonize();
     }
@@ -884,7 +884,7 @@ static int do_map(int argc, const char *argv[], Config *cfg)
     }
 
     r = image.update_unwatch(handle);
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 
 close_nbd:
@@ -1026,9 +1026,9 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
   CephInitParameters iparams = ceph_argparse_early_args(
           args, CEPH_ENTITY_TYPE_CLIENT, &cluster, &conf_file_list);
 
-  md_config_t config;
-  config.name = iparams.name;
-  config.cluster = cluster;
+  ConfigProxy config{false};
+  config->name = iparams.name;
+  config->cluster = cluster;
 
   if (!conf_file_list.empty()) {
     config.parse_config_files(conf_file_list.c_str(), nullptr, 0);

@@ -16,15 +16,20 @@
 #define CEPH_MCLIENTSESSION_H
 
 #include "msg/Message.h"
+#include "mds/mdstypes.h"
 
-class MClientSession : public Message {
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+class MClientSession : public MessageInstance<MClientSession> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
   ceph_mds_session_head head;
 
-  std::map<std::string, std::string> client_meta;
+  std::map<std::string, std::string> metadata;
+  feature_bitset_t supported_features;
 
   int get_op() const { return head.op; }
   version_t get_seq() const { return head.seq; }
@@ -32,21 +37,21 @@ public:
   int get_max_caps() const { return head.max_caps; }
   int get_max_leases() const { return head.max_leases; }
 
-  MClientSession() : Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) { }
+protected:
+  MClientSession() : MessageInstance(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) { }
   MClientSession(int o, version_t s=0) : 
-    Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
+    MessageInstance(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = s;
   }
   MClientSession(int o, utime_t st) : 
-    Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
+    MessageInstance(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = 0;
     st.encode_timeval(&head.stamp);
   }
-private:
   ~MClientSession() override {}
 
 public:
@@ -61,25 +66,26 @@ public:
   }
 
   void decode_payload() override { 
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(head, p);
-    if (header.version >= 2) {
-      decode(client_meta, p);
-    }
+    if (header.version >= 2)
+      decode(metadata, p);
+    if (header.version >= 3)
+      decode(supported_features, p);
   }
   void encode_payload(uint64_t features) override { 
     using ceph::encode;
     encode(head, payload);
-    if (client_meta.empty()) {
+    if (metadata.empty() && supported_features.empty()) {
       // If we're not trying to send any metadata (always the case if
       // we are a server) then send older-format message to avoid upsetting
       // old kernel clients.
       header.version = 1;
     } else {
-      encode(client_meta, payload);
       header.version = HEAD_VERSION;
+      encode(metadata, payload);
+      encode(supported_features, payload);
     }
-
   }
 };
 

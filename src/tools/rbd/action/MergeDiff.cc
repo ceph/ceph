@@ -66,7 +66,7 @@ static int parse_diff_header(int fd, __u8 *tag, string *from, string *to, uint64
 
       bufferlist bl;
       bl.append(buf, 8);
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       decode(*size, p);
     } else {
       break;
@@ -102,7 +102,7 @@ static int parse_diff_body(int fd, __u8 *tag, uint64_t *offset, uint64_t *length
 
   bufferlist bl;
   bl.append(buf, 16);
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   decode(*offset, p);
   decode(*length, p);
 
@@ -336,7 +336,7 @@ static int do_merge_diff(const char *first, const char *second,
         continue;
       }
     }
-    assert(f_off >= s_off);
+    ceph_assert(f_off >= s_off);
 
     if (f_off < s_off + s_len && f_len) {
       uint64_t delta = s_off + s_len - f_off;
@@ -363,7 +363,7 @@ static int do_merge_diff(const char *first, const char *second,
         continue;
       }
     }
-    assert(f_off >= s_off + s_len);
+    ceph_assert(f_off >= s_off + s_len);
     if (s_len) {
       r = accept_diff_body(sd, pd, s_tag, s_off, s_len);
       if (r < 0) {
@@ -374,7 +374,7 @@ static int do_merge_diff(const char *first, const char *second,
       s_len = 0;
       s_tag = 0;
     } else {
-      assert(f_end && s_end);
+      ceph_assert(f_end && s_end);
     }
     continue;
   }

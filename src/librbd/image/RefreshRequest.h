@@ -43,16 +43,19 @@ private:
   /**
    * @verbatim
    *
-   * <start>
-   *    |
-   *    | (v1)
-   *    |-----> V1_READ_HEADER ---> V1_GET_SNAPSHOTS ---> V1_GET_LOCKS
-   *    |                                                     |
-   *    | (v2)                                                v
-   *    \-----> V2_GET_MUTABLE_METADATA                    <apply>
-   *                |                                         |
-   *                v                                         |
-   *            V2_GET_METADATA                               |
+   * <start> < * * * * * * * * * * * * * * * * * * * * * * * * * * (ENOENT)
+   *  ^ |                                                        *
+   *  * | (v1)                                                   *
+   *  * |-----> V1_READ_HEADER -------------> GET_MIGRATION_HEADER (skip if not
+   *  * |                                                     |     migrating)
+   *  * | (v2)                                                v
+   *  * \-----> V2_GET_MUTABLE_METADATA                   V1_GET_SNAPSHOTS
+   *  *             |                                         |
+   *  *             v                                         v
+   *  * * * * * GET_MIGRATION_HEADER (skip if not         V1_GET_LOCKS
+   *  (ENOENT)      |                 migrating)              |
+   *                v                                         v
+   *            V2_GET_METADATA                            <apply>
    *                |                                         |
    *                v                                         |
    *            V2_GET_FLAGS                                  |
@@ -119,6 +122,7 @@ private:
   bool m_skip_open_parent_image;
   Context *m_on_finish;
 
+  cls::rbd::MigrationSpec m_migration_spec;
   int m_error_result;
   bool m_flush_aio;
   decltype(m_image_ctx.exclusive_lock) m_exclusive_lock;
@@ -155,6 +159,9 @@ private:
 
   bool m_blocked_writes = false;
   bool m_incomplete_update = false;
+
+  void send_get_migration_header();
+  Context *handle_get_migration_header(int *result);
 
   void send_v1_read_header();
   Context *handle_v1_read_header(int *result);
@@ -234,7 +241,9 @@ private:
   }
 
   void apply();
-  int get_parent_info(uint64_t snap_id, ParentInfo *parent_md);
+  int get_parent_info(uint64_t snap_id, ParentInfo *parent_md,
+                      MigrationInfo *migration_info);
+  bool get_migration_info(ParentInfo *parent_md, MigrationInfo *migration_info);
 };
 
 } // namespace image

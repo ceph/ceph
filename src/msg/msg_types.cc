@@ -16,8 +16,9 @@ void entity_name_t::dump(Formatter *f) const
 
 void entity_addr_t::dump(Formatter *f) const
 {
-  f->dump_unsigned("nonce", nonce);
+  f->dump_string("type", get_type_name(type));
   f->dump_stream("addr") << get_sockaddr();
+  f->dump_unsigned("nonce", nonce);
 }
 
 void entity_inst_t::dump(Formatter *f) const
@@ -63,7 +64,7 @@ void entity_inst_t::generate_test_instances(list<entity_inst_t*>& o)
 
 bool entity_addr_t::parse(const char *s, const char **end)
 {
-  memset(this, 0, sizeof(*this));
+  *this = entity_addr_t();
 
   const char *start = s;
 
@@ -220,30 +221,39 @@ ostream& operator<<(ostream& out, const sockaddr *sa)
 
 // entity_addrvec_t
 
+bool entity_addrvec_t::parse(const char *s, const char **end)
+{
+  v.clear();
+  while (*s) {
+    entity_addr_t a;
+    bool r = a.parse(s, end);
+    if (!r) {
+      break;
+    }
+    v.push_back(a);
+    s = *end;
+    while (*s == ',' ||
+	   *s == ' ' ||
+	   *s == ';') {
+      ++s;
+    }
+  }
+  return !v.empty();
+}
+
 void entity_addrvec_t::encode(bufferlist& bl, uint64_t features) const
 {
   using ceph::encode;
   if ((features & CEPH_FEATURE_MSG_ADDR2) == 0) {
     // encode a single legacy entity_addr_t for unfeatured peers
-    if (v.size() > 0) {
-      for (vector<entity_addr_t>::const_iterator p = v.begin();
-           p != v.end(); ++p) {
-        if ((*p).type == entity_addr_t::TYPE_LEGACY) {
-	  encode(*p, bl, 0);
-	  return;
-	}
-      }
-      encode(v[0], bl, 0);
-    } else {
-      encode(entity_addr_t(), bl, 0);
-    }
+    encode(legacy_addr(), bl, 0);
     return;
   }
   encode((__u8)2, bl);
   encode(v, bl, features);
 }
 
-void entity_addrvec_t::decode(bufferlist::iterator& bl)
+void entity_addrvec_t::decode(bufferlist::const_iterator& bl)
 {
   using ceph::decode;
   __u8 marker;

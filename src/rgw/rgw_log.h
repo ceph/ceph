@@ -61,7 +61,7 @@ struct rgw_log_entry {
     encode(x_headers, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, p);
     decode(object_owner.id, p);
     if (struct_v > 3)

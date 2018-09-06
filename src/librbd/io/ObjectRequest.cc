@@ -131,9 +131,10 @@ void ObjectRequest<I>::add_write_hint(I& image_ctx,
 }
 
 template <typename I>
-bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents) {
-  assert(m_ictx->snap_lock.is_locked());
-  assert(m_ictx->parent_lock.is_locked());
+bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents,
+                                              bool read_request) {
+  ceph_assert(m_ictx->snap_lock.is_locked());
+  ceph_assert(m_ictx->parent_lock.is_locked());
 
   m_has_parent = false;
   parent_extents->clear();
@@ -146,7 +147,13 @@ bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents) {
     lderr(m_ictx->cct) << "failed to retrieve parent overlap: "
                        << cpp_strerror(r) << dendl;
     return false;
-  } else if (parent_overlap == 0) {
+  }
+
+  if (!read_request && !m_ictx->migration_info.empty()) {
+    parent_overlap = m_ictx->migration_info.overlap;
+  }
+
+  if (parent_overlap == 0) {
     return false;
   }
 
@@ -232,7 +239,7 @@ void ObjectReadRequest<I>::read_object() {
   int r = image_ctx->data_ctx.aio_operate(
     this->m_oid, rados_completion, &op, flags, nullptr,
     (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   rados_completion->release();
 }
@@ -323,7 +330,7 @@ void ObjectReadRequest<I>::copyup() {
   image_ctx->snap_lock.get_read();
   image_ctx->parent_lock.get_read();
   Extents parent_extents;
-  if (!this->compute_parent_extents(&parent_extents) ||
+  if (!this->compute_parent_extents(&parent_extents, true) ||
       (image_ctx->exclusive_lock != nullptr &&
        !image_ctx->exclusive_lock->is_lock_owner())) {
     image_ctx->parent_lock.put_read();
@@ -345,13 +352,15 @@ void ObjectReadRequest<I>::copyup() {
 
     image_ctx->copyup_list[this->m_object_no] = new_req;
     image_ctx->copyup_list_lock.Unlock();
+    image_ctx->parent_lock.put_read();
+    image_ctx->snap_lock.put_read();
     new_req->send();
   } else {
     image_ctx->copyup_list_lock.Unlock();
+    image_ctx->parent_lock.put_read();
+    image_ctx->snap_lock.put_read();
   }
 
-  image_ctx->parent_lock.put_read();
-  image_ctx->snap_lock.put_read();
   image_ctx->owner_lock.put_read();
   this->finish(0);
 }
@@ -372,7 +381,7 @@ AbstractObjectWriteRequest<I>::AbstractObjectWriteRequest(
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
     RWLock::RLocker parent_locker(ictx->parent_lock);
-    this->compute_parent_extents(&m_parent_extents);
+    this->compute_parent_extents(&m_parent_extents, false);
   }
 
   if (this->m_object_off == 0 &&
@@ -408,7 +417,7 @@ void AbstractObjectWriteRequest<I>::send() {
       m_object_may_exist = true;
     } else {
       // should have been flushed prior to releasing lock
-      assert(image_ctx->exclusive_lock->is_lock_owner());
+      ceph_assert(image_ctx->exclusive_lock->is_lock_owner());
       m_object_may_exist = image_ctx->object_map->object_may_exist(
         this->m_object_no);
     }
@@ -466,7 +475,7 @@ void AbstractObjectWriteRequest<I>::handle_pre_write_object_map_update(int r) {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << "r=" << r << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
   write_object();
 }
 
@@ -478,12 +487,17 @@ void AbstractObjectWriteRequest<I>::write_object() {
   librados::ObjectWriteOperation write;
   if (m_copyup_enabled) {
     ldout(image_ctx->cct, 20) << "guarding write" << dendl;
-    write.assert_exists();
+    if (!image_ctx->migration_info.empty()) {
+      cls_client::assert_snapc_seq(
+        &write, m_snap_seq, cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ);
+    } else {
+      write.assert_exists();
+    }
   }
 
   add_write_hint(&write);
   add_write_ops(&write);
-  assert(write.size() != 0);
+  ceph_assert(write.size() != 0);
 
   librados::AioCompletion *rados_completion = util::create_rados_callback<
     AbstractObjectWriteRequest<I>,
@@ -491,7 +505,7 @@ void AbstractObjectWriteRequest<I>::write_object() {
   int r = image_ctx->data_ctx.aio_operate(
     this->m_oid, rados_completion, &write, m_snap_seq, m_snaps,
     (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -501,7 +515,7 @@ void AbstractObjectWriteRequest<I>::handle_write_object(int r) {
   ldout(image_ctx->cct, 20) << "r=" << r << dendl;
 
   r = filter_write_result(r);
-  if (r == -ENOENT) {
+  if (r == -ENOENT || (r == -ERANGE && !image_ctx->migration_info.empty())) {
     if (m_copyup_enabled) {
       copyup();
       return;
@@ -525,7 +539,7 @@ void AbstractObjectWriteRequest<I>::copyup() {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << dendl;
 
-  assert(!m_copyup_in_progress);
+  ceph_assert(!m_copyup_in_progress);
   m_copyup_in_progress = true;
 
   image_ctx->copyup_list_lock.Lock();
@@ -553,7 +567,7 @@ void AbstractObjectWriteRequest<I>::handle_copyup(int r) {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << "r=" << r << dendl;
 
-  assert(m_copyup_in_progress);
+  ceph_assert(m_copyup_in_progress);
   m_copyup_in_progress = false;
 
   if (r < 0) {
@@ -586,7 +600,7 @@ void AbstractObjectWriteRequest<I>::post_write_object_map_update() {
   ldout(image_ctx->cct, 20) << dendl;
 
   // should have been flushed prior to releasing lock
-  assert(image_ctx->exclusive_lock->is_lock_owner());
+  ceph_assert(image_ctx->exclusive_lock->is_lock_owner());
   image_ctx->object_map_lock.get_write();
   if (image_ctx->object_map->template aio_update<
         AbstractObjectWriteRequest<I>,
@@ -608,7 +622,7 @@ void AbstractObjectWriteRequest<I>::handle_post_write_object_map_update(int r) {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << "r=" << r << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
   this->finish(0);
 }
 
@@ -668,7 +682,7 @@ int ObjectCompareAndWriteRequest<I>::filter_write_result(int r) const {
     Striper::extent_to_file(image_ctx->cct, &image_ctx->layout,
                             this->m_object_no, offset, this->m_object_len,
                             image_extents);
-    assert(image_extents.size() == 1);
+    ceph_assert(image_extents.size() == 1);
 
     if (m_mismatch_offset) {
       *m_mismatch_offset = image_extents[0].first;

@@ -89,7 +89,7 @@ public:
    * handle any encoding errors, and return an appropriate error code,
    * or 0 on valid input.
    */
-  virtual int init(bufferlist::iterator &params) = 0;
+  virtual int init(bufferlist::const_iterator &params) = 0;
 
   /**
    * xattr key, or empty string.  If non-empty, this xattr will be fetched
@@ -159,6 +159,8 @@ extern uint64_t cls_get_client_features(cls_method_context_t hctx);
 
 /* helpers */
 extern void cls_cxx_subop_version(cls_method_context_t hctx, string *s);
+
+extern int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq);
 
 /* These are also defined in rados.h and librados.h. Keep them in sync! */
 #define CEPH_OSD_TMAP_HDR 'h'

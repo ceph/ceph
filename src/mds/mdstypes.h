@@ -206,7 +206,7 @@ struct frag_info_t : public scatter_info_t {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<frag_info_t*>& ls);
 };
@@ -230,7 +230,7 @@ struct nest_info_t : public scatter_info_t {
   int64_t rsubdirs = 0;
   int64_t rsize() const { return rfiles + rsubdirs; }
 
-  int64_t rsnaprealms = 0;
+  int64_t rsnaps = 0;
 
   nest_info_t() {}
 
@@ -247,7 +247,7 @@ struct nest_info_t : public scatter_info_t {
     rbytes += fac*other.rbytes;
     rfiles += fac*other.rfiles;
     rsubdirs += fac*other.rsubdirs;
-    rsnaprealms += fac*other.rsnaprealms;
+    rsnaps += fac*other.rsnaps;
   }
 
   // *this += cur - acc;
@@ -257,7 +257,7 @@ struct nest_info_t : public scatter_info_t {
     rbytes += cur.rbytes - acc.rbytes;
     rfiles += cur.rfiles - acc.rfiles;
     rsubdirs += cur.rsubdirs - acc.rsubdirs;
-    rsnaprealms += cur.rsnaprealms - acc.rsnaprealms;
+    rsnaps += cur.rsnaps - acc.rsnaps;
   }
 
   bool same_sums(const nest_info_t &o) const {
@@ -265,11 +265,11 @@ struct nest_info_t : public scatter_info_t {
         rbytes == o.rbytes &&
         rfiles == o.rfiles &&
         rsubdirs == o.rsubdirs &&
-        rsnaprealms == o.rsnaprealms;
+        rsnaps == o.rsnaps;
   }
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<nest_info_t*>& ls);
 };
@@ -296,7 +296,7 @@ struct vinodeno_t {
     encode(ino, bl);
     encode(snapid, bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     using ceph::decode;
     decode(ino, p);
     decode(snapid, p);
@@ -329,7 +329,7 @@ struct quota_info_t
     encode(max_files, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, p);
     decode(max_bytes, p);
     decode(max_files, p);
@@ -392,12 +392,12 @@ struct client_writeable_range_t {
   client_writeable_range_t() {}
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<client_writeable_range_t*>& ls);
 };
 
-inline void decode(client_writeable_range_t::byte_range_t& range, bufferlist::iterator& bl) {
+inline void decode(client_writeable_range_t::byte_range_t& range, bufferlist::const_iterator& bl) {
   decode(range.first, bl);
   decode(range.last, bl);
 }
@@ -450,7 +450,7 @@ public:
     return !(*this == o);
   }
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
 };
 WRITE_CLASS_ENCODER(inline_data_t)
 
@@ -543,7 +543,7 @@ struct inode_t {
 
   bool is_truncating() const { return (truncate_pending > 0); }
   void truncate(uint64_t old_size, uint64_t new_size) {
-    assert(new_size < old_size);
+    ceph_assert(new_size < old_size);
     if (old_size > max_size_ever)
       max_size_ever = old_size;
     truncate_from = old_size;
@@ -611,7 +611,7 @@ struct inode_t {
   }
 
   void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<inode_t*>& ls);
   /**
@@ -691,7 +691,7 @@ void inode_t<Allocator>::encode(bufferlist &bl, uint64_t features) const
 }
 
 template<template<typename> class Allocator>
-void inode_t<Allocator>::decode(bufferlist::iterator &p)
+void inode_t<Allocator>::decode(bufferlist::const_iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(15, 6, 6, p);
 
@@ -861,7 +861,7 @@ void inode_t<Allocator>::generate_test_instances(list<inode_t*>& ls)
 template<template<typename> class Allocator>
 int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent) const
 {
-  assert(ino == other.ino);
+  ceph_assert(ino == other.ino);
   *divergent = false;
   if (version == other.version) {
     if (rdev != other.rdev ||
@@ -899,7 +899,7 @@ int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent
     *divergent = !older_is_consistent(other);
     return 1;
   } else {
-    assert(version < other.version);
+    ceph_assert(version < other.version);
     *divergent = !other.older_is_consistent(*this);
     return -1;
   }
@@ -931,7 +931,7 @@ inline void encode(const inode_t<Allocator> &c, ::ceph::bufferlist &bl, uint64_t
   ENCODE_DUMP_POST(cl);
 }
 template<template<typename> class Allocator>
-inline void decode(inode_t<Allocator> &c, ::ceph::bufferlist::iterator &p)
+inline void decode(inode_t<Allocator> &c, ::ceph::bufferlist::const_iterator &p)
 {
   c.decode(p);
 }
@@ -952,7 +952,7 @@ struct old_inode_t {
   xattr_map<Allocator> xattrs;
 
   void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<old_inode_t*>& ls);
 };
@@ -969,7 +969,7 @@ void old_inode_t<Allocator>::encode(bufferlist& bl, uint64_t features) const
 }
 
 template<template<typename> class Allocator>
-void old_inode_t<Allocator>::decode(bufferlist::iterator& bl)
+void old_inode_t<Allocator>::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(first, bl);
@@ -1012,7 +1012,7 @@ inline void encode(const old_inode_t<Allocator> &c, ::ceph::bufferlist &bl, uint
   ENCODE_DUMP_POST(cl);
 }
 template<template<typename> class Allocator>
-inline void decode(old_inode_t<Allocator> &c, ::ceph::bufferlist::iterator &p)
+inline void decode(old_inode_t<Allocator> &c, ::ceph::bufferlist::const_iterator &p)
 {
   c.decode(p);
 }
@@ -1036,7 +1036,7 @@ struct fnode_t {
   utime_t localized_scrub_stamp;
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<fnode_t*>& ls);
   fnode_t() {}
@@ -1049,7 +1049,7 @@ struct old_rstat_t {
   nest_info_t rstat, accounted_rstat;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<old_rstat_t*>& ls);
 };
@@ -1059,21 +1059,114 @@ inline std::ostream& operator<<(std::ostream& out, const old_rstat_t& o) {
   return out << "old_rstat(first " << o.first << " " << o.rstat << " " << o.accounted_rstat << ")";
 }
 
+/*
+ * feature_bitset_t
+ */
+class feature_bitset_t {
+public:
+  typedef uint64_t block_type;
+  static const size_t bits_per_block = sizeof(block_type) * 8;
+
+  feature_bitset_t(const feature_bitset_t& other) : _vec(other._vec) {}
+  feature_bitset_t(feature_bitset_t&& other) : _vec(std::move(other._vec)) {}
+  feature_bitset_t(unsigned long value = 0);
+  feature_bitset_t(const vector<size_t>& array);
+  feature_bitset_t& operator=(const feature_bitset_t& other) {
+    _vec = other._vec;
+    return *this;
+  }
+  feature_bitset_t& operator=(feature_bitset_t&& other) {
+    _vec = std::move(other._vec);
+    return *this;
+  }
+  bool empty() const {
+    for (auto& v : _vec) {
+      if (v)
+	return false;
+    }
+    return true;
+  }
+  bool test(size_t bit) const {
+    if (bit >= bits_per_block * _vec.size())
+      return false;
+    return _vec[bit / bits_per_block] & ((block_type)1 << (bit % bits_per_block));
+  }
+  void clear() {
+    _vec.clear();
+  }
+  feature_bitset_t& operator-=(const feature_bitset_t& other);
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::const_iterator &p);
+  void print(ostream& out) const;
+private:
+  vector<block_type> _vec;
+};
+WRITE_CLASS_ENCODER(feature_bitset_t)
+
+inline std::ostream& operator<<(std::ostream& out, const feature_bitset_t& s) {
+  s.print(out);
+  return out;
+}
+
+/*
+ * client_metadata_t
+ */
+struct client_metadata_t {
+  using kv_map_t = std::map<std::string,std::string>;
+  using iterator = kv_map_t::const_iterator;
+
+  kv_map_t kv_map;
+  feature_bitset_t features;
+
+  client_metadata_t() {}
+  client_metadata_t(const client_metadata_t& other) :
+    kv_map(other.kv_map), features(other.features) {}
+  client_metadata_t(client_metadata_t&& other) :
+    kv_map(std::move(other.kv_map)), features(std::move(other.features)) {}
+  client_metadata_t(kv_map_t&& kv, feature_bitset_t &&f) :
+    kv_map(std::move(kv)), features(std::move(f)) {}
+  client_metadata_t(const kv_map_t& kv, const feature_bitset_t &f) :
+    kv_map(kv), features(f) {}
+  client_metadata_t& operator=(const client_metadata_t& other) {
+    kv_map = other.kv_map;
+    features = other.features;
+    return *this;
+  }
+
+  bool empty() const { return kv_map.empty() && features.empty(); }
+  iterator find(const std::string& key) const { return kv_map.find(key); }
+  iterator begin() const { return kv_map.begin(); }
+  iterator end() const { return kv_map.end(); }
+  std::string& operator[](const std::string& key) { return kv_map[key]; }
+  void merge(const client_metadata_t& other) {
+    kv_map.insert(other.kv_map.begin(), other.kv_map.end());
+    features = other.features;
+  }
+  void clear() {
+    kv_map.clear();
+    features.clear();
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::const_iterator& p);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(client_metadata_t)
 
 /*
  * session_info_t
  */
-
 struct session_info_t {
   entity_inst_t inst;
   std::map<ceph_tid_t,inodeno_t> completed_requests;
   interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.
   interval_set<inodeno_t> used_inos;       // journaling use
-  std::map<std::string, std::string> client_metadata;
+  client_metadata_t client_metadata;
   std::set<ceph_tid_t> completed_flushes;
   EntityName auth_name;
 
   client_t get_client() const { return client_t(inst.name.num()); }
+  bool has_feature(size_t bit) const { return client_metadata.features.test(bit); }
   const entity_name_t& get_source() const { return inst.name; }
 
   void clear_meta() {
@@ -1081,10 +1174,11 @@ struct session_info_t {
     used_inos.clear();
     completed_requests.clear();
     completed_flushes.clear();
+    client_metadata.clear();
   }
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<session_info_t*>& ls);
 };
@@ -1124,14 +1218,14 @@ struct dentry_key_t {
     oss << name << "_" << b;
     key = oss.str();
   }
-  static void decode_helper(bufferlist::iterator& bl, string& nm, snapid_t& sn) {
+  static void decode_helper(bufferlist::const_iterator& bl, string& nm, snapid_t& sn) {
     string key;
     decode(key, bl);
     decode_helper(key, nm, sn);
   }
   static void decode_helper(std::string_view key, string& nm, snapid_t& sn) {
     size_t i = key.find_last_of('_');
-    assert(i != string::npos);
+    ceph_assert(i != string::npos);
     if (key.compare(i+1, std::string_view::npos, "head") == 0) {
       // name_head
       sn = CEPH_NOSNAP;
@@ -1177,7 +1271,7 @@ struct string_snap_t {
   string_snap_t(const char *n, snapid_t s) : name(n), snapid(s) {}
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<string_snap_t*>& ls);
 };
@@ -1205,7 +1299,7 @@ struct mds_table_pending_t {
   version_t tid = 0;
   mds_table_pending_t() {}
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<mds_table_pending_t*>& ls);
 };
@@ -1225,7 +1319,7 @@ struct metareqid_t {
     encode(name, bl);
     encode(tid, bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     using ceph::decode;
     decode(name, p);
     decode(tid, p);
@@ -1288,9 +1382,9 @@ struct cap_reconnect_t {
     flockbl.claim(lb);
   }
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void encode_old(bufferlist& bl) const;
-  void decode_old(bufferlist::iterator& bl);
+  void decode_old(bufferlist::const_iterator& bl);
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<cap_reconnect_t*>& ls);
@@ -1339,7 +1433,7 @@ struct old_cap_reconnect_t {
     encode(path, bl);
     encode(capinfo, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     decode(path, bl);
     decode(capinfo, bl);
@@ -1363,7 +1457,7 @@ struct dirfrag_t {
     encode(ino, bl);
     encode(frag, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     decode(ino, bl);
     decode(frag, bl);
@@ -1408,54 +1502,55 @@ namespace std {
 #define META_NPOP        5
 
 class inode_load_vec_t {
-  static const int NUM = 2;
-  std::array<DecayCounter, NUM> vec;
 public:
-  explicit inode_load_vec_t(const utime_t &now)
-     : vec{DecayCounter(now), DecayCounter(now)}
-  {}
-  // for dencoder infrastructure
-  inode_load_vec_t() {}
+  using time = DecayCounter::time;
+  using clock = DecayCounter::clock;
+  static const size_t NUM = 2;
+
+  inode_load_vec_t() : vec{DecayCounter(DecayRate()), DecayCounter(DecayRate())} {}
+  inode_load_vec_t(const DecayRate &rate) : vec{DecayCounter(rate), DecayCounter(rate)} {}
+
   DecayCounter &get(int t) { 
-    assert(t < NUM);
     return vec[t]; 
   }
-  void zero(utime_t now) {
-    for (int i=0; i<NUM; i++) 
-      vec[i].reset(now);
+  void zero() {
+    for (auto &d : vec) {
+      d.reset();
+    }
   }
   void encode(bufferlist &bl) const;
-  void decode(const utime_t &t, bufferlist::iterator &p);
-  // for dencoder
-  void decode(bufferlist::iterator& p) { utime_t sample; decode(sample, p); }
-  void dump(Formatter *f);
+  void decode(bufferlist::const_iterator& p);
+  void dump(Formatter *f) const;
   static void generate_test_instances(list<inode_load_vec_t*>& ls);
+
+private:
+  std::array<DecayCounter, NUM> vec;
 };
-inline void encode(const inode_load_vec_t &c, bufferlist &bl) { c.encode(bl); }
-inline void decode(inode_load_vec_t & c, const utime_t &t, bufferlist::iterator &p) {
-  c.decode(t, p);
+inline void encode(const inode_load_vec_t &c, bufferlist &bl) {
+  c.encode(bl);
 }
-// for dencoder
-inline void decode(inode_load_vec_t & c, bufferlist::iterator &p) {
-  utime_t sample;
-  c.decode(sample, p);
+inline void decode(inode_load_vec_t & c, bufferlist::const_iterator &p) {
+  c.decode(p);
 }
 
 class dirfrag_load_vec_t {
 public:
-  static const int NUM = 5;
-  std::array<DecayCounter, NUM> vec;
-  explicit dirfrag_load_vec_t(const utime_t &now)
-     : vec{
-         DecayCounter(now),
-         DecayCounter(now),
-         DecayCounter(now),
-         DecayCounter(now),
-         DecayCounter(now)
-       }
+  using time = DecayCounter::time;
+  using clock = DecayCounter::clock;
+  static const size_t NUM = 5;
+
+  dirfrag_load_vec_t() :
+      vec{DecayCounter(DecayRate()),
+          DecayCounter(DecayRate()),
+          DecayCounter(DecayRate()),
+          DecayCounter(DecayRate()),
+          DecayCounter(DecayRate())
+         }
   {}
-  // for dencoder infrastructure
-  dirfrag_load_vec_t() {}
+  dirfrag_load_vec_t(const DecayRate &rate) : 
+      vec{DecayCounter(rate), DecayCounter(rate), DecayCounter(rate), DecayCounter(rate), DecayCounter(rate)}
+  {}
+
   void encode(bufferlist &bl) const {
     ENCODE_START(2, 2, bl);
     for (const auto &i : vec) {
@@ -1463,86 +1558,80 @@ public:
     }
     ENCODE_FINISH(bl);
   }
-  void decode(const utime_t &t, bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
     for (auto &i : vec) {
-      decode(i, t, p);
+      decode(i, p);
     }
     DECODE_FINISH(p);
   }
-  // for dencoder infrastructure
-  void decode(bufferlist::iterator& p) {
-    utime_t sample;
-    decode(sample, p);
-  }
   void dump(Formatter *f) const;
-  void dump(Formatter *f, utime_t now, const DecayRate& rate);
-  static void generate_test_instances(list<dirfrag_load_vec_t*>& ls);
+  void dump(Formatter *f, const DecayRate& rate) const;
+  static void generate_test_instances(std::list<dirfrag_load_vec_t*>& ls);
 
-  DecayCounter &get(int t) { 
-    assert(t < NUM);
-    return vec[t]; 
+  const DecayCounter &get(int t) const {
+    return vec[t];
   }
-  void adjust(utime_t now, const DecayRate& rate, double d) {
+  DecayCounter &get(int t) {
+    return vec[t];
+  }
+  void adjust(double d) {
     for (auto &i : vec) {
-      i.adjust(now, rate, d);
+      i.adjust(d);
     }
   }
-  void zero(utime_t now) {
+  void zero() {
     for (auto &i : vec) {
-      i.reset(now);
+      i.reset();
     }
-  }
-  double meta_load(utime_t now, const DecayRate& rate) {
-    return 
-      1*vec[META_POP_IRD].get(now, rate) + 
-      2*vec[META_POP_IWR].get(now, rate) +
-      1*vec[META_POP_READDIR].get(now, rate) +
-      2*vec[META_POP_FETCH].get(now, rate) +
-      4*vec[META_POP_STORE].get(now, rate);
   }
   double meta_load() const {
     return 
-      1*vec[META_POP_IRD].get_last() + 
-      2*vec[META_POP_IWR].get_last() +
-      1*vec[META_POP_READDIR].get_last() +
-      2*vec[META_POP_FETCH].get_last() +
-      4*vec[META_POP_STORE].get_last();
+      1*vec[META_POP_IRD].get() + 
+      2*vec[META_POP_IWR].get() +
+      1*vec[META_POP_READDIR].get() +
+      2*vec[META_POP_FETCH].get() +
+      4*vec[META_POP_STORE].get();
   }
 
-  void add(utime_t now, DecayRate& rate, dirfrag_load_vec_t& r) {
-    for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
-      vec[i].adjust(r.vec[i].get(now, rate));
+  void add(dirfrag_load_vec_t& r) {
+    for (size_t i=0; i<dirfrag_load_vec_t::NUM; i++)
+      vec[i].adjust(r.vec[i].get());
   }
-  void sub(utime_t now, DecayRate& rate, dirfrag_load_vec_t& r) {
-    for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
-      vec[i].adjust(-r.vec[i].get(now, rate));
+  void sub(dirfrag_load_vec_t& r) {
+    for (size_t i=0; i<dirfrag_load_vec_t::NUM; i++)
+      vec[i].adjust(-r.vec[i].get());
   }
   void scale(double f) {
-    for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
+    for (size_t i=0; i<dirfrag_load_vec_t::NUM; i++)
       vec[i].scale(f);
   }
+
+private:
+  friend inline std::ostream& operator<<(std::ostream& out, const dirfrag_load_vec_t& dl);
+  std::array<DecayCounter, NUM> vec;
 };
 
-inline void encode(const dirfrag_load_vec_t &c, bufferlist &bl) { c.encode(bl); }
-inline void decode(dirfrag_load_vec_t& c, const utime_t &t, bufferlist::iterator &p) {
-  c.decode(t, p);
+inline void encode(const dirfrag_load_vec_t &c, bufferlist &bl) {
+  c.encode(bl);
 }
-// this for dencoder
-inline void decode(dirfrag_load_vec_t& c, bufferlist::iterator &p) {
-  utime_t sample;
-  c.decode(sample, p);
+inline void decode(dirfrag_load_vec_t& c, bufferlist::const_iterator &p) {
+  c.decode(p);
 }
 
 inline std::ostream& operator<<(std::ostream& out, const dirfrag_load_vec_t& dl)
 {
-  return out << "[" << dl.vec[0].get_last() << "," << dl.vec[1].get_last()
-	     << " " << dl.meta_load() << "]";
+  std::ostringstream ss;
+  ss << std::setprecision(1) << std::fixed
+     << "[pop"
+        " IRD:" << dl.vec[0]
+     << " IWR:" << dl.vec[1]
+     << " RDR:" << dl.vec[2]
+     << " FET:" << dl.vec[3]
+     << " STR:" << dl.vec[4]
+     << " *LOAD:" << dl.meta_load() << "]";
+  return out << ss.str() << std::endl;
 }
-
-
-
-
 
 
 /* mds_load_t
@@ -1550,8 +1639,14 @@ inline std::ostream& operator<<(std::ostream& out, const dirfrag_load_vec_t& dl)
  */
 
 struct mds_load_t {
+  using clock = dirfrag_load_vec_t::clock;
+  using time = dirfrag_load_vec_t::time;
+
   dirfrag_load_vec_t auth;
   dirfrag_load_vec_t all;
+
+  mds_load_t() : auth(DecayRate()), all(DecayRate()) {}
+  mds_load_t(const DecayRate &rate) : auth(rate), all(rate) {}
 
   double req_rate = 0.0;
   double cache_hit_rate = 0.0;
@@ -1559,26 +1654,17 @@ struct mds_load_t {
 
   double cpu_load_avg = 0.0;
 
-  explicit mds_load_t(const utime_t &t) : auth(t), all(t) {}
-  // mostly for the dencoder infrastructure
-  mds_load_t() : auth(), all() {}
-  
-  double mds_load();  // defiend in MDBalancer.cc
+  double mds_load() const;  // defiend in MDBalancer.cc
   void encode(bufferlist& bl) const;
-  void decode(const utime_t& now, bufferlist::iterator& bl);
-  //this one is for dencoder infrastructure
-  void decode(bufferlist::iterator& bl) { utime_t sample; decode(sample, bl); }
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<mds_load_t*>& ls);
+  static void generate_test_instances(std::list<mds_load_t*>& ls);
 };
-inline void encode(const mds_load_t &c, bufferlist &bl) { c.encode(bl); }
-inline void decode(mds_load_t &c, const utime_t &t, bufferlist::iterator &p) {
-  c.decode(t, p);
+inline void encode(const mds_load_t &c, bufferlist &bl) {
+  c.encode(bl);
 }
-// this one is for dencoder
-inline void decode(mds_load_t &c, bufferlist::iterator &p) {
-  utime_t sample;
-  c.decode(sample, p);
+inline void decode(mds_load_t &c, bufferlist::const_iterator &p) {
+  c.decode(p);
 }
 
 inline std::ostream& operator<<(std::ostream& out, const mds_load_t& load)
@@ -1593,19 +1679,22 @@ inline std::ostream& operator<<(std::ostream& out, const mds_load_t& load)
 
 class load_spread_t {
 public:
+  using time = DecayCounter::time;
+  using clock = DecayCounter::clock;
   static const int MAX = 4;
   int last[MAX];
   int p = 0, n = 0;
   DecayCounter count;
 
 public:
-  load_spread_t() : count(ceph_clock_now())
+  load_spread_t() = delete;
+  load_spread_t(const DecayRate &rate) : count(rate)
   {
     for (int i=0; i<MAX; i++)
       last[i] = -1;
   } 
 
-  double hit(utime_t now, const DecayRate& rate, int who) {
+  double hit(int who) {
     for (int i=0; i<n; i++)
       if (last[i] == who) 
 	return count.get_last();
@@ -1617,10 +1706,10 @@ public:
 
     if (p == MAX) p = 0;
 
-    return count.hit(now, rate);
+    return count.hit();
   }
-  double get(utime_t now, const DecayRate& rate) {
-    return count.get(now, rate);
+  double get() const {
+    return count.get();
   }
 };
 
@@ -1648,7 +1737,7 @@ public:
   MDSCacheObjectInfo() {}
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<MDSCacheObjectInfo*>& ls);
 };

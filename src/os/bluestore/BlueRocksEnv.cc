@@ -23,7 +23,7 @@ rocksdb::Status err_to_status(int r)
     return rocksdb::Status::IOError(strerror(r));
   default:
     // FIXME :(
-    assert(0 == "unrecognized error code");
+    ceph_abort_msg("unrecognized error code");
     return rocksdb::Status::NotSupported(rocksdb::Status::kNone);
   }
 }
@@ -48,7 +48,7 @@ class BlueRocksSequentialFile : public rocksdb::SequentialFile {
   // REQUIRES: External synchronization
   rocksdb::Status Read(size_t n, rocksdb::Slice* result, char* scratch) override {
     int r = fs->read(h, &h->buf, h->buf.pos, n, NULL, scratch);
-    assert(r >= 0);
+    ceph_assert(r >= 0);
     *result = rocksdb::Slice(scratch, r);
     return rocksdb::Status::OK();
   }
@@ -96,7 +96,7 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
   rocksdb::Status Read(uint64_t offset, size_t n, rocksdb::Slice* result,
 		       char* scratch) const override {
     int r = fs->read_random(h, offset, n, scratch);
-    assert(r >= 0);
+    ceph_assert(r >= 0);
     *result = rocksdb::Slice(scratch, r);
     return rocksdb::Status::OK();
   }

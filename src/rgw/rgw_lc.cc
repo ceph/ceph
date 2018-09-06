@@ -272,7 +272,7 @@ bool RGWLC::obj_has_expired(ceph::real_time mtime, int days)
   return (timediff >= cmp);
 }
 
-int RGWLC::remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, bool remove_indeed)
+int RGWLC::remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, const string& owner, const string& owner_display_name, bool remove_indeed)
 {
   if (remove_indeed) {
     return rgw_remove_object(store, bucket_info, bucket_info.bucket, obj_key);
@@ -280,7 +280,18 @@ int RGWLC::remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, b
     obj_key.instance.clear();
     RGWObjectCtx rctx(store);
     rgw_obj obj(bucket_info.bucket, obj_key);
-    return store->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status());
+    ACLOwner obj_owner;
+    obj_owner.set_id(rgw_user {owner});
+    obj_owner.set_name(owner_display_name);
+
+    RGWRados::Object del_target(store, bucket_info, rctx, obj);
+    RGWRados::Object::Delete del_op(&del_target);
+
+    del_op.params.bucket_owner = bucket_info.owner;
+    del_op.params.versioning_status = bucket_info.versioning_status();
+    del_op.params.obj_owner = obj_owner;
+
+    return del_op.delete_obj();
   }
 }
 
@@ -293,7 +304,12 @@ int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<strin
   int ret;
   RGWBucketInfo& bucket_info = target->get_bucket_info();
   RGWRados::Bucket::List list_op(target);
+  auto delay_ms = cct->_conf.get_val<int64_t>("rgw_lc_thread_delay");
   list_op.params.list_versions = false;
+  /* lifecycle processing does not depend on total order, so can
+   * take advantage of unorderd listing optimizations--such as
+   * operating on one shard at a time */
+  list_op.params.allow_unordered = true;
   list_op.params.ns = RGW_OBJ_NS_MULTIPART;
   list_op.params.filter = &mp_filter;
   for (auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
@@ -328,7 +344,8 @@ int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<strin
           if (going_down())
             return 0;
         }
-      }
+      } /* for objs */
+      std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
     } while(is_truncated);
   }
   return 0;
@@ -353,6 +370,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
   vector<rgw_bucket_dir_entry> objs;
   RGWObjectCtx obj_ctx(store);
   vector<std::string> result;
+  auto delay_ms = cct->_conf.get_val<int64_t>("rgw_lc_thread_delay");
   boost::split(result, shard_id, boost::is_any_of(":"));
   string bucket_tenant = result[0];
   string bucket_name = result[1];
@@ -376,7 +394,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
   if (aiter == bucket_attrs.end())
     return 0;
 
-  bufferlist::iterator iter(&aiter->second);
+  bufferlist::const_iterator iter{&aiter->second};
   try {
       config.decode(iter);
     } catch (const buffer::error& e) {
@@ -396,7 +414,11 @@ int RGWLC::bucket_lc_process(string& shard_id)
         ceph_clock_now() < ceph::real_clock::to_time_t(*prefix_iter->second.expiration_date)) {
         continue;
       }
+      /* lifecycle processing does not depend on total order, so can
+       * take advantage of unorderd listing optimizations--such as
+       * operating on one shard at a time */
       list_op.params.prefix = prefix_iter->first;
+      list_op.params.allow_unordered = true;
       do {
         objs.clear();
         list_op.params.marker = list_op.get_next_marker();
@@ -425,7 +447,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
             }
             RGWObjTags dest_obj_tags;
             try {
-              auto iter = tags_bl.begin();
+              auto iter = tags_bl.cbegin();
               dest_obj_tags.decode(iter);
             } catch (buffer::error& err) {
                ldout(cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
@@ -460,7 +482,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
               ldout(cct, 20) << __func__ << "() skipping removal: state->mtime " << state->mtime << " obj->mtime " << obj_iter->meta.mtime << dendl;
               continue;
             }
-            ret = remove_expired_obj(bucket_info, obj_iter->key, true);
+            ret = remove_expired_obj(bucket_info, obj_iter->key, obj_iter->meta.owner, obj_iter->meta.owner_display_name, true);
             if (ret < 0) {
               ldout(cct, 0) << "ERROR: remove_expired_obj " << dendl;
             } else {
@@ -470,7 +492,8 @@ int RGWLC::bucket_lc_process(string& shard_id)
             if (going_down())
               return 0;
           }
-        }
+        } /* for objs */
+	std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
       } while (is_truncated);
     }
   } else {
@@ -565,7 +588,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
               if (state->mtime != obj_iter->meta.mtime)//Check mtime again to avoid delete a recently update object as much as possible
                 continue;
             }
-            ret = remove_expired_obj(bucket_info, obj_iter->key, remove_indeed);
+            ret = remove_expired_obj(bucket_info, obj_iter->key, obj_iter->meta.owner, obj_iter->meta.owner_display_name, remove_indeed);
             if (ret < 0) {
               ldout(cct, 0) << "ERROR: remove_expired_obj " << dendl;
             } else {

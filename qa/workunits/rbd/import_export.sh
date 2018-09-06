@@ -139,7 +139,7 @@ if rbd help export | grep -q export-format; then
     rbd import --stripe-count 1000 --stripe-unit 4096 ${TMPDIR}/img testimg
     rbd export --export-format 2 testimg ${TMPDIR}/img_v2
     rbd import --export-format 2 ${TMPDIR}/img_v2 testimg_import
-    rbd info testimg_import|grep "stripe unit"|awk '{print $3}'|grep -Ei '(4KiB|4096)'
+    rbd info testimg_import|grep "stripe unit"|grep -Ei '(4 KiB|4096)'
     rbd info testimg_import|grep "stripe count"|awk '{print $3}'|grep 1000
 
     rm ${TMPDIR}/img_v2
@@ -184,7 +184,7 @@ dd if=/dev/urandom bs=1M count=1 of=${TMPDIR}/sparse2; truncate ${TMPDIR}/sparse
 # 1M sparse, 1M data
 rbd rm sparse1 || true
 rbd import $RBD_CREATE_ARGS --order 20 ${TMPDIR}/sparse1
-rbd ls -l | grep sparse1 | grep -Ei '(2MiB|2048k)'
+rbd ls -l | grep sparse1 | grep -Ei '(2 MiB|2048k)'
 [ $tiered -eq 1 -o "$(objects sparse1)" = '1' ]
 
 # export, compare contents and on-disk size
@@ -196,7 +196,7 @@ rbd rm sparse1
 # 1M data, 1M sparse
 rbd rm sparse2 || true
 rbd import $RBD_CREATE_ARGS --order 20 ${TMPDIR}/sparse2
-rbd ls -l | grep sparse2 | grep -Ei '(2MiB|2048k)'
+rbd ls -l | grep sparse2 | grep -Ei '(2 MiB|2048k)'
 [ $tiered -eq 1 -o "$(objects sparse2)" = '0' ]
 rbd export sparse2 ${TMPDIR}/sparse2.out
 compare_files_and_ondisk_sizes ${TMPDIR}/sparse2 ${TMPDIR}/sparse2.out
@@ -207,7 +207,7 @@ rbd rm sparse2
 truncate ${TMPDIR}/sparse1 -s 10M
 # import from stdin just for fun, verify still sparse
 rbd import $RBD_CREATE_ARGS --order 20 - sparse1 < ${TMPDIR}/sparse1
-rbd ls -l | grep sparse1 | grep -Ei '(10MiB|10240k)'
+rbd ls -l | grep sparse1 | grep -Ei '(10 MiB|10240k)'
 [ $tiered -eq 1 -o "$(objects sparse1)" = '1' ]
 rbd export sparse1 ${TMPDIR}/sparse1.out
 compare_files_and_ondisk_sizes ${TMPDIR}/sparse1 ${TMPDIR}/sparse1.out
@@ -218,7 +218,7 @@ rbd rm sparse1
 dd if=/dev/urandom bs=2M count=1 of=${TMPDIR}/sparse2 oflag=append conv=notrunc
 # again from stding
 rbd import $RBD_CREATE_ARGS --order 20 - sparse2 < ${TMPDIR}/sparse2
-rbd ls -l | grep sparse2 | grep -Ei '(4MiB|4096k)'
+rbd ls -l | grep sparse2 | grep -Ei '(4 MiB|4096k)'
 [ $tiered -eq 1 -o "$(objects sparse2)" = '0 2 3' ]
 rbd export sparse2 ${TMPDIR}/sparse2.out
 compare_files_and_ondisk_sizes ${TMPDIR}/sparse2 ${TMPDIR}/sparse2.out

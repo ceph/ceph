@@ -69,7 +69,9 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Ceph Filesystem
 	CephFS
 	Ceph FS
-		The POSIX filesystem components of Ceph.
+		The POSIX filesystem components of Ceph. Refer
+		:ref:`CephFS Architecture <arch-cephfs>` and :ref:`ceph-filesystem` for
+		more details.
 
 	Cloud Platforms
 	Cloud Stacks
@@ -121,6 +123,13 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	MGR
 		The Ceph manager software, which collects all the state from the whole
 		cluster in one place.
+
+	Ceph Manager Dashboard
+	Ceph Dashboard
+	Dashboard Plugin
+	Dashboard
+                A built-in web based monitoring and administration application to
+                Ceph Manager. Refer :ref:`mgr-dashboard` for more details.
 
 	Ceph Metadata Server
 	MDS

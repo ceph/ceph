@@ -193,7 +193,7 @@ struct compression_block {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(old_ofs, bl);
      decode(new_ofs, bl);
@@ -222,7 +222,7 @@ struct RGWCompressionInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(compression_type, bl);
      decode(orig_size, bl);
@@ -248,7 +248,7 @@ struct RGWOLHInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(target, bl);
      decode(removed, bl);
@@ -270,7 +270,7 @@ struct RGWOLHPendingInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(time, bl);
      DECODE_FINISH(bl);
@@ -332,7 +332,7 @@ struct RGWObjManifestPart {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
      decode(loc, bl);
      decode(loc_ofs, bl);
@@ -382,7 +382,7 @@ struct RGWObjManifestRule {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(start_part_num, bl);
     decode(start_ofs, bl);
@@ -502,7 +502,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN_32(7, 2, 2, bl);
     decode(obj_size, bl);
     decode(objs, bl);
@@ -845,7 +845,7 @@ struct RGWUploadPartInfo {
     encode(accounted_size, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
     decode(num, bl);
     decode(size, bl);
@@ -1001,7 +1001,7 @@ struct RGWDefaultSystemMetaObjInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(default_id, bl);
     DECODE_FINISH(bl);
@@ -1021,7 +1021,7 @@ struct RGWNameToId {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(obj_id, bl);
     DECODE_FINISH(bl);
@@ -1071,7 +1071,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  virtual void decode(bufferlist::iterator& bl) {
+  virtual void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(id, bl);
     decode(name, bl);
@@ -1124,7 +1124,7 @@ struct RGWZonePlacementInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(6, bl);
     string index_pool_str;
     string data_pool_str;
@@ -1234,7 +1234,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) override {
+  void decode(bufferlist::const_iterator& bl) override {
     DECODE_START(12, bl);
     decode(domain_root, bl);
     decode(control_pool, bl);
@@ -1379,7 +1379,7 @@ struct RGWZone {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(7, bl);
     decode(name, bl);
     if (struct_v < 4) {
@@ -1430,7 +1430,7 @@ struct RGWDefaultZoneGroupInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(default_zonegroup, bl);
     DECODE_FINISH(bl);
@@ -1464,7 +1464,7 @@ struct RGWZoneGroupPlacementTarget {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(name, bl);
     decode(tags, bl);
@@ -1540,7 +1540,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) override {
+  void decode(bufferlist::const_iterator& bl) override {
     DECODE_START(4, bl);
     decode(name, bl);
     decode(api_name, bl);
@@ -1597,7 +1597,7 @@ struct RGWPeriodMap
   string master_zonegroup;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
 
   int update(const RGWZoneGroup& zonegroup, CephContext *cct);
 
@@ -1626,7 +1626,7 @@ struct RGWPeriodConfig
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(bucket_quota, bl);
     decode(user_quota, bl);
@@ -1658,7 +1658,7 @@ struct RGWRegionMap {
   RGWQuotaInfo user_quota;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -1679,7 +1679,7 @@ struct RGWZoneGroupMap {
   int read(CephContext *cct, RGWRados *store);
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -1705,7 +1705,7 @@ struct objexp_hint_entry {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     // XXX Do we want DECODE_START_LEGACY_COMPAT_LEN(2, 1, 1, bl); ?
     DECODE_START(2, bl);
     decode(bucket_name, bl);
@@ -1745,7 +1745,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) override {
+  void decode(bufferlist::const_iterator& bl) override {
     DECODE_START(1, bl);
     RGWSystemMetaObj::decode(bl);
     decode(current_period, bl);
@@ -1793,7 +1793,7 @@ struct RGWPeriodLatestEpochInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(epoch, bl);
     DECODE_FINISH(bl);
@@ -1945,7 +1945,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(id, bl);
     decode(epoch, bl);
@@ -2320,6 +2320,9 @@ class RGWRados : public AdminSocketHook
   librados::IoCtx control_pool_ctx;   // .rgw.control
   bool watch_initialized;
 
+  double inject_notify_timeout_probability = 0;
+  unsigned max_notify_retries = 0;
+
   friend class RGWWatcher;
 
   Mutex bucket_id_lock;
@@ -2524,6 +2527,8 @@ public:
     if (!current_period.get_id().empty()) {
       const auto& zonegroups_by_api = current_period.get_map().zonegroups_by_api;
       if (zonegroups_by_api.find(api) != zonegroups_by_api.end())
+        return true;
+    } else if (zonegroup.api_name == api) {
         return true;
     }
     return false;
@@ -2851,7 +2856,7 @@ public:
         int flags;
         const char *if_match;
         const char *if_nomatch;
-        uint64_t olh_epoch;
+        std::optional<uint64_t> olh_epoch;
         ceph::real_time delete_at;
         bool canceled;
         const string *user_data;
@@ -2861,7 +2866,7 @@ public:
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
-                 if_match(NULL), if_nomatch(NULL), olh_epoch(0), canceled(false), user_data(nullptr), zones_trace(nullptr),
+                 if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), zones_trace(nullptr),
                  modify_tail(false),  completeMultipart(false) {}
       } meta;
 
@@ -3188,7 +3193,7 @@ public:
                        bool copy_if_newer,
                        map<string, bufferlist>& attrs,
                        RGWObjCategory category,
-                       uint64_t olh_epoch,
+                       std::optional<uint64_t> olh_epoch,
 		       ceph::real_time delete_at,
                        string *version_id,
                        string *ptag,
@@ -3389,7 +3394,9 @@ public:
                             const rgw_obj& obj_instance, bool delete_marker,
                             const string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch,
-                            ceph::real_time unmod_since, bool high_precision_time, rgw_zone_set *zones_trace = nullptr);
+                            ceph::real_time unmod_since, bool high_precision_time,
+                            rgw_zone_set *zones_trace = nullptr,
+                            bool log_data_change = false);
   int bucket_index_unlink_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj_instance, const string& op_tag, const string& olh_tag, uint64_t olh_epoch, rgw_zone_set *zones_trace = nullptr);
   int bucket_index_read_olh_log(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance, uint64_t ver_marker,
                                 map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
@@ -3400,7 +3407,8 @@ public:
                     uint64_t *plast_ver, rgw_zone_set *zones_trace = nullptr);
   int update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_zone_set *zones_trace = nullptr);
   int set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
-              uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, rgw_zone_set *zones_trace = nullptr);
+              uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time,
+              rgw_zone_set *zones_trace = nullptr, bool log_data_change = false);
   int unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj,
                           uint64_t olh_epoch, rgw_zone_set *zones_trace = nullptr);
 
@@ -3420,6 +3428,7 @@ public:
   int append_async(rgw_raw_obj& obj, size_t size, bufferlist& bl);
 
   int watch(const string& oid, uint64_t *watch_handle, librados::WatchCtx2 *ctx);
+  int aio_watch(const string& oid, uint64_t *watch_handle, librados::WatchCtx2 *ctx, librados::AioCompletion *c);
   int unwatch(uint64_t watch_handle);
   void add_watcher(int i);
   void remove_watcher(int i);
@@ -3427,6 +3436,9 @@ public:
   int init_watch();
   void finalize_watch();
   int distribute(const string& key, bufferlist& bl);
+private:
+  int robust_notify(const string& notify_oid, bufferlist& bl);
+public:
   virtual int watch_cb(uint64_t notify_id,
 		       uint64_t cookie,
 		       uint64_t notifier_id,
@@ -3636,7 +3648,7 @@ public:
 
   int list_gc_objs(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated);
   int process_gc(bool expired_only);
-  int process_expire_objects();
+  bool process_expire_objects();
   int defer_gc(void *ctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj);
 
   int process_lc();
@@ -3890,7 +3902,7 @@ public:
 
   void init(RGWRados *store) {
     store->register_chained_cache(this);
-    expiry = std::chrono::seconds(store->ctx()->_conf->get_val<uint64_t>(
+    expiry = std::chrono::seconds(store->ctx()->_conf.get_val<uint64_t>(
 				    "rgw_cache_expiry_interval"));
   }
 
@@ -4042,7 +4054,7 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
   uint64_t max_chunk_size;
 
   bool versioned_object;
-  uint64_t olh_epoch;
+  std::optional<uint64_t> olh_epoch;
   string version_id;
 
 protected:
@@ -4079,7 +4091,6 @@ public:
                                 data_ofs(0),
                                 max_chunk_size(0),
                                 versioned_object(versioned),
-                                olh_epoch(0),
                                 bucket(_b),
                                 obj_str(_o),
                                 unique_tag(_t) {}

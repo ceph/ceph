@@ -43,6 +43,10 @@ Options
 
    Interact with the given pool. Required by most commands.
 
+.. option:: --namespace namespace-name
+
+   Use a pre-defined image namespace within a pool
+
 .. option:: --no-progress
 
    Do not output progress information (goes to standard error by
@@ -392,6 +396,29 @@ Commands
   'rbd merge-diff first second - | rbd merge-diff - third result'. Note this command
   currently only support the source incremental diff with stripe_count == 1
 
+:command:`migration abort` *image-spec*
+  Cancel image migration. This step may be run after successful or
+  failed migration prepare or migration execute steps and returns the
+  image to its initial (before migration) state. All modifications to
+  the destination image are lost.
+
+:command:`migration commit` *image-spec*
+  Commit image migration. This step is run after a successful migration
+  prepare and migration execute steps and removes the source image data.
+
+:command:`migration execute` *image-spec*
+  Execute image migration. This step is run after a successful migration
+  prepare step and copies image data to the destination.
+
+:command:`migration prepare` [--order *order*] [--object-size *object-size*] [--image-feature *image-feature*] [--image-shared] [--stripe-unit *stripe-unit*] [--stripe-count *stripe-count*] [--data-pool *data-pool*] *src-image-spec* [*dest-image-spec*]
+  Prepare image migration. This is the first step when migrating an
+  image, i.e. changing the image location, format or other
+  parameters that can't be changed dynamically. The destination can
+  match the source, and in this case *dest-image-spec* can be omitted.
+  After this step the source image is set as a parent of the
+  destination image, and the image is accessible in copy-on-write mode
+  by its destination spec.
+
 :command:`mirror image demote` *image-spec*
   Demote a primary image to non-primary for RBD mirroring.
 
@@ -470,6 +497,15 @@ Commands
 
 :command:`mv` *src-image-spec* *dest-image-spec*
   Rename an image.  Note: rename across pools is not supported.
+
+:command:`namespace create` *pool-name* *namespace-name*
+  Create a new image namespace within the pool.
+
+:command:`namespace list` *pool-name*
+  List image namespaces defined within the pool.
+
+:command:`namespace remove` *pool-name* *namespace-name*
+  Remove an empty image namespace from the pool.
 
 :command:`object-map check` *image-spec* | *snap-spec*
   Verify the object map is correct.
@@ -559,19 +595,19 @@ Commands
 Image, snap, group and journal specs
 ====================================
 
-| *image-spec*      is [*pool-name*/]\ *image-name*
-| *snap-spec*       is [*pool-name*/]\ *image-name*\ @\ *snap-name*
-| *group-spec*      is [*pool-name*/]\ *group-name*
-| *group-snap-spec* is [*pool-name*/]\ *group-name*\ @\ *snap-name*
-| *journal-spec*    is [*pool-name*/]\ *journal-name*
+| *image-spec*      is [*pool-name*/[*namespace-name*/]]\ *image-name*
+| *snap-spec*       is [*pool-name*/[*namespace-name*/]]\ *image-name*\ @\ *snap-name*
+| *group-spec*      is [*pool-name*/[*namespace-name*/]]\ *group-name*
+| *group-snap-spec* is [*pool-name*/[*namespace-name*/]]\ *group-name*\ @\ *snap-name*
+| *journal-spec*    is [*pool-name*/[*namespace-name*/]]\ *journal-name*
 
-The default for *pool-name* is "rbd".  If an image name contains a slash
-character ('/'), *pool-name* is required.
+The default for *pool-name* is "rbd" and *namespace-name* is "". If an image
+name contains a slash character ('/'), *pool-name* is required.
 
 The *journal-name* is *image-id*.
 
-You may specify each name individually, using --pool, --image and --snap
-options, but this is discouraged in favor of the above spec syntax.
+You may specify each name individually, using --pool, --namespace, --image, and
+--snap options, but this is discouraged in favor of the above spec syntax.
 
 Striping
 ========

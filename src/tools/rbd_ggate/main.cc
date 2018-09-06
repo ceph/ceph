@@ -21,7 +21,7 @@
 #include "common/Preforker.h"
 #include "common/TextTable.h"
 #include "common/ceph_argparse.h"
-#include "common/config.h"
+#include "common/config_proxy.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "global/global_init.h"
@@ -67,8 +67,8 @@ static void handle_signal(int signum)
 {
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
 
-  assert(signum == SIGINT || signum == SIGTERM);
-  assert(drv);
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
+  ceph_assert(drv);
 
   drv->shut_down();
 }
@@ -93,7 +93,7 @@ static int do_map(int argc, const char *argv[])
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_DAEMON,
                          CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
-  g_ceph_context->_conf->set_val_or_die("pid_file", "");
+  g_ceph_context->_conf.set_val_or_die("pid_file", "");
 
   if (global_init_prefork(g_ceph_context) >= 0) {
     std::string err;
@@ -116,7 +116,7 @@ static int do_map(int argc, const char *argv[])
   global_init_chdir(g_ceph_context);
 
   if (poolname.empty()) {
-    poolname = g_ceph_context->_conf->get_val<std::string>("rbd_default_pool");
+    poolname = g_ceph_context->_conf.get_val<std::string>("rbd_default_pool");
   }
 
   std::string devname = boost::starts_with(devpath, "/dev/") ?
@@ -200,7 +200,7 @@ static int do_map(int argc, const char *argv[])
 
   std::cout << "/dev/" << drv->get_devname() << std::endl;
 
-  if (g_conf->daemonize) {
+  if (g_conf()->daemonize) {
     forker.daemonize();
     global_init_postfork_start(g_ceph_context);
     global_init_postfork_finish(g_ceph_context);
@@ -219,7 +219,7 @@ static int do_map(int argc, const char *argv[])
   shutdown_async_signal_handler();
 
   r = image.update_unwatch(handle);
-  assert(r == 0);
+  ceph_assert(r == 0);
 
 done:
   image.close();
@@ -404,23 +404,8 @@ int main(int argc, const char *argv[]) {
     usage();
     exit(0);
   }
-
-  std::string conf_file_list;
-  std::string cluster;
-  CephInitParameters iparams = ceph_argparse_early_args(
-      args, CEPH_ENTITY_TYPE_CLIENT, &cluster, &conf_file_list);
-
-  md_config_t config;
-  config.name = iparams.name;
-  config.cluster = cluster;
-
-  if (!conf_file_list.empty()) {
-    config.parse_config_files(conf_file_list.c_str(), nullptr, 0);
-  } else {
-    config.parse_config_files(nullptr, nullptr, 0);
-  }
-  config.parse_env();
-  config.parse_argv(args);
+  // filter out ceph config options
+  ConfigProxy{false}.parse_argv(args);
 
   std::string format;
   bool pretty_format = false;

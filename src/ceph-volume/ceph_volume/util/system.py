@@ -100,6 +100,7 @@ def chown(path, recursive=True):
     """
     uid, gid = get_ceph_user_ids()
     if os.path.islink(path):
+        process.run(['chown', '-h', 'ceph:ceph', path])
         path = os.path.realpath(path)
     if recursive:
         process.run(['chown', '-R', 'ceph:ceph', path])
@@ -272,3 +273,12 @@ def get_mounts(devices=False, paths=False, realpath=False):
         return devices_mounted
     else:
         return paths_mounted
+
+
+def set_context(path, recursive = False):
+    # restore selinux context to default policy values
+    if which('restorecon').startswith('/'):
+        if recursive:
+            process.run(['restorecon', '-R', path])
+        else:
+            process.run(['restorecon', path])

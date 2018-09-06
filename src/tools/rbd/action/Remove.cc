@@ -59,18 +59,20 @@ int execute(const po::variables_map &vm,
             const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -126,12 +128,16 @@ int execute(const po::variables_map &vm,
         librados::IoCtx pool_io_ctx;
         image_r = rados.ioctx_create2(group_info.pool, pool_io_ctx);
         if (image_r < 0) {
-          pool_name = "<missing data pool " + stringify(group_info.pool) + ">";
+          pool_name = "<missing group pool " + stringify(group_info.pool) + ">";
         } else {
           pool_name = pool_io_ctx.get_pool_name();
         }
         std::cerr << "rbd: error: image belongs to a group "
-                  << pool_name << "/" << group_info.name;
+                  << pool_name << "/";
+        if (!io_ctx.get_namespace().empty()) {
+          std::cerr << io_ctx.get_namespace() << "/";
+        }
+        std::cerr << group_info.name;
       } else
 	std::cerr << "rbd: error: image belongs to a group";
 

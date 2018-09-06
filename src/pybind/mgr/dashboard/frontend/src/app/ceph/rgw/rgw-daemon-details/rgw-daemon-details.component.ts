@@ -14,7 +14,8 @@ export class RgwDaemonDetailsComponent implements OnChanges {
   metadata: any;
   serviceId = '';
 
-  @Input() selection: CdTableSelection;
+  @Input()
+  selection: CdTableSelection;
 
   constructor(private rgwDaemonService: RgwDaemonService) {}
 
@@ -29,9 +30,8 @@ export class RgwDaemonDetailsComponent implements OnChanges {
     if (_.isEmpty(this.serviceId)) {
       return;
     }
-    this.rgwDaemonService.get(this.serviceId)
-      .subscribe((resp) => {
-        this.metadata = resp['rgw_metadata'];
-      });
+    this.rgwDaemonService.get(this.serviceId).subscribe((resp) => {
+      this.metadata = resp['rgw_metadata'];
+    });
   }
 }

@@ -37,10 +37,10 @@ void Entry::encode(bufferlist &bl) const {
   uint32_t bl_offset = bl.length();
   bl.claim_append(data_bl);
   encode(crc, bl);
-  assert(get_fixed_size() + m_data.length() + bl_offset == bl.length());
+  ceph_assert(get_fixed_size() + m_data.length() + bl_offset == bl.length());
 }
 
-void Entry::decode(bufferlist::iterator &iter) {
+void Entry::decode(bufferlist::const_iterator &iter) {
   using ceph::decode;
   uint32_t start_offset = iter.get_off();
   uint64_t bl_preamble;
@@ -82,7 +82,7 @@ void Entry::dump(Formatter *f) const {
   f->dump_string("data", data.str());
 }
 
-bool Entry::is_readable(bufferlist::iterator iter, uint32_t *bytes_needed) {
+bool Entry::is_readable(bufferlist::const_iterator iter, uint32_t *bytes_needed) {
   using ceph::decode;
   uint32_t start_off = iter.get_off();
   if (iter.get_remaining() < HEADER_FIXED_SIZE) {

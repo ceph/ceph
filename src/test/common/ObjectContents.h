@@ -60,7 +60,7 @@ public:
     Iterator &operator++() {
       ++pos;
       if (iter != parent->seeds.end() && pos >= iter->first) {
-	assert(pos == iter->first);
+	ceph_assert(pos == iter->first);
 	current_state = iter->second;
 	++iter;
       }
@@ -77,7 +77,7 @@ public:
     seeds[0] = 0;
   }
 
-  explicit ObjectContents(bufferlist::iterator &bp) {
+  explicit ObjectContents(bufferlist::const_iterator &bp) {
     decode(_size, bp);
     decode(seeds, bp);
     decode(written, bp);

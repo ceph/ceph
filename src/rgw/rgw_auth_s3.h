@@ -115,6 +115,42 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
   }
 
 public:
+  using engine_map_t = std::map <std::string, std::reference_wrapper<const Engine>>;
+  void add_engines(const std::vector <std::string>& auth_order,
+		   engine_map_t eng_map)
+  {
+    auto ctrl_flag = Control::SUFFICIENT;
+    for (const auto &eng : auth_order) {
+      // fallback to the last engine, in case of multiple engines, since ctrl
+      // flag is sufficient for others, error from earlier engine is returned
+      if (&eng == &auth_order.back() && eng_map.size() > 1) {
+        ctrl_flag = Control::FALLBACK;
+      }
+      if (const auto kv = eng_map.find(eng);
+          kv != eng_map.end()) {
+        add_engine(ctrl_flag, kv->second);
+      }
+    }
+  }
+
+  auto parse_auth_order(CephContext* const cct)
+  {
+    std::vector <std::string> result;
+
+    const std::set <std::string_view> allowed_auth = { "external", "local" };
+    std::vector <std::string> default_order = { "external", "local"};
+    // supplied strings may contain a space, so let's bypass that
+    boost::split(result, cct->_conf->rgw_s3_auth_order,
+		 boost::is_any_of(", "), boost::token_compress_on);
+
+    if (std::any_of(result.begin(), result.end(),
+		    [allowed_auth](std::string_view s)
+		    { return allowed_auth.find(s) == allowed_auth.end();})){
+      return default_order;
+    }
+    return result;
+  }
+
   AWSAuthStrategy(CephContext* const cct,
                   RGWRados* const store)
     : store(store),
@@ -129,20 +165,17 @@ public:
       add_engine(Control::SUFFICIENT, anonymous_engine);
     }
 
+    auto auth_order = parse_auth_order(cct);
+    engine_map_t engine_map;
     /* The external auth. */
-    Control local_engine_mode;
     if (! external_engines.is_empty()) {
-      add_engine(Control::SUFFICIENT, external_engines);
-
-      local_engine_mode = Control::FALLBACK;
-    } else {
-      local_engine_mode = Control::SUFFICIENT;
+      engine_map.insert(std::make_pair("external", std::cref(external_engines)));
     }
-
     /* The local auth. */
     if (cct->_conf->rgw_s3_auth_use_rados) {
-      add_engine(local_engine_mode, local_engine);
+      engine_map.insert(std::make_pair("local", std::cref(local_engine)));
     }
+    add_engines(auth_order, engine_map);
   }
 
   const char* get_name() const noexcept override {
@@ -351,12 +384,55 @@ int parse_credentials(const req_info& info,                     /* in */
                       boost::string_view& date,                 /* out */
                       const bool using_qs);                     /* in */
 
+static inline bool char_needs_aws4_escaping(const char c, bool encode_slash)
+{
+  if ((c >= 'a' && c <= 'z') ||
+      (c >= 'A' && c <= 'Z') ||
+      (c >= '0' && c <= '9')) {
+    return false;
+  }
+
+  switch (c) {
+    case '-':
+    case '_':
+    case '.':
+    case '~':
+      return false;
+  }
+
+  if (c == '/' && !encode_slash)
+    return false;
+
+  return true;
+}
+
+static inline std::string aws4_uri_encode(const std::string& src, bool encode_slash)
+{
+  std::string result;
+
+  for (const std::string::value_type c : src) {
+    if (char_needs_aws4_escaping(c, encode_slash)) {
+      rgw_uri_escape_char(c, result);
+    } else {
+      result.push_back(c);
+    }
+  }
+
+  return result;
+}
+
+static inline std::string aws4_uri_recode(const boost::string_view& src, bool encode_slash)
+{
+  std::string decoded = url_decode(src);
+  return aws4_uri_encode(decoded, encode_slash);
+}
+
 static inline std::string get_v4_canonical_uri(const req_info& info) {
   /* The code should normalize according to RFC 3986 but S3 does NOT do path
    * normalization that SigV4 typically does. This code follows the same
    * approach that boto library. See auth.py:canonical_uri(...). */
 
-  std::string canonical_uri = info.request_uri_aws4;
+  std::string canonical_uri = aws4_uri_recode(info.request_uri_aws4, false);
 
   if (canonical_uri.empty()) {
     canonical_uri = "/";
@@ -447,7 +523,6 @@ extern AWSEngine::VersionAbstractor::server_signature_t
 get_v2_signature(CephContext*,
                  const std::string& secret_key,
                  const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign);
-
 } /* namespace s3 */
 } /* namespace auth */
 } /* namespace rgw */

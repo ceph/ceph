@@ -607,7 +607,7 @@ TEST(LibRadosAio, RoundTripPP3)
   ASSERT_EQ(0, memcmp(buf, bl.c_str(), sizeof(buf)));
 
   ASSERT_EQ(8U, csum_bl.length());
-  auto csum_bl_it = csum_bl.begin();
+  auto csum_bl_it = csum_bl.cbegin();
   uint32_t csum_count;
   uint32_t csum;
   decode(csum_count, csum_bl_it);

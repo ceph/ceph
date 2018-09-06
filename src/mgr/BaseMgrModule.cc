@@ -58,7 +58,7 @@ public:
     : py_modules(py_modules_), python_completion(ev),
       tag(tag_), pThreadState(ts_)
   {
-    assert(python_completion != nullptr);
+    ceph_assert(python_completion != nullptr);
     Py_INCREF(python_completion);
   }
 
@@ -75,7 +75,7 @@ public:
 
   void finish(int r) override
   {
-    assert(python_completion != nullptr);
+    ceph_assert(python_completion != nullptr);
 
     dout(10) << "MonCommandCompletion::finish()" << dendl;
     {
@@ -85,7 +85,7 @@ public:
       Gil gil(pThreadState, true);
 
       auto set_fn = PyObject_GetAttrString(python_completion, "complete");
-      assert(set_fn != nullptr);
+      ceph_assert(set_fn != nullptr);
 
       auto pyR = PyInt_FromLong(r);
       auto pyOutBl = PyString_FromString(outbl.to_str().c_str());
@@ -131,7 +131,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
   if (set_fn == nullptr) {
     ceph_abort();  // TODO raise python exception instead
   } else {
-    assert(PyCallable_Check(set_fn));
+    ceph_assert(PyCallable_Check(set_fn));
   }
   Py_DECREF(set_fn);
 
@@ -344,7 +344,7 @@ ceph_get_server(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_get_mgr_id(BaseMgrModule *self, PyObject *args)
 {
-  return PyString_FromString(g_conf->name.get_id().c_str());
+  return PyString_FromString(g_conf()->name.get_id().c_str());
 }
 
 static PyObject*
@@ -472,7 +472,7 @@ ceph_log(BaseMgrModule *self, PyObject *args)
     return nullptr;
   }
 
-  assert(self->this_module);
+  ceph_assert(self->this_module);
 
   self->this_module->log(level, record);
 
@@ -553,6 +553,53 @@ ceph_have_mon_connection(BaseMgrModule *self, PyObject *args)
   }
 }
 
+static PyObject *
+ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
+{
+  char *other_module = nullptr;
+  char *method = nullptr;
+  PyObject *remote_args = nullptr;
+  PyObject *remote_kwargs = nullptr;
+  if (!PyArg_ParseTuple(args, "ssOO:ceph_dispatch_remote",
+        &other_module, &method, &remote_args, &remote_kwargs)) {
+    return nullptr;
+  }
+
+  // Early error handling, because if the module doesn't exist then we
+  // won't be able to use its thread state to set python error state
+  // inside dispatch_remote().
+  if (!self->py_modules->module_exists(other_module)) {
+    derr << "no module '" << other_module << "'" << dendl;
+    PyErr_SetString(PyExc_ImportError, "Module not found");
+    return nullptr;
+  }
+
+  // Drop GIL from calling python thread state, it will be taken
+  // both for checking for method existence and for executing method.
+  PyThreadState *tstate = PyEval_SaveThread();
+
+  if (!self->py_modules->method_exists(other_module, method)) {
+    PyEval_RestoreThread(tstate);
+    PyErr_SetString(PyExc_NameError, "Method not found");
+    return nullptr;
+  }
+
+  std::string err;
+  auto result = self->py_modules->dispatch_remote(other_module, method,
+      remote_args, remote_kwargs, &err);
+
+  PyEval_RestoreThread(tstate);
+
+  if (result == nullptr) {
+    std::stringstream ss;
+    ss << "Remote method threw exception: " << err;
+    PyErr_SetString(PyExc_RuntimeError, ss.str().c_str());
+    derr << ss.str() << dendl;
+  }
+
+  return result;
+}
+
 
 PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
@@ -616,6 +663,9 @@ PyMethodDef BaseMgrModule_methods[] = {
     METH_NOARGS, "Find out whether this mgr daemon currently has "
                  "a connection to a monitor"},
 
+  {"_ceph_dispatch_remote", (PyCFunction)ceph_dispatch_remote,
+    METH_VARARGS, "Dispatch a call to another module"},
+
   {NULL, NULL, 0, NULL}
 };
 
@@ -644,12 +694,12 @@ BaseMgrModule_init(BaseMgrModule *self, PyObject *args, PyObject *kwds)
         return -1;
     }
 
-    self->py_modules = (ActivePyModules*)PyCapsule_GetPointer(
-        py_modules_capsule, nullptr);
-    assert(self->py_modules);
-    self->this_module = (ActivePyModule*)PyCapsule_GetPointer(
-        this_module_capsule, nullptr);
-    assert(self->this_module);
+    self->py_modules = static_cast<ActivePyModules*>(PyCapsule_GetPointer(
+        py_modules_capsule, nullptr));
+    ceph_assert(self->py_modules);
+    self->this_module = static_cast<ActivePyModule*>(PyCapsule_GetPointer(
+        this_module_capsule, nullptr));
+    ceph_assert(self->this_module);
 
     return 0;
 }

@@ -20,7 +20,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "get_bucket_info"; }
+  const char* name() const override { return "get_bucket_info"; }
 };
 
 void RGWOp_Bucket_Info::execute()
@@ -57,7 +57,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "get_policy"; }
+  const char* name() const override { return "get_policy"; }
 };
 
 void RGWOp_Get_Policy::execute()
@@ -87,7 +87,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "check_bucket_index"; }
+  const char* name() const override { return "check_bucket_index"; }
 };
 
 void RGWOp_Check_Bucket_Index::execute()
@@ -121,7 +121,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "link_bucket"; }
+  const char* name() const override { return "link_bucket"; }
 };
 
 void RGWOp_Bucket_Link::execute()
@@ -155,7 +155,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "unlink_bucket"; }
+  const char* name() const override { return "unlink_bucket"; }
 };
 
 void RGWOp_Bucket_Unlink::execute()
@@ -187,7 +187,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "remove_bucket"; }
+  const char* name() const override { return "remove_bucket"; }
 };
 
 void RGWOp_Bucket_Remove::execute()
@@ -211,13 +211,13 @@ class RGWOp_Set_Bucket_Quota : public RGWRESTOp {
 public:
   RGWOp_Set_Bucket_Quota() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
   void execute() override;
 
-  virtual const string name() override { return "set_bucket_quota"; }
+  const char* name() const override { return "set_bucket_quota"; }
 };
 
 #define QUOTA_INPUT_MAX_LEN 1024
@@ -295,7 +295,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "remove_object"; }
+  const char* name() const override { return "remove_object"; }
 };
 
 void RGWOp_Object_Remove::execute()

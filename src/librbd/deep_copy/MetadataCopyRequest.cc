@@ -57,7 +57,7 @@ void MetadataCopyRequest<I>::handle_list_src_metadata(int r) {
 
   Metadata metadata;
   if (r == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     r = librbd::cls_client::metadata_list_finish(&it, &metadata);
   }
 

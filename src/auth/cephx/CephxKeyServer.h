@@ -47,7 +47,7 @@ struct KeyServerData {
     encode(secrets, bl);
     encode(rotating_secrets, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -66,7 +66,7 @@ struct KeyServerData {
   }
   void decode_rotating(bufferlist& rotating_bl) {
     using ceph::decode;
-    bufferlist::iterator iter = rotating_bl.begin();
+    auto iter = rotating_bl.cbegin();
     __u8 struct_v;
     decode(struct_v, iter);
     decode(rotating_ver, iter);
@@ -144,14 +144,14 @@ struct KeyServerData {
 	encode(auth, bl);
       }
     }
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       using ceph::decode;
       __u8 struct_v;
       decode(struct_v, bl);
       __u32 _op;
       decode(_op, bl);
       op = (IncrementalOp)_op;
-      assert(op >= AUTH_INC_NOP && op <= AUTH_INC_SET_ROTATING);
+      ceph_assert(op >= AUTH_INC_NOP && op <= AUTH_INC_SET_ROTATING);
       if (op == AUTH_INC_SET_ROTATING) {
 	decode(rotating_bl, bl);
       } else {
@@ -231,7 +231,7 @@ public:
     using ceph::encode;
     encode(data, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     Mutex::Locker l(lock);
     using ceph::decode;
     decode(data, bl);

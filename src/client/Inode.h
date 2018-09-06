@@ -32,10 +32,11 @@ class Fh;
 class Cap {
 public:
   Cap() = delete;
-  Cap(Inode *i, MetaSession *s) :
-      session(s), inode(i), cap_id(0), issued(0),
-      implemented(0), wanted(0), seq(0), issue_seq(0), mseq(0), gen(s->cap_gen),
-      latest_perms(), cap_item(this) {
+  Cap(Inode &i, MetaSession *s) : inode(i),
+                                  session(s),
+                                  gen(s->cap_gen),
+                                  cap_item(this)
+  {
     s->caps.push_back(&cap_item);
   }
   ~Cap() {
@@ -49,14 +50,15 @@ public:
 
   void dump(Formatter *f) const;
 
+  Inode &inode;
   MetaSession *session;
-  Inode *inode;
-  uint64_t cap_id;
-  unsigned issued;
-  unsigned implemented;
-  unsigned wanted;   // as known to mds.
-  uint64_t seq, issue_seq;
-  __u32 mseq;  // migration seq
+  uint64_t cap_id = 0;
+  unsigned issued = 0;
+  unsigned implemented = 0;
+  unsigned wanted = 0;   // as known to mds.
+  uint64_t seq = 0;
+  uint64_t issue_seq = 0;
+  __u32 mseq = 0;  // migration seq
   __u32 gen;
   UserPerm latest_perms;
 
@@ -172,7 +174,7 @@ struct Inode {
     int which = dir_layout.dl_dir_hash;
     if (!which)
       which = CEPH_STR_HASH_LINUX;
-    assert(ceph_str_hash_valid(which));
+    ceph_assert(ceph_str_hash_valid(which));
     return ceph_str_hash(which, dn.data(), dn.length());
   }
 
@@ -229,7 +231,7 @@ struct Inode {
   list<Cond*>	    waitfor_deleg;
 
   Dentry *get_first_parent() {
-    assert(!dentries.empty());
+    ceph_assert(!dentries.empty());
     return *dentries.begin();
   }
 
@@ -247,7 +249,7 @@ struct Inode {
     ll_ref++;
   }
   void ll_put(int n=1) {
-    assert(ll_ref >= n);
+    ceph_assert(ll_ref >= n);
     ll_ref -= n;
   }
 

@@ -1,43 +1,26 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsModalService } from 'ngx-bootstrap/modal';
-import 'rxjs/add/observable/of';
-import { Observable } from 'rxjs/Observable';
+import { of as observableOf } from 'rxjs';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserFormComponent } from './rgw-user-form.component';
 
 describe('RgwUserFormComponent', () => {
   let component: RgwUserFormComponent;
   let fixture: ComponentFixture<RgwUserFormComponent>;
-  let queryResult: Array<string> = [];
 
-  class MockRgwUserService extends RgwUserService {
-    enumerate() {
-      return Observable.of(queryResult);
-    }
-  }
-
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [ RgwUserFormComponent ],
-      imports: [
-        HttpClientTestingModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule
-      ],
-      providers: [
-        BsModalService,
-        { provide: RgwUserService, useClass: MockRgwUserService }
-      ]
-    })
-    .compileComponents();
-  }));
+  configureTestBed({
+    declarations: [RgwUserFormComponent],
+    imports: [HttpClientTestingModule, ReactiveFormsModule, RouterTestingModule, SharedModule],
+    providers: [BsModalService, RgwUserService]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwUserFormComponent);
@@ -47,6 +30,49 @@ describe('RgwUserFormComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  describe('s3 key management', () => {
+    let rgwUserService: RgwUserService;
+
+    beforeEach(() => {
+      rgwUserService = TestBed.get(RgwUserService);
+      spyOn(rgwUserService, 'addS3Key').and.stub();
+    });
+
+    it('should not update key', () => {
+      component.setS3Key(new RgwUserS3Key(), 3);
+      expect(component.s3Keys.length).toBe(0);
+      expect(rgwUserService.addS3Key).not.toHaveBeenCalled();
+    });
+
+    it('should set key', () => {
+      const key = new RgwUserS3Key();
+      key.user = 'test1:subuser2';
+      component.setS3Key(key);
+      expect(component.s3Keys.length).toBe(1);
+      expect(component.s3Keys[0].user).toBe('test1:subuser2');
+      expect(rgwUserService.addS3Key).toHaveBeenCalledWith('test1', {
+        subuser: 'subuser2',
+        generate_key: 'false',
+        access_key: undefined,
+        secret_key: undefined
+      });
+    });
+
+    it('should set key w/o subuser', () => {
+      const key = new RgwUserS3Key();
+      key.user = 'test1';
+      component.setS3Key(key);
+      expect(component.s3Keys.length).toBe(1);
+      expect(component.s3Keys[0].user).toBe('test1');
+      expect(rgwUserService.addS3Key).toHaveBeenCalledWith('test1', {
+        subuser: '',
+        generate_key: 'false',
+        access_key: undefined,
+        secret_key: undefined
+      });
+    });
   });
 
   describe('quotaMaxSizeValidator', () => {
@@ -86,45 +112,44 @@ describe('RgwUserFormComponent', () => {
     });
   });
 
-  describe('userIdValidator', () => {
-    it('should validate user id (1/3)', () => {
-      const validatorFn = component.userIdValidator();
-      const ctrl = new FormControl('');
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          expect(resp).toBe(null);
-        });
-      }
+  describe('username validation', () => {
+    let rgwUserService: RgwUserService;
+
+    beforeEach(() => {
+      rgwUserService = TestBed.get(RgwUserService);
+      spyOn(rgwUserService, 'enumerate').and.returnValue(observableOf(['abc', 'xyz']));
     });
 
-    it('should validate user id (2/3)', () => {
-      const validatorFn = component.userIdValidator();
-      const ctrl = new FormControl('ab');
-      ctrl.markAsDirty();
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          expect(resp).toBe(null);
-        });
-      }
+    it('should validate that username is required', () => {
+      const user_id = component.userForm.get('user_id');
+      user_id.markAsDirty();
+      user_id.setValue('');
+      expect(user_id.hasError('required')).toBeTruthy();
+      expect(user_id.valid).toBeFalsy();
     });
 
-    it('should validate user id (3/3)', () => {
-      queryResult = ['abc'];
-      const validatorFn = component.userIdValidator();
-      const ctrl = new FormControl('abc');
-      ctrl.markAsDirty();
-      const validatorPromise = validatorFn(ctrl);
-      expect(validatorPromise instanceof Promise).toBeTruthy();
-      if (validatorPromise instanceof Promise) {
-        validatorPromise.then((resp) => {
-          expect(resp instanceof Object).toBeTruthy();
-          expect(resp.userIdExists).toBeTruthy();
-        });
-      }
-    });
+    it(
+      'should validate that username is valid',
+      fakeAsync(() => {
+        const user_id = component.userForm.get('user_id');
+        user_id.markAsDirty();
+        user_id.setValue('ab');
+        tick(500);
+        expect(user_id.hasError('notUnique')).toBeFalsy();
+        expect(user_id.valid).toBeTruthy();
+      })
+    );
+
+    it(
+      'should validate that username is invalid',
+      fakeAsync(() => {
+        const user_id = component.userForm.get('user_id');
+        user_id.markAsDirty();
+        user_id.setValue('abc');
+        tick(500);
+        expect(user_id.hasError('notUnique')).toBeTruthy();
+        expect(user_id.valid).toBeFalsy();
+      })
+    );
   });
 });

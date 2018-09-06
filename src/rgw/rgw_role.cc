@@ -303,7 +303,7 @@ int RGWRole::read_id(const string& role_name, const string& tenant, string& role
 
   RGWNameToId nameToId;
   try {
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     using ceph::decode;
     decode(nameToId, iter);
   } catch (buffer::error& err) {
@@ -331,7 +331,7 @@ int RGWRole::read_info()
 
   try {
     using ceph::decode;
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     decode(*this, iter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "ERROR: failed to decode role info from pool: " << pool.name <<
@@ -359,7 +359,7 @@ int RGWRole::read_name()
   RGWNameToId nameToId;
   try {
     using ceph::decode;
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     decode(nameToId, iter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "ERROR: failed to decode role name from pool: " << pool.name << ": "

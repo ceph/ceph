@@ -59,7 +59,7 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
   bufferlist qbl;
   mon->store->get(service_name, "quorum", qbl);
   if (qbl.length()) {
-    auto p = qbl.begin();
+    auto p = qbl.cbegin();
     decode(quorum_checks, p);
   } else {
     quorum_checks.clear();
@@ -68,7 +68,7 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
   bufferlist lbl;
   mon->store->get(service_name, "leader", lbl);
   if (lbl.length()) {
-    auto p = lbl.begin();
+    auto p = lbl.cbegin();
     decode(leader_checks, p);
   } else {
     leader_checks.clear();
@@ -202,10 +202,10 @@ bool HealthMonitor::check_member_health()
 
   // snapshot of usage
   DataStats stats;
-  get_fs_stats(stats.fs_stats, g_conf->mon_data.c_str());
+  get_fs_stats(stats.fs_stats, g_conf()->mon_data.c_str());
   map<string,uint64_t> extra;
   uint64_t store_size = mon->store->get_estimated_size(extra);
-  assert(store_size > 0);
+  ceph_assert(store_size > 0);
   stats.store_stats.bytes_total = store_size;
   stats.store_stats.bytes_sst = extra["sst"];
   stats.store_stats.bytes_log = extra["log"];
@@ -218,14 +218,14 @@ bool HealthMonitor::check_member_health()
 
   // MON_DISK_{LOW,CRIT,BIG}
   health_check_map_t next;
-  if (stats.fs_stats.avail_percent <= g_conf->mon_data_avail_crit) {
+  if (stats.fs_stats.avail_percent <= g_conf()->mon_data_avail_crit) {
     stringstream ss, ss2;
     ss << "mon%plurals% %names% %isorare% very low on available space";
     auto& d = next.add("MON_DISK_CRIT", HEALTH_ERR, ss.str());
     ss2 << "mon." << mon->name << " has " << stats.fs_stats.avail_percent
 	<< "% avail";
     d.detail.push_back(ss2.str());
-  } else if (stats.fs_stats.avail_percent <= g_conf->mon_data_avail_warn) {
+  } else if (stats.fs_stats.avail_percent <= g_conf()->mon_data_avail_warn) {
     stringstream ss, ss2;
     ss << "mon%plurals% %names% %isorare% low on available space";
     auto& d = next.add("MON_DISK_LOW", HEALTH_WARN, ss.str());
@@ -233,14 +233,14 @@ bool HealthMonitor::check_member_health()
 	<< "% avail";
     d.detail.push_back(ss2.str());
   }
-  if (stats.store_stats.bytes_total >= g_conf->mon_data_size_warn) {
+  if (stats.store_stats.bytes_total >= g_conf()->mon_data_size_warn) {
     stringstream ss, ss2;
     ss << "mon%plurals% %names% %isorare% using a lot of disk space";
     auto& d = next.add("MON_DISK_BIG", HEALTH_WARN, ss.str());
     ss2 << "mon." << mon->name << " is "
 	<< byte_u_t(stats.store_stats.bytes_total)
 	<< " >= mon_data_size_warn ("
-	<< byte_u_t(g_conf->mon_data_size_warn) << ")";
+	<< byte_u_t(g_conf()->mon_data_size_warn) << ")";
     d.detail.push_back(ss2.str());
   }
 
@@ -258,8 +258,8 @@ bool HealthMonitor::check_member_health()
     // There's also the obvious drawback that if this is set on a single
     // monitor on a 3-monitor cluster, this warning will only be shown every
     // third monitor connection.
-    if (g_conf->mon_warn_on_osd_down_out_interval_zero &&
-        g_conf->mon_osd_down_out_interval == 0) {
+    if (g_conf()->mon_warn_on_osd_down_out_interval_zero &&
+        g_conf()->mon_osd_down_out_interval == 0) {
       ostringstream ss, ds;
       ss << "mon%plurals% %names% %hasorhave% mon_osd_down_out_interval set to 0";
       auto& d = next.add("OSD_NO_DOWN_OUT_INTERVAL", HEALTH_WARN, ss.str());
@@ -285,8 +285,7 @@ bool HealthMonitor::check_member_health()
     changed = true;
   } else {
     // tell the leader
-    mon->messenger->send_message(new MMonHealthChecks(next),
-                                 mon->monmap->get_inst(mon->get_leader()));
+    mon->send_mon_message(new MMonHealthChecks(next), mon->get_leader());
   }
 
   return changed;
@@ -339,19 +338,16 @@ bool HealthMonitor::check_leader_health()
   if (!mon->timecheck_skews.empty()) {
     list<string> warns;
     list<string> details;
-    for (map<entity_inst_t,double>::iterator i = mon->timecheck_skews.begin();
-	 i != mon->timecheck_skews.end(); ++i) {
-      entity_inst_t inst = i->first;
-      double skew = i->second;
-      double latency = mon->timecheck_latencies[inst];
-      string name = mon->monmap->get_name(inst.addr);
+    for (auto& i : mon->timecheck_skews) {
+      double skew = i.second;
+      double latency = mon->timecheck_latencies[i.first];
+      string name = mon->monmap->get_name(i.first);
       ostringstream tcss;
       health_status_t tcstatus = mon->timecheck_status(tcss, skew, latency);
       if (tcstatus != HEALTH_OK) {
 	warns.push_back(name);
 	ostringstream tmp_ss;
-	tmp_ss << "mon." << name
-	       << " addr " << inst.addr << " " << tcss.str()
+	tmp_ss << "mon." << name << " " << tcss.str()
 	       << " (latency " << latency << "s)";
 	details.push_back(tmp_ss.str());
       }

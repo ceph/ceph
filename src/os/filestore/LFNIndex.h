@@ -20,7 +20,6 @@
 #include <map>
 #include <set>
 #include <vector>
-#include "include/memory.h"
 #include <exception>
 
 #include "osd/osd_types.h"
@@ -57,7 +56,7 @@
     try {					\
       if (failed) {				\
 	r = cleanup();				\
-	assert(r == 0);				\
+	ceph_assert(r == 0);				\
       }						\
       { x }					\
       out:					\

@@ -230,7 +230,7 @@ int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime)
   ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
   if (ret < 0)
     return ret;
-  bufferlist::iterator iter = ops[0].outdata.begin();
+  auto iter = ops[0].outdata.cbegin();
   utime_t ut;
   uint64_t s;
   try {
@@ -255,7 +255,7 @@ int cls_cxx_stat2(cls_method_context_t hctx, uint64_t *size, ceph::real_time *mt
   ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
   if (ret < 0)
     return ret;
-  bufferlist::iterator iter = ops[0].outdata.begin();
+  auto iter = ops[0].outdata.cbegin();
   real_time ut;
   uint64_t s;
   try {
@@ -368,7 +368,7 @@ int cls_cxx_getxattrs(cls_method_context_t hctx, map<string, bufferlist> *attrse
   if (r < 0)
     return r;
 
-  bufferlist::iterator iter = op.outdata.begin();
+  auto iter = op.outdata.cbegin();
   try {
     decode(*attrset, iter);
   } catch (buffer::error& err) {
@@ -427,7 +427,7 @@ int cls_cxx_map_get_all_vals(cls_method_context_t hctx, map<string, bufferlist>*
   if (ret < 0)
     return ret;
 
-  bufferlist::iterator iter = op.outdata.begin();
+  auto iter = op.outdata.cbegin();
   try {
     decode(*vals, iter);
     decode(*more, iter);
@@ -455,7 +455,7 @@ int cls_cxx_map_get_keys(cls_method_context_t hctx, const string &start_obj,
   if (ret < 0)
     return ret;
 
-  bufferlist::iterator iter = op.outdata.begin();
+  auto iter = op.outdata.cbegin();
   try {
     decode(*keys, iter);
     decode(*more, iter);
@@ -484,7 +484,7 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
   if (ret < 0)
     return ret;
 
-  bufferlist::iterator iter = op.outdata.begin();
+  auto iter = op.outdata.cbegin();
   try {
     decode(*vals, iter);
     decode(*more, iter);
@@ -527,7 +527,7 @@ int cls_cxx_map_get_val(cls_method_context_t hctx, const string &key,
   if (ret < 0)
     return ret;
 
-  bufferlist::iterator iter = op.outdata.begin();
+  auto iter = op.outdata.cbegin();
   try {
     map<string, bufferlist> m;
 
@@ -625,7 +625,7 @@ int cls_cxx_list_watchers(cls_method_context_t hctx,
   if (r < 0)
     return r;
 
-  bufferlist::iterator iter = op.outdata.begin();
+  auto iter = op.outdata.cbegin();
   try {
     decode(*watchers, iter);
   } catch (buffer::error& err) {
@@ -703,6 +703,15 @@ void cls_cxx_subop_version(cls_method_context_t hctx, string *s)
   snprintf(buf, sizeof(buf), "%lld.%d", (long long)ver, subop_num);
 
   *s = buf;
+}
+
+int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq) {
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+  if (!ctx->new_obs.exists) {
+    return -ENOENT;
+  }
+  *snap_seq = ctx->obc->ssc->snapset.seq;
+  return 0;
 }
 
 int cls_log(int level, const char *format, ...)

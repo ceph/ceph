@@ -34,8 +34,9 @@ def test_create_from_mon(ctx, config):
     manager = ctx.managers['ceph']
     log.info('1. creating pool.a')
     pool_a = manager.create_pool_with_unique_name(pg_num)
-    manager.wait_for_clean()
-    assert manager.get_num_active_clean() == pg_num
+    pg_states = manager.wait_till_pg_convergence(300)
+    pg_created = pg_num_in_all_states(pg_states, 'active', 'clean')
+    assert pg_created == pg_num
 
     log.info('2. creating pool.b')
     pool_b = manager.create_pool_with_unique_name(pg_num)
@@ -81,8 +82,9 @@ def test_create_from_peer(ctx, config):
     manager = ctx.managers['ceph']
     log.info('1. creating pool.a')
     pool_a = manager.create_pool_with_unique_name(pg_num)
-    manager.wait_for_clean()
-    assert manager.get_num_active_clean() == pg_num
+    pg_states = manager.wait_till_pg_convergence(300)
+    pg_created = pg_num_in_all_states(pg_states, 'active', 'clean')
+    assert pg_created == pg_num
 
     log.info('2. creating pool.b')
     while True:

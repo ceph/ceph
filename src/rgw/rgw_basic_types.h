@@ -31,7 +31,7 @@ struct rgw_user {
     encode(id, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(tenant, bl);
     decode(id, bl);

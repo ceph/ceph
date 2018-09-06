@@ -93,7 +93,7 @@ struct BucketTrimStatus {
     encode(marker, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     DECODE_START(1, p);
     decode(marker, p);
     DECODE_FINISH(p);

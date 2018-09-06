@@ -95,7 +95,7 @@ public:
                 DaemonStateIndex &ds, ClusterState &cs,
                 const std::map<std::string, std::string> &kv_store,
                 MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
-                Client &client_, Finisher &f);
+                Client &client_, Finisher &f, DaemonServer &server);
   void standby_start(MonClient &mc);
 
   bool is_standby_running() const
@@ -110,7 +110,7 @@ public:
   void with_active_modules(Callback&& cb, Args&&...args) const
   {
     Mutex::Locker l(lock);
-    assert(active_modules != nullptr);
+    ceph_assert(active_modules != nullptr);
 
     std::forward<Callback>(cb)(*active_modules, std::forward<Args>(args)...);
   }
@@ -140,6 +140,7 @@ public:
   int handle_command(
     std::string const &module_name,
     const cmdmap_t &cmdmap,
+    const bufferlist &inbuf,
     std::stringstream *ds,
     std::stringstream *ss);
 
@@ -169,7 +170,7 @@ public:
 
   std::map<std::string, std::string> get_services() const
   {
-    assert(active_modules);
+    ceph_assert(active_modules);
     return active_modules->get_services();
   }
   // <<< (end of ActivePyModules cheeky call-throughs)

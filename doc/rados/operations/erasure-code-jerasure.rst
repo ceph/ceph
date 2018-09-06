@@ -74,7 +74,7 @@ Where:
 ``crush-root={root}``
 
 :Description: The name of the crush bucket used for the first step of
-              the CRUSH rule. For intance **step take default**.
+              the CRUSH rule. For instance **step take default**.
 
 :Type: String
 :Required: No.
@@ -100,9 +100,8 @@ Where:
 
 :Type: String
 :Required: No.
-:Default:
 
- ``directory={directory}``
+``directory={directory}``
 
 :Description: Set the **directory** name from which the erasure code
               plugin is loaded.

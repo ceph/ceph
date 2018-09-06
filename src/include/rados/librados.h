@@ -81,6 +81,8 @@ enum {
   LIBRADOS_OP_FLAG_FADVISE_DONTNEED   = 0x20,
   // indicate read/write data will not accessed again (by *this* client)
   LIBRADOS_OP_FLAG_FADVISE_NOCACHE    = 0x40,
+  // optionally support FUA (force unit access) on write requests
+  LIBRADOS_OP_FLAG_FADVISE_FUA        = 0x80,
 };
 
 #if __GNUC__ >= 4
@@ -815,7 +817,6 @@ CEPH_RADOS_API int rados_pool_reverse_lookup(rados_t cluster, int64_t id,
 /**
  * Create a pool with default settings
  *
- * The default owner is the admin user (auid 0).
  * The default crush rule is rule 0.
  *
  * @param cluster the cluster in which the pool will be created
@@ -825,10 +826,10 @@ CEPH_RADOS_API int rados_pool_reverse_lookup(rados_t cluster, int64_t id,
 CEPH_RADOS_API int rados_pool_create(rados_t cluster, const char *pool_name);
 
 /**
- * Create a pool owned by a specific auid
+ * Create a pool owned by a specific auid.
  *
- * The auid is the authenticated user id to give ownership of the pool.
- * TODO: document auid and the rest of the auth system
+ * DEPRECATED: auid support has been removed, and this call will be removed in a future
+ * release.
  *
  * @param cluster the cluster in which the pool will be created
  * @param pool_name the name of the new pool
@@ -837,7 +838,8 @@ CEPH_RADOS_API int rados_pool_create(rados_t cluster, const char *pool_name);
  */
 CEPH_RADOS_API int rados_pool_create_with_auid(rados_t cluster,
                                                const char *pool_name,
-                                               uint64_t auid);
+                                               uint64_t auid)
+  __attribute__((deprecated));
 
 /**
  * Create a pool with a specific CRUSH rule
@@ -854,6 +856,9 @@ CEPH_RADOS_API int rados_pool_create_with_crush_rule(rados_t cluster,
 /**
  * Create a pool with a specific CRUSH rule and auid
  *
+ * DEPRECATED: auid support has been removed and this call will be removed
+ * in a future release.
+ *
  * This is a combination of rados_pool_create_with_crush_rule() and
  * rados_pool_create_with_auid().
  *
@@ -866,7 +871,8 @@ CEPH_RADOS_API int rados_pool_create_with_crush_rule(rados_t cluster,
 CEPH_RADOS_API int rados_pool_create_with_all(rados_t cluster,
                                               const char *pool_name,
                                               uint64_t auid,
-			                      uint8_t crush_rule_num);
+			                      uint8_t crush_rule_num)
+  __attribute__((deprecated));
 
 /**
  * Returns the pool that is the base tier for this pool.
@@ -897,6 +903,8 @@ CEPH_RADOS_API int rados_pool_delete(rados_t cluster, const char *pool_name);
 /**
  * Attempt to change an io context's associated auid "owner"
  *
+ * DEPRECATED: auid support has been removed and this call has no effect.
+ *
  * Requires that you have write permission on both the current and new
  * auid.
  *
@@ -904,16 +912,22 @@ CEPH_RADOS_API int rados_pool_delete(rados_t cluster, const char *pool_name);
  * @param auid the auid you wish the io to have.
  * @returns 0 on success, negative error code on failure
  */
-CEPH_RADOS_API int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid);
+CEPH_RADOS_API int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid)
+  __attribute__((deprecated));
+
 
 /**
  * Get the auid of a pool
  *
+ * DEPRECATED: auid support has been removed and this call always reports
+ * CEPH_AUTH_UID_DEFAULT (-1).
+
  * @param io pool to query
  * @param auid where to store the auid
  * @returns 0 on success, negative error code on failure
  */
-CEPH_RADOS_API int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid);
+CEPH_RADOS_API int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid)
+  __attribute__((deprecated));
 
 /* deprecated, use rados_ioctx_pool_requires_alignment2 instead */
 CEPH_RADOS_API int rados_ioctx_pool_requires_alignment(rados_ioctx_t io)
@@ -998,6 +1012,18 @@ CEPH_RADOS_API void rados_ioctx_locator_set_key(rados_ioctx_t io,
  */
 CEPH_RADOS_API void rados_ioctx_set_namespace(rados_ioctx_t io,
                                               const char *nspace);
+
+/**
+ * Get the namespace for objects within the io context
+ *
+ * @param io the io context to query
+ * @param buf pointer to buffer where name will be stored
+ * @param maxlen size of buffer where name will be stored
+ * @returns length of string stored, or -ERANGE if buffer too small
+ */
+CEPH_RADOS_API int rados_ioctx_get_namespace(rados_ioctx_t io, char *buf,
+                                             unsigned maxlen);
+
 /** @} obj_loc */
 
 /**
@@ -1700,6 +1726,13 @@ CEPH_RADOS_API int rados_omap_get_next2(rados_omap_iter_t iter,
                                        char **val,
                                        size_t *key_len,
                                        size_t *val_len);
+
+/**
+ * Return number of elements in the iterator
+ *
+ * @param iter the iterator of which to return the size
+ */
+CEPH_RADOS_API unsigned int rados_omap_iter_size(rados_omap_iter_t iter);
 
 /**
  * Close the omap iterator.

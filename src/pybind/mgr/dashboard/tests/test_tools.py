@@ -9,11 +9,13 @@ from mock import patch
 
 from ..services.exception import handle_rados_error
 from .helper import ControllerTestCase
-from ..controllers import RESTController, ApiController, BaseController
+from ..controllers import RESTController, ApiController, Controller, \
+                          BaseController, Proxy
 from ..tools import is_valid_ipv6_address, dict_contains_path
 
 
-@ApiController('foo')
+# pylint: disable=W0613
+@Controller('/foo', secure=False)
 class FooResource(RESTController):
     elems = []
 
@@ -38,20 +40,20 @@ class FooResource(RESTController):
         return dict(key=key, newdata=newdata)
 
 
-@ApiController('foo/:key/:method')
+@Controller('/foo/:key/:method', secure=False)
 class FooResourceDetail(RESTController):
     def list(self, key, method):
         return {'detail': (key, [method])}
 
 
-@ApiController('rgw/proxy/{path:.*}')
+@ApiController('/rgw/proxy', secure=False)
 class GenerateControllerRoutesController(BaseController):
-    @cherrypy.expose
+    @Proxy()
     def __call__(self, path, **params):
         pass
 
 
-@ApiController('fooargs')
+@ApiController('/fooargs', secure=False)
 class FooArgs(RESTController):
     def set(self, code, name=None, opt1=None, opt2=None):
         return {'code': code, 'name': name, 'opt1': opt1, 'opt2': opt2}
@@ -115,13 +117,13 @@ class RESTControllerTest(ControllerTestCase):
         assert 'traceback' in body
 
     def test_args_from_json(self):
-        self._put("/fooargs/hello", {'name': 'world'})
+        self._put("/api/fooargs/hello", {'name': 'world'})
         self.assertJsonBody({'code': 'hello', 'name': 'world', 'opt1': None, 'opt2': None})
 
-        self._put("/fooargs/hello", {'name': 'world', 'opt1': 'opt1'})
+        self._put("/api/fooargs/hello", {'name': 'world', 'opt1': 'opt1'})
         self.assertJsonBody({'code': 'hello', 'name': 'world', 'opt1': 'opt1', 'opt2': None})
 
-        self._put("/fooargs/hello", {'name': 'world', 'opt2': 'opt2'})
+        self._put("/api/fooargs/hello", {'name': 'world', 'opt2': 'opt2'})
         self.assertJsonBody({'code': 'hello', 'name': 'world', 'opt1': None, 'opt2': 'opt2'})
 
     def test_detail_route(self):
@@ -136,24 +138,6 @@ class RESTControllerTest(ControllerTestCase):
 
         self._post('/foo/1/detail', 'post-data')
         self.assertStatus(404)
-
-    def test_developer_page(self):
-        self.getPage('/foo', headers=[('Accept', 'text/html')])
-        self.assertIn('<p>GET', self.body.decode('utf-8'))
-        self.assertIn('Content-Type: text/html', self.body.decode('utf-8'))
-        self.assertIn('<form action="/api/foo/" method="post">', self.body.decode('utf-8'))
-        self.assertIn('<input type="hidden" name="_method" value="post" />',
-                      self.body.decode('utf-8'))
-
-    def test_developer_exception_page(self):
-        self.getPage('/foo',
-                     headers=[('Accept', 'text/html'), ('Content-Length', '0')],
-                     method='put')
-        self.assertStatus(404)
-
-    def test_create_form(self):
-        self.getPage('/fooargs', headers=[('Accept', 'text/html')])
-        self.assertIn('my_arg_name', self.body.decode('utf-8'))
 
     def test_generate_controller_routes(self):
         # We just need to add this controller in setup_server():

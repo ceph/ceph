@@ -72,6 +72,14 @@
 struct xio_reg_mem;
 class XioDispatchHook;
 #endif
+#ifdef HAVE_SEASTAR
+namespace seastar {
+template <typename T> class temporary_buffer;
+namespace net {
+class packet;
+}
+}
+#endif // HAVE_SEASTAR
 class deleter;
 
 namespace ceph {
@@ -168,6 +176,15 @@ namespace buffer CEPH_BUFFER_API {
   raw* create_static(unsigned len, char *buf);
   raw* claim_buffer(unsigned len, char *buf, deleter del);
 
+#ifdef HAVE_SEASTAR
+  /// create a raw buffer to wrap seastar cpu-local memory, using foreign_ptr to
+  /// make it safe to share between cpus
+  raw* create_foreign(seastar::temporary_buffer<char>&& buf);
+  /// create a raw buffer to wrap seastar cpu-local memory, without the safety
+  /// of foreign_ptr. the caller must otherwise guarantee that the buffer ptr is
+  /// destructed on this cpu
+  raw* create(seastar::temporary_buffer<char>&& buf);
+#endif
 #if defined(HAVE_XIO)
   raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
 #endif
@@ -181,49 +198,39 @@ namespace buffer CEPH_BUFFER_API {
 
     void release();
 
-  public:
-    class iterator {
+    template<bool is_const>
+    class iterator_impl {
       const ptr *bp;     ///< parent ptr
       const char *start; ///< starting pointer into bp->c_str()
       const char *pos;   ///< pointer into bp->c_str()
       const char *end_ptr;   ///< pointer to bp->end_c_str()
-      bool deep;         ///< if true, do not allow shallow ptr copies
+      const bool deep;   ///< if true, do not allow shallow ptr copies
 
-      iterator(const ptr *p, size_t offset, bool d)
+      iterator_impl(typename std::conditional<is_const, const ptr*, ptr*>::type p,
+		    size_t offset, bool d)
 	: bp(p),
 	  start(p->c_str() + offset),
 	  pos(start),
 	  end_ptr(p->end_c_str()),
-	  deep(d) {}
+	  deep(d)
+      {}
 
       friend class ptr;
 
     public:
-      const char *get_pos_add(size_t n) {
-	const char *r = pos;
-	pos += n;
-	if (pos > end_ptr)
-	  throw end_of_buffer();
+      using pointer = typename std::conditional<is_const, const char*, char *>::type;
+      pointer get_pos_add(size_t n) {
+	auto r = pos;
+	advance(n);
 	return r;
       }
-
       ptr get_ptr(size_t len) {
 	if (deep) {
 	  return buffer::copy(get_pos_add(len), len);
 	} else {
 	  size_t off = pos - bp->c_str();
-	  pos += len;
-	  if (pos > end_ptr)
-	    throw end_of_buffer();
+	  advance(len);
 	  return ptr(*bp, off, len);
-	}
-      }
-      ptr get_preceding_ptr(size_t len) {
-	if (deep) {
-	  return buffer::copy(get_pos() - len, len);
-	} else {
-	  size_t off = pos - bp->c_str();
-	  return ptr(*bp, off - len, len);
 	}
       }
 
@@ -249,6 +256,10 @@ namespace buffer CEPH_BUFFER_API {
       }
     };
 
+  public:
+    using const_iterator = iterator_impl<true>;
+    using iterator = iterator_impl<false>;
+
     ptr() : _raw(0), _off(0), _len(0) {}
     // cppcheck-suppress noExplicitConstructor
     ptr(raw *r);
@@ -267,14 +278,20 @@ namespace buffer CEPH_BUFFER_API {
     bool have_raw() const { return _raw ? true:false; }
 
     raw *clone();
-    void swap(ptr& other);
+    void swap(ptr& other) noexcept;
     ptr& make_shareable();
 
-    iterator begin(size_t offset=0) const {
+    iterator begin(size_t offset=0) {
       return iterator(this, offset, false);
     }
-    iterator begin_deep(size_t offset=0) const {
-      return iterator(this, offset, true);
+    const_iterator begin(size_t offset=0) const {
+      return const_iterator(this, offset, false);
+    }
+    const_iterator cbegin() const {
+      return begin();
+    }
+    const_iterator begin_deep(size_t offset=0) const {
+      return const_iterator(this, 0, true);
     }
 
     // misc
@@ -328,11 +345,19 @@ namespace buffer CEPH_BUFFER_API {
 
     // modifiers
     void set_offset(unsigned o) {
+#ifdef __CEPH__
+      ceph_assert(raw_length() >= o);
+#else
       assert(raw_length() >= o);
+#endif
       _off = o;
     }
     void set_length(unsigned l) {
+#ifdef __CEPH__
+      ceph_assert(raw_length() >= l);
+#else
       assert(raw_length() >= l);
+#endif
       _len = l;
     }
 
@@ -349,6 +374,14 @@ namespace buffer CEPH_BUFFER_API {
     void zero(bool crc_reset);
     void zero(unsigned o, unsigned l);
     void zero(unsigned o, unsigned l, bool crc_reset);
+    unsigned append_zeros(unsigned l);
+
+#ifdef HAVE_SEASTAR
+    /// create a temporary_buffer, copying the ptr as its deleter
+    operator seastar::temporary_buffer<char>() &;
+    /// convert to temporary_buffer, stealing the ptr as its deleter
+    operator seastar::temporary_buffer<char>() &&;
+#endif // HAVE_SEASTAR
 
   };
 
@@ -680,7 +713,7 @@ namespace buffer CEPH_BUFFER_API {
 			      _memcopy_count(other._memcopy_count), last_p(this) {
       make_shareable();
     }
-    list(list&& other);
+    list(list&& other) noexcept;
     list& operator= (const list& other) {
       if (this != &other) {
         _buffers = other._buffers;
@@ -690,7 +723,7 @@ namespace buffer CEPH_BUFFER_API {
       return *this;
     }
 
-    list& operator= (list&& other) {
+    list& operator= (list&& other) noexcept {
       _buffers = std::move(other._buffers);
       _len = other._len;
       _memcopy_count = other._memcopy_count;
@@ -714,7 +747,7 @@ namespace buffer CEPH_BUFFER_API {
 
     unsigned get_memcopy_count() const {return _memcopy_count; }
     const std::list<ptr>& buffers() const { return _buffers; }
-    void swap(list& other);
+    void swap(list& other) noexcept;
     unsigned length() const {
 #if 0
       // DEBUG: verify _len
@@ -724,7 +757,11 @@ namespace buffer CEPH_BUFFER_API {
 	   it++) {
 	len += (*it).length();
       }
+#ifdef __CEPH__
+      ceph_assert(len == _len);
+#else
       assert(len == _len);
+#endif // __CEPH__
 #endif
       return _len;
     }
@@ -744,7 +781,7 @@ namespace buffer CEPH_BUFFER_API {
     bool is_zero() const;
 
     // modifiers
-    void clear() {
+    void clear() noexcept {
       _buffers.clear();
       _len = 0;
       _memcopy_count = 0;
@@ -812,6 +849,11 @@ namespace buffer CEPH_BUFFER_API {
       }
     }
 
+#ifdef HAVE_SEASTAR
+    /// convert the bufferlist into a network packet
+    operator seastar::net::packet() &&;
+#endif
+
     iterator begin() {
       return iterator(this, 0);
     }
@@ -821,6 +863,9 @@ namespace buffer CEPH_BUFFER_API {
 
     const_iterator begin() const {
       return const_iterator(this, 0);
+    }
+    const_iterator cbegin() const {
+      return begin();
     }
     const_iterator end() const {
       return const_iterator(this, _len, _buffers.end(), 0);
@@ -894,7 +939,11 @@ namespace buffer CEPH_BUFFER_API {
     int write_fd_zero_copy(int fd) const;
     template<typename VectorT>
     void prepare_iov(VectorT *piov) const {
+#ifdef __CEPH__
+      ceph_assert(_buffers.size() <= IOV_MAX);
+#else
       assert(_buffers.size() <= IOV_MAX);
+#endif
       piov->resize(_buffers.size());
       unsigned n = 0;
       for (auto& p : _buffers) {
@@ -983,12 +1032,12 @@ inline bufferhash& operator<<(bufferhash& l, const bufferlist &r) {
   return l;
 }
 
-}
+} // namespace buffer
 
 #if defined(HAVE_XIO)
 xio_reg_mem* get_xio_mp(const buffer::ptr& bp);
 #endif
 
-}
+} // namespace ceph
 
 #endif

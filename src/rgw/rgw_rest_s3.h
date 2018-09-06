@@ -569,9 +569,6 @@ protected:
   bool is_acl_op() {
     return s->info.args.exists("acl");
   }
-  bool is_cors_op() {
-      return s->info.args.exists("cors");
-  }
   bool is_tagging_op() {
     return s->info.args.exists("tagging");
   }
@@ -848,7 +845,6 @@ public:
 
   static void shutdown();
 };
-
 
 class LocalEngine : public AWSEngine {
   RGWRados* const store;

@@ -3,7 +3,7 @@ Telegraf Plugin
 ===============
 The Telegraf plugin collects and sends statistics series to a Telegraf agent.
 
-The Telegraf agent can buffer, aggegrate, parse and process the data before
+The Telegraf agent can buffer, aggregate, parse and process the data before
 sending it to an output which can be InfluxDB, ElasticSearch and many more.
 
 Currently the only way to send statistics to Telegraf from this module is to

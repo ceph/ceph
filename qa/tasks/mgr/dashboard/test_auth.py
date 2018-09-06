@@ -8,20 +8,42 @@ from .helper import DashboardTestCase
 
 
 class AuthTest(DashboardTestCase):
+
+    AUTO_AUTHENTICATE = False
+
     def setUp(self):
         self.reset_session()
-        self._ceph_cmd(['dashboard', 'set-login-credentials', 'admin', 'admin'])
 
     def test_a_set_login_credentials(self):
-        self._ceph_cmd(['dashboard', 'set-login-credentials', 'admin2', 'admin2'])
+        self.create_user('admin2', 'admin2', ['administrator'])
         self._post("/api/auth", {'username': 'admin2', 'password': 'admin2'})
         self.assertStatus(201)
-        self.assertJsonBody({"username": "admin2"})
+        # self.assertJsonBody({"username": "admin2"})
+        data = self.jsonBody()
+        self.assertIn('username', data)
+        self.assertEqual(data['username'], "admin2")
+        self.assertIn('permissions', data)
+        for scope, perms in data['permissions'].items():
+            self.assertIsNotNone(scope)
+            self.assertIn('read', perms)
+            self.assertIn('update', perms)
+            self.assertIn('create', perms)
+            self.assertIn('delete', perms)
+        self.delete_user('admin2')
 
     def test_login_valid(self):
         self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
         self.assertStatus(201)
-        self.assertJsonBody({"username": "admin"})
+        data = self.jsonBody()
+        self.assertIn('username', data)
+        self.assertEqual(data['username'], "admin")
+        self.assertIn('permissions', data)
+        for scope, perms in data['permissions'].items():
+            self.assertIsNotNone(scope)
+            self.assertIn('read', perms)
+            self.assertIn('update', perms)
+            self.assertIn('create', perms)
+            self.assertIn('delete', perms)
 
     def test_login_stay_signed_in(self):
         self._post("/api/auth", {
@@ -47,8 +69,12 @@ class AuthTest(DashboardTestCase):
 
     def test_login_invalid(self):
         self._post("/api/auth", {'username': 'admin', 'password': 'inval'})
-        self.assertStatus(403)
-        self.assertJsonBody({"detail": "Invalid credentials"})
+        self.assertStatus(400)
+        self.assertJsonBody({
+            "component": "auth",
+            "code": "invalid_credentials",
+            "detail": "Invalid credentials"
+        })
 
     def test_logout(self):
         self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
@@ -71,6 +97,4 @@ class AuthTest(DashboardTestCase):
 
     def test_unauthorized(self):
         self._get("/api/host")
-        self.assertStatus(401)
-        self._get("/api")
         self.assertStatus(401)

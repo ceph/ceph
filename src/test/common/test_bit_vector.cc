@@ -142,13 +142,13 @@ TYPED_TEST(BitVectorTest, partial_decode_encode) {
 
   bufferlist header_bl;
   header_bl.substr_of(bl, 0, bit_vector.get_header_length());
-  bufferlist::iterator header_it = header_bl.begin();
+  auto header_it = header_bl.cbegin();
   bit_vector.decode_header(header_it);
 
   bufferlist footer_bl;
   footer_bl.substr_of(bl, bit_vector.get_footer_offset(),
 		      bl.length() - bit_vector.get_footer_offset());
-  bufferlist::iterator footer_it = footer_bl.begin();
+  auto footer_it = footer_bl.cbegin();
   bit_vector.decode_footer(footer_it);
 
   typedef std::pair<uint64_t, uint64_t> Extent;
@@ -172,7 +172,7 @@ TYPED_TEST(BitVectorTest, partial_decode_encode) {
     bufferlist data_bl;
     data_bl.substr_of(bl, bit_vector.get_header_length() + byte_offset,
 		      byte_length);
-    bufferlist::iterator data_it = data_bl.begin();
+    auto data_it = data_bl.cbegin();
     bit_vector.decode_data(data_it, byte_offset);
 
     data_bl.clear();
@@ -196,7 +196,7 @@ TYPED_TEST(BitVectorTest, partial_decode_encode) {
     updated_bl.append(footer_bl);
     ASSERT_EQ(bl, updated_bl);
 
-    bufferlist::iterator updated_it = updated_bl.begin();
+    auto updated_it = updated_bl.cbegin();
     decode(bit_vector, updated_it);
   }
 }
@@ -210,7 +210,7 @@ TYPED_TEST(BitVectorTest, header_crc) {
   bufferlist footer;
   bit_vector.encode_footer(footer);
 
-  bufferlist::iterator it = footer.begin();
+  auto it = footer.cbegin();
   bit_vector.decode_footer(it);
 
   bit_vector.resize(1);
@@ -236,7 +236,7 @@ TYPED_TEST(BitVectorTest, data_crc) {
   bufferlist data;
   bit_vector1.encode_data(data, byte_offset, byte_length);
 
-  bufferlist::iterator data_it = data.begin();
+  auto data_it = data.cbegin();
   bit_vector1.decode_data(data_it, byte_offset);
 
   bit_vector2[bit_vector2.size() - 1] = 1;

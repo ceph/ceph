@@ -10,5 +10,6 @@ export class InfoPanelComponent {
    * The title to be displayed. Defaults to 'Information'.
    * @type {string}
    */
-  @Input() title = 'Information';
+  @Input()
+  title = 'Information';
 }

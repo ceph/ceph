@@ -36,7 +36,7 @@ void MoveRequest<I>::trash_add() {
   auto aio_comp = create_rados_callback<
     MoveRequest<I>, &MoveRequest<I>::handle_trash_add>(this);
   int r = m_io_ctx.aio_operate(RBD_TRASH, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -65,7 +65,7 @@ void MoveRequest<I>::remove_id() {
     MoveRequest<I>, &MoveRequest<I>::handle_remove_id>(this);
   int r = m_io_ctx.aio_remove(util::id_obj_name(m_trash_image_spec.name),
                               aio_comp);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -94,7 +94,7 @@ void MoveRequest<I>::directory_remove() {
   auto aio_comp = create_rados_callback<
     MoveRequest<I>, &MoveRequest<I>::handle_directory_remove>(this);
   int r = m_io_ctx.aio_operate(RBD_DIRECTORY, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 

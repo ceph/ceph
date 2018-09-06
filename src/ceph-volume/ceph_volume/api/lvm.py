@@ -5,8 +5,13 @@ set of utilities for interacting with LVM.
 """
 import logging
 import os
-from ceph_volume import process
-from ceph_volume.exceptions import MultipleLVsError, MultipleVGsError, MultiplePVsError
+import uuid
+from math import floor
+from ceph_volume import process, util
+from ceph_volume.exceptions import (
+    MultipleLVsError, MultipleVGsError,
+    MultiplePVsError, SizeAllocationError
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +78,51 @@ def _splitname_parser(line):
         parsed[key] = value
 
     return parsed
+
+
+def sizing(device_size, parts=None, size=None):
+    """
+    Calculate proper sizing to fully utilize the volume group in the most
+    efficient way possible. To prevent situations where LVM might accept
+    a percentage that is beyond the vg's capabilities, it will refuse with
+    an error when requesting a larger-than-possible parameter, in addition
+    to rounding down calculations.
+
+    A dictionary with different sizing parameters is returned, to make it
+    easier for others to choose what they need in order to create logical
+    volumes::
+
+        >>> sizing(100, parts=2)
+        >>> {'parts': 2, 'percentages': 50, 'sizes': 50}
+
+    """
+    if parts is not None and size is not None:
+        raise ValueError(
+            "Cannot process sizing with both parts (%s) and size (%s)" % (parts, size)
+        )
+
+    if size and size > device_size:
+        raise SizeAllocationError(size, device_size)
+
+    def get_percentage(parts):
+        return int(floor(100 / float(parts)))
+
+    if parts is not None:
+        # Prevent parts being 0, falling back to 1 (100% usage)
+        parts = parts or 1
+        percentages = get_percentage(parts)
+
+    if size:
+        parts = int(device_size / size) or 1
+        percentages = get_percentage(parts)
+
+    sizes = device_size / parts if parts else int(floor(device_size))
+
+    return {
+        'parts': parts,
+        'percentages': percentages,
+        'sizes': int(sizes),
+    }
 
 
 def parse_tags(lv_tags):
@@ -233,15 +283,17 @@ def get_api_vgs():
 
     Command and sample delimited output should look like::
 
-        $ vgs --noheadings --readonly --separator=';' \
+        $ vgs --noheadings --units=g --readonly --separator=';' \
           -o vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free
           ubuntubox-vg;1;2;0;wz--n-;299.52g;12.00m
           osd_vg;3;1;0;wz--n-;29.21g;9.21g
 
+    To normalize sizing, the units are forced in 'g' which is equivalent to
+    gigabytes, which uses multiples of 1024 (as opposed to 1000)
     """
-    fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free'
+    fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free,vg_free_count'
     stdout, stderr, returncode = process.call(
-        ['vgs', '--noheadings', '--readonly', '--separator=";"', '-o', fields]
+        ['vgs', '--noheadings', '--readonly', '--units=g', '--separator=";"', '-o', fields]
     )
     return _output_parser(stdout, fields)
 
@@ -258,7 +310,7 @@ def get_api_lvs():
           ;/dev/ubuntubox-vg/swap_1;swap_1;ubuntubox-vg
 
     """
-    fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid'
+    fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
     stdout, stderr, returncode = process.call(
         ['lvs', '--noheadings', '--readonly', '--separator=";"', '-o', fields]
     )
@@ -349,22 +401,61 @@ def create_pv(device):
     ])
 
 
-def create_vg(name, *devices):
+def create_vg(devices, name=None, name_prefix=None):
     """
     Create a Volume Group. Command looks like::
 
         vgcreate --force --yes group_name device
 
     Once created the volume group is returned as a ``VolumeGroup`` object
+
+    :param devices: A list of devices to create a VG. Optionally, a single
+                    device (as a string) can be used.
+    :param name: Optionally set the name of the VG, defaults to 'ceph-{uuid}'
+    :param name_prefix: Optionally prefix the name of the VG, which will get combined
+                        with a UUID string
     """
+    if isinstance(devices, set):
+        devices = list(devices)
+    if not isinstance(devices, list):
+        devices = [devices]
+    if name_prefix:
+        name = "%s-%s" % (name_prefix, str(uuid.uuid4()))
+    elif name is None:
+        name = "ceph-%s" % str(uuid.uuid4())
     process.run([
         'vgcreate',
         '--force',
         '--yes',
-        name] + list(devices)
+        name] + devices
     )
 
     vg = get_vg(vg_name=name)
+    return vg
+
+
+def extend_vg(vg, devices):
+    """
+    Extend a Volume Group. Command looks like::
+
+        vgextend --force --yes group_name [device, ...]
+
+    Once created the volume group is extended and returned as a ``VolumeGroup`` object
+
+    :param vg: A VolumeGroup object
+    :param devices: A list of devices to extend the VG. Optionally, a single
+                    device (as a string) can be used.
+    """
+    if not isinstance(devices, list):
+        devices = [devices]
+    process.run([
+        'vgextend',
+        '--force',
+        '--yes',
+        vg.name] + devices
+    )
+
+    vg = get_vg(vg_name=vg.name)
     return vg
 
 
@@ -422,7 +513,7 @@ def remove_lv(path):
     return True
 
 
-def create_lv(name, group, size=None, tags=None):
+def create_lv(name, group, extents=None, size=None, tags=None, uuid_name=False):
     """
     Create a Logical Volume in a Volume Group. Command looks like::
 
@@ -433,7 +524,19 @@ def create_lv(name, group, size=None, tags=None):
     conform to the convention of prefixing them with "ceph." like::
 
         {"ceph.block_device": "/dev/ceph/osd-1"}
+
+    :param uuid_name: Optionally combine the ``name`` with UUID to ensure uniqueness
     """
+    if uuid_name:
+        name = '%s-%s' % (name, uuid.uuid4())
+    if tags is None:
+        tags = {
+            "ceph.osd_id": "null",
+            "ceph.type": "null",
+            "ceph.cluster_fsid": "null",
+            "ceph.osd_fsid": "null",
+        }
+
     # XXX add CEPH_VOLUME_LVM_DEBUG to enable -vvvv on lv operations
     type_path_tag = {
         'journal': 'ceph.journal_device',
@@ -449,6 +552,14 @@ def create_lv(name, group, size=None, tags=None):
             '--yes',
             '-L',
             '%s' % size,
+            '-n', name, group
+        ])
+    elif extents:
+        process.run([
+            'lvcreate',
+            '--yes',
+            '-l',
+            '%s' % extents,
             '-n', name, group
         ])
     # create the lv with all the space available, this is needed because the
@@ -473,6 +584,50 @@ def create_lv(name, group, size=None, tags=None):
             {path_tag: lv.lv_path}
         )
     return lv
+
+
+def create_lvs(volume_group, parts=None, size=None, name_prefix='ceph-lv'):
+    """
+    Create multiple Logical Volumes from a Volume Group by calculating the
+    proper extents from ``parts`` or ``size``. A custom prefix can be used
+    (defaults to ``ceph-lv``), these names are always suffixed with a uuid.
+
+    LV creation in ceph-volume will require tags, this is expected to be
+    pre-computed by callers who know Ceph metadata like OSD IDs and FSIDs. It
+    will probably not be the case when mass-creating LVs, so common/default
+    tags will be set to ``"null"``.
+
+    .. note:: LVs that are not in use can be detected by querying LVM for tags that are
+              set to ``"null"``.
+
+    :param volume_group: The volume group (vg) to use for LV creation
+    :type group: ``VolumeGroup()`` object
+    :param parts: Number of LVs to create *instead of* ``size``.
+    :type parts: int
+    :param size: Size (in gigabytes) of LVs to create, e.g. "as many 10gb LVs as possible"
+    :type size: int
+    :param extents: The number of LVM extents to use to create the LV. Useful if looking to have
+    accurate LV sizes (LVM rounds sizes otherwise)
+    """
+    if parts is None and size is None:
+        # fallback to just one part (using 100% of the vg)
+        parts = 1
+    lvs = []
+    tags = {
+        "ceph.osd_id": "null",
+        "ceph.type": "null",
+        "ceph.cluster_fsid": "null",
+        "ceph.osd_fsid": "null",
+    }
+    sizing = volume_group.sizing(parts=parts, size=size)
+    for part in range(0, sizing['parts']):
+        size = sizing['sizes']
+        extents = sizing['extents']
+        lv_name = '%s-%s' % (name_prefix, uuid.uuid4())
+        lvs.append(
+            create_lv(lv_name, volume_group.name, extents=extents, tags=tags)
+        )
+    return lvs
 
 
 def get_vg(vg_name=None, vg_tags=None):
@@ -785,7 +940,7 @@ class PVolumes(list):
         )
         if not pvs:
             return None
-        if len(pvs) > 1:
+        if len(pvs) > 1 and pv_tags:
             raise MultiplePVsError(pv_name)
         return pvs[0]
 
@@ -806,6 +961,97 @@ class VolumeGroup(object):
 
     def __repr__(self):
         return self.__str__()
+
+    def _parse_size(self, size):
+        error_msg = "Unable to convert vg size to integer: '%s'" % str(size)
+        try:
+            integer, _ = size.split('g')
+        except ValueError:
+            logger.exception(error_msg)
+            raise RuntimeError(error_msg)
+
+        return util.str_to_int(integer)
+
+    @property
+    def free(self):
+        """
+        Parse the available size in gigabytes from the ``vg_free`` attribute, that
+        will be a string with a character ('g') to indicate gigabytes in size.
+        Returns a rounded down integer to ease internal operations::
+
+        >>> data_vg.vg_free
+        '0.01g'
+        >>> data_vg.size
+        0
+        """
+        return self._parse_size(self.vg_free)
+
+    @property
+    def size(self):
+        """
+        Parse the size in gigabytes from the ``vg_size`` attribute, that
+        will be a string with a character ('g') to indicate gigabytes in size.
+        Returns a rounded down integer to ease internal operations::
+
+        >>> data_vg.vg_size
+        '1024.9g'
+        >>> data_vg.size
+        1024
+        """
+        return self._parse_size(self.vg_size)
+
+    def sizing(self, parts=None, size=None):
+        """
+        Calculate proper sizing to fully utilize the volume group in the most
+        efficient way possible. To prevent situations where LVM might accept
+        a percentage that is beyond the vg's capabilities, it will refuse with
+        an error when requesting a larger-than-possible parameter, in addition
+        to rounding down calculations.
+
+        A dictionary with different sizing parameters is returned, to make it
+        easier for others to choose what they need in order to create logical
+        volumes::
+
+        >>> data_vg.free
+        1024
+        >>> data_vg.sizing(parts=4)
+        {'parts': 4, 'sizes': 256, 'percentages': 25}
+        >>> data_vg.sizing(size=512)
+        {'parts': 2, 'sizes': 512, 'percentages': 50}
+
+
+        :param parts: Number of parts to create LVs from
+        :param size: Size in gigabytes to divide the VG into
+
+        :raises SizeAllocationError: When requested size cannot be allocated with
+        :raises ValueError: If both ``parts`` and ``size`` are given
+        """
+        if parts is not None and size is not None:
+            raise ValueError(
+                "Cannot process sizing with both parts (%s) and size (%s)" % (parts, size)
+            )
+
+        # if size is given we need to map that to extents so that we avoid
+        # issues when trying to get this right with a size in gigabytes find
+        # the percentage first, cheating, because these values are thrown out
+        vg_free_count = util.str_to_int(self.vg_free_count)
+
+        if size:
+            extents = int(size * vg_free_count / self.free)
+            disk_sizing = sizing(self.free, size=size, parts=parts)
+        else:
+            if parts is not None:
+                # Prevent parts being 0, falling back to 1 (100% usage)
+                parts = parts or 1
+            size = int(self.free / parts)
+            extents = size * vg_free_count / self.free
+            disk_sizing = sizing(self.free, parts=parts)
+
+        extent_sizing = sizing(vg_free_count, size=extents)
+
+        disk_sizing['extents'] = int(extents)
+        disk_sizing['percentages'] = extent_sizing['percentages']
+        return disk_sizing
 
 
 class Volume(object):

@@ -299,6 +299,14 @@ void ceph_buffer_free(char *buf);
 int ceph_unmount(struct ceph_mount_info *cmount);
 
 /**
+ * Abort mds connections
+ *
+ * @param cmount the mount handle
+ * @return 0 on success, negative error code on failure
+ */
+int ceph_abort_conn(struct ceph_mount_info *cmount);
+
+/**
  * Destroy the mount handle.
  *
  * The handle should not be mounted. This should be called on completion of
@@ -318,6 +326,17 @@ int ceph_release(struct ceph_mount_info *cmount);
  * @param cmount the mount handle to shutdown
  */
 void ceph_shutdown(struct ceph_mount_info *cmount);
+
+/**
+ * Get a global id for current instance
+ *
+ * The handle should not be mounted. This should be called on completion of
+ * all libcephfs functions.
+ *
+ * @param cmount the mount handle
+ * @returns instance global id
+ */
+uint64_t ceph_get_instance_id(struct ceph_mount_info *cmount);
 
 /**
  * Extract the CephContext from the mount point handle.
@@ -786,6 +805,56 @@ int ceph_lchown(struct ceph_mount_info *cmount, const char *path, int uid, int g
 int ceph_utime(struct ceph_mount_info *cmount, const char *path, struct utimbuf *buf);
 
 /**
+ * Change file/directory last access and modification times.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param fd the fd of the open file/directory to set the time values of.
+ * @param buf holding the access and modification times to set on the file.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_futime(struct ceph_mount_info *cmount, int fd, struct utimbuf *buf);
+
+/**
+ * Change file/directory last access and modification times.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param path the path to the file/directory to set the time values of.
+ * @param times holding the access and modification times to set on the file.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_utimes(struct ceph_mount_info *cmount, const char *path, struct timeval times[2]);
+
+/**
+ * Change file/directory last access and modification times, don't follow symlinks.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param path the path to the file/directory to set the time values of.
+ * @param times holding the access and modification times to set on the file.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_lutimes(struct ceph_mount_info *cmount, const char *path, struct timeval times[2]);
+
+/**
+ * Change file/directory last access and modification times.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param fd the fd of the open file/directory to set the time values of.
+ * @param times holding the access and modification times to set on the file.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_futimes(struct ceph_mount_info *cmount, int fd, struct timeval times[2]);
+
+/**
+ * Change file/directory last access and modification times.
+ *
+ * @param cmount the ceph mount handle to use for performing the utime.
+ * @param fd the fd of the open file/directory to set the time values of.
+ * @param times holding the access and modification times to set on the file.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_futimens(struct ceph_mount_info *cmount, int fd, struct timespec times[2]);
+
+/**
  * Apply or remove an advisory lock.
  *
  * @param cmount the ceph mount handle to use for performing the lock.
@@ -971,6 +1040,16 @@ int ceph_fsync(struct ceph_mount_info *cmount, int fd, int syncdataonly);
  */
 int ceph_fallocate(struct ceph_mount_info *cmount, int fd, int mode,
 	                      int64_t offset, int64_t length);
+
+/**
+ * Enable/disable lazyio for the file.
+ *
+ * @param cmount the ceph mount handle to use for performing the fsync.
+ * @param fd the file descriptor of the file to sync.
+ * @param enable a boolean to enable lazyio or disable lazyio.
+ * @returns 0 on success or a negative error code on failure.
+ */
+int ceph_lazyio(struct ceph_mount_info *cmount, int fd, int enable);
 
 /** @} file */
 
@@ -1489,6 +1568,8 @@ int ceph_ll_fsync(struct ceph_mount_info *cmount, struct Fh *fh,
 		  int syncdataonly);
 int ceph_ll_sync_inode(struct ceph_mount_info *cmount, struct Inode *in,
 		  int syncdataonly);
+int ceph_ll_fallocate(struct ceph_mount_info *cmount, struct Fh *fh,
+		      int mode, int64_t offset, int64_t length);
 int ceph_ll_write(struct ceph_mount_info *cmount, struct Fh* filehandle,
 		  int64_t off, uint64_t len, const char *data);
 int64_t ceph_ll_readv(struct ceph_mount_info *cmount, struct Fh *fh,
@@ -1588,6 +1669,8 @@ int ceph_ll_getlk(struct ceph_mount_info *cmount,
 int ceph_ll_setlk(struct ceph_mount_info *cmount,
 		  Fh *fh, struct flock *fl, uint64_t owner, int sleep);
 
+int ceph_ll_lazyio(struct ceph_mount_info *cmount, Fh *fh, int enable);
+
 /*
  * Delegation support
  *
@@ -1667,6 +1750,9 @@ int ceph_set_deleg_timeout(struct ceph_mount_info *cmount, uint32_t timeout);
  */
 int ceph_ll_delegation(struct ceph_mount_info *cmount, Fh *fh,
 		       unsigned int cmd, ceph_deleg_cb_t cb, void *priv);
+
+mode_t ceph_umask(struct ceph_mount_info *cmount, mode_t mode);
+
 #ifdef __cplusplus
 }
 #endif

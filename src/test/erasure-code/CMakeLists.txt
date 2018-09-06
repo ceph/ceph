@@ -165,7 +165,6 @@ target_link_libraries(unittest_erasure_code_example
   erasure_code
   ${UNITTEST_LIBS}
   )
-set_target_properties(unittest_erasure_code_example PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/src/erasure-code/jerasure/jerasure/include)
 include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/src/erasure-code//jerasure/gf-complete/include)
@@ -202,7 +201,7 @@ target_link_libraries(unittest_erasure_code_shec
 add_executable(unittest_erasure_code_shec_all
   TestErasureCodeShec_all.cc
   )
-add_ceph_unittest(unittest_erasure_code_shec_all)
+add_ceph_unittest(unittest_erasure_code_shec_all parallel)
 target_link_libraries(unittest_erasure_code_shec_all
   global
   ${CMAKE_DL_LIBS}

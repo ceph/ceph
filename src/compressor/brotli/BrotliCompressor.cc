@@ -47,7 +47,7 @@ int BrotliCompressor::compress(const bufferlist &in, bufferlist &out)
   return 0;
 }
 
-int BrotliCompressor::decompress(bufferlist::iterator &p,
+int BrotliCompressor::decompress(bufferlist::const_iterator &p,
                                  size_t compressed_size,
                                  bufferlist &out) 
 {

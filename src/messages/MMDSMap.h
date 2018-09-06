@@ -20,27 +20,29 @@
 #include "mds/MDSMap.h"
 #include "include/ceph_features.h"
 
-class MMDSMap : public Message {
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+class MMDSMap : public MessageInstance<MMDSMap> {
 public:
-
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
+public:
   uuid_d fsid;
   epoch_t epoch = 0;
   bufferlist encoded;
 
   version_t get_epoch() const { return epoch; }
-  bufferlist& get_encoded() { return encoded; }
+  const bufferlist& get_encoded() const { return encoded; }
 
+protected:
   MMDSMap() : 
-    Message(CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION) {}
-  MMDSMap(const uuid_d &f, const MDSMap *mm) :
-    Message(CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION) {}
+  MMDSMap(const uuid_d &f, const MDSMap &mm) :
+    MessageInstance(CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION),
     fsid(f) {
-    epoch = mm->get_epoch();
-    mm->encode(encoded, -1);  // we will reencode with fewer features as necessary
+    epoch = mm.get_epoch();
+    mm.encode(encoded, -1);  // we will reencode with fewer features as necessary
   }
-private:
   ~MMDSMap() override {}
 
 public:
@@ -51,7 +53,7 @@ public:
 
   // marshalling
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(fsid, p);
     decode(epoch, p);
     decode(encoded, p);
@@ -62,7 +64,8 @@ public:
     encode(epoch, payload);
     if ((features & CEPH_FEATURE_PGID64) == 0 ||
 	(features & CEPH_FEATURE_MDSENC) == 0 ||
-	(features & CEPH_FEATURE_MSG_ADDR2) == 0) {
+	(features & CEPH_FEATURE_MSG_ADDR2) == 0 ||
+	!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
       // reencode for old clients.
       MDSMap m;
       m.decode(encoded);

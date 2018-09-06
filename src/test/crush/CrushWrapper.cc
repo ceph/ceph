@@ -1013,7 +1013,7 @@ TEST(CrushWrapper, choose_args_compat) {
   item = 2;
   c.insert_item(g_ceph_context, item, weight, "osd.2", loc);
 
-  assert(c.add_simple_rule("rule1", "r11", "host", "",
+  ceph_assert(c.add_simple_rule("rule1", "r11", "host", "",
 			   "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
 
   int id = c.get_item_id("b1");
@@ -1023,11 +1023,11 @@ TEST(CrushWrapper, choose_args_compat) {
   weight_set.size = 1;
   weight_set.weights = &weights;
   int maxbuckets = c.get_max_buckets();
-  assert(maxbuckets > 0);
+  ceph_assert(maxbuckets > 0);
   crush_choose_arg choose_args[maxbuckets];
   memset(choose_args, '\0', sizeof(crush_choose_arg) * maxbuckets);
   choose_args[-1-id].ids_size = 0;
-  choose_args[-1-id].weight_set_size = 1;
+  choose_args[-1-id].weight_set_positions = 1;
   choose_args[-1-id].weight_set = &weight_set;
   crush_choose_arg_map arg_map;
   arg_map.size = c.get_max_buckets();
@@ -1041,11 +1041,11 @@ TEST(CrushWrapper, choose_args_compat) {
     c.choose_args[caid] = arg_map;
     bufferlist bl;
     c.encode(bl, features|CEPH_FEATURE_CRUSH_CHOOSE_ARGS);
-    bufferlist::iterator i(bl.begin());
+    auto i = bl.cbegin();
     CrushWrapper c_new;
     c_new.decode(i);
     ASSERT_EQ(1u, c_new.choose_args.size());
-    ASSERT_EQ(1u, c_new.choose_args[caid].args[-1-id].weight_set_size);
+    ASSERT_EQ(1u, c_new.choose_args[caid].args[-1-id].weight_set_positions);
     ASSERT_EQ(weights, c_new.choose_args[caid].args[-1-id].weight_set[0].weights[0]);
     ASSERT_EQ(weight, c_new.get_bucket_item_weightf(id, 0));
   }
@@ -1056,7 +1056,7 @@ TEST(CrushWrapper, choose_args_compat) {
     bufferlist bl;
     c.encode(bl, features);
     c.choose_args.clear();
-    bufferlist::iterator i(bl.begin());
+    auto i = bl.cbegin();
     CrushWrapper c_new;
     c_new.decode(i);
     ASSERT_EQ(0u, c_new.choose_args.size());
@@ -1085,7 +1085,7 @@ TEST(CrushWrapper, remove_root) {
   loc["root"] = "default";
   c.insert_item(g_ceph_context, item, weight, "osd.2", loc);
 
-  assert(c.add_simple_rule("rule1", "r11", "host", "",
+  ceph_assert(c.add_simple_rule("rule1", "r11", "host", "",
 			   "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("r11"));

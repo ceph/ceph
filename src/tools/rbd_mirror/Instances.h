@@ -28,15 +28,16 @@ public:
 
   static Instances *create(Threads<ImageCtxT> *threads,
                            librados::IoCtx &ioctx,
+                           const std::string& instance_id,
                            instances::Listener& listener) {
-    return new Instances(threads, ioctx, listener);
+    return new Instances(threads, ioctx, instance_id, listener);
   }
   void destroy() {
     delete this;
   }
 
   Instances(Threads<ImageCtxT> *threads, librados::IoCtx &ioctx,
-            instances::Listener& listener);
+            const std::string& instance_id, instances::Listener& listener);
   virtual ~Instances();
 
   void init(Context *on_finish);
@@ -129,6 +130,7 @@ private:
 
   Threads<ImageCtxT> *m_threads;
   librados::IoCtx &m_ioctx;
+  std::string m_instance_id;
   instances::Listener& m_listener;
   CephContext *m_cct;
 

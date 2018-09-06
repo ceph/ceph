@@ -52,7 +52,7 @@ public:
     ENCODE_FINISH(bl);
   }
   
-  void decode(bufferlist::iterator &p)
+  void decode(bufferlist::const_iterator &p)
   {
     DECODE_START(3, p);
     decode(path, p);
@@ -70,10 +70,13 @@ public:
 };
 WRITE_CLASS_ENCODER(PerfCounterType)
 
-class MMgrReport : public Message
-{
-  static const int HEAD_VERSION = 6;
-  static const int COMPAT_VERSION = 1;
+class MMgrReport : public MessageInstance<MMgrReport> {
+public:
+  friend factory;
+private:
+
+  static constexpr int HEAD_VERSION = 6;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
   /**
@@ -105,7 +108,7 @@ public:
 
   void decode_payload() override
   {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(daemon_name, p);
     decode(declare_types, p);
     decode(packed, p);
@@ -157,7 +160,7 @@ public:
   }
 
   MMgrReport()
-    : Message(MSG_MGR_REPORT, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_MGR_REPORT, HEAD_VERSION, COMPAT_VERSION)
   {}
 };
 

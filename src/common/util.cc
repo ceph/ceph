@@ -93,6 +93,7 @@ static void file_values_parse(const map<string, string>& kvm, FILE *fp, map<stri
 
 static bool os_release_parse(map<string, string> *m, CephContext *cct)
 {
+#if defined(__linux__)
   static const map<string, string> kvm = {
     { "distro", "ID=" },
     { "distro_description", "PRETTY_NAME=" },
@@ -109,6 +110,15 @@ static bool os_release_parse(map<string, string> *m, CephContext *cct)
   file_values_parse(kvm, fp, m, cct);
 
   fclose(fp);
+#elif defined(__FreeBSD__)
+  struct utsname u;
+  int r = uname(&u);
+  if (!r) {
+     m->insert(std::make_pair("distro", u.sysname));
+     m->insert(std::make_pair("distro_description", u.version));
+     m->insert(std::make_pair("distro_version", u.release));
+  }
+#endif
 
   return true;
 }
@@ -142,6 +152,19 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
     (*m)["hostname"] = u.nodename;
     (*m)["arch"] = u.machine;
   }
+
+  // but wait, am i in a container?
+  if (const char *pod_name = getenv("POD_NAME")) {
+    (*m)["pod_name"] = pod_name;
+    if (const char *node_name = getenv("NODE_NAME")) {
+      (*m)["container_hostname"] = u.nodename;
+      (*m)["hostname"] = node_name;
+    }
+  }
+  if (const char *ns = getenv("POD_NAMESPACE")) {
+    (*m)["pod_namespace"] = ns;
+  }
+
 #ifdef __APPLE__
   // memory
   {
@@ -222,7 +245,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
 
 void dump_services(Formatter* f, const map<string, list<int> >& services, const char* type)
 {
-  assert(f);
+  ceph_assert(f);
 
   f->open_object_section(type);
   for (map<string, list<int> >::const_iterator host = services.begin();
@@ -240,7 +263,7 @@ void dump_services(Formatter* f, const map<string, list<int> >& services, const 
 
 void dump_services(Formatter* f, const map<string, list<string> >& services, const char* type)
 {
-  assert(f);
+  ceph_assert(f);
 
   f->open_object_section(type);
   for (const auto& host : services) {

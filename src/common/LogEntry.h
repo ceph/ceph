@@ -16,7 +16,7 @@
 #define CEPH_LOGENTRY_H
 
 #include "include/utime.h"
-#include "msg/msg_types.h" // for entity_inst_t
+#include "msg/msg_types.h"
 #include "common/entity_name.h"
 
 namespace ceph {
@@ -58,18 +58,18 @@ private:
   uint64_t _hash = 0;
 
   void _calc_hash() {
-    hash<entity_inst_t> h;
-    _hash = seq + h(who);
+    hash<entity_name_t> h;
+    _hash = seq + h(rank);
   }
 
-  entity_inst_t who;
+  entity_name_t rank;
   utime_t stamp;
   uint64_t seq = 0;
 
 public:
   LogEntryKey() {}
-  LogEntryKey(const entity_inst_t& w, utime_t t, uint64_t s)
-    : who(w), stamp(t), seq(s) {
+  LogEntryKey(const entity_name_t& w, utime_t t, uint64_t s)
+    : rank(w), stamp(t), seq(s) {
     _calc_hash();
   }
 
@@ -77,16 +77,13 @@ public:
     return _hash;
   }
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogEntryKey*>& o);
 
   friend bool operator==(const LogEntryKey& l, const LogEntryKey& r) {
-    return l.who == r.who && l.stamp == r.stamp && l.seq == r.seq;
+    return l.rank == r.rank && l.stamp == r.stamp && l.seq == r.seq;
   }
 };
-WRITE_CLASS_ENCODER_FEATURES(LogEntryKey)
 
 namespace std {
   template<> struct hash<LogEntryKey> {
@@ -97,8 +94,9 @@ namespace std {
 } // namespace std
 
 struct LogEntry {
-  entity_inst_t who;
   EntityName name;
+  entity_name_t rank;
+  entity_addrvec_t addrs;
   utime_t stamp;
   uint64_t seq;
   clog_type prio;
@@ -107,12 +105,12 @@ struct LogEntry {
 
   LogEntry() : seq(0), prio(CLOG_DEBUG) {}
 
-  LogEntryKey key() const { return LogEntryKey(who, stamp, seq); }
+  LogEntryKey key() const { return LogEntryKey(rank, stamp, seq); }
 
   void log_to_syslog(string level, string facility);
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogEntry*>& o);
   static clog_type str_to_level(std::string const &str);
@@ -147,7 +145,7 @@ struct LogSummary {
   }
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogSummary*>& o);
 };
@@ -173,8 +171,8 @@ inline ostream& operator<<(ostream& out, const clog_type t)
 
 inline ostream& operator<<(ostream& out, const LogEntry& e)
 {
-  return out << e.stamp << " " << e.name << " " << e.who
-	     << " " << e.seq << " : "
+  return out << e.stamp << " " << e.name << " (" << e.rank << ") "
+	     << e.seq << " : "
              << e.channel << " " << e.prio << " " << e.msg;
 }
 

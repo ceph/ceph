@@ -15,7 +15,7 @@
 #ifndef CEPH_ROTATINGKEYRING_H
 #define CEPH_ROTATINGKEYRING_H
 
-#include "common/Mutex.h"
+#include "common/lock_mutex.h"
 #include "auth/Auth.h"
 
 /*
@@ -25,19 +25,20 @@
 class KeyRing;
 class CephContext;
 
+template<LockPolicy lock_policy>
 class RotatingKeyRing : public KeyStore {
   CephContext *cct;
   uint32_t service_id;
   RotatingSecrets secrets;
   KeyRing *keyring;
-  mutable Mutex lock;
+  mutable LockMutexT<lock_policy> lock;
 
 public:
   RotatingKeyRing(CephContext *cct_, uint32_t s, KeyRing *kr) :
     cct(cct_),
     service_id(s),
     keyring(kr),
-    lock("RotatingKeyRing::lock") {}
+    lock(LockMutex<lock_policy>::create("RotatingKeyRing::lock")) {}
 
   bool need_new_secrets() const;
   bool need_new_secrets(utime_t now) const;

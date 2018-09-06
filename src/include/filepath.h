@@ -134,7 +134,7 @@ class filepath {
 
   const string& last_dentry() const {
     if (bits.empty() && path.length() > 0) parse_bits();
-    assert(!bits.empty());
+    ceph_assert(!bits.empty());
     return bits[ bits.size()-1 ];
   }
 
@@ -186,7 +186,7 @@ class filepath {
     rebuild_path();
   }
   void append(const filepath& a) {
-    assert(a.pure_relative());
+    ceph_assert(a.pure_relative());
     for (unsigned i=0; i<a.depth(); i++) 
       push_dentry(a[i]);
   }
@@ -199,7 +199,7 @@ class filepath {
     encode(ino, bl);
     encode(path, bl);
   }
-  void decode(bufferlist::iterator& blp) {
+  void decode(bufferlist::const_iterator& blp) {
     using ceph::decode;
     bits.clear();
     __u8 struct_v;
@@ -219,6 +219,17 @@ class filepath {
     o.push_back(new filepath("var/log", 1));
     o.push_back(new filepath("foo/bar", 101));
   }
+
+  bool is_last_dot_or_dotdot() const {
+    if (depth() > 0) {
+      std::string dname = last_dentry();
+      if (dname == "." || dname == "..") {
+        return true;
+      }
+    }
+
+    return false;
+  }
 };
 
 WRITE_CLASS_ENCODER(filepath)
@@ -227,7 +238,7 @@ inline ostream& operator<<(ostream& out, const filepath& path)
 {
   if (path.get_ino()) {
     out << '#' << path.get_ino();
-    if (path.depth())
+    if (path.length())
       out << '/';
   }
   return out << path.get_path();

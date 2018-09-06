@@ -6,7 +6,7 @@ function(build_fio)
     DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/src/
     UPDATE_COMMAND "" # this disables rebuild on each run
     GIT_REPOSITORY "https://github.com/axboe/fio.git"
-    GIT_TAG "fio-3.5"
+    GIT_TAG "bf0b7e75c1ccca4026c8880ed8a76fc7ef85f2f3"
     SOURCE_DIR ${CMAKE_BINARY_DIR}/src/fio
     BUILD_IN_SOURCE 1
     CONFIGURE_COMMAND <SOURCE_DIR>/configure

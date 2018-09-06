@@ -17,6 +17,7 @@
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
+#include "common/config_obs.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "osd/osd_types.h"
@@ -96,10 +97,10 @@ static int conf_stringify(const Option::value_t& v, string *out)
   return 0;
 }
 
-md_config_t::md_config_t(bool is_daemon)
-  : is_daemon(is_daemon),
-    cluster(""),
-    lock("md_config_t", true, false)
+md_config_t::md_config_t(ConfigValues& values,
+			 const ConfigTracker& tracker,
+			 bool is_daemon)
+  : is_daemon(is_daemon)
 {
   // Load the compile-time list of Option into
   // a map so that we can resolve keys quickly.
@@ -116,15 +117,15 @@ md_config_t::md_config_t(bool is_daemon)
   }
 
   // Define the debug_* options as well.
-  subsys_options.reserve(subsys.get_num());
-  for (unsigned i = 0; i < subsys.get_num(); ++i) {
-    string name = string("debug_") + subsys.get_name(i);
+  subsys_options.reserve(values.subsys.get_num());
+  for (unsigned i = 0; i < values.subsys.get_num(); ++i) {
+    string name = string("debug_") + values.subsys.get_name(i);
     subsys_options.push_back(
       Option(name, Option::TYPE_STR, Option::LEVEL_ADVANCED));
     Option& opt = subsys_options.back();
-    opt.set_default(stringify(subsys.get_log_level(i)) + "/" +
-		    stringify(subsys.get_gather_level(i)));
-    string desc = string("Debug level for ") + subsys.get_name(i);
+    opt.set_default(stringify(values.subsys.get_log_level(i)) + "/" +
+		    stringify(values.subsys.get_gather_level(i)));
+    string desc = string("Debug level for ") + values.subsys.get_name(i);
     opt.set_description(desc.c_str());
     opt.set_flag(Option::FLAG_RUNTIME);
     opt.set_long_description("The value takes the form 'N' or 'N/M' where N and M are values between 0 and 99.  N is the debug level to log (all values below this are included), and M is the level to gather and buffer in memory.  In the event of a crash, the most recent items <= M are dumped to the log file.");
@@ -165,7 +166,7 @@ md_config_t::md_config_t(bool is_daemon)
   // members if present.
   legacy_values = {
 #define OPTION(name, type) \
-    {std::string(STRINGIFY(name)), &md_config_t::name},
+    {std::string(STRINGIFY(name)), &ConfigValues::name},
 #define SAFE_OPTION(name, type) OPTION(name, type)
 #include "common/legacy_config_opts.h"
 #undef OPTION
@@ -202,13 +203,13 @@ md_config_t::md_config_t(bool is_daemon)
       if (val != *def_str) {
 	// if the validator normalizes the string into a different form than
 	// what was compiled in, use that.
-	set_val_default(opt.name, val);
+	set_val_default(values, tracker, opt.name, val);
       }
     }
   }
 
   // Copy out values (defaults) into any legacy (C struct member) fields
-  update_legacy_vals();
+  update_legacy_vals(values);
 }
 
 md_config_t::~md_config_t()
@@ -250,21 +251,23 @@ const Option *md_config_t::find_option(const string& name) const
   return nullptr;
 }
 
-void md_config_t::set_val_default(const string& name, const std::string& val)
+void md_config_t::set_val_default(ConfigValues& values,
+				  const ConfigTracker& tracker,
+				  const string& name, const std::string& val)
 {
-  Mutex::Locker l(lock);
   const Option *o = find_option(name);
-  assert(o);
+  ceph_assert(o);
   string err;
-  int r = _set_val(val, *o, CONF_DEFAULT, &err);
-  assert(r >= 0);
+  int r = _set_val(values, tracker, val, *o, CONF_DEFAULT, &err);
+  ceph_assert(r >= 0);
 }
 
 int md_config_t::set_mon_vals(CephContext *cct,
+    ConfigValues& values,
+    const ConfigTracker& tracker,
     const map<string,string>& kv,
     config_callback config_cb)
 {
-  Mutex::Locker l(lock);
   ignored_mon_values.clear();
 
   if (!config_cb) {
@@ -289,77 +292,55 @@ int md_config_t::set_mon_vals(CephContext *cct,
       continue;
     }
     std::string err;
-    int r = _set_val(i.second, *o, CONF_MON, &err);
+    int r = _set_val(values, tracker, i.second, *o, CONF_MON, &err);
     if (r < 0) {
       lderr(cct) << __func__ << " failed to set " << i.first << " = "
 		 << i.second << ": " << err << dendl;
       ignored_mon_values.emplace(i);
-    } else if (r == 0) {
+    } else if (r == ConfigValues::SET_NO_CHANGE ||
+	       r == ConfigValues::SET_NO_EFFECT) {
       ldout(cct,20) << __func__ << " " << i.first << " = " << i.second
 		    << " (no change)" << dendl;
-    } else if (r == 1) {
+    } else if (r == ConfigValues::SET_HAVE_EFFECT) {
       ldout(cct,10) << __func__ << " " << i.first << " = " << i.second << dendl;
     } else {
       ceph_abort();
     }
   }
-  for (const auto& [name,configs] : values) {
-    auto j = configs.find(CONF_MON);
-    if (j != configs.end()) {
-      if (kv.find(name) == kv.end()) {
-	ldout(cct,10) << __func__ << " " << name
-		      << " cleared (was " << Option::to_str(j->second) << ")"
-		      << dendl;
-	_rm_val(name, CONF_MON);
-      }
+  values.for_each([&] (auto name, auto configs) {
+    auto config = configs.find(CONF_MON);
+    if (config == configs.end()) {
+      return;
     }
-  }
+    if (kv.find(name) != kv.end()) {
+      return;
+    }
+    ldout(cct,10) << __func__ << " " << name
+		  << " cleared (was " << Option::to_str(config->second) << ")"
+		  << dendl;
+    values.rm_val(name, CONF_MON);
+  });
   values_bl.clear();
-  _apply_changes(nullptr);
+  update_legacy_vals(values);
   return 0;
 }
 
-void md_config_t::add_observer(md_config_obs_t* observer_)
-{
-  Mutex::Locker l(lock);
-  const char **keys = observer_->get_tracked_conf_keys();
-  for (const char ** k = keys; *k; ++k) {
-    obs_map_t::value_type val(*k, observer_);
-    observers.insert(val);
-  }
-}
-
-void md_config_t::remove_observer(md_config_obs_t* observer_)
-{
-  Mutex::Locker l(lock);
-  bool found_obs = false;
-  for (obs_map_t::iterator o = observers.begin(); o != observers.end(); ) {
-    if (o->second == observer_) {
-      observers.erase(o++);
-      found_obs = true;
-    }
-    else {
-      ++o;
-    }
-  }
-  assert(found_obs);
-}
-
-int md_config_t::parse_config_files(const char *conf_files_str,
+int md_config_t::parse_config_files(ConfigValues& values,
+				    const ConfigTracker& tracker,
+				    const char *conf_files_str,
 				    std::ostream *warnings,
 				    int flags)
 {
-  Mutex::Locker l(lock);
 
   if (safe_to_start_threads)
     return -ENOSYS;
 
-  if (!cluster.size() && !conf_files_str) {
+  if (!values.cluster.size() && !conf_files_str) {
     /*
      * set the cluster name to 'ceph' when neither cluster name nor
      * configuration file are specified.
      */
-    cluster = "ceph";
+    values.cluster = "ceph";
   }
 
   if (!conf_files_str) {
@@ -384,7 +365,7 @@ int md_config_t::parse_config_files(const char *conf_files_str,
       // useless $data_dir item, skip
       p = conf_files.erase(p);
     } else {
-      early_expand_meta(s, warnings);
+      early_expand_meta(values, s, warnings);
       ++p;
     }
   }
@@ -405,7 +386,7 @@ int md_config_t::parse_config_files(const char *conf_files_str,
   if (c == conf_files.end())
     return -ENOENT;
 
-  if (cluster.size() == 0) {
+  if (values.cluster.size() == 0) {
     /*
      * If cluster name is not set yet, use the prefix of the
      * basename of configuration file as cluster name.
@@ -418,21 +399,21 @@ int md_config_t::parse_config_files(const char *conf_files_str,
          * convention, we do the last try and assign the cluster to
          * 'ceph'.
          */
-        cluster = "ceph";
+        values.cluster = "ceph";
     } else {
-      cluster = c->substr(start, end - start);
+      values.cluster = c->substr(start, end - start);
     }
   }
 
   std::vector <std::string> my_sections;
-  _get_my_sections(my_sections);
+  _get_my_sections(values, my_sections);
   for (const auto &i : schema) {
     const auto &opt = i.second;
     std::string val;
     int ret = _get_val_from_conf_file(my_sections, opt.name, val);
     if (ret == 0) {
       std::string error_message;
-      int r = _set_val(val, opt, CONF_FILE, &error_message);
+      int r = _set_val(values, tracker, val, opt, CONF_FILE, &error_message);
       if (warnings != nullptr && (r < 0 || !error_message.empty())) {
         *warnings << "parse error setting '" << opt.name << "' to '" << val
                   << "'";
@@ -466,12 +447,14 @@ int md_config_t::parse_config_files(const char *conf_files_str,
     cerr << ". Please use the new style section names that include a period.";
   }
 
-  update_legacy_vals();
+  update_legacy_vals(values);
 
   return 0;
 }
 
-void md_config_t::parse_env(const char *args_var)
+void md_config_t::parse_env(ConfigValues& values,
+			    const ConfigTracker& tracker,
+			    const char *args_var)
 {
   if (safe_to_start_threads)
     return;
@@ -479,41 +462,38 @@ void md_config_t::parse_env(const char *args_var)
     args_var = "CEPH_ARGS";
   }
   if (getenv("CEPH_KEYRING")) {
-    Mutex::Locker l(lock);
-    string k = getenv("CEPH_KEYRING");
-    values["keyring"][CONF_ENV] = Option::value_t(k);
+    _set_val(values, tracker, getenv("CEPH_KEYRING"), *find_option("keyring"),
+	     CONF_ENV, nullptr);
   }
   if (const char *dir = getenv("CEPH_LIB")) {
-    Mutex::Locker l(lock);
     for (auto name : { "erasure_code_dir", "plugin_dir", "osd_class_dir" }) {
     std::string err;
       const Option *o = find_option(name);
-      assert(o);
-      _set_val(dir, *o, CONF_ENV, &err);
+      ceph_assert(o);
+      _set_val(values, tracker, dir, *o, CONF_ENV, &err);
     }
   }
   if (getenv(args_var)) {
     vector<const char *> env_args;
     env_to_vec(env_args, args_var);
-    parse_argv(env_args, CONF_ENV);
+    parse_argv(values, tracker, env_args, CONF_ENV);
   }
 }
 
-void md_config_t::show_config(std::ostream& out)
+void md_config_t::show_config(const ConfigValues& values,
+			      std::ostream& out) const
 {
-  Mutex::Locker l(lock);
-  _show_config(&out, NULL);
+  _show_config(values, &out, nullptr);
 }
 
-void md_config_t::show_config(Formatter *f)
+void md_config_t::show_config(const ConfigValues& values,
+			      Formatter *f) const
 {
-  Mutex::Locker l(lock);
-  _show_config(NULL, f);
+  _show_config(values, nullptr, f);
 }
 
-void md_config_t::config_options(Formatter *f)
+void md_config_t::config_options(Formatter *f) const
 {
-  Mutex::Locker l(lock);
   f->open_array_section("options");
   for (const auto& i: schema) {
     f->dump_object("option", i.second);
@@ -521,20 +501,21 @@ void md_config_t::config_options(Formatter *f)
   f->close_section();
 }
 
-void md_config_t::_show_config(std::ostream *out, Formatter *f)
+void md_config_t::_show_config(const ConfigValues& values,
+			       std::ostream *out, Formatter *f) const
 {
   if (out) {
-    *out << "name = " << name << std::endl;
-    *out << "cluster = " << cluster << std::endl;
+    *out << "name = " << values.name << std::endl;
+    *out << "cluster = " << values.cluster << std::endl;
   }
   if (f) {
-    f->dump_string("name", stringify(name));
-    f->dump_string("cluster", cluster);
+    f->dump_string("name", stringify(values.name));
+    f->dump_string("cluster", values.cluster);
   }
   for (const auto& i: schema) {
     const Option &opt = i.second;
     string val;
-    conf_stringify(_get_val(opt), &val);
+    conf_stringify(_get_val(values, opt), &val);
     if (out) {
       *out << opt.name << " = " << val << std::endl;
     }
@@ -544,9 +525,10 @@ void md_config_t::_show_config(std::ostream *out, Formatter *f)
   }
 }
 
-int md_config_t::parse_argv(std::vector<const char*>& args, int level)
+int md_config_t::parse_argv(ConfigValues& values,
+			    const ConfigTracker& tracker,
+			    std::vector<const char*>& args, int level)
 {
-  Mutex::Locker l(lock);
   if (safe_to_start_threads) {
     return -ENOSYS;
   }
@@ -573,32 +555,32 @@ int md_config_t::parse_argv(std::vector<const char*>& args, int level)
       do_show_config_value = val;
     }
     else if (ceph_argparse_flag(args, i, "--no-mon-config", (char*)NULL)) {
-      no_mon_config = true;
+      values.no_mon_config = true;
     }
     else if (ceph_argparse_flag(args, i, "--mon-config", (char*)NULL)) {
-      no_mon_config = false;
+      values.no_mon_config = false;
     }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
-      set_val_or_die("daemonize", "false");
+      set_val_or_die(values, tracker, "daemonize", "false");
     }
     else if (ceph_argparse_flag(args, i, "-d", (char*)NULL)) {
-      set_val_or_die("daemonize", "false");
-      set_val_or_die("log_file", "");
-      set_val_or_die("log_to_stderr", "true");
-      set_val_or_die("err_to_stderr", "true");
-      set_val_or_die("log_to_syslog", "false");
+      set_val_or_die(values, tracker, "daemonize", "false");
+      set_val_or_die(values, tracker, "log_file", "");
+      set_val_or_die(values, tracker, "log_to_stderr", "true");
+      set_val_or_die(values, tracker, "err_to_stderr", "true");
+      set_val_or_die(values, tracker, "log_to_syslog", "false");
     }
     // Some stuff that we wanted to give universal single-character options for
     // Careful: you can burn through the alphabet pretty quickly by adding
     // to this list.
     else if (ceph_argparse_witharg(args, i, &val, "--monmap", "-M", (char*)NULL)) {
-      set_val_or_die("monmap", val.c_str());
+      set_val_or_die(values, tracker, "monmap", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--mon_host", "-m", (char*)NULL)) {
-      set_val_or_die("mon_host", val.c_str());
+      set_val_or_die(values, tracker, "mon_host", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--bind", (char*)NULL)) {
-      set_val_or_die("public_addr", val.c_str());
+      set_val_or_die(values, tracker, "public_addr", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--keyfile", "-K", (char*)NULL)) {
       bufferlist bl;
@@ -611,37 +593,39 @@ int md_config_t::parse_argv(std::vector<const char*>& args, int level)
       }
       if (r >= 0) {
 	string k(bl.c_str(), bl.length());
-	set_val_or_die("key", k.c_str());
+	set_val_or_die(values, tracker, "key", k.c_str());
       }
     }
     else if (ceph_argparse_witharg(args, i, &val, "--keyring", "-k", (char*)NULL)) {
-      set_val_or_die("keyring", val.c_str());
+      set_val_or_die(values, tracker, "keyring", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--client_mountpoint", "-r", (char*)NULL)) {
-      set_val_or_die("client_mountpoint", val.c_str());
+      set_val_or_die(values, tracker, "client_mountpoint", val.c_str());
     }
     else {
-      int r = parse_option(args, i, NULL, level);
+      int r = parse_option(values, tracker, args, i, NULL, level);
       if (r < 0) {
         return r;
       }
     }
   }
+  // meta expands could have modified anything.  Copy it all out again.
+  update_legacy_vals(values);
   return 0;
 }
 
-void md_config_t::do_argv_commands()
+void md_config_t::do_argv_commands(const ConfigValues& values) const
 {
-  Mutex::Locker l(lock);
 
   if (do_show_config) {
-    _show_config(&cout, NULL);
+    _show_config(values, &cout, NULL);
     _exit(0);
   }
 
   if (do_show_config_value.size()) {
     string val;
-    int r = conf_stringify(_get_val(do_show_config_value, 0, &cerr), &val);
+    int r = conf_stringify(_get_val(values, do_show_config_value, 0, &cerr),
+			   &val);
     if (r < 0) {
       if (r == -ENOENT)
 	std::cerr << "failed to get config option '"
@@ -657,7 +641,9 @@ void md_config_t::do_argv_commands()
   }
 }
 
-int md_config_t::parse_option(std::vector<const char*>& args,
+int md_config_t::parse_option(ConfigValues& values,
+			      const ConfigTracker& tracker,
+			      std::vector<const char*>& args,
 			      std::vector<const char*>::iterator& i,
 			      ostream *oss,
 			      int level)
@@ -680,9 +666,9 @@ int md_config_t::parse_option(std::vector<const char*>& args,
       if (ceph_argparse_binary_flag(args, i, &res, oss, as_option.c_str(),
 				    (char*)NULL)) {
 	if (res == 0)
-	  ret = _set_val("false", opt, level, &error_message);
+	  ret = _set_val(values, tracker, "false", opt, level, &error_message);
 	else if (res == 1)
-	  ret = _set_val("true", opt, level, &error_message);
+	  ret = _set_val(values, tracker, "true", opt, level, &error_message);
 	else
 	  ret = res;
 	break;
@@ -690,7 +676,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	std::string no("--no-");
 	no += opt.name;
 	if (ceph_argparse_flag(args, i, no.c_str(), (char*)NULL)) {
-	  ret = _set_val("false", opt, level, &error_message);
+	  ret = _set_val(values, tracker, "false", opt, level, &error_message);
 	  break;
 	}
       }
@@ -701,14 +687,14 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	ret = -EINVAL;
 	break;
       }
-      ret = _set_val(val, opt, level, &error_message);
+      ret = _set_val(values, tracker,  val, opt, level, &error_message);
       break;
     }
     ++o;
   }
 
   if (ret < 0 || !error_message.empty()) {
-    assert(!option_name.empty());
+    ceph_assert(!option_name.empty());
     if (oss) {
       *oss << "Parse error setting " << option_name << " to '"
            << val << "' using injectargs";
@@ -733,94 +719,18 @@ int md_config_t::parse_option(std::vector<const char*>& args,
   return ret >= 0 ? 0 : ret;
 }
 
-int md_config_t::parse_injectargs(std::vector<const char*>& args,
+int md_config_t::parse_injectargs(ConfigValues& values,
+				  const ConfigTracker& tracker,
+				  std::vector<const char*>& args,
 				  std::ostream *oss)
 {
-  assert(lock.is_locked());
   int ret = 0;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
-    int r = parse_option(args, i, oss, CONF_OVERRIDE);
+    int r = parse_option(values, tracker, args, i, oss, CONF_OVERRIDE);
     if (r < 0)
       ret = r;
   }
   return ret;
-}
-
-void md_config_t::apply_changes(std::ostream *oss)
-{
-  Mutex::Locker l(lock);
-  /*
-   * apply changes until the cluster name is assigned
-   */
-  if (cluster.size())
-    _apply_changes(oss);
-}
-
-void md_config_t::_apply_changes(std::ostream *oss)
-{
-  /* Maps observers to the configuration options that they care about which
-   * have changed. */
-  typedef std::map < md_config_obs_t*, std::set <std::string> > rev_obs_map_t;
-
-  // meta expands could have modified anything.  Copy it all out again.
-  update_legacy_vals();
-
-  // create the reverse observer mapping, mapping observers to the set of
-  // changed keys that they'll get.
-  rev_obs_map_t robs;
-  std::set <std::string> empty_set;
-  string val;
-  for (changed_set_t::const_iterator c = changed.begin();
-       c != changed.end(); ++c) {
-    const std::string &key(*c);
-    pair < obs_map_t::iterator, obs_map_t::iterator >
-      range(observers.equal_range(key));
-    if ((oss) && !conf_stringify(_get_val(key), &val)) {
-      (*oss) << key << " = '" << val << "' ";
-      if (range.first == range.second) {
-	(*oss) << "(not observed, change may require restart) ";
-      }
-    }
-    for (obs_map_t::iterator r = range.first; r != range.second; ++r) {
-      rev_obs_map_t::value_type robs_val(r->second, empty_set);
-      pair < rev_obs_map_t::iterator, bool > robs_ret(robs.insert(robs_val));
-      std::set <std::string> &keys(robs_ret.first->second);
-      keys.insert(key);
-    }
-  }
-
-  changed.clear();
-
-  // Make any pending observer callbacks
-  for (rev_obs_map_t::const_iterator r = robs.begin(); r != robs.end(); ++r) {
-    md_config_obs_t *obs = r->first;
-    obs->handle_conf_change(this, r->second);
-  }
-
-}
-
-void md_config_t::call_all_observers()
-{
-  std::map<md_config_obs_t*,std::set<std::string> > obs;
-  // Have the scope of the lock extend to the scope of
-  // handle_conf_change since that function expects to be called with
-  // the lock held. (And the comment in config.h says that is the
-  // expected behavior.)
-  //
-  // An alternative might be to pass a std::unique_lock to
-  // handle_conf_change and have a version of get_var that can take it
-  // by reference and lock as appropriate.
-  Mutex::Locker l(lock);
-  {
-    for (auto r = observers.begin(); r != observers.end(); ++r) {
-      obs[r->second].insert(r->first);
-    }
-  }
-  for (auto p = obs.begin();
-       p != obs.end();
-       ++p) {
-    p->first->handle_conf_change(this, p->second);
-  }
 }
 
 void md_config_t::set_safe_to_start_threads()
@@ -833,10 +743,11 @@ void md_config_t::_clear_safe_to_start_threads()
   safe_to_start_threads = false;
 }
 
-int md_config_t::injectargs(const std::string& s, std::ostream *oss)
+int md_config_t::injectargs(ConfigValues& values,
+			    const ConfigTracker& tracker,
+			    const std::string& s, std::ostream *oss)
 {
   int ret;
-  Mutex::Locker l(lock);
   char b[s.length()+1];
   strcpy(b, s.c_str());
   std::vector<const char*> nargs;
@@ -849,7 +760,7 @@ int md_config_t::injectargs(const std::string& s, std::ostream *oss)
     *p++ = 0;
     while (*p && *p == ' ') p++;
   }
-  ret = parse_injectargs(nargs, oss);
+  ret = parse_injectargs(values, tracker, nargs, oss);
   if (!nargs.empty()) {
     *oss << " failed to parse arguments: ";
     std::string prefix;
@@ -861,25 +772,28 @@ int md_config_t::injectargs(const std::string& s, std::ostream *oss)
     *oss << "\n";
     ret = -EINVAL;
   }
-  _apply_changes(oss);
+  update_legacy_vals(values);
   return ret;
 }
 
-void md_config_t::set_val_or_die(const std::string &key,
-                                 const std::string &val)
+void md_config_t::set_val_or_die(ConfigValues& values,
+				 const ConfigTracker& tracker,
+				 const std::string &key,
+				 const std::string &val)
 {
   std::stringstream err;
-  int ret = set_val(key, val, &err);
+  int ret = set_val(values, tracker, key, val, &err);
   if (ret != 0) {
     std::cerr << "set_val_or_die(" << key << "): " << err.str();
   }
-  assert(ret == 0);
+  ceph_assert(ret == 0);
 }
 
-int md_config_t::set_val(const std::string &key, const char *val,
+int md_config_t::set_val(ConfigValues& values,
+			 const ConfigTracker& tracker,
+			 const std::string &key, const char *val,
 			 std::stringstream *err_ss)
 {
-  Mutex::Locker l(lock);
   if (key.empty()) {
     if (err_ss) *err_ss << "No key specified";
     return -EINVAL;
@@ -896,7 +810,7 @@ int md_config_t::set_val(const std::string &key, const char *val,
   if (opt_iter != schema.end()) {
     const Option &opt = opt_iter->second;
     std::string error_message;
-    int r = _set_val(v, opt, CONF_OVERRIDE, &error_message);
+    int r = _set_val(values, tracker, v, opt, CONF_OVERRIDE, &error_message);
     if (r >= 0) {
       if (err_ss) *err_ss << "Set " << opt.name << " to " << v;
       r = 0;
@@ -910,32 +824,28 @@ int md_config_t::set_val(const std::string &key, const char *val,
   return -ENOENT;
 }
 
-int md_config_t::rm_val(const std::string& key)
+int md_config_t::rm_val(ConfigValues& values, const std::string& key)
 {
-  Mutex::Locker l(lock);
-  return _rm_val(key, CONF_OVERRIDE);
+  return _rm_val(values, key, CONF_OVERRIDE);
 }
 
-void md_config_t::get_defaults_bl(bufferlist *bl)
+void md_config_t::get_defaults_bl(const ConfigValues& values,
+					 bufferlist *bl)
 {
-  Mutex::Locker l(lock);
   if (defaults_bl.length() == 0) {
     uint32_t n = 0;
     bufferlist bl;
     for (const auto &i : schema) {
       ++n;
       encode(i.second.name, bl);
-      auto j = values.find(i.second.name);
-      if (j != values.end()) {
-	auto k = j->second.find(CONF_DEFAULT);
-	if (k != j->second.end()) {
-	  encode(Option::to_str(k->second), bl);
-	  continue;
-	}
+      auto [value, found] = values.get_value(i.second.name, CONF_DEFAULT);
+      if (found) {
+	encode(Option::to_str(value), bl);
+      } else {
+	string val;
+	conf_stringify(_get_val_default(i.second), &val);
+	encode(val, bl);
       }
-      string val;
-      conf_stringify(_get_val_default(i.second), &val);
-      encode(val, bl);
     }
     encode(n, defaults_bl);
     defaults_bl.claim_append(bl);
@@ -944,30 +854,30 @@ void md_config_t::get_defaults_bl(bufferlist *bl)
 }
 
 void md_config_t::get_config_bl(
+  const ConfigValues& values,
   uint64_t have_version,
   bufferlist *bl,
   uint64_t *got_version)
 {
-  Mutex::Locker l(lock);
   if (values_bl.length() == 0) {
     uint32_t n = 0;
     bufferlist bl;
-    for (auto& i : values) {
-      if (i.first == "fsid" ||
-	  i.first == "host") {
-	continue;
+    values.for_each([&](auto& name, auto& configs) {
+      if (name == "fsid" ||
+	  name == "host") {
+	return;
       }
       ++n;
-      encode(i.first, bl);
-      encode((uint32_t)i.second.size(), bl);
-      for (auto& j : i.second) {
+      encode(name, bl);
+      encode((uint32_t)configs.size(), bl);
+      for (auto& j : configs) {
 	encode(j.first, bl);
 	encode(Option::to_str(j.second), bl);
       }
-    }
+    });
     // make sure overridden items appear, and include the default value
     for (auto& i : ignored_mon_values) {
-      if (values.count(i.first)) {
+      if (values.contains(i.first)) {
 	continue;
       }
       if (i.first == "fsid" ||
@@ -997,33 +907,35 @@ void md_config_t::get_config_bl(
   }
 }
 
-int md_config_t::get_val(const std::string &key, char **buf, int len) const
+int md_config_t::get_val(const ConfigValues& values,
+			 const std::string &key, char **buf, int len) const
 {
-  Mutex::Locker l(lock);
   string k(ConfFile::normalize_key_name(key));
-  return _get_val_cstr(k, buf, len);
+  return _get_val_cstr(values, k, buf, len);
 }
 
 int md_config_t::get_val(
+  const ConfigValues& values,
   const std::string &key,
   std::string *val) const
 {
-  return conf_stringify(get_val_generic(key), val);
+  return conf_stringify(get_val_generic(values, key), val);
 }
 
-Option::value_t md_config_t::get_val_generic(const std::string &key) const
+Option::value_t md_config_t::get_val_generic(
+  const ConfigValues& values,
+  const std::string &key) const
 {
-  Mutex::Locker l(lock);
   string k(ConfFile::normalize_key_name(key));
-  return _get_val(k);
+  return _get_val(values, k);
 }
 
 Option::value_t md_config_t::_get_val(
+  const ConfigValues& values,
   const std::string &key,
   expand_stack_t *stack,
   std::ostream *err) const
 {
-  assert(lock.is_locked());
   if (key.empty()) {
     return Option::value_t(boost::blank());
   }
@@ -1037,10 +949,11 @@ Option::value_t md_config_t::_get_val(
     return Option::value_t(boost::blank());
   }
 
-  return _get_val(*o, stack, err);
+  return _get_val(values, *o, stack, err);
 }
 
 Option::value_t md_config_t::_get_val(
+  const ConfigValues& values,
   const Option& o,
   expand_stack_t *stack,
   std::ostream *err) const
@@ -1049,24 +962,19 @@ Option::value_t md_config_t::_get_val(
   if (!stack) {
     stack = &a_stack;
   }
-
-  auto p = values.find(o.name);
-  if (p != values.end() && !p->second.empty()) {
-    // use highest-priority value available (see CONF_*)
-    return _expand_meta(p->second.rbegin()->second, &o, stack, err);
-  }
-
-  return _expand_meta(_get_val_default(o), &o, stack, err);
+  return _expand_meta(values,
+		      _get_val_nometa(values, o),
+		      &o, stack, err);
 }
 
-Option::value_t md_config_t::_get_val_nometa(const Option& o) const
+Option::value_t md_config_t::_get_val_nometa(const ConfigValues& values,
+					     const Option& o) const
 {
-  auto p = values.find(o.name);
-  if (p != values.end() && !p->second.empty()) {
-    // use highest-priority value available (see CONF_*)
-    return p->second.rbegin()->second;
+  if (auto [value, found] = values.get_value(o.name, -1); found) {
+    return value;
+  } else {
+    return _get_val_default(o);
   }
-  return _get_val_default(o);
 }
 
 const Option::value_t& md_config_t::_get_val_default(const Option& o) const
@@ -1080,16 +988,35 @@ const Option::value_t& md_config_t::_get_val_default(const Option& o) const
 }
 
 void md_config_t::early_expand_meta(
+  const ConfigValues& values,
   std::string &val,
   std::ostream *err) const
 {
-  Mutex::Locker l(lock);
   expand_stack_t stack;
-  Option::value_t v = _expand_meta(Option::value_t(val), nullptr, &stack, err);
+  Option::value_t v = _expand_meta(values,
+				   Option::value_t(val),
+				   nullptr, &stack, err);
   conf_stringify(v, &val);
 }
 
+bool md_config_t::finalize_reexpand_meta(ConfigValues& values,
+					 const ConfigTracker& tracker)
+{
+  for (auto& [name, value] : may_reexpand_meta) {
+    set_val(values, tracker, name, value);
+  }
+  
+  if (!may_reexpand_meta.empty()) {
+    // meta expands could have modified anything.  Copy it all out again.
+    update_legacy_vals(values);
+    return true;
+  } else {
+    return false;
+  }
+}
+
 Option::value_t md_config_t::_expand_meta(
+  const ConfigValues& values,
   const Option::value_t& in,
   const Option *o,
   expand_stack_t *stack,
@@ -1117,7 +1044,7 @@ Option::value_t md_config_t::_expand_meta(
   string out;
   decltype(pos) last_pos = 0;
   while (pos != std::string::npos) {
-    assert((*str)[pos] == '$');
+    ceph_assert((*str)[pos] == '$');
     if (pos > last_pos) {
       out += str->substr(last_pos, pos - last_pos);
     }
@@ -1151,23 +1078,26 @@ Option::value_t md_config_t::_expand_meta(
       //cout << " found var " << var << std::endl;
       // special metavariable?
       if (var == "type") {
-	out += name.get_type_name();
+	out += values.name.get_type_name();
       } else if (var == "cluster") {
-	out += cluster;
+	out += values.cluster;
       } else if (var == "name") {
-	out += name.to_cstr();
+	out += values.name.to_cstr();
       } else if (var == "host") {
-	if (host == "") {
+	if (values.host == "") {
 	  out += ceph_get_short_hostname();
 	} else {
-	  out += host;
+	  out += values.host;
 	}
       } else if (var == "num") {
-	out += name.get_id().c_str();
+	out += values.name.get_id().c_str();
       } else if (var == "id") {
-	out += name.get_id();
+	out += values.name.get_id();
       } else if (var == "pid") {
 	out += stringify(getpid());
+        if (o) {
+          may_reexpand_meta[o->name] = *str;
+        }
       } else if (var == "cctid") {
 	out += stringify((unsigned long long)this);
       } else if (var == "home") {
@@ -1201,7 +1131,7 @@ Option::value_t md_config_t::_expand_meta(
 	  } else {
 	    // recursively evaluate!
 	    string n;
-	    conf_stringify(_get_val(*o, stack, err), &n);
+	    conf_stringify(_get_val(values, *o, stack, err), &n);
 	    out += n;
 	  }
 	}
@@ -1220,15 +1150,14 @@ Option::value_t md_config_t::_expand_meta(
 }
 
 int md_config_t::_get_val_cstr(
+  const ConfigValues& values,
   const std::string &key, char **buf, int len) const
 {
-  assert(lock.is_locked());
-
   if (key.empty())
     return -EINVAL;
 
   string val;
-  if (conf_stringify(_get_val(key), &val) == 0) {
+  if (conf_stringify(_get_val(values, key), &val) == 0) {
     int l = val.length() + 1;
     if (len == -1) {
       *buf = (char*)malloc(l);
@@ -1266,18 +1195,18 @@ void md_config_t::get_all_keys(std::vector<std::string> *keys) const {
  * looking. The lowest priority section is the one we look in only if all
  * others had nothing.  This should always be the global section.
  */
-void md_config_t::get_my_sections(std::vector <std::string> &sections) const
+void md_config_t::get_my_sections(const ConfigValues& values,
+				  std::vector <std::string> &sections) const
 {
-  Mutex::Locker l(lock);
-  _get_my_sections(sections);
+  _get_my_sections(values, sections);
 }
 
-void md_config_t::_get_my_sections(std::vector <std::string> &sections) const
+void md_config_t::_get_my_sections(const ConfigValues& values,
+				   std::vector <std::string> &sections) const
 {
-  assert(lock.is_locked());
-  sections.push_back(name.to_str());
+  sections.push_back(values.name.to_str());
 
-  sections.push_back(name.get_type_name());
+  sections.push_back(values.name.get_type_name());
 
   sections.push_back("global");
 }
@@ -1285,7 +1214,6 @@ void md_config_t::_get_my_sections(std::vector <std::string> &sections) const
 // Return a list of all sections
 int md_config_t::get_all_sections(std::vector <std::string> &sections) const
 {
-  Mutex::Locker l(lock);
   for (ConfFile::const_section_iter_t s = cf.sections_begin();
        s != cf.sections_end(); ++s) {
     sections.push_back(s->first);
@@ -1294,19 +1222,19 @@ int md_config_t::get_all_sections(std::vector <std::string> &sections) const
 }
 
 int md_config_t::get_val_from_conf_file(
+  const ConfigValues& values,
   const std::vector <std::string> &sections,
   const std::string &key,
   std::string &out,
   bool emeta) const
 {
-  Mutex::Locker l(lock);
   int r = _get_val_from_conf_file(sections, key, out);
   if (r < 0) {
     return r;
   }
   if (emeta) {
     expand_stack_t stack;
-    auto v = _expand_meta(Option::value_t(out), nullptr, &stack, nullptr);
+    auto v = _expand_meta(values, Option::value_t(out), nullptr, &stack, nullptr);
     conf_stringify(v, &out);
   }
   return 0;
@@ -1317,7 +1245,6 @@ int md_config_t::_get_val_from_conf_file(
   const std::string &key,
   std::string &out) const
 {
-  assert(lock.is_locked());
   std::vector <std::string>::const_iterator s = sections.begin();
   std::vector <std::string>::const_iterator s_end = sections.end();
   for (; s != s_end; ++s) {
@@ -1332,13 +1259,13 @@ int md_config_t::_get_val_from_conf_file(
 }
 
 int md_config_t::_set_val(
+  ConfigValues& values,
+  const ConfigTracker& observers,
   const std::string &raw_val,
   const Option &opt,
   int level,
   std::string *error_message)
 {
-  assert(lock.is_locked());
-
   Option::value_t new_value;
   int r = opt.parse_value(raw_val, &new_value, error_message);
   if (r < 0) {
@@ -1348,9 +1275,9 @@ int md_config_t::_set_val(
   // unsafe runtime change?
   if (!opt.can_update_at_runtime() &&
       safe_to_start_threads &&
-      observers.count(opt.name) == 0) {
+      !observers.is_tracking(opt.name)) {
     // accept value if it is not actually a change
-    if (new_value != _get_val_nometa(opt)) {
+    if (new_value != _get_val_nometa(values, opt)) {
       *error_message = string("Configuration option '") + opt.name +
 	"' may not be modified at runtime";
       return -ENOSYS;
@@ -1358,73 +1285,52 @@ int md_config_t::_set_val(
   }
 
   // Apply the value to its entry in the `values` map
-  auto p = values.find(opt.name);
-  if (p != values.end()) {
-    auto q = p->second.find(level);
-    if (q != p->second.end()) {
-      if (new_value == q->second) {
-	// no change!
-	return 0;
-      }
-      q->second = new_value;
-    } else {
-      p->second[level] = new_value;
-    }
+  auto result = values.set_value(opt.name, std::move(new_value), level);
+  switch (result) {
+  case ConfigValues::SET_NO_CHANGE:
+    break;
+  case ConfigValues::SET_NO_EFFECT:
     values_bl.clear();
-    if (p->second.rbegin()->first > level) {
-      // there was a higher priority value; no effect
-      return 0;
-    }
-  } else {
+    break;
+  case ConfigValues::SET_HAVE_EFFECT:
     values_bl.clear();
-    values[opt.name][level] = new_value;
+    _refresh(values, opt);
+    break;
   }
-
-  _refresh(opt);
-  return 1;
+  return result;
 }
 
-void md_config_t::_refresh(const Option& opt)
+void md_config_t::_refresh(ConfigValues& values, const Option& opt)
 {
   // Apply the value to its legacy field, if it has one
   auto legacy_ptr_iter = legacy_values.find(std::string(opt.name));
   if (legacy_ptr_iter != legacy_values.end()) {
-    update_legacy_val(opt, legacy_ptr_iter->second);
+    update_legacy_val(values, opt, legacy_ptr_iter->second);
   }
-
   // Was this a debug_* option update?
   if (opt.subsys >= 0) {
     string actual_val;
-    conf_stringify(_get_val(opt), &actual_val);
-    int log, gather;
-    int r = sscanf(actual_val.c_str(), "%d/%d", &log, &gather);
-    if (r >= 1) {
-      if (r < 2) {
-	gather = log;
-      }
-      subsys.set_log_level(opt.subsys, log);
-      subsys.set_gather_level(opt.subsys, gather);
-    }
+    conf_stringify(_get_val(values, opt), &actual_val);
+    values.set_logging(opt.subsys, actual_val.c_str());
   } else {
     // normal option, advertise the change.
-    changed.insert(opt.name);
+    values.changed.insert(opt.name);
   }
 }
 
-int md_config_t::_rm_val(const std::string& key, int level)
+int md_config_t::_rm_val(ConfigValues& values,
+			 const std::string& key,
+			 int level)
 {
-  auto i = values.find(key);
-  if (i == values.end()) {
-    return -ENOENT;
+  if (schema.count(key) == 0) {
+    return -EINVAL;
   }
-  auto j = i->second.find(level);
-  if (j == i->second.end()) {
-    return -ENOENT;
+  auto ret = values.rm_val(key, level);
+  if (ret < 0) {
+    return ret;
   }
-  bool matters = (j->first == i->second.rbegin()->first);
-  i->second.erase(j);
-  if (matters) {
-    _refresh(*find_option(key));
+  if (ret == ConfigValues::SET_HAVE_EFFECT) {
+    _refresh(values, *find_option(key));
   }
   values_bl.clear();
   return 0;
@@ -1449,53 +1355,55 @@ struct get_size_visitor : public boost::static_visitor<Size>
 /**
  * Handles assigning from a variant-of-types to a variant-of-pointers-to-types
  */
+template<class Config>
 class assign_visitor : public boost::static_visitor<>
 {
-  md_config_t *conf;
+  Config *conf;
   Option::value_t val;
   public:
 
-  assign_visitor(md_config_t *conf_, Option::value_t val_)
+  assign_visitor(Config *conf_, Option::value_t val_)
     : conf(conf_), val(val_)
   {}
 
   template <typename T>
-  void operator()( T md_config_t::* ptr) const
+  void operator()(T Config::* ptr) const
   {
-    T *member = const_cast<T *>(&(conf->*(boost::get<const T md_config_t::*>(ptr))));
+    T *member = const_cast<T *>(&(conf->*(boost::get<const T Config::*>(ptr))));
 
     *member = boost::get<T>(val);
   }
-  void operator()(uint64_t md_config_t::* ptr) const
+  void operator()(uint64_t Config::* ptr) const
   {
     using T = uint64_t;
-    auto member = const_cast<T*>(&(conf->*(boost::get<const T md_config_t::*>(ptr))));
+    auto member = const_cast<T*>(&(conf->*(boost::get<const T Config::*>(ptr))));
     *member = boost::apply_visitor(get_size_visitor<T>{}, val);
   }
-  void operator()(int64_t md_config_t::* ptr) const
+  void operator()(int64_t Config::* ptr) const
   {
     using T = int64_t;
-    auto member = const_cast<T*>(&(conf->*(boost::get<const T md_config_t::*>(ptr))));
+    auto member = const_cast<T*>(&(conf->*(boost::get<const T Config::*>(ptr))));
     *member = boost::apply_visitor(get_size_visitor<T>{}, val);
   }
 };
 } // anonymous namespace
 
-void md_config_t::update_legacy_vals()
+void md_config_t::update_legacy_vals(ConfigValues& values)
 {
   for (const auto &i : legacy_values) {
     const auto &name = i.first;
     const auto &option = schema.at(name);
     auto ptr = i.second;
-    update_legacy_val(option, ptr);
+    update_legacy_val(values, option, ptr);
   }
 }
 
-void md_config_t::update_legacy_val(const Option &opt,
+void md_config_t::update_legacy_val(ConfigValues& values,
+				    const Option &opt,
                                     md_config_t::member_ptr_t member_ptr)
 {
-  Option::value_t v = _get_val(opt);
-  boost::apply_visitor(assign_visitor(this, v), member_ptr);
+  Option::value_t v = _get_val(values, opt);
+  boost::apply_visitor(assign_visitor(&values, v), member_ptr);
 }
 
 static void dump(Formatter *f, int level, Option::value_t in)
@@ -1514,29 +1422,28 @@ static void dump(Formatter *f, int level, Option::value_t in)
 }
 
 void md_config_t::diff(
+  const ConfigValues& values,
   Formatter *f,
   string name) const
 {
-  Mutex::Locker l(lock);
-  for (auto& i : values) {
-    if (i.second.size() == 1 &&
-	i.second.begin()->first == CONF_DEFAULT) {
+  values.for_each([this, f, &values] (auto& name, auto& configs) {
+    if (configs.size() == 1 &&
+	configs.begin()->first == CONF_DEFAULT) {
       // we only have a default value; exclude from diff
-      continue;
+      return;
     }
-    f->open_object_section(i.first.c_str());
-    const Option *o = find_option(i.first);
+    f->open_object_section(name.c_str());
+    const Option *o = find_option(name);
     dump(f, CONF_DEFAULT, _get_val_default(*o));
-    for (auto& j : i.second) {
+    for (auto& j : configs) {
       dump(f, j.first, j.second);
     }
-    dump(f, CONF_FINAL, _get_val(*o));
+    dump(f, CONF_FINAL, _get_val(values, *o));
     f->close_section();
-  }
+  });
 }
 
 void md_config_t::complain_about_parse_errors(CephContext *cct)
 {
   ::complain_about_parse_errors(cct, &parse_errors);
 }
-

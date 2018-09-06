@@ -29,6 +29,7 @@
 
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
+#include "common/config_proxy.h"
 
 #include "include/spinlock.h"
 
@@ -38,8 +39,6 @@ class AdminSocket;
 class CephContextServiceThread;
 class PerfCountersCollection;
 class PerfCounters;
-class md_config_obs_t;
-struct md_config_t;
 class CephContextHook;
 class CephContextObs;
 class CryptoHandler;
@@ -84,7 +83,7 @@ public:
   }
   void put();
 
-  md_config_t *_conf;
+  ConfigProxy _conf;
   ceph::logging::Log *_log;
 
   /* init ceph::crypto */
@@ -144,7 +143,7 @@ public:
   void do_command(std::string_view command, const cmdmap_t& cmdmap,
 		  std::string_view format, ceph::bufferlist *out);
 
-  static constexpr std::size_t largest_singleton = sizeof(void*) * 72;
+  static constexpr std::size_t largest_singleton = 8 * 72;
 
   template<typename T, typename... Args>
   T& lookup_or_create_singleton_object(std::string_view name,

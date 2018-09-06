@@ -8,7 +8,6 @@
 #include <string>
 
 #include <vector>
-#include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 
 #include "os/ObjectMap.h"
@@ -59,6 +58,8 @@ class DBObjectMap : public ObjectMap {
 public:
   boost::scoped_ptr<KeyValueDB> db;
 
+  KeyValueDB *get_db() override { return db.get(); }
+
   /**
    * Serializes access to next_seq as well as the in_use set
    */
@@ -92,12 +93,12 @@ public:
     }
 
     const ghobject_t &get_locked() const {
-      assert(locked);
+      ceph_assert(locked);
       return *locked;
     }
 
     void swap(MapHeaderLock &o) {
-      assert(db == o.db);
+      ceph_assert(db == o.db);
 
       // centos6's boost optional doesn't seem to have swap :(
       boost::optional<ghobject_t> _locked = o.locked;
@@ -108,7 +109,7 @@ public:
     ~MapHeaderLock() {
       if (locked) {
 	Mutex::Locker l(db->header_lock);
-	assert(db->map_header_in_use.count(*locked));
+	ceph_assert(db->map_header_in_use.count(*locked));
 	db->map_header_cond.Signal();
 	db->map_header_in_use.erase(*locked);
       }
@@ -235,7 +236,7 @@ public:
   int sync(const ghobject_t *oid=0, const SequencerPosition *spos=0) override;
 
   void compact() override {
-    assert(db);
+    ceph_assert(db);
     db->compact();
   }
 
@@ -281,7 +282,7 @@ public:
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       DECODE_START(3, bl);
       if (struct_v >= 2)
 	decode(v, bl);
@@ -328,7 +329,7 @@ public:
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       coll_t unused;
       DECODE_START(2, bl);
       decode(seq, bl);
@@ -365,7 +366,7 @@ public:
 				      const string &in);
 private:
   /// Implicit lock on Header->seq
-  typedef ceph::shared_ptr<_Header> Header;
+  typedef std::shared_ptr<_Header> Header;
   Mutex cache_lock;
   SimpleLRU<ghobject_t, _Header> caches;
 
@@ -405,12 +406,12 @@ private:
     Header header;
 
     /// parent_iter == NULL iff no parent
-    ceph::shared_ptr<DBObjectMapIteratorImpl> parent_iter;
+    std::shared_ptr<DBObjectMapIteratorImpl> parent_iter;
     KeyValueDB::Iterator key_iter;
     KeyValueDB::Iterator complete_iter;
 
     /// cur_iter points to currently valid iterator
-    ceph::shared_ptr<ObjectMapIteratorImpl> cur_iter;
+    std::shared_ptr<ObjectMapIteratorImpl> cur_iter;
     int r;
 
     /// init() called, key_iter, complete_iter, parent_iter filled in
@@ -456,7 +457,7 @@ private:
     int adjust();
   };
 
-  typedef ceph::shared_ptr<DBObjectMapIteratorImpl> DBObjectMapIterator;
+  typedef std::shared_ptr<DBObjectMapIteratorImpl> DBObjectMapIterator;
   DBObjectMapIterator _get_iterator(Header header) {
     return std::make_shared<DBObjectMapIteratorImpl>(this, header);
   }
@@ -565,7 +566,7 @@ private:
       db(db) {}
     void operator() (_Header *header) {
       Mutex::Locker l(db->header_lock);
-      assert(db->in_use.count(header->seq));
+      ceph_assert(db->in_use.count(header->seq));
       db->in_use.erase(header->seq);
       db->header_cond.Signal();
       delete header;

@@ -94,7 +94,7 @@ namespace ceph {
 			Request&& item) override final {
       queue.enqueue(client_info_mgr.osd_op_type(item),
 		    priority,
-		    0u,
+		    1u,
 		    std::move(item));
     }
 

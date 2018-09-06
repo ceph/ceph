@@ -33,7 +33,7 @@
 #define dout_prefix *_dout << "test_idempotent_sequence "
 
 void usage(const char *name, std::string command = "") {
-  assert(name != NULL);
+  ceph_assert(name != NULL);
 
   std::string more = "cmd <args...>";
   std::string diff = "diff <filestoreA> <journalA> <filestoreB> <journalB>";
@@ -122,7 +122,7 @@ int run_get_last_op(std::string& filestore_path, std::string& journal_path)
     store->read(ch, txn_object, 0, 100, bl);
     int32_t t = 0;
     if (bl.length()) {
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       decode(t, p);
     }
     if (t > txn) {
@@ -218,7 +218,7 @@ int main(int argc, const char *argv[])
 			 CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   std::string command;
   std::vector<std::string> command_args;

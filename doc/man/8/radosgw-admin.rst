@@ -563,10 +563,6 @@ Options
 
 	Optional for listing operations to specify the max entires
 
-.. option:: --auth-uid=auid
-
-   The librados auid.
-
 .. option:: --purge-data
 
    When specified, user removal will also purge all the user data.
@@ -590,6 +586,10 @@ Options
 .. option:: --period=<id>
 
    Period id.
+
+.. option:: --url=<url>
+
+   url for pushing/pulling period or realm.
 
 .. option:: --epoch=<number>
 

@@ -38,7 +38,7 @@ struct ObjectMetaInfo {
     encode(mtime, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     decode(size, bl);
     decode(mtime, bl);
@@ -58,7 +58,7 @@ struct ObjectCacheInfo {
   map<string, bufferlist> rm_xattrs;
   ObjectMetaInfo meta;
   obj_version version = {};
-  ceph::coarse_mono_time time_added = ceph::coarse_mono_clock::now();
+  ceph::coarse_mono_time time_added;
 
   ObjectCacheInfo() = default;
 
@@ -74,7 +74,7 @@ struct ObjectCacheInfo {
     encode(version, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
     decode(status, bl);
     decode(flags, bl);
@@ -112,7 +112,7 @@ struct RGWCacheNotifyInfo {
     encode(ns, obl);
     ENCODE_FINISH(obl);
   }
-  void decode(bufferlist::iterator& ibl) {
+  void decode(bufferlist::const_iterator& ibl) {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, ibl);
     decode(op, ibl);
     decode(obj, ibl);
@@ -183,7 +183,7 @@ public:
   void set_ctx(CephContext *_cct) {
     cct = _cct;
     lru_window = cct->_conf->rgw_cache_lru_size / 2;
-    expiry = std::chrono::seconds(cct->_conf->get_val<uint64_t>(
+    expiry = std::chrono::seconds(cct->_conf.get_val<uint64_t>(
 						"rgw_cache_expiry_interval"));
   }
   bool chain_cache_entry(std::initializer_list<rgw_cache_entry_info*> cache_info_entries,
@@ -583,7 +583,7 @@ int RGWCache<T>::watch_cb(uint64_t notify_id,
   RGWCacheNotifyInfo info;
 
   try {
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     decode(info, iter);
   } catch (buffer::end_of_buffer& err) {
     mydout(0) << "ERROR: got bad notification" << dendl;

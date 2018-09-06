@@ -35,7 +35,7 @@ struct inconsistent_obj_wrapper;
 //forward declaration
 class OSDMap;
 class PGLog;
-typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
+typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
  /**
   * PGBackend
@@ -187,7 +187,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      }
      virtual const pg_missing_const_i &get_shard_missing(pg_shard_t peer) const {
        auto m = maybe_get_shard_missing(peer);
-       assert(m);
+       ceph_assert(m);
        return *m;
      }
 
@@ -198,7 +198,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        } else {
 	 map<pg_shard_t, pg_info_t>::const_iterator i =
 	   get_shard_info().find(peer);
-	 assert(i != get_shard_info().end());
+	 ceph_assert(i != get_shard_info().end());
 	 return i->second;
        }
      }
@@ -234,7 +234,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        const eversion_t &trim_to,
        const eversion_t &roll_forward_to,
        bool transaction_applied,
-       ObjectStore::Transaction &t) = 0;
+       ObjectStore::Transaction &t,
+       bool async = false) = 0;
 
      virtual void pgb_set_object_snap_mapping(
        const hobject_t &soid,
@@ -569,13 +570,16 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      const ScrubMap::object &candidate,
      shard_info_wrapper& shard_error,
      inconsistent_obj_wrapper &result,
-     ostream &errorstream);
+     ostream &errorstream,
+     bool has_snapset);
    map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
      const map<pg_shard_t,ScrubMap*> &maps,
      object_info_t *auth_oi,
      map<pg_shard_t, shard_info_wrapper> &shard_map,
-     inconsistent_obj_wrapper &object_error);
+     bool &digest_match,
+     spg_t pgid,
+     ostream &errorstream);
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
      const set<hobject_t> &master_set,

@@ -103,10 +103,10 @@ configuration details, perform the following steps using ``ceph-deploy``.
    - ``ceph.bootstrap-rgw.keyring``
    - ``ceph.bootstrap-rbd.keyring``
 
-.. note:: If this process fails with a message similar to "Unable to
-   find /etc/ceph/ceph.client.admin.keyring", please ensure that the
-   IP listed for the monitor node in ceph.conf is the Public IP, not
-   the Private IP.
+   .. note:: If this process fails with a message similar to "Unable to
+      find /etc/ceph/ceph.client.admin.keyring", please ensure that the
+      IP listed for the monitor node in ceph.conf is the Public IP, not
+      the Private IP.
 
 #. Use ``ceph-deploy`` to copy the configuration file and admin key to
    your admin node and your Ceph Nodes so that you can use the ``ceph``
@@ -133,6 +133,10 @@ configuration details, perform the following steps using ``ceph-deploy``.
      ceph-deploy osd create --data /dev/vdb node1
      ceph-deploy osd create --data /dev/vdb node2
      ceph-deploy osd create --data /dev/vdb node3
+
+   .. note:: If you are creating an OSD on an LVM volume, the argument to
+      ``--data`` *must* be ``volume_group/lv_name``, rather than the path to
+      the volume's block device.
 
 #. Check your cluster's health. ::
 
@@ -165,7 +169,7 @@ Ceph Monitor and Ceph Manager to ``node2`` and ``node3`` to improve reliability 
                      |                  |     node2      |
                      |                  | cCCC           |
                      +----------------->+                |
-                     |                  |     osd.0      |
+                     |                  |     osd.1      |
                      |                  |   mon.node2    |
                      |                  \----------------/
                      |
@@ -173,7 +177,7 @@ Ceph Monitor and Ceph Manager to ``node2`` and ``node3`` to improve reliability 
                      |                  |     node3      |
                      |                  | cCCC           |
                      +----------------->+                |
-                                        |     osd.1      |
+                                        |     osd.2      |
                                         |   mon.node3    |
                                         \----------------/
 

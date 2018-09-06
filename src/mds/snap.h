@@ -32,7 +32,7 @@ struct SnapInfo {
   mutable string long_name; ///< cached _$ino_$name
   
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<SnapInfo*>& ls);
 
@@ -59,7 +59,7 @@ struct snaplink_t {
   snapid_t first;
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<snaplink_t*>& ls);
 };
@@ -95,7 +95,7 @@ struct sr_t {
   {}
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<sr_t*>& ls);
 };

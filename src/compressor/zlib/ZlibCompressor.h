@@ -36,7 +36,7 @@ public:
 
   int compress(const bufferlist &in, bufferlist &out) override;
   int decompress(const bufferlist &in, bufferlist &out) override;
-  int decompress(bufferlist::iterator &p, size_t compressed_len, bufferlist &out) override;
+  int decompress(bufferlist::const_iterator &p, size_t compressed_len, bufferlist &out) override;
 private:
   int zlib_compress(const bufferlist &in, bufferlist &out);
   int isal_compress(const bufferlist &in, bufferlist &out);

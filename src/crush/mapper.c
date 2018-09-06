@@ -312,8 +312,8 @@ static inline __u32 *get_choose_arg_weights(const struct crush_bucket_straw2 *bu
 {
 	if ((arg == NULL) || (arg->weight_set == NULL))
 		return bucket->item_weights;
-	if (position >= arg->weight_set_size)
-		position = arg->weight_set_size - 1;
+	if (position >= arg->weight_set_positions)
+		position = arg->weight_set_positions - 1;
 	return arg->weight_set[position].weights;
 }
 

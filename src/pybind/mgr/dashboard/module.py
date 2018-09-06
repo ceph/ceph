@@ -6,6 +6,7 @@ from __future__ import absolute_import
 
 import errno
 from distutils.version import StrictVersion
+from distutils.util import strtobool
 import os
 import socket
 import tempfile
@@ -58,9 +59,11 @@ if 'COVERAGE_ENABLED' in os.environ:
 # pylint: disable=wrong-import-position
 from . import logger, mgr
 from .controllers import generate_routes, json_error_page
-from .controllers.auth import Auth
 from .tools import SessionExpireAtBrowserCloseTool, NotificationQueue, \
                    RequestLoggingTool, TaskManager
+from .services.auth import AuthManager, AuthManagerTool
+from .services.access_control import ACCESS_CONTROL_COMMANDS, \
+                                     handle_access_control_command
 from .services.exception import dashboard_exception_handler
 from .settings import options_command_list, options_schema_list, \
                       handle_option_command
@@ -114,7 +117,12 @@ class SSLCherryPyConfig(object):
         :returns our URI
         """
         server_addr = self.get_localized_config('server_addr', '::')
-        server_port = self.get_localized_config('server_port', '8080')
+        ssl = strtobool(self.get_localized_config('ssl', 'True'))
+        def_server_port = 8443
+        if not ssl:
+            def_server_port = 8080
+
+        server_port = self.get_localized_config('server_port', def_server_port)
         if server_addr is None:
             raise ServerConfigException(
                 'no server_addr configured; '
@@ -124,7 +132,7 @@ class SSLCherryPyConfig(object):
                       server_port)
 
         # Initialize custom handlers.
-        cherrypy.tools.authenticate = cherrypy.Tool('before_handler', Auth.check_auth)
+        cherrypy.tools.authenticate = AuthManagerTool()
         cherrypy.tools.session_expire_at_browser_close = SessionExpireAtBrowserCloseTool()
         cherrypy.tools.request_logging = RequestLoggingTool()
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
@@ -161,18 +169,22 @@ class SSLCherryPyConfig(object):
             'engine.autoreload.on': False,
             'server.socket_host': server_addr,
             'server.socket_port': int(server_port),
-            'server.ssl_module': 'builtin',
-            'server.ssl_certificate': cert_fname,
-            'server.ssl_private_key': pkey_fname,
             'error_page.default': json_error_page,
             'tools.request_logging.on': True
         }
+
+        if ssl:
+            config['server.ssl_module'] = 'builtin'
+            config['server.ssl_certificate'] = cert_fname
+            config['server.ssl_private_key'] = pkey_fname
+
         cherrypy.config.update(config)
 
         self._url_prefix = prepare_url_prefix(self.get_config('url_prefix',
                                                               default=''))
 
-        uri = "https://{0}:{1}{2}/".format(
+        uri = "{0}://{1}:{2}{3}/".format(
+            'https' if ssl else 'http',
             socket.getfqdn() if server_addr == "::" else server_addr,
             server_port,
             self.url_prefix
@@ -208,13 +220,6 @@ class Module(MgrModule, SSLCherryPyConfig):
 
     COMMANDS = [
         {
-            'cmd': 'dashboard set-login-credentials '
-                   'name=username,type=CephString '
-                   'name=password,type=CephString',
-            'desc': 'Set the login credentials',
-            'perm': 'w'
-        },
-        {
             'cmd': 'dashboard set-session-expire '
                    'name=seconds,type=CephInt',
             'desc': 'Set the session expire timeout',
@@ -227,6 +232,7 @@ class Module(MgrModule, SSLCherryPyConfig):
         },
     ]
     COMMANDS.extend(options_command_list())
+    COMMANDS.extend(ACCESS_CONTROL_COMMANDS)
 
     OPTIONS = [
         {'name': 'server_addr'},
@@ -237,6 +243,7 @@ class Module(MgrModule, SSLCherryPyConfig):
         {'name': 'username'},
         {'name': 'key_file'},
         {'name': 'crt_file'},
+        {'name': 'ssl'}
     ]
     OPTIONS.extend(options_schema_list())
 
@@ -247,6 +254,7 @@ class Module(MgrModule, SSLCherryPyConfig):
         mgr.init(self)
 
         self._stopping = threading.Event()
+        self.shutdown_event = threading.Event()
 
     @classmethod
     def can_run(cls):
@@ -267,6 +275,8 @@ class Module(MgrModule, SSLCherryPyConfig):
         if 'COVERAGE_ENABLED' in os.environ:
             _cov.start()
 
+        AuthManager.initialize()
+
         uri = self.await_configuration()
         if uri is None:
             # We were shut down while waiting
@@ -276,45 +286,48 @@ class Module(MgrModule, SSLCherryPyConfig):
         # about to start serving
         self.set_uri(uri)
 
-        mapper = generate_routes(self.url_prefix)
+        mapper, parent_urls = generate_routes(self.url_prefix)
 
         config = {
-            '{}/'.format(self.url_prefix): {
+            self.url_prefix or '/': {
                 'tools.staticdir.on': True,
                 'tools.staticdir.dir': self.get_frontend_path(),
                 'tools.staticdir.index': 'index.html'
-            },
-            '{}/api'.format(self.url_prefix): {'request.dispatch': mapper}
+            }
         }
+        for purl in parent_urls:
+            config[purl] = {
+                'request.dispatch': mapper
+            }
         cherrypy.tree.mount(None, config=config)
 
         cherrypy.engine.start()
         NotificationQueue.start_queue()
         TaskManager.init()
-        logger.info('Waiting for engine...')
-        cherrypy.engine.block()
+        logger.info('Engine started.')
+        # wait for the shutdown event
+        self.shutdown_event.wait()
+        self.shutdown_event.clear()
+        NotificationQueue.stop()
+        cherrypy.engine.stop()
         if 'COVERAGE_ENABLED' in os.environ:
             _cov.stop()
             _cov.save()
-        logger.info('Engine done')
+        logger.info('Engine stopped')
 
     def shutdown(self):
         super(Module, self).shutdown()
-
         SSLCherryPyConfig.shutdown(self)
+        logger.info('Stopping engine...')
+        self.shutdown_event.set()
 
-        logger.info('Stopping server...')
-        NotificationQueue.stop()
-        cherrypy.engine.exit()
-        logger.info('Stopped server')
-
-    def handle_command(self, cmd):
+    def handle_command(self, inbuf, cmd):
         res = handle_option_command(cmd)
         if res[0] != -errno.ENOSYS:
             return res
-        if cmd['prefix'] == 'dashboard set-login-credentials':
-            Auth.set_login_credentials(cmd['username'], cmd['password'])
-            return 0, 'Username and password updated', ''
+        res = handle_access_control_command(cmd)
+        if res[0] != -errno.ENOSYS:
+            return res
         elif cmd['prefix'] == 'dashboard set-session-expire':
             self.set_config('session-expire', str(cmd['seconds']))
             return 0, 'Session expiration timeout updated', ''
@@ -355,6 +368,7 @@ class StandbyModule(MgrStandbyModule, SSLCherryPyConfig):
     def __init__(self, *args, **kwargs):
         super(StandbyModule, self).__init__(*args, **kwargs)
         SSLCherryPyConfig.__init__(self)
+        self.shutdown_event = threading.Event()
 
         # We can set the global mgr instance to ourselves even though
         # we're just a standby, because it's enough for logging.
@@ -397,14 +411,16 @@ class StandbyModule(MgrStandbyModule, SSLCherryPyConfig):
         cherrypy.tree.mount(Root(), "{}/".format(self.url_prefix), {})
         self.log.info("Starting engine...")
         cherrypy.engine.start()
-        self.log.info("Waiting for engine...")
-        cherrypy.engine.wait(state=cherrypy.engine.states.STOPPED)
-        self.log.info("Engine done.")
+        self.log.info("Engine started...")
+        # Wait for shutdown event
+        self.shutdown_event.wait()
+        self.shutdown_event.clear()
+        cherrypy.engine.stop()
+        self.log.info("Engine stopped.")
 
     def shutdown(self):
         SSLCherryPyConfig.shutdown(self)
 
-        self.log.info("Stopping server...")
-        cherrypy.engine.wait(state=cherrypy.engine.states.STARTED)
-        cherrypy.engine.stop()
-        self.log.info("Stopped server")
+        self.log.info("Stopping engine...")
+        self.shutdown_event.set()
+        self.log.info("Stopped engine...")

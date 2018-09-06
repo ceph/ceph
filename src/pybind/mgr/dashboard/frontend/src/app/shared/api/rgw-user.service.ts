@@ -2,32 +2,38 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import * as _ from 'lodash';
-import 'rxjs/add/observable/forkJoin';
-import 'rxjs/add/observable/of';
-import { Observable } from 'rxjs/Observable';
+import { forkJoin as observableForkJoin, Observable, of as observableOf } from 'rxjs';
+import { mergeMap } from 'rxjs/operators';
 
-@Injectable()
+import { cdEncode } from '../decorators/cd-encode';
+import { ApiModule } from './api.module';
+
+@cdEncode
+@Injectable({
+  providedIn: ApiModule
+})
 export class RgwUserService {
+  private url = 'api/rgw/user';
 
-  private url = '/api/rgw/proxy/user';
-
-  constructor(private http: HttpClient) { }
+  constructor(private http: HttpClient) {}
 
   /**
    * Get the list of users.
    * @return {Observable<Object[]>}
    */
   list() {
-    return this.enumerate()
-      .flatMap((uids: string[]) => {
+    return this.enumerate().pipe(
+      mergeMap((uids: string[]) => {
         if (uids.length > 0) {
-          return Observable.forkJoin(
+          return observableForkJoin(
             uids.map((uid: string) => {
               return this.get(uid);
-            }));
+            })
+          );
         }
-        return Observable.of([]);
-      });
+        return observableOf([]);
+      })
+    );
   }
 
   /**
@@ -35,113 +41,85 @@ export class RgwUserService {
    * @return {Observable<string[]>}
    */
   enumerate() {
-    return this.http.get('/api/rgw/proxy/metadata/user');
+    return this.http.get(this.url);
   }
 
   get(uid: string) {
-    let params = new HttpParams();
-    params = params.append('uid', uid);
-    return this.http.get(this.url, {params: params});
+    return this.http.get(`${this.url}/${uid}`);
   }
 
   getQuota(uid: string) {
-    let params = new HttpParams();
-    params = params.append('uid', uid);
-    return this.http.get(`${this.url}?quota`, {params: params});
+    return this.http.get(`${this.url}/${uid}/quota`);
   }
 
-  put(args: object) {
+  create(args: object) {
     let params = new HttpParams();
     _.keys(args).forEach((key) => {
       params = params.append(key, args[key]);
     });
-    return this.http.put(this.url, null, {params: params});
+    return this.http.post(this.url, null, { params: params });
   }
 
-  putQuota(args: object) {
+  update(uid: string, args: object) {
     let params = new HttpParams();
     _.keys(args).forEach((key) => {
       params = params.append(key, args[key]);
     });
-    return this.http.put(`${this.url}?quota`, null, {params: params});
+    return this.http.put(`${this.url}/${uid}`, null, { params: params });
   }
 
-  post(args: object) {
+  updateQuota(uid: string, args: object) {
     let params = new HttpParams();
     _.keys(args).forEach((key) => {
       params = params.append(key, args[key]);
     });
-    return this.http.post(this.url, null, {params: params});
+    return this.http.put(`${this.url}/${uid}/quota`, null, { params: params });
   }
 
   delete(uid: string) {
-    let params = new HttpParams();
-    params = params.append('uid', uid);
-    return this.http.delete(this.url, {params: params});
+    return this.http.delete(`${this.url}/${uid}`);
   }
 
-  addSubuser(uid: string, subuser: string, permissions: string,
-             secretKey: string, generateSecret: boolean) {
-    const mapPermissions = {
-      'full-control': 'full',
-      'read-write': 'readwrite'
-    };
+  createSubuser(uid: string, args: object) {
     let params = new HttpParams();
-    params = params.append('uid', uid);
-    params = params.append('subuser', subuser);
-    params = params.append('key-type', 'swift');
-    params = params.append('access', (permissions in mapPermissions) ?
-      mapPermissions[permissions] : permissions);
-    if (generateSecret) {
-      params = params.append('generate-secret', 'true');
-    } else {
-      params = params.append('secret-key', secretKey);
-    }
-    return this.http.put(this.url, null, {params: params});
+    _.keys(args).forEach((key) => {
+      params = params.append(key, args[key]);
+    });
+    return this.http.post(`${this.url}/${uid}/subuser`, null, { params: params });
   }
 
   deleteSubuser(uid: string, subuser: string) {
-    let params = new HttpParams();
-    params = params.append('uid', uid);
-    params = params.append('subuser', subuser);
-    params = params.append('purge-keys', 'true');
-    return this.http.delete(this.url, {params: params});
+    return this.http.delete(`${this.url}/${uid}/subuser/${subuser}`);
   }
 
   addCapability(uid: string, type: string, perm: string) {
     let params = new HttpParams();
-    params = params.append('uid', uid);
-    params = params.append('user-caps', `${type}=${perm}`);
-    return this.http.put(`${this.url}?caps`, null, {params: params});
+    params = params.append('type', type);
+    params = params.append('perm', perm);
+    return this.http.post(`${this.url}/${uid}/capability`, null, { params: params });
   }
 
   deleteCapability(uid: string, type: string, perm: string) {
     let params = new HttpParams();
-    params = params.append('uid', uid);
-    params = params.append('user-caps', `${type}=${perm}`);
-    return this.http.delete(`${this.url}?caps`, {params: params});
+    params = params.append('type', type);
+    params = params.append('perm', perm);
+    return this.http.delete(`${this.url}/${uid}/capability`, { params: params });
   }
 
-  addS3Key(uid: string, subuser: string, accessKey: string,
-           secretKey: string, generateKey: boolean) {
+  addS3Key(uid: string, args: object) {
     let params = new HttpParams();
-    params = params.append('uid', uid);
-    params = params.append('key-type', 's3');
-    params = params.append('generate-key', generateKey ? 'true' : 'false');
-    if (!generateKey) {
-      params = params.append('access-key', accessKey);
-      params = params.append('secret-key', secretKey);
-    }
-    params = params.append('subuser', subuser);
-    return this.http.put(`${this.url}?key`, null, {params: params});
+    params = params.append('key_type', 's3');
+    _.keys(args).forEach((key) => {
+      params = params.append(key, args[key]);
+    });
+    return this.http.post(`${this.url}/${uid}/key`, null, { params: params });
   }
 
   deleteS3Key(uid: string, accessKey: string) {
     let params = new HttpParams();
-    params = params.append('uid', uid);
-    params = params.append('key-type', 's3');
-    params = params.append('access-key', accessKey);
-    return this.http.delete(`${this.url}?key`, {params: params});
+    params = params.append('key_type', 's3');
+    params = params.append('access_key', accessKey);
+    return this.http.delete(`${this.url}/${uid}/key`, { params: params });
   }
 
   /**
@@ -149,11 +127,12 @@ export class RgwUserService {
    * @param {string} uid The user ID to check.
    * @return {Observable<boolean>}
    */
-  exists(uid: string) {
-    return this.enumerate()
-      .flatMap((resp: string[]) => {
+  exists(uid: string): Observable<boolean> {
+    return this.enumerate().pipe(
+      mergeMap((resp: string[]) => {
         const index = _.indexOf(resp, uid);
-        return Observable.of(-1 !== index);
-      });
+        return observableOf(-1 !== index);
+      })
+    );
   }
 }

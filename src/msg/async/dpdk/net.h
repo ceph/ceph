@@ -55,7 +55,7 @@ class forward_hash {
     return end_idx;
   }
   void push_back(uint8_t b) {
-    assert(end_idx < sizeof(data));
+    ceph_assert(end_idx < sizeof(data));
     data[end_idx++] = b;
   }
   void push_back(uint16_t b) {
@@ -117,7 +117,7 @@ class interface {
  private:
   int dispatch_packet(EventCenter *c, Packet p);
  public:
-  explicit interface(CephContext *cct, std::shared_ptr<DPDKDevice> dev, EventCenter *c);
+  explicit interface(CephContext *cct, std::shared_ptr<DPDKDevice> dev, EventCenter *center);
   ethernet_address hw_address() { return _hw_address; }
   const struct hw_features& get_hw_features() const { return _hw_features; }
   subscription<Packet, ethernet_address> register_l3(

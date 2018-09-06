@@ -1,10 +1,5 @@
-<nav aria-label="breadcrumb">
-  <ol class="breadcrumb">
-    <li class="breadcrumb-item active">Pools</li>
-  </ol>
-</nav>
 <cd-table [data]="pools"
-          (fetchData)="getPoolList()"
+          (fetchData)="getPoolList($event)"
           [columns]="columns"
           selectionType="single"
           (updateSelection)="updateSelection($event)">

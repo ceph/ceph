@@ -27,7 +27,9 @@ set(librbd_internal_srcs
   api/DiffIterate.cc
   api/Group.cc
   api/Image.cc
+  api/Migration.cc
   api/Mirror.cc
+  api/Namespace.cc
   api/Snapshot.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
@@ -48,6 +50,7 @@ set(librbd_internal_srcs
   image/CloseRequest.cc
   image/CreateRequest.cc
   image/DetachChildRequest.cc
+  image/ListWatchersRequest.cc
   image/OpenRequest.cc
   image/RefreshParentRequest.cc
   image/RefreshRequest.cc
@@ -106,6 +109,7 @@ set(librbd_internal_srcs
   operation/FlattenRequest.cc
   operation/MetadataRemoveRequest.cc
   operation/MetadataSetRequest.cc
+  operation/MigrateRequest.cc
   operation/ObjectMapIterate.cc
   operation/RebuildObjectMapRequest.cc
   operation/RenameRequest.cc
@@ -155,10 +159,6 @@ target_link_libraries(librbd PRIVATE
 if(HAVE_UDEV)
   target_link_libraries(librbd PRIVATE
     udev)
-endif()
-if(WITH_STATIC_LIBSTDCXX)
-  target_link_libraries(librbd INTERFACE
-    "-static-libstdc++ -static-libgcc")
 endif()
 if(ENABLE_SHARED)
   set_target_properties(librbd PROPERTIES

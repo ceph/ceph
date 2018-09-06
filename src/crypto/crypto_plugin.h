@@ -16,7 +16,6 @@
 #define CRYPTO_PLUGIN_H
 
 // -----------------------------------------------------------------------------
-#include "include/memory.h"
 #include "common/PluginRegistry.h"
 #include "ostream"
 

@@ -6,6 +6,8 @@
 #include "common/errno.h"
 #include "librbd/Utils.h"
 #include "librbd/deep_copy/Utils.h"
+#include "librbd/image/CloseRequest.h"
+#include "librbd/image/OpenRequest.h"
 #include "osdc/Striper.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -16,21 +18,23 @@
 namespace librbd {
 namespace deep_copy {
 
+using librbd::util::create_context_callback;
 using librbd::util::unique_lock_name;
 
 template <typename I>
 ImageCopyRequest<I>::ImageCopyRequest(I *src_image_ctx, I *dst_image_ctx,
                                       librados::snap_t snap_id_start,
                                       librados::snap_t snap_id_end,
+                                      bool flatten,
                                       const ObjectNumber &object_number,
                                       const SnapSeqs &snap_seqs,
                                       ProgressContext *prog_ctx,
                                       Context *on_finish)
   : RefCountedObject(dst_image_ctx->cct, 1), m_src_image_ctx(src_image_ctx),
     m_dst_image_ctx(dst_image_ctx), m_snap_id_start(snap_id_start),
-    m_snap_id_end(snap_id_end), m_object_number(object_number),
-    m_snap_seqs(snap_seqs), m_prog_ctx(prog_ctx), m_on_finish(on_finish),
-    m_cct(dst_image_ctx->cct),
+    m_snap_id_end(snap_id_end), m_flatten(flatten),
+    m_object_number(object_number), m_snap_seqs(snap_seqs),
+    m_prog_ctx(prog_ctx), m_on_finish(on_finish), m_cct(dst_image_ctx->cct),
     m_lock(unique_lock_name("ImageCopyRequest::m_lock", this)) {
 }
 
@@ -79,7 +83,7 @@ void ImageCopyRequest<I>::send_object_copies() {
   {
     Mutex::Locker locker(m_lock);
     for (int i = 0;
-         i < m_cct->_conf->get_val<int64_t>("rbd_concurrent_management_ops");
+         i < m_cct->_conf.get_val<int64_t>("rbd_concurrent_management_ops");
          ++i) {
       send_next_object_copy();
       if (m_ret_val < 0 && m_current_ops == 0) {
@@ -96,7 +100,7 @@ void ImageCopyRequest<I>::send_object_copies() {
 
 template <typename I>
 void ImageCopyRequest<I>::send_next_object_copy() {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   if (m_canceled && m_ret_val == 0) {
     ldout(m_cct, 10) << "image copy canceled" << dendl;
@@ -118,7 +122,7 @@ void ImageCopyRequest<I>::send_next_object_copy() {
       handle_object_copy(ono, r);
     });
   ObjectCopyRequest<I> *req = ObjectCopyRequest<I>::create(
-      m_src_image_ctx, m_dst_image_ctx, m_snap_map, ono, ctx);
+      m_src_image_ctx, m_dst_image_ctx, m_snap_map, ono, m_flatten, ctx);
   req->send();
 }
 
@@ -129,10 +133,10 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
   bool complete;
   {
     Mutex::Locker locker(m_lock);
-    assert(m_current_ops > 0);
+    ceph_assert(m_current_ops > 0);
     --m_current_ops;
 
-    if (r < 0) {
+    if (r < 0 && r != -ENOENT) {
       lderr(m_cct) << "object copy failed: " << cpp_strerror(r) << dendl;
       if (m_ret_val == 0) {
         m_ret_val = r;
@@ -148,7 +152,7 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
         m_lock.Unlock();
         m_prog_ctx->update_progress(progress_object_no, m_end_object_no);
         m_lock.Lock();
-        assert(m_updating_progress);
+        ceph_assert(m_updating_progress);
         m_updating_progress = false;
       }
     }

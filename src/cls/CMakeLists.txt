@@ -70,21 +70,23 @@ add_library(cls_lock_client STATIC ${cls_lock_client_srcs})
 
 
 # cls_otp
-set(cls_otp_srcs otp/cls_otp.cc)
-add_library(cls_otp SHARED ${cls_otp_srcs})
-target_link_libraries(cls_otp oath)
-set_target_properties(cls_otp PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
-  INSTALL_RPATH ""
-  CXX_VISIBILITY_PRESET hidden)
-install(TARGETS cls_otp DESTINATION ${cls_dir})
+if (WITH_RADOSGW)
+  set(cls_otp_srcs otp/cls_otp.cc)
+  add_library(cls_otp SHARED ${cls_otp_srcs})
+  target_link_libraries(cls_otp OATH::OATH)
+  set_target_properties(cls_otp PROPERTIES
+    VERSION "1.0.0"
+    SOVERSION "1"
+    INSTALL_RPATH ""
+    CXX_VISIBILITY_PRESET hidden)
+  install(TARGETS cls_otp DESTINATION ${cls_dir})
 
-set(cls_otp_client_srcs
-  otp/cls_otp_client.cc
-  otp/cls_otp_types.cc
-  )
-add_library(cls_otp_client STATIC ${cls_otp_client_srcs})
+  set(cls_otp_client_srcs
+    otp/cls_otp_client.cc
+    otp/cls_otp_types.cc
+    )
+  add_library(cls_otp_client STATIC ${cls_otp_client_srcs})
+endif (WITH_RADOSGW)
 
 # cls_refcount
 set(cls_refcount_srcs

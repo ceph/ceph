@@ -233,8 +233,6 @@ If you rename a pool and you have per-pool capabilities for an authenticated
 user, you must update the user's capabilities (i.e., caps) with the new pool
 name.
 
-.. note:: Version ``0.48`` Argonaut and above.
-
 Show Pool Statistics
 ====================
 
@@ -250,17 +248,12 @@ To make a snapshot of a pool, execute::
 
 	ceph osd pool mksnap {pool-name} {snap-name}
 
-.. note:: Version ``0.48`` Argonaut and above.
-
-
 Remove a Snapshot of a Pool
 ===========================
 
 To remove a snapshot of a pool, execute::
 
 	ceph osd pool rmsnap {pool-name} {snap-name}
-
-.. note:: Version ``0.48`` Argonaut and above.
 
 .. _setpoolvalues:
 
@@ -278,24 +271,21 @@ You may set values for the following keys:
 
 ``compression_algorithm``
 
-:Description: Sets inline compression algorithm to use for underlying BlueStore.
-              This setting overrides the `global setting <rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression algorithm``.
+:Description: Sets inline compression algorithm to use for underlying BlueStore. This setting overrides the `global setting <http://docs.ceph.com/docs/master/rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression algorithm``.
 
 :Type: String
 :Valid Settings: ``lz4``, ``snappy``, ``zlib``, ``zstd``
 
 ``compression_mode``
 
-:Description: Sets the policy for the inline compression algorithm for underlying BlueStore.
-              This setting overrides the `global setting <rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression mode``.
+:Description: Sets the policy for the inline compression algorithm for underlying BlueStore. This setting overrides the `global setting <http://docs.ceph.com/docs/master/rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression mode``.
 
 :Type: String
 :Valid Settings: ``none``, ``passive``, ``aggressive``, ``force``
 
 ``compression_min_blob_size``
 
-:Description: Chunks smaller than this are never compressed.
-              This setting overrides the `global setting <rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression min blob *``.
+:Description: Chunks smaller than this are never compressed. This setting overrides the `global setting <http://docs.ceph.com/docs/master/rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression min blob *``.
 
 :Type: Unsigned Integer
 
@@ -370,7 +360,6 @@ You may set values for the following keys:
 :Description: Set/Unset HASHPSPOOL flag on a given pool.
 :Type: Integer
 :Valid Range: 1 sets flag, 0 unsets flag
-:Version: Version ``0.48`` Argonaut and above.
 
 .. _nodelete:
 

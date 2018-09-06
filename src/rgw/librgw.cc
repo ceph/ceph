@@ -220,7 +220,8 @@ namespace rgw {
     rgw_env.set("HTTP_HOST", "");
 
     /* XXX and -then- bloat up req_state with string copies from it */
-    struct req_state rstate(req->cct, &rgw_env, req->get_user());
+    const uint64_t reqid = store->get_new_req_id();
+    struct req_state rstate(req->cct, &rgw_env, req->get_user(), reqid);
     struct req_state *s = &rstate;
 
     // XXX fix this
@@ -251,7 +252,7 @@ namespace rgw {
 
     /* XXX authorize does less here then in the REST path, e.g.,
      * the user's info is cached, but still incomplete */
-    req->log(s, "authorizing");
+    ldpp_dout(s, 2) << "authorizing" << dendl;
     ret = req->authorize();
     if (ret < 0) {
       dout(10) << "failed to authorize request" << dendl;
@@ -265,28 +266,28 @@ namespace rgw {
       s->auth.identity = rgw::auth::transform_old_authinfo(s);
     }
 
-    req->log(s, "reading op permissions");
+    ldpp_dout(s, 2) << "reading op permissions" << dendl;
     ret = req->read_permissions(op);
     if (ret < 0) {
       abort_req(s, op, ret);
       goto done;
     }
 
-    req->log(s, "init op");
+    ldpp_dout(s, 2) << "init op" << dendl;
     ret = op->init_processing();
     if (ret < 0) {
       abort_req(s, op, ret);
       goto done;
     }
 
-    req->log(s, "verifying op mask");
+    ldpp_dout(s, 2) << "verifying op mask" << dendl;
     ret = op->verify_op_mask();
     if (ret < 0) {
       abort_req(s, op, ret);
       goto done;
     }
 
-    req->log(s, "verifying op permissions");
+    ldpp_dout(s, 2) << "verifying op permissions" << dendl;
     ret = op->verify_permission();
     if (ret < 0) {
       if (s->system_request) {
@@ -299,14 +300,14 @@ namespace rgw {
       }
     }
 
-    req->log(s, "verifying op params");
+    ldpp_dout(s, 2) << "verifying op params" << dendl;
     ret = op->verify_params();
     if (ret < 0) {
       abort_req(s, op, ret);
       goto done;
     }
 
-    req->log(s, "executing");
+    ldpp_dout(s, 2) << "executing" << dendl;
     op->pre_exec();
     op->execute();
     op->complete();
@@ -325,7 +326,7 @@ namespace rgw {
 
     int http_ret = s->err.http_ret;
 
-    req->log_format(s, "http status=%d", http_ret);
+    ldpp_dout(s, 2) << "http status=" << http_ret << dendl;
 
     dout(1) << "====== " << __func__
 	    << " req done req=" << hex << req << dec << " http_status="
@@ -366,7 +367,7 @@ namespace rgw {
 
     /* XXX authorize does less here then in the REST path, e.g.,
      * the user's info is cached, but still incomplete */
-    req->log(s, "authorizing");
+    ldpp_dout(s, 2) << "authorizing" << dendl;
     ret = req->authorize();
     if (ret < 0) {
       dout(10) << "failed to authorize request" << dendl;
@@ -380,28 +381,28 @@ namespace rgw {
       s->auth.identity = rgw::auth::transform_old_authinfo(s);
     }
 
-    req->log(s, "reading op permissions");
+    ldpp_dout(s, 2) << "reading op permissions" << dendl;
     ret = req->read_permissions(op);
     if (ret < 0) {
       abort_req(s, op, ret);
       goto done;
     }
 
-    req->log(s, "init op");
+    ldpp_dout(s, 2) << "init op" << dendl;
     ret = op->init_processing();
     if (ret < 0) {
       abort_req(s, op, ret);
       goto done;
     }
 
-    req->log(s, "verifying op mask");
+    ldpp_dout(s, 2) << "verifying op mask" << dendl;
     ret = op->verify_op_mask();
     if (ret < 0) {
       abort_req(s, op, ret);
       goto done;
     }
 
-    req->log(s, "verifying op permissions");
+    ldpp_dout(s, 2) << "verifying op permissions" << dendl;
     ret = op->verify_permission();
     if (ret < 0) {
       if (s->system_request) {
@@ -414,7 +415,7 @@ namespace rgw {
       }
     }
 
-    req->log(s, "verifying op params");
+    ldpp_dout(s, 2) << "verifying op params" << dendl;
     ret = op->verify_params();
     if (ret < 0) {
       abort_req(s, op, ret);
@@ -450,7 +451,7 @@ namespace rgw {
   int RGWLibFrontend::init()
   {
     pprocess = new RGWLibProcess(g_ceph_context, &env,
-				 g_conf->rgw_thread_pool_size, conf);
+				 g_conf()->rgw_thread_pool_size, conf);
     return 0;
   }
 
@@ -480,7 +481,7 @@ namespace rgw {
     SafeTimer init_timer(g_ceph_context, mutex);
     init_timer.init();
     mutex.Lock();
-    init_timer.add_event_after(g_conf->rgw_init_timeout, new C_InitTimeout);
+    init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
     mutex.Unlock();
 
     common_init_finish(g_ceph_context);
@@ -490,11 +491,11 @@ namespace rgw {
     rgw_init_resolver();
 
     store = RGWStoreManager::get_storage(g_ceph_context,
-					 g_conf->rgw_enable_gc_threads,
-					 g_conf->rgw_enable_lc_threads,
-					 g_conf->rgw_enable_quota_threads,
-					 g_conf->rgw_run_sync_thread,
-					 g_conf->rgw_dynamic_resharding);
+					 g_conf()->rgw_enable_gc_threads,
+					 g_conf()->rgw_enable_lc_threads,
+					 g_conf()->rgw_enable_quota_threads,
+					 g_conf()->rgw_run_sync_thread,
+					 g_conf()->rgw_dynamic_resharding);
 
     if (!store) {
       mutex.Lock();
@@ -537,9 +538,9 @@ namespace rgw {
 
     // XXX ex-RGWRESTMgr_lib, mgr->set_logging(true)
 
-    if (!g_conf->rgw_ops_log_socket_path.empty()) {
-      olog = new OpsLogSocket(g_ceph_context, g_conf->rgw_ops_log_data_backlog);
-      olog->init(g_conf->rgw_ops_log_socket_path);
+    if (!g_conf()->rgw_ops_log_socket_path.empty()) {
+      olog = new OpsLogSocket(g_ceph_context, g_conf()->rgw_ops_log_data_backlog);
+      olog->init(g_conf()->rgw_ops_log_socket_path);
     }
 
     int port = 80;

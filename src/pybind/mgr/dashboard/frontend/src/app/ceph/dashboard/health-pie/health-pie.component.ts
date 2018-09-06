@@ -10,7 +10,6 @@ import {
 } from '@angular/core';
 
 import * as Chart from 'chart.js';
-import * as _ from 'lodash';
 
 import { ChartTooltip } from '../../../shared/models/chart-tooltip';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
@@ -21,12 +20,17 @@ import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
   styleUrls: ['./health-pie.component.scss']
 })
 export class HealthPieComponent implements OnChanges, OnInit {
-  @ViewChild('chartCanvas') chartCanvasRef: ElementRef;
-  @ViewChild('chartTooltip') chartTooltipRef: ElementRef;
+  @ViewChild('chartCanvas')
+  chartCanvasRef: ElementRef;
+  @ViewChild('chartTooltip')
+  chartTooltipRef: ElementRef;
 
-  @Input() data: any;
-  @Input() tooltipFn: any;
-  @Output() prepareFn = new EventEmitter();
+  @Input()
+  data: any;
+  @Input()
+  tooltipFn: any;
+  @Output()
+  prepareFn = new EventEmitter();
 
   chart: any = {
     chartType: 'doughnut',
@@ -99,11 +103,10 @@ export class HealthPieComponent implements OnChanges, OnInit {
       this.chartCanvasRef,
       this.chartTooltipRef,
       getStyleLeft,
-      getStyleTop,
+      getStyleTop
     );
     chartTooltip.getBody = getBody;
 
-    const self = this;
     this.chart.options.tooltips.custom = (tooltip) => {
       chartTooltip.customTooltips(tooltip);
     };

@@ -28,6 +28,7 @@
 #include "PyModule.h"
 
 #include "ActivePyModules.h"
+#include "DaemonServer.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -38,10 +39,10 @@ ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
           std::map<std::string, std::string> store_data,
           DaemonStateIndex &ds, ClusterState &cs,
 	  MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
-          Client &client_, Finisher &f)
+          Client &client_, Finisher &f, DaemonServer &server)
   : module_config(module_config_), daemon_state(ds), cluster_state(cs),
     monc(mc), clog(clog_), objecter(objecter_), client(client_), finisher(f),
-    lock("ActivePyModules")
+    server(server), lock("ActivePyModules")
 {
   store_cache = std::move(store_data);
 }
@@ -191,9 +192,9 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   } else if (what.substr(0, 6) == "config") {
     PyFormatter f;
     if (what == "config_options") {
-      g_conf->config_options(&f);  
+      g_conf().config_options(&f);
     } else if (what == "config") {
-      g_conf->show_config(&f);
+      g_conf().show_config(&f);
     }
     return f.get();
   } else if (what == "mon_map") {
@@ -281,11 +282,27 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     return f.get();
   } else if (what == "pg_dump") {
     PyFormatter f;
-        cluster_state.with_pgmap(
-        [&f](const PGMap &pg_map) {
-	  pg_map.dump(&f);
-        }
+    cluster_state.with_pgmap(
+      [&f](const PGMap &pg_map) {
+	pg_map.dump(&f);
+      }
     );
+    return f.get();
+  } else if (what == "devices") {
+    PyFormatter f;
+    f.open_array_section("devices");
+    daemon_state.with_devices([&f] (const DeviceState& dev) {
+	f.dump_object("device", dev);
+      });
+    f.close_section();
+    return f.get();
+  } else if (what.size() > 7 &&
+	     what.substr(0, 7) == "device ") {
+    string devid = what.substr(7);
+    PyFormatter f;
+    daemon_state.with_device(devid, [&f] (const DeviceState& dev) {
+	f.dump_object("device", dev);
+      });
     return f.get();
   } else if (what == "io_rate") {
     PyFormatter f;
@@ -298,9 +315,9 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   } else if (what == "df") {
     PyFormatter f;
 
-    cluster_state.with_osdmap([this, &f](const OSDMap &osd_map){
-      cluster_state.with_pgmap(
-          [&osd_map, &f](const PGMap &pg_map) {
+    cluster_state.with_pgmap([this, &f](const PGMap &pg_map) {
+      cluster_state.with_osdmap(
+          [&pg_map, &f](const OSDMap &osd_map) {
         pg_map.dump_fs_stats(nullptr, &f, true);
         pg_map.dump_pool_stats_full(osd_map, nullptr, &f, true);
       });
@@ -356,19 +373,20 @@ int ActivePyModules::start_one(PyModuleRef py_module)
 {
   Mutex::Locker l(lock);
 
-  assert(modules.count(py_module->get_name()) == 0);
+  ceph_assert(modules.count(py_module->get_name()) == 0);
 
   modules[py_module->get_name()].reset(new ActivePyModule(py_module, clog));
+  auto active_module = modules.at(py_module->get_name()).get();
 
-  int r = modules[py_module->get_name()]->load(this);
+  int r = active_module->load(this);
   if (r != 0) {
+    // the class instance wasn't created... remove it from the set of activated
+    // modules so commands and notifications aren't delivered.
+    modules.erase(py_module->get_name());
     return r;
   } else {
     dout(4) << "Starting thread for " << py_module->get_name() << dendl;
-    // Giving Thread the module's module_name member as its
-    // char* thread name: thread must not outlive module class lifetime.
-    modules[py_module->get_name()]->thread.create(
-        py_module->get_name().c_str());
+    active_module->thread.create(active_module->get_thread_name());
 
     return 0;
   }
@@ -457,6 +475,19 @@ bool ActivePyModules::get_store(const std::string &module_name,
   } else {
     return false;
   }
+}
+
+PyObject *ActivePyModules::dispatch_remote(
+    const std::string &other_module,
+    const std::string &method,
+    PyObject *args,
+    PyObject *kwargs,
+    std::string *err)
+{
+  auto mod_iter = modules.find(other_module);
+  ceph_assert(mod_iter != modules.end());
+
+  return mod_iter->second->dispatch_remote(method, args, kwargs, err);
 }
 
 bool ActivePyModules::get_config(const std::string &module_name,
@@ -589,13 +620,24 @@ PyObject* ActivePyModules::get_counter_python(
     Mutex::Locker l2(metadata->lock);
     if (metadata->perf_counters.instances.count(path)) {
       auto counter_instance = metadata->perf_counters.instances.at(path);
-      const auto &data = counter_instance.get_data();
-      for (const auto &datapoint : data) {
-        f.open_array_section("datapoint");
-        f.dump_unsigned("t", datapoint.t.sec());
-        f.dump_unsigned("v", datapoint.v);
-        f.close_section();
-
+      auto counter_type = metadata->perf_counters.types.at(path);
+      if (counter_type.type & PERFCOUNTER_LONGRUNAVG) {
+        const auto &avg_data = counter_instance.get_data_avg();
+        for (const auto &datapoint : avg_data) {
+          f.open_array_section("datapoint");
+          f.dump_unsigned("t", datapoint.t.sec());
+          f.dump_unsigned("s", datapoint.s);
+          f.dump_unsigned("c", datapoint.c);
+          f.close_section();
+        }
+      } else {
+        const auto &data = counter_instance.get_data();
+        for (const auto &datapoint : data) {
+          f.open_array_section("datapoint");
+          f.dump_unsigned("t", datapoint.t.sec());
+          f.dump_unsigned("v", datapoint.v);
+          f.close_section();
+        }
       }
     } else {
       dout(4) << "Missing counter: '" << path << "' ("
@@ -696,7 +738,7 @@ PyObject *construct_with_capsule(
     derr << "Failed to import python module:" << dendl;
     derr << handle_pyerror() << dendl;
   }
-  assert(module);
+  ceph_assert(module);
 
   PyObject *wrapper_type = PyObject_GetAttrString(
       module, (const char*)clsname.c_str());
@@ -704,11 +746,11 @@ PyObject *construct_with_capsule(
     derr << "Failed to get python type:" << dendl;
     derr << handle_pyerror() << dendl;
   }
-  assert(wrapper_type);
+  ceph_assert(wrapper_type);
 
   // Construct a capsule containing an OSDMap.
   auto wrapped_capsule = PyCapsule_New(wrapped, nullptr, nullptr);
-  assert(wrapped_capsule);
+  ceph_assert(wrapped_capsule);
 
   // Construct the python OSDMap
   auto pArgs = PyTuple_Pack(1, wrapped_capsule);
@@ -717,7 +759,7 @@ PyObject *construct_with_capsule(
     derr << "Failed to construct python OSDMap:" << dendl;
     derr << handle_pyerror() << dendl;
   }
-  assert(wrapper_instance != nullptr);
+  ceph_assert(wrapper_instance != nullptr);
   Py_DECREF(pArgs);
   Py_DECREF(wrapped_capsule);
 
@@ -745,16 +787,35 @@ PyObject *ActivePyModules::get_osdmap()
 void ActivePyModules::set_health_checks(const std::string& module_name,
 				  health_check_map_t&& checks)
 {
-  Mutex::Locker l(lock);
+  bool changed = false;
+
+  lock.Lock();
   auto p = modules.find(module_name);
   if (p != modules.end()) {
-    p->second->set_health_checks(std::move(checks));
+    changed = p->second->set_health_checks(std::move(checks));
   }
+  lock.Unlock();
+
+  // immediately schedule a report to be sent to the monitors with the new
+  // health checks that have changed. This is done asynchronusly to avoid
+  // blocking python land. ActivePyModules::lock needs to be dropped to make
+  // lockdep happy:
+  //
+  //   send_report callers: DaemonServer::lock -> PyModuleRegistery::lock
+  //   active_start: PyModuleRegistry::lock -> ActivePyModules::lock
+  //
+  // if we don't release this->lock before calling schedule_tick a cycle is
+  // formed with the addition of ActivePyModules::lock -> DaemonServer::lock.
+  // This is still correct as send_report is run asynchronously under
+  // DaemonServer::lock.
+  if (changed)
+    server.schedule_tick(0);
 }
 
 int ActivePyModules::handle_command(
   std::string const &module_name,
   const cmdmap_t &cmdmap,
+  const bufferlist &inbuf,
   std::stringstream *ds,
   std::stringstream *ss)
 {
@@ -766,7 +827,7 @@ int ActivePyModules::handle_command(
   }
 
   lock.Unlock();
-  return mod_iter->second->handle_command(cmdmap, ds, ss);
+  return mod_iter->second->handle_command(cmdmap, inbuf, ds, ss);
 }
 
 void ActivePyModules::get_health_checks(health_check_map_t *checks)
@@ -786,4 +847,5 @@ void ActivePyModules::set_uri(const std::string& module_name,
 
   modules[module_name]->set_uri(uri);
 }
+
 

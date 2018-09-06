@@ -71,9 +71,9 @@ public:
     opsvc.create("OpHistorySvc");
   }
   ~OpHistory() {
-    assert(arrived.empty());
-    assert(duration.empty());
-    assert(slow_op.empty());
+    ceph_assert(arrived.empty());
+    ceph_assert(duration.empty());
+    ceph_assert(slow_op.empty());
   }
   void insert(const utime_t& now, TrackedOpRef op)
   {
@@ -134,6 +134,7 @@ public:
   bool dump_historic_slow_ops(Formatter *f, set<string> filters = {""});
   bool register_inflight_op(TrackedOp *i);
   void unregister_inflight_op(TrackedOp *i);
+  void record_history_op(TrackedOpRef&& i);
 
   void get_age_ms_histogram(pow2_hist_t *h);
 
@@ -303,7 +304,9 @@ public:
     ++nref;
   }
   void put() {
-    if (--nref == 0) {
+  again:
+    auto nref_snap = nref.load();
+    if (nref_snap == 1) {
       switch (state.load()) {
       case STATE_UNTRACKED:
 	_unregistered();
@@ -313,6 +316,14 @@ public:
       case STATE_LIVE:
 	mark_event("done");
 	tracker->unregister_inflight_op(this);
+	_unregistered();
+	if (!tracker->is_tracking()) {
+	  delete this;
+	} else {
+	  state = TrackedOp::STATE_HISTORY;
+	  tracker->record_history_op(
+	    TrackedOpRef(this, /* add_ref = */ false));
+	}
 	break;
 
       case STATE_HISTORY:
@@ -322,6 +333,8 @@ public:
       default:
 	ceph_abort();
       }
+    } else if (!nref.compare_exchange_weak(nref_snap, nref_snap - 1)) {
+      goto again;
     }
   }
 

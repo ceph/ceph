@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -17,10 +19,12 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <dirent.h>
+//#include "common/debug.h"
 #include "include/uuid.h"
 #include "blkdev.h"
 
 #ifdef __linux__
+#include <libudev.h>
 #include <linux/fs.h>
 #include <blkid/blkid.h>
 
@@ -30,6 +34,8 @@
 #define UUID_LEN 36
 
 static const char *sandbox_dir = "";
+
+static std::string get_block_device_string_property_wrap(const std::string &devname, const std::string &property); 
 
 void set_block_device_sandbox_dir(const char *dir)
 {
@@ -209,9 +215,19 @@ bool block_device_is_rotational(const char *devname)
   return get_block_device_int_property(devname, "queue/rotational") > 0;
 }
 
+int block_device_vendor(const char *devname, char *vendor, size_t max)
+{
+  return get_block_device_string_property(devname, "device/vendor", vendor, max);
+}
+
 int block_device_model(const char *devname, char *model, size_t max)
 {
   return get_block_device_string_property(devname, "device/model", model, max);
+}
+
+int block_device_serial(const char *devname, char *serial, size_t max)
+{
+  return get_block_device_string_property(devname, "device/serial", serial, max);
 }
 
 int get_device_by_fd(int fd, char *partition, char *device, size_t max)
@@ -357,6 +373,69 @@ bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
   return true;
 }
 
+// trying to use udev first, and if it doesn't work, we fall back to 
+// reading /sys/block/$devname/device/(vendor/model/serial).
+std::string get_device_id(const std::string& devname)
+{
+  struct udev_device *dev;
+  static struct udev *udev;
+  const char *data;
+  std::string device_id;
+
+  udev = udev_new();
+  if (!udev) {
+    return {};
+  }
+  dev = udev_device_new_from_subsystem_sysname(udev, "block", devname.c_str());
+  if (!dev) {
+    udev_unref(udev);
+    return {};
+  }
+
+  // "ID_SERIAL_SHORT" returns only the serial number;
+  // "ID_SERIAL" returns vendor model_serial.
+  data = udev_device_get_property_value(dev, "ID_SERIAL");
+  if (data) {
+    device_id = data;
+  }
+
+  udev_device_unref(dev);
+  udev_unref(udev);
+
+  if (!device_id.empty()) {
+    std::replace(device_id.begin(), device_id.end(), ' ', '_');
+    return device_id;
+  }
+
+  // either udev_device_get_property_value() failed, or succeeded but
+  // returned nothing; trying to read from files.  note that the 'vendor'
+  // file rarely contains the actual vendor; it's usually 'ATA'.
+  std::string model, serial;
+  model = get_block_device_string_property_wrap(devname, "device/model");
+  serial = get_block_device_string_property_wrap(devname, "device/serial");
+
+  if (!model.size() || serial.size()) {
+    return {};
+  }
+
+  device_id = model + "_" + serial;
+  std::replace(device_id.begin(), device_id.end(), ' ', '_');
+  return device_id;
+}
+
+std::string get_block_device_string_property_wrap(const std::string &devname,
+						  const std::string &property)
+{
+  char buff[1024] = {0};
+  std::string prop_val;
+  int ret = get_block_device_string_property(devname.c_str(), property.c_str(), buff, sizeof(buff));
+  if (ret < 0) {
+    return {};
+  }
+  prop_val = buff;
+  return prop_val;
+}
+
 #elif defined(__APPLE__)
 #include <sys/disk.h>
 
@@ -459,6 +538,12 @@ bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
   return false;
 }
 
+std::string get_device_id(const std::string& devname)
+{
+  // FIXME: implement me for freebsd
+  return std::string();
+}
+
 #else
 int get_block_device_size(int fd, int64_t *psize)
 {
@@ -502,4 +587,11 @@ bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
 {
   return false;
 }
+
+std::string get_device_id(const std::string& devname)
+{
+  // not implemented
+  return std::string();
+}
+
 #endif

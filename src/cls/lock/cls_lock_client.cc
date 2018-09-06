@@ -116,7 +116,7 @@ namespace rados {
           return r;
 
         cls_lock_list_locks_reply ret;
-        bufferlist::iterator iter = out.begin();
+        auto iter = cbegin(out);
         try {
           decode(ret, iter);
         } catch (buffer::error& err) {
@@ -138,7 +138,7 @@ namespace rados {
         rados_op->exec("lock", "get_info", in);
       }
 
-      int get_lock_info_finish(bufferlist::iterator *iter,
+      int get_lock_info_finish(bufferlist::const_iterator *iter,
 			       map<locker_id_t, locker_info_t> *lockers,
 			       ClsLockType *type, string *tag)
       {
@@ -174,7 +174,7 @@ namespace rados {
         int r = ioctx->operate(oid, &op, &out);
 	if (r < 0)
 	  return r;
-	bufferlist::iterator it = out.begin();
+	auto it = std::cbegin(out);
 	return get_lock_info_finish(&it, lockers, type, tag);
       }
 

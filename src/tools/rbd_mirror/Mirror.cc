@@ -181,7 +181,7 @@ public:
   bool call(std::string_view command, const cmdmap_t& cmdmap,
 	    std::string_view format, bufferlist& out) override {
     Commands::const_iterator i = commands.find(command);
-    assert(i != commands.end());
+    ceph_assert(i != commands.end());
     Formatter *f = Formatter::create(format);
     stringstream ss;
     bool r = i->second->call(f, &ss);
@@ -260,7 +260,7 @@ void Mirror::run()
     }
     m_cond.WaitInterval(
       m_lock,
-      utime_t(m_cct->_conf->get_val<int64_t>("rbd_mirror_pool_replayers_refresh_interval"), 0));
+      utime_t(m_cct->_conf.get_val<int64_t>("rbd_mirror_pool_replayers_refresh_interval"), 0));
   }
 
   // stop all pool replayers in parallel
@@ -374,7 +374,7 @@ void Mirror::release_leader()
 void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
 {
   dout(20) << "enter" << dendl;
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   // remove stale pool replayers before creating new pool replayers
   for (auto it = m_pool_replayers.begin(); it != m_pool_replayers.end();) {

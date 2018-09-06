@@ -27,7 +27,7 @@ public:
     if (ptr)
       put_with_id(ptr, id);
     else
-      assert(id == 0);
+      ceph_assert(id == 0);
   }
   void swap(TrackedIntPtr &other) {
     T *optr = other.ptr;

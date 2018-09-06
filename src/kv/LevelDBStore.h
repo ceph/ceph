@@ -9,7 +9,6 @@
 #include <set>
 #include <map>
 #include <string>
-#include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 #include "leveldb/db.h"
 #include "leveldb/env.h"
@@ -97,6 +96,10 @@ class LevelDBStore : public KeyValueDB {
 public:
   /// compact the underlying leveldb store
   void compact() override;
+
+  void compact_async() override {
+    compact_range_async(string(), string());
+  }
 
   /// compact db for all keys with a given prefix
   void compact_prefix(const string& prefix) override {

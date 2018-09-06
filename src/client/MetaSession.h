@@ -23,7 +23,8 @@ struct MetaSession {
   uint64_t cap_gen;
   utime_t cap_ttl, last_cap_renew_request;
   uint64_t cap_renew_seq;
-  entity_inst_t inst;
+  entity_addrvec_t addrs;
+  feature_bitset_t mds_features;
 
   enum {
     STATE_NEW, // Unused
@@ -46,11 +47,12 @@ struct MetaSession {
   std::set<ceph_tid_t> flushing_caps_tids;
   std::set<Inode*> early_flushing_caps;
 
-  boost::intrusive_ptr<MClientCapRelease> release;
+  MClientCapRelease::ref release;
 
-  MetaSession(mds_rank_t mds_num, ConnectionRef con, entity_inst_t inst)
+  MetaSession(mds_rank_t mds_num, ConnectionRef con,
+	      const entity_addrvec_t& addrs)
     : mds_num(mds_num), con(con),
-      seq(0), cap_gen(0), cap_renew_seq(0), inst(inst),
+      seq(0), cap_gen(0), cap_renew_seq(0), addrs(addrs),
       state(STATE_OPENING), mds_state(MDSMap::STATE_NULL), readonly(false)
   {}
 

@@ -19,7 +19,7 @@ public:
   }
   void execute() override;
 
-  const string name() override { return "get_usage"; }
+  const char* name() const override { return "get_usage"; }
 };
 
 void RGWOp_Usage_Get::execute() {
@@ -63,7 +63,7 @@ public:
   }
   void execute() override;
 
-  const string name() override { return "trim_usage"; }
+  const char* name() const override { return "trim_usage"; }
 };
 
 void RGWOp_Usage_Delete::execute() {

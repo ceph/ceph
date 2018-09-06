@@ -96,7 +96,7 @@ void MemWriteback::read(const object_t& oid, uint64_t object_no,
                          const ZTracer::Trace &parent_trace,
                          Context *onfinish)
 {
-  assert(snapid == CEPH_NOSNAP);
+  ceph_assert(snapid == CEPH_NOSNAP);
   C_DelayRead *wrapper = new C_DelayRead(this, m_cct, onfinish, m_lock, oid,
 					 off, len, pbl, m_delay_ns);
   m_finisher->queue(wrapper, len);
@@ -112,7 +112,7 @@ ceph_tid_t MemWriteback::write(const object_t& oid,
                                 const ZTracer::Trace &parent_trace,
                                 Context *oncommit)
 {
-  assert(snapc.seq == 0);
+  ceph_assert(snapc.seq == 0);
   C_DelayWrite *wrapper = new C_DelayWrite(this, m_cct, oncommit, m_lock, oid,
 					   off, len, bl, m_delay_ns);
   m_finisher->queue(wrapper, 0);
@@ -123,7 +123,7 @@ void MemWriteback::write_object_data(const object_t& oid, uint64_t off, uint64_t
 				     const bufferlist& data_bl)
 {
   dout(1) << "writing " << oid << " " << off << "~" << len  << dendl;
-  assert(len == data_bl.length());
+  ceph_assert(len == data_bl.length());
   bufferlist& obj_bl = object_data[oid];
   bufferlist new_obj_bl;
   // ensure size, or set it if new object

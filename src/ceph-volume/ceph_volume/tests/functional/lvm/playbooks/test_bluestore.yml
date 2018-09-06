@@ -8,9 +8,28 @@
         name: ceph-osd@2
         state: stopped
 
+    - name: stop ceph-osd@0 daemon
+      service:
+        name: ceph-osd@0
+        state: stopped
+
+
+- hosts: mons
+  become: yes
+  tasks:
+
     - name: destroy osd.2
       command: "ceph osd destroy osd.2 --yes-i-really-mean-it"
 
+    - name: destroy osd.0
+      command: "ceph osd destroy osd.0 --yes-i-really-mean-it"
+
+
+- hosts: osds
+  become: yes
+  tasks:
+
+    # osd.2 device
     - name: zap /dev/sdd1
       command: "ceph-volume lvm zap /dev/sdd1 --destroy"
       environment:
@@ -21,14 +40,7 @@
       environment:
         CEPH_VOLUME_DEBUG: 1
 
-    - name: stop ceph-osd@0 daemon
-      service:
-        name: ceph-osd@0
-        state: stopped
-
-    - name: destroy osd.0
-      command: "ceph osd destroy osd.0 --yes-i-really-mean-it"
-
+    # osd.0 device
     - name: zap test_group/data-lv1
       command: "ceph-volume lvm zap test_group/data-lv1"
       environment:
@@ -41,5 +53,10 @@
 
     - name: activate all to start the previously prepared osd.0
       command: "ceph-volume lvm activate --all"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: list all OSDs
+      command: "ceph-volume lvm list"
       environment:
         CEPH_VOLUME_DEBUG: 1

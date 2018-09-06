@@ -7,7 +7,6 @@
   <ng-container class="modal-content">
     <form name="deletionForm"
           #formDir="ngForm"
-          (submit)="delete($event)"
           [formGroup]="deletionForm"
           novalidate>
       <div class="modal-body">
@@ -25,24 +24,24 @@
           </kbd>.
         </p>
         <div class="form-group"
-             [ngClass]="{'has-error': invalidControl(formDir.submitted)}">
+             [ngClass]="{'has-error': deletionForm.showError('confirmation', formDir)}">
           <input type="text"
                  class="form-control"
                  name="confirmation"
                  id="confirmation"
                  [placeholder]="pattern"
-                 [pattern]="pattern"
+                 [pattern]="escapeRegExp(pattern)"
                  autocomplete="off"
                  (keyup)="updateConfirmation($event)"
                  formControlName="confirmation"
                  autofocus>
           <span class="help-block"
-                *ngIf="invalidControl(formDir.submitted,'required')"
+                *ngIf="deletionForm.showError('confirmation', formDir, 'required')"
                 i18n>
           This field is required.
         </span>
           <span class="help-block"
-                *ngIf="invalidControl(formDir.submitted, 'pattern')">
+                *ngIf="deletionForm.showError('confirmation', formDir, 'pattern')">
           '{{ confirmation.value }}'
           <span i18n>doesn't match</span>
           '{{ pattern }}'.

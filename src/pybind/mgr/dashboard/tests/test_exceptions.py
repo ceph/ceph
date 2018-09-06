@@ -3,11 +3,9 @@ from __future__ import absolute_import
 
 import time
 
-import cherrypy
-
 import rados
 from ..services.ceph_service import SendCommandError
-from ..controllers import RESTController, ApiController, Task
+from ..controllers import RESTController, Controller, Task, Endpoint
 from .helper import ControllerTestCase
 from ..services.exception import handle_rados_error, handle_send_command_error, \
     serialize_dashboard_exception
@@ -15,34 +13,29 @@ from ..tools import ViewCache, TaskManager, NotificationQueue
 
 
 # pylint: disable=W0613
-@ApiController('foo')
+@Controller('foo', secure=False)
 class FooResource(RESTController):
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
+    @Endpoint()
     @handle_rados_error('foo')
     def no_exception(self, param1, param2):
         return [param1, param2]
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
+    @Endpoint()
     @handle_rados_error('foo')
     def error_foo_controller(self):
         raise rados.OSError('hi', errno=-42)
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
+    @Endpoint()
     @handle_send_command_error('foo')
     def error_send_command(self):
         raise SendCommandError('hi', 'prefix', {}, -42)
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
+    @Endpoint()
     def error_generic(self):
         raise rados.Error('hi')
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
+    @Endpoint()
     def vc_no_data(self):
         @ViewCache(timeout=0)
         def _no_data():
@@ -52,8 +45,7 @@ class FooResource(RESTController):
         assert False
 
     @handle_rados_error('foo')
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
+    @Endpoint()
     def vc_exception(self):
         @ViewCache(timeout=10)
         def _raise():
@@ -62,8 +54,7 @@ class FooResource(RESTController):
         _raise()
         assert False
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
+    @Endpoint()
     def internal_server_error(self):
         return 1/0
 
@@ -71,16 +62,14 @@ class FooResource(RESTController):
     def list(self):
         raise SendCommandError('list', 'prefix', {}, -42)
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
+    @Endpoint()
     @Task('task_exceptions/task_exception', {1: 2}, 1.0,
           exception_handler=serialize_dashboard_exception)
     @handle_rados_error('foo')
     def task_exception(self):
         raise rados.OSError('hi', errno=-42)
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
+    @Endpoint()
     def wait_task_exception(self):
         ex, _ = TaskManager.list('task_exceptions/task_exception')
         return bool(len(ex))
@@ -125,11 +114,6 @@ class RESTControllerTest(ControllerTestCase):
         self.assertJsonBody(
             {'detail': '[errno -42] list', 'code': "42", 'component': 'foo'}
         )
-
-    def test_error_send_command_bowsable_api(self):
-        self.getPage('/foo/error_send_command', headers=[('Accept', 'text/html')])
-        for err in ["'detail': '[errno -42] hi'", "'component': 'foo'"]:
-            self.assertIn(err.replace("'", "\'").encode('utf-8'), self.body)
 
     def test_error_foo_generic(self):
         self._get('/foo/error_generic')

@@ -78,7 +78,7 @@ class NObjectIteratorImpl {
   private:
     NObjectIteratorImpl(ObjListCtx *ctx_);
     void get_next();
-    ceph::shared_ptr < ObjListCtx > ctx;
+    std::shared_ptr < ObjListCtx > ctx;
     ListObject cur_obj;
 };
 

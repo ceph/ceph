@@ -20,11 +20,14 @@
 #include "include/filepath.h"
 
 #include "MDSCacheObject.h"
+#include "MDSContext.h"
 
 #include "SimpleLock.h"
 #include "Capability.h"
 
 #include "common/TrackedOp.h"
+#include "messages/MClientRequest.h"
+#include "messages/MMDSSlaveRequest.h"
 
 class LogSegment;
 class Capability;
@@ -33,8 +36,6 @@ class CDir;
 class CDentry;
 class Session;
 class ScatterLock;
-class MClientRequest;
-class MMDSSlaveRequest;
 struct sr_t;
 
 struct MutationImpl : public TrackedOp {
@@ -94,13 +95,13 @@ public:
       reqid(ri), attempt(att),
       slave_to_mds(slave_to) { }
   ~MutationImpl() override {
-    assert(locking == NULL);
-    assert(pins.empty());
-    assert(auth_pins.empty());
-    assert(xlocks.empty());
-    assert(rdlocks.empty());
-    assert(wrlocks.empty());
-    assert(remote_wrlocks.empty());
+    ceph_assert(locking == NULL);
+    ceph_assert(pins.empty());
+    ceph_assert(auth_pins.empty());
+    ceph_assert(xlocks.empty());
+    ceph_assert(rdlocks.empty());
+    ceph_assert(wrlocks.empty());
+    ceph_assert(remote_wrlocks.empty());
   }
 
   bool is_master() const { return slave_to_mds == MDS_RANK_NONE; }
@@ -179,7 +180,7 @@ struct MDRequestImpl : public MutationImpl {
   elist<MDRequestImpl*>::item item_session_request;  // if not on list, op is aborted.
 
   // -- i am a client (master) request
-  MClientRequest *client_request; // client request (if any)
+  MClientRequest::const_ref client_request; // client request (if any)
 
   // store up to two sets of dn vectors, inode pointers, for request path1 and path2.
   vector<CDentry*> dn[2];
@@ -206,7 +207,7 @@ struct MDRequestImpl : public MutationImpl {
   map<vinodeno_t, ceph_seq_t> cap_releases;  
 
   // -- i am a slave request
-  MMDSSlaveRequest *slave_request; // slave request (if one is pending; implies slave == true)
+  MMDSSlaveRequest::const_ref slave_request; // slave request (if one is pending; implies slave == true)
 
   // -- i am an internal op
   int internal_op;
@@ -222,7 +223,7 @@ struct MDRequestImpl : public MutationImpl {
   // break rarely-used fields into a separately allocated structure 
   // to save memory for most ops
   struct More {
-    int slave_error;
+    int slave_error = 0;
     set<mds_rank_t> slaves;           // mds nodes that have slave requests to me (implies client_request)
     set<mds_rank_t> waiting_on_slave; // peers i'm waiting for slavereq replies from. 
 
@@ -230,58 +231,49 @@ struct MDRequestImpl : public MutationImpl {
     set<mds_rank_t> witnessed;       // nodes who have journaled a RenamePrepare
     map<MDSCacheObject*,version_t> pvmap;
 
-    bool has_journaled_slaves;
-    bool slave_update_journaled;
-    bool slave_rolling_back;
+    bool has_journaled_slaves = false;
+    bool slave_update_journaled = false;
+    bool slave_rolling_back = false;
     
     // for rename
     set<mds_rank_t> extra_witnesses; // replica list from srcdn auth (rename)
-    mds_rank_t srcdn_auth_mds;
+    mds_rank_t srcdn_auth_mds = MDS_RANK_NONE;
     bufferlist inode_import;
-    version_t inode_import_v;
-    CInode* rename_inode;
-    bool is_freeze_authpin;
-    bool is_ambiguous_auth;
-    bool is_remote_frozen_authpin;
-    bool is_inode_exporter;
+    version_t inode_import_v = 0;
+    CInode* rename_inode = nullptr;
+    bool is_freeze_authpin = false;
+    bool is_ambiguous_auth = false;
+    bool is_remote_frozen_authpin = false;
+    bool is_inode_exporter = false;
 
     map<client_t, pair<Session*, uint64_t> > imported_session_map;
     map<CInode*, map<client_t,Capability::Export> > cap_imports;
     
     // for lock/flock
-    bool flock_was_waiting;
+    bool flock_was_waiting = false;
 
     // for snaps
-    version_t stid;
+    version_t stid = 0;
     bufferlist snapidbl;
 
-    sr_t *srci_srnode;
-    sr_t *desti_srnode;
+    sr_t *srci_srnode = nullptr;
+    sr_t *desti_srnode = nullptr;
 
     // called when slave commits or aborts
-    Context *slave_commit;
+    Context *slave_commit = nullptr;
     bufferlist rollback_bl;
 
-    list<MDSInternalContextBase*> waiting_for_finish;
+    MDSInternalContextBase::vec waiting_for_finish;
 
     // export & fragment
-    CDir* export_dir;
+    CDir* export_dir = nullptr;
     dirfrag_t fragment_base;
 
     // for internal ops doing lookup
     filepath filepath1;
     filepath filepath2;
 
-    More() : 
-      slave_error(0),
-      has_journaled_slaves(false), slave_update_journaled(false),
-      slave_rolling_back(false),
-      srcdn_auth_mds(-1), inode_import_v(0), rename_inode(0),
-      is_freeze_authpin(false), is_ambiguous_auth(false),
-      is_remote_frozen_authpin(false), is_inode_exporter(false),
-      flock_was_waiting(false),
-      stid(0), srci_srnode(NULL), desti_srnode(NULL),
-      slave_commit(0), export_dir(NULL)  { }
+    More() {}
   } *_more;
 
 
@@ -289,15 +281,14 @@ struct MDRequestImpl : public MutationImpl {
   struct Params {
     metareqid_t reqid;
     __u32 attempt;
-    MClientRequest *client_req;
-    class Message *triggering_slave_req;
+    MClientRequest::const_ref client_req;
+    Message::const_ref triggering_slave_req;
     mds_rank_t slave_to;
     utime_t initiated;
     utime_t throttled, all_read, dispatched;
     int internal_op;
     // keep these default values synced to MutationImpl's
-    Params() : attempt(0), client_req(NULL),
-        triggering_slave_req(NULL), slave_to(MDS_RANK_NONE), internal_op(-1) {}
+    Params() : attempt(0), slave_to(MDS_RANK_NONE), internal_op(-1) {}
     const utime_t& get_recv_stamp() const {
       return initiated;
     }
@@ -317,7 +308,7 @@ struct MDRequestImpl : public MutationImpl {
     session(NULL), item_session_request(this),
     client_request(params->client_req), straydn(NULL), snapid(CEPH_NOSNAP),
     tracei(NULL), tracedn(NULL), alloc_ino(0), used_prealloc_ino(0),
-    slave_request(NULL), internal_op(params->internal_op), internal_op_finish(NULL),
+    internal_op(params->internal_op), internal_op_finish(NULL),
     internal_op_private(NULL),
     retry(0),
     waited_for_osdmap(false), _more(NULL) {
@@ -347,11 +338,16 @@ struct MDRequestImpl : public MutationImpl {
   void print(ostream &out) const override;
   void dump(Formatter *f) const override;
 
+  MClientRequest::const_ref release_client_request();
+  void reset_slave_request(const MMDSSlaveRequest::const_ref& req=nullptr);
+
   // TrackedOp stuff
   typedef boost::intrusive_ptr<MDRequestImpl> Ref;
 protected:
   void _dump(Formatter *f) const override;
   void _dump_op_descriptor_unlocked(ostream& stream) const override;
+private:
+  mutable ceph::spinlock msg_lock;
 };
 
 typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;

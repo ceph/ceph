@@ -31,7 +31,7 @@ struct EntityName
     encode(type, bl);
     encode(id, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     uint32_t type_;
     std::string id_;

@@ -484,6 +484,25 @@ int AdminSocket::unregister_command(std::string_view command)
   return ret;
 }
 
+void AdminSocket::unregister_commands(const AdminSocketHook *hook)
+{
+  std::unique_lock l(lock);
+  auto i = hooks.begin();
+  while (i != hooks.end()) {
+    if (i->second.hook == hook) {
+      ldout(m_cct, 5) << __func__ << " " << i->first << dendl;
+
+      // If we are currently processing a command, wait for it to
+      // complete in case it referenced the hook that we are
+      // unregistering.
+      in_hook_cond.wait(l, [this]() { return !in_hook; });
+      hooks.erase(i++);
+    } else {
+      i++;
+    }
+  }
+}
+
 class VersionHook : public AdminSocketHook {
 public:
   bool call(std::string_view command, const cmdmap_t& cmdmap,
@@ -623,9 +642,7 @@ void AdminSocket::shutdown()
 
   retry_sys_call(::close, m_sock_fd);
 
-  unregister_command("version");
-  unregister_command("git_version");
-  unregister_command("0");
+  unregister_commands(version_hook.get());
   version_hook.reset();
 
   unregister_command("help");

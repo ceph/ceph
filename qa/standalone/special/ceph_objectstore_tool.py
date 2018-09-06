@@ -152,7 +152,7 @@ def cat_file(level, filename):
 def vstart(new, opt=""):
     print("vstarting....", end="")
     NEW = new and "-n" or "-N"
-    call("MON=1 OSD=4 MDS=0 MGR=1 CEPH_PORT=7400 {path}/src/vstart.sh --filestore --short -l {new} -d {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
+    call("MON=1 OSD=4 MDS=0 MGR=1 CEPH_PORT=7400 MGR_PYTHON_PATH={path}/src/pybind/mgr {path}/src/vstart.sh --filestore --short -l {new} -d {opt} > /dev/null 2>&1".format(new=NEW, opt=opt, path=CEPH_ROOT), shell=True)
     print("DONE")
 
 
@@ -1803,7 +1803,7 @@ def main(argv):
 
     if EXP_ERRORS == 0:
         NEWPOOL = "rados-import-pool"
-        cmd = "{path}/rados mkpool {pool}".format(pool=NEWPOOL, path=CEPH_BIN)
+        cmd = "{path}/ceph osd pool create {pool} 8".format(pool=NEWPOOL, path=CEPH_BIN)
         logging.debug(cmd)
         ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
 

@@ -42,7 +42,7 @@ int hex_to_int(char c)
 /// int value to hex digit
 char int_to_hex(int v)
 {
-  assert(v < 16);
+  ceph_assert(v < 16);
   if (v < 10)
     return '0' + v;
   return 'A' + v - 10;
@@ -51,7 +51,7 @@ char int_to_hex(int v)
 /// reverse bits in a nibble (0..15)
 int reverse_nibble_bits(int in)
 {
-  assert(in < 16);
+  ceph_assert(in < 16);
   return
     ((in & 8) >> 3) |
     ((in & 4) >> 1) |
@@ -76,11 +76,11 @@ string reverse_hexdigit_bits_string(string s)
 /// compare hex digit (as length 1 string) bitwise
 bool cmp_hexdigit_bitwise(const string& l, const string& r)
 {
-  assert(l.length() == 1 && r.length() == 1);
+  ceph_assert(l.length() == 1 && r.length() == 1);
   int lv = hex_to_int(l[0]);
   int rv = hex_to_int(r[0]);
-  assert(lv < 16);
-  assert(rv < 16);
+  ceph_assert(lv < 16);
+  ceph_assert(rv < 16);
   return reverse_nibble_bits(lv) < reverse_nibble_bits(rv);
 }
 
@@ -99,7 +99,7 @@ int HashIndex::cleanup() {
     // No in progress operations!
     return 0;
   }
-  bufferlist::iterator i = bl.begin();
+  auto i = bl.cbegin();
   InProgressOp in_progress(i);
   subdir_info_s info;
   r = get_info(in_progress.path, &info);
@@ -296,7 +296,7 @@ int HashIndex::_split(
   uint32_t match,
   uint32_t bits,
   CollectionIndex* dest) {
-  assert(collection_version() == dest->collection_version());
+  ceph_assert(collection_version() == dest->collection_version());
   unsigned mkdirred = 0;
   return col_split_level(
     *this,
@@ -321,7 +321,7 @@ int HashIndex::split_dirs(const vector<string> &path, int target_level) {
   if (must_split(info, target_level)) {
     dout(1) << __func__ << " " << path << " has " << info.objs
             << " objects, " << info.hash_level 
-            << " level, starting split." << dendl;
+            << " level, starting split in pg " << coll() << "." << dendl;
     r = initiate_split(path, info);
     if (r < 0) {
       dout(10) << "error initiating split on " << path << ": "
@@ -330,7 +330,7 @@ int HashIndex::split_dirs(const vector<string> &path, int target_level) {
     }
 
     r = complete_split(path, info);
-    dout(1) << __func__ << " " << path << " split completed."
+    dout(1) << __func__ << " " << path << " split completed in pg " << coll() << "."
             << dendl;
     if (r < 0) {
       dout(10) << "error completing split on " << path << ": "
@@ -403,7 +403,7 @@ int HashIndex::read_settings() {
     derr << __func__ << " error reading settings: " << cpp_strerror(r) << dendl;
     return r;
   }
-  bufferlist::iterator it = bl.begin();
+  auto it = bl.cbegin();
   settings.decode(it);
   dout(20) << __func__ << " split_rand_factor = " << settings.split_rand_factor << dendl;
   return 0;
@@ -425,12 +425,12 @@ int HashIndex::_created(const vector<string> &path,
 
   if (must_split(info)) {
     dout(1) << __func__ << " " << path << " has " << info.objs
-            << " objects, starting split." << dendl;
+            << " objects, starting split in pg " << coll() << "." << dendl;
     int r = initiate_split(path, info);
     if (r < 0)
       return r;
     r = complete_split(path, info);
-    dout(1) << __func__ << " " << path << " split completed."
+    dout(1) << __func__ << " " << path << " split completed in pg " << coll() << "."
             << dendl;
     return r;
   } else {
@@ -580,7 +580,7 @@ int HashIndex::pre_split_folder(uint32_t pg_num, uint64_t expected_num_objs)
   // the below logic is inspired by rados.h#ceph_stable_mod,
   // it basically determines how many sub-folders should we
   // create for splitting
-  assert(pg_num_bits > 0); // otherwise BAD_SHIFT
+  ceph_assert(pg_num_bits > 0); // otherwise BAD_SHIFT
   if (((1 << (pg_num_bits - 1)) | ps) >= pg_num) {
     ++split_bits;
   }
@@ -593,7 +593,7 @@ int HashIndex::pre_split_folder(uint32_t pg_num, uint64_t expected_num_objs)
     leavies = leavies >> 4;
   }
   for (uint32_t i = 0; i < subs; ++i) {
-    assert(split_bits <= 4); // otherwise BAD_SHIFT
+    ceph_assert(split_bits <= 4); // otherwise BAD_SHIFT
     int v = tmp_id | (i << ((4 - split_bits) % 4));
     paths.push_back(to_hex(v));
     ret = create_path(paths);
@@ -724,15 +724,15 @@ int HashIndex::get_info(const vector<string> &path, subdir_info_s *info) {
   int r = get_attr_path(path, SUBDIR_ATTR, buf);
   if (r < 0)
     return r;
-  bufferlist::iterator bufiter = buf.begin();
+  auto bufiter = buf.cbegin();
   info->decode(bufiter);
-  assert(path.size() == (unsigned)info->hash_level);
+  ceph_assert(path.size() == (unsigned)info->hash_level);
   return 0;
 }
 
 int HashIndex::set_info(const vector<string> &path, const subdir_info_s &info) {
   bufferlist buf;
-  assert(path.size() == (unsigned)info.hash_level);
+  ceph_assert(path.size() == (unsigned)info.hash_level);
   info.encode(buf);
   return add_attr_path(path, SUBDIR_ATTR, buf);
 }
@@ -924,7 +924,7 @@ string HashIndex::get_hash_str(uint32_t hash) {
 }
 
 string HashIndex::get_path_str(const ghobject_t &oid) {
-  assert(!oid.is_max());
+  ceph_assert(!oid.is_max());
   return get_hash_str(oid.hobj.get_hash());
 }
 
@@ -1005,7 +1005,7 @@ int HashIndex::list_by_hash(const vector<string> &path,
 			    ghobject_t *next,
 			    vector<ghobject_t> *out)
 {
-  assert(out);
+  ceph_assert(out);
   return list_by_hash_bitwise(path, end, max_count, next, out);
 }
 

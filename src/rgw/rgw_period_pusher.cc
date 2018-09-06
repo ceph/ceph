@@ -175,7 +175,7 @@ RGWPeriodPusher::RGWPeriodPusher(RGWRados* store)
 RGWPeriodPusher::~RGWPeriodPusher() = default;
 
 void RGWPeriodPusher::handle_notify(RGWRealmNotify type,
-                                    bufferlist::iterator& p)
+                                    bufferlist::const_iterator& p)
 {
   // decode the period
   RGWZonesNeedPeriod info;

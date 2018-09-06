@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <atomic>
 #include <iostream>
+#include <list>
 #include <random>
 #include <string>
 #include <set>
@@ -24,13 +25,38 @@
 #include <gtest/gtest.h>
 
 #include "acconfig.h"
+#include "common/config_obs.h"
 #include "include/Context.h"
-
 #include "msg/async/Event.h"
 #include "msg/async/Stack.h"
 
 
 #if GTEST_HAS_PARAM_TEST
+
+class NoopConfigObserver : public md_config_obs_t {
+  std::list<std::string> options;
+  const char **ptrs = 0;
+
+public:
+  NoopConfigObserver(std::list<std::string> l) : options(l) {
+    ptrs = new const char*[options.size() + 1];
+    unsigned j = 0;
+    for (auto& i : options) {
+      ptrs[j++] = i.c_str();
+    }
+    ptrs[j] = 0;
+  }
+  ~NoopConfigObserver() {
+    delete[] ptrs;
+  }
+
+  const char** get_tracked_conf_keys() const override {
+    return ptrs;
+  }
+  void handle_conf_change(const ConfigProxy& conf,
+			  const std::set <std::string> &changed) override {
+  }
+};
 
 class NetworkWorkerTest : public ::testing::TestWithParam<const char*> {
  public:
@@ -47,17 +73,17 @@ class NetworkWorkerTest : public ::testing::TestWithParam<const char*> {
   void SetUp() override {
     cerr << __func__ << " start set up " << GetParam() << std::endl;
     if (strncmp(GetParam(), "dpdk", 4)) {
-      g_ceph_context->_conf->set_val("ms_type", "async+posix");
+      g_ceph_context->_conf.set_val("ms_type", "async+posix");
       addr = "127.0.0.1:15000";
       port_addr = "127.0.0.1:15001";
     } else {
-      g_ceph_context->_conf->set_val_or_die("ms_type", "async+dpdk");
-      g_ceph_context->_conf->set_val_or_die("ms_dpdk_debug_allow_loopback", "true");
-      g_ceph_context->_conf->set_val_or_die("ms_async_op_threads", "2");
-      g_ceph_context->_conf->set_val_or_die("ms_dpdk_coremask", "0x7");
-      g_ceph_context->_conf->set_val_or_die("ms_dpdk_host_ipv4_addr", "172.16.218.3");
-      g_ceph_context->_conf->set_val_or_die("ms_dpdk_gateway_ipv4_addr", "172.16.218.2");
-      g_ceph_context->_conf->set_val_or_die("ms_dpdk_netmask_ipv4_addr", "255.255.255.0");
+      g_ceph_context->_conf.set_val_or_die("ms_type", "async+dpdk");
+      g_ceph_context->_conf.set_val_or_die("ms_dpdk_debug_allow_loopback", "true");
+      g_ceph_context->_conf.set_val_or_die("ms_async_op_threads", "2");
+      g_ceph_context->_conf.set_val_or_die("ms_dpdk_coremask", "0x7");
+      g_ceph_context->_conf.set_val_or_die("ms_dpdk_host_ipv4_addr", "172.16.218.3");
+      g_ceph_context->_conf.set_val_or_die("ms_dpdk_gateway_ipv4_addr", "172.16.218.2");
+      g_ceph_context->_conf.set_val_or_die("ms_dpdk_netmask_ipv4_addr", "255.255.255.0");
       addr = "172.16.218.3:15000";
       port_addr = "172.16.218.3:15001";
     }

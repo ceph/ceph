@@ -18,8 +18,8 @@ import { FormatterService } from '../services/formatter.service';
   selector: '[cdDimlessBinary]'
 })
 export class DimlessBinaryDirective implements OnInit {
-
-  @Output() ngModelChange: EventEmitter<any> = new EventEmitter();
+  @Output()
+  ngModelChange: EventEmitter<any> = new EventEmitter();
 
   /**
    * Minimum size in bytes.
@@ -31,7 +31,8 @@ export class DimlessBinaryDirective implements OnInit {
    * Example:
    *   Given minBytes=4096 (4KiB), if user type 1KiB, then model will be updated to 4KiB
    */
-  @Input() minBytes: number;
+  @Input()
+  minBytes: number;
 
   /**
    * Maximum size in bytes.
@@ -43,7 +44,8 @@ export class DimlessBinaryDirective implements OnInit {
    * Example:
    *   Given maxBytes=3145728 (3MiB), if user type 4MiB, then model will be updated to 3MiB
    */
-  @Input() maxBytes: number;
+  @Input()
+  maxBytes: number;
 
   /**
    * Value will be rounded up the nearest power of <roundPower>
@@ -52,7 +54,8 @@ export class DimlessBinaryDirective implements OnInit {
    *   Given roundPower=2, if user type 7KiB, then model will be updated to 8KiB
    *   Given roundPower=2, if user type 5KiB, then model will be updated to 4KiB
    */
-  @Input() roundPower: number;
+  @Input()
+  roundPower: number;
 
   /**
    * Default unit that should be used when user do not type a unit.
@@ -62,14 +65,17 @@ export class DimlessBinaryDirective implements OnInit {
    *   Given defaultUnit=null, if user type 7, then model will be updated to 7MiB
    *   Given defaultUnit=k, if user type 7, then model will be updated to 7KiB
    */
-  @Input() defaultUnit: string;
+  @Input()
+  defaultUnit: string;
 
   private el: HTMLInputElement;
 
-  constructor(private elementRef: ElementRef,
-              private control: NgControl,
-              private dimlessBinaryPipe: DimlessBinaryPipe,
-              private formatter: FormatterService) {
+  constructor(
+    private elementRef: ElementRef,
+    private control: NgControl,
+    private dimlessBinaryPipe: DimlessBinaryPipe,
+    private formatter: FormatterService
+  ) {
     this.el = this.elementRef.nativeElement;
   }
 
@@ -113,5 +119,4 @@ export class DimlessBinaryDirective implements OnInit {
   onBlur(value) {
     this.setValue(value);
   }
-
 }

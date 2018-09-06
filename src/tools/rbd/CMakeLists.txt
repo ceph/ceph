@@ -26,8 +26,10 @@ set(rbd_srcs
   action/List.cc
   action/Lock.cc
   action/MergeDiff.cc
+  action/Migration.cc
   action/MirrorPool.cc
   action/MirrorImage.cc
+  action/Namespace.cc
   action/Nbd.cc
   action/ObjectMap.cc
   action/Pool.cc

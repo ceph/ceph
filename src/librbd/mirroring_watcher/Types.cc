@@ -34,7 +34,7 @@ void ModeUpdatedPayload::encode(bufferlist &bl) const {
   encode(static_cast<uint32_t>(mirror_mode), bl);
 }
 
-void ModeUpdatedPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void ModeUpdatedPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   uint32_t mirror_mode_decode;
   decode(mirror_mode_decode, iter);
@@ -52,7 +52,7 @@ void ImageUpdatedPayload::encode(bufferlist &bl) const {
   encode(global_image_id, bl);
 }
 
-void ImageUpdatedPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void ImageUpdatedPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   uint32_t mirror_image_state_decode;
   decode(mirror_image_state_decode, iter);
@@ -72,7 +72,7 @@ void UnknownPayload::encode(bufferlist &bl) const {
   ceph_abort();
 }
 
-void UnknownPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void UnknownPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
 }
 
 void UnknownPayload::dump(Formatter *f) const {
@@ -84,7 +84,7 @@ void NotifyMessage::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void NotifyMessage::decode(bufferlist::iterator& iter) {
+void NotifyMessage::decode(bufferlist::const_iterator& iter) {
   DECODE_START(1, iter);
 
   uint32_t notify_op;

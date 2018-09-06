@@ -168,10 +168,6 @@ package() {
 
 	# udev rules
 	install -m 0644 -D udev/50-rbd.rules $pkgdir$_udevrulesdir/50-rbd.rules || return 1
-	install -m 0644 -D udev/60-ceph-by-parttypeuuid.rules  \
-		$pkgdir$_udevrulesdir/60-ceph-by-parttypeuuid.rules || return 1
-	install -m 0644 -D udev/95-ceph-osd.rules \
-		$pkgdir$_udevrulesdir/95-ceph-osd.rules
 }
 
 base() {
@@ -190,14 +186,13 @@ base() {
 		xfsprogs
 	"
 
-	_pkg $_bindir crushtool monmaptool osdmaptool ceph-run ceph-detect-init
+	_pkg $_bindir crushtool monmaptool osdmaptool ceph-run
 	_pkg $_sbindir ceph-create-keys mount.ceph
 	_pkg $_libexecdir/ceph ceph_common.sh
 	_pkg $_libdir/rados-classes *.so*
 	_pkg $_libdir/ceph/erasure-code libec_*.so*
 	_pkg $_libdir/ceph/compressor libceph_*.so*
 	_pkg $_sysconfdir/logrotate.d ceph
-	_pkg $_python_sitelib ceph_detect_init* ceph_disk*
 	for dir in tmp bootstrap-osd bootstrap-mds bootstrap-rgw; do
     	install -m 750 -o $_ceph_uid -g $_ceph_gid -d \
     		$subpkgdir$_localstatedir/lib/ceph/$dir || return 1
@@ -296,9 +291,8 @@ osd() {
 	depends="ceph-base parted gptfdisk"
 
 	_pkg $_bindir ceph-clsinfo ceph-bluefs-tool ceph-objectstore-tool ceph-osd
-	_pkg $_sbindir ceph-disk
+	_pkg $_sbindir ceph-volume
 	_pkg $_libexecdir/ceph ceph-osd-prestart.sh
-	_pkg $_udevrulesdir 60-ceph-by-parttypeuuid.rules 95-ceph-osd.rules
 	install -m 750 -o $_ceph_uid -g $_ceph_gid -d \
 		$subpkgdir$_localstatedir/lib/ceph/osd
 }
@@ -321,8 +315,7 @@ librados_dev() {
 		page.h \
 		crc32c.h \
 		rados_types.h \
-		rados_types.hpp \
-		memory.h
+		rados_types.hpp
 	_pkg $_libdir librados.so
 	_pkg $_bindir librados-config
 }

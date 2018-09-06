@@ -672,7 +672,7 @@ struct AWSSyncInstanceEnv {
 
   void get_profile(const rgw_bucket& bucket, std::shared_ptr<AWSSyncConfig_Profile> *ptarget) {
     conf.find_profile(bucket, ptarget);
-    assert(ptarget);
+    ceph_assert(ptarget);
   }
 };
 
@@ -691,7 +691,7 @@ static int do_decode_rest_obj(CephContext *cct, map<string, bufferlist>& attrs, 
   auto aiter = attrs.find(RGW_ATTR_ACL);
   if (aiter != attrs.end()) {
     bufferlist& bl = aiter->second;
-    bufferlist::iterator bliter = bl.begin();
+    auto bliter = bl.cbegin();
     try {
       info->acls.decode(bliter);
     } catch (buffer::error& err) {
@@ -949,7 +949,7 @@ public:
   }
 
   void send_ready(const rgw_rest_obj& rest_obj) override {
-    RGWRESTStreamS3PutObj *r = (RGWRESTStreamS3PutObj *)req;
+    RGWRESTStreamS3PutObj *r = static_cast<RGWRESTStreamS3PutObj *>(req);
 
     map<string, string> new_attrs;
     if (!multipart.is_multipart) {
@@ -1088,7 +1088,7 @@ public:
         return set_cr_error(retcode);
       }
 
-      if (!((RGWAWSStreamPutCRF *)out_crf.get())->get_etag(petag)) {
+      if (!(static_cast<RGWAWSStreamPutCRF *>(out_crf.get()))->get_etag(petag)) {
         ldout(sync_env->cct, 0) << "ERROR: failed to get etag from PUT request" << dendl;
         return set_cr_error(-EIO);
       }
@@ -1531,7 +1531,7 @@ int decode_attr(map<string, bufferlist>& attrs, const char *attr_name, T *result
     *result = def_val;
     return 0;
   }
-  bufferlist::iterator bliter = bl.begin();
+  auto bliter = bl.cbegin();
   try {
     decode(*result, bliter);
   } catch (buffer::error& err) {
@@ -1759,10 +1759,11 @@ public:
 
   ~RGWAWSDataSyncModule() {}
 
-  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch,
+  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key,
+                            std::optional<uint64_t> versioned_epoch,
                             rgw_zone_set *zones_trace) override {
-    ldout(sync_env->cct, 0) << instance.id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
-    return new RGWAWSHandleRemoteObjCR(sync_env, bucket_info, key, instance, versioned_epoch);
+    ldout(sync_env->cct, 0) << instance.id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
+    return new RGWAWSHandleRemoteObjCR(sync_env, bucket_info, key, instance, versioned_epoch.value_or(0));
   }
   RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch,
                               rgw_zone_set *zones_trace) override {

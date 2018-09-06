@@ -62,12 +62,12 @@ public:
     while (!pintail.empty()) {
       lru_remove(pintail.front());
     }
-    assert(num_pinned == 0);
+    ceph_assert(num_pinned == 0);
   }
 
   // insert at top of lru
   void lru_insert_top(LRUObject *o) {
-    assert(!o->lru);
+    ceph_assert(!o->lru);
     o->lru = this;
     top.push_front(&o->lru_link);
     if (o->lru_pinned) num_pinned++;
@@ -76,7 +76,7 @@ public:
 
   // insert at mid point in lru
   void lru_insert_mid(LRUObject *o) {
-    assert(!o->lru);
+    ceph_assert(!o->lru);
     o->lru = this;
     bottom.push_front(&o->lru_link);
     if (o->lru_pinned) num_pinned++;
@@ -85,7 +85,7 @@ public:
 
   // insert at bottom of lru
   void lru_insert_bot(LRUObject *o) {
-    assert(!o->lru);
+    ceph_assert(!o->lru);
     o->lru = this;
     bottom.push_back(&o->lru_link);
     if (o->lru_pinned) num_pinned++;
@@ -96,7 +96,7 @@ public:
   LRUObject *lru_remove(LRUObject *o) {
     if (!o->lru) return o;
     auto list = o->lru_link.get_list();
-    assert(list == &top || list == &bottom || list == &pintail);
+    ceph_assert(list == &top || list == &bottom || list == &pintail);
     o->lru_link.remove_myself();
     if (o->lru_pinned) num_pinned--;
     o->lru = nullptr;
@@ -109,9 +109,9 @@ public:
     if (!o->lru) {
       lru_insert_top(o);
     } else {
-      assert(o->lru == this);
+      ceph_assert(o->lru == this);
       auto list = o->lru_link.get_list();
-      assert(list == &top || list == &bottom || list == &pintail);
+      ceph_assert(list == &top || list == &bottom || list == &pintail);
       top.push_front(&o->lru_link);
       adjust();
     }
@@ -123,9 +123,9 @@ public:
     if (!o->lru) {
       lru_insert_mid(o);
     } else {
-      assert(o->lru == this);
+      ceph_assert(o->lru == this);
       auto list = o->lru_link.get_list();
-      assert(list == &top || list == &bottom || list == &pintail);
+      ceph_assert(list == &top || list == &bottom || list == &pintail);
       if (list == &top) return false;
       bottom.push_front(&o->lru_link);
       adjust();
@@ -138,9 +138,9 @@ public:
     if (!o->lru) {
       lru_insert_bot(o);
     } else {
-      assert(o->lru == this);
+      ceph_assert(o->lru == this);
       auto list = o->lru_link.get_list();
-      assert(list == &top || list == &bottom || list == &pintail);
+      ceph_assert(list == &top || list == &bottom || list == &pintail);
       bottom.push_back(&o->lru_link);
       adjust();
     }

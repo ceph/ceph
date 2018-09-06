@@ -196,7 +196,7 @@ protected:
    * @endverbatim
    */
 
-  virtual void on_start_fail(int r, const std::string &desc = "");
+  virtual void on_start_fail(int r, const std::string &desc);
   virtual bool on_start_interrupted();
 
   virtual void on_stop_journal_replay(int r = 0, const std::string &desc = "");
@@ -378,7 +378,7 @@ private:
   void queue_mirror_image_status_update(const OptionalState &state);
   void send_mirror_status_update(const OptionalState &state);
   void handle_mirror_status_update(int r);
-  void reschedule_update_status_task(int new_interval = 0);
+  void reschedule_update_status_task(int new_interval);
 
   void shut_down(int r);
   void handle_shut_down(int r);

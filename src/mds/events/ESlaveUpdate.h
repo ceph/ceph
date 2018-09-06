@@ -35,7 +35,7 @@ struct link_rollback {
   link_rollback() : ino(0), was_inc(false) {}
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<link_rollback*>& ls);
 };
@@ -56,7 +56,7 @@ struct rmdir_rollback {
   bufferlist snapbl;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<rmdir_rollback*>& ls);
 };
@@ -75,7 +75,7 @@ struct rename_rollback {
     drec() : remote_d_type((char)S_IFREG) {}
 
     void encode(bufferlist& bl) const;
-    void decode(bufferlist::iterator& bl);
+    void decode(bufferlist::const_iterator& bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<drec*>& ls);
   };
@@ -89,7 +89,7 @@ struct rename_rollback {
   bufferlist desti_snapbl;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<rename_rollback*>& ls);
 };
@@ -144,7 +144,7 @@ public:
   EMetaBlob *get_metablob() override { return &commit; }
 
   void encode(bufferlist& bl, uint64_t features) const override;
-  void decode(bufferlist::iterator& bl) override;
+  void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
   static void generate_test_instances(list<ESlaveUpdate*>& ls);
 

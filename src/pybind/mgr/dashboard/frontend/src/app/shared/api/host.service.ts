@@ -1,15 +1,20 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-@Injectable()
-export class HostService {
+import { ApiModule } from './api.module';
 
-  constructor(private http: HttpClient) {
-  }
+@Injectable({
+  providedIn: ApiModule
+})
+export class HostService {
+  constructor(private http: HttpClient) {}
 
   list() {
-    return this.http.get('api/host').toPromise().then((resp: any) => {
-      return resp;
-    });
+    return this.http
+      .get('api/host')
+      .toPromise()
+      .then((resp: any) => {
+        return resp;
+      });
   }
 }

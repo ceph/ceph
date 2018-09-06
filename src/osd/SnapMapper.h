@@ -108,7 +108,7 @@ public:
       : oid(oid), snaps(snaps) {}
     object_snaps() {}
     void encode(bufferlist &bl) const;
-    void decode(bufferlist::iterator &bp);
+    void decode(bufferlist::const_iterator &bp);
   };
 
 private:
@@ -157,7 +157,7 @@ public:
       return string();
     char buf[20];
     int r = snprintf(buf, sizeof(buf), ".%x", (int)shard);
-    assert(r < (int)sizeof(buf));
+    ceph_assert(r < (int)sizeof(buf));
     return string(buf, r) + '_';
   }
   uint32_t mask_bits;
@@ -184,7 +184,7 @@ public:
   void update_bits(
     uint32_t new_bits  ///< [in] new split bits
     ) {
-    assert(new_bits >= mask_bits);
+    ceph_assert(new_bits >= mask_bits);
     mask_bits = new_bits;
     set<string> _prefixes = hobject_t::get_prefixes(
       mask_bits,

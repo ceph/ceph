@@ -14,10 +14,15 @@
 
 #include "include/types.h"
 
+#include "include/rados/buffer.h"
 #include "include/rados/librados.hpp"
 #include "include/rados/rados_types.hpp"
-#include "include/radosstriper/libradosstriper.hpp"
-using namespace libradosstriper;
+
+#include "acconfig.h"
+#ifdef WITH_LIBRADOSSTRIPER
+ #include "include/radosstriper/libradosstriper.hpp"
+ using namespace libradosstriper;
+#endif
 
 #include "common/config.h"
 #include "common/ceph_argparse.h"
@@ -67,16 +72,11 @@ void usage(ostream& out)
 "usage: rados [options] [commands]\n"
 "POOL COMMANDS\n"
 "   lspools                          list pools\n"
-"   mkpool <pool-name> [123[ 4]]     create pool <pool-name>'\n"
-"                                    [with auid 123[and using crush rule 4]]\n"
 "   cppool <pool-name> <dest-pool>   copy content of a pool\n"
-"   rmpool <pool-name> [<pool-name> --yes-i-really-really-mean-it]\n"
-"                                    remove pool <pool-name>'\n"
 "   purge <pool-name> --yes-i-really-really-mean-it\n"
 "                                    remove all objects from pool <pool-name> without removing it\n"
 "   df                               show per-pool and total usage\n"
 "   ls                               list objects in pool\n\n"
-"   chown 123                        change the pool owner to auid 123\n"
 "\n"
 "POOL SNAP COMMANDS\n"
 "   lssnap                           list snaps\n"
@@ -131,6 +131,7 @@ void usage(ostream& out)
 "   set-chunk <object A> <offset> <length> --target-pool <caspool> <target object A> <taget-offset> [--with-reference]\n"
 "                                    convert an object to chunked object\n"
 "   tier-promote <obj-name>	     promote the object to the base tier\n"
+"   unset-manifest <obj-name>	     unset redirect or chunked object\n"
 "\n"
 "IMPORT AND EXPORT\n"
 "   export [filename]\n"
@@ -201,10 +202,12 @@ void usage(ostream& out)
 "        Use with cp to specify the locator of the new object\n"
 "   --target-nspace\n"
 "        Use with cp to specify the namespace of the new object\n"
+#ifdef WITH_LIBRADOSSTRIPER
 "   --striper\n"
 "        Use radostriper interface rather than pure rados\n"
 "        Available for stat, get, put, truncate, rm, ls and \n"
 "        all xattr related operations\n"
+#endif
 "\n"
 "BENCH OPTIONS:\n"
 "   -t N\n"
@@ -237,6 +240,170 @@ void usage(ostream& out)
 "OMAP OPTIONS:\n"
 "    --omap-key-file file            read the omap key from a file\n";
 }
+
+namespace detail {
+
+#ifdef WITH_LIBRADOSSTRIPER
+RadosStriper& striper()
+{
+  static RadosStriper s;
+  return s;
+}
+#endif
+
+int read([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, buffer::list& out_data, const unsigned op_size, const uint64_t offset, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return striper().read(oid, &out_data, op_size, offset);
+#endif
+
+  return io_ctx.read(oid, out_data, op_size, offset);
+}
+
+int write([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, buffer::list& indata, const uint64_t count, const uint64_t offset, [[maybe_unused]] const bool use_striper)
+{
+ #ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return striper().write(oid, indata, count, offset);
+#endif
+
+  return io_ctx.write(oid, indata, count, offset);
+}
+
+int write_full([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, bufferlist& indata, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return striper().write_full(oid, indata);
+#endif
+
+  return io_ctx.write_full(oid, indata);
+}
+
+int trunc([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, const uint64_t offset, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return striper().trunc(oid, offset);
+#endif
+ 
+  return io_ctx.trunc(oid, offset);
+}
+
+int append([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, buffer::list& indata, const uint64_t count, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return striper().append(oid, indata, count);
+#endif
+
+  return io_ctx.append(oid, indata, count); 
+}
+
+int setxattr([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, const std::string& attr_name, buffer::list& bl, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return striper().setxattr(oid, attr_name.c_str(), bl);
+#endif
+
+  return io_ctx.setxattr(oid, attr_name.c_str(), bl);
+}
+
+int getxattr([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, const std::string& attr_name, buffer::list& bl, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return striper().getxattr(oid, attr_name.c_str(), bl);
+#endif
+
+  return io_ctx.getxattr(oid, attr_name.c_str(), bl);
+}
+
+int rmxattr([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, const std::string& attr_name, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return striper().rmxattr(oid, attr_name.c_str());
+#endif
+
+  return io_ctx.rmxattr(oid, attr_name.c_str());
+}
+
+int getxattrs([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, std::map<std::string, buffer::list>& attrset, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return striper().getxattrs(oid, attrset); 
+#endif
+
+  return io_ctx.getxattrs(oid, attrset);
+}
+
+int remove([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, const int flags, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return striper().remove(oid, flags); 
+#endif
+
+  return io_ctx.remove(oid, flags);
+}
+
+int remove([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return striper().remove(oid);
+#endif
+
+  return io_ctx.remove(oid);
+}
+
+std::string get_oid(librados::NObjectIterator& i, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return i->get_oid().substr(0, i->get_oid().length()-17);
+#endif
+
+  return i->get_oid();
+}
+
+int stat([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, uint64_t& size, time_t& mtime, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return striper().stat(oid, &size, &mtime);
+#endif
+
+  return io_ctx.stat(oid, &size, &mtime);
+}
+
+int stat2([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, uint64_t& size, timespec& mtime, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return striper().stat2(oid, &size, &mtime);
+#endif
+
+  return io_ctx.stat2(oid, &size, &mtime);
+}
+
+void dump_name(Formatter *formatter, const librados::NObjectIterator& i, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper) {
+     formatter->dump_string("name", i->get_oid().substr(0, i->get_oid().length()-17));
+     return;
+  }
+#endif
+
+  formatter->dump_string("name", i->get_oid());
+}
+
+} // namespace detail
 
 unsigned default_op_size = 1 << 22;
 
@@ -284,9 +451,7 @@ static int dump_data(std::string const &filename, bufferlist const &data)
 }
 
 
-static int do_get(IoCtx& io_ctx, RadosStriper& striper,
-		  const char *objname, const char *outfile, unsigned op_size,
-		  bool use_striper)
+static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, unsigned op_size, [[maybe_unused]] const bool use_striper)
 {
   string oid(objname);
 
@@ -306,11 +471,8 @@ static int do_get(IoCtx& io_ctx, RadosStriper& striper,
   int ret;
   while (true) {
     bufferlist outdata;
-    if (use_striper) {
-      ret = striper.read(oid, &outdata, op_size, offset);
-    } else {
-      ret = io_ctx.read(oid, outdata, op_size, offset);
-    }
+
+    ret = detail::read(io_ctx, oid, outdata, op_size, offset, use_striper);
     if (ret <= 0) {
       goto out;
     }
@@ -384,9 +546,10 @@ static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_p
   return 0;
 }
 
-static int do_put(IoCtx& io_ctx, RadosStriper& striper,
-		  const char *objname, const char *infile, int op_size,
-		  uint64_t obj_offset, bool use_striper)
+static int do_put(IoCtx& io_ctx, 
+            const char *objname, const char *infile, int op_size,
+            uint64_t obj_offset,
+            const bool use_striper)
 {
   string oid(objname);
   bool stdio = (strcmp(infile, "-") == 0);
@@ -411,39 +574,27 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
  
     if (count == 0) {
      if (offset == obj_offset) { // in case we have to create an empty object & if obj_offset > 0 do a hole
-	if (use_striper) {
-	  ret = striper.write_full(oid, indata); // indata is empty
-	} else {
-	  ret = io_ctx.write_full(oid, indata); // indata is empty
-	}
-	if (ret < 0) {
-	  goto out;
-	}
-	if (offset) {
-	  if (use_striper) {
-	    ret = striper.trunc(oid, offset); // before truncate, object must be existed.
-	  } else {
-	    ret = io_ctx.trunc(oid, offset); // before truncate, object must be existed.
-	  }
+         ret = detail::write_full(io_ctx, oid, indata, use_striper); // indata is empty
 
-	  if (ret < 0) {
-	    goto out;
-	  }
-	}
+	    if (ret < 0) {
+	        goto out;
+	    }
+
+	    if (offset) {
+            ret = detail::trunc(io_ctx, oid, offset, use_striper); // before truncate, object must be existed.
+
+	      if (ret < 0) {
+	          goto out;
+	      }
+	    }
       }
-      continue;
+     continue;
     }
-    if (use_striper) {
-      if (offset == 0)
-	ret = striper.write_full(oid, indata);
-      else
-	ret = striper.write(oid, indata, count, offset);
-    } else {
-      if (offset == 0)
-	ret = io_ctx.write_full(oid, indata);
-      else
-	ret = io_ctx.write(oid, indata, count, offset);
-    }
+
+    if (0 == offset)
+      ret = detail::write_full(io_ctx, oid, indata, use_striper);
+    else
+      ret = detail::write(io_ctx, oid, indata, count, offset, use_striper);
 
     if (ret < 0) {
       goto out;
@@ -457,9 +608,9 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
   return ret;
 }
 
-static int do_append(IoCtx& io_ctx, RadosStriper& striper,
+static int do_append(IoCtx& io_ctx, 
                   const char *objname, const char *infile, int op_size,
-                  bool use_striper)
+                  const bool use_striper)
 {
   string oid(objname);
   bool stdio = (strcmp(infile, "-") == 0);
@@ -480,11 +631,7 @@ static int do_append(IoCtx& io_ctx, RadosStriper& striper,
       cerr << "error reading input file " << infile << ": " << cpp_strerror(ret) << std::endl;
       goto out;
     }
-    if (use_striper) {
-      ret = striper.append(oid, indata, count);
-    } else {
-      ret = io_ctx.append(oid, indata, count);
-    }
+    ret = detail::append(io_ctx, oid, indata, count, use_striper);
 
     if (ret < 0) {
       goto out;
@@ -912,7 +1059,7 @@ protected:
 
   int aio_read(const std::string& oid, int slot, bufferlist *pbl, size_t len,
 	       size_t offset) override {
-    return io_ctx.aio_read(oid, completions[slot], pbl, len, 0);
+    return io_ctx.aio_read(oid, completions[slot], pbl, len, offset);
   }
 
   int aio_write(const std::string& oid, int slot, bufferlist& bl, size_t len,
@@ -1381,11 +1528,11 @@ static void dump_shard(const shard_info_t& shard,
      || shard.has_obj_size_info_mismatch()) &&
         !shard.has_info_missing()) {
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(OI_ATTR);
-    assert(k != shard.attrs.end()); // Can't be missing
+    ceph_assert(k != shard.attrs.end()); // Can't be missing
     if (!shard.has_info_corrupted()) {
       object_info_t oi;
       bufferlist bl;
-      bufferlist::iterator bliter = k->second.begin();
+      auto bliter = k->second.cbegin();
       decode(oi, bliter);  // Can't be corrupted
       f.open_object_section("object_info");
       oi.dump(&f);
@@ -1400,11 +1547,11 @@ static void dump_shard(const shard_info_t& shard,
        || inc.has_snapset_inconsistency()) &&
        !shard.has_snapset_missing()) {
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(SS_ATTR);
-    assert(k != shard.attrs.end()); // Can't be missing
+    ceph_assert(k != shard.attrs.end()); // Can't be missing
     if (!shard.has_snapset_corrupted()) {
       SnapSet ss;
       bufferlist bl;
-      bufferlist::iterator bliter = k->second.begin();
+      auto bliter = k->second.cbegin();
       decode(ss, bliter);  // Can't be corrupted
       f.open_object_section("snapset");
       ss.dump(&f);
@@ -1419,11 +1566,11 @@ static void dump_shard(const shard_info_t& shard,
        || inc.has_hinfo_inconsistency()) &&
        !shard.has_hinfo_missing()) {
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(ECUtil::get_hinfo_key());
-    assert(k != shard.attrs.end()); // Can't be missing
+    ceph_assert(k != shard.attrs.end()); // Can't be missing
     if (!shard.has_hinfo_corrupted()) {
       ECUtil::HashInfo hi;
       bufferlist bl;
-      bufferlist::iterator bliter = k->second.begin();
+      auto bliter = k->second.cbegin();
       decode(hi, bliter);  // Can't be corrupted
       f.open_object_section("hashinfo");
       hi.dump(&f);
@@ -1508,8 +1655,8 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
       object_info_t oi;
       bufferlist bl;
       auto k = shard.attrs.find(OI_ATTR);
-      assert(k != shard.attrs.end()); // Can't be missing
-      bufferlist::iterator bliter = k->second.begin();
+      ceph_assert(k != shard.attrs.end()); // Can't be missing
+      auto bliter = k->second.cbegin();
       decode(oi, bliter);  // Can't be corrupted
       f.open_object_section("selected_object_info");
       oi.dump(&f);
@@ -1540,7 +1687,7 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
   if (inc.ss_bl.length()) {
     SnapSet ss;
     bufferlist bl = inc.ss_bl;
-    bufferlist::iterator bliter = bl.begin();
+    auto bliter = bl.cbegin();
     decode(ss, bliter);  // Can't be corrupted
     f.open_object_section("snapset");
     ss.dump(&f);
@@ -1646,7 +1793,7 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     }
     // It must be the same interval every time.  EAGAIN would
     // occur if interval changes.
-    assert(start.name.empty() || first_interval == interval);
+    ceph_assert(start.name.empty() || first_interval == interval);
     if (start.name.empty()) {
       first_interval = interval;
       formatter.open_object_section("info");
@@ -1729,7 +1876,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   Rados rados;
   IoCtx io_ctx;
-  RadosStriper striper;
 
   i = opts.find("create");
   if (i != opts.end()) {
@@ -1947,7 +2093,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
 
   i = opts.find("pgid");
-  boost::optional<pg_t> pgid(i != opts.end(), std::move(pg_t()));
+  boost::optional<pg_t> pgid(i != opts.end(), pg_t());
   if (pgid && (!pgid->parse(i->second.c_str()) || (pool_name && rados.pool_lookup(pool_name) != pgid->pool()))) {
     cerr << "invalid pgid" << std::endl;
     ret = -1;
@@ -1974,7 +2120,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
 
   if (create_pool) {
-    ret = rados.pool_create(pool_name, 0, 0);
+    ret = rados.pool_create(pool_name);
     if (ret < 0) {
       cerr << "error creating pool " << pool_name << ": "
 	   << cpp_strerror(ret) << std::endl;
@@ -2019,16 +2165,20 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       }
     }
 
+#ifdef WITH_LIBRADOSSTRIPER
     // create striper interface
     if (opts.find("striper") != opts.end()) {
-      ret = RadosStriper::striper_create(io_ctx, &striper);
+      // Note that this call does a tricky thing by reaching into a "singleton". We count
+      // on this happening only once:
+      ret = RadosStriper::striper_create(io_ctx, &detail::striper());
       if (0 != ret) {
-	cerr << "error opening pool " << pool_name << " with striper interface: "
-	     << cpp_strerror(ret) << std::endl;
-	goto out;
+          cerr << "error opening pool " << pool_name << " with striper interface: "
+               << cpp_strerror(ret) << std::endl;
+	      goto out;
       }
       use_striper = true;
     }
+#endif // USE_LIBRADOSSTRIPER
   }
 
   // snapname?
@@ -2082,7 +2232,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     cout << "selected snap " << snapid << " '" << name << "'" << std::endl;
   }
 
-  assert(!nargs.empty());
+  ceph_assert(!nargs.empty());
 
   // list pools?
   if (strcmp(nargs[0], "lspools") == 0) {
@@ -2239,6 +2389,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	librados::NObjectIterator i = pgid ? io_ctx.nobjects_begin(pgid->ps()) : io_ctx.nobjects_begin();
 	librados::NObjectIterator i_end = io_ctx.nobjects_end();
 	for (; i != i_end; ++i) {
+#ifdef WITH_LIBRADOSSTRIPER
 	  if (use_striper) {
 	    // in case of --striper option, we only list striped
 	    // objects, so we only display the first object of
@@ -2247,6 +2398,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	    if (l <= 17 ||
 		(0 != i->get_oid().compare(l-17, 17,".0000000000000000"))) continue;
 	  }
+#endif // WITH_LIBRADOSSTRIPER
           if (pgid) {
             uint32_t ps;
             if (io_ctx.get_object_pg_hash_position2(i->get_oid(), &ps) || pgid->ps() != ps)
@@ -2256,22 +2408,18 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	    // Only include namespace in output when wildcard specified
 	    if (wildcard)
 	      *outstream << i->get_nspace() << "\t";
-	    if (use_striper) {
-	      *outstream << i->get_oid().substr(0, i->get_oid().length()-17);
-	    } else {
-	      *outstream << i->get_oid();
-	    }
+      
+        *outstream << detail::get_oid(i, use_striper);
+
 	    if (i->get_locator().size())
 	      *outstream << "\t" << i->get_locator();
 	    *outstream << std::endl;
 	  } else {
 	    formatter->open_object_section("object");
 	    formatter->dump_string("namespace", i->get_nspace());
-	    if (use_striper) {
-	      formatter->dump_string("name", i->get_oid().substr(0, i->get_oid().length()-17));
-	    } else {
-	      formatter->dump_string("name", i->get_oid());
-	    }
+
+        detail::dump_name(formatter, i, use_striper);
+
 	    if (i->get_locator().size())
 	      formatter->dump_string("locator", i->get_locator());
 	    formatter->close_section(); //object
@@ -2294,24 +2442,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!stdout)
       delete outstream;
   }
-  else if (strcmp(nargs[0], "chown") == 0) {
-    if (!pool_name || nargs.size() < 2)
-      usage_exit();
-
-    char* endptr = NULL;
-    uint64_t new_auid = strtol(nargs[1], &endptr, 10);
-    if (*endptr) {
-      cerr << "Invalid value for new-auid: '" << nargs[1] << "'" << std::endl;
-      ret = -1;
-      goto out;
-    }
-    ret = io_ctx.set_auid(new_auid);
-    if (ret < 0) {
-      cerr << "error changing auid on pool " << io_ctx.get_pool_name() << ':'
-	   << cpp_strerror(ret) << std::endl;
-    } else cerr << "changed auid on pool " << io_ctx.get_pool_name()
-		<< " to " << new_auid << std::endl;
-  }
   else if (strcmp(nargs[0], "mapext") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
@@ -2333,11 +2463,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     string oid(nargs[1]);
     uint64_t size;
     time_t mtime;
-    if (use_striper) {
-      ret = striper.stat(oid, &size, &mtime);
-    } else {
-      ret = io_ctx.stat(oid, &size, &mtime);
-    }
+
+    ret = detail::stat(io_ctx, oid, size, mtime, use_striper);
+
     if (ret < 0) {
       cerr << " error stat-ing " << pool_name << "/" << oid << ": "
            << cpp_strerror(ret) << std::endl;
@@ -2354,11 +2482,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     string oid(nargs[1]);
     uint64_t size;
     struct timespec mtime;
-    if (use_striper) {
-      ret = striper.stat2(oid, &size, &mtime);
-    } else {
-      ret = io_ctx.stat2(oid, &size, &mtime);
-    }
+
+    ret = detail::stat2(io_ctx, oid, size, mtime, use_striper);
+
     if (ret < 0) {
       cerr << " error stat-ing " << pool_name << "/" << oid << ": "
 	   << cpp_strerror(ret) << std::endl;
@@ -2397,7 +2523,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   else if (strcmp(nargs[0], "get") == 0) {
     if (!pool_name || nargs.size() < 3)
       usage_exit();
-    ret = do_get(io_ctx, striper, nargs[1], nargs[2], op_size, use_striper);
+    ret = do_get(io_ctx, nargs[1], nargs[2], op_size, use_striper);
     if (ret < 0) {
       cerr << "error getting " << pool_name << "/" << nargs[1] << ": " << cpp_strerror(ret) << std::endl;
       goto out;
@@ -2406,7 +2532,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   else if (strcmp(nargs[0], "put") == 0) {
     if (!pool_name || nargs.size() < 3)
       usage_exit();
-    ret = do_put(io_ctx, striper, nargs[1], nargs[2], op_size, obj_offset, use_striper);
+    ret = do_put(io_ctx, nargs[1], nargs[2], op_size, obj_offset, use_striper);
     if (ret < 0) {
       cerr << "error putting " << pool_name << "/" << nargs[1] << ": " << cpp_strerror(ret) << std::endl;
       goto out;
@@ -2415,7 +2541,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   else if (strcmp(nargs[0], "append") == 0) {
     if (!pool_name || nargs.size() < 3)
       usage_exit();
-    ret = do_append(io_ctx, striper, nargs[1], nargs[2], op_size, use_striper);
+    ret = do_append(io_ctx, nargs[1], nargs[2], op_size, use_striper);
     if (ret < 0) {
       cerr << "error appending " << pool_name << "/" << nargs[1] << ": " << cpp_strerror(ret) << std::endl;
       goto out;
@@ -2437,11 +2563,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cerr << "error, cannot truncate to negative value" << std::endl;
       usage_exit();
     }
-    if (use_striper) {
-      ret = striper.trunc(oid, size);
-    } else {
-      ret = io_ctx.trunc(oid, size);
-    }
+
+    ret = detail::trunc(io_ctx, oid, size, use_striper);
+
     if (ret < 0) {
       cerr << "error truncating oid "
 	   << oid << " to " << size << ": "
@@ -2468,11 +2592,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       } while (ret > 0);
     }
 
-    if (use_striper) {
-      ret = striper.setxattr(oid, attr_name.c_str(), bl);
-    } else {
-      ret = io_ctx.setxattr(oid, attr_name.c_str(), bl);
-    }
+    ret = detail::setxattr(io_ctx, oid, attr_name, bl, use_striper);
+
     if (ret < 0) {
       cerr << "error setting xattr " << pool_name << "/" << oid << "/" << attr_name << ": " << cpp_strerror(ret) << std::endl;
       goto out;
@@ -2488,11 +2609,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     string attr_name(nargs[2]);
 
     bufferlist bl;
-    if (use_striper) {
-      ret = striper.getxattr(oid, attr_name.c_str(), bl);
-    } else {
-      ret = io_ctx.getxattr(oid, attr_name.c_str(), bl);
-    }
+    ret = detail::getxattr(io_ctx, oid, attr_name, bl, use_striper);
+
     if (ret < 0) {
       cerr << "error getting xattr " << pool_name << "/" << oid << "/" << attr_name << ": " << cpp_strerror(ret) << std::endl;
       goto out;
@@ -2508,11 +2626,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     string oid(nargs[1]);
     string attr_name(nargs[2]);
 
-    if (use_striper) {
-      ret = striper.rmxattr(oid, attr_name.c_str());
-    } else {
-      ret = io_ctx.rmxattr(oid, attr_name.c_str());
-    }
+    ret = detail::rmxattr(io_ctx, oid, attr_name, use_striper);
+
     if (ret < 0) {
       cerr << "error removing xattr " << pool_name << "/" << oid << "/" << attr_name << ": " << cpp_strerror(ret) << std::endl;
       goto out;
@@ -2522,13 +2637,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage_exit();
 
     string oid(nargs[1]);
-    map<std::string, bufferlist> attrset;
     bufferlist bl;
-    if (use_striper) {
-      ret = striper.getxattrs(oid, attrset);
-    } else {
-      ret = io_ctx.getxattrs(oid, attrset);
-    }
+    map<std::string, bufferlist> attrset;
+
+    ret = detail::getxattrs(io_ctx, oid, attrset, use_striper);
+
     if (ret < 0) {
       cerr << "error getting xattr set " << pool_name << "/" << oid << ": " << cpp_strerror(ret) << std::endl;
       goto out;
@@ -2789,20 +2902,14 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ++iter;
     for (; iter != nargs.end(); ++iter) {
       const string & oid = *iter;
-      if (use_striper) {
-	if (forcefull) {
-	  ret = striper.remove(oid, CEPH_OSD_FLAG_FULL_FORCE);
-	} else {
-	  ret = striper.remove(oid);
-	}
-      } else {
-	if (forcefull) {
-	  ret = io_ctx.remove(oid, CEPH_OSD_FLAG_FULL_FORCE);
-	} else {
-	  ret = io_ctx.remove(oid);
-	}
-      }
-      if (ret < 0) {
+
+    if (forcefull) {
+        ret = detail::remove(io_ctx, oid, CEPH_OSD_FLAG_FULL_FORCE, use_striper);
+    } else {
+        ret = detail::remove(io_ctx, oid, use_striper);
+    }
+
+    if (ret < 0) {
         string name = (nspace.size() ? nspace + "/" : "" ) + oid;
         cerr << "error removing " << pool_name << ">" << name << ": " << cpp_strerror(ret) << std::endl;
         goto out;
@@ -2831,7 +2938,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	cerr << "error reading " << pool_name << "/" << oid << ": " << cpp_strerror(ret) << std::endl;
 	goto out;
       }
-      bufferlist::iterator p = outdata.begin();
+      auto p = outdata.cbegin();
       bufferlist header;
       map<string, bufferlist> kv;
       try {
@@ -2884,7 +2991,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     bufferlist hdr;
     map<string, bufferlist> kv;
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     try {
       decode(hdr, p);
       decode(kv, p);
@@ -2913,38 +3020,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ret = 0;
   }
 
-  else if (strcmp(nargs[0], "mkpool") == 0) {
-    int auid = 0;
-    __u8 crush_rule = 0;
-    if (nargs.size() < 2)
-      usage_exit();
-    if (nargs.size() > 2) {
-      char* endptr = NULL;
-      auid = strtol(nargs[2], &endptr, 10);
-      if (*endptr) {
-	cerr << "Invalid value for auid: '" << nargs[2] << "'" << std::endl;
-	ret = -EINVAL;
-	goto out;
-      }
-      cerr << "setting auid:" << auid << std::endl;
-      if (nargs.size() > 3) {
-	crush_rule = (__u8)strtol(nargs[3], &endptr, 10);
-	if (*endptr) {
-	  cerr << "Invalid value for crush-rule: '" << nargs[3] << "'" << std::endl;
-	  ret = -EINVAL;
-	  goto out;
-	}
-	cerr << "using crush rule " << (int)crush_rule << std::endl;
-      }
-    }
-    ret = rados.pool_create(nargs[1], auid, crush_rule);
-    if (ret < 0) {
-      cerr << "error creating pool " << nargs[1] << ": "
-	   << cpp_strerror(ret) << std::endl;
-      goto out;
-    }
-    cout << "successfully created pool " << nargs[1] << std::endl;
-  }
   else if (strcmp(nargs[0], "cppool") == 0) {
     bool force = nargs.size() == 4 && !strcmp(nargs[3], "--yes-i-really-mean-it");
     if (nargs.size() != 3 && !(nargs.size() == 4 && force))
@@ -2980,30 +3055,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
     cout << "successfully copied pool " << nargs[1] << std::endl;
-  }
-  else if (strcmp(nargs[0], "rmpool") == 0) {
-    if (nargs.size() < 2)
-      usage_exit();
-    if (nargs.size() < 4 ||
-	strcmp(nargs[1], nargs[2]) != 0 ||
-	strcmp(nargs[3], "--yes-i-really-really-mean-it") != 0) {
-      cerr << "WARNING:\n"
-	   << "  This will PERMANENTLY DESTROY an entire pool of objects with no way back.\n"
-	   << "  To confirm, pass the pool to remove twice, followed by\n"
-	   << "  --yes-i-really-really-mean-it" << std::endl;
-      ret = -1;
-      goto out;
-    }
-    ret = rados.pool_delete(nargs[1]);
-    if (ret >= 0) {
-      cout << "successfully deleted pool " << nargs[1] << std::endl;
-    } else {
-      cerr << "pool " << nargs[1] << " could not be removed" << std::endl;
-      if (ret == -EPERM) {
-	cerr << "Check your monitor configuration - `mon allow pool delete` is set to false by default,"
-	     << " change it to true to allow deletion of pools" << std::endl;
-      }
-    }
   }
   else if (strcmp(nargs[0], "purge") == 0) {
     if (nargs.size() < 2)
@@ -3217,7 +3268,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (replybl.length()) {
       map<pair<uint64_t,uint64_t>,bufferlist> rm;
       set<pair<uint64_t,uint64_t> > missed;
-      bufferlist::iterator p = replybl.begin();
+      auto p = replybl.cbegin();
       decode(rm, p);
       decode(missed, p);
       for (map<pair<uint64_t,uint64_t>,bufferlist>::iterator p = rm.begin();
@@ -3275,7 +3326,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (max_backlog)
       lg.max_backlog = max_backlog;
     if (target_throughput)
-      lg.target_throughput = target_throughput << 20;
+      lg.target_throughput = target_throughput;
     if (read_percent >= 0)
       lg.read_percent = read_percent;
     if (num_objs)
@@ -3696,6 +3747,19 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << cpp_strerror(ret) << std::endl;
       goto out;
     }
+  } else if (strcmp(nargs[0], "unset-manifest") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+    string oid(nargs[1]);
+
+    ObjectWriteOperation op;
+    op.unset_manifest();
+    ret = io_ctx.operate(oid, &op);
+    if (ret < 0) {
+      cerr << "error unset-manifest " << pool_name << "/" << oid << " : " 
+	   << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
   } else if (strcmp(nargs[0], "export") == 0) {
     // export [filename]
     if (!pool_name || nargs.size() > 2) {
@@ -3868,8 +3932,10 @@ int main(int argc, const char **argv)
       opts["target_locator"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--target-nspace" , (char *)NULL)) {
       opts["target_nspace"] = val;
+#ifdef WITH_LIBRADOSSTRIPER
     } else if (ceph_argparse_flag(args, i, "--striper" , (char *)NULL)) {
       opts["striper"] = "true";
+#endif
     } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)NULL)) {
       opts["concurrent-ios"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--block-size", (char*)NULL)) {

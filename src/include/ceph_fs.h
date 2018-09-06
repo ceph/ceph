@@ -183,7 +183,7 @@ struct ceph_mon_poolop {
 	struct ceph_fsid fsid;
 	__le32 pool;
 	__le32 op;
-	__le64 auid;
+	__le64 __old_auid;  // obsolete
 	__le64 snapid;
 	__le32 name_len;
 } __attribute__ ((packed));
@@ -396,6 +396,7 @@ extern const char *ceph_mds_op_name(int op);
 #define CEPH_O_CREAT           00000100
 #define CEPH_O_EXCL            00000200
 #define CEPH_O_TRUNC           00001000
+#define CEPH_O_LAZY            00020000
 #define CEPH_O_DIRECTORY       00200000
 #define CEPH_O_NOFOLLOW        00400000
 
@@ -754,6 +755,8 @@ int ceph_flags_to_mode(int flags);
 			   CEPH_CAP_LINK_EXCL |		\
 			   CEPH_CAP_XATTR_EXCL |	\
 			   CEPH_CAP_FILE_EXCL)
+#define CEPH_CAP_ANY_FILE_RD (CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE | \
+                              CEPH_CAP_FILE_SHARED)
 #define CEPH_CAP_ANY_FILE_WR (CEPH_CAP_FILE_WR | CEPH_CAP_FILE_BUFFER |	\
 			      CEPH_CAP_FILE_EXCL)
 #define CEPH_CAP_ANY_WR   (CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_FILE_WR)

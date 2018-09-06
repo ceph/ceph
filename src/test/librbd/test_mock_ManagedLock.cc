@@ -48,7 +48,7 @@ struct BaseRequest {
   static T* create(librados::IoCtx& ioctx, MockImageWatcher *watcher,
                    ContextWQ *work_queue, const std::string& oid,
                    const std::string& cookie, Context *on_finish) {
-    assert(!s_requests.empty());
+    ceph_assert(!s_requests.empty());
     T* req = s_requests.front();
     req->on_finish = on_finish;
     s_requests.pop_front();
@@ -106,11 +106,11 @@ struct GetLockerRequest<MockManagedLockImageCtx> {
   static GetLockerRequest* create(librados::IoCtx& ioctx,
                                   const std::string& oid, bool exclusive,
                                   Locker *locker, Context *on_finish) {
-    assert(0 == "unexpected call");
+    ceph_abort_msg("unexpected call");
   }
 
   void send() {
-    assert(0 == "unexpected call");
+    ceph_abort_msg("unexpected call");
   }
 };
 
@@ -121,11 +121,11 @@ struct BreakRequest<MockManagedLockImageCtx> {
                               bool exclusive, bool blacklist_locker,
                               uint32_t blacklist_expire_seconds,
                               bool force_break_lock, Context *on_finish) {
-    assert(0 == "unexpected call");
+    ceph_abort_msg("unexpected call");
   }
 
   void send() {
-    assert(0 == "unexpected call");
+    ceph_abort_msg("unexpected call");
   }
 };
 
@@ -214,7 +214,7 @@ public:
         }
         on_finish->complete(r);}));
   }
-  
+
   int when_acquire_lock(MockManagedLock &managed_lock) {
     C_SaferCond ctx;
     {
@@ -529,30 +529,51 @@ TEST_F(TestMockManagedLock, ReacquireLockError) {
 TEST_F(TestMockManagedLock, ReacquireWithSameCookie) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  
+
   MockManagedLockImageCtx mock_image_ctx(*ictx);
   MockMockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
                                ictx->header_oid, mock_image_ctx.image_watcher,
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
- 
+
   MockAcquireRequest request_lock_acquire;
   expect_acquire_lock(*mock_image_ctx.image_watcher, ictx->op_work_queue, request_lock_acquire, 0);
   ASSERT_EQ(0, when_acquire_lock(managed_lock));
   ASSERT_TRUE(is_lock_owner(managed_lock));
- 
-  // watcher with same cookie after rewatch 
+
+  // watcher with same cookie after rewatch
   uint64_t client_id = 0;
   C_SaferCond reacquire_ctx;
   expect_post_reacquired_lock_handler(*mock_image_ctx.image_watcher, managed_lock, client_id);
   managed_lock.reacquire_lock(&reacquire_ctx);
-  ASSERT_LT(0, client_id);
+  ASSERT_LT(0U, client_id);
   ASSERT_TRUE(is_lock_owner(managed_lock));
 
   MockReleaseRequest shutdown_release;
   expect_release_lock(ictx->op_work_queue, shutdown_release, 0);
   //ASSERT_EQ(0, when_release_lock(managed_lock));
   ASSERT_EQ(0, when_shut_down(managed_lock));
+}
+
+TEST_F(TestMockManagedLock, ShutDownWhileWaiting) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockManagedLockImageCtx mock_image_ctx(*ictx);
+  MockMockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+                               ictx->header_oid, mock_image_ctx.image_watcher,
+                               librbd::managed_lock::EXCLUSIVE, true, 0);
+
+  InSequence seq;
+
+  expect_get_watch_handle(*mock_image_ctx.image_watcher, 0);
+
+  C_SaferCond acquire_ctx;
+  managed_lock.acquire_lock(&acquire_ctx);
+
+  ASSERT_EQ(0, when_shut_down(managed_lock));
+  ASSERT_EQ(-ESHUTDOWN, acquire_ctx.wait());
+  ASSERT_FALSE(is_lock_owner(managed_lock));
 }
 
 } // namespace librbd

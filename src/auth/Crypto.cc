@@ -11,17 +11,19 @@
  * 
  */
 
+#include <array>
 #include <sstream>
+#include <limits>
+
 #include "Crypto.h"
-#ifdef USE_NSS
-# include <nspr.h>
-# include <nss.h>
-# include <pk11pub.h>
+#ifdef USE_OPENSSL
+# include <openssl/aes.h>
 #endif
 
 #include "include/assert.h"
 #include "common/Clock.h"
 #include "common/armor.h"
+#include "common/ceph_context.h"
 #include "common/ceph_crypto.h"
 #include "common/hex.h"
 #include "common/safe_io.h"
@@ -76,9 +78,68 @@ void CryptoRandom::get_bytes(char *buf, int len)
 
 
 // ---------------------------------------------------
+// fallback implementation of the bufferlist-free
+// interface.
+
+std::size_t CryptoKeyHandler::encrypt(
+  const CryptoKeyHandler::in_slice_t& in,
+  const CryptoKeyHandler::out_slice_t& out) const
+{
+  ceph::bufferptr inptr(reinterpret_cast<const char*>(in.buf), in.length);
+  ceph::bufferlist plaintext;
+  plaintext.append(std::move(inptr));
+
+  ceph::bufferlist ciphertext;
+  std::string error;
+  const int ret = encrypt(plaintext, ciphertext, &error);
+  if (ret != 0 || !error.empty()) {
+    throw std::runtime_error(std::move(error));
+  }
+
+  // we need to specify the template parameter explicitly as ::length()
+  // returns unsigned int, not size_t.
+  const auto todo_len = \
+    std::min<std::size_t>(ciphertext.length(), out.max_length);
+  memcpy(out.buf, ciphertext.c_str(), todo_len);
+
+  return todo_len;
+}
+
+std::size_t CryptoKeyHandler::decrypt(
+  const CryptoKeyHandler::in_slice_t& in,
+  const CryptoKeyHandler::out_slice_t& out) const
+{
+  ceph::bufferptr inptr(reinterpret_cast<const char*>(in.buf), in.length);
+  ceph::bufferlist ciphertext;
+  ciphertext.append(std::move(inptr));
+
+  ceph::bufferlist plaintext;
+  std::string error;
+  const int ret = decrypt(ciphertext, plaintext, &error);
+  if (ret != 0 || !error.empty()) {
+    throw std::runtime_error(std::move(error));
+  }
+
+  // we need to specify the template parameter explicitly as ::length()
+  // returns unsigned int, not size_t.
+  const auto todo_len = \
+    std::min<std::size_t>(plaintext.length(), out.max_length);
+  memcpy(out.buf, plaintext.c_str(), todo_len);
+
+  return todo_len;
+}
+
+// ---------------------------------------------------
 
 class CryptoNoneKeyHandler : public CryptoKeyHandler {
 public:
+  CryptoNoneKeyHandler()
+    : CryptoKeyHandler(CryptoKeyHandler::BLOCK_SIZE_0B()) {
+  }
+
+  using CryptoKeyHandler::encrypt;
+  using CryptoKeyHandler::decrypt;
+
   int encrypt(const bufferlist& in,
 	       bufferlist& out, std::string *error) const override {
     out = in;
@@ -125,128 +186,181 @@ public:
   CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
 };
 
-#ifdef USE_NSS
+#ifdef USE_OPENSSL
 // when we say AES, we mean AES-128
-# define AES_KEY_LEN	16
-# define AES_BLOCK_LEN   16
-
-static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
-			     CK_MECHANISM_TYPE mechanism,
-			     PK11SymKey *key,
-			     SECItem *param,
-			     const bufferlist& in, bufferlist& out,
-			     std::string *error)
-{
-  // sample source said this has to be at least size of input + 8,
-  // but i see 15 still fail with SEC_ERROR_OUTPUT_LEN
-  bufferptr out_tmp(in.length()+16);
-  bufferlist incopy;
-
-  SECStatus ret;
-  int written;
-  unsigned char *in_buf;
-
-  PK11Context *ectx;
-  ectx = PK11_CreateContextBySymKey(mechanism, op, key, param);
-  assert(ectx);
-
-  incopy = in;  // it's a shallow copy!
-  in_buf = (unsigned char*)incopy.c_str();
-  ret = PK11_CipherOp(ectx,
-		      (unsigned char*)out_tmp.c_str(), &written, out_tmp.length(),
-		      in_buf, in.length());
-  if (ret != SECSuccess) {
-    PK11_DestroyContext(ectx, PR_TRUE);
-    if (error) {
-      ostringstream oss;
-      oss << "NSS AES failed: " << PR_GetError();
-      *error = oss.str();
-    }
-    return -1;
-  }
-
-  unsigned int written2;
-  ret = PK11_DigestFinal(ectx,
-			 (unsigned char*)out_tmp.c_str()+written, &written2,
-			 out_tmp.length()-written);
-  PK11_DestroyContext(ectx, PR_TRUE);
-  if (ret != SECSuccess) {
-    if (error) {
-      ostringstream oss;
-      oss << "NSS AES final round failed: " << PR_GetError();
-      *error = oss.str();
-    }
-    return -1;
-  }
-
-  out_tmp.set_length(written + written2);
-  out.append(out_tmp);
-  return 0;
-}
+static constexpr const std::size_t AES_KEY_LEN{16};
+static constexpr const std::size_t AES_BLOCK_LEN{16};
 
 class CryptoAESKeyHandler : public CryptoKeyHandler {
-  CK_MECHANISM_TYPE mechanism;
-  PK11SlotInfo *slot;
-  PK11SymKey *key;
-  SECItem *param;
+  AES_KEY enc_key;
+  AES_KEY dec_key;
 
 public:
   CryptoAESKeyHandler()
-    : mechanism(CKM_AES_CBC_PAD),
-      slot(NULL),
-      key(NULL),
-      param(NULL) {}
-  ~CryptoAESKeyHandler() override {
-    SECITEM_FreeItem(param, PR_TRUE);
-    if (key)
-      PK11_FreeSymKey(key);
-    if (slot)
-      PK11_FreeSlot(slot);
+    : CryptoKeyHandler(CryptoKeyHandler::BLOCK_SIZE_16B()) {
   }
 
   int init(const bufferptr& s, ostringstream& err) {
     secret = s;
 
-    slot = PK11_GetBestSlot(mechanism, NULL);
-    if (!slot) {
-      err << "cannot find NSS slot to use: " << PR_GetError();
+    const int enc_key_ret = \
+      AES_set_encrypt_key((const unsigned char*)secret.c_str(),
+			  AES_KEY_LEN * CHAR_BIT, &enc_key);
+    if (enc_key_ret != 0) {
+      err << "cannot set OpenSSL encrypt key for AES: " << enc_key_ret;
       return -1;
     }
 
-    SECItem keyItem;
-    keyItem.type = siBuffer;
-    keyItem.data = (unsigned char*)secret.c_str();
-    keyItem.len = secret.length();
-    key = PK11_ImportSymKey(slot, mechanism, PK11_OriginUnwrap, CKA_ENCRYPT,
-			    &keyItem, NULL);
-    if (!key) {
-      err << "cannot convert AES key for NSS: " << PR_GetError();
-      return -1;
-    }
-
-    SECItem ivItem;
-    ivItem.type = siBuffer;
-    // losing constness due to SECItem.data; IV should never be
-    // modified, regardless
-    ivItem.data = (unsigned char*)CEPH_AES_IV;
-    ivItem.len = sizeof(CEPH_AES_IV);
-
-    param = PK11_ParamFromIV(mechanism, &ivItem);
-    if (!param) {
-      err << "cannot set NSS IV param: " << PR_GetError();
+    const int dec_key_ret = \
+      AES_set_decrypt_key((const unsigned char*)secret.c_str(),
+			  AES_KEY_LEN * CHAR_BIT, &dec_key);
+    if (dec_key_ret != 0) {
+      err << "cannot set OpenSSL decrypt key for AES: " << dec_key_ret;
       return -1;
     }
 
     return 0;
   }
 
-  int encrypt(const bufferlist& in,
-	      bufferlist& out, std::string *error) const override {
-    return nss_aes_operation(CKA_ENCRYPT, mechanism, key, param, in, out, error);
+  int encrypt(const ceph::bufferlist& in,
+	      ceph::bufferlist& out,
+              std::string* /* unused */) const override {
+    // we need to take into account the PKCS#7 padding. There *always* will
+    // be at least one byte of padding. This stays even to input aligned to
+    // AES_BLOCK_LEN. Otherwise we would face ambiguities during decryption.
+    // To exemplify:
+    //   16 + p2align(10, 16) -> 16
+    //   16 + p2align(16, 16) -> 32 including 16 bytes for padding.
+    ceph::bufferptr out_tmp{static_cast<unsigned>(
+      AES_BLOCK_LEN + p2align(in.length(), AES_BLOCK_LEN))};
+
+    // let's pad the data
+    std::uint8_t pad_len = out_tmp.length() - in.length();
+    ceph::bufferptr pad_buf{pad_len};
+    memset(pad_buf.c_str(), pad_len, pad_len);
+
+    // form contiguous buffer for block cipher. The ctor copies shallowly.
+    ceph::bufferlist incopy(in);
+    incopy.append(std::move(pad_buf));
+    const auto in_buf = reinterpret_cast<unsigned char*>(incopy.c_str());
+
+    // reinitialize IV each time. It might be unnecessary depending on
+    // actual implementation but at the interface layer we are obliged
+    // to deliver IV as non-const.
+    static_assert(strlen_ct(CEPH_AES_IV) == AES_BLOCK_LEN);
+    unsigned char iv[AES_BLOCK_LEN];
+    memcpy(iv, CEPH_AES_IV, AES_BLOCK_LEN);
+
+    // we aren't using EVP because of performance concerns. Profiling
+    // shows the cost is quite high. Endianness might be an issue.
+    // However, as they would affect Cephx, any fallout should pop up
+    // rather early, hopefully.
+    AES_cbc_encrypt(in_buf, reinterpret_cast<unsigned char*>(out_tmp.c_str()),
+		    out_tmp.length(), &enc_key, iv, AES_ENCRYPT);
+
+    out.append(out_tmp);
+    return 0;
   }
-  int decrypt(const bufferlist& in,
-	       bufferlist& out, std::string *error) const override {
-    return nss_aes_operation(CKA_DECRYPT, mechanism, key, param, in, out, error);
+
+  int decrypt(const ceph::bufferlist& in,
+	      ceph::bufferlist& out,
+	      std::string* /* unused */) const override {
+    // PKCS#7 padding enlarges even empty plain-text to take 16 bytes.
+    if (in.length() < AES_BLOCK_LEN || in.length() % AES_BLOCK_LEN) {
+      return -1;
+    }
+
+    // needed because of .c_str() on const. It's a shallow copy.
+    ceph::bufferlist incopy(in);
+    const auto in_buf = reinterpret_cast<unsigned char*>(incopy.c_str());
+
+    // make a local, modifiable copy of IV.
+    static_assert(strlen_ct(CEPH_AES_IV) == AES_BLOCK_LEN);
+    unsigned char iv[AES_BLOCK_LEN];
+    memcpy(iv, CEPH_AES_IV, AES_BLOCK_LEN);
+
+    ceph::bufferptr out_tmp{in.length()};
+    AES_cbc_encrypt(in_buf, reinterpret_cast<unsigned char*>(out_tmp.c_str()),
+		    in.length(), &dec_key, iv, AES_DECRYPT);
+
+    // BE CAREFUL: we cannot expose any single bit of information about
+    // the cause of failure. Otherwise we'll face padding oracle attack.
+    // See: https://en.wikipedia.org/wiki/Padding_oracle_attack.
+    const auto pad_len = \
+      std::min<std::uint8_t>(out_tmp[in.length() - 1], AES_BLOCK_LEN);
+    out_tmp.set_length(in.length() - pad_len);
+    out.append(std::move(out_tmp));
+
+    return 0;
+  }
+
+  std::size_t encrypt(const in_slice_t& in,
+		      const out_slice_t& out) const override {
+    if (out.buf == nullptr) {
+      // 16 + p2align(10, 16) -> 16
+      // 16 + p2align(16, 16) -> 32
+      const std::size_t needed = \
+        AES_BLOCK_LEN + p2align(in.length, AES_BLOCK_LEN);
+      return needed;
+    }
+
+    // how many bytes of in.buf hang outside the alignment boundary and how
+    // much padding we need.
+    //   length = 23 -> tail_len = 7, pad_len = 9
+    //   length = 32 -> tail_len = 0, pad_len = 16
+    const std::uint8_t tail_len = in.length % AES_BLOCK_LEN;
+    const std::uint8_t pad_len = AES_BLOCK_LEN - tail_len;
+    static_assert(std::numeric_limits<std::uint8_t>::max() > AES_BLOCK_LEN);
+
+    std::array<unsigned char, AES_BLOCK_LEN> last_block;
+    memcpy(last_block.data(), in.buf + in.length - tail_len, tail_len);
+    memset(last_block.data() + tail_len, pad_len, pad_len);
+
+    // need a local copy because AES_cbc_encrypt takes `iv` as non-const.
+    // Useful because it allows us to encrypt in two steps: main + tail.
+    static_assert(strlen_ct(CEPH_AES_IV) == AES_BLOCK_LEN);
+    std::array<unsigned char, AES_BLOCK_LEN> iv;
+    memcpy(iv.data(), CEPH_AES_IV, AES_BLOCK_LEN);
+
+    const std::size_t main_encrypt_size = \
+      std::min(in.length - tail_len, out.max_length);
+    AES_cbc_encrypt(in.buf, out.buf, main_encrypt_size, &enc_key, iv.data(),
+		    AES_ENCRYPT);
+
+    const std::size_t tail_encrypt_size = \
+      std::min(AES_BLOCK_LEN, out.max_length - main_encrypt_size);
+    AES_cbc_encrypt(last_block.data(), out.buf + main_encrypt_size,
+		    tail_encrypt_size, &enc_key, iv.data(), AES_ENCRYPT);
+
+    return main_encrypt_size + tail_encrypt_size;
+  }
+
+  std::size_t decrypt(const in_slice_t& in,
+		      const out_slice_t& out) const override {
+    if (in.length % AES_BLOCK_LEN != 0 || in.length < AES_BLOCK_LEN) {
+      throw std::runtime_error("input not aligned to AES_BLOCK_LEN");
+    } else if (out.buf == nullptr) {
+      // essentially it would be possible to decrypt into a buffer that
+      // doesn't include space for any PKCS#7 padding. We don't do that
+      // for the sake of performance and simplicity.
+      return in.length;
+    } else if (out.max_length < in.length) {
+      throw std::runtime_error("output buffer too small");
+    }
+
+    static_assert(strlen_ct(CEPH_AES_IV) == AES_BLOCK_LEN);
+    std::array<unsigned char, AES_BLOCK_LEN> iv;
+    memcpy(iv.data(), CEPH_AES_IV, AES_BLOCK_LEN);
+
+    AES_cbc_encrypt(in.buf, out.buf, in.length, &dec_key, iv.data(),
+		    AES_DECRYPT);
+
+    // NOTE: we aren't handling partial decrypt. PKCS#7 padding must be
+    // at the end. If it's malformed, don't say a word to avoid risk of
+    // having an oracle. All we need to ensure is valid buffer boundary.
+    const auto pad_len = \
+      std::min<std::uint8_t>(out.buf[in.length - 1], AES_BLOCK_LEN);
+    return in.length - pad_len;
   }
 };
 
@@ -268,7 +382,7 @@ int CryptoAES::create(CryptoRandom *random, bufferptr& secret)
 
 int CryptoAES::validate_secret(const bufferptr& secret)
 {
-  if (secret.length() < (size_t)AES_KEY_LEN) {
+  if (secret.length() < AES_KEY_LEN) {
     return -EINVAL;
   }
 
@@ -307,7 +421,7 @@ void CryptoKey::encode(bufferlist& bl) const
   bl.append(secret);
 }
 
-void CryptoKey::decode(bufferlist::iterator& bl)
+void CryptoKey::decode(bufferlist::const_iterator& bl)
 {
   using ceph::decode;
   decode(type, bl);

@@ -1,53 +1,49 @@
-import {
-  Component,
-  Input,
-  OnChanges,
-  OnInit,
-  TemplateRef,
-  ViewChild
-} from '@angular/core';
+import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import * as _ from 'lodash';
-import { ToastsManager } from 'ng2-toastr';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { of } from 'rxjs';
 
-import {
-  RbdService
-} from '../../../shared/api/rbd.service';
-import {
-  DeletionModalComponent
-} from '../../../shared/components/deletion-modal/deletion-modal.component';
+import { RbdService } from '../../../shared/api/rbd.service';
+import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
+import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { FinishedTask } from '../../../shared/models/finished-task';
+import { Permission } from '../../../shared/models/permissions';
 import { CdDatePipe } from '../../../shared/pipes/cd-date.pipe';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
-import {
-  NotificationService
-} from '../../../shared/services/notification.service';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { NotificationService } from '../../../shared/services/notification.service';
+import { SummaryService } from '../../../shared/services/summary.service';
+import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskManagerService } from '../../../shared/services/task-manager.service';
 import { RbdSnapshotFormComponent } from '../rbd-snapshot-form/rbd-snapshot-form.component';
-import {
-  RollbackConfirmationModalComponent
-} from '../rollback-confirmation-modal/rollback-confimation-modal.component';
 import { RbdSnapshotModel } from './rbd-snapshot.model';
 
 @Component({
   selector: 'cd-rbd-snapshot-list',
   templateUrl: './rbd-snapshot-list.component.html',
-  styleUrls: ['./rbd-snapshot-list.component.scss']
+  styleUrls: ['./rbd-snapshot-list.component.scss'],
+  providers: [TaskListService]
 })
 export class RbdSnapshotListComponent implements OnInit, OnChanges {
+  @Input()
+  snapshots: RbdSnapshotModel[] = [];
+  @Input()
+  poolName: string;
+  @Input()
+  rbdName: string;
+  @ViewChild('nameTpl')
+  nameTpl: TemplateRef<any>;
+  @ViewChild('protectTpl')
+  protectTpl: TemplateRef<any>;
+  @ViewChild('rollbackTpl')
+  rollbackTpl: TemplateRef<any>;
 
-  @Input() snapshots: RbdSnapshotModel[] = [];
-  @Input() poolName: string;
-  @Input() rbdName: string;
-  @Input() executingTasks: ExecutingTask[] = [];
-
-  @ViewChild('nameTpl') nameTpl: TemplateRef<any>;
-  @ViewChild('protectTpl') protectTpl: TemplateRef<any>;
+  permission: Permission;
 
   data: RbdSnapshotModel[];
 
@@ -57,13 +53,27 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
 
   selection = new CdTableSelection();
 
-  constructor(private modalService: BsModalService,
-              private dimlessBinaryPipe: DimlessBinaryPipe,
-              private cdDatePipe: CdDatePipe,
-              private rbdService: RbdService,
-              private toastr: ToastsManager,
-              private taskManagerService: TaskManagerService,
-              private notificationService: NotificationService) { }
+  builders = {
+    'rbd/snap/create': (metadata) => {
+      const model = new RbdSnapshotModel();
+      model.name = metadata['snapshot_name'];
+      return model;
+    }
+  };
+
+  constructor(
+    private authStorageService: AuthStorageService,
+    private modalService: BsModalService,
+    private dimlessBinaryPipe: DimlessBinaryPipe,
+    private cdDatePipe: CdDatePipe,
+    private rbdService: RbdService,
+    private taskManagerService: TaskManagerService,
+    private notificationService: NotificationService,
+    private summaryService: SummaryService,
+    private taskListService: TaskListService
+  ) {
+    this.permission = this.authStorageService.getPermissions().rbdImage;
+  }
 
   ngOnInit() {
     this.columns = [
@@ -104,33 +114,29 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges() {
-    this.data = this.merge(this.snapshots, this.executingTasks);
-  }
+    const itemFilter = (entry, task) => {
+      return entry.name === task.metadata['snapshot_name'];
+    };
 
-  private merge(snapshots: RbdSnapshotModel[], executingTasks: ExecutingTask[] = []) {
-    const resultSnapshots = _.clone(snapshots);
-    executingTasks.forEach((executingTask) => {
-      const snapshotExecuting = resultSnapshots.find((snapshot) => {
-        return snapshot.name === executingTask.metadata['snapshot_name'];
-      });
-      if (snapshotExecuting) {
-        if (executingTask.name === 'rbd/snap/delete') {
-          snapshotExecuting.cdExecuting = 'deleting';
+    const taskFilter = (task) => {
+      return (
+        ['rbd/snap/create', 'rbd/snap/delete', 'rbd/snap/edit', 'rbd/snap/rollback'].includes(
+          task.name
+        ) &&
+        this.poolName === task.metadata['pool_name'] &&
+        this.rbdName === task.metadata['image_name']
+      );
+    };
 
-        } else if (executingTask.name === 'rbd/snap/edit') {
-          snapshotExecuting.cdExecuting = 'updating';
-
-        } else if (executingTask.name === 'rbd/snap/rollback') {
-          snapshotExecuting.cdExecuting = 'rolling back';
-        }
-      } else if (executingTask.name === 'rbd/snap/create') {
-        const rbdSnapshotModel = new RbdSnapshotModel();
-        rbdSnapshotModel.name = executingTask.metadata['snapshot_name'];
-        rbdSnapshotModel.cdExecuting = 'creating';
-        resultSnapshots.push(rbdSnapshotModel);
-      }
-    });
-    return resultSnapshots;
+    this.taskListService.init(
+      () => of(this.snapshots),
+      null,
+      (items) => (this.data = items),
+      () => (this.data = this.snapshots),
+      taskFilter,
+      itemFilter,
+      this.builders
+    );
   }
 
   private openSnapshotModal(taskName: string, oldSnapshotName: string = null) {
@@ -143,8 +149,12 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     this.modalRef.content.onSubmit.subscribe((snapshotName: string) => {
       const executingTask = new ExecutingTask();
       executingTask.name = taskName;
-      executingTask.metadata = {'snapshot_name': snapshotName};
-      this.executingTasks.push(executingTask);
+      executingTask.metadata = {
+        image_name: this.rbdName,
+        pool_name: this.poolName,
+        snapshot_name: snapshotName
+      };
+      this.summaryService.addRunningTask(executingTask);
       this.ngOnChanges();
     });
   }
@@ -163,21 +173,26 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     const finishedTask = new FinishedTask();
     finishedTask.name = 'rbd/snap/edit';
     finishedTask.metadata = {
-      'pool_name': this.poolName,
-      'image_name': this.rbdName,
-      'snapshot_name': snapshotName
+      pool_name: this.poolName,
+      image_name: this.rbdName,
+      snapshot_name: snapshotName
     };
-    this.rbdService.protectSnapshot(this.poolName, this.rbdName, snapshotName, !isProtected)
-      .toPromise().then((resp) => {
+    this.rbdService
+      .protectSnapshot(this.poolName, this.rbdName, snapshotName, !isProtected)
+      .toPromise()
+      .then((resp) => {
         const executingTask = new ExecutingTask();
         executingTask.name = finishedTask.name;
         executingTask.metadata = finishedTask.metadata;
-        this.executingTasks.push(executingTask);
+        this.summaryService.addRunningTask(executingTask);
         this.ngOnChanges();
-        this.taskManagerService.subscribe(finishedTask.name, finishedTask.metadata,
+        this.taskManagerService.subscribe(
+          finishedTask.name,
+          finishedTask.metadata,
           (asyncFinishedTask: FinishedTask) => {
             this.notificationService.notifyTask(asyncFinishedTask);
-          });
+          }
+        );
       });
   }
 
@@ -185,22 +200,26 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     const finishedTask = new FinishedTask();
     finishedTask.name = taskName;
     finishedTask.metadata = {
-      'pool_name': this.poolName,
-      'image_name': this.rbdName,
-      'snapshot_name': snapshotName
+      pool_name: this.poolName,
+      image_name: this.rbdName,
+      snapshot_name: snapshotName
     };
     this.rbdService[task](this.poolName, this.rbdName, snapshotName)
-      .toPromise().then(() => {
+      .toPromise()
+      .then(() => {
         const executingTask = new ExecutingTask();
         executingTask.name = finishedTask.name;
         executingTask.metadata = finishedTask.metadata;
-        this.executingTasks.push(executingTask);
+        this.summaryService.addRunningTask(executingTask);
         this.modalRef.hide();
         this.ngOnChanges();
-        this.taskManagerService.subscribe(executingTask.name, executingTask.metadata,
+        this.taskManagerService.subscribe(
+          executingTask.name,
+          executingTask.metadata,
           (asyncFinishedTask: FinishedTask) => {
             this.notificationService.notifyTask(asyncFinishedTask);
-          });
+          }
+        );
       })
       .catch((resp) => {
         this.modalRef.content.stopLoadingSpinner();
@@ -209,11 +228,19 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
 
   rollbackModal() {
     const snapshotName = this.selection.selected[0].name;
-    this.modalRef = this.modalService.show(RollbackConfirmationModalComponent);
-    this.modalRef.content.snapName = `${this.poolName}/${this.rbdName}@${snapshotName}`;
-    this.modalRef.content.onSubmit.subscribe((itemName: string) => {
-      this._asyncTask('rollbackSnapshot', 'rbd/snap/rollback', snapshotName);
-    });
+    const initialState = {
+      titleText: 'RBD snapshot rollback',
+      buttonText: 'Rollback',
+      bodyTpl: this.rollbackTpl,
+      bodyData: {
+        snapName: `${this.poolName}/${this.rbdName}@${snapshotName}`
+      },
+      onSubmit: () => {
+        this._asyncTask('rollbackSnapshot', 'rbd/snap/rollback', snapshotName);
+      }
+    };
+
+    this.modalRef = this.modalService.show(ConfirmationModalComponent, { initialState });
   }
 
   deleteSnapshotModal() {

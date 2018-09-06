@@ -79,29 +79,29 @@ void OpRequest::_unregistered() {
   request->set_connection(nullptr);
 }
 
-bool OpRequest::check_rmw(int flag) {
-  assert(rmw_flags != 0);
+bool OpRequest::check_rmw(int flag) const {
+  ceph_assert(rmw_flags != 0);
   return rmw_flags & flag;
 }
-bool OpRequest::may_read() {
+bool OpRequest::may_read() const {
   return need_read_cap() || check_rmw(CEPH_OSD_RMW_FLAG_CLASS_READ);
 }
-bool OpRequest::may_write() {
+bool OpRequest::may_write() const {
   return need_write_cap() || check_rmw(CEPH_OSD_RMW_FLAG_CLASS_WRITE);
 }
-bool OpRequest::may_cache() { return check_rmw(CEPH_OSD_RMW_FLAG_CACHE); }
-bool OpRequest::rwordered_forced() {
+bool OpRequest::may_cache() const { return check_rmw(CEPH_OSD_RMW_FLAG_CACHE); }
+bool OpRequest::rwordered_forced() const {
   return check_rmw(CEPH_OSD_RMW_FLAG_RWORDERED);
 }
-bool OpRequest::rwordered() {
+bool OpRequest::rwordered() const {
   return may_write() || may_cache() || rwordered_forced();
 }
 
 bool OpRequest::includes_pg_op() { return check_rmw(CEPH_OSD_RMW_FLAG_PGOP); }
-bool OpRequest::need_read_cap() {
+bool OpRequest::need_read_cap() const {
   return check_rmw(CEPH_OSD_RMW_FLAG_READ);
 }
-bool OpRequest::need_write_cap() {
+bool OpRequest::need_write_cap() const {
   return check_rmw(CEPH_OSD_RMW_FLAG_WRITE);
 }
 bool OpRequest::need_promote() {

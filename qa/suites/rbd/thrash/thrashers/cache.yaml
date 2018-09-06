@@ -4,8 +4,8 @@ overrides:
       - but it is still running
       - objects unfound and apparently lost
       - overall HEALTH_
-      - (CACHE_POOL_NEAR_FULL)
-      - (CACHE_POOL_NO_HIT_SET)
+      - \(CACHE_POOL_NEAR_FULL\)
+      - \(CACHE_POOL_NO_HIT_SET\)
 tasks:
 - exec:
     client.0:

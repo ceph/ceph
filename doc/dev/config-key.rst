@@ -22,11 +22,10 @@ where the secret is a base64 encoded LUKS key.
 
 Created by the 'osd new' command (see OSDMonitor.cc).
 
-Consumed by ceph-disk, ceph-volume, and similar tools.  Normally
-access to the dm-crypt/osd/$OSD_UUID prefix is allowed by a
-client.osd-lockbox.$OSD_UUID cephx key, such that only the appropriate
-host can retrieve the LUKS key (which in turn decrypts the actual raw
-key, also stored on the device itself).
+Consumed by ceph-volume, and similar tools. Normally access to the
+dm-crypt/osd/$OSD_UUID prefix is allowed by a client.osd-lockbox.$OSD_UUID
+cephx key, such that only the appropriate host can retrieve the LUKS key (which
+in turn decrypts the actual raw key, also stored on the device itself).
 
 
 ceph-mgr modules

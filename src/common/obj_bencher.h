@@ -107,7 +107,7 @@ protected:
   ostream& out(ostream& os);
   ostream& out(ostream& os, utime_t& t);
 public:
-  explicit ObjBencher(CephContext *cct_) : show_time(false), cct(cct_), lock("ObjBencher::lock") {}
+  explicit ObjBencher(CephContext *cct_) : show_time(false), cct(cct_), lock("ObjBencher::lock"), data() {}
   virtual ~ObjBencher() {}
   int aio_bench(
     int operation, int secondsToRun,

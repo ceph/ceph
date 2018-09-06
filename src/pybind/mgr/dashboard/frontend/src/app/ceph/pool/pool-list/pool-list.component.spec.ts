@@ -1,8 +1,9 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs/tabs.module';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { PoolListComponent } from './pool-list.component';
 
@@ -10,17 +11,10 @@ describe('PoolListComponent', () => {
   let component: PoolListComponent;
   let fixture: ComponentFixture<PoolListComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [ PoolListComponent ],
-      imports: [
-        SharedModule,
-        TabsModule.forRoot(),
-        HttpClientTestingModule
-      ],
-    })
-    .compileComponents();
-  }));
+  configureTestBed({
+    declarations: [PoolListComponent],
+    imports: [SharedModule, TabsModule.forRoot(), HttpClientTestingModule]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(PoolListComponent);

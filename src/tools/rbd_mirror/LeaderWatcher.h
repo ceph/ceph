@@ -210,6 +210,7 @@ private:
   InstancesListener m_instances_listener;
   mutable Mutex m_lock;
   uint64_t m_notifier_id;
+  std::string m_instance_id;
   LeaderLock *m_leader_lock;
   Context *m_on_finish = nullptr;
   Context *m_on_shut_down_finish = nullptr;
@@ -293,6 +294,8 @@ private:
 
   void handle_notify(uint64_t notify_id, uint64_t handle,
                      uint64_t notifier_id, bufferlist &bl) override;
+
+  void handle_rewatch_complete(int r) override;
 
   void handle_heartbeat(Context *on_ack);
   void handle_lock_acquired(Context *on_ack);

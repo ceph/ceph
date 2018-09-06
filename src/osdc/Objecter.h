@@ -33,11 +33,14 @@
 #include "common/admin_socket.h"
 #include "common/ceph_time.h"
 #include "common/ceph_timer.h"
-#include "common/Finisher.h"
+#include "common/config_obs.h"
 #include "common/shunique_lock.h"
 #include "common/zipkin_trace.h"
+#include "common/Finisher.h"
+#include "common/Throttle.h"
 
 #include "messages/MOSDOp.h"
+#include "msg/Dispatcher.h"
 #include "osd/OSDMap.h"
 
 
@@ -81,7 +84,7 @@ struct ObjectOperation {
   }
 
   void set_last_op_flags(int flags) {
-    assert(!ops.empty());
+    ceph_assert(!ops.empty());
     ops.rbegin()->op.flags = flags;
   }
 
@@ -233,7 +236,7 @@ struct ObjectOperation {
       : psize(ps), pmtime(pm), ptime(pt), pts(_pts), prval(prval) {}
     void finish(int r) override {
       if (r >= 0) {
-	bufferlist::iterator p = bl.begin();
+	auto p = bl.cbegin();
 	try {
 	  uint64_t size;
 	  ceph::real_time mtime;
@@ -332,7 +335,7 @@ struct ObjectOperation {
 				  int *prval)
       : data_bl(data_bl), extents(extents), prval(prval) {}
     void finish(int r) override {
-      bufferlist::iterator iter = bl.begin();
+      auto iter = bl.cbegin();
       if (r >= 0) {
         // NOTE: it's possible the sub-op has not been executed but the result
         // code remains zeroed. Avoid the costly exception handling on a
@@ -442,7 +445,7 @@ struct ObjectOperation {
     }
     void finish(int r) override {
       if (r >= 0) {
-	bufferlist::iterator p = bl.begin();
+	auto p = bl.cbegin();
 	try {
 	  if (pattrs)
 	    decode(*pattrs, p);
@@ -484,7 +487,7 @@ struct ObjectOperation {
     }
     void finish(int r) override {
       if (r >= 0) {
-	bufferlist::iterator p = bl.begin();
+	auto p = bl.cbegin();
 	try {
 	  if (pattrs)
 	    decode(*pattrs, p);
@@ -519,7 +522,7 @@ struct ObjectOperation {
       : pwatchers(pw), prval(pr) {}
     void finish(int r) override {
       if (r >= 0) {
-	bufferlist::iterator p = bl.begin();
+	auto p = bl.cbegin();
 	try {
 	  obj_list_watch_response_t resp;
 	  decode(resp, p);
@@ -552,7 +555,7 @@ struct ObjectOperation {
       : psnaps(ps), prval(pr) {}
     void finish(int r) override {
       if (r >= 0) {
-	bufferlist::iterator p = bl.begin();
+	auto p = bl.cbegin();
 	try {
 	  obj_list_snap_response_t resp;
 	  decode(resp, p);
@@ -766,7 +769,7 @@ struct ObjectOperation {
       if (r < 0 && r != -ENOENT)
 	return;
       try {
-	bufferlist::iterator p = bl.begin();
+	auto p = bl.cbegin();
 	object_copy_data_t copy_reply;
 	decode(copy_reply, p);
 	if (r == -ENOENT) {
@@ -858,7 +861,7 @@ struct ObjectOperation {
       if (r < 0)
 	return;
       try {
-	bufferlist::iterator p = bl.begin();
+	auto p = bl.cbegin();
 	bool isdirty;
 	decode(isdirty, p);
 	if (pisdirty)
@@ -894,7 +897,7 @@ struct ObjectOperation {
       if (r < 0)
 	return;
       try {
-	bufferlist::iterator p = bl.begin();
+	auto p = bl.cbegin();
 	std::list< std::pair<ceph::real_time, ceph::real_time> > ls;
 	decode(ls, p);
 	if (ptls) {
@@ -1156,6 +1159,10 @@ struct ObjectOperation {
     add_op(CEPH_OSD_OP_TIER_PROMOTE);
   }
 
+  void unset_manifest() {
+    add_op(CEPH_OSD_OP_UNSET_MANIFEST);
+  }
+
   void set_alloc_hint(uint64_t expected_object_size,
                       uint64_t expected_write_size,
 		      uint32_t flags) {
@@ -1200,7 +1207,7 @@ class Objecter : public md_config_obs_t, public Dispatcher {
 public:
   // config observer bits
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const struct md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
 
 public:
@@ -1478,7 +1485,7 @@ public:
       psize(ps), pmtime(pm), fin(c) {}
     void finish(int r) override {
       if (r >= 0) {
-	bufferlist::iterator p = bl.begin();
+	auto p = bl.cbegin();
 	uint64_t s;
 	ceph::real_time m;
 	decode(s, p);
@@ -1500,7 +1507,7 @@ public:
 							   fin(c) {}
     void finish(int r) override {
       if (r >= 0) {
-	bufferlist::iterator p = bl.begin();
+	auto p = bl.cbegin();
 	decode(attrset, p);
       }
       fin->complete(r);
@@ -1590,14 +1597,13 @@ public:
     Context *onfinish;
     uint64_t ontimeout;
     int pool_op;
-    uint64_t auid;
     int16_t crush_rule;
     snapid_t snapid;
     bufferlist *blp;
 
     ceph::coarse_mono_time last_submit;
     PoolOp() : tid(0), pool(0), onfinish(NULL), ontimeout(0), pool_op(0),
-	       auid(0), crush_rule(0), snapid(0), blp(NULL) {}
+	       crush_rule(0), snapid(0), blp(NULL) {}
   };
 
   // -- osd commands --
@@ -1728,7 +1734,7 @@ public:
     }
     void finished_async() {
       unique_lock l(watch_lock);
-      assert(!watch_pending_async.empty());
+      ceph_assert(!watch_pending_async.empty());
       watch_pending_async.pop_front();
     }
 
@@ -1905,7 +1911,6 @@ public:
   void _send_op(Op *op);
   void _send_op_account(Op *op);
   void _cancel_linger_op(Op *op);
-  void finish_op(OSDSession *session, ceph_tid_t tid);
   void _finish_op(Op *op, int r);
   static bool is_pg_changed(
     int oldprimary,
@@ -1993,7 +1998,7 @@ private:
   int calc_op_budget(const vector<OSDOp>& ops);
   void _throttle_op(Op *op, shunique_lock& sul, int op_size = 0);
   int _take_op_budget(Op *op, shunique_lock& sul) {
-    assert(sul && sul.mutex() == &rwlock);
+    ceph_assert(sul && sul.mutex() == &rwlock);
     int op_budget = calc_op_budget(op->ops);
     if (keep_balanced_budget) {
       _throttle_op(op, sul, op_budget);
@@ -2007,7 +2012,7 @@ private:
   int take_linger_budget(LingerOp *info);
   friend class WatchContext; // to invoke put_up_budget_bytes
   void put_op_budget_bytes(int op_budget) {
-    assert(op_budget >= 0);
+    ceph_assert(op_budget >= 0);
     op_throttle_bytes.put(op_budget);
     op_throttle_ops.put(1);
   }
@@ -2219,7 +2224,7 @@ public:
   void osd_command(int osd, const std::vector<string>& cmd,
 		  const bufferlist& inbl, ceph_tid_t *ptid,
 		  bufferlist *poutbl, string *prs, Context *onfinish) {
-    assert(osd >= 0);
+    ceph_assert(osd >= 0);
     CommandOp *c = new CommandOp(
       osd,
       cmd,
@@ -2928,11 +2933,10 @@ public:
   int delete_pool_snap(int64_t pool, string& snapName, Context *onfinish);
   int delete_selfmanaged_snap(int64_t pool, snapid_t snap, Context *onfinish);
 
-  int create_pool(string& name, Context *onfinish, uint64_t auid=0,
+  int create_pool(string& name, Context *onfinish,
 		  int crush_rule=-1);
   int delete_pool(int64_t pool, Context *onfinish);
   int delete_pool(const string& name, Context *onfinish);
-  int change_pool_auid(int64_t pool, Context *onfinish, uint64_t auid);
 
   void handle_pool_op_reply(MPoolOpReply *m);
   int pool_op_cancel(ceph_tid_t tid, int r);
@@ -3032,7 +3036,7 @@ public:
 	     bit != p->buffer_extents.end();
 	     ++bit)
 	  bl.copy(bit->first, bit->second, cur);
-	assert(cur.length() == p->length);
+	ceph_assert(cur.length() == p->length);
 	write_trunc(p->oid, p->oloc, p->offset, p->length,
 	      snapc, cur, mtime, flags, p->truncate_size, trunc_seq,
 	      oncommit ? gcom.new_sub():0,

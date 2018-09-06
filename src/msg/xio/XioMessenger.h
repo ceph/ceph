@@ -98,7 +98,7 @@ public:
 		    void *cb_user_context);
 
   /* Messenger interface */
-  virtual void set_addr_unknowns(const entity_addr_t &addr) override
+  virtual bool set_addr_unknowns(const entity_addrvec_t &addr) override
     { } /* XXX applicable? */
   virtual void set_addr(const entity_addr_t &addr) override
     { } /* XXX applicable? */
@@ -133,6 +133,13 @@ public:
     { return EINVAL; }
 
   virtual ConnectionRef get_connection(const entity_inst_t& dest);
+
+  // compat hack
+  ConnectionRef connect_to(
+    int type, const entity_addrvec_t& dest) override {
+    return get_connection(entity_inst_t(entity_name_t(type, -1),
+					dest.legacy_addr()));
+  }
 
   virtual ConnectionRef get_loopback_connection();
 

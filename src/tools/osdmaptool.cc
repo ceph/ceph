@@ -359,7 +359,7 @@ int main(int argc, const char **argv)
     if (r > 0) {
       print_inc_upmaps(pending_inc, upmap_fd);
       r = osdmap.apply_incremental(pending_inc);
-      assert(r == 0);
+      ceph_assert(r == 0);
     }
   }
   if (upmap) {
@@ -388,7 +388,7 @@ int main(int argc, const char **argv)
       print_inc_upmaps(pending_inc, upmap_fd);
       if (upmap_save) {
 	int r = osdmap.apply_incremental(pending_inc);
-	assert(r == 0);
+	ceph_assert(r == 0);
 	modified = true;
       }
     } else {
@@ -411,7 +411,7 @@ int main(int argc, const char **argv)
 
     // validate
     CrushWrapper cw;
-    bufferlist::iterator p = cbl.begin();
+    auto p = cbl.cbegin();
     cw.decode(p);
 
     if (cw.get_max_devices() > osdmap.get_max_osd()) {
@@ -490,6 +490,7 @@ int main(int argc, const char **argv)
     vector<int> first_count(n, 0);
     vector<int> primary_count(n, 0);
     vector<int> size(30, 0);
+    int max_size = 0;
     if (test_random)
       srand(getpid());
     auto& pools = osdmap.get_pools();
@@ -515,11 +516,15 @@ int main(int argc, const char **argv)
 	} else if (test_map_pgs_dump_all) {
          osdmap.pg_to_raw_osds(pgid, &raw, &calced_primary);
          osdmap.pg_to_up_acting_osds(pgid, &up, &up_primary,
-                                &acting, &acting_primary);         
+                                &acting, &acting_primary);
+	 osds = acting;
+	 primary = acting_primary;
        } else {
 	  osdmap.pg_to_acting_osds(pgid, &osds, &primary);
 	}
 	size[osds.size()]++;
+	if ((unsigned)max_size < osds.size())
+	  max_size = osds.size();
 
 	if (test_map_pgs_dump) {
 	  cout << pgid << "\t" << osds << "\t" << primary << std::endl;
@@ -596,8 +601,9 @@ int main(int argc, const char **argv)
     if (max_osd >= 0)
       cout << " max osd." << max_osd << " " << count[max_osd] << std::endl;
 
-    for (int i=0; i<4; i++) {
-      cout << "size " << i << "\t" << size[i] << std::endl;
+    for (int i=0; i<=max_size; i++) {
+      if (size[i])
+        cout << "size " << i << "\t" << size[i] << std::endl;
     }
   }
   if (test_crush) {

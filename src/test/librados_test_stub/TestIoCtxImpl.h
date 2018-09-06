@@ -61,6 +61,14 @@ public:
   virtual int64_t get_id();
   virtual uint64_t get_last_version();
   virtual std::string get_pool_name();
+
+  inline void set_namespace(const std::string& namespace_name) {
+    m_namespace_name = namespace_name;
+  }
+  inline std::string get_namespace() const {
+    return m_namespace_name;
+  }
+
   snap_t get_snap_read() const {
     return m_snap_seq;
   }
@@ -188,6 +196,8 @@ private:
   TestRadosClient *m_client;
   int64_t m_pool_id = 0;
   std::string m_pool_name;
+  std::string m_namespace_name;
+
   snap_t m_snap_seq = 0;
   SnapContext m_snapc;
   std::atomic<uint64_t> m_refcount = { 0 };

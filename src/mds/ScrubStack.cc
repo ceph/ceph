@@ -52,7 +52,7 @@ void ScrubStack::pop_inode(CInode *in)
 {
   dout(20) << "popping " << *in
           << " off of ScrubStack" << dendl;
-  assert(in->item_scrub.is_on_list());
+  ceph_assert(in->item_scrub.is_on_list());
   in->put(CInode::PIN_SCRUBQUEUE);
   in->item_scrub.remove_myself();
   stack_size--;
@@ -64,7 +64,7 @@ void ScrubStack::_enqueue_inode(CInode *in, CDentry *parent,
 {
   dout(10) << __func__ << " with {" << *in << "}"
            << ", on_finish=" << on_finish << ", top=" << top << dendl;
-  assert(mdcache->mds->mds_lock.is_locked_by_me());
+  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
   in->scrub_initialize(parent, header, on_finish);
   if (top)
     push_inode(in);
@@ -85,7 +85,7 @@ void ScrubStack::kick_off_scrubs()
               "progress and " << stack_size << " in the stack" << dendl;
   bool can_continue = true;
   elist<CInode*>::iterator i = inode_stack.begin();
-  while (g_conf->mds_max_scrub_ops_in_progress > scrubs_in_progress &&
+  while (g_conf()->mds_max_scrub_ops_in_progress > scrubs_in_progress &&
       can_continue && !i.end()) {
     CInode *curi = *i;
     ++i; // we have our reference, push iterator forward
@@ -135,7 +135,7 @@ void ScrubStack::scrub_dir_inode(CInode *in,
   bool all_frags_done = true;
 
   ScrubHeaderRef header = in->get_scrub_header();
-  assert(header != nullptr);
+  ceph_assert(header != nullptr);
 
   if (header->get_recursive()) {
     list<frag_t> scrubbing_frags;
@@ -161,7 +161,7 @@ void ScrubStack::scrub_dir_inode(CInode *in,
 	     << " scrubbing cdirs" << dendl;
 
     list<CDir*>::iterator i = scrubbing_cdirs.begin();
-    while (g_conf->mds_max_scrub_ops_in_progress > scrubs_in_progress) {
+    while (g_conf()->mds_max_scrub_ops_in_progress > scrubs_in_progress) {
       // select next CDir
       CDir *cur_dir = NULL;
       if (i != scrubbing_cdirs.end()) {
@@ -240,7 +240,7 @@ bool ScrubStack::get_next_cdir(CInode *in, CDir **new_dir)
     dout(25) << "returning dir " << *new_dir << dendl;
     return true;
   }
-  assert(r == ENOENT);
+  ceph_assert(r == ENOENT);
   // there are no dirfrags left
   *new_dir = NULL;
   return true;
@@ -294,7 +294,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir,
 			       bool *added_children, bool *is_terminal,
 			       bool *done)
 {
-  assert(dir != NULL);
+  ceph_assert(dir != NULL);
 
   dout(20) << __func__ << " on " << *dir << dendl;
   *added_children = false;
@@ -349,7 +349,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir,
 
     // scrub_dentry_next defined to only give EAGAIN, ENOENT, 0 -- we should
     // never get random IO errors here.
-    assert(r == 0);
+    ceph_assert(r == 0);
 
     _enqueue_inode(dn->get_projected_inode(), dn, header, NULL, true);
 
@@ -402,7 +402,7 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
                    << " (" << path << ")";
     } else {
       clog->warn() << "Scrub error on inode " << in->ino()
-                   << " (" << path << ") see " << g_conf->name
+                   << " (" << path << ") see " << g_conf()->name
                    << " log and `damage ls` output for details";
     }
 

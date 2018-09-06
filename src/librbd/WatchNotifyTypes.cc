@@ -52,7 +52,7 @@ void AsyncRequestId::encode(bufferlist &bl) const {
   encode(request_id, bl);
 }
 
-void AsyncRequestId::decode(bufferlist::iterator &iter) {
+void AsyncRequestId::decode(bufferlist::const_iterator &iter) {
   using ceph::decode;
   decode(client_id, iter);
   decode(request_id, iter);
@@ -70,7 +70,7 @@ void AcquiredLockPayload::encode(bufferlist &bl) const {
   encode(client_id, bl);
 }
 
-void AcquiredLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void AcquiredLockPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   if (version >= 2) {
     decode(client_id, iter);
@@ -88,7 +88,7 @@ void ReleasedLockPayload::encode(bufferlist &bl) const {
   encode(client_id, bl);
 }
 
-void ReleasedLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void ReleasedLockPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   if (version >= 2) {
     decode(client_id, iter);
@@ -107,7 +107,7 @@ void RequestLockPayload::encode(bufferlist &bl) const {
   encode(force, bl);
 }
 
-void RequestLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void RequestLockPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   if (version >= 2) {
     decode(client_id, iter);
@@ -127,7 +127,7 @@ void RequestLockPayload::dump(Formatter *f) const {
 void HeaderUpdatePayload::encode(bufferlist &bl) const {
 }
 
-void HeaderUpdatePayload::decode(__u8 version, bufferlist::iterator &iter) {
+void HeaderUpdatePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
 }
 
 void HeaderUpdatePayload::dump(Formatter *f) const {
@@ -138,7 +138,7 @@ void AsyncRequestPayloadBase::encode(bufferlist &bl) const {
   encode(async_request_id, bl);
 }
 
-void AsyncRequestPayloadBase::decode(__u8 version, bufferlist::iterator &iter) {
+void AsyncRequestPayloadBase::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   decode(async_request_id, iter);
 }
@@ -156,7 +156,7 @@ void AsyncProgressPayload::encode(bufferlist &bl) const {
   encode(total, bl);
 }
 
-void AsyncProgressPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void AsyncProgressPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   AsyncRequestPayloadBase::decode(version, iter);
   decode(offset, iter);
@@ -175,7 +175,7 @@ void AsyncCompletePayload::encode(bufferlist &bl) const {
   encode(result, bl);
 }
 
-void AsyncCompletePayload::decode(__u8 version, bufferlist::iterator &iter) {
+void AsyncCompletePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   AsyncRequestPayloadBase::decode(version, iter);
   decode(result, iter);
@@ -193,7 +193,7 @@ void ResizePayload::encode(bufferlist &bl) const {
   encode(allow_shrink, bl);
 }
 
-void ResizePayload::decode(__u8 version, bufferlist::iterator &iter) {
+void ResizePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   decode(size, iter);
   AsyncRequestPayloadBase::decode(version, iter);
@@ -215,7 +215,7 @@ void SnapPayloadBase::encode(bufferlist &bl) const {
   encode(snap_namespace, bl);
 }
 
-void SnapPayloadBase::decode(__u8 version, bufferlist::iterator &iter) {
+void SnapPayloadBase::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   decode(snap_name, iter);
   if (version >= 6) {
@@ -232,7 +232,7 @@ void SnapCreatePayload::encode(bufferlist &bl) const {
   SnapPayloadBase::encode(bl);
 }
 
-void SnapCreatePayload::decode(__u8 version, bufferlist::iterator &iter) {
+void SnapCreatePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   SnapPayloadBase::decode(version, iter);
   if (version == 5) {
@@ -250,7 +250,7 @@ void SnapRenamePayload::encode(bufferlist &bl) const {
   SnapPayloadBase::encode(bl);
 }
 
-void SnapRenamePayload::decode(__u8 version, bufferlist::iterator &iter) {
+void SnapRenamePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   decode(snap_id, iter);
   SnapPayloadBase::decode(version, iter);
@@ -266,7 +266,7 @@ void RenamePayload::encode(bufferlist &bl) const {
   encode(image_name, bl);
 }
 
-void RenamePayload::decode(__u8 version, bufferlist::iterator &iter) {
+void RenamePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   decode(image_name, iter);
 }
@@ -281,7 +281,7 @@ void UpdateFeaturesPayload::encode(bufferlist &bl) const {
   encode(enabled, bl);
 }
 
-void UpdateFeaturesPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void UpdateFeaturesPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   decode(features, iter);
   decode(enabled, iter);
@@ -296,7 +296,7 @@ void UnknownPayload::encode(bufferlist &bl) const {
   ceph_abort();
 }
 
-void UnknownPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void UnknownPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
 }
 
 void UnknownPayload::dump(Formatter *f) const {
@@ -312,7 +312,7 @@ void NotifyMessage::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void NotifyMessage::decode(bufferlist::iterator& iter) {
+void NotifyMessage::decode(bufferlist::const_iterator& iter) {
   DECODE_START(1, iter);
 
   uint32_t notify_op;
@@ -368,6 +368,9 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
   case NOTIFY_OP_UPDATE_FEATURES:
     payload = UpdateFeaturesPayload();
     break;
+  case NOTIFY_OP_MIGRATE:
+    payload = MigratePayload();
+    break;
   default:
     payload = UnknownPayload();
     break;
@@ -402,6 +405,7 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(RebuildObjectMapPayload(AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(RenamePayload("foo")));
   o.push_back(new NotifyMessage(UpdateFeaturesPayload(1, true)));
+  o.push_back(new NotifyMessage(MigratePayload(AsyncRequestId(ClientId(0, 1), 2))));
 }
 
 void ResponseMessage::encode(bufferlist& bl) const {
@@ -410,7 +414,7 @@ void ResponseMessage::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void ResponseMessage::decode(bufferlist::iterator& iter) {
+void ResponseMessage::decode(bufferlist::const_iterator& iter) {
   DECODE_START(1, iter);
   decode(result, iter);
   DECODE_FINISH(iter);
@@ -476,6 +480,9 @@ std::ostream &operator<<(std::ostream &out,
     break;
   case NOTIFY_OP_UPDATE_FEATURES:
     out << "UpdateFeatures";
+    break;
+  case NOTIFY_OP_MIGRATE:
+    out << "Migrate";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(op) << ")";

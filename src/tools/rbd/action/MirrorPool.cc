@@ -481,7 +481,7 @@ public:
       m_factory(std::bind(ImageRequestAllocator<RequestT>(),
                           std::ref(m_io_ctx), std::ref(m_throttle),
                           std::placeholders::_1, std::forward<Args>(args)...)),
-      m_throttle(g_conf->get_val<int64_t>("rbd_concurrent_management_ops"),
+      m_throttle(g_conf().get_val<int64_t>("rbd_concurrent_management_ops"),
                  true) {
   }
 
@@ -546,9 +546,10 @@ int execute_peer_add(const po::variables_map &vm,
     config_path = vm[at::CONFIG_PATH].as<std::string>();
   }
 
+  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -600,9 +601,10 @@ int execute_peer_remove(const po::variables_map &vm,
     return r;
   }
 
+  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -652,9 +654,10 @@ int execute_peer_set(const po::variables_map &vm,
     std::cerr << "rbd: must specify new " << key << " value." << std::endl;
   }
 
+  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -695,7 +698,8 @@ int execute_enable_disable(const std::string &pool_name,
   librados::IoCtx io_ctx;
   rbd_mirror_mode_t current_mirror_mode;
 
-  int r = utils::init(pool_name, &rados, &io_ctx);
+  // TODO support namespaces
+  int r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -783,9 +787,10 @@ int execute_info(const po::variables_map &vm,
     config_path = vm[at::CONFIG_PATH].as<std::string>();
   }
 
+  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -861,9 +866,10 @@ int execute_status(const po::variables_map &vm,
     config_path = vm[at::CONFIG_PATH].as<std::string>();
   }
 
+  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -960,9 +966,10 @@ int execute_promote(const po::variables_map &vm,
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
+  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  int r = utils::init(pool_name, &rados, &io_ctx);
+  int r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -993,9 +1000,10 @@ int execute_demote(const po::variables_map &vm,
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
+  // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  int r = utils::init(pool_name, &rados, &io_ctx);
+  int r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }

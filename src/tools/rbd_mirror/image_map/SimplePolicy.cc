@@ -27,7 +27,7 @@ size_t SimplePolicy::calc_images_per_instance(const InstanceToImageMap& map,
       ++nr_instances;
     }
   }
-  assert(nr_instances > 0);
+  ceph_assert(nr_instances > 0);
 
   size_t images_per_instance = image_count / nr_instances;
   if (images_per_instance == 0) {
@@ -39,7 +39,6 @@ size_t SimplePolicy::calc_images_per_instance(const InstanceToImageMap& map,
 
 void SimplePolicy::do_shuffle_add_instances(
     const InstanceToImageMap& map, size_t image_count,
-    const std::vector<std::string> &instance_ids,
     std::set<std::string> *remap_global_image_ids) {
   uint64_t images_per_instance = calc_images_per_instance(map, image_count);
   dout(5) << "images per instance=" << images_per_instance << dendl;
@@ -67,15 +66,19 @@ void SimplePolicy::do_shuffle_add_instances(
 
 std::string SimplePolicy::do_map(const InstanceToImageMap& map,
                                  const std::string &global_image_id) {
-  auto min_it = map.begin();
-  for (auto it = min_it; it != map.end(); ++it) {
-    assert(it->second.find(global_image_id) == it->second.end());
-    if (it->second.size() < min_it->second.size() &&
-        !Policy::is_dead_instance(it->first)) {
+  auto min_it = map.end();
+  for (auto it = map.begin(); it != map.end(); ++it) {
+    ceph_assert(it->second.find(global_image_id) == it->second.end());
+    if (Policy::is_dead_instance(it->first)) {
+      continue;
+    } else if (min_it == map.end()) {
+      min_it = it;
+    } else if (it->second.size() < min_it->second.size()) {
       min_it = it;
     }
   }
 
+  ceph_assert(min_it != map.end());
   dout(20) << "global_image_id=" << global_image_id << " maps to instance_id="
            << min_it->first << dendl;
   return min_it->first;

@@ -82,7 +82,7 @@ protected:
     void _process(RGWAsyncRadosRequest *req, ThreadPool::TPHandle& handle) override;
     void _dump_queue();
     void _clear() override {
-      assert(processor->m_req_queue.empty());
+      ceph_assert(processor->m_req_queue.empty());
     }
   } req_wq;
 
@@ -248,7 +248,7 @@ int RGWSimpleRadosReadCR<T>::request_complete()
       return ret;
     }
     try {
-      bufferlist::iterator iter = bl.begin();
+      auto iter = bl.cbegin();
       if (iter.end()) {
         // allow successful reads with empty buffers. ReadSyncStatus coroutines
         // depend on this to be able to read without locking, because the
@@ -412,6 +412,7 @@ class RGWRadosGetOmapKeysCR : public RGWSimpleCoroutine {
   string marker;
   std::set<std::string> *entries;
   int max_entries;
+  bool *pmore;
 
   rgw_rados_ref ref;
 
@@ -423,7 +424,8 @@ public:
   RGWRadosGetOmapKeysCR(RGWRados *_store,
 		      const rgw_raw_obj& _obj,
 		      const string& _marker,
-		      std::set<std::string> *_entries, int _max_entries);
+		      std::set<std::string> *_entries,
+                        int _max_entries, bool *pmore);
 
   int send_request() override;
   int request_complete() override;
@@ -741,7 +743,7 @@ class RGWAsyncFetchRemoteObj : public RGWAsyncRadosRequest {
   RGWBucketInfo bucket_info;
 
   rgw_obj_key key;
-  uint64_t versioned_epoch;
+  std::optional<uint64_t> versioned_epoch;
 
   real_time src_mtime;
 
@@ -755,7 +757,7 @@ public:
                          const string& _source_zone,
                          RGWBucketInfo& _bucket_info,
                          const rgw_obj_key& _key,
-                         uint64_t _versioned_epoch,
+                         std::optional<uint64_t> _versioned_epoch,
                          bool _if_newer, rgw_zone_set *_zones_trace) : RGWAsyncRadosRequest(caller, cn), store(_store),
                                                       source_zone(_source_zone),
                                                       bucket_info(_bucket_info),
@@ -773,7 +775,7 @@ class RGWFetchRemoteObjCR : public RGWSimpleCoroutine {
   RGWBucketInfo bucket_info;
 
   rgw_obj_key key;
-  uint64_t versioned_epoch;
+  std::optional<uint64_t> versioned_epoch;
 
   real_time src_mtime;
 
@@ -787,7 +789,7 @@ public:
                       const string& _source_zone,
                       RGWBucketInfo& _bucket_info,
                       const rgw_obj_key& _key,
-                      uint64_t _versioned_epoch,
+                      std::optional<uint64_t> _versioned_epoch,
                       bool _if_newer, rgw_zone_set *_zones_trace) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
                                        async_rados(_async_rados), store(_store),
                                        source_zone(_source_zone),

@@ -55,7 +55,7 @@ void RefreshRequest<I>::apply() {
     num_objs = Striper::get_num_objects(
       m_image_ctx.layout, m_image_ctx.get_image_size(m_snap_id));
   }
-  assert(m_on_disk_object_map.size() >= num_objs);
+  ceph_assert(m_on_disk_object_map.size() >= num_objs);
 
   *m_object_map = m_on_disk_object_map;
 }
@@ -87,7 +87,7 @@ Context *RefreshRequest<I>::handle_lock(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  assert(*ret_val == 0);
+  ceph_assert(*ret_val == 0);
   send_load();
   return nullptr;
 }
@@ -106,7 +106,7 @@ void RefreshRequest<I>::send_load() {
   librados::AioCompletion *rados_completion =
     create_rados_callback<klass, &klass::handle_load>(this);
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -116,7 +116,7 @@ Context *RefreshRequest<I>::handle_load(int *ret_val) {
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *ret_val << dendl;
 
   if (*ret_val == 0) {
-    bufferlist::iterator bl_it = m_out_bl.begin();
+    auto bl_it = m_out_bl.cbegin();
     *ret_val = cls_client::object_map_load_finish(&bl_it,
                                                   &m_on_disk_object_map);
   }
@@ -169,7 +169,7 @@ void RefreshRequest<I>::send_invalidate() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_invalidate>(this);
   InvalidateRequest<I> *req = InvalidateRequest<I>::create(
-    m_image_ctx, m_snap_id, false, ctx);
+    m_image_ctx, m_snap_id, true, ctx);
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
@@ -181,7 +181,7 @@ Context *RefreshRequest<I>::handle_invalidate(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *ret_val << dendl;
 
-  assert(*ret_val == 0);
+  ceph_assert(*ret_val == 0);
   apply();
   return m_on_finish;
 }
@@ -199,7 +199,7 @@ void RefreshRequest<I>::send_resize_invalidate() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_resize_invalidate>(this);
   InvalidateRequest<I> *req = InvalidateRequest<I>::create(
-    m_image_ctx, m_snap_id, false, ctx);
+    m_image_ctx, m_snap_id, true, ctx);
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
@@ -211,7 +211,7 @@ Context *RefreshRequest<I>::handle_resize_invalidate(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *ret_val << dendl;
 
-  assert(*ret_val == 0);
+  ceph_assert(*ret_val == 0);
   send_resize();
   return nullptr;
 }
@@ -235,7 +235,7 @@ void RefreshRequest<I>::send_resize() {
   librados::AioCompletion *rados_completion =
     create_rados_callback<klass, &klass::handle_resize>(this);
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -275,7 +275,7 @@ Context *RefreshRequest<I>::handle_invalidate_and_close(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *ret_val << dendl;
 
-  assert(*ret_val == 0);
+  ceph_assert(*ret_val == 0);
 
   *ret_val = -EFBIG;
   m_object_map->clear();

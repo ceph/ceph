@@ -33,7 +33,7 @@
 #include <list>
 #include <set>
 #include <map>
-#include "include/memory.h"
+#include <memory>
 #include "include/btree_map.h"
 
 // forward declaration
@@ -76,7 +76,7 @@ struct osd_info_t {
 
   void dump(Formatter *f) const;
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   static void generate_test_instances(list<osd_info_t*>& o);
 };
 WRITE_CLASS_ENCODER(osd_info_t)
@@ -95,7 +95,7 @@ struct osd_xinfo_t {
 
   void dump(Formatter *f) const;
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   static void generate_test_instances(list<osd_xinfo_t*>& o);
 };
 WRITE_CLASS_ENCODER(osd_xinfo_t)
@@ -118,7 +118,7 @@ struct PGTempMap {
       bl.append((char*)p.second, (*p.second + 1) * sizeof(int32_t));
     }
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     using ceph::decode;
     data.clear();
     map.clear();
@@ -126,7 +126,7 @@ struct PGTempMap {
     decode(n, p);
     if (!n)
       return;
-    bufferlist::iterator pstart = p;
+    auto pstart = p;
     size_t start_off = pstart.get_off();
     vector<pair<pg_t,size_t>> offsets;
     offsets.resize(n);
@@ -153,7 +153,7 @@ struct PGTempMap {
   void rebuild() {
     bufferlist bl;
     encode(bl);
-    auto p = bl.begin();
+    auto p = std::cbegin(bl);
     decode(p);
   }
   friend bool operator==(const PGTempMap& l, const PGTempMap& r) {
@@ -169,7 +169,7 @@ struct PGTempMap {
     void init_current() {
       if (it != end) {
 	current.first = it->first;
-	assert(it->second);
+	ceph_assert(it->second);
 	current.second.resize(*it->second);
 	int32_t *p = it->second + 1;
 	for (int n = 0; n < *it->second; ++n, ++p) {
@@ -260,7 +260,7 @@ struct PGTempMap {
   void encode(bufferlist& bl) const {
     encode(pg_temp, bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     decode(pg_temp, p);
   }
   friend bool operator==(const PGTempMap& l, const PGTempMap& r) {
@@ -375,8 +375,8 @@ public:
     mempool::osdmap::set<int64_t> old_pools;
     mempool::osdmap::map<string,map<string,string> > new_erasure_code_profiles;
     mempool::osdmap::vector<string> old_erasure_code_profiles;
-    mempool::osdmap::map<int32_t,entity_addr_t> new_up_client;
-    mempool::osdmap::map<int32_t,entity_addr_t> new_up_cluster;
+    mempool::osdmap::map<int32_t,entity_addrvec_t> new_up_client;
+    mempool::osdmap::map<int32_t,entity_addrvec_t> new_up_cluster;
     mempool::osdmap::map<int32_t,uint32_t> new_state;             // XORed onto previous state.
     mempool::osdmap::map<int32_t,uint32_t> new_weight;
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t> > new_pg_temp;     // [] to remove
@@ -390,8 +390,8 @@ public:
 
     mempool::osdmap::map<entity_addr_t,utime_t> new_blacklist;
     mempool::osdmap::vector<entity_addr_t> old_blacklist;
-    mempool::osdmap::map<int32_t, entity_addr_t> new_hb_back_up;
-    mempool::osdmap::map<int32_t, entity_addr_t> new_hb_front_up;
+    mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_back_up;
+    mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_front_up;
 
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t>> new_pg_upmap;
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<pair<int32_t,int32_t>>> new_pg_upmap_items;
@@ -418,8 +418,8 @@ public:
     void encode_client_old(bufferlist& bl) const;
     void encode_classic(bufferlist& bl, uint64_t features) const;
     void encode(bufferlist& bl, uint64_t features=CEPH_FEATURES_ALL) const;
-    void decode_classic(bufferlist::iterator &p);
-    void decode(bufferlist::iterator &bl);
+    void decode_classic(bufferlist::const_iterator &p);
+    void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<Incremental*>& o);
 
@@ -429,10 +429,10 @@ public:
       have_crc(false), full_crc(0), inc_crc(0) {
     }
     explicit Incremental(bufferlist &bl) {
-      bufferlist::iterator p = bl.begin();
+      auto p = std::cbegin(bl);
       decode(p);
     }
-    explicit Incremental(bufferlist::iterator &p) {
+    explicit Incremental(bufferlist::const_iterator &p) {
       decode(p);
     }
 
@@ -455,7 +455,7 @@ public:
 
     /// filter out osds with any pending state changing
     size_t get_pending_state_osds(vector<int> *osds) {
-      assert(osds);
+      ceph_assert(osds);
       osds->clear();
 
       for (auto &p : new_state) {
@@ -520,22 +520,24 @@ private:
     CEPH_FEATUREMASK_CRUSH_TUNABLES5 |
     CEPH_FEATUREMASK_CRUSH_CHOOSE_ARGS |
     CEPH_FEATUREMASK_SERVER_LUMINOUS |
-    CEPH_FEATUREMASK_SERVER_MIMIC;
+    CEPH_FEATUREMASK_SERVER_MIMIC |
+    CEPH_FEATUREMASK_SERVER_NAUTILUS;
 
   struct addrs_s {
-    mempool::osdmap::vector<ceph::shared_ptr<entity_addr_t> > client_addr;
-    mempool::osdmap::vector<ceph::shared_ptr<entity_addr_t> > cluster_addr;
-    mempool::osdmap::vector<ceph::shared_ptr<entity_addr_t> > hb_back_addr;
-    mempool::osdmap::vector<ceph::shared_ptr<entity_addr_t> > hb_front_addr;
-    entity_addr_t blank;
+    mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > client_addrs;
+    mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > cluster_addrs;
+    mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > hb_back_addrs;
+    mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > hb_front_addrs;
   };
-  ceph::shared_ptr<addrs_s> osd_addrs;
+  std::shared_ptr<addrs_s> osd_addrs;
+
+  entity_addrvec_t _blank_addrvec;
 
   mempool::osdmap::vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   mempool::osdmap::vector<osd_info_t> osd_info;
-  ceph::shared_ptr<PGTempMap> pg_temp;  // temp pg mapping (e.g. while we rebuild)
-  ceph::shared_ptr< mempool::osdmap::map<pg_t,int32_t > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
-  ceph::shared_ptr< mempool::osdmap::vector<__u32> > osd_primary_affinity; ///< 16.16 fixed point, 0x10000 = baseline
+  std::shared_ptr<PGTempMap> pg_temp;  // temp pg mapping (e.g. while we rebuild)
+  std::shared_ptr< mempool::osdmap::map<pg_t,int32_t > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
+  std::shared_ptr< mempool::osdmap::vector<__u32> > osd_primary_affinity; ///< 16.16 fixed point, 0x10000 = baseline
 
   // remap (post-CRUSH, pre-up)
   mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t>> pg_upmap; ///< remap pg
@@ -546,7 +548,7 @@ private:
   mempool::osdmap::map<string,map<string,string> > erasure_code_profiles;
   mempool::osdmap::map<string,int64_t> name_pool;
 
-  ceph::shared_ptr< mempool::osdmap::vector<uuid_d> > osd_uuid;
+  std::shared_ptr< mempool::osdmap::vector<uuid_d> > osd_uuid;
   mempool::osdmap::vector<osd_xinfo_t> osd_xinfo;
 
   mempool::osdmap::unordered_map<entity_addr_t,utime_t> blacklist;
@@ -585,7 +587,7 @@ private:
   bool have_crc() const { return crc_defined; }
   uint32_t get_crc() const { return crc; }
 
-  ceph::shared_ptr<CrushWrapper> crush;       // hierarchical map
+  std::shared_ptr<CrushWrapper> crush;       // hierarchical map
 private:
   uint32_t crush_version = 1;
 
@@ -629,7 +631,7 @@ public:
     if (o.osd_primary_affinity)
       osd_primary_affinity.reset(new mempool::osdmap::vector<__u32>(*o.osd_primary_affinity));
 
-    // NOTE: this still references shared entity_addr_t's.
+    // NOTE: this still references shared entity_addrvec_t's.
     osd_addrs.reset(new addrs_s(*o.osd_addrs));
 
     // NOTE: we do not copy crush.  note that apply_incremental will
@@ -654,6 +656,7 @@ public:
   const utime_t& get_modified() const { return modified; }
 
   bool is_blacklisted(const entity_addr_t& a) const;
+  bool is_blacklisted(const entity_addrvec_t& a) const;
   void get_blacklist(list<pair<entity_addr_t,utime_t > > *bl) const;
   void get_blacklist(std::set<entity_addr_t> *bl) const;
 
@@ -714,27 +717,27 @@ public:
   static void calc_state_set(int state, set<string>& st);
 
   int get_state(int o) const {
-    assert(o < max_osd);
+    ceph_assert(o < max_osd);
     return osd_state[o];
   }
   int get_state(int o, set<string>& st) const {
-    assert(o < max_osd);
+    ceph_assert(o < max_osd);
     unsigned t = osd_state[o];
     calc_state_set(t, st);
     return osd_state[o];
   }
   void set_state(int o, unsigned s) {
-    assert(o < max_osd);
+    ceph_assert(o < max_osd);
     osd_state[o] = s;
   }
   void set_weight(int o, unsigned w) {
-    assert(o < max_osd);
+    ceph_assert(o < max_osd);
     osd_weight[o] = w;
     if (w)
       osd_state[o] |= CEPH_OSD_EXISTS;
   }
   unsigned get_weight(int o) const {
-    assert(o < max_osd);
+    ceph_assert(o < max_osd);
     return osd_weight[o];
   }
   float get_weightf(int o) const {
@@ -743,7 +746,7 @@ public:
   void adjust_osd_weights(const map<int,double>& weights, Incremental& inc) const;
 
   void set_primary_affinity(int o, int w) {
-    assert(o < max_osd);
+    ceph_assert(o < max_osd);
     if (!osd_primary_affinity)
       osd_primary_affinity.reset(
 	new mempool::osdmap::vector<__u32>(
@@ -751,7 +754,7 @@ public:
     (*osd_primary_affinity)[o] = w;
   }
   unsigned get_primary_affinity(int o) const {
-    assert(o < max_osd);
+    ceph_assert(o < max_osd);
     if (!osd_primary_affinity)
       return CEPH_OSD_DEFAULT_PRIMARY_AFFINITY;
     return (*osd_primary_affinity)[o];
@@ -830,7 +833,7 @@ public:
   }
 
   void get_noup_osds(vector<int> *osds) const {
-    assert(osds);
+    ceph_assert(osds);
     osds->clear();
 
     for (int i = 0; i < max_osd; i++) {
@@ -841,7 +844,7 @@ public:
   }
 
   void get_nodown_osds(vector<int> *osds) const {
-    assert(osds);
+    ceph_assert(osds);
     osds->clear();
 
     for (int i = 0; i < max_osd; i++) {
@@ -852,7 +855,7 @@ public:
   }
 
   void get_noin_osds(vector<int> *osds) const {
-    assert(osds);
+    ceph_assert(osds);
     osds->clear();
 
     for (int i = 0; i < max_osd; i++) {
@@ -863,7 +866,7 @@ public:
   }
 
   void get_noout_osds(vector<int> *osds) const {
-    assert(osds);
+    ceph_assert(osds);
     osds->clear();
 
     for (int i = 0; i < max_osd; i++) {
@@ -890,69 +893,55 @@ public:
     return identify_osd(addr) >= 0;
   }
   int find_osd_on_ip(const entity_addr_t& ip) const;
-  const entity_addr_t &get_addr(int osd) const {
-    assert(exists(osd));
-    return osd_addrs->client_addr[osd] ? *osd_addrs->client_addr[osd] : osd_addrs->blank;
+
+  const entity_addrvec_t& get_addrs(int osd) const {
+    ceph_assert(exists(osd));
+    return osd_addrs->client_addrs[osd] ?
+      *osd_addrs->client_addrs[osd] : _blank_addrvec;
   }
-  const entity_addr_t &get_cluster_addr(int osd) const {
-    assert(exists(osd));
-    if (!osd_addrs->cluster_addr[osd] || *osd_addrs->cluster_addr[osd] == entity_addr_t())
-      return get_addr(osd);
-    return *osd_addrs->cluster_addr[osd];
+  const entity_addrvec_t& get_most_recent_addrs(int osd) const {
+    return get_addrs(osd);
   }
-  const entity_addr_t &get_hb_back_addr(int osd) const {
-    assert(exists(osd));
-    return osd_addrs->hb_back_addr[osd] ? *osd_addrs->hb_back_addr[osd] : osd_addrs->blank;
+  const entity_addrvec_t &get_cluster_addrs(int osd) const {
+    ceph_assert(exists(osd));
+    return osd_addrs->cluster_addrs[osd] ?
+      *osd_addrs->cluster_addrs[osd] : _blank_addrvec;
   }
-  const entity_addr_t &get_hb_front_addr(int osd) const {
-    assert(exists(osd));
-    return osd_addrs->hb_front_addr[osd] ? *osd_addrs->hb_front_addr[osd] : osd_addrs->blank;
+  const entity_addrvec_t &get_hb_back_addrs(int osd) const {
+    ceph_assert(exists(osd));
+    return osd_addrs->hb_back_addrs[osd] ?
+      *osd_addrs->hb_back_addrs[osd] : _blank_addrvec;
   }
-  entity_inst_t get_most_recent_inst(int osd) const {
-    assert(exists(osd));
-    return entity_inst_t(entity_name_t::OSD(osd), get_addr(osd));
-  }
-  entity_inst_t get_inst(int osd) const {
-    assert(is_up(osd));
-    return get_most_recent_inst(osd);
-  }
-  entity_inst_t get_cluster_inst(int osd) const {
-    assert(is_up(osd));
-    return entity_inst_t(entity_name_t::OSD(osd), get_cluster_addr(osd));
-  }
-  entity_inst_t get_hb_back_inst(int osd) const {
-    assert(is_up(osd));
-    return entity_inst_t(entity_name_t::OSD(osd), get_hb_back_addr(osd));
-  }
-  entity_inst_t get_hb_front_inst(int osd) const {
-    assert(is_up(osd));
-    return entity_inst_t(entity_name_t::OSD(osd), get_hb_front_addr(osd));
+  const entity_addrvec_t &get_hb_front_addrs(int osd) const {
+    ceph_assert(exists(osd));
+    return osd_addrs->hb_front_addrs[osd] ?
+      *osd_addrs->hb_front_addrs[osd] : _blank_addrvec;
   }
 
   const uuid_d& get_uuid(int osd) const {
-    assert(exists(osd));
+    ceph_assert(exists(osd));
     return (*osd_uuid)[osd];
   }
 
   const epoch_t& get_up_from(int osd) const {
-    assert(exists(osd));
+    ceph_assert(exists(osd));
     return osd_info[osd].up_from;
   }
   const epoch_t& get_up_thru(int osd) const {
-    assert(exists(osd));
+    ceph_assert(exists(osd));
     return osd_info[osd].up_thru;
   }
   const epoch_t& get_down_at(int osd) const {
-    assert(exists(osd));
+    ceph_assert(exists(osd));
     return osd_info[osd].down_at;
   }
   const osd_info_t& get_info(int osd) const {
-    assert(osd < max_osd);
+    ceph_assert(osd < max_osd);
     return osd_info[osd];
   }
 
   const osd_xinfo_t& get_xinfo(int osd) const {
-    assert(osd < max_osd);
+    ceph_assert(osd < max_osd);
     return osd_xinfo[osd];
   }
   
@@ -983,6 +972,13 @@ public:
     }
     return -1;
   }
+
+
+  void get_random_up_osds_by_subtree(int n,     // whoami
+                                     string &subtree,
+                                     int limit, // how many
+                                     set<int> skip,
+                                     set<int> *want) const;
 
   /**
    * get feature bits required by the current structure
@@ -1025,12 +1021,12 @@ public:
 private:
   void encode_client_old(bufferlist& bl) const;
   void encode_classic(bufferlist& bl, uint64_t features) const;
-  void decode_classic(bufferlist::iterator& p);
+  void decode_classic(bufferlist::const_iterator& p);
   void post_decode();
 public:
   void encode(bufferlist& bl, uint64_t features=CEPH_FEATURES_ALL) const;
   void decode(bufferlist& bl);
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
 
 
   /****   mapping facilities   ****/
@@ -1046,7 +1042,7 @@ public:
 			    const object_locator_t& loc) const {
     pg_t pg;
     int ret = object_locator_to_pg(oid, loc, pg);
-    assert(ret == 0);
+    ceph_assert(ret == 0);
     return pg;
   }
 
@@ -1066,7 +1062,7 @@ public:
   int get_pg_num(int pg_pool) const
   {
     const pg_pool_t *pool = get_pg_pool(pg_pool);
-    assert(NULL != pool);
+    ceph_assert(NULL != pool);
     return pool->get_pg_num();
   }
 
@@ -1080,7 +1076,7 @@ public:
       return -ENOENT;
     }
     const pg_pool_t *p = get_pg_pool(pgid.pool());
-    assert(p);
+    ceph_assert(p);
     return p->get_min_size();
   }
 
@@ -1089,7 +1085,7 @@ public:
       return -ENOENT;
     }
     const pg_pool_t *p = get_pg_pool(pgid.pool());
-    assert(p);
+    ceph_assert(p);
     return p->get_size();
   }
 
@@ -1098,7 +1094,7 @@ public:
       return -ENOENT;
     }
     const pg_pool_t *p = get_pg_pool(pgid.pool());
-    assert(p);
+    ceph_assert(p);
     return p->get_crush_rule();
   }
 
@@ -1176,7 +1172,7 @@ public:
   }
   bool pg_is_ec(pg_t pg) const {
     auto i = pools.find(pg.pool());
-    assert(i != pools.end());
+    ceph_assert(i != pools.end());
     return i->second.is_erasure();
   }
   bool get_primary_shard(const pg_t& pgid, spg_t *out) const {
@@ -1250,7 +1246,7 @@ public:
     return pools;
   }
   void get_pool_ids_by_rule(int rule_id, set<int64_t> *pool_ids) const {
-    assert(pool_ids);
+    ceph_assert(pool_ids);
     for (auto &p: pools) {
       if (p.second.get_crush_rule() == rule_id) {
         pool_ids->insert(p.first);
@@ -1262,7 +1258,7 @@ public:
                            set<int64_t> *pool_ids) const;
   const string& get_pool_name(int64_t p) const {
     auto i = pool_name.find(p);
-    assert(i != pool_name.end());
+    ceph_assert(i != pool_name.end());
     return i->second;
   }
   const mempool::osdmap::map<int64_t,string>& get_pool_names() const {
@@ -1279,19 +1275,19 @@ public:
   }
   unsigned get_pg_size(pg_t pg) const {
     auto p = pools.find(pg.pool());
-    assert(p != pools.end());
+    ceph_assert(p != pools.end());
     return p->second.get_size();
   }
   int get_pg_type(pg_t pg) const {
     auto p = pools.find(pg.pool());
-    assert(p != pools.end());
+    ceph_assert(p != pools.end());
     return p->second.get_type();
   }
 
 
   pg_t raw_pg_to_pg(pg_t pg) const {
     auto p = pools.find(pg.pool());
-    assert(p != pools.end());
+    ceph_assert(p != pools.end());
     return p->second.raw_pg_to_pg(pg);
   }
 
@@ -1468,7 +1464,7 @@ public:
 WRITE_CLASS_ENCODER_FEATURES(OSDMap)
 WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)
 
-typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
+typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
 inline ostream& operator<<(ostream& out, const OSDMap& m) {
   m.print_oneline_summary(out);

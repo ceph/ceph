@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/cache/ObjectCacherObjectDispatch.h"
+#include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
@@ -41,7 +42,7 @@ struct ObjectCacherObjectDispatch<I>::C_InvalidateCache : public Context {
   }
 
   void finish(int r) override {
-    assert(dispatcher->m_cache_lock.is_locked());
+    ceph_assert(dispatcher->m_cache_lock.is_locked());
     auto cct = dispatcher->m_image_ctx->cct;
 
     if (r == -EBLACKLISTED) {

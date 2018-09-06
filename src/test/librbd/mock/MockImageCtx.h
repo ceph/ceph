@@ -35,7 +35,7 @@ struct MockImageCtx {
                               const std::string &image_id,
                               const char *snap, librados::IoCtx& p,
                               bool read_only) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
   MOCK_METHOD0(destroy, void());
@@ -61,6 +61,7 @@ struct MockImageCtx {
       owner_lock(image_ctx.owner_lock),
       md_lock(image_ctx.md_lock),
       snap_lock(image_ctx.snap_lock),
+      timestamp_lock(image_ctx.timestamp_lock),
       parent_lock(image_ctx.parent_lock),
       object_map_lock(image_ctx.object_map_lock),
       async_ops_lock(image_ctx.async_ops_lock),
@@ -101,6 +102,8 @@ struct MockImageCtx {
       journal_object_flush_interval(image_ctx.journal_object_flush_interval),
       journal_object_flush_bytes(image_ctx.journal_object_flush_bytes),
       journal_object_flush_age(image_ctx.journal_object_flush_age),
+      journal_object_max_in_flight_appends(
+          image_ctx.journal_object_max_in_flight_appends),
       journal_pool(image_ctx.journal_pool),
       journal_max_payload_bytes(image_ctx.journal_max_payload_bytes),
       journal_max_concurrent_object_sets(
@@ -111,7 +114,10 @@ struct MockImageCtx {
       mirroring_replay_delay(image_ctx.mirroring_replay_delay),
       non_blocking_aio(image_ctx.non_blocking_aio),
       blkin_trace_all(image_ctx.blkin_trace_all),
-      enable_alloc_hint(image_ctx.enable_alloc_hint)
+      enable_alloc_hint(image_ctx.enable_alloc_hint),
+      ignore_migrating(image_ctx.ignore_migrating),
+      mtime_update_interval(image_ctx.mtime_update_interval),
+      atime_update_interval(image_ctx.atime_update_interval)
   {
     md_ctx.dup(image_ctx.md_ctx);
     data_ctx.dup(image_ctx.data_ctx);
@@ -156,6 +162,8 @@ struct MockImageCtx {
   MOCK_CONST_METHOD1(get_image_size, uint64_t(librados::snap_t));
   MOCK_CONST_METHOD1(get_object_count, uint64_t(librados::snap_t));
   MOCK_CONST_METHOD1(get_read_flags, int(librados::snap_t));
+  MOCK_CONST_METHOD2(get_flags, int(librados::snap_t in_snap_id,
+                     uint64_t *flags));
   MOCK_CONST_METHOD2(get_snap_id,
 		     librados::snap_t(cls::rbd::SnapshotNamespace snap_namespace,
 				      std::string in_snap_name));
@@ -165,6 +173,7 @@ struct MockImageCtx {
 					     cls::rbd::SnapshotNamespace *out_snap_namespace));
   MOCK_CONST_METHOD2(get_parent_spec, int(librados::snap_t in_snap_id,
                                           ParentSpec *pspec));
+  MOCK_CONST_METHOD1(get_parent_info, const ParentInfo*(librados::snap_t));
   MOCK_CONST_METHOD2(get_parent_overlap, int(librados::snap_t in_snap_id,
                                              uint64_t *overlap));
   MOCK_CONST_METHOD2(prune_parent_extents, uint64_t(vector<pair<uint64_t,uint64_t> >& ,
@@ -174,6 +183,13 @@ struct MockImageCtx {
                                             bool *is_protected));
   MOCK_CONST_METHOD2(is_snap_unprotected, int(librados::snap_t in_snap_id,
                                               bool *is_unprotected));
+
+  MOCK_CONST_METHOD0(get_create_timestamp, utime_t());
+  MOCK_CONST_METHOD0(get_access_timestamp, utime_t());
+  MOCK_CONST_METHOD0(get_modify_timestamp, utime_t());
+
+  MOCK_METHOD1(set_access_timestamp, void(const utime_t at));
+  MOCK_METHOD1(set_modify_timestamp, void(const utime_t at));
 
   MOCK_METHOD8(add_snap, void(cls::rbd::SnapshotNamespace in_snap_namespace,
 			      std::string in_snap_name,
@@ -213,6 +229,8 @@ struct MockImageCtx {
   MOCK_CONST_METHOD0(get_stripe_count, uint64_t());
   MOCK_CONST_METHOD0(get_stripe_period, uint64_t());
 
+  MOCK_CONST_METHOD0(is_writeback_cache_enabled, bool());
+
   ImageCtx *image_ctx;
   CephContext *cct;
   PerfCounters *perfcounter;
@@ -243,6 +261,7 @@ struct MockImageCtx {
   RWLock &owner_lock;
   RWLock &md_lock;
   RWLock &snap_lock;
+  RWLock &timestamp_lock;
   RWLock &parent_lock;
   RWLock &object_map_lock;
   Mutex &async_ops_lock;
@@ -261,6 +280,7 @@ struct MockImageCtx {
   std::string id;
   std::string name;
   ParentInfo parent_md;
+  MigrationInfo migration_info;
   char *format_string;
   cls::rbd::GroupSpec group_spec;
 
@@ -304,6 +324,7 @@ struct MockImageCtx {
   int journal_object_flush_interval;
   uint64_t journal_object_flush_bytes;
   double journal_object_flush_age;
+  uint64_t journal_object_max_in_flight_appends;
   std::string journal_pool;
   uint32_t journal_max_payload_bytes;
   int journal_max_concurrent_object_sets;
@@ -313,6 +334,10 @@ struct MockImageCtx {
   bool non_blocking_aio;
   bool blkin_trace_all;
   bool enable_alloc_hint;
+  bool ignore_migrating;
+  uint64_t mtime_update_interval;
+  uint64_t atime_update_interval;
+  bool cache;
 };
 
 } // namespace librbd

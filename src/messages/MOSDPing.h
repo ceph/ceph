@@ -32,10 +32,12 @@
 #include "osd/osd_types.h"
 
 
-class MOSDPing : public Message {
-
-  static const int HEAD_VERSION = 4;
-  static const int COMPAT_VERSION = 4;
+class MOSDPing : public MessageInstance<MOSDPing> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 4;
+  static constexpr int COMPAT_VERSION = 4;
 
  public:
   enum {
@@ -65,18 +67,18 @@ class MOSDPing : public Message {
   uint32_t min_message_size;
 
   MOSDPing(const uuid_d& f, epoch_t e, __u8 o, utime_t s, uint32_t min_message)
-    : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION),
       fsid(f), map_epoch(e), op(o), stamp(s), min_message_size(min_message)
   { }
   MOSDPing()
-    : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION), min_message_size(0)
+    : MessageInstance(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION), min_message_size(0)
   {}
 private:
   ~MOSDPing() override {}
 
 public:
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(fsid, p);
     decode(map_epoch, p);
     decode(op, p);

@@ -23,7 +23,7 @@
 #include "common/errno.h"
 #include "include/stringify.h"
 
-#include "include/assert.h" // re-clobber assert()
+#include "include/assert.h" // re-clobber ceph_assert()
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, this)
@@ -173,7 +173,7 @@ void ConfigKeyService::store_delete_prefix(
 bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 {
   Message *m = op->get_req();
-  assert(m != NULL);
+  ceph_assert(m != NULL);
   dout(10) << __func__ << " " << *m << dendl;
 
   if (!in_quorum()) {
@@ -182,11 +182,11 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
     return false;
   }
 
-  assert(m->get_type() == MSG_MON_COMMAND);
+  ceph_assert(m->get_type() == MSG_MON_COMMAND);
 
   MMonCommand *cmd = static_cast<MMonCommand*>(m);
 
-  assert(!cmd->cmd.empty());
+  ceph_assert(!cmd->cmd.empty());
 
   int ret = 0;
   stringstream ss;
@@ -199,14 +199,14 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
     return false;
   }
 
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
   string key;
-  cmd_getval(g_ceph_context, cmdmap, "key", key);
+  cmd_getval_throws(g_ceph_context, cmdmap, "key", key);
 
   if (prefix == "config-key get") {
     ret = store_get(key, rdata);
     if (ret < 0) {
-      assert(!rdata.length());
+      ceph_assert(!rdata.length());
       ss << "error obtaining '" << key << "': " << cpp_strerror(ret);
       goto out;
     }
@@ -222,17 +222,17 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 
     bufferlist data;
     string val;
-    if (cmd_getval(g_ceph_context, cmdmap, "val", val)) {
+    if (cmd_getval_throws(g_ceph_context, cmdmap, "val", val)) {
       // they specified a value in the command instead of a file
       data.append(val);
     } else if (cmd->get_data_len() > 0) {
       // they specified '-i <file>'
       data = cmd->get_data();
     }
-    if (data.length() > (size_t) g_conf->mon_config_key_max_entry_size) {
+    if (data.length() > (size_t) g_conf()->mon_config_key_max_entry_size) {
       ret = -EFBIG; // File too large
       ss << "error: entry size limited to "
-         << g_conf->mon_config_key_max_entry_size << " bytes. "
+         << g_conf()->mon_config_key_max_entry_size << " bytes. "
          << "Use 'mon config key max entry size' to manually adjust";
       goto out;
     }
@@ -293,7 +293,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 
   } else if (prefix == "config-key dump") {
     string prefix;
-    cmd_getval(g_ceph_context, cmdmap, "key", prefix);
+    cmd_getval_throws(g_ceph_context, cmdmap, "key", prefix);
     stringstream tmp_ss;
     store_dump(tmp_ss, prefix);
     rdata.append(tmp_ss);
@@ -375,7 +375,7 @@ void ConfigKeyService::do_osd_new(
     const uuid_d& uuid,
     const string& dmcrypt_key)
 {
-  assert(paxos->is_plugged());
+  ceph_assert(paxos->is_plugged());
 
   string dmcrypt_key_prefix = _get_dmcrypt_prefix(uuid, "luks");
   bufferlist dmcrypt_key_value;

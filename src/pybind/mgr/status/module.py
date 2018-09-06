@@ -5,9 +5,10 @@ High level status display commands
 
 from collections import defaultdict
 from prettytable import PrettyTable
-import prettytable
-import fnmatch
 import errno
+import fnmatch
+import prettytable
+import six
 
 from mgr_module import MgrModule
 
@@ -67,7 +68,7 @@ class Module(MgrModule):
         """
         
         factor = 1000 if decimal else 1024
-        units = [' ', 'k', 'M', 'G', 'T', 'P']
+        units = [' ', 'k', 'M', 'G', 'T', 'P', 'E']
         unit = 0
         while len("%s" % (int(n) // (factor**unit))) > width - 1:
             unit += 1
@@ -187,7 +188,7 @@ class Module(MgrModule):
                     ])
 
             # Find the standby replays
-            for gid_str, daemon_info in mdsmap['info'].iteritems():
+            for gid_str, daemon_info in six.iteritems(mdsmap['info']):
                 if daemon_info['state'] != "up:standby-replay":
                     continue
 
@@ -198,6 +199,9 @@ class Module(MgrModule):
                     self.get_rate("mds", daemon_info['name'], "mds_log.replay"),
                     5
                 ) + "/s"
+
+                metadata = self.get_metadata('mds', daemon_info['name'])
+                mds_versions[metadata.get('ceph_version', "unknown")].append(daemon_info['name'])
 
                 rank_table.add_row([
                     "{0}-s".format(daemon_info['rank']), "standby-replay",
@@ -242,14 +246,14 @@ class Module(MgrModule):
             output += "MDS version: {0}".format(mds_versions.keys()[0])
         else:
             version_table = PrettyTable(["version", "daemons"])
-            for version, daemons in mds_versions.iteritems():
+            for version, daemons in six.iteritems(mds_versions):
                 version_table.add_row([
                     version,
                     ", ".join(daemons)
                 ])
             output += version_table.get_string() + "\n"
 
-        return 0, "", output
+        return 0, output, ""
 
     def handle_osd_status(self, cmd):
         osd_table = PrettyTable(['id', 'host', 'used', 'avail', 'wr ops', 'wr data', 'rd ops', 'rd data', 'state'])
@@ -301,9 +305,9 @@ class Module(MgrModule):
                                ','.join(osd['state']),
                                ])
 
-        return 0, "", osd_table.get_string()
+        return 0, osd_table.get_string(), ""
 
-    def handle_command(self, cmd):
+    def handle_command(self, inbuf, cmd):
         self.log.error("handle_command")
 
         if cmd['prefix'] == "fs status":

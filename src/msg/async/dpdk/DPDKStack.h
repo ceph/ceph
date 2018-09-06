@@ -38,7 +38,8 @@ template <typename Protocol>
 class DPDKServerSocketImpl : public ServerSocketImpl {
   typename Protocol::listener _listener;
  public:
-  DPDKServerSocketImpl(Protocol& proto, uint16_t port, const SocketOptions &opt);
+  DPDKServerSocketImpl(Protocol& proto, uint16_t port, const SocketOptions &opt,
+		       int type);
   int listen() {
     return _listener.listen();
   }
@@ -122,7 +123,7 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     } else {
       _cur_off += f.size;
     }
-    assert(data.length());
+    ceph_assert(data.length());
     return data.length();
   }
   virtual ssize_t send(bufferlist &bl, bool more) override {
@@ -181,8 +182,8 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
 
 template <typename Protocol>
 DPDKServerSocketImpl<Protocol>::DPDKServerSocketImpl(
-        Protocol& proto, uint16_t port, const SocketOptions &opt)
-        : _listener(proto.listen(port)) {}
+  Protocol& proto, uint16_t port, const SocketOptions &opt, int type)
+  : ServerSocketImpl(type), _listener(proto.listen(port)) {}
 
 template <typename Protocol>
 int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s, const SocketOptions &options, entity_addr_t *out, Worker *w) {
@@ -192,8 +193,10 @@ int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s, const SocketOptio
   if (!c)
     return -EAGAIN;
 
-  if (out)
+  if (out) {
     *out = c->remote_addr();
+    out->set_type(addr_type);
+  }
   std::unique_ptr<NativeConnectedSocketImpl<Protocol>> csi(
           new NativeConnectedSocketImpl<Protocol>(std::move(*c)));
   *s = ConnectedSocket(std::move(csi));
@@ -218,7 +221,7 @@ class DPDKWorker : public Worker {
   };
   std::unique_ptr<Impl> _impl;
 
-  virtual void initialize();
+  virtual void initialize() override;
   void set_ipv4_packet_filter(ip_packet_filter* filter) {
     _impl->_inet.set_packet_filter(filter);
   }
@@ -245,7 +248,7 @@ class DPDKStack : public NetworkStack {
     funcs.resize(cct->_conf->ms_async_max_op_threads);
   }
   virtual bool support_zero_copy_read() const override { return true; }
-  virtual bool support_local_listen_table() const { return true; }
+  virtual bool support_local_listen_table() const override { return true; }
 
   virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override;
   virtual void join_worker(unsigned i) override {

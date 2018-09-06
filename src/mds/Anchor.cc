@@ -26,7 +26,7 @@ void Anchor::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void Anchor::decode(bufferlist::iterator &bl)
+void Anchor::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(1, bl);
   decode(ino, bl);

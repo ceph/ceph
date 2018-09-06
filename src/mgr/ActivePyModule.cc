@@ -25,7 +25,7 @@
 
 int ActivePyModule::load(ActivePyModules *py_modules)
 {
-  assert(py_modules);
+  ceph_assert(py_modules);
   Gil gil(py_module->pMyThreadState, true);
 
   // We tell the module how we name it, so that it can be consistent
@@ -51,7 +51,7 @@ int ActivePyModule::load(ActivePyModules *py_modules)
 
 void ActivePyModule::notify(const std::string &notify_type, const std::string &notify_id)
 {
-  assert(pClassInstance != nullptr);
+  ceph_assert(pClassInstance != nullptr);
 
   Gil gil(py_module->pMyThreadState, true);
 
@@ -74,7 +74,7 @@ void ActivePyModule::notify(const std::string &notify_type, const std::string &n
 
 void ActivePyModule::notify_clog(const LogEntry &log_entry)
 {
-  assert(pClassInstance != nullptr);
+  ceph_assert(pClassInstance != nullptr);
 
   Gil gil(py_module->pMyThreadState, true);
 
@@ -100,15 +100,71 @@ void ActivePyModule::notify_clog(const LogEntry &log_entry)
   }
 }
 
+bool ActivePyModule::method_exists(const std::string &method) const
+{
+  Gil gil(py_module->pMyThreadState, true);
+
+  auto boundMethod = PyObject_GetAttrString(pClassInstance, method.c_str());
+  if (boundMethod == nullptr) {
+    return false;
+  } else {
+    Py_DECREF(boundMethod);
+    return true;
+  }
+}
+
+PyObject *ActivePyModule::dispatch_remote(
+    const std::string &method,
+    PyObject *args,
+    PyObject *kwargs,
+    std::string *err)
+{
+  ceph_assert(err != nullptr);
+
+  // Rather than serializing arguments, pass the CPython objects.
+  // Works because we happen to know that the subinterpreter
+  // implementation shares a GIL, allocator, deallocator and GC state, so
+  // it's okay to pass the objects between subinterpreters.
+  // But in future this might involve serialization to support a CSP-aware
+  // future Python interpreter a la PEP554
+
+  Gil gil(py_module->pMyThreadState, true);
+
+  // Fire the receiving method
+  auto boundMethod = PyObject_GetAttrString(pClassInstance, method.c_str());
+
+  // Caller should have done method_exists check first!
+  ceph_assert(boundMethod != nullptr);
+
+  dout(20) << "Calling " << py_module->get_name()
+           << "." << method << "..." << dendl;
+
+  auto remoteResult = PyObject_Call(boundMethod,
+      args, kwargs);
+  Py_DECREF(boundMethod);
+
+  if (remoteResult == nullptr) {
+    // Because the caller is in a different context, we can't let this
+    // exception bubble up, need to re-raise it from the caller's
+    // context later.
+    *err = handle_pyerror();
+  } else {
+    dout(20) << "Success calling '" << method << "'" << dendl;
+  }
+
+  return remoteResult;
+}
+
 
 
 int ActivePyModule::handle_command(
   const cmdmap_t &cmdmap,
+  const bufferlist &inbuf,
   std::stringstream *ds,
   std::stringstream *ss)
 {
-  assert(ss != nullptr);
-  assert(ds != nullptr);
+  ceph_assert(ss != nullptr);
+  ceph_assert(ds != nullptr);
 
   if (pClassInstance == nullptr) {
     // Not the friendliest error string, but we could only
@@ -122,15 +178,20 @@ int ActivePyModule::handle_command(
   PyFormatter f;
   cmdmap_dump(cmdmap, &f);
   PyObject *py_cmd = f.get();
+  string instr;
+  inbuf.copy(0, inbuf.length(), instr);
 
   auto pResult = PyObject_CallMethod(pClassInstance,
-      const_cast<char*>("handle_command"), const_cast<char*>("(O)"), py_cmd);
+      const_cast<char*>("handle_command"), const_cast<char*>("s#O"),
+      instr.c_str(), instr.length(), py_cmd);
 
   Py_DECREF(py_cmd);
 
   int r = 0;
   if (pResult != NULL) {
     if (PyTuple_Size(pResult) != 3) {
+      derr << "module '" << py_module->get_name() << "' command handler "
+              "returned wrong type!" << dendl;
       r = -EINVAL;
     } else {
       r = PyInt_AsLong(PyTuple_GetItem(pResult, 0));
@@ -140,6 +201,8 @@ int ActivePyModule::handle_command(
 
     Py_DECREF(pResult);
   } else {
+    derr << "module '" << py_module->get_name() << "' command handler "
+            "threw exception: " << peek_pyerror() << dendl;
     *ds << "";
     *ss << handle_pyerror();
     r = -EINVAL;

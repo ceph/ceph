@@ -142,6 +142,14 @@ TEST_F(TestInternal, OpenByID) {
    close_image(ictx);
 }
 
+TEST_F(TestInternal, OpenSnapDNE) {
+   librbd::ImageCtx *ictx;
+   ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+   ictx = new librbd::ImageCtx(m_image_name, "", "unknown_snap", m_ioctx, true);
+   ASSERT_EQ(-ENOENT, ictx->state->open(true));
+}
+
 TEST_F(TestInternal, IsExclusiveLockOwner) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
@@ -739,7 +747,7 @@ TEST_F(TestInternal, DiscardCopyup)
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   CephContext* cct = reinterpret_cast<CephContext*>(_rados.cct());
-  REQUIRE(!cct->_conf->get_val<bool>("rbd_skip_partial_discard"));
+  REQUIRE(!cct->_conf.get_val<bool>("rbd_skip_partial_discard"));
 
   m_image_name = get_temp_image_name();
   m_image_size = 1 << 14;

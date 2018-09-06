@@ -25,6 +25,5 @@ set(lib_mon_srcs
   ../osd/OSDCap.cc)
 add_library(mon STATIC
   ${lib_mon_srcs}
-  $<TARGET_OBJECTS:kv_objs>
-  $<TARGET_OBJECTS:heap_profiler_objs>)
-target_link_libraries(mon ${ALLOC_LIBS})
+  $<TARGET_OBJECTS:kv_objs>)
+target_link_libraries(mon heap_profiler)

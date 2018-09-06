@@ -41,7 +41,7 @@ public:
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       DECODE_START(1, bl);
       decode(name, bl);
       decode(can_run, bl);
@@ -93,7 +93,7 @@ public:
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator& p)
+    void decode(bufferlist::const_iterator& p)
     {
       DECODE_START(3, p);
       decode(gid, p);
@@ -132,7 +132,7 @@ public:
   /// global_id of the ceph-mgr instance selected as a leader
   uint64_t active_gid = 0;
   /// server address reported by the leader once it is active
-  entity_addr_t active_addr;
+  entity_addrvec_t active_addrs;
   /// whether the nominated leader is active (i.e. has initialized its server)
   bool available = false;
   /// the name (foo in mgr.<foo>) of the active daemon
@@ -151,7 +151,7 @@ public:
   std::map<std::string, std::string> services;
 
   epoch_t get_epoch() const { return epoch; }
-  entity_addr_t get_active_addr() const { return active_addr; }
+  entity_addrvec_t get_active_addrs() const { return active_addrs; }
   uint64_t get_active_gid() const { return active_gid; }
   bool get_available() const { return available; }
   const std::string &get_active_name() const { return active_name; }
@@ -235,33 +235,48 @@ public:
 
   void encode(bufferlist& bl, uint64_t features) const
   {
-    ENCODE_START(4, 1, bl);
+    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      ENCODE_START(5, 1, bl);
+      encode(epoch, bl);
+      encode(active_addrs.legacy_addr(), bl, features);
+      encode(active_gid, bl);
+      encode(available, bl);
+      encode(active_name, bl);
+      encode(standbys, bl);
+      encode(modules, bl);
+
+      // Pre-version 4 string list of available modules
+      // (replaced by direct encode of ModuleInfo below)
+      std::set<std::string> old_available_modules;
+      for (const auto &i : available_modules) {
+	old_available_modules.insert(i.name);
+      }
+      encode(old_available_modules, bl);
+
+      encode(services, bl);
+      encode(available_modules, bl);
+      ENCODE_FINISH(bl);
+      return;
+    }
+    ENCODE_START(6, 6, bl);
     encode(epoch, bl);
-    encode(active_addr, bl, features);
+    encode(active_addrs, bl, features);
     encode(active_gid, bl);
     encode(available, bl);
     encode(active_name, bl);
     encode(standbys, bl);
     encode(modules, bl);
-
-    // Pre-version 4 string list of available modules
-    // (replaced by direct encode of ModuleInfo below)
-    std::set<std::string> old_available_modules;
-    for (const auto &i : available_modules) {
-      old_available_modules.insert(i.name);
-    }
-    encode(old_available_modules, bl);
-
     encode(services, bl);
     encode(available_modules, bl);
     ENCODE_FINISH(bl);
+    return;
   }
 
-  void decode(bufferlist::iterator& p)
+  void decode(bufferlist::const_iterator& p)
   {
-    DECODE_START(4, p);
+    DECODE_START(6, p);
     decode(epoch, p);
-    decode(active_addr, p);
+    decode(active_addrs, p);
     decode(active_gid, p);
     decode(available, p);
     decode(active_name, p);
@@ -269,17 +284,19 @@ public:
     if (struct_v >= 2) {
       decode(modules, p);
 
-      // Reconstitute ModuleInfos from names
-      std::set<std::string> module_name_list;
-      decode(module_name_list, p);
-      // Only need to unpack this field if we won't have the full
-      // MgrMap::ModuleInfo structures added in v4
-      if (struct_v < 4) {
-        for (const auto &i : module_name_list) {
-          MgrMap::ModuleInfo info;
-          info.name = i;
-          available_modules.push_back(std::move(info));
-        }
+      if (struct_v < 6) {
+	// Reconstitute ModuleInfos from names
+	std::set<std::string> module_name_list;
+	decode(module_name_list, p);
+	// Only need to unpack this field if we won't have the full
+	// MgrMap::ModuleInfo structures added in v4
+	if (struct_v < 4) {
+	  for (const auto &i : module_name_list) {
+	    MgrMap::ModuleInfo info;
+	    info.name = i;
+	    available_modules.push_back(std::move(info));
+	  }
+	}
       }
     }
     if (struct_v >= 3) {
@@ -295,7 +312,7 @@ public:
     f->dump_int("epoch", epoch);
     f->dump_int("active_gid", get_active_gid());
     f->dump_string("active_name", get_active_name());
-    f->dump_stream("active_addr") << active_addr;
+    f->dump_object("active_addrs", active_addrs);
     f->dump_bool("available", available);
     f->open_array_section("standbys");
     for (const auto &i : standbys) {
@@ -335,7 +352,7 @@ public:
   void print_summary(Formatter *f, std::ostream *ss) const
   {
     // One or the other, not both
-    assert((ss != nullptr) != (f != nullptr));
+    ceph_assert((ss != nullptr) != (f != nullptr));
     if (f) {
       dump(f);
     } else {

@@ -1,23 +1,16 @@
-#ceph_perf_objectstore
 add_executable(ceph_perf_objectstore 
-  ObjectStoreTransactionBenchmark.cc
-  )
-set_target_properties(ceph_perf_objectstore PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
+  ObjectStoreTransactionBenchmark.cc)
 target_link_libraries(ceph_perf_objectstore os osdc global ${UNITTEST_LIBS})
 install(TARGETS ceph_perf_objectstore
   DESTINATION bin)
 
-#ceph_test_objectstore
 add_library(store_test_fixture OBJECT store_test_fixture.cc)
-set_target_properties(store_test_fixture PROPERTIES
-  COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+target_include_directories(store_test_fixture PRIVATE
+  $<TARGET_PROPERTY:GTest::GTest,INTERFACE_INCLUDE_DIRECTORIES>)
 
 add_executable(ceph_test_objectstore
   store_test.cc
   $<TARGET_OBJECTS:store_test_fixture>)
-set_target_properties(ceph_test_objectstore PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_objectstore
   os
   ceph-common
@@ -30,12 +23,8 @@ target_link_libraries(ceph_test_objectstore
 install(TARGETS ceph_test_objectstore
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-#ceph_test_keyvaluedb
 add_executable(ceph_test_keyvaluedb
-  test_kv.cc
-  )
-set_target_properties(ceph_test_keyvaluedb PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
+  test_kv.cc)
 target_link_libraries(ceph_test_keyvaluedb
   os
   ceph-common
@@ -95,13 +84,6 @@ add_ceph_unittest(unittest_rocksdb_option)
 target_link_libraries(unittest_rocksdb_option global os ${BLKID_LIBRARIES})
 
 if(WITH_BLUESTORE)
-  # unittest_bit_alloc
-  add_executable(unittest_bit_alloc
-    BitAllocator_test.cc
-    $<TARGET_OBJECTS:unit-main>
-    )
-  add_ceph_unittest(unittest_bit_alloc)
-  target_link_libraries(unittest_bit_alloc os global)
 
   add_executable(unittest_alloc
     Allocator_test.cc
@@ -110,7 +92,20 @@ if(WITH_BLUESTORE)
   add_ceph_unittest(unittest_alloc)
   target_link_libraries(unittest_alloc os global)
 
-  # unittest_bluefs
+
+  add_executable(unittest_alloc_bench
+    Allocator_bench.cc
+    $<TARGET_OBJECTS:unit-main>
+    )
+  target_link_libraries(unittest_alloc_bench ${UNITTEST_LIBS} os global)
+
+  add_executable(unittest_fastbmap_allocator
+    fastbmap_allocator_test.cc
+    $<TARGET_OBJECTS:unit-main>
+    )
+  add_ceph_unittest(unittest_fastbmap_allocator)
+  target_link_libraries(unittest_fastbmap_allocator os global)
+
   add_executable(unittest_bluefs
     test_bluefs.cc
     )

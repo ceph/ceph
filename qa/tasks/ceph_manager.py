@@ -1135,7 +1135,7 @@ class CephManager:
             )
         return proc.stdout.getvalue()
 
-    def raw_cluster_cmd_result(self, *args):
+    def raw_cluster_cmd_result(self, *args, **kwargs):
         """
         Start ceph on a cluster.  Return success or failure information.
         """
@@ -1152,10 +1152,9 @@ class CephManager:
             self.cluster,
         ]
         ceph_args.extend(args)
-        proc = self.controller.run(
-            args=ceph_args,
-            check_status=False,
-            )
+        kwargs['args'] = ceph_args
+        kwargs['check_status'] = False
+        proc = self.controller.run(**kwargs)
         return proc.exitstatus
 
     def run_ceph_w(self):
@@ -1387,7 +1386,7 @@ class CephManager:
         # both osd_mon_report_interval and mgr_stats_period are 5 seconds
         # by default, and take the faulty injection in ms into consideration,
         # 12 seconds are more than enough
-        delays = [1, 1, 2, 3, 5, 8, 13]
+        delays = [1, 1, 2, 3, 5, 8, 13, 0]
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             exc = None
@@ -1658,9 +1657,8 @@ class CephManager:
             assert pool_name in self.pools
             self.log("removing pool_name %s" % (pool_name,))
             del self.pools[pool_name]
-            self.do_rados(self.controller,
-                          ['rmpool', pool_name, pool_name,
-                           "--yes-i-really-really-mean-it"])
+            self.raw_cluster_cmd('osd', 'pool', 'rm', pool_name, pool_name,
+                                 "--yes-i-really-really-mean-it")
 
     def get_pool(self):
         """

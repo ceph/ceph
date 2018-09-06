@@ -72,7 +72,7 @@ void PerfCountersCollection::remove(class PerfCounters *l)
   }
 
   perf_counters_set_t::iterator i = m_loggers.find(l);
-  assert(i != m_loggers.end());
+  ceph_assert(i != m_loggers.end());
   m_loggers.erase(i);
 }
 
@@ -167,8 +167,8 @@ void PerfCounters::inc(int idx, uint64_t amt)
   if (!m_cct->_conf->perf)
     return;
 
-  assert(idx > m_lower_bound);
-  assert(idx < m_upper_bound);
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_U64))
     return;
@@ -186,10 +186,10 @@ void PerfCounters::dec(int idx, uint64_t amt)
   if (!m_cct->_conf->perf)
     return;
 
-  assert(idx > m_lower_bound);
-  assert(idx < m_upper_bound);
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  assert(!(data.type & PERFCOUNTER_LONGRUNAVG));
+  ceph_assert(!(data.type & PERFCOUNTER_LONGRUNAVG));
   if (!(data.type & PERFCOUNTER_U64))
     return;
   data.u64 -= amt;
@@ -200,8 +200,8 @@ void PerfCounters::set(int idx, uint64_t amt)
   if (!m_cct->_conf->perf)
     return;
 
-  assert(idx > m_lower_bound);
-  assert(idx < m_upper_bound);
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_U64))
     return;
@@ -222,8 +222,8 @@ uint64_t PerfCounters::get(int idx) const
   if (!m_cct->_conf->perf)
     return 0;
 
-  assert(idx > m_lower_bound);
-  assert(idx < m_upper_bound);
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
   const perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_U64))
     return 0;
@@ -235,8 +235,8 @@ void PerfCounters::tinc(int idx, utime_t amt)
   if (!m_cct->_conf->perf)
     return;
 
-  assert(idx > m_lower_bound);
-  assert(idx < m_upper_bound);
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_TIME))
     return;
@@ -254,8 +254,8 @@ void PerfCounters::tinc(int idx, ceph::timespan amt)
   if (!m_cct->_conf->perf)
     return;
 
-  assert(idx > m_lower_bound);
-  assert(idx < m_upper_bound);
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_TIME))
     return;
@@ -273,8 +273,8 @@ void PerfCounters::tset(int idx, utime_t amt)
   if (!m_cct->_conf->perf)
     return;
 
-  assert(idx > m_lower_bound);
-  assert(idx < m_upper_bound);
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_TIME))
     return;
@@ -288,8 +288,8 @@ utime_t PerfCounters::tget(int idx) const
   if (!m_cct->_conf->perf)
     return utime_t();
 
-  assert(idx > m_lower_bound);
-  assert(idx < m_upper_bound);
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
   const perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_TIME))
     return utime_t();
@@ -302,12 +302,12 @@ void PerfCounters::hinc(int idx, int64_t x, int64_t y)
   if (!m_cct->_conf->perf)
     return;
 
-  assert(idx > m_lower_bound);
-  assert(idx < m_upper_bound);
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
 
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  assert(data.type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
-  assert(data.histogram);
+  ceph_assert(data.type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
+  ceph_assert(data.histogram);
 
   data.histogram->inc(x, y);
 }
@@ -317,8 +317,8 @@ pair<uint64_t, uint64_t> PerfCounters::get_tavg_ns(int idx) const
   if (!m_cct->_conf->perf)
     return make_pair(0, 0);
 
-  assert(idx > m_lower_bound);
-  assert(idx < m_upper_bound);
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
   const perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_TIME))
     return make_pair(0, 0);
@@ -398,9 +398,9 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
       }
       f->dump_int("priority", get_adjusted_priority(d->prio));
       
-      if (d->unit == NONE) {
+      if (d->unit == UNIT_NONE) {
 	f->dump_string("units", "none"); 
-      } else if (d->unit == BYTES) {
+      } else if (d->unit == UNIT_BYTES) {
 	f->dump_string("units", "bytes");
       }
       f->close_section();
@@ -431,8 +431,8 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
 	}
 	f->close_section();
       } else if (d->type & PERFCOUNTER_HISTOGRAM) {
-        assert(d->type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
-        assert(d->histogram);
+        ceph_assert(d->type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
+        ceph_assert(d->histogram);
         f->open_object_section(d->name);
         d->histogram->dump_formatted(f);
         f->close_section();
@@ -537,17 +537,17 @@ void PerfCountersBuilder::add_impl(
   const char *description, const char *nick, int prio, int ty, int unit,
   unique_ptr<PerfHistogram<>> histogram)
 {
-  assert(idx > m_perf_counters->m_lower_bound);
-  assert(idx < m_perf_counters->m_upper_bound);
+  ceph_assert(idx > m_perf_counters->m_lower_bound);
+  ceph_assert(idx < m_perf_counters->m_upper_bound);
   PerfCounters::perf_counter_data_vec_t &vec(m_perf_counters->m_data);
   PerfCounters::perf_counter_data_any_d
     &data(vec[idx - m_perf_counters->m_lower_bound - 1]);
-  assert(data.type == PERFCOUNTER_NONE);
+  ceph_assert(data.type == PERFCOUNTER_NONE);
   data.name = name;
   data.description = description;
   // nick must be <= 4 chars
   if (nick) {
-    assert(strlen(nick) <= 4);
+    ceph_assert(strlen(nick) <= 4);
   }
   data.nick = nick;
   data.prio = prio ? prio : prio_default;
@@ -561,8 +561,8 @@ PerfCounters *PerfCountersBuilder::create_perf_counters()
   PerfCounters::perf_counter_data_vec_t::const_iterator d = m_perf_counters->m_data.begin();
   PerfCounters::perf_counter_data_vec_t::const_iterator d_end = m_perf_counters->m_data.end();
   for (; d != d_end; ++d) {
-    assert(d->type != PERFCOUNTER_NONE);
-    assert(d->type & (PERFCOUNTER_U64 | PERFCOUNTER_TIME));
+    ceph_assert(d->type != PERFCOUNTER_NONE);
+    ceph_assert(d->type & (PERFCOUNTER_U64 | PERFCOUNTER_TIME));
   }
 
   PerfCounters *ret = m_perf_counters;

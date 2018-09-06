@@ -68,7 +68,7 @@ public:
     encode(check_on_raw, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(3, 1, 1, bl);
     int64_t max_size_kb;
     decode(max_size_kb, bl);

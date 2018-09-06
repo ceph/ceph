@@ -1,12 +1,14 @@
 import errno
 import json
+import itertools
+import six
 import socket
 import time
 from threading import Event
 
 from telegraf.basesocket import BaseSocket
 from telegraf.protocol import Line
-from mgr_module import MgrModule
+from mgr_module import MgrModule, PG_STATES
 
 try:
     from urllib.parse import urlparse
@@ -30,11 +32,6 @@ class Module(MgrModule):
         {
             "cmd": "telegraf send",
             "desc": "Force sending data to Telegraf",
-            "perm": "rw"
-        },
-        {
-            "cmd": "telegraf self-test",
-            "desc": "debug the module",
             "perm": "rw"
         },
     ]
@@ -71,7 +68,6 @@ class Module(MgrModule):
 
     def get_pool_stats(self):
         df = self.get('df')
-        data = []
 
         df_types = [
             'bytes_used',
@@ -90,7 +86,7 @@ class Module(MgrModule):
 
         for df_type in df_types:
             for pool in df['pools']:
-                point = {
+                yield {
                     'measurement': 'ceph_pool_stats',
                     'tags': {
                         'pool_name': pool['name'],
@@ -100,21 +96,19 @@ class Module(MgrModule):
                     },
                     'value': pool['stats'][df_type],
                 }
-                data.append(point)
-        return data
 
     def get_daemon_stats(self):
-        data = []
-
-        for daemon, counters in self.get_all_perf_counters().iteritems():
+        for daemon, counters in six.iteritems(self.get_all_perf_counters()):
             svc_type, svc_id = daemon.split('.', 1)
             metadata = self.get_metadata(svc_type, svc_id)
+            if not metadata:
+                continue
 
             for path, counter_info in counters.items():
                 if counter_info['type'] & self.PERFCOUNTER_HISTOGRAM:
                     continue
 
-                data.append({
+                yield {
                     'measurement': 'ceph_daemon_stats',
                     'tags': {
                         'ceph_daemon': daemon,
@@ -123,9 +117,28 @@ class Module(MgrModule):
                         'fsid': self.get_fsid()
                     },
                     'value': counter_info['value']
-                })
+                }
 
-        return data
+    def get_pg_stats(self):
+        stats = dict()
+
+        pg_status = self.get('pg_status')
+        for key in ['bytes_total', 'data_bytes', 'bytes_used', 'bytes_avail',
+                    'num_pgs', 'num_objects', 'num_pools']:
+            stats[key] = pg_status[key]
+
+        for state in PG_STATES:
+            stats['num_pgs_{0}'.format(state)] = 0
+
+        stats['num_pgs'] = pg_status['num_pgs']
+        for state in pg_status['pgs_by_state']:
+            states = state['state_name'].split('+')
+            for s in PG_STATES:
+                key = 'num_pgs_{0}'.format(s)
+                if s in states:
+                    stats[key] += state['count']
+
+        return stats
 
     def get_cluster_stats(self):
         stats = dict()
@@ -174,42 +187,17 @@ class Module(MgrModule):
         stats['num_mds_up'] = num_mds_up
         stats['num_mds'] = num_mds_up + stats['num_mds_standby']
 
-        pg_status = self.get('pg_status')
-        for key in ['bytes_total', 'data_bytes', 'bytes_used', 'bytes_avail',
-                    'num_pgs', 'num_objects', 'num_pools']:
-            stats[key] = pg_status[key]
+        stats.update(self.get_pg_stats())
 
-        stats['num_pgs_active'] = 0
-        stats['num_pgs_clean'] = 0
-        stats['num_pgs_scrubbing'] = 0
-        stats['num_pgs_peering'] = 0
-        for state in pg_status['pgs_by_state']:
-            states = state['state_name'].split('+')
-
-            if 'active' in states:
-                stats['num_pgs_active'] += state['count']
-
-            if 'clean' in states:
-                stats['num_pgs_clean'] += state['count']
-
-            if 'peering' in states:
-                stats['num_pgs_peering'] += state['count']
-
-            if 'scrubbing' in states:
-                stats['num_pgs_scrubbing'] += state['count']
-
-        data = list()
         for key, value in stats.items():
-            data.append({
+            yield {
                 'measurement': 'ceph_cluster_stats',
                 'tags': {
                     'type_instance': key,
                     'fsid': self.get_fsid()
                 },
                 'value': int(value)
-            })
-
-        return data
+            }
 
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():
@@ -239,11 +227,11 @@ class Module(MgrModule):
         return int(round(time.time() * 1000000000))
 
     def gather_measurements(self):
-        measurements = list()
-        measurements += self.get_pool_stats()
-        measurements += self.get_daemon_stats()
-        measurements += self.get_cluster_stats()
-        return measurements
+        return itertools.chain(
+            self.get_pool_stats(),
+            self.get_daemon_stats(),
+            self.get_cluster_stats()
+        )
 
     def send_to_telegraf(self):
         url = urlparse(self.config['address'])
@@ -260,7 +248,7 @@ class Module(MgrModule):
                                 measurement['tags'], now)
                     self.log.debug(line.to_line_protocol())
                     s.send(line.to_line_protocol())
-            except (socket.error, RuntimeError, errno, IOError):
+            except (socket.error, RuntimeError, IOError, OSError):
                 self.log.exception('Failed to send statistics to Telegraf:')
 
     def shutdown(self):
@@ -268,7 +256,7 @@ class Module(MgrModule):
         self.run = False
         self.event.set()
 
-    def handle_command(self, cmd):
+    def handle_command(self, inbuf, cmd):
         if cmd['prefix'] == 'telegraf config-show':
             return 0, json.dumps(self.config), ''
         elif cmd['prefix'] == 'telegraf config-set':
@@ -284,15 +272,12 @@ class Module(MgrModule):
         elif cmd['prefix'] == 'telegraf send':
             self.send_to_telegraf()
             return 0, 'Sending data to Telegraf', ''
-        if cmd['prefix'] == 'telegraf self-test':
-            self.self_test()
-            return 0, '', 'Self-test OK'
 
         return (-errno.EINVAL, '',
                 "Command not found '{0}'".format(cmd['prefix']))
 
     def self_test(self):
-        measurements = self.gather_measurements()
+        measurements = list(self.gather_measurements())
         if len(measurements) == 0:
             raise RuntimeError('No measurements found')
 

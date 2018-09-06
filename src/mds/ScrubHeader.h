@@ -31,7 +31,7 @@ public:
       : tag(tag_), force(force_), recursive(recursive_), repair(repair_),
         formatter(f_), origin(nullptr)
   {
-    assert(formatter != nullptr);
+    ceph_assert(formatter != nullptr);
   }
 
   // Set after construction because it won't be known until we've
@@ -59,8 +59,8 @@ protected:
   bool repaired = false;  // May be set during scrub if repairs happened
 };
 
-typedef ceph::shared_ptr<ScrubHeader> ScrubHeaderRef;
-typedef ceph::shared_ptr<const ScrubHeader> ScrubHeaderRefConst;
+typedef std::shared_ptr<ScrubHeader> ScrubHeaderRef;
+typedef std::shared_ptr<const ScrubHeader> ScrubHeaderRefConst;
 
 #endif // SCRUB_HEADER_H_
 

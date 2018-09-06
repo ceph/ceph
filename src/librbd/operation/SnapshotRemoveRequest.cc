@@ -36,7 +36,7 @@ void SnapshotRemoveRequest<I>::send_op() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
 
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
     RWLock::RLocker object_map_locker(image_ctx.object_map_lock);
@@ -83,7 +83,7 @@ void SnapshotRemoveRequest<I>::trash_snap() {
     SnapshotRemoveRequest<I>,
     &SnapshotRemoveRequest<I>::handle_trash_snap>(this);
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -115,14 +115,14 @@ void SnapshotRemoveRequest<I>::get_snap() {
   ldout(cct, 5) << dendl;
 
   librados::ObjectReadOperation op;
-  cls_client::snapshot_get_start(&op, {m_snap_id});
+  cls_client::snapshot_info_get_start(&op, m_snap_id);
 
   auto aio_comp = create_rados_callback<
     SnapshotRemoveRequest<I>,
     &SnapshotRemoveRequest<I>::handle_get_snap>(this);
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, aio_comp, &op,
                                        &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -133,14 +133,12 @@ void SnapshotRemoveRequest<I>::handle_get_snap(int r) {
   ldout(cct, 5) << "r=" << r << dendl;
 
   if (r == 0) {
-    std::vector<cls::rbd::SnapshotInfo> snap_infos;
-    std::vector<ParentInfo> parents;
-    std::vector<uint8_t> protections;
-    bufferlist::iterator it = m_out_bl.begin();
-    r = cls_client::snapshot_get_finish(&it, {m_snap_id}, &snap_infos,
-                                        &parents, &protections);
+    cls::rbd::SnapshotInfo snap_info;
+
+    auto it = m_out_bl.cbegin();
+    r = cls_client::snapshot_info_get_finish(&it, &snap_info);
     if (r == 0) {
-      m_child_attached = (snap_infos[0].child_count > 0);
+      m_child_attached = (snap_info.child_count > 0);
     }
   }
 
@@ -310,7 +308,7 @@ void SnapshotRemoveRequest<I>::remove_snap() {
     SnapshotRemoveRequest<I>,
     &SnapshotRemoveRequest<I>::handle_remove_snap>(this);
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -343,8 +341,8 @@ void SnapshotRemoveRequest<I>::remove_snap_context() {
 template <typename I>
 int SnapshotRemoveRequest<I>::scan_for_parents(ParentSpec &pspec) {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.snap_lock.is_locked());
-  assert(image_ctx.parent_lock.is_locked());
+  ceph_assert(image_ctx.snap_lock.is_locked());
+  ceph_assert(image_ctx.parent_lock.is_locked());
 
   if (pspec.pool_id != -1) {
     map<uint64_t, SnapInfo>::iterator it;

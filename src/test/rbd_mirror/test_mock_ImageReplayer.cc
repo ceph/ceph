@@ -45,7 +45,7 @@ namespace journal {
 
 template<>
 struct Replay<MockTestImageCtx> {
-  MOCK_METHOD2(decode, int(bufferlist::iterator *, EventEntry *));
+  MOCK_METHOD2(decode, int(bufferlist::const_iterator *, EventEntry *));
   MOCK_METHOD3(process, void(const EventEntry &, Context *, Context *));
   MOCK_METHOD1(flush, void(Context*));
   MOCK_METHOD2(shut_down, void(bool, Context*));
@@ -72,7 +72,7 @@ struct ImageDeleter<librbd::MockTestImageCtx> {
   static void trash_move(librados::IoCtx& local_io_ctx,
                          const std::string& global_image_id, bool resync,
                          MockContextWQ* work_queue, Context* on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->trash_move(global_image_id, resync, on_finish);
   }
 
@@ -135,7 +135,7 @@ struct PrepareLocalImageRequest<librbd::MockTestImageCtx> {
                                           std::string *tag_owner,
                                           MockContextWQ *work_queue,
                                           Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->local_image_id = local_image_id;
     s_instance->local_image_name = local_image_name;
     s_instance->tag_owner = tag_owner;
@@ -171,7 +171,7 @@ struct PrepareRemoteImageRequest<librbd::MockTestImageCtx> {
                                            cls::journal::ClientState *client_state,
                                            librbd::journal::MirrorPeerClientMeta *client_meta,
                                            Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->remote_mirror_uuid = remote_mirror_uuid;
     s_instance->remote_image_id = remote_image_id;
     s_instance->remote_journaler = remote_journaler;
@@ -209,7 +209,7 @@ struct BootstrapRequest<librbd::MockTestImageCtx> {
       librbd::journal::MirrorPeerClientMeta *client_meta,
       Context *on_finish, bool *do_resync,
       rbd::mirror::ProgressContext *progress_ctx = nullptr) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->image_ctx = local_image_ctx;
     s_instance->on_finish = on_finish;
     s_instance->do_resync = do_resync;
@@ -217,12 +217,12 @@ struct BootstrapRequest<librbd::MockTestImageCtx> {
   }
 
   BootstrapRequest() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
   ~BootstrapRequest() {
-    assert(s_instance == this);
+    ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
 
@@ -248,19 +248,19 @@ struct CloseImageRequest<librbd::MockTestImageCtx> {
 
   static CloseImageRequest* create(librbd::MockTestImageCtx **image_ctx,
                                    Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->image_ctx = image_ctx;
     s_instance->on_finish = on_finish;
     return s_instance;
   }
 
   CloseImageRequest() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
   ~CloseImageRequest() {
-    assert(s_instance == this);
+    ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
 
@@ -276,7 +276,7 @@ struct EventPreprocessor<librbd::MockTestImageCtx> {
                                    const std::string &local_mirror_uuid,
                                    librbd::journal::MirrorPeerClientMeta *client_meta,
                                    MockContextWQ *work_queue) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
@@ -284,12 +284,12 @@ struct EventPreprocessor<librbd::MockTestImageCtx> {
   }
 
   EventPreprocessor() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
   ~EventPreprocessor() {
-    assert(s_instance == this);
+    ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
 
@@ -303,7 +303,7 @@ struct ReplayStatusFormatter<librbd::MockTestImageCtx> {
 
   static ReplayStatusFormatter* create(::journal::MockJournalerProxy *journaler,
                                        const std::string &mirror_uuid) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
@@ -311,12 +311,12 @@ struct ReplayStatusFormatter<librbd::MockTestImageCtx> {
   }
 
   ReplayStatusFormatter() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
   ~ReplayStatusFormatter() {
-    assert(s_instance == this);
+    ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
 
@@ -1300,7 +1300,7 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
   EXPECT_CALL(mock_replay_entry, get_data());
   C_SaferCond decode_ctx;
   EXPECT_CALL(mock_local_replay, decode(_, _))
-    .WillOnce(DoAll(Invoke([&decode_ctx](bufferlist::iterator* it,
+    .WillOnce(DoAll(Invoke([&decode_ctx](bufferlist::const_iterator* it,
                                          librbd::journal::EventEntry *e) {
                              decode_ctx.complete(0);
                            }),

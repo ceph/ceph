@@ -45,7 +45,7 @@ void TrashMoveRequest<I>::get_mirror_image_id() {
     &TrashMoveRequest<I>::handle_get_mirror_image_id>(this);
   m_out_bl.clear();
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -54,7 +54,7 @@ void TrashMoveRequest<I>::handle_get_mirror_image_id(int r) {
   dout(10) << "r=" << r << dendl;
 
   if (r == 0) {
-    auto bl_it = m_out_bl.begin();
+    auto bl_it = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_image_get_image_id_finish(&bl_it,
                                                              &m_image_id);
   }
@@ -122,7 +122,7 @@ void TrashMoveRequest<I>::disable_mirror_image() {
     TrashMoveRequest<I>,
     &TrashMoveRequest<I>::handle_disable_mirror_image>(this);
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -294,7 +294,7 @@ void TrashMoveRequest<I>::remove_mirror_image() {
     TrashMoveRequest<I>,
     &TrashMoveRequest<I>::handle_remove_mirror_image>(this);
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 

@@ -19,12 +19,14 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MOSDAlive : public PaxosServiceMessage {
- public:
+class MOSDAlive : public MessageInstance<MOSDAlive, PaxosServiceMessage> {
+public:
+  friend factory;
+
   epoch_t want = 0;
 
-  MOSDAlive(epoch_t h, epoch_t w) : PaxosServiceMessage(MSG_OSD_ALIVE, h), want(w) { }
-  MOSDAlive() : PaxosServiceMessage(MSG_OSD_ALIVE, 0) {}
+  MOSDAlive(epoch_t h, epoch_t w) : MessageInstance(MSG_OSD_ALIVE, h), want(w) { }
+  MOSDAlive() : MessageInstance(MSG_OSD_ALIVE, 0) {}
 private:
   ~MOSDAlive() override {}
 
@@ -35,7 +37,7 @@ public:
     encode(want, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(want, p);
   }

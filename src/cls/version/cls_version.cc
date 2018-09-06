@@ -64,7 +64,7 @@ static int read_version(cls_method_context_t hctx, obj_version *objv, bool impli
     return ret;
 
   try {
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     decode(*objv, iter);
   } catch (buffer::error& err) {
     CLS_LOG(0, "ERROR: read_version(): failed to decode version entry\n");
@@ -76,7 +76,7 @@ static int read_version(cls_method_context_t hctx, obj_version *objv, bool impli
 
 static int cls_version_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_version_set_op op;
   try {
@@ -142,7 +142,7 @@ static bool check_conds(list<obj_version_cond>& conds, obj_version& objv)
 
 static int cls_version_inc(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_version_inc_op op;
   try {
@@ -171,7 +171,7 @@ static int cls_version_inc(cls_method_context_t hctx, bufferlist *in, bufferlist
 
 static int cls_version_check(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_version_check_op op;
   try {

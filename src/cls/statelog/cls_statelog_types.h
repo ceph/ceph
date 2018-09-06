@@ -29,7 +29,7 @@ struct cls_statelog_entry {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(client_id, bl);
     decode(op_id, bl);

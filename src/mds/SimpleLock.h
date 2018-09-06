@@ -43,7 +43,6 @@ inline const char *get_lock_type_name(int t) {
   }
 }
 
-#include "include/memory.h"
 
 struct MutationImpl;
 typedef boost::intrusive_ptr<MutationImpl> MutationRef;
@@ -297,7 +296,7 @@ public:
     }
   };
 
-  void decode_locked_state(bufferlist& bl) {
+  void decode_locked_state(const bufferlist& bl) {
     parent->decode_lock_state(type->type, bl);
   }
   void encode_locked_state(bufferlist& bl) {
@@ -306,7 +305,7 @@ public:
   void finish_waiters(uint64_t mask, int r=0) {
     parent->finish_waiting(mask << get_wait_shift(), r);
   }
-  void take_waiting(uint64_t mask, list<MDSInternalContextBase*>& ls) {
+  void take_waiting(uint64_t mask, MDSInternalContextBase::vec& ls) {
     parent->take_waiting(mask << get_wait_shift(), ls);
   }
   void add_waiter(uint64_t mask, MDSInternalContextBase *c) {
@@ -325,8 +324,8 @@ public:
     //assert(!is_stable() || gather_set.size() == 0);  // gather should be empty in stable states.
     return s;
   }
-  void set_state_rejoin(int s, list<MDSInternalContextBase*>& waiters, bool survivor) {
-    assert(!get_parent()->is_auth());
+  void set_state_rejoin(int s, MDSInternalContextBase::vec& waiters, bool survivor) {
+    ceph_assert(!get_parent()->is_auth());
 
     // If lock in the replica object was not in SYNC state when auth mds of the object failed.
     // Auth mds of the object may take xlock on the lock and change the object when replaying
@@ -455,7 +454,7 @@ public:
     return ++num_rdlock; 
   }
   int put_rdlock() {
-    assert(num_rdlock>0);
+    ceph_assert(num_rdlock>0);
     --num_rdlock;
     if (num_rdlock == 0)
       parent->put(MDSCacheObject::PIN_LOCK);
@@ -488,8 +487,8 @@ public:
 
   // xlock
   void get_xlock(MutationRef who, client_t client) { 
-    assert(get_xlock_by() == MutationRef());
-    assert(state == LOCK_XLOCK || is_locallock() ||
+    ceph_assert(get_xlock_by() == MutationRef());
+    ceph_assert(state == LOCK_XLOCK || is_locallock() ||
 	   state == LOCK_LOCK /* if we are a slave */);
     parent->get(MDSCacheObject::PIN_LOCK);
     more()->num_xlock++;
@@ -497,15 +496,15 @@ public:
     more()->xlock_by_client = client;
   }
   void set_xlock_done() {
-    assert(more()->xlock_by);
-    assert(state == LOCK_XLOCK || is_locallock() ||
+    ceph_assert(more()->xlock_by);
+    ceph_assert(state == LOCK_XLOCK || is_locallock() ||
 	   state == LOCK_LOCK /* if we are a slave */);
     if (!is_locallock())
       state = LOCK_XLOCKDONE;
     more()->xlock_by.reset();
   }
   void put_xlock() {
-    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE ||
+    ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE ||
 	   state == LOCK_XLOCKSNAP || is_locallock() ||
 	   state == LOCK_LOCK /* if we are a master of a slave */);
     --more()->num_xlock;
@@ -537,11 +536,11 @@ public:
     return state_flags & LEASED;
   }
   void get_client_lease() {
-    assert(!is_leased());
+    ceph_assert(!is_leased());
     state_flags |= LEASED;
   }
   void put_client_lease() {
-    assert(is_leased());
+    ceph_assert(is_leased());
     state_flags &= ~LEASED;
   }
 
@@ -569,7 +568,7 @@ public:
       encode(empty_gather_set, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     DECODE_START(2, p);
     decode(state, p);
     set<__s32> g;
@@ -583,14 +582,14 @@ public:
     using ceph::encode;
     encode(s, bl);
   }
-  void decode_state(bufferlist::iterator& p, bool is_new=true) {
+  void decode_state(bufferlist::const_iterator& p, bool is_new=true) {
     using ceph::decode;
     __s16 s;
     decode(s, p);
     if (is_new)
       state = s;
   }
-  void decode_state_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters, bool survivor) {
+  void decode_state_rejoin(bufferlist::const_iterator& p, MDSInternalContextBase::vec& waiters, bool survivor) {
     __s16 s;
     using ceph::decode;
     decode(s, p);
@@ -643,8 +642,8 @@ public:
    * called on first replica creation.
    */
   void replicate_relax() {
-    assert(parent->is_auth());
-    assert(!parent->is_replicated());
+    ceph_assert(parent->is_auth());
+    ceph_assert(!parent->is_replicated());
     if (state == LOCK_LOCK && !is_used())
       state = LOCK_SYNC;
   }

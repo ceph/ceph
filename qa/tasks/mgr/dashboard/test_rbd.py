@@ -7,11 +7,7 @@ from .helper import DashboardTestCase, JObj, JLeaf, JList
 
 
 class RbdTest(DashboardTestCase):
-
-    @classmethod
-    def authenticate(cls):
-        cls._ceph_cmd(['dashboard', 'set-login-credentials', 'admin', 'admin'])
-        cls._post('/api/auth', {'username': 'admin', 'password': 'admin'})
+    AUTH_ROLES = ['pool-manager', 'block-manager']
 
     @classmethod
     def create_pool(cls, name, pg_num, pool_type, application='rbd'):
@@ -19,11 +15,47 @@ class RbdTest(DashboardTestCase):
             'pool': name,
             'pg_num': pg_num,
             'pool_type': pool_type,
-            'application_metadata': application
+            'application_metadata': [application]
         }
         if pool_type == 'erasure':
             data['flags'] = ['ec_overwrites']
-        cls._post("/api/pool", data)
+        cls._task_post("/api/pool", data)
+
+    @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['create', 'update', 'delete']}])
+    def test_read_access_permissions(self):
+        self._get('/api/block/image')
+        self.assertStatus(403)
+        self._get('/api/block/image/pool/image')
+        self.assertStatus(403)
+
+    @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['read', 'update', 'delete']}])
+    def test_create_access_permissions(self):
+        self.create_image('pool', 'name', 0)
+        self.assertStatus(403)
+        self.create_snapshot('pool', 'image', 'snapshot')
+        self.assertStatus(403)
+        self.copy_image('src_pool', 'src_image', 'dest_pool', 'dest_image')
+        self.assertStatus(403)
+        self.clone_image('parent_pool', 'parent_image', 'parent_snap', 'pool', 'name')
+        self.assertStatus(403)
+
+    @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['read', 'create', 'delete']}])
+    def test_update_access_permissions(self):
+        self.edit_image('pool', 'image')
+        self.assertStatus(403)
+        self.update_snapshot('pool', 'image', 'snapshot', None, None)
+        self.assertStatus(403)
+        self._task_post('/api/block/image/rbd/rollback_img/snap/snap1/rollback')
+        self.assertStatus(403)
+        self.flatten_image('pool', 'image')
+        self.assertStatus(403)
+
+    @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['read', 'create', 'update']}])
+    def test_delete_access_permissions(self):
+        self.remove_image('pool', 'image')
+        self.assertStatus(403)
+        self.remove_snapshot('pool', 'image', 'snapshot')
+        self.assertStatus(403)
 
     @classmethod
     def create_image(cls, pool, name, size, **kwargs):
@@ -80,7 +112,6 @@ class RbdTest(DashboardTestCase):
     @classmethod
     def setUpClass(cls):
         super(RbdTest, cls).setUpClass()
-        cls.authenticate()
         cls.create_pool('rbd', 10, 'replicated')
         cls.create_pool('rbd_iscsi', 10, 'replicated')
 
@@ -549,3 +580,22 @@ class RbdTest(DashboardTestCase):
         self.assertEqual(default_features, ['deep-flatten', 'exclusive-lock',
                                              'fast-diff', 'layering',
                                              'object-map'])
+
+    def test_image_with_special_name(self):
+        rbd_name = 'test/rbd'
+        rbd_name_encoded = 'test%2Frbd'
+
+        self.create_image('rbd', rbd_name, 10240)
+        self.assertStatus(201)
+
+        img = self._get("/api/block/image/rbd/" + rbd_name_encoded)
+        self.assertStatus(200)
+
+        self._validate_image(img, name=rbd_name, size=10240,
+                             num_objs=1, obj_size=4194304,
+                             features_name=['deep-flatten',
+                                            'exclusive-lock',
+                                            'fast-diff', 'layering',
+                                            'object-map'])
+
+        self.remove_image('rbd', rbd_name_encoded)

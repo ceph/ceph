@@ -6,7 +6,7 @@ Contributing to Ceph: A Guide for Developers
 :Author: Nathan Cutler
 :License: Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)
 
-.. note:: The old (pre-2016) developer documentation has been moved to :doc:`/dev/index-old`.
+.. note:: You may also be interested in the :doc:`/dev/internals` documentation.
 
 .. contents::
    :depth: 3
@@ -23,8 +23,8 @@ object store and file system designed to provide excellent performance,
 reliability and scalability). If not, please refer to the `project website`_
 and especially the `publications list`_.
 
-.. _`project website`: http://ceph.com
-.. _`publications list`: https://ceph.com/resources/publications/
+.. _`project website`: https://ceph.com
+.. _`publications list`: https://ceph.com/publications/
 
 Since this document is to be consumed by developers, who are assumed to
 have Internet access, topics covered elsewhere, either within the Ceph
@@ -93,7 +93,7 @@ the `Ceph "organization"`_.
 To make a meaningful contribution to the project as a developer, a working
 knowledge of git_ is essential.
 
-.. _git: https://git-scm.com/documentation
+.. _git: https://git-scm.com/doc
 
 Although the `Ceph "organization"`_ includes several software repositories,
 this document covers only one: https://github.com/ceph/ceph.
@@ -203,6 +203,11 @@ Development-mode cluster
 
 See :doc:`/dev/quick_guide`.
 
+Kubernetes/Rook development cluster
+-----------------------------------
+
+See :ref:`kubernetes-dev`
+
 Backporting
 -----------
 
@@ -268,7 +273,7 @@ Branch merges
   stable release.
 * The master is merged into the branch of the stable release
   immediately after each development x.0.z release.
-  
+
 Stable release candidates (i.e. x.1.z) phase 1
 ----------------------------------------------
 
@@ -367,10 +372,10 @@ Issue tracker
 
 See `Redmine issue tracker`_ for a brief introduction to the Ceph Issue Tracker.
 
-Ceph developers use the issue tracker to 
+Ceph developers use the issue tracker to
 
 1. keep track of issues - bugs, fix requests, feature requests, backport
-requests, etc. 
+requests, etc.
 
 2. communicate with other developers and keep them informed as work
 on the issues progresses.
@@ -420,7 +425,7 @@ The following chart illustrates basic development workflow:
                 ^                                    | fix changes
                 |                                    | test changes
                 | review                             | git commit
-                |                                    | 
+                |                                    |
                 |                                    v
            /--------------\                        /-------------\
            |   github     |<---------------------- | ceph/fix_1  |
@@ -436,17 +441,17 @@ Update the tracker
 
 Before you start, you should know the `Issue tracker`_ number of the bug
 you intend to fix. If there is no tracker issue, now is the time to create
-one. 
+one.
 
 The tracker is there to explain the issue (bug) to your fellow Ceph
-developers and keep them informed as you make progress toward resolution. 
+developers and keep them informed as you make progress toward resolution.
 To this end, then, provide a descriptive title as well as sufficient
 information and details in the description.
 
 If you have sufficient tracker permissions, assign the bug to yourself by
 changing the ``Assignee`` field.  If your tracker permissions have not yet
 been elevated, simply add a comment to the issue with a short message like
-"I am working on this issue". 
+"I am working on this issue".
 
 Upstream code
 -------------
@@ -460,9 +465,9 @@ chart illustrates, we will make a local copy of this code, modify it, test
 our modifications, and submit the modifications back to the upstream repo
 for review.
 
-A local copy of the upstream code is made by 
+A local copy of the upstream code is made by
 
-1. forking the upstream repo on GitHub, and 
+1. forking the upstream repo on GitHub, and
 2. cloning your fork to make a local working copy
 
 See the `the GitHub documentation
@@ -501,7 +506,7 @@ Fetching downloads all objects (commits, branches) that were added since
 the last sync. After running these commands, all the branches from
 ``ceph/ceph.git`` are downloaded to the local git repo as
 ``remotes/ceph/$BRANCH_NAME`` and can be referenced as
-``ceph/$BRANCH_NAME`` in certain git commands. 
+``ceph/$BRANCH_NAME`` in certain git commands.
 
 For example, your local ``master`` branch can be reset to the upstream Ceph
 ``master`` branch by doing::
@@ -602,7 +607,7 @@ tests. These tests run on machines operated by the Ceph Continuous
 Integration (CI) team. When the tests complete, the result will be shown
 on GitHub in the pull request itself.
 
-You can (and should) also test your modifications before you open a PR. 
+You can (and should) also test your modifications before you open a PR.
 Refer to the `Testing`_ chapter for details.
 
 Notes on PR make check test
@@ -777,7 +782,7 @@ The ``teuthology-suite`` command is part of the `teuthology framework`_.
 In the sections that follow we attempt to provide a detailed introduction
 to that framework from the perspective of a beginning Ceph developer.
 
-Teuthology consumes packages 
+Teuthology consumes packages
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 It may take some time to understand the significance of this fact, but it
@@ -800,7 +805,7 @@ A number of integration tests are run on a regular basis in the `Sepia
 lab`_ against the official Ceph repositories (on the ``master`` development
 branch and the stable branches). Traditionally, these tests are called "the
 nightlies" because the Ceph core developers used to live and work in
-the same time zone and from their perspective the tests were run overnight. 
+the same time zone and from their perspective the tests were run overnight.
 
 The results of the nightlies are published at http://pulpito.ceph.com/ and
 http://pulpito.ovh.sepia.ceph.com:8081/. The developer nick shows in the
@@ -815,12 +820,7 @@ The ``suites`` directory of the `ceph/qa sub-directory`_ contains
 all the integration tests, for all the Ceph components.
 
 `ceph-deploy <https://github.com/ceph/ceph/tree/master/qa/suites/ceph-deploy>`_
-  install a Ceph cluster with ``ceph-deploy`` (`ceph-deploy man page`_)
-
-`ceph-disk <https://github.com/ceph/ceph/tree/master/qa/suites/ceph-disk>`_
-  verify init scripts (upstart etc.) and udev integration with
-  ``ceph-disk`` (`ceph-disk man page`_), with and without `dmcrypt
-  <https://gitlab.com/cryptsetup/cryptsetup/wikis/DMCrypt>`_ support.
+  install a Ceph cluster with ``ceph-deploy`` (:ref:`ceph-deploy man page <ceph-deploy>`)
 
 `dummy <https://github.com/ceph/ceph/tree/master/qa/suites/dummy>`_
   get a machine, do nothing and return success (commonly used to
@@ -860,7 +860,6 @@ all the integration tests, for all the Ceph components.
   without disrupting an ongoing workload
 
 .. _`ceph-deploy man page`: ../../man/8/ceph-deploy
-.. _`ceph-disk man page`: ../../man/8/ceph-disk
 
 teuthology-describe-tests
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -898,7 +897,7 @@ This OpenStack backend can build packages from a given git commit or
 branch, provision VMs, install the packages and run integration tests
 on those VMs. This process is controlled using a tool called
 `ceph-workbench ceph-qa-suite`_. This tool also automates publishing of
-test results at http://teuthology-logs.public.ceph.com. 
+test results at http://teuthology-logs.public.ceph.com.
 
 Running integration tests on your code contributions and publishing the
 results allows reviewers to verify that changes to the code base do not
@@ -928,7 +927,7 @@ larger yaml file.
 Reading a standalone test
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Let us first examine a standalone test, or "singleton". 
+Let us first examine a standalone test, or "singleton".
 
 Here is a commented example using the integration test
 `rados/singleton/all/admin-socket.yaml
@@ -995,7 +994,7 @@ This test can be run with::
 
     $ teuthology-suite --suite rados/singleton/all/admin-socket.yaml fs/ext4.yaml
 
-Test descriptions 
+Test descriptions
 ^^^^^^^^^^^^^^^^^
 
 Each test has a "test description", which is similar to a directory path,
@@ -1017,19 +1016,19 @@ yaml facets, followed by an expression in curly braces (``{}``) consisting of
 a list of yaml facets in order of concatenation. For instance the
 test description::
 
-  ceph-disk/basic/{distros/centos_7.0.yaml tasks/ceph-disk.yaml}
+  ceph-deploy/basic/{distros/centos_7.0.yaml tasks/ceph-deploy.yaml}
 
 signifies the concatenation of two files:
 
-* ceph-disk/basic/distros/centos_7.0.yaml
-* ceph-disk/basic/tasks/ceph-disk.yaml
+* ceph-deploy/basic/distros/centos_7.0.yaml
+* ceph-deploy/basic/tasks/ceph-deploy.yaml
 
 How are tests built from directories?
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 As noted in the previous section, most tests are not defined in a single
 yaml file, but rather as a `combination` of files collected from a
-directory tree within the ``suites/`` subdirectory of the `ceph/qa sub-directory`_. 
+directory tree within the ``suites/`` subdirectory of the `ceph/qa sub-directory`_.
 
 The set of all tests defined by a given subdirectory of ``suites/`` is
 called an "integration test suite", or a "teuthology suite".
@@ -1046,55 +1045,55 @@ The convolution operator, implemented as an empty file called ``%``, tells
 teuthology to construct a test matrix from yaml facets found in
 subdirectories below the directory containing the operator.
 
-For example, the `ceph-disk suite
-<https://github.com/ceph/ceph/tree/jewel/qa/suites/ceph-disk/>`_ is
-defined by the ``suites/ceph-disk/`` tree, which consists of the files and
+For example, the `ceph-deploy suite
+<https://github.com/ceph/ceph/tree/jewel/qa/suites/ceph-deploy/>`_ is
+defined by the ``suites/ceph-deploy/`` tree, which consists of the files and
 subdirectories in the following structure::
 
-  directory: ceph-disk/basic
+  directory: ceph-deploy/basic
       file: %
       directory: distros
          file: centos_7.0.yaml
          file: ubuntu_16.04.yaml
       directory: tasks
-         file: ceph-disk.yaml
+         file: ceph-deploy.yaml
 
-This is interpreted as a 2x1 matrix consisting of two tests: 
+This is interpreted as a 2x1 matrix consisting of two tests:
 
-1. ceph-disk/basic/{distros/centos_7.0.yaml tasks/ceph-disk.yaml}
-2. ceph-disk/basic/{distros/ubuntu_16.04.yaml tasks/ceph-disk.yaml}
+1. ceph-deploy/basic/{distros/centos_7.0.yaml tasks/ceph-deploy.yaml}
+2. ceph-deploy/basic/{distros/ubuntu_16.04.yaml tasks/ceph-deploy.yaml}
 
-i.e. the concatenation of centos_7.0.yaml and ceph-disk.yaml and
-the concatenation of ubuntu_16.04.yaml and ceph-disk.yaml, respectively.
-In human terms, this means that the task found in ``ceph-disk.yaml`` is
+i.e. the concatenation of centos_7.0.yaml and ceph-deploy.yaml and
+the concatenation of ubuntu_16.04.yaml and ceph-deploy.yaml, respectively.
+In human terms, this means that the task found in ``ceph-deploy.yaml`` is
 intended to run on both CentOS 7.0 and Ubuntu 16.04.
 
-Without the file percent, the ``ceph-disk`` tree would be interpreted as
+Without the file percent, the ``ceph-deploy`` tree would be interpreted as
 three standalone tests:
 
-* ceph-disk/basic/distros/centos_7.0.yaml
-* ceph-disk/basic/distros/ubuntu_16.04.yaml
-* ceph-disk/basic/tasks/ceph-disk.yaml
+* ceph-deploy/basic/distros/centos_7.0.yaml
+* ceph-deploy/basic/distros/ubuntu_16.04.yaml
+* ceph-deploy/basic/tasks/ceph-deploy.yaml
 
 (which would of course be wrong in this case).
 
 Referring to the `ceph/qa sub-directory`_, you will notice that the
 ``centos_7.0.yaml`` and ``ubuntu_16.04.yaml`` files in the
-``suites/ceph-disk/basic/distros/`` directory are implemented as symlinks.
+``suites/ceph-deploy/basic/distros/`` directory are implemented as symlinks.
 By using symlinks instead of copying, a single file can appear in multiple
 suites. This eases the maintenance of the test framework as a whole.
 
-All the tests generated from the ``suites/ceph-disk/`` directory tree
-(also known as the "ceph-disk suite") can be run with::
+All the tests generated from the ``suites/ceph-deploy/`` directory tree
+(also known as the "ceph-deploy suite") can be run with::
 
-  $ teuthology-suite --suite ceph-disk
+  $ teuthology-suite --suite ceph-deploy
 
-An individual test from the `ceph-disk suite`_ can be run by adding the
+An individual test from the `ceph-deploy suite`_ can be run by adding the
 ``--filter`` option::
 
   $ teuthology-suite \
-      --suite ceph-disk/basic \
-      --filter 'ceph-disk/basic/{distros/ubuntu_16.04.yaml tasks/ceph-disk.yaml}'
+      --suite ceph-deploy/basic \
+      --filter 'ceph-deploy/basic/{distros/ubuntu_16.04.yaml tasks/ceph-deploy.yaml}'
 
 .. note: To run a standalone test like the one in `Reading a standalone
    test`_, ``--suite`` alone is sufficient. If you want to run a single
@@ -1145,7 +1144,7 @@ define the following ``roles``::
   - [mon.a, mon.c, osd.0, osd.1, osd.2, client.0]
   - [mon.b, osd.3, osd.4, osd.5, client.1]
 
-The ``rbd/thrash`` suite as defined above, consisting of two tests, 
+The ``rbd/thrash`` suite as defined above, consisting of two tests,
 can be run with::
 
   $ teuthology-suite --suite rbd/thrash
@@ -1197,7 +1196,7 @@ run with different messenger types: ``simple``, ``async`` and
 the `msgr directory
 <https://github.com/ceph/ceph/tree/master/qa/suites/rados/basic/msgr>`_
 
-All integration tests are required to be run before a Ceph release is published. 
+All integration tests are required to be run before a Ceph release is published.
 When merely verifying whether a contribution can be merged without
 risking a trivial regression, it is enough to run a subset. The ``--subset`` option can be used to
 reduce the number of tests that are triggered. For instance::
@@ -1270,7 +1269,7 @@ Linking ceph-workbench with your OpenStack tenant
 -------------------------------------------------
 
 Before you can trigger your first teuthology suite, you will need to link
-``ceph-workbench`` with your OpenStack account. 
+``ceph-workbench`` with your OpenStack account.
 
 First, download a ``openrc.sh`` file by clicking on the "Download OpenStack
 RC File" button, which can be found in the "API Access" tab of the "Access
@@ -1288,7 +1287,7 @@ something like::
 
 When `ceph-workbench ceph-qa-suite`_ connects to your OpenStack tenant for
 the first time, it will generate two keypairs: ``teuthology-myself`` and
-``teuthology``. 
+``teuthology``.
 
 .. If this is not the first time you have tried to use
 .. `ceph-workbench ceph-qa-suite`_ with this tenant, make sure to delete any
@@ -1304,7 +1303,7 @@ drive::
 
 Be forewarned that the first run of `ceph-workbench ceph-qa-suite`_ on a
 pristine tenant will take a long time to complete because it downloads a VM
-image and during this time the command may not produce any output. 
+image and during this time the command may not produce any output.
 
 The images are cached in OpenStack, so they are only downloaded once.
 Subsequent runs of the same command will complete faster.
@@ -1421,7 +1420,7 @@ to determine the name or ID, and then terminate it with::
 Deploy a cluster for manual testing
 -----------------------------------
 
-The `teuthology framework`_ and `ceph-workbench ceph-qa-suite`_ are 
+The `teuthology framework`_ and `ceph-workbench ceph-qa-suite`_ are
 versatile tools that automatically provision Ceph clusters in the cloud and
 run various tests on them in an automated fashion. This enables a single
 engineer, in a matter of hours, to perform thousands of tests that would
@@ -1529,57 +1528,57 @@ To run the s3tests suite do the following::
 ..
 .. Architecture
 .. ============
-.. 
+..
 .. Ceph is a collection of components built on top of RADOS and provide
 .. services (RBD, RGW, CephFS) and APIs (S3, Swift, POSIX) for the user to
 .. store and retrieve data.
-.. 
+..
 .. See :doc:`/architecture` for an overview of Ceph architecture. The
 .. following sections treat each of the major architectural components
 .. in more detail, with links to code and tests.
-.. 
+..
 .. FIXME The following are just stubs. These need to be developed into
 .. detailed descriptions of the various high-level components (RADOS, RGW,
 .. etc.) with breakdowns of their respective subcomponents.
-.. 
+..
 .. FIXME Later, in the Testing chapter I would like to take another look
 .. at these components/subcomponents with a focus on how they are tested.
-.. 
+..
 .. RADOS
 .. -----
-.. 
+..
 .. RADOS stands for "Reliable, Autonomic Distributed Object Store". In a Ceph
 .. cluster, all data are stored in objects, and RADOS is the component responsible
 .. for that.
-.. 
+..
 .. RADOS itself can be further broken down into Monitors, Object Storage Daemons
 .. (OSDs), and client APIs (librados). Monitors and OSDs are introduced at
 .. :doc:`/start/intro`. The client library is explained at
 .. :doc:`/rados/api/index`.
-.. 
+..
 .. RGW
 .. ---
-.. 
+..
 .. RGW stands for RADOS Gateway. Using the embedded HTTP server civetweb_ or
 .. Apache FastCGI, RGW provides a REST interface to RADOS objects.
-.. 
+..
 .. .. _civetweb: https://github.com/civetweb/civetweb
-.. 
+..
 .. A more thorough introduction to RGW can be found at :doc:`/radosgw/index`.
-.. 
+..
 .. RBD
 .. ---
-.. 
+..
 .. RBD stands for RADOS Block Device. It enables a Ceph cluster to store disk
 .. images, and includes in-kernel code enabling RBD images to be mounted.
-.. 
+..
 .. To delve further into RBD, see :doc:`/rbd/rbd`.
-.. 
+..
 .. CephFS
 .. ------
-.. 
+..
 .. CephFS is a distributed file system that enables a Ceph cluster to be used as a NAS.
-.. 
+..
 .. File system metadata is managed by Meta Data Server (MDS) daemons. The Ceph
 .. file system is explained in more detail at :doc:`/cephfs/index`.
 ..

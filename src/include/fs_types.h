@@ -22,7 +22,7 @@ struct inodeno_t {
     using ceph::encode;
     encode(val, bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     using ceph::decode;
     decode(val, p);
   }
@@ -41,7 +41,7 @@ struct denc_traits<inodeno_t> {
   static void encode(const inodeno_t &o, buffer::list::contiguous_appender& p) {
     denc(o.val, p);
   }
-  static void decode(inodeno_t& o, buffer::ptr::iterator &p) {
+  static void decode(inodeno_t& o, buffer::ptr::const_iterator &p) {
     denc(o.val, p);
   }
 };
@@ -113,7 +113,7 @@ struct file_layout_t {
   bool is_valid() const;
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<file_layout_t*>& o);
 };

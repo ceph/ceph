@@ -32,7 +32,7 @@ using namespace rbd_replay;
 namespace {
 
 bool is_versioned_replay(BufferReader &buffer_reader) {
-  bufferlist::iterator *it;
+  bufferlist::const_iterator *it;
   int r = buffer_reader.fetch(&it);
   if (r < 0) {
     return false;
@@ -73,12 +73,12 @@ void Worker::join() {
 }
 
 void Worker::send(Action::ptr action) {
-  assert(action);
+  ceph_assert(action);
   m_buffer.push_front(action);
 }
 
 void Worker::add_pending(PendingIO::ptr io) {
-  assert(io);
+  ceph_assert(io);
   std::scoped_lock lock{m_pending_ios_mutex};
   assertf(m_pending_ios.count(io->id()) == 0, "id = %d", io->id());
   m_pending_ios[io->id()] = io;
@@ -113,7 +113,7 @@ void Worker::run() {
 
 
 void Worker::remove_pending(PendingIO::ptr io) {
-  assert(io);
+  ceph_assert(io);
   m_replayer.set_action_complete(io->id());
   std::scoped_lock lock{m_pending_ios_mutex};
   size_t num_erased = m_pending_ios.erase(io->id());
@@ -130,7 +130,7 @@ librbd::Image* Worker::get_image(imagectx_id_t imagectx_id) {
 
 
 void Worker::put_image(imagectx_id_t imagectx_id, librbd::Image* image) {
-  assert(image);
+  ceph_assert(image);
   m_replayer.put_image(imagectx_id, image);
 }
 
@@ -227,7 +227,7 @@ void Replayer::run(const std::string& replay_file) {
       while (true) {
         action::ActionEntry action_entry;
         try {
-          bufferlist::iterator *it;
+          bufferlist::const_iterator *it;
           int r = buffer_reader.fetch(&it);
           if (r < 0) {
             std::cerr << "Failed to read from trace file: " << cpp_strerror(r)
@@ -288,9 +288,9 @@ librbd::Image* Replayer::get_image(imagectx_id_t imagectx_id) {
 }
 
 void Replayer::put_image(imagectx_id_t imagectx_id, librbd::Image *image) {
-  assert(image);
+  ceph_assert(image);
   std::unique_lock lock{m_images_mutex};
-  assert(m_images.count(imagectx_id) == 0);
+  ceph_assert(m_images.count(imagectx_id) == 0);
   m_images[imagectx_id] = image;
 }
 
@@ -316,7 +316,7 @@ void Replayer::set_action_complete(action_id_t id) {
   auto now = std::chrono::system_clock::now();
   action_tracker_d &tracker = tracker_for(id);
   std::unique_lock lock{tracker.mutex};
-  assert(tracker.actions.count(id) == 0);
+  ceph_assert(tracker.actions.count(id) == 0);
   tracker.actions[id] = now;
   tracker.condition.notify_all();
 }

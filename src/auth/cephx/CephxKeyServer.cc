@@ -310,15 +310,11 @@ int KeyServer::encode_secrets(Formatter *f, stringstream *ds) const
     if (ds) {
       *ds << name.to_str() << std::endl;
       *ds << "\tkey: " << mapiter->second.key << std::endl;
-      if (mapiter->second.auid != CEPH_AUTH_UID_DEFAULT)
-	*ds << "\tauid: " << mapiter->second.auid << std::endl;
     }
     if (f) {
       f->open_object_section("auth_entities");
       f->dump_string("entity", name.to_str());
       f->dump_stream("key") << mapiter->second.key;
-      if (mapiter->second.auid != CEPH_AUTH_UID_DEFAULT)
-	f->dump_int("auid", mapiter->second.auid);
       f->open_object_section("caps");
     }
 
@@ -327,7 +323,7 @@ int KeyServer::encode_secrets(Formatter *f, stringstream *ds) const
     for (; capsiter != mapiter->second.caps.end(); ++capsiter) {
       // FIXME: need a const_iterator for bufferlist, but it doesn't exist yet.
       bufferlist *bl = const_cast<bufferlist*>(&capsiter->second);
-      bufferlist::iterator dataiter = bl->begin();
+      auto dataiter = bl->cbegin();
       string caps;
       using ceph::decode;
       decode(caps, dataiter);
@@ -351,7 +347,7 @@ int KeyServer::encode_secrets(Formatter *f, stringstream *ds) const
 
 void KeyServer::encode_formatted(string label, Formatter *f, bufferlist &bl)
 {
-  assert(f != NULL);
+  ceph_assert(f != NULL);
   f->open_object_section(label.c_str());
   encode_secrets(f, NULL);
   f->close_section();

@@ -63,7 +63,7 @@ struct bluefs_fnode_t {
     _denc_friend(*this, p);
     DENC_DUMP_POST(bluefs_fnode_t);
   }
-  void decode(buffer::ptr::iterator& p) {
+  void decode(buffer::ptr::const_iterator& p) {
     _denc_friend(*this, p);
     recalc_allocated();
   }
@@ -132,7 +132,7 @@ struct bluefs_super_t {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluefs_super_t*>& ls);
 };
@@ -234,9 +234,9 @@ struct bluefs_transaction_t {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
-  static void generate_test_instance(list<bluefs_transaction_t*>& ls);
+  static void generate_test_instances(list<bluefs_transaction_t*>& ls);
 };
 WRITE_CLASS_ENCODER(bluefs_transaction_t)
 

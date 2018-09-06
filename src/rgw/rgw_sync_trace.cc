@@ -127,13 +127,11 @@ void RGWSyncTraceManager::init(RGWRados *store)
 
 RGWSyncTraceManager::~RGWSyncTraceManager()
 {
-  AdminSocket *admin_socket = cct->get_admin_socket();
-  for (auto cmd : admin_commands) {
-    admin_socket->unregister_command(cmd[0]);
-  }
-
+  cct->get_admin_socket()->unregister_commands(this);
   service_map_thread->stop();
   delete service_map_thread;
+
+  nodes.clear();
 }
 
 int RGWSyncTraceManager::hook_to_admin_command()

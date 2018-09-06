@@ -13,7 +13,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <iostream>
-#include <map>
+#include <optional>
 #include <poll.h>
 #include <sstream>
 #include <stdio.h>
@@ -48,6 +48,52 @@ struct krbd_ctx {
   CephContext *cct;
   struct udev *udev;
 };
+
+static const std::string SNAP_HEAD_NAME("-");
+
+struct krbd_spec {
+  std::string pool_name;
+  std::string nspace_name;
+  std::string image_name;
+  std::string snap_name;
+
+  krbd_spec(const char *pool_name, const char *nspace_name,
+            const char *image_name, const char *snap_name)
+      : pool_name(pool_name),
+        nspace_name(nspace_name),
+        image_name(image_name),
+        snap_name(*snap_name ? snap_name : SNAP_HEAD_NAME) { }
+
+  bool operator==(const krbd_spec& rhs) const {
+    return pool_name == rhs.pool_name &&
+           nspace_name == rhs.nspace_name &&
+           image_name == rhs.image_name &&
+           snap_name == rhs.snap_name;
+  }
+};
+
+std::ostream& operator<<(std::ostream& os, const krbd_spec& spec) {
+  os << spec.pool_name << "/";
+  if (!spec.nspace_name.empty())
+    os << spec.nspace_name << "/";
+  os << spec.image_name;
+  if (spec.snap_name != SNAP_HEAD_NAME)
+    os << "@" << spec.snap_name;
+  return os;
+}
+
+std::optional<krbd_spec> spec_from_dev(udev_device *dev) {
+  const char *pool_name = udev_device_get_sysattr_value(dev, "pool");
+  const char *nspace_name = udev_device_get_sysattr_value(dev, "pool_ns");
+  const char *image_name = udev_device_get_sysattr_value(dev, "name");
+  const char *snap_name = udev_device_get_sysattr_value(dev, "current_snap");
+
+  if (!pool_name || !image_name || !snap_name)
+    return std::nullopt;
+
+  return std::make_optional<krbd_spec>(
+      pool_name, nspace_name ?: "", image_name, snap_name);
+}
 
 static string get_kernel_rbd_name(const char *id)
 {
@@ -109,8 +155,8 @@ static int have_minor_attr(void)
   return access("/sys/module/rbd/parameters/single_major", F_OK) == 0;
 }
 
-static int build_map_buf(CephContext *cct, const char *pool, const char *image,
-                         const char *snap, const char *options, string *pbuf)
+static int build_map_buf(CephContext *cct, const krbd_spec& spec,
+                         const char *options, string *pbuf)
 {
   ostringstream oss;
   int r;
@@ -134,11 +180,11 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
 
   KeyRing keyring;
   auto auth_client_required =
-    cct->_conf->get_val<std::string>("auth_client_required");
+    cct->_conf.get_val<std::string>("auth_client_required");
   if (auth_client_required != "none") {
     r = keyring.from_ceph_context(cct);
-    auto keyfile = cct->_conf->get_val<std::string>("keyfile");
-    auto key = cct->_conf->get_val<std::string>("key");
+    auto keyfile = cct->_conf.get_val<std::string>("keyfile");
+    auto key = cct->_conf.get_val<std::string>("key");
     if (r == -ENOENT && keyfile.empty() && key.empty())
       r = 0;
     if (r < 0) {
@@ -172,15 +218,17 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
 
   if (strcmp(options, "") != 0)
     oss << "," << options;
+  if (!spec.nspace_name.empty())
+    oss << ",_pool_ns=" << spec.nspace_name;
 
-  oss << " " << pool << " " << image << " " << snap;
+  oss << " " << spec.pool_name << " " << spec.image_name << " "
+      << spec.snap_name;
 
   *pbuf = oss.str();
   return 0;
 }
 
-static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
-                             const char *image, const char *snap,
+static int wait_for_udev_add(struct udev_monitor *mon, const krbd_spec& spec,
                              string *pname)
 {
   struct udev_device *bus_dev = nullptr;
@@ -208,14 +256,8 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
 
     if (!bus_dev) {
       if (strcmp(udev_device_get_subsystem(dev), "rbd") == 0) {
-        const char *this_pool = udev_device_get_sysattr_value(dev, "pool");
-        const char *this_image = udev_device_get_sysattr_value(dev, "name");
-        const char *this_snap = udev_device_get_sysattr_value(dev,
-                                                              "current_snap");
-
-        if (this_pool && strcmp(this_pool, pool) == 0 &&
-            this_image && strcmp(this_image, image) == 0 &&
-            this_snap && strcmp(this_snap, snap) == 0) {
+        auto cur_spec = spec_from_dev(dev);
+        if (cur_spec && *cur_spec == spec) {
           bus_dev = dev;
           continue;
         }
@@ -227,13 +269,13 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
         const char *this_major = udev_device_get_property_value(dev, "MAJOR");
         const char *this_minor = udev_device_get_property_value(dev, "MINOR");
 
-        assert(!minor ^ have_minor_attr());
+        ceph_assert(!minor ^ have_minor_attr());
 
         if (strcmp(this_major, major) == 0 &&
             (!minor || strcmp(this_minor, minor) == 0)) {
           string name = get_kernel_rbd_name(udev_device_get_sysname(bus_dev));
 
-          assert(strcmp(udev_device_get_devnode(dev), name.c_str()) == 0);
+          ceph_assert(strcmp(udev_device_get_devnode(dev), name.c_str()) == 0);
           *pname = name;
 
           udev_device_unref(dev);
@@ -250,8 +292,8 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
   return 0;
 }
 
-static int do_map(struct udev *udev, const char *pool, const char *image,
-                  const char *snap, const string& buf, string *pname)
+static int do_map(struct udev *udev, const krbd_spec& spec, const string& buf,
+                  string *pname)
 {
   struct udev_monitor *mon;
   int r;
@@ -278,7 +320,7 @@ static int do_map(struct udev *udev, const char *pool, const char *image,
     goto out_mon;
   }
 
-  r = wait_for_udev_add(mon, pool, image, snap, pname);
+  r = wait_for_udev_add(mon, spec, pname);
   if (r < 0) {
     cerr << "rbd: wait failed" << std::endl;
     goto out_mon;
@@ -289,16 +331,13 @@ out_mon:
   return r;
 }
 
-static int map_image(struct krbd_ctx *ctx, const char *pool, const char *image,
-                     const char *snap, const char *options, string *pname)
+static int map_image(struct krbd_ctx *ctx, const krbd_spec& spec,
+                     const char *options, string *pname)
 {
   string buf;
   int r;
 
-  if (strcmp(snap, "") == 0)
-    snap = "-";
-
-  r = build_map_buf(ctx->cct, pool, image, snap, options, &buf);
+  r = build_map_buf(ctx->cct, spec, options, &buf);
   if (r < 0)
     return r;
 
@@ -322,7 +361,7 @@ static int map_image(struct krbd_ctx *ctx, const char *pool, const char *image,
     }
   }
 
-  return do_map(ctx->udev, pool, image, snap, buf, pname);
+  return do_map(ctx->udev, spec, buf, pname);
 }
 
 static int devno_to_krbd_id(struct udev *udev, dev_t devno, string *pid)
@@ -363,7 +402,7 @@ static int devno_to_krbd_id(struct udev *udev, dev_t devno, string *pid)
   }
 
   /* make sure there is only one match */
-  assert(!udev_list_entry_get_next(l));
+  ceph_assert(!udev_list_entry_get_next(l));
 
   dev = udev_device_new_from_syspath(udev, udev_list_entry_get_name(l));
   if (!dev) {
@@ -379,36 +418,85 @@ out_enm:
   return r;
 }
 
-static int enumerate_devices(struct udev_enumerate *enm, const char *pool,
-                             const char *image, const char *snap)
+static int __enumerate_devices(struct udev *udev, const krbd_spec& spec,
+                               bool match_nspace, struct udev_enumerate **penm)
 {
+  struct udev_enumerate *enm;
   int r;
+
+  enm = udev_enumerate_new(udev);
+  if (!enm)
+    return -ENOMEM;
 
   r = udev_enumerate_add_match_subsystem(enm, "rbd");
   if (r < 0)
-    return r;
+    goto out_enm;
 
-  r = udev_enumerate_add_match_sysattr(enm, "pool", pool);
+  r = udev_enumerate_add_match_sysattr(enm, "pool", spec.pool_name.c_str());
   if (r < 0)
-    return r;
+    goto out_enm;
 
-  r = udev_enumerate_add_match_sysattr(enm, "name", image);
+  if (match_nspace) {
+    r = udev_enumerate_add_match_sysattr(enm, "pool_ns",
+                                         spec.nspace_name.c_str());
+  } else {
+    /*
+     * Match _only_ devices that don't have pool_ns attribute.
+     * If the kernel supports namespaces, the result will be empty.
+     */
+    r = udev_enumerate_add_nomatch_sysattr(enm, "pool_ns", nullptr);
+  }
   if (r < 0)
-    return r;
+    goto out_enm;
 
-  r = udev_enumerate_add_match_sysattr(enm, "current_snap", snap);
+  r = udev_enumerate_add_match_sysattr(enm, "name", spec.image_name.c_str());
   if (r < 0)
-    return r;
+    goto out_enm;
+
+  r = udev_enumerate_add_match_sysattr(enm, "current_snap",
+                                       spec.snap_name.c_str());
+  if (r < 0)
+    goto out_enm;
 
   r = udev_enumerate_scan_devices(enm);
   if (r < 0)
+    goto out_enm;
+
+  *penm = enm;
+  return 0;
+
+out_enm:
+  udev_enumerate_unref(enm);
+  return r;
+}
+
+static int enumerate_devices(struct udev *udev, const krbd_spec& spec,
+                             struct udev_enumerate **penm)
+{
+  struct udev_enumerate *enm;
+  int r;
+
+  r = __enumerate_devices(udev, spec, true, &enm);
+  if (r < 0)
     return r;
 
+  /*
+   * If no namespace is set, try again with match_nspace=false to
+   * handle older kernels.  On a newer kernel the result will remain
+   * the same (i.e. empty).
+   */
+  if (!udev_enumerate_get_list_entry(enm) && spec.nspace_name.empty()) {
+    udev_enumerate_unref(enm);
+    r = __enumerate_devices(udev, spec, false, &enm);
+    if (r < 0)
+      return r;
+  }
+
+  *penm = enm;
   return 0;
 }
 
-static int spec_to_devno_and_krbd_id(struct udev *udev, const char *pool,
-                                     const char *image, const char *snap,
+static int spec_to_devno_and_krbd_id(struct udev *udev, const krbd_spec& spec,
                                      dev_t *pdevno, string *pid)
 {
   struct udev_enumerate *enm;
@@ -418,13 +506,9 @@ static int spec_to_devno_and_krbd_id(struct udev *udev, const char *pool,
   string err;
   int r;
 
-  enm = udev_enumerate_new(udev);
-  if (!enm)
-    return -ENOMEM;
-
-  r = enumerate_devices(enm, pool, image, snap);
+  r = enumerate_devices(udev, spec, &enm);
   if (r < 0)
-    goto out_enm;
+    return r;
 
   l = udev_enumerate_get_list_entry(enm);
   if (!l) {
@@ -459,8 +543,7 @@ static int spec_to_devno_and_krbd_id(struct udev *udev, const char *pool,
    * ran map.
    */
   if (udev_list_entry_get_next(l))
-    cerr << "rbd: " << pool << "/" << image << "@" << snap
-         << ": mapped more than once, unmapping "
+    cerr << "rbd: " << spec << ": mapped more than once, unmapping "
          << get_kernel_rbd_name(udev_device_get_sysname(dev))
          << " only" << std::endl;
 
@@ -603,22 +686,18 @@ static int unmap_image(struct krbd_ctx *ctx, const char *devnode,
   return do_unmap(ctx->udev, wholedevno, build_unmap_buf(id, options));
 }
 
-static int unmap_image(struct krbd_ctx *ctx, const char *pool,
-                       const char *image, const char *snap,
+static int unmap_image(struct krbd_ctx *ctx, const krbd_spec& spec,
                        const char *options)
 {
   dev_t devno = 0;
   string id;
   int r;
 
-  if (!snap)
-    snap = "-";
-
-  r = spec_to_devno_and_krbd_id(ctx->udev, pool, image, snap, &devno, &id);
+  r = spec_to_devno_and_krbd_id(ctx->udev, spec, &devno, &id);
   if (r < 0) {
     if (r == -ENOENT) {
-      cerr << "rbd: " << pool << "/" << image << "@" << snap
-           << ": not a mapped image or snapshot" << std::endl;
+      cerr << "rbd: " << spec << ": not a mapped image or snapshot"
+           << std::endl;
       r = -EINVAL;
     }
     return r;
@@ -631,24 +710,24 @@ static bool dump_one_image(Formatter *f, TextTable *tbl,
                            struct udev_device *dev)
 {
   const char *id = udev_device_get_sysname(dev);
-  const char *pool = udev_device_get_sysattr_value(dev, "pool");
-  const char *image = udev_device_get_sysattr_value(dev, "name");
-  const char *snap = udev_device_get_sysattr_value(dev, "current_snap");
+  auto spec = spec_from_dev(dev);
   string kname = get_kernel_rbd_name(id);
 
-  if (!pool || !image || !snap)
+  if (!spec)
     return false;
 
   if (f) {
     f->open_object_section("device");
     f->dump_string("id", id);
-    f->dump_string("pool", pool);
-    f->dump_string("name", image);
-    f->dump_string("snap", snap);
+    f->dump_string("pool", spec->pool_name);
+    f->dump_string("namespace", spec->nspace_name);
+    f->dump_string("name", spec->image_name);
+    f->dump_string("snap", spec->snap_name);
     f->dump_string("device", kname);
     f->close_section();
   } else {
-    *tbl << id << pool << image << snap << kname << TextTable::endrow;
+    *tbl << id << spec->pool_name << spec->nspace_name << spec->image_name
+         << spec->snap_name << kname << TextTable::endrow;
   }
 
   return true;
@@ -699,6 +778,7 @@ int dump_images(struct krbd_ctx *ctx, Formatter *f)
   } else {
     tbl.define_column("id", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("pool", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("namespace", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("image", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("snap", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("device", TextTable::LEFT, TextTable::LEFT);
@@ -717,23 +797,16 @@ int dump_images(struct krbd_ctx *ctx, Formatter *f)
   return r;
 }
 
-static int is_mapped_image(struct udev *udev, const char *pool,
-                           const char *image, const char *snap, string *pname)
+static int is_mapped_image(struct udev *udev, const krbd_spec& spec,
+                           string *pname)
 {
   struct udev_enumerate *enm;
   struct udev_list_entry *l;
   int r;
 
-  if (strcmp(snap, "") == 0)
-    snap = "-";
-
-  enm = udev_enumerate_new(udev);
-  if (!enm)
-    return -ENOMEM;
-
-  r = enumerate_devices(enm, pool, image, snap);
+  r = enumerate_devices(udev, spec, &enm);
   if (r < 0)
-    goto out_enm;
+    return r;
 
   l = udev_enumerate_get_list_entry(enm);
   if (l) {
@@ -783,15 +856,20 @@ extern "C" void krbd_destroy(struct krbd_ctx *ctx)
   delete ctx;
 }
 
-extern "C" int krbd_map(struct krbd_ctx *ctx, const char *pool,
-                        const char *image, const char *snap,
-                        const char *options, char **pdevnode)
+extern "C" int krbd_map(struct krbd_ctx *ctx,
+                        const char *pool_name,
+                        const char *nspace_name,
+                        const char *image_name,
+                        const char *snap_name,
+                        const char *options,
+                        char **pdevnode)
 {
+  krbd_spec spec(pool_name, nspace_name, image_name, snap_name);
   string name;
   char *devnode;
   int r;
 
-  r = map_image(ctx, pool, image, snap, options, &name);
+  r = map_image(ctx, spec, options, &name);
   if (r < 0)
     return r;
 
@@ -809,11 +887,15 @@ extern "C" int krbd_unmap(struct krbd_ctx *ctx, const char *devnode,
   return unmap_image(ctx, devnode, options);
 }
 
-extern "C" int krbd_unmap_by_spec(struct krbd_ctx *ctx, const char *pool,
-                                  const char *image, const char *snap,
+extern "C" int krbd_unmap_by_spec(struct krbd_ctx *ctx,
+                                  const char *pool_name,
+                                  const char *nspace_name,
+                                  const char *image_name,
+                                  const char *snap_name,
                                   const char *options)
 {
-  return unmap_image(ctx, pool, image, snap, options);
+  krbd_spec spec(pool_name, nspace_name, image_name, snap_name);
+  return unmap_image(ctx, spec, options);
 }
 
 int krbd_showmapped(struct krbd_ctx *ctx, Formatter *f)
@@ -821,15 +903,19 @@ int krbd_showmapped(struct krbd_ctx *ctx, Formatter *f)
   return dump_images(ctx, f);
 }
 
-extern "C" int krbd_is_mapped(struct krbd_ctx *ctx, const char *pool,
-                              const char *image, const char *snap,
+extern "C" int krbd_is_mapped(struct krbd_ctx *ctx,
+                              const char *pool_name,
+                              const char *nspace_name,
+                              const char *image_name,
+                              const char *snap_name,
                               char **pdevnode)
 {
+  krbd_spec spec(pool_name, nspace_name, image_name, snap_name);
   string name;
   char *devnode;
   int r;
 
-  r = is_mapped_image(ctx->udev, pool, image, snap, &name);
+  r = is_mapped_image(ctx->udev, spec, &name);
   if (r <= 0)  /* error or not mapped */
     return r;
 

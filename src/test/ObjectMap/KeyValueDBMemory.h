@@ -3,7 +3,6 @@
 #include <map>
 #include <set>
 #include <string>
-#include "include/memory.h"
 
 #include "kv/KeyValueDB.h"
 #include "include/buffer.h"

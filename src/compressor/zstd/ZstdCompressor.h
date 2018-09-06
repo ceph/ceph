@@ -42,7 +42,7 @@ class ZstdCompressor : public Compressor {
     outbuf.pos = 0;
 
     while (left) {
-      assert(!p.end());
+      ceph_assert(!p.end());
       struct ZSTD_inBuffer_s inbuf;
       inbuf.pos = 0;
       inbuf.size = p.get_ptr_and_advance(left, (const char**)&inbuf.src);
@@ -53,7 +53,7 @@ class ZstdCompressor : public Compressor {
 	return -EINVAL;
       }
     }
-    assert(p.end());
+    ceph_assert(p.end());
 
     ZSTD_freeCStream(s);
 
@@ -64,11 +64,11 @@ class ZstdCompressor : public Compressor {
   }
 
   int decompress(const bufferlist &src, bufferlist &dst) override {
-    bufferlist::iterator i = const_cast<bufferlist&>(src).begin();
+    auto i = std::cbegin(src);
     return decompress(i, src.length(), dst);
   }
 
-  int decompress(bufferlist::iterator &p,
+  int decompress(bufferlist::const_iterator &p,
 		 size_t compressed_len,
 		 bufferlist &dst) override {
     if (compressed_len < 4) {

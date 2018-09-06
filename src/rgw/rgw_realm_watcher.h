@@ -33,7 +33,7 @@ class RGWRealmWatcher : public librados::WatchCtx2 {
     virtual ~Watcher() = default;
 
     virtual void handle_notify(RGWRealmNotify type,
-                               bufferlist::iterator& p) = 0;
+                               bufferlist::const_iterator& p) = 0;
   };
 
   RGWRealmWatcher(CephContext* cct, RGWRealm& realm);

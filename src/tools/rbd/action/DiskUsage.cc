@@ -102,14 +102,16 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     f->open_array_section("images");
   } else {
     tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("PROVISIONED", TextTable::RIGHT, TextTable::RIGHT);
-    tbl.define_column("USED", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("PROVISIONED", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
   }
 
   uint32_t count = 0;
   uint64_t used_size = 0;
   uint64_t total_prov = 0;
   uint64_t total_used = 0;
+  uint64_t snap_id = CEPH_NOSNAP;
+  uint64_t from_id = CEPH_NOSNAP;
   bool found = false;
   std::sort(names.begin(), names.end());
   for (std::vector<string>::const_iterator name = names.begin();
@@ -161,10 +163,42 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
                     snap_list.end());
 
     bool found_from_snap = (from_snapname == nullptr);
+    bool found_snap = (snapname == nullptr);
+    bool found_from = (from_snapname == nullptr);
     std::string last_snap_name;
     std::sort(snap_list.begin(), snap_list.end(),
               boost::bind(&librbd::snap_info_t::id, _1) <
                 boost::bind(&librbd::snap_info_t::id, _2));
+    if (!found_snap || !found_from) {
+      for (auto &snap_info : snap_list) {
+        if (!found_snap && snap_info.name == snapname) {
+          snap_id = snap_info.id;
+          found_snap = true;
+        }
+        if (!found_from && snap_info.name == from_snapname) {
+          from_id = snap_info.id;
+          found_from = true;
+        }
+        if (found_snap && found_from) {
+          break;
+        }
+      }
+    }
+    if ((snapname != nullptr && snap_id == CEPH_NOSNAP) ||
+        (from_snapname != nullptr && from_id == CEPH_NOSNAP)) {
+      std::cerr << "specified snapshot is not found." << std::endl;
+      return -ENOENT;
+    }
+    if (snap_id != CEPH_NOSNAP && from_id != CEPH_NOSNAP) {
+      if (from_id == snap_id) {
+        // no diskusage.
+        return 0;
+      }
+      if (from_id >= snap_id) {
+        return -EINVAL;
+      }
+    }
+
     for (std::vector<librbd::snap_info_t>::const_iterator snap =
          snap_list.begin(); snap != snap_list.end(); ++snap) {
       librbd::Image snap_image;
@@ -227,7 +261,7 @@ out:
     }
     f->close_section();
     f->flush(std::cout);
-  } else {
+  } else if (!names.empty()) {
     if (count > 1) {
       tbl << "<TOTAL>"
           << stringify(byte_u_t(total_prov))
@@ -255,12 +289,13 @@ int execute(const po::variables_map &vm,
             const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
-    utils::SPEC_VALIDATION_NONE, vm.count(at::FROM_SNAPSHOT_NAME));
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, vm.count(at::FROM_SNAPSHOT_NAME),
+    utils::SNAPSHOT_PRESENCE_PERMITTED, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -278,7 +313,7 @@ int execute(const po::variables_map &vm,
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }

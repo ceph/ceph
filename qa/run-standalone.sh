@@ -6,20 +6,12 @@ if [ ! -e Makefile -o ! -d bin ]; then
     exit 1
 fi
 
-TEMP_DIR=${TMPDIR:-/tmp}
-if [ ! -d $TEMP_DIR/ceph-disk-virtualenv -o ! -d $TEMP_DIR/ceph-detect-init-virtualenv ]; then
-    echo '/tmp/*-virtualenv directories not built. Please run "make check" first.'
-    exit 1
-fi
-
 function get_cmake_variable() {
     local variable=$1
     grep "$variable" CMakeCache.txt | cut -d "=" -f 2
 }
 
 function get_python_path() {
-    local ceph_lib=$1
-    shift
     local py_ver=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f1)
     if [ -z "${py_ver}" ]; then
         if [ $(get_cmake_variable WITH_PYTHON2) = ON ]; then
@@ -28,7 +20,7 @@ function get_python_path() {
             py_ver=3
         fi
     fi
-    echo $(realpath ../src/pybind):$ceph_lib/cython_modules/lib.$py_ver
+    echo $(realpath ../src/pybind):$(pwd)/lib/cython_modules/lib.$py_ver
 }
 
 if [ `uname` = FreeBSD ]; then
@@ -94,6 +86,15 @@ if [ "$precore" = "$COREPATTERN" ]; then
 else
     sudo sysctl -w ${KERNCORE}=${COREPATTERN}
 fi
+# Clean out any cores in core target directory (currently .)
+if ls $(dirname $(sysctl -n $KERNCORE)) | grep -q '^core\|core$' ; then
+    mkdir found.cores.$$ 2> /dev/null || true
+    for i in $(ls $(dirname $(sysctl -n $KERNCORE)) | grep '^core\|core$'); do
+	mv $i found.cores.$$
+    done
+    echo "Stray cores put in $(pwd)/found.cores.$$"
+fi
+
 ulimit -c unlimited
 for f in $(cd $location ; find . -perm $exec_mode -type f)
 do

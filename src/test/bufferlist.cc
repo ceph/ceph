@@ -19,7 +19,6 @@
  *
  */
 
-#include "include/memory.h"
 #include <limits.h>
 #include <errno.h>
 #include <sys/uio.h>
@@ -277,7 +276,7 @@ protected:
     snprintf(cmd, sizeof(cmd), "echo ABC > %s", FILENAME);
     EXPECT_EQ(0, ::system(cmd));
     fd = ::open(FILENAME, O_RDONLY);
-    assert(fd >= 0);
+    ceph_assert(fd >= 0);
   }
   void TearDown() override {
     ::close(fd);
@@ -2284,7 +2283,7 @@ TEST(BufferList, append_zero) {
   EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   EXPECT_EQ((unsigned)1, bl.length());
   bl.append_zero(1);
-  EXPECT_EQ((unsigned)2, bl.get_num_buffers());
+  EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   EXPECT_EQ((unsigned)2, bl.length());
   EXPECT_EQ('\0', bl[1]);
 }
@@ -2578,8 +2577,8 @@ TEST(BufferList, crc32c_append_perf) {
   // track usage of cached crcs
   buffer::track_cached_crc(true);
 
-  int base_cached = buffer::get_cached_crc();
-  int base_cached_adjusted = buffer::get_cached_crc_adjusted();
+  [[maybe_unused]] int base_cached = buffer::get_cached_crc();
+  [[maybe_unused]] int base_cached_adjusted = buffer::get_cached_crc_adjusted();
 
   bufferlist bla;
   bla.push_back(a);
@@ -2593,7 +2592,7 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "a.crc32c(0) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 1138817026u);
   }
-  assert(buffer::get_cached_crc() == 0 + base_cached);
+  ceph_assert(buffer::get_cached_crc() == 0 + base_cached);
   {
     utime_t start = ceph_clock_now();
     uint32_t r = bla.crc32c(0);
@@ -2602,7 +2601,7 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "a.crc32c(0) (again) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 1138817026u);
   }
-  assert(buffer::get_cached_crc() == 1 + base_cached);
+  ceph_assert(buffer::get_cached_crc() == 1 + base_cached);
 
   {
     utime_t start = ceph_clock_now();
@@ -2612,8 +2611,8 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "a.crc32c(5) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 3239494520u);
   }
-  assert(buffer::get_cached_crc() == 1 + base_cached);
-  assert(buffer::get_cached_crc_adjusted() == 1 + base_cached_adjusted);
+  ceph_assert(buffer::get_cached_crc() == 1 + base_cached);
+  ceph_assert(buffer::get_cached_crc_adjusted() == 1 + base_cached_adjusted);
   {
     utime_t start = ceph_clock_now();
     uint32_t r = bla.crc32c(5);
@@ -2622,8 +2621,8 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "a.crc32c(5) (again) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 3239494520u);
   }
-  assert(buffer::get_cached_crc() == 1 + base_cached);
-  assert(buffer::get_cached_crc_adjusted() == 2 + base_cached_adjusted);
+  ceph_assert(buffer::get_cached_crc() == 1 + base_cached);
+  ceph_assert(buffer::get_cached_crc_adjusted() == 2 + base_cached_adjusted);
   {
     utime_t start = ceph_clock_now();
     uint32_t r = blb.crc32c(0);
@@ -2632,7 +2631,7 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "b.crc32c(0) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 2481791210u);
   }
-  assert(buffer::get_cached_crc() == 1 + base_cached);
+  ceph_assert(buffer::get_cached_crc() == 1 + base_cached);
   {
     utime_t start = ceph_clock_now();
     uint32_t r = blb.crc32c(0);
@@ -2641,7 +2640,7 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "b.crc32c(0) (again)= " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 2481791210u);
   }
-  assert(buffer::get_cached_crc() == 2 + base_cached);
+  ceph_assert(buffer::get_cached_crc() == 2 + base_cached);
 
   bufferlist ab;
   ab.push_back(a);
@@ -2654,8 +2653,8 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "ab.crc32c(0) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 2988268779u);
   }
-  assert(buffer::get_cached_crc() == 3 + base_cached);
-  assert(buffer::get_cached_crc_adjusted() == 3 + base_cached_adjusted);
+  ceph_assert(buffer::get_cached_crc() == 3 + base_cached);
+  ceph_assert(buffer::get_cached_crc_adjusted() == 3 + base_cached_adjusted);
   bufferlist ac;
   ac.push_back(a);
   ac.push_back(c);
@@ -2667,8 +2666,8 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "ac.crc32c(0) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 2988268779u);
   }
-  assert(buffer::get_cached_crc() == 4 + base_cached);
-  assert(buffer::get_cached_crc_adjusted() == 3 + base_cached_adjusted);
+  ceph_assert(buffer::get_cached_crc() == 4 + base_cached);
+  ceph_assert(buffer::get_cached_crc_adjusted() == 3 + base_cached_adjusted);
 
   bufferlist ba;
   ba.push_back(b);
@@ -2681,8 +2680,8 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "ba.crc32c(0) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 169240695u);
   }
-  assert(buffer::get_cached_crc() == 5 + base_cached);
-  assert(buffer::get_cached_crc_adjusted() == 4 + base_cached_adjusted);
+  ceph_assert(buffer::get_cached_crc() == 5 + base_cached);
+  ceph_assert(buffer::get_cached_crc_adjusted() == 4 + base_cached_adjusted);
   {
     utime_t start = ceph_clock_now();
     uint32_t r = ba.crc32c(5);
@@ -2691,8 +2690,8 @@ TEST(BufferList, crc32c_append_perf) {
     std::cout << "ba.crc32c(5) = " << r << " at " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(r, 1265464778u);
   }
-  assert(buffer::get_cached_crc() == 5 + base_cached);
-  assert(buffer::get_cached_crc_adjusted() == 6 + base_cached_adjusted);
+  ceph_assert(buffer::get_cached_crc() == 5 + base_cached);
+  ceph_assert(buffer::get_cached_crc_adjusted() == 6 + base_cached_adjusted);
 
   cout << "crc cache hits (same start) = " << buffer::get_cached_crc() << std::endl;
   cout << "crc cache hits (adjusted) = " << buffer::get_cached_crc_adjusted() << std::endl;
@@ -2916,7 +2915,7 @@ TEST(BufferList, TestCloneNonShareable) {
 
 TEST(BufferList, TestCopyAll) {
   const static size_t BIG_SZ = 10737414;
-  ceph::shared_ptr <unsigned char> big(
+  std::shared_ptr <unsigned char> big(
       (unsigned char*)malloc(BIG_SZ), free);
   unsigned char c = 0;
   for (size_t i = 0; i < BIG_SZ; ++i) {
@@ -2928,7 +2927,7 @@ TEST(BufferList, TestCopyAll) {
   bufferlist bl2;
   i.copy_all(bl2);
   ASSERT_EQ(bl2.length(), BIG_SZ);
-  ceph::shared_ptr <unsigned char> big2(
+  std::shared_ptr <unsigned char> big2(
       (unsigned char*)malloc(BIG_SZ), free);
   bl2.copy(0, BIG_SZ, (char*)big2.get());
   ASSERT_EQ(memcmp(big.get(), big2.get(), BIG_SZ), 0);
@@ -2936,7 +2935,7 @@ TEST(BufferList, TestCopyAll) {
 
 TEST(BufferList, InvalidateCrc) {
   const static size_t buffer_size = 262144;
-  ceph::shared_ptr <unsigned char> big(
+  std::shared_ptr <unsigned char> big(
       (unsigned char*)malloc(buffer_size), free);
   unsigned char c = 0;
   char* ptr = (char*) big.get();

@@ -80,17 +80,17 @@ public:
 
   void _post_lock() {
     if (!impl->recursive)
-      assert(nlock == 0);
+      ceph_assert(nlock == 0);
     locked_by = std::this_thread::get_id();
     nlock++;
   }
 
   void _pre_unlock() {
-    assert(nlock > 0);
+    ceph_assert(nlock > 0);
     --nlock;
-    assert(locked_by == std::this_thread::get_id());
+    ceph_assert(locked_by == std::this_thread::get_id());
     if (!impl->recursive)
-      assert(nlock == 0);
+      ceph_assert(nlock == 0);
     if (nlock == 0)
       locked_by = std::thread::id();
   }
@@ -146,14 +146,14 @@ public:
       r = pthread_mutexattr_settype(&a, PTHREAD_MUTEX_RECURSIVE);
     else
       r = pthread_mutexattr_settype(&a, PTHREAD_MUTEX_ERRORCHECK);
-    assert(r == 0);
+    ceph_assert(r == 0);
     r = pthread_mutex_init(&m, &a);
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
   // Mutex is Destructible
   ~mutex_debug_impl() {
     int r = pthread_mutex_destroy(&m);
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 
   // Mutex concept is non-Copyable
@@ -172,12 +172,12 @@ public:
 		 r == EBUSY)) {
       throw std::system_error(r, std::generic_category());
     }
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 
   void unlock_impl() noexcept {
     int r = pthread_mutex_unlock(&m);
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 
   bool try_lock_impl() {
@@ -190,6 +190,9 @@ public:
     default:
       throw std::system_error(r, std::generic_category());
     }
+  }
+  pthread_mutex_t* native_handle() {
+    return &m;
   }
 };
 } // namespace mutex_debug_detail

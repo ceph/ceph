@@ -15,6 +15,22 @@ class TestWatchNotify;
 
 class TestCluster {
 public:
+  struct ObjectLocator {
+    std::string nspace;
+    std::string name;
+
+    ObjectLocator(const std::string& nspace, const std::string& name)
+      : nspace(nspace), name(name) {
+    }
+
+    bool operator<(const ObjectLocator& rhs) const {
+      if (nspace != rhs.nspace) {
+        return nspace < rhs.nspace;
+      }
+      return name < rhs.name;
+    }
+  };
+
   struct ObjectHandler {
     virtual ~ObjectHandler() {}
 
@@ -28,9 +44,11 @@ public:
 
   virtual TestRadosClient *create_rados_client(CephContext *cct) = 0;
 
-  virtual int register_object_handler(int64_t pool_id, const std::string& o,
+  virtual int register_object_handler(int64_t pool_id,
+                                      const ObjectLocator& locator,
                                       ObjectHandler* object_handler) = 0;
-  virtual void unregister_object_handler(int64_t pool_id, const std::string& o,
+  virtual void unregister_object_handler(int64_t pool_id,
+                                         const ObjectLocator& locator,
                                          ObjectHandler* object_handler) = 0;
 
   TestWatchNotify *get_watch_notify() {

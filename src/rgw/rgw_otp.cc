@@ -119,12 +119,10 @@ public:
 
     RGWRados *store = info->store;
 
-    list<string> unfiltered_keys;
-
     int ret = store->list_raw_objects_next(no_filter, max, info->ctx,
                                            keys, truncated);
     if (ret < 0 && ret != -ENOENT)
-      return ret;		        
+      return ret;
     if (ret == -ENOENT) {
       if (truncated)
         *truncated = false;

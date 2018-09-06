@@ -1,10 +1,12 @@
 import { Component, EventEmitter, Output } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Validators } from '@angular/forms';
 
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal/bs-modal-ref.service';
 
-import { CdValidators } from '../../../shared/validators/cd-validators';
+import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
+import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import { CdValidators } from '../../../shared/forms/cd-validators';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 
 @Component({
@@ -13,39 +15,27 @@ import { RgwUserS3Key } from '../models/rgw-user-s3-key';
   styleUrls: ['./rgw-user-s3-key-modal.component.scss']
 })
 export class RgwUserS3KeyModalComponent {
-
   /**
    * The event that is triggered when the 'Add' button as been pressed.
    */
-  @Output() submitAction = new EventEmitter();
+  @Output()
+  submitAction = new EventEmitter();
 
-  formGroup: FormGroup;
+  formGroup: CdFormGroup;
   viewing = true;
   userCandidates: string[] = [];
 
-  constructor(private formBuilder: FormBuilder,
-              public bsModalRef: BsModalRef) {
+  constructor(private formBuilder: CdFormBuilder, public bsModalRef: BsModalRef) {
     this.createForm();
     this.listenToChanges();
   }
 
   createForm() {
     this.formGroup = this.formBuilder.group({
-      'user': [
-        null,
-        [Validators.required]
-      ],
-      'generate_key': [
-        true
-      ],
-      'access_key': [
-        null,
-        [CdValidators.requiredIf({'generate_key': false})]
-      ],
-      'secret_key': [
-        null,
-        [CdValidators.requiredIf({'generate_key': false})]
-      ]
+      user: [null, [Validators.required]],
+      generate_key: [true],
+      access_key: [null, [CdValidators.requiredIf({ generate_key: false })]],
+      secret_key: [null, [CdValidators.requiredIf({ generate_key: false })]]
     });
   }
 
@@ -55,7 +45,7 @@ export class RgwUserS3KeyModalComponent {
     // validated again if the status of their prerequisites have been changed.
     this.formGroup.get('generate_key').valueChanges.subscribe(() => {
       ['access_key', 'secret_key'].forEach((path) => {
-        this.formGroup.get(path).updateValueAndValidity({onlySelf: true});
+        this.formGroup.get(path).updateValueAndValidity({ onlySelf: true });
       });
     });
   }
@@ -75,10 +65,10 @@ export class RgwUserS3KeyModalComponent {
    */
   setValues(user: string, access_key: string, secret_key: string) {
     this.formGroup.setValue({
-      'user': user,
-      'generate_key': _.isEmpty(access_key),
-      'access_key': access_key,
-      'secret_key': secret_key
+      user: user,
+      generate_key: _.isEmpty(access_key),
+      access_key: access_key,
+      secret_key: secret_key
     });
   }
 

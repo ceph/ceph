@@ -55,6 +55,22 @@ See the `Ceph Dashboard plugin documentation
 and configure the dashboard manually and how to configure other settings, e.g.
 access to the Ceph object gateway.
 
+Supported browsers
+------------------
+
+The Ceph Manager Dashboard is tested and developed on the following browsers:
+
++----------------------------------------------+----------+
+|                    Browser                   | Versions |
++==============================================+==========+
+| `Chrome <https://www.google.com/chrome/>`_   | 68+      |
++----------------------------------------------+----------+
+| `Firefox <http://www.mozilla.org/firefox/>`_ | 61+      |
++----------------------------------------------+----------+
+
+While Ceph Manager Dashboard might work in older browsers, we cannot guarantee
+it and recommend you update your browser to the latest version.
+
 Working on the Dashboard Code
 -----------------------------
 

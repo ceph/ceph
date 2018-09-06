@@ -20,6 +20,7 @@
 #include "BaseMgrStandbyModule.h"
 #include "Gil.h"
 #include "MgrContext.h"
+#include "mgr/mgr_commands.h"
 
 #include "ActivePyModules.h"
 
@@ -46,7 +47,7 @@ void PyModuleRegistry::init()
   Py_SetProgramName(const_cast<char*>(PYTHON_EXECUTABLE));
 #endif
   // Add more modules
-  if (g_conf->get_val<bool>("daemonize")) {
+  if (g_conf().get_val<bool>("daemonize")) {
     PyImport_AppendInittab("ceph_logger", PyModule::init_ceph_logger);
   }
   PyImport_AppendInittab("ceph_module", PyModule::init_ceph_module);
@@ -61,7 +62,7 @@ void PyModuleRegistry::init()
   // Drop the GIL and remember the main thread state (current
   // thread state becomes NULL)
   pMainThreadState = PyEval_SaveThread();
-  assert(pMainThreadState != nullptr);
+  ceph_assert(pMainThreadState != nullptr);
 
   std::list<std::string> failed_modules;
 
@@ -70,9 +71,12 @@ void PyModuleRegistry::init()
   for (const auto& module_name : module_names) {
     dout(1) << "Loading python module '" << module_name << "'" << dendl;
 
+    const bool always_on = always_on_modules.find(module_name) !=
+      always_on_modules.end();
+
     // Everything starts disabled, set enabled flag on module
     // when we see first MgrMap
-    auto mod = std::make_shared<PyModule>(module_name);
+    auto mod = std::make_shared<PyModule>(module_name, always_on);
     int r = mod->load(pMainThreadState);
     if (r != 0) {
       // Don't use handle_pyerror() here; we don't have the GIL
@@ -127,12 +131,12 @@ bool PyModuleRegistry::handle_mgr_map(const MgrMap &mgr_map_)
 void PyModuleRegistry::standby_start(MonClient &mc)
 {
   Mutex::Locker l(lock);
-  assert(active_modules == nullptr);
-  assert(standby_modules == nullptr);
+  ceph_assert(active_modules == nullptr);
+  ceph_assert(standby_modules == nullptr);
 
   // Must have seen a MgrMap by this point, in order to know
   // which modules should be enabled
-  assert(mgr_map.epoch > 0);
+  ceph_assert(mgr_map.epoch > 0);
 
   dout(4) << "Starting modules in standby mode" << dendl;
 
@@ -142,6 +146,10 @@ void PyModuleRegistry::standby_start(MonClient &mc)
   std::set<std::string> failed_modules;
   for (const auto &i : modules) {
     if (!(i.second->is_enabled() && i.second->get_can_run())) {
+      // report always_on modules with a standby mode that won't run
+      if (i.second->is_always_on() && i.second->pStandbyClass) {
+        failed_modules.insert(i.second->get_name());
+      }
       continue;
     }
 
@@ -171,17 +179,17 @@ void PyModuleRegistry::active_start(
             DaemonStateIndex &ds, ClusterState &cs,
             const std::map<std::string, std::string> &kv_store,
             MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
-            Client &client_, Finisher &f)
+            Client &client_, Finisher &f, DaemonServer &server)
 {
   Mutex::Locker locker(lock);
 
   dout(4) << "Starting modules in active mode" << dendl;
 
-  assert(active_modules == nullptr);
+  ceph_assert(active_modules == nullptr);
 
   // Must have seen a MgrMap by this point, in order to know
   // which modules should be enabled
-  assert(mgr_map.epoch > 0);
+  ceph_assert(mgr_map.epoch > 0);
 
   if (standby_modules != nullptr) {
     standby_modules->shutdown();
@@ -190,7 +198,7 @@ void PyModuleRegistry::active_start(
 
   active_modules.reset(new ActivePyModules(
               module_config, kv_store, ds, cs, mc,
-              clog_, objecter_, client_, f));
+              clog_, objecter_, client_, f, server));
 
   for (const auto &i : modules) {
     // Anything we're skipping because of !can_run will be flagged
@@ -257,7 +265,7 @@ void PyModuleRegistry::shutdown()
 
 std::set<std::string> PyModuleRegistry::probe_modules() const
 {
-  std::string path = g_conf->get_val<std::string>("mgr_module_path");
+  std::string path = g_conf().get_val<std::string>("mgr_module_path");
 
   DIR *dir = opendir(path.c_str());
   if (!dir) {
@@ -287,11 +295,12 @@ std::set<std::string> PyModuleRegistry::probe_modules() const
 int PyModuleRegistry::handle_command(
   std::string const &module_name,
   const cmdmap_t &cmdmap,
+  const bufferlist &inbuf,
   std::stringstream *ds,
   std::stringstream *ss)
 {
   if (active_modules) {
-    return active_modules->handle_command(module_name, cmdmap, ds, ss);
+    return active_modules->handle_command(module_name, cmdmap, inbuf, ds, ss);
   } else {
     // We do not expect to be called before active modules is up, but
     // it's straightfoward to handle this case so let's do it.
@@ -364,6 +373,16 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
       }
     }
 
+    // report failed always_on modules as health errors
+    for (const auto& name : always_on_modules) {
+      if (!active_modules->module_exists(name)) {
+        if (failed_modules.find(name) == failed_modules.end() &&
+            dependency_modules.find(name) == dependency_modules.end()) {
+          failed_modules[name] = "Unknown error";
+        }
+      }
+    }
+
     if (!dependency_modules.empty()) {
       std::ostringstream ss;
       if (dependency_modules.size() == 1) {
@@ -412,7 +431,7 @@ void PyModuleRegistry::upgrade_config(
     dout(1) << "Upgrading module configuration for Mimic" << dendl;
     // Upgrade luminous->mimic: migrate config-key configuration
     // into main configuration store
-    for(auto &i : old_config) {
+    for (auto &i : old_config) {
       auto last_slash = i.first.rfind('/');
       const std::string module_name = i.first.substr(4, i.first.substr(4).find('/'));
       const std::string key = i.first.substr(last_slash + 1);

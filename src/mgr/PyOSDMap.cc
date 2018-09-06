@@ -28,7 +28,7 @@ typedef struct {
 
 typedef struct {
   PyObject_HEAD
-  ceph::shared_ptr<CrushWrapper> crush;
+  std::shared_ptr<CrushWrapper> crush;
 } BasePyCRUSH;
 
 // ----------
@@ -192,14 +192,14 @@ BasePyOSDMap_init(BasePyOSDMap *self, PyObject *args, PyObject *kwds)
     if (! PyArg_ParseTupleAndKeywords(args, kwds, "O",
                                       const_cast<char**>(kwlist),
                                       &osdmap_capsule)) {
-      assert(0);
-        return -1;
+      ceph_abort();
+      return -1;
     }
-    assert(PyObject_TypeCheck(osdmap_capsule, &PyCapsule_Type));
+    ceph_assert(PyObject_TypeCheck(osdmap_capsule, &PyCapsule_Type));
 
     self->osdmap = (OSDMap*)PyCapsule_GetPointer(
         osdmap_capsule, nullptr);
-    assert(self->osdmap);
+    ceph_assert(self->osdmap);
 
     return 0;
 }
@@ -291,14 +291,14 @@ BasePyOSDMapIncremental_init(BasePyOSDMapIncremental *self,
     if (! PyArg_ParseTupleAndKeywords(args, kwds, "O",
                                       const_cast<char**>(kwlist),
                                       &inc_capsule)) {
-      assert(0);
-        return -1;
+      ceph_abort();
+      return -1;
     }
-    assert(PyObject_TypeCheck(inc_capsule, &PyCapsule_Type));
+    ceph_assert(PyObject_TypeCheck(inc_capsule, &PyCapsule_Type));
 
     self->inc = (OSDMap::Incremental*)PyCapsule_GetPointer(
         inc_capsule, nullptr);
-    assert(self->inc);
+    ceph_assert(self->inc);
 
     return 0;
 }
@@ -376,8 +376,8 @@ static PyObject *osdmap_inc_set_compat_weight_set_weights(
   }
 
   CrushWrapper crush;
-  assert(self->inc->crush.length());  // see new_incremental
-  auto p = self->inc->crush.begin();
+  ceph_assert(self->inc->crush.length());  // see new_incremental
+  auto p = self->inc->crush.cbegin();
   decode(crush, p);
   crush.create_choose_args(CrushWrapper::DEFAULT_CHOOSE_ARGS, 1);
   for (auto i : wm) {
@@ -460,12 +460,12 @@ BasePyCRUSH_init(BasePyCRUSH *self,
     if (! PyArg_ParseTupleAndKeywords(args, kwds, "O",
                                       const_cast<char**>(kwlist),
                                       &crush_capsule)) {
-      assert(0);
-        return -1;
+      ceph_abort();
+      return -1;
     }
-    assert(PyObject_TypeCheck(crush_capsule, &PyCapsule_Type));
+    ceph_assert(PyObject_TypeCheck(crush_capsule, &PyCapsule_Type));
 
-    auto ptr_ref = (ceph::shared_ptr<CrushWrapper>*)(
+    auto ptr_ref = (std::shared_ptr<CrushWrapper>*)(
         PyCapsule_GetPointer(crush_capsule, nullptr));
 
     // We passed a pointer to a shared pointer, which is weird, but
@@ -473,7 +473,7 @@ BasePyCRUSH_init(BasePyCRUSH *self,
     // pointer construction now, and then we throw away that pointer to
     // the shared pointer.
     self->crush = *ptr_ref;
-    assert(self->crush);
+    ceph_assert(self->crush);
 
     return 0;
 }

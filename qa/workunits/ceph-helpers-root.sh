@@ -47,20 +47,8 @@ function control_osd() {
     local action=$1
     local id=$2
 
-    local init=$(ceph-detect-init)
+    sudo systemctl $action ceph-osd@$id
 
-    case $init in
-        upstart)
-            sudo service ceph-osd $action id=$id
-            ;;
-        systemd)
-            sudo systemctl $action ceph-osd@$id
-            ;;
-        *)
-            echo ceph-detect-init returned an unknown init system: $init >&2
-            return 1
-            ;;
-    esac
     return 0
 }
 

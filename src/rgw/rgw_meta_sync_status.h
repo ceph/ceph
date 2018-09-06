@@ -26,7 +26,7 @@ struct rgw_meta_sync_info {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(state, bl);
     decode(num_shards, bl);
@@ -72,7 +72,7 @@ struct rgw_meta_sync_marker {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(state, bl);
     decode(marker, bl);
@@ -105,7 +105,7 @@ struct rgw_meta_sync_status {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(sync_info, bl);
      decode(sync_markers, bl);

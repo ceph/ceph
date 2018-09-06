@@ -19,9 +19,9 @@ int main(int argc, char **argv) {
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   // make sure we have 3 copies, or some tests won't work
-  g_ceph_context->_conf->set_val("osd_pool_default_size", "3");
+  g_ceph_context->_conf.set_val("osd_pool_default_size", "3");
   // our map is flat, so just try and split across OSDs, not hosts or whatever
-  g_ceph_context->_conf->set_val("osd_crush_chooseleaf_type", "0");
+  g_ceph_context->_conf.set_val("osd_crush_chooseleaf_type", "0");
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
@@ -42,16 +42,17 @@ public:
     osdmap.build_simple(g_ceph_context, 0, fsid, num_osds);
     OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
     pending_inc.fsid = osdmap.get_fsid();
-    entity_addr_t sample_addr;
+    entity_addrvec_t sample_addrs;
+    sample_addrs.v.push_back(entity_addr_t());
     uuid_d sample_uuid;
     for (int i = 0; i < num_osds; ++i) {
       sample_uuid.generate_random();
-      sample_addr.nonce = i;
+      sample_addrs.v[0].nonce = i;
       pending_inc.new_state[i] = CEPH_OSD_EXISTS | CEPH_OSD_NEW;
-      pending_inc.new_up_client[i] = sample_addr;
-      pending_inc.new_up_cluster[i] = sample_addr;
-      pending_inc.new_hb_back_up[i] = sample_addr;
-      pending_inc.new_hb_front_up[i] = sample_addr;
+      pending_inc.new_up_client[i] = sample_addrs;
+      pending_inc.new_up_cluster[i] = sample_addrs;
+      pending_inc.new_hb_back_up[i] = sample_addrs;
+      pending_inc.new_hb_front_up[i] = sample_addrs;
       pending_inc.new_weight[i] = CEPH_OSD_IN;
       pending_inc.new_uuid[i] = sample_uuid;
     }
@@ -69,7 +70,7 @@ public:
     pg_pool_t empty;
     // make an ec pool
     uint64_t pool_id = ++new_pool_inc.new_pool_max;
-    assert(pool_id == my_ec_pool);
+    ceph_assert(pool_id == my_ec_pool);
     pg_pool_t *p = new_pool_inc.get_new_pool(pool_id, &empty);
     p->size = 3;
     p->set_pg_num(64);
@@ -79,7 +80,7 @@ public:
     new_pool_inc.new_pool_names[pool_id] = "ec";
     // and a replicated pool
     pool_id = ++new_pool_inc.new_pool_max;
-    assert(pool_id == my_rep_pool);
+    ceph_assert(pool_id == my_rep_pool);
     p = new_pool_inc.get_new_pool(pool_id, &empty);
     p->size = 3;
     p->set_pg_num(64);
@@ -94,7 +95,7 @@ public:
   void get_crush(CrushWrapper& newcrush) {
     bufferlist bl;
     osdmap.crush->encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     newcrush.decode(p);
   }
   int crush_move(const string &name, const vector<string> &argvec) {
@@ -611,6 +612,20 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
           break;
         }
       }
+      {
+        // Check we can handle a negative pg_upmap value
+        vector<int32_t> new_pg_upmap;
+        new_pg_upmap.push_back(up[0]);
+        new_pg_upmap.push_back(-823648512);
+        OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+        pending_inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
+            new_pg_upmap.begin(), new_pg_upmap.end());
+        osdmap.apply_incremental(pending_inc);
+        vector<int> new_up;
+        int new_up_primary;
+        // crucial call - _apply_upmap should ignore the negative value
+        osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
+      }
       ASSERT_NE(-1, replaced_by);
       // generate a new pg_upmap item and apply
       vector<int32_t> new_pg_upmap;
@@ -701,6 +716,23 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
       candidate_children.erase(will_choose);
       ASSERT_TRUE(!candidate_children.empty());
       up_after_out = new_up; // needed for verification..
+    }
+    {
+      // Make sure we can handle a negative pg_upmap_item
+      int victim = up[0];
+      int replaced_by = -823648512;
+      vector<pair<int32_t,int32_t>> new_pg_upmap_items;
+      new_pg_upmap_items.push_back(make_pair(victim, replaced_by));
+      // apply
+      OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+      pending_inc.new_pg_upmap_items[pgid] =
+        mempool::osdmap::vector<pair<int32_t,int32_t>>(
+        new_pg_upmap_items.begin(), new_pg_upmap_items.end());
+      osdmap.apply_incremental(pending_inc);
+      vector<int> new_up;
+      int new_up_primary;
+      // crucial call - _apply_upmap should ignore the negative value
+      osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
     }
     {
       // STEP-2: generating a new pg_upmap_items entry by

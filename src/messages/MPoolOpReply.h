@@ -17,17 +17,19 @@
 
 #include "common/errno.h"
 
-class MPoolOpReply : public PaxosServiceMessage {
+class MPoolOpReply : public MessageInstance<MPoolOpReply, PaxosServiceMessage> {
 public:
+  friend factory;
+
   uuid_d fsid;
   __u32 replyCode = 0;
   epoch_t epoch = 0;
   bufferlist response_data;
 
-  MPoolOpReply() : PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, 0)
+  MPoolOpReply() : MessageInstance(CEPH_MSG_POOLOP_REPLY, 0)
   {}
   MPoolOpReply( uuid_d& f, ceph_tid_t t, int rc, int e, version_t v) :
-    PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v),
+    MessageInstance(CEPH_MSG_POOLOP_REPLY, v),
     fsid(f),
     replyCode(rc),
     epoch(e) {
@@ -35,7 +37,7 @@ public:
   }
   MPoolOpReply( uuid_d& f, ceph_tid_t t, int rc, int e, version_t v,
 		bufferlist *blp) :
-    PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v),
+    MessageInstance(CEPH_MSG_POOLOP_REPLY, v),
     fsid(f),
     replyCode(rc),
     epoch(e) {
@@ -65,7 +67,7 @@ public:
       encode(false, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(fsid, p);
     decode(replyCode, p);

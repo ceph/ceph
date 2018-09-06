@@ -19,7 +19,7 @@ struct cls_log_add_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(entries, bl);
     if (struct_v >= 2) {
@@ -48,7 +48,7 @@ struct cls_log_list_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(from_time, bl);
     decode(marker, bl);
@@ -74,7 +74,7 @@ struct cls_log_list_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entries, bl);
     decode(marker, bl);
@@ -106,7 +106,7 @@ struct cls_log_trim_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(from_time, bl);
     decode(to_time, bl);
@@ -128,7 +128,7 @@ struct cls_log_info_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     // currently empty request
     DECODE_FINISH(bl);
@@ -145,7 +145,7 @@ struct cls_log_info_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(header, bl);
     DECODE_FINISH(bl);

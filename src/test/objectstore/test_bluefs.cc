@@ -23,9 +23,9 @@ string get_temp_bdev(uint64_t size)
   string fn = "ceph_test_bluefs.tmp.block." + stringify(getpid())
     + "." + stringify(++n);
   int fd = ::open(fn.c_str(), O_CREAT|O_RDWR|O_TRUNC, 0644);
-  assert(fd >= 0);
+  ceph_assert(fd >= 0);
   int r = ::ftruncate(fd, size);
-  assert(r >= 0);
+  ceph_assert(r >= 0);
   ::close(fd);
   return fn;
 }
@@ -164,9 +164,9 @@ void write_data(BlueFS &fs, uint64_t rationed_bytes)
       if (r < 0) {
          break;
       }
-      written_bytes += g_conf->bluefs_alloc_size;
+      written_bytes += g_conf()->bluefs_alloc_size;
       j++;
-      if ((rationed_bytes - written_bytes) <= g_conf->bluefs_alloc_size) {
+      if ((rationed_bytes - written_bytes) <= g_conf()->bluefs_alloc_size) {
         break;
       }
     }
@@ -210,8 +210,8 @@ void write_single_file(BlueFS &fs, uint64_t rationed_bytes)
       if (r < 0) {
          break;
       }
-      written_bytes += g_conf->bluefs_alloc_size;
-      if ((rationed_bytes - written_bytes) <= g_conf->bluefs_alloc_size) {
+      written_bytes += g_conf()->bluefs_alloc_size;
+      if ((rationed_bytes - written_bytes) <= g_conf()->bluefs_alloc_size) {
         break;
       }
     }
@@ -249,10 +249,10 @@ void join_all(std::vector<std::thread>& v)
 TEST(BlueFS, test_flush_1) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
-  g_ceph_context->_conf->set_val(
+  g_ceph_context->_conf.set_val(
     "bluefs_alloc_size",
     "65536");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn, false));
@@ -284,10 +284,10 @@ TEST(BlueFS, test_flush_1) {
 TEST(BlueFS, test_flush_2) {
   uint64_t size = 1048576 * 256;
   string fn = get_temp_bdev(size);
-  g_ceph_context->_conf->set_val(
+  g_ceph_context->_conf.set_val(
     "bluefs_alloc_size",
     "65536");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn, false));
@@ -312,10 +312,10 @@ TEST(BlueFS, test_flush_2) {
 TEST(BlueFS, test_flush_3) {
   uint64_t size = 1048576 * 256;
   string fn = get_temp_bdev(size);
-  g_ceph_context->_conf->set_val(
+  g_ceph_context->_conf.set_val(
     "bluefs_alloc_size",
     "65536");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn, false));
@@ -345,7 +345,7 @@ TEST(BlueFS, test_flush_3) {
 }
 
 TEST(BlueFS, test_simple_compaction_sync) {
-  g_ceph_context->_conf->set_val(
+  g_ceph_context->_conf.set_val(
     "bluefs_compact_log_sync",
     "true");
   uint64_t size = 1048576 * 128;
@@ -398,7 +398,7 @@ TEST(BlueFS, test_simple_compaction_sync) {
 }
 
 TEST(BlueFS, test_simple_compaction_async) {
-  g_ceph_context->_conf->set_val(
+  g_ceph_context->_conf.set_val(
     "bluefs_compact_log_sync",
     "false");
   uint64_t size = 1048576 * 128;
@@ -453,10 +453,10 @@ TEST(BlueFS, test_simple_compaction_async) {
 TEST(BlueFS, test_compaction_sync) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
-  g_ceph_context->_conf->set_val(
+  g_ceph_context->_conf.set_val(
     "bluefs_alloc_size",
     "65536");
-  g_ceph_context->_conf->set_val(
+  g_ceph_context->_conf.set_val(
     "bluefs_compact_log_sync",
     "true");
 
@@ -491,10 +491,10 @@ TEST(BlueFS, test_compaction_sync) {
 TEST(BlueFS, test_compaction_async) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
-  g_ceph_context->_conf->set_val(
+  g_ceph_context->_conf.set_val(
     "bluefs_alloc_size",
     "65536");
-  g_ceph_context->_conf->set_val(
+  g_ceph_context->_conf.set_val(
     "bluefs_compact_log_sync",
     "false");
 
@@ -529,10 +529,10 @@ TEST(BlueFS, test_compaction_async) {
 TEST(BlueFS, test_replay) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
-  g_ceph_context->_conf->set_val(
+  g_ceph_context->_conf.set_val(
     "bluefs_alloc_size",
     "65536");
-  g_ceph_context->_conf->set_val(
+  g_ceph_context->_conf.set_val(
     "bluefs_compact_log_sync",
     "false");
 
@@ -580,10 +580,10 @@ int main(int argc, char **argv) {
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->set_val(
+  g_ceph_context->_conf.set_val(
     "enable_experimental_unrecoverable_data_corrupting_features",
     "*");
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

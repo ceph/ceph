@@ -2,6 +2,7 @@ from datetime import datetime
 from threading import Event
 import json
 import errno
+import six
 import time
 
 from mgr_module import MgrModule
@@ -71,12 +72,7 @@ class Module(MgrModule):
             "cmd": "influx send",
             "desc": "Force sending data to Influx",
             "perm": "rw"
-        },
-        {
-            "cmd": "influx self-test",
-            "desc": "debug the module",
-            "perm": "rw"
-        },
+        }
     ]
 
     def __init__(self, *args, **kwargs):
@@ -149,8 +145,11 @@ class Module(MgrModule):
         osd_sum = pg_sum['by_osd']
         pool_sum = pg_sum['by_pool']
         data = []
-        for osd_id, stats in osd_sum.iteritems():
+        for osd_id, stats in six.iteritems(osd_sum):
             metadata = self.get_metadata('osd', "%s" % osd_id)
+            if not metadata:
+                continue
+
             for stat in stats:
                 point_1 = {
                     "measurement": "ceph_pg_summary_osd",
@@ -165,7 +164,7 @@ class Module(MgrModule):
                     }
                 }
                 data.append(point_1)
-        for pool_id, stats in pool_sum.iteritems():
+        for pool_id, stats in six.iteritems(pool_sum):
             for stat in stats:
                 point_2 = {
                     "measurement": "ceph_pg_summary_pool",
@@ -188,7 +187,7 @@ class Module(MgrModule):
 
         now = datetime.utcnow().isoformat() + 'Z'
 
-        for daemon, counters in self.get_all_perf_counters().iteritems():
+        for daemon, counters in six.iteritems(self.get_all_perf_counters()):
             svc_type, svc_id = daemon.split(".", 1)
             metadata = self.get_metadata(svc_type, svc_id)
 
@@ -326,7 +325,19 @@ class Module(MgrModule):
         self.run = False
         self.event.set()
 
-    def handle_command(self, cmd):
+    def self_test(self):
+        daemon_stats = self.get_daemon_stats()
+        assert len(daemon_stats)
+        df_stats, pools = self.get_df_stats()
+
+        result = {
+            'daemon_stats': daemon_stats,
+            'df_stats': df_stats
+        }
+
+        return json.dumps(result, indent=2)
+
+    def handle_command(self, inbuf, cmd):
         if cmd['prefix'] == 'influx config-show':
             return 0, json.dumps(self.config), ''
         elif cmd['prefix'] == 'influx config-set':
@@ -342,17 +353,6 @@ class Module(MgrModule):
         elif cmd['prefix'] == 'influx send':
             self.send_to_influx()
             return 0, 'Sending data to Influx', ''
-        if cmd['prefix'] == 'influx self-test':
-            daemon_stats = self.get_daemon_stats()
-            assert len(daemon_stats)
-            df_stats, pools = self.get_df_stats()
-
-            result = {
-                'daemon_stats': daemon_stats,
-                'df_stats': df_stats
-            }
-
-            return 0, json.dumps(result, indent=2), 'Self-test OK'
 
         return (-errno.EINVAL, '',
                 "Command not found '{0}'".format(cmd['prefix']))

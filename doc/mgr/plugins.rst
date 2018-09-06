@@ -1,12 +1,21 @@
 
-ceph-mgr plugin author guide
-============================
+
+.. _mgr-module-dev:
+
+ceph-mgr module developer's guide
+=================================
+
+.. warning::
+
+    This is developer documentation, describing Ceph internals that
+    are only relevant to people writing ceph-mgr modules.
 
 Creating a plugin
 -----------------
 
 In pybind/mgr/, create a python module.  Within your module, create a class
-that inherits from ``MgrModule``.
+that inherits from ``MgrModule``.  For ceph-mgr to detect your module, your
+directory must contain a file called `module.py`.
 
 The most important methods to override are:
 
@@ -16,6 +25,12 @@ The most important methods to override are:
   take action when new cluster data is available.
 * a ``handle_command`` member function if your module
   exposes CLI commands.
+
+Some modules interface with external orchestrators to deploy
+Ceph services.  These also inherit from ``Orchestrator``, which adds
+additional methods to the base ``MgrModule`` class.  See
+:ref:`Orchestrator modules <orchestrator-modules>` for more on
+creating these modules.
 
 Installing a plugin
 -------------------
@@ -60,7 +75,22 @@ like this::
 The ``cmd`` part of each entry is parsed in the same way as internal
 Ceph mon and admin socket commands (see mon/MonCommands.h in
 the Ceph source for examples). Note that the "poll" field is optional,
-and is set to False by default.
+and is set to False by default; this indicates to the ``ceph`` CLI
+that it should call this command repeatedly and output results (see
+``ceph -h`` and its ``--period`` option).
+
+Each command is expected to return a tuple ``(retval, stdout, stderr)``.
+``retval`` is an integer representing a libc error code (e.g. EINVAL,
+EPERM, or 0 for no error), ``stdout`` is a string containing any
+non-error output, and ``stderr`` is a string containing any progress or
+error explanation output.  Either or both of the two strings may be empty.
+
+Implement the ``handle_command`` function to respond to the commands
+when they are sent:
+
+
+.. py:currentmodule:: mgr_module
+.. automethod:: MgrModule.handle_command
 
 Configuration options
 ---------------------
@@ -113,8 +143,9 @@ Hints for using config options:
   value will become visible to `get_config` immediately, although the
   mon->mgr update is asynchronous, so `config set` will return a fraction
   of a second before the new value is visible on the mgr.
+* To delete a config value (i.e. revert to default), just pass ``None`` to
+  set_config.
 
-.. py:currentmodule:: mgr_module
 .. automethod:: MgrModule.get_config
 .. automethod:: MgrModule.set_config
 .. automethod:: MgrModule.get_localized_config
@@ -146,8 +177,6 @@ a particular prefix (i.e. all keys starting with a particular substring).
 
 .. automethod:: MgrModule.get_store
 .. automethod:: MgrModule.set_store
-.. automethod:: MgrModule.set_store_json
-.. automethod:: MgrModule.get_store_json
 .. automethod:: MgrModule.get_localized_store
 .. automethod:: MgrModule.set_localized_store
 .. automethod:: MgrModule.get_store_prefix
@@ -178,7 +207,23 @@ function. This will result in a circular locking exception.
 .. automethod:: MgrModule.get_server
 .. automethod:: MgrModule.list_servers
 .. automethod:: MgrModule.get_metadata
+.. automethod:: MgrModule.get_daemon_status
+.. automethod:: MgrModule.get_perf_schema
 .. automethod:: MgrModule.get_counter
+.. automethod:: MgrModule.get_mgr_id
+
+Exposing health checks
+----------------------
+
+Modules can raise first class Ceph health checks, which will be reported
+in the output of ``ceph status`` and in other places that report on the
+cluster's health.
+
+If you use ``set_health_checks`` to report a problem, be sure to call
+it again with an empty dict to clear your health check when the problem
+goes away.
+
+.. automethod:: MgrModule.set_health_checks
 
 What if the mons are down?
 --------------------------
@@ -218,6 +263,40 @@ to the cluster.
 
 .. automethod:: MgrModule.send_command
 
+Receiving notifications
+-----------------------
+
+The manager daemon calls the ``notify`` function on all active modules
+when certain important pieces of cluster state are updated, such as the
+cluster maps.
+
+The actual data is not passed into this function, rather it is a cue for
+the module to go and read the relevant structure if it is interested.  Most
+modules ignore most types of notification: to ignore a notification
+simply return from this function without doing anything.
+
+.. automethod:: MgrModule.notify
+
+Accessing RADOS or CephFS
+-------------------------
+
+If you want to use the librados python API to access data stored in
+the Ceph cluster, you can access the ``rados`` attribute of your
+``MgrModule`` instance.  This is an instance of ``rados.Rados`` which
+has been constructed for you using the existing Ceph context (an internal
+detail of the C++ Ceph code) of the mgr daemon.
+
+Always use this specially constructed librados instance instead of
+constructing one by hand.
+
+Similarly, if you are using libcephfs to access the filesystem, then
+use the libcephfs ``create_with_rados`` to construct it from the
+``MgrModule.rados`` librados instance, and thereby inherit the correct context.
+
+Remember that your module may be running while other parts of the cluster
+are down: do not assume that librados or libcephfs calls will return
+promptly -- consider whether to use timeouts or to block if the rest of
+the cluster is not fully available.
 
 Implementing standby mode
 -------------------------
@@ -244,6 +323,30 @@ in the Ceph source code for the full list of methods.
 
 For an example of how to use this interface, look at the source code
 of the ``dashboard`` module.
+
+Communicating between modules
+-----------------------------
+
+Modules can invoke member functions of other modules.
+
+.. automethod:: MgrModule.remote
+
+Be sure to handle ``ImportError`` to deal with the case that the desired
+module is not enabled.
+
+If the remote method raises a python exception, this will be converted
+to a RuntimeError on the calling side, where the message string describes
+the exception that was originally thrown.  If your logic intends
+to handle certain errors cleanly, it is better to modify the remote method
+to return an error value instead of raising an exception.
+
+At time of writing, inter-module calls are implemented without
+copies or serialization, so when you return a python object, you're 
+returning a reference to that object to the calling module.  It
+is recommend *not* to rely on this reference passing, as in future the
+implementation may change to serialize arguments and return
+values.
+
 
 Logging
 -------

@@ -201,16 +201,18 @@ TEST_F(TestMockDeepCopySetHeadRequest, SetParentOverlap) {
   mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   mock_image_ctx.parent_md.spec = {123, "test", 0};
+  mock_image_ctx.parent_md.overlap = m_image_ctx->size;
 
   InSequence seq;
   expect_start_op(mock_exclusive_lock);
-  expect_set_parent(mock_image_ctx, 0);
+  expect_set_size(mock_image_ctx, 0);
 
   C_SaferCond ctx;
-  auto request = create_request(mock_image_ctx, m_image_ctx->size,
+  auto request = create_request(mock_image_ctx, 123,
                                 mock_image_ctx.parent_md.spec, 123, &ctx);
   request->send();
   ASSERT_EQ(0, ctx.wait());
+  ASSERT_EQ(123U, mock_image_ctx.parent_md.overlap);
 }
 
 TEST_F(TestMockDeepCopySetHeadRequest, SetParentError) {

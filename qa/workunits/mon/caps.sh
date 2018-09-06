@@ -66,4 +66,16 @@ ceph auth del client.bar
 
 rm $tmp.bazar.keyring $tmp.foo.keyring $tmp.bar.keyring
 
+# invalid caps health warning
+cat <<EOF | ceph auth import -i -
+[client.bad]
+  caps mon = this is wrong
+  caps osd = does not parse
+  caps mds = also does not parse
+EOF
+ceph health | grep AUTH_BAD_CAP
+ceph health detail | grep client.bad
+ceph auth rm client.bad
+expect "ceph auth health | grep AUTH_BAD_CAP" 1
+
 echo OK

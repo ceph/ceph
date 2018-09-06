@@ -109,7 +109,8 @@ int TestMemIoCtxImpl::list_snaps(const std::string& oid, snap_set_t *out_snaps) 
   out_snaps->clones.clear();
 
   RWLock::RLocker l(m_pool->file_lock);
-  TestMemCluster::Files::iterator it = m_pool->files.find(oid);
+  TestMemCluster::Files::iterator it = m_pool->files.find(
+    {get_namespace(), oid});
   if (it == m_pool->files.end()) {
     return -ENOENT;
   }
@@ -194,7 +195,8 @@ int TestMemIoCtxImpl::omap_get_vals2(const std::string& oid,
   out_vals->clear();
 
   RWLock::RLocker l(file->lock);
-  TestMemCluster::FileOMaps::iterator o_it = m_pool->file_omaps.find(oid);
+  TestMemCluster::FileOMaps::iterator o_it = m_pool->file_omaps.find(
+    {get_namespace(), oid});
   if (o_it == m_pool->file_omaps.end()) {
     if (pmore) {
       *pmore = false;
@@ -250,7 +252,7 @@ int TestMemIoCtxImpl::omap_rm_keys(const std::string& oid,
   RWLock::WLocker l(file->lock);
   for (std::set<std::string>::iterator it = keys.begin();
        it != keys.end(); ++it) {
-    m_pool->file_omaps[oid].erase(*it);
+    m_pool->file_omaps[{get_namespace(), oid}].erase(*it);
   }
   return 0;
 }
@@ -277,7 +279,7 @@ int TestMemIoCtxImpl::omap_set(const std::string& oid,
       it != map.end(); ++it) {
     bufferlist bl;
     bl.append(it->second);
-    m_pool->file_omaps[oid][it->first] = bl;
+    m_pool->file_omaps[{get_namespace(), oid}][it->first] = bl;
   }
 
   return 0;
@@ -330,13 +332,14 @@ int TestMemIoCtxImpl::remove(const std::string& oid, const SnapContext &snapc) {
     file->exists = false;
   }
 
-  TestMemCluster::Files::iterator it = m_pool->files.find(oid);
-  assert(it != m_pool->files.end());
+  TestCluster::ObjectLocator locator(get_namespace(), oid);
+  TestMemCluster::Files::iterator it = m_pool->files.find(locator);
+  ceph_assert(it != m_pool->files.end());
 
   if (*it->second.rbegin() == file) {
     TestMemCluster::ObjectHandlers object_handlers;
-    std::swap(object_handlers, m_pool->file_handlers[oid]);
-    m_pool->file_handlers.erase(oid);
+    std::swap(object_handlers, m_pool->file_handlers[locator]);
+    m_pool->file_handlers.erase(locator);
 
     for (auto object_handler : object_handlers) {
       object_handler->handle_removed(m_client);
@@ -345,7 +348,7 @@ int TestMemIoCtxImpl::remove(const std::string& oid, const SnapContext &snapc) {
 
   if (it->second.size() == 1) {
     m_pool->files.erase(it);
-    m_pool->file_omaps.erase(oid);
+    m_pool->file_omaps.erase(locator);
   }
   return 0;
 }
@@ -387,7 +390,8 @@ int TestMemIoCtxImpl::selfmanaged_snap_rollback(const std::string& oid,
   RWLock::WLocker l(m_pool->file_lock);
 
   TestMemCluster::SharedFile file;
-  TestMemCluster::Files::iterator f_it = m_pool->files.find(oid);
+  TestMemCluster::Files::iterator f_it = m_pool->files.find(
+    {get_namespace(), oid});
   if (f_it == m_pool->files.end()) {
     return 0;
   }
@@ -672,7 +676,8 @@ int TestMemIoCtxImpl::xattr_get(const std::string& oid,
 
   TestMemCluster::SharedFile file;
   RWLock::RLocker l(m_pool->file_lock);
-  TestMemCluster::FileXAttrs::iterator it = m_pool->file_xattrs.find(oid);
+  TestMemCluster::FileXAttrs::iterator it = m_pool->file_xattrs.find(
+    {get_namespace(), oid});
   if (it == m_pool->file_xattrs.end()) {
     return -ENODATA;
   }
@@ -687,7 +692,7 @@ int TestMemIoCtxImpl::xattr_set(const std::string& oid, const std::string &name,
   }
 
   RWLock::WLocker l(m_pool->file_lock);
-  m_pool->file_xattrs[oid][name] = bl;
+  m_pool->file_xattrs[{get_namespace(), oid}][name] = bl;
   return 0;
 }
 
@@ -752,11 +757,12 @@ void TestMemIoCtxImpl::ensure_minimum_length(size_t len, bufferlist *bl) {
 
 TestMemCluster::SharedFile TestMemIoCtxImpl::get_file(
     const std::string &oid, bool write, const SnapContext &snapc) {
-  assert(m_pool->file_lock.is_locked() || m_pool->file_lock.is_wlocked());
-  assert(!write || m_pool->file_lock.is_wlocked());
+  ceph_assert(m_pool->file_lock.is_locked() || m_pool->file_lock.is_wlocked());
+  ceph_assert(!write || m_pool->file_lock.is_wlocked());
 
   TestMemCluster::SharedFile file;
-  TestMemCluster::Files::iterator it = m_pool->files.find(oid);
+  TestMemCluster::Files::iterator it = m_pool->files.find(
+    {get_namespace(), oid});
   if (it != m_pool->files.end()) {
     file = it->second.back();
   } else if (!write) {
@@ -793,14 +799,14 @@ TestMemCluster::SharedFile TestMemIoCtxImpl::get_file(
     if (new_version) {
       file->snap_id = snapc.seq;
       file->mtime = ceph_clock_now().sec();
-      m_pool->files[oid].push_back(file);
+      m_pool->files[{get_namespace(), oid}].push_back(file);
     }
     return file;
   }
 
   if (get_snap_read() == CEPH_NOSNAP) {
     if (!file->exists) {
-      assert(it->second.size() > 1);
+      ceph_assert(it->second.size() > 1);
       return TestMemCluster::SharedFile();
     }
     return file;

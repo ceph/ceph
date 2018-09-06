@@ -13,13 +13,15 @@
 
 #pragma once
 
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+#include <boost/optional.hpp>
+#include "common/Mutex.h"
 #include "Python.h"
 #include "Gil.h"
 
-#include <string>
-#include "common/Mutex.h"
-#include <memory>
-#include <boost/optional.hpp>
 
 class MonClient;
 
@@ -55,6 +57,7 @@ class PyModule
   mutable Mutex lock{"PyModule::lock"};
 private:
   const std::string module_name;
+  const bool always_on;
   std::string get_site_packages();
   int load_subclass_of(const char* class_name, PyObject** py_class);
 
@@ -94,8 +97,8 @@ public:
   PyObject *pClass = nullptr;
   PyObject *pStandbyClass = nullptr;
 
-  explicit PyModule(const std::string &module_name_)
-    : module_name(module_name_)
+  explicit PyModule(const std::string &module_name_, bool always_on)
+    : module_name(module_name_), always_on(always_on)
   {
   }
 
@@ -123,7 +126,7 @@ public:
   void get_commands(std::vector<ModuleCommand> *out) const
   {
     Mutex::Locker l(lock);
-    assert(out != nullptr);
+    ceph_assert(out != nullptr);
     out->insert(out->end(), commands.begin(), commands.end());
   }
 
@@ -139,9 +142,14 @@ public:
     error_string = reason;
   }
 
-  bool is_enabled() const { Mutex::Locker l(lock) ; return enabled; }
+  bool is_enabled() const {
+    Mutex::Locker l(lock);
+    return enabled || always_on;
+  }
+
   bool is_failed() const { Mutex::Locker l(lock) ; return failed; }
   bool is_loaded() const { Mutex::Locker l(lock) ; return loaded; }
+  bool is_always_on() const { Mutex::Locker l(lock) ; return always_on; }
 
   const std::string &get_name() const {
     Mutex::Locker l(lock) ; return module_name;

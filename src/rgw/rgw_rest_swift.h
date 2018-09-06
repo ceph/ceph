@@ -121,6 +121,8 @@ public:
   RGWPutObj_ObjStore_SWIFT() {}
   ~RGWPutObj_ObjStore_SWIFT() override {}
 
+  int update_slo_segment_size(rgw_slo_entry& entry);
+
   int verify_permission() override;
   int get_params() override;
   void send_response() override;
@@ -233,7 +235,7 @@ protected:
   struct info
   {
     bool is_admin_info;
-    function<void (Formatter&, const md_config_t&, RGWRados&)> list_data;
+    function<void (Formatter&, const ConfigProxy&, RGWRados&)> list_data;
   };
 
   static const vector<pair<string, struct info>> swift_info;
@@ -243,10 +245,10 @@ public:
 
   void execute() override;
   void send_response() override;
-  static void list_swift_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
-  static void list_tempauth_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
-  static void list_tempurl_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
-  static void list_slo_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
+  static void list_swift_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
+  static void list_tempauth_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
+  static void list_tempurl_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
+  static void list_slo_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
   static bool is_expired(const std::string& expires, CephContext* cct);
 };
 

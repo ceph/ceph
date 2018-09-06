@@ -42,7 +42,7 @@ void LockRequest<I>::send_lock() {
   librados::AioCompletion *rados_completion =
     create_rados_callback<klass, &klass::handle_lock>(this);
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -81,7 +81,7 @@ void LockRequest<I>::send_get_lock_info() {
   librados::AioCompletion *rados_completion =
     create_rados_callback<klass, &klass::handle_get_lock_info>(this);
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -98,7 +98,7 @@ Context *LockRequest<I>::handle_get_lock_info(int *ret_val) {
   ClsLockType lock_type;
   std::string lock_tag;
   if (*ret_val == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     *ret_val = rados::cls::lock::get_lock_info_finish(&it, &m_lockers,
                                                       &lock_type, &lock_tag);
   }
@@ -130,7 +130,7 @@ void LockRequest<I>::send_break_locks() {
   librados::AioCompletion *rados_completion =
     create_rados_callback<klass, &klass::handle_break_locks>(this);
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 

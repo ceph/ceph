@@ -65,13 +65,12 @@ const StateTransition::TransitionTable StateTransition::s_transition_table {
   {{STATE_ASSOCIATING,  ACTION_TYPE_ACQUIRE},    {ACTION_TYPE_NONE, {}, {},
                                                   {STATE_ASSOCIATED}}},
 
-  {{STATE_DISSOCIATING, ACTION_TYPE_NONE},       {ACTION_TYPE_RELEASE, {}, {},
-                                                  {}}},
+  {{STATE_DISSOCIATING, ACTION_TYPE_NONE},       {ACTION_TYPE_RELEASE, {},
+                                                 {POLICY_ACTION_UNMAP}, {}}},
   {{STATE_DISSOCIATING, ACTION_TYPE_RELEASE},    {ACTION_TYPE_MAP_REMOVE, {},
-                                                  {POLICY_ACTION_UNMAP}, {}}},
+                                                  {POLICY_ACTION_REMOVE}, {}}},
   {{STATE_DISSOCIATING, ACTION_TYPE_MAP_REMOVE}, {ACTION_TYPE_NONE, {},
-                                                  {POLICY_ACTION_REMOVE},
-                                                  {STATE_UNASSOCIATED}}},
+                                                  {}, {STATE_UNASSOCIATED}}},
 
   {{STATE_SHUFFLING,    ACTION_TYPE_NONE},       {ACTION_TYPE_RELEASE, {},
                                                   {POLICY_ACTION_UNMAP}, {}}},
@@ -85,7 +84,7 @@ const StateTransition::TransitionTable StateTransition::s_transition_table {
 
 void StateTransition::transit(State state, Transition* transition) {
   auto it = s_transition_table.find({state, transition->action_type});
-  assert(it != s_transition_table.end());
+  ceph_assert(it != s_transition_table.end());
 
   *transition = it->second;
 }

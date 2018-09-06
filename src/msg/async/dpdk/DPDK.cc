@@ -151,7 +151,7 @@ static constexpr uint8_t packet_read_size        = 32;
 
 int DPDKDevice::init_port_start()
 {
-  assert(_port_idx < rte_eth_dev_count());
+  ceph_assert(_port_idx < rte_eth_dev_count());
 
   rte_eth_dev_info_get(_port_idx, &_dev_info);
 
@@ -263,7 +263,7 @@ int DPDKDevice::init_port_start()
   if (_num_queues > 1) {
     if (_dev_info.reta_size) {
       // RETA size should be a power of 2
-      assert((_dev_info.reta_size & (_dev_info.reta_size - 1)) == 0);
+      ceph_assert((_dev_info.reta_size & (_dev_info.reta_size - 1)) == 0);
 
       // Set the RSS table to the correct size
       _redir_table.resize(_dev_info.reta_size);
@@ -301,7 +301,7 @@ int DPDKDevice::init_port_start()
   // all together. If this assumption breaks we need to rework the below logic
   // by splitting the csum offload feature bit into separate bits for IPv4,
   // TCP.
-  assert(((_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) &&
+  ceph_assert(((_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) &&
           (_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_TCP_CKSUM)) ||
          (!(_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_IPV4_CKSUM) &&
           !(_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_TCP_CKSUM)));
@@ -329,7 +329,7 @@ int DPDKDevice::init_port_start()
   // or not set all together. If this assumption breaks we need to rework the
   // below logic by splitting the csum offload feature bit into separate bits
   // for TCP.
-  assert((_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_CKSUM) ||
+  ceph_assert((_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_CKSUM) ||
           !(_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_CKSUM));
 
   if (_dev_info.tx_offload_capa & DEV_TX_OFFLOAD_TCP_CKSUM) {
@@ -443,7 +443,7 @@ int DPDKDevice::init_port_fini()
 }
 
 void DPDKQueuePair::configure_proxies(const std::map<unsigned, float>& cpu_weights) {
-  assert(!cpu_weights.empty());
+  ceph_assert(!cpu_weights.empty());
   if (cpu_weights.size() == 1 && cpu_weights.begin()->first == _qid) {
     // special case queue sending to self only, to avoid requiring a hash value
     return;
@@ -518,10 +518,10 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
     std::string mz_name = "rx_buffer_data" + std::to_string(_qid);
     const struct rte_memzone *mz = rte_memzone_reserve_aligned(mz_name.c_str(),
           mbuf_data_size*bufs_count, _pktmbuf_pool_rx->socket_id, mz_flags, mbuf_data_size);
-    assert(mz);
+    ceph_assert(mz);
     void* m = mz->addr;
     for (int i = 0; i < bufs_count; i++) {
-      assert(m);
+      ceph_assert(m);
       _alloc_bufs.push_back(m);
       m += mbuf_data_size;
     }
@@ -606,16 +606,16 @@ DPDKQueuePair::DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, 
   plb.add_u64_counter(l_dpdk_qp_tx_packets, "dpdk_send_packets", "DPDK sendd packets");
   plb.add_u64_counter(l_dpdk_qp_rx_bad_checksum_errors, "dpdk_receive_bad_checksum_errors", "DPDK received bad checksum packets");
   plb.add_u64_counter(l_dpdk_qp_rx_no_memory_errors, "dpdk_receive_no_memory_errors", "DPDK received no memory packets");
-  plb.add_u64_counter(l_dpdk_qp_rx_bytes, "dpdk_receive_bytes", "DPDK received bytes", NULL, 0, unit_t(BYTES));
-  plb.add_u64_counter(l_dpdk_qp_tx_bytes, "dpdk_send_bytes", "DPDK sendd bytes", NULL, 0, unit_t(BYTES));
+  plb.add_u64_counter(l_dpdk_qp_rx_bytes, "dpdk_receive_bytes", "DPDK received bytes", NULL, 0, unit_t(UNIT_BYTES));
+  plb.add_u64_counter(l_dpdk_qp_tx_bytes, "dpdk_send_bytes", "DPDK sendd bytes", NULL, 0, unit_t(UNIT_BYTES));
   plb.add_u64_counter(l_dpdk_qp_rx_last_bunch, "dpdk_receive_last_bunch", "DPDK last received bunch");
   plb.add_u64_counter(l_dpdk_qp_tx_last_bunch, "dpdk_send_last_bunch", "DPDK last send bunch");
   plb.add_u64_counter(l_dpdk_qp_rx_fragments, "dpdk_receive_fragments", "DPDK received total fragments");
   plb.add_u64_counter(l_dpdk_qp_tx_fragments, "dpdk_send_fragments", "DPDK sendd total fragments");
   plb.add_u64_counter(l_dpdk_qp_rx_copy_ops, "dpdk_receive_copy_ops", "DPDK received copy operations");
   plb.add_u64_counter(l_dpdk_qp_tx_copy_ops, "dpdk_send_copy_ops", "DPDK sendd copy operations");
-  plb.add_u64_counter(l_dpdk_qp_rx_copy_bytes, "dpdk_receive_copy_bytes", "DPDK received copy bytes", NULL, 0, unit_t(BYTES));
-  plb.add_u64_counter(l_dpdk_qp_tx_copy_bytes, "dpdk_send_copy_bytes", "DPDK send copy bytes", NULL, 0, unit_t(BYTES));
+  plb.add_u64_counter(l_dpdk_qp_rx_copy_bytes, "dpdk_receive_copy_bytes", "DPDK received copy bytes", NULL, 0, unit_t(UNIT_BYTES));
+  plb.add_u64_counter(l_dpdk_qp_tx_copy_bytes, "dpdk_send_copy_bytes", "DPDK send copy bytes", NULL, 0, unit_t(UNIT_BYTES));
   plb.add_u64_counter(l_dpdk_qp_rx_linearize_ops, "dpdk_receive_linearize_ops", "DPDK received linearize operations");
   plb.add_u64_counter(l_dpdk_qp_tx_linearize_ops, "dpdk_send_linearize_ops", "DPDK send linearize operations");
   plb.add_u64_counter(l_dpdk_qp_tx_queue_length, "dpdk_send_queue_length", "DPDK send queue length");
@@ -781,14 +781,14 @@ bool DPDKQueuePair::rx_gc(bool force)
                            (void **)_rx_free_bufs.data(),
                            _rx_free_bufs.size());
 
-      // TODO: assert() in a fast path! Remove me ASAP!
-      assert(_num_rx_free_segs >= _rx_free_bufs.size());
+      // TODO: ceph_assert() in a fast path! Remove me ASAP!
+      ceph_assert(_num_rx_free_segs >= _rx_free_bufs.size());
 
       _num_rx_free_segs -= _rx_free_bufs.size();
       _rx_free_bufs.clear();
 
-      // TODO: assert() in a fast path! Remove me ASAP!
-      assert((_rx_free_pkts.empty() && !_num_rx_free_segs) ||
+      // TODO: ceph_assert() in a fast path! Remove me ASAP!
+      ceph_assert((_rx_free_pkts.empty() && !_num_rx_free_segs) ||
              (!_rx_free_pkts.empty() && _num_rx_free_segs));
     }
   }
@@ -1020,7 +1020,7 @@ void DPDKQueuePair::tx_buf::set_cluster_offload_info(const Packet& p, const DPDK
       head->l3_len = oi.ip_hdr_len;
 
       if (oi.tso_seg_size) {
-        assert(oi.needs_ip_csum);
+        ceph_assert(oi.needs_ip_csum);
         head->ol_flags |= PKT_TX_TCP_SEG;
         head->l4_len = oi.tcp_hdr_len;
         head->tso_segsz = oi.tso_seg_size;
@@ -1139,7 +1139,7 @@ void DPDKQueuePair::tx_buf::copy_packet_to_cluster(const Packet& p, rte_mbuf* he
       cur_seg_offset = 0;
 
       // FIXME: assert in a fast-path - remove!!!
-      assert(cur_seg);
+      ceph_assert(cur_seg);
     }
   }
 }

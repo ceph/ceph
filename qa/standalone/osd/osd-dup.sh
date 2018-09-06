@@ -43,7 +43,7 @@ function TEST_filestore_to_bluestore() {
     create_pool foo 16
 
     # write some objects
-    rados bench -p foo 10 write -b 4096 --no-cleanup || return 1
+    timeout 20 rados bench -p foo 10 write -b 4096 --no-cleanup || return 1
 
     # kill
     while kill $osd_pid; do sleep 1 ; done

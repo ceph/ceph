@@ -233,7 +233,7 @@ TEST(TestRGWObj, old_to_raw) {
         rgw_raw_obj raw_obj;
 
         try {
-          bufferlist::iterator iter = bl.begin();
+          auto iter = bl.cbegin();
           decode(new_obj, iter);
 
           iter = bl.begin();
@@ -254,7 +254,7 @@ TEST(TestRGWObj, old_to_raw) {
         cout << "raw=" << raw_obj << std::endl;
 
         try {
-          bufferlist::iterator iter = bl.begin();
+          auto iter = bl.cbegin();
           decode(new_obj2, iter);
 
           /*

@@ -17,7 +17,7 @@ void MirrorPeer::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void MirrorPeer::decode(bufferlist::iterator &it) {
+void MirrorPeer::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(uuid, it);
   decode(cluster_name, it);
@@ -82,7 +82,7 @@ void MirrorImage::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void MirrorImage::decode(bufferlist::iterator &it) {
+void MirrorImage::decode(bufferlist::const_iterator &it) {
   uint8_t int_state;
   DECODE_START(1, it);
   decode(global_image_id, it);
@@ -142,7 +142,7 @@ void MirrorImageStatus::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void MirrorImageStatus::decode(bufferlist::iterator &it) {
+void MirrorImageStatus::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(state, it);
   decode(description, it);
@@ -219,7 +219,7 @@ void ChildImageSpec::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void ChildImageSpec::decode(bufferlist::iterator &it) {
+void ChildImageSpec::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(pool_id, it);
   decode(image_id, it);
@@ -243,7 +243,7 @@ void GroupImageSpec::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void GroupImageSpec::decode(bufferlist::iterator &it) {
+void GroupImageSpec::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(image_id, it);
   decode(pool_id, it);
@@ -300,7 +300,7 @@ void GroupImageStatus::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void GroupImageStatus::decode(bufferlist::iterator &it) {
+void GroupImageStatus::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(spec, it);
   decode(state, it);
@@ -338,7 +338,7 @@ void GroupSpec::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void GroupSpec::decode(bufferlist::iterator &it) {
+void GroupSpec::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(pool_id, it);
   decode(group_id, it);
@@ -366,7 +366,7 @@ void GroupSnapshotNamespace::encode(bufferlist& bl) const {
   encode(group_snapshot_id, bl);
 }
 
-void GroupSnapshotNamespace::decode(bufferlist::iterator& it) {
+void GroupSnapshotNamespace::decode(bufferlist::const_iterator& it) {
   using ceph::decode;
   decode(group_pool, it);
   decode(group_id, it);
@@ -385,7 +385,7 @@ void TrashSnapshotNamespace::encode(bufferlist& bl) const {
   encode(static_cast<uint32_t>(original_snapshot_namespace_type), bl);
 }
 
-void TrashSnapshotNamespace::decode(bufferlist::iterator& it) {
+void TrashSnapshotNamespace::decode(bufferlist::const_iterator& it) {
   using ceph::decode;
   decode(original_name, it);
   uint32_t snap_type;
@@ -418,7 +418,7 @@ private:
 
 class DecodeSnapshotNamespaceVisitor : public boost::static_visitor<void> {
 public:
-  DecodeSnapshotNamespaceVisitor(bufferlist::iterator &iter)
+  DecodeSnapshotNamespaceVisitor(bufferlist::const_iterator &iter)
     : m_iter(iter) {
   }
 
@@ -427,7 +427,7 @@ public:
     t.decode(m_iter);
   }
 private:
-  bufferlist::iterator &m_iter;
+  bufferlist::const_iterator &m_iter;
 };
 
 class DumpSnapshotNamespaceVisitor : public boost::static_visitor<void> {
@@ -471,7 +471,7 @@ void SnapshotInfo::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void SnapshotInfo::decode(bufferlist::iterator& it) {
+void SnapshotInfo::decode(bufferlist::const_iterator& it) {
   DECODE_START(1, it);
   decode(id, it);
   decode(snapshot_namespace, it);
@@ -511,7 +511,7 @@ void SnapshotNamespace::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void SnapshotNamespace::decode(bufferlist::iterator &p)
+void SnapshotNamespace::decode(bufferlist::const_iterator &p)
 {
   DECODE_START(1, p);
   uint32_t snap_type;
@@ -601,7 +601,7 @@ void ImageSnapshotSpec::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void ImageSnapshotSpec::decode(bufferlist::iterator& it) {
+void ImageSnapshotSpec::decode(bufferlist::const_iterator& it) {
   using ceph::decode;
   DECODE_START(1, it);
   decode(pool, it);
@@ -631,7 +631,7 @@ void GroupSnapshot::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void GroupSnapshot::decode(bufferlist::iterator& it) {
+void GroupSnapshot::decode(bufferlist::const_iterator& it) {
   using ceph::decode;
   DECODE_START(1, it);
   decode(id, it);
@@ -660,7 +660,7 @@ void TrashImageSpec::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void TrashImageSpec::decode(bufferlist::iterator &it) {
+void TrashImageSpec::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(source, it);
   decode(name, it);
@@ -670,13 +670,7 @@ void TrashImageSpec::decode(bufferlist::iterator &it) {
 }
 
 void TrashImageSpec::dump(Formatter *f) const {
-  switch(source) {
-    case TRASH_IMAGE_SOURCE_USER:
-      f->dump_string("source", "user");
-      break;
-    case TRASH_IMAGE_SOURCE_MIRRORING:
-      f->dump_string("source", "rbd_mirror");
-  }
+  f->dump_stream("source") << source;
   f->dump_string("name", name);
   f->dump_unsigned("deletion_time", deletion_time);
   f->dump_unsigned("deferment_end_time", deferment_end_time);
@@ -690,7 +684,7 @@ void MirrorImageMap::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void MirrorImageMap::decode(bufferlist::iterator &it) {
+void MirrorImageMap::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(instance_id, it);
   decode(mapped_time, it);
@@ -730,6 +724,137 @@ std::ostream& operator<<(std::ostream& os,
                          const MirrorImageMap &image_map) {
   return os << "[" << "instance_id=" << image_map.instance_id << ", mapped_time="
             << image_map.mapped_time << "]";
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MigrationHeaderType& type) {
+  switch (type) {
+  case MIGRATION_HEADER_TYPE_SRC:
+    os << "source";
+    break;
+  case MIGRATION_HEADER_TYPE_DST:
+    os << "destination";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(type) << ")";
+    break;
+  }
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MigrationState& migration_state) {
+  switch (migration_state) {
+  case MIGRATION_STATE_ERROR:
+    os << "error";
+    break;
+  case MIGRATION_STATE_PREPARING:
+    os << "preparing";
+    break;
+  case MIGRATION_STATE_PREPARED:
+    os << "prepared";
+    break;
+  case MIGRATION_STATE_EXECUTING:
+    os << "executing";
+    break;
+  case MIGRATION_STATE_EXECUTED:
+    os << "executed";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(migration_state) << ")";
+    break;
+  }
+  return os;
+}
+
+void MigrationSpec::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(header_type, bl);
+  encode(pool_id, bl);
+  encode(image_name, bl);
+  encode(image_id, bl);
+  encode(snap_seqs, bl);
+  encode(overlap, bl);
+  encode(flatten, bl);
+  encode(mirroring, bl);
+  encode(state, bl);
+  encode(state_description, bl);
+  ENCODE_FINISH(bl);
+}
+
+void MigrationSpec::decode(bufferlist::const_iterator& bl) {
+  DECODE_START(1, bl);
+  decode(header_type, bl);
+  decode(pool_id, bl);
+  decode(image_name, bl);
+  decode(image_id, bl);
+  decode(snap_seqs, bl);
+  decode(overlap, bl);
+  decode(flatten, bl);
+  decode(mirroring, bl);
+  decode(state, bl);
+  decode(state_description, bl);
+  DECODE_FINISH(bl);
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const std::map<uint64_t, uint64_t>& snap_seqs) {
+  os << "{";
+  size_t count = 0;
+  for (auto &it : snap_seqs) {
+    os << (count++ > 0 ? ", " : "") << "(" << it.first << ", " << it.second
+       << ")";
+  }
+  os << "}";
+  return os;
+}
+
+void MigrationSpec::dump(Formatter *f) const {
+  f->dump_stream("header_type") << header_type;
+  f->dump_int("pool_id", pool_id);
+  f->dump_string("image_name", image_name);
+  f->dump_string("image_id", image_id);
+  f->dump_stream("snap_seqs") << snap_seqs;
+  f->dump_unsigned("overlap", overlap);
+  f->dump_bool("mirroring", mirroring);
+}
+
+void MigrationSpec::generate_test_instances(std::list<MigrationSpec*> &o) {
+  o.push_back(new MigrationSpec());
+  o.push_back(new MigrationSpec(MIGRATION_HEADER_TYPE_SRC, 1, "image_name",
+                                "image_id", {{1, 2}}, 123, true, true,
+                                MIGRATION_STATE_PREPARED, "description"));
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MigrationSpec& migration_spec) {
+  os << "["
+     << "header_type=" << migration_spec.header_type << ", "
+     << "pool_id=" << migration_spec.pool_id << ", "
+     << "image_name=" << migration_spec.image_name << ", "
+     << "image_id=" << migration_spec.image_id << ", "
+     << "snap_seqs=" << migration_spec.snap_seqs << ", "
+     << "overlap=" << migration_spec.overlap << ", "
+     << "flatten=" << migration_spec.flatten << ", "
+     << "mirroring=" << migration_spec.mirroring << ", "
+     << "state=" << migration_spec.state << ", "
+     << "state_description=" << migration_spec.state_description << "]";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const AssertSnapcSeqState& state) {
+  switch (state) {
+  case ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ:
+    os << "gt";
+    break;
+  case ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ:
+    os << "le";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(state) << ")";
+    break;
+  }
+  return os;
 }
 
 } // namespace rbd

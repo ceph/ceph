@@ -314,6 +314,7 @@ extern int ceph_release_from_features(uint64_t features);
 	f(SET_REDIRECT,	__CEPH_OSD_OP(WR, DATA, 39),	"set-redirect")	    \
 	f(SET_CHUNK,	__CEPH_OSD_OP(WR, DATA, 40),	"set-chunk")	    \
 	f(TIER_PROMOTE,	__CEPH_OSD_OP(WR, DATA, 41),	"tier-promote")	    \
+	f(UNSET_MANIFEST, __CEPH_OSD_OP(WR, DATA, 42),	"unset-manifest")   \
 									    \
 	/** attrs **/							    \
 	/* read */							    \
@@ -469,6 +470,7 @@ enum {
 	CEPH_OSD_OP_FLAG_FADVISE_DONTNEED   = 0x20,/* data will not be accessed in the near future */
 	CEPH_OSD_OP_FLAG_FADVISE_NOCACHE   = 0x40, /* data will be accessed only once by this client */
 	CEPH_OSD_OP_FLAG_WITH_REFERENCE   = 0x80, /* need reference couting */
+	CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE = 0x100, /* bypass ObjectStore cache, mainly for deep-scrub */
 };
 
 #define EOLDSNAPC    85  /* ORDERSNAP flag set; writer has old snapc*/

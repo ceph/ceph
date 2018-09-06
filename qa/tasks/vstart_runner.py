@@ -373,6 +373,14 @@ class LocalDaemon(object):
 
         self.proc = self.controller.run([os.path.join(BIN_PREFIX, "./ceph-{0}".format(self.daemon_type)), "-i", self.daemon_id])
 
+    def signal(self, sig, silent=False):
+        if not self.running():
+            raise RuntimeError("Can't send signal to non-running daemon")
+
+        os.kill(self._get_pid(), sig)
+        if not silent:
+            log.info("Sent signal {0} to {1}.{2}".format(sig, self.daemon_type, self.daemon_id))
+
 
 def safe_kill(pid):
     """
@@ -389,8 +397,8 @@ def safe_kill(pid):
 
 
 class LocalFuseMount(FuseMount):
-    def __init__(self, test_dir, client_id):
-        super(LocalFuseMount, self).__init__(None, test_dir, client_id, LocalRemote())
+    def __init__(self, ctx, test_dir, client_id):
+        super(LocalFuseMount, self).__init__(ctx, None, test_dir, client_id, LocalRemote())
 
     @property
     def config_path(self):
@@ -408,6 +416,15 @@ class LocalFuseMount(FuseMount):
         return self.client_remote.run(
             args, wait=wait, cwd=self.mountpoint
         )
+
+    def setupfs(self, name=None):
+        if name is None and self.fs is not None:
+            # Previous mount existed, reuse the old name
+            name = self.fs.name
+        self.fs = LocalFilesystem(self.ctx, name=name)
+        log.info('Wait for MDS to reach steady state...')
+        self.fs.wait_for_daemons()
+        log.info('Ready to start {}...'.format(type(self).__name__))
 
     @property
     def _prefix(self):
@@ -439,6 +456,8 @@ class LocalFuseMount(FuseMount):
             super(LocalFuseMount, self).umount()
 
     def mount(self, mount_path=None, mount_fs_name=None):
+        self.setupfs(name=mount_fs_name)
+
         self.client_remote.run(
             args=[
                 'mkdir',
@@ -519,15 +538,15 @@ class LocalFuseMount(FuseMount):
         else:
             self._fuse_conn = new_conns[0]
 
-    def _run_python(self, pyscript):
+        self.gather_mount_info()
+
+    def _run_python(self, pyscript, py_version='python'):
         """
         Override this to remove the daemon-helper prefix that is used otherwise
         to make the process killable.
         """
-        return self.client_remote.run(args=[
-            'python', '-c', pyscript
-        ], wait=False)
-
+        return self.client_remote.run(args=[py_version, '-c', pyscript],
+                                      wait=False)
 
 class LocalCephManager(CephManager):
     def __init__(self):
@@ -552,19 +571,20 @@ class LocalCephManager(CephManager):
         proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph"), "-w"], wait=False, stdout=StringIO())
         return proc
 
-    def raw_cluster_cmd(self, *args):
+    def raw_cluster_cmd(self, *args, **kwargs):
         """
         args like ["osd", "dump"}
         return stdout string
         """
-        proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph")] + list(args))
+        proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph")] + list(args), **kwargs)
         return proc.stdout.getvalue()
 
-    def raw_cluster_cmd_result(self, *args):
+    def raw_cluster_cmd_result(self, *args, **kwargs):
         """
         like raw_cluster_cmd but don't check status, just return rc
         """
-        proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph")] + list(args), check_status=False)
+        kwargs['check_status'] = False
+        proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph")] + list(args), **kwargs)
         return proc.exitstatus
 
     def admin_socket(self, daemon_type, daemon_id, command, check_status=True):
@@ -828,7 +848,6 @@ class LocalContext(object):
     def __del__(self):
         shutil.rmtree(self.teuthology_config['test_path'])
 
-
 def exec_test():
     # Parse arguments
     interactive_on_error = False
@@ -896,6 +915,11 @@ def exec_test():
     test_dir = tempfile.mkdtemp()
     teuth_config['test_path'] = test_dir
 
+    ctx = LocalContext()
+    ceph_cluster = LocalCephCluster(ctx)
+    mds_cluster = LocalMDSCluster(ctx)
+    mgr_cluster = LocalMgrCluster(ctx)
+
     # Construct Mount classes
     mounts = []
     for client_id in clients:
@@ -911,7 +935,7 @@ def exec_test():
 
             open("./keyring", "a").write(p.stdout.getvalue())
 
-        mount = LocalFuseMount(test_dir, client_id)
+        mount = LocalFuseMount(ctx, test_dir, client_id)
         mounts.append(mount)
         if mount.is_mounted():
             log.warn("unmounting {0}".format(mount.mountpoint))
@@ -919,11 +943,6 @@ def exec_test():
         else:
             if os.path.exists(mount.mountpoint):
                 os.rmdir(mount.mountpoint)
-
-    ctx = LocalContext()
-    ceph_cluster = LocalCephCluster(ctx)
-    mds_cluster = LocalMDSCluster(ctx)
-    mgr_cluster = LocalMgrCluster(ctx)
 
     from tasks.cephfs_test_runner import DecoratingLoader
 

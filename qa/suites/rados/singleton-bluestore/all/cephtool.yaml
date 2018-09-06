@@ -22,10 +22,21 @@ tasks:
     - failsafe engaged, dropping updates
     - failsafe disengaged, no longer dropping updates
     - overall HEALTH_
-    - (OSDMAP_FLAGS)
-    - (OSD_
-    - (PG_
-    - (SMALLER_PG_NUM)
+    - \(OSDMAP_FLAGS\)
+    - \(OSD_
+    - \(PG_
+    - \(SMALLER_PG_NUM\)
+    - \(SMALLER_PGP_NUM\)
+    - \(CACHE_POOL_NO_HIT_SET\)
+    - \(CACHE_POOL_NEAR_FULL\)
+    - \(FS_WITH_FAILED_MDS\)
+    - \(FS_DEGRADED\)
+    - \(POOL_BACKFILLFULL\)
+    - \(POOL_FULL\)
+    - \(SMALLER_PGP_NUM\)
+    - \(POOL_NEARFULL\)
+    - \(POOL_APP_NOT_ENABLED\)
+    - \(AUTH_BAD_CAPS\)
 - workunit:
     clients:
       all:

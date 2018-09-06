@@ -46,7 +46,7 @@ struct OldObjManifestPart {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
      decode(loc, bl);
      decode(loc_ofs, bl);
@@ -92,7 +92,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN_32(6, 2, 2, bl);
     decode(obj_size, bl);
     decode(objs, bl);
@@ -362,7 +362,7 @@ TEST(TestRGWManifest, old_obj_manifest) {
   RGWObjManifest manifest;
 
   try {
-    auto iter = bl.begin();
+    auto iter = bl.cbegin();
     decode(manifest, iter);
   } catch (buffer::error& err) {
     ASSERT_TRUE(false);

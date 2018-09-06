@@ -120,7 +120,7 @@ if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
         respawn_in_path(lib_path, pybind_path, pythonlib_path)
 
         if 'PATH' in os.environ and bin_path not in os.environ['PATH']:
-            os.environ['PATH'] += ':' + bin_path
+            os.environ['PATH'] = os.pathsep.join([bin_path, os.environ['PATH']])
 
 import argparse
 import errno
@@ -375,8 +375,15 @@ def do_extended_help(parser, args, target, partial):
                                          prefix='get_command_descriptions',
                                          timeout=10)
         if ret:
-            print("couldn't get command descriptions for {0}: {1} ({2})".
-                  format(target, outs, ret), file=sys.stderr)
+            if ret == -errno.EPERM and target[0] in ('osd', 'mds'):
+                print("Permission denied.  Check that your user has 'allow *' "
+                      "capabilities for the target daemon type.", file=sys.stderr)
+            elif ret == -errno.EPERM:
+                print("Permission denied.  Check your user has proper "
+                      "capabilities configured", file=sys.stderr)
+            else:
+                print("couldn't get command descriptions for {0}: {1} ({2})".
+                      format(target, outs, ret), file=sys.stderr)
             return ret
         else:
             return help_for_sigs(outbuf.decode('utf-8'), partial)

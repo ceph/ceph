@@ -45,10 +45,10 @@ public:
       librbd::MockTestImageCtx *src_image_ctx,
       librbd::MockTestImageCtx *dst_image_ctx,
       librados::snap_t snap_id_start, librados::snap_t snap_id_end,
-      const librbd::deep_copy::ObjectNumber &object_number,
+      bool flatten, const librbd::deep_copy::ObjectNumber &object_number,
       ContextWQ *work_queue, SnapSeqs *snap_seqs, ProgressContext *prog_ctx,
       Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -98,7 +98,7 @@ public:
                                         journal::MockJournaler *journaler,
                                         librbd::journal::MirrorPeerClientMeta *client_meta,
                                         Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -121,7 +121,7 @@ public:
                                        journal::MockJournaler *journaler,
                                        librbd::journal::MirrorPeerClientMeta *client_meta,
                                        Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     s_instance->sync_complete = sync_complete;
     return s_instance;

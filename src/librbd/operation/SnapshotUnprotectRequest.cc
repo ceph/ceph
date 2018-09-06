@@ -64,7 +64,7 @@ public:
 
   int send() override {
     I &image_ctx = this->m_image_ctx;
-    assert(image_ctx.owner_lock.is_locked());
+    ceph_assert(image_ctx.owner_lock.is_locked());
 
     CephContext *cct = image_ctx.cct;
     ldout(cct, 10) << this << " scanning pool '" << m_pool.second << "'"
@@ -98,6 +98,9 @@ public:
       return r;
     }
 
+    // TODO support clone v2 child namespaces
+    m_pool_ioctx.set_namespace(image_ctx.md_ctx.get_namespace());
+
     librados::ObjectReadOperation op;
     cls_client::get_children_start(&op, m_pspec);
 
@@ -105,7 +108,7 @@ public:
       util::create_rados_callback(this);
     r = m_pool_ioctx.aio_operate(RBD_CHILDREN, rados_completion, &op,
                                  &m_children_bl);
-    assert(r == 0);
+    ceph_assert(r == 0);
     rados_completion->release();
     return 0;
   }
@@ -116,7 +119,7 @@ protected:
     CephContext *cct = image_ctx.cct;
 
     if (r == 0) {
-      bufferlist::iterator it = m_children_bl.begin();
+      auto it = m_children_bl.cbegin();
       r= cls_client::get_children_finish(&it, &m_children);
     }
 
@@ -225,7 +228,7 @@ bool SnapshotUnprotectRequest<I>::should_complete_error() {
 template <typename I>
 void SnapshotUnprotectRequest<I>::send_unprotect_snap_start() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
@@ -240,7 +243,7 @@ void SnapshotUnprotectRequest<I>::send_unprotect_snap_start() {
 template <typename I>
 void SnapshotUnprotectRequest<I>::send_scan_pool_children() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
@@ -270,7 +273,7 @@ void SnapshotUnprotectRequest<I>::send_scan_pool_children() {
 template <typename I>
 void SnapshotUnprotectRequest<I>::send_unprotect_snap_finish() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
@@ -283,14 +286,14 @@ void SnapshotUnprotectRequest<I>::send_unprotect_snap_finish() {
 
   librados::AioCompletion *comp = this->create_callback_completion();
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
 template <typename I>
 void SnapshotUnprotectRequest<I>::send_unprotect_snap_rollback() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
@@ -303,7 +306,7 @@ void SnapshotUnprotectRequest<I>::send_unprotect_snap_rollback() {
 
   librados::AioCompletion *comp = this->create_callback_completion();
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -341,7 +344,7 @@ int SnapshotUnprotectRequest<I>::verify_and_send_unprotect_snap_start() {
 
   librados::AioCompletion *comp = this->create_callback_completion();
   r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 
   // TODO legacy code threw a notification post UNPROTECTING update -- required?

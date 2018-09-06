@@ -28,9 +28,16 @@ static ostream& _prefix(std::ostream *_dout, mds_rank_t rank) {
   return *_dout << "mds." << rank << ".purge_queue ";
 }
 
+const std::map<std::string, PurgeItem::Action> PurgeItem::actions = {
+  {"NONE", PurgeItem::NONE},
+  {"PURGE_FILE", PurgeItem::PURGE_FILE},
+  {"TRUNCATE_FILE", PurgeItem::TRUNCATE_FILE},
+  {"PURGE_DIR", PurgeItem::PURGE_DIR}
+};
+
 void PurgeItem::encode(bufferlist &bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode((uint8_t)action, bl);
   encode(ino, bl);
   encode(size, bl);
@@ -38,12 +45,17 @@ void PurgeItem::encode(bufferlist &bl) const
   encode(old_pools, bl);
   encode(snapc, bl);
   encode(fragtree, bl);
+  encode(stamp, bl);
+  uint8_t static const pad = 0xff;
+  for (unsigned int i = 0; i<pad_size; i++) {
+    encode(pad, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
-void PurgeItem::decode(bufferlist::iterator &p)
+void PurgeItem::decode(bufferlist::const_iterator &p)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   decode((uint8_t&)action, p);
   decode(ino, p);
   decode(size, p);
@@ -51,6 +63,9 @@ void PurgeItem::decode(bufferlist::iterator &p)
   decode(old_pools, p);
   decode(snapc, p);
   decode(fragtree, p);
+  if (struct_v >= 2) {
+    decode(stamp, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -82,9 +97,9 @@ PurgeQueue::PurgeQueue(
     delayed_flush(nullptr),
     recovered(false)
 {
-  assert(cct != nullptr);
-  assert(on_error != nullptr);
-  assert(objecter != nullptr);
+  ceph_assert(cct != nullptr);
+  ceph_assert(on_error != nullptr);
+  ceph_assert(objecter != nullptr);
   journaler.set_write_error_handler(on_error);
 }
 
@@ -97,12 +112,14 @@ PurgeQueue::~PurgeQueue()
 
 void PurgeQueue::create_logger()
 {
-  PerfCountersBuilder pcb(g_ceph_context,
-          "purge_queue", l_pq_first, l_pq_last);
+  PerfCountersBuilder pcb(g_ceph_context, "purge_queue", l_pq_first, l_pq_last);
+
+  pcb.add_u64_counter(l_pq_executed, "pq_executed", "Purge queue tasks executed",
+                      "purg", PerfCountersBuilder::PRIO_INTERESTING);
+
+  pcb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
   pcb.add_u64(l_pq_executing_ops, "pq_executing_ops", "Purge queue ops in flight");
   pcb.add_u64(l_pq_executing, "pq_executing", "Purge queue tasks in flight");
-  pcb.add_u64_counter(l_pq_executed, "pq_executed", "Purge queue tasks executed", "purg",
-      PerfCountersBuilder::PRIO_INTERESTING);
 
   logger.reset(pcb.create_perf_counters());
   g_ceph_context->get_perfcounters_collection()->add(logger.get());
@@ -112,7 +129,7 @@ void PurgeQueue::init()
 {
   Mutex::Locker l(lock);
 
-  assert(logger != nullptr);
+  ceph_assert(logger != nullptr);
 
   finisher.start();
   timer.init();
@@ -191,7 +208,7 @@ void PurgeQueue::wait_for_recovery(Context* c)
 
 void PurgeQueue::_recover()
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   // Journaler::is_readable() adjusts write_pos if partial entry is encountered
   while (1) {
@@ -224,7 +241,7 @@ void PurgeQueue::_recover()
 
     bufferlist bl;
     bool readable = journaler.try_read_entry(bl);
-    assert(readable);  // we checked earlier
+    ceph_assert(readable);  // we checked earlier
   }
 }
 
@@ -256,7 +273,7 @@ void PurgeQueue::push(const PurgeItem &pi, Context *completion)
   Mutex::Locker l(lock);
 
   // Callers should have waited for open() before using us
-  assert(!journaler.is_readonly());
+  ceph_assert(!journaler.is_readonly());
 
   bufferlist bl;
 
@@ -279,7 +296,7 @@ void PurgeQueue::push(const PurgeItem &pi, Context *completion)
           });
 
       timer.add_event_after(
-          g_conf->mds_purge_queue_busy_flush_period,
+	  g_conf()->mds_purge_queue_busy_flush_period,
           delayed_flush);
     }
   }
@@ -301,7 +318,7 @@ uint32_t PurgeQueue::_calculate_ops(const PurgeItem &item) const
     const uint64_t num = (item.size > 0) ?
       Striper::get_num_objects(item.layout, item.size) : 1;
 
-    ops_required = std::min(num, g_conf->filer_max_purge_ops);
+    ops_required = std::min(num, g_conf()->filer_max_purge_ops);
 
     // Account for removing (or zeroing) backtrace
     ops_required += 1;
@@ -318,7 +335,7 @@ uint32_t PurgeQueue::_calculate_ops(const PurgeItem &item) const
 bool PurgeQueue::can_consume()
 {
   dout(20) << ops_in_flight << "/" << max_purge_ops << " ops, "
-           << in_flight.size() << "/" << g_conf->mds_max_purge_files
+           << in_flight.size() << "/" << g_conf()->mds_max_purge_files
            << " files" << dendl;
 
   if (in_flight.size() == 0 && cct->_conf->mds_max_purge_files > 0) {
@@ -346,7 +363,7 @@ bool PurgeQueue::can_consume()
 
 bool PurgeQueue::_consume()
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   bool could_consume = false;
   while(can_consume()) {
@@ -359,6 +376,12 @@ bool PurgeQueue::_consume()
       delayed_flush = nullptr;
     }
 
+    if (int r = journaler.get_error()) {
+      derr << "Error " << r << " recovering write_pos" << dendl;
+      on_error->complete(r);
+      return could_consume;
+    }
+
     if (!journaler.is_readable()) {
       dout(10) << " not readable right now" << dendl;
       // Because we are the writer and the reader of the journal
@@ -368,6 +391,8 @@ bool PurgeQueue::_consume()
           Mutex::Locker l(lock);
           if (r == 0) {
             _consume();
+          } else if (r != -EAGAIN) {
+            on_error->complete(r);
           }
         }));
       }
@@ -379,11 +404,11 @@ bool PurgeQueue::_consume()
     // The journaler is readable: consume an entry
     bufferlist bl;
     bool readable = journaler.try_read_entry(bl);
-    assert(readable);  // we checked earlier
+    ceph_assert(readable);  // we checked earlier
 
     dout(20) << " decoding entry" << dendl;
     PurgeItem item;
-    bufferlist::iterator q = bl.begin();
+    auto q = bl.cbegin();
     try {
       decode(item, q);
     } catch (const buffer::error &err) {
@@ -404,7 +429,7 @@ void PurgeQueue::_execute_item(
     const PurgeItem &item,
     uint64_t expire_to)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
 
   in_flight[expire_to] = item;
   logger->set(l_pq_executing, in_flight.size());
@@ -479,7 +504,7 @@ void PurgeQueue::_execute_item(
     logger->set(l_pq_executing, in_flight.size());
     return;
   }
-  assert(gather.has_subs());
+  ceph_assert(gather.has_subs());
 
   gather.set_finisher(new C_OnFinisher(
                       new FunctionContext([this, expire_to](int r){
@@ -506,12 +531,12 @@ void PurgeQueue::_execute_item(
 void PurgeQueue::_execute_item_complete(
     uint64_t expire_to)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
   dout(10) << "complete at 0x" << std::hex << expire_to << std::dec << dendl;
-  assert(in_flight.count(expire_to) == 1);
+  ceph_assert(in_flight.count(expire_to) == 1);
 
   auto iter = in_flight.find(expire_to);
-  assert(iter != in_flight.end());
+  ceph_assert(iter != in_flight.end());
   if (iter == in_flight.begin()) {
     uint64_t pos = expire_to;
     if (!pending_expire.empty()) {
@@ -582,7 +607,7 @@ void PurgeQueue::update_op_limit(const MDSMap &mds_map)
   }
 }
 
-void PurgeQueue::handle_conf_change(const struct md_config_t *conf,
+void PurgeQueue::handle_conf_change(const ConfigProxy& conf,
 			     const std::set <std::string> &changed,
                              const MDSMap &mds_map)
 {
@@ -591,7 +616,6 @@ void PurgeQueue::handle_conf_change(const struct md_config_t *conf,
     update_op_limit(mds_map);
   } else if (changed.count("mds_max_purge_files")) {
     Mutex::Locker l(lock);
-
     if (in_flight.empty()) {
       // We might have gone from zero to a finite limit, so
       // might need to kick off consume.
@@ -611,9 +635,9 @@ bool PurgeQueue::drain(
     size_t *in_flight_count
     )
 {
-  assert(progress != nullptr);
-  assert(progress_total != nullptr);
-  assert(in_flight_count != nullptr);
+  ceph_assert(progress != nullptr);
+  ceph_assert(progress_total != nullptr);
+  ceph_assert(in_flight_count != nullptr);
 
   const bool done = in_flight.empty() && (
       journaler.get_read_pos() == journaler.get_write_pos());
@@ -641,5 +665,17 @@ bool PurgeQueue::drain(
   *in_flight_count = in_flight.size();
 
   return false;
+}
+
+std::string PurgeItem::get_type_str() const
+{
+  switch(action) {
+  case PurgeItem::NONE: return "NONE";
+  case PurgeItem::PURGE_FILE: return "PURGE_FILE";
+  case PurgeItem::PURGE_DIR: return "PURGE_DIR";
+  case PurgeItem::TRUNCATE_FILE: return "TRUNCATE_FILE";
+  default:
+    return "UNKNOWN";
+  }
 }
 

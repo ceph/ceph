@@ -1,15 +1,20 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-@Injectable()
-export class TcmuIscsiService {
+import { ApiModule } from './api.module';
 
-  constructor(private http: HttpClient) {
-  }
+@Injectable({
+  providedIn: ApiModule
+})
+export class TcmuIscsiService {
+  constructor(private http: HttpClient) {}
 
   tcmuiscsi() {
-    return this.http.get('api/tcmuiscsi').toPromise().then((resp: any) => {
-      return resp;
-    });
+    return this.http
+      .get('api/tcmuiscsi')
+      .toPromise()
+      .then((resp: any) => {
+        return resp;
+      });
   }
 }

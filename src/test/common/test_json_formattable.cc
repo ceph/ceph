@@ -129,7 +129,7 @@ TEST(formatable, bin_encode) {
 
   bufferlist bl;
   ::encode(f, bl);
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   try {
     ::decode(f2, iter);
   } catch (buffer::error& err) {
@@ -223,24 +223,24 @@ TEST(formatable, set_array) {
   JSONFormattable f, f2;
 
   f.set("asd[0]", "\"xyz\"");
-  ASSERT_EQ(f["asd"].array().size(), 1);
+  ASSERT_EQ(1u, f["asd"].array().size());
   ASSERT_EQ((string)f["asd"][0], "xyz");
 
   f.set("bbb[0][0]", "10");
   f.set("bbb[0][1]", "20");
-  ASSERT_EQ(f["bbb"].array().size(), 1);
-  ASSERT_EQ(f["bbb"][0].array().size(), 2);
-  ASSERT_EQ((string)f["bbb"][0][0], "10");
-  ASSERT_EQ((int)f["bbb"][0][1], 20);
+  ASSERT_EQ(1u, f["bbb"].array().size());
+  ASSERT_EQ(2u, f["bbb"][0].array().size());
+  ASSERT_EQ("10", (string)f["bbb"][0][0]);
+  ASSERT_EQ(20, (int)f["bbb"][0][1]);
   f.set("bbb[0][1]", "25");
-  ASSERT_EQ(f["bbb"][0].array().size(), 2);
-  ASSERT_EQ((int)f["bbb"][0][1], 25);
+  ASSERT_EQ(2u, f["bbb"][0].array().size());
+  ASSERT_EQ(25, (int)f["bbb"][0][1]);
 
   f.set("bbb[0][]", "26"); /* append operation */
-  ASSERT_EQ((int)f["bbb"][0][2], 26);
+  ASSERT_EQ(26, (int)f["bbb"][0][2]);
   f.set("bbb[0][-1]", "27"); /* replace last */
-  ASSERT_EQ((int)f["bbb"][0][2], 27);
-  ASSERT_EQ(f["bbb"][0].array().size(), 3);
+  ASSERT_EQ(27, (int)f["bbb"][0][2]);
+  ASSERT_EQ(3u, f["bbb"][0].array().size());
 
   f.set("foo.asd[0][0]", "{ \"field\": \"xyz\"}");
   ASSERT_EQ((string)f["foo"]["asd"][0][0]["field"], "xyz");
@@ -255,8 +255,8 @@ TEST(formatable, erase_array) {
   JSONFormattable f;
 
   f.set("asd[0]", "\"xyz\"");
-  ASSERT_EQ(f["asd"].array().size(), 1);
-  ASSERT_EQ((string)f["asd"][0], "xyz");
+  ASSERT_EQ(1u, f["asd"].array().size());
+  ASSERT_EQ("xyz", (string)f["asd"][0]);
   ASSERT_TRUE(f["asd"].exists(0));
   f.erase("asd[0]");
   ASSERT_FALSE(f["asd"].exists(0));

@@ -504,7 +504,7 @@ struct JSONFormattable {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     uint8_t t;
     decode(t, bl);

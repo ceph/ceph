@@ -20,15 +20,17 @@
 #include "include/ceph_features.h"
 
 
-class MClientReconnect : public Message {
-
-  const static int HEAD_VERSION = 3;
+class MClientReconnect : public MessageInstance<MClientReconnect> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 3;
 
 public:
   map<inodeno_t, cap_reconnect_t>  caps;   // only head inodes
   vector<ceph_mds_snaprealm_reconnect> realms;
 
-  MClientReconnect() : Message(CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION) { }
+  MClientReconnect() : MessageInstance(CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION) { }
 private:
   ~MClientReconnect() override {}
 
@@ -78,7 +80,7 @@ public:
     encode_nohead(realms, data);
   }
   void decode_payload() override {
-    bufferlist::iterator p = data.begin();
+    auto p = data.cbegin();
     if (header.version >= 3) {
       // new protocol
       decode(caps, p);

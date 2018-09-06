@@ -190,7 +190,7 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
     }
   }
   ExportDiffContext edc(&image, fd, info.size,
-                        g_conf->get_val<int64_t>("rbd_concurrent_management_ops"),
+                        g_conf().get_val<int64_t>("rbd_concurrent_management_ops"),
                         no_progress, export_format);
   r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
                           &C_ExportDiff::export_diff_cb, (void *)&edc);
@@ -265,11 +265,12 @@ int execute_diff(const po::variables_map &vm,
                  const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
+    vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_PERMITTED,
     utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
@@ -289,8 +290,8 @@ int execute_diff(const po::variables_map &vm,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", snap_name, true,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "",
+                                 snap_name, true, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
@@ -352,7 +353,7 @@ public:
       return;
     }
 
-    assert(m_bufferlist.length() == static_cast<size_t>(r));
+    ceph_assert(m_bufferlist.length() == static_cast<size_t>(r));
     if (m_fd != STDOUT_FILENO) {
       if (m_bufferlist.is_zero()) {
         return;
@@ -564,7 +565,7 @@ static int do_export(librbd::Image& image, const char *path, bool no_progress, i
     fd = STDOUT_FILENO;
     max_concurrent_ops = 1;
   } else {
-    max_concurrent_ops = g_conf->get_val<int64_t>("rbd_concurrent_management_ops");
+    max_concurrent_ops = g_conf().get_val<int64_t>("rbd_concurrent_management_ops");
     fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (fd < 0) {
       return -errno;
@@ -605,11 +606,12 @@ int execute(const po::variables_map &vm,
             const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
+    vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_PERMITTED,
     utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
@@ -624,12 +626,12 @@ int execute(const po::variables_map &vm,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", snap_name, true,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "",
+                                 snap_name, true, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
-  
+
   int format = 1;
   if (vm.count("export-format"))
     format = vm["export-format"].as<uint64_t>();

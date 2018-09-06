@@ -211,6 +211,12 @@ void usage()
   cout << "  reshard cancel             cancel resharding a bucket\n";
   cout << "  sync error list            list sync error\n";
   cout << "  sync error trim            trim sync error\n";
+  cout << "  mfa create                 create a new MFA TOTP token\n";
+  cout << "  mfa list                   list MFA TOTP tokens\n";
+  cout << "  mfa get                    show MFA TOTP token\n";
+  cout << "  mfa remove                 delete MFA TOTP token\n";
+  cout << "  mfa check                  check MFA TOTP token\n";
+  cout << "  mfa resync                 re-sync MFA TOTP token\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --uid=<id>                user id\n";
@@ -245,6 +251,7 @@ void usage()
   cout << "   --metadata-key=<key>      key to retrieve metadata from with metadata get\n";
   cout << "   --remote=<remote>         zone or zonegroup id of remote gateway\n";
   cout << "   --period=<id>             period id\n";
+  cout << "   --url=<url>               url for pushing/pulling period/realm\n";
   cout << "   --epoch=<number>          period epoch\n";
   cout << "   --commit                  commit the period during 'period update'\n";
   cout << "   --staging                 get staging period info\n";
@@ -318,6 +325,8 @@ void usage()
   cout << "   --min-rewrite-size        min object size for bucket rewrite (default 4M)\n";
   cout << "   --max-rewrite-size        max object size for bucket rewrite (default ULLONG_MAX)\n";
   cout << "   --min-rewrite-stripe-size min stripe size for object rewrite (default 0)\n";
+  cout << "   --trim-delay-ms           time interval in msec to limit the frequency of sync error log entries trimming operations,\n";
+  cout << "                             the trimming process will sleep the specified msec for every 1000 entries trimmed\n";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cout << "\nQuota options:\n";
@@ -338,6 +347,12 @@ void usage()
   cout << "   --policy-name             name of the policy document\n";
   cout << "   --policy-doc              permission policy document\n";
   cout << "   --path-prefix             path prefix for filtering roles\n";
+  cout << "\nMFA options:\n";
+  cout << "   --totp-serial             a string that represents the ID of a TOTP token\n";
+  cout << "   --totp-seed               the secret seed that is used to calculate the TOTP\n";
+  cout << "   --totp-seconds            the time resolution that is being used for TOTP generation\n";
+  cout << "   --totp-window             the number of TOTP tokens that are checked before and after the current token when validating token\n";
+  cout << "   --totp-pin                the valid value of a TOTP token at a certain time\n";
   cout << "\n";
   generic_client_usage();
 }
@@ -984,7 +999,7 @@ BIIndexType get_bi_index_type(const string& type_str) {
 
 void dump_bi_entry(bufferlist& bl, BIIndexType index_type, Formatter *formatter)
 {
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   switch (index_type) {
     case PlainIdx:
     case InstanceIdx:
@@ -1190,7 +1205,7 @@ static bool decode_dump(const char *field_name, bufferlist& bl, Formatter *f)
 {
   T t;
 
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
 
   try {
     decode(t, iter);
@@ -1344,7 +1359,7 @@ int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_o
 
   try {
     bufferlist& bl = iter->second;
-    bufferlist::iterator biter = bl.begin();
+    auto biter = bl.cbegin();
     decode(manifest, biter);
   } catch (buffer::error& err) {
     ldout(store->ctx(), 0) << "ERROR: failed to decode manifest" << dendl;
@@ -2527,7 +2542,7 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
                      time_t *pofs)
 {
 #define MAX_TOTP_SKEW_HOURS (24 * 7)
-  assert(pins.size() == 2);
+  ceph_assert(pins.size() == 2);
 
   time_t start_time = ceph::real_clock::to_time_t(now);
   time_t time_ofs = 0, time_ofs_abs = 0;
@@ -2570,6 +2585,30 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
   return -ENOENT;
 }
 
+static int trim_sync_error_log(int shard_id, const ceph::real_time& start_time,
+                               const ceph::real_time& end_time,
+                               const string& start_marker, const string& end_marker,
+                               int delay_ms)
+{
+  auto oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX,
+                                               shard_id);
+  // call cls_log_trim() until it returns -ENODATA
+  for (;;) {
+    int ret = store->time_log_trim(oid, start_time, end_time,
+                                   start_marker, end_marker);
+    if (ret == -ENODATA) {
+      return 0;
+    }
+    if (ret < 0) {
+      return ret;
+    }
+    if (delay_ms) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+    }
+  }
+  // unreachable
+}
+
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
@@ -2587,8 +2626,8 @@ int main(int argc, const char **argv)
                          CODE_ENVIRONMENT_UTILITY, 0);
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
-  if (!g_conf->rgw_region.empty() && g_conf->rgw_zonegroup.empty()) {
-    g_conf->set_val_or_die("rgw_zonegroup", g_conf->rgw_region.c_str());
+  if (!g_conf()->rgw_region.empty() && g_conf()->rgw_zonegroup.empty()) {
+    g_conf().set_val_or_die("rgw_zonegroup", g_conf()->rgw_region.c_str());
   }
 
   common_init_finish(g_ceph_context);
@@ -2712,7 +2751,6 @@ int main(int argc, const char **argv)
   std::string val;
   std::ostringstream errs;
   string err;
-  long long tmp = 0;
 
   string source_zone_name;
   string source_zone; /* zone id */
@@ -2737,6 +2775,7 @@ int main(int argc, const char **argv)
   vector<string> totp_pin;
   int totp_seconds = 0;
   int totp_window = 0;
+  int trim_delay_ms = 0;
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -2805,11 +2844,6 @@ int main(int argc, const char **argv)
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &commit, NULL, "--commit", (char*)NULL)) {
       // do nothing
-    } else if (ceph_argparse_witharg(args, i, &tmp, errs, "-a", "--auth-uid", (char*)NULL)) {
-      if (!errs.str().empty()) {
-	cerr << errs.str() << std::endl;
-	exit(EXIT_FAILURE);
-      }
     } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-size", (char*)NULL)) {
       min_rewrite_size = (uint64_t)atoll(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--max-rewrite-size", (char*)NULL)) {
@@ -3063,6 +3097,8 @@ int main(int argc, const char **argv)
       totp_seconds = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-window", (char*)NULL)) {
       totp_window = atoi(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--trim-delay-ms", (char*)NULL)) {
+      trim_delay_ms = atoi(val.c_str());
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -3158,9 +3194,9 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  realm_name = g_conf->rgw_realm;
-  zone_name = g_conf->rgw_zone;
-  zonegroup_name = g_conf->rgw_zonegroup;
+  realm_name = g_conf()->rgw_realm;
+  zone_name = g_conf()->rgw_zone;
+  zonegroup_name = g_conf()->rgw_zonegroup;
 
   RGWStreamFlusher f(formatter, cout);
 
@@ -3253,7 +3289,7 @@ int main(int argc, const char **argv)
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
   } else {
     store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false, false,
-      need_cache && g_conf->rgw_cache_enabled);
+      need_cache && g_conf()->rgw_cache_enabled);
   }
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
@@ -5882,9 +5918,8 @@ next:
   }
 
   if (opt_cmd == OPT_OBJECTS_EXPIRE) {
-    int ret = store->process_expire_objects();
-    if (ret < 0) {
-      cerr << "ERROR: process_expire_objects() processing returned error: " << cpp_strerror(-ret) << std::endl;
+    if (!store->process_expire_objects()) {
+      cerr << "ERROR: process_expire_objects() processing returned error." << std::endl;
       return 1;
     }
   }
@@ -6154,7 +6189,7 @@ next:
     int ret = br.cancel();
     if (ret < 0) {
       if (ret == -EBUSY) {
-	cerr << "There is ongoing resharding, please retry after " << g_conf->rgw_reshard_bucket_lock_duration <<
+	cerr << "There is ongoing resharding, please retry after " << g_conf()->rgw_reshard_bucket_lock_duration <<
 	     " seconds " << std::endl;
       } else {
 	cerr << "Error canceling bucket " << bucket_name << " resharding: " << cpp_strerror(-ret) <<
@@ -6362,6 +6397,13 @@ next:
   }
 
   if (opt_cmd == OPT_ORPHANS_FIND) {
+    if (!yes_i_really_mean_it) {
+      cerr << "accidental removal of active objects can not be reversed; "
+	   << "do you really mean it? (requires --yes-i-really-mean-it)"
+	   << std::endl;
+      return EINVAL;
+    }
+
     RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
 
     if (job_id.empty()) {
@@ -6672,7 +6714,7 @@ next:
       return -ret;
     }
 
-    auto num_shards = g_conf->rgw_md_log_max_shards;
+    auto num_shards = g_conf()->rgw_md_log_max_shards;
     ret = crs.run(create_admin_meta_log_trim_cr(store, &http, num_shards));
     if (ret < 0) {
       cerr << "automated mdlog trim failed with " << cpp_strerror(ret) << std::endl;
@@ -7119,7 +7161,7 @@ next:
         for (auto& cls_entry : entries) {
           rgw_sync_error_info log_entry;
 
-          auto iter = cls_entry.data.begin();
+          auto iter = cls_entry.data.cbegin();
           try {
             decode(log_entry, iter);
           } catch (buffer::error& err) {
@@ -7164,9 +7206,10 @@ next:
     }
 
     for (; shard_id < ERROR_LOGGER_SHARDS; ++shard_id) {
-      string oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX, shard_id);
-      ret = store->time_log_trim(oid, start_time.to_real_time(), end_time.to_real_time(), start_marker, end_marker);
-      if (ret < 0 && ret != -ENODATA) {
+      ret = trim_sync_error_log(shard_id, start_time.to_real_time(),
+                                end_time.to_real_time(), start_marker,
+                                end_marker, trim_delay_ms);
+      if (ret < 0) {
         cerr << "ERROR: sync error trim: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }

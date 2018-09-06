@@ -46,8 +46,8 @@ struct CompatSet {
     friend std::ostream& operator<<(std::ostream& out, const CompatSet& compat);
     FeatureSet() : mask(1), names() {}
     void insert(const Feature& f) {
-      assert(f.id > 0);
-      assert(f.id < 64);
+      ceph_assert(f.id > 0);
+      ceph_assert(f.id < 64);
       mask |= ((uint64_t)1<<f.id);
       names[f.id] = f.name;
     }
@@ -63,7 +63,7 @@ struct CompatSet {
      */
     std::string get_name(uint64_t const f) const {
       std::map<uint64_t, std::string>::const_iterator i = names.find(f);
-      assert(i != names.end());
+      ceph_assert(i != names.end());
       return i->second;
     }
 
@@ -85,7 +85,7 @@ struct CompatSet {
       encode(names, bl);
     }
 
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       using ceph::decode;
       decode(mask, bl);
       decode(names, bl);
@@ -228,7 +228,7 @@ struct CompatSet {
     incompat.encode(bl);
   }
   
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     compat.decode(bl);
     ro_compat.decode(bl);
     incompat.decode(bl);

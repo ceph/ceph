@@ -1385,6 +1385,7 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   const std::string& period_marker; //< max marker stored in next period
 
   std::set<std::string> entries;
+  bool more = false;
   std::set<std::string>::iterator iter;
 
   string oid;
@@ -1492,7 +1493,7 @@ public:
       }
 
       map<string, string>::iterator prev_iter = pos_to_prev.find(pos);
-      assert(prev_iter != pos_to_prev.end());
+      ceph_assert(prev_iter != pos_to_prev.end());
 
       /*
        * we should get -EAGAIN for transient errors, for which we want to retry, so we don't
@@ -1509,7 +1510,7 @@ public:
         }
         pos_to_prev.erase(prev_iter);
       } else {
-        assert(pos_to_prev.size() > 1);
+        ceph_assert(pos_to_prev.size() > 1);
         pos_to_prev.erase(prev_iter);
         prev_iter = pos_to_prev.begin();
         if (can_adjust_marker) {
@@ -1572,7 +1573,7 @@ public:
           break;
         }
         yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, oid),
-                                             marker, &entries, max_entries));
+                                             marker, &entries, max_entries, &more));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
           tn->log(0, SSTR("ERROR: failed to list omap keys, status=" << retcode));
@@ -1602,7 +1603,7 @@ public:
           }
         }
         collect_children();
-      } while ((int)entries.size() == max_entries && can_adjust_marker);
+      } while (more && can_adjust_marker);
 
       tn->unset_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
 
@@ -1659,7 +1660,7 @@ public:
       tn->log(10, "full sync complete");
 
       // apply the sync marker update
-      assert(temp_marker);
+      ceph_assert(temp_marker);
       sync_marker = std::move(*temp_marker);
       temp_marker = boost::none;
       // must not yield after this point!
@@ -1782,7 +1783,7 @@ public:
               raw_key = log_iter->section + ":" + log_iter->name;
               yield {
                 RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, mdlog_entry.log_data.status, marker_tracker, tn), false);
-                assert(stack);
+                ceph_assert(stack);
                 // stack_to_pos holds a reference to the stack
                 stack_to_pos[stack] = log_iter->id;
                 pos_to_prev[log_iter->id] = marker;
@@ -1980,7 +1981,7 @@ public:
           return set_cr_error(ret);
         }
         // advance to the next period
-        assert(next);
+        ceph_assert(next);
         cursor = next;
 
         // write the updated sync info
@@ -2371,7 +2372,7 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request()
     log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
     http_op->put();
     http_op = NULL;
-    return ret;
+    return set_cr_error(ret);
   }
 
   return io_block(0);
@@ -2507,7 +2508,7 @@ int PurgePeriodLogsCR::operate()
     if (retcode < 0) {
       return set_cr_error(retcode);
     }
-    assert(cursor);
+    ceph_assert(cursor);
     ldout(cct, 20) << "oldest log realm_epoch=" << cursor.get_epoch()
         << " period=" << cursor.get_period().get_id() << dendl;
 
@@ -2548,7 +2549,7 @@ int PurgePeriodLogsCR::operate()
         *last_trim_epoch = cursor.get_epoch();
       }
 
-      assert(cursor.has_next()); // get_current() should always come after
+      ceph_assert(cursor.has_next()); // get_current() should always come after
       cursor.next();
     }
     return set_cr_done();

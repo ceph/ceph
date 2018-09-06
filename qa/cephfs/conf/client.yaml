@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        client mount timeout: 600
+        debug ms: 1
+        debug client: 20

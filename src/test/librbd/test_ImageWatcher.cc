@@ -65,7 +65,7 @@ public:
       try {
 	int op;
 	bufferlist payload;
-	bufferlist::iterator iter = bl.begin();
+	auto iter = bl.cbegin();
 	DECODE_START(1, iter);
 	decode(op, iter);
 	iter.copy_all(payload);
@@ -156,8 +156,8 @@ public:
     }
 
     bufferlist payload = m_notify_payloads[op];
-    bufferlist::iterator iter = payload.begin();
-
+    auto iter = payload.cbegin();
+    
     switch (op) {
     case NOTIFY_OP_FLATTEN:
       {

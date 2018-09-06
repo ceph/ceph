@@ -99,27 +99,24 @@ TEST(LibRadosMiscPool, PoolCreationRace) {
   ASSERT_EQ(0, rados_conf_read_file(cluster_a, NULL));
   // kludge: i want to --log-file foo and only get cluster b
   //ASSERT_EQ(0, rados_conf_parse_env(cluster_a, NULL));
+  ASSERT_EQ(0, rados_conf_set(cluster_a,
+			      "objecter_debug_inject_relock_delay", "true"));
   ASSERT_EQ(0, rados_connect(cluster_a));
 
   ASSERT_EQ(0, rados_create(&cluster_b, NULL));
   ASSERT_EQ(0, rados_conf_read_file(cluster_b, NULL));
   ASSERT_EQ(0, rados_conf_parse_env(cluster_b, NULL));
-  ASSERT_EQ(0, rados_conf_set(cluster_b,
-			      "objecter_debug_inject_relock_delay", "true"));
   ASSERT_EQ(0, rados_connect(cluster_b));
 
   char poolname[80];
   snprintf(poolname, sizeof(poolname), "poolrace.%d", rand());
   rados_pool_create(cluster_a, poolname);
-  rados_ioctx_t a, b;
+  rados_ioctx_t a;
   rados_ioctx_create(cluster_a, poolname, &a);
-  int64_t poolid = rados_ioctx_get_id(a);
-
-  rados_ioctx_create2(cluster_b, poolid+1, &b);
 
   char pool2name[80];
   snprintf(pool2name, sizeof(pool2name), "poolrace2.%d", rand());
-  rados_pool_create(cluster_a, pool2name);
+  rados_pool_create(cluster_b, pool2name);
 
   list<rados_completion_t> cls;
   // this should normally trigger pretty easily, but we need to bound
@@ -131,7 +128,7 @@ TEST(LibRadosMiscPool, PoolCreationRace) {
     rados_completion_t c;
     rados_aio_create_completion(0, 0, 0, &c);
     cls.push_back(c);
-    rados_aio_read(b, "PoolCreationRaceObj", c, buf, 100, 0);
+    rados_aio_read(a, "PoolCreationRaceObj", c, buf, 100, 0);
     cout << "started " << (void*)c << std::endl;
     if (rados_aio_is_complete(cls.front())) {
       break;
@@ -151,7 +148,6 @@ TEST(LibRadosMiscPool, PoolCreationRace) {
   cout << "done." << std::endl;
 
   rados_ioctx_destroy(a);
-  rados_ioctx_destroy(b);
   rados_pool_delete(cluster_a, poolname);
   rados_pool_delete(cluster_a, pool2name);
   rados_shutdown(cluster_b);
@@ -172,7 +168,7 @@ TEST_F(LibRadosMiscPP, WaitOSDMapPP) {
 TEST_F(LibRadosMiscPP, LongNamePP) {
   bufferlist bl;
   bl.append("content");
-  int maxlen = g_conf->osd_max_object_name_len;
+  int maxlen = g_conf()->osd_max_object_name_len;
   ASSERT_EQ(0, ioctx.write(string(maxlen/2, 'a').c_str(), bl, bl.length(), 0));
   ASSERT_EQ(0, ioctx.write(string(maxlen-1, 'a').c_str(), bl, bl.length(), 0));
   ASSERT_EQ(0, ioctx.write(string(maxlen, 'a').c_str(), bl, bl.length(), 0));
@@ -183,7 +179,7 @@ TEST_F(LibRadosMiscPP, LongNamePP) {
 TEST_F(LibRadosMiscPP, LongLocatorPP) {
   bufferlist bl;
   bl.append("content");
-  int maxlen = g_conf->osd_max_object_name_len;
+  int maxlen = g_conf()->osd_max_object_name_len;
   ioctx.locator_set_key(
     string((maxlen/2), 'a'));
   ASSERT_EQ(
@@ -224,7 +220,7 @@ TEST_F(LibRadosMiscPP, LongLocatorPP) {
 TEST_F(LibRadosMiscPP, LongNSpacePP) {
   bufferlist bl;
   bl.append("content");
-  int maxlen = g_conf->osd_max_object_namespace_len;
+  int maxlen = g_conf()->osd_max_object_namespace_len;
   ioctx.set_namespace(
     string((maxlen/2), 'a'));
   ASSERT_EQ(
@@ -265,7 +261,7 @@ TEST_F(LibRadosMiscPP, LongNSpacePP) {
 TEST_F(LibRadosMiscPP, LongAttrNamePP) {
   bufferlist bl;
   bl.append("content");
-  int maxlen = g_conf->osd_max_attr_name_len;
+  int maxlen = g_conf()->osd_max_attr_name_len;
   ASSERT_EQ(0, ioctx.setxattr("bigattrobj", string(maxlen/2, 'a').c_str(), bl));
   ASSERT_EQ(0, ioctx.setxattr("bigattrobj", string(maxlen-1, 'a').c_str(), bl));
   ASSERT_EQ(0, ioctx.setxattr("bigattrobj", string(maxlen, 'a').c_str(), bl));
@@ -283,7 +279,7 @@ static std::string read_key_from_tmap(IoCtx& ioctx, const std::string &obj,
     oss << "ioctx.read(" << obj << ", bl, 0, 0) returned " << r;
     return oss.str();
   }
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   bufferlist header;
   map<string, bufferlist> m;
   decode(header, p);
@@ -519,7 +515,7 @@ TEST_F(LibRadosMisc, Exec) {
   ASSERT_GT(res, 0);
   bufferlist bl;
   bl.append(buf2, res);
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   uint64_t all_features;
   decode(all_features, iter);
   // make sure *some* features are specified; don't care which ones
@@ -532,7 +528,7 @@ TEST_F(LibRadosMiscPP, ExecPP) {
   bufferlist bl2, out;
   int r = ioctx.exec("foo", "rbd", "get_all_features", bl2, out);
   ASSERT_EQ(0, r);
-  bufferlist::iterator iter = out.begin();
+  auto iter = out.cbegin();
   uint64_t all_features;
   decode(all_features, iter);
   // make sure *some* features are specified; don't care which ones
@@ -737,17 +733,17 @@ TEST_F(LibRadosMiscPP, BigAttrPP) {
 
   bufferlist got;
 
-  cout << "osd_max_attr_size = " << g_conf->osd_max_attr_size << std::endl;
-  if (g_conf->osd_max_attr_size) {
+  cout << "osd_max_attr_size = " << g_conf()->osd_max_attr_size << std::endl;
+  if (g_conf()->osd_max_attr_size) {
     bl.clear();
     got.clear();
-    bl.append(buffer::create(g_conf->osd_max_attr_size));
+    bl.append(buffer::create(g_conf()->osd_max_attr_size));
     ASSERT_EQ(0, ioctx.setxattr("foo", "one", bl));
     ASSERT_EQ((int)bl.length(), ioctx.getxattr("foo", "one", got));
     ASSERT_TRUE(bl.contents_equal(got));
 
     bl.clear();
-    bl.append(buffer::create(g_conf->osd_max_attr_size+1));
+    bl.append(buffer::create(g_conf()->osd_max_attr_size+1));
     ASSERT_EQ(-EFBIG, ioctx.setxattr("foo", "one", bl));
   } else {
     cout << "osd_max_attr_size == 0; skipping test" << std::endl;
@@ -756,7 +752,7 @@ TEST_F(LibRadosMiscPP, BigAttrPP) {
   for (int i=0; i<1000; i++) {
     bl.clear();
     got.clear();
-    bl.append(buffer::create(std::min<uint64_t>(g_conf->osd_max_attr_size,
+    bl.append(buffer::create(std::min<uint64_t>(g_conf()->osd_max_attr_size,
 						1024)));
     char n[10];
     snprintf(n, sizeof(n), "a%d", i);
@@ -816,7 +812,7 @@ TEST_F(LibRadosMiscPP, CopyPP) {
   }
 
   // do a big object
-  bl.append(buffer::create(g_conf->osd_copyfrom_max_chunk * 3));
+  bl.append(buffer::create(g_conf()->osd_copyfrom_max_chunk * 3));
   bl.zero();
   bl.append("tail");
   blc = bl;
@@ -927,7 +923,7 @@ TEST_F(LibRadosMiscPP, CopyScrubPP) {
   bufferlist inbl, bl, x;
   for (int i=0; i<100; ++i)
     x.append("barrrrrrrrrrrrrrrrrrrrrrrrrr");
-  bl.append(buffer::create(g_conf->osd_copyfrom_max_chunk * 3));
+  bl.append(buffer::create(g_conf()->osd_copyfrom_max_chunk * 3));
   bl.zero();
   bl.append("tail");
   bufferlist cbl;
@@ -1153,7 +1149,7 @@ TYPED_TEST(LibRadosChecksum, Subset) {
   for (uint32_t i = 0; i < csum_count; ++i) {
     ASSERT_EQ(0, checksum_rvals[i]);
 
-    auto bl_it = checksum_bls[i].begin();
+    auto bl_it = checksum_bls[i].cbegin();
     uint32_t count;
     decode(count, bl_it);
     ASSERT_EQ(1U, count);
@@ -1192,7 +1188,7 @@ TYPED_TEST(LibRadosChecksum, Chunked) {
   ASSERT_EQ(0, this->ioctx.operate("foo", &op, NULL));
   ASSERT_EQ(0, checksum_rval);
 
-  auto bl_it = checksum_bl.begin();
+  auto bl_it = checksum_bl.cbegin();
   uint32_t count;
   decode(count, bl_it);
   ASSERT_EQ(csum_count, count);

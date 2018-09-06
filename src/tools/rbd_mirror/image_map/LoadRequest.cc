@@ -52,7 +52,7 @@ void LoadRequest<I>::image_map_list() {
 
   m_out_bl.clear();
   int r = m_ioctx.aio_operate(RBD_MIRROR_LEADER, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -62,7 +62,7 @@ void LoadRequest<I>::handle_image_map_list(int r) {
 
   std::map<std::string, cls::rbd::MirrorImageMap> image_mapping;
   if (r == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_image_map_list_finish(&it, &image_mapping);
   }
 

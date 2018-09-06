@@ -45,7 +45,7 @@ static void print_bucket_class_ids(ostream& out, int t, CrushWrapper &crush)
     int c = i.first;
     int cid = i.second;
     const char* class_name = crush.get_class_name(c);
-    assert(class_name);
+    ceph_assert(class_name);
     out << "\tid " << cid << " class " << class_name << "\t\t# do not change unnecessarily\n";
   }
 }
@@ -161,7 +161,7 @@ int CrushCompiler::decompile_bucket(int cur,
     std::map<int, dcb_state_t>::value_type val(cur, DCB_STATE_IN_PROGRESS);
     std::pair <std::map<int, dcb_state_t>::iterator, bool> rval
       (dcb_states.insert(val));
-    assert(rval.second);
+    ceph_assert(rval.second);
     c = rval.first;
   }
   else if (c->second == DCB_STATE_DONE) {
@@ -250,8 +250,8 @@ int CrushCompiler::decompile_choose_arg(crush_choose_arg *arg,
   int r;
   out << "  {\n";
   out << "    bucket_id " << bucket_id << "\n";
-  if (arg->weight_set_size > 0) {
-    r = decompile_weight_set(arg->weight_set, arg->weight_set_size, out);
+  if (arg->weight_set_positions > 0) {
+    r = decompile_weight_set(arg->weight_set, arg->weight_set_positions, out);
     if (r < 0)
       return r;
   }
@@ -269,7 +269,7 @@ int CrushCompiler::decompile_choose_arg_map(crush_choose_arg_map arg_map,
 {
   for (__u32 i = 0; i < arg_map.size; i++) {
     if ((arg_map.args[i].ids_size == 0) &&
-        (arg_map.args[i].weight_set_size == 0))
+        (arg_map.args[i].weight_set_positions == 0))
       continue;
     int r = decompile_choose_arg(&arg_map.args[i], -1-i, out);
     if (r < 0)
@@ -741,7 +741,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   item_id[name] = id;
   item_weight[id] = bucketweight;
   
-  assert(id != 0);
+  ceph_assert(id != 0);
   int idout;
   int r = crush.add_bucket(id, alg, hash, type, size,
                            &items[0], &weights[0], &idout);
@@ -925,7 +925,7 @@ int CrushCompiler::parse_rule(iter_t const& i)
       return -1;
     }
   }
-  assert(step == steps);
+  ceph_assert(step == steps);
   return 0;
 }
 
@@ -951,14 +951,14 @@ int CrushCompiler::parse_weight_set_weights(iter_t const& i, int bucket_id, crus
 int CrushCompiler::parse_weight_set(iter_t const& i, int bucket_id, crush_choose_arg *arg)
 {
   // -3 stands for the leading "weight_set" keyword and the enclosing [ ]
-  arg->weight_set_size = i->children.size() - 3;
-  arg->weight_set = (crush_weight_set *)calloc(arg->weight_set_size, sizeof(crush_weight_set));
+  arg->weight_set_positions = i->children.size() - 3;
+  arg->weight_set = (crush_weight_set *)calloc(arg->weight_set_positions, sizeof(crush_weight_set));
   __u32 pos = 0;
   for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
     int r = 0;
     switch((int)p->value.id().to_long()) {
     case crush_grammar::_weight_set_weights:
-      if (pos < arg->weight_set_size) {
+      if (pos < arg->weight_set_positions) {
         r = parse_weight_set_weights(p, bucket_id, &arg->weight_set[pos]);
         pos++;
       } else {
@@ -1251,7 +1251,7 @@ int CrushCompiler::compile(istream& in, const char *infn)
     int cpos = info.stop - start;
     //out << "cpos " << cpos << std::endl;
     //out << " linemap " << line_pos << std::endl;
-    assert(!line_pos.empty());
+    ceph_assert(!line_pos.empty());
     map<int,int>::iterator p = line_pos.upper_bound(cpos);
     if (p != line_pos.begin())
       --p;

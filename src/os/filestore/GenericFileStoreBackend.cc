@@ -395,7 +395,7 @@ int GenericFileStoreBackend::_crc_load_or_init(int fd, SloppyCRCMap *cm)
   }
   bufferlist bl;
   bl.append(std::move(bp));
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   try {
     decode(*cm, p);
   }

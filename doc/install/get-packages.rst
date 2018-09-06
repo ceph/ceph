@@ -119,13 +119,6 @@ release::
 
 	echo deb https://download.ceph.com/debian-{release-name}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
-Ceph on ARM processors requires Google's memory profiling tools (``google-perftools``).
-The Ceph repository should have a copy at
-https://download.ceph.com/packages/google-perftools/debian. ::
-
-	echo deb https://download.ceph.com/packages/google-perftools/debian  $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/google-perftools.list
-
-
 For development release packages, add our package repository to your system's
 list of APT sources.  See `the testing Debian repository`_ for a complete list
 of Debian and Ubuntu releases supported. ::
@@ -255,7 +248,7 @@ before attempting an install.
 Debian Packages
 ---------------
 
-Ceph requires additional additional third party libraries.
+Ceph requires additional third party libraries.
 
 - libaio1
 - libsnappy1

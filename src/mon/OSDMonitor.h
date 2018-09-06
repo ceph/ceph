@@ -183,7 +183,7 @@ struct osdmap_manifest_t {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl)
+  void decode(bufferlist::const_iterator& bl)
   {
     DECODE_START(1, bl);
     decode(pinned, bl);
@@ -191,7 +191,7 @@ struct osdmap_manifest_t {
   }
 
   void decode(bufferlist& bl) {
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(p);
   }
 
@@ -237,9 +237,6 @@ public:
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
   void force_failure(int target_osd, int by);
 
-  // the time of last msg(MSG_ALIVE and MSG_PGTEMP) proposed without delay
-  utime_t last_attempted_minwait_time;
-
   bool _have_pending_crush();
   CrushWrapper &_get_stable_crush();
   void _get_pending_crush(CrushWrapper& newcrush);
@@ -269,7 +266,7 @@ private:
   void _prune_update_trimmed(
       MonitorDBStore::TransactionRef tx,
       version_t first);
-  void prune_init();
+  void prune_init(osdmap_manifest_t& manifest);
   bool _prune_sanitize_options() const;
   bool is_prune_enabled() const;
   bool is_prune_supported() const;
@@ -403,6 +400,7 @@ private:
   int _prepare_remove_pool(int64_t pool, ostream *ss, bool no_fake);
   int _prepare_rename_pool(int64_t pool, string newname);
 
+  bool enforce_pool_op_caps(MonOpRequestRef op);
   bool preprocess_pool_op (MonOpRequestRef op);
   bool preprocess_pool_op_create (MonOpRequestRef op);
   bool prepare_pool_op (MonOpRequestRef op);
@@ -448,7 +446,7 @@ private:
 				unsigned *stripe_width,
 				ostream *ss);
   int check_pg_num(int64_t pool, int pg_num, int size, ostream* ss);
-  int prepare_new_pool(string& name, uint64_t auid,
+  int prepare_new_pool(string& name,
 		       int crush_rule,
 		       const string &crush_rule_name,
                        unsigned pg_num, unsigned pgp_num,
@@ -493,7 +491,7 @@ private:
       else if (r == -EAGAIN)
         cmon->dispatch(op);
       else
-	assert(0 == "bad C_Booted return value");
+	ceph_abort_msg("bad C_Booted return value");
     }
   };
 
@@ -510,7 +508,7 @@ private:
       else if (r == -EAGAIN)
 	osdmon->dispatch(op);
       else
-	assert(0 == "bad C_ReplyMap return value");
+	ceph_abort_msg("bad C_ReplyMap return value");
     }    
   };
   struct C_PoolOp : public C_MonOp {
@@ -531,7 +529,7 @@ private:
       else if (r == -EAGAIN)
 	osdmon->dispatch(op);
       else
-	assert(0 == "bad C_PoolOp return value");
+	ceph_abort_msg("bad C_PoolOp return value");
     }
   };
 
@@ -655,6 +653,7 @@ public:
   int get_inc(version_t ver, OSDMap::Incremental& inc);
   int get_full_from_pinned_map(version_t ver, bufferlist& bl);
 
+  epoch_t blacklist(const entity_addrvec_t& av, utime_t until);
   epoch_t blacklist(const entity_addr_t& a, utime_t until);
 
   void dump_info(Formatter *f);

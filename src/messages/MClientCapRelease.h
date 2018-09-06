@@ -18,10 +18,15 @@
 #include "msg/Message.h"
 
 
-class MClientCapRelease : public Message {
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+class MClientCapRelease : public MessageInstance<MClientCapRelease> {
+public:
+  friend factory;
+
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
  public:
+
   struct ceph_mds_cap_release head;
   vector<ceph_mds_cap_item> caps;
 
@@ -30,7 +35,7 @@ class MClientCapRelease : public Message {
   epoch_t osd_epoch_barrier;
 
   MClientCapRelease() : 
-    Message(CEPH_MSG_CLIENT_CAPRELEASE, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(CEPH_MSG_CLIENT_CAPRELEASE, HEAD_VERSION, COMPAT_VERSION),
     osd_epoch_barrier(0)
   {
     memset(&head, 0, sizeof(head));
@@ -45,7 +50,7 @@ public:
   }
   
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(head, p);
     decode_nohead(head.num, caps, p);
     if (header.version >= 2) {

@@ -183,6 +183,12 @@ TEST_F(LibRadosList, ListObjectsNS) {
   ASSERT_EQ(0, rados_write(ioctx, "foo6", buf, sizeof(buf), 0));
   ASSERT_EQ(0, rados_write(ioctx, "foo7", buf, sizeof(buf), 0));
 
+  char nspace[4];
+  ASSERT_EQ(-ERANGE, rados_ioctx_get_namespace(ioctx, nspace, 3));
+  ASSERT_EQ(static_cast<int>(strlen("ns2")),
+	    rados_ioctx_get_namespace(ioctx, nspace, sizeof(nspace)));
+  ASSERT_EQ(0, strcmp("ns2", nspace));
+
   std::set<std::string> def, ns1, ns2, all;
   def.insert(std::string("foo1"));
   def.insert(std::string("foo2"));
@@ -271,6 +277,7 @@ TEST_F(LibRadosListPP, ListObjectsPPNS) {
   ioctx.set_namespace("ns2");
   ASSERT_EQ(0, ioctx.write("foo6", bl1, sizeof(buf), 0));
   ASSERT_EQ(0, ioctx.write("foo7", bl1, sizeof(buf), 0));
+  ASSERT_EQ(std::string("ns2"), ioctx.get_namespace());
 
   std::set<std::string> def, ns1, ns2, all;
   def.insert(std::string("foo1"));

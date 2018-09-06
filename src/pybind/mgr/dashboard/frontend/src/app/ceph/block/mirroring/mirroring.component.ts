@@ -1,7 +1,4 @@
-import { HttpClient } from '@angular/common/http';
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
-
-import * as _ from 'lodash';
 
 import { RbdMirroringService } from '../../../shared/api/rbd-mirroring.service';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
@@ -13,10 +10,14 @@ import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.p
   styleUrls: ['./mirroring.component.scss']
 })
 export class MirroringComponent implements OnInit {
-  @ViewChild('healthTmpl') healthTmpl: TemplateRef<any>;
-  @ViewChild('stateTmpl') stateTmpl: TemplateRef<any>;
-  @ViewChild('syncTmpl') syncTmpl: TemplateRef<any>;
-  @ViewChild('progressTmpl') progressTmpl: TemplateRef<any>;
+  @ViewChild('healthTmpl')
+  healthTmpl: TemplateRef<any>;
+  @ViewChild('stateTmpl')
+  stateTmpl: TemplateRef<any>;
+  @ViewChild('syncTmpl')
+  syncTmpl: TemplateRef<any>;
+  @ViewChild('progressTmpl')
+  progressTmpl: TemplateRef<any>;
 
   contentData: any;
 
@@ -43,10 +44,9 @@ export class MirroringComponent implements OnInit {
   };
 
   constructor(
-    private http: HttpClient,
     private rbdMirroringService: RbdMirroringService,
     private cephShortVersionPipe: CephShortVersionPipe
-  ) { }
+  ) {}
 
   ngOnInit() {
     this.daemons.columns = [

@@ -6,7 +6,6 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
-#include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/deep_copy/ImageCopyRequest.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
@@ -29,23 +28,24 @@ using librbd::util::unique_lock_name;
 template <typename I>
 DeepCopyRequest<I>::DeepCopyRequest(I *src_image_ctx, I *dst_image_ctx,
                                     librados::snap_t snap_id_start,
-                                    librados::snap_t snap_id_end,
+                                    librados::snap_t snap_id_end, bool flatten,
                                     const ObjectNumber &object_number,
                                     ContextWQ *work_queue, SnapSeqs *snap_seqs,
                                     ProgressContext *prog_ctx,
                                     Context *on_finish)
   : RefCountedObject(dst_image_ctx->cct, 1), m_src_image_ctx(src_image_ctx),
     m_dst_image_ctx(dst_image_ctx), m_snap_id_start(snap_id_start),
-    m_snap_id_end(snap_id_end), m_object_number(object_number),
-    m_work_queue(work_queue), m_snap_seqs(snap_seqs), m_prog_ctx(prog_ctx),
-    m_on_finish(on_finish), m_cct(dst_image_ctx->cct),
+    m_snap_id_end(snap_id_end), m_flatten(flatten),
+    m_object_number(object_number), m_work_queue(work_queue),
+    m_snap_seqs(snap_seqs), m_prog_ctx(prog_ctx), m_on_finish(on_finish),
+    m_cct(dst_image_ctx->cct),
     m_lock(unique_lock_name("DeepCopyRequest::m_lock", this)) {
 }
 
 template <typename I>
 DeepCopyRequest<I>::~DeepCopyRequest() {
-  assert(m_snapshot_copy_request == nullptr);
-  assert(m_image_copy_request == nullptr);
+  ceph_assert(m_snapshot_copy_request == nullptr);
+  ceph_assert(m_image_copy_request == nullptr);
 }
 
 template <typename I>
@@ -90,8 +90,8 @@ void DeepCopyRequest<I>::send_copy_snapshots() {
   Context *ctx = create_context_callback<
     DeepCopyRequest<I>, &DeepCopyRequest<I>::handle_copy_snapshots>(this);
   m_snapshot_copy_request = SnapshotCopyRequest<I>::create(
-    m_src_image_ctx, m_dst_image_ctx, m_snap_id_end, m_work_queue, m_snap_seqs,
-    ctx);
+    m_src_image_ctx, m_dst_image_ctx, m_snap_id_end, m_flatten, m_work_queue,
+    m_snap_seqs, ctx);
   m_snapshot_copy_request->get();
   m_lock.Unlock();
 
@@ -122,6 +122,10 @@ void DeepCopyRequest<I>::handle_copy_snapshots(int r) {
     return;
   }
 
+  if (m_snap_id_end == CEPH_NOSNAP) {
+    (*m_snap_seqs)[CEPH_NOSNAP] = CEPH_NOSNAP;
+  }
+
   send_copy_image();
 }
 
@@ -140,7 +144,7 @@ void DeepCopyRequest<I>::send_copy_image() {
     DeepCopyRequest<I>, &DeepCopyRequest<I>::handle_copy_image>(this);
   m_image_copy_request = ImageCopyRequest<I>::create(
       m_src_image_ctx, m_dst_image_ctx, m_snap_id_start, m_snap_id_end,
-      m_object_number, *m_snap_seqs, m_prog_ctx, ctx);
+      m_flatten, m_object_number, *m_snap_seqs, m_prog_ctx, ctx);
   m_image_copy_request->get();
   m_lock.Unlock();
 
@@ -192,7 +196,7 @@ void DeepCopyRequest<I>::send_copy_object_map() {
     return;
   }
 
-  assert(m_dst_image_ctx->object_map != nullptr);
+  ceph_assert(m_dst_image_ctx->object_map != nullptr);
 
   ldout(m_cct, 20) << dendl;
 
@@ -214,7 +218,7 @@ void DeepCopyRequest<I>::send_copy_object_map() {
       handle_copy_object_map(r);
       finish_op_ctx->complete(0);
     });
-  assert(m_snap_seqs->count(m_snap_id_end) > 0);
+  ceph_assert(m_snap_seqs->count(m_snap_id_end) > 0);
   librados::snap_t copy_snap_id = (*m_snap_seqs)[m_snap_id_end];
   m_dst_image_ctx->object_map->rollback(copy_snap_id, ctx);
   m_dst_image_ctx->snap_lock.put_read();
@@ -225,7 +229,7 @@ template <typename I>
 void DeepCopyRequest<I>::handle_copy_object_map(int r) {
   ldout(m_cct, 20) << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
   send_refresh_object_map();
 }
 
@@ -258,7 +262,7 @@ template <typename I>
 void DeepCopyRequest<I>::handle_refresh_object_map(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
   {
     RWLock::WLocker snap_locker(m_dst_image_ctx->snap_lock);
     std::swap(m_dst_image_ctx->object_map, m_object_map);

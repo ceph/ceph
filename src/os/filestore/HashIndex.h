@@ -92,12 +92,12 @@ private:
       encode(hash_level, bl);
     }
 
-    void decode(bufferlist::iterator &bl)
+    void decode(bufferlist::const_iterator &bl)
     {
       using ceph::decode;
       __u8 v;
       decode(v, bl);
-      assert(v == 1);
+      ceph_assert(v == 1);
       decode(objs, bl);
       decode(subdirs, bl);
       decode(hash_level, bl);
@@ -114,7 +114,7 @@ private:
       encode(v, bl);
       encode(split_rand_factor, bl);
     }
-    void decode(bufferlist::iterator &bl)
+    void decode(bufferlist::const_iterator &bl)
     {
       using ceph::decode;
       __u8 v;
@@ -134,7 +134,7 @@ private:
     InProgressOp(int op, const vector<string> &path)
       : op(op), path(path) {}
 
-    explicit InProgressOp(bufferlist::iterator &bl) {
+    explicit InProgressOp(bufferlist::const_iterator &bl) {
       decode(bl);
     }
 
@@ -150,11 +150,11 @@ private:
       encode(path, bl);
     }
 
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       using ceph::decode;
       __u8 v;
       decode(v, bl);
-      assert(v == 1);
+      ceph_assert(v == 1);
       decode(op, bl);
       decode(path, bl);
     }
@@ -386,7 +386,7 @@ private:
 
   /// Convert a number to hex string (upper case).
   static string to_hex(int n) {
-    assert(n >= 0 && n < 16);
+    ceph_assert(n >= 0 && n < 16);
     char c = (n <= 9 ? ('0' + n) : ('A' + n - 10));
     string str;
     str.append(1, c);

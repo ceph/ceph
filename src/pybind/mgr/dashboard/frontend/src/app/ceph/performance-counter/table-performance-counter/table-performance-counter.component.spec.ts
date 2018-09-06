@@ -1,38 +1,18 @@
-import { Component, Input } from '@angular/core';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { Observable } from 'rxjs/Observable';
-
-import { PerformanceCounterService } from '../../../shared/api/performance-counter.service';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { FormatterService } from '../../../shared/services/formatter.service';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { SharedModule } from '../../../shared/shared.module';
 import { TablePerformanceCounterComponent } from './table-performance-counter.component';
-
-@Component({ selector: 'cd-table', template: '' })
-class TableStubComponent {
-  @Input() data: any[];
-  @Input() columns: CdTableColumn[];
-  @Input() autoReload: any = 5000;
-}
 
 describe('TablePerformanceCounterComponent', () => {
   let component: TablePerformanceCounterComponent;
   let fixture: ComponentFixture<TablePerformanceCounterComponent>;
 
-  const fakeService = {};
-
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [TablePerformanceCounterComponent, TableStubComponent, DimlessPipe],
-      imports: [],
-      providers: [
-        { provide: PerformanceCounterService, useValue: fakeService },
-        DimlessPipe,
-        FormatterService
-      ]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    declarations: [TablePerformanceCounterComponent],
+    imports: [SharedModule, HttpClientTestingModule]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(TablePerformanceCounterComponent);

@@ -20,8 +20,6 @@ set(pkgdatadir ${CMAKE_INSTALL_FULL_DATADIR})
 set(datadir ${CMAKE_INSTALL_FULL_DATADIR}/${PROJECT_NAME})
 set(prefix ${CMAKE_INSTALL_PREFIX})
 
-add_definitions("-DCEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\"")
-add_definitions("-DCEPH_PKGLIBDIR=\"${CMAKE_INSTALL_FULL_PKGLIBDIR}\"")
 add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS")
 add_definitions("-D_FILE_OFFSET_BITS=64")
 if(LINUX)
@@ -34,13 +32,18 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Werror=format-security -fno
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ftemplate-depth-1024")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wnon-virtual-dtor")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-ignored-qualifiers")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wstrict-null-sentinel -Woverloaded-virtual")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-new-ttp-matching")
-  if(NOT WITH_OSD_INSTRUMENT_FUNCTIONS)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
+  # cmake does not add '-pie' for executables even if
+  # CMAKE_POSITION_INDEPENDENT_CODE is TRUE.
+  if(EXE_LINKER_USE_PIE)
+    if (NOT WITH_OSD_INSTRUMENT_FUNCTIONS AND NOT HAVE_SEASTAR)
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
+    endif()
   endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_EXPORTS_C_FLAG}")
@@ -61,16 +64,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_CXX_FLAGS}")
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Default BUILD_TYPE is RelWithDebInfo, other options are: Debug, Release, and MinSizeRel." FORCE)
-endif()
-
-if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-  # we use assert(3) for testing, so scrub the -DNDEBUG defined by default
-  string(TOUPPER "${CMAKE_BUILD_TYPE}" build_type_upper)
-  foreach(flags
-      CMAKE_CXX_FLAGS_${build_type_upper}
-      CMAKE_C_FLAGS_${build_type_upper})
-    string(REGEX REPLACE "(^| )[/-]D *NDEBUG($| )" " " "${flags}" "${${flags}}")
-  endforeach()
 endif()
 
 include(CheckCCompilerFlag)
@@ -98,48 +91,12 @@ if(HAVE_INTEL)
     set(object_format "elf64")
   endif()
   set(CMAKE_ASM_FLAGS "-f ${object_format}")
+  include(CheckYasm)
+  check_yasm_support(${object_format}
+    HAVE_GOOD_YASM_ELF64
+    HAVE_BETTER_YASM_ELF64)
 endif()
 
-execute_process(
-  COMMAND yasm -f "${object_format}" ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.s -o /dev/null
-  RESULT_VARIABLE no_yasm
-  OUTPUT_QUIET)
-if(no_yasm)
-  message(STATUS " we do not have a modern/working yasm")
-else(no_yasm)
-  message(STATUS " we have a modern and working yasm")
-  if(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64")
-    message(STATUS " we are x86_64")
-    set(save_quiet ${CMAKE_REQUIRED_QUIET})
-    set(CMAKE_REQUIRED_QUIET true)
-    include(CheckCXXSourceCompiles)
-    check_cxx_source_compiles("
-      #if defined(__x86_64__) && defined(__ILP32__)
-      #error x32
-      #endif
-      int main() {}
-      " not_arch_x32)
-    set(CMAKE_REQUIRED_QUIET ${save_quiet})
-    if(not_arch_x32)
-      message(STATUS " we are not x32")
-      set(HAVE_GOOD_YASM_ELF64 1)
-      execute_process(COMMAND yasm -f ${object_format} -i
-        ${CMAKE_SOURCE_DIR}/src/isa-l/include/
-        ${CMAKE_SOURCE_DIR}/src/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm
-        -o /dev/null
-        RESULT_VARIABLE rc
-        OUTPUT_QUIET)
-      if(NOT rc)
-        set(HAVE_BETTER_YASM_ELF64 1)
-        message(STATUS " yasm can also build the isa-l stuff")
-      endif(NOT rc)
-    else(not_arch_x32)
-      message(STATUS " we are x32; no yasm for you")
-    endif(not_arch_x32)
-  else(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64")
-    message(STATUS " we are not x86_64 && !x32")
-  endif(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64")
-endif(no_yasm)
 
 # require c++17
 if(CMAKE_VERSION VERSION_LESS "3.8")
@@ -208,12 +165,6 @@ if(LINUX OR APPLE)
   set(LIB_RESOLV resolv)
   list(APPEND EXTRALIBS ${LIB_RESOLV})
 endif()
-
-option(WITH_PROFILER "build extra profiler binaries" OFF)
-if(WITH_PROFILER)
-  find_package(gperftools REQUIRED)
-  list(APPEND EXTRALIBS profiler)
-endif(WITH_PROFILER)
 
 if(${ENABLE_COVERAGE})
   find_program(HAVE_GCOV gcov)
@@ -296,34 +247,17 @@ if(HAVE_XIO)
   list(APPEND EXTRALIBS ${XIO_LIBRARY} pthread)
 endif(HAVE_XIO)
 
-if(HAVE_RDMA)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${RDMA_INCLUDE_DIR}")
-  list(APPEND EXTRALIBS ${RDMA_LIBRARIES} pthread)
-endif(HAVE_RDMA)
-
 # sort out which allocator to use
 if(ALLOCATOR STREQUAL "tcmalloc")
-  set(ALLOC_LIBS ${GPERFTOOLS_TCMALLOC_LIBRARY})
+  set(ALLOC_LIBS gperftools::tcmalloc)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
-  set(TCMALLOC_srcs perfglue/heap_profiler.cc)
 elseif(ALLOCATOR STREQUAL "tcmalloc_minimal")
-  set(ALLOC_LIBS ${GPERFTOOLS_TCMALLOC_MINIMAL_LIBRARY})
+  set(ALLOC_LIBS gperftools::tcmalloc_minimal)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
-  set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
 elseif(ALLOCATOR STREQUAL "jemalloc")
-  set(ALLOC_LIBS ${JEMALLOC_LIBRARIES})
+  set(ALLOC_LIBS JeMalloc::JeMalloc)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
-  set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-elseif(ALLOCATOR STREQUAL "libc")
-  set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-else()
-  set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-  message(FATAL_ERROR "Unsupported allocator selected: ${ALLOCATOR}")
 endif()
-
-# tcmalloc heap profiler
-set(heap_profiler_files ${TCMALLOC_srcs})
-add_library(heap_profiler_objs OBJECT ${heap_profiler_files})
 
 if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
@@ -335,21 +269,6 @@ configure_file(
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   @ONLY)
 
-set(auth_files
-  auth/AuthAuthorizeHandler.cc
-  auth/AuthClientHandler.cc
-  auth/AuthSessionHandler.cc
-  auth/AuthMethodList.cc
-  auth/cephx/CephxAuthorizeHandler.cc
-  auth/cephx/CephxClientHandler.cc
-  auth/cephx/CephxProtocol.cc
-  auth/cephx/CephxSessionHandler.cc
-  auth/none/AuthNoneAuthorizeHandler.cc
-  auth/unknown/AuthUnknownAuthorizeHandler.cc
-  auth/Crypto.cc
-  auth/KeyRing.cc
-  auth/RotatingKeyRing.cc)
-
 set(mds_files)
 list(APPEND mds_files
   mds/MDSMap.cc
@@ -359,268 +278,75 @@ list(APPEND mds_files
   mds/mdstypes.cc
   mds/flock.cc)
 
-set(crush_srcs
-  crush/builder.c
-  crush/mapper.c
-  crush/crush.c
-  crush/hash.c
-  crush/CrushWrapper.cc
-  crush/CrushCompiler.cc
-  crush/CrushTester.cc
-  crush/CrushLocation.cc)
-
-add_library(crush_objs OBJECT ${crush_srcs})
-
 add_subdirectory(json_spirit)
 
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
-set(GMOCK_INCLUDE_DIRS
-  "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include/gmock")
-set(GTEST_INCLUDE_DIRS
-  "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include/gtest")
-
-include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/src")
-include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
-
-# needed for source files that friend unit tests (e.g., using FRIEND_TEST)
-include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include")
-
-set(xio_common_srcs)
-if(HAVE_XIO)
-  list(APPEND xio_common_srcs
-    msg/xio/XioConnection.cc
-    msg/xio/XioMsg.cc
-    msg/xio/XioPool.cc
-    msg/xio/XioMessenger.cc
-    msg/xio/XioPortal.cc)
-endif(HAVE_XIO)
-
-set(async_rdma_common_srcs)
-if(HAVE_RDMA)
-  list(APPEND async_rdma_common_srcs
-    msg/async/rdma/Infiniband.cc
-    msg/async/rdma/RDMAConnectedSocketImpl.cc
-    msg/async/rdma/RDMAServerSocketImpl.cc
-    msg/async/rdma/RDMAStack.cc)
-endif(HAVE_RDMA)
-
-add_library(common_buffer_obj OBJECT
-  common/buffer.cc)
-
-add_library(common_texttable_obj OBJECT
-  common/TextTable.cc)
+if(WITH_SEASTAR)
+  find_package(fmt 4.0.0 QUIET)
+  if(NOT fmt_FOUND)
+    message(STATUS "Could not find fmt, will build it")
+    add_subdirectory(fmt)
+  elseif(fmt_VERSION VERSION_GREATER_EQUAL 5.0.0)
+    message(WARNING "Could NOT find fmt: "
+      "Found unsuitable version \"${fmt_VERSION}\", "
+      "but required is at most \"5.0.0\" (found ${fmt_INCLUDE_DIR}). "
+      "Will build it")
+    add_subdirectory(fmt)
+  endif()
+  find_package(c-ares 1.13.0 QUIET)
+  if(NOT c-ares_FOUND)
+    message(STATUS "Could not find c-ares, will build it")
+    include(Buildc-ares)
+    build_c_ares()
+  endif()
+  macro(find_package name)
+    if(NOT TARGET ${name})
+      _find_package(${ARGV})
+    endif()
+  endmacro ()
+  add_subdirectory(seastar)
+  add_subdirectory(crimson)
+endif()
 
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
-  common/AsyncOpTracker.cc
-  common/DecayCounter.cc
-  common/LogClient.cc
-  common/LogEntry.cc
-  common/PrebufferedStreambuf.cc
-  common/CachedPrebufferedStreambuf.cc
-  common/BackTrace.cc
-  common/perf_counters.cc
-  common/perf_histogram.cc
-  common/mutex_debug.cc
-  common/Mutex.cc
-  common/OutputDataSocket.cc
-  common/admin_socket.cc
-  common/admin_socket_client.cc
-  common/bloom_filter.cc
-  common/Readahead.cc
-  common/cmdparse.cc
-  common/escape.cc
-  common/url_escape.cc
-  common/io_priority.cc
-  common/ceph_time.cc
-  common/mempool.cc
-  common/Throttle.cc
-  common/Timer.cc
-  common/Finisher.cc
-  common/environment.cc
-  common/sctp_crc32.c
-  common/crc32c.cc
-  common/crc32c_intel_baseline.c
   xxHash/xxhash.c
-  common/assert.cc
-  common/run_cmd.cc
-  common/WorkQueue.cc
-  common/ConfUtils.cc
-  common/fd.cc
-  common/xattr.c
-  common/str_list.cc
-  common/str_map.cc
-  common/snap_types.cc
-  common/errno.cc
-  common/TrackedOp.cc
-  common/SloppyCRCMap.cc
-  common/types.cc
-  common/iso_8601.cc
   log/Log.cc
   mon/MonCap.cc
   mon/MonClient.cc
   mon/MonMap.cc
+  mon/MonSub.cc
   mgr/MgrClient.cc
-  msg/simple/Accepter.cc
-  msg/DispatchQueue.cc
-  msg/Message.cc
   mgr/ServiceMap.cc
   osd/ECMsgTypes.cc
   osd/HitSet.cc
-  common/RefCountedObj.cc
-  msg/Messenger.cc
-  msg/simple/Pipe.cc
-  msg/simple/PipeConnection.cc
-  msg/simple/SimpleMessenger.cc
-  msg/async/AsyncConnection.cc
-  msg/async/AsyncMessenger.cc
-  msg/async/Event.cc
-  msg/async/EventSelect.cc
-  msg/async/Stack.cc
-  msg/async/PosixStack.cc
-  msg/async/net_handler.cc
-  msg/QueueStrategy.cc
-  ${xio_common_srcs}
-  ${async_rdma_common_srcs}
-  msg/msg_types.cc
-  common/reverse.c
-  common/hobject.cc
   osd/OSDMap.cc
   osd/OSDMapMapping.cc
-  common/histogram.cc
   osd/osd_types.cc
   osd/PGPeeringEvent.cc
   osd/OpRequest.cc
-  common/blkdev.cc
-  common/common_init.cc
-  common/pipe.c
-  common/ceph_argparse.cc
-  common/ceph_context.cc
-  common/code_environment.cc
-  common/dout.cc
-  common/signal.cc
-  common/Thread.cc
-  common/Formatter.cc
-  common/HTMLFormatter.cc
-  common/HeartbeatMap.cc
-  common/PluginRegistry.cc
-  common/ceph_fs.cc
-  common/ceph_hash.cc
-  common/ceph_strings.cc
-  common/ceph_frag.cc
-  common/options.cc
-  common/config.cc
-  common/utf8.c
-  common/mime.c
-  common/strtol.cc
-  common/page.cc
-  common/lockdep.cc
-  common/version.cc
-  common/hex.cc
-  common/entity_name.cc
-  common/ceph_crypto.cc
-  common/ceph_crypto_cms.cc
-  common/ceph_json.cc
-  common/ipaddr.cc
-  common/pick_address.cc
-  common/address_helper.cc
-  common/linux_version.c
-  common/TracepointProvider.cc
-  common/Cycles.cc
-  common/scrub_types.cc
-  common/bit_str.cc
   osdc/Striper.cc
   osdc/Objecter.cc
-  common/compat.cc
-  common/Graylog.cc
-  common/fs_types.cc
-  common/dns_resolve.cc
-  common/hostname.cc
-  common/util.cc
   librbd/Features.cc
-  arch/probe.cc
-  ${auth_files}
   ${mds_files})
+set_source_files_properties(ceph_ver.c
+  APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
+add_library(common-objs OBJECT ${libcommon_files})
 
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
-if(HAS_VTA)
-  set_source_files_properties(
-    common/config.cc
-    common/options.cc
-    PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
-endif()
+add_subdirectory(auth)
+add_subdirectory(common)
+add_subdirectory(crush)
+add_subdirectory(msg)
+add_subdirectory(arch)
 
-if(FREEBSD)
-  list(APPEND libcommon_files common/freebsd_errno.cc)
-elseif(APPLE)
-  list(APPEND libcommon_files common/darwin_errno.cc)
-elseif(SUN)
-  list(APPEND libcommon_files common/solaris_errno.cc)
-elseif(AIX)
-  list(APPEND libcommon_files common/aix_errno.cc)
-endif()
-
-if(HAVE_ARM)
-  list(APPEND libcommon_files arch/arm.c)
-elseif(HAVE_INTEL)
-  list(APPEND libcommon_files arch/intel.c)
-elseif(HAVE_POWER8)
-  list(APPEND libcommon_files arch/ppc.c)
-endif()
-
-if(HAVE_INTEL)
-  list(APPEND libcommon_files
-    common/crc32c_intel_fast.c)
-  if(HAVE_GOOD_YASM_ELF64)
-    list(APPEND libcommon_files
-      common/crc32c_intel_fast_asm.s
-      common/crc32c_intel_fast_zero_asm.s)
-  endif(HAVE_GOOD_YASM_ELF64)
-elseif(HAVE_POWER8)
-  list(APPEND libcommon_files
-    common/crc32c_ppc.c)
-  if(HAVE_PPC64LE)
-    list(APPEND libcommon_files
-      common/crc32c_ppc_asm.S
-      common/crc32c_ppc_fast_zero_asm.S)
-  endif(HAVE_PPC64LE)
-endif(HAVE_INTEL)
-
-if(LINUX)
-  list(APPEND libcommon_files msg/async/EventEpoll.cc)
-  message(STATUS " Using EventEpoll for events.")
-elseif(FREEBSD OR APPLE)
-  list(APPEND libcommon_files msg/async/EventKqueue.cc)
-  message(STATUS " Using EventKqueue for events.")
-endif(LINUX)
-
-if(WITH_LTTNG AND WITH_EVENTTRACE)
-  message(STATUS " Using EventTrace class.")
-  add_definitions("-DWITH_EVENTTRACE")
-  list(APPEND libcommon_files common/EventTrace.cc)
-endif()
-
-set(common_mountcephfs_files
-  common/armor.c
-  common/safe_io.c
-  common/module.c
-  common/addr_parsing.c)
-add_library(common_mountcephfs_objs OBJECT
-  ${common_mountcephfs_files})
-
-if(WITH_PROFILER)
-  list(APPEND libcommon_files
-    perfglue/cpu_profiler.cc)
-else()
-  list(APPEND libcommon_files
-    perfglue/disabled_stubs.cc)
-endif()
-
-add_library(common-objs OBJECT ${libcommon_files})
 set(ceph_common_objs
+  $<TARGET_OBJECTS:common-auth-objs>
+  $<TARGET_OBJECTS:common-common-objs>
+  $<TARGET_OBJECTS:common-msg-objs>
   $<TARGET_OBJECTS:common_buffer_obj>
   $<TARGET_OBJECTS:common_texttable_obj>
   $<TARGET_OBJECTS:compressor_objs>
@@ -629,7 +355,8 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:global_common_objs>
   $<TARGET_OBJECTS:crush_objs>)
 set(ceph_common_deps
-  json_spirit erasure_code ${LIB_RESOLV}
+  json_spirit erasure_code arch crc32
+  ${LIB_RESOLV}
   Boost::thread
   Boost::system
   Boost::random
@@ -642,62 +369,32 @@ set(ceph_common_deps
   ${CRYPTO_LIBS}
   ${CMAKE_THREAD_LIBS_INIT}
   ${CMAKE_DL_LIBS})
-if(HAVE_RDMA)
-  list(APPEND ceph_common_deps ${RDMA_LIBRARY})
+if(HAVE_UDEV)
+  list(APPEND ceph_common_deps ${UDEV_LIBRARIES})
 endif()
+
+if(HAVE_VERBS)
+  list(APPEND ceph_common_deps IBVerbs::verbs)
+endif()
+
+if(HAVE_RDMACM)
+  list(APPEND ceph_common_deps RDMA::RDMAcm)
+endif()
+
 if(NOT WITH_SYSTEM_BOOST)
   list(APPEND ceph_common_deps ${ZLIB_LIBRARIES})
 endif()
+
 if(HAVE_QATZIP)
   list(APPEND ceph_common_deps ${QATZIP_LIBRARIES})
 endif()
 
-set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
-  ${CMAKE_SOURCE_DIR}/src/common/version.cc
-  ${CMAKE_SOURCE_DIR}/src/test/encoding/ceph_dencoder.cc
-  APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
-
-if(HAVE_ARMV8_CRC)
-  add_library(common_crc_aarch64 STATIC common/crc32c_aarch64.c)
-  set_target_properties(common_crc_aarch64 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARMV8_CRC_COMPILE_FLAGS}")
-  list(APPEND ceph_common_deps common_crc_aarch64)
-endif(HAVE_ARMV8_CRC)
-
 if(WITH_DPDK)
-  list(APPEND common_async_dpdk_files
-    msg/async/dpdk/ARP.cc
-    msg/async/dpdk/DPDK.cc
-    msg/async/dpdk/dpdk_rte.cc
-    msg/async/dpdk/DPDKStack.cc
-    msg/async/dpdk/EventDPDK.cc
-    msg/async/dpdk/IP.cc
-    msg/async/dpdk/net.cc
-    msg/async/dpdk/IPChecksum.cc
-    msg/async/dpdk/Packet.cc
-    msg/async/dpdk/TCP.cc
-    msg/async/dpdk/UserspaceEvent.cc
-    msg/async/dpdk/ethernet.cc)
-  add_library(common_async_dpdk STATIC
-    ${common_async_dpdk_files})
-  # to ready the dpdk header files
-  add_dependencies(common_async_dpdk
-    ${DPDK_LIBRARIES})
   list(APPEND ceph_common_deps common_async_dpdk)
-  target_link_libraries(common_async_dpdk
-    ${DPDK_LIBRARIES})
-  set_target_properties(common_async_dpdk PROPERTIES
-    COMPILE_FLAGS "-march=native -I${DPDK_INCLUDE_DIR}")
-endif(WITH_DPDK)
+endif()
 
 add_library(common STATIC ${ceph_common_objs})
-target_link_libraries(common
-  PRIVATE ${ceph_common_deps})
-if(WITH_STATIC_LIBSTDCXX)
-  # the apps linking against libcommon are daemons also written in C++, so we
-  # need to link them against libstdc++.
-  target_link_libraries(common
-    INTERFACE "-static-libstdc++ -static-libgcc")
-endif()
+target_link_libraries(common ${ceph_common_deps})
 
 add_library(ceph-common SHARED ${ceph_common_objs})
 target_link_libraries(ceph-common ${ceph_common_deps})
@@ -705,15 +402,21 @@ target_link_libraries(ceph-common ${ceph_common_deps})
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 0
   INSTALL_RPATH "")
-if(WITH_STATIC_LIBSTDCXX)
-  # link libstdc++ into ceph-common to avoid including libstdc++ in every apps,
-  # to reduce the size of the app linking against ceph-common.
-  set_target_properties(ceph-common PROPERTIES
-    LINK_FLAGS "-static-libstdc++ -static-libgcc")
+if(NOT APPLE)
+  # Apple uses Mach-O, not ELF. so this option does not apply to APPLE.
+  #
+  # prefer the local symbol definitions when binding references to global
+  # symbols. otherwise we could reference the symbols defined by the application
+  # with the same name, instead of using the one defined in libceph-common.
+  # in other words, we require libceph-common to use local symbols, even if redefined
+  # in application".
+  set_property(
+    TARGET ceph-common
+    APPEND APPEND_STRING
+    PROPERTY LINK_FLAGS "-Wl,-Bsymbolic -Wl,-Bsymbolic-functions")
 endif()
-install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
 
-add_library(common_utf8 STATIC common/utf8.c)
+install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
 
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
@@ -730,47 +433,27 @@ add_subdirectory(cls)
 # RADOS client/library
 add_subdirectory(osdc)
 
+# heal_profiler
+add_subdirectory(perfglue)
+
 add_library(rados_snap_set_diff_obj OBJECT librados/snap_set_diff.cc)
 
 add_subdirectory(include)
 add_subdirectory(librados)
-add_subdirectory(libradosstriper)
 
-if (WITH_MGR)
-  set(mgr_srcs
-      ceph_mgr.cc
-      mon/PGMap.cc
-      mgr/DaemonState.cc
-      mgr/DaemonServer.cc
-      mgr/ClusterState.cc
-      mgr/ActivePyModules.cc
-      mgr/DaemonHealthMetricCollector.cc
-      mgr/StandbyPyModules.cc
-      mgr/PyModule.cc
-      mgr/PyModuleRegistry.cc
-      mgr/PyModuleRunner.cc
-      mgr/PyFormatter.cc
-      mgr/PyOSDMap.cc
-      mgr/BaseMgrModule.cc
-      mgr/BaseMgrStandbyModule.cc
-      mgr/ActivePyModule.cc
-      mgr/MgrStandby.cc
-      mgr/Mgr.cc
-      mgr/Gil.cc
-      mgr/mgr_commands.cc)
-  add_executable(ceph-mgr ${mgr_srcs}
-                 $<TARGET_OBJECTS:heap_profiler_objs>)
-  target_include_directories(ceph-mgr SYSTEM PRIVATE "${PYTHON_INCLUDE_DIRS}")
-  target_link_libraries(ceph-mgr osdc client global-static ceph-common
-      Boost::python ${MGR_PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
-  install(TARGETS ceph-mgr DESTINATION bin)
-endif (WITH_MGR)
+option(WITH_LIBRADOSSTRIPER "build with libradosstriper support" ON)
+if(WITH_LIBRADOSSTRIPER)
+  add_subdirectory(libradosstriper)
+endif()
+
+if(WITH_MGR)
+  add_subdirectory(mgr)
+endif()
 
 set(librados_config_srcs
   librados-config.cc)
 add_executable(librados-config ${librados_config_srcs})
-target_link_libraries(librados-config librados global ${BLKID_LIBRARIES} ${RDMA_LIBRARIES}
-  ${CMAKE_DL_LIBS})
+target_link_libraries(librados-config librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 install(TARGETS librados-config DESTINATION bin)
 
@@ -781,64 +464,7 @@ if(NOT CEPH_BUILD_VIRTUALENV)
 endif()
 
 add_subdirectory(pybind)
-add_subdirectory(ceph-disk)
 add_subdirectory(ceph-volume)
-add_subdirectory(ceph-detect-init)
-
-## dencoder
-if(HAS_VTA)
-  set_source_files_properties(test/encoding/ceph_dencoder.cc
-    PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
-endif()
-
-set(dencoder_srcs
-  test/encoding/ceph_dencoder.cc
-  $<TARGET_OBJECTS:common_texttable_obj>
-  )
-if(${WITH_RADOSGW})
-  list(APPEND dencoder_srcs
-    rgw/rgw_dencoder.cc
-  )
-  set(DENCODER_EXTRALIBS
-    rgw_a
-    cls_rgw_client
-  )
-endif(${WITH_RADOSGW})
-if(WITH_RBD)
-  set(DENCODER_EXTRALIBS
-    ${DENCODER_EXTRALIBS}
-    cls_rbd_client
-    rbd_mirror_types
-    rbd_types
-    rbd_replay_types)
-  if(WITH_KRBD)
-    set(DENCODER_EXTRALIBS
-      ${DENCODER_EXTRALIBS}
-      krbd)
-  endif()
-endif(WITH_RBD)
-
-add_executable(ceph-dencoder ${dencoder_srcs})
-target_link_libraries(ceph-dencoder
-  global
-  os
-  osd
-  mds
-  mon
-  journal
-  ${DENCODER_EXTRALIBS}
-  cls_lock_client
-  cls_refcount_client
-  cls_log_client
-  cls_statelog_client
-  cls_version_client
-  cls_user_client
-  cls_journal_client
-  cls_timeindex_client
-  ${EXTRALIBS}
-  ${CMAKE_DL_LIBS}
-  )
-install(TARGETS ceph-dencoder DESTINATION bin)
 
 # Monitor
 add_subdirectory(mon)
@@ -869,20 +495,19 @@ endif()
 add_subdirectory(kv)
 add_subdirectory(os)
 
-set(cls_references_files objclass/class_api.cc)
-add_library(cls_references_objs OBJECT ${cls_references_files})
-
 add_subdirectory(osd)
 
 set(ceph_osd_srcs
   ceph_osd.cc)
 add_executable(ceph-osd ${ceph_osd_srcs})
 add_dependencies(ceph-osd erasure_code_plugins)
-target_link_libraries(ceph-osd osd os global-static ceph-common
-  ${BLKID_LIBRARIES} ${RDMA_LIBRARIES})
+target_link_libraries(ceph-osd osd os global-static common
+  ${BLKID_LIBRARIES})
 if(WITH_FUSE)
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
 endif()
+set_target_properties(ceph-osd PROPERTIES
+  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
 install(TARGETS ceph-osd DESTINATION bin)
 
 add_subdirectory(mds)
@@ -897,27 +522,41 @@ add_subdirectory(erasure-code)
 
 # Support/Tools
 if(WITH_TESTS)
-  add_subdirectory(googletest/googlemock)
-  add_subdirectory(test)
+  option(WITH_SYSTEM_GTEST "require and build with system gtest and gmock" OFF)
+  if(WITH_SYSTEM_GTEST)
+    find_package(GTest REQUIRED)
+    find_package(GMock REQUIRED)
+  else()
+    add_subdirectory(googletest/googlemock)
+    add_library(GMock::GMock ALIAS gmock)
+    add_library(GMock::Main ALIAS gmock_main)
+    target_include_directories(gmock INTERFACE
+      $<TARGET_PROPERTY:gtest,INTERFACE_INCLUDE_DIRECTORIES>)
+    target_include_directories(gmock_main INTERFACE
+      $<TARGET_PROPERTY:gtest,INTERFACE_INCLUDE_DIRECTORIES>)
+    add_library(GTest::GTest ALIAS gtest)
+    add_library(GTest::Main ALIAS gtest_main)
+  endif()
 endif(WITH_TESTS)
 
-add_subdirectory(compressor)
-
-add_subdirectory(tools)
-
 # dmClock (after gmock)
-
-add_subdirectory(dmclock/src)
-
 option(WITH_DMCLOCK_TESTS
   "enable the build of dmclock-tests and dmclock-data-struct tests binaries"
   OFF)
 if(WITH_TESTS AND WITH_DMCLOCK_TESTS)
   # note: add_test is not being called, so dmclock tests aren't part
   # of ceph tests
-  add_subdirectory(dmclock/test)
-  add_subdirectory(dmclock/support/test)
-endif(WITH_TESTS AND WITH_DMCLOCK_TESTS)
+  set(dmclock_TEST ON CACHE BOOL "" FORCE)
+endif()
+add_subdirectory(dmclock)
+
+add_subdirectory(compressor)
+
+add_subdirectory(tools)
+
+if(WITH_TESTS)
+  add_subdirectory(test)
+endif()
 
 add_subdirectory(crypto)
 
@@ -937,6 +576,9 @@ configure_file(${CMAKE_SOURCE_DIR}/src/init-ceph.in
 configure_file(ceph-post-file.in
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file @ONLY)
 
+configure_file(ceph-crash.in
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crash @ONLY)
+
 if(WITH_TESTS)
   install(PROGRAMS
     ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack
@@ -947,6 +589,7 @@ endif()
 install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crash
   ${CMAKE_SOURCE_DIR}/src/ceph-run
   ${CMAKE_SOURCE_DIR}/src/ceph-clsinfo
   DESTINATION bin)
@@ -968,17 +611,9 @@ install(PROGRAMS
 
 install(PROGRAMS
   ${CMAKE_SOURCE_DIR}/src/ceph-create-keys
-#  ${CMAKE_SOURCE_DIR}/src/ceph-disk
   DESTINATION sbin)
 
 add_subdirectory(bash_completion)
-
-if(WITH_LIBCEPHFS OR WITH_KRBD)
-  set(parse_secret_files
-    common/secret.c)
-  add_library(parse_secret_objs OBJECT ${parse_secret_files})
-endif()
-
 add_subdirectory(client)
 
 if(WITH_LIBCEPHFS)
@@ -986,10 +621,6 @@ if(WITH_LIBCEPHFS)
   add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs})
   target_link_libraries(cephfs PRIVATE client ceph-common
     ${CRYPTO_LIBS} ${EXTRALIBS})
-  if(WITH_STATIC_LIBSTDCXX)
-    target_link_libraries(cephfs
-      INTERFACE "-static-libstdc++ -static-libgcc")
-  endif()
   if(ENABLE_SHARED)
     set_target_properties(cephfs PROPERTIES
       OUTPUT_NAME cephfs
@@ -1011,18 +642,8 @@ if(WITH_LIBCEPHFS)
     client/SyntheticClient.cc)
   add_executable(ceph-syn ${ceph_syn_srcs})
   target_link_libraries(ceph-syn client global-static ceph-common)
-
-  set(mount_ceph_srcs
-    mount/mount.ceph.c)
-  add_executable(mount.ceph ${mount_ceph_srcs}
-    $<TARGET_OBJECTS:parse_secret_objs>
-    $<TARGET_OBJECTS:common_mountcephfs_objs>)
-  set_target_properties(mount.ceph PROPERTIES
-    INSTALL_RPATH "")
-  target_link_libraries(mount.ceph ${KEYUTILS_LIBRARIES})
-
   install(TARGETS ceph-syn DESTINATION bin)
-  install(TARGETS mount.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
+  add_subdirectory(mount)
 endif(WITH_LIBCEPHFS)
 
 if(WITH_FUSE)
@@ -1030,9 +651,11 @@ if(WITH_FUSE)
     ceph_fuse.cc
     client/fuse_ll.cc)
   add_executable(ceph-fuse ${ceph_fuse_srcs})
-  target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES}
+  target_link_libraries(ceph-fuse ${FUSE_LIBRARIES}
     client ceph-common global-static)
-  set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
+  set_target_properties(ceph-fuse PROPERTIES
+    COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}"
+    POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
   install(TARGETS ceph-fuse DESTINATION bin)
   install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
 endif(WITH_FUSE)
@@ -1043,7 +666,7 @@ if(WITH_RBD)
   if(WITH_KRBD)
     add_library(krbd STATIC krbd.cc
       $<TARGET_OBJECTS:parse_secret_objs>)
-    target_link_libraries(krbd ${KEYUTILS_LIBRARIES} ${UDEV_LIBRARIES})
+    target_link_libraries(krbd keyutils::keyutils)
   endif()
   add_subdirectory(librbd)
   if(WITH_FUSE)
@@ -1100,8 +723,6 @@ configure_file(
   ${CMAKE_BINARY_DIR}/include/acconfig.h
 )
 
-add_subdirectory(brag)
-
 # Everything you need to spin up a cluster with vstart.sh
 add_custom_target(vstart-base DEPENDS
     ceph-osd
@@ -1126,7 +747,7 @@ if(WITH_LTTNG)
   add_dependencies(vstart tracepoint_libraries)
 endif(WITH_LTTNG)
 
-if(WITH_MGR_DASHBOARD_FRONTEND AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
+if(WITH_MGR AND WITH_MGR_DASHBOARD_FRONTEND AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
   add_dependencies(vstart mgr-dashboard-frontend-build)
 endif()
 

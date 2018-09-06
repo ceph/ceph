@@ -40,18 +40,18 @@ void SnapClient::resend_queries()
   }
 }
 
-void SnapClient::handle_query_result(MMDSTableRequest *m)
+void SnapClient::handle_query_result(const MMDSTableRequest::const_ref &m)
 {
   dout(10) << __func__ << " " << *m << dendl;
 
   char type;
   using ceph::decode;
-  bufferlist::iterator p = m->bl.begin();
+  auto p = m->bl.cbegin();
   decode(type, p);
 
   switch (type) {
   case 'U': // uptodate
-    assert(cached_version == m->get_tid());
+    ceph_assert(cached_version == m->get_tid());
     break;
   case 'F': // full
     {
@@ -97,24 +97,25 @@ void SnapClient::handle_query_result(MMDSTableRequest *m)
     synced = true;
 
   if (synced && !waiting_for_version.empty()) {
-    std::list<MDSInternalContextBase*> finished;
-    for (auto p = waiting_for_version.begin();
-	p != waiting_for_version.end(); ) {
-      if (p->first > cached_version)
+    MDSInternalContextBase::vec finished;
+    while (!waiting_for_version.empty()) {
+      auto it = waiting_for_version.begin();
+      if (it->first > cached_version)
 	break;
-      finished.splice(finished.end(), p->second);
-      waiting_for_version.erase(p++);
+      auto& v = it->second;
+      finished.insert(finished.end(), v.begin(), v.end());
+      waiting_for_version.erase(it);
     }
     if (!finished.empty())
       mds->queue_waiters(finished);
   }
 }
 
-void SnapClient::handle_notify_prep(MMDSTableRequest *m)
+void SnapClient::handle_notify_prep(const MMDSTableRequest::const_ref &m)
 {
   dout(10) << __func__ << " " << *m << dendl;
   handle_query_result(m);
-  MMDSTableRequest *ack = new MMDSTableRequest(table, TABLESERVER_OP_NOTIFY_ACK, 0, m->get_tid());
+  auto ack = MMDSTableRequest::create(table, TABLESERVER_OP_NOTIFY_ACK, 0, m->get_tid());
   mds->send_message(ack, m->get_connection());
 }
 
@@ -122,7 +123,7 @@ void SnapClient::notify_commit(version_t tid)
 {
   dout(10) << __func__ << " tid " << tid << dendl;
 
-  assert(cached_version == 0 || cached_version >= tid);
+  ceph_assert(cached_version == 0 || cached_version >= tid);
   if (cached_version == 0) {
     committing_tids.insert(tid);
   } else if (cached_pending_update.count(tid)) {
@@ -144,7 +145,7 @@ void SnapClient::refresh(version_t want, MDSInternalContextBase *onfinish)
 {
   dout(10) << __func__ << " want " << want << dendl;
 
-  assert(want >= cached_version);
+  ceph_assert(want >= cached_version);
   if (onfinish)
     waiting_for_version[want].push_back(onfinish);
 
@@ -152,7 +153,7 @@ void SnapClient::refresh(version_t want, MDSInternalContextBase *onfinish)
     return;
 
   mds_rank_t ts = mds->mdsmap->get_tableserver();
-  MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_QUERY, ++last_reqid, 0);
+  auto req = MMDSTableRequest::create(table, TABLESERVER_OP_QUERY, ++last_reqid, 0);
   using ceph::encode;
   char op = 'F';
   encode(op, req->bl);
@@ -174,7 +175,7 @@ void SnapClient::sync(MDSInternalContextBase *onfinish)
 
 void SnapClient::get_snaps(set<snapid_t>& result) const
 {
-  assert(cached_version > 0);
+  ceph_assert(cached_version > 0);
   for (auto& p : cached_snaps)
     result.insert(p.first);
 
@@ -191,7 +192,7 @@ void SnapClient::get_snaps(set<snapid_t>& result) const
 
 set<snapid_t> SnapClient::filter(const set<snapid_t>& snaps) const
 {
-  assert(cached_version > 0);
+  ceph_assert(cached_version > 0);
   if (snaps.empty())
     return snaps;
 
@@ -220,7 +221,7 @@ set<snapid_t> SnapClient::filter(const set<snapid_t>& snaps) const
 
 const SnapInfo* SnapClient::get_snap_info(snapid_t snapid) const
 {
-  assert(cached_version > 0);
+  ceph_assert(cached_version > 0);
 
   const SnapInfo* result = NULL;
   auto it = cached_snaps.find(snapid);
@@ -248,7 +249,7 @@ const SnapInfo* SnapClient::get_snap_info(snapid_t snapid) const
 void SnapClient::get_snap_infos(map<snapid_t, const SnapInfo*>& infomap,
 			        const set<snapid_t>& snaps) const
 {
-  assert(cached_version > 0);
+  ceph_assert(cached_version > 0);
 
   if (snaps.empty())
     return;

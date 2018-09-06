@@ -27,7 +27,7 @@ public:
   }
   void execute() override;
   void send_response() override;
-  const string name() override {
+  const char* name() const override {
     if (old_format) {
       return "get_region_map";
     } else {
@@ -41,7 +41,7 @@ class RGWOp_ZoneConfig_Get : public RGWRESTOp {
 public:
   RGWOp_ZoneConfig_Get() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("admin", RGW_CAP_READ);
   }
   int verify_permission() override {
@@ -49,7 +49,7 @@ public:
   }
   void execute() override {} /* store already has the info we need, just need to send response */
   void send_response() override ;
-  const string name() override {
+  const char* name() const override {
     return "get_zone_config";
   }
 };

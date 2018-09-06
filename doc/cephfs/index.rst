@@ -1,8 +1,10 @@
+.. _ceph-filesystem:
+
 =================
  Ceph Filesystem
 =================
 
-The :term:`Ceph Filesystem` (Ceph FS) is a POSIX-compliant filesystem that uses
+The Ceph Filesystem (CephFS) is a POSIX-compliant filesystem that uses
 a Ceph Storage Cluster to store its data. The Ceph filesystem uses the same Ceph
 Storage Cluster system as Ceph Block Devices, Ceph Object Storage with its S3
 and Swift APIs, or native bindings (librados).
@@ -48,7 +50,8 @@ least one :term:`Ceph Metadata Server` running.
 .. toctree:: 
 	:maxdepth: 1
 
-	Add/Remove MDS(s) <../../rados/deployment/ceph-deploy-mds>
+	Add/Remove MDS(s) <add-remove-mds>
+	MDS states <mds-states>
 	MDS failover and standby configuration <standby>
 	MDS Configuration Settings <mds-config-ref>
 	Client Configuration Settings <client-config-ref>
@@ -71,6 +74,7 @@ authentication keyring.
 	Mount CephFS <kernel>
 	Mount CephFS as FUSE <fuse>
 	Mount CephFS in fstab <fstab>
+	Use the CephFS Shell <cephfs-shell>
 	Manpage ceph-fuse <../../man/8/ceph-fuse>
 	Manpage mount.ceph <../../man/8/mount.ceph>
 	Manpage mount.fuse.ceph <../../man/8/mount.fuse.ceph>
@@ -84,6 +88,7 @@ authentication keyring.
     :maxdepth: 1
 
     Deployment best practices <best-practices>
+    MDS States <mds-states>
     Administrative commands <administration>
     Understanding MDS Cache Size Limits <cache-size-limits>
     POSIX compatibility <posix>
@@ -102,6 +107,11 @@ authentication keyring.
     Configuring directory fragmentation <dirfrags>
     Configuring multiple active MDS daemons <multimds>
     Export over NFS <nfs>
+
+.. toctree:: 
+   :hidden:
+
+    Advanced: Metadata repair <disaster-recovery-experts>
 
 .. raw:: html
 

@@ -18,13 +18,19 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 
-struct MMDSFindIno : public Message {
+class MMDSFindIno : public MessageInstance<MMDSFindIno> {
+public:
+  friend factory;
+
   ceph_tid_t tid {0};
   inodeno_t ino;
 
-  MMDSFindIno() : Message(MSG_MDS_FINDINO) {}
-  MMDSFindIno(ceph_tid_t t, inodeno_t i) : Message(MSG_MDS_FINDINO), tid(t), ino(i) {}
+protected:
+  MMDSFindIno() : MessageInstance(MSG_MDS_FINDINO) {}
+  MMDSFindIno(ceph_tid_t t, inodeno_t i) : MessageInstance(MSG_MDS_FINDINO), tid(t), ino(i) {}
+  ~MMDSFindIno() override {}
 
+public:
   const char *get_type_name() const override { return "findino"; }
   void print(ostream &out) const override {
     out << "findino(" << tid << " " << ino << ")";
@@ -36,7 +42,7 @@ struct MMDSFindIno : public Message {
     encode(ino, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(tid, p);
     decode(ino, p);
   }

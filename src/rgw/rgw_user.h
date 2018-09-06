@@ -40,7 +40,7 @@ struct RGWUID
     using ceph::encode;
     encode(s, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     string s;
     using ceph::decode;
     decode(s, bl);
@@ -226,7 +226,7 @@ struct RGWUserAdminOpState {
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
 
-  void set_access_key(std::string& access_key) {
+  void set_access_key(const std::string& access_key) {
     if (access_key.empty())
       return;
 
@@ -236,7 +236,7 @@ struct RGWUserAdminOpState {
     key_op = true;
   }
 
-  void set_secret_key(std::string& secret_key) {
+  void set_secret_key(const std::string& secret_key) {
     if (secret_key.empty())
       return;
 
@@ -260,7 +260,7 @@ struct RGWUserAdminOpState {
     user_email_specified = true;
   }
 
-  void set_display_name(std::string& name) {
+  void set_display_name(const std::string& name) {
     if (name.empty())
       return;
 
@@ -289,7 +289,7 @@ struct RGWUserAdminOpState {
     subuser_specified = true;
   }
 
-  void set_caps(std::string& _caps) {
+  void set_caps(const std::string& _caps) {
     if (_caps.empty())
       return;
 

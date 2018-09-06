@@ -47,7 +47,7 @@ struct cls_user_bucket {
       ENCODE_FINISH(bl);
     }
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
     decode(name, bl);
     if (struct_v < 8) {
@@ -124,7 +124,7 @@ struct cls_user_bucket_entry {
     //::encode(placement_rule, bl); removed in v9
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(9, 5, 5, bl);
     __u32 mt;
     uint64_t s;
@@ -175,7 +175,7 @@ struct cls_user_stats {
     encode(total_bytes_rounded, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(total_entries, bl);
     decode(total_bytes, bl);
@@ -203,7 +203,7 @@ struct cls_user_header {
     encode(last_stats_update, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(stats, bl);
     decode(last_stats_sync, bl);

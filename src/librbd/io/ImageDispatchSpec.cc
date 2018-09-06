@@ -15,7 +15,7 @@ struct ImageDispatchSpec<I>::SendVisitor
   : public boost::static_visitor<void> {
   ImageDispatchSpec* spec;
 
-  SendVisitor(ImageDispatchSpec* spec)
+  explicit SendVisitor(ImageDispatchSpec* spec)
     : spec(spec) {
   }
 
@@ -72,6 +72,45 @@ struct ImageDispatchSpec<I>::IsWriteOpVisitor
 };
 
 template <typename I>
+struct ImageDispatchSpec<I>::TokenRequestedVisitor
+  : public boost::static_visitor<uint64_t> {
+  ImageDispatchSpec* spec;
+  uint64_t flag;
+
+  TokenRequestedVisitor(ImageDispatchSpec* spec, uint64_t _flag)
+    : spec(spec), flag(_flag) {
+  }
+
+  uint64_t operator()(const Read&) const {
+    if (flag & RBD_QOS_WRITE_MASK) {
+      return 0;
+    }
+
+    if (flag & RBD_QOS_BPS_MASK) {
+      return spec->extents_length();
+    }
+    return 1;
+  }
+
+  template <typename T>
+  uint64_t operator()(const Flush&) const {
+    return 0;
+  }
+
+  template <typename T>
+  uint64_t operator()(const T&) const {
+    if (flag & RBD_QOS_READ_MASK) {
+      return 0;
+    }
+
+    if (flag & RBD_QOS_BPS_MASK) {
+      return spec->extents_length();
+    }
+    return 1;
+  }
+};
+
+template <typename I>
 void ImageDispatchSpec<I>::send() {
   boost::apply_visitor(SendVisitor{this}, m_request);
 }
@@ -83,8 +122,24 @@ void ImageDispatchSpec<I>::fail(int r) {
 }
 
 template <typename I>
+uint64_t ImageDispatchSpec<I>::extents_length() {
+  uint64_t length = 0;
+  auto &extents = this->m_image_extents;
+
+  for (auto &extent : extents) {
+    length += extent.second;
+  }
+  return length;
+}
+
+template <typename I>
 bool ImageDispatchSpec<I>::is_write_op() const {
   return boost::apply_visitor(IsWriteOpVisitor{}, m_request);
+}
+
+template <typename I>
+uint64_t ImageDispatchSpec<I>::tokens_requested(uint64_t flag) {
+  return boost::apply_visitor(TokenRequestedVisitor{this, flag}, m_request);
 }
 
 template <typename I>

@@ -5,7 +5,7 @@
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "include/rbd/features.h"
-#include "common/config.h"
+#include "common/config_proxy.h"
 #include "common/strtol.h"
 #include "common/Formatter.h"
 #include "global/global_context.h"
@@ -60,15 +60,6 @@ std::string get_description_prefix(ArgumentModifier modifier) {
   }
 }
 
-void add_special_pool_option(po::options_description *opt,
-			     const std::string &prefix) {
-  std::string name = prefix + "-" + POOL_NAME;
-  std::string description = prefix + " pool name";
-
-  opt->add_options()
-    (name.c_str(), po::value<std::string>(), description.c_str());
-}
-
 void add_pool_option(po::options_description *opt,
                      ArgumentModifier modifier,
                      const std::string &desc_suffix) {
@@ -86,6 +77,27 @@ void add_pool_option(po::options_description *opt,
     break;
   }
   description += desc_suffix;
+
+  // TODO add validator
+  opt->add_options()
+    (name.c_str(), po::value<std::string>(), description.c_str());
+}
+
+void add_namespace_option(boost::program_options::options_description *opt,
+                          ArgumentModifier modifier) {
+  std::string name = NAMESPACE_NAME;
+  std::string description = "namespace name";
+  switch (modifier) {
+  case ARGUMENT_MODIFIER_NONE:
+    break;
+  case ARGUMENT_MODIFIER_SOURCE:
+    description = "source " + description;
+    break;
+  case ARGUMENT_MODIFIER_DEST:
+    name = DEST_NAMESPACE_NAME;
+    description = "destination " + description;
+    break;
+  }
 
   // TODO add validator
   opt->add_options()
@@ -126,29 +138,6 @@ void add_image_id_option(po::options_description *opt,
     (name.c_str(), po::value<std::string>(), description.c_str());
 }
 
-void add_group_option(po::options_description *opt,
-		      ArgumentModifier modifier,
-		      const std::string &desc_suffix) {
-  std::string name = GROUP_NAME;
-  std::string description = "group name";
-  switch (modifier) {
-  case ARGUMENT_MODIFIER_NONE:
-    break;
-  case ARGUMENT_MODIFIER_SOURCE:
-    description = "source " + description;
-    break;
-  case ARGUMENT_MODIFIER_DEST:
-    name = DEST_GROUP_NAME;
-    description = "destination " + description;
-    break;
-  }
-  description += desc_suffix;
-
-  // TODO add validator
-  opt->add_options()
-    (name.c_str(), po::value<std::string>(), description.c_str());
-}
-
 void add_snap_option(po::options_description *opt,
                       ArgumentModifier modifier) {
 
@@ -176,29 +165,6 @@ void add_snap_id_option(po::options_description *opt) {
     (SNAPSHOT_ID.c_str(), po::value<uint64_t>(), "snapshot id");
 }
 
-void add_journal_option(po::options_description *opt,
-                      ArgumentModifier modifier,
-                      const std::string &desc_suffix) {
-  std::string name = JOURNAL_NAME;
-  std::string description = "journal name";
-  switch (modifier) {
-  case ARGUMENT_MODIFIER_NONE:
-    break;
-  case ARGUMENT_MODIFIER_SOURCE:
-    description = "source " + description;
-    break;
-  case ARGUMENT_MODIFIER_DEST:
-    name = DEST_JOURNAL_NAME;
-    description = "destination " + description;
-    break;
-  }
-  description += desc_suffix;
-
-  // TODO add validator
-  opt->add_options()
-    (name.c_str(), po::value<std::string>(), description.c_str());
-}
-
 void add_pool_options(boost::program_options::options_description *pos,
                       boost::program_options::options_description *opt) {
   pos->add_options()
@@ -207,35 +173,25 @@ void add_pool_options(boost::program_options::options_description *pos,
     ((POOL_NAME + ",p").c_str(), po::value<std::string>(), "pool name");
 }
 
+void add_namespace_options(boost::program_options::options_description *pos,
+                           boost::program_options::options_description *opt) {
+  if (pos != nullptr) {
+    pos->add_options()
+      ("namespace-name", "namespace name");
+  }
+  add_namespace_option(opt, ARGUMENT_MODIFIER_NONE);
+}
+
 void add_image_spec_options(po::options_description *pos,
                             po::options_description *opt,
                             ArgumentModifier modifier) {
   pos->add_options()
     ((get_name_prefix(modifier) + IMAGE_SPEC).c_str(),
      (get_description_prefix(modifier) + "image specification\n" +
-      "(example: [<pool-name>/]<image-name>)").c_str());
+      "(example: [<pool-name>/[<namespace-name>/]]<image-name>)").c_str());
   add_pool_option(opt, modifier);
+  add_namespace_option(opt, modifier);
   add_image_option(opt, modifier);
-}
-
-void add_group_spec_options(po::options_description *pos,
-			    po::options_description *opt,
-			    ArgumentModifier modifier,
-                            bool snap) {
-  add_pool_option(opt, modifier);
-  add_group_option(opt, modifier);
-  if (!snap) {
-    pos->add_options()
-      ((get_name_prefix(modifier) + GROUP_SPEC).c_str(),
-       (get_description_prefix(modifier) + "group specification\n" +
-         "(example: [<pool-name>/]<group-name>)").c_str());
-  } else {
-    add_snap_option(opt, modifier);
-    pos->add_options()
-      ((get_name_prefix(modifier) + GROUP_SNAP_SPEC).c_str(),
-       (get_description_prefix(modifier) + "group specification\n" +
-         "(example: [<pool-name>/]<group-name>@<snap-name>)").c_str());
-  }
 }
 
 void add_snap_spec_options(po::options_description *pos,
@@ -244,8 +200,9 @@ void add_snap_spec_options(po::options_description *pos,
   pos->add_options()
     ((get_name_prefix(modifier) + SNAPSHOT_SPEC).c_str(),
      (get_description_prefix(modifier) + "snapshot specification\n" +
-      "(example: [<pool-name>/]<image-name>@<snapshot-name>)").c_str());
+      "(example: [<pool-name>/[<namespace-name>/]]<image-name>@<snapshot-name>)").c_str());
   add_pool_option(opt, modifier);
+  add_namespace_option(opt, modifier);
   add_image_option(opt, modifier);
   add_snap_option(opt, modifier);
 }
@@ -256,23 +213,11 @@ void add_image_or_snap_spec_options(po::options_description *pos,
   pos->add_options()
     ((get_name_prefix(modifier) + IMAGE_OR_SNAPSHOT_SPEC).c_str(),
      (get_description_prefix(modifier) + "image or snapshot specification\n" +
-      "(example: [<pool-name>/]<image-name>[@<snap-name>])").c_str());
+      "(example: [<pool-name>/[<namespace-name>/]]<image-name>[@<snap-name>])").c_str());
   add_pool_option(opt, modifier);
+  add_namespace_option(opt, modifier);
   add_image_option(opt, modifier);
   add_snap_option(opt, modifier);
-}
-
-void add_journal_spec_options(po::options_description *pos,
-			      po::options_description *opt,
-			      ArgumentModifier modifier) {
-
-  pos->add_options()
-    ((get_name_prefix(modifier) + JOURNAL_SPEC).c_str(),
-     (get_description_prefix(modifier) + "journal specification\n" +
-      "(example: [<pool-name>/]<journal-name>)").c_str());
-  add_pool_option(opt, modifier);
-  add_image_option(opt, modifier);
-  add_journal_option(opt, modifier);
 }
 
 void add_create_image_options(po::options_description *opt,
@@ -367,6 +312,12 @@ void add_export_format_option(boost::program_options::options_description *opt) 
     ("export-format", po::value<ExportFormat>(), "format of image file");
 }
 
+void add_flatten_option(boost::program_options::options_description *opt) {
+  opt->add_options()
+    (IMAGE_FLATTEN.c_str(), po::bool_switch(),
+     "fill clone with parent data (make it independent)");
+}
+
 std::string get_short_features_help(bool append_suffix) {
   std::ostringstream oss;
   bool first_feature = true;
@@ -453,7 +404,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
               ImageObjectSize *target_type, int dummy) {
   po::validators::check_first_occurrence(v);
   const std::string &s = po::validators::get_single_string(values);
-  
+
   std::string parse_error;
   uint64_t objectsize = strict_iecstrtoll(s.c_str(), &parse_error);
   if (!parse_error.empty()) {
@@ -556,7 +507,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
 
   po::validators::check_first_occurrence(v);
   const std::string &s = po::validators::get_single_string(values);
-  g_conf->set_val_or_die("keyfile", s.c_str());
+  g_conf().set_val_or_die("keyfile", s.c_str());
   v = boost::any(s);
 }
 

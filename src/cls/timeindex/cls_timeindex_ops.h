@@ -17,7 +17,7 @@ struct cls_timeindex_add_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entries, bl);
     DECODE_FINISH(bl);
@@ -43,7 +43,7 @@ struct cls_timeindex_list_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(from_time, bl);
     decode(marker, bl);
@@ -69,7 +69,7 @@ struct cls_timeindex_list_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entries, bl);
     decode(marker, bl);
@@ -101,7 +101,7 @@ struct cls_timeindex_trim_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(from_time, bl);
     decode(to_time, bl);

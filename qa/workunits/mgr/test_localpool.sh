@@ -1,7 +1,7 @@
 #!/bin/sh -ex
 
-ceph config-key set mgr/localpool/subtree host
-ceph config-key set mgr/localpool/failure_domain osd
+ceph config set mgr mgr/localpool/subtree host
+ceph config set mgr mgr/localpool/failure_domain osd
 ceph mgr module enable localpool
 
 while ! ceph osd pool ls | grep '^by-host-'
@@ -15,7 +15,7 @@ do
     ceph osd pool rm $p $p --yes-i-really-really-mean-it
 done
 
-ceph config-key rm mgr/localpool/subtree
-ceph config-key rm mgr/localpool/failure_domain
+ceph config rm mgr mgr/localpool/subtree
+ceph config rm mgr mgr/localpool/failure_domain
 
 echo OK

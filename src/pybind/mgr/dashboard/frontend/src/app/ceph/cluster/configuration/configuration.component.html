@@ -1,12 +1,5 @@
-<nav aria-label="breadcrumb">
-  <ol class="breadcrumb">
-    <li class="breadcrumb-item">Cluster</li>
-    <li class="breadcrumb-item active"
-        aria-current="page">Configuration Documentation</li>
-  </ol>
-</nav>
 <cd-table [data]="data | filter:filters"
-          (fetchData)="getConfigurationList()"
+          (fetchData)="getConfigurationList($event)"
           [columns]="columns"
           selectionType="single"
           (updateSelection)="updateSelection($event)">
@@ -28,4 +21,20 @@
       </cd-table-key-value>
     </tab>
   </tabset>
+  <ng-template #confValTpl let-value="value">
+    <span *ngIf="value">
+      <span *ngFor="let conf of value; last as isLast">
+        {{ conf.section }}: {{ conf.value }}{{ !isLast ? "," : "" }}<br/>
+      </span>
+    </span>
+  </ng-template>
+  <ng-template #confFlagTpl let-value="value">
+    <span *ngIf="value !== ''">
+      <span *ngFor="let flag of value; last as isLast">
+        <span title="{{ flags[flag] }}">
+          {{ flag | uppercase }}{{ !isLast ? "," : "" }}<br/>
+        </span>
+      </span>
+    </span>
+  </ng-template>
 </cd-table>

@@ -21,8 +21,12 @@
 #undef dout_prefix
 #define dout_prefix *_dout << " RDMAServerSocketImpl "
 
-RDMAServerSocketImpl::RDMAServerSocketImpl(CephContext *cct, Infiniband* i, RDMADispatcher *s, RDMAWorker *w, entity_addr_t& a)
-  : cct(cct), net(cct), server_setup_socket(-1), infiniband(i), dispatcher(s), worker(w), sa(a)
+RDMAServerSocketImpl::RDMAServerSocketImpl(
+  CephContext *cct, Infiniband* i, RDMADispatcher *s, RDMAWorker *w,
+  entity_addr_t& a)
+  : ServerSocketImpl(a.get_type()),
+    cct(cct), net(cct), server_setup_socket(-1), infiniband(i),
+    dispatcher(s), worker(w), sa(a)
 {
 }
 
@@ -76,7 +80,8 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
 {
   ldout(cct, 15) << __func__ << dendl;
 
-  assert(sock);
+  ceph_assert(sock);
+
   sockaddr_storage ss;
   socklen_t slen = sizeof(ss);
   int sd = ::accept(server_setup_socket, (sockaddr*)&ss, &slen);
@@ -97,8 +102,9 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
     return -errno;
   }
 
-  assert(NULL != out); //out should not be NULL in accept connection
+  ceph_assert(NULL != out); //out should not be NULL in accept connection
 
+  out->set_type(addr_type);
   out->set_sockaddr((sockaddr*)&ss);
   net.set_priority(sd, opt.priority, out->get_family());
 

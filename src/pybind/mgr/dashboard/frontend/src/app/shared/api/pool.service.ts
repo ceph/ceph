@@ -1,20 +1,27 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-@Injectable()
+import { cdEncode } from '../decorators/cd-encode';
+import { ApiModule } from './api.module';
+
+@cdEncode
+@Injectable({
+  providedIn: ApiModule
+})
 export class PoolService {
+  constructor(private http: HttpClient) {}
 
-  constructor(private http: HttpClient) {
-  }
-
-  getList () {
+  getList() {
     return this.http.get('api/pool');
   }
 
   list(attrs = []) {
     const attrsStr = attrs.join(',');
-    return this.http.get(`api/pool?attrs=${attrsStr}`).toPromise().then((resp: any) => {
-      return resp;
-    });
+    return this.http
+      .get(`api/pool?attrs=${attrsStr}`)
+      .toPromise()
+      .then((resp: any) => {
+        return resp;
+      });
   }
 }

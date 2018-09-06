@@ -22,6 +22,8 @@
 
 const std::string BENCH_LASTRUN_METADATA = "benchmark_last_metadata";
 const std::string BENCH_PREFIX = "benchmark_data";
+const std::string BENCH_OBJ_NAME = BENCH_PREFIX + "_%s_%d_object%d";
+
 static char cached_hostname[30] = {0};
 int cached_pid = 0;
 
@@ -47,11 +49,23 @@ static std::string generate_object_prefix(int pid = 0) {
   return oss.str();
 }
 
-static std::string generate_object_name(int objnum, int pid = 0)
+// this is 8x faster than previous impl based on chained, deduped functions call
+static std::string generate_object_name_fast(int objnum, int pid = 0)
 {
-  std::ostringstream oss;
-  oss << generate_object_prefix(pid) << "_object" << objnum;
-  return oss.str();
+  if (cached_hostname[0] == 0) {
+	gethostname(cached_hostname, sizeof(cached_hostname)-1);
+	cached_hostname[sizeof(cached_hostname)-1] = 0;
+  }
+
+  if (pid)
+	cached_pid = pid;
+  else if (!cached_pid)
+	cached_pid = getpid();
+
+  char name[512];
+  int n = snprintf(&name[0], sizeof(name),  BENCH_OBJ_NAME.c_str(), cached_hostname, cached_pid, objnum);
+  ceph_assert(n > 0 && n < (int)sizeof(name));
+  return std::string(&name[0], (size_t)n);
 }
 
 static void sanitize_object_contents (bench_data *data, size_t length) {
@@ -348,7 +362,7 @@ int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
     }
     return r;
   }
-  bufferlist::iterator p = object_data.begin();
+  auto p = object_data.cbegin();
   decode(*object_size, p);
   decode(*num_objects, p);
   decode(*prevPid, p);
@@ -408,7 +422,7 @@ int ObjBencher::write_bench(int secondsToRun,
 
   //set up writes so I can start them together
   for (int i = 0; i<concurrentios; ++i) {
-    name[i] = generate_object_name(i / writes_per_object);
+    name[i] = generate_object_name_fast(i / writes_per_object);
     contents[i] = new bufferlist();
     snprintf(data.object_contents, data.op_size, "I'm the %16dth op!", i);
     contents[i]->append(data.object_contents, data.op_size);
@@ -467,7 +481,7 @@ int ObjBencher::write_bench(int secondsToRun,
     }
     lock.Unlock();
     //create new contents and name on the heap, and fill them
-    newName = generate_object_name(data.started / writes_per_object);
+    newName = generate_object_name_fast(data.started / writes_per_object);
     newContents = contents[slot];
     snprintf(newContents->c_str(), data.op_size, "I'm the %16dth op!", data.started);
     // we wrote to buffer, going around internal crc cache, so invalidate it now.
@@ -606,7 +620,7 @@ int ObjBencher::write_bench(int secondsToRun,
     formatter->dump_format("min_iops", "%d", data.idata.min_iops);
     formatter->dump_format("average_latency", "%f", data.avg_latency);
     formatter->dump_format("stddev_latency", "%f", latency_stddev);
-    formatter->dump_format("max_latency:", "%f", data.max_latency);
+    formatter->dump_format("max_latency", "%f", data.max_latency);
     formatter->dump_format("min_latency", "%f", data.min_latency);
   }
   //write object size/number data for read benchmarks
@@ -666,7 +680,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
   //set up initial reads
   for (int i = 0; i < concurrentios; ++i) {
-    name[i] = generate_object_name(i / writes_per_object, pid);
+    name[i] = generate_object_name_fast(i / writes_per_object, pid);
     contents[i] = new bufferlist();
   }
 
@@ -742,7 +756,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
       }
     }
 
-    newName = generate_object_name(data.started / writes_per_object, pid);
+    newName = generate_object_name_fast(data.started / writes_per_object, pid);
     index[slot] = data.started;
     lock.Unlock();
     completion_wait(slot);
@@ -904,7 +918,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
 
   //set up initial reads
   for (int i = 0; i < concurrentios; ++i) {
-    name[i] = generate_object_name(i / writes_per_object, pid);
+    name[i] = generate_object_name_fast(i / writes_per_object, pid);
     contents[i] = new bufferlist();
   }
 
@@ -998,7 +1012,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     } 
 
     rand_id = rand() % num_objects;
-    newName = generate_object_name(rand_id / writes_per_object, pid);
+    newName = generate_object_name_fast(rand_id / writes_per_object, pid);
     index[slot] = rand_id;
     release_completion(slot);
 
@@ -1209,7 +1223,7 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
 
   //set up initial removes
   for (int i = 0; i < concurrentios; ++i) {
-    name[i] = generate_object_name(i, prevPid);
+    name[i] = generate_object_name_fast(i, prevPid);
   }
 
   //start initial removes
@@ -1248,7 +1262,7 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
       lc.cond.Wait(lock);
     }
     lock.Unlock();
-    newName = generate_object_name(data.started, prevPid);
+    newName = generate_object_name_fast(data.started, prevPid);
     completion_wait(slot);
     lock.Lock();
     r = completion_ret(slot);

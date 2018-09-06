@@ -3,7 +3,7 @@ import argparse
 import logging
 import os
 from textwrap import dedent
-from ceph_volume import process, conf, decorators, terminal
+from ceph_volume import process, conf, decorators, terminal, __release__
 from ceph_volume.util import system, disk
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import encryption as encryption_utils
@@ -73,6 +73,9 @@ def activate_filestore(lvs, no_systemd=False):
     if no_systemd is False:
         # enable the ceph-volume unit for this OSD
         systemctl.enable_volume(osd_id, osd_fsid, 'lvm')
+
+        # enable the OSD
+        systemctl.enable_osd(osd_id)
 
         # start the OSD
         systemctl.start_osd(osd_id)
@@ -148,10 +151,16 @@ def activate_bluestore(lvs, no_systemd=False):
     wal_device_path = get_osd_device_path(osd_lv, lvs, 'wal', dmcrypt_secret=dmcrypt_secret)
 
     # Once symlinks are removed, the osd dir can be 'primed again.
-    process.run([
+    prime_command = [
         'ceph-bluestore-tool', '--cluster=%s' % conf.cluster,
         'prime-osd-dir', '--dev', osd_lv_path,
-        '--path', osd_path])
+        '--path', osd_path]
+
+    if __release__ != "luminous":
+        # mon-config changes are not available in Luminous
+        prime_command.append('--no-mon-config')
+
+    process.run(prime_command)
     # always re-do the symlink regardless if it exists, so that the block,
     # block.wal, and block.db devices that may have changed can be mapped
     # correctly every time
@@ -162,14 +171,19 @@ def activate_bluestore(lvs, no_systemd=False):
         destination = os.path.join(osd_path, 'block.db')
         process.run(['ln', '-snf', db_device_path, destination])
         system.chown(db_device_path)
+        system.chown(destination)
     if wal_device_path:
         destination = os.path.join(osd_path, 'block.wal')
         process.run(['ln', '-snf', wal_device_path, destination])
         system.chown(wal_device_path)
+        system.chown(destination)
 
     if no_systemd is False:
         # enable the ceph-volume unit for this OSD
         systemctl.enable_volume(osd_id, osd_fsid, 'lvm')
+
+        # enable the OSD
+        systemctl.enable_osd(osd_id)
 
         # start the OSD
         systemctl.start_osd(osd_id)

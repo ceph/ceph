@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.5.1)
 
 project(ceph CXX C ASM)
 set(VERSION 13.1.0)
@@ -20,6 +20,9 @@ if(POLICY CMP0065)
 endif()
 if(POLICY CMP0051)
   cmake_policy(SET CMP0051 NEW)
+endif()
+if(POLICY CMP0075)
+  cmake_policy(SET CMP0075 NEW)
 endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
@@ -95,12 +98,18 @@ endif()
 CHECK_FUNCTION_EXISTS(strerror_r HAVE_Strerror_R)
 CHECK_FUNCTION_EXISTS(name_to_handle_at HAVE_NAME_TO_HANDLE_AT)
 CHECK_FUNCTION_EXISTS(pipe2 HAVE_PIPE2)
+
+include(CMakePushCheckState)
+cmake_push_check_state(RESET)
 set(CMAKE_REQUIRED_LIBRARIES pthread)
 CHECK_FUNCTION_EXISTS(pthread_spin_init HAVE_PTHREAD_SPINLOCK)
 CHECK_FUNCTION_EXISTS(pthread_set_name_np HAVE_PTHREAD_SET_NAME_NP)
+CHECK_FUNCTION_EXISTS(pthread_get_name_np HAVE_PTHREAD_GET_NAME_NP)
 CHECK_FUNCTION_EXISTS(pthread_setname_np HAVE_PTHREAD_SETNAME_NP)
 CHECK_FUNCTION_EXISTS(pthread_getname_np HAVE_PTHREAD_GETNAME_NP)
 CHECK_FUNCTION_EXISTS(pthread_rwlockattr_setkind_np HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
+cmake_pop_check_state()
+
 CHECK_FUNCTION_EXISTS(eventfd HAVE_EVENTFD)
 CHECK_FUNCTION_EXISTS(getprogname HAVE_GETPROGNAME)
 
@@ -167,16 +176,30 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ${ENABLE_SHARED})
 
 option(WITH_STATIC_LIBSTDCXX "Link against libstdc++ statically" OFF)
 if(WITH_STATIC_LIBSTDCXX)
-  if(NOT CMAKE_COMPILER_IS_GNUCXX)
+  if(CMAKE_COMPILER_IS_GNUCXX)
+    set(static_linker_flags "-static-libstdc++ -static-libgcc")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${static_linker_flags}")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${static_linker_flags}")
+    unset(static_linker_flags)
+    set(GPERFTOOLS_USE_STATIC_LIBS TRUE)
+  else()
     message(FATAL_ERROR "Please use GCC to enable WITH_STATIC_LIBSTDCXX")
   endif()
+endif()
+include(CheckCxxAtomic)
+if(NOT HAVE_CXX11_ATOMIC)
+  set(CMAKE_CXX_STANDARD_LIBRARIES
+    "${CMAKE_CXX_STANDARD_LIBRARIES} ${LIBATOMIC_LINK_FLAGS}")
 endif()
 
 option(WITH_RDMA "Enable RDMA in async messenger" ON)
 if(WITH_RDMA)
-  find_package(rdma REQUIRED)
-  set(HAVE_RDMA ${RDMA_FOUND})
-endif(WITH_RDMA)
+  find_package(verbs REQUIRED)
+  set(HAVE_VERBS ${VERBS_FOUND})
+  find_package(rdmacm REQUIRED)
+  set(HAVE_RDMACM ${RDMACM_FOUND})
+  set(HAVE_RDMA TRUE)
+endif()
 
 find_package(Backtrace)
 
@@ -300,25 +323,29 @@ if(WITH_LZ4)
 endif(WITH_LZ4)
 
 #if allocator is set on command line make sure it matches below strings
+set(ALLOCATOR "" CACHE STRING
+  "specify memory allocator to use. currently tcmalloc, tcmalloc_minimal, \
+jemalloc, and libc is supported. if not specified, will try to find tcmalloc, \
+and then jemalloc. If neither of then is found. use the one in libc.")
 if(ALLOCATOR)
   if(${ALLOCATOR} MATCHES "tcmalloc(_minimal)?")
     find_package(gperftools REQUIRED)
     set(HAVE_LIBTCMALLOC ON)
   elseif(${ALLOCATOR} STREQUAL "jemalloc")
     find_package(JeMalloc REQUIRED)
-    set(HAVE_LIBJEMALLOC ${JEMALLOC_FOUND})
     set(HAVE_JEMALLOC 1)
+  elseif(NOT ALLOCATOR STREQUAL "libc")
+    message(FATAL_ERROR "Unsupported allocator selected: ${ALLOCATOR}")
   endif()
 else(ALLOCATOR)
   find_package(gperftools)
-  set(HAVE_LIBTCMALLOC ${GPERFTOOLS_FOUND})
-  if(NOT GPERFTOOLS_FOUND)
+  set(HAVE_LIBTCMALLOC ${gperftools_FOUND})
+  if(NOT gperftools_FOUND)
     find_package(JeMalloc)
-    set(HAVE_LIBJEMALLOC ${JEMALLOC_FOUND})
-  endif(NOT GPERFTOOLS_FOUND)
-  if(GPERFTOOLS_FOUND)
+  endif()
+  if(gperftools_FOUND)
     set(ALLOCATOR tcmalloc)
-  elseif(JEMALLOC_FOUND)
+  elseif(JeMalloc_FOUND)
     set(ALLOCATOR jemalloc)
   else()
     if(NOT FREEBSD)
@@ -326,9 +353,14 @@ else(ALLOCATOR)
       message(WARNING "tcmalloc and jemalloc not found, falling back to libc")
     endif()
     set(ALLOCATOR "libc")
-  endif(GPERFTOOLS_FOUND)
+  endif(gperftools_FOUND)
 endif(ALLOCATOR)
 
+if(HAVE_LIBTCMALLOC AND WITH_STATIC_LIBSTDCXX)
+  set(EXE_LINKER_USE_PIE FALSE)
+else()
+  set(EXE_LINKER_USE_PIE ${ENABLE_SHARED})
+endif()
 
 if(WITH_LIBCEPHFS OR WITH_KRBD)
   find_package(keyutils REQUIRED)
@@ -341,9 +373,12 @@ CHECK_SYMBOL_EXISTS(curl_multi_wait curl/curl.h HAVE_CURL_MULTI_WAIT)
 
 find_package(NSS REQUIRED)
 find_package(NSPR REQUIRED)
+find_package(OpenSSL REQUIRED)
+# TODO: use NSS only for validation of the OpenSSL-based implementations
 set(USE_NSS 1)
-set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES})
-set(SSL_LIBRARIES ${NSS_LIBRARIES})
+set(USE_OPENSSL 1)
+set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES} ${OPENSSL_LIBRARIES})
+set(SSL_LIBRARIES ${NSS_LIBRARIES} ${OPENSSL_LIBRARIES})
 
 option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)
@@ -354,14 +389,11 @@ endif()
 option(WITH_DPDK "Enable DPDK messaging" OFF)
 if(WITH_DPDK)
   find_package(dpdk)
-  set(HAVE_DPDK ${DPDK_FOUND})
-  if(NOT TARGET dpdk-ext)
-    find_package(dpdk)
-    if(NOT DPDK_FOUND)
-      include(BuildDPDK)
-      build_dpdk()
-    endif()
+  if(NOT DPDK_FOUND AND NOT TARGET dpdk-ext)
+    include(BuildDPDK)
+    build_dpdk()
   endif()
+  set(HAVE_DPDK TRUE)
 endif()
 
 option(WITH_BLKIN "Use blkin to emit LTTng tracepoints for Zipkin" OFF)
@@ -390,7 +422,7 @@ if(WITH_RADOSGW)
     message(WARNING "disabling WITH_RADOSGW_BEAST_FRONTEND, which depends on WITH_BOOST_CONTEXT")
     set(WITH_RADOSGW_BEAST_FRONTEND OFF)
   endif()
-  find_package(liboath REQUIRED)
+  find_package(OATH REQUIRED)
 
 # https://curl.haxx.se/docs/install.html mentions the
 # configure flags for various ssl backends
@@ -466,6 +498,7 @@ if(WITH_MGR)
   set(MGR_PYTHON_EXECUTABLE ${PYTHON_EXECUTABLE})
   set(MGR_PYTHON_LIBRARIES ${PYTHON_LIBRARIES})
   set(MGR_PYTHON_VERSION_MAJOR ${PYTHON_VERSION_MAJOR})
+  set(MGR_PYTHON_VERSION_MINOR ${PYTHON_VERSION_MINOR})
   # Boost dependency check deferred to Boost section
 endif(WITH_MGR)
 
@@ -533,64 +566,59 @@ endif(LINUX)
 
 # ASAN and friends
 option(WITH_ASAN "build with ASAN" OFF)
-option(WITH_ASAN_LEAK "explicitly enable ASAN leak detection" OFF)
-
 if(WITH_ASAN)
-  list(APPEND SANITIZE_FLAGS "address")
-  if(WITH_ASAN_LEAK)
-    list(APPEND SANITIZE_FLAGS "leak")
-  endif()
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lasan")
-  if(HAVE_JEMALLOC)
-    message(FATAL "ASAN does not work well with JeMalloc")
-  endif()
+  list(APPEND sanitizers "address")
+endif()
+
+option(WITH_ASAN_LEAK "explicitly enable ASAN leak detection" OFF)
+if(WITH_ASAN_LEAK)
+  list(APPEND sanitizers "leak")
 endif()
 
 option(WITH_TSAN "build with TSAN" OFF)
 if(WITH_TSAN)
-  if(WITH_ASAN AND WITH_ASAN_LEAK)
-    message(FATAL_ERROR "Cannot combine -fsanitize-leak w/-fsanitize-thread")
-  elseif(HAVE_JEMALLOC)
-    message(FATAL "TSAN does not work well with JeMalloc")
-  endif()
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie -ltsan")
-  list(APPEND SANITIZE_FLAGS "thread")
+  list(APPEND sanitizers "thread")
 endif()
 
 option(WITH_UBSAN "build with UBSAN" OFF)
 if(WITH_UBSAN)
-  if(HAVE_JEMALLOC)
-    message(FATAL "UBSAN does not work well with JeMalloc")
-  endif()
-  list(APPEND SANITIZE_FLAGS "undefined")
+  list(APPEND sanitizers "undefined-behavior")
 endif()
 
-if(SANITIZE_FLAGS)
-  string(REPLACE ";" "," SANITIZE_FLAGS "${SANITIZE_FLAGS}")
-  set(SANITIZE_CFLAGS "-fsanitize=${SANITIZE_FLAGS} -fno-omit-frame-pointer")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SANITIZE_CFLAGS}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SANITIZE_CFLAGS}")
+if(sanitizers)
+  find_package(Sanitizers REQUIRED ${sanitizers})
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${Sanitizers_COMPILE_OPTIONS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${Sanitizers_COMPILE_OPTIONS}")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${Sanitizers_COMPILE_OPTIONS}")
 endif()
 
 # Rocksdb
 option(WITH_SYSTEM_ROCKSDB "require and build with system rocksdb" OFF)
 if (WITH_SYSTEM_ROCKSDB)
-  find_package(rocksdb 5.8 REQUIRED)
+  find_package(RocksDB 5.8 REQUIRED)
 endif()
+
+option(WITH_SEASTAR "Build seastar components")
+set(HAVE_SEASTAR ${WITH_SEASTAR})
 
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
 # Boost::thread depends on Boost::atomic, so list it explicitly.
 set(BOOST_COMPONENTS
-  atomic chrono thread system regex random program_options date_time iostreams)
+  atomic chrono thread system regex random program_options date_time
+  iostreams)
 set(BOOST_HEADER_COMPONENTS container)
 
 if(WITH_MGR)
-	list(APPEND BOOST_COMPONENTS python)
+  list(APPEND BOOST_COMPONENTS
+    python${MGR_PYTHON_VERSION_MAJOR}${MGR_PYTHON_VERSION_MINOR})
 endif()
 if(WITH_BOOST_CONTEXT)
   list(APPEND BOOST_COMPONENTS context coroutine)
+endif()
+if(WITH_SEASTAR)
+  list(APPEND BOOST_COMPONENTS filesystem timer)
 endif()
 
 set(Boost_USE_MULTITHREADED ON)
@@ -601,13 +629,13 @@ if(WITH_SYSTEM_BOOST)
   else()
     set(Boost_USE_STATIC_LIBS ON)
   endif()
-  find_package(Boost 1.66 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+  find_package(Boost 1.67 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
 else()
   set(BOOST_J 1 CACHE STRING
     "max jobs for Boost build") # override w/-DBOOST_J=<n>
   set(Boost_USE_STATIC_LIBS ON)
   include(BuildBoost)
-  build_boost(1.66
+  build_boost(1.67
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
   include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 endif()
@@ -615,23 +643,18 @@ set(Boost_USE_MULTITHREADED ON)
 
 # dashboard angular2 frontend
 option(WITH_MGR_DASHBOARD_FRONTEND "Build the mgr/dashboard frontend using `npm`" ON)
+option(WITH_SYSTEM_NPM "Assume that dashboard build tools already installed through packages" OFF)
+if(WITH_SYSTEM_NPM)
+  find_program(NPM npm)
+  if(NOT NPM)
+    message(FATAL_ERROR "Can't find npm.")
+  endif()
+endif()
 
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
 find_package(Threads REQUIRED)
 
-execute_process(
-  COMMAND ./librarytest.sh ${CMAKE_CXX_COMPILER} ${CMAKE_CXX_FLAGS}
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-  OUTPUT_VARIABLE CXX_STDLIB
-  )
-
-if(CXX_STDLIB STREQUAL "libstdc++" OR CXX_STDLIB STREQUAL "libc++")
-  message(STATUS "We are using ${CXX_STDLIB}.")
-else()
-  message(FATAL_ERROR
-    "Unable to determine C++ standard library, got ${CXX_STDLIB}.")
-endif()
 
 option(WITH_SELINUX "build SELinux policy" OFF)
 if(WITH_SELINUX)

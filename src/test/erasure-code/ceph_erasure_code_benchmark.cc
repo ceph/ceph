@@ -27,6 +27,7 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
+#include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/Clock.h"
 #include "include/utime.h"
@@ -86,7 +87,7 @@ int ErasureCodeBench::setup(int argc, char** argv) {
     CODE_ENVIRONMENT_UTILITY,
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   if (vm.count("help")) {
     cout << desc << std::endl;
@@ -153,7 +154,7 @@ int ErasureCodeBench::encode()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->get_val<std::string>("erasure_code_dir"),
+			      g_conf().get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
@@ -257,7 +258,7 @@ int ErasureCodeBench::decode()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->get_val<std::string>("erasure_code_dir"),
+			      g_conf().get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
@@ -341,9 +342,9 @@ int main(int argc, char** argv) {
 
 /*
  * Local Variables:
- * compile-command: "cd ../.. ; make -j4 ceph_erasure_code_benchmark &&
+ * compile-command: "cd ../../../build ; make -j4 ceph_erasure_code_benchmark &&
  *   valgrind --tool=memcheck --leak-check=full \
- *      ./ceph_erasure_code_benchmark \
+ *      ./bin/ceph_erasure_code_benchmark \
  *      --plugin jerasure \
  *      --parameter directory=lib \
  *      --parameter technique=reed_sol_van \

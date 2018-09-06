@@ -7,6 +7,7 @@ import functools
 
 import collections
 from datetime import datetime, timedelta
+from distutils.util import strtobool
 import fnmatch
 import time
 import threading
@@ -21,7 +22,7 @@ from .exceptions import ViewCacheNoDataException
 class RequestLoggingTool(cherrypy.Tool):
     def __init__(self):
         cherrypy.Tool.__init__(self, 'before_handler', self.request_begin,
-                               priority=95)
+                               priority=10)
 
     def _setup(self):
         cherrypy.Tool._setup(self)
@@ -579,7 +580,7 @@ class Task(object):
         return hash((self.name, tuple(sorted(self.metadata.items()))))
 
     def __eq__(self, other):
-        return self.name == self.name and self.metadata == self.metadata
+        return self.name == other.name and self.metadata == other.metadata
 
     def __str__(self):
         return "Task(ns={}, md={})" \
@@ -739,3 +740,27 @@ def getargspec(func):
     except AttributeError:
         pass
     return _getargspec(func)
+
+
+def str_to_bool(val):
+    """
+    Convert a string representation of truth to True or False.
+
+    >>> str_to_bool('true') and str_to_bool('yes') and str_to_bool('1') and str_to_bool(True)
+    True
+
+    >>> str_to_bool('false') and str_to_bool('no') and str_to_bool('0') and str_to_bool(False)
+    False
+
+    >>> str_to_bool('xyz')
+    Traceback (most recent call last):
+        ...
+    ValueError: invalid truth value 'xyz'
+
+    :param val: The value to convert.
+    :type val: str|bool
+    :rtype: bool
+    """
+    if isinstance(val, bool):
+        return val
+    return bool(strtobool(val))

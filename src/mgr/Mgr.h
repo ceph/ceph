@@ -22,7 +22,6 @@
 #include "msg/Messenger.h"
 #include "auth/Auth.h"
 #include "common/Finisher.h"
-#include "common/Timer.h"
 #include "mon/MgrMap.h"
 
 #include "DaemonServer.h"
@@ -46,7 +45,6 @@ protected:
   Messenger *client_messenger;
 
   mutable Mutex lock;
-  SafeTimer timer;
   Finisher finisher;
 
   // Track receipt of initial data during startup
@@ -78,7 +76,9 @@ public:
   ~Mgr();
 
   bool is_initialized() const {return initialized;}
-  entity_addr_t get_server_addr() const { return server.get_myaddr(); }
+  entity_addrvec_t get_server_addrs() const {
+    return server.get_myaddrs();
+  }
 
   void handle_mgr_digest(MMgrDigest* m);
   void handle_fs_map(MFSMap* m);
@@ -89,8 +89,6 @@ public:
   bool got_mgr_map(const MgrMap& m);
 
   bool ms_dispatch(Message *m);
-
-  void tick();
 
   void background_init(Context *completion);
   void shutdown();

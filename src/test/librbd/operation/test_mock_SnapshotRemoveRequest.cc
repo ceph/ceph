@@ -26,7 +26,7 @@ public:
   static DetachChildRequest *s_instance;
   static DetachChildRequest *create(MockImageCtx &image_ctx,
                                     Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -110,16 +110,6 @@ public:
                              encode(snap_info, *bl);
                              return r;
                            })));
-    if (r >= 0) {
-      EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                       StrEq("get_parent"), _, _, _))
-        .WillOnce(DoDefault());
-      EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
-                       StrEq("get_protection_status"), _, _, _))
-        .WillOnce(DoDefault());
-    }
   }
 
   void expect_object_map_snap_remove(MockImageCtx &mock_image_ctx, int r) {

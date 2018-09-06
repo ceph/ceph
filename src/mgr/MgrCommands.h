@@ -107,6 +107,20 @@ COMMAND("osd test-reweight-by-pg " \
 	"dry run of reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
 	"osd", "r", "cli,rest")
 
+COMMAND("osd destroy "	    \
+        "name=id,type=CephOsdName " \
+        "name=sure,type=CephString,req=False",
+        "mark osd as being destroyed. Keeps the ID intact (allowing reuse), " \
+        "but removes cephx keys, config-key data and lockbox keys, "\
+        "rendering data permanently unreadable.", \
+        "osd", "rw", "cli,rest")
+COMMAND("osd purge " \
+        "name=id,type=CephOsdName " \
+        "name=sure,type=CephString,req=false",			     \
+        "purge all osd data from the monitors including the OSD id " \
+	"and CRUSH position",					     \
+	"osd", "rw", "cli,rest")
+
 COMMAND("osd safe-to-destroy name=ids,type=CephString,n=N",
 	"check whether osd(s) can be safely destroyed without reducing data durability",
 	"osd", "r", "cli,rest")
@@ -140,3 +154,24 @@ COMMAND("config show-with-defaults " \
 	"name=who,type=CephString",
 	"Show running configuration (including compiled-in defaults)",
 	"mgr", "r", "cli,rest")
+
+COMMAND("device ls",
+	"Show devices",
+	"mgr", "r", "cli,rest")
+COMMAND("device info name=devid,type=CephString",
+	"Show information about a device",
+	"mgr", "r", "cli,rest")
+COMMAND("device ls-by-daemon name=who,type=CephString",
+	"Show devices associated with a daemon",
+	"mgr", "r", "cli,rest")
+COMMAND("device ls-by-host name=host,type=CephString",
+	"Show devices on a host",
+	"mgr", "r", "cli,rest")
+COMMAND("device set-life-expectancy name=devid,type=CephString "\
+	"name=from,type=CephString "\
+	"name=to,type=CephString,req=False",
+	"Set predicted device life expectancy",
+	"mgr", "rw", "cli,rest")
+COMMAND("device rm-life-expectancy name=devid,type=CephString",
+	"Clear predicted device life expectancy",
+	"mgr", "rw", "cli,rest")

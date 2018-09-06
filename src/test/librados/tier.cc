@@ -2367,7 +2367,7 @@ TEST_F(LibRadosTwoPoolsPP, HitSetRead) {
     c->release();
 
     if (hbl.length()) {
-      bufferlist::iterator p = hbl.begin();
+      auto p = hbl.cbegin();
       HitSet hs;
       decode(hs, p);
       if (hs.contains(oid)) {
@@ -2391,7 +2391,7 @@ static int _get_pg_num(Rados& cluster, string pool_name)
     + string("\",\"var\": \"pg_num\",\"format\": \"json\"}");
   bufferlist outbl;
   int r = cluster.mon_command(cmd, inbl, &outbl, NULL);
-  assert(r >= 0);
+  ceph_assert(r >= 0);
   string outstr(outbl.c_str(), outbl.length());
   json_spirit::Value v;
   if (!json_spirit::read(outstr, v)) {
@@ -2414,7 +2414,7 @@ static int _get_pg_num(Rados& cluster, string pool_name)
 
 TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
   int num_pg = _get_pg_num(cluster, pool_name);
-  assert(num_pg > 0);
+  ceph_assert(num_pg > 0);
 
   // make it a tier
   bufferlist inbl;
@@ -2466,7 +2466,7 @@ TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
     c->release();
 
     try {
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       decode(hitsets[i], p);
     }
     catch (buffer::error& e) {
@@ -3234,7 +3234,105 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
     cache_ioctx.exec("bar", "refcount", "chunk_read", in, out);
     cls_chunk_refcount_read_ret read_ret;
     try {
-      bufferlist::iterator iter = out.begin();
+      auto iter = out.cbegin();
+      decode(read_ret, iter);
+    } catch (buffer::error& err) {
+      ASSERT_TRUE(0);
+    }
+    ASSERT_EQ(1U, read_ret.refs.size());
+  }
+  // chunk's refcount 
+  {
+    bufferlist in, out;
+    cache_ioctx.exec("bar-chunk", "refcount", "chunk_read", in, out);
+    cls_chunk_refcount_read_ret read_ret;
+    try {
+      auto iter = out.cbegin();
+      decode(read_ret, iter);
+    } catch (buffer::error& err) {
+      ASSERT_TRUE(0);
+    }
+    ASSERT_EQ(1, read_ret.refs.size());
+  }
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
+}
+
+TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
+  // skip test if not yet nautilus
+  {
+    bufferlist inbl, outbl;
+    ASSERT_EQ(0, cluster.mon_command(
+		"{\"prefix\": \"osd dump\"}",
+		inbl, &outbl, NULL));
+    string s(outbl.c_str(), outbl.length());
+    if (s.find("nautilus") == std::string::npos) {
+      cout << "cluster is not yet nautilus, skipping test" << std::endl;
+      return;
+    }
+  }
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("hi there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("base chunk");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo-chunk", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("bar", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("CHUNK");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("bar-chunk", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // set-redirect
+  {
+    ObjectWriteOperation op;
+    op.set_redirect("bar", cache_ioctx, 0, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // set-chunk
+  {
+    ObjectWriteOperation op;
+    op.set_chunk(0, 2, cache_ioctx, "bar-chunk", 0, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // redirect's refcount 
+  {
+    bufferlist in, out;
+    cache_ioctx.exec("bar", "refcount", "chunk_read", in, out);
+    cls_chunk_refcount_read_ret read_ret;
+    try {
+      auto iter = out.cbegin();
       decode(read_ret, iter);
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
@@ -3247,12 +3345,46 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
     cache_ioctx.exec("bar-chunk", "refcount", "chunk_read", in, out);
     cls_chunk_refcount_read_ret read_ret;
     try {
-      bufferlist::iterator iter = out.begin();
+      auto iter = out.cbegin();
       decode(read_ret, iter);
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
     ASSERT_EQ(1, read_ret.refs.size());
+  }
+
+  // unset-manifest for set-redirect
+  {
+    ObjectWriteOperation op;
+    op.unset_manifest();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // unset-manifest for set-chunk
+  {
+    ObjectWriteOperation op;
+    op.unset_manifest();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo-chunk", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // redirect's refcount 
+  {
+    bufferlist in, out;
+    cache_ioctx.exec("bar", "refcount", "chunk_read", in, out);
+    ASSERT_EQ(0U, out.length());
+  }
+  // chunk's refcount 
+  {
+    bufferlist in, out;
+    cache_ioctx.exec("bar-chunk", "refcount", "chunk_read", in, out);
+    ASSERT_EQ(0, out.length());
   }
 
   // wait for maps to settle before next test
@@ -5399,7 +5531,7 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetRead) {
     c->release();
 
     if (hbl.length()) {
-      bufferlist::iterator p = hbl.begin();
+      auto p = hbl.cbegin();
       HitSet hs;
       decode(hs, p);
       if (hs.contains(oid)) {
@@ -5419,7 +5551,7 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetRead) {
 #if 0
 TEST_F(LibRadosTierECPP, HitSetWrite) {
   int num_pg = _get_pg_num(cluster, pool_name);
-  assert(num_pg > 0);
+  ceph_assert(num_pg > 0);
 
   // enable hitset tracking for this pool
   bufferlist inbl;
@@ -5465,7 +5597,7 @@ TEST_F(LibRadosTierECPP, HitSetWrite) {
     //bl.hexdump(std::cout);
     //std::cout << std::endl;
 
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(hitsets[i], p);
 
     // cope with racing splits by refreshing pg_num

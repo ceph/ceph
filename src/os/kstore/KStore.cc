@@ -299,7 +299,7 @@ static void get_object_key(CephContext* cct, const ghobject_t& oid,
       derr << "key " << pretty_binary_string(*key) << dendl;
       derr << "oid " << oid << dendl;
       derr << "  t " << t << dendl;
-      assert(t == oid);
+      ceph_assert(t == oid);
     }
   }
 }
@@ -435,7 +435,7 @@ void KStore::OnodeHashLRU::add(const ghobject_t& oid, OnodeRef o)
 {
   std::lock_guard<std::mutex> l(lock);
   dout(30) << __func__ << " " << oid << " " << o << dendl;
-  assert(onode_map.count(oid) == 0);
+  ceph_assert(onode_map.count(oid) == 0);
   onode_map[oid] = o;
   lru.push_front(*o);
 }
@@ -471,7 +471,7 @@ void KStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
   po = onode_map.find(old_oid);
   pn = onode_map.find(new_oid);
 
-  assert(po != onode_map.end());
+  ceph_assert(po != onode_map.end());
   if (pn != onode_map.end()) {
     lru_list_t::iterator p = lru.iterator_to(*pn->second);
     lru.erase(p);
@@ -502,14 +502,14 @@ bool KStore::OnodeHashLRU::get_next(
       return false;
     }
     ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.begin();
-    assert(p != onode_map.end());
+    ceph_assert(p != onode_map.end());
     next->first = p->first;
     next->second = p->second;
     return true;
   }
 
   ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(after);
-  assert(p != onode_map.end()); // for now
+  ceph_assert(p != onode_map.end()); // for now
   lru_list_t::iterator pi = lru.iterator_to(*p->second);
   ++pi;
   if (pi == lru.end()) {
@@ -546,7 +546,7 @@ int KStore::OnodeHashLRU::trim(int max)
       lru.erase(p--);
     } else {
       lru.erase(p);
-      assert(num == 1);
+      ceph_assert(num == 1);
     }
     o->get();  // paranoia
     onode_map.erase(o->oid);
@@ -588,7 +588,7 @@ KStore::OnodeRef KStore::Collection::get_onode(
   const ghobject_t& oid,
   bool create)
 {
-  assert(create ? lock.is_wlocked() : lock.is_locked());
+  ceph_assert(create ? lock.is_wlocked() : lock.is_locked());
 
   spg_t pgid;
   if (cid.is_pg(&pgid)) {
@@ -614,7 +614,7 @@ KStore::OnodeRef KStore::Collection::get_onode(
   ldout(store->cct, 20) << " r " << r << " v.len " << v.length() << dendl;
   Onode *on;
   if (v.length() == 0) {
-    assert(r == -ENOENT);
+    ceph_assert(r == -ENOENT);
     if (!create)
       return OnodeRef();
 
@@ -623,10 +623,10 @@ KStore::OnodeRef KStore::Collection::get_onode(
     on->dirty = true;
   } else {
     // loaded
-    assert(r >=0);
+    ceph_assert(r >=0);
     on = new Onode(store->cct, oid, key);
     on->exists = true;
-    bufferlist::iterator p = v.begin();
+    auto p = v.cbegin();
     decode(on->onode, p);
   }
   o.reset(on);
@@ -664,9 +664,9 @@ KStore::KStore(CephContext *cct, const string& path)
 KStore::~KStore()
 {
   _shutdown_logger();
-  assert(!mounted);
-  assert(db == NULL);
-  assert(fsid_fd < 0);
+  ceph_assert(!mounted);
+  ceph_assert(db == NULL);
+  ceph_assert(fsid_fd < 0);
 }
 
 void KStore::_init_logger()
@@ -692,7 +692,7 @@ void KStore::_shutdown_logger()
 
 int KStore::_open_path()
 {
-  assert(path_fd < 0);
+  ceph_assert(path_fd < 0);
   path_fd = ::open(path.c_str(), O_DIRECTORY);
   if (path_fd < 0) {
     int r = -errno;
@@ -711,7 +711,7 @@ void KStore::_close_path()
 
 int KStore::_open_fsid(bool create)
 {
-  assert(fsid_fd < 0);
+  ceph_assert(fsid_fd < 0);
   int flags = O_RDWR;
   if (create)
     flags |= O_CREAT;
@@ -816,7 +816,7 @@ bool KStore::test_mount_in_use()
 int KStore::_open_db(bool create)
 {
   int r;
-  assert(!db);
+  ceph_assert(!db);
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/db", path.c_str());
 
@@ -883,14 +883,14 @@ int KStore::_open_db(bool create)
 
 void KStore::_close_db()
 {
-  assert(db);
+  ceph_assert(db);
   delete db;
   db = NULL;
 }
 
 int KStore::_open_collections(int *errors)
 {
-  assert(coll_map.empty());
+  ceph_assert(coll_map.empty());
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_COLL);
   for (it->upper_bound(string());
        it->valid();
@@ -899,7 +899,7 @@ int KStore::_open_collections(int *errors)
     if (cid.parse(it->key())) {
       CollectionRef c(new Collection(this, cid));
       bufferlist bl = it->value();
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       try {
         decode(c->cnode, p);
       } catch (buffer::error& e) {
@@ -1039,7 +1039,7 @@ int KStore::mount()
 
 int KStore::umount()
 {
-  assert(mounted);
+  ceph_assert(mounted);
   dout(1) << __func__ << dendl;
 
   _sync();
@@ -1089,7 +1089,7 @@ int KStore::statfs(struct store_statfs_t* buf0)
   buf0->reset();
   if (::statfs(basedir.c_str(), &buf) < 0) {
     int r = -errno;
-    assert(r != -ENOENT);
+    ceph_assert(r != -ENOENT);
     return r;
   }
 
@@ -1146,7 +1146,7 @@ void KStore::_reap_collections()
     {
       pair<ghobject_t,OnodeRef> next;
       while (c->onode_map.get_next(next.first, &next)) {
-	assert(!next.second->exists);
+	ceph_assert(!next.second->exists);
 	if (!next.second->flush_txns.empty()) {
 	  dout(10) << __func__ << " " << c->cid << " " << next.second->oid
 		   << " flush_txns " << next.second->flush_txns << dendl;
@@ -1512,10 +1512,10 @@ int KStore::_collection_list(
     get_object_key(cct, start, &k);
     if (start.hobj.is_temp()) {
       temp = true;
-      assert(k >= temp_start_key && k < temp_end_key);
+      ceph_assert(k >= temp_start_key && k < temp_end_key);
     } else {
       temp = false;
-      assert(k >= start_key && k < end_key);
+      ceph_assert(k >= start_key && k < end_key);
     }
     dout(20) << " start from " << pretty_binary_string(k)
 	     << " temp=" << (int)temp << dendl;
@@ -1558,7 +1558,7 @@ int KStore::_collection_list(
     dout(20) << __func__ << " key " << pretty_binary_string(it->key()) << dendl;
     ghobject_t oid;
     int r = get_key_object(it->key(), &oid);
-    assert(r == 0);
+    ceph_assert(r == 0);
     if (ls->size() >= (unsigned)max) {
       dout(20) << __func__ << " reached max " << max << dendl;
       *pnext = oid;
@@ -1650,7 +1650,7 @@ int KStore::OmapIteratorImpl::next(bool validate)
 string KStore::OmapIteratorImpl::key()
 {
   RWLock::RLocker l(c->lock);
-  assert(it->valid());
+  ceph_assert(it->valid());
   string db_key = it->raw_key().second;
   string user_key;
   decode_omap_key(db_key, &user_key);
@@ -1660,7 +1660,7 @@ string KStore::OmapIteratorImpl::key()
 bufferlist KStore::OmapIteratorImpl::value()
 {
   RWLock::RLocker l(c->lock);
-  assert(it->valid());
+  ceph_assert(it->valid());
   return it->value();
 }
 
@@ -1701,7 +1701,7 @@ int KStore::omap_get(
 	decode_omap_key(it->key(), &user_key);
 	dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
 		 << " -> " << user_key << dendl;
-	assert(it->key() < tail);
+	ceph_assert(it->key() < tail);
 	(*out)[user_key] = it->value();
       }
       it->next();
@@ -1778,7 +1778,7 @@ int KStore::omap_get_keys(
       decode_omap_key(it->key(), &user_key);
       dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
 	       << " -> " << user_key << dendl;
-      assert(it->key() < tail);
+      ceph_assert(it->key() < tail);
       keys->insert(user_key);
       it->next();
     }
@@ -1890,7 +1890,7 @@ int KStore::_open_super_meta()
     nid_max = 0;
     bufferlist bl;
     db->get(PREFIX_SUPER, "nid_max", &bl);
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     try {
       decode(nid_max, p);
     } catch (buffer::error& e) {
@@ -1939,7 +1939,7 @@ void KStore::_txc_state_proc(TransContext *txc)
 	std::lock_guard<std::mutex> l(kv_lock);
 	if (cct->_conf->kstore_sync_submit_transaction) {
           int r = db->submit_transaction(txc->t);
-	  assert(r == 0);
+	  ceph_assert(r == 0);
 	}
 	kv_queue.push_back(txc);
 	kv_cond.notify_one();
@@ -1947,7 +1947,7 @@ void KStore::_txc_state_proc(TransContext *txc)
       }
       {
 	int r = db->submit_transaction_sync(txc->t);
-	assert(r == 0);
+	ceph_assert(r == 0);
       }
       break;
 
@@ -1970,7 +1970,7 @@ void KStore::_txc_state_proc(TransContext *txc)
     default:
       derr << __func__ << " unexpected txc " << txc
 	   << " state " << txc->get_state_name() << dendl;
-      assert(0 == "unexpected txc state");
+      ceph_abort_msg("unexpected txc state");
       return;
     }
   }
@@ -2023,7 +2023,7 @@ void KStore::_txc_finish_kv(TransContext *txc)
 void KStore::_txc_finish(TransContext *txc)
 {
   dout(20) << __func__ << " " << txc << " onodes " << txc->onodes << dendl;
-  assert(txc->state == TransContext::STATE_FINISHING);
+  ceph_assert(txc->state == TransContext::STATE_FINISHING);
 
   for (set<OnodeRef>::iterator p = txc->onodes.begin();
        p != txc->onodes.end();
@@ -2031,7 +2031,7 @@ void KStore::_txc_finish(TransContext *txc)
     std::lock_guard<std::mutex> l((*p)->flush_lock);
     dout(20) << __func__ << " onode " << *p << " had " << (*p)->flush_txns
 	     << dendl;
-    assert((*p)->flush_txns.count(txc));
+    ceph_assert((*p)->flush_txns.count(txc));
     (*p)->flush_txns.erase(txc);
     if ((*p)->flush_txns.empty()) {
       (*p)->flush_cond.notify_all();
@@ -2086,7 +2086,7 @@ void KStore::_kv_sync_thread()
   dout(10) << __func__ << " start" << dendl;
   std::unique_lock<std::mutex> l(kv_lock);
   while (true) {
-    assert(kv_committing.empty());
+    ceph_assert(kv_committing.empty());
     if (kv_queue.empty()) {
       if (kv_stop)
 	break;
@@ -2109,11 +2109,11 @@ void KStore::_kv_sync_thread()
 	     it != kv_committing.end();
 	     ++it) {
 	  int r = db->submit_transaction((*it)->t);
-	  assert(r == 0);
+	  ceph_assert(r == 0);
 	}
       }
       int r = db->submit_transaction_sync(t);
-      assert(r == 0);
+      ceph_assert(r == 0);
       utime_t finish = ceph_clock_now();
       utime_t dur = finish - start;
       dout(20) << __func__ << " committed " << kv_committing.size()
@@ -2222,7 +2222,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_MKCOLL:
       {
-	assert(!c);
+	ceph_assert(!c);
         coll_t cid = i.get_cid(op->cid);
 	r = _create_collection(txc, cid, op->split_bits, &c);
 	if (!r)
@@ -2231,7 +2231,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_SPLIT_COLLECTION:
-      assert(0 == "deprecated");
+      ceph_abort_msg("deprecated");
       break;
 
     case Transaction::OP_SPLIT_COLLECTION2:
@@ -2249,7 +2249,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
         uint32_t type = op->hint_type;
         bufferlist hint;
         i.decode_bl(hint);
-        bufferlist::iterator hiter = hint.begin();
+        auto hiter = hint.cbegin();
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;
@@ -2275,7 +2275,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_COLL_RENAME:
-      assert(0 == "not implemented");
+      ceph_abort_msg("not implemented");
       break;
     }
     if (r < 0) {
@@ -2289,7 +2289,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       f.close_section();
       f.flush(*_dout);
       *_dout << dendl;
-      assert(0 == "unexpected error");
+      ceph_abort_msg("unexpected error");
     }
 
     // object operations
@@ -2397,7 +2397,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_CLONERANGE:
-      assert(0 == "deprecated");
+      ceph_abort_msg("deprecated");
       break;
 
     case Transaction::OP_CLONERANGE2:
@@ -2412,20 +2412,20 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_COLL_ADD:
-      assert(0 == "not implemented");
+      ceph_abort_msg("not implemented");
       break;
 
     case Transaction::OP_COLL_REMOVE:
-      assert(0 == "not implemented");
+      ceph_abort_msg("not implemented");
       break;
 
     case Transaction::OP_COLL_MOVE:
-      assert(0 == "deprecated");
+      ceph_abort_msg("deprecated");
       break;
 
     case Transaction::OP_COLL_MOVE_RENAME:
       {
-	assert(op->cid == op->dest_cid);
+	ceph_assert(op->cid == op->dest_cid);
 	const ghobject_t& noid = i.get_oid(op->dest_oid);
 	OnodeRef no = c->get_onode(noid, true);
 	r = _rename(txc, c, o, no, noid);
@@ -2536,7 +2536,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	f.close_section();
 	f.flush(*_dout);
 	*_dout << dendl;
-	assert(0 == "unexpected error");
+	ceph_abort_msg("unexpected error");
       }
     }
   }
@@ -2979,7 +2979,7 @@ int KStore::_omap_setkeys(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   __u32 num;
   if (!o->onode.omap_head) {
     o->onode.omap_head = o->onode.nid;
@@ -3024,11 +3024,11 @@ int KStore::_omap_setheader(TransContext *txc,
 int KStore::_omap_rmkeys(TransContext *txc,
 			 CollectionRef& c,
 			 OnodeRef& o,
-			 bufferlist& bl)
+			 const bufferlist& bl)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   __u32 num;
 
   if (!o->onode.omap_head) {
@@ -3170,7 +3170,7 @@ int KStore::_clone(TransContext *txc,
       } else {
 	dout(30) << __func__ << "  got header/data "
 		 << pretty_binary_string(it->key()) << dendl;
-	assert(it->key() < tail);
+	ceph_assert(it->key() < tail);
 	rewrite_omap_key(newo->onode.omap_head, it->key(), &key);
 	txc->t->set(PREFIX_OMAP, key, it->value());
       }
@@ -3272,9 +3272,9 @@ int KStore::_create_collection(
       goto out;
     }
     auto p = new_coll_map.find(cid);
-    assert(p != new_coll_map.end());
+    ceph_assert(p != new_coll_map.end());
     *c = p->second;
-    assert((*c)->cid == cid);
+    ceph_assert((*c)->cid == cid);
     (*c)->cnode.bits = bits;
     coll_map[cid] = *c;
     new_coll_map.erase(p);
@@ -3359,7 +3359,7 @@ int KStore::_split_collection(TransContext *txc,
   c->onode_map.clear();
   d->onode_map.clear();
   c->cnode.bits = bits;
-  assert(d->cnode.bits == bits);
+  ceph_assert(d->cnode.bits == bits);
   r = 0;
 
   bufferlist bl;

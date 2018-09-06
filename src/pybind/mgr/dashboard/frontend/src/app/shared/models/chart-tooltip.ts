@@ -1,7 +1,5 @@
 import { ElementRef } from '@angular/core';
 
-import * as _ from 'lodash';
-
 export class ChartTooltip {
   tooltipEl: any;
   chartEl: any;
@@ -57,13 +55,13 @@ export class ChartTooltip {
     // Set Text
     if (tooltip.body) {
       const titleLines = tooltip.title || [];
-      const bodyLines = tooltip.body.map(bodyItem => {
+      const bodyLines = tooltip.body.map((bodyItem) => {
         return bodyItem.lines;
       });
 
       let innerHtml = '<thead>';
 
-      titleLines.forEach(title => {
+      titleLines.forEach((title) => {
         innerHtml += '<tr><th>' + this.getTitle(title) + '</th></tr>';
       });
       innerHtml += '</thead><tbody>';

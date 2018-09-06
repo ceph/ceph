@@ -25,9 +25,9 @@
 
 #include "include/assert.h"
 #include "include/unordered_map.h"
-#include "include/memory.h"
 #include "common/Finisher.h"
 #include "common/RWLock.h"
+#include "common/Throttle.h"
 #include "common/WorkQueue.h"
 #include "os/ObjectStore.h"
 #include "common/perf_counters.h"
@@ -267,7 +267,7 @@ public:
     q_list_t q;  ///< transactions
 
     ~OpSequencer() {
-      assert(q.empty());
+      ceph_assert(q.empty());
     }
 
     void queue_new(TransContext *txc) {
@@ -290,7 +290,7 @@ public:
       if (txc->state >= TransContext::STATE_KV_DONE) {
 	return true;
       }
-      assert(txc->state < TransContext::STATE_KV_DONE);
+      ceph_assert(txc->state < TransContext::STATE_KV_DONE);
       txc->oncommits.push_back(c);
       return false;
     }
@@ -562,7 +562,7 @@ public:
     ThreadPool::TPHandle *handle = NULL) override;
 
   void compact () override {
-    assert(db);
+    ceph_assert(db);
     db->compact();
   }
   
@@ -631,7 +631,7 @@ private:
   int _omap_rmkeys(TransContext *txc,
 		   CollectionRef& c,
 		   OnodeRef& o,
-		   bufferlist& bl);
+		   const bufferlist& bl);
   int _omap_rmkey_range(TransContext *txc,
 			CollectionRef& c,
 			OnodeRef& o,

@@ -217,6 +217,7 @@ using ceph::crypto::MD5;
 #define ERR_MALFORMED_ACL_ERROR  2212
 #define ERR_ZONEGROUP_DEFAULT_PLACEMENT_MISCONFIGURATION 2213
 #define ERR_INVALID_ENCRYPTION_ALGORITHM                 2214
+#define ERR_INVALID_CORS_RULES_ERROR                     2215
 
 #define ERR_BUSY_RESHARDING      2300
 
@@ -531,7 +532,7 @@ struct RGWAccessKey {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
      decode(id, bl);
      decode(key, bl);
@@ -560,7 +561,7 @@ struct RGWSubUser {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
      decode(name, bl);
      decode(perm_mask, bl);
@@ -591,7 +592,7 @@ public:
      encode(caps, bl);
      ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(caps, bl);
      DECODE_FINISH(bl);
@@ -620,7 +621,6 @@ enum RGWUserSourceType
 
 struct RGWUserInfo
 {
-  uint64_t auid;
   rgw_user user_id;
   string display_name;
   string user_email;
@@ -642,8 +642,7 @@ struct RGWUserInfo
   set<string> mfa_ids;
 
   RGWUserInfo()
-    : auid(0),
-      suspended(0),
+    : suspended(0),
       max_buckets(RGW_DEFAULT_MAX_BUCKETS),
       op_mask(RGW_OP_TYPE_ALL),
       admin(0),
@@ -660,7 +659,7 @@ struct RGWUserInfo
 
   void encode(bufferlist& bl) const {
      ENCODE_START(20, 9, bl);
-     encode(auid, bl);
+     encode((uint64_t)0, bl); // old auid
      string access_key;
      string secret_key;
      if (!access_keys.empty()) {
@@ -703,10 +702,12 @@ struct RGWUserInfo
      encode(mfa_ids, bl);
      ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(20, 9, 9, bl);
-     if (struct_v >= 2) decode(auid, bl);
-     else auid = CEPH_AUTH_UID_DEFAULT;
+     if (struct_v >= 2) {
+       uint64_t old_auid;
+       decode(old_auid, bl);
+     }
      string access_key;
      string secret_key;
     decode(access_key, bl);
@@ -827,9 +828,9 @@ struct rgw_pool {
     ENCODE_FINISH(bl);
   }
 
-  void decode_from_bucket(bufferlist::iterator& bl);
+  void decode_from_bucket(bufferlist::const_iterator& bl);
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(10, 3, 3, bl);
 
     decode(name, bl);
@@ -947,9 +948,9 @@ struct rgw_raw_obj {
     ENCODE_FINISH(bl);
   }
 
-  void decode_from_rgw_obj(bufferlist::iterator& bl);
+  void decode_from_rgw_obj(bufferlist::const_iterator& bl);
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     unsigned ofs = bl.get_off();
     DECODE_START(6, bl);
     if (struct_v < 6) {
@@ -1040,7 +1041,7 @@ struct rgw_bucket {
     }
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(10, 3, 3, bl);
     decode(name, bl);
     if (struct_v < 10) {
@@ -1282,7 +1283,7 @@ struct RGWBucketInfo {
      encode(new_bucket_instance_id, bl);
      ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN_32(19, 4, 4, bl);
      decode(bucket, bl);
      if (struct_v >= 2) {
@@ -1393,8 +1394,8 @@ struct RGWBucketEntryPoint
     encode(creation_time, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
-    bufferlist::iterator orig_iter = bl;
+  void decode(bufferlist::const_iterator& bl) {
+    auto orig_iter = bl;
     DECODE_START_LEGACY_COMPAT_LEN_32(10, 4, 4, bl);
     if (struct_v < 8) {
       /* ouch, old entry, contains the bucket info itself */
@@ -1733,7 +1734,7 @@ struct rgw_obj_key {
     encode(ns, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(name, bl);
     decode(instance, bl);
@@ -1769,16 +1770,12 @@ struct req_init_state {
   string src_bucket;
 };
 
-/* XXX why don't RGWRequest (or descendants) hold this state? */
-class RGWRequest;
-
 #include "rgw_auth.h"
 
 /** Store all the state necessary to complete and respond to an HTTP request*/
-struct req_state {
+struct req_state : DoutPrefixProvider {
   CephContext *cct;
   rgw::io::BasicClient *cio{nullptr};
-  RGWRequest *req{nullptr}; /// XXX: re-remove??
   http_op op{OP_UNKNOWN};
   RGWOpType op_type{};
   bool content_started{false};
@@ -1895,13 +1892,19 @@ struct req_state {
   string dialect;
   string req_id;
   string trans_id;
+  uint64_t id;
 
   bool mfa_verified{false};
 
-  req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u);
+  req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u, uint64_t id);
   ~req_state();
 
   bool is_err() const { return err.is_err(); }
+
+  // implements DoutPrefixProvider
+  std::ostream& gen_prefix(std::ostream& out) const override;
+  CephContext* get_cct() const override { return cct; }
+  unsigned get_subsys() const override { return ceph_subsys_rgw; }
 };
 
 void set_req_state_err(struct req_state*, int);
@@ -1963,7 +1966,7 @@ struct RGWBucketEnt {
     encode(placement_rule, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
     __u32 mt;
     uint64_t s;
@@ -2055,7 +2058,7 @@ struct rgw_obj {
 //    encode(placement_id, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
     if (struct_v < 6) {
       string s;
@@ -2397,5 +2400,53 @@ extern string lowercase_dash_http_attr(const string& orig);
 
 void rgw_setup_saved_curl_handles();
 void rgw_release_all_curl_handles();
+
+static inline void rgw_escape_str(const string& s, char esc_char,
+				  char special_char, string *dest)
+{
+  const char *src = s.c_str();
+  char dest_buf[s.size() * 2 + 1];
+  char *destp = dest_buf;
+
+  for (size_t i = 0; i < s.size(); i++) {
+    char c = src[i];
+    if (c == esc_char || c == special_char) {
+      *destp++ = esc_char;
+    }
+    *destp++ = c;
+  }
+  *destp++ = '\0';
+  *dest = dest_buf;
+}
+
+static inline ssize_t rgw_unescape_str(const string& s, ssize_t ofs,
+				       char esc_char, char special_char,
+				       string *dest)
+{
+  const char *src = s.c_str();
+  char dest_buf[s.size() + 1];
+  char *destp = dest_buf;
+  bool esc = false;
+
+  dest_buf[0] = '\0';
+
+  for (size_t i = ofs; i < s.size(); i++) {
+    char c = src[i];
+    if (!esc && c == esc_char) {
+      esc = true;
+      continue;
+    }
+    if (!esc && c == special_char) {
+      *destp = '\0';
+      *dest = dest_buf;
+      return (ssize_t)i + 1;
+    }
+    *destp++ = c;
+    esc = false;
+  }
+  *destp = '\0';
+  *dest = dest_buf;
+  return string::npos;
+}
 
 #endif
