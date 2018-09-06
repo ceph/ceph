@@ -701,6 +701,14 @@ enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
     } else {
       bl.copy(0, bl.length(), static_cast<char*>(u->xfer_buf));
       u->resid = u->xfer_buflen - r;
+      if (r == 0) {
+        // this is workaround for FIO handling differently reads outside files
+        // when read is asynchronous, not reading anything is ok
+        // when read is synchronous, not reading anything is an error
+        // we trick here FIO to think that it wanted to read 0
+        u->resid = 0;
+        u->xfer_buflen = 0;
+      }
     }
     return FIO_Q_COMPLETED;
   }
@@ -730,6 +738,8 @@ int fio_ceph_os_close(thread_data* td, fio_file* f) { return 0; }
 int fio_ceph_os_io_u_init(thread_data* td, io_u* u)
 {
   // no data is allocated, we just use the pointer as a boolean 'completed' flag
+  if (!td->io_ops_data)
+    fio_ceph_os_setup(td);
   u->engine_data = nullptr;
   return 0;
 }
