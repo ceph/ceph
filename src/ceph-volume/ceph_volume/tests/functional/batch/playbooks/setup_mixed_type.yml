@@ -1,0 +1,140 @@
+
+- hosts: osds
+  become: yes
+  tasks:
+
+    - name: create the nvme image systemd unit
+      copy:
+        content: |
+          [Unit]
+          Description=NVMe loop device
+          After=local-fs.target
+          Wants=local-fs.target
+
+          [Service]
+          Type=simple
+          ExecStart=/bin/bash /opt/ceph-nvme.sh
+          StandardOutput=journal
+          StandardError=journal
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: "/etc/systemd/system/ceph-nvme.service"
+
+    - name: create the ceph-nvme startup script
+      copy:
+        content: |
+          set -x
+          set -e
+          modprobe nvmet
+          modprobe nvme_loop
+          modprobe nvme_fabrics
+          modprobe loop
+          losetup -v /dev/loop0 /opt/loop0_nvme0
+          losetup -l
+          nvmetcli restore /opt/loop.json
+          nvme connect -t loop -n testnqn -q hostnqn
+          nvme list
+        dest: "/opt/ceph-nvme.sh"
+
+    - name: ensure ceph-nvme is enabled
+      service:
+        name: ceph-nvme
+        state: stopped
+        enabled: yes
+
+    - name: install nvme dependencies
+      package:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - nvme-cli
+        - nvmetcli
+
+    - name: enable NVME kernel modules
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - nvmet
+        - nvme_loop
+        - nvme_fabrics
+
+    - name: check if the nvme file is attached to loop0
+      command: losetup -l /dev/loop0
+      register: losetup_list
+
+    - name: detach current nvme0 file
+      command: losetup -d /dev/loop0
+      when: '"loop0_nvme0" in losetup_list.stdout'
+
+    - name: remove previous nvme0 file
+      file:
+        path: /opt/loop0_nvme0
+        state: absent
+
+    - name: create a 15GB sparse file for NVMe
+      command: fallocate -l 15G /opt/loop0_nvme0
+
+    - name: setup loop device with sparse file
+      command: losetup /dev/loop0 /opt/loop0_nvme0
+      when:
+        - '"loop0_nvme0" not in losetup_list.stdout'
+
+    - name: create the loop.json file for nvmetcli
+      copy:
+        content: |
+            {
+              "hosts": [
+                {
+                  "nqn": "hostnqn"
+                }
+              ],
+              "ports": [
+                {
+                  "addr": {
+                    "adrfam": "",
+                    "traddr": "",
+                    "treq": "not specified",
+                    "trsvcid": "",
+                    "trtype": "loop"
+                  },
+                  "portid": 1,
+                  "referrals": [],
+                  "subsystems": [
+                    "testnqn"
+                  ]
+                }
+              ],
+              "subsystems": [
+                {
+                  "allowed_hosts": [
+                    "hostnqn"
+                  ],
+                  "attr": {
+                    "allow_any_host": "0"
+                  },
+                  "namespaces": [
+                    {
+                      "device": {
+                        "nguid": "ef90689c-6c46-d44c-89c1-4067801309a8",
+                        "path": "/dev/loop0"
+                      },
+                      "enable": 1,
+                      "nsid": 1
+                    }
+                  ],
+                  "nqn": "testnqn"
+                }
+              ]
+            }
+        dest: "/opt/loop.json"
+
+    - name: setup the /dev/loop0 target with nvmetcli
+      command: nvmetcli restore /opt/loop.json
+
+    - name: connect the new target as an nvme device
+      command: nvme connect -t loop -n testnqn -q hostnqn
+
+    - name: debug output for nvme list
+      command: nvme list
