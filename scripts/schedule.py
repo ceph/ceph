@@ -26,6 +26,9 @@ optional arguments:
   -N <num>, --num <num>                Number of times to run/queue the job
                                        [default: 1]
 
+  --first-in-suite                     Mark the first job in a suite so suite
+                                       can note down the rerun-related info
+                                       [default: False]
   --last-in-suite                      Mark the last job in a suite so suite
                                        post-processing can be run
                                        [default: False]

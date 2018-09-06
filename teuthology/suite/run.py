@@ -291,6 +291,38 @@ class Run(object):
             base_args.extend(['--owner', self.args.owner])
         return base_args
 
+
+    def write_rerun_memo(self):
+        args = copy.deepcopy(self.base_args)
+        args.append('--first-in-suite')
+        if self.args.subset:
+            subset = '/'.join(str(i) for i in self.args.subset)
+            args.extend(['--subset', subset])
+        args.extend(['--seed', str(self.args.seed)])
+        util.teuthology_schedule(
+            args=args,
+            dry_run=self.args.dry_run,
+            verbose=self.args.verbose,
+            log_prefix="Memo: ")
+
+
+    def write_result(self):
+        arg = copy.deepcopy(self.base_args)
+        arg.append('--last-in-suite')
+        if self.base_config.email:
+            arg.extend(['--email', self.base_config.email])
+        if self.args.timeout:
+            arg.extend(['--timeout', self.args.timeout])
+        util.teuthology_schedule(
+            args=arg,
+            dry_run=self.args.dry_run,
+            verbose=self.args.verbose,
+            log_prefix="Results: ")
+        results_url = get_results_url(self.base_config.name)
+        if results_url:
+            log.info("Test results viewable at %s", results_url)
+
+
     def prepare_and_schedule(self):
         """
         Puts together some "base arguments" with which to execute
@@ -309,25 +341,7 @@ class Run(object):
         num_jobs = self.schedule_suite()
 
         if num_jobs:
-            arg = copy.deepcopy(self.base_args)
-            arg.append('--last-in-suite')
-            if self.base_config.email:
-                arg.extend(['--email', self.base_config.email])
-            if self.args.subset:
-                subset = '/'.join(str(i) for i in self.args.subset)
-                arg.extend(['--subset', subset])
-            arg.extend(['--seed', str(self.args.seed)])
-            if self.args.timeout:
-                arg.extend(['--timeout', self.args.timeout])
-            util.teuthology_schedule(
-                args=arg,
-                dry_run=self.args.dry_run,
-                verbose=self.args.verbose,
-                log_prefix="Results: ",
-            )
-            results_url = get_results_url(self.base_config.name)
-            if results_url:
-                log.info("Test results viewable at %s", results_url)
+            self.write_result()
 
     def collect_jobs(self, arch, configs, newest=False):
         jobs_to_schedule = []
@@ -524,6 +538,10 @@ class Run(object):
 
         with open(base_yaml_path, 'w+b') as base_yaml:
             base_yaml.write(str(self.base_config))
+
+        if jobs_to_schedule:
+            self.write_rerun_memo()
+
         self.schedule_jobs(jobs_missing_packages, jobs_to_schedule, name)
 
         os.remove(base_yaml_path)

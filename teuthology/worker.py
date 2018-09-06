@@ -190,10 +190,10 @@ def prep_job(job_config, log_file_path, archive_dir):
 
 def run_job(job_config, teuth_bin_path, archive_dir, verbose):
     safe_archive = safepath.munge(job_config['name'])
-    if job_config.get('last_in_suite'):
+    if job_config.get('first_in_suite') or job_config.get('last_in_suite'):
         if teuth_config.results_server:
             report.try_delete_jobs(job_config['name'], job_config['job_id'])
-        log.info('Generating results for %s', job_config['name'])
+        log.info('Generating memo/results for %s', job_config['name'])
         args = [
             os.path.join(teuth_bin_path, 'teuthology-results'),
             '--timeout',
@@ -203,11 +203,11 @@ def run_job(job_config, teuth_bin_path, archive_dir, verbose):
             os.path.join(archive_dir, safe_archive),
             '--name',
             job_config['name'],
-            '--seed',
-            job_config['seed'],
         ]
         if job_config.get('email'):
             args.extend(['--email', job_config['email']])
+        if job_config.get('seed'):
+            args.extend(['--seed', job_config['seed']])
         if job_config.get('subset'):
             args.extend(['--subset', job_config['subset']])
         # Execute teuthology-results, passing 'preexec_fn=os.setpgrp' to

@@ -7,8 +7,16 @@ from teuthology import report
 
 
 def main(args):
+    if not args['--first-in-suite']:
+        first_job_args = ['subset', 'seed']
+        for arg in first_job_args:
+            opt = '--{arg}'.format(arg=arg)
+            msg_fmt = '{opt} is only applicable to the first job in a suite'
+            if args[opt]:
+                raise ValueError(msg_fmt.format(opt=opt))
+
     if not args['--last-in-suite']:
-        last_job_args = ['email', 'timeout', 'subset', 'seed']
+        last_job_args = ['email', 'timeout']
         for arg in last_job_args:
             opt = '--{arg}'.format(arg=arg)
             msg_fmt = '{opt} is only applicable to the last job in a suite'
@@ -43,6 +51,7 @@ def build_config(args):
 
     job_config = dict(
         name=args['--name'],
+        first_in_suite=args['--first-in-suite'],
         last_in_suite=args['--last-in-suite'],
         email=args['--email'],
         description=args['--description'],
