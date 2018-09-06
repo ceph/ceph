@@ -24,6 +24,8 @@ public:
   void block_requests(int r);
   void unblock_requests();
 
+  int get_unlocked_op_error() const;
+
   void init(uint64_t features, Context *on_init);
   void shut_down(Context *on_shutdown);
 
