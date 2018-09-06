@@ -65,7 +65,7 @@ void RGWOp_Period_Get::execute()
   period.set_id(period_id);
   period.set_epoch(epoch);
 
-  http_ret = period.init(store->ctx(), store->svc.sysobj.get(), realm_id, realm_name);
+  http_ret = period.init(store->ctx(), store->svc.sysobj, realm_id, realm_name);
   if (http_ret < 0)
     ldout(store->ctx(), 5) << "failed to read period" << dendl;
 }
@@ -82,7 +82,7 @@ void RGWOp_Period_Post::execute()
   auto cct = store->ctx();
 
   // initialize the period without reading from rados
-  period.init(cct, store->svc.sysobj.get(), false);
+  period.init(cct, store->svc.sysobj, false);
 
   // decode the period from input
   const auto max_size = cct->_conf->rgw_max_put_param_size;
@@ -105,7 +105,7 @@ void RGWOp_Period_Post::execute()
   // period that we haven't restarted with yet. we also don't want to modify
   // the objects in use by RGWRados
   RGWRealm realm(period.get_realm());
-  http_ret = realm.init(cct, store->svc.sysobj.get());
+  http_ret = realm.init(cct, store->svc.sysobj);
   if (http_ret < 0) {
     lderr(cct) << "failed to read current realm: "
         << cpp_strerror(-http_ret) << dendl;
@@ -113,7 +113,7 @@ void RGWOp_Period_Post::execute()
   }
 
   RGWPeriod current_period;
-  http_ret = current_period.init(cct, store->svc.sysobj.get(), realm.get_id());
+  http_ret = current_period.init(cct, store->svc.sysobj, realm.get_id());
   if (http_ret < 0) {
     lderr(cct) << "failed to read current period: "
         << cpp_strerror(-http_ret) << dendl;
@@ -258,7 +258,7 @@ void RGWOp_Realm_Get::execute()
 
   // read realm
   realm.reset(new RGWRealm(id, name));
-  http_ret = realm->init(g_ceph_context, store->svc.sysobj.get());
+  http_ret = realm->init(g_ceph_context, store->svc.sysobj);
   if (http_ret < 0)
     lderr(store->ctx()) << "failed to read realm id=" << id
         << " name=" << name << dendl;

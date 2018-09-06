@@ -8,24 +8,32 @@
 
 
 class RGWSI_Zone;
+class RGWSI_Finisher;
 
 class RGWWatcher;
 
 class RGWS_Notify : public RGWService
 {
 public:
-  RGWS_Notify(CephContext *cct) : RGWService(cct, "quota") {}
+  RGWS_Notify(CephContext *cct) : RGWService(cct, "notify") {}
 
   int create_instance(const std::string& conf, RGWServiceInstanceRef *instance) override;
 };
 
+class RGWSI_Notify_ShutdownCB;
+
 class RGWSI_Notify : public RGWServiceInstance
 {
+  friend class RGWWatcher;
+  friend class RGWSI_Notify_ShutdownCB;
+
 public:
   class CB;
+
 private:
   std::shared_ptr<RGWSI_Zone> zone_svc;
   std::shared_ptr<RGWSI_RADOS> rados_svc;
+  std::shared_ptr<RGWSI_Finisher> finisher_svc;
 
   std::map<std::string, RGWServiceInstance::dependency> get_deps() override;
   int load(const std::string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs) override;
@@ -41,12 +49,15 @@ private:
   double inject_notify_timeout_probability{0};
   unsigned max_notify_retries{0};
 
-  friend class RGWWatcher;
-
   string get_control_oid(int i);
   RGWSI_RADOS::Obj pick_control_obj(const string& key);
 
   CB *cb{nullptr};
+
+  int finisher_handle{0};
+  RGWSI_Notify_ShutdownCB *shutdown_cb{nullptr};
+
+  bool finalized{false};
 
   int init_watch();
   void finalize_watch();
@@ -65,8 +76,11 @@ private:
   void set_enabled(bool status);
 
   int robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl);
+
+  void schedule_context(Context *c);
 public:
   RGWSI_Notify(RGWService *svc, CephContext *cct): RGWServiceInstance(svc, cct) {}
+  ~RGWSI_Notify();
 
   class CB {
     public:

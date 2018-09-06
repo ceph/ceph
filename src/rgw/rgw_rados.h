@@ -50,6 +50,7 @@ class RGWSI_Zone;
 class RGWSI_ZoneUtils;
 class RGWSI_Quota;
 class RGWSI_SysObj;
+class RGWSI_SysObj_Cache;
 
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01
@@ -1132,7 +1133,6 @@ struct RGWObjectCtx {
   explicit RGWObjectCtx(RGWRados *_store, req_state *_s) : store(_store), s(_s), obj(store), raw(store) { }
 };
 
-class Finisher;
 class RGWAsyncRadosProcessor;
 
 template <class T>
@@ -1295,8 +1295,6 @@ protected:
 
   RGWQuotaHandler *quota_handler;
 
-  Finisher *finisher;
-
   RGWCoroutinesManagerRegistry *cr_registry;
 
   RGWSyncModulesManager *sync_modules_manager{nullptr};
@@ -1305,8 +1303,10 @@ protected:
 
   RGWServiceRegistryRef svc_registry;
   RGWIndexCompletionManager *index_completion_manager{nullptr};
+
+  bool use_cache{false};
 public:
-  RGWRados() : lock("rados_timer_lock"), timer(NULL),
+  RGWRados(): lock("rados_timer_lock"), timer(NULL),
                gc(NULL), lc(NULL), obj_expirer(NULL), use_gc_thread(false), use_lc_thread(false), quota_threads(false),
                run_sync_thread(false), run_reshard_thread(false), async_rados(nullptr), meta_notifier(NULL),
                data_notifier(NULL), meta_sync_processor_thread(NULL),
@@ -1319,9 +1319,12 @@ public:
                binfo_cache(NULL), obj_tombstone_cache(nullptr),
                pools_initialized(false),
                quota_handler(NULL),
-               finisher(NULL),
                cr_registry(NULL),
                meta_mgr(NULL), data_log(NULL), reshard(NULL) {}
+
+  void set_use_cache(bool status) {
+    use_cache = status;
+  }
 
   uint64_t get_new_req_id() {
     return ++max_req_id;
@@ -1340,6 +1343,16 @@ public:
     std::shared_ptr<RGWSI_ZoneUtils> zone_utils;
     std::shared_ptr<RGWSI_Quota> quota;
     std::shared_ptr<RGWSI_SysObj> sysobj;
+    std::shared_ptr<RGWSI_SysObj_Cache> cache;
+  } _svc;
+
+  struct {
+    RGWSI_RADOS *rados{nullptr};
+    RGWSI_Zone *zone{nullptr};
+    RGWSI_ZoneUtils *zone_utils{nullptr};
+    RGWSI_Quota *quota{nullptr};
+    RGWSI_SysObj *sysobj{nullptr};
+    RGWSI_SysObj_Cache *cache{nullptr};
   } svc;
 
   /**
@@ -1412,7 +1425,7 @@ public:
     return initialize();
   }
   /** Initialize the RADOS instance and prepare to do other ops */
-  virtual int init_rados();
+  int init_rados();
   int init_complete();
   int initialize();
   void finalize();

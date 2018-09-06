@@ -18,7 +18,6 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/Throttle.h"
-#include "common/Finisher.h"
 
 #include "rgw_rados.h"
 #include "rgw_zone.h"
@@ -76,6 +75,7 @@ using namespace librados;
 #include "services/svc_zone_utils.h"
 #include "services/svc_quota.h"
 #include "services/svc_sys_obj.h"
+#include "services/svc_sys_obj_cache.h"
 
 #include "compressor/Compressor.h"
 
@@ -93,8 +93,6 @@ using namespace librados;
 #define dout_subsys ceph_subsys_rgw
 
 
-static string notify_oid_prefix = "notify";
-static string *notify_oids = NULL;
 static string shadow_ns = "shadow";
 static string dir_oid_prefix = ".dir.";
 static string default_bucket_index_pool_suffix = "rgw.buckets.index";
@@ -1358,16 +1356,6 @@ void RGWRados::finalize()
     sync_log_trimmer = nullptr;
     bucket_trim = boost::none;
   }
-  if (finisher) {
-    finisher->stop();
-  }
-  if (finisher) {
-    /* delete finisher only after cleaning up watches, as watch error path might call
-     * into finisher. We stop finisher before finalizing watch to make sure we don't
-     * actually handle any racing work
-     */
-    delete finisher;
-  }
   if (meta_notifier) {
     meta_notifier->stop();
     delete meta_notifier;
@@ -1518,9 +1506,6 @@ int RGWRados::init_complete()
     }
   }
 
-  finisher = new Finisher(cct);
-  finisher->start();
-
   period_puller.reset(new RGWPeriodPuller(this));
   period_history.reset(new RGWPeriodHistory(cct, period_puller.get(),
                                             svc.zone->get_current_period()));
@@ -1562,7 +1547,6 @@ int RGWRados::init_complete()
   auto& zone_params = svc.zone->get_zone_params();
   auto& zone = svc.zone->get_zone();
 
-#warning sync service needed
   /* no point of running sync thread if we don't have a master zone configured
     or there is no rest_master_conn */
   if (zonegroup.master_zone.empty() || !svc.zone->get_master_conn()
@@ -1696,6 +1680,27 @@ int RGWRados::init_complete()
   return ret;
 }
 
+/*
+ * FIXME: in the future formattable will derive from formatter, so formattable
+ * could be constructed directly
+ */
+static bool to_formattable(CephContext *cct, JSONFormatter& f, JSONFormattable *result)
+{
+  stringstream ss;
+  f.flush(ss);
+  string s = ss.str();
+
+  JSONParser jp;
+  if (!jp.parse(s.c_str(), s.size())) {
+    ldout(cct, 0) << "failed to parse formatter string: data=" << s << dendl;
+    return false;
+  }
+
+  result->decode_json(&jp);
+
+  return true;
+}
+
 /** 
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
@@ -1711,28 +1716,47 @@ int RGWRados::initialize()
   svc_registry = std::make_unique<RGWServiceRegistry>(cct);
 
   JSONFormattable zone_svc_conf;
-  ret = svc_registry->get_instance("zone", zone_svc_conf, &svc.zone);
+  ret = svc_registry->get_instance("zone", zone_svc_conf, &_svc.zone);
   if (ret < 0) {
     return ret;
   }
+  svc.zone = _svc.zone.get();
 
   JSONFormattable zone_utils_svc_conf;
-  ret = svc_registry->get_instance("zone_utils", zone_utils_svc_conf, &svc.zone_utils);
+  ret = svc_registry->get_instance("zone_utils", zone_utils_svc_conf, &_svc.zone_utils);
   if (ret < 0) {
     return ret;
   }
+  svc.zone_utils = _svc.zone_utils.get();
 
   JSONFormattable quota_svc_conf;
-  ret = svc_registry->get_instance("quota", quota_svc_conf, &svc.quota);
+  ret = svc_registry->get_instance("quota", quota_svc_conf, &_svc.quota);
   if (ret < 0) {
     return ret;
+  }
+  svc.quota = _svc.quota.get();
+
+  if (use_cache) {
+    JSONFormattable cache_svc_conf;
+    ret = svc_registry->get_instance("sys_obj_cache", cache_svc_conf, &_svc.cache);
+    if (ret < 0) {
+      return ret;
+    }
+    svc.cache = _svc.cache.get();
   }
 
   JSONFormattable sysobj_svc_conf;
-  ret = svc_registry->get_instance("sys_obj", quota_svc_conf, &svc.sysobj);
+
+  JSONFormatter f;
+  encode_json("cache", use_cache, &f);
+  if (!to_formattable(cct, f, &sysobj_svc_conf)) {
+    assert(0);
+  }
+  ret = svc_registry->get_instance("sys_obj", sysobj_svc_conf, &_svc.sysobj);
   if (ret < 0) {
     return ret;
   }
+  svc.sysobj = _svc.sysobj.get();
 
   host_id = svc.zone_utils->gen_host_id();
 
@@ -1741,10 +1765,6 @@ int RGWRados::initialize()
     return ret;
 
   return init_complete();
-}
-
-void RGWRados::schedule_context(Context *c) {
-  finisher->queue(c);
 }
 
 int RGWRados::list_raw_prefixed_objs(const rgw_pool& pool, const string& prefix, list<string>& result)
@@ -10431,12 +10451,9 @@ uint64_t RGWRados::next_bucket_id()
 RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread,
 						 bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache)
 {
-  RGWRados *store = NULL;
-  if (!use_cache) {
-    store = new RGWRados;
-  } else {
-    store = new RGWCache<RGWRados>;
-  }
+  RGWRados *store = new RGWRados;
+
+  store->set_use_cache(use_cache);
 
   if (store->initialize(cct, use_gc_thread, use_lc_thread, quota_threads, run_sync_thread, run_reshard_thread) < 0) {
     delete store;
@@ -10655,7 +10672,7 @@ bool RGWRados::call_inspect(const std::string& s, Formatter *f)
   if (!svc.cache) {
     return false;
   }
-  return svc.cache->call_inspec(s, f);
+  return svc.cache->call_inspect(s, f);
 }
 
 bool RGWRados::call_erase(const std::string& s) {

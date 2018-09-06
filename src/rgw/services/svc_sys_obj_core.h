@@ -98,6 +98,14 @@ public:
   }
 };
 
+class RGWS_SysObj_Core : public RGWService
+{
+public:
+  RGWS_SysObj_Core(CephContext *cct) : RGWService(cct, "sysobj_core") {}
+
+  int create_instance(const std::string& conf, RGWServiceInstanceRef *instance) override;
+};
+
 class RGWSI_SysObj_Core : public RGWServiceInstance
 {
   friend class RGWSI_SysObj;

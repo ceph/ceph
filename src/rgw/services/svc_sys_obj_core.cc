@@ -6,6 +6,12 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+int RGWS_SysObj_Core::create_instance(const string& conf, RGWServiceInstanceRef *instance)
+{
+  instance->reset(new RGWSI_SysObj_Core(this, cct));
+  return 0;
+}
+
 int RGWSI_SysObj_Core::GetObjState::get_rados_obj(RGWSI_RADOS *rados_svc,
                                                   RGWSI_Zone *zone_svc,
                                                   rgw_raw_obj& obj,

@@ -1,10 +1,14 @@
 #include "rgw_service.h"
 
+#include "services/svc_finisher.h"
+#include "services/svc_notify.h"
 #include "services/svc_rados.h"
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
 #include "services/svc_quota.h"
 #include "services/svc_sys_obj.h"
+#include "services/svc_sys_obj_cache.h"
+#include "services/svc_sys_obj_core.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -18,11 +22,15 @@ RGWServiceInstance::~RGWServiceInstance()
 
 void RGWServiceRegistry::register_all(CephContext *cct)
 {
+  services["finisher"] = make_shared<RGWS_Finisher>(cct);
+  services["notify"] = make_shared<RGWS_Notify>(cct);
   services["rados"] = make_shared<RGWS_RADOS>(cct);
   services["zone"] = make_shared<RGWS_Zone>(cct);
   services["zone_utils"] = make_shared<RGWS_ZoneUtils>(cct);
   services["quota"] = make_shared<RGWS_Quota>(cct);
   services["sys_obj"] = make_shared<RGWS_SysObj>(cct);
+  services["sys_obj_cache"] = make_shared<RGWS_SysObj_Cache>(cct);
+  services["sys_obj_core"] = make_shared<RGWS_SysObj_Core>(cct);
 }
 
 bool RGWServiceRegistry::find(const string& name, RGWServiceRef *svc)
