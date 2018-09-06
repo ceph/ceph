@@ -24,6 +24,7 @@ using namespace std;
 
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
+#include "common/WorkQueue.h"
 #include "global/global_init.h"
 #include "msg/Messenger.h"
 #include "messages/MOSDOp.h"
