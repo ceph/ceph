@@ -135,6 +135,7 @@ if [ x`uname`x = xFreeBSDx ]; then
         net/socat \
         textproc/expat2 \
         textproc/gsed \
+        lang/gawk \
         textproc/libxml2 \
         textproc/xmlstarlet \
         textproc/jq \
