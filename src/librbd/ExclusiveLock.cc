@@ -91,6 +91,14 @@ void ExclusiveLock<I>::unblock_requests() {
 }
 
 template <typename I>
+int ExclusiveLock<I>::get_unlocked_op_error() const {
+  if (m_image_ctx.image_watcher->is_blacklisted()) {
+    return -EBLACKLISTED;
+  }
+  return -EROFS;
+}
+
+template <typename I>
 void ExclusiveLock<I>::init(uint64_t features, Context *on_init) {
   assert(m_image_ctx.owner_lock.is_locked());
   ldout(m_image_ctx.cct, 10) << dendl;
