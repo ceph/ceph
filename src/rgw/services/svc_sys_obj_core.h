@@ -195,6 +195,9 @@ protected:
 public:
   RGWSI_SysObj_Core(RGWService *svc, CephContext *cct): RGWServiceInstance(svc, cct) {}
 
+  RGWSI_Zone *get_zone_svc() {
+    return zone_svc.get();
+  }
 };
 
 #endif

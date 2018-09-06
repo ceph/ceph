@@ -101,7 +101,6 @@ static string default_storage_extra_pool_suffix = "rgw.buckets.non-ec";
 static string log_lock_name = "rgw_log_lock";
 static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 #define RGW_USAGE_OBJ_PREFIX "usage."
-#define FIRST_EPOCH 1
 
 
 #define dout_subsys ceph_subsys_rgw

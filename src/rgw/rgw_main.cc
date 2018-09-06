@@ -40,6 +40,8 @@
 #include "rgw_asio_frontend.h"
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
 
+#include "services/svc_zone.h"
+
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
@@ -314,7 +316,7 @@ int main(int argc, const char **argv)
     return -r;
   }
 
-  rgw_rest_init(g_ceph_context, store, store->get_zonegroup());
+  rgw_rest_init(g_ceph_context, store, store->svc.zone->get_zonegroup());
 
   mutex.Lock();
   init_timer.cancel_all_events();
@@ -378,7 +380,7 @@ int main(int argc, const char **argv)
                           set_logging(rest_filter(store, RGW_REST_SWIFT,
                                                   swift_resource)));
     } else {
-      if (store->get_zonegroup().zones.size() > 1) {
+      if (store->svc.zone->get_zonegroup().zones.size() > 1) {
         derr << "Placing Swift API in the root of URL hierarchy while running"
              << " multi-site configuration requires another instance of RadosGW"
              << " with S3 API enabled!" << dendl;
@@ -522,7 +524,7 @@ int main(int argc, const char **argv)
   RGWFrontendPauser pauser(fes, &pusher);
   RGWRealmReloader reloader(store, service_map_meta, &pauser);
 
-  RGWRealmWatcher realm_watcher(g_ceph_context, store->realm);
+  RGWRealmWatcher realm_watcher(g_ceph_context, store->svc.zone->get_realm());
   realm_watcher.add_watcher(RGWRealmNotify::Reload, reloader);
   realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
 

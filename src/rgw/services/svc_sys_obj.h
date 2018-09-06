@@ -223,6 +223,7 @@ public:
     return Pool(core_svc.get(), pool);
   }
 
+  RGWSI_Zone *get_zone_svc();
 };
 
 using RGWSysObj = RGWSI_SysObj::Obj;

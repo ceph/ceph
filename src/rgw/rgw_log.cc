@@ -14,6 +14,8 @@
 #include "rgw_client_io.h"
 #include "rgw_rest.h"
 
+#include "services/svc_zone.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 static void set_param_str(struct req_state *s, const char *name, string& str)
@@ -440,11 +442,11 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
     string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
 				        s->bucket.bucket_id, entry.bucket);
 
-    rgw_raw_obj obj(store->get_zone_params().log_pool, oid);
+    rgw_raw_obj obj(store->svc.zone->get_zone_params().log_pool, oid);
 
     ret = store->append_async(obj, bl.length(), bl);
     if (ret == -ENOENT) {
-      ret = store->create_pool(store->get_zone_params().log_pool);
+      ret = store->create_pool(store->svc.zone->get_zone_params().log_pool);
       if (ret < 0)
         goto done;
       // retry

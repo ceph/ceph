@@ -10,20 +10,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static string zone_names_oid_prefix = "zone_names.";
-static string region_info_oid_prefix = "region_info.";
-static string realm_names_oid_prefix = "realms_names.";
-static string default_region_info_oid = "default.region";
-static string region_map_oid = "region_map";
-const string default_zonegroup_name = "default";
-const string default_zone_name = "default";
-static string zonegroup_names_oid_prefix = "zonegroups_names.";
-static string RGW_DEFAULT_ZONE_ROOT_POOL = "rgw.root";
-static string RGW_DEFAULT_ZONEGROUP_ROOT_POOL = "rgw.root";
-static string RGW_DEFAULT_REALM_ROOT_POOL = "rgw.root";
-static string RGW_DEFAULT_PERIOD_ROOT_POOL = "rgw.root";
-static string avail_pools = ".pools.avail";
-static string default_storage_pool_suffix = "rgw.buckets.data";
+using namespace rgw_zone_defaults;
 
 int RGWS_Zone::create_instance(const string& conf, RGWServiceInstanceRef *instance)
 {
@@ -1205,5 +1192,28 @@ int RGWSI_Zone::list_placement_set(set<rgw_pool>& names)
   }
 
   return names.size();
+}
+
+bool RGWSI_Zone::get_redirect_zone_endpoint(string *endpoint)
+{
+  if (zone_public_config->redirect_zone.empty()) {
+    return false;
+  }
+
+  auto iter = zone_conn_map.find(zone_public_config->redirect_zone);
+  if (iter == zone_conn_map.end()) {
+    ldout(cct, 0) << "ERROR: cannot find entry for redirect zone: " << zone_public_config->redirect_zone << dendl;
+    return false;
+  }
+
+  RGWRESTConn *conn = iter->second;
+
+  int ret = conn->get_url(*endpoint);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: redirect zone, conn->get_endpoint() returned ret=" << ret << dendl;
+    return false;
+  }
+
+  return true;
 }
 

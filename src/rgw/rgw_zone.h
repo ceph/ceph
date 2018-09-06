@@ -1,8 +1,35 @@
 #ifndef CEPH_RGW_ZONE_H
 #define CEPH_RGW_ZONE_H
 
+#include "rgw_common.h"
+
+namespace rgw_zone_defaults {
+
+extern std::string zone_names_oid_prefix;
+extern std::string region_info_oid_prefix;
+extern std::string realm_names_oid_prefix;
+extern std::string zone_group_info_oid_prefix;
+extern std::string realm_info_oid_prefix;
+extern std::string default_region_info_oid;
+extern std::string default_zone_group_info_oid;
+extern std::string region_map_oid;
+extern std::string default_realm_info_oid;
+extern std::string default_zonegroup_name;
+extern std::string default_zone_name;
+extern std::string zonegroup_names_oid_prefix;
+extern std::string RGW_DEFAULT_ZONE_ROOT_POOL;
+extern std::string RGW_DEFAULT_ZONEGROUP_ROOT_POOL;
+extern std::string RGW_DEFAULT_REALM_ROOT_POOL;
+extern std::string RGW_DEFAULT_PERIOD_ROOT_POOL;
+extern std::string avail_pools;
+extern std::string default_storage_pool_suffix;
+
+}
+
+class JSONObj;
+
 struct RGWNameToId {
-  string obj_id;
+  std::string obj_id;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -22,7 +49,7 @@ struct RGWNameToId {
 WRITE_CLASS_ENCODER(RGWNameToId)
 
 struct RGWDefaultSystemMetaObjInfo {
-  string default_id;
+  std::string default_id;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -42,36 +69,42 @@ struct RGWDefaultSystemMetaObjInfo {
 WRITE_CLASS_ENCODER(RGWDefaultSystemMetaObjInfo)
 
 class RGWSI_SysObj;
+class RGWSI_Zone;
 
 class RGWSystemMetaObj {
 protected:
-  string id;
-  string name;
+  std::string id;
+  std::string name;
 
   CephContext *cct{nullptr};
   RGWSI_SysObj *sysobj_svc{nullptr};
+  RGWSI_Zone *zone_svc{nullptr};
 
   int store_name(bool exclusive);
   int store_info(bool exclusive);
-  int read_info(const string& obj_id, bool old_format = false);
-  int read_id(const string& obj_name, string& obj_id);
+  int read_info(const std::string& obj_id, bool old_format = false);
+  int read_id(const std::string& obj_name, std::string& obj_id);
   int read_default(RGWDefaultSystemMetaObjInfo& default_info,
-		   const string& oid);
+		   const std::string& oid);
   /* read and use default id */
   int use_default(bool old_format = false);
 
 public:
   RGWSystemMetaObj() {}
-  RGWSystemMetaObj(const string& _name): name(_name) {}
-  RGWSystemMetaObj(const string& _id, const string& _name) : id(_id), name(_name) {}
-  RGWSystemMetaObj(CephContext *_cct, RGWSI_SysObj *_sysobj_svc): cct(_cct), sysobj_svc(_sysobj_svc){}
-  RGWSystemMetaObj(const string& _name, CephContext *_cct, RGWSI_SysObj *_sysobj_svc): name(_name), cct(_cct), sysobj_svc(_sysobj_svc){}
+  RGWSystemMetaObj(const std::string& _name): name(_name) {}
+  RGWSystemMetaObj(const std::string& _id, const std::string& _name) : id(_id), name(_name) {}
+  RGWSystemMetaObj(CephContext *_cct, RGWSI_SysObj *_sysobj_svc) {
+    reinit_instance(_cct, _sysobj_svc);
+  }
+  RGWSystemMetaObj(const std::string& _name, CephContext *_cct, RGWSI_SysObj *_sysobj_svc): name(_name) {
+    reinit_instance(_cct, _sysobj_svc);
+  }
 
-  const string& get_name() const { return name; }
-  const string& get_id() const { return id; }
+  const std::string& get_name() const { return name; }
+  const std::string& get_id() const { return id; }
 
-  void set_name(const string& _name) { name = _name;}
-  void set_id(const string& _id) { id = _id;}
+  void set_name(const std::string& _name) { name = _name;}
+  void set_id(const std::string& _id) { id = _id;}
   void clear_id() { id.clear(); }
 
   virtual ~RGWSystemMetaObj() {}
@@ -90,27 +123,24 @@ public:
     DECODE_FINISH(bl);
   }
 
-  void reinit_instance(CephContext *_cct, RGWSI_SysObj *_sysobj_svc) {
-    cct = _cct;
-    sysobj_svc = _sysobj_svc;
-  }
+  void reinit_instance(CephContext *_cct, RGWSI_SysObj *_sysobj_svc);
   int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, bool setup_obj = true, bool old_format = false);
-  virtual int read_default_id(string& default_id, bool old_format = false);
+  virtual int read_default_id(std::string& default_id, bool old_format = false);
   virtual int set_as_default(bool exclusive = false);
   int delete_default();
   virtual int create(bool exclusive = true);
   int delete_obj(bool old_format = false);
-  int rename(const string& new_name);
+  int rename(const std::string& new_name);
   int update() { return store_info(false);}
   int update_name() { return store_name(false);}
   int read();
   int write(bool exclusive);
 
   virtual rgw_pool get_pool(CephContext *cct) = 0;
-  virtual const string get_default_oid(bool old_format = false) = 0;
-  virtual const string& get_names_oid_prefix() = 0;
-  virtual const string& get_info_oid_prefix(bool old_format = false) = 0;
-  virtual const string& get_predefined_name(CephContext *cct) = 0;
+  virtual const std::string get_default_oid(bool old_format = false) = 0;
+  virtual const std::string& get_names_oid_prefix() = 0;
+  virtual const std::string& get_info_oid_prefix(bool old_format = false) = 0;
+  virtual const std::string& get_predefined_name(CephContext *cct) = 0;
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -138,14 +168,14 @@ struct RGWZonePlacementInfo {
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(6, bl);
-    string index_pool_str;
-    string data_pool_str;
+    std::string index_pool_str;
+    std::string data_pool_str;
     decode(index_pool_str, bl);
     index_pool = rgw_pool(index_pool_str);
     decode(data_pool_str, bl);
     data_pool = rgw_pool(data_pool_str);
     if (struct_v >= 4) {
-      string data_extra_pool_str;
+      std::string data_extra_pool_str;
       decode(data_extra_pool_str, bl);
       data_extra_pool = rgw_pool(data_extra_pool_str);
     }
@@ -190,34 +220,34 @@ struct RGWZoneParams : RGWSystemMetaObj {
 
   RGWAccessKey system_key;
 
-  map<string, RGWZonePlacementInfo> placement_pools;
+  map<std::string, RGWZonePlacementInfo> placement_pools;
 
-  string realm_id;
+  std::string realm_id;
 
   JSONFormattable tier_config;
 
   RGWZoneParams() : RGWSystemMetaObj() {}
-  explicit RGWZoneParams(const string& name) : RGWSystemMetaObj(name){}
-  RGWZoneParams(const string& id, const string& name) : RGWSystemMetaObj(id, name) {}
-  RGWZoneParams(const string& id, const string& name, const string& _realm_id)
+  explicit RGWZoneParams(const std::string& name) : RGWSystemMetaObj(name){}
+  RGWZoneParams(const std::string& id, const std::string& name) : RGWSystemMetaObj(id, name) {}
+  RGWZoneParams(const std::string& id, const std::string& name, const std::string& _realm_id)
     : RGWSystemMetaObj(id, name), realm_id(_realm_id) {}
 
   rgw_pool get_pool(CephContext *cct) override;
-  const string get_default_oid(bool old_format = false) override;
-  const string& get_names_oid_prefix() override;
-  const string& get_info_oid_prefix(bool old_format = false) override;
-  const string& get_predefined_name(CephContext *cct) override;
+  const std::string get_default_oid(bool old_format = false) override;
+  const std::string& get_names_oid_prefix() override;
+  const std::string& get_info_oid_prefix(bool old_format = false) override;
+  const std::string& get_predefined_name(CephContext *cct) override;
 
   int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, bool setup_obj = true,
 	   bool old_format = false);
   using RGWSystemMetaObj::init;
-  int read_default_id(string& default_id, bool old_format = false) override;
+  int read_default_id(std::string& default_id, bool old_format = false) override;
   int set_as_default(bool exclusive = false) override;
   int create_default(bool old_format = false);
   int create(bool exclusive = true) override;
   int fix_pool_names();
 
-  const string& get_compression_type(const string& placement_rule) const;
+  const std::string& get_compression_type(const std::string& placement_rule) const;
   
   void encode(bufferlist& bl) const override {
     ENCODE_START(12, 1, bl);
@@ -237,7 +267,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     encode(metadata_heap, bl);
     encode(realm_id, bl);
     encode(lc_pool, bl);
-    map<string, string, ltstr_nocase> old_tier_config;
+    map<std::string, std::string, ltstr_nocase> old_tier_config;
     encode(old_tier_config, bl);
     encode(roles_pool, bl);
     encode(reshard_pool, bl);
@@ -278,7 +308,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     } else {
       lc_pool = log_pool.name + ":lc";
     }
-    map<string, string, ltstr_nocase> old_tier_config;
+    map<std::string, std::string, ltstr_nocase> old_tier_config;
     if (struct_v >= 8) {
       decode(old_tier_config, bl);
     }
@@ -310,7 +340,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<RGWZoneParams*>& o);
 
-  bool get_placement(const string& placement_id, RGWZonePlacementInfo *placement) const {
+  bool get_placement(const std::string& placement_id, RGWZonePlacementInfo *placement) const {
     auto iter = placement_pools.find(placement_id);
     if (iter == placement_pools.end()) {
       return false;
@@ -322,7 +352,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   /*
    * return data pool of the head object
    */
-  bool get_head_data_pool(const string& placement_id, const rgw_obj& obj, rgw_pool *pool) const {
+  bool get_head_data_pool(const std::string& placement_id, const rgw_obj& obj, rgw_pool *pool) const {
     const rgw_data_placement_target& explicit_placement = obj.bucket.explicit_placement;
     if (!explicit_placement.data_pool.empty()) {
       if (!obj.in_extra_data) {
@@ -350,15 +380,15 @@ struct RGWZoneParams : RGWSystemMetaObj {
 WRITE_CLASS_ENCODER(RGWZoneParams)
 
 struct RGWZone {
-  string id;
-  string name;
-  list<string> endpoints;
+  std::string id;
+  std::string name;
+  list<std::string> endpoints;
   bool log_meta;
   bool log_data;
   bool read_only;
-  string tier_type;
+  std::string tier_type;
 
-  string redirect_zone;
+  std::string redirect_zone;
 
 /**
  * Represents the number of shards for the bucket index object, a value of zero
@@ -370,7 +400,7 @@ struct RGWZone {
   uint32_t bucket_index_max_shards;
 
   bool sync_from_all;
-  set<string> sync_from; /* list of zones to sync from */
+  set<std::string> sync_from; /* list of zones to sync from */
 
   RGWZone() : log_meta(false), log_data(false), read_only(false), bucket_index_max_shards(0),
               sync_from_all(true) {}
@@ -427,14 +457,14 @@ struct RGWZone {
 
   bool is_read_only() { return read_only; }
 
-  bool syncs_from(const string& zone_id) const {
+  bool syncs_from(const std::string& zone_id) const {
     return (sync_from_all || sync_from.find(zone_id) != sync_from.end());
   }
 };
 WRITE_CLASS_ENCODER(RGWZone)
 
 struct RGWDefaultZoneGroupInfo {
-  string default_zonegroup;
+  std::string default_zonegroup;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -454,10 +484,10 @@ struct RGWDefaultZoneGroupInfo {
 WRITE_CLASS_ENCODER(RGWDefaultZoneGroupInfo)
 
 struct RGWZoneGroupPlacementTarget {
-  string name;
-  set<string> tags;
+  std::string name;
+  set<std::string> tags;
 
-  bool user_permitted(list<string>& user_tags) const {
+  bool user_permitted(list<std::string>& user_tags) const {
     if (tags.empty()) {
       return true;
     }
@@ -489,25 +519,25 @@ WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTarget)
 
 
 struct RGWZoneGroup : public RGWSystemMetaObj {
-  string api_name;
-  list<string> endpoints;
+  std::string api_name;
+  list<std::string> endpoints;
   bool is_master = false;
 
-  string master_zone;
-  map<string, RGWZone> zones;
+  std::string master_zone;
+  map<std::string, RGWZone> zones;
 
-  map<string, RGWZoneGroupPlacementTarget> placement_targets;
-  string default_placement;
+  map<std::string, RGWZoneGroupPlacementTarget> placement_targets;
+  std::string default_placement;
 
-  list<string> hostnames;
-  list<string> hostnames_s3website;
-  // TODO: Maybe convert hostnames to a map<string,list<string>> for
+  list<std::string> hostnames;
+  list<std::string> hostnames_s3website;
+  // TODO: Maybe convert hostnames to a map<std::string,list<std::string>> for
   // endpoint_type->hostnames
 /*
 20:05 < _robbat21irssi> maybe I do someting like: if (hostname_map.empty()) { populate all map keys from hostnames; };
 20:05 < _robbat21irssi> but that's a later compatability migration planning bit
 20:06 < yehudasa> more like if (!hostnames.empty()) {
-20:06 < yehudasa> for (list<string>::iterator iter = hostnames.begin(); iter != hostnames.end(); ++iter) {
+20:06 < yehudasa> for (list<std::string>::iterator iter = hostnames.begin(); iter != hostnames.end(); ++iter) {
 20:06 < yehudasa> hostname_map["s3"].append(iter->second);
 20:07 < yehudasa> hostname_map["s3website"].append(iter->second);
 20:07 < yehudasa> s/append/push_back/g
@@ -515,16 +545,16 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
 20:08 < yehudasa> yeah, probably
 20:08 < _robbat21irssi> s3, s3website, swift, swith_auth, swift_website
 */
-  map<string, list<string> > api_hostname_map;
-  map<string, list<string> > api_endpoints_map;
+  map<std::string, list<std::string> > api_hostname_map;
+  map<std::string, list<std::string> > api_endpoints_map;
 
-  string realm_id;
+  std::string realm_id;
 
   RGWZoneGroup(): is_master(false){}
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
   explicit RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
   RGWZoneGroup(const std::string &_name, bool _is_master, CephContext *cct, RGWSI_SysObj* sysobj_svc,
-	       const string& _realm_id, const list<string>& _endpoints)
+	       const std::string& _realm_id, const list<std::string>& _endpoints)
     : RGWSystemMetaObj(_name, cct , sysobj_svc), endpoints(_endpoints), is_master(_is_master),
       realm_id(_realm_id) {}
 
@@ -577,21 +607,21 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     DECODE_FINISH(bl);
   }
 
-  int read_default_id(string& default_id, bool old_format = false) override;
+  int read_default_id(std::string& default_id, bool old_format = false) override;
   int set_as_default(bool exclusive = false) override;
   int create_default(bool old_format = false);
-  int equals(const string& other_zonegroup) const;
+  int equals(const std::string& other_zonegroup) const;
   int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
-               const list<string>& endpoints, const string *ptier_type,
-               bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm,
-               string *predirect_zone);
+               const list<std::string>& endpoints, const std::string *ptier_type,
+               bool *psync_from_all, list<std::string>& sync_from, list<std::string>& sync_from_rm,
+               std::string *predirect_zone);
   int remove_zone(const std::string& zone_id);
   int rename_zone(const RGWZoneParams& zone_params);
   rgw_pool get_pool(CephContext *cct) override;
-  const string get_default_oid(bool old_region_format = false) override;
-  const string& get_info_oid_prefix(bool old_region_format = false) override;
-  const string& get_names_oid_prefix() override;
-  const string& get_predefined_name(CephContext *cct) override;
+  const std::string get_default_oid(bool old_region_format = false) override;
+  const std::string& get_info_oid_prefix(bool old_region_format = false) override;
+  const std::string& get_names_oid_prefix() override;
+  const std::string& get_predefined_name(CephContext *cct) override;
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -601,12 +631,12 @@ WRITE_CLASS_ENCODER(RGWZoneGroup)
 
 struct RGWPeriodMap
 {
-  string id;
-  map<string, RGWZoneGroup> zonegroups;
-  map<string, RGWZoneGroup> zonegroups_by_api;
-  map<string, uint32_t> short_zone_ids;
+  std::string id;
+  map<std::string, RGWZoneGroup> zonegroups;
+  map<std::string, RGWZoneGroup> zonegroups_by_api;
+  map<std::string, uint32_t> short_zone_ids;
 
-  string master_zonegroup;
+  std::string master_zonegroup;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
@@ -622,7 +652,7 @@ struct RGWPeriodMap
     master_zonegroup.clear();
   }
 
-  uint32_t get_zone_short_id(const string& zone_id) const;
+  uint32_t get_zone_short_id(const std::string& zone_id) const;
 };
 WRITE_CLASS_ENCODER(RGWPeriodMap)
 
@@ -662,9 +692,9 @@ WRITE_CLASS_ENCODER(RGWPeriodConfig)
 /* for backward comaptability */
 struct RGWRegionMap {
 
-  map<string, RGWZoneGroup> regions;
+  map<std::string, RGWZoneGroup> regions;
 
-  string master_region;
+  std::string master_region;
 
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
@@ -679,10 +709,10 @@ WRITE_CLASS_ENCODER(RGWRegionMap)
 
 struct RGWZoneGroupMap {
 
-  map<string, RGWZoneGroup> zonegroups;
-  map<string, RGWZoneGroup> zonegroups_by_api;
+  map<std::string, RGWZoneGroup> zonegroups;
+  map<std::string, RGWZoneGroup> zonegroups_by_api;
 
-  string master_zonegroup;
+  std::string master_zonegroup;
 
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
@@ -703,16 +733,16 @@ class RGWPeriod;
 
 class RGWRealm : public RGWSystemMetaObj
 {
-  string current_period;
+  std::string current_period;
   epoch_t epoch{0}; //< realm epoch, incremented for each new period
 
   int create_control(bool exclusive);
   int delete_control();
 public:
   RGWRealm() {}
-  RGWRealm(const string& _id, const string& _name = "") : RGWSystemMetaObj(_id, _name) {}
+  RGWRealm(const std::string& _id, const std::string& _name = "") : RGWSystemMetaObj(_id, _name) {}
   RGWRealm(CephContext *_cct, RGWSI_SysObj *_sysobj_svc): RGWSystemMetaObj(_cct, _sysobj_svc) {}
-  RGWRealm(const string& _name, CephContext *_cct, RGWSI_SysObj *_sysobj_svc): RGWSystemMetaObj(_name, _cct, _sysobj_svc){}
+  RGWRealm(const std::string& _name, CephContext *_cct, RGWSI_SysObj *_sysobj_svc): RGWSystemMetaObj(_name, _cct, _sysobj_svc){}
 
   void encode(bufferlist& bl) const override {
     ENCODE_START(1, 1, bl);
@@ -733,17 +763,17 @@ public:
   int create(bool exclusive = true) override;
   int delete_obj();
   rgw_pool get_pool(CephContext *cct) override;
-  const string get_default_oid(bool old_format = false) override;
-  const string& get_names_oid_prefix() override;
-  const string& get_info_oid_prefix(bool old_format = false) override;
-  const string& get_predefined_name(CephContext *cct) override;
+  const std::string get_default_oid(bool old_format = false) override;
+  const std::string& get_names_oid_prefix() override;
+  const std::string& get_info_oid_prefix(bool old_format = false) override;
+  const std::string& get_predefined_name(CephContext *cct) override;
 
   using RGWSystemMetaObj::read_id; // expose as public for radosgw-admin
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 
-  const string& get_current_period() const {
+  const std::string& get_current_period() const {
     return current_period;
   }
   int set_current_period(RGWPeriod& period);
@@ -753,7 +783,7 @@ public:
   }
   epoch_t get_epoch() const { return epoch; }
 
-  string get_control_oid();
+  std::string get_control_oid();
   /// send a notify on the realm control object
   int notify_zone(bufferlist& bl);
   /// notify the zone of a new period
@@ -783,17 +813,17 @@ WRITE_CLASS_ENCODER(RGWPeriodLatestEpochInfo)
 
 class RGWPeriod
 {
-  string id;
+  std::string id;
   epoch_t epoch{0};
-  string predecessor_uuid;
+  std::string predecessor_uuid;
   std::vector<std::string> sync_status;
   RGWPeriodMap period_map;
   RGWPeriodConfig period_config;
-  string master_zonegroup;
-  string master_zone;
+  std::string master_zonegroup;
+  std::string master_zone;
 
-  string realm_id;
-  string realm_name;
+  std::string realm_id;
+  std::string realm_name;
   epoch_t realm_epoch{1}; //< realm epoch when period was made current
 
   CephContext *cct{nullptr};
@@ -805,8 +835,8 @@ class RGWPeriod
   int use_latest_epoch();
   int use_current_period();
 
-  const string get_period_oid();
-  const string get_period_oid_prefix();
+  const std::string get_period_oid();
+  const std::string get_period_oid_prefix();
 
   // gather the metadata sync status for each shard; only for use on master zone
   int update_sync_status(const RGWPeriod &current_period,
@@ -815,23 +845,23 @@ class RGWPeriod
 public:
   RGWPeriod() {}
 
-  RGWPeriod(const string& period_id, epoch_t _epoch = 0)
+  RGWPeriod(const std::string& period_id, epoch_t _epoch = 0)
     : id(period_id), epoch(_epoch) {}
 
-  const string& get_id() const { return id; }
+  const std::string& get_id() const { return id; }
   epoch_t get_epoch() const { return epoch; }
   epoch_t get_realm_epoch() const { return realm_epoch; }
-  const string& get_predecessor() const { return predecessor_uuid; }
-  const string& get_master_zone() const { return master_zone; }
-  const string& get_master_zonegroup() const { return master_zonegroup; }
-  const string& get_realm() const { return realm_id; }
+  const std::string& get_predecessor() const { return predecessor_uuid; }
+  const std::string& get_master_zone() const { return master_zone; }
+  const std::string& get_master_zonegroup() const { return master_zonegroup; }
+  const std::string& get_realm() const { return realm_id; }
   const RGWPeriodMap& get_map() const { return period_map; }
   RGWPeriodConfig& get_config() { return period_config; }
   const RGWPeriodConfig& get_config() const { return period_config; }
   const std::vector<std::string>& get_sync_status() const { return sync_status; }
   rgw_pool get_pool(CephContext *cct);
-  const string& get_latest_epoch_oid();
-  const string& get_info_oid_prefix();
+  const std::string& get_latest_epoch_oid();
+  const std::string& get_info_oid_prefix();
 
   void set_user_quota(RGWQuotaInfo& user_quota) {
     period_config.user_quota = user_quota;
@@ -841,26 +871,26 @@ public:
     period_config.bucket_quota = bucket_quota;
   }
 
-  void set_id(const string& id) {
+  void set_id(const std::string& id) {
     this->id = id;
     period_map.id = id;
   }
   void set_epoch(epoch_t epoch) { this->epoch = epoch; }
   void set_realm_epoch(epoch_t epoch) { realm_epoch = epoch; }
 
-  void set_predecessor(const string& predecessor)
+  void set_predecessor(const std::string& predecessor)
   {
     predecessor_uuid = predecessor;
   }
 
-  void set_realm_id(const string& _realm_id) {
+  void set_realm_id(const std::string& _realm_id) {
     realm_id = _realm_id;
   }
 
   int reflect();
 
   int get_zonegroup(RGWZoneGroup& zonegroup,
-		    const string& zonegroup_id);
+		    const std::string& zonegroup_id);
 
   bool is_single_zonegroup() const
   {
@@ -889,7 +919,7 @@ public:
   // update latest_epoch if the given epoch is higher, else return -EEXIST
   int update_latest_epoch(epoch_t epoch);
 
-  int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, const string &period_realm_id, const string &period_realm_name = "",
+  int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, const std::string &period_realm_id, const std::string &period_realm_name = "",
 	   bool setup_obj = true);
   int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, bool setup_obj = true);  
 
@@ -939,7 +969,7 @@ public:
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 
-  static string get_staging_id(const string& realm_id) {
+  static std::string get_staging_id(const std::string& realm_id) {
     return realm_id + ":staging";
   }
 };
