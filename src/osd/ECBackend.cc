@@ -966,16 +966,13 @@ void ECBackend::handle_sub_read(
     int r = 0;
     ECUtil::HashInfoRef hinfo;
     int subchunk_size = sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
-    if (!get_parent()->get_pool().allows_ecoverwrites()) {
-
-      hinfo = get_hash_info(i->first);
-      if (!hinfo) {
-	r = -EIO;
-	get_parent()->clog_error() << "Corruption detected: object " << i->first
-                                   << " is missing hash_info";
-	dout(5) << __func__ << ": No hinfo for " << i->first << dendl;
-	goto error;
-      }
+    hinfo = get_hash_info(i->first);
+    if (!hinfo) {
+      r = -EIO;
+      get_parent()->clog_error() << "Corruption detected: object " << i->first
+                                 << " is missing hash_info";
+      dout(5) << __func__ << ": No hinfo for " << i->first << dendl;
+      goto error;
     }
     for (auto j = i->second.begin(); j != i->second.end(); ++j) {
       bufferlist bl;
