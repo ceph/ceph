@@ -353,11 +353,16 @@ bool AdminSocket::do_accept()
     retry_sys_call(::close, connection_fd);
     return false;
   }
-  cmd_getval(m_cct, cmdmap, "format", format);
+  try {
+    cmd_getval(m_cct, cmdmap, "format", format);
+    cmd_getval(m_cct, cmdmap, "prefix", c);
+  } catch (const bad_cmd_get& e) {
+    retry_sys_call(::close, connection_fd);
+    return false;
+  }
   if (format != "json" && format != "json-pretty" &&
       format != "xml" && format != "xml-pretty")
     format = "json-pretty";
-  cmd_getval(m_cct, cmdmap, "prefix", c);
 
   std::unique_lock l(lock);
   decltype(hooks)::iterator p;
