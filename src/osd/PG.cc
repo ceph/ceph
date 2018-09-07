@@ -1564,9 +1564,14 @@ void PG::choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
     // past the authoritative last_update the same as those equal to it.
     version_t auth_version = auth_info.last_update.version;
     version_t candidate_version = shard_info.last_update.version;
-    if (auth_version > candidate_version &&
-        (auth_version - candidate_version) > cct->_conf.get_val<uint64_t>("osd_async_recovery_min_pg_log_entries")) {
-      candidates_by_cost.insert(make_pair(auth_version - candidate_version, shard_i));
+    auto approx_missing_objects =
+      shard_info.stats.stats.sum.num_objects_missing;
+    if (auth_version > candidate_version) {
+      approx_missing_objects += auth_version - candidate_version;
+    }
+    if (approx_missing_objects > cct->_conf.get_val<uint64_t>(
+        "osd_async_recovery_min_cost")) {
+      candidates_by_cost.insert(make_pair(approx_missing_objects, shard_i));
     }
   }
 
@@ -1607,17 +1612,19 @@ void PG::choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_
       continue;
     auto shard_info = all_info.find(shard_i)->second;
     // use the approximate magnitude of the difference in length of
-    // logs as the cost of recovery
+    // logs plus historical missing objects as the cost of recovery
     version_t auth_version = auth_info.last_update.version;
     version_t candidate_version = shard_info.last_update.version;
-    size_t approx_entries;
+    auto approx_missing_objects =
+      shard_info.stats.stats.sum.num_objects_missing;
     if (auth_version > candidate_version) {
-      approx_entries = auth_version - candidate_version;
+      approx_missing_objects += auth_version - candidate_version;
     } else {
-      approx_entries = candidate_version - auth_version;
+      approx_missing_objects += candidate_version - auth_version;
     }
-    if (approx_entries > cct->_conf.get_val<uint64_t>("osd_async_recovery_min_pg_log_entries")) {
-      candidates_by_cost.insert(make_pair(approx_entries, shard_i));
+    if (approx_missing_objects  > cct->_conf.get_val<uint64_t>(
+        "osd_async_recovery_min_cost")) {
+      candidates_by_cost.insert(make_pair(approx_missing_objects, shard_i));
     }
   }
 
