@@ -22,9 +22,9 @@ int RGWS_Zone::create_instance(const string& conf, RGWServiceInstanceRef *instan
 std::map<string, RGWServiceInstance::dependency> RGWSI_Zone::get_deps()
 {
   map<string, RGWServiceInstance::dependency> deps;
-  deps["sys_obj_dep"] = { .name = "sys_obj",
+  deps["sysobj_dep"] = { .name = "sysobj",
                           .conf = "{}" };
-  deps["rados_dep"] = { .name = "rados_obj",
+  deps["rados_dep"] = { .name = "rados",
                         .conf = "{}" };
   deps["sync_modules_dep"] = { .name = "sync_modules",
                         .conf = "{}" };
@@ -33,7 +33,7 @@ std::map<string, RGWServiceInstance::dependency> RGWSI_Zone::get_deps()
 
 int RGWSI_Zone::load(const string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs)
 {
-  sysobj_svc = static_pointer_cast<RGWSI_SysObj>(dep_refs["sys_obj_dep"]);
+  sysobj_svc = static_pointer_cast<RGWSI_SysObj>(dep_refs["sysobj_dep"]);
   assert(sysobj_svc);
 
   realm = make_shared<RGWRealm>();

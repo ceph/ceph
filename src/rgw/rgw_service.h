@@ -75,9 +75,13 @@ public:
   string get_title() {
     return svc->type() + ":" + svc_instance;
   }
+
+  std::shared_ptr<RGWService>& get_svc() {
+    return svc;
+  }
 };
 
-class RGWServiceRegistry : std::enable_shared_from_this<RGWServiceRegistry> {
+class RGWServiceRegistry {
   CephContext *cct;
 
   map<string, RGWServiceRef> services;
@@ -96,6 +100,22 @@ class RGWServiceRegistry : std::enable_shared_from_this<RGWServiceRegistry> {
 
   string get_conf_id(const string& service_type, const string& conf);
   void register_all(CephContext *cct);
+
+  int do_get_instance(RGWServiceRef& svc,
+                      const string& conf,
+                      RGWServiceInstanceRef *ref,
+                      std::vector<RGWServiceInstanceRef> *new_instances);
+  template <class T>
+  int do_get_instance(const string& svc_name,
+                   const string& conf,
+                   T *ref,
+                   std::vector<RGWServiceInstanceRef> *new_instances) {
+    auto iter = services.find(svc_name);
+    if (iter == services.end()) {
+      return -ENOENT;
+    }
+    return do_get_instance(iter->second, conf, ref, new_instances);
+  }
 public:
   RGWServiceRegistry(CephContext *_cct) : cct(_cct) {
     register_all(cct);
