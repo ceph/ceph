@@ -11,6 +11,8 @@
 #include "rgw_rados.h"
 #include "rgw_orphan.h"
 
+#include "services/svc_zone.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 #define DEFAULT_NUM_SHARDS 64
@@ -141,7 +143,7 @@ int RGWOrphanStore::list_jobs(map <string,RGWOrphanSearchState>& job_list)
 
 int RGWOrphanStore::init()
 {
-  rgw_pool& log_pool = store->get_zone_params().log_pool;
+  rgw_pool& log_pool = store->svc.zone->get_zone_params().log_pool;
   int r = rgw_init_ioctx(store->get_rados_handle(), log_pool, ioctx);
   if (r < 0) {
     cerr << "ERROR: failed to open log pool (" << log_pool << " ret=" << r << std::endl;
