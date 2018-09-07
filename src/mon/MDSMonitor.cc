@@ -644,6 +644,31 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
     update_metadata(m->get_global_id(), m->get_sys_info());
   } else {
     // state update
+
+    if (!pending.gid_exists(gid)) {
+      /* gid has been removed from pending, send null map */
+      dout(5) << "mds_beacon " << *m << " is not in fsmap (state "
+              << ceph_mds_state_name(state) << ")" << dendl;
+
+      /* We can't send an MDSMap this MDS was a part of because we no longer
+       * know which FS it was part of. Nor does this matter. Sending an empty
+       * MDSMap is sufficient for getting the MDS to respawn.
+       */
+      wait_for_finished_proposal(op, new FunctionContext([op, this](int r){
+        if (r >= 0) {
+          const auto& fsmap = get_fsmap();
+          MDSMap null_map;
+          null_map.epoch = fsmap.epoch;
+          null_map.compat = fsmap.compat;
+          auto m = MMDSMap::create(mon->monmap->fsid, null_map);
+          mon->send_reply(op, m.detach());
+        } else {
+          dispatch(op);        // try again
+        }
+      }));
+      return true;
+    }
+
     const MDSMap::mds_info_t &info = pending.get_info_gid(gid);
     // Old MDS daemons don't mention that they're standby replay until
     // after they've sent their boot beacon, so update this field.
