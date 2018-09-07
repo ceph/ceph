@@ -1286,7 +1286,7 @@ namespace rgw {
     struct req_state* s = get_state();
 
     auto compression_type =
-      get_store()->get_zone_params().get_compression_type(
+      get_store()->svc.zone->get_zone_params().get_compression_type(
 	s->bucket_info.placement_rule);
 
     /* not obviously supportable */
