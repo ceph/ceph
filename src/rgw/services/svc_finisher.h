@@ -22,9 +22,12 @@ public:
 
 private:
   Finisher *finisher{nullptr};
+  bool finalized{false};
 
   std::map<std::string, RGWServiceInstance::dependency> get_deps() override;
-  int load(const std::string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs) override;
+  int load(const std::string& conf, std::map<std::string, RGWServiceInstanceRef>& dep_refs) override {
+    return 0;
+  }
   int init() override;
   void shutdown() override;
 

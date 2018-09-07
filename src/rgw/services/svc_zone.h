@@ -8,6 +8,7 @@
 
 class RGWSI_RADOS;
 class RGWSI_SysObj;
+class RGWSI_SyncModules;
 
 class RGWRESTConn;
 
@@ -23,6 +24,7 @@ class RGWSI_Zone : public RGWServiceInstance
 {
   std::shared_ptr<RGWSI_SysObj> sysobj_svc;
   std::shared_ptr<RGWSI_RADOS> rados_svc;
+  std::shared_ptr<RGWSI_SyncModules> sync_modules_svc;
 
   std::shared_ptr<RGWRealm> realm;
   std::shared_ptr<RGWZoneGroup> zonegroup;

@@ -3,6 +3,7 @@
 #include "rgw_zone.h"
 #include "rgw_realm_watcher.h"
 #include "rgw_meta_sync_status.h"
+#include "rgw_sync.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
@@ -175,7 +176,7 @@ int RGWZoneGroup::equals(const string& other_zonegroup) const
 int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
                            const list<string>& endpoints, const string *ptier_type,
                            bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm,
-                           string *predirect_zone)
+                           string *predirect_zone, RGWSyncModulesManager *sync_mgr)
 {
   auto& zone_id = zone_params.get_id();
   auto& zone_name = zone_params.get_name();
@@ -213,16 +214,13 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bo
   }
   if (ptier_type) {
     zone.tier_type = *ptier_type;
-#warning FIXME
-#if 0
-    if (!store->get_sync_modules_manager()->get_module(*ptier_type, nullptr)) {
+    if (!sync_mgr->get_module(*ptier_type, nullptr)) {
       ldout(cct, 0) << "ERROR: could not found sync module: " << *ptier_type 
                     << ",  valid sync modules: " 
-                    << store->get_sync_modules_manager()->get_registered_module_names()
+                    << sync_mgr->get_registered_module_names()
                     << dendl;
       return -ENOENT;
     }
-#endif
   }
 
   if (psync_from_all) {
@@ -831,19 +829,12 @@ string RGWRealm::get_control_oid()
 
 int RGWRealm::notify_zone(bufferlist& bl)
 {
-  // open a context on the realm's pool
   rgw_pool pool{get_pool(cct)};
-  librados::IoCtx ctx;
-  int r = rgw_init_ioctx(store->get_rados_handle(), pool, ctx);
-  if (r < 0) {
-    ldout(cct, 0) << "Failed to open pool " << pool << dendl;
-    return r;
-  }
-  // send a notify on the realm object
-  r = ctx.notify2(get_control_oid(), bl, 0, nullptr);
-  if (r < 0) {
-    ldout(cct, 0) << "Realm notify failed with " << r << dendl;
-    return r;
+  auto obj_ctx = sysobj_svc->init_obj_ctx();
+  auto sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj{pool, get_control_oid()});
+  int ret = sysobj.wn().notify(bl, 0, nullptr);
+  if (ret < 0) {
+    return ret;
   }
   return 0;
 }
@@ -1351,7 +1342,8 @@ static int read_sync_status(RGWRados *store, rgw_meta_sync_status *sync_status)
   return r;
 }
 
-int RGWPeriod::update_sync_status(const RGWPeriod &current_period,
+int RGWPeriod::update_sync_status(RGWRados *store, /* for now */
+				  const RGWPeriod &current_period,
                                   std::ostream& error_stream,
                                   bool force_if_stale)
 {
@@ -1400,7 +1392,8 @@ int RGWPeriod::update_sync_status(const RGWPeriod &current_period,
   return 0;
 }
 
-int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period,
+int RGWPeriod::commit(RGWRados *store,
+		      RGWRealm& realm, const RGWPeriod& current_period,
                       std::ostream& error_stream, bool force_if_stale)
 {
   auto zone_svc = sysobj_svc->get_zone_svc();
@@ -1432,7 +1425,7 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period,
   // did the master zone change?
   if (master_zone != current_period.get_master_zone()) {
     // store the current metadata sync status in the period
-    int r = update_sync_status(current_period, error_stream, force_if_stale);
+    int r = update_sync_status(store, current_period, error_stream, force_if_stale);
     if (r < 0) {
       ldout(cct, 0) << "failed to update metadata sync status: "
           << cpp_strerror(-r) << dendl;
@@ -1590,7 +1583,7 @@ int RGWZoneParams::fix_pool_names()
   }
 
   set<rgw_pool> pools;
-  r = get_zones_pool_set(cct, zone_svc, zones, id, pools);
+  r = get_zones_pool_set(cct, sysobj_svc, zones, id, pools);
   if (r < 0) {
     ldout(cct, 0) << "Error: get_zones_pool_names" << r << dendl;
     return r;

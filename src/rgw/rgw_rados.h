@@ -49,6 +49,7 @@ class RGWReshardWait;
 class RGWSI_Zone;
 class RGWSI_ZoneUtils;
 class RGWSI_Quota;
+class RGWSI_SyncModules;
 class RGWSI_SysObj;
 class RGWSI_SysObj_Cache;
 
@@ -1297,7 +1298,6 @@ protected:
 
   RGWCoroutinesManagerRegistry *cr_registry;
 
-  RGWSyncModulesManager *sync_modules_manager{nullptr};
   RGWSyncModuleInstanceRef sync_module;
   bool writeable_zone{false};
 
@@ -1342,6 +1342,7 @@ public:
     std::shared_ptr<RGWSI_Zone> zone;
     std::shared_ptr<RGWSI_ZoneUtils> zone_utils;
     std::shared_ptr<RGWSI_Quota> quota;
+    std::shared_ptr<RGWSI_SyncModules> sync_modules;
     std::shared_ptr<RGWSI_SysObj> sysobj;
     std::shared_ptr<RGWSI_SysObj_Cache> cache;
   } _svc;
@@ -1351,6 +1352,7 @@ public:
     RGWSI_Zone *zone{nullptr};
     RGWSI_ZoneUtils *zone_utils{nullptr};
     RGWSI_Quota *quota{nullptr};
+    RGWSI_SyncModules *sync_modules{nullptr};
     RGWSI_SysObj *sysobj{nullptr};
     RGWSI_SysObj_Cache *cache{nullptr};
   } svc;
@@ -1379,10 +1381,6 @@ public:
 
   tombstone_cache_t *get_tombstone_cache() {
     return obj_tombstone_cache;
-  }
-
-  RGWSyncModulesManager *get_sync_modules_manager() {
-    return sync_modules_manager;
   }
   const RGWSyncModuleInstanceRef& get_sync_module() {
     return sync_module;

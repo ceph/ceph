@@ -74,6 +74,7 @@ using namespace librados;
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
 #include "services/svc_quota.h"
+#include "services/svc_sync_modules.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_sys_obj_cache.h"
 
@@ -1385,7 +1386,6 @@ void RGWRados::finalize()
   delete meta_mgr;
   delete binfo_cache;
   delete obj_tombstone_cache;
-  delete sync_modules_manager;
 
   if (reshard_wait.get()) {
     reshard_wait->stop();
@@ -1429,10 +1429,6 @@ int RGWRados::init_rados()
       return ret;
     }
   }
-
-  sync_modules_manager = new RGWSyncModulesManager();
-
-  rgw_register_sync_modules(sync_modules_manager);
 
   auto crs = std::unique_ptr<RGWCoroutinesManagerRegistry>{
     new RGWCoroutinesManagerRegistry(cct)};
@@ -1492,13 +1488,13 @@ int RGWRados::init_complete()
 
   if (run_sync_thread) {
     auto& zone_public_config = svc.zone->get_zone();
-    ret = sync_modules_manager->create_instance(cct, zone_public_config.tier_type, svc.zone->get_zone_params().tier_config, &sync_module);
+    ret = svc.sync_modules->get_manager()->create_instance(cct, zone_public_config.tier_type, svc.zone->get_zone_params().tier_config, &sync_module);
     if (ret < 0) {
       lderr(cct) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
       if (ret == -ENOENT) {
         lderr(cct) << "ERROR: " << zone_public_config.tier_type 
                    << " sync module does not exist. valid sync modules: " 
-                   << sync_modules_manager->get_registered_module_names()
+                   << svc.sync_modules->get_manager()->get_registered_module_names()
                    << dendl;
       }
       return ret;
@@ -1734,6 +1730,13 @@ int RGWRados::initialize()
     return ret;
   }
   svc.quota = _svc.quota.get();
+
+  JSONFormattable sync_modules_svc_conf;
+  ret = svc_registry->get_instance("sync_modules", sync_modules_svc_conf, &_svc.sync_modules);
+  if (ret < 0) {
+    return ret;
+  }
+  svc.sync_modules = _svc.sync_modules.get();
 
   if (use_cache) {
     JSONFormattable cache_svc_conf;

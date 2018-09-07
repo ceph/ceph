@@ -467,6 +467,22 @@ int RGWSI_SysObj_Core::omap_del(rgw_raw_obj& obj, const std::string& key)
   return r;
 }
 
+int RGWSI_SysObj_Core::notify(rgw_raw_obj& obj,
+			      bufferlist& bl,
+			      uint64_t timeout_ms,
+			      bufferlist *pbl)
+{
+  RGWSI_RADOS::Obj rados_obj;
+  int r = get_rados_obj(zone_svc.get(), obj, &rados_obj);
+  if (r < 0) {
+    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
+    return r;
+  }
+
+  r = rados_obj.notify(bl, timeout_ms, pbl);
+  return r;
+}
+
 int RGWSI_SysObj_Core::remove(RGWSysObjectCtxBase& obj_ctx,
                          RGWObjVersionTracker *objv_tracker,
                          rgw_raw_obj& obj)

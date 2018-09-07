@@ -27,6 +27,7 @@
 #include "cls/lock/cls_lock_client.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_sync_modules.h"
 
 #include "include/random.h"
 
@@ -1759,7 +1760,7 @@ int RGWDataSyncStatusManager::init()
     return -EIO;
   }
 
-  if (!store->get_sync_modules_manager()->supports_data_export(zone_def->tier_type)) {
+  if (!store->svc.sync_modules->get_manager()->supports_data_export(zone_def->tier_type)) {
     return -ENOTSUP;
   }
 

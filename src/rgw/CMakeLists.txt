@@ -42,6 +42,7 @@ set(librgw_common_srcs
   services/svc_finisher.cc
   services/svc_notify.cc
   services/svc_quota.cc
+  services/svc_sync_modules.cc
   services/svc_rados.cc
   services/svc_sys_obj.cc
   services/svc_sys_obj_cache.cc

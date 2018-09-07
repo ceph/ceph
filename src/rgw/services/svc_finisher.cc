@@ -1,9 +1,6 @@
 #include "common/Finisher.h"
 
 #include "svc_finisher.h"
-#include "svc_zone.h"
-
-#include "rgw/rgw_zone.h"
 
 int RGWS_Finisher::create_instance(const string& conf, RGWServiceInstanceRef *instance)
 {
@@ -27,6 +24,10 @@ int RGWSI_Finisher::init()
 
 void RGWSI_Finisher::shutdown()
 {
+  if (finalized) {
+    return;
+  }
+
   if (finisher) {
     finisher->stop();
 
@@ -37,6 +38,13 @@ void RGWSI_Finisher::shutdown()
     }
     delete finisher;
   }
+
+  finalized = true;
+}
+
+RGWSI_Finisher::~RGWSI_Finisher()
+{
+  shutdown();
 }
 
 void RGWSI_Finisher::register_caller(ShutdownCB *cb, int *phandle)

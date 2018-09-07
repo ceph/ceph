@@ -1,6 +1,7 @@
 #include "svc_zone.h"
 #include "svc_rados.h"
 #include "svc_sys_obj.h"
+#include "svc_sync_modules.h"
 
 #include "rgw/rgw_zone.h"
 #include "rgw/rgw_rest_conn.h"
@@ -20,15 +21,13 @@ int RGWS_Zone::create_instance(const string& conf, RGWServiceInstanceRef *instan
 
 std::map<string, RGWServiceInstance::dependency> RGWSI_Zone::get_deps()
 {
-  RGWServiceInstance::dependency dep1 = { .name = "sys_obj",
-                                          .conf = "{}" };
   map<string, RGWServiceInstance::dependency> deps;
-  deps["sys_obj_dep"] = dep1;
-
-  RGWServiceInstance::dependency dep2 = { .name = "rados_obj",
-                                          .conf = "{}" };
-  map<string, RGWServiceInstance::dependency> deps2;
-  deps["rados_dep"] = dep2;
+  deps["sys_obj_dep"] = { .name = "sys_obj",
+                          .conf = "{}" };
+  deps["rados_dep"] = { .name = "rados_obj",
+                        .conf = "{}" };
+  deps["sync_modules_dep"] = { .name = "sync_modules",
+                        .conf = "{}" };
   return deps;
 }
 
@@ -46,7 +45,16 @@ int RGWSI_Zone::load(const string& conf, std::map<std::string, RGWServiceInstanc
   rados_svc = static_pointer_cast<RGWSI_RADOS>(dep_refs["rados_dep"]);
   assert(rados_svc);
 
+  sync_modules_svc = static_pointer_cast<RGWSI_SyncModules>(dep_refs["sync_modules_dep"]);
+  assert(sync_modules_svc);
+
   return 0;
+}
+
+bool RGWSI_Zone::zone_syncs_from(RGWZone& target_zone, RGWZone& source_zone)
+{
+  return target_zone.syncs_from(source_zone.name) &&
+         sync_modules_svc->get_manager()->supports_data_export(source_zone.tier_type);
 }
 
 int RGWSI_Zone::init()
