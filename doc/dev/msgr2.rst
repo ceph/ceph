@@ -295,12 +295,14 @@ Once a session is established, we can exchange messages.
     data_pre_padding
     data
 
-  - The ceph_msg_header2 is modified from ceph_msg_header to include an
-    ack_seq.  This avoids the need for a TAG_ACK message most of the time.
-  - The ceph_msg_header2 is modified from ceph_msg_header to remove teh
-    src field, which we now get from the message flow handshake (TAG_IDENT).
-  - The ceph_msg_header2 specifies the data_pre_padding, which can be used to
-    adjust the alignment of the data payload.  (NOTE: is this is useful?)
+  - The ceph_msg_header2 is modified from ceph_msg_header:
+      * include an ack_seq.  This avoids the need for a TAG_ACK
+        message most of the time.
+      * remove the src field, which we now get from the message flow
+        handshake (TAG_IDENT).
+      * specifies the data_pre_padding length, which can be used to
+        adjust the alignment of the data payload.  (NOTE: is this is
+        useful?)
 
 * TAG_ACK: acknowledge receipt of message(s)::
 
