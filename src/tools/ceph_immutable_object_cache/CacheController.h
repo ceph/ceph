@@ -1,7 +1,8 @@
-#ifndef CACHE_CONTROLLER_H
-#define CACHE_CONTROLLER_H
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
-#include <thread>
+#ifndef CEPH_CACHE_CONTROLLER_H
+#define CEPH_CACHE_CONTROLLER_H
 
 #include "common/Formatter.h"
 #include "common/admin_socket.h"
@@ -15,15 +16,13 @@
 #include "include/assert.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
-
-#include "CacheControllerSocket.hpp"
+#include "CacheServer.h"
 #include "ObjectCacheStore.h"
 
+#include <thread>
 
-using boost::asio::local::stream_protocol;
-
-namespace rbd {
-namespace cache {
+namespace ceph {
+namespace immutable_obj_cache {
 
 class CacheController {
  public:
@@ -48,7 +47,7 @@ class CacheController {
   ContextWQ* pcache_op_work_queue;
 };
 
-} // namespace rbd
-} // namespace cache
+} // namespace immutable_obj_cache
+} // namespace ceph
 
 #endif

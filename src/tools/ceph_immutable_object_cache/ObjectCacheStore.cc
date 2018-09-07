@@ -4,13 +4,13 @@
 #include "ObjectCacheStore.h"
 
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rbd_cache
+#define dout_subsys ceph_subsys_immutable_obj_cache
 #undef dout_prefix
-#define dout_prefix *_dout << "rbd::cache::ObjectCacheStore: " << this << " " \
+#define dout_prefix *_dout << "ceph::cache::ObjectCacheStore: " << this << " " \
                            << __func__ << ": "
 
-namespace rbd {
-namespace cache {
+namespace ceph {
+namespace immutable_obj_cache {
 
 ObjectCacheStore::ObjectCacheStore(CephContext *cct, ContextWQ* work_queue)
       : m_cct(cct), m_work_queue(work_queue),
@@ -168,5 +168,5 @@ int ObjectCacheStore::evict_objects() {
   }
 }
 
-} // namespace cache
-} // namespace rbd
+} // namespace immutable_obj_cache
+} // namespace ceph

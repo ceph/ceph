@@ -1,11 +1,14 @@
-#ifndef RBD_CACHE_POLICY_HPP
-#define RBD_CACHE_POLICY_HPP
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
+#ifndef CEPH_CACHE_POLICY_HPP
+#define CEPH_CACHE_POLICY_HPP
 
 #include <list>
 #include <string>
 
-namespace rbd {
-namespace cache {
+namespace ceph {
+namespace immutable_obj_cache {
 
 enum CACHESTATUS {
   OBJ_CACHE_NONE = 0,
@@ -25,6 +28,6 @@ public:
   virtual void get_evict_list(std::list<std::string>* obj_list) = 0;
 };
 
-} // namespace cache
-} // namespace rbd
+} // namespace immutable_obj_cache
+} // namespace ceph
 #endif

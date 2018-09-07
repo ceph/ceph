@@ -1,21 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CACHE_CONTROLLER_SOCKET_COMMON_H
-#define CACHE_CONTROLLER_SOCKET_COMMON_H
+#ifndef CEPH_CACHE_SOCKET_COMMON_H
+#define CEPH_CACHE_SOCKET_COMMON_H
 
-/*
-#define RBDSC_REGISTER         0X11
-#define RBDSC_READ             0X12
-#define RBDSC_LOOKUP           0X13
-#define RBDSC_REGISTER_REPLY   0X14
-#define RBDSC_READ_REPLY       0X15
-#define RBDSC_LOOKUP_REPLY     0X16
-#define RBDSC_READ_RADOS       0X17
-*/
-
-namespace rbd {
-namespace cache {
+namespace ceph {
+namespace immutable_obj_cache {
 
 static const int RBDSC_REGISTER        =  0X11;
 static const int RBDSC_READ            =  0X12;
@@ -30,6 +20,8 @@ static const int RBDSC_READ_RADOS      =  0X17;
 typedef std::function<void(uint64_t, std::string)> ProcessMsg;
 typedef std::function<void(std::string)> ClientProcessMsg;
 typedef uint8_t rbdsc_req_type;
+
+//TODO(): switch to bufferlist
 struct rbdsc_req_type_t {
   rbdsc_req_type type;
   uint64_t vol_size;
@@ -57,6 +49,6 @@ struct rbdsc_req_type_t {
 
 static const int RBDSC_MSG_LEN = sizeof(rbdsc_req_type_t);
 
-} // namespace cache
-} // namespace rbd
+} // namespace immutable_obj_cache
+} // namespace ceph
 #endif

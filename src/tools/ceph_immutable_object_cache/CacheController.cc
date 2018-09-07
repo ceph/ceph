@@ -4,22 +4,22 @@
 #include "CacheController.h"
 
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rbd_cache
+#define dout_subsys ceph_subsys_immutable_obj_cache
 #undef dout_prefix
-#define dout_prefix *_dout << "rbd::cache::CacheController: " << this << " " \
+#define dout_prefix *_dout << "ceph::cache::CacheController: " << this << " " \
                            << __func__ << ": "
 
-namespace rbd {
-namespace cache {
+namespace ceph {
+namespace immutable_obj_cache {
 
 class ThreadPoolSingleton : public ThreadPool {
 public:
   ContextWQ *op_work_queue;
 
   explicit ThreadPoolSingleton(CephContext *cct)
-    : ThreadPool(cct, "librbd::cache::thread_pool", "tp_librbd_cache", 32,
+    : ThreadPool(cct, "ceph::cache::thread_pool", "tp_librbd_cache", 32,
                  "pcache_threads"),
-      op_work_queue(new ContextWQ("librbd::pcache_op_work_queue",
+      op_work_queue(new ContextWQ("ceph::pcache_op_work_queue",
                     cct->_conf.get_val<int64_t>("rbd_op_thread_timeout"),
                     this)) {
     start();
@@ -44,13 +44,14 @@ CacheController::~CacheController() {
 
 int CacheController::init() {
   ThreadPoolSingleton* thread_pool_singleton = &m_cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-    "rbd::cache::thread_pool", false, m_cct);
+    "ceph::cache::thread_pool", false, m_cct);
   pcache_op_work_queue = thread_pool_singleton->op_work_queue;
 
   m_object_cache_store = new ObjectCacheStore(m_cct, pcache_op_work_queue);
-  int r = m_object_cache_store->init(false);
+  //TODO(): make this configurable
+  int r = m_object_cache_store->init(true);
   if (r < 0) {
-    //derr << "init error\n" << dendl;
+    lderr(m_cct) << "init error\n" << dendl;
   }
   return r;
 }
@@ -72,7 +73,7 @@ void CacheController::run() {
       ([&](uint64_t p, std::string s){handle_request(p, s);}), m_cct);
     m_cache_server->run();
   } catch (std::exception& e) {
-    std::cerr << "Exception: " << e.what() << "\n";
+    lderr(m_cct) << "Exception: " << e.what() << dendl;
   }
 }
 
@@ -105,12 +106,12 @@ void CacheController::handle_request(uint64_t session_id, std::string msg){
 
       break;
     }
-    std::cout<<"can't recongize request"<<std::endl;
+    ldout(m_cct, 5) << "can't recongize request" << dendl;
     assert(0); // TODO replace it.
   }
 }
 
-} // namespace rbd
-} // namespace cache
+} // namespace immutable_obj_cache
+} // namespace ceph
 
 

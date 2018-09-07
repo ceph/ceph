@@ -4,13 +4,11 @@
 #ifndef CEPH_LIBRBD_CACHE_SHARED_PERSISTENT_OBJECT_CACHER_OBJECT_DISPATCH_H
 #define CEPH_LIBRBD_CACHE_SHARED_PERSISTENT_OBJECT_CACHER_OBJECT_DISPATCH_H
 
-#include "librbd/io/ObjectDispatchInterface.h"
 #include "common/Mutex.h"
-#include "osdc/ObjectCacher.h"
-#include "tools/rbd_cache/CacheControllerSocketClient.hpp"
 #include "SharedPersistentObjectCacher.h"
+#include "librbd/io/ObjectDispatchInterface.h"
+#include "tools/ceph_immutable_object_cache/CacheClient.h"
 
-struct WritebackHandler;
 
 namespace librbd {
 
@@ -18,19 +16,15 @@ class ImageCtx;
 
 namespace cache {
 
-/**
- * Facade around the OSDC object cacher to make it align with
- * the object dispatcher interface
- */
 template <typename ImageCtxT = ImageCtx>
-class SharedPersistentObjectCacherObjectDispatch : public io::ObjectDispatchInterface {
+class SharedReadOnlyObjectDispatch : public io::ObjectDispatchInterface {
 public:
-  static SharedPersistentObjectCacherObjectDispatch* create(ImageCtxT* image_ctx) {
-    return new SharedPersistentObjectCacherObjectDispatch(image_ctx);
+  static SharedReadOnlyObjectDispatch* create(ImageCtxT* image_ctx) {
+    return new SharedReadOnlyObjectDispatch(image_ctx);
   }
 
-  SharedPersistentObjectCacherObjectDispatch(ImageCtxT* image_ctx);
-  ~SharedPersistentObjectCacherObjectDispatch() override;
+  SharedReadOnlyObjectDispatch(ImageCtxT* image_ctx);
+  ~SharedReadOnlyObjectDispatch() override;
 
   io::ObjectDispatchLayer get_object_dispatch_layer() const override {
     return io::OBJECT_DISPATCH_LAYER_SHARED_PERSISTENT_CACHE;
@@ -108,8 +102,6 @@ public:
       uint64_t journal_tid, uint64_t new_journal_tid) {
   }
 
-  SharedPersistentObjectCacher<ImageCtxT> *m_object_store = nullptr;
-
 private:
 
   int handle_read_cache(
@@ -122,12 +114,13 @@ private:
 
   ImageCtxT* m_image_ctx;
 
-  rbd::cache::CacheClient *m_cache_client = nullptr;
+  ceph::immutable_obj_cache::CacheClient *m_cache_client = nullptr;
+  SharedPersistentObjectCacher<ImageCtxT> *m_object_store = nullptr;
 };
 
 } // namespace cache
 } // namespace librbd
 
-extern template class librbd::cache::SharedPersistentObjectCacherObjectDispatch<librbd::ImageCtx>;
+extern template class librbd::cache::SharedReadOnlyObjectDispatch<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_CACHE_OBJECT_CACHER_OBJECT_DISPATCH_H

@@ -11,7 +11,7 @@
 
 #include <vector>
 
-rbd::cache::CacheController *cachectl = nullptr;
+ceph::immutable_obj_cache::CacheController *cachectl = nullptr;
 
 void usage() {
   std::cout << "usage: cache controller [options...]" << std::endl;
@@ -64,7 +64,7 @@ int main(int argc, const char **argv)
   // disable unnecessary librbd cache
   g_ceph_context->_conf.set_val_or_die("rbd_cache", "false");
 
-  cachectl = new rbd::cache::CacheController(g_ceph_context, cmd_args);
+  cachectl = new ceph::immutable_obj_cache::CacheController(g_ceph_context, cmd_args);
   int r = cachectl->init();
   if (r < 0) {
     std::cerr << "failed to initialize: " << cpp_strerror(r) << std::endl;
