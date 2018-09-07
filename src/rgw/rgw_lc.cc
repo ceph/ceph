@@ -27,7 +27,6 @@ const char* LC_STATUS[] = {
       "COMPLETE"
 };
 
-static string STANDARD_IA = "STANDARD_IA";
 
 using namespace librados;
 
@@ -440,7 +439,7 @@ int RGWLC::handle_transition(RGWRados::Bucket *target, const map<string, lc_op>&
           if (!key.ns.empty()) {
             continue;
           }
-          if (obj_iter->meta.placement_type != src_type) {
+          if (obj_iter->meta.placement_storage_class != src_type) {
             continue;
           }
           if (dst_iter->second.date != boost::none) {

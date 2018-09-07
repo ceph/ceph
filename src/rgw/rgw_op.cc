@@ -86,6 +86,9 @@ static MultipartMetaFilter mp_filter;
 // at some point
 static constexpr auto S3_EXISTING_OBJTAG = "s3:ExistingObjectTag";
 
+static string standard_storage_class = "STANDARD";
+static string standard_ia_storage_class = "STANDARD_IA";
+
 int RGWGetObj::parse_range(void)
 {
   int r = -ERANGE;
@@ -3220,11 +3223,11 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
   obj.set_in_extra_data(true);
   int res = get_obj_attrs(store, s, obj, xattrs);
   if (res == 0) {
-    map<string, bufferlist>::iterator placement_type_iter = xattrs.find(RGW_ATTR_PLACEMENT_TYPE);
-    if (placement_type_iter != xattrs.end()) {
-      bufferlist &bl = placement_type_iter->second;
-      placement_type = bl.to_str();
-      if (!placement_type.empty()) {
+    map<string, bufferlist>::iterator placement_storage_class_iter = xattrs.find(RGW_ATTR_PLACEMENT_STORAGE_CLASS);
+    if (placement_storage_class_iter != xattrs.end()) {
+      bufferlist &bl = placement_storage_class_iter->second;
+      placement_storage_class = bl.to_str();
+      if (!placement_storage_class.empty()) {
         const auto &zonegroup = store->get_zonegroup();
         for (const auto &target : zonegroup.placement_targets) {
           if (strcmp(target.second.type.c_str(), bl.to_str().c_str()) == 0) {
@@ -3264,19 +3267,10 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
                                               map<string, bufferlist>& attrs,
                                               real_time delete_at,
                                               const char *if_match,
-                                              const char *if_nomatch, const string *user_data, const std::string *placement_type, rgw_zone_set *zones_trace)
+                                              const char *if_nomatch, const string *user_data, const string *placement_id, rgw_zone_set *zones_trace)
 {
   complete_writing_data();
-  RGWBucketInfo op_target_bucket_info = s->bucket_info;
-  const auto& zonegroup = store->get_zonegroup();
-  for (const auto& target : zonegroup.placement_targets) {
-    if (strcmp(target.second.type.c_str(), placement_type->c_str()) == 0) {
-      op_target_bucket_info.placement_rule = target.second.name;
-      break;
-    }
-  }
-
-  RGWRados::Object op_target(store, op_target_bucket_info, obj_ctx, head_obj);
+  RGWRados::Object op_target(store, s->bucket_info, obj_ctx, head_obj);
   op_target.set_versioning_disabled(true);
   RGWRados::Object::Write head_obj_op(&op_target);
 
@@ -3284,7 +3278,17 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
   head_obj_op.meta.mtime = mtime;
   head_obj_op.meta.owner = s->owner.get_id();
   head_obj_op.meta.delete_at = delete_at;
-  head_obj_op.meta.placement_type = placement_type;
+  bool using_tail_data_pool = false;
+
+  if (placement_id && placement_id->compare("default-placement") == 0) {
+    head_obj_op.meta.storage_class = static_cast<const std::string*>(&standard_storage_class);
+    using_tail_data_pool = false;
+  }
+  else {
+    head_obj_op.meta.storage_class = static_cast<const std::string*>(&standard_ia_storage_class);
+    using_tail_data_pool = true;
+  }
+
   head_obj_op.meta.zones_trace = zones_trace;
   head_obj_op.meta.modify_tail = true;
 
@@ -3334,7 +3338,11 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
 
   rgw_raw_obj raw_meta_obj;
 
-  store->obj_to_raw(op_target_bucket_info.placement_rule , meta_obj, &raw_meta_obj);
+  if (placement_id)
+    store->obj_to_raw(*placement_id, meta_obj, &raw_meta_obj);
+  else
+    store->obj_to_raw(s->bucket_info.placement_rule, meta_obj, &raw_meta_obj);
+
   const bool must_exist = true;// detect races with abort
   r = store->omap_set(raw_meta_obj, p, bl, must_exist);
   return r;
@@ -3562,10 +3570,10 @@ void RGWPutObj::execute()
     supplied_md5[sizeof(supplied_md5) - 1] = '\0';
   }
 
-  if (!placement_type.empty()) {
+  if (!placement_storage_class.empty()) {
     bufferlist tmp;
-    tmp.append(placement_type.c_str(), placement_type.length());
-    emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
+    tmp.append(placement_storage_class.c_str(), placement_storage_class.length());
+    emplace_attr(RGW_ATTR_PLACEMENT_STORAGE_CLASS, std::move(tmp));
   }
 
   processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
@@ -3834,21 +3842,23 @@ void RGWPutObj::execute()
   }
 
   tracepoint(rgw_op, processor_complete_enter, s->req_id.c_str());
-  if (! multipart) {
+  if (!multipart) {
+    //non multipart upload
     op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
                                  (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
                                  (user_data.empty() ? nullptr : &user_data),
-                                 (placement_type.empty() ? nullptr : &placement_type));
+                                 (s->placement_id.empty() ? nullptr : &s->placement_id));
   } else {
-    if (!processor->get_placement_type().empty()) {
+    //multipart upload
+    if (!processor->get_placement_storage_class().empty()) {
       bufferlist tmp;
-      tmp.append(processor->get_placement_type().c_str(), processor->get_placement_type().length());
-      emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
+      tmp.append(processor->get_placement_storage_class().c_str(), processor->get_placement_storage_class().length());
+      emplace_attr(RGW_ATTR_PLACEMENT_STORAGE_CLASS, std::move(tmp));
     }
     op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
                                  (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
                                  (user_data.empty() ? nullptr : &user_data),
-                                 (processor->get_placement_type().empty() ? nullptr : &(processor->get_placement_type())));
+                                 (processor->get_placement_id().empty() ? nullptr : &(processor->get_placement_id())));
   }
 
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
@@ -4058,10 +4068,10 @@ void RGWPostObj::execute()
     bl.append(etag.c_str(), etag.size());
     emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
-    if (!placement_type.empty()) {
+    if (!placement_storage_class.empty()) {
       bufferlist tmp;
-      tmp.append(placement_type.c_str(), placement_type.length());
-      emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
+      tmp.append(placement_storage_class.c_str(), placement_storage_class.length());
+      emplace_attr(RGW_ATTR_PLACEMENT_STORAGE_CLASS, std::move(tmp));
     }
 
     policy.encode(aclbl);
@@ -4801,18 +4811,6 @@ void RGWCopyObj::execute()
     return;
   }
 
-  if(!s->placement_id.empty()) {
-    attrs_mod = RGWRados::ATTRSMOD_MERGE;
-  }
-
-  /* Store the placement type */
-  if (!placement_type.empty()) {
-    attrs.erase(RGW_ATTR_PLACEMENT_TYPE);
-    bufferlist tmp;
-    tmp.append(placement_type.c_str(), placement_type.length());
-    emplace_attr(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
-  }
-
   op_ret = store->copy_obj(obj_ctx,
 			   s->user->user_id,
 			   client_id,
@@ -5481,10 +5479,10 @@ void RGWInitMultipart::execute()
     return;
   }
 
-  if (!placement_type.empty()) {
+  if (!placement_storage_class.empty()) {
     bufferlist tmp;
-    tmp.append(placement_type.c_str(), placement_type.length());
-    attrs[RGW_ATTR_PLACEMENT_TYPE] = tmp;
+    tmp.append(placement_storage_class.c_str(), placement_storage_class.length());
+    attrs[RGW_ATTR_PLACEMENT_STORAGE_CLASS] = tmp;
   }
 
   do {
@@ -5831,29 +5829,29 @@ void RGWCompleteMultipart::execute()
   obj_op.meta.owner = s->owner.get_id();
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.modify_tail = true;
-  map<string, bufferlist>::iterator placement_type_iter = attrs.find(RGW_ATTR_PLACEMENT_TYPE);
-  std::string placement_type;
-  if (placement_type_iter != attrs.end()) {
-    bufferlist& bl = placement_type_iter->second;
-    placement_type = bl.to_str();
-    obj_op.meta.placement_type = &placement_type;
-    if (!placement_type.empty()) {
+  map<string, bufferlist>::iterator placement_storage_class_iter = attrs.find(RGW_ATTR_PLACEMENT_STORAGE_CLASS);
+  std::string placement_storage_class;
+  if (placement_storage_class_iter != attrs.end()) {
+    bufferlist& bl = placement_storage_class_iter->second;
+    placement_storage_class = bl.to_str();
+    obj_op.meta.storage_class = &placement_storage_class;
+    if (!placement_storage_class.empty()) {
       std::string placement_id;
       bool is_exist = false;
       const auto& zonegroup = store->get_zonegroup();
       for (const auto& target : zonegroup.placement_targets) {
-        if (target.second.type == placement_type) {
+        if (target.second.type == placement_storage_class) {
           placement_id = target.second.name;
           is_exist = true;
           break;
         }
       }
       if (!is_exist) {
-        ldout(s->cct, 0) << "placement type (" << placement_type << ")"
+        ldout(s->cct, 0) << "placement type (" << placement_storage_class << ")"
                          << " doesn't exist in the placement targets of zonegroup"
                          << " (" << store->get_zonegroup().api_name << ")" << dendl;
         op_ret = -ERR_INVALID_STORAGE_CLASS;
-        s->err.message = "The x-amz-storage-class " + placement_type +
+        s->err.message = "The x-amz-storage-class " + placement_storage_class +
                          " does not exist";
         return;
       }
@@ -5868,7 +5866,7 @@ void RGWCompleteMultipart::execute()
         s->placement_id = placement_id;
       } else {
         op_ret = -ERR_INVALID_STORAGE_CLASS;
-        s->err.message = "The x-amz-storage-class (" + placement_type +
+        s->err.message = "The x-amz-storage-class (" + placement_storage_class +
                          ") must use the same index_pool and data_pool" +
                          " with bucket default placement (" +
                          s->bucket_info.placement_rule + ")";
@@ -5999,10 +5997,10 @@ void RGWListMultipart::execute()
   if (op_ret < 0)
     return;
 
-  map<string, bufferlist>::iterator placement_type_iter = xattrs.find(RGW_ATTR_PLACEMENT_TYPE);
-  if (placement_type_iter != xattrs.end()) {
-    bufferlist &bl = placement_type_iter->second;
-    placement_type = bl.to_str();
+  map<string, bufferlist>::iterator placement_storage_class_iter = xattrs.find(RGW_ATTR_PLACEMENT_STORAGE_CLASS);
+  if (placement_storage_class_iter != xattrs.end()) {
+    bufferlist &bl = placement_storage_class_iter->second;
+    placement_storage_class = bl.to_str();
   }
   op_ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts,
 				marker, parts, NULL, &truncated);

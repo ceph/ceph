@@ -2885,7 +2885,7 @@ public:
         ceph::real_time delete_at;
         bool canceled;
         const string *user_data;
-        const std::string *placement_type;
+        const std::string *storage_class;
         rgw_zone_set *zones_trace;
         bool modify_tail;
         bool completeMultipart;
@@ -2893,7 +2893,7 @@ public:
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
-                 if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), placement_type(nullptr), zones_trace(nullptr),
+                 if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), storage_class(nullptr), zones_trace(nullptr),
                  modify_tail(false),  completeMultipart(false), modify_olh(true) {}
       } meta;
 
@@ -3052,7 +3052,7 @@ public:
                    uint64_t accounted_size, ceph::real_time& ut,
                    const string& etag, const string& content_type,
                    bufferlist *acl_bl, RGWObjCategory category,
-		   list<rgw_obj_index_key> *remove_objs, const string *user_data = nullptr, const std::string *placement_type = nullptr);
+		   list<rgw_obj_index_key> *remove_objs, const string *user_data = nullptr, const std::string *placement_id = nullptr);
       int complete_del(int64_t poolid, uint64_t epoch,
                        ceph::real_time& removed_mtime, /* mtime of removed object */
                        list<rgw_obj_index_key> *remove_objs);
@@ -3176,7 +3176,7 @@ public:
     ATTRSMOD_MERGE   = 2
   };
 
-  int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj, const string* placement_type = nullptr, string* placement_id = nullptr);
+  int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj, const string* placement_storage_class = nullptr, string* placement_id = nullptr);
 
   int stat_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
@@ -4000,11 +4000,12 @@ protected:
   virtual int do_complete(size_t accounted_size, const string& etag,
                           ceph::real_time *mtime, ceph::real_time set_mtime,
                           map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                          const char *if_match, const char *if_nomatch, const string *user_data, const string *placement_type,
+                          const char *if_match, const char *if_nomatch, const string *user_data, const string *placement_id,
                           rgw_zone_set* zones_trace = nullptr) = 0;
 
 public:
-  virtual const string& get_placement_type() = 0;
+  virtual const string& get_placement_storage_class() = 0;
+  virtual const string& get_placement_id() = 0;
   RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), 
                                                                    obj_ctx(_obj_ctx), 
                                                                    is_complete(false), 
@@ -4019,7 +4020,7 @@ public:
   int complete(size_t accounted_size, const string& etag, 
                ceph::real_time *mtime, ceph::real_time set_mtime,
                map<string, bufferlist>& attrs, ceph::real_time delete_at,
-               const char *if_match = NULL, const char *if_nomatch = NULL, const string *user_data = nullptr, const string *placement_type = nullptr,
+               const char *if_match = NULL, const char *if_nomatch = NULL, const string *user_data = nullptr, const string *placement_id = nullptr,
                rgw_zone_set *zones_trace = nullptr);
 
   CephContext *ctx();
@@ -4092,7 +4093,7 @@ protected:
   string unique_tag;
 
   std::string placement_id;
-  std::string placement_type;
+  std::string placement_storage_class;
 
   rgw_raw_obj cur_obj;
   RGWObjManifest manifest;
@@ -4102,7 +4103,7 @@ protected:
   int do_complete(size_t accounted_size, const string& etag,
                   ceph::real_time *mtime, ceph::real_time set_mtime,
                   map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                  const char *if_match, const char *if_nomatch, const string *user_data, const string *placement_type, rgw_zone_set *zones_trace) override;
+                  const char *if_match, const char *if_nomatch, const string *user_data, const string *placement_id, rgw_zone_set *zones_trace) override;
 
   int prepare_next_part(off_t ofs);
   int complete_parts();
@@ -4143,8 +4144,12 @@ public:
     version_id = vid;
   }
 
-  const string& get_placement_type() override {
-    return placement_type;
+  const string& get_placement_storage_class() override {
+    return placement_storage_class;
+  }
+
+  const string& get_placement_id() override {
+    return placement_id;
   }
 
   const string& get_version_id() const {
@@ -4230,7 +4235,7 @@ protected:
   int do_complete(size_t accounted_size, const string& etag,
                   ceph::real_time *mtime, ceph::real_time set_mtime,
                   map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                  const char *if_match, const char *if_nomatch, const string *user_data, const string *placement_type,
+                  const char *if_match, const char *if_nomatch, const string *user_data, const string *placement_id,
                   rgw_zone_set *zones_trace) override;
 public:
   bool immutable_head() override { return true; }

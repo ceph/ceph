@@ -266,7 +266,7 @@ void usage()
   cout << "   --read-only               set zone as read-only (when adding to zonegroup)\n";
   cout << "   --redirect-zone           specify zone id to redirect when response is 404 (not found)\n";
   cout << "   --placement-id            placement id for zonegroup placement commands\n";
-  cout << "   --placement-type          placement type for zonegroup placement commands\n";
+  cout << "   --placement-storage-class placement storage class for zonegroup placement commands\n";
   cout << "   --tags=<list>             list of tags for zonegroup placement add and modify commands\n";
   cout << "   --tags-add=<list>         list of tags to add for zonegroup placement modify command\n";
   cout << "   --tags-rm=<list>          list of tags to remove for zonegroup placement modify command\n";
@@ -2704,7 +2704,7 @@ int main(int argc, const char **argv)
   string quota_scope;
   string object_version;
   string placement_id;
-  string placement_type;
+  string placement_storage_class;
   list<string> tags;
   list<string> tags_add;
   list<string> tags_rm;
@@ -3018,8 +3018,8 @@ int main(int argc, const char **argv)
       zonegroup_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-id", (char*)NULL)) {
       placement_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--placement-type", (char*)NULL)) {
-      placement_type = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--placement-storage-class", (char*)NULL)) {
+      placement_storage_class = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tags", (char*)NULL)) {
       get_str_list(val, tags);
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-add", (char*)NULL)) {
@@ -4193,13 +4193,13 @@ int main(int argc, const char **argv)
 	}
 
         if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_ADD) {
-          if (placement_type.empty()) {
-            cerr << "ERROR: --placement-type not specified" << std::endl;
+          if (placement_storage_class.empty()) {
+            cerr << "ERROR: --placement-storage-class not specified" << std::endl;
             return EINVAL;
           }
           RGWZoneGroupPlacementTarget target;
           target.name = placement_id;
-          target.type = placement_type;
+          target.type = placement_storage_class;
           for (auto& t : tags) {
             target.tags.insert(t);
           }
@@ -4213,8 +4213,8 @@ int main(int argc, const char **argv)
             }
           }
           target.name = placement_id;
-          if (!placement_type.empty())
-            target.type = placement_type;
+          if (!placement_storage_class.empty())
+            target.type = placement_storage_class;
           for (auto& t : tags_rm) {
             target.tags.erase(t);
           }

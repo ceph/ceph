@@ -98,7 +98,7 @@ struct rgw_bucket_dir_entry_meta {
   string content_type;
   uint64_t accounted_size;
   string user_data;
-  std::string placement_type;
+  std::string placement_storage_class;
 
   rgw_bucket_dir_entry_meta() :
   category(0), size(0), accounted_size(0) { }
@@ -114,7 +114,7 @@ struct rgw_bucket_dir_entry_meta {
     encode(content_type, bl);
     encode(accounted_size, bl);
     encode(user_data, bl);
-    encode(placement_type, bl);
+    encode(placement_storage_class, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
@@ -133,8 +133,10 @@ struct rgw_bucket_dir_entry_meta {
       accounted_size = size;
     if (struct_v >= 5)
       decode(user_data, bl);
-    if (struct_v >= 6)
-      decode(placement_type, bl);
+    if (struct_v >= 6) 
+      decode(placement_storage_class, bl);
+    else
+      placement_storage_class = "STANDARD";
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

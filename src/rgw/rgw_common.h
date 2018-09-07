@@ -107,7 +107,7 @@ using ceph::crypto::MD5;
 /* IAM Policy */
 #define RGW_ATTR_IAM_POLICY	RGW_ATTR_PREFIX "iam-policy"
 
-#define RGW_ATTR_PLACEMENT_TYPE    RGW_ATTR_PREFIX "placement-type"
+#define RGW_ATTR_PLACEMENT_STORAGE_CLASS    RGW_ATTR_PREFIX "placement-storage-class"
 
 /* RGW File Attributes */
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"

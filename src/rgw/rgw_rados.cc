@@ -124,6 +124,8 @@ static string RGW_DEFAULT_ZONE_ROOT_POOL = "rgw.root";
 static string RGW_DEFAULT_ZONEGROUP_ROOT_POOL = "rgw.root";
 static string RGW_DEFAULT_REALM_ROOT_POOL = "rgw.root";
 static string RGW_DEFAULT_PERIOD_ROOT_POOL = "rgw.root";
+static string standard_storage_class = "STANDARD";
+static string standard_ia_storage_class = "STANDARD_IA";
 
 #define RGW_STATELOG_OBJ_PREFIX "statelog."
 
@@ -2480,10 +2482,10 @@ int RGWPutObjProcessor::complete(size_t accounted_size, const string& etag,
                                  real_time *mtime, real_time set_mtime,
                                  map<string, bufferlist>& attrs, real_time delete_at,
                                  const char *if_match, const char *if_nomatch, const string *user_data,
-                                 const string *placement_type,
+                                 const string *placement_id,
                                  rgw_zone_set *zones_trace)
 {
-  int r = do_complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at, if_match, if_nomatch, user_data, placement_type, zones_trace);
+  int r = do_complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at, if_match, if_nomatch, user_data, placement_id, zones_trace);
   if (r < 0)
     return r;
 
@@ -2834,7 +2836,7 @@ int RGWPutObjProcessor_Atomic::do_complete(size_t accounted_size, const string& 
                                            real_time delete_at,
                                            const char *if_match,
                                            const char *if_nomatch, const string *user_data,
-                                           const string *placement_type,
+                                           const string *placement_id,
                                            rgw_zone_set *zones_trace) {
   int r = complete_writing_data();
   if (r < 0)
@@ -2861,7 +2863,13 @@ int RGWPutObjProcessor_Atomic::do_complete(size_t accounted_size, const string& 
   obj_op.meta.olh_epoch = olh_epoch;
   obj_op.meta.delete_at = delete_at;
   obj_op.meta.user_data = user_data;
-  obj_op.meta.placement_type = placement_type;
+
+  if (placement_id && placement_id->compare("default-placement") == 0) {
+    obj_op.meta.storage_class = static_cast<const std::string*>(&standard_storage_class);
+  }
+  else { 
+    obj_op.meta.storage_class = static_cast<const std::string*>(&standard_ia_storage_class);
+  }
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
   obj_op.meta.modify_olh = modify_olh;
@@ -7312,7 +7320,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   tracepoint(rgw_rados, complete_enter, req_id.c_str());
   r = index_op->complete(poolid, epoch, size, accounted_size,
                         meta.set_mtime, etag, content_type, &acl_bl,
-                        meta.category, meta.remove_objs, meta.user_data, meta.placement_type);
+                        meta.category, meta.remove_objs, meta.user_data, &s->placement_id);
   tracepoint(rgw_rados, complete_exit, req_id.c_str());
   if (r < 0)
     goto done_cancel;
@@ -7799,7 +7807,7 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs,
   }
 }
 
-int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj, const string* placement_type, string* placement_id)
+int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj, const string* placement_storage_class, string* placement_id)
 {
   map<string, bufferlist> attrset;
 
@@ -7819,11 +7827,11 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj, const s
 
   attrset.erase(RGW_ATTR_ID_TAG);
   attrset.erase(RGW_ATTR_TAIL_TAG);
-  attrset.erase(RGW_ATTR_PLACEMENT_TYPE);
-  if (placement_type && !(*placement_type).empty()) {
+  attrset.erase(RGW_ATTR_PLACEMENT_STORAGE_CLASS);
+  if (placement_storage_class && !(*placement_storage_class).empty()) {
     bufferlist tmp;
-    tmp.append((*placement_type).c_str(), (*placement_type).length());
-    attrset.emplace(RGW_ATTR_PLACEMENT_TYPE, std::move(tmp));
+    tmp.append((*placement_storage_class).c_str(), (*placement_storage_class).length());
+    attrset.emplace(RGW_ATTR_PLACEMENT_STORAGE_CLASS, std::move(tmp));
   }
 
   return copy_obj_data(rctx, dest_bucket_info, read_op, obj_size - 1, obj, NULL, mtime, attrset,
@@ -8456,6 +8464,12 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (cmp != src_attrs.end())
     attrs[RGW_ATTR_COMPRESSION] = cmp->second;
 
+  attrs.erase(RGW_ATTR_PLACEMENT_STORAGE_CLASS); //erase old storage class
+  bufferlist tmp;
+  string storage_class = obj_ctx.s->info.env->get("HTTP_X_AMZ_STORAGE_CLASS", "STANDARD");
+  tmp.append(storage_class.c_str(), storage_class.length());
+  attrs.emplace(std::move(RGW_ATTR_PLACEMENT_STORAGE_CLASS), std::move(tmp));
+
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
 
@@ -8526,12 +8540,13 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     }
   }
 
+//  std::string storage_class = obj_ctx.s->info.env->get("HTTP_X_AMZ_STORAGE_CLASS", "STANDARD");
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     attrs.erase(RGW_ATTR_ID_TAG);
     attrs.erase(RGW_ATTR_TAIL_TAG);
     return copy_obj_data(obj_ctx, dest_bucket_info, read_op, obj_size - 1, dest_obj,
                          mtime, real_time(), attrs, olh_epoch, delete_at,
-                         version_id, petag);
+                         version_id, petag, &(obj_ctx.s->placement_id));
   }
 
   RGWObjManifest::obj_iterator miter = astate->manifest.obj_begin();
@@ -8732,14 +8747,15 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     // pass original size if compressed
     accounted_size = compressed ? cs_info.orig_size : ofs;
   }
-  iter = attrs.find(RGW_ATTR_PLACEMENT_TYPE);
-  if (iter != attrs.end()) {
-    bufferlist &bl = iter->second;
-    string placement_type = bl.to_str();
-    return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at, NULL, NULL, NULL, &placement_type, NULL);
-  }
+//  iter = attrs.find(RGW_ATTR_PLACEMENT_STORAGE_CLASS);
+//  if (iter != attrs.end()) {
+//    bufferlist &bl = iter->second;
+//    string placement_type = bl.to_str();
+//    return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at, NULL, NULL, NULL, &placement_type, NULL);
+//  }
 
-  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at);
+//  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at);
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at, NULL, NULL, NULL, placement_id, NULL);
 }
 
 bool RGWRados::is_meta_master()
@@ -10485,7 +10501,7 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
                                             const string& content_type,
                                             bufferlist *acl_bl,
                                             RGWObjCategory category,
-                                            list<rgw_obj_index_key> *remove_objs, const string *user_data, const std::string *placement_type)
+                                            list<rgw_obj_index_key> *remove_objs, const string *user_data, const std::string *placement_id)
 {
   if (blind) {
     return 0;
@@ -10508,9 +10524,23 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
   if (user_data)
     ent.meta.user_data = *user_data;
 
-  if (placement_type)
-    ent.meta.placement_type = *placement_type;
-
+  string storage_class;
+  const auto &zonegroup = store->get_zonegroup();
+  for (const auto &target : zonegroup.placement_targets) {
+    if (placement_id && target.second.name.compare(*placement_id) == 0) {
+      storage_class = target.second.type;
+      break;
+    }
+  }
+  if (!placement_id && storage_class.empty()) {
+    RGWObjectCtx rctx(store);
+    RGWObjState *state;
+    bufferlist bl;
+    int ret = store->get_obj_state(&rctx, target->bucket_info, obj, &state, false);
+    state->get_attr(RGW_ATTR_PLACEMENT_STORAGE_CLASS, bl);
+    storage_class = bl.to_str();
+  }
+  ent.meta.placement_storage_class = storage_class;
   ACLOwner owner;
   if (acl_bl && acl_bl->length()) {
     int ret = store->decode_policy(*acl_bl, &owner);
@@ -14644,7 +14674,7 @@ int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need
 }
 
 int rgw_placement_id_from_attrset(map<string, bufferlist>& attrs, RGWRados *store, req_state *s) {
-  map<string, bufferlist>::iterator value = attrs.find(RGW_ATTR_PLACEMENT_TYPE);
+  map<string, bufferlist>::iterator value = attrs.find(RGW_ATTR_PLACEMENT_STORAGE_CLASS);
   if (value != attrs.end()) {
     bufferlist &bl = value->second;
     if (!bl.to_str().empty()) {
