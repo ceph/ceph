@@ -13,7 +13,7 @@
  */
 
 #include "rgw_dmclock_scheduler.h"
-
+#include "rgw_common.h" // for rgw PerfCounter
 namespace rgw::dmclock {
 
 AsyncScheduler::~AsyncScheduler()
@@ -163,6 +163,12 @@ void AsyncScheduler::process(const Time& now)
         inc(psums, client, cost);
         c->tinc(queue_counters::l_prio_latency, lat);
       }
+    }
+  }
+
+  if (outstanding_requests >= max_requests) {
+    if(perfcounter){
+      perfcounter->inc(l_rgw_throttle);
     }
   }
 

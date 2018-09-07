@@ -269,6 +269,8 @@ enum {
   l_rgw_cache_hit,
   l_rgw_cache_miss,
 
+  l_rgw_throttle,
+
   l_rgw_keystone_token_cache_hit,
   l_rgw_keystone_token_cache_miss,
 
