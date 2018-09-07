@@ -394,28 +394,28 @@ public:
 };
 
 class RGWRadosGetOmapKeysCR : public RGWSimpleCoroutine {
-  RGWRados *store;
+ public:
+  struct Result {
+    rgw_rados_ref ref;
+    std::set<std::string> entries;
+    bool more = false;
+  };
+  using ResultPtr = std::shared_ptr<Result>;
 
-  string marker;
-  std::set<std::string> *entries;
-  int max_entries;
-  bool *pmore;
-
-  rgw_rados_ref ref;
-
-  rgw_raw_obj obj;
-
-  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
-
-public:
-  RGWRadosGetOmapKeysCR(RGWRados *_store,
-		      const rgw_raw_obj& _obj,
-		      const string& _marker,
-		      std::set<std::string> *_entries,
-                        int _max_entries, bool *pmore);
+  RGWRadosGetOmapKeysCR(RGWRados *_store, const rgw_raw_obj& _obj,
+                        const string& _marker, int _max_entries,
+                        ResultPtr result);
 
   int send_request() override;
   int request_complete() override;
+
+ private:
+  RGWRados *store;
+  rgw_raw_obj obj;
+  string marker;
+  int max_entries;
+  ResultPtr result;
+  boost::intrusive_ptr<RGWAioCompletionNotifier> cn;
 };
 
 class RGWRadosRemoveOmapKeysCR : public RGWSimpleCoroutine {
