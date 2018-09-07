@@ -21,7 +21,7 @@ from cpython cimport PyObject, ref, exc
 from libc cimport errno
 from libc.stdint cimport *
 from libc.stdlib cimport realloc, free
-from libc.string cimport strdup
+from libc.string cimport strdup, memset
 
 from collections import Iterable
 from datetime import datetime
@@ -748,6 +748,7 @@ cdef void* realloc_chk(void* ptr, size_t size) except NULL:
     cdef void *ret = realloc(ptr, size)
     if ret == NULL:
         raise MemoryError("realloc failed")
+    memset(ret, 0, size)
     return ret
 
 cdef class Completion
