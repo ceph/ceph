@@ -119,8 +119,7 @@ int RGWSI_SysObj::Pool::Op::list_prefixed_objs(const string& prefix, list<string
 {
   bool is_truncated;
 
-  auto rados_svc = source.get_rados_svc();
-  auto rados_pool = rados_svc->pool(source.pool);
+  auto rados_pool = source.rados_svc->pool(source.pool);
 
   auto op = rados_pool.op();
 
@@ -189,6 +188,16 @@ int RGWSI_SysObj::Obj::OmapOp::del(const std::string& key)
   rgw_raw_obj& obj = source.obj;
 
   return svc->omap_del(obj, key);
+}
+
+int RGWSI_SysObj::Obj::WNOp::notify(bufferlist& bl,
+				    uint64_t timeout_ms,
+				    bufferlist *pbl)
+{
+  RGWSI_SysObj_Core *svc = source.core_svc;
+  rgw_raw_obj& obj = source.obj;
+
+  return svc->notify(obj, bl, timeout_ms, pbl);
 }
 
 RGWSI_Zone *RGWSI_SysObj::get_zone_svc()

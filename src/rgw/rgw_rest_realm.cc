@@ -122,7 +122,7 @@ void RGWOp_Period_Post::execute()
 
   // if period id is empty, handle as 'period commit'
   if (period.get_id().empty()) {
-    http_ret = period.commit(realm, current_period, error_stream);
+    http_ret = period.commit(store, realm, current_period, error_stream);
     if (http_ret < 0) {
       lderr(cct) << "master zone failed to commit period" << dendl;
     }

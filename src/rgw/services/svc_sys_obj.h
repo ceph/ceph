@@ -32,8 +32,6 @@ public:
     RGWSysObjectCtx& ctx;
     rgw_raw_obj obj;
 
-    RGWSI_RADOS *get_rados_svc();
-
   public:
     Obj(RGWSI_SysObj_Core *_core_svc,
         RGWSysObjectCtx& _ctx,
@@ -157,6 +155,16 @@ public:
       int set(const map<std::string, bufferlist>& m);
       int del(const std::string& key);
     };
+
+    struct WNOp {
+      Obj& source;
+
+      WNOp(Obj& _source) : source(_source) {}
+
+      int notify(bufferlist& bl,
+		 uint64_t timeout_ms,
+		 bufferlist *pbl);
+    };
     ROp rop() {
       return ROp(*this);
     }
@@ -168,19 +176,24 @@ public:
     OmapOp omap() {
       return OmapOp(*this);
     }
+
+    WNOp wn() {
+      return WNOp(*this);
+    }
   };
 
   class Pool {
     friend class Op;
 
+    RGWSI_RADOS *rados_svc;
     RGWSI_SysObj_Core *core_svc;
     rgw_pool pool;
 
-    RGWSI_RADOS *get_rados_svc();
-
   public:
-    Pool(RGWSI_SysObj_Core *_core_svc,
-         const rgw_pool& _pool) : core_svc(_core_svc),
+    Pool(RGWSI_RADOS *_rados_svc,
+	 RGWSI_SysObj_Core *_core_svc,
+         const rgw_pool& _pool) : rados_svc(_rados_svc),
+                                  core_svc(_core_svc),
                                   pool(_pool) {}
 
     rgw_pool& get_pool() {
@@ -220,7 +233,7 @@ public:
   Obj get_obj(RGWSysObjectCtx& obj_ctx, const rgw_raw_obj& obj);
 
   Pool get_pool(const rgw_pool& pool) {
-    return Pool(core_svc.get(), pool);
+    return Pool(rados_svc.get(), core_svc.get(), pool);
   }
 
   RGWSI_Zone *get_zone_svc();

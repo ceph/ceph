@@ -246,10 +246,6 @@ int RGWSI_Notify::init_watch()
 
 void RGWSI_Notify::finalize_watch()
 {
-  if (finalized) {
-    return;
-  }
-
   for (int i = 0; i < num_watchers; i++) {
     RGWWatcher *watcher = watchers[i];
     watcher->unregister_watch();
@@ -277,8 +273,21 @@ int RGWSI_Notify::init()
 
 void RGWSI_Notify::shutdown()
 {
+  if (finalized) {
+    return;
+  }
+
   finisher_svc->unregister_caller(finisher_handle);
   finalize_watch();
+
+  delete shutdown_cb;
+
+  finalized = true;
+}
+
+RGWSI_Notify::~RGWSI_Notify()
+{
+  shutdown();
 }
 
 int RGWSI_Notify::unwatch(RGWSI_RADOS::Obj& obj, uint64_t watch_handle)

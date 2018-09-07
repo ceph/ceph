@@ -27,6 +27,7 @@ extern std::string default_storage_pool_suffix;
 }
 
 class JSONObj;
+class RGWSyncModulesManager;
 
 struct RGWNameToId {
   std::string obj_id;
@@ -614,7 +615,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
                const list<std::string>& endpoints, const std::string *ptier_type,
                bool *psync_from_all, list<std::string>& sync_from, list<std::string>& sync_from_rm,
-               std::string *predirect_zone);
+               std::string *predirect_zone, RGWSyncModulesManager *sync_mgr);
   int remove_zone(const std::string& zone_id);
   int rename_zone(const RGWZoneParams& zone_params);
   rgw_pool get_pool(CephContext *cct) override;
@@ -839,7 +840,8 @@ class RGWPeriod
   const std::string get_period_oid_prefix();
 
   // gather the metadata sync status for each shard; only for use on master zone
-  int update_sync_status(const RGWPeriod &current_period,
+  int update_sync_status(RGWRados *store,
+                         const RGWPeriod &current_period,
                          std::ostream& error_stream, bool force_if_stale);
 
 public:
@@ -932,7 +934,8 @@ public:
   int update();
 
   // commit a staging period; only for use on master zone
-  int commit(RGWRealm& realm, const RGWPeriod &current_period,
+  int commit(RGWRados *store,
+             RGWRealm& realm, const RGWPeriod &current_period,
              std::ostream& error_stream, bool force_if_stale = false);
 
   void encode(bufferlist& bl) const {

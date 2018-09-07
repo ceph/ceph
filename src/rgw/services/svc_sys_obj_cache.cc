@@ -173,6 +173,36 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
   return r;
 }
 
+int RGWSI_SysObj_Cache::get_attr(rgw_raw_obj& obj,
+				 const char *attr_name,
+				 bufferlist *dest)
+{
+  rgw_pool pool;
+  string oid;
+
+  normalize_pool_and_obj(obj.pool, obj.oid, pool, oid);
+  string name = normal_name(pool, oid);
+
+  ObjectCacheInfo info;
+
+  uint32_t flags = CACHE_FLAG_XATTRS;
+
+  if (cache.get(name, info, flags, nullptr) == 0) {
+    if (info.status < 0)
+      return info.status;
+
+    auto iter = info.xattrs.find(attr_name);
+    if (iter == info.xattrs.end()) {
+      return -ENODATA;
+    }
+
+    *dest = iter->second;
+    return dest->length();
+  }
+  /* don't try to cache this one */
+  return RGWSI_SysObj_Core::get_attr(obj, attr_name, dest);
+}
+
 int RGWSI_SysObj_Cache::set_attrs(rgw_raw_obj& obj, 
                                   map<string, bufferlist>& attrs,
                                   map<string, bufferlist> *rmattrs,

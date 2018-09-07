@@ -180,6 +180,11 @@ protected:
   virtual int omap_set(rgw_raw_obj& obj, const map<std::string, bufferlist>& m, bool must_exist = false);
   virtual int omap_del(rgw_raw_obj& obj, const std::string& key);
 
+  virtual int notify(rgw_raw_obj& obj,
+		     bufferlist& bl,
+		     uint64_t timeout_ms,
+		     bufferlist *pbl);
+
   /* wrappers */
   int get_system_obj_state_impl(RGWSysObjectCtxBase *rctx, rgw_raw_obj& obj, RGWSysObjState **state, RGWObjVersionTracker *objv_tracker);
   int get_system_obj_state(RGWSysObjectCtxBase *rctx, rgw_raw_obj& obj, RGWSysObjState **state, RGWObjVersionTracker *objv_tracker);
