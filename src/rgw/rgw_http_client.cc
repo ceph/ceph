@@ -292,13 +292,6 @@ size_t RGWHTTPClient::receive_http_data(void * const ptr,
 
   bool pause = false;
 
-  size_t& skip_bytes = req_data->client->receive_pause_skip;
-
-  if (skip_bytes >= len) {
-    skip_bytes -= len;
-    return len;
-  }
-
   RGWHTTPClient *client;
 
   {
@@ -308,6 +301,13 @@ size_t RGWHTTPClient::receive_http_data(void * const ptr,
     }
 
     client = req_data->client;
+  }
+
+  size_t& skip_bytes = client->receive_pause_skip;
+
+  if (skip_bytes >= len) {
+    skip_bytes -= len;
+    return len;
   }
 
   int ret = client->receive_data((char *)ptr + skip_bytes, len - skip_bytes, &pause);
