@@ -101,6 +101,63 @@ describe('RoleFormComponent', () => {
       roleReq.flush({});
       expect(router.navigate).toHaveBeenCalledWith(['/user-management/roles']);
     });
+
+    it('should check all perms for a scope', () => {
+      form.get('scopes_permissions').setValue({ cephfs: ['read'] });
+      component.onClickCellCheckbox('grafana', 'scope');
+      const scopes_permissions = form.getValue('scopes_permissions');
+      expect(Object.keys(scopes_permissions)).toContain('grafana');
+      expect(scopes_permissions['grafana']).toEqual(['create', 'delete', 'read', 'update']);
+    });
+
+    it('should uncheck all perms for a scope', () => {
+      form.get('scopes_permissions').setValue({ cephfs: ['read', 'create', 'update', 'delete'] });
+      component.onClickCellCheckbox('cephfs', 'scope');
+      const scopes_permissions = form.getValue('scopes_permissions');
+      expect(Object.keys(scopes_permissions)).not.toContain('cephfs');
+    });
+
+    it('should uncheck all scopes and perms', () => {
+      component.scopes = ['cephfs', 'grafana'];
+      form.get('scopes_permissions').setValue({ cephfs: ['read', 'delete'], grafana: ['update'] });
+      component.onClickHeaderCheckbox('scope', { target: { checked: false } });
+      const scopes_permissions = form.getValue('scopes_permissions');
+      expect(scopes_permissions).toEqual({});
+    });
+
+    it('should check all scopes and perms', () => {
+      component.scopes = ['cephfs', 'grafana'];
+      form
+        .get('scopes_permissions')
+        .setValue({ cephfs: ['create', 'update'], grafana: ['delete'] });
+      component.onClickHeaderCheckbox('scope', { target: { checked: true } });
+      const scopes_permissions = form.getValue('scopes_permissions');
+      const keys = Object.keys(scopes_permissions);
+      expect(keys).toEqual(['cephfs', 'grafana']);
+      keys.forEach((key) => {
+        expect(scopes_permissions[key].sort()).toEqual(['create', 'delete', 'read', 'update']);
+      });
+    });
+
+    it('should check if column is checked', () => {
+      component.scopes_permissions = [
+        { scope: 'a', read: true, create: true, update: true, delete: true },
+        { scope: 'b', read: false, create: true, update: false, delete: true }
+      ];
+      expect(component.isRowChecked('a')).toBeTruthy();
+      expect(component.isRowChecked('b')).toBeFalsy();
+      expect(component.isRowChecked('c')).toBeFalsy();
+    });
+
+    it('should check if header is checked', () => {
+      component.scopes_permissions = [
+        { scope: 'a', read: true, create: true, update: false, delete: true },
+        { scope: 'b', read: false, create: true, update: false, delete: true }
+      ];
+      expect(component.isHeaderChecked('read')).toBeFalsy();
+      expect(component.isHeaderChecked('create')).toBeTruthy();
+      expect(component.isHeaderChecked('update')).toBeFalsy();
+    });
   });
 
   describe('edit mode', () => {
@@ -117,7 +174,6 @@ describe('RoleFormComponent', () => {
       component.ngOnInit();
       const reqScopes = httpTesting.expectOne('ui-api/scope');
       expect(reqScopes.request.method).toBe('GET');
-      reqScopes.flush(scopes);
     });
 
     afterEach(() => {
@@ -142,10 +198,10 @@ describe('RoleFormComponent', () => {
     });
 
     it('should submit', () => {
+      component.onClickCellCheckbox('osd', 'update');
+      component.onClickCellCheckbox('osd', 'create');
+      component.onClickCellCheckbox('user', 'read');
       component.submit();
-      component.hadlePermissionClick('osd', 'update');
-      component.hadlePermissionClick('osd', 'create');
-      component.hadlePermissionClick('user', 'read');
       const roleReq = httpTesting.expectOne(`api/role/${role.name}`);
       expect(roleReq.request.method).toBe('PUT');
       expect(roleReq.request.body).toEqual({

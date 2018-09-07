@@ -1,32 +1,13 @@
 <tabset  *ngIf="selection?.hasSingleSelection">
   <tab heading="Details" i18n-heading>
-    <table class="table table-bordered table-hover">
-      <thead>
-      <tr>
-        <th></th>
-        <th class="text-center">Read</th>
-        <th class="text-center">Create</th>
-        <th class="text-center">Update</th>
-        <th class="text-center">Delete</th>
-      </tr>
-      </thead>
-      <tbody>
-      <tr *ngFor="let scope of scopes">
-        <td i18n
-            class="bold col-sm-3">
-          {{ scope }}
-        </td>
-        <td class="col-sm-2 text-center"
-            *ngFor="let column of ['read', 'create', 'update', 'delete']">
-          <span *ngIf="selectedItem.scopes_permissions[scope] && selectedItem.scopes_permissions[scope].indexOf(column) !== -1">
-            <i class="fa fa-check-square-o" aria-hidden="true"></i>
-          </span>
-          <span *ngIf="!selectedItem.scopes_permissions[scope] || selectedItem.scopes_permissions[scope].indexOf(column) === -1">
-            <i class="fa fa-square-o" aria-hidden="true"></i>
-          </span>
-        </td>
-      </tr>
-      </tbody>
-    </table>
+    <cd-table [data]="scopes_permissions"
+              [columns]="columns"
+              columnMode="flex"
+              [toolHeader]="false"
+              [autoReload]="false"
+              [autoSave]="false"
+              [footer]="false"
+              [limit]="0">
+    </cd-table>
   </tab>
 </tabset>
