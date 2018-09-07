@@ -656,16 +656,15 @@ public:
 class RGWAsyncGetBucketInstanceInfo : public RGWAsyncRadosRequest {
   RGWRados *store;
   const std::string oid;
-  RGWBucketInfo *bucket_info;
 
 protected:
   int _send_request() override;
 public:
   RGWAsyncGetBucketInstanceInfo(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
-                                RGWRados *_store, const std::string& oid,
-                                RGWBucketInfo *_bucket_info)
-    : RGWAsyncRadosRequest(caller, cn), store(_store),
-      oid(oid), bucket_info(_bucket_info) {}
+                                RGWRados *_store, const std::string& oid)
+    : RGWAsyncRadosRequest(caller, cn), store(_store), oid(oid) {}
+
+  RGWBucketInfo bucket_info;
 };
 
 class RGWGetBucketInstanceInfoCR : public RGWSimpleCoroutine {
@@ -700,11 +699,14 @@ public:
   }
 
   int send_request() override {
-    req = new RGWAsyncGetBucketInstanceInfo(this, stack->create_completion_notifier(), store, oid, bucket_info);
+    req = new RGWAsyncGetBucketInstanceInfo(this, stack->create_completion_notifier(), store, oid);
     async_rados->queue(req);
     return 0;
   }
   int request_complete() override {
+    if (bucket_info) {
+      *bucket_info = std::move(req->bucket_info);
+    }
     return req->get_ret_status();
   }
 };
