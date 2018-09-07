@@ -872,7 +872,7 @@ TEST(BufferPtr, append_bench) {
       bufferptr bp(buflen);
       bp.set_length(0);
       for (int64_t j=0; j<buflen; j += s) {
-	bp.append(src, s);
+	bp.append(src + j, s);
       }
     }
     utime_t end = ceph_clock_now();
@@ -1496,6 +1496,48 @@ TEST(BufferList, BenchAlloc) {
   bench_bufferlist_alloc(256, 100000, 16);
   bench_bufferlist_alloc(32, 100000, 16);
   bench_bufferlist_alloc(4, 100000, 16);
+}
+
+TEST(BufferList, append_bench_with_size_hint) {
+  std::array<char, 1048576> src = { 0, };
+
+  for (size_t step = 4; step <= 16384; step *= 4) {
+    const utime_t start = ceph_clock_now();
+
+    constexpr size_t rounds = 4000;
+    for (size_t r = 0; r < rounds; ++r) {
+      ceph::bufferlist bl(std::size(src));
+      for (auto iter = std::begin(src);
+	   iter != std::end(src);
+	   iter = std::next(iter, step)) {
+	bl.append(&*iter, step);
+      }
+    }
+    cout << rounds << " fills of buffer len " << src.size()
+	 << " with " << step << " byte appends in "
+	 << (ceph_clock_now() - start) << std::endl;
+  }
+}
+
+TEST(BufferList, append_bench) {
+  std::array<char, 1048576> src = { 0, };
+
+  for (size_t step = 4; step <= 16384; step *= 4) {
+    const utime_t start = ceph_clock_now();
+
+    constexpr size_t rounds = 4000;
+    for (size_t r = 0; r < rounds; ++r) {
+      ceph::bufferlist bl;
+      for (auto iter = std::begin(src);
+	   iter != std::end(src);
+	   iter = std::next(iter, step)) {
+	bl.append(&*iter, step);
+      }
+    }
+    cout << rounds << " fills of buffer len " << src.size()
+	 << " with " << step << " byte appends in "
+	 << (ceph_clock_now() - start) << std::endl;
+  }
 }
 
 TEST(BufferList, operator_equal) {
