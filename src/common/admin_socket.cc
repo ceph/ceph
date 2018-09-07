@@ -18,7 +18,6 @@
 #include "common/admin_socket_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/pipe.h"
 #include "common/safe_io.h"
 #include "common/Thread.h"
 #include "common/version.h"
@@ -26,6 +25,8 @@
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/ceph_assert.h"
+#include "include/compat.h"
+#include "include/sock_compat.h"
 
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix
@@ -106,10 +107,10 @@ AdminSocket::~AdminSocket()
 std::string AdminSocket::create_shutdown_pipe(int *pipe_rd, int *pipe_wr)
 {
   int pipefd[2];
-  int ret = pipe_cloexec(pipefd);
-  if (ret < 0) {
+  if (pipe_cloexec(pipefd) < 0) {
+    int e = errno;
     ostringstream oss;
-    oss << "AdminSocket::create_shutdown_pipe error: " << cpp_strerror(ret);
+    oss << "AdminSocket::create_shutdown_pipe error: " << cpp_strerror(e);
     return oss.str();
   }
   
@@ -158,20 +159,12 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
 	<< (sizeof(address.sun_path) - 1);
     return oss.str();
   }
-  int sock_fd = socket(PF_UNIX, SOCK_STREAM, 0);
+  int sock_fd = socket_cloexec(PF_UNIX, SOCK_STREAM, 0);
   if (sock_fd < 0) {
     int err = errno;
     ostringstream oss;
     oss << "AdminSocket::bind_and_listen: "
 	<< "failed to create socket: " << cpp_strerror(err);
-    return oss.str();
-  }
-  int r = fcntl(sock_fd, F_SETFD, FD_CLOEXEC);
-  if (r < 0) {
-    r = errno;
-    retry_sys_call(::close, sock_fd);
-    ostringstream oss;
-    oss << "AdminSocket::bind_and_listen: failed to fcntl on socket: " << cpp_strerror(r);
     return oss.str();
   }
   memset(&address, 0, sizeof(struct sockaddr_un));
@@ -284,15 +277,15 @@ bool AdminSocket::do_accept()
   struct sockaddr_un address;
   socklen_t address_length = sizeof(address);
   ldout(m_cct, 30) << "AdminSocket: calling accept" << dendl;
-  int connection_fd = accept(m_sock_fd, (struct sockaddr*) &address,
+  int connection_fd = accept_cloexec(m_sock_fd, (struct sockaddr*) &address,
 			     &address_length);
-  ldout(m_cct, 30) << "AdminSocket: finished accept" << dendl;
   if (connection_fd < 0) {
     int err = errno;
     lderr(m_cct) << "AdminSocket: do_accept error: '"
 			   << cpp_strerror(err) << dendl;
     return false;
   }
+  ldout(m_cct, 30) << "AdminSocket: finished accept" << dendl;
 
   char cmd[1024];
   unsigned pos = 0;

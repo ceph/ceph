@@ -307,7 +307,7 @@ int _get_vdo_stats_handle(const char *devname, std::string *vdo_name)
     target[r] = 0;
     if (expect == target) {
       snprintf(fn, sizeof(fn), "/sys/kvdo/%s/statistics", de->d_name);
-      vdo_fd = ::open(fn, O_RDONLY); //DIRECTORY);
+      vdo_fd = ::open(fn, O_RDONLY|O_CLOEXEC); //DIRECTORY);
       if (vdo_fd >= 0) {
 	*vdo_name = de->d_name;
 	break;
@@ -340,7 +340,7 @@ int get_vdo_stats_handle(const char *devname, std::string *vdo_name)
 int64_t get_vdo_stat(int vdo_fd, const char *property)
 {
   int64_t ret = 0;
-  int fd = ::openat(vdo_fd, property, O_RDONLY);
+  int fd = ::openat(vdo_fd, property, O_RDONLY|O_CLOEXEC);
   if (fd < 0) {
     return 0;
   }

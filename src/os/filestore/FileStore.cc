@@ -294,7 +294,7 @@ int FileStore::lfn_open(const coll_t& cid,
     goto fail;
   }
 
-  r = ::open((*path)->path(), flags, 0644);
+  r = ::open((*path)->path(), flags|O_CLOEXEC, 0644);
   if (r < 0) {
     r = -errno;
     dout(10) << "error opening file " << (*path)->path() << " with flags="
@@ -866,7 +866,7 @@ int FileStore::mkfs()
   uuid_d old_omap_fsid;
 
   dout(1) << "mkfs in " << basedir << dendl;
-  basedir_fd = ::open(basedir.c_str(), O_RDONLY);
+  basedir_fd = ::open(basedir.c_str(), O_RDONLY|O_CLOEXEC);
   if (basedir_fd < 0) {
     ret = -errno;
     derr << __FUNC__ << ": failed to open base dir " << basedir << ": " << cpp_strerror(ret) << dendl;
@@ -875,7 +875,7 @@ int FileStore::mkfs()
 
   // open+lock fsid
   snprintf(fsid_fn, sizeof(fsid_fn), "%s/fsid", basedir.c_str());
-  fsid_fd = ::open(fsid_fn, O_RDWR|O_CREAT, 0644);
+  fsid_fd = ::open(fsid_fn, O_RDWR|O_CREAT|O_CLOEXEC, 0644);
   if (fsid_fd < 0) {
     ret = -errno;
     derr << __FUNC__ << ": failed to open " << fsid_fn << ": " << cpp_strerror(ret) << dendl;
@@ -990,7 +990,7 @@ int FileStore::mkfs()
 
       if (backend->can_checkpoint()) {
 	// create snap_1 too
-	current_fd = ::open(current_fn.c_str(), O_RDONLY);
+	current_fd = ::open(current_fn.c_str(), O_RDONLY|O_CLOEXEC);
 	ceph_assert(current_fd >= 0);
 	char s[NAME_MAX];
 	snprintf(s, sizeof(s), COMMIT_SNAP_ITEM, 1ull);
@@ -1015,7 +1015,7 @@ int FileStore::mkfs()
   int omap_fsid_fd;
   char omap_fsid_fn[PATH_MAX];
   snprintf(omap_fsid_fn, sizeof(omap_fsid_fn), "%s/osd_uuid", omap_dir.c_str());
-  omap_fsid_fd = ::open(omap_fsid_fn, O_RDWR|O_CREAT, 0644);
+  omap_fsid_fd = ::open(omap_fsid_fn, O_RDWR|O_CREAT|O_CLOEXEC, 0644);
   if (omap_fsid_fd < 0) {
     ret = -errno;
     derr << __FUNC__ << ": failed to open " << omap_fsid_fn << ": " << cpp_strerror(ret) << dendl;
@@ -1091,7 +1091,7 @@ int FileStore::mkjournal()
   int ret;
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
-  int fd = ::open(fn, O_RDONLY, 0644);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC, 0644);
   if (fd < 0) {
     int err = errno;
     derr << __FUNC__ << ": open error: " << cpp_strerror(err) << dendl;
@@ -1173,7 +1173,7 @@ bool FileStore::test_mount_in_use()
 
   // verify fs isn't in use
 
-  fsid_fd = ::open(fn, O_RDWR, 0644);
+  fsid_fd = ::open(fn, O_RDWR|O_CLOEXEC, 0644);
   if (fsid_fd < 0)
     return 0;   // no fsid, ok.
   bool inuse = lock_fsid() < 0;
@@ -1188,7 +1188,7 @@ bool FileStore::is_rotational()
   if (backend) {
     rotational = backend->is_rotational();
   } else {
-    int fd = ::open(basedir.c_str(), O_RDONLY);
+    int fd = ::open(basedir.c_str(), O_RDONLY|O_CLOEXEC);
     if (fd < 0)
       return true;
     struct statfs st;
@@ -1212,7 +1212,7 @@ bool FileStore::is_journal_rotational()
   if (backend) {
     journal_rotational = backend->is_journal_rotational();
   } else {
-    int fd = ::open(journalpath.c_str(), O_RDONLY);
+    int fd = ::open(journalpath.c_str(), O_RDONLY|O_CLOEXEC);
     if (fd < 0)
       return true;
     struct statfs st;
@@ -1274,7 +1274,7 @@ int FileStore::_detect_fs()
   int x = rand();
   int y = x+1;
   snprintf(fn, sizeof(fn), "%s/xattr_test", basedir.c_str());
-  int tmpfd = ::open(fn, O_CREAT|O_WRONLY|O_TRUNC, 0700);
+  int tmpfd = ::open(fn, O_CREAT|O_WRONLY|O_TRUNC|O_CLOEXEC, 0700);
   if (tmpfd < 0) {
     int ret = -errno;
     derr << __FUNC__ << ": unable to create " << fn << ": " << cpp_strerror(ret) << dendl;
@@ -1451,7 +1451,7 @@ int FileStore::upgrade()
 
 int FileStore::read_op_seq(uint64_t *seq)
 {
-  int op_fd = ::open(current_op_seq_fn.c_str(), O_CREAT|O_RDWR, 0644);
+  int op_fd = ::open(current_op_seq_fn.c_str(), O_CREAT|O_RDWR|O_CLOEXEC, 0644);
   if (op_fd < 0) {
     int r = -errno;
     ceph_assert(!m_filestore_fail_eio || r != -EIO);
@@ -1507,7 +1507,7 @@ int FileStore::mount()
 
   // get fsid
   snprintf(buf, sizeof(buf), "%s/fsid", basedir.c_str());
-  fsid_fd = ::open(buf, O_RDWR, 0644);
+  fsid_fd = ::open(buf, O_RDWR|O_CLOEXEC, 0644);
   if (fsid_fd < 0) {
     ret = -errno;
     derr << __FUNC__ << ": error opening '" << buf << "': "
@@ -1570,7 +1570,7 @@ int FileStore::mount()
   }
 
   // open some dir handles
-  basedir_fd = ::open(basedir.c_str(), O_RDONLY);
+  basedir_fd = ::open(basedir.c_str(), O_RDONLY|O_CLOEXEC);
   if (basedir_fd < 0) {
     ret = -errno;
     derr << __FUNC__ << ": failed to open " << basedir << ": "
@@ -1680,7 +1680,7 @@ int FileStore::mount()
   }
   initial_op_seq = 0;
 
-  current_fd = ::open(current_fn.c_str(), O_RDONLY);
+  current_fd = ::open(current_fn.c_str(), O_RDONLY|O_CLOEXEC);
   if (current_fd < 0) {
     ret = -errno;
     derr << __FUNC__ << ": error opening: " << current_fn << ": " << cpp_strerror(ret) << dendl;
@@ -1731,7 +1731,7 @@ int FileStore::mount()
   } else {
     int omap_fsid_fd;
     // if osd_uuid exists, compares osd_uuid with fsid
-    omap_fsid_fd = ::open(omap_fsid_buf, O_RDONLY, 0644);
+    omap_fsid_fd = ::open(omap_fsid_buf, O_RDONLY|O_CLOEXEC, 0644);
     if (omap_fsid_fd < 0) {
         ret = -errno;
         derr << __FUNC__ << ": error opening '" << omap_fsid_buf << "': "
@@ -2457,7 +2457,7 @@ void FileStore::_set_global_replay_guard(const coll_t& cid,
 
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
-  int fd = ::open(fn, O_RDONLY);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
   if (fd < 0) {
     int err = errno;
     derr << __FUNC__ << ": " << cid << " error " << cpp_strerror(err) << dendl;
@@ -2491,7 +2491,7 @@ int FileStore::_check_global_replay_guard(const coll_t& cid,
 {
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
-  int fd = ::open(fn, O_RDONLY);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
   if (fd < 0) {
     dout(10) << __FUNC__ << ": " << cid << " dne" << dendl;
     return 1;  // if collection does not exist, there is no guard, and we can replay.
@@ -2523,7 +2523,7 @@ void FileStore::_set_replay_guard(const coll_t& cid,
 {
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
-  int fd = ::open(fn, O_RDONLY);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
   if (fd < 0) {
     int err = errno;
     derr << __FUNC__ << ": " << cid << " error " << cpp_strerror(err) << dendl;
@@ -2582,7 +2582,7 @@ void FileStore::_close_replay_guard(const coll_t& cid,
 {
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
-  int fd = ::open(fn, O_RDONLY);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
   if (fd < 0) {
     int err = errno;
     derr << __FUNC__ << ": " << cid << " error " << cpp_strerror(err) << dendl;
@@ -2655,7 +2655,7 @@ int FileStore::_check_replay_guard(const coll_t& cid, const SequencerPosition& s
 
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
-  int fd = ::open(fn, O_RDONLY);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
   if (fd < 0) {
     dout(10) << __FUNC__ << ": " << cid << " dne" << dendl;
     return 1;  // if collection does not exist, there is no guard, and we can replay.
@@ -3895,10 +3895,10 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 #ifdef CEPH_HAVE_SPLICE
   if (backend->has_splice()) {
     int pipefd[2];
-    if (pipe(pipefd) < 0) {
-      r = -errno;
-      derr << " pipe " << " got " << cpp_strerror(r) << dendl;
-      return r;
+    if (pipe_cloexec(pipefd) < 0) {
+      int e = errno;
+      derr << " pipe " << " got " << cpp_strerror(e) << dendl;
+      return -e;
     }
 
     loff_t dstpos = dstoff;
@@ -5028,7 +5028,7 @@ int FileStore::_collection_set_bits(const coll_t& c, int bits)
   char n[PATH_MAX];
   int r;
   int32_t v = bits;
-  int fd = ::open(fn, O_RDONLY);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
   if (fd < 0) {
     r = -errno;
     goto out;
@@ -5049,7 +5049,7 @@ int FileStore::collection_bits(CollectionHandle& ch)
   int r;
   char n[PATH_MAX];
   int32_t bits;
-  int fd = ::open(fn, O_RDONLY);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
   if (fd < 0) {
     bits = r = -errno;
     goto out;

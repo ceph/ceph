@@ -1931,7 +1931,7 @@ void buffer::list::decode_base64(buffer::list& e)
 
 int buffer::list::read_file(const char *fn, std::string *error)
 {
-  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY));
+  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC));
   if (fd < 0) {
     int err = errno;
     std::ostringstream oss;
@@ -1986,7 +1986,7 @@ ssize_t buffer::list::read_fd(int fd, size_t len)
 
 int buffer::list::write_file(const char *fn, int mode)
 {
-  int fd = TEMP_FAILURE_RETRY(::open(fn, O_WRONLY|O_CREAT|O_TRUNC, mode));
+  int fd = TEMP_FAILURE_RETRY(::open(fn, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, mode));
   if (fd < 0) {
     int err = errno;
     cerr << "bufferlist::write_file(" << fn << "): failed to open file: "

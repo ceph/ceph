@@ -68,13 +68,13 @@ int KernelDevice::open(const string& p)
   int r = 0;
   dout(1) << __func__ << " path " << path << dendl;
 
-  fd_direct = ::open(path.c_str(), O_RDWR | O_DIRECT);
+  fd_direct = ::open(path.c_str(), O_RDWR | O_DIRECT | O_CLOEXEC);
   if (fd_direct < 0) {
     r = -errno;
     derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
     return r;
   }
-  fd_buffered = ::open(path.c_str(), O_RDWR);
+  fd_buffered = ::open(path.c_str(), O_RDWR | O_CLOEXEC);
   if (fd_buffered < 0) {
     r = -errno;
     derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
