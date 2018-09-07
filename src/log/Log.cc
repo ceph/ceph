@@ -23,6 +23,8 @@
 #define DEFAULT_MAX_NEW    100
 #define DEFAULT_MAX_RECENT 10000
 
+#include <fcntl.h>
+
 #define PREALLOC 1000000
 
 
@@ -145,12 +147,11 @@ void Log::reopen_log_file()
   if (m_fd >= 0)
     VOID_TEMP_FAILURE_RETRY(::close(m_fd));
   if (m_log_file.length()) {
-    m_fd = ::open(m_log_file.c_str(), O_CREAT|O_WRONLY|O_APPEND, 0644);
+    m_fd = ::open(m_log_file.c_str(), O_CREAT|O_WRONLY|O_APPEND|O_CLOEXEC, 0644);
     if (m_fd >= 0 && (m_uid || m_gid)) {
-      int r = ::fchown(m_fd, m_uid, m_gid);
-      if (r < 0) {
-	r = -errno;
-	cerr << "failed to chown " << m_log_file << ": " << cpp_strerror(r)
+      if (::fchown(m_fd, m_uid, m_gid) < 0) {
+	int e = errno;
+	cerr << "failed to chown " << m_log_file << ": " << cpp_strerror(e)
 	     << std::endl;
       }
     }

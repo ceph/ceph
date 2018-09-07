@@ -14,6 +14,7 @@
  *
  */
 
+#include "include/compat.h"
 #include "common/errno.h"
 #include "Event.h"
 
@@ -141,9 +142,10 @@ int EventCenter::init(int n, unsigned i, const std::string &t)
     return 0;
 
   int fds[2];
-  if (pipe(fds) < 0) {
-    lderr(cct) << __func__ << " can't create notify pipe" << dendl;
-    return -errno;
+  if (pipe_cloexec(fds) < 0) {
+    int e = errno;
+    lderr(cct) << __func__ << " can't create notify pipe: " << cpp_strerror(e) << dendl;
+    return -e;
   }
 
   notify_receive_fd = fds[0];

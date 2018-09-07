@@ -418,7 +418,7 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
   if (cfuse->fino_snap(parent) == CEPH_SNAPDIR &&
       fuse_multithreaded && fuse_syncfs_on_mksnap) {
     int err = 0;
-    int fd = ::open(cfuse->mountpoint, O_RDONLY | O_DIRECTORY);
+    int fd = ::open(cfuse->mountpoint, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (fd < 0) {
       err = errno;
     } else {
