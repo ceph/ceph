@@ -807,7 +807,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 
   _aio_log_start(ioc, off, len);
 
-  bufferptr p = buffer::create_page_aligned(len);
+  bufferptr p = buffer::create_small_page_aligned(len);
   int r = ::pread(buffered ? fd_buffered : fd_direct,
 		  p.c_str(), len, off);
   if (r < 0) {
@@ -861,7 +861,7 @@ int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
 {
   uint64_t aligned_off = align_down(off, block_size);
   uint64_t aligned_len = align_up(off+len, block_size) - aligned_off;
-  bufferptr p = buffer::create_page_aligned(aligned_len);
+  bufferptr p = buffer::create_small_page_aligned(aligned_len);
   int r = 0;
 
   r = ::pread(fd_direct, p.c_str(), aligned_len, aligned_off);

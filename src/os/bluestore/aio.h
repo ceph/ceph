@@ -32,7 +32,7 @@ struct aio_t {
   void pread(uint64_t _offset, uint64_t len) {
     offset = _offset;
     length = len;
-    bufferptr p = buffer::create_page_aligned(length);
+    bufferptr p = buffer::create_small_page_aligned(length);
     io_prep_pread(&iocb, fd, p.c_str(), length, offset);
     bl.append(std::move(p));
   }

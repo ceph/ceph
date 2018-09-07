@@ -40,7 +40,7 @@ class LZ4Compressor : public Compressor {
     if (qat_enabled)
       return qat_accel.compress(src, dst);
 #endif
-    bufferptr outptr = buffer::create_page_aligned(
+    bufferptr outptr = buffer::create_small_page_aligned(
       LZ4_compressBound(src.length()));
     LZ4_stream_t lz4_stream;
     LZ4_resetStream(&lz4_stream);
