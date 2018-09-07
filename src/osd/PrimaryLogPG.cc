@@ -2619,7 +2619,7 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
       switch (fp_algo_t) {
 	case pg_pool_t::TYPE_FINGERPRINT_SHA1:
 	  {
-	    boost::optional<sha1_digest_info_t> fp_t = chunk_data.sha1();
+	    boost::optional<sha1_digest_t> fp_t = chunk_data.sha1();
 	    object_t fp_oid;
 	    bufferlist in;
 	    if (fp_t != boost::none) {

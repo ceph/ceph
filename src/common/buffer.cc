@@ -2467,7 +2467,7 @@ void buffer::list::invalidate_crc()
 #include "common/ceph_crypto.h"
 using ceph::crypto::SHA1;
 
-boost::optional<sha1_digest_info_t> buffer::list::sha1()
+boost::optional<sha1_digest_t> buffer::list::sha1()
 {
   ptr nb;
   unsigned pos = 0;
@@ -2486,7 +2486,7 @@ boost::optional<sha1_digest_info_t> buffer::list::sha1()
   SHA1 sha1_gen;
   sha1_gen.Update((const unsigned char *)nb.c_str(), size);
   sha1_gen.Final(fingerprint);
-  sha1_digest_info_t fp_t(fingerprint);
+  sha1_digest_t fp_t(fingerprint);
   return fp_t;
 }
 
