@@ -493,7 +493,6 @@ set(libcommon_files
   osd/OpRequest.cc
   common/blkdev.cc
   common/common_init.cc
-  common/pipe.c
   common/ceph_argparse.cc
   common/ceph_context.cc
   common/code_environment.cc

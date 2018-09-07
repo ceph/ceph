@@ -59,7 +59,7 @@ int ceph_resolve_file_search(const std::string& filename_list,
   int ret = -ENOENT;
   list<string>::iterator iter;
   for (iter = ls.begin(); iter != ls.end(); ++iter) {
-    int fd = ::open(iter->c_str(), O_RDONLY);
+    int fd = ::open(iter->c_str(), O_RDONLY|O_CLOEXEC);
     if (fd < 0) {
       ret = -errno;
       continue;

@@ -874,7 +874,7 @@ int NVMEDevice::open(const string& p)
   dout(1) << __func__ << " path " << p << dendl;
 
   string serial_number;
-  int fd = ::open(p.c_str(), O_RDONLY);
+  int fd = ::open(p.c_str(), O_RDONLY | O_CLOEXEC);
   if (fd < 0) {
     r = -errno;
     derr << __func__ << " unable to open " << p << ": " << cpp_strerror(r)

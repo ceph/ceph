@@ -69,7 +69,7 @@ void MemDB::_save()
   dout(10) << __func__ << " Saving MemDB to file: "<< _get_data_fn().c_str() << dendl;
   int mode = 0644;
   int fd = TEMP_FAILURE_RETRY(::open(_get_data_fn().c_str(),
-                                     O_WRONLY|O_CREAT|O_TRUNC, mode));
+                                     O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, mode));
   if (fd < 0) {
     int err = errno;
     cerr << "write_file(" << _get_data_fn().c_str() << "): failed to open file: "
@@ -95,7 +95,7 @@ int MemDB::_load()
   /*
    * Open file and read it in single shot.
    */
-  int fd = TEMP_FAILURE_RETRY(::open(_get_data_fn().c_str(), O_RDONLY));
+  int fd = TEMP_FAILURE_RETRY(::open(_get_data_fn().c_str(), O_RDONLY|O_CLOEXEC));
   if (fd < 0) {
     int err = errno;
     cerr << "can't open " << _get_data_fn().c_str() << ": "

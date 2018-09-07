@@ -92,7 +92,7 @@ struct denc_traits {
     snprintf(fn, sizeof(fn),						\
 	     ENCODE_STRINGIFY(ENCODE_DUMP_PATH) "/%s__%d.%x", #Type,		\
 	     getpid(), i++);						\
-    int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT, 0644);		\
+    int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT|O_CLOEXEC, 0644);		\
     if (fd >= 0) {							\
       size_t len = p.get_pos() - __denc_dump_pre;			\
       int r = ::write(fd, __denc_dump_pre, len);			\

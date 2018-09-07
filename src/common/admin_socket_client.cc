@@ -12,12 +12,18 @@
  *
  */
 
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+
 #include "common/admin_socket.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/admin_socket_client.h"
 
-#include <sys/un.h>
+#include "include/compat.h"
+#include "include/sock_compat.h"
 
 using std::ostringstream;
 
@@ -41,7 +47,7 @@ const char* get_rand_socket_path()
 
 static std::string asok_connect(const std::string &path, int *fd)
 {
-  int socket_fd = socket(PF_UNIX, SOCK_STREAM, 0);
+  int socket_fd = socket_cloexec(PF_UNIX, SOCK_STREAM, 0);
   if(socket_fd < 0) {
     int err = errno;
     ostringstream oss;

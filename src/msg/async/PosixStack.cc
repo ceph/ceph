@@ -31,6 +31,7 @@
 #include "common/dout.h"
 #include "common/simple_spin.h"
 #include "msg/Messenger.h"
+#include "include/compat.h"
 #include "include/sock_compat.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -187,12 +188,11 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
   assert(sock);
   sockaddr_storage ss;
   socklen_t slen = sizeof(ss);
-  int sd = ::accept(_fd, (sockaddr*)&ss, &slen);
+  int sd = accept_cloexec(_fd, (sockaddr*)&ss, &slen);
   if (sd < 0) {
     return -errno;
   }
 
-  handler.set_close_on_exec(sd);
   int r = handler.set_nonblock(sd);
   if (r < 0) {
     ::close(sd);
@@ -233,7 +233,6 @@ int PosixWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
     return -errno;
   }
 
-  net.set_close_on_exec(listen_sd);
   r = net.set_socket_options(listen_sd, opt.nodelay, opt.rcbuf_size);
   if (r < 0) {
     ::close(listen_sd);
