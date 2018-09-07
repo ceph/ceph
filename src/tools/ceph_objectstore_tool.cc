@@ -3031,8 +3031,7 @@ int main(int argc, char **argv)
   positional.add_options()
     ("object", po::value<string>(&object), "'' for pgmeta_oid, object name or ghobject in json")
     ("objcmd", po::value<string>(&objcmd), "command [(get|set)-bytes, (get|set|rm)-(attr|omap), (get|set)-omaphdr, list-attrs, list-omap, remove]")
-    ("arg1", po::value<string>(&arg1), "arg1 based on cmd, "
-     "for apply-layout-settings: target hash level split to")
+    ("arg1", po::value<string>(&arg1), "arg1 based on cmd")
     ("arg2", po::value<string>(&arg2), "arg2 based on cmd")
     ;
 
@@ -3123,7 +3122,7 @@ int main(int argc, char **argv)
     usage(desc);
     return 1;
   }
-  if (op != "list" &&
+  if (op != "list" && op != "apply-layout-settings" &&
       vm.count("op") && vm.count("object")) {
     cerr << "Can't specify both --op and object command syntax" << std::endl;
     usage(desc);
@@ -3135,7 +3134,7 @@ int main(int argc, char **argv)
     usage(desc);
     return 1;
   }
-  if (op != "list" && vm.count("object") && !vm.count("objcmd")) {
+  if (op != "list" && op != "apply-layout-settings" && vm.count("object") && !vm.count("objcmd")) {
     cerr << "Invalid syntax, missing command" << std::endl;
     usage(desc);
     return 1;
@@ -3404,7 +3403,14 @@ int main(int argc, char **argv)
 
   if (op == "apply-layout-settings") {
     int target_level = 0;
-    if (vm.count("arg1") && isdigit(arg1[0])) {
+    // Single positional argument with apply-layout-settings
+    // for target_level.
+    if (vm.count("object") && isdigit(object[0])) {
+      target_level = atoi(object.c_str());
+    // This requires --arg1 to be specified since
+    // this is the third positional argument and normally
+    // used with object operations.
+    } else if (vm.count("arg1") && isdigit(arg1[0])) {
       target_level = atoi(arg1.c_str());
     }
     ret = apply_layout_settings(fs, superblock, pool, pgid, dry_run, target_level);
