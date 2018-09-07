@@ -1262,11 +1262,11 @@ Subcommand ``ls`` lists pg with specific pool, osd, state
 Usage::
 
 	ceph pg ls {<int>} {active|clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	scrubbing|degraded|inconsistent|peering|repair|
 	recovery|backfill_wait|incomplete|stale| remapped|
 	deep_scrub|backfill|backfill_toofull|recovery_wait|
 	undersized [active|clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	scrubbing|degraded|inconsistent|peering|repair|
 	recovery|backfill_wait|incomplete|stale|remapped|
 	deep_scrub|backfill|backfill_toofull|recovery_wait|
 	undersized...]}
@@ -1277,11 +1277,11 @@ Usage::
 
 	ceph pg ls-by-osd <osdname (id|osd.id)> {<int>}
 	{active|clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	scrubbing|degraded|inconsistent|peering|repair|
 	recovery|backfill_wait|incomplete|stale| remapped|
 	deep_scrub|backfill|backfill_toofull|recovery_wait|
 	undersized [active|clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	scrubbing|degraded|inconsistent|peering|repair|
 	recovery|backfill_wait|incomplete|stale|remapped|
 	deep_scrub|backfill|backfill_toofull|recovery_wait|
 	undersized...]}
@@ -1292,11 +1292,11 @@ Usage::
 
 	ceph pg ls-by-pool <poolstr> {<int>} {active|
 	clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	scrubbing|degraded|inconsistent|peering|repair|
 	recovery|backfill_wait|incomplete|stale| remapped|
 	deep_scrub|backfill|backfill_toofull|recovery_wait|
 	undersized [active|clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	scrubbing|degraded|inconsistent|peering|repair|
 	recovery|backfill_wait|incomplete|stale|remapped|
 	deep_scrub|backfill|backfill_toofull|recovery_wait|
 	undersized...]}
@@ -1307,11 +1307,11 @@ Usage::
 
 	ceph pg ls-by-primary <osdname (id|osd.id)> {<int>}
 	{active|clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	scrubbing|degraded|inconsistent|peering|repair|
 	recovery|backfill_wait|incomplete|stale| remapped|
 	deep_scrub|backfill|backfill_toofull|recovery_wait|
 	undersized [active|clean|down|replay|splitting|
-	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	scrubbing|degraded|inconsistent|peering|repair|
 	recovery|backfill_wait|incomplete|stale|remapped|
 	deep_scrub|backfill|backfill_toofull|recovery_wait|
 	undersized...]}
