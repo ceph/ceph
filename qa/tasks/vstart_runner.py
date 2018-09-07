@@ -312,6 +312,10 @@ class LocalDaemon(object):
     def running(self):
         return self._get_pid() is not None
 
+    def check_status(self):
+        if self.proc:
+            return self.proc.poll()
+
     def _get_pid(self):
         """
         Return PID as an integer or None if not found
@@ -674,7 +678,7 @@ class LocalMDSCluster(LocalCephCluster, MDSCluster):
     def __init__(self, ctx):
         super(LocalMDSCluster, self).__init__(ctx)
 
-        self.mds_ids = ctx.daemons.daemons['mds'].keys()
+        self.mds_ids = ctx.daemons.daemons['ceph.mds'].keys()
         self.mds_daemons = dict([(id_, LocalDaemon("mds", id_)) for id_ in self.mds_ids])
 
     def clear_firewall(self):
@@ -689,7 +693,7 @@ class LocalMgrCluster(LocalCephCluster, MgrCluster):
     def __init__(self, ctx):
         super(LocalMgrCluster, self).__init__(ctx)
 
-        self.mgr_ids = ctx.daemons.daemons['mgr'].keys()
+        self.mgr_ids = ctx.daemons.daemons['ceph.mgr'].keys()
         self.mgr_daemons = dict([(id_, LocalDaemon("mgr", id_)) for id_ in self.mgr_ids])
 
 
@@ -844,12 +848,13 @@ class LocalContext(object):
         # Inspect ceph.conf to see what roles exist
         for conf_line in open("ceph.conf").readlines():
             for svc_type in ["mon", "osd", "mds", "mgr"]:
-                if svc_type not in self.daemons.daemons:
-                    self.daemons.daemons[svc_type] = {}
+                prefixed_type = "ceph." + svc_type
+                if prefixed_type not in self.daemons.daemons:
+                    self.daemons.daemons[prefixed_type] = {}
                 match = re.match("^\[{0}\.(.+)\]$".format(svc_type), conf_line)
                 if match:
                     svc_id = match.group(1)
-                    self.daemons.daemons[svc_type][svc_id] = LocalDaemon(svc_type, svc_id)
+                    self.daemons.daemons[prefixed_type][svc_id] = LocalDaemon(svc_type, svc_id)
 
     def __del__(self):
         shutil.rmtree(self.teuthology_config['test_path'])
