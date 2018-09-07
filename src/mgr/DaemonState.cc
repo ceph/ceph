@@ -289,11 +289,6 @@ void DaemonPerfCounters::update(MMgrReport *report)
   DECODE_FINISH(p);
 }
 
-uint64_t PerfCounterInstance::get_current() const
-{
-  return buffer.front().v;
-}
-
 void PerfCounterInstance::push(utime_t t, uint64_t const &v)
 {
   buffer.push_back({t, v});
