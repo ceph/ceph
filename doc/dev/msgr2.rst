@@ -177,8 +177,8 @@ authentication method as the first attempt:
                 |        auth done|
 
 
-Message frame format
---------------------
+Post-auth frame format
+----------------------
 
 The frame format is fixed (see above), but can take three different
 forms, depending on the AUTH_DONE flags:
@@ -189,6 +189,11 @@ forms, depending on the AUTH_DONE flags:
     tag
     payload
     payload_padding (out to auth block_size)
+
+  - The padding is some number of bytes < the auth block_size that
+    brings the total length of the payload + payload_padding to a
+    multiple of block_size.  It does not include the frame_len or tag.  Padding
+    content can be zeros or (better) random bytes.
 
 * If FLAG_SIGNED has been specified::
 
