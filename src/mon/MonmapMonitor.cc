@@ -12,6 +12,10 @@
  * 
  */
 
+#include <ostream>
+#include <sstream>
+#include <iostream>
+
 #include "MonmapMonitor.h"
 #include "Monitor.h"
 #include "messages/MMonCommand.h"
@@ -19,7 +23,6 @@
 
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
-#include <sstream>
 #include "common/config.h"
 #include "common/cmdparse.h"
 
@@ -33,6 +36,36 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()
 		<< ").monmap v" << mon->monmap->epoch << " ";
+}
+
+namespace ceph::mon_cmds {
+
+mon_cmd_ctx::mon_cmd_ctx(MonOpRequestRef op,
+                         MonmapMonitor& monmap_monitor,
+                         Monitor& mon)
+ : op(op),
+   monmap_monitor(monmap_monitor),
+   mon(mon),
+   mmon_command(*(static_cast<MMonCommand *>(op->get_req())))
+{
+  auto& m = mmon_command;
+
+  if (!cmdmap_from_json(m.cmd, &cmdmap, ss))
+   throw ceph::mon_cmds::failure(-EINVAL, ss.str());
+
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  f.reset(Formatter::create(format));
+}
+
+} // namespace ceph::mon_cmds
+
+MonmapMonitor::MonmapMonitor(Monitor *mn, Paxos *p, const string& service_name)
+ : PaxosService(mn, p, service_name),
+   commands { "mon" }
+{
+    ceph::mon_cmds::register_commands(commands);
 }
 
 void MonmapMonitor::create_initial()
@@ -251,6 +284,43 @@ void MonmapMonitor::dump_info(Formatter *f)
 
 bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
 {
+  using namespace ceph::mon_cmds;
+
+  assert(nullptr != mon->monmap);
+  
+  try 
+  {   
+      mon_cmd_ctx state { op, *this, *mon };
+
+      if (!commands.in_registry(state.prefix)) {
+          return legacy_preprocess_command(op);
+      }
+      
+      // Multiplex the commands to their respective handlers:
+      auto result = commands.apply(ceph::operation_type::preprocess, state.prefix, state);
+
+      if (mon_cmd_result::failure == *result) {
+          return false;
+      }
+
+      if (-1 == state.r) {
+          return false;
+      }
+
+      mon->reply_command(op, state.r,
+                         ceph::util::get_line(state.ss), state.rdata, get_last_committed());
+            
+      return true;
+  }
+  catch(mon_cmds::failure& e)
+  { 
+    mon->reply_command(op, e.error_code(), e.what(), get_last_committed());
+    return false;
+  }
+}
+
+bool MonmapMonitor::legacy_preprocess_command(MonOpRequestRef op)
+{
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   int r = -1;
   bufferlist rdata;
@@ -285,61 +355,8 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
     ss.str("");
     r = 0;
 
-  } else if (prefix == "mon getmap" ||
-             prefix == "mon dump") {
-
-    epoch_t epoch;
-    int64_t epochnum;
-    cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum, (int64_t)0);
-    epoch = epochnum;
-
-    MonMap *p = mon->monmap;
-    if (epoch) {
-      bufferlist bl;
-      r = get_version(epoch, bl);
-      if (r == -ENOENT) {
-        ss << "there is no map for epoch " << epoch;
-        goto reply;
-      }
-      ceph_assert(r == 0);
-      ceph_assert(bl.length() > 0);
-      p = new MonMap;
-      p->decode(bl);
-    }
-
-    ceph_assert(p);
-
-    if (prefix == "mon getmap") {
-      p->encode(rdata, m->get_connection()->get_features());
-      r = 0;
-      ss << "got monmap epoch " << p->get_epoch();
-    } else if (prefix == "mon dump") {
-      stringstream ds;
-      if (f) {
-        f->open_object_section("monmap");
-        p->dump(f.get());
-        f->open_array_section("quorum");
-        for (set<int>::iterator q = mon->get_quorum().begin();
-            q != mon->get_quorum().end(); ++q) {
-          f->dump_int("mon", *q);
-        }
-        f->close_section();
-        f->close_section();
-        f->flush(ds);
-        r = 0;
-      } else {
-        p->print(ds);
-        r = 0;
-      }
-      rdata.append(ds);
-      ss << "dumped monmap epoch " << p->get_epoch();
-    }
-    if (p != mon->monmap) {
-       delete p;
-       p = nullptr;
-    }
-
-  } else if (prefix == "mon feature ls") {
+  } 
+  else if (prefix == "mon feature ls") {
    
     bool list_with_value = false;
     string with_value;
@@ -448,6 +465,11 @@ bool MonmapMonitor::prepare_update(MonOpRequestRef op)
 }
 
 bool MonmapMonitor::prepare_command(MonOpRequestRef op)
+{
+  return legacy_prepare_command(op);
+}
+
+bool MonmapMonitor::legacy_prepare_command(MonOpRequestRef op)
 {
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   stringstream ss;
@@ -963,3 +985,119 @@ void MonmapMonitor::tick()
     propose_pending();
   }
 }
+
+namespace ceph::mon_cmds {
+
+using std::string;
+using std::vector;
+
+using ceph::mon_cmds::mon_cmd;
+using ceph::mon_cmds::mon_cmd_result;
+
+// A demo type for testing hooks:
+#pragma warning JFW REMOVEME
+struct cmd_echo : public mon_cmd 
+{
+ vector<string> tags() { return { "mon echo" }; }
+
+ mon_cmd_result at_prepare(const mon_cmd_ctx& state, string_view cmd)
+ {
+    state.ss << "cmd_echo() at_prepare: " << state.prefix;
+    return mon_cmd_result::success;
+ }
+
+ mon_cmd_result at_preprocess(const mon_cmd_ctx& state, string_view cmd)
+ {
+    state.ss << "cmd_echo() at_preprocess: " << state.prefix;
+    return mon_cmd_result::success;
+ }
+};
+
+struct cmd_getmap : public mon_cmd 
+{
+ vector<string> tags() { return { "mon getmap", "mon dump" }; }
+
+ mon_cmd_result at_preprocess(const mon_cmd_ctx& state, string_view cmd)
+ {
+    auto& cmdmap = state.cmdmap;
+    auto* mon    = &state.mon;
+    auto* m      = &state.mmon_command;
+    auto& f      = state.f;
+    auto& r      = state.r;
+    auto& ss     = state.ss;
+    auto& rdata  = state.rdata;
+
+    epoch_t epoch;
+    int64_t epochnum;
+    cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum, (int64_t)0);
+    epoch = epochnum;
+
+    MonMap *p = mon->monmap;
+    if (epoch) {
+      bufferlist bl;
+      r = state.monmap_monitor.get_version(epoch, bl);
+      if (r == -ENOENT) {
+        ss << "there is no map for epoch " << epoch;
+        return mon_cmd_result::failure;
+      }
+      ceph_assert(r == 0);
+      ceph_assert(bl.length() > 0);
+      p = new MonMap;
+      p->decode(bl);
+    }
+
+    ceph_assert(p);
+
+    if (state.prefix == "mon getmap") {
+      p->encode(rdata, m->get_connection()->get_features());
+      r = 0;
+      ss << "got monmap epoch " << p->get_epoch();
+    } else if (state.prefix == "mon dump") {
+      stringstream ds;
+      if (f) {
+        f->open_object_section("monmap");
+        p->dump(f.get());
+        f->open_array_section("quorum");
+        for (set<int>::iterator q = mon->get_quorum().begin();
+            q != mon->get_quorum().end(); ++q) {
+          f->dump_int("mon", *q);
+        }
+        f->close_section();
+        f->close_section();
+        f->flush(ds);
+        r = 0;
+      } else {
+        p->print(ds);
+        r = 0;
+      }
+      rdata.append(ds);
+      ss << "dumped monmap epoch " << p->get_epoch();
+    }
+    if (p != mon->monmap) {
+       delete p;
+       p = nullptr;
+    }
+
+    return mon_cmd_result::success;
+  }
+};
+
+} // namespace ceph::mon_cmds
+
+/* Command registry:
+    - Add your function types here, watch them grow!  */
+namespace ceph::mon_cmds {
+
+void register_commands(ceph::mon_cmds::mon_cmd_registry& commands)
+{
+ ceph::register_commands<ceph::mon_cmds::mon_cmd_registry,
+    cmd_echo,
+    cmd_getmap
+ >(commands);
+
+ /* If you require a non-default ctor, you can manually initialize and
+    add your types here: */
+}
+
+} // namespace ceph::mon_cmds
+>>>>>>> 429e38fadb... mon: monmapmonitor plumbing for command dispatch
