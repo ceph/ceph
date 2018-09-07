@@ -55,6 +55,14 @@ static int set_close_on_exec(int fd)
 int Accepter::create_selfpipe(int *pipe_rd, int *pipe_wr) {
   int selfpipe[2];
   int ret = ::pipe2(selfpipe, (O_CLOEXEC|O_NONBLOCK));
+  if (ret == 0) {
+    for (size_t i = 0; i < std::size(selfpipe); i++) {
+      int f = fcntl(selfpipe[i], F_GETFL);
+      ceph_assert(f != -1);
+      f = fcntl(selfpipe[i], F_SETFL, f | O_NONBLOCK);
+      ceph_assert(f != -1);
+    }
+  }
   if (ret < 0 ) {
     lderr(msgr->cct) << __func__ << " unable to create the selfpipe: "
                     << cpp_strerror(errno) << dendl;
