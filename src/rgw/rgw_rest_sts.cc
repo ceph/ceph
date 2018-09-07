@@ -107,8 +107,12 @@ void RGWSTSGetSessionToken::execute()
   op_ret = std::move(ret);
   //Dump the output
   if (op_ret == 0) {
+    s->formatter->open_object_section("GetSessionTokenResponse");
+    s->formatter->open_object_section("GetSessionTokenResult");
     s->formatter->open_object_section("Credentials");
     creds.dump(s->formatter);
+    s->formatter->close_section();
+    s->formatter->close_section();
     s->formatter->close_section();
   }
 }
@@ -154,10 +158,14 @@ void RGWSTSAssumeRole::execute()
   op_ret = std::move(ret);
   //Dump the output
   if (op_ret == 0) {
+    s->formatter->open_object_section("AssumeRoleResponse");
+    s->formatter->open_object_section("AssumeRoleResult");
     s->formatter->open_object_section("AssumeRole");
     assumedRoleUser.dump(s->formatter);
     creds.dump(s->formatter);
     encode_json("PackedPolicySize", packedPolicySize , s->formatter);
+    s->formatter->close_section();
+    s->formatter->close_section();
     s->formatter->close_section();
   }
 }
@@ -181,7 +189,7 @@ int RGWHandler_REST_STS::init(RGWRados *store,
 {
   s->dialect = "sts";
 
-  if (int ret = RGWHandler_REST_STS::init_from_header(s, RGW_FORMAT_JSON, true); ret < 0) {
+  if (int ret = RGWHandler_REST_STS::init_from_header(s, RGW_FORMAT_XML, true); ret < 0) {
     ldout(s->cct, 10) << "init_from_header returned err=" << ret <<  dendl;
     return ret;
   }
