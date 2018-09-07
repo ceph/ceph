@@ -74,9 +74,17 @@ class PerfCounterInstance
   {
     return buffer;
   }
+  const DataPoint& get_latest_data() const
+  {
+    return buffer.back();
+  }
   const boost::circular_buffer<AvgDataPoint> & get_data_avg() const
   {
     return avg_buffer;
+  }
+  const AvgDataPoint& get_latest_data_avg() const
+  {
+    return avg_buffer.back();
   }
   void push(utime_t t, uint64_t const &v);
   void push_avg(utime_t t, uint64_t const &s, uint64_t const &c);

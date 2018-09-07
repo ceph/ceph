@@ -603,10 +603,11 @@ std::map<std::string, std::string> ActivePyModules::get_services() const
   return result;
 }
 
-PyObject* ActivePyModules::get_counter_python(
+PyObject* ActivePyModules::with_perf_counters(
+    std::function<void(PerfCounterInstance& counter_instance, PerfCounterType& counter_type, PyFormatter& f)> fct,
     const std::string &svc_name,
     const std::string &svc_id,
-    const std::string &path)
+    const std::string &path) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
   Mutex::Locker l(lock);
@@ -621,27 +622,10 @@ PyObject* ActivePyModules::get_counter_python(
     if (metadata->perf_counters.instances.count(path)) {
       auto counter_instance = metadata->perf_counters.instances.at(path);
       auto counter_type = metadata->perf_counters.types.at(path);
-      if (counter_type.type & PERFCOUNTER_LONGRUNAVG) {
-        const auto &avg_data = counter_instance.get_data_avg();
-        for (const auto &datapoint : avg_data) {
-          f.open_array_section("datapoint");
-          f.dump_unsigned("t", datapoint.t.sec());
-          f.dump_unsigned("s", datapoint.s);
-          f.dump_unsigned("c", datapoint.c);
-          f.close_section();
-        }
-      } else {
-        const auto &data = counter_instance.get_data();
-        for (const auto &datapoint : data) {
-          f.open_array_section("datapoint");
-          f.dump_unsigned("t", datapoint.t.sec());
-          f.dump_unsigned("v", datapoint.v);
-          f.close_section();
-        }
-      }
+      fct(counter_instance, counter_type, f);
     } else {
       dout(4) << "Missing counter: '" << path << "' ("
-              << svc_name << "." << svc_id << ")" << dendl;
+        << svc_name << "." << svc_id << ")" << dendl;
       dout(20) << "Paths are:" << dendl;
       for (const auto &i : metadata->perf_counters.instances) {
         dout(20) << i.first << dendl;
@@ -649,10 +633,66 @@ PyObject* ActivePyModules::get_counter_python(
     }
   } else {
     dout(4) << "No daemon state for "
-              << svc_name << "." << svc_id << ")" << dendl;
+      << svc_name << "." << svc_id << ")" << dendl;
   }
   f.close_section();
   return f.get();
+}
+
+PyObject* ActivePyModules::get_counter_python(
+    const std::string &svc_name,
+    const std::string &svc_id,
+    const std::string &path)
+{
+  auto extract_counters = [](
+      PerfCounterInstance& counter_instance,
+      PerfCounterType& counter_type,
+      PyFormatter& f)
+  {
+    if (counter_type.type & PERFCOUNTER_LONGRUNAVG) {
+      const auto &avg_data = counter_instance.get_data_avg();
+      for (const auto &datapoint : avg_data) {
+        f.open_array_section("datapoint");
+        f.dump_unsigned("t", datapoint.t.sec());
+        f.dump_unsigned("s", datapoint.s);
+        f.dump_unsigned("c", datapoint.c);
+        f.close_section();
+      }
+    } else {
+      const auto &data = counter_instance.get_data();
+      for (const auto &datapoint : data) {
+        f.open_array_section("datapoint");
+        f.dump_unsigned("t", datapoint.t.sec());
+        f.dump_unsigned("v", datapoint.v);
+        f.close_section();
+      }
+    }
+  };
+  return with_perf_counters(extract_counters, svc_name, svc_id, path);
+}
+
+PyObject* ActivePyModules::get_latest_counter_python(
+    const std::string &svc_name,
+    const std::string &svc_id,
+    const std::string &path)
+{
+  auto extract_latest_counters = [](
+      PerfCounterInstance& counter_instance,
+      PerfCounterType& counter_type,
+      PyFormatter& f)
+  {
+    if (counter_type.type & PERFCOUNTER_LONGRUNAVG) {
+      const auto &datapoint = counter_instance.get_latest_data_avg();
+      f.dump_unsigned("t", datapoint.t.sec());
+      f.dump_unsigned("s", datapoint.s);
+      f.dump_unsigned("c", datapoint.c);
+    } else {
+      const auto &datapoint = counter_instance.get_latest_data();
+      f.dump_unsigned("t", datapoint.t.sec());
+      f.dump_unsigned("v", datapoint.v);
+    }
+  };
+  return with_perf_counters(extract_latest_counters, svc_name, svc_id, path);
 }
 
 PyObject* ActivePyModules::get_perf_schema_python(

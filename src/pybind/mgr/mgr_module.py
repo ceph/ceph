@@ -479,6 +479,20 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         return self._ceph_get_counter(svc_type, svc_name, path)
 
+    def get_latest_counter(self, svc_type, svc_name, path):
+        """
+        Called by the plugin to fetch only the newest performance counter data
+        pointfor a particular counter on a particular service.
+
+        :param str svc_type:
+        :param str svc_name:
+        :param str path: a period-separated concatenation of the subsystem and the
+            counter name, for example "mds.inodes".
+        :return: A list of two-tuples of (timestamp, value) is returned.  This may be
+            empty if no data is available.
+        """
+        return self._ceph_get_latest_counter(svc_type, svc_name, path)
+
     def list_servers(self):
         """
         Like ``get_server``, but gives information about all servers (i.e. all
@@ -721,19 +735,17 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         return self._ceph_get_osdmap()
 
-    # TODO: improve C++->Python interface to return just
-    # the latest if that's all we want.
     def get_latest(self, daemon_type, daemon_name, counter):
-        data = self.get_counter(daemon_type, daemon_name, counter)[counter]
+        data = self.get_latest_counter(daemon_type, daemon_name, counter)[counter]
         if data:
-            return data[-1][1]
+            return data[1]
         else:
             return 0
 
     def get_latest_avg(self, daemon_type, daemon_name, counter):
-        data = self.get_counter(daemon_type, daemon_name, counter)[counter]
+        data = self.get_latest_counter(daemon_type, daemon_name, counter)[counter]
         if data:
-            return (data[-1][1], data[-1][2])
+            return (data[1], data[2])
         else:
             return (0, 0)
 
@@ -742,7 +754,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         Return the perf counters currently known to this ceph-mgr
         instance, filtered by priority equal to or greater than `prio_limit`.
 
-        The result us a map of string to dict, associating services
+        The result is a map of string to dict, associating services
         (like "osd.123") with their counters.  The counter
         dict for each service maps counter paths to a counter
         info structure, which is the information from
