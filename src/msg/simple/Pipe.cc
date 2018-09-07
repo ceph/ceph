@@ -2043,7 +2043,7 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
   }
   unsigned middle = left & CEPH_PAGE_MASK;
   if (middle > 0) {
-    data.push_back(buffer::create_page_aligned(middle));
+    data.push_back(buffer::create_small_page_aligned(middle));
     left -= middle;
   }
   if (left) {
