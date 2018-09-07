@@ -3942,6 +3942,8 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_OBJ_TAGGING:
         case RGW_OP_PUT_LC:
         case RGW_OP_SET_REQUEST_PAYMENT:
+        case RGW_STS_GET_SESSION_TOKEN:
+        case RGW_STS_ASSUME_ROLE:
           break;
         default:
           dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
