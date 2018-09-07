@@ -1708,7 +1708,7 @@ int RGWRados::initialize()
     cct->_conf.get_val<double>("rgw_inject_notify_timeout_probability");
   max_notify_retries = cct->_conf.get_val<uint64_t>("rgw_max_notify_retries");
 
-  svc_registry = std::make_unique<RGWServiceRegistry>(cct);
+  svc_registry = std::make_shared<RGWServiceRegistry>(cct);
 
   JSONFormattable zone_svc_conf;
   ret = svc_registry->get_instance("zone", zone_svc_conf, &_svc.zone);
@@ -1740,7 +1740,7 @@ int RGWRados::initialize()
 
   if (use_cache) {
     JSONFormattable cache_svc_conf;
-    ret = svc_registry->get_instance("sys_obj_cache", cache_svc_conf, &_svc.cache);
+    ret = svc_registry->get_instance("sysobj_cache", cache_svc_conf, &_svc.cache);
     if (ret < 0) {
       return ret;
     }
@@ -1754,7 +1754,7 @@ int RGWRados::initialize()
   if (!to_formattable(cct, f, &sysobj_svc_conf)) {
     assert(0);
   }
-  ret = svc_registry->get_instance("sys_obj", sysobj_svc_conf, &_svc.sysobj);
+  ret = svc_registry->get_instance("sysobj", sysobj_svc_conf, &_svc.sysobj);
   if (ret < 0) {
     return ret;
   }
