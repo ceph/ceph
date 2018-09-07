@@ -54,9 +54,6 @@ class RGWSI_Zone : public RGWServiceInstance
   int convert_regionmap();
 
   int update_placement_map();
-  int add_bucket_placement(const rgw_pool& new_pool);
-  int remove_bucket_placement(const rgw_pool& old_pool);
-  int list_placement_set(set<rgw_pool>& names);
 public:
   RGWSI_Zone(RGWService *svc, CephContext *cct): RGWServiceInstance(svc, cct) {}
 
@@ -110,6 +107,10 @@ public:
   int select_new_bucket_location(RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
                                  string *pselected_rule_name, RGWZonePlacementInfo *rule_info);
   int select_bucket_location_by_rule(const string& location_rule, RGWZonePlacementInfo *rule_info);
+
+  int add_bucket_placement(const rgw_pool& new_pool);
+  int remove_bucket_placement(const rgw_pool& old_pool);
+  int list_placement_set(set<rgw_pool>& names);
 
   bool is_meta_master() const;
 

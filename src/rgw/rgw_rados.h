@@ -28,6 +28,7 @@
 #include "rgw_sync_log_trim.h"
 
 #include "services/svc_rados.h"
+#include "services/svc_zone.h"
 
 class RGWWatcher;
 class SafeTimer;
@@ -1480,9 +1481,6 @@ public:
                             rgw_bucket *master_bucket,
                             uint32_t *master_num_shards,
                             bool exclusive = true);
-  int add_bucket_placement(const rgw_pool& new_pool);
-  int remove_bucket_placement(const rgw_pool& new_pool);
-  int list_placement_set(set<rgw_pool>& names);
   int create_pools(vector<rgw_pool>& pools, vector<int>& retcodes);
 
   RGWCoroutinesManagerRegistry *get_cr_registry() { return cr_registry; }
