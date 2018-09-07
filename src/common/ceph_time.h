@@ -181,6 +181,14 @@ namespace ceph {
 	return from_timespec(ts);
       }
 
+      static bool is_zero(const time_point& t) {
+	return (t == time_point::min());
+      }
+
+      static time_point zero() {
+	return time_point::min();
+      }
+
       static time_t to_time_t(const time_point& t) noexcept {
 	return duration_cast<seconds>(t.time_since_epoch()).count();
       }
