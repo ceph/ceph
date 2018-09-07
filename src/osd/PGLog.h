@@ -750,6 +750,23 @@ public:
       opg_log->rebuilt_missing_with_deletes = true;
   }
 
+  void merge_from(
+    const vector<PGLog*>& sources,
+    eversion_t last_update) {
+    unindex();
+    missing.clear();
+
+    vector<pg_log_t*> slogs;
+    for (auto s : sources) {
+      slogs.push_back(&s->log);
+    }
+    log.merge_from(slogs, last_update);
+
+    index();
+
+    mark_log_for_rewrite();
+  }
+
   void recover_got(hobject_t oid, eversion_t v, pg_info_t &info) {
     if (missing.is_missing(oid, v)) {
       missing.got(oid, v);

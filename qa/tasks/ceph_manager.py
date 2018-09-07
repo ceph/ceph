@@ -129,7 +129,8 @@ class Thrasher:
         self.chance_force_recovery = self.config.get('chance_force_recovery', 0.3)
 
         num_osds = self.in_osds + self.out_osds
-        self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * num_osds
+        self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * len(num_osds)
+        self.min_pgs = self.config.get("min_pgs_per_pool_osd", 1) * len(num_osds)
         if self.logger is not None:
             self.log = lambda x: self.logger.info(x)
         else:
@@ -332,6 +333,12 @@ class Thrasher:
                          "...ignored")
             elif proc.exitstatus == 11:
                 self.log("Attempt to import an incompatible export"
+                         "...ignored")
+            elif proc.exitstatus == 12:
+                # this should be safe to ignore because we only ever move 1
+                # copy of the pg at a time, and merge is only initiated when
+                # all replicas are peered and happy.  /me crosses fingers
+                self.log("PG merged on target"
                          "...ignored")
             elif proc.exitstatus:
                 raise Exception("ceph-objectstore-tool: "
@@ -644,6 +651,19 @@ class Thrasher:
                                          self.max_pgs):
             self.pools_to_fix_pgp_num.add(pool)
 
+    def shrink_pool(self):
+        """
+        Decrease the size of the pool
+        """
+        pool = self.ceph_manager.get_pool()
+        orig_pg_num = self.ceph_manager.get_pool_pg_num(pool)
+        self.log("Shrinking pool %s" % (pool,))
+        if self.ceph_manager.contract_pool(
+                pool,
+                self.config.get('pool_shrink_by', 10),
+                self.min_pgs):
+            self.pools_to_fix_pgp_num.add(pool)
+
     def fix_pgp_num(self, pool=None):
         """
         Fix number of pgs in pool.
@@ -815,6 +835,8 @@ class Thrasher:
                         self.config.get('reweight_osd', .5),))
         actions.append((self.grow_pool,
                         self.config.get('chance_pgnum_grow', 0),))
+        actions.append((self.shrink_pool,
+                        self.config.get('chance_pgnum_shrink', 0),))
         actions.append((self.fix_pgp_num,
                         self.config.get('chance_pgpnum_fix', 0),))
         actions.append((self.test_pool_min_size,
@@ -1740,6 +1762,29 @@ class CephManager:
                 return False
             self.log("increase pool size by %d" % (by,))
             new_pg_num = self.pools[pool_name] + by
+            self.set_pool_property(pool_name, "pg_num", new_pg_num)
+            self.pools[pool_name] = new_pg_num
+            return True
+
+    def contract_pool(self, pool_name, by, min_pgs):
+        """
+        Decrease the number of pgs in a pool
+        """
+        with self.lock:
+            self.log('contract_pool %s by %s min %s' % (
+                     pool_name, str(by), str(min_pgs)))
+            assert isinstance(pool_name, basestring)
+            assert isinstance(by, int)
+            assert pool_name in self.pools
+            if self.get_num_creating() > 0:
+                self.log('too many creating')
+                return False
+            proj = self.pools[pool_name] - by
+            if proj < min_pgs:
+                self.log('would drop below min_pgs, proj %d, currently %d' % (proj,self.pools[pool_name],))
+                return False
+            self.log("decrease pool size by %d" % (by,))
+            new_pg_num = self.pools[pool_name] - by
             self.set_pool_property(pool_name, "pg_num", new_pg_num)
             self.pools[pool_name] = new_pg_num
             return True

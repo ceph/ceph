@@ -109,6 +109,7 @@ TYPE(ScrubMap)
 TYPE_FEATUREFUL(obj_list_watch_response_t)
 TYPE(clone_info)
 TYPE(obj_list_snap_response_t)
+TYPE(pool_pg_num_history_t)
 
 #include "osd/ECUtil.h"
 // TYPE(stripe_info_t) non-standard encoding/decoding functions

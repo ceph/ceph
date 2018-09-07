@@ -257,8 +257,6 @@ Valid fields are:
 
 	* ``pg_num``: The placement group number.
 	* ``pgp_num``: Effective number of placement groups when calculating placement.
-	* ``lpg_num``: The number of local placement groups.
-	* ``lpgp_num``: The number used for placing the local placement groups.
 
 
 Sends a scrub command to OSD ``{osd-num}``. To send the command to all OSDs, use ``*``. ::

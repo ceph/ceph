@@ -198,6 +198,10 @@ public:
     uint32_t bits,                              //< [in] bits to check
     CollectionIndex* dest                       //< [in] destination index
     ) = 0;
+  virtual int _merge(
+    uint32_t bits,                              //< [in] bits for target
+    CollectionIndex* dest                       //< [in] destination index
+    ) = 0;
 
   /// @see CollectionIndex
   int split(
@@ -207,6 +211,17 @@ public:
     ) override {
     WRAP_RETRY(
       r = _split(match, bits, dest);
+      goto out;
+      );
+  }
+
+  /// @see CollectionIndex
+  int merge(
+    uint32_t bits,
+    CollectionIndex* dest
+    ) override {
+    WRAP_RETRY(
+      r = _merge(bits, dest);
       goto out;
       );
   }

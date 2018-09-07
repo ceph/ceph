@@ -3193,20 +3193,6 @@ BlueStore::Collection::Collection(BlueStore *store_, Cache *c, coll_t cid)
     exists(true),
     onode_map(c)
 {
-  {
-    std::lock_guard<std::mutex> l(store->zombie_osr_lock);
-    auto p = store->zombie_osr_set.find(cid);
-    if (p == store->zombie_osr_set.end()) {
-      osr = new OpSequencer(store, cid);
-      osr->shard = cid.hash_to_shard(store->m_finisher_num);
-    } else {
-      osr = p->second;
-      store->zombie_osr_set.erase(p);
-      ldout(store->cct, 10) << "resurrecting zombie osr " << osr << dendl;
-      osr->zombie = false;
-      ceph_assert(osr->shard == cid.hash_to_shard(store->m_finisher_num));
-    }
-  }
 }
 
 bool BlueStore::Collection::flush_commit(Context *c)
@@ -3388,11 +3374,13 @@ void BlueStore::Collection::split_cache(
 
   auto p = onode_map.onode_map.begin();
   while (p != onode_map.onode_map.end()) {
+    OnodeRef o = p->second;
     if (!p->second->oid.match(destbits, destpg.pgid.ps())) {
       // onode does not belong to this child
+      ldout(store->cct, 20) << __func__ << " not moving " << o << " " << o->oid
+			    << dendl;
       ++p;
     } else {
-      OnodeRef o = p->second;
       ldout(store->cct, 20) << __func__ << " moving " << o << " " << o->oid
 			    << dendl;
 
@@ -5466,6 +5454,7 @@ int BlueStore::_open_collections(int *errors)
       }   
       dout(20) << __func__ << " opened " << cid << " " << c
 	       << " " << c->cnode << dendl;
+      _osr_attach(c.get());
       coll_map[cid] = c;
     } else {
       derr << __func__ << " unrecognized collection " << it->key() << dendl;
@@ -7255,6 +7244,7 @@ ObjectStore::CollectionHandle BlueStore::create_new_collection(
     cache_shards[cid.hash_to_shard(cache_shards.size())],
     cid);
   new_coll_map[cid] = c;
+  _osr_attach(c);
   return c;
 }
 
@@ -9028,13 +9018,43 @@ out:
   txc->released.clear();
 }
 
+void BlueStore::_osr_attach(Collection *c)
+{
+  // note: caller has RWLock on coll_map
+  auto q = coll_map.find(c->cid);
+  if (q != coll_map.end()) {
+    c->osr = q->second->osr;
+    ceph_assert(c->osr->shard == c->cid.hash_to_shard(m_finisher_num));
+    ldout(cct, 10) << __func__ << " " << c->cid
+		   << " reusing osr " << c->osr << " from existing coll "
+		   << q->second << dendl;
+  } else {
+    std::lock_guard<std::mutex> l(zombie_osr_lock);
+    auto p = zombie_osr_set.find(c->cid);
+    if (p == zombie_osr_set.end()) {
+      c->osr = new OpSequencer(this, c->cid);
+      c->osr->shard = c->cid.hash_to_shard(m_finisher_num);
+      ldout(cct, 10) << __func__ << " " << c->cid
+		     << " fresh osr " << c->osr << dendl;
+    } else {
+      c->osr = p->second;
+      zombie_osr_set.erase(p);
+      ldout(cct, 10) << __func__ << " " << c->cid
+		     << " resurrecting zombie osr " << c->osr << dendl;
+      c->osr->zombie = false;
+      ceph_assert(c->osr->shard == c->cid.hash_to_shard(m_finisher_num));
+    }
+  }
+}
+
 void BlueStore::_osr_register_zombie(OpSequencer *osr)
 {
   std::lock_guard<std::mutex> l(zombie_osr_lock);
   dout(10) << __func__ << " " << osr << " " << osr->cid << dendl;
   osr->zombie = true;
   auto i = zombie_osr_set.emplace(osr->cid, osr);
-  ceph_assert(i.second); // this should be a new insertion
+  // this is either a new insertion or the same osr is already there
+  ceph_assert(i.second || i.first->second == osr);
 }
 
 void BlueStore::_osr_drain_preceding(TransContext *txc)
@@ -9057,6 +9077,29 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
     kv_cond.notify_one();
   }
   osr->drain_preceding(txc);
+  --deferred_aggressive;
+  dout(10) << __func__ << " " << osr << " done" << dendl;
+}
+
+void BlueStore::_osr_drain(OpSequencer *osr)
+{
+  dout(10) << __func__ << " " << osr << dendl;
+  ++deferred_aggressive; // FIXME: maybe osr-local aggressive flag?
+  {
+    // submit anything pending
+    deferred_lock.lock();
+    if (osr->deferred_pending && !osr->deferred_running) {
+      _deferred_submit_unlock(osr);
+    } else {
+      deferred_lock.unlock();
+    }
+  }
+  {
+    // wake up any previously finished deferred events
+    std::lock_guard<std::mutex> l(kv_lock);
+    kv_cond.notify_one();
+  }
+  osr->drain();
   --deferred_aggressive;
   dout(10) << __func__ << " " << osr << " done" << dendl;
 }
@@ -9869,6 +9912,15 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
         uint32_t bits = op->split_bits;
         uint32_t rem = op->split_rem;
 	r = _split_collection(txc, c, cvec[op->dest_cid], bits, rem);
+	if (!r)
+	  continue;
+      }
+      break;
+
+    case Transaction::OP_MERGE_COLLECTION:
+      {
+        uint32_t bits = op->split_bits;
+	r = _merge_collection(txc, &c, cvec[op->dest_cid], bits);
 	if (!r)
 	  continue;
       }
@@ -12142,12 +12194,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
         }
       }
       if (!exists) {
-        coll_map.erase(cid);
-        txc->removed_collections.push_back(*c);
-        (*c)->exists = false;
-	_osr_register_zombie((*c)->osr.get());
-        c->reset();
-        txc->t->rmkey(PREFIX_COLL, stringify(cid));
+	_do_remove_collection(txc, c);
         r = 0;
       } else {
         dout(10) << __func__ << " " << cid
@@ -12160,6 +12207,17 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
  out:
   dout(10) << __func__ << " " << cid << " = " << r << dendl;
   return r;
+}
+
+void BlueStore::_do_remove_collection(TransContext *txc,
+				      CollectionRef *c)
+{
+  coll_map.erase((*c)->cid);
+  txc->removed_collections.push_back(*c);
+  (*c)->exists = false;
+  _osr_register_zombie((*c)->osr.get());
+  txc->t->rmkey(PREFIX_COLL, stringify((*c)->cid));
+  c->reset();
 }
 
 int BlueStore::_split_collection(TransContext *txc,
@@ -12213,6 +12271,64 @@ int BlueStore::_split_collection(TransContext *txc,
 	   << " bits " << bits << " = " << r << dendl;
   return r;
 }
+
+int BlueStore::_merge_collection(
+  TransContext *txc,
+  CollectionRef *c,
+  CollectionRef& d,
+  unsigned bits)
+{
+  dout(15) << __func__ << " " << (*c)->cid << " to " << d->cid
+	   << " bits " << bits << dendl;
+  RWLock::WLocker l((*c)->lock);
+  RWLock::WLocker l2(d->lock);
+  int r;
+
+  coll_t cid = (*c)->cid;
+
+  // flush all previous deferred writes on the source collection to ensure
+  // that all deferred writes complete before we merge as the target collection's
+  // sequencer may need to order new ops after those writes.
+
+  _osr_drain((*c)->osr.get());
+
+  // move any cached items (onodes and referenced shared blobs) that will
+  // belong to the child collection post-split.  leave everything else behind.
+  // this may include things that don't strictly belong to the now-smaller
+  // parent split, but the OSD will always send us a split for every new
+  // child.
+
+  spg_t pgid, dest_pgid;
+  bool is_pg = cid.is_pg(&pgid);
+  ceph_assert(is_pg);
+  is_pg = d->cid.is_pg(&dest_pgid);
+  ceph_assert(is_pg);
+
+  // adjust bits.  note that this will be redundant for all but the first
+  // merge call for the parent/target.
+  d->cnode.bits = bits;
+
+  // behavior depends on target (d) bits, so this after that is updated.
+  (*c)->split_cache(d.get());
+
+  // remove source collection
+  {
+    RWLock::WLocker l3(coll_lock);
+    _do_remove_collection(txc, c);
+  }
+
+  r = 0;
+
+  bufferlist bl;
+  encode(d->cnode, bl);
+  txc->t->set(PREFIX_COLL, stringify(d->cid), bl);
+
+  dout(10) << __func__ << " " << cid << " to " << d->cid << " "
+	   << " bits " << bits << " = " << r << dendl;
+  return r;
+}
+
+
 
 // DB key value Histogram
 #define KEY_SLAB 32

@@ -848,6 +848,20 @@ int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap, bufferlist& bl)
   return 0;
 }
 
+int get_pg_num_history(ObjectStore *store, pool_pg_num_history_t *h)
+{
+  ObjectStore::CollectionHandle ch = store->open_collection(coll_t::meta());
+  bufferlist bl;
+  auto pghist = OSD::make_pg_num_history_oid();
+  int r = store->read(ch, pghist, 0, 0, bl, 0);
+  if (r >= 0 && bl.length() > 0) {
+    auto p = bl.cbegin();
+    decode(*h, p);
+  }
+  cout << __func__ << " pg_num_history " << *h << std::endl;
+  return 0;
+}
+
 int add_osdmap(ObjectStore *store, metadata_section &ms)
 {
   return get_osdmap(store, ms.map_epoch, ms.osdmap, ms.osdmap_bl);
@@ -1466,7 +1480,10 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
     vector<int> up, acting;
     lastmap->pg_to_up_acting_osds(
       ms.info.pgid.pgid, &up, &up_primary, &acting, &acting_primary);
-
+    cerr << "initial e" << lastmap->get_epoch()
+	 << " up " << up << "/" << up_primary
+	 << " acting " << acting << "/" << acting_primary
+	 << std::endl;
     while (ms.map_epoch < sb.current_epoch) {
       ++ms.map_epoch;
       if (ms.map_epoch < sb.oldest_map) {
@@ -1488,6 +1505,11 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
       nextmap->pg_to_up_acting_osds(
 	ms.info.pgid.pgid, &new_up, &new_up_primary, &new_acting,
 	&new_acting_primary);
+
+      cerr << "e" << nextmap->get_epoch()
+	   << " up " << up << "/" << up_primary
+	   << " acting " << acting << "/" << acting_primary
+	   << std::endl;
 
       // this is a bit imprecise, but sufficient?
       struct min_size_predicate_t : public IsPGRecoverablePredicate {
@@ -1796,6 +1818,16 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     return 10;  // Positive return means exit status
   }
 
+  const pg_pool_t *pi = curmap.get_pg_pool(pgid.pgid.m_pool);
+  if (pi->get_pg_num() <= pgid.pgid.m_seed) {
+    cerr << "PG " << pgid.pgid << " no longer exists" << std::endl;
+    // Special exit code for this error, used by test code
+    return 12;  // Positive return means exit status
+  }
+
+  pool_pg_num_history_t pg_num_history;
+  get_pg_num_history(store, &pg_num_history);
+
   ghobject_t pgmeta_oid = pgid.make_pgmeta_oid();
 
   //Check for PG already present.
@@ -1806,20 +1838,6 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
   }
 
   ObjectStore::CollectionHandle ch;
-  if (!dry_run) {
-    ObjectStore::Transaction t;
-    ch = store->create_new_collection(coll);
-    PG::_create(t, pgid,
-		pgid.get_split_bits(curmap.get_pg_pool(pgid.pool())->get_pg_num()));
-    PG::_init(t, pgid, NULL);
-
-    // mark this coll for removal until we're done
-    map<string,bufferlist> values;
-    encode((char)1, values["_remove"]);
-    t.omap_setkeys(coll, pgid.make_pgmeta_oid(), values);
-
-    store->queue_transaction(ch, std::move(t));
-  }
 
   OSDriver driver(
     store,
@@ -1850,6 +1868,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     }
     switch(type) {
     case TYPE_OBJECT_BEGIN:
+      ceph_assert(found_metadata);
       ret = get_object(store, driver, mapper, coll, ebl, curmap, &skipped_objects);
       if (ret) return ret;
       break;
@@ -1857,8 +1876,51 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
       ret = get_pg_metadata(store, ebl, ms, sb, curmap, pgid);
       if (ret) return ret;
       found_metadata = true;
+
+      // make sure there are no conflicting merges
+      {
+	auto p = pg_num_history.pg_nums.find(pgid.pgid.m_pool);
+	if (p != pg_num_history.pg_nums.end()) {
+	  unsigned pg_num = ms.osdmap.get_pg_num(pgid.pgid.m_pool);
+	  for (auto q = p->second.lower_bound(ms.map_epoch);
+	       q != p->second.end();
+	       ++q) {
+	    pg_t parent;
+	    if (pgid.pgid.is_merge_source(pg_num, q->second, &parent)) {
+	      cerr << "PG " << pgid.pgid << " merge source in epoch "
+		   << q->first << " pg_num " << pg_num
+		   << " -> " << q->second << std::endl;
+	      return 12;
+	    }
+	    if (pgid.pgid.is_merge_target(pg_num, q->second)) {
+	      cerr << "PG " << pgid.pgid << " merge target in epoch "
+		   << q->first << " pg_num " << pg_num
+		   << " -> " << q->second << std::endl;
+	      return 12;
+	    }
+	    pg_num = q->second;
+	  }
+	}
+      }
+
+      if (!dry_run) {
+	ObjectStore::Transaction t;
+	ch = store->create_new_collection(coll);
+	PG::_create(t, pgid,
+		    pgid.get_split_bits(curmap.get_pg_pool(pgid.pool())->get_pg_num()));
+	PG::_init(t, pgid, NULL);
+
+	// mark this coll for removal until we're done
+	map<string,bufferlist> values;
+	encode((char)1, values["_remove"]);
+	t.omap_setkeys(coll, pgid.make_pgmeta_oid(), values);
+
+	store->queue_transaction(ch, std::move(t));
+      }
+
       break;
     case TYPE_PG_END:
+      ceph_assert(found_metadata);
       done = true;
       break;
     default:

@@ -785,9 +785,8 @@ private:
 		      const SequencerPosition &spos);
   int _split_collection(const coll_t& cid, uint32_t bits, uint32_t rem, coll_t dest,
                         const SequencerPosition &spos);
-  int _split_collection_create(const coll_t& cid, uint32_t bits, uint32_t rem,
-			       coll_t dest,
-			       const SequencerPosition &spos);
+  int _merge_collection(const coll_t& cid, uint32_t bits, coll_t dest,
+                        const SequencerPosition &spos);
 
   const char** get_tracked_conf_keys() const override;
   void handle_conf_change(const ConfigProxy& conf,
