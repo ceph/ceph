@@ -398,6 +398,8 @@ public:
     const pg_pool_t *pool,
     ObjectStore::Transaction *t) = 0;
   void split_into(pg_t child_pgid, PG *child, unsigned split_bits);
+  void merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
+		  unsigned split_bits);
   void finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction *t);
 
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
@@ -2831,6 +2833,7 @@ protected:
     return state_test(PG_STATE_ACTIVE) || state_test(PG_STATE_PEERED);
   }
   bool is_recovering() const { return state_test(PG_STATE_RECOVERING); }
+  bool is_premerge() const { return state_test(PG_STATE_PREMERGE); }
 
   bool is_empty() const { return info.last_update == eversion_t(0,0); }
 
@@ -2859,6 +2862,10 @@ public:
     bool dirty_epoch,
     bool try_fast_info,
     PerfCounters *logger = nullptr);
+
+  void write_if_dirty(RecoveryCtx *rctx) {
+    write_if_dirty(*rctx->transaction);
+  }
 protected:
   void write_if_dirty(ObjectStore::Transaction& t);
 

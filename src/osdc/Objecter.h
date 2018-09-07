@@ -1298,6 +1298,7 @@ public:
     spg_t actual_pgid; ///< last (actual) spg_t we mapped to
     unsigned pg_num = 0; ///< last pg_num we mapped to
     unsigned pg_num_mask = 0; ///< last pg_num_mask we mapped to
+    unsigned pg_num_pending = 0; ///< last pg_num we mapped to
     vector<int> up; ///< set of up osds for last pg we mapped to
     vector<int> acting; ///< set of acting osds for last pg we mapped to
     int up_primary = -1; ///< last up_primary we mapped to

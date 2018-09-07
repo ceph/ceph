@@ -2861,6 +2861,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   int size = pi->size;
   int min_size = pi->min_size;
   unsigned pg_num = pi->get_pg_num();
+  unsigned pg_num_pending = pi->get_pg_num_pending();
   int up_primary, acting_primary;
   vector<int> up, acting;
   osdmap->pg_to_up_acting_osds(pgid, &up, &up_primary,
@@ -2884,6 +2885,8 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 	min_size,
 	t->pg_num,
 	pg_num,
+	t->pg_num_pending,
+	pg_num_pending,
 	t->sort_bitwise,
 	sort_bitwise,
 	t->recovery_deletes,
@@ -2903,12 +2906,15 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       is_pg_changed(
 	t->acting_primary, t->acting, acting_primary, acting,
 	t->used_replica || any_change);
-  bool split = false;
+  bool split_or_merge = false;
   if (t->pg_num) {
-    split = prev_pgid.is_split(t->pg_num, pg_num, nullptr);
+    split_or_merge =
+      prev_pgid.is_split(t->pg_num, pg_num, nullptr) ||
+      prev_pgid.is_merge_source(t->pg_num, pg_num, nullptr) ||
+      prev_pgid.is_merge_target(t->pg_num, pg_num);
   }
 
-  if (legacy_change || split || force_resend) {
+  if (legacy_change || split_or_merge || force_resend) {
     t->pgid = pgid;
     t->acting = acting;
     t->acting_primary = acting_primary;
@@ -2918,6 +2924,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->min_size = min_size;
     t->pg_num = pg_num;
     t->pg_num_mask = pi->get_pg_num_mask();
+    t->pg_num_pending = pg_num_pending;
     osdmap->get_primary_shard(
       pg_t(ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask), pgid.pool()),
       &t->actual_pgid);
@@ -2973,7 +2980,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   if (legacy_change || unpaused || force_resend) {
     return RECALC_OP_TARGET_NEED_RESEND;
   }
-  if (split &&
+  if (split_or_merge &&
       (osdmap->require_osd_release >= CEPH_RELEASE_LUMINOUS ||
        HAVE_FEATURE(osdmap->get_xinfo(acting_primary).features,
 		    RESEND_ON_SPLIT))) {

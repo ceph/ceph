@@ -150,6 +150,7 @@ public:
   void send_report();
   void got_service_map();
   void got_mgr_map();
+  void adjust_pgs();
 
   void _send_configure(ConnectionRef c);
 

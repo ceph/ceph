@@ -281,6 +281,7 @@ public:
   mempool::pgmap::unordered_map<int,set<pg_t> > pg_by_osd;
   mempool::pgmap::unordered_map<int,int> blocked_by_sum;
   mempool::pgmap::list< pair<pool_stat_t, utime_t> > pg_sum_deltas;
+  mempool::pgmap::unordered_map<int64_t,mempool::pgmap::unordered_map<uint64_t,int32_t>> num_pg_by_pool_state;
 
   utime_t stamp;
 

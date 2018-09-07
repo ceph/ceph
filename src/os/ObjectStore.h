@@ -349,6 +349,8 @@ public:
       OP_TRY_RENAME = 41,   // oldcid, oldoid, newoid
 
       OP_COLL_SET_BITS = 42, // cid, bits
+
+      OP_MERGE_COLLECTION = 43, // cid, destination
     };
 
     // Transaction hint type
@@ -676,6 +678,13 @@ public:
 	break;
 
       case OP_SPLIT_COLLECTION2:
+        ceph_assert(op->cid < cm.size());
+	ceph_assert(op->dest_cid < cm.size());
+        op->cid = cm[op->cid];
+        op->dest_cid = cm[op->dest_cid];
+        break;
+
+      case OP_MERGE_COLLECTION:
         ceph_assert(op->cid < cm.size());
 	ceph_assert(op->dest_cid < cm.size());
         op->cid = cm[op->cid];
@@ -1364,6 +1373,19 @@ public:
       _op->dest_cid = _get_coll_id(destination);
       _op->split_bits = bits;
       _op->split_rem = rem;
+      data.ops++;
+    }
+
+    /// Merge collection into another.
+    void merge_collection(
+      coll_t cid,
+      coll_t destination,
+      uint32_t bits) {
+      Op* _op = _get_next_op();
+      _op->op = OP_MERGE_COLLECTION;
+      _op->cid = _get_coll_id(cid);
+      _op->dest_cid = _get_coll_id(destination);
+      _op->split_bits = bits;
       data.ops++;
     }
 

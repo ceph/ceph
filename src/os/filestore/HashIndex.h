@@ -195,6 +195,17 @@ public:
     ) override;
 
   /// @see CollectionIndex
+  int _merge(
+    uint32_t bits,
+    CollectionIndex* dest
+    ) override;
+
+  int _merge_dirs(
+    HashIndex& from,
+    HashIndex& to,
+    const vector<string>& path);
+
+  /// @see CollectionIndex
   int apply_layout_settings(int target_level) override;
 
 protected:

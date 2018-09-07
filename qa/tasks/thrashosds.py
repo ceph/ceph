@@ -76,6 +76,8 @@ def task(ctx, config):
     chance_pgnum_grow: (0) chance to increase a pool's size
     chance_pgpnum_fix: (0) chance to adjust pgpnum to pg for a pool
     pool_grow_by: (10) amount to increase pgnum by
+    chance_pgnum_shrink: (0) chance to decrease a pool's size
+    pool_shrink_by: (10) amount to decrease pgnum by
     max_pgs_per_pool_osd: (1200) don't expand pools past this size per osd
 
     pause_short: (3) duration of short pause
