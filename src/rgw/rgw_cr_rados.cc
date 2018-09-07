@@ -87,58 +87,65 @@ void RGWAsyncRadosProcessor::queue(RGWAsyncRadosRequest *req) {
 
 int RGWAsyncGetSystemObj::_send_request()
 {
-  return store->get_system_obj(*obj_ctx, read_state, objv_tracker, obj, *pbl, ofs, end, pattrs, NULL);
+  map<string, bufferlist> *pattrs = want_attrs ? &attrs : nullptr;
+
+  return store->get_system_obj(obj_ctx, read_state, &objv_tracker,
+                               obj, bl, ofs, end, pattrs, nullptr);
 }
 
-RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store, RGWObjectCtx *_obj_ctx,
+RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-                       bufferlist *_pbl, off_t _ofs, off_t _end) : RGWAsyncRadosRequest(caller, cn), store(_store), obj_ctx(_obj_ctx),
-                                                                   objv_tracker(_objv_tracker), obj(_obj), pbl(_pbl), pattrs(NULL),
-                                                                  ofs(_ofs), end(_end)
+                       off_t _ofs, off_t _end, bool want_attrs)
+  : RGWAsyncRadosRequest(caller, cn), store(_store), obj_ctx(_store),
+    obj(_obj), ofs(_ofs), end(_end), want_attrs(want_attrs)
 {
+  if (_objv_tracker) {
+    objv_tracker = *_objv_tracker;
+  }
 }
 
 int RGWSimpleRadosReadAttrsCR::send_request()
 {
   req = new RGWAsyncGetSystemObj(this, stack->create_completion_notifier(),
-			         store, &obj_ctx, NULL,
-				 obj,
-				 &bl, 0, -1);
-  if (pattrs) {
-    req->set_read_attrs(pattrs);
-  }
+			         store, nullptr, obj, 0, -1, true);
   async_rados->queue(req);
   return 0;
 }
 
 int RGWSimpleRadosReadAttrsCR::request_complete()
 {
+  if (pattrs) {
+    *pattrs = std::move(req->attrs);
+  }
   return req->get_ret_status();
 }
 
 int RGWAsyncPutSystemObj::_send_request()
 {
-  return store->put_system_obj_data(NULL, obj, bl, -1, exclusive, objv_tracker);
+  return store->put_system_obj_data(NULL, obj, bl, -1, exclusive, &objv_tracker);
 }
 
 RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
-                     RGWObjVersionTracker *_objv_tracker, rgw_raw_obj& _obj,
-                     bool _exclusive, bufferlist& _bl)
-  : RGWAsyncRadosRequest(caller, cn), store(_store), objv_tracker(_objv_tracker),
-    obj(_obj), exclusive(_exclusive), bl(_bl)
+                     RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
+                     bool _exclusive, bufferlist _bl)
+  : RGWAsyncRadosRequest(caller, cn), store(_store),
+    obj(_obj), exclusive(_exclusive), bl(std::move(_bl))
 {
+  if (_objv_tracker) {
+    objv_tracker = *_objv_tracker;
+  }
 }
 
 int RGWAsyncPutSystemObjAttrs::_send_request()
 {
-  return store->system_obj_set_attrs(NULL, obj, *attrs, NULL, objv_tracker);
+  return store->system_obj_set_attrs(nullptr, obj, attrs, nullptr, &objv_tracker);
 }
 
 RGWAsyncPutSystemObjAttrs::RGWAsyncPutSystemObjAttrs(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                      RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-                     map<string, bufferlist> *_attrs) : RGWAsyncRadosRequest(caller, cn), store(_store),
-                                                       objv_tracker(_objv_tracker), obj(_obj),
-                                                       attrs(_attrs)
+                     map<string, bufferlist> _attrs)
+  : RGWAsyncRadosRequest(caller, cn), store(_store),
+    obj(_obj), attrs(std::move(_attrs))
 {
 }
 
