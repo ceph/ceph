@@ -13,13 +13,14 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw_sync
 
-RGWSyncTraceNode::RGWSyncTraceNode(CephContext *_cct, RGWSyncTraceManager *_manager,
+RGWSyncTraceNode::RGWSyncTraceNode(CephContext *_cct, uint64_t _handle,
                                    const RGWSyncTraceNodeRef& _parent,
                                    const string& _type, const string& _id) : cct(_cct),
-                                                                             manager(_manager),
                                                                              parent(_parent),
                                                                              type(_type),
-                                                                             id(_id), history(cct->_conf->rgw_sync_trace_per_node_log_size)
+                                                                             id(_id),
+                                                                             handle(_handle),
+                                                                             history(cct->_conf->rgw_sync_trace_per_node_log_size)
 {
   if (parent.get()) {
     prefix = parent->get_prefix();
@@ -32,7 +33,6 @@ RGWSyncTraceNode::RGWSyncTraceNode(CephContext *_cct, RGWSyncTraceManager *_mana
     }
     prefix += ":";
   }
-  handle = manager->alloc_handle();
 }
 
 void RGWSyncTraceNode::log(int level, const string& s)
@@ -47,11 +47,6 @@ void RGWSyncTraceNode::log(int level, const string& s)
     lsubdout(cct, rgw,
       ceph::dout::need_dynamic(level)) << "RGW-SYNC:" << to_str() << dendl;
   }
-}
-
-void RGWSyncTraceNode::finish()
-{
-  manager->finish_node(this);
 }
 
 
@@ -80,15 +75,18 @@ int RGWSyncTraceServiceMapThread::process()
   return 0;
 }
 
-RGWSyncTraceNodeRef RGWSyncTraceManager::add_node(RGWSyncTraceNode *node)
+RGWSyncTraceNodeRef RGWSyncTraceManager::add_node(const RGWSyncTraceNodeRef& parent,
+                                                  const std::string& type,
+                                                  const std::string& id)
 {
   shunique_lock wl(lock, ceph::acquire_unique);
-  RGWSyncTraceNodeRef& ref = nodes[node->handle];
-  ref.reset(node);
+  auto handle = alloc_handle();
+  RGWSyncTraceNodeRef& ref = nodes[handle];
+  ref.reset(new RGWSyncTraceNode(cct, handle, parent, type, id));
   // return a separate shared_ptr that calls finish() on the node instead of
   // deleting it. the lambda capture holds a reference to the original 'ref'
-  auto deleter = [ref] (RGWSyncTraceNode *node) { node->finish(); };
-  return {node, deleter};
+  auto deleter = [ref, this] (RGWSyncTraceNode *node) { finish_node(node); };
+  return {ref.get(), deleter};
 }
 
 bool RGWSyncTraceNode::match(const string& search_term, bool search_history)
