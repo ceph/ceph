@@ -1,11 +1,12 @@
 from __future__ import print_function
 import json
 from uuid import uuid4
-from ceph_volume.util import disk
+from ceph_volume.util import disk, prepare
 from ceph_volume.api import lvm
 from . import validators
 from ceph_volume.devices.lvm.create import Create
 from ceph_volume.util import templates
+from ceph_volume.exceptions import SizeAllocationError
 
 
 class SingleType(object):
@@ -124,9 +125,10 @@ class MixedType(object):
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
         self.computed = {'osds': [], 'vgs': []}
-        self.block_db_size = None
+        self.block_db_size = prepare.get_block_db_size(lv_format=False) or disk.Size(b=0)
+        self.system_vgs = lvm.VolumeGroups()
         # For every HDD we get 1 block.db
-        self.db_lvs = len(self.hdds)
+        self.dbs_needed = len(self.hdds)
         self.validate()
         self.compute()
 
@@ -134,7 +136,7 @@ class MixedType(object):
         print(json.dumps(self.computed, indent=4, sort_keys=True))
 
     def report_pretty(self):
-        vg_extents = lvm.sizing(self.total_ssd_size.b, parts=self.db_lvs)
+        vg_extents = lvm.sizing(self.total_available_db_space.b, parts=self.dbs_needed)
         db_size = str(disk.Size(b=(vg_extents['sizes'])))
 
         string = ""
@@ -144,7 +146,7 @@ class MixedType(object):
 
         string += templates.ssd_volume_group.format(
             target='block.db',
-            total_lv_size=str(self.total_ssd_size),
+            total_lv_size=str(self.total_available_db_space),
             total_lvs=vg_extents['parts'],
             block_lv_size=db_size,
             block_db_devices=', '.join([ssd.abspath for ssd in self.ssds]),
@@ -163,7 +165,7 @@ class MixedType(object):
 
             string += templates.osd_component.format(
                 _type='[block.db]',
-                path='(volume-group/lv)',
+                path=osd['block.db']['path'],
                 size=osd['block.db']['human_readable_size'],
                 percent=osd['block.db']['percentage'])
 
@@ -171,27 +173,39 @@ class MixedType(object):
 
     def compute(self):
         osds = self.computed['osds']
+
+        # unconfigured block db size will be 0, so set it back to using as much
+        # as possible from looking at extents
+        if self.block_db_size.b == 0:
+            self.block_db_size = disk.Size(b=self.vg_extents['sizes'])
+
+        if not self.common_vg:
+            # there isn't a common vg, so a new one must be created with all
+            # the blank SSDs
+            self.computed['vg'] = {
+                'devices': self.blank_ssds,
+                'parts': self.dbs_needed,
+                'percentages': self.vg_extents['percentages'],
+                'sizes': self.journal_size.b,
+                'size': int(self.total_blank_ssd_size.b),
+                'human_readable_sizes': str(self.block_db_size),
+                'human_readable_size': str(self.total_available_db_space),
+            }
+            vg_name = 'lv/vg'
+        else:
+            vg_name = self.common_vg.name
+
         for device in self.hdds:
             osd = {'data': {}, 'block.db': {}}
             osd['data']['path'] = device.abspath
             osd['data']['size'] = device.sys_api['size']
             osd['data']['percentage'] = 100
             osd['data']['human_readable_size'] = str(disk.Size(b=(device.sys_api['size'])))
-            osd['block.db']['path'] = None
+            osd['block.db']['path'] = 'vg: %s' % vg_name
             osd['block.db']['size'] = int(self.block_db_size.b)
             osd['block.db']['human_readable_size'] = str(self.block_db_size)
             osd['block.db']['percentage'] = self.vg_extents['percentages']
             osds.append(osd)
-
-        self.computed['vgs'] = [{
-            'devices': [d.abspath for d in self.ssds],
-            'parts': self.db_lvs,
-            'percentages': self.vg_extents['percentages'],
-            'sizes': self.vg_extents['sizes'],
-            'size': int(self.total_ssd_size.b),
-            'human_readable_sizes': str(disk.Size(b=self.vg_extents['sizes'])),
-            'human_readable_size': str(self.total_ssd_size),
-        }]
 
     def execute(self):
         """
@@ -225,6 +239,17 @@ class MixedType(object):
 
             Create(command).main()
 
+    def get_common_vg(self):
+        # find all the vgs associated with the current device
+        for ssd in self.ssds:
+            for pv in ssd.pvs_api:
+                vg = self.system_vgs.get(vg_name=pv.vg_name)
+                if not vg:
+                    continue
+                # this should give us just one VG, it would've been caught by
+                # the validator otherwise
+                return vg
+
     def validate(self):
         """
         HDDs represent data devices, and solid state devices are for block.db,
@@ -237,18 +262,53 @@ class MixedType(object):
         # make sure that data devices do not have any LVs
         validators.no_lvm_membership(self.hdds)
 
-        # add all the size available in solid drives and divide it by the
-        # expected number of osds, the expected output should be larger than
-        # the minimum alllowed for block.db
-        self.total_ssd_size = disk.Size(b=0)
-        for ssd in self.ssds:
-            self.total_ssd_size += disk.Size(b=ssd.sys_api['size'])
+        # do not allow non-common VG to continue
+        validators.has_common_vg(self.ssds)
 
-        self.block_db_size = self.total_ssd_size / self.db_lvs
-        self.vg_extents = lvm.sizing(self.total_ssd_size.b, parts=self.db_lvs)
+        # find the common VG to calculate how much is available
+        self.common_vg = self.get_common_vg()
 
-        # min 2GB of block.db is allowed
-        msg = 'Total solid size (%s) is not enough for block.db LVs larger than 2 GB'
-        if self.block_db_size < disk.Size(gb=2):
-            # use ad-hoc exception here
-            raise RuntimeError(msg % self.total_ssd_size)
+        # find how many journals are possible from the common VG
+        if self.common_vg:
+            common_vg_size = disk.Size(gb=self.common_vg.free)
+        else:
+            common_vg_size = disk.Size(gb=0)
+
+        # non-VG SSDs
+        self.vg_ssds = set([d for d in self.ssds if d.is_lvm_member])
+        self.blank_ssds = set(self.ssds).difference(self.vg_ssds)
+        self.total_blank_ssd_size = disk.Size(b=0)
+        for blank_ssd in self.blank_ssds:
+            self.total_blank_ssd_size += disk.Size(b=blank_ssd.sys_api['size'])
+
+        self.total_available_db_space = self.total_blank_ssd_size + common_vg_size
+
+        # If not configured, we default to 0, which is really "use as much as
+        # possible" captured by the `else` condition
+        if self.block_db_size.gb > 0:
+            try:
+                self.vg_extents = lvm.sizing(
+                    self.total_available_db_space.b, size=self.block_db_size.b
+                )
+            except SizeAllocationError:
+                self.vg_extents = {'parts': 0, 'percentages': 0, 'sizes': 0}
+        else:
+            self.vg_extents = lvm.sizing(
+                self.total_available_db_space.b, parts=self.dbs_needed
+            )
+
+        # validate that number of journals possible are enough for number of
+        # OSDs proposed
+        if self.total_available_db_space.b == 0:
+            msg = "No space left in fast devices to create block.db LVs"
+            raise RuntimeError(msg)
+        if self.block_db_size.b == 0:
+            self.block_db_size = self.total_available_db_space / self.dbs_needed
+
+        total_dbs_possible = self.total_available_db_space / self.block_db_size
+
+        if len(self.hdds) > total_dbs_possible:
+            msg = "%s is not enough to create %s x %s block.db LVs" % (
+                self.block_db_size, len(self.hdds), self.block_db_size,
+            )
+            raise RuntimeError(msg)
