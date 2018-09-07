@@ -60,9 +60,11 @@ int Accepter::create_selfpipe(int *pipe_rd, int *pipe_wr) {
 #else
   int ret = ::pipe(selfpipe);
   if (ret == 0) {
-    for (int i = 0; i < std::size(selfpipe); i++) {
-      int f = fcntl(selfpipe[i], F_GETFD);
-      fcntl(selfpipe[i], F_SETFD, f | FD_CLOEXEC | O_NONBLOCK);
+    for (size_t i = 0; i < std::size(selfpipe); i++) {
+      int f = fcntl(selfpipe[i], F_GETFL);
+      ceph_assert(f != -1);
+      f = fcntl(selfpipe[i], F_SETFL, f | O_NONBLOCK);
+      ceph_assert(f != -1);
     }
   }
 #endif
