@@ -321,9 +321,9 @@ TEST_P(MessengerTest, NameAddrTest) {
   ASSERT_TRUE(conn->get_peer_addrs() == server_msgr->get_myaddrs());
   ConnectionRef server_conn = server_msgr->connect_to(
     client_msgr->get_mytype(), client_msgr->get_myaddrs());
-  // Make should server_conn is the one we already accepted from client,
-  // so it means client_msgr has the same addr when server connection has
-  ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
+  // Verify that server_conn is the one we already accepted from client,
+  // so it means the session counter in server_conn is also incremented.
+  ASSERT_EQ(1U, static_cast<Session*>(server_conn->get_priv().get())->get_count());
   server_msgr->shutdown();
   client_msgr->shutdown();
   server_msgr->wait();
