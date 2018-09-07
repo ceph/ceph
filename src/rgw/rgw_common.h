@@ -2319,12 +2319,12 @@ extern std::string url_encode(const std::string& src, bool encode_slash = true);
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);
 
-using sha1_digest_t = \
+using sha1_digest_array_t = \
   std::array<char, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE>;
 
-static inline sha1_digest_t
+static inline sha1_digest_array_t
 calc_hmac_sha1(const boost::string_view& key, const boost::string_view& msg) {
-  sha1_digest_t dest;
+  sha1_digest_array_t dest;
   calc_hmac_sha1(key.data(), key.size(), msg.data(), msg.size(), dest.data());
   return dest;
 }

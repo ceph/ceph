@@ -541,7 +541,7 @@ WRITE_CLASS_ENCODER(errorcode32_t)
 WRITE_EQ_OPERATORS_1(errorcode32_t, code)
 WRITE_CMP_OPERATORS_1(errorcode32_t, code)
 
-struct sha1_digest_info_t {
+struct sha1_digest_t {
 #define SHA1_DIGEST_SIZE 20
   unsigned char v[SHA1_DIGEST_SIZE] = {0};
 
@@ -553,13 +553,13 @@ struct sha1_digest_info_t {
     }
     return string(str);
   }
-  sha1_digest_info_t(unsigned char *_v) {
+  sha1_digest_t(unsigned char *_v) {
     memcpy(v, _v, 20);
   };
-  sha1_digest_info_t() {}
+  sha1_digest_t() {}
 };
 
-inline ostream& operator<<(ostream& out, const sha1_digest_info_t& b)
+inline ostream& operator<<(ostream& out, const sha1_digest_t& b)
 {
   string str = b.to_str();
   return out << str;
