@@ -13,6 +13,7 @@
  */
 
 #include "include/compat.h"
+#include "include/sock_compat.h"
 #include <iterator>
 #include <sys/socket.h>
 #include <netinet/tcp.h>
@@ -41,37 +42,19 @@
  * Accepter
  */
 
-static int set_close_on_exec(int fd)
-{
-  int flags = fcntl(fd, F_GETFD, 0);
-  if (flags < 0) {
-    return errno;
-  }
-  if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC)) {
-    return errno;
-  }
-  return 0;
-}
-
 int Accepter::create_selfpipe(int *pipe_rd, int *pipe_wr) {
   int selfpipe[2];
-#ifdef HAVE_PIPE2
-  int ret = ::pipe2(selfpipe, (O_CLOEXEC|O_NONBLOCK));
-#else
-  int ret = ::pipe(selfpipe);
-  if (ret == 0) {
-    for (size_t i = 0; i < std::size(selfpipe); i++) {
-      int f = fcntl(selfpipe[i], F_GETFL);
-      ceph_assert(f != -1);
-      f = fcntl(selfpipe[i], F_SETFL, f | O_NONBLOCK);
-      ceph_assert(f != -1);
-    }
-  }
-#endif
-  if (ret < 0 ) {
+  if (pipe_cloexec(selfpipe) < 0) {
+    int e = errno;
     lderr(msgr->cct) << __func__ << " unable to create the selfpipe: "
-                    << cpp_strerror(errno) << dendl;
-    return -errno;
+                    << cpp_strerror(e) << dendl;
+    return -e;
+  }
+  for (size_t i = 0; i < std::size(selfpipe); i++) {
+    int rc = fcntl(selfpipe[i], F_GETFL);
+    ceph_assert(rc != -1);
+    rc = fcntl(selfpipe[i], F_SETFL, rc | O_NONBLOCK);
+    ceph_assert(rc != -1);
   }
   *pipe_rd = selfpipe[0];
   *pipe_wr = selfpipe[1];
@@ -97,19 +80,14 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
   }
 
   /* socket creation */
-  listen_sd = ::socket(family, SOCK_STREAM, 0);
-  ldout(msgr->cct,10) <<  __func__ << " socket sd: " << listen_sd << dendl;
+  listen_sd = socket_cloexec(family, SOCK_STREAM, 0);
   if (listen_sd < 0) {
+    int e = errno;
     lderr(msgr->cct) << __func__ << " unable to create socket: "
-		     << cpp_strerror(errno) << dendl;
-    return -errno;
+		     << cpp_strerror(e) << dendl;
+    return -e;
   }
-
-  if (set_close_on_exec(listen_sd)) {
-    lderr(msgr->cct) << __func__ << " unable to set_close_exec(): "
-		     << cpp_strerror(errno) << dendl;
-  }
-  
+  ldout(msgr->cct,10) <<  __func__ << " socket sd: " << listen_sd << dendl;
 
   // use whatever user specified (if anything)
   entity_addr_t listen_addr = bind_addr;
@@ -346,20 +324,16 @@ void *Accepter::entry()
     // accept
     sockaddr_storage ss;
     socklen_t slen = sizeof(ss);
-    int sd = ::accept(listen_sd, (sockaddr*)&ss, &slen);
+    int sd = accept_cloexec(listen_sd, (sockaddr*)&ss, &slen);
     if (sd >= 0) {
-      int r = set_close_on_exec(sd);
-      if (r) {
-	ldout(msgr->cct,1) << __func__ << " set_close_on_exec() failed "
-	      << cpp_strerror(r) << dendl;
-      }
       errors = 0;
       ldout(msgr->cct,10) << __func__ << " incoming on sd " << sd << dendl;
       
       msgr->add_accept_pipe(sd);
     } else {
+      int e = errno;
       ldout(msgr->cct,0) << __func__ << " no incoming connection?  sd = " << sd
-	      << " errno " << errno << " " << cpp_strerror(errno) << dendl;
+	      << " errno " << e << " " << cpp_strerror(e) << dendl;
       if (++errors > msgr->cct->_conf->ms_max_accept_failures) {
         lderr(msgr->cct) << "accetper has encoutered enough errors, just do ceph_abort()." << dendl;
         ceph_abort();

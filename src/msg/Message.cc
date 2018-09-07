@@ -264,7 +264,7 @@ void Message::encode(uint64_t features, int crcflags)
       snprintf(fn, sizeof(fn), ENCODE_STRINGIFY(ENCODE_DUMP) "/%s__%d.%x",
 	       abi::__cxa_demangle(typeid(*this).name(), 0, 0, &status),
 	       getpid(), i++);
-      int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+      int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT|O_CLOEXEC, 0644);
       if (fd >= 0) {
 	bl.write_fd(fd);
 	::close(fd);

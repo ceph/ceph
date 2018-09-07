@@ -61,7 +61,7 @@ int PMEMDevice::open(const string& p)
   int r = 0;
   dout(1) << __func__ << " path " << path << dendl;
 
-  fd = ::open(path.c_str(), O_RDWR);
+  fd = ::open(path.c_str(), O_RDWR | O_CLOEXEC);
   if (fd < 0) {
     r = -errno;
     derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
