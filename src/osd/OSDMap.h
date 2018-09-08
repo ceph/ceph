@@ -1006,7 +1006,8 @@ public:
   uint64_t get_up_osd_features() const;
 
   void maybe_remove_pg_upmaps(CephContext *cct,
-                              const OSDMap& osdmap,
+                              const OSDMap& oldmap,
+			      const OSDMap& nextmap,
                               Incremental *pending_inc);
 
   int apply_incremental(const Incremental &inc);
@@ -1014,7 +1015,9 @@ public:
   /// try to re-use/reference addrs in oldmap from newmap
   static void dedup(const OSDMap *oldmap, OSDMap *newmap);
 
-  static void clean_temps(CephContext *cct, const OSDMap& osdmap,
+  static void clean_temps(CephContext *cct,
+			  const OSDMap& oldmap,
+			  const OSDMap& nextmap,
 			  Incremental *pending_inc);
 
   // serialize, unserialize
