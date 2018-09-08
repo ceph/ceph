@@ -1520,7 +1520,7 @@ Request Parameters
 :Description: The bucket id to unlink.
 :Type: String
 :Example: ``dev.6607669.420``
-:Required: Yes
+:Required: No
 
 ``uid``
 
