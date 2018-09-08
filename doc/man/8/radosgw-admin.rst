@@ -514,9 +514,10 @@ Options
 
    Set the system flag on the user.
 
-.. option:: --bucket=bucket
+.. option:: --bucket=[tenant-id/]bucket
 
-   Specify the bucket name.
+   Specify the bucket name.  If tenant-id is not specified, the tenant-id
+   of the user (--uid) is used.
 
 .. option:: --pool=<pool>
 
@@ -546,8 +547,8 @@ Options
 .. option:: --bucket-new-name=[tenant-id/]<bucket>
 
    Optional for `bucket link`; use to rename a bucket.
-        When using implicit tenants, prefix the name
-        with the desired tenant-id.
+        While tenant-id/ can be specified, this is never
+        necessary for normal operation.
 
 .. option:: --shard-id=<shard-id>
 
@@ -903,6 +904,14 @@ Link bucket to specified user::
 Unlink bucket from specified user::
 
         $ radosgw-admin bucket unlink --bucket=foo --uid=johnny
+
+Rename a bucket::
+
+        $ radosgw-admin bucket link --bucket=foo --bucket-new-name=bar --uid=johnny
+
+Move a bucket from the old global tenant space to a specified tenant::
+
+        $ radosgw-admin bucket link --bucket=/foo --uid=12345678$12345678'
 
 Show the logs of a bucket from April 1st, 2012::
 
