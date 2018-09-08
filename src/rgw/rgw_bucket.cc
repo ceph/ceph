@@ -859,26 +859,31 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
   string bucket_id = op_state.get_bucket_id();
 
   std::string display_name = op_state.get_user_display_name();
-  rgw_bucket bucket = op_state.get_bucket();
+  rgw_bucket& bucket = op_state.get_bucket();
   if (!bucket_id.empty() && bucket_id != bucket.bucket_id) {
-    set_err_msg(err_msg, "specified bucket id does not match");
+    set_err_msg(err_msg,
+	"specified bucket id does not match " + bucket.bucket_id);
     return -EINVAL;
   }
   rgw_bucket old_bucket = bucket;
   bucket.tenant = tenant;
+  if (!op_state.new_bucket_name.empty()) {
+    auto pos = op_state.new_bucket_name.find('/');
+    if (pos != boost::string_ref::npos) {
+      bucket.tenant = op_state.new_bucket_name.substr(0, pos);
+      bucket.name = op_state.new_bucket_name.substr(pos + 1);
+    } else {
+      bucket.name = op_state.new_bucket_name;
+    }
+  }
 
-
-  const rgw_pool& root_pool = store->svc.zone->get_zone_params().domain_root;
-  std::string bucket_entry;
-  rgw_make_bucket_entry_name(tenant, bucket_name, bucket_entry);
-  rgw_raw_obj obj(root_pool, bucket_entry);
   RGWObjVersionTracker objv_tracker;
   RGWObjVersionTracker old_version = bucket_info.objv_tracker;
 
   map<string, bufferlist>::iterator aiter = attrs.find(RGW_ATTR_ACL);
   if (aiter == attrs.end()) {
     // XXX why isn't this an error?  mdw 20180825
-    ldout(store->ctx(), 0) << "WARNING: bucket link will do nothing because no acl on bucket=" << bucket_name << dendl;
+    ldout(store->ctx(), 0) << "WARNING: bucket link will do nothing because no acl on bucket=" << old_bucket.name << dendl;
     return 0;
   }
   bufferlist aclbl = aiter->second;
@@ -931,7 +936,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
     }
   } else {
     attrs[RGW_ATTR_ACL] = aclbl;
-    bucket_info.bucket.tenant = tenant;
+    bucket_info.bucket = bucket;
     bucket_info.owner = user_info.user_id;
     bucket_info.objv_tracker.version_for_read()->ver = 0;
     r = store->put_bucket_instance_info(bucket_info, true, real_time(), &attrs);
@@ -965,15 +970,16 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
     RGWObjVersionTracker ep_version;
     *ep_version.version_for_read() = bucket_info.ep_objv;
     // like RGWRados::delete_bucket -- excepting no bucket_index work.
-    r = rgw_bucket_delete_bucket_obj(store, old_bucket.tenant, old_bucket.name, ep_version);
+    r = rgw_bucket_delete_bucket_obj(store,
+	old_bucket.tenant, old_bucket.name, ep_version);
     if (r < 0) {
-      set_err_msg(err_msg, "failed to unlink old bucket endpoint");
+      set_err_msg(err_msg, "failed to unlink old bucket endpoint " + old_bucket.tenant + "/" + old_bucket.name);
       return r;
     }
     string entry = old_bucket.get_key();
     r = rgw_bucket_instance_remove_entry(store, entry, &old_version);
     if (r < 0) {
-      set_err_msg(err_msg, "failed to unlink old bucket info");
+      set_err_msg(err_msg, "failed to unlink old bucket info " + entry);
       return r;
     }
 
