@@ -1641,18 +1641,17 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
 }
 
 void OSDMap::clean_temps(CephContext *cct,
-			 const OSDMap& osdmap, Incremental *pending_inc)
+			 const OSDMap& oldmap,
+			 const OSDMap& nextmap,
+			 Incremental *pending_inc)
 {
   ldout(cct, 10) << __func__ << dendl;
-  OSDMap tmpmap;
-  tmpmap.deepish_copy_from(osdmap);
-  tmpmap.apply_incremental(*pending_inc);
 
-  for (auto pg : *tmpmap.pg_temp) {
+  for (auto pg : *nextmap.pg_temp) {
     // if pool does not exist, remove any existing pg_temps associated with
     // it.  we don't care about pg_temps on the pending_inc either; if there
     // are new_pg_temp entries on the pending, clear them out just as well.
-    if (!osdmap.have_pg_pool(pg.first.pool())) {
+    if (!nextmap.have_pg_pool(pg.first.pool())) {
       ldout(cct, 10) << __func__ << " removing pg_temp " << pg.first
 		     << " for nonexistent pool " << pg.first.pool() << dendl;
       pending_inc->new_pg_temp[pg.first].clear();
@@ -1661,7 +1660,7 @@ void OSDMap::clean_temps(CephContext *cct,
     // all osds down?
     unsigned num_up = 0;
     for (auto o : pg.second) {
-      if (!tmpmap.is_down(o)) {
+      if (!nextmap.is_down(o)) {
 	++num_up;
 	break;
       }
@@ -1675,20 +1674,30 @@ void OSDMap::clean_temps(CephContext *cct,
     // redundant pg_temp?
     vector<int> raw_up;
     int primary;
-    tmpmap.pg_to_raw_up(pg.first, &raw_up, &primary);
+    nextmap.pg_to_raw_up(pg.first, &raw_up, &primary);
+    bool remove = false;
     if (raw_up == pg.second) {
       ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
 		     << pg.second << " that matches raw_up mapping" << dendl;
-      if (osdmap.pg_temp->count(pg.first))
+      remove = true;
+    }
+    // oversized pg_temp?
+    if (pg.second.size() > nextmap.get_pg_pool(pg.first.pool())->get_size()) {
+      ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
+		     << pg.second << " exceeds pool size" << dendl;
+      remove = true;
+    }
+    if (remove) {
+      if (oldmap.pg_temp->count(pg.first))
 	pending_inc->new_pg_temp[pg.first].clear();
       else
 	pending_inc->new_pg_temp.erase(pg.first);
     }
   }
   
-  for (auto &pg : *tmpmap.primary_temp) {
+  for (auto &pg : *nextmap.primary_temp) {
     // primary down?
-    if (tmpmap.is_down(pg.second)) {
+    if (nextmap.is_down(pg.second)) {
       ldout(cct, 10) << __func__ << "  removing primary_temp " << pg.first
 		     << " to down " << pg.second << dendl;
       pending_inc->new_primary_temp[pg.first] = -1;
@@ -1698,13 +1707,13 @@ void OSDMap::clean_temps(CephContext *cct,
     vector<int> real_up, templess_up;
     int real_primary, templess_primary;
     pg_t pgid = pg.first;
-    tmpmap.pg_to_acting_osds(pgid, &real_up, &real_primary);
-    tmpmap.pg_to_raw_up(pgid, &templess_up, &templess_primary);
+    nextmap.pg_to_acting_osds(pgid, &real_up, &real_primary);
+    nextmap.pg_to_raw_up(pgid, &templess_up, &templess_primary);
     if (real_primary == templess_primary){
       ldout(cct, 10) << __func__ << "  removing primary_temp "
 		     << pgid << " -> " << real_primary
 		     << " (unnecessary/redundant)" << dendl;
-      if (osdmap.primary_temp->count(pgid))
+      if (oldmap.primary_temp->count(pgid))
 	pending_inc->new_primary_temp[pgid] = -1;
       else
 	pending_inc->new_primary_temp.erase(pgid);
@@ -1713,21 +1722,19 @@ void OSDMap::clean_temps(CephContext *cct,
 }
 
 void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
-                                    const OSDMap& osdmap,
+                                    const OSDMap& oldmap,
+				    const OSDMap& nextmap,
                                     Incremental *pending_inc)
 {
   ldout(cct, 10) << __func__ << dendl;
-  OSDMap tmpmap;
-  tmpmap.deepish_copy_from(osdmap);
-  tmpmap.apply_incremental(*pending_inc);
   set<pg_t> to_check;
   set<pg_t> to_cancel;
   map<int, map<int, float>> rule_weight_map;
 
-  for (auto& p : tmpmap.pg_upmap) {
+  for (auto& p : nextmap.pg_upmap) {
     to_check.insert(p.first);
   }
-  for (auto& p : tmpmap.pg_upmap_items) {
+  for (auto& p : nextmap.pg_upmap_items) {
     to_check.insert(p.first);
   }
   for (auto& p : pending_inc->new_pg_upmap) {
@@ -1737,7 +1744,7 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     to_check.insert(p.first);
   }
   for (auto& pg : to_check) {
-    auto crush_rule = tmpmap.get_pg_pool_crush_rule(pg);
+    auto crush_rule = nextmap.get_pg_pool_crush_rule(pg);
     if (crush_rule < 0) {
       lderr(cct) << __func__ << " unable to load crush-rule of pg "
                  << pg << dendl;
@@ -1746,7 +1753,7 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     map<int, float> weight_map;
     auto it = rule_weight_map.find(crush_rule);
     if (it == rule_weight_map.end()) {
-      auto r = tmpmap.crush->get_rule_weight_osd_map(crush_rule, &weight_map);
+      auto r = nextmap.crush->get_rule_weight_osd_map(crush_rule, &weight_map);
       if (r < 0) {
         lderr(cct) << __func__ << " unable to get crush weight_map for "
                    << "crush_rule " << crush_rule << dendl;
@@ -1756,7 +1763,7 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     } else {
       weight_map = it->second;
     }
-    auto type = tmpmap.crush->get_rule_failure_domain(crush_rule);
+    auto type = nextmap.crush->get_rule_failure_domain(crush_rule);
     if (type < 0) {
       lderr(cct) << __func__ << " unable to load failure-domain-type of pg "
                  << pg << dendl;
@@ -1769,11 +1776,11 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
                    << dendl;
     vector<int> raw;
     int primary;
-    tmpmap.pg_to_raw_up(pg, &raw, &primary);
+    nextmap.pg_to_raw_up(pg, &raw, &primary);
     set<int> parents;
     for (auto osd : raw) {
       if (type > 0) {
-        auto parent = tmpmap.crush->get_parent_of_type(osd, type, crush_rule);
+        auto parent = nextmap.crush->get_parent_of_type(osd, type, crush_rule);
         if (parent < 0) {
           auto r = parents.insert(parent);
           if (!r.second) {
@@ -1796,7 +1803,7 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
         to_cancel.insert(pg);
         break;
       }
-      auto adjusted_weight = tmpmap.get_weightf(it->first) * it->second;
+      auto adjusted_weight = nextmap.get_weightf(it->first) * it->second;
       if (adjusted_weight == 0) {
         // osd is out/crush-out
         to_cancel.insert(pg);
@@ -1814,10 +1821,10 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
                        << dendl;
         pending_inc->new_pg_upmap.erase(it);
       }
-      if (osdmap.pg_upmap.count(pg)) {
+      if (oldmap.pg_upmap.count(pg)) {
         ldout(cct, 10) << __func__ << " cancel invalid pg_upmap entry "
-                       << osdmap.pg_upmap.find(pg)->first << "->"
-                       << osdmap.pg_upmap.find(pg)->second
+                       << oldmap.pg_upmap.find(pg)->first << "->"
+                       << oldmap.pg_upmap.find(pg)->second
                        << dendl;
         pending_inc->old_pg_upmap.insert(pg);
       }
@@ -1831,11 +1838,11 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
                        << dendl;
         pending_inc->new_pg_upmap_items.erase(it);
       }
-      if (osdmap.pg_upmap_items.count(pg)) {
+      if (oldmap.pg_upmap_items.count(pg)) {
         ldout(cct, 10) << __func__ << " cancel invalid "
                        << "pg_upmap_items entry "
-                       << osdmap.pg_upmap_items.find(pg)->first << "->"
-                       << osdmap.pg_upmap_items.find(pg)->second
+                       << oldmap.pg_upmap_items.find(pg)->first << "->"
+                       << oldmap.pg_upmap_items.find(pg)->second
                        << dendl;
         pending_inc->old_pg_upmap_items.insert(pg);
       }
