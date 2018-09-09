@@ -76,12 +76,7 @@ seastar::future<> SocketMessenger::accept(seastar::connected_socket socket,
   ConnectionRef conn = new SocketConnection(this, get_myaddr(),
                                             peer_addr, std::move(socket));
   // initiate the handshake
-  return conn->server_handshake()
-    .handle_exception([conn] (std::exception_ptr eptr) {
-      // close the connection before returning errors
-      return seastar::make_exception_future<>(eptr)
-        .finally([conn] { return conn->close(); });
-    }).then([this, conn] {
+  return conn->server_handshake().then([this, conn] {
       dispatcher->ms_handle_accept(conn);
       // dispatch messages until the connection closes or the dispatch
       // queue shuts down
@@ -126,13 +121,7 @@ SocketMessenger::connect(const entity_addr_t& addr, entity_type_t peer_type)
       ConnectionRef conn = new SocketConnection(this, get_myaddr(), addr,
                                                 std::move(socket));
       // complete the handshake before returning to the caller
-      return conn->client_handshake(peer_type, get_myname().type())
-        .handle_exception([conn] (std::exception_ptr eptr) {
-          // close the connection before returning errors
-          return seastar::make_exception_future<>(eptr)
-            .finally([conn] { return conn->close(); });
-	  // TODO: retry on fault
-        }).then([=] {
+      return conn->client_handshake(peer_type, get_myname().type()).then([=] {
           dispatcher->ms_handle_connect(conn);
           // dispatch replies on this connection
           dispatch(conn)

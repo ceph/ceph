@@ -147,7 +147,7 @@ void SocketConnection::read_tags_until_next_message()
         });
     }).handle_exception_type([this] (const std::system_error& e) {
       if (e.code() == error::read_eof) {
-        close();
+        return fault();
       }
       throw e;
     }).then_wrapped([this] (auto fut) {
@@ -827,6 +827,8 @@ seastar::future<> SocketConnection::client_handshake(entity_type_t peer_type,
     }).then([this] {
       // start background processing of tags
       read_tags_until_next_message();
+    }).handle_exception([this] (std::exception_ptr eptr) {
+      return fault();
     }).then_wrapped([this] (auto fut) {
       // satisfy the handshake's promise
       fut.forward_to(std::move(h.promise));
@@ -860,6 +862,8 @@ seastar::future<> SocketConnection::server_handshake()
     }).then([this] {
       // start background processing of tags
       read_tags_until_next_message();
+    }).handle_exception([this] (std::exception_ptr eptr) {
+      return fault();
     }).then_wrapped([this] (auto fut) {
       // satisfy the handshake's promise
       fut.forward_to(std::move(h.promise));
@@ -871,6 +875,7 @@ seastar::future<> SocketConnection::fault()
   if (policy.lossy) {
     close();
   }
+  // TODO: retry on fault
   if (h.backoff.count()) {
     h.backoff += h.backoff;
   } else {
