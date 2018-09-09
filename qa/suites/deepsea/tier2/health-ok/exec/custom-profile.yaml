@@ -1,4 +1,0 @@
-overrides:
-  deepsea:
-    exec:
-    - suites/basic/health-ok.sh --profile=bs_dedicated_wal_db_sizes_all
