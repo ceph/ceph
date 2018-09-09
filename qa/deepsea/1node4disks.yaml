@@ -1,6 +1,6 @@
 ceph_cm: salt
 roles:
-- [master.a]
+- [client.salt_master]
 openstack:
 - volumes: # attached to each instance
     count: 4

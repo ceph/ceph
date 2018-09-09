@@ -4,4 +4,3 @@ tasks:
 - deepsea:
     repo: https://github.com/SUSE/DeepSea.git
     branch: master
-    exec: []

@@ -1,0 +1,18 @@
+ceph:
+  storage:
+    osds:
+      /dev/vdb:
+        format: bluestore
+        encryption: dmcrypt
+        wal_size: 1G
+        wal: /dev/vde
+      /dev/vdc:
+        format: bluestore
+        encryption: dmcrypt
+        wal: /dev/vde
+        wal_size: 2G
+      /dev/vdd:
+        format: bluestore
+        encryption: dmcrypt
+        wal: /dev/vde
+        wal_size: 3G

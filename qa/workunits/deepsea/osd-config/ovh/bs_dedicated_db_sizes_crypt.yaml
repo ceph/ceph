@@ -1,0 +1,18 @@
+ceph:
+  storage:
+    osds:
+      /dev/vdb:
+        format: bluestore
+        encryption: dmcrypt
+        db: /dev/vde
+        db_size: 1G
+      /dev/vdc:
+        format: bluestore
+        encryption: dmcrypt
+        db: /dev/vde
+        db_size: 2G
+      /dev/vdd:
+        format: bluestore
+        encryption: dmcrypt
+        db: /dev/vde
+        db_size: 3G

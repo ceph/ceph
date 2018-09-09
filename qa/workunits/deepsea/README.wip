@@ -1,0 +1,10 @@
+
+The following section is WIP - do not use!
+------------------------------------------
+
+7. a file called 'deepsea-qa-cluster-layout' (working name) has optionally been
+   created inside the same directory where the DeepSea repo was cloned. If it
+   exists, this file is expected to contain data points describing the cluster
+   layout (e.g. which nodes are storage nodes, which are client nodes, etc.).
+   If it is not present, the test script will try to do without it.
+

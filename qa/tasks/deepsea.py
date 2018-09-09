@@ -58,68 +58,29 @@ class DeepSea(Task):
     """
     def __init__(self, ctx, config):
         super(DeepSea, self).__init__(ctx, config)
-
-        log.debug("Initial config is {}".format(config))
-
-        # make sure self.config dict has values for important keys
-        assert config is not None, \
-            'deepsea task needs configuration (repo, branch, exec)'
-        assert isinstance(config, dict), \
+        log.debug("__init__: self.config is ->{}<-".format(self.config))
+        if self.config is None:
+            self.config = {}
+        assert isinstance(self.config, dict), \
             'deepsea task only accepts a dict for configuration'
-        assert 'exec' in config, \
-            'deepsea task needs configuration (exec)'
-        assert isinstance(self.config["exec"], list), \
-            'exec property of deepsea yaml must be a list'
 
         def _check_config_key(key, default_value):
-            if key not in config or not config[key]:
-                config[key] = default_value
+            if key not in self.config or not self.config[key]:
+                self.config[key] = default_value
 
-        _check_config_key('repo', '')
+        _check_config_key('repo', 'https://github.com/SUSE/DeepSea.git')
         _check_config_key('branch', 'master')
 
-        log.debug("Munged config is {}".format(config))
-
-        # prepare the list of commands to be executed on the master node
-        self.exec_cmd = []
-        qa='DeepSea/qa'
-        if self.config['repo'] is '':
-            qa = '/usr/lib/deepsea/qa'
-
-        assert len(self.config["exec"]) > 0, \
-            'deepsea exec list must have at least one element'
-        for cmd in self.config["exec"]:
-            self.exec_cmd.append('cd %s ; %s' % (qa, cmd))
-
-        # determine the role id of the master role
-        if(misc.num_instances_of_type(self.cluster, 'master') != 1):
-            raise ConfigError('deepsea requires a single master role')
-        id_ = next(misc.all_roles_of_type(self.ctx.cluster, 'master'))
-        master_role = '.'.join(['master', str(id_)])
+        log.debug("Munged config is {}".format(self.config))
 
         # set remote name for salt to pick it up. Setting the remote itself will
         # crash the reporting tool since it doesn't know how to turn the object
         # into a string
+        master_role = 'client.salt_master'
         self.config["master_remote"] = get_remote_for_role(self.ctx,
                 master_role).name
         self.log.info("master remote: {}".format(self.config["master_remote"]))
         self.salt = Salt(self.ctx, self.config)
-
-    def setup(self):
-        super(DeepSea, self).setup()
-
-        if self.config["repo"] is '':
-            self.salt.master_remote.run(args=[
-                'sudo',
-                'zypper',
-                '--non-interactive',
-                'install',
-                'deepsea',
-                'deepsea-qa'
-                ])
-        else:
-            self.make_install()
-        self.setup_salt()
 
     def make_install(self):
         self.log.info("DeepSea repo: {}".format(self.config["repo"]))
@@ -188,16 +149,30 @@ class DeepSea(Task):
 
         self.salt.ping_minions()
 
+    def setup(self):
+        super(DeepSea, self).setup()
+        if self.config["repo"] is '':
+            self.salt.master_remote.run(args=[
+                'sudo',
+                'zypper',
+                '--non-interactive',
+                'install',
+                'deepsea',
+                'deepsea-qa'
+                ])
+        else:
+            self.make_install()
+        self.setup_salt()
+
     def begin(self):
         super(DeepSea, self).begin()
-        for cmd in self.exec_cmd:
-            self.log.info(
-                "command to be executed on master node: {}".format(cmd)
-                )
-            self.salt.master_remote.run(args=[
-                'sudo', 'sh', '-c',
-                cmd
-                ])
+        self.salt.master_remote.run(args=[
+            'sudo',
+            'zypper',
+            '--non-interactive',
+            'install',
+            'ceph-test'
+            ])
 
     def purge_osds(self):
         # replace this hack with DeepSea purge when it's ready

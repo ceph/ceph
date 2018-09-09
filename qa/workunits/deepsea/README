@@ -1,0 +1,32 @@
+DeepSea integration testing
+===========================
+
+Use health-ok.sh to deploy a cluster (see usage function for options it takes),
+and then run commands (or other scripts -- see stage-5.sh for an example) to
+do things in the cluster so deployed.
+
+Assumptions made by health-ok.sh
+--------------------------------
+
+1. there is at least one test node which has a short hostname that is
+   resolvable either via /etc/hosts or DNS
+2. all the test nodes are configured as a Salt cluster, i.e.:
+   a. one node is configured as both a master and a minion
+   b. the remaining nodes are configured as minions only
+   c. the master can "salt '*' test.ping" all the minions
+3. the nodes have at least one external drive (>= 10GB) for OSD and there are
+   at least four OSDs, total, in the cluster
+4. the package repos have already been set up so DeepSea can install the RPMs
+   it needs (including the Ceph RPMs under test, if any)
+5. the DeepSea code under test has already been installed (git clone ; make
+   install) on the master node -- this is done by deepsea.py, i.e. the
+   "deepsea teuthology task"
+
+Caveat
+------
+
+Node targeting: DeepSea suite sets "deepsea_minions: *" in
+/srv/pillar/ceph/deepsea_minions.sls. If you want to override this in a test,
+implement an option to health-ok.sh that resets that file to something else
+after common/common.sh is sourced, but before Stage 0 is run.
+

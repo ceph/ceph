@@ -1,0 +1,15 @@
+ceph:
+  storage:
+    osds:
+      /dev/vdb:
+        format: bluestore
+        encryption: dmcrypt
+        db: /dev/vde
+      /dev/vdc:
+        format: bluestore
+        encryption: dmcrypt
+        db: /dev/vde
+      /dev/vdd:
+        format: bluestore
+        encryption: dmcrypt
+        db: /dev/vde
