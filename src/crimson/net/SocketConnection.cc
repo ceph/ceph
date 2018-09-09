@@ -642,7 +642,7 @@ seastar::future<> SocketConnection::replace_existing(ConnectionRef existing,
   } else {
     reply_tag = CEPH_MSGR_TAG_READY;
   }
-  get_messenger()->unregister_conn(existing);
+  existing->close();
   if (!existing->is_lossy()) {
     // reset the in_seq if this is a hard reset from peer,
     // otherwise we respect our original connection's value
@@ -869,7 +869,7 @@ seastar::future<> SocketConnection::server_handshake()
 seastar::future<> SocketConnection::fault()
 {
   if (policy.lossy) {
-    get_messenger()->unregister_conn(this);
+    close();
   }
   if (h.backoff.count()) {
     h.backoff += h.backoff;
