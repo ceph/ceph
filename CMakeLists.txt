@@ -640,8 +640,8 @@ else()
   include(BuildBoost)
   build_boost(1.67
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
-  include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 endif()
+include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 set(Boost_USE_MULTITHREADED ON)
 
 # dashboard angular2 frontend
