@@ -1,7 +1,4 @@
 tasks:
-- install:
-    install_packages: false
-- deepsea:
 - workunit:
     clients:
       client.salt_master:

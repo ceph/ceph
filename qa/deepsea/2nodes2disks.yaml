@@ -1,6 +1,6 @@
 ceph_cm: salt
 roles:
-- [master.a]
+- [client.salt_master]
 - [node.1]
 openstack:
 - volumes: # attached to each instance
