@@ -221,6 +221,7 @@ using ceph::crypto::MD5;
 #define ERR_NO_CORS_FOUND        2216
 
 #define ERR_BUSY_RESHARDING      2300
+#define ERR_STS_SET      2400
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)

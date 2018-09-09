@@ -55,5 +55,12 @@
 #define RGW_LC_GET_HEAD "lc_get_head"
 #define RGW_LC_LIST_ENTRIES "lc_list_entries"
 
+/* sts */
+#define RGW_STS_SET_ENTRY "sts_set_entry"
+#define RGW_STS_RM_ENTRY "sts_rm_entry"
+#define RGW_STS_GET_NEXT_ENTRY "sts_get_next_entry"
+#define RGW_STS_PUT_HEAD "sts_put_head"
+#define RGW_STS_GET_HEAD "sts_get_head"
+#define RGW_STS_LIST_ENTRIES "sts_list_entries"
 
 #endif

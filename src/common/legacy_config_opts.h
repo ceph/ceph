@@ -1281,6 +1281,7 @@ OPTION(rgw_bucket_index_max_aio, OPT_U32)
 OPTION(rgw_enable_quota_threads, OPT_BOOL)
 OPTION(rgw_enable_gc_threads, OPT_BOOL)
 OPTION(rgw_enable_lc_threads, OPT_BOOL)
+OPTION(rgw_enable_sts_threads, OPT_BOOL)
 
 
 OPTION(rgw_data, OPT_STR)
@@ -1299,6 +1300,10 @@ OPTION(rgw_lc_lock_max_time, OPT_INT)  // total run time for a single lc process
 OPTION(rgw_lc_max_objs, OPT_INT)
 OPTION(rgw_lc_max_rules, OPT_U32)  // Max rules set on one bucket
 OPTION(rgw_lc_debug_interval, OPT_INT)  // Debug run interval, in seconds
+OPTION(rgw_sts_work_time, OPT_STR) //job process sts  at 00:00-24:00s
+OPTION(rgw_sts_lock_max_time, OPT_INT)  // total run time for a single sts processor work
+OPTION(rgw_sts_max_objs, OPT_INT)
+OPTION(rgw_sts_debug_interval, OPT_INT)  // Debug run interval, in seconds
 OPTION(rgw_script_uri, OPT_STR) // alternative value for SCRIPT_URI if not set in request
 OPTION(rgw_request_uri, OPT_STR) // alternative value for REQUEST_URI if not set in request
 OPTION(rgw_ignore_get_invalid_range, OPT_BOOL) // treat invalid (e.g., negative) range requests as full

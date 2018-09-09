@@ -103,6 +103,7 @@ void RGWRealmReloader::reload()
     store = RGWStoreManager::get_storage(cct,
                                          cct->_conf->rgw_enable_gc_threads,
                                          cct->_conf->rgw_enable_lc_threads,
+                                         cct->_conf->rgw_enable_sts_threads,
                                          cct->_conf->rgw_enable_quota_threads,
                                          cct->_conf->rgw_run_sync_thread,
                                          cct->_conf->rgw_dynamic_resharding,

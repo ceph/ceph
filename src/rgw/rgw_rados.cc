@@ -67,6 +67,7 @@ using namespace librados;
 
 #include "rgw_gc.h"
 #include "rgw_lc.h"
+#include "rgw_sts.h"
 
 #include "rgw_object_expirer_core.h"
 #include "rgw_sync.h"
@@ -3806,6 +3807,9 @@ void RGWRados::finalize()
   delete lc;
   lc = NULL; 
 
+  delete sts;
+  sts = NULL; 
+
   delete gc;
   gc = NULL;
 
@@ -4591,6 +4595,10 @@ int RGWRados::init_complete()
   if (ret < 0)
     return ret;
 
+  ret = open_sts_pool_ctx();
+  if (ret < 0)
+    return ret;
+
   ret = open_objexp_pool_ctx();
   if (ret < 0)
     return ret;
@@ -4708,6 +4716,13 @@ int RGWRados::init_complete()
 
   if (use_lc_thread)
     lc->start_processor();
+
+
+  sts = new RGWSTS();
+  sts->initialize(cct, this);
+
+  if (use_sts_thread)
+    sts->start_processor();
 
   quota_handler = RGWQuotaHandler::generate_handler(this, quota_threads);
 
@@ -4885,6 +4900,11 @@ int RGWRados::open_gc_pool_ctx()
 int RGWRados::open_lc_pool_ctx()
 {
   return rgw_init_ioctx(get_rados_handle(), get_zone_params().lc_pool, lc_pool_ctx, true);
+}
+
+int RGWRados::open_sts_pool_ctx()
+{
+  return rgw_init_ioctx(get_rados_handle(), get_zone_params().sts_pool, sts_pool_ctx, true);
 }
 
 int RGWRados::open_objexp_pool_ctx()
@@ -13231,6 +13251,16 @@ int RGWRados::process_lc()
   return lc->process();
 }
 
+int RGWRados::list_sts_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map)
+{
+  return sts->list_sts_progress(marker, max_entries, progress_map);
+}
+
+int RGWRados::process_sts()
+{
+  return sts->process();
+}
+
 bool RGWRados::process_expire_objects()
 {
   return obj_expirer->inspect_all_shards(utime_t(), ceph_clock_now());
@@ -14487,7 +14517,7 @@ uint64_t RGWRados::next_bucket_id()
   return ++max_bucket_id;
 }
 
-RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread,
+RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool use_sts_thread,
 						 bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache)
 {
   RGWRados *store = NULL;
@@ -14497,7 +14527,7 @@ RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_t
     store = new RGWCache<RGWRados>;
   }
 
-  if (store->initialize(cct, use_gc_thread, use_lc_thread, quota_threads, run_sync_thread, run_reshard_thread) < 0) {
+  if (store->initialize(cct, use_gc_thread, use_lc_thread, use_sts_thread, quota_threads, run_sync_thread, run_reshard_thread) < 0) {
     delete store;
     return NULL;
   }

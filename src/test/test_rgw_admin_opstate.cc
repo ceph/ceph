@@ -808,7 +808,7 @@ int main(int argc, char *argv[]){
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false, false);
+  store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false, false, false);
   g_test = new admin_log::test_helper();
   finisher = new Finisher(g_ceph_context);
 #ifdef GTEST

@@ -174,6 +174,8 @@ void usage()
   cout << "                             --include-all to process all entries, including unexpired)\n";
   cout << "  lc list                    list all bucket lifecycle progress\n";
   cout << "  lc process                 manually process lifecycle\n";
+  cout << "  sts list                   list all sts progress\n";
+  cout << "  sts process                manually process sts\n";
   cout << "  metadata get               get metadata info\n";
   cout << "  metadata put               put metadata info\n";
   cout << "  metadata rm                remove metadata info\n";
@@ -519,6 +521,8 @@ enum {
   OPT_MFA_LIST,
   OPT_MFA_CHECK,
   OPT_MFA_RESYNC,
+  OPT_STS_LIST,
+  OPT_STS_PROCESS,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -539,6 +543,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "key") == 0 ||
       strcmp(cmd, "log") == 0 ||
       strcmp(cmd, "lc") == 0 ||
+      strcmp(cmd, "sts") == 0 ||
       strcmp(cmd, "mdlog") == 0 ||
       strcmp(cmd, "metadata") == 0 ||
       strcmp(cmd, "mfa") == 0 ||
@@ -849,6 +854,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_LC_LIST;
     if (strcmp(cmd, "process") == 0)
       return OPT_LC_PROCESS;
+  } else if (strcmp(prev_cmd, "sts") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_STS_LIST;
+    if (strcmp(cmd, "process") == 0)
+      return OPT_STS_PROCESS;
   } else if (strcmp(prev_cmd, "orphans") == 0) {
     if (strcmp(cmd, "find") == 0)
       return OPT_ORPHANS_FIND;
@@ -3288,7 +3298,7 @@ int main(int argc, const char **argv)
   if (raw_storage_op) {
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
   } else {
-    store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false, false,
+    store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false, false, false,
       need_cache && g_conf()->rgw_cache_enabled);
   }
   if (!store) {
@@ -6394,6 +6404,44 @@ next:
       cerr << "ERROR: lc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
     }
+  }
+
+  if (opt_cmd == OPT_STS_LIST) {
+    formatter->open_array_section("sts_list");
+    map<string, int> bucket_sts_map;
+    string marker;
+#define MAX_STS_LIST_ENTRIES 100
+    if (max_entries < 0) {
+      max_entries = MAX_STS_LIST_ENTRIES;
+    }
+    do {
+      int ret = store->list_sts_progress(marker, max_entries, &bucket_sts_map);
+      if (ret < 0) {
+        cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
+        return 1;
+      }
+      map<string, int>::iterator iter;
+      for (iter = bucket_sts_map.begin(); iter != bucket_sts_map.end(); ++iter) {
+        formatter->open_object_section("sts_info");
+        formatter->dump_string("access_key", iter->first);
+        formatter->dump_int("expire", iter->second);
+        formatter->close_section(); // objs
+        formatter->flush(cout);
+        marker = iter->first;
+      }
+    } while (!bucket_sts_map.empty());
+
+    formatter->close_section(); //sts
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_STS_PROCESS) {
+    int ret = store->process_sts();
+    if (ret < 0) {
+      cerr << "ERROR: sts processing returned error: " << cpp_strerror(-ret) << std::endl;
+      return 1;
+    }
+    ret = 0;
   }
 
   if (opt_cmd == OPT_ORPHANS_FIND) {

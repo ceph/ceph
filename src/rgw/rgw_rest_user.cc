@@ -500,6 +500,8 @@ void RGWOp_Key_Create::execute()
   std::string access_key;
   std::string secret_key;
   std::string key_type_str;
+  bool sts;
+  int64_t sts_expire;
 
   bool gen_key;
 
@@ -513,11 +515,15 @@ void RGWOp_Key_Create::execute()
   RESTArgs::get_string(s, "secret-key", secret_key, &secret_key);
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
   RESTArgs::get_bool(s, "generate-key", true, &gen_key);
+  RESTArgs::get_bool(s, "sts", false, &sts);
+  RESTArgs::get_int64(s, "expire", 0, &sts_expire);
 
   op_state.set_user_id(uid);
   op_state.set_subuser(subuser);
   op_state.set_access_key(access_key);
   op_state.set_secret_key(secret_key);
+  op_state.set_sts(sts);
+  op_state.set_expire(sts_expire);
 
   if (gen_key)
     op_state.set_generate_key();

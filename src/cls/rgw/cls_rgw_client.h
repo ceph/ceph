@@ -545,4 +545,16 @@ void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err)
 int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
                                   cls_rgw_bucket_instance_entry *entry);
 
+/* sts */
+int cls_rgw_sts_get_head(librados::IoCtx& io_ctx, string& oid, cls_rgw_sts_obj_head& head);
+int cls_rgw_sts_put_head(librados::IoCtx& io_ctx, string& oid, cls_rgw_sts_obj_head& head);
+int cls_rgw_sts_get_next_entry(librados::IoCtx& io_ctx, string& oid, string& marker, pair<string, int>& entry);
+int cls_rgw_sts_rm_entry(librados::IoCtx& io_ctx, string& oid, pair<string, int>& entry);
+int cls_rgw_sts_set_entry(librados::IoCtx& io_ctx, string& oid, pair<string, int>& entry);
+int cls_rgw_sts_list(librados::IoCtx& io_ctx, string& oid,
+                    const string& marker,
+                    uint32_t max_entries,
+                    map<string, int>& entries);
+
+
 #endif

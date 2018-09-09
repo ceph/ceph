@@ -225,6 +225,8 @@ struct RGWUserAdminOpState {
 
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
+  bool sts;
+  int64_t sts_expire;
 
   void set_access_key(const std::string& access_key) {
     if (access_key.empty())
@@ -362,6 +364,14 @@ struct RGWUserAdminOpState {
   void set_gen_secret() {
     gen_secret = true;
     key_op = true;
+  }
+
+  void set_sts(bool _sts) {
+    sts = _sts; 
+  }
+
+  void set_expire(int64_t _sts_expire) {
+    sts_expire = _sts_expire; 
   }
 
   void set_generate_key() {

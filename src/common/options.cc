@@ -5082,6 +5082,12 @@ std::vector<Option> get_rgw_options() {
         "some of the maintenance work between them.")
     .add_see_also({"rgw_enable_gc_threads", "rgw_enable_quota_threads"}),
 
+    Option("rgw_enable_sts_threads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Enables the sts maintenance thread. This is required on at least one rgw for each zone.")
+    .set_long_description("")
+    .add_see_also({"rgw_enable_gc_threads", "rgw_enable_lc_threads", "rgw_enable_quota_threads"}),
+
     Option("rgw_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/radosgw/$cluster-$id")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
@@ -5187,6 +5193,31 @@ std::vector<Option> get_rgw_options() {
     .set_long_description("Number of lifecycle rules set on one bucket should be limited."),
 
     Option("rgw_lc_debug_interval", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(-1)
+    .set_description(""),
+
+    Option("rgw_sts_work_time", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("00:00-24:00")
+    .set_description("STS allowed work time")
+    .set_long_description("Local time window in which the sts maintenance thread can work."),
+
+    Option("rgw_sts_lock_max_time", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(30)
+    .set_description(""),
+
+    Option("rgw_sts_thread_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Delay after processing of sts (i.e., per 1000 entries) in milliseconds"),
+
+    Option("rgw_sts_max_objs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(32)
+    .set_description("Number of sts data shards")
+    .set_long_description(
+          "Number of RADOS objects to use for storing sts index. This can affect "
+          "concurrency of sts maintenance, but requires multiple RGW processes "
+          "running on the zone to be utilized."),
+
+    Option("rgw_sts_debug_interval", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(-1)
     .set_description(""),
 

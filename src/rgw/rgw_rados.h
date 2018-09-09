@@ -35,6 +35,7 @@ class RGWGC;
 class RGWMetaNotifier;
 class RGWDataNotifier;
 class RGWLC;
+class RGWSTS;
 class RGWObjectExpirer;
 class RGWMetaSyncProcessorThread;
 class RGWDataSyncProcessorThread;
@@ -1164,6 +1165,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   rgw_pool control_pool;
   rgw_pool gc_pool;
   rgw_pool lc_pool;
+  rgw_pool sts_pool;
   rgw_pool log_pool;
   rgw_pool intent_log_pool;
   rgw_pool usage_log_pool;
@@ -1208,7 +1210,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   const string& get_compression_type(const string& placement_rule) const;
   
   void encode(bufferlist& bl) const override {
-    ENCODE_START(12, 1, bl);
+    ENCODE_START(13, 1, bl);
     encode(domain_root, bl);
     encode(control_pool, bl);
     encode(gc_pool, bl);
@@ -1231,11 +1233,12 @@ struct RGWZoneParams : RGWSystemMetaObj {
     encode(reshard_pool, bl);
     encode(otp_pool, bl);
     encode(tier_config, bl);
+    encode(sts_pool, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) override {
-    DECODE_START(12, bl);
+    DECODE_START(13, bl);
     decode(domain_root, bl);
     decode(control_pool, bl);
     decode(gc_pool, bl);
@@ -1291,6 +1294,11 @@ struct RGWZoneParams : RGWSystemMetaObj {
       for (auto& kv : old_tier_config) {
         tier_config.set(kv.first, kv.second);
       }
+    }
+    if (struct_v >= 13) {
+      ::decode(sts_pool, bl);
+    } else {
+      sts_pool = log_pool.name + ":sts";
     }
     DECODE_FINISH(bl);
   }
@@ -2234,6 +2242,7 @@ class RGWRados : public AdminSocketHook
   friend class RGWMetaNotifier;
   friend class RGWDataNotifier;
   friend class RGWLC;
+  friend class RGWSTS;
   friend class RGWObjectExpirer;
   friend class RGWMetaSyncProcessorThread;
   friend class RGWDataSyncProcessorThread;
@@ -2264,6 +2273,7 @@ class RGWRados : public AdminSocketHook
   int open_lc_pool_ctx();
   int open_objexp_pool_ctx();
   int open_reshard_pool_ctx();
+  int open_sts_pool_ctx();
 
   int open_pool_ctx(const rgw_pool& pool, librados::IoCtx&  io_ctx);
   int open_bucket_index_ctx(const RGWBucketInfo& bucket_info, librados::IoCtx& index_ctx);
@@ -2292,9 +2302,11 @@ class RGWRados : public AdminSocketHook
 
   RGWGC *gc;
   RGWLC *lc;
+  RGWSTS *sts;
   RGWObjectExpirer *obj_expirer;
   bool use_gc_thread;
   bool use_lc_thread;
+  bool use_sts_thread;
   bool quota_threads;
   bool run_sync_thread;
   bool run_reshard_thread;
@@ -2365,6 +2377,7 @@ protected:
 
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
   librados::IoCtx lc_pool_ctx;        // .rgw.lc
+  librados::IoCtx sts_pool_ctx;       // .rgw.sts
   librados::IoCtx objexp_pool_ctx;
   librados::IoCtx reshard_pool_ctx;
 
@@ -2392,8 +2405,8 @@ protected:
   RGWIndexCompletionManager *index_completion_manager{nullptr};
 public:
   RGWRados() : lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
-               gc(NULL), lc(NULL), obj_expirer(NULL), use_gc_thread(false), use_lc_thread(false), quota_threads(false),
-               run_sync_thread(false), run_reshard_thread(false), async_rados(nullptr), meta_notifier(NULL),
+               gc(NULL), lc(NULL), sts(NULL), obj_expirer(NULL), use_gc_thread(false), use_lc_thread(false), use_sts_thread(false), 
+               quota_threads(false), run_sync_thread(false), run_reshard_thread(false), async_rados(nullptr), meta_notifier(NULL),
                data_notifier(NULL), meta_sync_processor_thread(NULL),
                meta_sync_thread_lock("meta_sync_thread_lock"), data_sync_thread_lock("data_sync_thread_lock"),
                num_watchers(0), watchers(NULL),
@@ -2419,6 +2432,11 @@ public:
   librados::IoCtx* get_lc_pool_ctx() {
     return &lc_pool_ctx;
   }
+
+  librados::IoCtx* get_sts_pool_ctx() {
+    return &sts_pool_ctx;
+  }
+ 
   void set_context(CephContext *_cct) {
     cct = _cct;
   }
@@ -2595,10 +2613,11 @@ public:
 
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
-  int initialize(CephContext *_cct, bool _use_gc_thread, bool _use_lc_thread, bool _quota_threads, bool _run_sync_thread, bool _run_reshard_thread) {
+  int initialize(CephContext *_cct, bool _use_gc_thread, bool _use_lc_thread, bool _use_sts_thread, bool _quota_threads, bool _run_sync_thread, bool _run_reshard_thread) {
     set_context(_cct);
     use_gc_thread = _use_gc_thread;
     use_lc_thread = _use_lc_thread;
+    use_sts_thread = _use_sts_thread;
     quota_threads = _quota_threads;
     run_sync_thread = _run_sync_thread;
     run_reshard_thread = _run_reshard_thread;
@@ -3654,6 +3673,9 @@ public:
   int process_lc();
   int list_lc_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map);
   
+  int process_sts();
+  int list_sts_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map);
+
   int bucket_check_index(RGWBucketInfo& bucket_info,
                          map<RGWObjCategory, RGWStorageStats> *existing_stats,
                          map<RGWObjCategory, RGWStorageStats> *calculated_stats);
@@ -3874,9 +3896,9 @@ public:
 class RGWStoreManager {
 public:
   RGWStoreManager() {}
-  static RGWRados *get_storage(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads,
+  static RGWRados *get_storage(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool use_sts_thread, bool quota_threads,
 			       bool run_sync_thread, bool run_reshard_thread, bool use_cache = true) {
-    RGWRados *store = init_storage_provider(cct, use_gc_thread, use_lc_thread, quota_threads, run_sync_thread,
+    RGWRados *store = init_storage_provider(cct, use_gc_thread, use_lc_thread, use_sts_thread, quota_threads, run_sync_thread,
 					    run_reshard_thread, use_cache);
     return store;
   }
@@ -3884,7 +3906,7 @@ public:
     RGWRados *store = init_raw_storage_provider(cct);
     return store;
   }
-  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_metadata_cache);
+  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool use_sts_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_metadata_cache);
   static RGWRados *init_raw_storage_provider(CephContext *cct);
   static void close_storage(RGWRados *store);
 

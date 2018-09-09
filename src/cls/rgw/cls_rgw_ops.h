@@ -1375,4 +1375,168 @@ struct cls_rgw_get_bucket_resharding_ret  {
 };
 WRITE_CLASS_ENCODER(cls_rgw_get_bucket_resharding_ret)
 
+struct cls_rgw_sts_get_next_entry_op {
+  string marker;
+  cls_rgw_sts_get_next_entry_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(marker, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_sts_get_next_entry_op)
+
+struct cls_rgw_sts_get_next_entry_ret {
+  pair<string, int> entry;
+
+  cls_rgw_sts_get_next_entry_ret() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(entry, bl);
+    DECODE_FINISH(bl);
+  }
+
+};
+WRITE_CLASS_ENCODER(cls_rgw_sts_get_next_entry_ret)
+
+struct cls_rgw_sts_rm_entry_op {
+  pair<string, int> entry;
+  cls_rgw_sts_rm_entry_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(entry, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_sts_rm_entry_op)
+
+struct cls_rgw_sts_set_entry_op {
+  pair<string, int> entry;
+  cls_rgw_sts_set_entry_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(entry, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_sts_set_entry_op)
+
+struct cls_rgw_sts_put_head_op {
+  cls_rgw_sts_obj_head head;
+
+
+  cls_rgw_sts_put_head_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(head, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(head, bl);
+    DECODE_FINISH(bl);
+  }
+
+};
+WRITE_CLASS_ENCODER(cls_rgw_sts_put_head_op)
+
+struct cls_rgw_sts_get_head_ret {
+  cls_rgw_sts_obj_head head;
+
+  cls_rgw_sts_get_head_ret() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(head, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(head, bl);
+    DECODE_FINISH(bl);
+  }
+
+};
+WRITE_CLASS_ENCODER(cls_rgw_sts_get_head_ret)
+
+struct cls_rgw_sts_list_entries_op {
+  string marker;
+  uint32_t max_entries = 0;
+
+  cls_rgw_sts_list_entries_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(marker, bl);
+    encode(max_entries, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(marker, bl);
+    decode(max_entries, bl);
+    DECODE_FINISH(bl);
+  }
+
+};
+WRITE_CLASS_ENCODER(cls_rgw_sts_list_entries_op)
+
+struct cls_rgw_sts_list_entries_ret {
+  map<string, int> entries;
+  bool is_truncated{false};
+
+  cls_rgw_sts_list_entries_ret() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(2, 1, bl);
+    encode(entries, bl);
+    encode(is_truncated, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(2, bl);
+    decode(entries, bl);
+    if (struct_v >= 2) {
+      decode(is_truncated, bl);
+    }
+    DECODE_FINISH(bl);
+  }
+
+};
+WRITE_CLASS_ENCODER(cls_rgw_sts_list_entries_ret)
+
+
 #endif /* CEPH_CLS_RGW_OPS_H */

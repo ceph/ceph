@@ -22,6 +22,9 @@
 #include "rgw_common.h"
 
 #include "rgw_bucket.h"
+#include "rgw_sts.h"
+#include "cls/rgw/cls_rgw_ops.h"
+#include "cls/rgw/cls_rgw_client.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -964,6 +967,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
         continue;
 
     } while (!rgw_get_user_info_by_access_key(store, id, duplicate_check));
+    op_state.set_access_key(id);
   }
 
   if (key_type == KEY_TYPE_SWIFT) {
@@ -2540,6 +2544,24 @@ int RGWUserAdminOp_Key::create(RGWRados *store, RGWUserAdminOpState& op_state,
   ret = user.keys.add(op_state, NULL);
   if (ret < 0)
     return ret;
+  
+  if (op_state.sts) {
+    string sts_access_key = op_state.get_access_key();
+    auto& pool = store->get_zone_params().sts_pool;
+    librados::IoCtx *ctx = store->get_sts_pool_ctx();
+    pair<string, int> entry(sts_access_key, op_state.sts_expire);
+
+    int max_objs = (store->ctx()->_conf->rgw_sts_max_objs > HASH_PRIME)?HASH_PRIME:store->ctx()->_conf->rgw_sts_max_objs;
+    int index = ceph_str_hash_linux(sts_access_key.c_str(), sts_access_key.size()) % HASH_PRIME % max_objs;
+    string oid = sts_oid_prefix;
+    char buf[32];
+    snprintf(buf, 32, ".%d", index);
+    oid.append(buf);
+
+    int sts_ret = cls_rgw_sts_set_entry(*ctx, oid, entry);
+    if (sts_ret < 0) 
+      return -ERR_STS_SET;
+  }
 
   ret = user.info(info, NULL);
   if (ret < 0)
