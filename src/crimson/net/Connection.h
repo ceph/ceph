@@ -75,6 +75,8 @@ class Connection : public boost::intrusive_ref_counter<Connection,
 public:
   enum class state_t {
     none,
+    accepting,
+    connecting,
     open,
     standby,
     closed,

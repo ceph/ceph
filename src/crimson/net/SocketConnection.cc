@@ -339,12 +339,13 @@ seastar::future<> SocketConnection::close()
     return close_ready.get_future();
   }
 
+  if (state >= state_t::connecting) {
+    get_messenger()->unregister_conn(this);
+  }
   state = state_t::closed;
 
   // unregister_conn() drops a reference, so hold another until completion
   auto cleanup = [conn = ConnectionRef(this)] {};
-
-  get_messenger()->unregister_conn(this);
 
   // close_ready become valid only after state is state_t::closed
   assert(!close_ready.valid());
@@ -799,6 +800,8 @@ seastar::future<> SocketConnection::connect(entity_type_t peer_type,
 seastar::future<> SocketConnection::client_handshake(entity_type_t peer_type,
                                                      entity_type_t host_type)
 {
+  state = state_t::connecting;
+  get_messenger()->register_conn(this);
   // read server's handshake header
   return read(server_header_size)
     .then([this] (bufferlist headerbl) {
@@ -837,6 +840,7 @@ seastar::future<> SocketConnection::client_handshake(entity_type_t peer_type,
 
 seastar::future<> SocketConnection::server_handshake()
 {
+  state = state_t::accepting;
   // encode/send server's handshake header
   bufferlist bl;
   bl.append(buffer::create_static(banner_size, banner));
@@ -861,6 +865,7 @@ seastar::future<> SocketConnection::server_handshake()
                                [this] { return handle_connect(); });
     }).then([this] {
       // start background processing of tags
+      get_messenger()->register_conn(this);
       read_tags_until_next_message();
     }).handle_exception([this] (std::exception_ptr eptr) {
       return fault();

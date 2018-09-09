@@ -41,10 +41,6 @@ void SocketMessenger::bind(const entity_addr_t& addr)
 
 seastar::future<> SocketMessenger::dispatch(ConnectionRef conn)
 {
-  auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
-  std::ignore = i;
-  ceph_assert(added);
-
   return seastar::keep_doing([=] {
       return conn->read_message()
         .then([=] (MessageRef msg) {
@@ -168,6 +164,13 @@ ceph::net::ConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
   } else {
     return nullptr;
   }
+}
+
+void SocketMessenger::register_conn(ConnectionRef conn)
+{
+  auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
+  std::ignore = i;
+  ceph_assert(added);
 }
 
 void SocketMessenger::unregister_conn(ConnectionRef conn)

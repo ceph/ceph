@@ -53,6 +53,7 @@ class SocketMessenger final : public Messenger {
   void set_policy(entity_type_t peer_type, const SocketPolicy& p);
   void set_policy_throttler(entity_type_t peer_type, Throttle* throttle);
   ConnectionRef lookup_conn(const entity_addr_t& addr) override;
+  void register_conn(ConnectionRef) override;
   void unregister_conn(ConnectionRef) override;
   seastar::future<msgr_tag_t, bufferlist>
   verify_authorizer(peer_type_t peer_type,
