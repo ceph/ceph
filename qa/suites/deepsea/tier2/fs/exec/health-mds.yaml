@@ -1,4 +1,0 @@
-overrides:
-  deepsea:
-    exec:
-    - suites/basic/health-ok.sh --client-nodes=1 --mds --min-nodes=2
