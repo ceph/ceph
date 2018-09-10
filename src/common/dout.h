@@ -44,6 +44,47 @@ public:
   virtual ~DoutPrefixProvider() {}
 };
 
+// a prefix provider with empty prefix
+class NoDoutPrefix : public DoutPrefixProvider {
+  CephContext *const cct;
+  const unsigned subsys;
+ public:
+  NoDoutPrefix(CephContext *cct, unsigned subsys) : cct(cct), subsys(subsys) {}
+
+  std::ostream& gen_prefix(std::ostream& out) const override { return out; }
+  CephContext *get_cct() const override { return cct; }
+  unsigned get_subsys() const override { return subsys; }
+};
+
+// a prefix provider with static (const char*) prefix
+class DoutPrefix : public NoDoutPrefix {
+  const char *const prefix;
+ public:
+  DoutPrefix(CephContext *cct, unsigned subsys, const char *prefix)
+    : NoDoutPrefix(cct, subsys), prefix(prefix) {}
+
+  std::ostream& gen_prefix(std::ostream& out) const override {
+    return out << prefix;
+  }
+};
+
+// a prefix provider that composes itself on top of another
+class DoutPrefixPipe : public DoutPrefixProvider {
+  const DoutPrefixProvider& dpp;
+ public:
+  DoutPrefixPipe(const DoutPrefixProvider& dpp) : dpp(dpp) {}
+
+  std::ostream& gen_prefix(std::ostream& out) const override final {
+    dpp.gen_prefix(out);
+    add_prefix(out);
+    return out;
+  }
+  CephContext *get_cct() const override { return dpp.get_cct(); }
+  unsigned get_subsys() const override { return dpp.get_subsys(); }
+
+  virtual void add_prefix(std::ostream& out) const = 0;
+};
+
 // helpers
 namespace ceph::dout {
 
