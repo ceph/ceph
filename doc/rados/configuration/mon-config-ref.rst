@@ -348,8 +348,8 @@ by setting it in the ``[mon]`` section of the configuration file.
 ``mon warn on cache pools without hit sets``
 
 :Description: Issue a ``HEALTH_WARN`` in cluster log if a cache pool does not
-              have the hitset type set set.
-              See `hit set type <../operations/pools#hit-set-type>`_ for more
+              have the ``hit_set_type`` value configured.
+              See :ref:`hit_set_type <hit_set_type>` for more
               details.
 :Type: Boolean
 :Default: True
