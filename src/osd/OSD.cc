@@ -7458,7 +7458,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 	osd_min = min;
       }
     }
-    if (osdmap->get_epoch() > max_lag &&
+    if (osd_min > 0 &&
+	osdmap->get_epoch() > max_lag &&
 	osdmap->get_epoch() - max_lag > osd_min) {
       epoch_t need = osdmap->get_epoch() - max_lag;
       dout(10) << __func__ << " waiting for pgs to catch up (need " << need
