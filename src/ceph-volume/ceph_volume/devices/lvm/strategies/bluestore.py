@@ -17,6 +17,7 @@ class SingleType(object):
     def __init__(self, devices, args):
         self.args = args
         self.devices = devices
+        # TODO: add --fast-devices and --slow-devices so these can be customized
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
         self.computed = {'osds': [], 'vgs': []}
@@ -122,6 +123,7 @@ class MixedType(object):
     def __init__(self, devices, args):
         self.args = args
         self.devices = devices
+        # TODO: add --fast-devices and --slow-devices so these can be customized
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
         self.computed = {'osds': []}
