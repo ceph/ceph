@@ -287,7 +287,7 @@ void RemoveRequest<I>::check_group() {
 
   using klass = RemoveRequest<I>;
   librados::AioCompletion *rados_completion = create_rados_callback<
-    klass, &klass::handle_check_group>(this);
+    klass, &klass::handle_check_group, I>(this, m_image_ctx);
   m_out_bl.clear();
   int r = m_image_ctx->md_ctx.aio_operate(m_header_oid, rados_completion, &op,
                                           &m_out_bl);
@@ -484,7 +484,7 @@ void RemoveRequest<I>::remove_header() {
 
   using klass = RemoveRequest<I>;
   librados::AioCompletion *rados_completion =
-    create_rados_callback<klass, &klass::handle_remove_header>(this);
+    create_rados_callback<klass, &klass::handle_remove_header, I>(this, m_image_ctx);
   int r = m_ioctx.aio_remove(m_header_oid, rados_completion);
   ceph_assert(r == 0);
   rados_completion->release();
@@ -512,7 +512,7 @@ void RemoveRequest<I>::remove_header_v2() {
 
   using klass = RemoveRequest<I>;
   librados::AioCompletion *rados_completion =
-    create_rados_callback<klass, &klass::handle_remove_header_v2>(this);
+    create_rados_callback<klass, &klass::handle_remove_header_v2, I>(this, m_image_ctx);
   int r = m_ioctx.aio_remove(m_header_oid, rados_completion);
   ceph_assert(r == 0);
   rados_completion->release();
@@ -566,7 +566,7 @@ void RemoveRequest<I>::send_object_map_remove() {
 
   using klass = RemoveRequest<I>;
   librados::AioCompletion *rados_completion =
-    create_rados_callback<klass, &klass::handle_object_map_remove>(this);
+    create_rados_callback<klass, &klass::handle_object_map_remove, I>(this, m_image_ctx);
 
   int r = ObjectMap<>::aio_remove(m_ioctx,
 				  m_image_id,
@@ -600,7 +600,7 @@ void RemoveRequest<I>::mirror_image_remove() {
 
   using klass = RemoveRequest<I>;
   librados::AioCompletion *rados_completion =
-    create_rados_callback<klass, &klass::handle_mirror_image_remove>(this);
+    create_rados_callback<klass, &klass::handle_mirror_image_remove, I>(this, m_image_ctx);
   int r = m_ioctx.aio_operate(RBD_MIRRORING, rados_completion, &op);
   ceph_assert(r == 0);
   rados_completion->release();
@@ -696,7 +696,7 @@ void RemoveRequest<I>::dir_get_image_id() {
 
   using klass = RemoveRequest<I>;
   librados::AioCompletion *rados_completion =
-    create_rados_callback<klass, &klass::handle_dir_get_image_id>(this);
+    create_rados_callback<klass, &klass::handle_dir_get_image_id, I>(this, m_image_ctx);
   m_out_bl.clear();
   int r = m_ioctx.aio_operate(RBD_DIRECTORY, rados_completion, &op, &m_out_bl);
   ceph_assert(r == 0);
@@ -735,7 +735,7 @@ void RemoveRequest<I>::dir_get_image_name() {
 
   using klass = RemoveRequest<I>;
   librados::AioCompletion *rados_completion =
-    create_rados_callback<klass, &klass::handle_dir_get_image_name>(this);
+    create_rados_callback<klass, &klass::handle_dir_get_image_name, I>(this, m_image_ctx);
   m_out_bl.clear();
   int r = m_ioctx.aio_operate(RBD_DIRECTORY, rados_completion, &op, &m_out_bl);
   ceph_assert(r == 0);
@@ -771,7 +771,7 @@ void RemoveRequest<I>::remove_id_object() {
 
   using klass = RemoveRequest<I>;
   librados::AioCompletion *rados_completion =
-    create_rados_callback<klass, &klass::handle_remove_id_object>(this);
+    create_rados_callback<klass, &klass::handle_remove_id_object, I>(this, m_image_ctx);
   int r = m_ioctx.aio_remove(util::id_obj_name(m_image_name), rados_completion);
   ceph_assert(r == 0);
   rados_completion->release();
@@ -800,7 +800,7 @@ void RemoveRequest<I>::dir_remove_image() {
 
   using klass = RemoveRequest<I>;
   librados::AioCompletion *rados_completion =
-    create_rados_callback<klass, &klass::handle_dir_remove_image>(this);
+    create_rados_callback<klass, &klass::handle_dir_remove_image, I>(this, m_image_ctx);
   int r = m_ioctx.aio_operate(RBD_DIRECTORY, rados_completion, &op);
   ceph_assert(r == 0);
   rados_completion->release();

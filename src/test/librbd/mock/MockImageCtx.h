@@ -155,6 +155,13 @@ struct MockImageCtx {
     ctx.wait();
   }
 
+  void get_thread_pool_instance(CephContext *cct,
+                                ThreadPool **thread_pool,
+                                ContextWQ **op_work_queue) {
+    image_ctx->get_thread_pool_instance(cct, thread_pool,
+                                        op_work_queue);
+  }
+
   MOCK_METHOD0(init_layout, void());
 
   MOCK_CONST_METHOD1(get_object_name, std::string(uint64_t));

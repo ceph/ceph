@@ -234,7 +234,7 @@ void ObjectReadRequest<I>::read_object() {
   op.set_op_flags2(m_op_flags);
 
   librados::AioCompletion *rados_completion = util::create_rados_callback<
-    ObjectReadRequest<I>, &ObjectReadRequest<I>::handle_read_object>(this);
+    ObjectReadRequest<I>, &ObjectReadRequest<I>::handle_read_object, I>(this, image_ctx);
   int flags = image_ctx->get_read_flags(this->m_snap_id);
   int r = image_ctx->data_ctx.aio_operate(
     this->m_oid, rados_completion, &op, flags, nullptr,
@@ -501,7 +501,7 @@ void AbstractObjectWriteRequest<I>::write_object() {
 
   librados::AioCompletion *rados_completion = util::create_rados_callback<
     AbstractObjectWriteRequest<I>,
-    &AbstractObjectWriteRequest<I>::handle_write_object>(this);
+    &AbstractObjectWriteRequest<I>::handle_write_object, I>(this, image_ctx);
   int r = image_ctx->data_ctx.aio_operate(
     this->m_oid, rados_completion, &write, m_snap_seq, m_snaps,
     (this->m_trace.valid() ? this->m_trace.get_info() : nullptr));

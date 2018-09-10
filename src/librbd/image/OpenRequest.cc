@@ -54,7 +54,7 @@ void OpenRequest<I>::send_v1_detect_header() {
 
   using klass = OpenRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_v1_detect_header>(this);
+    create_rados_callback<klass, &klass::handle_v1_detect_header, I>(this, m_image_ctx);
   m_out_bl.clear();
   m_image_ctx->md_ctx.aio_operate(util::old_header_name(m_image_ctx->name),
                                  comp, &op, &m_out_bl);
@@ -96,7 +96,7 @@ void OpenRequest<I>::send_v2_detect_header() {
 
     using klass = OpenRequest<I>;
     librados::AioCompletion *comp =
-      create_rados_callback<klass, &klass::handle_v2_detect_header>(this);
+      create_rados_callback<klass, &klass::handle_v2_detect_header, I>(this,  m_image_ctx);
     m_out_bl.clear();
     m_image_ctx->md_ctx.aio_operate(util::id_obj_name(m_image_ctx->name),
                                    comp, &op, &m_out_bl);
@@ -134,7 +134,7 @@ void OpenRequest<I>::send_v2_get_id() {
 
   using klass = OpenRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_v2_get_id>(this);
+    create_rados_callback<klass, &klass::handle_v2_get_id, I>(this, m_image_ctx);
   m_out_bl.clear();
   m_image_ctx->md_ctx.aio_operate(util::id_obj_name(m_image_ctx->name),
                                   comp, &op, &m_out_bl);
@@ -170,7 +170,7 @@ void OpenRequest<I>::send_v2_get_name() {
 
   using klass = OpenRequest<I>;
   librados::AioCompletion *comp = create_rados_callback<
-    klass, &klass::handle_v2_get_name>(this);
+    klass, &klass::handle_v2_get_name, I>(this, m_image_ctx);
   m_out_bl.clear();
   m_image_ctx->md_ctx.aio_operate(RBD_DIRECTORY, comp, &op, &m_out_bl);
   comp->release();
@@ -210,7 +210,7 @@ void OpenRequest<I>::send_v2_get_name_from_trash() {
 
   using klass = OpenRequest<I>;
   librados::AioCompletion *comp = create_rados_callback<
-    klass, &klass::handle_v2_get_name_from_trash>(this);
+    klass, &klass::handle_v2_get_name_from_trash, I>(this, m_image_ctx);
   m_out_bl.clear();
   m_image_ctx->md_ctx.aio_operate(RBD_TRASH, comp, &op, &m_out_bl);
   comp->release();
@@ -261,7 +261,7 @@ void OpenRequest<I>::send_v2_get_initial_metadata() {
 
   using klass = OpenRequest<I>;
   librados::AioCompletion *comp = create_rados_callback<
-    klass, &klass::handle_v2_get_initial_metadata>(this);
+    klass, &klass::handle_v2_get_initial_metadata, I>(this, m_image_ctx);
   m_out_bl.clear();
   m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
                                   &m_out_bl);
@@ -316,7 +316,7 @@ void OpenRequest<I>::send_v2_get_stripe_unit_count() {
 
   using klass = OpenRequest<I>;
   librados::AioCompletion *comp = create_rados_callback<
-    klass, &klass::handle_v2_get_stripe_unit_count>(this);
+    klass, &klass::handle_v2_get_stripe_unit_count, I>(this, m_image_ctx);
   m_out_bl.clear();
   m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
                                   &m_out_bl);
@@ -359,7 +359,7 @@ void OpenRequest<I>::send_v2_get_create_timestamp() {
 
   using klass = OpenRequest<I>;
   librados::AioCompletion *comp = create_rados_callback<
-    klass, &klass::handle_v2_get_create_timestamp>(this);
+    klass, &klass::handle_v2_get_create_timestamp, I>(this, m_image_ctx);
   m_out_bl.clear();
   m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
                                   &m_out_bl);
@@ -442,7 +442,7 @@ void OpenRequest<I>::send_v2_get_data_pool() {
 
   using klass = OpenRequest<I>;
   librados::AioCompletion *comp = create_rados_callback<
-    klass, &klass::handle_v2_get_data_pool>(this);
+    klass, &klass::handle_v2_get_data_pool, I>(this, m_image_ctx);
   m_out_bl.clear();
   m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
                                   &m_out_bl);

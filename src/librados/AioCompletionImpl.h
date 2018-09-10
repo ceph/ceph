@@ -35,6 +35,9 @@ struct librados::AioCompletionImpl {
   version_t objver;
   ceph_tid_t tid;
 
+  int fd = -1;
+  bool eventfd = false;
+
   rados_callback_t callback_complete, callback_safe;
   void *callback_complete_arg, *callback_safe_arg;
 

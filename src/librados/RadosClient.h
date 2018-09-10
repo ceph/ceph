@@ -24,6 +24,7 @@
 #include "mon/MonClient.h"
 #include "mgr/MgrClient.h"
 #include "msg/Dispatcher.h"
+#include "common/event_socket.h"
 
 #include "IoCtxImpl.h"
 
@@ -87,6 +88,7 @@ private:
 
 public:
   Finisher finisher;
+  EventSocket event_socket;
 
   explicit RadosClient(CephContext *cct_);
   ~RadosClient() override;

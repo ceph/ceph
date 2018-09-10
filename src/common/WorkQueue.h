@@ -20,6 +20,10 @@
 #include "common/config_obs.h"
 #include "common/HeartbeatMap.h"
 
+#include <sys/eventfd.h>
+#include "event_socket.h"
+#include "epoll_event.h"
+
 #include <atomic>
 
 class CephContext;
@@ -38,6 +42,9 @@ class ThreadPool : public md_config_obs_t {
   Cond _wait_cond;
   int ioprio_class, ioprio_priority;
 
+  //epoll
+  int wq_fd = -1;
+
 public:
   class TPHandle {
     friend class ThreadPool;
@@ -55,6 +62,11 @@ public:
     void reset_tp_timeout();
     void suspend_tp_timeout();
   };
+
+  //epoll
+  EpollEvent *epoll_event;
+  EventSocket event_socket;
+
 private:
 
   /// Basic interface to a work queue used by the worker threads.
@@ -140,8 +152,11 @@ public:
     bool queue(T *item) {
       pool->_lock.Lock();
       bool r = _enqueue(item);
-      pool->_cond.SignalOne();
+      //pool->_cond.SignalOne();
+      //pool->_lock.Unlock();
+      pool->event_socket.notify(pool->wq_fd);
       pool->_lock.Unlock();
+
       return r;
     }
     void dequeue(T *item) {
@@ -237,12 +252,14 @@ public:
     void queue(T item) {
       Mutex::Locker l(pool->_lock);
       _enqueue(item);
-      pool->_cond.SignalOne();
+      //pool->_cond.SignalOne();
+      pool->event_socket.notify(pool->wq_fd);
     }
     void queue_front(T item) {
       Mutex::Locker l(pool->_lock);
       _enqueue_front(item);
-      pool->_cond.SignalOne();
+      //pool->_cond.SignalOne();
+      pool->event_socket.notify(pool->wq_fd);
     }
     void drain() {
       pool->drain(this);
@@ -301,7 +318,8 @@ public:
     bool queue(T *item) {
       pool->_lock.Lock();
       bool r = _enqueue(item);
-      pool->_cond.SignalOne();
+      //pool->_cond.SignalOne();
+      pool->event_socket.notify(pool->wq_fd);
       pool->_lock.Unlock();
       return r;
     }
@@ -364,7 +382,7 @@ public:
     void queue(T *item) {
       Mutex::Locker l(m_pool->_lock);
       m_items.push_back(item);
-      m_pool->_cond.SignalOne();
+      m_pool->event_socket.notify(m_pool->wq_fd);
     }
     bool empty() {
       Mutex::Locker l(m_pool->_lock);
@@ -412,7 +430,8 @@ public:
     }
 
     T *front() {
-      ceph_assert(m_pool->_lock.is_locked());
+      //ceph_assert(m_pool->_lock.is_locked());
+      Mutex::Locker locker(m_pool->_lock);
       if (m_items.empty()) {
         return NULL;
       }
@@ -425,7 +444,8 @@ public:
     }
     void signal() {
       Mutex::Locker pool_locker(m_pool->_lock);
-      m_pool->_cond.SignalOne();
+      //m_pool->_cond.SignalOne();
+      m_pool->event_socket.notify(m_pool->wq_fd);
     }
     Mutex &get_pool_lock() {
       return m_pool->_lock;
@@ -458,6 +478,7 @@ private:
   void start_threads();
   void join_old_threads();
   void worker(WorkThread *wt);
+  void worker_alt(WorkThread *wt);
 
 public:
   ThreadPool(CephContext *cct_, string nm, string tn, int n, const char *option = NULL);

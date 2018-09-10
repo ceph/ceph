@@ -22,6 +22,7 @@
 #include "include/ceph_assert.h"
 #include "common/valgrind.h"
 #include "common/EventTrace.h"
+#include "common/event_socket.h"
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix
@@ -1998,9 +1999,15 @@ void librados::IoCtxImpl::C_aio_Complete::finish(int r)
     }
   }
 
-  if (c->callback_complete ||
-      c->callback_safe) {
-    c->io->client->finisher.queue(new C_AioComplete(c));
+  if (c->eventfd){
+    c->io->client->event_socket.notify(c->fd);
+  }
+
+  else {
+    if (c->callback_complete ||
+        c->callback_safe) {
+      c->io->client->finisher.queue(new C_AioComplete(c));
+    }
   }
 
   if (c->aio_write_seq) {

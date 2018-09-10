@@ -8,9 +8,15 @@
 #include "include/rbd_types.h"
 #include "include/Context.h"
 #include "common/zipkin_trace.h"
+#include "common/event_socket.h"
+#include "common/epoll_event.h"
+#include <sys/eventfd.h>
+#include "common/WorkQueue.h"
 
 #include <atomic>
 #include <type_traits>
+
+class ThreadPool;
 
 namespace librbd {
 
@@ -121,10 +127,34 @@ librados::AioCompletion *create_rados_callback(T *obj) {
     obj, &detail::rados_callback<T, MF>, nullptr);
 }
 
+template <typename T, void(T::*MF)(int), typename I>
+librados::AioCompletion *create_rados_callback(T *obj, I *image_ctx) {
+  ThreadPool *thread_pool;
+  ContextWQ *op_work_queue;
+  image_ctx->get_thread_pool_instance(image_ctx->cct, &thread_pool, &op_work_queue);
+  int efd =  eventfd(0, EFD_NONBLOCK);
+  thread_pool->epoll_event->add_event(efd);
+  thread_pool->epoll_event->template add_aiocallbacks<T, MF>(obj, efd);
+  return librados::Rados::aio_create_completion(
+    obj, &detail::rados_callback<T, MF>, nullptr, efd);
+}
+
 template <typename T, Context*(T::*MF)(int*), bool destroy=true>
 librados::AioCompletion *create_rados_callback(T *obj) {
   return librados::Rados::aio_create_completion(
     obj, &detail::rados_state_callback<T, MF, destroy>, nullptr);
+}
+
+template <typename T, Context*(T::*MF)(int*), typename I, bool destroy=true>
+librados::AioCompletion *create_rados_callback(T *obj, I *image_ctx) {
+  ThreadPool *thread_pool;
+  ContextWQ *op_work_queue;
+  int efd =  eventfd(0, EFD_NONBLOCK);
+  image_ctx->get_thread_pool_instance(image_ctx->cct, &thread_pool, &op_work_queue);
+  thread_pool->epoll_event->add_event(efd);
+  thread_pool->epoll_event->template add_aiocallbacks<T, MF, destroy>(obj, efd);
+  return librados::Rados::aio_create_completion(
+    obj, &detail::rados_state_callback<T, MF, destroy>, nullptr, efd);
 }
 
 template <typename T, void(T::*MF)(int) = &T::complete>

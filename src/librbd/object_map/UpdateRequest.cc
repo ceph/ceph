@@ -59,7 +59,7 @@ void UpdateRequest<I>::update_object_map() {
                                 m_current_state);
 
   auto rados_completion = librbd::util::create_rados_callback<
-    UpdateRequest<I>, &UpdateRequest<I>::handle_update_object_map>(this);
+    UpdateRequest<I>, &UpdateRequest<I>::handle_update_object_map, I>(this, &m_image_ctx);
   std::vector<librados::snap_t> snaps;
   int r = m_image_ctx.md_ctx.aio_operate(
     oid, rados_completion, &op, 0, snaps,

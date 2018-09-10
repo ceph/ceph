@@ -6407,6 +6407,10 @@ static std::vector<Option> get_rbd_options() {
     .set_default(1)
     .set_description("number of threads to utilize for internal processing"),
 
+    Option("busy_epoll", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("poll store for aio completions"),
+
     Option("rbd_op_thread_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(60)
     .set_description("time in seconds for detecting a hung thread"),

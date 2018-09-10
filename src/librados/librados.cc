@@ -26,6 +26,8 @@
 #include "include/types.h"
 #include <include/stringify.h>
 
+#include "common/epoll_event.h"
+
 #include "librados/AioCompletionImpl.h"
 #include "librados/IoCtxImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
@@ -2826,6 +2828,20 @@ librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
   AioCompletionImpl *c;
   int r = rados_aio_create_completion(cb_arg, cb_complete, cb_safe, (void**)&c);
   ceph_assert(r == 0);
+  return new AioCompletion(c);
+}
+
+librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
+                                                                callback_t cb_complete,
+                                                                callback_t cb_safe,
+                                                                int fd)
+{
+  AioCompletionImpl *c;
+  int r = rados_aio_create_completion(cb_arg, cb_complete, cb_safe, (void**)&c);
+  c->eventfd = true;
+  c->fd = fd;
+  assert(r == 0);
+
   return new AioCompletion(c);
 }
 

@@ -78,6 +78,17 @@ class EventSocket {
     }
     return ret;
   }
+
+  int notify(int efd){
+    int ret;
+    uint64_t value = 1;
+    ret = write(efd, &value, sizeof (value));
+    if (ret < 0)
+      ret = -errno;
+    else
+      ret = 0;
+    return ret;
+  }
 };
 
 #endif

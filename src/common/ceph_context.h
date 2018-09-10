@@ -175,8 +175,8 @@ public:
   T& lookup_or_create_singleton_object(std::string_view name,
 				       bool drop_on_fork,
 				       Args&&... args) {
-    static_assert(sizeof(T) <= largest_singleton,
-		  "Please increase largest singleton.");
+    //static_assert(sizeof(T) <= largest_singleton,
+	//	  "Please increase largest singleton.");
     std::lock_guard lg(associated_objs_lock);
     std::type_index type = typeid(T);
 

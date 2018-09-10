@@ -15,6 +15,8 @@
 #include "WorkQueue.h"
 #include "include/compat.h"
 #include "common/errno.h"
+#include "common/epoll_event.h"
+#include <sys/eventfd.h>
 
 #define dout_subsys ceph_subsys_tp
 #undef dout_prefix
@@ -75,7 +77,7 @@ void ThreadPool::handle_conf_change(const ConfigProxy& conf,
       _lock.Lock();
       _num_threads = v;
       start_threads();
-      _cond.SignalAll();
+      //_cond.SignalAll();
       _lock.Unlock();
     }
   }
@@ -85,14 +87,12 @@ void ThreadPool::worker(WorkThread *wt)
 {
   _lock.Lock();
   ldout(cct,10) << "worker start" << dendl;
-  
+
   std::stringstream ss;
   ss << name << " thread " << (void *)pthread_self();
   heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str(), pthread_self());
 
   while (!_stop) {
-
-    // manage dynamic thread pool
     join_old_threads();
     if (_threads.size() > _num_threads) {
       ldout(cct,1) << " worker shutting down; too many threads (" << _threads.size() << " > " << _num_threads << ")" << dendl;
@@ -100,52 +100,57 @@ void ThreadPool::worker(WorkThread *wt)
       _old_threads.push_back(wt);
       break;
     }
+    _lock.Unlock();
 
-    if (!_pause && !work_queues.empty()) {
-      WorkQueue_* wq;
-      int tries = 2 * work_queues.size();
-      bool did = false;
-      while (tries--) {
-	next_work_queue %= work_queues.size();
-	wq = work_queues[next_work_queue++];
-	
-	void *item = wq->_void_dequeue();
-	if (item) {
-	  processing++;
-	  ldout(cct,12) << "worker wq " << wq->name << " start processing " << item
-			<< " (" << processing << " active)" << dendl;
-	  TPHandle tp_handle(cct, hb, wq->timeout_interval, wq->suicide_interval);
-	  tp_handle.reset_tp_timeout();
-	  _lock.Unlock();
-	  wq->_void_process(item, tp_handle);
-	  _lock.Lock();
-	  wq->_void_process_finish(item);
-	  processing--;
-	  ldout(cct,15) << "worker wq " << wq->name << " done processing " << item
-			<< " (" << processing << " active)" << dendl;
-	  if (_pause || _draining)
-	    _wait_cond.Signal();
-	  did = true;
-	  break;
-	}
+    vector<EpollEvent::FiredAIOEvent> fired_aio_events;
+    int numevents = epoll_event->process_events(fired_aio_events);
+
+    _lock.Lock();
+    for (int j = 0; j < numevents; j++) {
+      if (fired_aio_events[j].fd == wq_fd){
+        if(!_pause && !work_queues.empty()){
+          WorkQueue_* wq;
+          int tries = work_queues.size();
+          bool did = false;
+          while (tries--) {
+            next_work_queue %= work_queues.size();
+            wq = work_queues[next_work_queue++];
+
+            void *item = wq->_void_dequeue();
+            if (item) {
+              processing++;
+              ldout(cct,12) << "worker wq " << wq->name << " start processing " << item
+                            << " (" << processing << " active)" << dendl;
+              TPHandle tp_handle(cct, hb, wq->timeout_interval, wq->suicide_interval);
+              tp_handle.reset_tp_timeout();
+              _lock.Unlock();
+              wq->_void_process(item, tp_handle);
+              _lock.Lock();
+              wq->_void_process_finish(item);
+              processing--;
+              ldout(cct,15) << "worker wq " << wq->name << " done processing " << item
+                        << " (" << processing << " active)" << dendl;
+              if (_pause || _draining)
+                _wait_cond.Signal();
+              did = true;
+              break;
+            }
+          }
+          if (did)
+            continue;
+        }
       }
-      if (did)
-	continue;
+      else {
+        _lock.Unlock();
+        ldout(cct,1) << "processing epoll aio events" << dendl;
+        epoll_event->process_callbacks(fired_aio_events[j].fd);
+        epoll_event->cleanup_events(fired_aio_events[j].fd);
+        _lock.Lock();
+      }
     }
-
-    ldout(cct,20) << "worker waiting" << dendl;
-    cct->get_heartbeat_map()->reset_timeout(
-      hb,
-      cct->_conf->threadpool_default_timeout,
-      0);
-    _cond.WaitInterval(_lock,
-      utime_t(
-	cct->_conf->threadpool_empty_queue_max_wait, 0));
   }
   ldout(cct,1) << "worker finish" << dendl;
-
   cct->get_heartbeat_map()->remove_worker(hb);
-
   _lock.Unlock();
 }
 
@@ -187,6 +192,13 @@ void ThreadPool::start()
   }
 
   _lock.Lock();
+  epoll_event = new EpollEvent(cct);
+  if(!epoll_event->events){
+    epoll_event->init();
+    ldout(cct, 10) << "created epoll" << dendl;
+  }
+  wq_fd = eventfd(0, EFD_NONBLOCK);
+  epoll_event->add_event(wq_fd);
   start_threads();
   _lock.Unlock();
   ldout(cct,15) << "started" << dendl;
@@ -203,7 +215,7 @@ void ThreadPool::stop(bool clear_after)
 
   _lock.Lock();
   _stop = true;
-  _cond.Signal();
+  //_cond.Signal();
   join_old_threads();
   _lock.Unlock();
   for (set<WorkThread*>::iterator p = _threads.begin();
@@ -216,6 +228,19 @@ void ThreadPool::stop(bool clear_after)
   _lock.Lock();
   for (unsigned i=0; i<work_queues.size(); i++)
     work_queues[i]->_clear();
+
+  if (wq_fd != -1)
+    close(wq_fd);
+
+  if(epoll_event->ep_fd != -1)
+    close(epoll_event->ep_fd);
+
+  if(epoll_event->events){
+    free(epoll_event->events);
+    epoll_event->events = NULL;
+    ldout(cct, 10) << "Epoll events freed" << dendl;
+  }
+  delete epoll_event;
   _stop = false;
   _lock.Unlock();    
   ldout(cct,15) << "stopped" << dendl;
@@ -246,7 +271,7 @@ void ThreadPool::unpause()
   _lock.Lock();
   ceph_assert(_pause > 0);
   _pause--;
-  _cond.Signal();
+  //_cond.Signal();
   _lock.Unlock();
 }
 

@@ -1452,6 +1452,8 @@ namespace librados
     static AioCompletion *aio_create_completion();
     static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete,
 						callback_t cb_safe);
+    static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete,
+                                                callback_t cb_safe, int fd);
     
     friend std::ostream& operator<<(std::ostream &oss, const Rados& r);
   private:

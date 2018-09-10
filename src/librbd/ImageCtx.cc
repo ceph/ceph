@@ -135,6 +135,7 @@ public:
 
     memset(&header, 0, sizeof(header));
 
+
     ThreadPool *thread_pool;
     get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
     io_work_queue = new io::ImageRequestWQ<>(

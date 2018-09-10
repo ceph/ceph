@@ -40,7 +40,7 @@ void LockRequest<I>::send_lock() {
 
   using klass = LockRequest<I>;
   librados::AioCompletion *rados_completion =
-    create_rados_callback<klass, &klass::handle_lock>(this);
+    create_rados_callback<klass, &klass::handle_lock>(this, &m_image_ctx);
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
   ceph_assert(r == 0);
   rados_completion->release();
@@ -79,7 +79,7 @@ void LockRequest<I>::send_get_lock_info() {
 
   using klass = LockRequest<I>;
   librados::AioCompletion *rados_completion =
-    create_rados_callback<klass, &klass::handle_get_lock_info>(this);
+    create_rados_callback<klass, &klass::handle_get_lock_info>(this, &m_image_ctx);
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op, &m_out_bl);
   ceph_assert(r == 0);
   rados_completion->release();
@@ -128,7 +128,7 @@ void LockRequest<I>::send_break_locks() {
 
   using klass = LockRequest<I>;
   librados::AioCompletion *rados_completion =
-    create_rados_callback<klass, &klass::handle_break_locks>(this);
+    create_rados_callback<klass, &klass::handle_break_locks, I>(this, &m_image_ctx);
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
   ceph_assert(r == 0);
   rados_completion->release();

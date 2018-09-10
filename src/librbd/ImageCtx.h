@@ -63,6 +63,7 @@ namespace librbd {
   struct ImageCtx {
     CephContext *cct;
     PerfCounters *perfcounter;
+
     struct rbd_obj_header_ondisk header;
     ::SnapContext snapc;
     std::vector<librados::snap_t> snaps; // this mirrors snapc.snaps, but is in

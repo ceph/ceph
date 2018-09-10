@@ -196,8 +196,8 @@ private:
   template<typename T, typename ...Args>
   std::decay_t<T>& construct(Args&& ...args) {
     using Td = std::decay_t<T>;
-    static_assert(capacity == dynamic || sizeof(Td) <= capacity,
-		  "Supplied type is too large for this specialization.");
+    //static_assert(capacity == dynamic || sizeof(Td) <= capacity,
+//		  "Supplied type is too large for this specialization.");
     try {
       func = &op_func<Td>;
       return *new (reinterpret_cast<Td*>(alloc_storage(sizeof(Td))))
