@@ -8,7 +8,7 @@
 #include "librbd/api/Mirror.h"
 #include "tools/rbd_mirror/ClusterWatcher.h"
 #include "tools/rbd_mirror/ServiceDaemon.h"
-#include "tools/rbd_mirror/types.h"
+#include "tools/rbd_mirror/Types.h"
 #include "test/rbd_mirror/test_fixture.h"
 #include "test/librados/test.h"
 #include "gtest/gtest.h"

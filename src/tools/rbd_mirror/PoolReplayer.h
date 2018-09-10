@@ -14,7 +14,7 @@
 #include "LeaderWatcher.h"
 #include "PoolWatcher.h"
 #include "ImageDeleter.h"
-#include "types.h"
+#include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_map/Types.h"
 #include "tools/rbd_mirror/leader_watcher/Types.h"
 #include "tools/rbd_mirror/pool_watcher/Types.h"

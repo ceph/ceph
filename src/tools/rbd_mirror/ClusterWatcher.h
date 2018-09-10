@@ -12,7 +12,7 @@
 #include "common/Mutex.h"
 #include "common/Timer.h"
 #include "include/rados/librados.hpp"
-#include "types.h"
+#include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/service_daemon/Types.h"
 #include <unordered_map>
 

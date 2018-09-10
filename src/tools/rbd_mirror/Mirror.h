@@ -9,7 +9,7 @@
 #include "include/rados/librados.hpp"
 #include "ClusterWatcher.h"
 #include "PoolReplayer.h"
-#include "types.h"
+#include "tools/rbd_mirror/Types.h"
 
 #include <set>
 #include <map>

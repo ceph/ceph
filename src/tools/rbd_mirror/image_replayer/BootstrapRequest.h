@@ -11,7 +11,7 @@
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include "tools/rbd_mirror/BaseRequest.h"
-#include "tools/rbd_mirror/types.h"
+#include "tools/rbd_mirror/Types.h"
 #include <list>
 #include <string>
 

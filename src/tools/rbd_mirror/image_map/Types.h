@@ -13,7 +13,7 @@
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/utime.h"
-#include "tools/rbd_mirror/types.h"
+#include "tools/rbd_mirror/Types.h"
 
 struct Context;
 
