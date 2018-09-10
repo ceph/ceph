@@ -81,6 +81,7 @@ class Module(MgrModule):
         self._self_test_osdmap()
         self._self_test_getters()
         self._self_test_config()
+        self._self_test_store()
         self._self_test_misc()
         self._self_test_perf_counters()
 
@@ -135,11 +136,15 @@ class Module(MgrModule):
         self.set_localized_config("testkey", "testvalue")
         assert self.get_localized_config("testkey") == "testvalue"
 
-        self.set_config_json("testjsonkey", {"testblob": 2})
-        assert self.get_config_json("testjsonkey") == {"testblob": 2}
-
         assert sorted(self.get_config_prefix("test").keys()) == sorted(
-                ["testkey", "testjsonkey"])
+                ["testkey"])
+
+    def _self_test_store(self):
+        self.set_store("testkey", "testvalue")
+        assert self.get_store("testkey") == "testvalue"
+
+        self.set_store_json("testjsonkey", {"testblob": 2})
+        assert self.get_store_json("testjsonkey") == {"testblob": 2}
 
     def _self_test_perf_counters(self):
         self.get_perf_schema("osd", "0")

@@ -461,14 +461,27 @@ class MgrModule(ceph_module.BaseMgrModule):
         else:
             return r
 
-    def get_config_prefix(self, key_prefix):
+    def get_store_prefix(self, key_prefix):
         """
-        Retrieve a dict of config values with the given prefix
+        Retrieve a dict of KV store keys to values, where the keys
+        have the given prefix
 
         :param key_prefix: str
         :return: str
         """
         return self._ceph_get_config_prefix(key_prefix)
+
+    def _get_localized(self, key, default, getter):
+        r = getter(self.get_mgr_id() + '/' + key)
+        if r is None:
+            r = getter(key)
+
+        if r is None:
+            r = default
+        return r
+
+    def _set_localized(self, key, val, setter):
+        return setter(self.get_mgr_id() + '/' + key, val)
 
     def get_localized_config(self, key, default=None):
         """
@@ -477,13 +490,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param default: str
         :return: str
         """
-        r = self.get_config(self.get_mgr_id() + '/' + key)
-        if r is None:
-            r = self.get_config(key)
-
-        if r is None:
-            r = default
-        return r
+        return self._get_localized(key, default, self.get_config)
 
     def set_config(self, key, val):
         """
@@ -501,29 +508,48 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param default: str
         :return: str
         """
-        return self._ceph_set_config(self.get_mgr_id() + '/' + key, val)
+        return self._set_localized(key, val, self.set_config)
 
-    def set_config_json(self, key, val):
+    def set_store_json(self, key, val):
         """
-        Helper for setting json-serialized-config
+        Helper for setting json-serialized stored data
 
         :param key: str
         :param val: json-serializable object
         """
-        self._ceph_set_config(key, json.dumps(val))
+        self.set_store(key, json.dumps(val))
 
-    def get_config_json(self, key):
+    def get_store_json(self, key):
         """
-        Helper for getting json-serialized config
+        Helper for getting json-serialized stored data
 
         :param key: str
         :return: object
         """
-        raw = self.get_config(key)
+        raw = self.get_store(key)
         if raw is None:
             return None
         else:
             return json.loads(raw)
+
+    def set_store(self, key, val):
+        """
+        Set a value in this module's persistent key value store
+        """
+        self.set_config(key, val)
+
+    def get_store(self, key, default=None):
+        """
+        Get a value from this module's persistent key value store
+        """
+        return self.get_config(key, default)
+
+    def get_localized_store(self, key, default=None):
+        return self._get_localized(key, default, self.get_store)
+
+    def set_localized_store(self, key, val):
+        return self._set_localized(key, val, self.set_store)
+
 
     def self_test(self):
         """
