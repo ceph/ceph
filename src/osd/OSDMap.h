@@ -407,6 +407,8 @@ public:
 
     int8_t new_require_min_compat_client = -1;
 
+    utime_t new_last_up_change, new_last_in_change;
+
     mutable bool have_crc;      ///< crc values are defined
     uint32_t full_crc;  ///< crc of the resulting OSDMap
     mutable uint32_t inc_crc;   ///< crc of this incremental
@@ -505,6 +507,8 @@ private:
 
   int32_t max_osd;
   vector<uint32_t> osd_state;
+
+  utime_t last_up_change, last_in_change;
 
   // These features affect OSDMap[::Incremental] encoding, or the
   // encoding of some type embedded therein (CrushWrapper, something

@@ -1056,7 +1056,24 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       dout(10) << "new_state for osd." << p->first << " is 0, removing" << dendl;
       p = pending_inc.new_state.erase(p);
     } else {
+      if (p->second & CEPH_OSD_UP) {
+	pending_inc.new_last_up_change = pending_inc.modified;
+      }
       ++p;
+    }
+  }
+  if (!pending_inc.new_up_client.empty()) {
+    pending_inc.new_last_up_change = pending_inc.modified;
+  }
+  for (auto& i : pending_inc.new_weight) {
+    if (i.first > osdmap.max_osd) {
+      if (i.second) {
+	// new osd is already marked in
+	pending_inc.new_last_in_change = pending_inc.modified;
+      }
+    } else if (!!i.second != !!osdmap.osd_weight[i.first]) {
+      // existing osd marked in or out
+      pending_inc.new_last_in_change = pending_inc.modified;
     }
   }
 
