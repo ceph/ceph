@@ -21,7 +21,7 @@ This process is transparent to the user.
 The detection process runs:
 1. When new objects are added to the bucket
 2. In a background process that periodically scans all the buckets
-This is needed in order to deal with existng buckets in the system that are not being updated.
+This is needed in order to deal with existing buckets in the system that are not being updated.
 A bucket that requires resharding is added to the ``reshard_log`` queue and will be
 scheduled to be resharded later.
 The reshard threads run in the background and execute the scheduled resharding, one at a time.
