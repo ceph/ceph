@@ -102,7 +102,7 @@ public:
       RGWObjVersionTracker *objv_tracker{nullptr};
       map<string, bufferlist> attrs;
       ceph::real_time mtime;
-      ceph::real_time *pmtime;
+      ceph::real_time *pmtime{nullptr};
       bool exclusive{false};
 
       WOp& set_attrs(map<string, bufferlist>&& _attrs) {

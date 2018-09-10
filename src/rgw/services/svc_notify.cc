@@ -211,10 +211,17 @@ int RGWSI_Notify::init_watch()
     notify_objs[i] = rados_svc->handle(0).obj({control_pool, notify_oid});
     auto& notify_obj = notify_objs[i];
 
+    int r = notify_obj.open();
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: notify_obj.open() returned r=" << r << dendl;
+      return r;
+    }
+
     librados::ObjectWriteOperation op;
     op.create(false);
-    int r = notify_obj.operate(&op);
+    r = notify_obj.operate(&op);
     if (r < 0 && r != -EEXIST) {
+      ldout(cct, 0) << "ERROR: notify_obj.operate() returned r=" << r << dendl;
       return r;
     }
 
@@ -312,7 +319,7 @@ void RGWSI_Notify::add_watcher(int i)
   watchers_set.insert(i);
   if (watchers_set.size() ==  (size_t)num_watchers) {
     ldout(cct, 2) << "all " << num_watchers << " watchers are set, enabling cache" << dendl;
-    set_enabled(true);
+    _set_enabled(true);
   }
 }
 
@@ -325,7 +332,7 @@ void RGWSI_Notify::remove_watcher(int i)
   if (orig_size == (size_t)num_watchers &&
       watchers_set.size() < orig_size) { /* actually removed */
     ldout(cct, 2) << "removed watcher, disabling cache" << dendl;
-    set_enabled(false);
+    _set_enabled(false);
   }
 }
 
@@ -344,6 +351,11 @@ int RGWSI_Notify::watch_cb(uint64_t notify_id,
 void RGWSI_Notify::set_enabled(bool status)
 {
   RWLock::RLocker l(watchers_lock);
+  _set_enabled(status);
+}
+
+void RGWSI_Notify::_set_enabled(bool status)
+{
   if (cb) {
     cb->set_enabled(status);
   }
