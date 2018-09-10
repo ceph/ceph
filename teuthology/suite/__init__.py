@@ -114,7 +114,7 @@ def get_rerun_conf(conf):
     try:
         subset, seed = reporter.get_rerun_conf(conf.rerun)
     except IOError:
-        return None, None
+        return conf.subset, conf.seed
     if seed is None:
         return conf.subset, conf.seed
     if conf.seed < 0:
