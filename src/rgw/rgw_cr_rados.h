@@ -735,7 +735,7 @@ class RGWAsyncFetchRemoteObj : public RGWAsyncRadosRequest {
   real_time src_mtime;
 
   bool copy_if_newer;
-  rgw_zone_set *zones_trace;
+  rgw_zone_set zones_trace;
 
 protected:
   int _send_request() override;
@@ -750,7 +750,12 @@ public:
                                                       bucket_info(_bucket_info),
                                                       key(_key),
                                                       versioned_epoch(_versioned_epoch),
-                                                      copy_if_newer(_if_newer), zones_trace(_zones_trace) {}
+                                                      copy_if_newer(_if_newer)
+  {
+    if (_zones_trace) {
+      zones_trace = *_zones_trace;
+    }
+  }
 };
 
 class RGWFetchRemoteObjCR : public RGWSimpleCoroutine {
@@ -923,7 +928,7 @@ class RGWAsyncRemoveObj : public RGWAsyncRadosRequest {
 
   bool del_if_older;
   ceph::real_time timestamp;
-  rgw_zone_set *zones_trace;
+  rgw_zone_set zones_trace;
 
 protected:
   int _send_request() override;
@@ -948,9 +953,13 @@ public:
                                                       versioned(_versioned),
                                                       versioned_epoch(_versioned_epoch),
                                                       del_if_older(_if_older),
-                                                      timestamp(_timestamp), zones_trace(_zones_trace) {
+                                                      timestamp(_timestamp) {
     if (_delete_marker) {
       marker_version_id = key.instance;
+    }
+
+    if (_zones_trace) {
+      zones_trace = *_zones_trace;
     }
   }
 };
