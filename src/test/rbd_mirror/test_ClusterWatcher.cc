@@ -11,6 +11,7 @@
 #include "tools/rbd_mirror/Types.h"
 #include "test/rbd_mirror/test_fixture.h"
 #include "test/librados/test.h"
+#include "test/librbd/test_support.h"
 #include "gtest/gtest.h"
 #include <boost/scope_exit.hpp>
 #include <iostream>
@@ -100,6 +101,27 @@ public:
     }
     m_pools.erase(name);
     ASSERT_EQ(0, m_cluster->pool_delete(name.c_str()));
+  }
+
+  void set_peer_config_key(const std::string& pool_name,
+                           const PeerSpec &peer) {
+    int64_t pool_id = m_cluster->pool_lookup(pool_name.c_str());
+    ASSERT_GE(pool_id, 0);
+
+    std::string json =
+      "{"
+        "\\\"mon_host\\\": \\\"" + peer.mon_host + "\\\", "
+        "\\\"key\\\": \\\"" + peer.key + "\\\""
+      "}";
+
+    bufferlist in_bl;
+    ASSERT_EQ(0, m_cluster->mon_command(
+      "{"
+        "\"prefix\": \"config-key set\","
+        "\"key\": \"" RBD_MIRROR_PEER_CONFIG_KEY_PREFIX + stringify(pool_id) +
+          "/" + peer.uuid + "\","
+        "\"val\": \"" + json + "\"" +
+      "}", in_bl, nullptr, nullptr));
   }
 
   void create_cache_pool(const string &base_pool, string *cache_pool_name) {
@@ -209,5 +231,24 @@ TEST_F(TestClusterWatcher, CachePools) {
   BOOST_SCOPE_EXIT( base2, cache2, this_ ) {
     this_->remove_cache_pool(base2, cache2);
   } BOOST_SCOPE_EXIT_END;
+  check_peers();
+}
+
+TEST_F(TestClusterWatcher, ConfigKey) {
+  REQUIRE(!is_librados_test_stub(*m_cluster));
+
+  std::string pool_name;
+  check_peers();
+
+  PeerSpec site1("", "site1", "mirror1");
+  create_pool(true, site1, &site1.uuid, &pool_name);
+  check_peers();
+
+  PeerSpec site2("", "site2", "mirror2");
+  site2.mon_host = "abc";
+  site2.key = "xyz";
+  create_pool(false, site2, &site2.uuid);
+  set_peer_config_key(pool_name, site2);
+
   check_peers();
 }
