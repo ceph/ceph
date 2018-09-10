@@ -3,7 +3,7 @@
           [columns]="columns"
           selectionType="single"
           (updateSelection)="updateSelection($event)"
-          [updateSelectionOnRefresh]="false">
+          [updateSelectionOnRefresh]="'never'">
   <div class="table-actions btn-toolbar"
        *ngIf="permission.update">
     <div class="btn-group"
