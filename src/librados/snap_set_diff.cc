@@ -43,6 +43,7 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
     } else if (r->snaps.empty()) {
       ldout(cct, 1) << "clone " << r->cloneid
                     << ": empty snaps, return whole object" << dendl;
+      diff->clear();
       *whole_object = true;
       return;
     } else {

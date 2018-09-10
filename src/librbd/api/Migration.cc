@@ -1430,7 +1430,8 @@ int Migration<I>::remove_src_image() {
     return r;
   }
 
-  for (auto &snap : snaps) {
+  for (auto it = snaps.rbegin(); it != snaps.rend(); it++) {
+    auto &snap = *it;
     librbd::NoOpProgressContext prog_ctx;
     int r = snap_remove(m_src_image_ctx, snap.name.c_str(), 0, prog_ctx);
     if (r < 0) {
