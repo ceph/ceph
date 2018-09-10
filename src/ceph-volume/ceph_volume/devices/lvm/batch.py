@@ -206,6 +206,12 @@ class Batch(object):
             action='store_true',
             help='Skip creating and enabling systemd units and starting OSD services',
         )
+        parser.add_argument(
+            '--osds-per-device',
+            type=int,
+            default=1,
+            help='Provision more than 1 (the default) OSD per device',
+        )
         args = parser.parse_args(self.argv)
 
         if not args.devices:
