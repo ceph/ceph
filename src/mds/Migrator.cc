@@ -237,8 +237,9 @@ void Migrator::find_stale_export_freeze()
     ++p;
     if (stat.state != EXPORT_DISCOVERING && stat.state != EXPORT_FREEZING)
       continue;
-    if (stat.last_cum_auth_pins != dir->get_cum_auth_pins()) {
-      stat.last_cum_auth_pins = dir->get_cum_auth_pins();
+    ceph_assert(dir->freeze_tree_state);
+    if (stat.last_cum_auth_pins != dir->freeze_tree_state->auth_pins) {
+      stat.last_cum_auth_pins = dir->freeze_tree_state->auth_pins;
       stat.last_cum_auth_pins_change = now;
       continue;
     }
@@ -1346,7 +1347,6 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
 
   ceph_assert(it->second.state == EXPORT_FREEZING);
   ceph_assert(dir->is_frozen_tree_root());
-  ceph_assert(dir->get_cum_auth_pins() == 0);
 
   CInode *diri = dir->get_inode();
 
@@ -1631,7 +1631,6 @@ void Migrator::export_go_synced(CDir *dir, uint64_t tid)
   ceph_assert(g_conf()->mds_kill_export_at != 7);
 
   ceph_assert(dir->is_frozen_tree_root());
-  ceph_assert(dir->get_cum_auth_pins() == 0);
 
   // set ambiguous auth
   cache->adjust_subtree_auth(dir, mds->get_nodeid(), dest);
@@ -2706,6 +2705,7 @@ void Migrator::handle_export_dir(const MExportDir::const_ref &m)
   dout(7) << "handle_export_dir importing " << *dir << " from " << oldauth << dendl;
 
   ceph_assert(!dir->is_auth());
+  ceph_assert(dir->freeze_tree_state);
   
   map<dirfrag_t,import_state_t>::iterator it = import_state.find(m->dirfrag);
   ceph_assert(it != import_state.end());
@@ -3373,6 +3373,11 @@ int Migrator::decode_import_dir(bufferlist::const_iterator& blp,
   
   dout(7) << "decode_import_dir " << *dir << dendl;
 
+  if (!dir->freeze_tree_state) {
+    ceph_assert(dir->get_version() == 0);
+    dir->freeze_tree_state = import_root->freeze_tree_state;
+  }
+
   // assimilate state
   dir->decode_import(blp, ls);
 
@@ -3392,12 +3397,9 @@ int Migrator::decode_import_dir(bufferlist::const_iterator& blp,
   // NOTE: a pass of imported data is guaranteed to get all of my waiters because
   // a replica's presense in my cache implies/forces it's presense in authority's.
   MDSInternalContextBase::vec waiters;
-  
   dir->take_waiting(CDir::WAIT_ANY_MASK, waiters);
-  for (MDSInternalContextBase::vec::iterator it = waiters.begin();
-       it != waiters.end();
-       ++it) 
-    import_root->add_waiter(CDir::WAIT_UNFREEZE, *it);  // UNFREEZE will get kicked both on success or failure
+  for (auto c : waiters)
+    dir->add_waiter(CDir::WAIT_UNFREEZE, c);  // UNFREEZE will get kicked both on success or failure
   
   dout(15) << "doing contents" << dendl;
   
