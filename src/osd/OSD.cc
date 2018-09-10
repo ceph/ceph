@@ -8216,10 +8216,10 @@ bool OSD::advance_pg(
 	    pg->write_if_dirty(rctx);
 	    pg->unlock();
 	    // kick source(s) to get them ready
-	    for (auto& i : sources) {
-	      dout(20) << __func__ << " kicking source " << i.first << dendl;
+	    for (auto& i : children) {
+	      dout(20) << __func__ << " kicking source " << i << dendl;
 	      enqueue_peering_evt(
-		i.first,
+		i,
 		PGPeeringEventRef(
 		  std::make_shared<PGPeeringEvent>(
 		    nextmap->get_epoch(),
