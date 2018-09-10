@@ -19,7 +19,7 @@
 #include <set>
 
 using rbd::mirror::ClusterWatcher;
-using rbd::mirror::peer_t;
+using rbd::mirror::PeerSpec;
 using rbd::mirror::RadosRef;
 using std::map;
 using std::set;
@@ -59,7 +59,7 @@ public:
     TestFixture::TearDown();
   }
 
-  void create_pool(bool enable_mirroring, const peer_t &peer,
+  void create_pool(bool enable_mirroring, const PeerSpec &peer,
                    string *uuid = nullptr, string *name=nullptr) {
     string pool_name = get_temp_pool_name("test-rbd-mirror-");
     ASSERT_EQ(0, m_cluster->pool_create(pool_name.c_str()));
@@ -89,7 +89,7 @@ public:
     }
   }
 
-  void delete_pool(const string &name, const peer_t &peer) {
+  void delete_pool(const string &name, const PeerSpec &peer) {
     int64_t pool_id = m_cluster->pool_lookup(name.c_str());
     ASSERT_GE(pool_id, 0);
     if (m_pool_peers.find(pool_id) != m_pool_peers.end()) {
@@ -159,26 +159,26 @@ TEST_F(TestClusterWatcher, NoPools) {
 
 TEST_F(TestClusterWatcher, NoMirroredPools) {
   check_peers();
-  create_pool(false, peer_t());
+  create_pool(false, PeerSpec());
   check_peers();
-  create_pool(false, peer_t());
+  create_pool(false, PeerSpec());
   check_peers();
-  create_pool(false, peer_t());
+  create_pool(false, PeerSpec());
   check_peers();
 }
 
 TEST_F(TestClusterWatcher, ReplicatedPools) {
-  peer_t site1("", "site1", "mirror1");
-  peer_t site2("", "site2", "mirror2");
+  PeerSpec site1("", "site1", "mirror1");
+  PeerSpec site2("", "site2", "mirror2");
   string first_pool, last_pool;
   check_peers();
   create_pool(true, site1, &site1.uuid, &first_pool);
   check_peers();
-  create_pool(false, peer_t());
+  create_pool(false, PeerSpec());
   check_peers();
-  create_pool(false, peer_t());
+  create_pool(false, PeerSpec());
   check_peers();
-  create_pool(false, peer_t());
+  create_pool(false, PeerSpec());
   check_peers();
   create_pool(true, site2, &site2.uuid);
   check_peers();
@@ -193,7 +193,7 @@ TEST_F(TestClusterWatcher, ReplicatedPools) {
 }
 
 TEST_F(TestClusterWatcher, CachePools) {
-  peer_t site1("", "site1", "mirror1");
+  PeerSpec site1("", "site1", "mirror1");
   string base1, base2, cache1, cache2;
   create_pool(true, site1, &site1.uuid, &base1);
   check_peers();
@@ -204,7 +204,7 @@ TEST_F(TestClusterWatcher, CachePools) {
   } BOOST_SCOPE_EXIT_END;
   check_peers();
 
-  create_pool(false, peer_t(), nullptr, &base2);
+  create_pool(false, PeerSpec(), nullptr, &base2);
   create_cache_pool(base2, &cache2);
   BOOST_SCOPE_EXIT( base2, cache2, this_ ) {
     this_->remove_cache_pool(base2, cache2);

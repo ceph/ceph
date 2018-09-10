@@ -11,7 +11,7 @@ std::ostream &operator<<(std::ostream &os, const ImageId &image_id) {
             << "id=" << image_id.id;
 }
 
-std::ostream& operator<<(std::ostream& lhs, const peer_t &peer) {
+std::ostream& operator<<(std::ostream& lhs, const PeerSpec &peer) {
   return lhs << "uuid: " << peer.uuid
 	     << " cluster: " << peer.cluster_name
 	     << " client: " << peer.client_name;

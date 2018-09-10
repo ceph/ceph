@@ -48,7 +48,7 @@ class PoolReplayer {
 public:
   PoolReplayer(Threads<ImageCtxT> *threads,
                ServiceDaemon<ImageCtxT>* service_daemon,
-	       int64_t local_pool_id, const peer_t &peer,
+	       int64_t local_pool_id, const PeerSpec &peer,
 	       const std::vector<const char*> &args);
   ~PoolReplayer();
   PoolReplayer(const PoolReplayer&) = delete;
@@ -211,7 +211,7 @@ private:
   Threads<ImageCtxT> *m_threads;
   ServiceDaemon<ImageCtxT>* m_service_daemon;
   int64_t m_local_pool_id = -1;
-  peer_t m_peer;
+  PeerSpec m_peer;
   std::vector<const char*> m_args;
 
   mutable Mutex m_lock;

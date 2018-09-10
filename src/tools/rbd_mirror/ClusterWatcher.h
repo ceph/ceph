@@ -29,7 +29,7 @@ template <typename> class ServiceDaemon;
  */
 class ClusterWatcher {
 public:
-  typedef std::set<peer_t> Peers;
+  typedef std::set<PeerSpec> Peers;
   typedef std::map<int64_t, Peers>  PoolPeers;
   typedef std::set<std::string> PoolNames;
 

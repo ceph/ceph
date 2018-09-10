@@ -227,7 +227,7 @@ private:
 template <typename I>
 PoolReplayer<I>::PoolReplayer(Threads<I> *threads,
                               ServiceDaemon<I>* service_daemon,
-			      int64_t local_pool_id, const peer_t &peer,
+			      int64_t local_pool_id, const PeerSpec &peer,
 			      const std::vector<const char*> &args) :
   m_threads(threads),
   m_service_daemon(service_daemon),
