@@ -51,7 +51,7 @@ public:
 
 private:
   typedef ClusterWatcher::PoolPeers PoolPeers;
-  typedef std::pair<int64_t, peer_t> PoolPeer;
+  typedef std::pair<int64_t, PeerSpec> PoolPeer;
 
   void update_pool_replayers(const PoolPeers &pool_peers);
 
