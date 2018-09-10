@@ -18,7 +18,7 @@
 #include "include/utime.h"
 #include "common/AsyncOpTracker.h"
 #include "common/Mutex.h"
-#include "types.h"
+#include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_deleter/Types.h"
 #include <atomic>
 #include <deque>

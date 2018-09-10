@@ -19,7 +19,7 @@
 #include "common/Mutex.h"
 #include "tools/rbd_mirror/PoolWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
-#include "tools/rbd_mirror/types.h"
+#include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/pool_watcher/Types.h"
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
