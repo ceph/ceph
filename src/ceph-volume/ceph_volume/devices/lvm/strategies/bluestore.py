@@ -124,7 +124,7 @@ class MixedType(object):
         self.devices = devices
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
-        self.computed = {'osds': [], 'vgs': []}
+        self.computed = {'osds': []}
         self.block_db_size = prepare.get_block_db_size(lv_format=False) or disk.Size(b=0)
         self.system_vgs = lvm.VolumeGroups()
         # For every HDD we get 1 block.db
@@ -150,7 +150,7 @@ class MixedType(object):
             total_lvs=vg_extents['parts'],
             block_lv_size=db_size,
             block_db_devices=', '.join([ssd.abspath for ssd in self.ssds]),
-            lv_size=str(disk.Size(b=(vg_extents['sizes']))),
+            lv_size=self.block_db_size or str(disk.Size(b=(vg_extents['sizes']))),
             total_osds=len(self.hdds)
         )
 
@@ -186,7 +186,7 @@ class MixedType(object):
                 'devices': self.blank_ssds,
                 'parts': self.dbs_needed,
                 'percentages': self.vg_extents['percentages'],
-                'sizes': self.journal_size.b,
+                'sizes': self.block_db_size.b,
                 'size': int(self.total_blank_ssd_size.b),
                 'human_readable_sizes': str(self.block_db_size),
                 'human_readable_size': str(self.total_available_db_space),
@@ -213,18 +213,34 @@ class MixedType(object):
         (block, block.db, block.wal, etc..) and offload the OSD creation to
         ``lvm create``
         """
-        # create the single vg for all block.db lv's first
-        vg_info = self.computed['vgs'][0]
-        vg = lvm.create_vg(vg_info['devices'])
+        blank_ssd_paths = [d.abspath for d in self.blank_ssds]
 
-        # now produce all the block.db lvs needed from that single vg
-        db_lvs = lvm.create_lvs(vg, parts=vg_info['parts'], name_prefix='osd-block-db')
+        # no common vg is found, create one with all the blank SSDs
+        if not self.common_vg:
+            db_vg = lvm.create_vg(blank_ssd_paths, name_prefix='ceph-dbs')
+
+        # if a common vg exists then extend it with any blank ssds
+        elif self.common_vg and blank_ssd_paths:
+            db_vg = lvm.extend_vg(self.common_vg, blank_ssd_paths)
+
+        # one common vg with nothing else to extend can be used directly,
+        # either this is one device with one vg, or multiple devices with the
+        # same vg
+        else:
+            db_vg = self.common_vg
+
+        # since we are falling back to a block_db_size that might be "as large
+        # as possible" we can't fully rely on LV format coming from the helper
+        # function that looks up this value
+        block_db_size = "%sG" % self.block_db_size.gb.as_int()
 
         # create the data lvs, and create the OSD with the matching block.db lvs from before
         for osd in self.computed['osds']:
-            vg = lvm.create_vg(osd['data']['path'])
-            data_lv = lvm.create_lv('osd-data-%s' % str(uuid4()), vg.name)
-            db_lv = db_lvs.pop()
+            data_vg = lvm.create_vg(osd['data']['path'], name_prefix='ceph-block-db')
+            data_lv = lvm.create_lv('osd-data-%s' % str(uuid4()), data_vg.name)
+            db_lv = lvm.create_lv(
+                'osd-block-db', db_vg.name, size=block_db_size, uuid_name=True
+            )
             command = [
                 '--bluestore',
                 '--data', "%s/%s" % (data_lv.vg_name, data_lv.name),
@@ -268,7 +284,7 @@ class MixedType(object):
         # find the common VG to calculate how much is available
         self.common_vg = self.get_common_vg()
 
-        # find how many journals are possible from the common VG
+        # find how many block.db LVs are possible from the common VG
         if self.common_vg:
             common_vg_size = disk.Size(gb=self.common_vg.free)
         else:
@@ -291,17 +307,22 @@ class MixedType(object):
                     self.total_available_db_space.b, size=self.block_db_size.b
                 )
             except SizeAllocationError:
-                self.vg_extents = {'parts': 0, 'percentages': 0, 'sizes': 0}
+                msg = "Not enough space in fast devices (%s) to create a %s block.db LV"
+                raise RuntimeError(msg % (self.total_available_db_space, self.block_db_size))
         else:
             self.vg_extents = lvm.sizing(
                 self.total_available_db_space.b, parts=self.dbs_needed
             )
 
-        # validate that number of journals possible are enough for number of
+        # validate that number of block.db LVs possible are enough for number of
         # OSDs proposed
         if self.total_available_db_space.b == 0:
             msg = "No space left in fast devices to create block.db LVs"
             raise RuntimeError(msg)
+
+        # bluestore_block_db_size was unset, so we must set this to whatever
+        # size we get by dividing the total available space for block.db LVs
+        # into the number of block.db LVs needed (i.e. "as large as possible")
         if self.block_db_size.b == 0:
             self.block_db_size = self.total_available_db_space / self.dbs_needed
 
