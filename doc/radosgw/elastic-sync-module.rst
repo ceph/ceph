@@ -58,7 +58,7 @@ on data sync initialization.
 * ``explicit_custom_meta`` (true | false)
 
 Specifies whether all user custom metadata will be indexed, or whether
-user will need to configure (at the bucket level) what custome
+user will need to configure (at the bucket level) what custom
 metadata entries should be indexed. This is false by default
 
 * ``index_buckets_list`` (comma separated list of strings)
