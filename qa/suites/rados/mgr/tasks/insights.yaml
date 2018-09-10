@@ -9,6 +9,7 @@ tasks:
         - overall HEALTH_
         - \(MGR_DOWN\)
         - \(MGR_INSIGHTS_WARNING\)
+        - \(insights_health_check
         - \(PG_
         - replacing it with standby
         - No standby daemons available
