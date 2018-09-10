@@ -1406,17 +1406,11 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
     return -EINVAL;
   }
 
-  // Old exports didn't include OSDMap, see if we have a copy locally
+  // Old exports didn't include OSDMap
   if (ms.osdmap.get_epoch() == 0) {
-    OSDMap findmap;
-    bufferlist findmap_bl;
-    int ret = get_osdmap(store, ms.map_epoch, findmap, findmap_bl);
-    if (ret == 0) {
-      ms.osdmap.deepish_copy_from(findmap);
-    } else {
-      cerr << "WARNING: No OSDMap in old export,"
-           " some objects may be ignored due to a split" << std::endl;
-    }
+    cerr << "WARNING: No OSDMap in old export, this is an ancient export."
+      " Not supported." << std::endl;
+    return -EINVAL;
   }
   if (ms.osdmap.get_epoch() < sb.oldest_map) {
     cerr << "PG export's map " << ms.osdmap.get_epoch()
@@ -1427,12 +1421,7 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
       return -EINVAL;
     }
   }
-
-  // Make sure old_pg_num is 0 in the unusual case that OSDMap not in export
-  // nor can we find a local copy.
-  unsigned old_pg_num = 0;
-  if (ms.osdmap.get_epoch() != 0)
-    old_pg_num = ms.osdmap.get_pg_num(pgid.pgid.pool());
+  unsigned old_pg_num = ms.osdmap.get_pg_num(pgid.pgid.pool());
 
   if (debug) {
     cerr << "old_pg_num " << old_pg_num << std::endl;
