@@ -133,7 +133,7 @@ private:
   ImageCtxT *m_src_image_ctx;
   ImageCtxT *m_dst_image_ctx;
   CephContext *m_cct;
-  const SnapMap &m_snap_map;
+  SnapMap m_snap_map;
   uint64_t m_dst_object_number;
   bool m_flatten;
   Context *m_on_finish;
