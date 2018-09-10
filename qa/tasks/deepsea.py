@@ -168,11 +168,11 @@ class DeepSea(Task):
         super(DeepSea, self).begin()
         self.salt.master_remote.run(args=[
             'sudo',
-            'zypper',
-            '--non-interactive',
-            'install',
+            'rpm',
+            '-q',
             'ceph-test'
             ])
+        log.info("deepsea task complete")
 
     def purge_osds(self):
         # replace this hack with DeepSea purge when it's ready
