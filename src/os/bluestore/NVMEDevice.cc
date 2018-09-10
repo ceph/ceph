@@ -915,7 +915,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   ceph_assert(is_valid_io(off, len));
 
   Task *t = new Task(this, IOCommand::READ_COMMAND, off, len, 1);
-  bufferptr p = buffer::create_page_aligned(len);
+  bufferptr p = buffer::create_small_page_aligned(len);
   int r = 0;
   t->ctx = ioc;
   char *buf = p.c_str();
@@ -945,7 +945,7 @@ int NVMEDevice::aio_read(
 
   Task *t = new Task(this, IOCommand::READ_COMMAND, off, len);
 
-  bufferptr p = buffer::create_page_aligned(len);
+  bufferptr p = buffer::create_small_page_aligned(len);
   pbl->append(p);
   t->ctx = ioc;
   char* buf = p.c_str();
