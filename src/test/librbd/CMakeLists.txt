@@ -1,6 +1,12 @@
+set(librbd_test_support_srcs
+  test_support.cc
+  )
+add_library(rbd_test_support STATIC ${librbd_test_support_srcs})
+target_link_libraries(rbd_test_support PRIVATE
+  GTest::GTest)
+
 set(librbd_test
   test_fixture.cc
-  test_support.cc
   test_librbd.cc
   test_ImageWatcher.cc
   test_internal.cc
@@ -16,6 +22,7 @@ set(librbd_test
   journal/test_Replay.cc)
 add_library(rbd_test STATIC ${librbd_test})
 target_link_libraries(rbd_test PRIVATE
+  rbd_test_support
   Boost::thread
   GMock::GMock
   GTest::GTest)

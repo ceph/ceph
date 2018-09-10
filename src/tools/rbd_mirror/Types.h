@@ -79,11 +79,29 @@ struct PeerSpec {
   std::string cluster_name;
   std::string client_name;
 
-  bool operator<(const PeerSpec &rhs) const {
-    return uuid < rhs.uuid;
+  /// optional config properties
+  std::string mon_host;
+  std::string key;
+
+  bool operator==(const PeerSpec& rhs) const {
+    return (uuid == rhs.uuid &&
+            cluster_name == rhs.cluster_name &&
+            client_name == rhs.client_name &&
+            mon_host == rhs.mon_host &&
+            key == rhs.key);
   }
-  bool operator==(const PeerSpec &rhs) const {
-    return uuid == rhs.uuid;
+  bool operator<(const PeerSpec& rhs) const {
+    if (uuid != rhs.uuid) {
+      return uuid < rhs.uuid;
+    } else if (cluster_name != rhs.cluster_name) {
+      return cluster_name < rhs.cluster_name;
+    } else if (client_name != rhs.client_name) {
+      return client_name < rhs.client_name;
+    } else if (mon_host < rhs.mon_host) {
+      return mon_host < rhs.mon_host;
+    } else {
+      return key < rhs.key;
+    }
   }
 };
 

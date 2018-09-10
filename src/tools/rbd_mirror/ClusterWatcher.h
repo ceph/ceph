@@ -29,7 +29,12 @@ template <typename> class ServiceDaemon;
  */
 class ClusterWatcher {
 public:
-  typedef std::set<PeerSpec> Peers;
+  struct PeerSpecCompare {
+    bool operator()(const PeerSpec& lhs, const PeerSpec& rhs) const {
+      return (lhs.uuid < rhs.uuid);
+    }
+  };
+  typedef std::set<PeerSpec, PeerSpecCompare> Peers;
   typedef std::map<int64_t, Peers>  PoolPeers;
 
   ClusterWatcher(RadosRef cluster, Mutex &lock,
@@ -53,6 +58,9 @@ private:
   PoolPeers m_pool_peers;
 
   void read_pool_peers(PoolPeers *pool_peers);
+
+  int resolve_peer_config_keys(int64_t pool_id, const std::string& pool_name,
+                               PeerSpec* peer);
 };
 
 } // namespace mirror
