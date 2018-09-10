@@ -171,6 +171,7 @@ namespace buffer CEPH_BUFFER_API {
   raw* create_aligned(unsigned len, unsigned align);
   raw* create_aligned_in_mempool(unsigned len, unsigned align, int mempool);
   raw* create_page_aligned(unsigned len);
+  raw* create_small_page_aligned(unsigned len);
   raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
   raw* create_unshareable(unsigned len);
   raw* create_static(unsigned len, char *buf);

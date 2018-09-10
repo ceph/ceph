@@ -256,7 +256,7 @@ int PMEMDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   dout(5) << __func__ << " " << off << "~" << len  << dendl;
   ceph_assert(is_valid_io(off, len));
 
-  bufferptr p = buffer::create_page_aligned(len);
+  bufferptr p = buffer::create_small_page_aligned(len);
   memcpy(p.c_str(), addr + off, len);
 
   pbl->clear();
