@@ -61,6 +61,7 @@ int RGWSI_RADOS::load(const string& conf, map<string, RGWServiceInstanceRef>& de
       return ret;
     }
   }
+  std::swap(handles, rados);
   return 0;
 }
 
@@ -151,6 +152,7 @@ int RGWSI_RADOS::Obj::open()
     return r;
   }
 
+  ref.has_ioctx = true;
   ref.ioctx.locator_set_key(ref.key);
 
   return 0;

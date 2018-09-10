@@ -70,6 +70,7 @@ int RGWServiceRegistry::do_get_instance(RGWServiceRef& svc,
     ldout(cct, 0) << "ERROR: failed to create instance for service " << svc->type() << " conf=" << conf << " (r=" << r << ")" << dendl;
     return r;
   }
+  svc->svc_registry = shared_from_this();
   instance_ref->svc = svc;
   instance_ref->svc_id = ++max_registry_id;
 
@@ -97,7 +98,9 @@ int RGWServiceRegistry::do_get_instance(RGWServiceRef& svc,
     dep_refs[dep_id] = dep_ref;
   }
 
+  ldout(cct, 10) << "svc: load service: " << instance_ref->get_svc()->type() << dendl;
   r = instance_ref->load(conf, dep_refs);
+  ldout(cct, 10) << "svc: done load service: " << instance_ref->get_svc()->type() << dendl;
   if (r < 0) {
     ldout(cct, 0) << "ERROR: service instance load return error: service=" << svc->type() << " r=" << r << dendl;
     return r;
@@ -128,7 +131,9 @@ int RGWServiceRegistry::get_instance(RGWServiceRef& svc,
   }
 
   for (auto& instance_ref : new_instances) {
+    ldout(cct, 10) << "svc: init service: " << instance_ref->get_svc()->type() << dendl;
     r = instance_ref->init();
+    ldout(cct, 10) << "svc: done init service: " << instance_ref->get_svc()->type() << dendl;
     if (r < 0) {
       ldout(cct, 0) << "ERROR: service instance init return error: service=" << instance_ref->get_svc()->type() << " r=" << r << dendl;
       return r;

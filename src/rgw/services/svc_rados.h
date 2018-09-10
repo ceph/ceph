@@ -34,7 +34,51 @@ struct rgw_rados_ref {
   rgw_pool pool;
   string oid;
   string key;
+  bool has_ioctx{false};
   librados::IoCtx ioctx;
+
+  rgw_rados_ref() {}
+  ~rgw_rados_ref() {}
+
+  rgw_rados_ref(const rgw_rados_ref& r) : pool(r.pool),
+                                          oid(r.oid),
+                                          key(r.key),
+                                          has_ioctx(r.has_ioctx) {
+    if (r.has_ioctx) {
+      ioctx = r.ioctx;
+    }
+  }
+
+  rgw_rados_ref(const rgw_rados_ref&& r) : pool(std::move(r.pool)),
+                                           oid(std::move(r.oid)),
+                                           key(std::move(r.key)),
+                                           has_ioctx(r.has_ioctx) {
+    if (r.has_ioctx) {
+      ioctx = r.ioctx;
+    }
+  }
+
+  rgw_rados_ref& operator=(rgw_rados_ref&& r) {
+    pool = std::move(r.pool);
+    oid = std::move(r.oid);
+    key = std::move(r.key);
+    has_ioctx = r.has_ioctx;
+    if (has_ioctx) {
+      ioctx = r.ioctx;
+    }
+    return *this;
+  }
+
+  rgw_rados_ref& operator=(rgw_rados_ref& r) {
+    pool = r.pool;
+    oid = r.oid;
+    key = r.key;
+    has_ioctx = r.has_ioctx;
+    if (has_ioctx) {
+      ioctx = r.ioctx;
+    }
+    return *this;
+  }
 };
 
 class RGWSI_RADOS : public RGWServiceInstance

@@ -73,6 +73,7 @@ private:
                uint64_t cookie,
                uint64_t notifier_id,
                bufferlist& bl);
+  void _set_enabled(bool status);
   void set_enabled(bool status);
 
   int robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl);

@@ -81,7 +81,7 @@ public:
   }
 };
 
-class RGWServiceRegistry {
+class RGWServiceRegistry : public std::enable_shared_from_this<RGWServiceRegistry> {
   CephContext *cct;
 
   map<string, RGWServiceRef> services;
