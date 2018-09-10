@@ -210,4 +210,22 @@ describe('TableKeyValueComponent', () => {
       ]);
     });
   });
+
+  describe('subscribe fetchData', () => {
+    it('should not subscribe fetchData of table', () => {
+      component.ngOnInit();
+      expect(component.table.fetchData.observers.length).toBe(0);
+    });
+
+    it('should call fetchData', () => {
+      let called = false;
+      component.fetchData.subscribe(() => {
+        called = true;
+      });
+      component.ngOnInit();
+      expect(component.table.fetchData.observers.length).toBe(1);
+      component.table.fetchData.emit();
+      expect(called).toBeTruthy();
+    });
+  });
 });
