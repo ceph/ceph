@@ -836,7 +836,11 @@ def get_scrub_timestamps(childargs):
     devnull = open(os.devnull, 'w')
     out = subprocess.check_output(['ceph', 'pg', 'dump', '--format=json-pretty'],
                                   stderr=devnull)
-    for stat in json.loads(out)['pg_stats']:
+    try:
+        pgstats = json.loads(out)['pg_map']['pg_stats']
+    except KeyError:
+        pgstats = json.loads(out)['pg_stats']
+    for stat in pgstats:
         if scruball or stat['up_primary'] == int(childargs[2]):
             scrub_tuple = (stat['up_primary'], stat[last_scrub_stamp])
             results[stat['pgid']] = scrub_tuple
