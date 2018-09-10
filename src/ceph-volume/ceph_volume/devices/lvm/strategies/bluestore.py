@@ -16,6 +16,7 @@ class SingleType(object):
 
     def __init__(self, devices, args):
         self.args = args
+        self.osds_per_device = args.osds_per_device
         self.devices = devices
         # TODO: add --fast-devices and --slow-devices so these can be customized
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
@@ -24,13 +25,20 @@ class SingleType(object):
         self.validate()
         self.compute()
 
+    @property
+    def total_osds(self):
+        if self.hdds:
+            return len(self.hdds) * self.osds_per_device
+        else:
+            return len(self.ssds) * self.osds_per_device
+
     def report_json(self):
         print(json.dumps(self.computed, indent=4, sort_keys=True))
 
     def report_pretty(self):
         string = ""
         string += templates.total_osds.format(
-            total_osds=len(self.hdds) or len(self.ssds) * 2
+            total_osds=self.total_osds,
         )
         string += templates.osd_component_titles
 
@@ -62,27 +70,26 @@ class SingleType(object):
         a dictionary with the result
         """
         osds = self.computed['osds']
-        vgs = self.computed['vgs']
         for device in self.hdds:
-            vgs.append({'devices': [device.abspath], 'parts': 1})
-            osd = {'data': {}, 'block.db': {}}
-            osd['data']['path'] = device.abspath
-            osd['data']['size'] = device.sys_api['size']
-            osd['data']['parts'] = 1
-            osd['data']['percentage'] = 100
-            osd['data']['human_readable_size'] = str(disk.Size(b=device.sys_api['size']))
-            osds.append(osd)
+            for hdd in range(self.osds_per_device):
+                osd = {'data': {}, 'block.db': {}}
+                osd['data']['path'] = device.abspath
+                osd['data']['size'] = device.sys_api['size'] / self.osds_per_device
+                osd['data']['parts'] = self.osds_per_device
+                osd['data']['percentage'] = 100 / self.osds_per_device
+                osd['data']['human_readable_size'] = str(
+                    disk.Size(b=device.sys_api['size']) / self.osds_per_device
+                )
+                osds.append(osd)
 
         for device in self.ssds:
-            # TODO: creates 2 OSDs per device, make this configurable (env var?)
-            extents = lvm.sizing(device.sys_api['size'], parts=2)
-            vgs.append({'devices': [device.abspath], 'parts': 2})
-            for ssd in range(2):
+            extents = lvm.sizing(device.sys_api['size'], parts=self.osds_per_device)
+            for ssd in range(self.osds_per_device):
                 osd = {'data': {}, 'block.db': {}}
                 osd['data']['path'] = device.abspath
                 osd['data']['size'] = extents['sizes']
                 osd['data']['parts'] = extents['parts']
-                osd['data']['percentage'] = 50
+                osd['data']['percentage'] = 100 / self.osds_per_device
                 osd['data']['human_readable_size'] = str(disk.Size(b=extents['sizes']))
                 osds.append(osd)
 
