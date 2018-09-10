@@ -714,7 +714,7 @@ EOF
 
     for err_string in "${err_strings[@]}"
     do
-        if ! grep "$err_string" $dir/osd.${primary}.log > /dev/null;
+        if ! grep -q -E "$err_string" $dir/osd.${primary}.log > /dev/null;
         then
             echo "Missing log message '$err_string'"
             ERRORS=$(expr $ERRORS + 1)
@@ -1153,7 +1153,7 @@ fi
 
     for err_string in "${err_strings[@]}"
     do
-        if ! grep "$err_string" $dir/osd.${primary}.log > /dev/null;
+        if ! grep -q -E "$err_string" $dir/osd.${primary}.log > /dev/null;
         then
             echo "Missing log message '$err_string'"
             ERRORS=$(expr $ERRORS + 1)
