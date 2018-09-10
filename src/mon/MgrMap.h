@@ -137,6 +137,8 @@ public:
   bool available = false;
   /// the name (foo in mgr.<foo>) of the active daemon
   std::string active_name;
+  /// when the active mgr became active, or we lost the active mgr
+  utime_t active_change;
 
   std::map<uint64_t, StandbyInfo> standbys;
 
@@ -155,6 +157,7 @@ public:
   uint64_t get_active_gid() const { return active_gid; }
   bool get_available() const { return available; }
   const std::string &get_active_name() const { return active_name; }
+  const utime_t& get_active_change() const { return active_change; }
 
   bool all_support_module(const std::string& module) {
     if (!have_module(module)) {
@@ -258,7 +261,7 @@ public:
       ENCODE_FINISH(bl);
       return;
     }
-    ENCODE_START(6, 6, bl);
+    ENCODE_START(7, 6, bl);
     encode(epoch, bl);
     encode(active_addrs, bl, features);
     encode(active_gid, bl);
@@ -268,13 +271,14 @@ public:
     encode(modules, bl);
     encode(services, bl);
     encode(available_modules, bl);
+    encode(active_change, bl);
     ENCODE_FINISH(bl);
     return;
   }
 
   void decode(bufferlist::const_iterator& p)
   {
-    DECODE_START(6, p);
+    DECODE_START(7, p);
     decode(epoch, p);
     decode(active_addrs, p);
     decode(active_gid, p);
@@ -305,6 +309,11 @@ public:
     if (struct_v >= 4) {
       decode(available_modules, p);
     }
+    if (struct_v >= 7) {
+      decode(active_change, p);
+    } else {
+      active_change = {};
+    }
     DECODE_FINISH(p);
   }
 
@@ -313,6 +322,7 @@ public:
     f->dump_int("active_gid", get_active_gid());
     f->dump_string("active_name", get_active_name());
     f->dump_object("active_addrs", active_addrs);
+    f->dump_stream("active_change") << active_change;
     f->dump_bool("available", available);
     f->open_array_section("standbys");
     for (const auto &i : standbys) {
@@ -356,16 +366,24 @@ public:
     if (f) {
       dump(f);
     } else {
+      utime_t now = ceph_clock_now();
       if (get_active_gid() != 0) {
 	*ss << get_active_name();
         if (!available) {
           // If the daemon hasn't gone active yet, indicate that.
-          *ss << "(active, starting)";
+          *ss << "(active, starting";
         } else {
-          *ss << "(active)";
+          *ss << "(active";
         }
+	if (active_change) {
+	  *ss << ", since " << utimespan_str(now - active_change);
+	}
+	*ss << ")";
       } else {
 	*ss << "no daemons active";
+	if (active_change) {
+	  *ss << " (since " << utimespan_str(now - active_change) << ")";
+	}
       }
       if (standbys.size()) {
 	*ss << ", standbys: ";

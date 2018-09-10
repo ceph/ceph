@@ -533,4 +533,9 @@ inline std::ostream& operator<<(std::ostream& out, const utime_t& t)
   return t.localtime(out);
 }
 
+inline std::string utimespan_str(const utime_t& age) {
+  auto age_ts = ceph::timespan(age.nsec()) + std::chrono::seconds(age.sec());
+  return timespan_str(age_ts);
+}
+
 #endif
