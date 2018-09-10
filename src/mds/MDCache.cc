@@ -1346,14 +1346,21 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
       projected_subtree_renames.erase(p);
   }
 
+  vector<CDir*> dfls;
+
+  // adjust total auth pin of freezing subtree
+  if (olddir != newdir) {
+    diri->get_nested_dirfrags(dfls);
+    for (auto dir : dfls)
+      olddir->adjust_freeze_after_rename(dir);
+    dfls.clear();
+  }
+
   // adjust subtree
-  list<CDir*> dfls;
   // make sure subtree dirfrags are at the front of the list
   diri->get_subtree_dirfrags(dfls);
   diri->get_nested_dirfrags(dfls);
-  for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) {
-    CDir *dir = *p;
-
+  for (auto dir : dfls) {
     dout(10) << "dirfrag " << *dir << dendl;
     CDir *oldparent = get_subtree_root(olddir);
     dout(10) << " old parent " << *oldparent << dendl;
@@ -7701,8 +7708,8 @@ bool MDCache::shutdown_pass()
   ceph_assert(!migrator->is_exporting());
   ceph_assert(!migrator->is_importing());
 
-  if ((myin && myin->is_auth_pinned()) ||
-      (mydir && mydir->is_auth_pinned())) {
+  if ((myin && myin->get_num_auth_pins()) ||
+      (mydir && (mydir->get_auth_pins() || mydir->get_dir_auth_pins()))) {
     dout(7) << "still have auth pinned objects" << dendl;
     return false;
   }
