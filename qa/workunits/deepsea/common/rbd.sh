@@ -12,17 +12,13 @@ function ceph_conf_upstream_rbd_default_features {
 }
 
 function ceph_test_librbd_can_be_run {
-  local TESTSCRIPT=/tmp/rbd_api_test.sh
+  local TESTSCRIPT=/tmp/rbd_script.sh
   local CLIENTNODE=$(_client_node)
   cat << 'EOF' > $TESTSCRIPT
 set -e
 trap 'echo "Result: NOT_OK"' ERR
-for delay in 60 60 60 60 ; do
-    sudo zypper --non-interactive --gpg-auto-import-keys refresh && break
-    sleep $delay
-done
 set -x
-zypper --non-interactive install --no-recommends ceph-test
+chmod a+r /etc/ceph/ceph.client.admin.keyring
 rpm -V ceph-test
 type ceph_test_librbd
 echo "Result: OK"
@@ -30,3 +26,4 @@ EOF
   _run_test_script_on_node $TESTSCRIPT $CLIENTNODE
   echo "You can now run ceph_test_librbd on the client node"
 }
+

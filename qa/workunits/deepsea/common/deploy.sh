@@ -171,6 +171,7 @@ function deploy_ceph {
     run_stage_3 "$CLI"
     pre_create_pools
     ceph_cluster_status
+    test "$RBD" && ceph_test_librbd_can_be_run
     if [ -z "$MDS" -a -z "$NFS_GANESHA" -a -z "$RGW" ] ; then
         echo "WWWW"
         echo "Stages 0-3 OK, no roles requiring Stage 4: deploy phase complete!"

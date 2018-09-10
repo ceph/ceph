@@ -1,0 +1,12 @@
+tasks:
+- workunit:
+    clients:
+      client.salt_master:
+        - deepsea/suites/rbd/librbd-and-rbd-cli.sh
+- exec:
+    client.0:
+      - "ceph_test_librbd"
+- workunit:
+    clients:
+      client.0:
+        - rbd/cli_generic.sh
