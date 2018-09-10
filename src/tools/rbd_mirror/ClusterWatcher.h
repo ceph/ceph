@@ -31,7 +31,6 @@ class ClusterWatcher {
 public:
   typedef std::set<PeerSpec> Peers;
   typedef std::map<int64_t, Peers>  PoolPeers;
-  typedef std::set<std::string> PoolNames;
 
   ClusterWatcher(RadosRef cluster, Mutex &lock,
                  ServiceDaemon<librbd::ImageCtx>* service_daemon);
@@ -53,7 +52,7 @@ private:
   ServicePools m_service_pools;
   PoolPeers m_pool_peers;
 
-  void read_pool_peers(PoolPeers *pool_peers, PoolNames *pool_names);
+  void read_pool_peers(PoolPeers *pool_peers);
 };
 
 } // namespace mirror

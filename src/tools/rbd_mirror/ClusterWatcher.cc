@@ -45,8 +45,7 @@ void ClusterWatcher::refresh_pools()
   dout(20) << "enter" << dendl;
 
   PoolPeers pool_peers;
-  PoolNames pool_names;
-  read_pool_peers(&pool_peers, &pool_names);
+  read_pool_peers(&pool_peers);
 
   Mutex::Locker l(m_lock);
   m_pool_peers = pool_peers;
@@ -54,8 +53,7 @@ void ClusterWatcher::refresh_pools()
   // about config changes for existing pools
 }
 
-void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers,
-				     PoolNames *pool_names)
+void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers)
 {
   int r = m_cluster->wait_for_latest_osdmap();
   if (r < 0) {
@@ -143,7 +141,6 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers,
     }
 
     pool_peers->insert({pool_id, Peers{configs.begin(), configs.end()}});
-    pool_names->insert(pool_name);
   }
 
   for (auto it = m_service_pools.begin(); it != m_service_pools.end(); ) {
