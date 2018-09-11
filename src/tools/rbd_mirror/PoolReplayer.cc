@@ -279,7 +279,7 @@ void PoolReplayer<I>::init()
   dout(10) << "replaying for " << m_peer << dendl;
   int r = init_rados(g_ceph_context->_conf->cluster,
                      g_ceph_context->_conf->name.to_str(),
-                     "local cluster", &m_local_rados, false);
+                     "", "", "local cluster", &m_local_rados, false);
   if (r < 0) {
     m_callout_id = m_service_daemon->add_or_update_callout(
       m_local_pool_id, m_callout_id, service_daemon::CALLOUT_LEVEL_ERROR,
@@ -288,6 +288,7 @@ void PoolReplayer<I>::init()
   }
 
   r = init_rados(m_peer.cluster_name, m_peer.client_name,
+                 m_peer.mon_host, m_peer.key,
                  std::string("remote peer ") + stringify(m_peer),
                  &m_remote_rados, true);
   if (r < 0) {
@@ -329,7 +330,7 @@ void PoolReplayer<I>::init()
 
   dout(10) << "connected to " << m_peer << dendl;
 
-  m_instance_replayer.reset(InstanceReplayer<>::create(
+  m_instance_replayer.reset(InstanceReplayer<I>::create(
     m_threads, m_service_daemon, m_local_rados, local_mirror_uuid,
     m_local_pool_id));
   m_instance_replayer->init();
@@ -400,6 +401,8 @@ void PoolReplayer<I>::shut_down() {
 template <typename I>
 int PoolReplayer<I>::init_rados(const std::string &cluster_name,
 			        const std::string &client_name,
+                                const std::string &mon_host,
+                                const std::string &key,
 			        const std::string &description,
 			        RadosRef *rados_ref,
                                 bool strip_cluster_overrides) {
@@ -421,7 +424,7 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
 
   // librados::Rados::conf_read_file
   int r = cct->_conf.parse_config_files(nullptr, nullptr, 0);
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     derr << "could not read ceph conf for " << description << ": "
 	 << cpp_strerror(r) << dendl;
     cct->put();
@@ -481,6 +484,26 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
   if (!g_ceph_context->_conf->admin_socket.empty()) {
     cct->_conf.set_val_or_die("admin_socket",
                                "$run_dir/$name.$pid.$cluster.$cctid.asok");
+  }
+
+  if (!mon_host.empty()) {
+    r = cct->_conf.set_val("mon_host", mon_host);
+    if (r < 0) {
+      derr << "failed to set mon_host config for " << description << ": "
+           << cpp_strerror(r) << dendl;
+      cct->put();
+      return r;
+    }
+  }
+
+  if (!key.empty()) {
+    r = cct->_conf.set_val("key", key);
+    if (r < 0) {
+      derr << "failed to set key config for " << description << ": "
+           << cpp_strerror(r) << dendl;
+      cct->put();
+      return r;
+    }
   }
 
   // disable unnecessary librbd cache

@@ -13,6 +13,7 @@
 
 namespace librados {
 class TestRadosClient;
+class MockTestMemCluster;
 class MockTestMemIoCtxImpl;
 class MockTestMemRadosClient;
 }
@@ -57,6 +58,8 @@ public:
   void TearDown() override;
 
   void expect_test_features(librbd::MockImageCtx &mock_image_ctx);
+
+  librados::MockTestMemCluster& get_mock_cluster();
 
 private:
   static TestClusterRef s_test_cluster;
