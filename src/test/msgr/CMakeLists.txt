@@ -11,6 +11,12 @@ add_executable(ceph_test_msgr
   )
 target_link_libraries(ceph_test_msgr os global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${UNITTEST_LIBS})
 
+# ceph_test_msgr2
+add_executable(ceph_test_msgr2
+  test_msgr2.cc
+  )
+target_link_libraries(ceph_test_msgr2 os global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${UNITTEST_LIBS})
+
 # ceph_test_async_networkstack
 add_executable(ceph_test_async_networkstack
   test_async_networkstack.cc
@@ -40,6 +46,7 @@ endif(HAVE_DPDK)
 install(TARGETS
   ceph_test_async_driver
   ceph_test_msgr
+  ceph_test_msgr2
   ceph_test_async_networkstack
   ceph_perf_msgr_server
   ceph_perf_msgr_client
