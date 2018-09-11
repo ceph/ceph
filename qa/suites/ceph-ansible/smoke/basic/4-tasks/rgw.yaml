@@ -6,7 +6,6 @@ meta:
 - desc: "Run rgw tests"
 
 tasks:
-- rgw: [client.0]
 - s3readwrite:
     client.0:
       rgw_server: client.0
