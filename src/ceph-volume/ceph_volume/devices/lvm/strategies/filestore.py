@@ -5,6 +5,7 @@ from ceph_volume.api import lvm
 from . import validators
 from ceph_volume.devices.lvm.create import Create
 from ceph_volume.util import templates
+from ceph_volume.exceptions import SizeAllocationError
 
 
 class SingleType(object):
@@ -226,9 +227,7 @@ class MixedType(object):
             self.vg_extents = lvm.sizing(
                 self.total_available_journal_space.b, size=self.journal_size.b
             )
-        # FIXME with real exception catching from sizing that happens when the
-        # journal space is not enough
-        except Exception:
+        except SizeAllocationError:
             self.vg_extents = {'parts': 0, 'percentages': 0, 'sizes': 0}
 
         # validate that number of journals possible are enough for number of

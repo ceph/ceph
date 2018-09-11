@@ -509,14 +509,14 @@ class Size(object):
     def __truediv__(self, other):
         if isinstance(other, Size):
             return self._b / other._b
-        self._b = self._b / other
-        return self
+        _b = self._b / other
+        return Size(b=_b)
 
     def __div__(self, other):
         if isinstance(other, Size):
             return self._b / other._b
-        self._b = self._b / other
-        return self
+        _b = self._b / other
+        return Size(b=_b)
 
     def __getattr__(self, unit):
         """

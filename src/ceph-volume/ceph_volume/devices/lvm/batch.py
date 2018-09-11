@@ -142,7 +142,8 @@ class Batch(object):
             strategy.report_pretty()
             terminal.info('The above OSDs would be created if the operation continues')
             if not prompt_bool('do you want to proceed? (yes/no)'):
-                terminal.error('aborting OSD provisioning for %s' % ','.join(args.devices))
+                devices = ','.join([device.abspath for device in args.devices])
+                terminal.error('aborting OSD provisioning for %s' % devices)
                 raise SystemExit(0)
 
         strategy.execute()
