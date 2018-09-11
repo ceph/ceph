@@ -784,7 +784,7 @@ int BucketTrimCR::operate()
       // read BucketTrimStatus for marker position
       set_status("reading trim status");
       using ReadStatus = RGWSimpleRadosReadCR<BucketTrimStatus>;
-      yield call(new ReadStatus(store->get_async_rados(), store, obj,
+      yield call(new ReadStatus(store->get_async_rados(), store->svc.sysobj, obj,
                                 &status, true, &objv));
       if (retcode < 0) {
         ldout(cct, 10) << "failed to read bilog trim status: "
@@ -842,7 +842,7 @@ int BucketTrimCR::operate()
       status.marker = std::move(last_cold_marker);
       ldout(cct, 20) << "writing bucket trim marker=" << status.marker << dendl;
       using WriteStatus = RGWSimpleRadosWriteCR<BucketTrimStatus>;
-      yield call(new WriteStatus(store->get_async_rados(), store, obj,
+      yield call(new WriteStatus(store->get_async_rados(), store->svc.sysobj, obj,
                                  status, &objv));
       if (retcode < 0) {
         ldout(cct, 4) << "failed to write updated trim status: "

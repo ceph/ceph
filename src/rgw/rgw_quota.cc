@@ -26,6 +26,8 @@
 #include "rgw_bucket.h"
 #include "rgw_user.h"
 
+#include "services/svc_sys_obj.h"
+
 #include <atomic>
 
 #define dout_context g_ceph_context
@@ -291,7 +293,7 @@ int BucketAsyncRefreshHandler::init_fetch()
 {
   RGWBucketInfo bucket_info;
 
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
   if (r < 0) {
@@ -362,7 +364,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& user, const rg
 {
   RGWBucketInfo bucket_info;
 
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
   if (r < 0) {
@@ -625,7 +627,7 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& user, rgw_bucket& bucket)
 {
   RGWBucketInfo bucket_info;
 
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
   if (r < 0) {

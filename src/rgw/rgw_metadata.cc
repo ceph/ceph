@@ -360,18 +360,19 @@ namespace {
 int read_history(RGWRados *store, RGWMetadataLogHistory *state,
                  RGWObjVersionTracker *objv_tracker)
 {
-  RGWObjectCtx ctx{store};
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   auto& pool = store->svc.zone->get_zone_params().log_pool;
   const auto& oid = RGWMetadataLogHistory::oid;
   bufferlist bl;
-  int ret = rgw_get_system_obj(store, ctx, pool, oid, bl, objv_tracker, nullptr);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, objv_tracker, nullptr);
   if (ret < 0) {
     return ret;
   }
   if (bl.length() == 0) {
     /* bad history object, remove it */
     rgw_raw_obj obj(pool, oid);
-    ret = store->delete_system_obj(obj);
+    auto sysobj = obj_ctx.get_obj(obj);
+    ret = sysobj.wop().remove();
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: meta history is empty, but cannot remove it (" << cpp_strerror(-ret) << ")" << dendl;
       return ret;
@@ -424,7 +425,7 @@ class ReadHistoryCR : public RGWCoroutine {
         constexpr bool empty_on_enoent = false;
 
         using ReadCR = RGWSimpleRadosReadCR<RGWMetadataLogHistory>;
-        call(new ReadCR(store->get_async_rados(), store, obj,
+        call(new ReadCR(store->get_async_rados(), store->svc.sysobj, obj,
                         &state, empty_on_enoent, objv_tracker));
       }
       if (retcode < 0) {
@@ -468,7 +469,7 @@ class WriteHistoryCR : public RGWCoroutine {
                         RGWMetadataLogHistory::oid};
 
         using WriteCR = RGWSimpleRadosWriteCR<RGWMetadataLogHistory>;
-        call(new WriteCR(store->get_async_rados(), store, obj, state, objv));
+        call(new WriteCR(store->get_async_rados(), store->svc.sysobj, obj, state, objv));
       }
       if (retcode < 0) {
         ldout(cct, 1) << "failed to write mdlog history: "
@@ -801,7 +802,7 @@ int RGWMetadataManager::prepare_mutate(RGWRados *store,
 {
   bufferlist bl;
   real_time orig_mtime;
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid,
                                bl, objv_tracker, &orig_mtime,
                                nullptr, nullptr);
@@ -1075,9 +1076,11 @@ int RGWMetadataManager::remove_from_heap(RGWMetadataHandler *handler, const stri
 
   string oid = heap_oid(handler, key, objv_tracker->write_version);
   rgw_raw_obj obj(heap_pool, oid);
-  int ret = store->delete_system_obj(obj);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(obj);
+  int ret = sysobj.wop().remove();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: store->delete_system_obj() oid=" << oid << " returned ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "ERROR: sysobj.wop().remove() oid=" << oid << " returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -1138,7 +1141,11 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, R
 
   rgw_raw_obj obj(pool, oid);
 
-  ret = store->delete_system_obj(obj, objv_tracker);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(obj);
+  ret = sysobj.wop()
+              .set_objv_tracker(objv_tracker)
+              .remove();
   /* cascading ret into post_modify() */
 
   ret = post_modify(handler, section, key, log_data, objv_tracker, ret);

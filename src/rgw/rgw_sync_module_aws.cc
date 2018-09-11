@@ -1430,7 +1430,7 @@ public:
 
   int operate() override {
     reenter(this) {
-      yield call(new RGWSimpleRadosReadCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->store,
+      yield call(new RGWSimpleRadosReadCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->store->svc.sysobj,
                                                                  status_obj, &status, false));
 
       if (retcode < 0 && retcode != -ENOENT) {
@@ -1493,7 +1493,7 @@ public:
           return set_cr_error(ret_err);
         }
 
-        yield call(new RGWSimpleRadosWriteCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->store, status_obj, status));
+        yield call(new RGWSimpleRadosWriteCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->store->svc.sysobj, status_obj, status));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: failed to store multipart upload state, retcode=" << retcode << dendl;
           /* continue with upload anyway */

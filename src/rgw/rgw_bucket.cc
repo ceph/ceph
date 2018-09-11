@@ -24,6 +24,7 @@
 #include "rgw_multi.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_sys_obj.h"
 
 #include "include/rados/librados.hpp"
 // until everything is moved from rgw_common
@@ -165,7 +166,7 @@ int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, const R
 int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const string& bucket_name)
 {
   RGWBucketInfo bucket_info;
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
   int ret = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: could not fetch bucket info: ret=" << ret << dendl;
@@ -204,7 +205,7 @@ int rgw_link_bucket(RGWRados* const store,
     new_bucket.creation_time = creation_time;
 
   map<string, bufferlist> attrs;
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   if (update_entrypoint) {
     ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, ep, &ot, NULL, &attrs);
@@ -267,7 +268,7 @@ int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id, const string& te
   RGWBucketEntryPoint ep;
   RGWObjVersionTracker ot;
   map<string, bufferlist> attrs;
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
   ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, ep, &ot, NULL, &attrs);
   if (ret == -ENOENT)
     return 0;
@@ -410,7 +411,7 @@ int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
 
   if (!bucket_info.has_instance_obj) {
     /* an old bucket object, need to convert it */
-    RGWObjectCtx obj_ctx(store);
+    RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
     int ret = store->convert_old_bucket_info(obj_ctx, bucket.tenant, bucket.name);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: failed converting old bucket info: " << ret << dendl;
@@ -467,7 +468,7 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
 
       RGWBucketInfo bucket_info;
       real_time mtime;
-      RGWObjectCtx obj_ctx(store);
+      RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
       int r = store->get_bucket_info(obj_ctx, user_id.tenant, bucket.name, bucket_info, &mtime);
       if (r < 0) {
         ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << dendl;
@@ -521,7 +522,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
   std::vector<rgw_bucket_dir_entry> objs;
   map<string, bool> common_prefixes;
   RGWBucketInfo info;
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   string bucket_ver, master_ver;
 
@@ -621,11 +622,12 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
   map<string, bool> common_prefixes;
   RGWBucketInfo info;
   RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx sysobj_ctx = store->svc.sysobj->init_obj_ctx();
   CephContext *cct = store->ctx();
 
   string bucket_ver, master_ver;
 
-  ret = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL);
+  ret = store->get_bucket_info(sysobj_ctx, bucket.tenant, bucket.name, info, NULL);
   if (ret < 0)
     return ret;
 
@@ -778,7 +780,7 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
   tenant = user_id.tenant;
   bucket_name = op_state.get_bucket_name();
   RGWUserBuckets user_buckets;
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   if (bucket_name.empty() && user_id.empty())
     return -EINVAL;
@@ -830,7 +832,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   map<string, bufferlist> attrs;
   RGWBucketInfo bucket_info;
 
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, &attrs);
   if (r < 0) {
     return r;
@@ -873,7 +875,10 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     aclbl.clear();
     policy.encode(aclbl);
 
-    r = store->system_obj_set_attr(NULL, obj, RGW_ATTR_ACL, aclbl, &objv_tracker);
+    auto sysobj = obj_ctx.get_obj(obj);
+    r = sysobj.wop()
+              .set_objv_tracker(&objv_tracker)
+              .write_attr(RGW_ATTR_ACL, aclbl);
     if (r < 0) {
       return r;
     }
@@ -885,7 +890,10 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
 
     rgw_raw_obj obj_bucket_instance;
     store->get_bucket_instance_obj(bucket, obj_bucket_instance);
-    r = store->system_obj_set_attr(NULL, obj_bucket_instance, RGW_ATTR_ACL, aclbl, &objv_tracker);
+    auto inst_sysobj = obj_ctx.get_obj(obj_bucket_instance);
+    r = inst_sysobj.wop()
+                   .set_objv_tracker(&objv_tracker)
+                   .write_attr(RGW_ATTR_ACL, aclbl);
     if (r < 0) {
       return r;
     }
@@ -922,7 +930,7 @@ int RGWBucket::set_quota(RGWBucketAdminOpState& op_state, std::string *err_msg)
   rgw_bucket bucket = op_state.get_bucket();
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   int r = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, bucket_info, NULL, &attrs);
   if (r < 0) {
     set_err_msg(err_msg, "could not get bucket info for bucket=" + bucket.name + ": " + cpp_strerror(-r));
@@ -1032,7 +1040,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   map<rgw_obj_index_key, string> all_objs;
 
   RGWBucketInfo bucket_info;
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, nullptr);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: " << __func__ << "(): get_bucket_instance_info(bucket=" << bucket << ") returned r=" << r << dendl;
@@ -1225,11 +1233,12 @@ int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolic
 {
   std::string object_name = op_state.get_object_name();
   rgw_bucket bucket = op_state.get_bucket();
+  auto sysobj_ctx = store->svc.sysobj->init_obj_ctx();
   RGWObjectCtx obj_ctx(store);
 
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
-  int ret = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, bucket_info, NULL, &attrs);
+  int ret = store->get_bucket_info(sysobj_ctx, bucket.tenant, bucket.name, bucket_info, NULL, &attrs);
   if (ret < 0) {
     return ret;
   }
@@ -1404,7 +1413,7 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
   map<RGWObjCategory, RGWStorageStats> stats;
 
   real_time mtime;
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, &mtime);
   if (r < 0)
     return r;
@@ -1490,7 +1499,7 @@ int RGWBucketAdminOp::limit_check(RGWRados *store,
 
 	/* need info for num_shards */
 	RGWBucketInfo info;
-	RGWObjectCtx obj_ctx(store);
+	auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
 	marker = bucket.name; /* Casey's location for marker update,
 			       * as we may now not reach the end of
@@ -2103,7 +2112,7 @@ public:
 
     real_time mtime;
     map<string, bufferlist> attrs;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
     string tenant_name, bucket_name;
     parse_bucket(entry, &tenant_name, &bucket_name);
@@ -2131,7 +2140,7 @@ public:
     map<string, bufferlist> attrs;
 
     RGWObjVersionTracker old_ot;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
     string tenant_name, bucket_name;
     parse_bucket(entry, &tenant_name, &bucket_name);
@@ -2170,7 +2179,7 @@ public:
 
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
     RGWBucketEntryPoint be;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
     string tenant_name, bucket_name;
     parse_bucket(entry, &tenant_name, &bucket_name);
@@ -2270,7 +2279,7 @@ public:
     RGWBucketCompleteInfo bci;
 
     real_time mtime;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
     int ret = store->get_bucket_instance_info(obj_ctx, oid, bci.info, &mtime, &bci.attrs);
     if (ret < 0)
@@ -2293,7 +2302,7 @@ public:
     }
 
     real_time orig_mtime;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
     int ret = store->get_bucket_instance_info(obj_ctx, entry, old_bci.info,
             &orig_mtime, &old_bci.attrs);
@@ -2385,7 +2394,7 @@ public:
 
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
     RGWBucketInfo info;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
     int ret = store->get_bucket_instance_info(obj_ctx, entry, info, NULL, NULL);
     if (ret < 0 && ret != -ENOENT)

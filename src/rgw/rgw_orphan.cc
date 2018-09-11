@@ -12,6 +12,7 @@
 #include "rgw_orphan.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_sys_obj.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -473,7 +474,8 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
   ldout(store->ctx(), 10) << "building linked oids for bucket instance: " << bucket_instance_id << dendl;
   RGWBucketInfo bucket_info;
   RGWObjectCtx obj_ctx(store);
-  int ret = store->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, NULL, NULL);
+  auto sysobj_ctx = store->svc.sysobj->init_obj_ctx();
+  int ret = store->get_bucket_instance_info(sysobj_ctx, bucket_instance_id, bucket_info, NULL, NULL);
   if (ret < 0) {
     if (ret == -ENOENT) {
       /* probably raced with bucket removal */

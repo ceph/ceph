@@ -95,4 +95,63 @@ public:
   int call_zap();
 };
 
+template <class T>
+class RGWChainedCacheImpl : public RGWChainedCache {
+  RGWSI_SysObj_Cache *svc{nullptr};
+  ceph::timespan expiry;
+  RWLock lock;
+
+  std::unordered_map<std::string, std::pair<T, ceph::coarse_mono_time>> entries;
+
+public:
+  RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
+
+  void init(RGWSI_SysObj_Cache *svc) {
+    svc->register_chained_cache(this);
+    expiry = std::chrono::seconds(svc->ctx()->_conf.get_val<uint64_t>(
+				    "rgw_cache_expiry_interval"));
+  }
+
+  boost::optional<T> find(const string& key) {
+    RWLock::RLocker rl(lock);
+    auto iter = entries.find(key);
+    if (iter == entries.end()) {
+      return boost::none;
+    }
+    if (expiry.count() &&
+	(ceph::coarse_mono_clock::now() - iter->second.second) > expiry) {
+      return boost::none;
+    }
+
+    return iter->second.first;
+  }
+
+  bool put(RGWSI_SysObj_Cache *svc, const string& key, T *entry,
+	   std::initializer_list<rgw_cache_entry_info *> cache_info_entries) {
+    Entry chain_entry(this, key, entry);
+
+    /* we need the svc cache to call us under its lock to maintain lock ordering */
+    return svc->chain_cache_entry(cache_info_entries, &chain_entry);
+  }
+
+  void chain_cb(const string& key, void *data) override {
+    T *entry = static_cast<T *>(data);
+    RWLock::WLocker wl(lock);
+    entries[key].first = *entry;
+    if (expiry.count() > 0) {
+      entries[key].second = ceph::coarse_mono_clock::now();
+    }
+  }
+
+  void invalidate(const string& key) override {
+    RWLock::WLocker wl(lock);
+    entries.erase(key);
+  }
+
+  void invalidate_all() override {
+    RWLock::WLocker wl(lock);
+    entries.clear();
+  }
+}; /* RGWChainedCacheImpl */
+
 #endif

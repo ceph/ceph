@@ -26,6 +26,8 @@
 #include "rgw_quota.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_sys_obj.h"
+#include "services/svc_sys_obj_cache.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -51,7 +53,7 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
   bool is_truncated = false;
   string marker;
   int ret;
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   do {
     RGWUserBuckets user_buckets;
@@ -276,7 +278,7 @@ int rgw_get_user_info_from_index(RGWRados * const store,
   user_info_entry e;
   bufferlist bl;
   RGWUID uid;
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   int ret = rgw_get_system_obj(store, obj_ctx, pool, key, bl, NULL, &e.mtime);
   if (ret < 0)
@@ -296,7 +298,7 @@ int rgw_get_user_info_from_index(RGWRados * const store,
     return -EIO;
   }
 
-  uinfo_cache.put(store, key, &e, { &cache_info });
+  uinfo_cache.put(store->svc.cache, key, &e, { &cache_info });
 
   info = e.info;
   if (objv_tracker)
@@ -322,7 +324,7 @@ int rgw_get_user_info_by_uid(RGWRados *store,
   bufferlist bl;
   RGWUID user_id;
 
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   string oid = uid.to_str();
   int ret = rgw_get_system_obj(store, obj_ctx, store->svc.zone->get_zone_params().user_uid_pool, oid, bl, objv_tracker, pmtime, pattrs, cache_info);
   if (ret < 0) {
@@ -392,20 +394,22 @@ int rgw_get_user_attrs_by_uid(RGWRados *store,
                               map<string, bufferlist>& attrs,
                               RGWObjVersionTracker *objv_tracker)
 {
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   rgw_raw_obj obj(store->svc.zone->get_zone_params().user_uid_pool, user_id.to_str());
-  RGWRados::SystemObject src(store, obj_ctx, obj);
-  RGWRados::SystemObject::Read rop(&src);
+  auto src = obj_ctx.get_obj(obj);
 
-  rop.stat_params.attrs = &attrs;
-  return rop.stat(objv_tracker);
+  return src.rop()
+            .set_attrs(&attrs)
+            .set_objv_tracker(objv_tracker)
+            .stat();
 }
 
 int rgw_remove_key_index(RGWRados *store, RGWAccessKey& access_key)
 {
   rgw_raw_obj obj(store->svc.zone->get_zone_params().user_keys_pool, access_key.id);
-  int ret = store->delete_system_obj(obj);
-  return ret;
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(obj);
+  return sysobj.wop().remove();
 }
 
 int rgw_remove_uid_index(RGWRados *store, rgw_user& uid)
@@ -430,14 +434,17 @@ int rgw_remove_email_index(RGWRados *store, string& email)
     return 0;
   }
   rgw_raw_obj obj(store->svc.zone->get_zone_params().user_email_pool, email);
-  return store->delete_system_obj(obj);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(obj);
+  return sysobj.wop().remove();
 }
 
 int rgw_remove_swift_name_index(RGWRados *store, string& swift_name)
 {
   rgw_raw_obj obj(store->svc.zone->get_zone_params().user_swift_pool, swift_name);
-  int ret = store->delete_system_obj(obj);
-  return ret;
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(obj);
+  return sysobj.wop().remove();
 }
 
 /**
@@ -483,7 +490,9 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
   rgw_get_buckets_obj(info.user_id, buckets_obj_id);
   rgw_raw_obj uid_bucks(store->svc.zone->get_zone_params().user_uid_pool, buckets_obj_id);
   ldout(store->ctx(), 10) << "removing user buckets index" << dendl;
-  ret = store->delete_system_obj(uid_bucks);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(uid_bucks);
+  ret = sysobj.wop().remove();
   if (ret < 0 && ret != -ENOENT) {
     ldout(store->ctx(), 0) << "ERROR: could not remove " << info.user_id << ":" << uid_bucks << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
@@ -2816,7 +2825,7 @@ public:
 
 void rgw_user_init(RGWRados *store)
 {
-  uinfo_cache.init(store);
+  uinfo_cache.init(store->svc.cache);
 
   user_meta_handler = new RGWUserMetadataHandler;
   store->meta_mgr->register_handler(user_meta_handler);

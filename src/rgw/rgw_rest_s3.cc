@@ -1297,7 +1297,6 @@ int RGWPutObj_ObjStore_S3::get_params()
   if (!s->length)
     return -ERR_LENGTH_REQUIRED;
 
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
   map<string, bufferlist> src_attrs;
   size_t pos;
   int ret;
@@ -1351,7 +1350,7 @@ int RGWPutObj_ObjStore_S3::get_params()
          return ret;
        }
     }
-    ret = store->get_bucket_info(obj_ctx,
+    ret = store->get_bucket_info(*s->sysobj_ctx,
                                  copy_source_tenant_name,
                                  copy_source_bucket_name,
                                  copy_source_bucket_info,
@@ -3591,8 +3590,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   if (!(s->prot_flags & RGW_REST_WEBSITE))
     return 0;
 
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  int ret = store->get_bucket_info(obj_ctx, s->bucket_tenant,
+  int ret = store->get_bucket_info(*s->sysobj_ctx, s->bucket_tenant,
 				  s->bucket_name, s->bucket_info, NULL,
 				  &s->bucket_attrs);
   if (ret < 0) {

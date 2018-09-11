@@ -12,33 +12,49 @@
 #include "rgw_rados.h"
 #include "rgw_tools.h"
 
+#include "services/svc_sys_obj.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 #define READ_CHUNK_LEN (512 * 1024)
 
 static std::map<std::string, std::string>* ext_mime_map;
 
-int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, const bufferlist& data, bool exclusive,
+int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
-  if (!pattrs)
+  if (!pattrs) {
     pattrs = &no_attrs;
+  }
 
   rgw_raw_obj obj(pool, oid);
 
-  int ret = rgwstore->put_system_obj(NULL, obj, data, exclusive, NULL, *pattrs, objv_tracker, set_mtime);
+  auto obj_ctx = rgwstore->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(obj);
+  int ret = sysobj.wop()
+                  .set_objv_tracker(objv_tracker)
+                  .set_exclusive(exclusive)
+                  .set_mtime(set_mtime)
+                  .set_attrs(*pattrs)
+                  .write(data);
 
   if (ret == -ENOENT) {
     ret = rgwstore->create_pool(pool);
-    if (ret >= 0)
-      ret = rgwstore->put_system_obj(NULL, obj, data, exclusive, NULL, *pattrs, objv_tracker, set_mtime);
+    if (ret >= 0) {
+      ret = sysobj.wop()
+                  .set_objv_tracker(objv_tracker)
+                  .set_exclusive(exclusive)
+                  .set_mtime(set_mtime)
+                  .set_attrs(*pattrs)
+                  .write(data);
+    }
   }
 
   return ret;
 }
 
-int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
+int rgw_get_system_obj(RGWRados *rgwstore, RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info, boost::optional<obj_version> refresh_version)
 {
@@ -52,19 +68,19 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, const rgw_pool
   }
 
   do {
-    RGWRados::SystemObject source(rgwstore, obj_ctx, obj);
-    RGWRados::SystemObject::Read rop(&source);
+    auto sysobj = obj_ctx.get_obj(obj);
+    auto rop = sysobj.rop();
 
-    rop.stat_params.attrs = pattrs;
-    rop.stat_params.lastmod = pmtime;
-
-    int ret = rop.stat(objv_tracker);
+    int ret = rop.set_attrs(pattrs)
+                 .set_last_mod(pmtime)
+                 .set_objv_tracker(objv_tracker)
+                 .stat();
     if (ret < 0)
       return ret;
 
-    rop.read_params.cache_info = cache_info;
-
-    ret = rop.read(0, request_len - 1, bl, objv_tracker, refresh_version);
+    ret = rop.set_cache_info(cache_info)
+             .set_refresh_version(refresh_version)
+             .read(&bl);
     if (ret == -ECANCELED) {
       /* raced, restart */
       if (!original_readv.empty()) {
@@ -74,7 +90,7 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, const rgw_pool
       if (objv_tracker) {
         objv_tracker->read_version.clear();
       }
-      source.invalidate_state();
+      sysobj.invalidate();
       continue;
     }
     if (ret < 0)
@@ -92,8 +108,12 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, const rgw_pool
 int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker)
 {
+  auto obj_ctx = rgwstore->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(rgw_raw_obj{pool, oid});
   rgw_raw_obj obj(pool, oid);
-  return rgwstore->delete_system_obj(obj, objv_tracker);
+  return sysobj.wop()
+               .set_objv_tracker(objv_tracker)
+               .remove();
 }
 
 void parse_mime_map_line(const char *start, const char *end)

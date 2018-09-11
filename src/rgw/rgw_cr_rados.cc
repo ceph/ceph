@@ -5,6 +5,7 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
+#include "services/svc_sys_obj.h"
 
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -93,15 +94,18 @@ int RGWAsyncGetSystemObj::_send_request()
 {
   map<string, bufferlist> *pattrs = want_attrs ? &attrs : nullptr;
 
-  return store->get_system_obj(obj_ctx, read_state, &objv_tracker,
-                               obj, bl, ofs, end, pattrs, nullptr);
+  auto sysobj = obj_ctx.get_obj(obj);
+  return sysobj.rop()
+               .set_objv_tracker(&objv_tracker)
+               .set_attrs(pattrs)
+               .read(&bl);
 }
 
-RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-                       off_t _ofs, off_t _end, bool want_attrs)
-  : RGWAsyncRadosRequest(caller, cn), store(_store), obj_ctx(_store),
-    obj(_obj), ofs(_ofs), end(_end), want_attrs(want_attrs)
+                       bool want_attrs)
+  : RGWAsyncRadosRequest(caller, cn), obj_ctx(_svc),
+    obj(_obj), want_attrs(want_attrs)
 {
   if (_objv_tracker) {
     objv_tracker = *_objv_tracker;
@@ -111,7 +115,7 @@ RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletio
 int RGWSimpleRadosReadAttrsCR::send_request()
 {
   req = new RGWAsyncGetSystemObj(this, stack->create_completion_notifier(),
-			         store, nullptr, obj, 0, -1, true);
+			         svc, nullptr, obj, true);
   async_rados->queue(req);
   return 0;
 }
@@ -126,10 +130,16 @@ int RGWSimpleRadosReadAttrsCR::request_complete()
 
 int RGWAsyncPutSystemObj::_send_request()
 {
-  return store->put_system_obj_data(NULL, obj, bl, -1, exclusive, &objv_tracker);
+  auto obj_ctx = svc->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(obj);
+  return sysobj.wop()
+               .set_objv_tracker(&objv_tracker)
+               .set_exclusive(exclusive)
+               .write_data(bl);
 }
 
-RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
+                     RGWSI_SysObj *_svc,
                      RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
                      bool _exclusive, bufferlist _bl)
   : RGWAsyncRadosRequest(caller, cn), store(_store),
@@ -142,15 +152,25 @@ RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletio
 
 int RGWAsyncPutSystemObjAttrs::_send_request()
 {
-  return store->system_obj_set_attrs(nullptr, obj, attrs, nullptr, &objv_tracker);
+  auto obj_ctx = svc->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(obj);
+  return sysobj.wop()
+               .set_objv_tracker(&objv_tracker)
+               .set_exclusive(false)
+               .set_attrs(attrs)
+               .write_attrs();
 }
 
-RGWAsyncPutSystemObjAttrs::RGWAsyncPutSystemObjAttrs(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+RGWAsyncPutSystemObjAttrs::RGWAsyncPutSystemObjAttrs(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
+                     RGWSI_SysObj *_svc,
                      RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
                      map<string, bufferlist> _attrs)
-  : RGWAsyncRadosRequest(caller, cn), store(_store),
+  : RGWAsyncRadosRequest(caller, cn), svc(_svc),
     obj(_obj), attrs(std::move(_attrs))
 {
+  if (_objv_tracker) {
+    objv_tracker = *_objv_tracker;
+  }
 }
 
 
@@ -502,7 +522,7 @@ bool RGWOmapAppend::finish() {
 
 int RGWAsyncGetBucketInstanceInfo::_send_request()
 {
-  RGWObjectCtx obj_ctx(store);
+  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
   int r = store->get_bucket_instance_from_oid(obj_ctx, oid, bucket_info, NULL, NULL);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to get bucket instance info for "

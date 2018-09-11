@@ -54,6 +54,8 @@ class RGWSI_SyncModules;
 class RGWSI_SysObj;
 class RGWSI_SysObj_Cache;
 
+class RGWSysObjectCtx;
+
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01
 #define PUT_OBJ_EXCL        0x02
@@ -1062,22 +1064,6 @@ public:
 class RGWGetDirHeader_CB;
 class RGWGetUserHeader_CB;
 
-class RGWChainedCache {
-public:
-  virtual ~RGWChainedCache() {}
-  virtual void chain_cb(const string& key, void *data) = 0;
-  virtual void invalidate(const string& key) = 0;
-  virtual void invalidate_all() = 0;
-
-  struct Entry {
-    RGWChainedCache *cache;
-    const string& key;
-    void *data;
-
-    Entry(RGWChainedCache *_c, const string& _k, void *_d) : cache(_c), key(_k), data(_d) {}
-  };
-};
-
 template <class T, class S>
 class RGWObjectCtxImpl {
   RGWRados *store;
@@ -1485,60 +1471,6 @@ public:
 
   RGWCoroutinesManagerRegistry *get_cr_registry() { return cr_registry; }
 
-  class SystemObject {
-    RGWRados *store;
-    RGWObjectCtx& ctx;
-    rgw_raw_obj obj;
-
-  public:
-
-    SystemObject(RGWRados *_store, RGWObjectCtx& _ctx, rgw_raw_obj& _obj) :
-      store(_store), ctx(_ctx), obj(_obj)
-    {}
-
-    void invalidate_state();
-
-    RGWRados *get_store() { return store; }
-    rgw_raw_obj& get_obj() { return obj; }
-    RGWObjectCtx& get_ctx() { return ctx; }
-
-    struct Read {
-      RGWRados::SystemObject *source;
-
-      struct GetObjState {
-        rgw_rados_ref ref;
-        bool has_ref{false};
-        uint64_t last_ver{0};
-
-        GetObjState() {}
-
-        int get_ref(RGWRados *store, rgw_raw_obj& obj, rgw_rados_ref **pref);
-      } state;
-      
-      struct StatParams {
-        ceph::real_time *lastmod;
-        uint64_t *obj_size;
-        map<string, bufferlist> *attrs;
-
-        StatParams() : lastmod(NULL), obj_size(NULL), attrs(NULL) {}
-      } stat_params;
-
-      struct ReadParams {
-        rgw_cache_entry_info *cache_info{nullptr};
-        map<string, bufferlist> *attrs;
-
-        ReadParams() : attrs(NULL) {}
-      } read_params;
-
-      explicit Read(RGWRados::SystemObject *_source) : source(_source) {}
-
-      int stat(RGWObjVersionTracker *objv_tracker);
-      int read(int64_t ofs, int64_t end, bufferlist& bl, RGWObjVersionTracker *objv_tracker,
-	       boost::optional<obj_version> refresh_version = boost::none);
-      int get_attr(const char *name, bufferlist& dest);
-    };
-  };
-
   struct BucketShard {
     RGWRados *store;
     rgw_bucket bucket;
@@ -1900,28 +1832,9 @@ public:
     }; // class List
   }; // class Bucket
 
-  /** Write/overwrite an object to the bucket storage. */
-  virtual int put_system_obj_impl(rgw_raw_obj& obj, uint64_t size, ceph::real_time *mtime,
-              map<std::string, bufferlist>& attrs, int flags,
-              const bufferlist& data,
-              RGWObjVersionTracker *objv_tracker,
-              ceph::real_time set_mtime /* 0 for don't set */);
-
-  virtual int put_system_obj_data(void *ctx, rgw_raw_obj& obj,
-              const bufferlist& bl, off_t ofs, bool exclusive,
-              RGWObjVersionTracker *objv_tracker = nullptr);
   int aio_put_obj_data(void *ctx, rgw_raw_obj& obj, bufferlist& bl,
-                        off_t ofs, bool exclusive, void **handle);
-
-  int put_system_obj(void *ctx, rgw_raw_obj& obj, const bufferlist& data, bool exclusive,
-              ceph::real_time *mtime, map<std::string, bufferlist>& attrs, RGWObjVersionTracker *objv_tracker,
-              ceph::real_time set_mtime) {
-    int flags = PUT_OBJ_CREATE;
-    if (exclusive)
-      flags |= PUT_OBJ_EXCL;
-
-    return put_system_obj_impl(obj, data.length(), mtime, attrs, flags, data, objv_tracker, set_mtime);
-  }
+                       off_t ofs, bool exclusive,
+                       void **handle);
   int aio_wait(void *handle);
   bool aio_completed(void *handle);
 
@@ -1939,7 +1852,8 @@ public:
                             const rgw_user& user,               /* in */
                             RGWBucketInfo& bucket_info,         /* in */
                             rgw_obj& obj);                      /* in */
-  int swift_versioning_restore(RGWObjectCtx& obj_ctx,           /* in/out */
+  int swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
+                               RGWObjectCtx& obj_ctx,           /* in/out */
                                const rgw_user& user,            /* in */
                                RGWBucketInfo& bucket_info,      /* in */
                                rgw_obj& obj,                    /* in */
@@ -2084,30 +1998,10 @@ public:
                          const ceph::real_time& expiration_time = ceph::real_time(),
                          rgw_zone_set *zones_trace = nullptr);
 
-  /** Delete a raw object.*/
   int delete_raw_obj(const rgw_raw_obj& obj);
-
-  /* Delete a system object */
-  virtual int delete_system_obj(rgw_raw_obj& src_obj, RGWObjVersionTracker *objv_tracker = NULL);
 
   /** Remove an object from the bucket index */
   int delete_obj_index(const rgw_obj& obj);
-
-  /**
-   * Get an attribute for a system object.
-   * obj: the object to get attr
-   * name: name of the attr to retrieve
-   * dest: bufferlist to store the result in
-   * Returns: 0 on success, -ERR# otherwise.
-   */
-  virtual int system_obj_get_attr(rgw_raw_obj& obj, const char *name, bufferlist& dest);
-
-  int system_obj_set_attr(void *ctx, rgw_raw_obj& obj, const char *name, bufferlist& bl,
-                          RGWObjVersionTracker *objv_tracker);
-  virtual int system_obj_set_attrs(void *ctx, rgw_raw_obj& obj,
-                                   map<string, bufferlist>& attrs,
-                                   map<string, bufferlist>* rmattrs,
-                                   RGWObjVersionTracker *objv_tracker);
 
   /**
    * Set an attr on an object.
@@ -2129,26 +2023,6 @@ public:
   int get_obj_state(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state) {
     return get_obj_state(rctx, bucket_info, obj, state, true);
   }
-
-  virtual int stat_system_obj(RGWObjectCtx& obj_ctx,
-                              RGWRados::SystemObject::Read::GetObjState& state,
-                              rgw_raw_obj& obj,
-                              map<string, bufferlist> *attrs,
-                              ceph::real_time *lastmod,
-                              uint64_t *obj_size,
-                              RGWObjVersionTracker *objv_tracker);
-
-  virtual int get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::Read::GetObjState& read_state,
-                             RGWObjVersionTracker *objv_tracker, rgw_raw_obj& obj,
-                             bufferlist& bl, off_t ofs, off_t end,
-                             map<string, bufferlist> *attrs,
-                             rgw_cache_entry_info *cache_info,
-			     boost::optional<obj_version> refresh_version =
-			       boost::none);
-
-  virtual void register_chained_cache(RGWChainedCache *cache) {}
-  virtual bool chain_cache_entry(std::initializer_list<rgw_cache_entry_info*> cache_info_entries,
-				 RGWChainedCache::Entry *chained_entry) { return false; }
 
   int iterate_obj(RGWObjectCtx& ctx,
                   const RGWBucketInfo& bucket_info, const rgw_obj& obj,
@@ -2230,11 +2104,6 @@ public:
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
     rctx->obj.set_prefetch_data(obj);
   }
-  void set_prefetch_data(void *ctx, rgw_raw_obj& obj) {
-    RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
-    rctx->raw.set_prefetch_data(obj);
-  }
-
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, string *bucket_ver, string *master_ver,
       map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker, bool* syncstopped = NULL);
@@ -2248,22 +2117,22 @@ public:
                                  bool exclusive, RGWObjVersionTracker& objv_tracker, ceph::real_time mtime,
                                  map<string, bufferlist> *pattrs);
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, map<string, bufferlist> *pattrs);
-  int get_bucket_entrypoint_info(RGWObjectCtx& obj_ctx, const string& tenant_name, const string& bucket_name,
+  int get_bucket_entrypoint_info(RGWSysObjectCtx& obj_ctx, const string& tenant_name, const string& bucket_name,
                                  RGWBucketEntryPoint& entry_point, RGWObjVersionTracker *objv_tracker,
                                  ceph::real_time *pmtime, map<string, bufferlist> *pattrs, rgw_cache_entry_info *cache_info = NULL,
 				 boost::optional<obj_version> refresh_version = boost::none);
-  int get_bucket_instance_info(RGWObjectCtx& obj_ctx, const string& meta_key, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs);
-  int get_bucket_instance_info(RGWObjectCtx& obj_ctx, const rgw_bucket& bucket, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs);
-  int get_bucket_instance_from_oid(RGWObjectCtx& obj_ctx, const string& oid, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs,
+  int get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const string& meta_key, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs);
+  int get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const rgw_bucket& bucket, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs);
+  int get_bucket_instance_from_oid(RGWSysObjectCtx& obj_ctx, const string& oid, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs,
                                    rgw_cache_entry_info *cache_info = NULL,
 				   boost::optional<obj_version> refresh_version = boost::none);
 
-  int convert_old_bucket_info(RGWObjectCtx& obj_ctx, const string& tenant_name, const string& bucket_name);
+  int convert_old_bucket_info(RGWSysObjectCtx& obj_ctx, const string& tenant_name, const string& bucket_name);
   static void make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry);
 
 
 private:
-  int _get_bucket_info(RGWObjectCtx& obj_ctx, const string& tenant,
+  int _get_bucket_info(RGWSysObjectCtx& obj_ctx, const string& tenant,
 		       const string& bucket_name, RGWBucketInfo& info,
 		       real_time *pmtime,
 		       map<string, bufferlist> *pattrs,
@@ -2295,7 +2164,7 @@ protected:
   virtual void call_zap();
 public:
 
-  int get_bucket_info(RGWObjectCtx& obj_ctx,
+  int get_bucket_info(RGWSysObjectCtx& obj_ctx,
 		      const string& tenant_name, const string& bucket_name,
 		      RGWBucketInfo& info,
 		      ceph::real_time *pmtime, map<string, bufferlist> *pattrs = NULL);
@@ -2596,65 +2465,6 @@ public:
   static void close_storage(RGWRados *store);
 
 };
-
-template <class T>
-class RGWChainedCacheImpl : public RGWChainedCache {
-  ceph::timespan expiry;
-  RWLock lock;
-
-  std::unordered_map<std::string, std::pair<T, ceph::coarse_mono_time>> entries;
-
-public:
-  RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
-
-  void init(RGWRados *store) {
-    store->register_chained_cache(this);
-    expiry = std::chrono::seconds(store->ctx()->_conf.get_val<uint64_t>(
-				    "rgw_cache_expiry_interval"));
-  }
-
-  boost::optional<T> find(const string& key) {
-    RWLock::RLocker rl(lock);
-    auto iter = entries.find(key);
-    if (iter == entries.end()) {
-      return boost::none;
-    }
-    if (expiry.count() &&
-	(ceph::coarse_mono_clock::now() - iter->second.second) > expiry) {
-      return boost::none;
-    }
-
-    return iter->second.first;
-  }
-
-  bool put(RGWRados *store, const string& key, T *entry,
-	   std::initializer_list<rgw_cache_entry_info *> cache_info_entries) {
-    Entry chain_entry(this, key, entry);
-
-    /* we need the store cache to call us under its lock to maintain lock ordering */
-    return store->chain_cache_entry(cache_info_entries, &chain_entry);
-  }
-
-  void chain_cb(const string& key, void *data) override {
-    T *entry = static_cast<T *>(data);
-    RWLock::WLocker wl(lock);
-    entries[key].first = *entry;
-    if (expiry.count() > 0) {
-      entries[key].second = ceph::coarse_mono_clock::now();
-    }
-  }
-
-  void invalidate(const string& key) override {
-    RWLock::WLocker wl(lock);
-    entries.erase(key);
-  }
-
-  void invalidate_all() override {
-    RWLock::WLocker wl(lock);
-    entries.clear();
-  }
-}; /* RGWChainedCacheImpl */
-
 
 #define MP_META_SUFFIX ".meta"
 
