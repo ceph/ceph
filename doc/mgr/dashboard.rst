@@ -31,13 +31,14 @@ the Ceph cluster using a web server hosted by ``ceph-mgr``.
 The dashboard currently provides the following features to monitor and manage
 various aspects of your Ceph cluster:
 
-* **Multi-User and Role Management**: The dashboard supports the management of
-  multiple user accounts, and the management of permission roles.
-  providing a configurable username and password.
+* **Multi-User and Role Management**: The dashboard supports multiple user
+  accounts with different permissions (roles). The user accounts and roles
+  can be modified on both the command line and via the WebUI.
+  See :ref:`dashboard-user-role-management` for details.
 * **SSL/TLS support**: All HTTP communication between the web browser and the
   dashboard is secured via SSL. A self-signed certificate can be created with
   a built-in command, but it's also possible to import custom certificates
-  signed and issued by a CA.
+  signed and issued by a CA. See :ref:`dashboard-ssl-tls-support` for details.
 * **Overall cluster health**: Displays the overall cluster status, storage
   utilization (e.g. number of objects, raw capacity, usage per pool), a list of
   pools and their status and usage statistics.
@@ -79,6 +80,8 @@ Within a running Ceph cluster, the Ceph Manager Dashboard is enabled with::
 
 Configuration
 -------------
+
+.. _dashboard-ssl-tls-support:
 
 SSL/TLS Support
 ^^^^^^^^^^^^^^^
@@ -328,6 +331,7 @@ previously defined username and password. Select the **Keep me logged in**
 checkbox if you want to skip the username/password request when accessing the
 dashboard in the future.
 
+.. _dashboard-user-role-management:
 
 User and Role Management
 ------------------------
