@@ -9,6 +9,7 @@ import { DeletionModalComponent } from '../../../shared/components/deletion-moda
 import { EmptyPipe } from '../../../shared/empty.pipe';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
+import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
@@ -22,6 +23,7 @@ import { NotificationService } from '../../../shared/services/notification.servi
 })
 export class RoleListComponent implements OnInit {
   permission: Permission;
+  tableActions: CdTableAction[];
   columns: CdTableColumn[];
   roles: Array<any>;
   scopes: Array<string>;
@@ -38,6 +40,28 @@ export class RoleListComponent implements OnInit {
     private notificationService: NotificationService
   ) {
     this.permission = this.authStorageService.getPermissions().user;
+    const addAction: CdTableAction = {
+      permission: 'create',
+      icon: 'fa-plus',
+      routerLink: () => '/user-management/roles/add',
+      name: 'Add'
+    };
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: 'fa-pencil',
+      disable: () => !this.selection.hasSingleSelection || this.selection.first().system,
+      routerLink: () =>
+        this.selection.first() && `/user-management/roles/edit/${this.selection.first().name}`,
+      name: 'Edit'
+    };
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: 'fa-trash-o',
+      disable: () => !this.selection.hasSingleSelection || this.selection.first().system,
+      click: () => this.deleteRoleModal(),
+      name: 'Delete'
+    };
+    this.tableActions = [addAction, editAction, deleteAction];
   }
 
   ngOnInit() {
