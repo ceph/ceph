@@ -4995,6 +4995,7 @@ bool OSD::heartbeat_reset(Connection *con)
 	  p->second.con_front = newcon.second.get();
 	  p->second.con_front->set_priv(s);
 	}
+        p->second.ping_history.clear();
       } else {
 	dout(10) << "heartbeat_reset failed hb con " << con << " for osd." << p->second.peer
 		 << ", raced with osdmap update, closing out peer" << dendl;
