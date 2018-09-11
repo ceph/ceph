@@ -3215,6 +3215,8 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const MClientCaps::const_
       dout(7) << "  mtime " << pi->mtime << " -> " << mtime
 	      << " for " << *in << dendl;
       pi->mtime = mtime;
+      if (mtime > pi->rstat.rctime)
+	pi->rstat.rctime = mtime;
     }
     if (in->inode.is_file() &&   // ONLY if regular file
 	size > pi->size) {
