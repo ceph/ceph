@@ -103,7 +103,6 @@ export class UserListComponent implements OnInit {
     this.modalRef = this.modalService.show(DeletionModalComponent);
     this.modalRef.content.setUp({
       metaType: 'User',
-      pattern: `${username}`,
       deletionMethod: () => this.deleteUser(username),
       modalRef: this.modalRef
     });
