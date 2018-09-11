@@ -38,7 +38,7 @@ class Rgw(BaseController):
                     instance.userid)
                 raise RequestException(status['message'])
             status['available'] = True
-        except RequestException:
+        except (RequestException, LookupError):
             pass
         return status
 
