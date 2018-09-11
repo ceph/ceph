@@ -250,6 +250,13 @@ The default value is 45 seconds.
 Enabling the Embedding of Grafana Dashboards
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. note:: 
+  The embedding of Grafana dashboards into the Ceph Manager Dashboard is
+  currently work in progress. This section documents the backend configuration.
+  The corresponding changes to the WebUI have not been merged yet. You can
+  follow the development process in `PR#23666
+  <https://github.com/ceph/ceph/pull/23666>`_.
+
 Grafana and Prometheus are likely going to be bundled and installed by some
 orchestration tools along Ceph in the near future, but currently, you will have
 to install and configure both manually. After you have installed Prometheus and
@@ -373,7 +380,7 @@ User Roles and Permissions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 User accounts are also associated with a set of roles that define which
-dashboard fuctionality can be accessed by the user.
+dashboard functionality can be accessed by the user.
 
 The Dashboard functionality/modules are grouped within a *security scope*.
 Security scopes are predefined and static. The current avaliable security
