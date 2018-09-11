@@ -172,6 +172,8 @@ class DeepSea(Task):
             '-q',
             'ceph-test'
             ])
+        suite_path = self.ctx.config.get('suite_path')
+        log.info("suite_path is ->{}<-".format(suite_path))
         log.info("deepsea task complete")
 
     def purge_osds(self):
