@@ -86,7 +86,7 @@ bool RGWReadDataSyncStatusMarkersCR::spawn_next()
     return false;
   }
   using CR = RGWSimpleRadosReadCR<rgw_data_sync_marker>;
-  spawn(new CR(env->async_rados, env->store,
+  spawn(new CR(env->async_rados, env->store->svc.sysobj,
                rgw_raw_obj(env->store->svc.zone->get_zone_params().log_pool, RGWDataSyncStatusManager::shard_obj_name(env->source_zone, shard_id)),
                &markers[shard_id]),
         false);
@@ -149,7 +149,7 @@ int RGWReadDataSyncStatusCoroutine::operate()
     using ReadInfoCR = RGWSimpleRadosReadCR<rgw_data_sync_info>;
     yield {
       bool empty_on_enoent = false; // fail on ENOENT
-      call(new ReadInfoCR(sync_env->async_rados, sync_env->store,
+      call(new ReadInfoCR(sync_env->async_rados, sync_env->store->svc.sysobj,
                           rgw_raw_obj(sync_env->store->svc.zone->get_zone_params().log_pool, RGWDataSyncStatusManager::sync_status_oid(sync_env->source_zone)),
                           &sync_status->sync_info, empty_on_enoent));
     }
@@ -487,7 +487,7 @@ public:
         return set_cr_error(retcode);
       }
       using WriteInfoCR = RGWSimpleRadosWriteCR<rgw_data_sync_info>;
-      yield call(new WriteInfoCR(sync_env->async_rados, store,
+      yield call(new WriteInfoCR(sync_env->async_rados, store->svc.sysobj,
                                  rgw_raw_obj{pool, sync_status_oid},
                                  status->sync_info));
       if (retcode < 0) {
@@ -532,7 +532,7 @@ public:
           marker.timestamp = info.last_update;
           const auto& oid = RGWDataSyncStatusManager::shard_obj_name(sync_env->source_zone, i);
           using WriteMarkerCR = RGWSimpleRadosWriteCR<rgw_data_sync_marker>;
-          spawn(new WriteMarkerCR(sync_env->async_rados, store,
+          spawn(new WriteMarkerCR(sync_env->async_rados, store->svc.sysobj,
                                   rgw_raw_obj{pool, oid}, marker), true);
         }
       }
@@ -545,7 +545,7 @@ public:
       }
 
       status->sync_info.state = rgw_data_sync_info::StateBuildingFullSyncMaps;
-      yield call(new WriteInfoCR(sync_env->async_rados, store,
+      yield call(new WriteInfoCR(sync_env->async_rados, store->svc.sysobj,
                                  rgw_raw_obj{pool, sync_status_oid},
                                  status->sync_info));
       if (retcode < 0) {
@@ -799,7 +799,7 @@ public:
           int shard_id = (int)iter->first;
           rgw_data_sync_marker& marker = iter->second;
           marker.total_entries = entries_index->get_total_entries(shard_id);
-          spawn(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->async_rados, store,
+          spawn(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->async_rados, store->svc.sysobj,
                                                                 rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, RGWDataSyncStatusManager::shard_obj_name(sync_env->source_zone, shard_id)),
                                                                 marker), true);
         }
@@ -865,7 +865,7 @@ public:
     tn->log(20, SSTR("updating marker marker_oid=" << marker_oid << " marker=" << new_marker));
     RGWRados *store = sync_env->store;
 
-    return new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->async_rados, store,
+    return new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->async_rados, store->svc.sysobj,
                                                            rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, marker_oid),
                                                            sync_marker);
   }
@@ -1281,7 +1281,7 @@ public:
         sync_marker.marker = sync_marker.next_step_marker;
         sync_marker.next_step_marker.clear();
         RGWRados *store = sync_env->store;
-        call(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->async_rados, store,
+        call(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(sync_env->async_rados, store->svc.sysobj,
                                                              rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, status_oid),
                                                              sync_marker));
       }
@@ -1487,7 +1487,7 @@ public:
 
   RGWCoroutine *alloc_finisher_cr() override {
     RGWRados *store = sync_env->store;
-    return new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->async_rados, store,
+    return new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->async_rados, store->svc.sysobj,
                                                           rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, RGWDataSyncStatusManager::shard_obj_name(sync_env->source_zone, shard_id)),
                                                           &sync_marker);
   }
@@ -1617,7 +1617,7 @@ public:
 
   RGWCoroutine *set_sync_info_cr() {
     RGWRados *store = sync_env->store;
-    return new RGWSimpleRadosWriteCR<rgw_data_sync_info>(sync_env->async_rados, store,
+    return new RGWSimpleRadosWriteCR<rgw_data_sync_info>(sync_env->async_rados, store->svc.sysobj,
                                                          rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, RGWDataSyncStatusManager::sync_status_oid(sync_env->source_zone)),
                                                          sync_status.sync_info);
   }
@@ -1922,7 +1922,7 @@ public:
           status.inc_marker.position = info.max_marker;
           map<string, bufferlist> attrs;
           status.encode_all_attrs(attrs);
-          call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, store, obj, attrs));
+          call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, store->svc.sysobj, obj, attrs));
         }
       }
       if (info.syncstopped) {
@@ -2010,7 +2010,7 @@ public:
 int RGWReadBucketSyncStatusCoroutine::operate()
 {
   reenter(this) {
-    yield call(new RGWSimpleRadosReadAttrsCR(sync_env->async_rados, sync_env->store,
+    yield call(new RGWSimpleRadosReadAttrsCR(sync_env->async_rados, sync_env->store->svc.sysobj,
                                                    rgw_raw_obj(sync_env->store->svc.zone->get_zone_params().log_pool, oid),
                                                    &attrs));
     if (retcode == -ENOENT) {
@@ -2130,7 +2130,7 @@ int RGWReadPendingBucketShardsCoroutine::operate()
   reenter(this){
     //read sync status marker
     using CR = RGWSimpleRadosReadCR<rgw_data_sync_marker>;
-    yield call(new CR(sync_env->async_rados, store, 
+    yield call(new CR(sync_env->async_rados, store->svc.sysobj,
                       rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, status_oid),
                       sync_marker));
     if (retcode < 0) {
@@ -2381,7 +2381,7 @@ public:
     RGWRados *store = sync_env->store;
 
     tn->log(20, SSTR("updating marker marker_oid=" << marker_oid << " marker=" << new_marker));
-    return new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, store,
+    return new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, store->svc.sysobj,
                                           rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, marker_oid),
                                           attrs);
   }
@@ -2444,7 +2444,7 @@ public:
 
     tn->log(20, SSTR("updating marker marker_oid=" << marker_oid << " marker=" << new_marker));
     return new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados,
-                                          store,
+                                          store->svc.sysobj,
                                           rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, marker_oid),
                                           attrs);
   }
@@ -2756,7 +2756,7 @@ int RGWBucketShardFullSyncCR::operate()
         map<string, bufferlist> attrs;
         sync_info.encode_state_attr(attrs);
         RGWRados *store = sync_env->store;
-        call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, store,
+        call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, store->svc.sysobj,
                                             rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, status_oid),
                                             attrs));
       }

@@ -126,6 +126,23 @@ struct RGWCacheNotifyInfo {
 };
 WRITE_CLASS_ENCODER(RGWCacheNotifyInfo)
 
+class RGWChainedCache {
+public:
+  virtual ~RGWChainedCache() {}
+  virtual void chain_cb(const string& key, void *data) = 0;
+  virtual void invalidate(const string& key) = 0;
+  virtual void invalidate_all() = 0;
+
+  struct Entry {
+    RGWChainedCache *cache;
+    const string& key;
+    void *data;
+
+    Entry(RGWChainedCache *_c, const string& _k, void *_d) : cache(_c), key(_k), data(_d) {}
+  };
+};
+
+
 struct ObjectCacheEntry {
   ObjectCacheInfo info;
   std::list<string>::iterator lru_iter;

@@ -145,6 +145,9 @@ int process_request(RGWRados* const store,
   RGWObjectCtx rados_ctx(store, s);
   s->obj_ctx = &rados_ctx;
 
+  auto sysobj_ctx = store->svc.sysobj->init_obj_ctx();
+  s->sysobj_ctx = &sysobj_ctx;
+
   if (ret < 0) {
     s->cio = client_io;
     abort_early(s, nullptr, ret, nullptr);

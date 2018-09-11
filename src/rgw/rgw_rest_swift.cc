@@ -2102,7 +2102,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
 
   /* Need to get user info of bucket owner. */
   RGWBucketInfo bucket_info;
-  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+  int ret = store->get_bucket_info(*s->sysobj_ctx,
                                    bucket_tenant, bucket_name,
                                    bucket_info, nullptr);
   if (ret < 0) {

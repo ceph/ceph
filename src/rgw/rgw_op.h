@@ -45,6 +45,8 @@
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
 
+#include "services/svc_sys_obj.h"
+
 #include "include/ceph_assert.h"
 
 using ceph::crypto::SHA1;
@@ -471,7 +473,7 @@ inline ostream& operator<<(ostream& out, const RGWBulkDelete::acct_path_t &o) {
 
 
 class RGWBulkUploadOp : public RGWOp {
-  boost::optional<RGWObjectCtx> dir_ctx;
+  boost::optional<RGWSysObjectCtx> dir_ctx;
 
 protected:
   class fail_desc_t {
@@ -524,10 +526,7 @@ public:
 
   void init(RGWRados* const store,
             struct req_state* const s,
-            RGWHandler* const h) override {
-    RGWOp::init(store, s, h);
-    dir_ctx.emplace(store);
-  }
+            RGWHandler* const h) override;
 
   int verify_permission() override;
   void pre_exec() override;

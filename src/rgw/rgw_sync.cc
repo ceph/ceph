@@ -650,7 +650,7 @@ public:
       yield {
         set_status("writing sync status");
         RGWRados *store = sync_env->store;
-        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store,
+        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store->svc.sysobj,
                                                            rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sync_env->status_oid()),
                                                            status));
       }
@@ -681,7 +681,7 @@ public:
 	  marker.timestamp = info.last_update;
           RGWRados *store = sync_env->store;
           spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados,
-                                                                store,
+                                                                store->svc.sysobj,
                                                                 rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sync_env->shard_obj_name(i)),
                                                                 marker), true);
         }
@@ -690,7 +690,7 @@ public:
         set_status("changing sync state: build full sync maps");
 	status.state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
         RGWRados *store = sync_env->store;
-        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store,
+        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store->svc.sysobj,
                                                            rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sync_env->status_oid()),
                                                            status));
       }
@@ -734,7 +734,7 @@ bool RGWReadSyncStatusMarkersCR::spawn_next()
   using CR = RGWSimpleRadosReadCR<rgw_meta_sync_marker>;
   rgw_raw_obj obj{env->store->svc.zone->get_zone_params().log_pool,
                   env->shard_obj_name(shard_id)};
-  spawn(new CR(env->async_rados, env->store, obj, &markers[shard_id]), false);
+  spawn(new CR(env->async_rados, env->store->svc.sysobj, obj, &markers[shard_id]), false);
   shard_id++;
   return true;
 }
@@ -760,7 +760,7 @@ int RGWReadSyncStatusCoroutine::operate()
       bool empty_on_enoent = false; // fail on ENOENT
       rgw_raw_obj obj{sync_env->store->svc.zone->get_zone_params().log_pool,
                       sync_env->status_oid()};
-      call(new ReadInfoCR(sync_env->async_rados, sync_env->store, obj,
+      call(new ReadInfoCR(sync_env->async_rados, sync_env->store->svc.sysobj, obj,
                           &sync_status->sync_info, empty_on_enoent));
     }
     if (retcode < 0) {
@@ -956,7 +956,7 @@ public:
           int shard_id = (int)iter->first;
           rgw_meta_sync_marker& marker = iter->second;
           marker.total_entries = entries_index->get_total_entries(shard_id);
-          spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados, sync_env->store,
+          spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados, sync_env->store->svc.sysobj,
                                                                 rgw_raw_obj(sync_env->store->svc.zone->get_zone_params().log_pool, sync_env->shard_obj_name(shard_id)),
                                                                 marker), true);
         }
@@ -1213,7 +1213,7 @@ public:
     tn->log(20, SSTR("new marker=" << new_marker));
     RGWRados *store = sync_env->store;
     return new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados,
-                                                           store,
+                                                           store->svc.sysobj,
                                                            rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, marker_oid),
                                                            sync_marker);
   }
@@ -1625,7 +1625,7 @@ public:
 	  ldpp_dout(sync_env->dpp, 4) << *this << ": saving marker pos=" << temp_marker->marker << " realm_epoch=" << realm_epoch << dendl;
 
 	  using WriteMarkerCR = RGWSimpleRadosWriteCR<rgw_meta_sync_marker>;
-	  yield call(new WriteMarkerCR(sync_env->async_rados, sync_env->store,
+	  yield call(new WriteMarkerCR(sync_env->async_rados, sync_env->store->svc.sysobj,
 				       rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
 				       *temp_marker));
         }
@@ -1869,7 +1869,7 @@ public:
 
   RGWCoroutine *alloc_finisher_cr() override {
     RGWRados *store = sync_env->store;
-    return new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store,
+    return new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store->svc.sysobj,
                                                           rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
                                                           &sync_marker);
   }
@@ -1983,7 +1983,7 @@ public:
         sync_status.sync_info.period = cursor.get_period().get_id();
         sync_status.sync_info.realm_epoch = cursor.get_epoch();
         yield call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados,
-                                                                 sync_env->store,
+                                                                 sync_env->store->svc.sysobj,
                                                                  rgw_raw_obj(pool, sync_env->status_oid()),
                                                                  sync_status.sync_info));
       }
@@ -2060,7 +2060,7 @@ int RGWRemoteMetaLog::init_sync_status()
 int RGWRemoteMetaLog::store_sync_info(const rgw_meta_sync_info& sync_info)
 {
   tn->log(20, "store sync info");
-  return run(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store,
+  return run(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store->svc.sysobj,
                                                            rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sync_env.status_oid()),
                                                            sync_info));
 }

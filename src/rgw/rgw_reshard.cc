@@ -15,6 +15,7 @@
 #include "common/dout.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_sys_obj.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -972,7 +973,7 @@ int RGWReshard::process_single_logshard(int logshard_num)
 	ldout(store->ctx(), 20) << __func__ << " resharding " <<
 	  entry.bucket_name  << dendl;
 
-	RGWObjectCtx obj_ctx(store);
+        auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 	rgw_bucket bucket;
 	RGWBucketInfo bucket_info;
 	map<string, bufferlist> attrs;

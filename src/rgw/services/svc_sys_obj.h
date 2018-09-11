@@ -39,7 +39,7 @@ public:
                                    ctx(_ctx),
                                    obj(_obj) {}
 
-    void invalidate_state();
+    void invalidate();
 
     RGWSysObjectCtx& get_ctx() {
       return ctx;
@@ -61,6 +61,11 @@ public:
       uint64_t *obj_size{nullptr};
       rgw_cache_entry_info *cache_info{nullptr};
 
+      ROp& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+        objv_tracker = _objv_tracker;
+        return *this;
+      }
+
       ROp& set_last_mod(ceph::real_time *_lastmod) {
         lastmod = _lastmod;
         return *this;
@@ -76,7 +81,7 @@ public:
         return *this;
       }
 
-      ROp& set_refresh_version(const obj_version& rf) {
+      ROp& set_refresh_version(boost::optional<obj_version>& rf) {
         refresh_version = rf;
         return *this;
       }
@@ -105,6 +110,16 @@ public:
       ceph::real_time *pmtime{nullptr};
       bool exclusive{false};
 
+      WOp& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+        objv_tracker = _objv_tracker;
+        return *this;
+      }
+
+      WOp& set_attrs(map<string, bufferlist>& _attrs) {
+        attrs = _attrs;
+        return *this;
+      }
+
       WOp& set_attrs(map<string, bufferlist>&& _attrs) {
         attrs = _attrs;
         return *this;
@@ -132,6 +147,7 @@ public:
 
       int write_data(bufferlist& bl); /* write data only */
       int write_attrs(); /* write attrs only */
+      int write_attr(const char *name, bufferlist& bl); /* write attrs only */
     };
 
     struct OmapOp {

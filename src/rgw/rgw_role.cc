@@ -17,6 +17,7 @@
 #include "rgw_role.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_sys_obj.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -299,7 +300,7 @@ int RGWRole::read_id(const string& role_name, const string& tenant, string& role
   auto& pool = store->svc.zone->get_zone_params().roles_pool;
   string oid = tenant + get_names_oid_prefix() + role_name;
   bufferlist bl;
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0) {
@@ -325,7 +326,7 @@ int RGWRole::read_info()
   auto& pool = store->svc.zone->get_zone_params().roles_pool;
   string oid = get_info_oid_prefix() + id;
   bufferlist bl;
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0) {
@@ -352,7 +353,7 @@ int RGWRole::read_name()
   auto& pool = store->svc.zone->get_zone_params().roles_pool;
   string oid = tenant + get_names_oid_prefix() + name;
   bufferlist bl;
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0) {

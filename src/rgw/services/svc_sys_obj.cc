@@ -44,7 +44,7 @@ int RGWSI_SysObj::load(const string& conf, std::map<std::string, RGWServiceInsta
   return 0;
 }
 
-void RGWSI_SysObj::Obj::invalidate_state()
+void RGWSI_SysObj::Obj::invalidate()
 {
   ctx.invalidate(obj);
 }
@@ -113,6 +113,17 @@ int RGWSI_SysObj::Obj::WOp::write_attrs()
   rgw_raw_obj& obj = source.get_obj();
 
   return svc->set_attrs(obj, attrs, nullptr, objv_tracker);
+}
+
+int RGWSI_SysObj::Obj::WOp::write_attr(const char *name, bufferlist& bl)
+{
+  RGWSI_SysObj_Core *svc = source.core_svc;
+  rgw_raw_obj& obj = source.get_obj();
+
+  map<string, bufferlist> m;
+  m[name] = bl;
+
+  return svc->set_attrs(obj, m, nullptr, objv_tracker);
 }
 
 int RGWSI_SysObj::Pool::Op::list_prefixed_objs(const string& prefix, list<string> *result)
