@@ -2185,12 +2185,6 @@ int buffer::list::read_file(const char *fn, std::string *error)
 
 ssize_t buffer::list::read_fd(int fd, size_t len)
 {
-  // try zero copy first
-  if (false && read_fd_zero_copy(fd, len) == 0) {
-    // TODO fix callers to not require correct read size, which is not
-    // available for raw_pipe until we actually inspect the data
-    return 0;
-  }
   bufferptr bp = buffer::create(len);
   ssize_t ret = safe_read(fd, (void*)bp.c_str(), len);
   if (ret >= 0) {
@@ -2198,22 +2192,6 @@ ssize_t buffer::list::read_fd(int fd, size_t len)
     append(std::move(bp));
   }
   return ret;
-}
-
-int buffer::list::read_fd_zero_copy(int fd, size_t len)
-{
-#ifdef CEPH_HAVE_SPLICE
-  try {
-    append(buffer::create_zero_copy(len, fd, NULL));
-  } catch (buffer::error_code &e) {
-    return e.code;
-  } catch (buffer::malformed_input &e) {
-    return -EIO;
-  }
-  return 0;
-#else
-  return -ENOTSUP;
-#endif
 }
 
 int buffer::list::write_file(const char *fn, int mode)
