@@ -218,6 +218,49 @@ class RookCluster(object):
             else:
                 raise
 
+    def add_objectstore(self, spec):
+  
+        rook_os = {
+            "apiVersion": ROOK_API_NAME,
+            "kind": "ObjectStore",
+            "metadata": {
+                "name": spec.name,
+                "namespace": self.rook_namespace
+            },
+            "spec": {
+                "metaDataPool": {
+                    "failureDomain": "host",
+                    "replicated": {
+                        "size": 1
+                    }
+                },
+                "dataPool": {
+                    "failureDomain": "osd",
+                    "replicated": {
+                        "size": 1
+                    }
+                },
+                "gateway": {
+                    "type": "s3",
+                    "port": 80,
+                    "instances": 1,
+                    "allNodes": False
+                }
+            }
+        }
+        
+        try:
+            self.rook_api_post(
+                "objectstores/",
+                body=rook_os
+            )
+        except ApiException as e:
+            if e.status == 409:
+                log.info("ObjectStore '{0}' already exists".format(spec.name))
+                # Idempotent, succeed.                                                                                                                                                                     
+            else:
+                raise
+
     def can_create_osd(self):
         current_cluster = self.rook_api_get(
             "clusters/{0}".format(self.cluster_name))
