@@ -27,8 +27,6 @@
 #include "common/Clock.h"
 #include "mds/MDSMap.h"
 
-#include "common/config.h"
-
 #include "include/CompatSet.h"
 #include "include/ceph_features.h"
 #include "common/Formatter.h"

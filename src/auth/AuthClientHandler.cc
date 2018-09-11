@@ -36,8 +36,16 @@ AuthClientHandler::create(CephContext *cct, int proto,
 }
 
 // explicitly instantiate only the classes we need
+#ifdef WITH_SEASTAR
+template AuthClientHandler*
+AuthClientHandler::create<ceph::LockPolicy::SINGLE>(
+  CephContext *cct,
+  int proto,
+  RotatingKeyRing<ceph::LockPolicy::SINGLE> *rkeys);
+#else
 template AuthClientHandler*
 AuthClientHandler::create<ceph::LockPolicy::MUTEX>(
   CephContext *cct,
   int proto,
   RotatingKeyRing<ceph::LockPolicy::MUTEX> *rkeys);
+#endif
