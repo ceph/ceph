@@ -15,11 +15,15 @@
 #ifndef CEPH_MONMAP_H
 #define CEPH_MONMAP_H
 
-#include "include/err.h"
 
-#include "msg/Message.h"
+#include "common/config_fwd.h"
+
+#include "include/err.h"
 #include "include/types.h"
+
 #include "mon/mon_types.h"
+#include "msg/Message.h"
+
 
 namespace ceph {
   class Formatter;

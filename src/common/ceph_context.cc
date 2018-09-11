@@ -44,6 +44,40 @@
 using ceph::bufferlist;
 using ceph::HeartbeatMap;
 
+#ifdef WITH_SEASTAR
+CephContext::CephContext()
+  : _conf{ceph::common::local_conf()},
+    _crypto_random{std::make_unique<CryptoRandom>()}
+{}
+
+// define the dtor in .cc as CryptoRandom is an incomplete type in the header
+CephContext::~CephContext()
+{}
+
+CryptoRandom* CephContext::random() const
+{
+  return _crypto_random.get();
+}
+
+CephContext* CephContext::get()
+{
+  ++nref;
+  return this;
+}
+
+void CephContext::put()
+{
+  if (--nref == 0) {
+    delete this;
+  }
+}
+
+PerfCountersCollection* CephContext::get_perfcounters_collection()
+{
+  throw std::runtime_error("not yet implemented");
+}
+
+#else  // WITH_SEASTAR
 namespace {
 
 class LockdepObs : public md_config_obs_t {
@@ -848,3 +882,4 @@ void CephContext::notify_post_fork()
   for (auto &&t : _fork_watchers)
     t->handle_post_fork();
 }
+#endif	// WITH_SEASTAR

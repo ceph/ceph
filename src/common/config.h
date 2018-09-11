@@ -23,7 +23,6 @@
 #include "log/SubsystemMap.h"
 #include "common/options.h"
 #include "common/subsys_types.h"
-#include "common/config_fwd.h"
 #include "common/config_tracker.h"
 #include "common/config_values.h"
 
