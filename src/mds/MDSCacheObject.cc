@@ -48,9 +48,8 @@ void MDSCacheObject::dump(Formatter *f) const
 
 #ifdef MDS_REF_SET
     f->open_object_section("pins");
-    for(std::map<int, int>::const_iterator it = ref_map.begin();
-        it != ref_map.end(); ++it) {
-      f->dump_int(pin_name(it->first), it->second);
+    for(const auto& p : ref_map) {
+      f->dump_int(pin_name(p.first), p.second);
     }
     f->close_section();
 #endif

@@ -107,10 +107,14 @@ ostream& operator<<(ostream& out, const CDir& dir)
       out << " dir_auth=" << dir.get_dir_auth();
   }
   
-  if (dir.get_cum_auth_pins())
+  if (dir.get_cum_auth_pins()) {
     out << " ap=" << dir.get_auth_pins() 
 	<< "+" << dir.get_dir_auth_pins()
 	<< "+" << dir.get_nested_auth_pins();
+#ifdef MDS_AUTHPIN_SET
+    dir.print_authpin_set(out);
+#endif
+  }
 
   out << " state=" << dir.get_state();
   if (dir.state_test(CDir::STATE_COMPLETE)) out << "|complete";
@@ -2759,8 +2763,11 @@ void CDir::auth_unpin(void *by)
   auth_pins--;
 
 #ifdef MDS_AUTHPIN_SET
-  ceph_assert(auth_pin_set.count(by));
-  auth_pin_set.erase(auth_pin_set.find(by));
+  {
+    auto it = auth_pin_set.find(by);
+    ceph_assert(it != auth_pin_set.end());
+    auth_pin_set.erase(it);
+  }
 #endif
   if (auth_pins == 0)
     put(PIN_AUTHPIN);

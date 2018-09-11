@@ -651,9 +651,8 @@ inline std::enable_if_t<!traits::supported>
   decode(n, p);
   ls.clear();
   while (n--) {
-    T v;
-    decode(v, p);
-    ls.push_back(v);
+    ls.emplace_back();
+    decode(ls.back(), p);
   }
 }
 
@@ -1165,9 +1164,8 @@ inline void decode(std::deque<T,Alloc>& ls, bufferlist::const_iterator& p)
   decode(n, p);
   ls.clear();
   while (n--) {
-    T v;
-    decode(v, p);
-    ls.push_back(v);
+    ls.emplace_back();
+    decode(ls.back(), p);
   }
 }
 

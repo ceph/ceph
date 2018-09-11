@@ -191,16 +191,14 @@ public:
   void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
   void apply_allocated_inos(MDRequestRef& mdr, Session *session);
 
-  CInode* rdlock_path_pin_ref(MDRequestRef& mdr, int n, set<SimpleLock*>& rdlocks, bool want_auth,
-			      bool no_want_auth=false,
-			      file_layout_t **layout=NULL,
+  CInode* rdlock_path_pin_ref(MDRequestRef& mdr, int n, MutationImpl::LockOpVec& lov,
+			      bool want_auth, bool no_want_auth=false,
+			      file_layout_t **layout=nullptr,
 			      bool no_lookup=false);
   CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
-                                    set<SimpleLock*>& rdlocks,
-                                    set<SimpleLock*>& wrlocks,
-				    set<SimpleLock*>& xlocks, bool okexist,
-				    bool mustexist, bool alwaysxlock,
-				    file_layout_t **layout=NULL);
+				    MutationImpl::LockOpVec& lov,
+				    bool okexist, bool mustexist, bool alwaysxlock,
+				    file_layout_t **layout=nullptr);
 
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr);
 
@@ -229,14 +227,10 @@ public:
                           file_layout_t *layout);
   void handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 			 file_layout_t *dir_layout,
-			 set<SimpleLock*> rdlocks,
-			 set<SimpleLock*> wrlocks,
-			 set<SimpleLock*> xlocks);
+			 MutationImpl::LockOpVec& lov);
   void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
 			    file_layout_t *dir_layout,
-			    set<SimpleLock*> rdlocks,
-			    set<SimpleLock*> wrlocks,
-			    set<SimpleLock*> xlocks);
+			    MutationImpl::LockOpVec& lov);
   void handle_client_setxattr(MDRequestRef& mdr);
   void handle_client_removexattr(MDRequestRef& mdr);
 

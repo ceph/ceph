@@ -69,18 +69,14 @@ protected:
   void send_lock_message(SimpleLock *lock, int msg, const bufferlist &data);
 
   // -- locks --
-  void _drop_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue);
-  void _drop_non_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue);
+  void _drop_locks(MutationImpl *mut, set<CInode*> *pneed_issue, bool drop_rdlocks);
 public:
-  void include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in);
-  void include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
-                                    file_layout_t **layout);
+  void include_snap_rdlocks(CInode *in, MutationImpl::LockOpVec& lov);
+  void include_snap_rdlocks_wlayout(CInode *in, MutationImpl::LockOpVec& lov,
+				    file_layout_t **layout);
 
   bool acquire_locks(MDRequestRef& mdr,
-		     set<SimpleLock*> &rdlocks,
-		     set<SimpleLock*> &wrlocks,
-		     set<SimpleLock*> &xlocks,
-		     map<SimpleLock*,mds_rank_t> *remote_wrlocks=NULL,
+		     MutationImpl::LockOpVec& lov,
 		     CInode *auth_pin_freeze=NULL,
 		     bool auth_pin_nonblock=false);
 
@@ -111,23 +107,22 @@ public:
   bool _rdlock_kick(SimpleLock *lock, bool as_anon);
   bool rdlock_try(SimpleLock *lock, client_t client, MDSInternalContextBase *c);
   bool rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon=false);
-  void rdlock_finish(SimpleLock *lock, MutationImpl *mut, bool *pneed_issue);
-  bool can_rdlock_set(set<SimpleLock*>& locks);
-  bool rdlock_try_set(set<SimpleLock*>& locks);
-  void rdlock_take_set(set<SimpleLock*>& locks, MutationRef& mut);
+  void rdlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut, bool *pneed_issue);
+  bool can_rdlock_set(MutationImpl::LockOpVec& lov);
+  void rdlock_take_set(MutationImpl::LockOpVec& lov, MutationRef& mut);
 
   void wrlock_force(SimpleLock *lock, MutationRef& mut);
   bool wrlock_start(SimpleLock *lock, MDRequestRef& mut, bool nowait=false);
-  void wrlock_finish(SimpleLock *lock, MutationImpl *mut, bool *pneed_issue);
+  void wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut, bool *pneed_issue);
 
   void remote_wrlock_start(SimpleLock *lock, mds_rank_t target, MDRequestRef& mut);
-  void remote_wrlock_finish(SimpleLock *lock, mds_rank_t target, MutationImpl *mut);
+  void remote_wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut);
 
   bool xlock_start(SimpleLock *lock, MDRequestRef& mut);
   void _finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue);
-  void xlock_finish(SimpleLock *lock, MutationImpl *mut, bool *pneed_issue);
+  void xlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut, bool *pneed_issue);
 
-  void xlock_export(SimpleLock *lock, MutationImpl *mut);
+  void xlock_export(const MutationImpl::lock_iterator& it, MutationImpl *mut);
   void xlock_import(SimpleLock *lock);
 
 
@@ -221,9 +216,9 @@ public:
   void local_wrlock_grab(LocalLock *lock, MutationRef& mut);
 protected:
   bool local_wrlock_start(LocalLock *lock, MDRequestRef& mut);
-  void local_wrlock_finish(LocalLock *lock, MutationImpl *mut);
+  void local_wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut);
   bool local_xlock_start(LocalLock *lock, MDRequestRef& mut);
-  void local_xlock_finish(LocalLock *lock, MutationImpl *mut);
+  void local_xlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut);
 
 
   // file
