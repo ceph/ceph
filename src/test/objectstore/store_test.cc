@@ -6841,6 +6841,7 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
 
   SetVal(g_conf(), "bluestore_compression_max_blob_size", "524288");
   SetVal(g_conf(), "bluestore_compression_min_blob_size", "262144");
+  SetVal(g_conf(), "bluestore_max_blob_size", "524288");
   SetVal(g_conf(), "bluestore_compression_mode", "force");
   g_conf().apply_changes(nullptr);
 
