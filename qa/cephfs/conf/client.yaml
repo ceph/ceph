@@ -1,9 +1,7 @@
 overrides:
   ceph:
     conf:
-      mds:
-        debug ms: 1
-        debug mds: 20
       client:
+        client mount timeout: 600
         debug ms: 1
         debug client: 20
