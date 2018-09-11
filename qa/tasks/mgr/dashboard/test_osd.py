@@ -99,13 +99,17 @@ class OsdTest(DashboardTestCase):
         self.assertStatus(200)
 
     def test_safe_to_destroy(self):
-        self._get('/api/osd/5/safe_to_destroy')
+        osd_dump = json.loads(self._ceph_cmd(['osd', 'dump', '-f', 'json']))
+        unused_osd_id = max(map(lambda e: e['osd'], osd_dump['osds'])) + 10
+        self._get('/api/osd/{}/safe_to_destroy'.format(unused_osd_id))
         self.assertStatus(200)
         self.assertJsonBody({'safe-to-destroy': True})
 
         def get_destroy_status():
             self._get('/api/osd/0/safe_to_destroy')
-            return self.jsonBody()['safe-to-destroy']
+            if 'safe-to-destroy' in self.jsonBody():
+                return self.jsonBody()['safe-to-destroy']
+            return None
         self.wait_until_equal(get_destroy_status, False, 10)
         self.assertStatus(200)
 
