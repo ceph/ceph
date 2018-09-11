@@ -115,6 +115,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			    bool& isvalid, CryptoKey& session_key,
 			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override;
+  int ms_handle_authentication(Connection *con) override;
   void ms_handle_accept(Connection *con) override;
   void ms_handle_connect(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;
