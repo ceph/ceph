@@ -1094,6 +1094,7 @@ public:
     CSUM_TYPE,
     CSUM_MAX_BLOCK,
     CSUM_MIN_BLOCK,
+    FINGERPRINT_ALGORITHM,
   };
 
   enum type_t {
@@ -1444,6 +1445,37 @@ public:
   bool fast_read;            ///< whether turn on fast read on the pool or not
 
   pool_opts_t opts; ///< options
+
+  typedef enum {
+    TYPE_FINGERPRINT_NONE = 0,
+    TYPE_FINGERPRINT_SHA1 = 1,     
+  } fingerprint_t;
+  static fingerprint_t get_fingerprint_from_str(const string& s) {
+    if (s == "none")
+      return TYPE_FINGERPRINT_NONE;
+    if (s == "sha1")
+      return TYPE_FINGERPRINT_SHA1;
+    return (fingerprint_t)-1;
+  }
+  const fingerprint_t get_fingerprint_type() const {
+    string fp_str;
+    opts.get(pool_opts_t::FINGERPRINT_ALGORITHM, &fp_str);
+    return get_fingerprint_from_str(fp_str);
+  }
+  const char *get_fingerprint_name() const {
+    string fp_str;
+    fingerprint_t fp_t;
+    opts.get(pool_opts_t::FINGERPRINT_ALGORITHM, &fp_str);
+    fp_t = get_fingerprint_from_str(fp_str);
+    return get_fingerprint_name(fp_t);
+  }
+  static const char *get_fingerprint_name(fingerprint_t m) {
+    switch (m) {
+    case TYPE_FINGERPRINT_NONE: return "none";
+    case TYPE_FINGERPRINT_SHA1: return "sha1";
+    default: return "unknown";
+    }
+  }
 
   /// application -> key/value metadata
   map<string, std::map<string, string>> application_metadata;
@@ -4664,17 +4696,18 @@ static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
 }
 
 struct chunk_info_t {
-  enum {
+  typedef enum {
     FLAG_DIRTY = 1, 
     FLAG_MISSING = 2,
     FLAG_HAS_REFERENCE = 4,
-  };
+    FLAG_HAS_FINGERPRINT = 8,
+  } cflag_t;
   uint32_t offset;
   uint32_t length;
   hobject_t oid;
-  uint32_t flags;   // FLAG_*
+  cflag_t flags;   // FLAG_*
 
-  chunk_info_t() : offset(0), length(0), flags(0) { }
+  chunk_info_t() : offset(0), length(0), flags((cflag_t)0) { }
 
   static string get_flag_string(uint64_t flags) {
     string r;
@@ -4687,9 +4720,39 @@ struct chunk_info_t {
     if (flags & FLAG_HAS_REFERENCE) {
       r += "|has_reference";
     }
+    if (flags & FLAG_HAS_FINGERPRINT) {
+      r += "|has_fingerprint";
+    }
     if (r.length())
       return r.substr(1);
     return r;
+  }
+  bool test_flag(cflag_t f) const {
+    return (flags & f) == f;
+  }
+  void set_flag(cflag_t f) {
+    flags = (cflag_t)(flags | f);
+  }
+  void set_flags(cflag_t f) {
+    flags = f;
+  }
+  void clear_flag(cflag_t f) {
+    flags = (cflag_t)(flags & ~f);
+  }
+  void clear_flags() {
+    flags = (cflag_t)0;
+  }
+  bool is_dirty() const {
+    return test_flag(FLAG_DIRTY);
+  }
+  bool is_missing() const {
+    return test_flag(FLAG_MISSING);
+  }
+  bool has_reference() const {
+    return test_flag(FLAG_HAS_REFERENCE);
+  }
+  bool has_fingerprint() const {
+    return test_flag(FLAG_HAS_FINGERPRINT);
   }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &bl);
