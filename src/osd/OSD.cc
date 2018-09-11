@@ -5953,9 +5953,9 @@ COMMAND("pg " \
 	"osd", "rw", "cli")
 COMMAND("pg " \
 	"name=pgid,type=CephPgid " \
-	"name=cmd,type=CephChoices,strings=list_missing " \
+	"name=cmd,type=CephChoices,strings=list_unfound " \
 	"name=offset,type=CephString,req=false",
-	"list missing objects on this pg, perhaps starting at an offset given in JSON",
+	"list unfound objects on this pg, perhaps starting at an offset given in JSON",
 	"osd", "r", "cli")
 
 // new form: tell <pgid> <cmd> for both cli and rest
@@ -5966,9 +5966,9 @@ COMMAND("mark_unfound_lost " \
 	"name=mulcmd,type=CephChoices,strings=revert|delete", \
 	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
 	"osd", "rw", "cli,rest")
-COMMAND("list_missing " \
+COMMAND("list_unfound " \
 	"name=offset,type=CephString,req=false",
-	"list missing objects on this pg, perhaps starting at an offset given in JSON",
+	"list unfound objects on this pg, perhaps starting at an offset given in JSON",
 	"osd", "r", "cli,rest")
 COMMAND("perf histogram dump "
         "name=logger,type=CephString,req=false "
@@ -6201,7 +6201,7 @@ int OSD::_do_command(
   else if (prefix == "pg" ||
 	    prefix == "query" ||
 	    prefix == "mark_unfound_lost" ||
-	    prefix == "list_missing"
+	    prefix == "list_unfound"
 	   ) {
     pg_t pgid;
 

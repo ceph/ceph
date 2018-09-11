@@ -8,6 +8,9 @@
 * Nautilus is not supported on any distros still running upstart so upstart
   specific files and references have been removed.
 
+* The 'ceph pg <pgid> list_missing' command has been renamed to
+  'ceph pg <pgid> list_unfound' to better match its behaviour.
+
 >=13.1.0
 --------
 
