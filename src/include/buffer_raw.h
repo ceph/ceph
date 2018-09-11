@@ -89,9 +89,6 @@ public:
     virtual bool can_zero_copy() const {
       return false;
     }
-    virtual int zero_copy_to_fd(int fd, loff_t *offset) {
-      return -ENOTSUP;
-    }
     virtual bool is_shareable() {
       // true if safe to reference/share the existing buffer copy
       // false if it is not safe to share the buffer, e.g., due to special

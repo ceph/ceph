@@ -336,7 +336,6 @@ namespace buffer CEPH_BUFFER_API {
     void copy_out(unsigned o, unsigned l, char *dest) const;
 
     bool can_zero_copy() const;
-    int zero_copy_to_fd(int fd, int64_t *offset) const;
 
     unsigned wasted() const;
 
@@ -699,7 +698,6 @@ namespace buffer CEPH_BUFFER_API {
 
   private:
     mutable iterator last_p;
-    int zero_copy_to_fd(int fd) const;
 
   public:
     // cons/des
