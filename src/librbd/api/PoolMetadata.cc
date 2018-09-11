@@ -6,6 +6,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/Utils.h"
+#include "librbd/api/Config.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -35,6 +36,11 @@ int PoolMetadata<I>::set(librados::IoCtx& io_ctx, const std::string &key,
 
   std::string config_key;
   if (util::is_metadata_config_override(key, &config_key)) {
+    if (!librbd::api::Config<I>::is_option_name(io_ctx, config_key)) {
+      lderr(cct) << "validation for " << key
+                 << " failed: not allowed pool level override" << dendl;
+      return -EINVAL;
+    }
     int r = ConfigProxy{false}.set_val(config_key.c_str(), value);
     if (r < 0) {
       lderr(cct) << "validation for " << key << " failed: " << cpp_strerror(r)

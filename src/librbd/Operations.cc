@@ -16,6 +16,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
+#include "librbd/api/Config.h"
 #include "librbd/journal/DisabledPolicy.h"
 #include "librbd/journal/StandardPolicy.h"
 #include "librbd/operation/DisableFeaturesRequest.h"
@@ -1434,6 +1435,11 @@ int Operations<I>::metadata_set(const std::string &key,
   bool config_override = util::is_metadata_config_override(key, &config_key);
   if (config_override) {
     // validate config setting
+    if (!librbd::api::Config<I>::is_option_name(&m_image_ctx, config_key)) {
+      lderr(cct) << "validation for " << key
+                 << " failed: not allowed image level override" << dendl;
+      return -EINVAL;
+    }
     int r = ConfigProxy{false}.set_val(config_key.c_str(), value);
     if (r < 0) {
       return r;
