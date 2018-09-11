@@ -53,6 +53,24 @@ def fake_call(monkeypatch):
 
 
 @pytest.fixture
+def fakedevice(factory):
+    def apply(**kw):
+        params = dict(
+            path='/dev/sda',
+            abspath='/dev/sda',
+            lv_api=None,
+            pvs_api=[],
+            disk_api={},
+            sys_api={},
+            exists=True,
+            is_lvm_member=True,
+        )
+        params.update(dict(kw))
+        return factory(**params)
+    return apply
+
+
+@pytest.fixture
 def stub_call(monkeypatch):
     """
     Monkeypatches process.call, so that a caller can add behavior to the response
@@ -115,6 +133,13 @@ def volume_groups(monkeypatch):
     vgs = lvm_api.VolumeGroups()
     vgs._purge()
     return vgs
+
+
+@pytest.fixture
+def stub_vgs(monkeypatch, volume_groups):
+    def apply(vgs):
+        monkeypatch.setattr(lvm_api, 'get_api_vgs', lambda: vgs)
+    return apply
 
 
 @pytest.fixture
