@@ -16,6 +16,7 @@ class SingleType(object):
 
     def __init__(self, devices, args):
         self.args = args
+        self.osds_per_device = args.osds_per_device
         self.devices = devices
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
@@ -23,13 +24,20 @@ class SingleType(object):
         self.validate()
         self.compute()
 
+    @property
+    def total_osds(self):
+        if self.hdds:
+            return len(self.hdds) * self.osds_per_device
+        else:
+            return len(self.ssds) * self.osds_per_device
+
     def report_json(self):
         print(json.dumps(self.computed, indent=4, sort_keys=True))
 
     def report_pretty(self):
         string = ""
         string += templates.total_osds.format(
-            total_osds=len(self.hdds) or len(self.ssds) * 2
+            total_osds=self.total_osds
         )
         string += templates.osd_component_titles
 
@@ -56,7 +64,21 @@ class SingleType(object):
         met, raise an error if the provided devices would not work
         """
         # validate minimum size for all devices
-        validators.minimum_device_size(self.devices)
+        validators.minimum_device_size(self.devices, osds_per_device=self.osds_per_device)
+
+        # validate collocation
+        self.journal_size = prepare.get_journal_size(lv_format=False)
+        if self.hdds:
+            validators.minimum_device_collocated_size(
+                self.hdds, self.journal_size, osds_per_device=self.osds_per_device
+            )
+        else:
+            validators.minimum_device_collocated_size(
+                self.ssds, self.journal_size, osds_per_device=self.osds_per_device
+            )
+
+        # make sure that data devices do not have any LVs
+        validators.no_lvm_membership(self.hdds)
 
     def compute(self):
         """
@@ -66,51 +88,58 @@ class SingleType(object):
         # chose whichever is the one group we have to compute against
         devices = self.hdds or self.ssds
         osds = self.computed['osds']
-        vgs = self.computed['vgs']
         for device in devices:
-            device_size = disk.Size(b=device.sys_api['size'])
-            journal_size = prepare.get_journal_size(lv_format=False)
-            data_size = device_size - journal_size
-            data_percentage = data_size * 100 / device_size
-            vgs.append({'devices': [device.abspath], 'parts': 2})
-            osd = {'data': {}, 'journal': {}}
-            osd['data']['path'] = device.abspath
-            osd['data']['size'] = data_size.b
-            osd['data']['percentage'] = int(data_percentage)
-            osd['data']['human_readable_size'] = str(data_size)
-            osd['journal']['path'] = device.abspath
-            osd['journal']['size'] = journal_size.b
-            osd['journal']['percentage'] = int(100 - data_percentage)
-            osd['journal']['human_readable_size'] = str(journal_size)
-            osds.append(osd)
+            for osd in range(self.osds_per_device):
+                device_size = disk.Size(b=device.sys_api['size'])
+                osd_size = device_size / self.osds_per_device
+                journal_size = prepare.get_journal_size(lv_format=False)
+                data_size = osd_size - journal_size
+                data_percentage = data_size * 100 / device_size
+                osd = {'data': {}, 'journal': {}}
+                osd['data']['path'] = device.abspath
+                osd['data']['size'] = data_size.b
+                osd['data']['parts'] = self.osds_per_device
+                osd['data']['percentage'] = int(data_percentage)
+                osd['data']['human_readable_size'] = str(data_size)
+                osd['journal']['path'] = device.abspath
+                osd['journal']['size'] = journal_size.b
+                osd['journal']['percentage'] = int(100 - data_percentage)
+                osd['journal']['human_readable_size'] = str(journal_size)
+                osds.append(osd)
 
     def execute(self):
         """
         Create vgs/lvs from the incoming set of devices, assign their roles
         (data, journal) and offload the OSD creation to ``lvm create``
         """
-        osd_vgs = []
+        device_vgs = dict([(osd['data']['path'], None) for osd in self.computed['osds']])
 
-        # create the vgs first, one per device (since this is colocating, it
-        # picks the 'data' path)
+        # create 1 vg per data device first, mapping them to the device path,
+        # when the lvs get created later, it can create as many as needed,
+        # including the journals since it is going to be collocated
         for osd in self.computed['osds']:
-            vg = lvm.create_vg(osd['data']['path'])
-            osd_vgs.append(vg)
+            vg = device_vgs.get(osd['data']['path'])
+            if not vg:
+                vg = lvm.create_vg(osd['data']['path'], name_prefix='ceph-filestore')
+                device_vgs[osd['data']['path']] = vg
 
-        journal_size = prepare.get_journal_size()
-
-        # create the lvs from the vgs captured in the beginning
-        for vg in osd_vgs:
-            # this is called again, getting us the LVM formatted string
-            journal_lv = lvm.create_lv(
-                'osd-journal', vg.name, size=journal_size, uuid_name=True
+        # create the lvs from the per-device vg created in the beginning
+        for osd in self.computed['osds']:
+            data_path = osd['data']['path']
+            data_lv_size = disk.Size(b=osd['data']['size']).gb.as_int()
+            device_vg = device_vgs[data_path]
+            data_lv_extents = device_vg.sizing(size=data_lv_size)['extents']
+            journal_lv_extents = device_vg.sizing(size=self.journal_size.gb.as_int())['extents']
+            data_lv = lvm.create_lv(
+                'osd-data', device_vg.name, extents=data_lv_extents, uuid_name=True
             )
-            # no extents or size means it will use 100%FREE
-            data_lv = lvm.create_lv('osd-data', vg.name)
+            journal_lv = lvm.create_lv(
+                'osd-journal', device_vg.name, extents=journal_lv_extents, uuid_name=True
+            )
 
             command = ['--filestore', '--data']
-            command.append('%s/%s' % (vg.name, data_lv.name))
-            command.extend(['--journal', '%s/%s' % (vg.name, journal_lv.name)])
+            command.append('%s/%s' % (device_vg.name, data_lv.name))
+            command.extend(['--journal', '%s/%s' % (device_vg.name, journal_lv.name)])
             if self.args.dmcrypt:
                 command.append('--dmcrypt')
             if self.args.no_systemd:
@@ -132,12 +161,13 @@ class MixedType(object):
 
     def __init__(self, devices, args):
         self.args = args
+        self.osds_per_device = args.osds_per_device
         self.devices = devices
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
         self.computed = {'osds': [], 'vg': None}
         self.blank_ssds = []
-        self.journals_needed = len(self.hdds)
+        self.journals_needed = len(self.hdds) * self.osds_per_device
         self.journal_size = prepare.get_journal_size(lv_format=False)
         self.system_vgs = lvm.VolumeGroups()
         self.validate()
@@ -146,10 +176,17 @@ class MixedType(object):
     def report_json(self):
         print(json.dumps(self.computed, indent=4, sort_keys=True))
 
+    @property
+    def total_osds(self):
+        if self.hdds:
+            return len(self.hdds) * self.osds_per_device
+        else:
+            return len(self.ssds) * self.osds_per_device
+
     def report_pretty(self):
         string = ""
         string += templates.total_osds.format(
-            total_osds=len(self.hdds) or len(self.ssds) * 2
+            total_osds=self.total_osds
         )
 
         string += templates.ssd_volume_group.format(
@@ -197,7 +234,7 @@ class MixedType(object):
         met, raise an error if the provided devices would not work
         """
         # validate minimum size for all devices
-        validators.minimum_device_size(self.devices)
+        validators.minimum_device_size(self.devices, osds_per_device=self.osds_per_device)
 
         # make sure that data devices do not have any LVs
         validators.no_lvm_membership(self.hdds)
@@ -225,17 +262,20 @@ class MixedType(object):
 
         try:
             self.vg_extents = lvm.sizing(
-                self.total_available_journal_space.b, size=self.journal_size.b
+                self.total_available_journal_space.b, size=self.journal_size.b * self.osds_per_device
             )
         except SizeAllocationError:
-            self.vg_extents = {'parts': 0, 'percentages': 0, 'sizes': 0}
+            msg = "Not enough space in fast devices (%s) to create %s x %s journal LV"
+            raise RuntimeError(
+                msg % (self.total_available_journal_space, self.osds_per_device, self.journal_size)
+            )
 
         # validate that number of journals possible are enough for number of
         # OSDs proposed
         total_journals_possible = self.total_available_journal_space / self.journal_size
-        if len(self.hdds) > total_journals_possible:
-            msg = "Not enough %s journals (%s) can be created for %s OSDs" % (
-                self.journal_size, total_journals_possible, len(self.hdds)
+        if self.osds_per_device > total_journals_possible:
+            msg = "Not enough space (%s) to create %s x %s journal LVs" % (
+                self.total_available_journal_space, self.journals_needed, self.journal_size
             )
             raise RuntimeError(msg)
 
@@ -264,42 +304,57 @@ class MixedType(object):
             vg_name = self.common_vg.name
 
         for device in self.hdds:
-            device_size = disk.Size(b=device.sys_api['size'])
-            data_size = device_size - self.journal_size
-            osd = {'data': {}, 'journal': {}}
-            osd['data']['path'] = device.path
-            osd['data']['size'] = data_size.b
-            osd['data']['percentage'] = 100
-            osd['data']['human_readable_size'] = str(device_size)
-            osd['journal']['path'] = 'vg: %s' % vg_name
-            osd['journal']['size'] = self.journal_size.b
-            osd['journal']['percentage'] = int(self.journal_size.gb * 100 / vg_free)
-            osd['journal']['human_readable_size'] = str(self.journal_size)
-            osds.append(osd)
+            for osd in range(self.osds_per_device):
+                device_size = disk.Size(b=device.sys_api['size'])
+                data_size = device_size / self.osds_per_device
+                osd = {'data': {}, 'journal': {}}
+                osd['data']['path'] = device.path
+                osd['data']['size'] = data_size.b
+                osd['data']['percentage'] = 100 / self.osds_per_device
+                osd['data']['human_readable_size'] = str(data_size)
+                osd['journal']['path'] = 'vg: %s' % vg_name
+                osd['journal']['size'] = self.journal_size.b
+                osd['journal']['percentage'] = int(self.journal_size.gb * 100 / vg_free)
+                osd['journal']['human_readable_size'] = str(self.journal_size)
+                osds.append(osd)
 
     def execute(self):
         """
         Create vgs/lvs from the incoming set of devices, assign their roles
         (data, journal) and offload the OSD creation to ``lvm create``
         """
-        ssd_paths = [d.abspath for d in self.blank_ssds]
+        blank_ssd_paths = [d.abspath for d in self.blank_ssds]
+        data_vgs = dict([(osd['data']['path'], None) for osd in self.computed['osds']])
 
         # no common vg is found, create one with all the blank SSDs
         if not self.common_vg:
-            journal_vg = lvm.create_vg(ssd_paths, name_prefix='ceph-journals')
+            journal_vg = lvm.create_vg(blank_ssd_paths, name_prefix='ceph-journals')
         # a vg exists that can be extended
-        elif self.common_vg and ssd_paths:
-            journal_vg = lvm.extend_vg(self.common_vg, ssd_paths)
+        elif self.common_vg and blank_ssd_paths:
+            journal_vg = lvm.extend_vg(self.common_vg, blank_ssd_paths)
         # one common vg with nothing else to extend can be used directly
         else:
             journal_vg = self.common_vg
 
         journal_size = prepare.get_journal_size(lv_format=True)
 
+        # create 1 vg per data device first, mapping them to the device path,
+        # when the lv gets created later, it can create as many as needed (or
+        # even just 1)
         for osd in self.computed['osds']:
-            data_vg = lvm.create_vg(osd['data']['path'], name_prefix='ceph-data')
-            # no extents or size means it will use 100%FREE
-            data_lv = lvm.create_lv('osd-data', data_vg.name)
+            vg = data_vgs.get(osd['data']['path'])
+            if not vg:
+                vg = lvm.create_vg(osd['data']['path'], name_prefix='ceph-data')
+                data_vgs[osd['data']['path']] = vg
+
+        for osd in self.computed['osds']:
+            data_path = osd['data']['path']
+            data_lv_size = disk.Size(b=osd['data']['size']).gb.as_int()
+            data_vg = data_vgs[data_path]
+            data_lv_extents = data_vg.sizing(size=data_lv_size)['extents']
+            data_lv = lvm.create_lv(
+                'osd-data', data_vg.name, extents=data_lv_extents, uuid_name=True
+            )
             journal_lv = lvm.create_lv(
                 'osd-journal', journal_vg.name, size=journal_size, uuid_name=True
             )
