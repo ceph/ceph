@@ -136,6 +136,9 @@ void _generate_bootstrap_keys(
     } },
     { "bootstrap-rbd", {
       { "mon", _encode_cap("allow profile bootstrap-rbd") }
+    } },
+    { "bootstrap-rbd-mirror", {
+      { "mon", _encode_cap("allow profile bootstrap-rbd-mirror") }
     } }
   };
 
