@@ -827,11 +827,6 @@ using namespace ceph;
     return _raw->can_zero_copy();
   }
 
-  int buffer::ptr::zero_copy_to_fd(int fd, int64_t *offset) const
-  {
-    return _raw->zero_copy_to_fd(fd, (loff_t*)offset);
-  }
-
   // -- buffer::list::iterator --
   /*
   buffer::list::iterator operator=(const buffer::list::iterator& other)
