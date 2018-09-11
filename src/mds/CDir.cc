@@ -3053,23 +3053,6 @@ bool CDir::can_auth_pin(int *err_ret) const
   return !err;
 }
 
-CDir *CDir::get_freezing_tree_root()
-{
-  if (num_freezing_trees == 0)
-    return nullptr;
-  CDir *dir = this;
-  while (true) {
-    if (dir->is_freezing_tree_root())
-      return dir;
-    if (dir->is_subtree_root())
-      return nullptr;
-    if (dir->inode->parent)
-      dir = dir->inode->parent->dir;
-    else
-      return nullptr;
-  }
-}
-
 class C_Dir_AuthUnpin : public CDirContext {
   public:
   explicit C_Dir_AuthUnpin(CDir *d) : CDirContext(d) {}
