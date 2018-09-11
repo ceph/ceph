@@ -2056,7 +2056,7 @@ void PGMap::get_filtered_pg_stats(uint64_t state, int64_t poolid, int64_t osdid,
       continue;
     if ((osdid >= 0) && !(i->second.is_acting_osd(osdid,primary)))
       continue;
-    if (!(i->second.state & state))
+    if (state != (uint64_t)-1 && !(i->second.state & state))
       continue;
     pgs.insert(i->first);
   }
