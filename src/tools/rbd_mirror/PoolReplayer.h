@@ -162,6 +162,8 @@ private:
 
   int init_rados(const std::string &cluster_name,
                  const std::string &client_name,
+                 const std::string &mon_host,
+                 const std::string &key,
                  const std::string &description, RadosRef *rados_ref,
                  bool strip_cluster_overrides);
 
@@ -236,7 +238,7 @@ private:
   std::unique_ptr<ImageDeleter<ImageCtxT>> m_image_deleter;
 
   ImageMapListener m_image_map_listener;
-  std::unique_ptr<ImageMap<librbd::ImageCtx>> m_image_map;
+  std::unique_ptr<ImageMap<ImageCtxT>> m_image_map;
 
   std::string m_asok_hook_name;
   AdminSocketHook *m_asok_hook = nullptr;

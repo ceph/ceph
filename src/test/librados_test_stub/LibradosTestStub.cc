@@ -184,6 +184,13 @@ extern "C" int rados_create(rados_t *cluster, const char * const id) {
   return 0;
 }
 
+extern "C" int rados_create_with_context(rados_t *cluster,
+                                         rados_config_t cct_) {
+  auto cct = reinterpret_cast<CephContext*>(cct_);
+  *cluster = librados_test_stub::get_cluster()->create_rados_client(cct);
+  return 0;
+}
+
 extern "C" rados_config_t rados_ioctx_cct(rados_ioctx_t ioctx)
 {
   librados::TestIoCtxImpl *ctx =
@@ -1029,6 +1036,10 @@ int Rados::get_min_compatible_client(int8_t* min_compat_client,
 
 int Rados::init(const char * const id) {
   return rados_create(reinterpret_cast<rados_t *>(&client), id);
+}
+
+int Rados::init_with_context(config_t cct_) {
+  return rados_create_with_context(reinterpret_cast<rados_t *>(&client), cct_);
 }
 
 int Rados::ioctx_create(const char *name, IoCtx &io) {
