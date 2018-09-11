@@ -3,7 +3,6 @@
 from __future__ import absolute_import
 
 import json
-from time import sleep
 
 from .helper import DashboardTestCase, JObj, JAny, JList, JLeaf, JTuple
 
