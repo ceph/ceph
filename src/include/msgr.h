@@ -28,6 +28,34 @@
  */
 #define CEPH_BANNER "ceph v027"
 
+
+/*
+ * messenger V2 connection banner prefix.
+ * The full banner string should have the form: "ceph %x %x" the first hex
+ * bytes are the features supported mask and the second hex bytes are the
+ * features required mask.
+ */
+#define CEPH_BANNER_V2_PREFIX "ceph v2"
+
+/*
+ * messenger V2 features
+ */
+#define CEPH_MSGR2_INCARNATION_1 (0ull)
+
+#define DEFINE_MSGR2_FEATURE(bit, incarnation, name)               \
+	const static uint64_t CEPH_MSGR2_FEATURE_##name = (1ULL << bit); \
+	const static uint64_t CEPH_MSGR2_FEATUREMASK_##name =            \
+			(1ULL << bit | CEPH_FEATURE_INCARNATION_##incarnation);
+
+#define HAVE_MSGR2_FEATURE(x, name) \
+	(((x) & (CEPH_MSGR2_FEATUREMASK_##name)) == (CEPH_MSGR2_FEATUREMASK_##name))
+
+
+#define CEPH_MSGR2_SUPPORTED_FEATURES (0ull)
+
+#define CEPH_MSGR2_REQUIRED_FEATURES (CEPH_MSGR2_SUPPORTED_FEATURES)
+
+
 /*
  * Rollover-safe type and comparator for 32-bit sequence numbers.
  * Comparator returns -1, 0, or 1.
