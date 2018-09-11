@@ -55,6 +55,7 @@ you may write data with one API and retrieve it with the other.
    Server-Side Encryption <encryption>
    Bucket Policy <bucketpolicy>
    Data Layout in RADOS <layout>
+   STS Lite <STSLite>
    troubleshooting
    Manpage radosgw <../../man/8/radosgw>
    Manpage radosgw-admin <../../man/8/radosgw-admin>
