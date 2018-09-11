@@ -2234,8 +2234,11 @@ void DaemonServer::adjust_pgs()
       if (creating_or_unknown >= max) {
 	return;
       }
+      left -= creating_or_unknown;
       dout(10) << "creating_or_unknown " << creating_or_unknown
-	       << " max_creating " << max << dendl;
+	       << " max_creating " << max
+               << " left " << left
+               << dendl;
       cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	  if (pg_map.last_osdmap_epoch != osdmap.get_epoch()) {
 	    // do nothing if maps aren't in sync
@@ -2331,6 +2334,7 @@ void DaemonServer::adjust_pgs()
 			       << " pgs in " << pg_state_string(j.first)
 			       << dendl;
 		      active = false;
+                      break;
 		    }
 		  }
 		} else {
