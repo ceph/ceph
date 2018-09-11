@@ -217,6 +217,42 @@ BasePyOSDMap_dealloc(BasePyOSDMap *self)
   Py_TYPE(self)->tp_free(self);
 }
 
+static PyObject *osdmap_pg_to_up_acting_osds(BasePyOSDMap *self, PyObject *args)
+{
+  int pool_id = 0;
+  int ps = 0;
+  if (!PyArg_ParseTuple(args, "ii:pg_to_up_acting_osds",
+			&pool_id, &ps)) {
+    return nullptr;
+  }
+
+  std::vector<int> up;
+  int up_primary;
+  std::vector<int> acting;
+  int acting_primary;
+  pg_t pg_id(ps, pool_id);
+  self->osdmap->pg_to_up_acting_osds(pg_id,
+      &up, &up_primary,
+      &acting, &acting_primary);
+
+  // (Ab)use PyFormatter as a convenient way to generate a dict
+  PyFormatter f;
+  f.dump_int("up_primary", up_primary);
+  f.dump_int("acting_primary", acting_primary);
+  f.open_array_section("up");
+  for (const auto &i : up) {
+    f.dump_int("osd", i);
+  }
+  f.close_section();
+  f.open_array_section("acting");
+  for (const auto &i : acting) {
+    f.dump_int("osd", i);
+  }
+  f.close_section();
+
+  return f.get();
+}
+
 
 PyMethodDef BasePyOSDMap_methods[] = {
   {"_get_epoch", (PyCFunction)osdmap_get_epoch, METH_NOARGS, "Get OSDMap epoch"},
@@ -234,6 +270,8 @@ PyMethodDef BasePyOSDMap_methods[] = {
    "Calculate new pg-upmap values"},
   {"_map_pool_pgs_up", (PyCFunction)osdmap_map_pool_pgs_up, METH_VARARGS,
    "Calculate up set mappings for all PGs in a pool"},
+  {"_pg_to_up_acting_osds", (PyCFunction)osdmap_pg_to_up_acting_osds, METH_VARARGS,
+    "Calculate up+acting OSDs for a PG ID"},
   {NULL, NULL, 0, NULL}
 };
 

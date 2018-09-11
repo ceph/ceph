@@ -232,7 +232,6 @@ class LocalRemote(object):
     def run(self, args, check_status=True, wait=True,
             stdout=None, stderr=None, cwd=None, stdin=None,
             logger=None, label=None, env=None):
-        log.info("run args={0}".format(args))
 
         # We don't need no stinkin' sudo
         args = [a for a in args if a != "sudo"]
@@ -240,32 +239,33 @@ class LocalRemote(object):
         # We have to use shell=True if any run.Raw was present, e.g. &&
         shell = any([a for a in args if isinstance(a, Raw)])
 
+        # Filter out helper tools that don't exist in a vstart environment
+        args = [a for a in args if a not in {
+            'adjust-ulimits', 'ceph-coverage', 'timeout'}]
+
+        # Adjust binary path prefix if given a bare program name
+        if "/" not in args[0]:
+            # If they asked for a bare binary name, and it exists
+            # in our built tree, use the one there.
+            local_bin = os.path.join(BIN_PREFIX, args[0])
+            if os.path.exists(local_bin):
+                args = [local_bin] + args[1:]
+            else:
+                log.debug("'{0}' is not a binary in the Ceph build dir".format(
+                    args[0]
+                ))
+
+        log.info("Running {0}".format(args))
+
         if shell:
-            filtered = []
-            i = 0
-            while i < len(args):
-                if args[i] == 'adjust-ulimits':
-                    i += 1
-                elif args[i] == 'ceph-coverage':
-                    i += 2
-                elif args[i] == 'timeout':
-                    i += 2
-                else:
-                    filtered.append(args[i])
-                    i += 1
-
-            args = quote(filtered)
-            log.info("Running {0}".format(args))
-
-            subproc = subprocess.Popen(args,
+            subproc = subprocess.Popen(quote(args),
                                        stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE,
                                        stdin=subprocess.PIPE,
                                        cwd=cwd,
                                        shell=True)
         else:
-            log.info("Running {0}".format(args))
-
+            # Sanity check that we've got a list of strings
             for arg in args:
                 if not isinstance(arg, basestring):
                     raise RuntimeError("Oops, can't handle arg {0} type {1}".format(
@@ -559,6 +559,12 @@ class LocalCephManager(CephManager):
         self.lock = threading.RLock()
 
         self.log = lambda x: log.info(x)
+
+        # Don't bother constructing a map of pools: it should be empty
+        # at test cluster start, and in any case it would be out of date
+        # in no time.  The attribute needs to exist for some of the CephManager
+        # methods to work though.
+        self.pools = {}
 
     def find_remote(self, daemon_type, daemon_id):
         """
@@ -899,7 +905,7 @@ def exec_test():
         vstart_env = os.environ.copy()
         vstart_env["FS"] = "0"
         vstart_env["MDS"] = max_required_mds.__str__()
-        vstart_env["OSD"] = "1"
+        vstart_env["OSD"] = "4"
         vstart_env["MGR"] = max(max_required_mgr, 1).__str__()
 
         remote.run([os.path.join(SRC_PREFIX, "vstart.sh"), "-n", "-d", "--nolockdep"],
