@@ -6,7 +6,7 @@ RGW Support for Multifactor Authentication
 
 .. versionadded:: Mimic
 
-The S3 multifactor authenticatioin (MFA) feature allows
+The S3 multifactor authentication (MFA) feature allows
 users to require the use of one-time password when removing
 objects on certain buckets. The buckets need to be configured
 with versioning and MFA enabled which can be done through
@@ -22,7 +22,7 @@ Multisite
 
 While the MFA IDs are set on the user's metadata, the
 actual MFA one time password configuration resides in the local zone's
-osds. Therefore, in a multi-site environment it is adviseable to use
+osds. Therefore, in a multi-site environment it is advisable to use
 different tokens for different zones.
 
 
