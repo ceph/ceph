@@ -213,7 +213,7 @@ assumed to be preferable to returning an IO error to the user.
 
 First, you can identify which objects are unfound with::
 
-	ceph pg 2.4 list_missing [starting offset, in json]
+	ceph pg 2.4 list_unfound [starting offset, in json]
 
 .. code-block:: javascript
 

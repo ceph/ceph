@@ -467,7 +467,7 @@ function list_missing_erasure_coded() {
 
     for i in $(seq 0 120) ; do
         [ $i -lt 60 ] || return 1
-        matches=$(ceph pg $pg list_missing | egrep "MOBJ0|MOBJ1" | wc -l)
+        matches=$(ceph pg $pg list_unfound | egrep "MOBJ0|MOBJ1" | wc -l)
         [ $matches -eq 2 ] && break
     done
 

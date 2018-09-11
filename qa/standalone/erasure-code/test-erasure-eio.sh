@@ -558,7 +558,7 @@ function TEST_ec_backfill_unfound() {
     done
 
     ceph pg dump pgs
-    ceph pg 2.0 list_missing | grep -q $testobj || return 1
+    ceph pg 2.0 list_unfound | grep -q $testobj || return 1
 
     # Command should hang because object is unfound
     timeout 5 rados -p $poolname get $testobj $dir/CHECK
@@ -638,7 +638,7 @@ function TEST_ec_recovery_unfound() {
     done
 
     ceph pg dump pgs
-    ceph pg 2.0 list_missing | grep -q $testobj || return 1
+    ceph pg 2.0 list_unfound | grep -q $testobj || return 1
 
     # Command should hang because object is unfound
     timeout 5 rados -p $poolname get $testobj $dir/CHECK

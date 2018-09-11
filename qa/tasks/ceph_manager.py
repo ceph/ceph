@@ -1801,14 +1801,14 @@ class CephManager:
             self.set_pool_property(pool_name, 'pgp_num', self.pools[pool_name])
             return True
 
-    def list_pg_missing(self, pgid):
+    def list_pg_unfound(self, pgid):
         """
-        return list of missing pgs with the id specified
+        return list of unfound pgs with the id specified
         """
         r = None
         offset = {}
         while True:
-            out = self.raw_cluster_cmd('--', 'pg', pgid, 'list_missing',
+            out = self.raw_cluster_cmd('--', 'pg', pgid, 'list_unfound',
                                        json.dumps(offset))
             j = json.loads(out)
             if r is None:
