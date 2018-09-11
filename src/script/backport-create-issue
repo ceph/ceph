@@ -53,13 +53,17 @@ tracker2tracker_id = {}
 version2version_id = {}
 
 def usage():
-    logging.error("Command-line arguments must include either a Redmine key (positional "
-                  "argument) or a Redmine username and password (via --user and --password)")
+    logging.error("Command-line arguments must include either a Redmine key (--key) "
+                  "or a Redmine username and password (via --user and --password). "
+                  "Optionally, one or more issue numbers can be given via positional "
+                  "argument(s). In the absence of positional arguments, the script "
+                  "will loop through all issues in Pending Backport status.")
     exit(-1)
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument("key", nargs='?', help="Redmine user key")
+    parser.add_argument("issue_numbers", nargs='*', help="Issue number")
+    parser.add_argument("--key", help="Redmine user key")
     parser.add_argument("--user", help="Redmine user")
     parser.add_argument("--password", help="Redmine password")
     parser.add_argument("--debug", help="Show debug-level messages",
@@ -239,6 +243,13 @@ if __name__ == '__main__':
     logging.debug("Pending Backport status has ID {}"
         .format(pending_backport_status_id))
     populate_tracker_dict(redmine)
-    issues = redmine.issue.filter(project_id=ceph_project_id,
-                                  status_id=pending_backport_status_id)
+    if args.issue_numbers:
+        issue_list = ','.join(args.issue_numbers)
+        logging.info("Processing issue list ->{}<-".format(issue_list))
+        issues = redmine.issue.filter(project_id=ceph_project_id,
+                                      issue_id=issue_list,
+                                      status_id=pending_backport_status_id)
+    else:
+        issues = redmine.issue.filter(project_id=ceph_project_id,
+                                      status_id=pending_backport_status_id)
     iterate_over_backports(redmine, issues, args.dry_run)
