@@ -3589,6 +3589,11 @@ bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
   if (!src.is_osd() ||
       !osdmap.is_up(from) ||
       beacon->get_orig_source_addrs() != osdmap.get_addrs(from)) {
+    if (src.is_osd() && !osdmap.is_up(from)) {
+      // share some new maps with this guy in case it may not be
+      // aware of its own deadness...
+      send_latest(op, beacon->version+1);
+    }
     dout(1) << " ignoring beacon from non-active osd." << from << dendl;
     return false;
   }
