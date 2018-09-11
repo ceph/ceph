@@ -934,7 +934,6 @@ namespace buffer CEPH_BUFFER_API {
     void hexdump(std::ostream &out, bool trailing_newline = true) const;
     int read_file(const char *fn, std::string *error);
     ssize_t read_fd(int fd, size_t len);
-    int read_fd_zero_copy(int fd, size_t len);
     int write_file(const char *fn, int mode=0644);
     int write_fd(int fd) const;
     int write_fd(int fd, uint64_t offset) const;
