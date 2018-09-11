@@ -2069,9 +2069,6 @@ static int do_writev(int fd, struct iovec *vec, uint64_t offset, unsigned veclen
 
 int buffer::list::write_fd(int fd) const
 {
-  if (can_zero_copy())
-    return write_fd_zero_copy(fd);
-
   // use writev!
   iovec iov[IOV_MAX];
   int iovlen = 0;
@@ -2146,30 +2143,6 @@ int buffer::list::write_fd(int fd, uint64_t offset) const
     if (r < 0)
       return r;
     offset += bytes;
-  }
-  return 0;
-}
-
-int buffer::list::write_fd_zero_copy(int fd) const
-{
-  if (!can_zero_copy())
-    return -ENOTSUP;
-  /* pass offset to each call to avoid races updating the fd seek
-   * position, since the I/O may be non-blocking
-   */
-  int64_t offset = ::lseek(fd, 0, SEEK_CUR);
-  int64_t *off_p = &offset;
-  if (offset < 0 && errno != ESPIPE)
-    return -errno;
-  if (errno == ESPIPE)
-    off_p = NULL;
-  for (std::list<ptr>::const_iterator it = _buffers.begin();
-       it != _buffers.end(); ++it) {
-    int r = it->zero_copy_to_fd(fd, off_p);
-    if (r < 0)
-      return r;
-    if (off_p)
-      offset += it->length();
   }
   return 0;
 }

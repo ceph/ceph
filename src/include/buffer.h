@@ -935,7 +935,6 @@ namespace buffer CEPH_BUFFER_API {
     int write_file(const char *fn, int mode=0644);
     int write_fd(int fd) const;
     int write_fd(int fd, uint64_t offset) const;
-    int write_fd_zero_copy(int fd) const;
     template<typename VectorT>
     void prepare_iov(VectorT *piov) const {
 #ifdef __CEPH__
