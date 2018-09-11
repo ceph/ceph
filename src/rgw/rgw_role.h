@@ -1,6 +1,9 @@
 #ifndef CEPH_RGW_ROLE_H
 #define CEPH_RGW_ROLE_H
 
+#include "include/buffer.h"
+#include "rgw_common.h"
+
 class RGWRole
 {
   static const string role_name_oid_prefix;
@@ -87,15 +90,15 @@ public:
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 1, bl);
-    encode(id, bl);
-    encode(name, bl);
-    encode(path, bl);
-    encode(arn, bl);
-    encode(creation_date, bl);
-    encode(trust_policy, bl);
-    encode(perm_policy_map, bl);
-    encode(tenant, bl);
-    encode(max_session_duration, bl);
+    ::encode(id, bl);
+    ::encode(name, bl);
+    ::encode(path, bl);
+    ::encode(arn, bl);
+    ::encode(creation_date, bl);
+    ::encode(trust_policy, bl);
+    ::encode(perm_policy_map, bl);
+    ::encode(tenant, bl);
+    ::encode(max_session_duration, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -112,7 +115,7 @@ public:
       ::decode(tenant, bl);
     }
     if (struct_v >= 3) {
-      decode(max_session_duration, bl);
+      ::decode(max_session_duration, bl);
     }
     DECODE_FINISH(bl);
   }
