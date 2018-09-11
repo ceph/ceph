@@ -324,7 +324,7 @@ public:
   void adjust_export_after_rename(CInode* diri, CDir *olddir);
   void child_export_finish(std::shared_ptr<export_base_t>& parent, bool success);
 
-  void get_export_lock_set(CDir *dir, set<SimpleLock*>& locks);
+  void get_export_lock_set(CDir *dir, MutationImpl::LockOpVec& lov);
   void get_export_client_set(CDir *dir, set<client_t> &client_set);
   void get_export_client_set(CInode *in, set<client_t> &client_set);
 
