@@ -262,3 +262,17 @@ set(cls_lua_client_srcs
     lua/cls_lua_client.cc)
 add_library(cls_lua_client STATIC ${cls_lua_client_srcs})
 
+# cls_cas
+set(cls_cas_srcs 
+  cas/cls_cas.cc)
+add_library(cls_cas SHARED ${cls_cas_srcs})
+set_target_properties(cls_cas PROPERTIES
+  VERSION "1.0.0"
+  SOVERSION "1"
+  INSTALL_RPATH ""
+  CXX_VISIBILITY_PRESET hidden)
+install(TARGETS cls_cas DESTINATION ${cls_dir})
+
+set(cls_cas_client_srcs
+  cas/cls_cas_client.cc)
+add_library(cls_cas_client STATIC ${cls_cas_client_srcs})

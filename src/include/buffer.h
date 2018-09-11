@@ -61,6 +61,7 @@
 #endif
 
 #include "inline_memory.h"
+#include <boost/optional.hpp>
 
 #if __GNUC__ >= 4
   #define CEPH_BUFFER_API  __attribute__ ((visibility ("default")))
@@ -81,6 +82,7 @@ class packet;
 }
 #endif // HAVE_SEASTAR
 class deleter;
+struct sha1_digest_t;
 
 namespace ceph {
 
@@ -955,6 +957,7 @@ namespace buffer CEPH_BUFFER_API {
     }
     uint32_t crc32c(uint32_t crc) const;
     void invalidate_crc();
+    boost::optional<sha1_digest_t> sha1(); 
 
     // These functions return a bufferlist with a pointer to a single
     // static buffer. They /must/ not outlive the memory they

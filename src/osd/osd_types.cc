@@ -1057,7 +1057,9 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
            ("csum_max_block", pool_opts_t::opt_desc_t(
 	     pool_opts_t::CSUM_MAX_BLOCK, pool_opts_t::INT))
            ("csum_min_block", pool_opts_t::opt_desc_t(
-	     pool_opts_t::CSUM_MIN_BLOCK, pool_opts_t::INT));
+	     pool_opts_t::CSUM_MIN_BLOCK, pool_opts_t::INT))
+           ("fingerprint_algorithm", pool_opts_t::opt_desc_t(
+	     pool_opts_t::FINGERPRINT_ALGORITHM, pool_opts_t::STR));
 
 bool pool_opts_t::is_opt_name(const std::string& name) {
     return opt_mapping.count(name);
@@ -5069,7 +5071,8 @@ void chunk_info_t::encode(bufferlist& bl) const
   encode(offset, bl);
   encode(length, bl);
   encode(oid, bl);
-  encode(flags, bl);
+  __u32 _flags = flags;
+  encode(_flags, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -5079,7 +5082,9 @@ void chunk_info_t::decode(bufferlist::const_iterator& bl)
   decode(offset, bl);
   decode(length, bl);
   decode(oid, bl);
-  decode(flags, bl);
+  __u32 _flags;
+  decode(_flags, bl);
+  flags = (cflag_t)_flags;
   DECODE_FINISH(bl);
 }
 
