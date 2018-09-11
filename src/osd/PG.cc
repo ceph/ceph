@@ -1400,6 +1400,9 @@ void PG::calc_replicated_acting(
       acting_backfill->insert(up_cand);
       ss << " osd." << i << " (up) accepted " << cur_info << std::endl;
     }
+    if (want->size() >= size) {
+      break;
+    }
   }
 
   if (want->size() >= size) {
