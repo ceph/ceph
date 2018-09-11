@@ -2056,9 +2056,11 @@ void PGMap::get_filtered_pg_stats(uint64_t state, int64_t poolid, int64_t osdid,
       continue;
     if ((osdid >= 0) && !(i->second.is_acting_osd(osdid,primary)))
       continue;
-    if (state != (uint64_t)-1 && !(i->second.state & state))
-      continue;
-    pgs.insert(i->first);
+    if (state == (uint64_t)-1 ||                 // "all"
+	(i->second.state & state) ||             // matches a state bit
+	(state == 0 && i->second.state == 0)) {  // matches "unknown" (== 0)
+      pgs.insert(i->first);
+    }
   }
 }
 
