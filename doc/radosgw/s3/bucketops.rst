@@ -182,7 +182,7 @@ Response Entities
 | Name                   | Type      | Description                              |
 +========================+===========+==========================================+
 | ``LocationConstraint`` | String    | The region where bucket resides, empty   |
-|                        |           | string for defult region                 |
+|                        |           | string for default region                |
 +------------------------+-----------+------------------------------------------+
 
 

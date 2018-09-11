@@ -12,12 +12,12 @@ policy enforcement can be decoupled from policy decisions.
 Configure OPA
 =============
 
-To configure OPA, load custom polices into OPA that control the resources users
+To configure OPA, load custom policies into OPA that control the resources users
 are allowed to access. Relevant data or context can also be loaded into OPA to make decisions.
 
-Polices and data can be loaded into OPA in the following ways::
+Policies and data can be loaded into OPA in the following ways::
   * OPA's RESTful APIs
-  * OPA's *bundle* feature that downloads polcies and data from remote HTTP servers
+  * OPA's *bundle* feature that downloads policies and data from remote HTTP servers
   * Filesystem
 
 Configure the Ceph Object Gateway
