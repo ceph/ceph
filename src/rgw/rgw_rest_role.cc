@@ -17,6 +17,41 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+int RGWRestRole::verify_permission()
+{
+  if (s->auth.identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  string role_name = s->info.args.get("RoleName");
+  RGWRole role(s->cct, store, role_name, s->user->user_id.tenant);
+  if (op_ret = role.get(); op_ret < 0) {
+    if (op_ret == -ENOENT) {
+      op_ret = -ERR_NO_ROLE_FOUND;
+    }
+    return op_ret;
+  }
+
+  if (int ret = check_caps(s->user->caps); ret == 0) {
+    _role = std::move(role);
+    return ret;
+  }
+
+  string resource_name = role.get_path() + role_name;
+  uint64_t op = get_op();
+  if (!verify_user_permission(s,
+                              rgw::IAM::ARN(resource_name,
+                                            "role",
+                                             s->user->user_id.tenant, true),
+                                             op)) {
+    return -EACCES;
+  }
+
+  _role = std::move(role);
+
+  return 0;
+}
+
 void RGWRestRole::send_response()
 {
   if (op_ret) {
@@ -24,13 +59,6 @@ void RGWRestRole::send_response()
   }
   dump_errno(s);
   end_header(s);
-}
-
-int RGWRestRole::verify_permission()
-{
-  int ret = check_caps(s->user->caps);
-  ldout(s->cct, 0) << "INFO: verify_permissions ret" << ret << dendl;
-  return ret;
 }
 
 int RGWRoleRead::check_caps(RGWUserCaps& caps)
@@ -41,6 +69,30 @@ int RGWRoleRead::check_caps(RGWUserCaps& caps)
 int RGWRoleWrite::check_caps(RGWUserCaps& caps)
 {
     return caps.check_cap("roles", RGW_CAP_WRITE);
+}
+
+int RGWCreateRole::verify_permission()
+{
+  if (s->auth.identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if (int ret = check_caps(s->user->caps); ret == 0) {
+    return ret;
+  }
+
+  string role_name = s->info.args.get("RoleName");
+  string role_path = s->info.args.get("Path");
+
+  string resource_name = role_path + role_name;
+  if (!verify_user_permission(s,
+                              rgw::IAM::ARN(resource_name,
+                                            "role",
+                                             s->user->user_id.tenant, true),
+                                             get_op())) {
+    return -EACCES;
+  }
+  return 0;
 }
 
 int RGWCreateRole::get_params()
@@ -100,12 +152,38 @@ void RGWDeleteRole::execute()
   if (op_ret < 0) {
     return;
   }
-  RGWRole role(s->cct, store, role_name, s->user->user_id.tenant);
-  op_ret = role.delete_obj();
+
+  op_ret = _role.delete_obj();
 
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_ROLE_FOUND;
   }
+}
+
+int RGWGetRole::verify_permission()
+{
+  return 0;
+}
+
+int RGWGetRole::_verify_permission(const RGWRole& role)
+{
+  if (s->auth.identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if (int ret = check_caps(s->user->caps); ret == 0) {
+    return ret;
+  }
+
+  string resource_name = role.get_path() + role.get_name();
+  if (!verify_user_permission(s,
+                              rgw::IAM::ARN(resource_name,
+                                            "role",
+                                             s->user->user_id.tenant, true),
+                                             get_op())) {
+    return -EACCES;
+  }
+  return 0;
 }
 
 int RGWGetRole::get_params()
@@ -131,7 +209,10 @@ void RGWGetRole::execute()
 
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_ROLE_FOUND;
+    return;
   }
+
+  op_ret = _verify_permission(role);
 
   if (op_ret == 0) {
     s->formatter->open_object_section("role");
@@ -164,16 +245,29 @@ void RGWModifyRole::execute()
   if (op_ret < 0) {
     return;
   }
-  RGWRole role(s->cct, store, role_name, s->user->user_id.tenant);
-  op_ret = role.get();
-  if (op_ret == -ENOENT) {
-    op_ret = -ERR_NO_ROLE_FOUND;
+
+  _role.update_trust_policy(trust_policy);
+  op_ret = _role.update();
+
+}
+
+int RGWListRoles::verify_permission()
+{
+  if (s->auth.identity->is_anonymous()) {
+    return -EACCES;
   }
 
-  if (op_ret == 0) {
-    role.update_trust_policy(trust_policy);
-    op_ret = role.update();
+  if (int ret = check_caps(s->user->caps); ret == 0) {
+    return ret;
   }
+
+  if (!verify_user_permission(s,
+                              rgw::IAM::ARN(),
+                              get_op())) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 int RGWListRoles::get_params()
@@ -229,12 +323,8 @@ void RGWPutRolePolicy::execute()
     return;
   }
 
-  RGWRole role(s->cct, store, role_name, s->user->user_id.tenant);
-  op_ret = role.get();
-  if (op_ret == 0) {
-    role.set_perm_policy(policy_name, perm_policy);
-    op_ret = role.update();
-  }
+  _role.set_perm_policy(policy_name, perm_policy);
+  op_ret = _role.update();
 }
 
 int RGWGetRolePolicy::get_params()
@@ -256,24 +346,14 @@ void RGWGetRolePolicy::execute()
     return;
   }
 
-  RGWRole role(g_ceph_context, store, role_name, s->user->user_id.tenant);
-  op_ret = role.get();
-
-  if (op_ret == -ENOENT) {
-    op_ret = -ERR_NO_ROLE_FOUND;
-  }
-
+  string perm_policy;
+  op_ret = _role.get_role_policy(policy_name, perm_policy);
   if (op_ret == 0) {
-    string perm_policy;
-    op_ret = role.get_role_policy(policy_name, perm_policy);
-
-    if (op_ret == 0) {
-      s->formatter->open_object_section("GetRolePolicyResult");
-      s->formatter->dump_string("PolicyName", policy_name);
-      s->formatter->dump_string("RoleName", role_name);
-      s->formatter->dump_string("Permission policy", perm_policy);
-      s->formatter->close_section();
-    }
+    s->formatter->open_object_section("GetRolePolicyResult");
+    s->formatter->dump_string("PolicyName", policy_name);
+    s->formatter->dump_string("RoleName", role_name);
+    s->formatter->dump_string("Permission policy", perm_policy);
+    s->formatter->close_section();
   }
 }
 
@@ -295,21 +375,12 @@ void RGWListRolePolicies::execute()
     return;
   }
 
-  RGWRole role(g_ceph_context, store, role_name, s->user->user_id.tenant);
-  op_ret = role.get();
-
-  if (op_ret == -ENOENT) {
-    op_ret = -ERR_NO_ROLE_FOUND;
+  std::vector<string> policy_names = _role.get_role_policy_names();
+  s->formatter->open_array_section("PolicyNames");
+  for (const auto& it : policy_names) {
+    s->formatter->dump_string("member", it);
   }
-
-  if (op_ret == 0) {
-    std::vector<string> policy_names = role.get_role_policy_names();
-    s->formatter->open_array_section("PolicyNames");
-    for (const auto& it : policy_names) {
-      s->formatter->dump_string("member", it);
-    }
-    s->formatter->close_section();
-  }
+  s->formatter->close_section();
 }
 
 int RGWDeleteRolePolicy::get_params()
@@ -331,21 +402,12 @@ void RGWDeleteRolePolicy::execute()
     return;
   }
 
-  RGWRole role(g_ceph_context, store, role_name, s->user->user_id.tenant);
-  op_ret = role.get();
-
+  op_ret = _role.delete_policy(policy_name);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_ROLE_FOUND;
   }
 
   if (op_ret == 0) {
-    op_ret = role.delete_policy(policy_name);
-    if (op_ret == -ENOENT) {
-      op_ret = -ERR_NO_ROLE_FOUND;
-    }
-
-    if (op_ret == 0) {
-      op_ret = role.update();
-    }
+    op_ret = _role.update();
   }
 }
