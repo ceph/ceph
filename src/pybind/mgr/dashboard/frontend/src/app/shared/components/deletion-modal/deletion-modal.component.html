@@ -11,41 +11,27 @@
           novalidate>
       <div class="modal-body">
         <ng-container *ngTemplateOutlet="description"></ng-container>
-        <p>
-          <ng-container i18n>
-            To confirm the deletion, enter
-          </ng-container>
-          <kbd>{{ pattern }}</kbd>
-          <ng-container i18n>
-            and click on
-          </ng-container>
-          <kbd>
-            <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
-          </kbd>.
-        </p>
-        <div class="form-group"
-             [ngClass]="{'has-error': deletionForm.showError('confirmation', formDir)}">
-          <input type="text"
-                 class="form-control"
-                 name="confirmation"
-                 id="confirmation"
-                 [placeholder]="pattern"
-                 [pattern]="escapeRegExp(pattern)"
-                 autocomplete="off"
-                 (keyup)="updateConfirmation($event)"
-                 formControlName="confirmation"
-                 autofocus>
-          <span class="help-block"
-                *ngIf="deletionForm.showError('confirmation', formDir, 'required')"
-                i18n>
-          This field is required.
-        </span>
-          <span class="help-block"
-                *ngIf="deletionForm.showError('confirmation', formDir, 'pattern')">
-          '{{ confirmation.value }}'
-          <span i18n>doesn't match</span>
-          '{{ pattern }}'.
-        </span>
+        <div class="question">
+          <p>
+            <ng-container i18n>
+              Are you sure you want to delete the selected
+            </ng-container>
+            {{ metaType }}?
+          </p>
+          <div class="form-group"
+               [ngClass]="{'has-error': deletionForm.showError('confirmation', formDir)}">
+            <div class="checkbox checkbox-primary">
+              <input type="checkbox"
+                     name="confirmation"
+                     id="confirmation"
+                     formControlName="confirmation"
+                     autofocus>
+              <label i18n
+                     for="confirmation">
+                I'm sure I want to proceed with the deletion.
+              </label>
+            </div>
+          </div>
         </div>
       </div>
       <div class="modal-footer">

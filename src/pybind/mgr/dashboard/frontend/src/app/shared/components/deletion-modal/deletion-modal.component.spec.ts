@@ -1,11 +1,13 @@
 import { Component, NgModule, NO_ERRORS_SCHEMA, TemplateRef, ViewChild } from '@angular/core';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { NgForm, ReactiveFormsModule } from '@angular/forms';
+import { By } from '@angular/platform-browser';
 
 import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap';
 import { Observable, Subscriber, timer as observableTimer } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { DirectivesModule } from '../../directives/directives.module';
 import { DeletionModalComponent } from './deletion-modal.component';
 
 @NgModule({
@@ -52,7 +54,6 @@ class MockComponent {
     this.ctrlRef = this.modalService.show(DeletionModalComponent);
     this.ctrlRef.content.setUp({
       metaType: 'Controller delete handling',
-      pattern: 'ctrl-test',
       deletionMethod: this.fakeDeleteController.bind(this),
       description: this.ctrlDescription,
       modalRef: this.ctrlRef
@@ -63,7 +64,6 @@ class MockComponent {
     this.modalRef = this.modalService.show(DeletionModalComponent);
     this.modalRef.content.setUp({
       metaType: 'Modal delete handling',
-      pattern: 'modal-test',
       deletionObserver: this.fakeDelete(),
       description: this.modalDescription,
       modalRef: this.modalRef
@@ -102,7 +102,7 @@ describe('DeletionModalComponent', () => {
   configureTestBed({
     declarations: [MockComponent, DeletionModalComponent],
     schemas: [NO_ERRORS_SCHEMA],
-    imports: [ModalModule.forRoot(), ReactiveFormsModule, MockModule]
+    imports: [ModalModule.forRoot(), ReactiveFormsModule, MockModule, DirectivesModule]
   });
 
   beforeEach(() => {
@@ -125,27 +125,31 @@ describe('DeletionModalComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('should focus the checkbox form field', () => {
+    fixture = TestBed.createComponent(DeletionModalComponent);
+    fixture.detectChanges();
+    fixture.whenStable().then(() => {
+      const focused = fixture.debugElement.query(By.css(':focus'));
+      expect(focused.attributes.id).toBe('confirmation');
+      expect(focused.attributes.type).toBe('checkbox');
+      const element = document.getElementById('confirmation');
+      expect(element === document.activeElement).toBeTruthy();
+    });
+  });
+
   describe('setUp', () => {
     const clearSetup = () => {
       component.metaType = undefined;
-      component.pattern = 'yes';
       component.deletionObserver = undefined;
       component.description = undefined;
       component.modalRef = undefined;
     };
 
-    const expectSetup = (
-      metaType,
-      observer: boolean,
-      method: boolean,
-      pattern,
-      template: boolean
-    ) => {
+    const expectSetup = (metaType, observer: boolean, method: boolean, template: boolean) => {
       expect(component.modalRef).toBeTruthy();
       expect(component.metaType).toBe(metaType);
       expect(!!component.deletionObserver).toBe(observer);
       expect(!!component.deletionMethod).toBe(method);
-      expect(component.pattern).toBe(pattern);
       expect(!!component.description).toBe(template);
     };
 
@@ -186,47 +190,29 @@ describe('DeletionModalComponent', () => {
         modalRef: mockComponent.ctrlRef,
         deletionObserver: mockComponent.fakeDelete()
       });
-      expectSetup('Observer', true, false, 'yes', false);
+      expectSetup('Observer', true, false, false);
       clearSetup();
       component.setUp({
         metaType: 'Controller',
         modalRef: mockComponent.ctrlRef,
         deletionMethod: mockComponent.fakeDeleteController
       });
-      expectSetup('Controller', false, true, 'yes', false);
+      expectSetup('Controller', false, true, false);
     });
 
-    it('should test optional parameters - pattern and description', () => {
-      component.setUp({
-        metaType: 'Pattern only',
-        modalRef: mockComponent.ctrlRef,
-        deletionObserver: mockComponent.fakeDelete(),
-        pattern: '{sth/!$_8()'
-      });
-      expectSetup('Pattern only', true, false, '{sth/!$_8()', false);
-      clearSetup();
+    it('should test optional parameters - description', () => {
       component.setUp({
         metaType: 'Description only',
         modalRef: mockComponent.ctrlRef,
         deletionObserver: mockComponent.fakeDelete(),
         description: mockComponent.modalDescription
       });
-      expectSetup('Description only', true, false, 'yes', true);
-      clearSetup();
-      component.setUp({
-        metaType: 'Description and pattern',
-        modalRef: mockComponent.ctrlRef,
-        deletionObserver: mockComponent.fakeDelete(),
-        description: mockComponent.modalDescription,
-        pattern: '{sth/!$_8()'
-      });
-      expectSetup('Description and pattern', true, false, '{sth/!$_8()', true);
+      expectSetup('Description only', true, false, true);
     });
   });
 
   it('should test if the ctrl driven mock is set correctly through mock component', () => {
     expect(component.metaType).toBe('Controller delete handling');
-    expect(component.pattern).toBe('ctrl-test');
     expect(component.description).toBeTruthy();
     expect(component.modalRef).toBeTruthy();
     expect(component.deletionMethod).toBeTruthy();
@@ -236,7 +222,6 @@ describe('DeletionModalComponent', () => {
   it('should test if the modal driven mock is set correctly through mock component', () => {
     mockComponent.openModalDriven();
     expect(component.metaType).toBe('Modal delete handling');
-    expect(component.pattern).toBe('modal-test');
     expect(component.description).toBeTruthy();
     expect(component.modalRef).toBeTruthy();
     expect(component.deletionObserver).toBeTruthy();
@@ -245,9 +230,10 @@ describe('DeletionModalComponent', () => {
 
   describe('component functions', () => {
     const changeValue = (value) => {
-      component.confirmation.setValue(value);
-      component.confirmation.markAsDirty();
-      component.confirmation.updateValueAndValidity();
+      const ctrl = component.deletionForm.get('confirmation');
+      ctrl.setValue(value);
+      ctrl.markAsDirty();
+      ctrl.updateValueAndValidity();
       fixture.detectChanges();
     };
 
@@ -276,25 +262,9 @@ describe('DeletionModalComponent', () => {
         testValidation(false, undefined, false);
         testValidation(true, 'required', true);
         component.deletionForm.reset();
-        changeValue('let-me-pass');
-        changeValue('');
+        changeValue(true);
+        changeValue(false);
         testValidation(true, 'required', true);
-      });
-
-      it('should test pattern', () => {
-        changeValue('let-me-pass');
-        testValidation(false, 'pattern', true);
-        changeValue('ctrl-test');
-        testValidation(false, undefined, false);
-        testValidation(true, undefined, false);
-      });
-
-      it('should test regex pattern', () => {
-        component.pattern = 'a+b';
-        changeValue('ab');
-        testValidation(false, 'pattern', true);
-        changeValue('a+b');
-        testValidation(false, 'pattern', false);
       });
     });
 
