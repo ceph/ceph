@@ -5802,3 +5802,55 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
   }
   return true;
 }
+
+int Monitor::ms_handle_authentication(Connection *con)
+{
+  auto priv = con->get_priv();
+  MonSession *s = static_cast<MonSession*>(priv.get());
+  if (!s) {
+    // must be msgr2, otherwise dispatch would have set up the session.
+    s = session_map.new_session(
+      entity_name_t(con->get_peer_type(), -1),  // we don't know yet
+      con->get_peer_addrs(),
+      con);
+    assert(s);
+    dout(10) << __func__ << " adding session " << s << " to con " << con
+	     << dendl;
+    con->set_priv(s);
+    logger->set(l_mon_num_sessions, session_map.get_size());
+    logger->inc(l_mon_session_add);
+  }
+  dout(10) << __func__ << " session " << s << " con " << con
+	   << " addr " << s->con->get_peer_addr()
+	   << " " << *s << dendl;
+
+  AuthCapsInfo &caps_info = con->get_peer_caps_info();
+  if (caps_info.allow_all) {
+    s->caps.set_allow_all();
+    s->authenticated = true;
+  }
+  int ret = 1;
+  if (caps_info.caps.length()) {
+    bufferlist::const_iterator p = caps_info.caps.cbegin();
+    string str;
+    try {
+      decode(str, p);
+    } catch (const buffer::error &err) {
+      derr << __func__ << " corrupt cap data for " << con->get_peer_entity_name()
+	   << " in auth db" << dendl;
+      str.clear();
+      ret = -EPERM;
+    }
+    if (ret >= 0) {
+      if (s->caps.parse(str, NULL)) {
+	s->authenticated = true;
+      } else {
+	derr << __func__ << " unparseable caps '" << str << "' for "
+	     << con->get_peer_entity_name() << dendl;
+	ret = -EPERM;
+      }
+    }
+  }
+
+  return ret;
+}
