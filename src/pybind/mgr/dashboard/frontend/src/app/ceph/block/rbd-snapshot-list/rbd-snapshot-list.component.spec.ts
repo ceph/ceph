@@ -189,13 +189,15 @@ describe('RbdSnapshotListComponent', () => {
     });
 
     it('should display old snapshot name', () => {
-      component.openSnapshotModal('rbd/snap/edit', 'oldname');
+      component.selection.selected = [{ name: 'oldname' }];
+      component.selection.update();
+      component.openEditSnapshotModal();
       expect(component.modalRef.content.snapName).toBe('oldname');
       expect(component.modalRef.content.editing).toBeTruthy();
     });
 
     it('should display suggested snapshot name', () => {
-      component.openSnapshotModal('rbd/snap/create');
+      component.openCreateSnapshotModal();
       expect(component.modalRef.content.snapName).toMatch(
         RegExp(`^${component.rbdName}-\\d+T\\d+Z\$`)
       );
