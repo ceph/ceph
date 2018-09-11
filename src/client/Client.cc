@@ -4047,11 +4047,15 @@ void Client::remove_session_caps(MetaSession *s)
   sync_cond.Signal();
 }
 
-int Client::_do_remount(void)
+int Client::_do_remount(bool retry_on_error)
 {
+  uint64_t max_retries = g_conf().get_val<uint64_t>("mds_max_retries_on_remount_failure");
+
   errno = 0;
   int r = remount_cb(callback_handle);
-  if (r != 0) {
+  if (r == 0) {
+    retries_on_invalidate = 0;
+  } else {
     int e = errno;
     client_t whoami = get_nodeid();
     if (r == -1) {
@@ -4063,8 +4067,10 @@ int Client::_do_remount(void)
           "failed to remount (to trim kernel dentries): "
           "return code = " << r << dendl;
     }
-    bool should_abort = cct->_conf.get_val<bool>("client_die_on_failed_remount") ||
-        cct->_conf.get_val<bool>("client_die_on_failed_dentry_invalidate");
+    bool should_abort =
+      (cct->_conf.get_val<bool>("client_die_on_failed_remount") ||
+       cct->_conf.get_val<bool>("client_die_on_failed_dentry_invalidate")) &&
+      !(retry_on_error && (++retries_on_invalidate < max_retries));
     if (should_abort && !unmounting) {
       lderr(cct) << "failed to remount for kernel dentry trimming; quitting!" << dendl;
       ceph_abort();
@@ -4080,7 +4086,7 @@ public:
   explicit C_Client_Remount(Client *c) : client(c) {}
   void finish(int r) override {
     ceph_assert(r == 0);
-    client->_do_remount();
+    client->_do_remount(true);
   }
 };
 
@@ -10262,7 +10268,7 @@ int Client::test_dentry_handling(bool can_invalidate)
     r = 0;
   } else if (remount_cb) {
     ldout(cct, 1) << "using remount_cb" << dendl;
-    r = _do_remount();
+    r = _do_remount(false);
   }
   if (r) {
     bool should_abort = cct->_conf.get_val<bool>("client_die_on_failed_dentry_invalidate");
