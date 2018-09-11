@@ -3906,8 +3906,6 @@ class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
   int wait_pending_front();
   bool pending_has_completed();
 
-  rgw_raw_obj last_written_obj;
-
 protected:
   uint64_t obj_len{0};
 

@@ -2536,10 +2536,6 @@ int RGWPutObjProcessor_Aio::handle_obj_data(rgw_raw_obj& obj, bufferlist& bl, of
   if ((uint64_t)abs_ofs + bl.length() > obj_len)
     obj_len = abs_ofs + bl.length();
 
-  if (!(obj == last_written_obj)) {
-    last_written_obj = obj;
-  }
-
   // For the first call pass -1 as the offset to
   // do a write_full.
   return store->aio_put_obj_data(NULL, obj, bl, ((ofs != 0) ? ofs : -1), exclusive, phandle);
