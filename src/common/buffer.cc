@@ -822,10 +822,6 @@ using namespace ceph;
         _raw->invalidate_crc();
     memset(c_str()+o, 0, l);
   }
-  bool buffer::ptr::can_zero_copy() const
-  {
-    return _raw->can_zero_copy();
-  }
 
   // -- buffer::list::iterator --
   /*
@@ -1271,16 +1267,6 @@ using namespace ceph;
       }
       return true;
     }
-  }
-
-  bool buffer::list::can_zero_copy() const
-  {
-    for (std::list<ptr>::const_iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it)
-      if (!it->can_zero_copy())
-	return false;
-    return true;
   }
 
   bool buffer::list::is_provided_buffer(const char *dst) const

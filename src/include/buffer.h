@@ -335,8 +335,6 @@ namespace buffer CEPH_BUFFER_API {
 
     void copy_out(unsigned o, unsigned l, char *dest) const;
 
-    bool can_zero_copy() const;
-
     unsigned wasted() const;
 
     int cmp(const ptr& o) const;
@@ -767,7 +765,6 @@ namespace buffer CEPH_BUFFER_API {
     bool contents_equal(buffer::list& other);
     bool contents_equal(const buffer::list& other) const;
 
-    bool can_zero_copy() const;
     bool is_provided_buffer(const char *dst) const;
     bool is_aligned(unsigned align) const;
     bool is_page_aligned() const;
