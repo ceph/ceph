@@ -11,6 +11,7 @@
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Features.h"
+#include <random>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -51,7 +52,9 @@ std::string generate_image_id(librados::IoCtx &ioctx) {
   librados::Rados rados(ioctx);
 
   uint64_t bid = rados.get_instance_id();
-  uint32_t extra = rand() % 0xFFFFFFFF;
+  std::mt19937 generator{std::random_device{}()};
+  std::uniform_int_distribution<uint32_t> distribution{0, 0xFFFFFFFF};
+  uint32_t extra = distribution(generator);
 
   ostringstream bid_ss;
   bid_ss << std::hex << bid << std::hex << extra;
