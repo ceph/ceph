@@ -273,6 +273,8 @@ const char *ceph_mds_state_name(int s)
 	case CEPH_MDS_STATE_CLIENTREPLAY: return "up:clientreplay";
 	case CEPH_MDS_STATE_ACTIVE:     return "up:active";
 	case CEPH_MDS_STATE_STOPPING:   return "up:stopping";
+               /* misc */
+	case CEPH_MDS_STATE_NULL:       return "null";
 	}
 	return "???";
 }
