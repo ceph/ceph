@@ -252,28 +252,6 @@ using namespace ceph;
   };
 
 #ifndef __CYGWIN__
-  class buffer::raw_mmap_pages : public buffer::raw {
-  public:
-    MEMPOOL_CLASS_HELPERS();
-
-    explicit raw_mmap_pages(unsigned l) : raw(l) {
-      data = (char*)::mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
-      if (!data)
-	throw bad_alloc();
-      inc_total_alloc(len);
-      inc_history_alloc(len);
-      bdout << "raw_mmap " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
-    }
-    ~raw_mmap_pages() override {
-      ::munmap(data, len);
-      dec_total_alloc(len);
-      bdout << "raw_mmap " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
-    }
-    raw* clone_empty() override {
-      return new raw_mmap_pages(len);
-    }
-  };
-
   class buffer::raw_posix_aligned : public buffer::raw {
     unsigned align;
   public:
@@ -2634,8 +2612,6 @@ std::ostream& buffer::operator<<(std::ostream& out, const buffer::error& e)
 }
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_malloc, buffer_raw_malloc,
-			      buffer_meta);
-MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_mmap_pages, buffer_raw_mmap_pagse,
 			      buffer_meta);
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_posix_aligned,
 			      buffer_raw_posix_aligned, buffer_meta);
