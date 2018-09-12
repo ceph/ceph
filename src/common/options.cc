@@ -1599,14 +1599,6 @@ std::vector<Option> get_global_options() {
     .set_default(60.0)
     .set_description(""),
 
-    Option("mon_health_preluminous_compat", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description("Include health warnings in preluminous JSON fields"),
-
-    Option("mon_health_preluminous_compat_warning", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
-    .set_description("Warn about the health JSON format change in preluminous JSON fields"),
-
     Option("mon_health_max_detail", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50)
     .set_description("max detailed pgs to report in health detail"),
