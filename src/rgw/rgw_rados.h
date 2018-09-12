@@ -3845,7 +3845,7 @@ class RGWPutObjDataProcessor
 public:
   RGWPutObjDataProcessor(){}
   virtual ~RGWPutObjDataProcessor(){}
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) = 0;
+  virtual int handle_data(bufferlist& bl, off_t ofs, bool *again) = 0;
 }; /* RGWPutObjDataProcessor */
 
 
@@ -3918,7 +3918,7 @@ protected:
   }
 
   int drain_pending();
-  int handle_obj_data(rgw_raw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive);
+  int handle_obj_data(rgw_raw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, bool exclusive);
 
 public:
   int prepare(RGWRados *store, string *oid_rand) override;
@@ -3953,7 +3953,7 @@ protected:
   RGWObjManifest manifest;
   RGWObjManifest::generator manifest_gen;
 
-  int write_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool exclusive);
+  int write_data(bufferlist& bl, off_t ofs, bool exclusive);
   int do_complete(size_t accounted_size, const string& etag,
                   ceph::real_time *mtime, ceph::real_time set_mtime,
                   map<string, bufferlist>& attrs, ceph::real_time delete_at,
@@ -3982,7 +3982,7 @@ public:
                                 unique_tag(_t) {}
   int prepare(RGWRados *store, string *oid_rand) override;
   virtual bool immutable_head() { return false; }
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override;
+  int handle_data(bufferlist& bl, off_t ofs, bool *again) override;
 
   void set_olh_epoch(uint64_t epoch) {
     olh_epoch = epoch;

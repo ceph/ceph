@@ -677,15 +677,13 @@ RGWPutObj_BlockEncrypt::~RGWPutObj_BlockEncrypt() {
 
 int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
                                         off_t in_ofs,
-                                        void **phandle,
-                                        rgw_raw_obj *pobj,
                                         bool *again) {
   int res = 0;
   ldout(cct, 25) << "Encrypt " << bl.length() << " bytes" << dendl;
 
   if (*again) {
     bufferlist no_data;
-    res = next->handle_data(no_data, in_ofs, phandle, pobj, again);
+    res = next->handle_data(no_data, in_ofs, again);
     //if *again is not set to false, we will have endless loop
     //drop info on log
     if (*again) {
@@ -704,7 +702,7 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
     if (! crypt->encrypt(cache, 0, proc_size, data, ofs) ) {
       return -ERR_INTERNAL_ERROR;
     }
-    res = next->handle_data(data, ofs, phandle, pobj, again);
+    res = next->handle_data(data, ofs, again);
     ofs += proc_size;
     cache.splice(0, proc_size);
     if (res < 0)
@@ -713,7 +711,7 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
 
   if (bl.length() == 0) {
     /*replicate 0-sized handle_data*/
-    res = next->handle_data(bl, ofs, phandle, pobj, again);
+    res = next->handle_data(bl, ofs, again);
   }
   return res;
 }

@@ -2531,7 +2531,7 @@ RGWPutObjProcessor_Aio::~RGWPutObjProcessor_Aio()
   }
 }
 
-int RGWPutObjProcessor_Aio::handle_obj_data(rgw_raw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive)
+int RGWPutObjProcessor_Aio::handle_obj_data(rgw_raw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, bool exclusive)
 {
   const uint64_t len = bl.length();
   if (obj_len < abs_ofs + len)
@@ -2635,7 +2635,7 @@ int RGWPutObjProcessor_Aio::throttle_pending(void *handle, const rgw_raw_obj& ob
   return 0;
 }
 
-int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool exclusive)
+int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, bool exclusive)
 {
   if (ofs >= next_part_ofs) {
     int r = prepare_next_part(ofs);
@@ -2644,14 +2644,11 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
     }
   }
 
-  *pobj = cur_obj;
-
   if (!bl.length()) {
-    *phandle = nullptr;
     return 0;
   }
 
-  return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle, exclusive);
+  return handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, exclusive);
 }
 
 int RGWPutObjProcessor_Aio::prepare(RGWRados *store, string *oid_rand)
@@ -2663,9 +2660,8 @@ int RGWPutObjProcessor_Aio::prepare(RGWRados *store, string *oid_rand)
   return 0;
 }
 
-int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again)
+int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, bool *again)
 {
-  *phandle = NULL;
   uint64_t max_write_size = std::min(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
 
   pending_data_bl.claim_append(bl);
@@ -2694,7 +2690,7 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
   bool exclusive = (!write_ofs && immutable_head()); /* immutable head object, need to verify nothing exists there
                                                         we could be racing with another upload, to the same
                                                         object and cleanup can be messy */
-  int ret = write_data(bl, write_ofs, phandle, pobj, exclusive);
+  int ret = write_data(bl, write_ofs, exclusive);
   if (ret >= 0) { /* we might return, need to clear bl as it was already sent */
     bl.clear();
   }
@@ -2777,8 +2773,6 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
     obj_len = (uint64_t)first_chunk.length();
   }
   while (pending_data_bl.length()) {
-    void *handle = nullptr;
-    rgw_raw_obj obj;
     uint64_t max_write_size = std::min(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
     if (max_write_size > pending_data_bl.length()) {
       max_write_size = pending_data_bl.length();
@@ -2786,7 +2780,7 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
     bufferlist bl;
     pending_data_bl.splice(0, max_write_size, &bl);
     uint64_t write_len = bl.length();
-    int r = write_data(bl, data_ofs, &handle, &obj, false);
+    int r = write_data(bl, data_ofs, false);
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: write_data() returned " << r << dendl;
       return r;
@@ -7538,11 +7532,10 @@ class RGWPutObj_Buffer : public RGWPutObj_Filter {
     ceph_assert(isp2(buffer_size)); // must be power of 2
   }
 
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj,
-                  bool *again) override {
+  int handle_data(bufferlist& bl, off_t ofs, bool *again) override {
     if (*again || !bl.length()) {
       // flush buffered data
-      return RGWPutObj_Filter::handle_data(buffer, ofs, phandle, pobj, again);
+      return RGWPutObj_Filter::handle_data(buffer, ofs, again);
     }
     // transform offset to the beginning of the buffer
     ofs = ofs - buffer.length();
@@ -7553,7 +7546,7 @@ class RGWPutObj_Buffer : public RGWPutObj_Filter {
     }
     const auto count = p2align(buffer.length(), buffer_size);
     buffer.splice(0, count, &bl);
-    return RGWPutObj_Filter::handle_data(bl, ofs, phandle, pobj, again);
+    return RGWPutObj_Filter::handle_data(bl, ofs, again);
   }
 };
 
@@ -7648,10 +7641,8 @@ public:
     bool again = false;
 
     do {
-      void *handle = NULL;
-      rgw_raw_obj obj;
       uint64_t size = bl.length();
-      int ret = filter->handle_data(bl, lofs, &handle, &obj, &again);
+      int ret = filter->handle_data(bl, lofs, &again);
       if (ret < 0)
         return ret;
 
@@ -8555,10 +8546,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     bool again;
 
     do {
-      void *handle;
-      rgw_raw_obj obj;
-
-      ret = processor.handle_data(bl, ofs, &handle, &obj, &again);
+      ret = processor.handle_data(bl, ofs, &again);
       if (ret < 0) {
         return ret;
       }

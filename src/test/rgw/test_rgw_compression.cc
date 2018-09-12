@@ -54,7 +54,7 @@ class ut_put_sink: public RGWPutObjDataProcessor
 public:
   ut_put_sink(){}
   virtual ~ut_put_sink(){}
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override
+  int handle_data(bufferlist& bl, off_t ofs, bool *again) override
   {
     sink.append(bl);
     *again = false;
@@ -124,16 +124,14 @@ TEST(Compress, LimitedChunkSize)
     bufferlist bl;
     bl.append(bp);
 
-    void* handle;
-    rgw_raw_obj obj;
     bool again = false;
 
     ut_put_sink c_sink;
     RGWPutObj_Compress compressor(g_ceph_context, plugin, &c_sink);
-    compressor.handle_data(bl, 0, &handle, &obj, &again);
+    compressor.handle_data(bl, 0, &again);
 
     bufferlist empty;
-    compressor.handle_data(empty, s, &handle, &obj, &again);
+    compressor.handle_data(empty, s, &again);
 
     RGWCompressionInfo cs_info;
     cs_info.compression_type = plugin->get_type_name();
@@ -168,15 +166,13 @@ TEST(Compress, BillionZeros)
   bufferlist bl;
   bl.append(bp);
 
-  void* handle;
-  rgw_raw_obj obj;
   bool again = false;
 
   for (int i=0; i<1000;i++)
-    compressor.handle_data(bl, size*i, &handle, &obj, &again);
+    compressor.handle_data(bl, size*i, &again);
 
   bufferlist empty;
-  compressor.handle_data(empty, size*1000, &handle, &obj, &again);
+  compressor.handle_data(empty, size*1000, &again);
 
   RGWCompressionInfo cs_info;
   cs_info.compression_type = plugin->get_type_name();

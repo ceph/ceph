@@ -124,11 +124,7 @@ public:
                          RGWPutObjDataProcessor* next,
                          std::unique_ptr<BlockCrypt> crypt);
   virtual ~RGWPutObj_BlockEncrypt();
-  virtual int handle_data(bufferlist& bl,
-                          off_t ofs,
-                          void **phandle,
-                          rgw_raw_obj *pobj,
-                          bool *again) override;
+  virtual int handle_data(bufferlist& bl, off_t ofs, bool *again) override;
 }; /* RGWPutObj_BlockEncrypt */
 
 
