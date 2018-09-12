@@ -4311,6 +4311,11 @@ rgw::auth::s3::STSEngine::authenticate(
     return result_t::reject(ret);
   }
   //Authentication
+  //Check if access key is not the same passed in by client
+  if (token.access_key_id != _access_key_id) {
+    ldout(cct, 0) << "Invalid access key" << dendl;
+    return result_t::reject(-EPERM);
+  }
   //Check if the token has expired
   if (! token.expiration.empty()) {
     std::string expiration = token.expiration;
