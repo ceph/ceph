@@ -107,12 +107,12 @@ do
         found=false
         for c in "${!select[@]}"
         do
-            # Get command and any arguments of subset of tests ro tun
+            # Get command and any arguments of subset of tests to run
             allargs="${select[$c]}"
             arg1=$(echo "$allargs" | cut --delimiter " " --field 1)
             # Get user args for this selection for use below
             userargs="$(echo $allargs | cut -s --delimiter " " --field 2-)"
-            if [[ "$arg1" = $(basename $f) ]]; then
+            if [[ "$arg1" = $(basename $f) ]] || [[  "$arg1" = $(dirname $f) ]]; then
                 found=true
                 break
             fi
