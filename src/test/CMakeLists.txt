@@ -199,7 +199,6 @@ if(${WITH_RADOSGW})
     global
     cls_version_client
     cls_log_client
-    cls_statelog_client
     cls_refcount_client
     cls_rgw_client
     cls_user_client
@@ -226,7 +225,6 @@ if(${WITH_RADOSGW})
     global
     cls_version_client
     cls_log_client
-    cls_statelog_client
     cls_refcount_client
     cls_rgw_client
     cls_user_client
