@@ -3153,7 +3153,6 @@ public:
 
   int stat_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
-               const string& client_id,
                req_info *info,
                const string& source_zone,
                rgw_obj& src_obj,
@@ -3173,9 +3172,6 @@ public:
 
   int fetch_remote_obj(RGWObjectCtx& obj_ctx,
                        const rgw_user& user_id,
-                       const string& client_id,
-                       const string& op_id,
-                       bool record_op_state,
                        req_info *info,
                        const string& source_zone,
                        rgw_obj& dest_obj,
@@ -3217,8 +3213,6 @@ public:
    */
   int copy_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
-               const string& client_id,
-               const string& op_id,
                req_info *info,
                const string& source_zone,
                rgw_obj& dest_obj,

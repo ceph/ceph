@@ -6928,9 +6928,6 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
     return 0;
   }
 
-  string client_id;
-  string op_id;
-
   const string& src_name = obj.get_oid();
   char buf[src_name.size() + 32];
   struct timespec ts = ceph::real_clock::to_timespec(state->mtime);
@@ -6959,8 +6956,6 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
 
   r = copy_obj(obj_ctx,
                user,
-               client_id,
-               op_id,
                NULL, /* req_info *info */
                no_zone,
                dest_obj,
@@ -7025,8 +7020,6 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
 
   /* This code will be executed on latest version of the object. */
   const auto handler = [&](const rgw_bucket_dir_entry& entry) -> int {
-    std::string no_client_id;
-    std::string no_op_id;
     std::string no_zone;
 
     /* We don't support object versioning of Swift API on those buckets that
@@ -7048,8 +7041,6 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
 
     int ret = copy_obj(obj_ctx,
                        user,
-                       no_client_id,
-                       no_op_id,
                        nullptr,       /* req_info *info */
                        no_zone,
                        obj,           /* dest obj */
@@ -7861,7 +7852,6 @@ public:
 
 int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
-               const string& client_id,
                req_info *info,
                const string& source_zone,
                rgw_obj& src_obj,
@@ -7974,9 +7964,6 @@ int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
 
 int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
-               const string& client_id,
-               const string& op_id,
-               bool record_op_state,
                req_info *info,
                const string& source_zone,
                rgw_obj& dest_obj,
@@ -8261,8 +8248,6 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
  */
 int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
-               const string& client_id,
-               const string& op_id,
                req_info *info,
                const string& source_zone,
                rgw_obj& dest_obj,
@@ -8310,7 +8295,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   ldout(cct, 5) << "Copy object " << src_obj.bucket << ":" << src_obj.get_oid() << " => " << dest_obj.bucket << ":" << dest_obj.get_oid() << dendl;
 
   if (remote_src || !source_zone.empty()) {
-    return fetch_remote_obj(obj_ctx, user_id, client_id, op_id, true, info, source_zone,
+    return fetch_remote_obj(obj_ctx, user_id, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, src_bucket_info, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
                if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
