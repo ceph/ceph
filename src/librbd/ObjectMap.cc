@@ -111,6 +111,32 @@ bool ObjectMap<I>::object_may_exist(uint64_t object_no) const
 }
 
 template <typename I>
+bool ObjectMap<I>::object_may_not_exist(uint64_t object_no) const
+{
+  ceph_assert(m_image_ctx.snap_lock.is_locked());
+
+  // Fall back to default logic if object map is disabled or invalid
+  if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
+                                 m_image_ctx.snap_lock)) {
+    return true;
+  }
+
+  bool flags_set;
+  int r = m_image_ctx.test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
+                                 m_image_ctx.snap_lock, &flags_set);
+  if (r < 0 || flags_set) {
+    return true;
+  }
+
+  RWLock::RLocker l(m_image_ctx.object_map_lock);
+  uint8_t state = (*this)[object_no];
+  bool nonexistent = (state != OBJECT_EXISTS && state != OBJECT_EXISTS_CLEAN);
+  ldout(m_image_ctx.cct, 20) << "object_no=" << object_no << " r="
+                             << nonexistent << dendl;
+  return nonexistent;
+}
+
+template <typename I>
 bool ObjectMap<I>::update_required(const ceph::BitVector<2>::Iterator& it,
                                    uint8_t new_state) {
   ceph_assert(m_image_ctx.object_map_lock.is_wlocked());

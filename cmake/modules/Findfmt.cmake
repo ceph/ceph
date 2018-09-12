@@ -1,13 +1,13 @@
 find_path(fmt_INCLUDE_DIR NAMES fmt/format.h)
 
 if(fmt_INCLUDE_DIR)
-  set(_fmt_version_file "${fmt_INCLUDE_DIR}/fmt/format.h")
+  set(_fmt_version_file "${fmt_INCLUDE_DIR}/fmt/core.h")
   if(NOT EXISTS "${_fmt_version_file}")
-    set(_fmt_version_file "${fmt_INCLUDE_DIR}/fmt/core.h")
+    set(_fmt_version_file "${fmt_INCLUDE_DIR}/fmt/format.h")
   endif()
   if(EXISTS "${_fmt_version_file}")
     # parse "#define FMT_VERSION 40100" to 4.1.0
-    file(STRINGS "${fmt_INCLUDE_DIR}/fmt/format.h" fmt_VERSION_LINE
+    file(STRINGS "${_fmt_version_file}" fmt_VERSION_LINE
       REGEX "^#define[ \t]+FMT_VERSION[ \t]+[0-9]+$")
     string(REGEX REPLACE "^#define[ \t]+FMT_VERSION[ \t]+([0-9]+)$"
       "\\1" fmt_VERSION "${fmt_VERSION_LINE}")

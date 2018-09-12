@@ -6944,7 +6944,8 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     if (n == (int)p.get_pg_num_target()) {
       return 0;
     }
-    if (static_cast<uint64_t>(n) > g_conf().get_val<uint64_t>("mon_max_pool_pg_num")) {
+    if (n <= 0 || static_cast<uint64_t>(n) >
+                  g_conf().get_val<uint64_t>("mon_max_pool_pg_num")) {
       ss << "'pg_num' must be greater than 0 and less than or equal to "
          << g_conf().get_val<uint64_t>("mon_max_pool_pg_num")
          << " (you may adjust 'mon max pool pg num' for higher values)";
