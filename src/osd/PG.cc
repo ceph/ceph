@@ -3169,33 +3169,6 @@ void PG::write_if_dirty(ObjectStore::Transaction& t)
     t.omap_setkeys(coll, pgmeta_oid, km);
 }
 
-void PG::trim_log()
-{
-  assert(is_primary());
-  calc_trim_to();
-  dout(10) << __func__ << " to " << pg_trim_to << dendl;
-  if (pg_trim_to != eversion_t()) {
-    // inform peers to trim log
-    assert(!actingbackfill.empty());
-    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-	 i != actingbackfill.end();
-	 ++i) {
-      if (*i == pg_whoami) continue;
-      osd->send_message_osd_cluster(
-	i->osd,
-	new MOSDPGTrim(
-	  get_osdmap()->get_epoch(),
-	  spg_t(info.pgid.pgid, i->shard),
-	  pg_trim_to),
-	get_osdmap()->get_epoch());
-    }
-
-    // trim primary as well
-    pg_log.trim(pg_trim_to, info);
-    dirty_info = true;
-  }
-}
-
 void PG::add_log_entry(const pg_log_entry_t& e, bool applied)
 {
   // raise last_complete only if we were previously up to date
@@ -3279,7 +3252,14 @@ void PG::append_log(
 	roll_forward_to));
   }
 
-  pg_log.trim(trim_to, info);
+  dout(10) << __func__ << " approx pg log length =  "
+           << pg_log.get_log().approx_size() << dendl;
+  dout(10) << __func__ << " transaction_applied = "
+           << transaction_applied << dendl;
+  if (!transaction_applied)
+    dout(10) << __func__ << " " << pg_whoami
+             << " is backfill target" << dendl;
+  pg_log.trim(trim_to, info, transaction_applied);
 
   // update the local pg, pg log
   dirty_info = true;
@@ -7370,9 +7350,6 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
     pg->state_clear(PG_STATE_FORCED_BACKFILL | PG_STATE_FORCED_RECOVERY);
     pg->publish_stats_to_osd();
   }
-
-  // trim pglog on recovered
-  pg->trim_log();
 
   // adjust acting set?  (e.g. because backfill completed...)
   bool history_les_bound = false;

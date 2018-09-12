@@ -1574,15 +1574,20 @@ void PrimaryLogPG::calc_trim_to()
 		 PG_STATE_BACKFILL_TOOFULL)) {
     target = cct->_conf->osd_max_pg_log_entries;
   }
-
-  eversion_t limit = MIN(
-    min_last_complete_ondisk,
+  // limit pg log trimming up to the can_rollback_to value
+  eversion_t limit = std::min(
+    pg_log.get_head(),
     pg_log.get_can_rollback_to());
+  dout(10) << __func__ << " limit = " << limit << dendl;
+
   if (limit != eversion_t() &&
       limit != pg_trim_to &&
       pg_log.get_log().approx_size() > target) {
-    size_t num_to_trim = MIN(pg_log.get_log().approx_size() - target,
-			     cct->_conf->osd_pg_log_trim_max);
+    dout(10) << __func__ << " approx pg log length =  "
+             << pg_log.get_log().approx_size() << dendl;
+    size_t num_to_trim = std::min(pg_log.get_log().approx_size() - target,
+				  cct->_conf->osd_pg_log_trim_max);
+    dout(10) << __func__ << " num_to_trim =  " << num_to_trim << dendl;
     if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
 	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
       return;
@@ -1592,16 +1597,15 @@ void PrimaryLogPG::calc_trim_to()
     for (size_t i = 0; i < num_to_trim; ++i) {
       new_trim_to = it->version;
       ++it;
-      if (new_trim_to > limit) {
+      if (new_trim_to >= limit) {
 	new_trim_to = limit;
-	dout(10) << "calc_trim_to trimming to min_last_complete_ondisk" << dendl;
+        dout(10) << "calc_trim_to trimming to limit: " << limit << dendl;
 	break;
       }
     }
     dout(10) << "calc_trim_to " << pg_trim_to << " -> " << new_trim_to << dendl;
     pg_trim_to = new_trim_to;
     assert(pg_trim_to <= pg_log.get_head());
-    assert(pg_trim_to <= min_last_complete_ondisk);
   }
 }
 
