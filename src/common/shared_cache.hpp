@@ -53,6 +53,9 @@ private:
   ceph::unordered_map<K, typename std::list<std::pair<K, VPtr> >::iterator, H> contents;
   std::list<std::pair<K, VPtr> > lru;
 
+  // it seems that PrimaryLogPG::object_contexts doesn't really have
+  // strict ordering requirements. Useful info as find() on std::map
+  // with hobjects is costly.
   std::map<K, std::pair<WeakVPtr, V*>, C> weak_refs;
 
   void trim_cache(std::list<VPtr> *to_release) {
@@ -60,6 +63,14 @@ private:
       to_release->push_back(lru.back().second);
       lru_remove(lru.back().first);
     }
+  }
+
+  VPtr lru_lookup(const K& key) {
+    if (const auto i = contents.find(key); i != std::end(contents)) {
+      lru.splice(std::begin(lru), lru, i->second);
+      return lru.front().second;
+    }
+    return VPtr();
   }
 
   void lru_remove(const K& key) {
@@ -287,6 +298,11 @@ public:
     std::list<VPtr> to_release;
     {
       std::unique_lock l{lock};
+
+      val = lru_lookup(key);
+      if (val) {
+	return val;
+      }
 #ifndef WITH_SEASTAR
       ++waiting;
 #endif
@@ -310,9 +326,14 @@ public:
   }
   VPtr lookup_or_create(const K &key) {
     VPtr val;
-    list<VPtr> to_release;
+    std::list<VPtr> to_release;
     {
       std::unique_lock l{lock};
+
+      val = lru_lookup(key);
+      if (val) {
+	return val;
+      }
       cond.wait(l, [this, &key, &val] {
         if (auto i = weak_refs.find(key); i != weak_refs.end()) {
           if (val = i->second.first.lock(); val) {
