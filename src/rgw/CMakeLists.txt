@@ -92,7 +92,6 @@ set(librgw_common_srcs
   rgw_rest_conn.cc
   rgw_rest_log.cc
   rgw_rest_metadata.cc
-  rgw_rest_opstate.cc
   rgw_rest_realm.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
@@ -134,7 +133,6 @@ set(rgw_a_srcs
   rgw_rest_config.cc
   rgw_rest_log.cc
   rgw_rest_metadata.cc
-  rgw_rest_opstate.cc
   rgw_rest_realm.cc
   rgw_rest_swift.cc
   rgw_rest_usage.cc
