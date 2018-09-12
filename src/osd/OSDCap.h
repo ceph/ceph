@@ -103,7 +103,7 @@ struct OSDCapMatch {
   std::string object_prefix;
 
   OSDCapMatch() {}
-  OSDCapMatch(const OSDCapPoolNamespace& pns) : pool_namespace(pns) {}
+  explicit OSDCapMatch(const OSDCapPoolNamespace& pns) : pool_namespace(pns) {}
   OSDCapMatch(const std::string& pl, const std::string& pre)
     : pool_namespace(pl), object_prefix(pre) {}
   OSDCapMatch(const std::string& pl, const std::string& ns,
@@ -159,7 +159,7 @@ struct OSDCapGrant {
 
   OSDCapGrant() {}
   OSDCapGrant(const OSDCapMatch& m, const OSDCapSpec& s) : match(m), spec(s) {}
-  OSDCapGrant(const OSDCapProfile& profile) : profile(profile) {
+  explicit OSDCapGrant(const OSDCapProfile& profile) : profile(profile) {
     expand_profile();
   }
 
