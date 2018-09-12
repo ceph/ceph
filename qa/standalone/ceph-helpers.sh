@@ -131,6 +131,9 @@ function setup() {
     if [ $(ulimit -n) -le 1024 ]; then
         ulimit -n 4096 || return 1
     fi
+    if [ -z "$LOCALRUN" ]; then
+        trap "teardown $dir 1" TERM HUP INT
+    fi
 }
 
 function test_setup() {
