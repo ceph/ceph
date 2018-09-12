@@ -7578,7 +7578,6 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   boost::optional<RGWPutObj_Buffer> buffering;
   CompressorRef& plugin;
   RGWPutObjProcessor_Atomic *processor;
-  RGWOpStateSingleOp *opstate;
   void (*progress_cb)(off_t, void *);
   void *progress_data;
   bufferlist extra_data_bl;
@@ -7592,7 +7591,6 @@ public:
                  CompressorRef& plugin,
                  boost::optional<RGWPutObj_Compress>& compressor,
                  RGWPutObjProcessor_Atomic *p,
-                 RGWOpStateSingleOp *_ops,
                  void (*_progress_cb)(off_t, void *),
                  void *_progress_data) :
                        cct(cct),
@@ -7600,7 +7598,6 @@ public:
                        compressor(compressor),
                        plugin(plugin),
                        processor(p),
-                       opstate(_ops),
                        progress_cb(_progress_cb),
                        progress_data(_progress_data),
                        extra_data_left(0),
@@ -7662,8 +7659,6 @@ public:
     data_len += bl.length();
     bool again = false;
 
-    bool need_opstate = true;
-
     do {
       void *handle = NULL;
       rgw_raw_obj obj;
@@ -7673,23 +7668,6 @@ public:
         return ret;
 
       ofs += size;
-
-      if (need_opstate && opstate) {
-        /* need to update opstate repository with new state. This is ratelimited, so we're not
-         * really doing it every time
-         */
-        ret = opstate->renew_state();
-        if (ret < 0) {
-          ldout(cct, 0) << "ERROR: RGWRadosPutObj::handle_data(): failed to renew op state ret=" << ret << dendl;
-          int r = filter->throttle_data(handle, obj, size, false);
-          if (r < 0) {
-            ldout(cct, 0) << "ERROR: RGWRadosPutObj::handle_data(): processor->throttle_data() returned " << r << dendl;
-          }
-          /* could not renew state! might have been marked as cancelled */
-          return ret;
-        }
-        need_opstate = false;
-      }
 
       ret = filter->throttle_data(handle, obj, size, false);
       if (ret < 0)
@@ -8072,19 +8050,6 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   string obj_name = dest_obj.bucket.name + "/" + dest_obj.get_oid();
 
-  RGWOpStateSingleOp *opstate = NULL;
-
-  if (record_op_state) {
-    opstate = new RGWOpStateSingleOp(this, client_id, op_id, obj_name);
-
-    ret = opstate->set_state(RGWOpState::OPSTATE_IN_PROGRESS);
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: failed to set opstate ret=" << ret << dendl;
-      delete opstate;
-      return ret;
-    }
-  }
-
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
 
@@ -8098,7 +8063,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     }
   }
 
-  RGWRadosPutObj cb(cct, plugin, compressor, &processor, opstate, progress_cb, progress_data);
+  RGWRadosPutObj cb(cct, plugin, compressor, &processor, progress_cb, progress_data);
 
   string etag;
   real_time set_mtime;
@@ -8232,14 +8197,6 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     goto set_err_state;
   }
 
-  if (opstate) {
-    ret = opstate->set_state(RGWOpState::OPSTATE_COMPLETE);
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: failed to set opstate ret=" << ret << dendl;
-    }
-    delete opstate;
-  }
-
   return 0;
 set_err_state:
   if (copy_if_newer && ret == -ERR_NOT_MODIFIED) {
@@ -8253,19 +8210,6 @@ set_err_state:
       // we already have the latest copy
       ret = 0;
     }
-  }
-  if (opstate) {
-    RGWOpState::OpState state;
-    if (ret < 0) {
-      state = RGWOpState::OPSTATE_ERROR;
-    } else {
-      state = RGWOpState::OPSTATE_COMPLETE;
-    }
-    int r = opstate->set_state(state);
-    if (r < 0) {
-      ldout(cct, 0) << "ERROR: failed to set opstate r=" << ret << dendl;
-    }
-    delete opstate;
   }
   return ret;
 }
