@@ -2614,12 +2614,9 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
       switch (fp_algo_t) {
 	case pg_pool_t::TYPE_FINGERPRINT_SHA1:
 	  {
-	    boost::optional<sha1_digest_t> fp_t = chunk_data.sha1();
-	    object_t fp_oid;
+	    sha1_digest_t sha1r = chunk_data.sha1();
+	    object_t fp_oid = sha1r.to_str();
 	    bufferlist in;
-	    if (fp_t != boost::none) {
-	      fp_oid = fp_t.get().to_str();
-	    }
 	    if (fp_oid != tgt_soid.oid) {
 	      // decrement old chunk's reference count 
 	      ObjectOperation dec_op;
