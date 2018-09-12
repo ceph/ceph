@@ -948,13 +948,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </lock>
   </locks>
   $ rbd snap list foo
-  SNAPID*NAME*SIZE*TIMESTAMP* (glob)
+  SNAPID*NAME*SIZE*PROTECTED*TIMESTAMP* (glob)
   *snap*1 GiB* (glob)
   $ rbd snap list foo --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
           "name": "snap", 
+          "protected": "false", 
           "size": 1073741824, 
           "timestamp": ""
       }
@@ -965,24 +966,27 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <id>*</id> (glob)
       <name>snap</name>
       <size>1073741824</size>
+      <protected>false</protected>
       <timestamp></timestamp>
     </snapshot>
   </snapshots>
   $ rbd snap list bar
-  SNAPID*NAME*SIZE*TIMESTAMP* (glob)
-  *snap*512 MiB* (glob)
+  SNAPID*NAME*SIZE*PROTECTED*TIMESTAMP* (glob)
+  *snap*512 MiB*yes* (glob)
   *snap2*1 GiB* (glob)
   $ rbd snap list bar --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
           "name": "snap", 
+          "protected": "true", 
           "size": 536870912, 
           "timestamp": * (glob)
       }, 
       {
           "id": *,  (glob)
           "name": "snap2", 
+          "protected": "false", 
           "size": 1073741824, 
           "timestamp": * (glob)
       }
@@ -993,12 +997,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <id>*</id> (glob)
       <name>snap</name>
       <size>536870912</size>
+      <protected>true</protected>
       <timestamp>*</timestamp> (glob)
     </snapshot>
     <snapshot>
       <id>*</id> (glob)
       <name>snap2</name>
       <size>1073741824</size>
+      <protected>false</protected>
       <timestamp>*</timestamp> (glob)
     </snapshot>
   </snapshots>
@@ -1008,13 +1014,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd snap list baz --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <snapshots></snapshots>
   $ rbd snap list rbd_other/child
-  SNAPID*NAME*SIZE*TIMESTAMP* (glob)
+  SNAPID*NAME*SIZE*PROTECTED*TIMESTAMP* (glob)
   *snap*512 MiB* (glob)
   $ rbd snap list rbd_other/child --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
           "name": "snap", 
+          "protected": "false", 
           "size": 536870912, 
           "timestamp": * (glob)
       }
@@ -1025,6 +1032,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <id>*</id> (glob)
       <name>snap</name>
       <size>536870912</size>
+      <protected>false</protected>
       <timestamp>*</timestamp> (glob)
     </snapshot>
   </snapshots>
