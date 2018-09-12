@@ -1356,7 +1356,8 @@ public:
   /// last epoch that forced clients to resend (pre-luminous clients only)
   epoch_t last_force_op_resend_preluminous = 0;
 
-  epoch_t pg_num_pending_dec_epoch = 0;  ///< epoch pg_num_pending decremented
+  ///< last_epoch_clean preceding pg_num decrement request
+  epoch_t pg_num_dec_last_epoch_clean = 0;
   snapid_t snap_seq;        ///< seq for per-pool snapshot
   epoch_t snap_epoch;       ///< osdmap epoch of last snap
   uint64_t auid;            ///< who owns the pg
@@ -1611,6 +1612,10 @@ public:
   // return, for a given pg, the fraction (denominator) of the total
   // pool size that it represents.
   unsigned get_pg_num_divisor(pg_t pgid) const;
+
+  epoch_t get_pg_num_dec_last_epoch_clean() const {
+    return pg_num_dec_last_epoch_clean;
+  }
 
   bool is_pending_merge(pg_t pgid, bool *target) const;
 
