@@ -2662,39 +2662,39 @@ int RGWPutObjProcessor_Aio::prepare(RGWRados *store, string *oid_rand)
 
 int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, bool *again)
 {
+  *again = false;
   uint64_t max_write_size = std::min(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
 
   pending_data_bl.claim_append(bl);
-  if (pending_data_bl.length() < max_write_size) {
-    *again = false;
-    return 0;
-  }
 
-  pending_data_bl.splice(0, max_write_size, &bl);
+  while (pending_data_bl.length() >= max_write_size) {
+    pending_data_bl.splice(0, max_write_size, &bl);
 
-  /* do we have enough data pending accumulated that needs to be written? */
-  *again = (pending_data_bl.length() >= max_chunk_size);
-
-  if (!data_ofs && !immutable_head()) {
-    first_chunk.claim(bl);
-    obj_len = (uint64_t)first_chunk.length();
-    int r = prepare_next_part(obj_len);
-    if (r < 0) {
-      return r;
+    if (data_ofs == 0 && !immutable_head()) {
+      first_chunk.claim(bl);
+      obj_len = first_chunk.length();
+      int r = prepare_next_part(obj_len);
+      if (r < 0) {
+        return r;
+      }
+      data_ofs = obj_len;
+    } else {
+      off_t write_ofs = data_ofs;
+      data_ofs = write_ofs + bl.length();
+      /* immutable head object, need to verify nothing exists there
+         we could be racing with another upload, to the same
+         object and cleanup can be messy */
+      const bool exclusive = (write_ofs == 0 && immutable_head());
+      int ret = write_data(bl, write_ofs, exclusive);
+      if (ret < 0) {
+        return ret;
+      }
+      bl.clear();
     }
-    data_ofs = obj_len;
-    return 0;
+    // recalculate max size with updated data_ofs
+    max_write_size = std::min(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
   }
-  off_t write_ofs = data_ofs;
-  data_ofs = write_ofs + bl.length();
-  bool exclusive = (!write_ofs && immutable_head()); /* immutable head object, need to verify nothing exists there
-                                                        we could be racing with another upload, to the same
-                                                        object and cleanup can be messy */
-  int ret = write_data(bl, write_ofs, exclusive);
-  if (ret >= 0) { /* we might return, need to clear bl as it was already sent */
-    bl.clear();
-  }
-  return ret;
+  return 0;
 }
 
 
