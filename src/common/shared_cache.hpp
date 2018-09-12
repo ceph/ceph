@@ -142,10 +142,6 @@ public:
     weak_refs.insert(temp.begin(), temp.end());
   }
 
-  C get_comparator() {
-    return weak_refs.key_comp();
-  }
-
   void set_cct(CephContext *c) {
     cct = c;
   }
