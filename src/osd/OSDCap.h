@@ -179,6 +179,7 @@ struct OSDCapGrant {
   bool is_capable(const string& pool_name, const string& ns, int64_t pool_auid,
                   const string& object, bool op_may_read, bool op_may_write,
                   const std::vector<OpRequest::ClassInfo>& classes,
+		  const entity_addr_t& addr,
                   std::vector<bool>* class_allowed) const;
 
   void expand_profile();
@@ -215,7 +216,8 @@ struct OSDCap {
    */
   bool is_capable(const string& pool_name, const string& ns, int64_t pool_auid,
 		  const string& object, bool op_may_read, bool op_may_write,
-		  const std::vector<OpRequest::ClassInfo>& classes) const;
+		  const std::vector<OpRequest::ClassInfo>& classes,
+		  const entity_addr_t& addr) const;
 };
 
 static inline ostream& operator<<(ostream& out, const OSDCap& cap) 
