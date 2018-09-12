@@ -1,6 +1,5 @@
 from __future__ import print_function
 import json
-from uuid import uuid4
 from ceph_volume.util import disk, prepare
 from ceph_volume.api import lvm
 from . import validators
@@ -16,6 +15,7 @@ class SingleType(object):
 
     def __init__(self, devices, args):
         self.args = args
+        self.osds_per_device = args.osds_per_device
         self.devices = devices
         # TODO: add --fast-devices and --slow-devices so these can be customized
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
@@ -24,13 +24,20 @@ class SingleType(object):
         self.validate()
         self.compute()
 
+    @property
+    def total_osds(self):
+        if self.hdds:
+            return len(self.hdds) * self.osds_per_device
+        else:
+            return len(self.ssds) * self.osds_per_device
+
     def report_json(self):
         print(json.dumps(self.computed, indent=4, sort_keys=True))
 
     def report_pretty(self):
         string = ""
         string += templates.total_osds.format(
-            total_osds=len(self.hdds) or len(self.ssds) * 2
+            total_osds=self.total_osds,
         )
         string += templates.osd_component_titles
 
@@ -51,7 +58,9 @@ class SingleType(object):
         met, raise an error if the provided devices would not work
         """
         # validate minimum size for all devices
-        validators.minimum_device_size(self.devices)
+        validators.minimum_device_size(
+            self.devices, osds_per_device=self.osds_per_device
+        )
 
         # make sure that data devices do not have any LVs
         validators.no_lvm_membership(self.hdds)
@@ -62,27 +71,26 @@ class SingleType(object):
         a dictionary with the result
         """
         osds = self.computed['osds']
-        vgs = self.computed['vgs']
         for device in self.hdds:
-            vgs.append({'devices': [device.abspath], 'parts': 1})
-            osd = {'data': {}, 'block.db': {}}
-            osd['data']['path'] = device.abspath
-            osd['data']['size'] = device.sys_api['size']
-            osd['data']['parts'] = 1
-            osd['data']['percentage'] = 100
-            osd['data']['human_readable_size'] = str(disk.Size(b=device.sys_api['size']))
-            osds.append(osd)
+            for hdd in range(self.osds_per_device):
+                osd = {'data': {}, 'block.db': {}}
+                osd['data']['path'] = device.abspath
+                osd['data']['size'] = device.sys_api['size'] / self.osds_per_device
+                osd['data']['parts'] = self.osds_per_device
+                osd['data']['percentage'] = 100 / self.osds_per_device
+                osd['data']['human_readable_size'] = str(
+                    disk.Size(b=device.sys_api['size']) / self.osds_per_device
+                )
+                osds.append(osd)
 
         for device in self.ssds:
-            # TODO: creates 2 OSDs per device, make this configurable (env var?)
-            extents = lvm.sizing(device.sys_api['size'], parts=2)
-            vgs.append({'devices': [device.abspath], 'parts': 2})
-            for ssd in range(2):
+            extents = lvm.sizing(device.sys_api['size'], parts=self.osds_per_device)
+            for ssd in range(self.osds_per_device):
                 osd = {'data': {}, 'block.db': {}}
                 osd['data']['path'] = device.abspath
                 osd['data']['size'] = extents['sizes']
                 osd['data']['parts'] = extents['parts']
-                osd['data']['percentage'] = 50
+                osd['data']['percentage'] = 100 / self.osds_per_device
                 osd['data']['human_readable_size'] = str(disk.Size(b=extents['sizes']))
                 osds.append(osd)
 
@@ -123,14 +131,14 @@ class MixedType(object):
     def __init__(self, devices, args):
         self.args = args
         self.devices = devices
+        self.osds_per_device = args.osds_per_device
         # TODO: add --fast-devices and --slow-devices so these can be customized
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
         self.computed = {'osds': []}
         self.block_db_size = prepare.get_block_db_size(lv_format=False) or disk.Size(b=0)
         self.system_vgs = lvm.VolumeGroups()
-        # For every HDD we get 1 block.db
-        self.dbs_needed = len(self.hdds)
+        self.dbs_needed = len(self.hdds) * self.osds_per_device
         self.validate()
         self.compute()
 
@@ -143,13 +151,13 @@ class MixedType(object):
 
         string = ""
         string += templates.total_osds.format(
-            total_osds=len(self.hdds)
+            total_osds=len(self.hdds) * self.osds_per_device
         )
 
         string += templates.ssd_volume_group.format(
             target='block.db',
             total_lv_size=str(self.total_available_db_space),
-            total_lvs=vg_extents['parts'],
+            total_lvs=vg_extents['parts'] * self.osds_per_device,
             block_lv_size=db_size,
             block_db_devices=', '.join([ssd.abspath for ssd in self.ssds]),
             lv_size=self.block_db_size or str(disk.Size(b=(vg_extents['sizes']))),
@@ -193,21 +201,24 @@ class MixedType(object):
                 'human_readable_sizes': str(self.block_db_size),
                 'human_readable_size': str(self.total_available_db_space),
             }
-            vg_name = 'lv/vg'
+            vg_name = 'vg/lv'
         else:
             vg_name = self.common_vg.name
 
         for device in self.hdds:
-            osd = {'data': {}, 'block.db': {}}
-            osd['data']['path'] = device.abspath
-            osd['data']['size'] = device.sys_api['size']
-            osd['data']['percentage'] = 100
-            osd['data']['human_readable_size'] = str(disk.Size(b=(device.sys_api['size'])))
-            osd['block.db']['path'] = 'vg: %s' % vg_name
-            osd['block.db']['size'] = int(self.block_db_size.b)
-            osd['block.db']['human_readable_size'] = str(self.block_db_size)
-            osd['block.db']['percentage'] = self.vg_extents['percentages']
-            osds.append(osd)
+            for hdd in range(self.osds_per_device):
+                osd = {'data': {}, 'block.db': {}}
+                osd['data']['path'] = device.abspath
+                osd['data']['size'] = device.sys_api['size'] / self.osds_per_device
+                osd['data']['percentage'] = 100 / self.osds_per_device
+                osd['data']['human_readable_size'] = str(
+                    disk.Size(b=(device.sys_api['size'])) / self.osds_per_device
+                )
+                osd['block.db']['path'] = 'vg: %s' % vg_name
+                osd['block.db']['size'] = int(self.block_db_size.b)
+                osd['block.db']['human_readable_size'] = str(self.block_db_size)
+                osd['block.db']['percentage'] = self.vg_extents['percentages']
+                osds.append(osd)
 
     def execute(self):
         """
@@ -216,10 +227,11 @@ class MixedType(object):
         ``lvm create``
         """
         blank_ssd_paths = [d.abspath for d in self.blank_ssds]
+        data_vgs = dict([(osd['data']['path'], None) for osd in self.computed['osds']])
 
         # no common vg is found, create one with all the blank SSDs
         if not self.common_vg:
-            db_vg = lvm.create_vg(blank_ssd_paths, name_prefix='ceph-dbs')
+            db_vg = lvm.create_vg(blank_ssd_paths, name_prefix='ceph-block-dbs')
 
         # if a common vg exists then extend it with any blank ssds
         elif self.common_vg and blank_ssd_paths:
@@ -236,10 +248,25 @@ class MixedType(object):
         # function that looks up this value
         block_db_size = "%sG" % self.block_db_size.gb.as_int()
 
-        # create the data lvs, and create the OSD with the matching block.db lvs from before
+        # create 1 vg per data device first, mapping them to the device path,
+        # when the lv gets created later, it can create as many as needed (or
+        # even just 1)
         for osd in self.computed['osds']:
-            data_vg = lvm.create_vg(osd['data']['path'], name_prefix='ceph-block-db')
-            data_lv = lvm.create_lv('osd-data-%s' % str(uuid4()), data_vg.name)
+            vg = data_vgs.get(osd['data']['path'])
+            if not vg:
+                vg = lvm.create_vg(osd['data']['path'], name_prefix='ceph-block')
+                data_vgs[osd['data']['path']] = vg
+
+        # create the data lvs, and create the OSD with an lv from the common
+        # block.db vg from before
+        for osd in self.computed['osds']:
+            data_path = osd['data']['path']
+            data_lv_size = disk.Size(b=osd['data']['size']).gb.as_int()
+            data_vg = data_vgs[data_path]
+            data_lv_extents = data_vg.sizing(size=data_lv_size)['extents']
+            data_lv = lvm.create_lv(
+                'osd-block', data_vg.name, extents=data_lv_extents, uuid_name=True
+            )
             db_lv = lvm.create_lv(
                 'osd-block-db', db_vg.name, size=block_db_size, uuid_name=True
             )
@@ -275,7 +302,7 @@ class MixedType(object):
         those LVs would be large enough to accommodate a block.db
         """
         # validate minimum size for all devices
-        validators.minimum_device_size(self.devices)
+        validators.minimum_device_size(self.devices, osds_per_device=self.osds_per_device)
 
         # make sure that data devices do not have any LVs
         validators.no_lvm_membership(self.hdds)
@@ -306,11 +333,13 @@ class MixedType(object):
         if self.block_db_size.gb > 0:
             try:
                 self.vg_extents = lvm.sizing(
-                    self.total_available_db_space.b, size=self.block_db_size.b
+                    self.total_available_db_space.b, size=self.block_db_size.b * self.osds_per_device
                 )
             except SizeAllocationError:
-                msg = "Not enough space in fast devices (%s) to create a %s block.db LV"
-                raise RuntimeError(msg % (self.total_available_db_space, self.block_db_size))
+                msg = "Not enough space in fast devices (%s) to create %s x %s block.db LV"
+                raise RuntimeError(
+                    msg % (self.total_available_db_space, self.osds_per_device, self.block_db_size)
+                )
         else:
             self.vg_extents = lvm.sizing(
                 self.total_available_db_space.b, parts=self.dbs_needed
@@ -330,8 +359,8 @@ class MixedType(object):
 
         total_dbs_possible = self.total_available_db_space / self.block_db_size
 
-        if len(self.hdds) > total_dbs_possible:
-            msg = "%s is not enough to create %s x %s block.db LVs" % (
-                self.block_db_size, len(self.hdds), self.block_db_size,
+        if self.dbs_needed > total_dbs_possible:
+            msg = "Not enough space (%s) to create %s x %s block.db LVs" % (
+                self.total_available_db_space, self.dbs_needed, self.block_db_size,
             )
             raise RuntimeError(msg)
