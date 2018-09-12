@@ -79,7 +79,7 @@ export class RgwUserListComponent {
   }
 
   deleteAction() {
-    const modalRef = this.bsModalService.show(DeletionModalComponent, {
+    this.bsModalService.show(DeletionModalComponent, {
       initialState: {
         itemDescription: this.selection.hasSingleSelection ? 'user' : 'users',
         submitActionObservable: (): Observable<any> => {
