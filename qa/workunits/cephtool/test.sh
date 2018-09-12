@@ -2019,6 +2019,8 @@ function test_mon_osd_pool_set()
   ceph osd pool set $TEST_POOL_GETSET pg_num 10
   wait_for_clean
   ceph osd pool set $TEST_POOL_GETSET pgp_num 10
+  expect_false ceph osd pool set $TEST_POOL_GETSET pg_num 0
+  expect_false ceph osd pool set $TEST_POOL_GETSET pgp_num 0
 
   old_pgs=$(ceph osd pool get $TEST_POOL_GETSET pg_num | sed -e 's/pg_num: //')
   new_pgs=$(($old_pgs + $(ceph osd stat --format json | jq '.num_osds') * 32))
