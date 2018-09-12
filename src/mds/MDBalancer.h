@@ -136,6 +136,7 @@ private:
 
   utime_t last_get_load;
   uint64_t last_num_requests = 0;
+  uint64_t last_cpu_time = 0;
 
   // Dirfrags which are marked to be passed on to MDCache::[split|merge]_dir
   // just as soon as a delayed context comes back and triggers it.
