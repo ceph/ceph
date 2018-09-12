@@ -240,32 +240,6 @@ if(${WITH_RADOSGW})
     ${CRYPTO_LIBS}
     )
 
-  # ceph_test_cls_rgw_opstate
-  set(ceph_test_cls_rgw_opstate_srcs test_rgw_admin_opstate.cc)
-  add_executable(ceph_test_cls_rgw_opstate
-    ${ceph_test_cls_rgw_opstate_srcs}
-    )
-  target_link_libraries(ceph_test_cls_rgw_opstate
-    rgw_a
-    librados
-    cls_version_client
-    cls_log_client
-    cls_statelog_client
-    cls_timeindex_client
-    cls_refcount_client
-    cls_rgw_client
-    cls_user_client
-    cls_lock_client
-    global
-    ${BLKID_LIBRARIES}
-    ${CURL_LIBRARIES}
-    ${EXPAT_LIBRARIES}
-    ${CMAKE_DL_LIBS}
-    ${UNITTEST_LIBS}
-    ${CRYPTO_LIBS}
-    ${EXTRALIBS}
-    )
-
 # ceph_test_librgw_file (nfs-like RGW interface)
 add_executable(ceph_test_librgw_file
   librgw_file.cc
