@@ -1,20 +1,8 @@
-overrides:
-  rgw:
-    frontend: civetweb
-    ec-data-pool: false
 meta:
 - desc: "Run rgw tests"
 
 tasks:
-- s3readwrite:
+- s3tests:
     client.0:
+      force-branch: ceph-master
       rgw_server: client.0
-      readwrite:
-        bucket: rwtest
-        readers: 10
-        writers: 3
-        duration: 300
-        files:
-          num: 10
-          size: 2000
-          stddev: 500
