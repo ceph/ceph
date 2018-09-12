@@ -1095,9 +1095,6 @@ public:
   int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override {
     return next->handle_data(bl, ofs, phandle, pobj, again);
   }
-  int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) override {
-    return next->throttle_data(handle, obj, size, need_to_wait);
-  }
 }; /* RGWPutObj_Filter */
 
 class RGWPostObj : public RGWOp {
@@ -1861,21 +1858,9 @@ static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
     void *handle = nullptr;
     rgw_raw_obj obj;
 
-    uint64_t size = data.length();
-
     int ret = processor->handle_data(data, ofs, &handle, &obj, &again);
     if (ret < 0)
       return ret;
-    if (handle != nullptr)
-    {
-      ret = processor->throttle_data(handle, obj, size, need_to_wait);
-      if (ret < 0)
-        return ret;
-    }
-    else
-      break;
-    need_to_wait = false; /* the need to wait only applies to the first
-			   * iteration */
   } while (again);
 
   return 0;

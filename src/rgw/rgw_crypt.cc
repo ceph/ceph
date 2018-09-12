@@ -718,13 +718,6 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
   return res;
 }
 
-int RGWPutObj_BlockEncrypt::throttle_data(void *handle,
-                                          const rgw_raw_obj& obj,
-                                          uint64_t size,
-                                          bool need_to_wait) {
-  return next->throttle_data(handle, obj, size, need_to_wait);
-}
-
 std::string create_random_key_selector(CephContext * const cct) {
   char random[AES_256_KEYSIZE];
   cct->random()->get_bytes(&random[0], sizeof(random));

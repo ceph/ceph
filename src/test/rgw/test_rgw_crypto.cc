@@ -56,10 +56,6 @@ public:
     *again = false;
     return 0;
   }
-  int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) override
-  {
-    return 0;
-  }
   std::string get_sink()
   {
     return sink.str();
@@ -566,7 +562,6 @@ TEST(TestRGWCrypto, verify_RGWPutObj_BlockEncrypt_chunks)
       bool again = false;
       rgw_raw_obj ro;
       encrypt.handle_data(bl, 0, &handle, nullptr, &again);
-      encrypt.throttle_data(handle, ro, size, false);
 
       pos = pos + size;
     } while (pos < test_size);
@@ -623,7 +618,6 @@ TEST(TestRGWCrypto, verify_Encrypt_Decrypt)
     bool again = false;
     rgw_raw_obj ro;
     encrypt.handle_data(bl, 0, &handle, nullptr, &again);
-    encrypt.throttle_data(handle, ro, test_size, false);
     bl.clear();
     encrypt.handle_data(bl, 0, &handle, nullptr, &again);
     ASSERT_EQ(put_sink.get_sink().length(), test_size);

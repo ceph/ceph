@@ -129,10 +129,6 @@ public:
                           void **phandle,
                           rgw_raw_obj *pobj,
                           bool *again) override;
-  virtual int throttle_data(void *handle,
-                            const rgw_raw_obj& obj,
-                            uint64_t size,
-                            bool need_to_wait) override;
 }; /* RGWPutObj_BlockEncrypt */
 
 

@@ -1369,12 +1369,12 @@ namespace rgw {
     op_ret = put_data_and_throttle(filter, data, ofs, need_to_wait);
     if (op_ret < 0) {
       if (!need_to_wait || op_ret != -EEXIST) {
-	ldout(s->cct, 20) << "processor->thottle_data() returned ret="
+	ldout(s->cct, 20) << "processor->handle_data() returned ret="
 			  << op_ret << dendl;
 	goto done;
       }
 
-      ldout(s->cct, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
+      ldout(s->cct, 5) << "NOTICE: processor->handle_data() returned -EEXIST, need to restart write" << dendl;
 
       /* restore original data */
       data.swap(orig_data);

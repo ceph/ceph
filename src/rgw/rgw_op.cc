@@ -3718,12 +3718,12 @@ void RGWPutObj::execute()
     op_ret = put_data_and_throttle(filter, data, ofs, need_to_wait);
     if (op_ret < 0) {
       if (op_ret != -EEXIST) {
-        ldpp_dout(this, 20) << "processor->thottle_data() returned ret="
+        ldpp_dout(this, 20) << "processor->handle_data() returned ret="
 			  << op_ret << dendl;
         goto done;
       }
       /* need_to_wait == true and op_ret == -EEXIST */
-      ldpp_dout(this, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
+      ldpp_dout(this, 5) << "NOTICE: processor->handle_data() returned -EEXIST, need to restart write" << dendl;
 
       /* restore original data */
       data.swap(orig_data);

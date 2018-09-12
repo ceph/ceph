@@ -60,10 +60,6 @@ public:
     *again = false;
     return 0;
   }
-  int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) override
-  {
-    return 0;
-  }
   bufferlist&  get_sink()
   {
     return sink;

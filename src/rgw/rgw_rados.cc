@@ -2635,11 +2635,6 @@ int RGWPutObjProcessor_Aio::throttle_pending(void *handle, const rgw_raw_obj& ob
   return 0;
 }
 
-int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait)
-{
-  return 0; // already did in throttle_pending()
-}
-
 int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool exclusive)
 {
   if (ofs >= next_part_ofs) {
@@ -2797,11 +2792,6 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
       return r;
     }
     data_ofs += write_len;
-    r = throttle_data(handle, obj, write_len, false);
-    if (r < 0) {
-      ldout(store->ctx(), 0) << "ERROR: throttle_data() returned " << r << dendl;
-      return r;
-    }
 
     if (data_ofs >= next_part_ofs) {
       r = prepare_next_part(data_ofs);
@@ -7666,10 +7656,6 @@ public:
         return ret;
 
       ofs += size;
-
-      ret = filter->throttle_data(handle, obj, size, false);
-      if (ret < 0)
-        return ret;
     } while (again);
 
     return 0;
@@ -8576,9 +8562,6 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
       if (ret < 0) {
         return ret;
       }
-      ret = processor.throttle_data(handle, obj, read_len, false);
-      if (ret < 0)
-        return ret;
     } while (again);
 
     ofs += read_len;
