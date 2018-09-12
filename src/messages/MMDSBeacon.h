@@ -42,7 +42,8 @@ enum mds_metric_t {
   MDS_HEALTH_DAMAGE,
   MDS_HEALTH_READ_ONLY,
   MDS_HEALTH_SLOW_REQUEST,
-  MDS_HEALTH_CACHE_OVERSIZED
+  MDS_HEALTH_CACHE_OVERSIZED,
+  MDS_HEALTH_SLOW_METADATA_IO,
 };
 
 static inline const char *mds_metric_name(mds_metric_t m)
@@ -59,6 +60,7 @@ static inline const char *mds_metric_name(mds_metric_t m)
   case MDS_HEALTH_READ_ONLY: return "MDS_READ_ONLY";
   case MDS_HEALTH_SLOW_REQUEST: return "MDS_SLOW_REQUEST";
   case MDS_HEALTH_CACHE_OVERSIZED: return "MDS_CACHE_OVERSIZED";
+  case MDS_HEALTH_SLOW_METADATA_IO: return "MDS_SLOW_METADATA_IO";
   default:
     return "???";
   }
@@ -90,6 +92,8 @@ static inline const char *mds_metric_summary(mds_metric_t m)
     return "%num% MDSs report slow requests";
   case MDS_HEALTH_CACHE_OVERSIZED:
     return "%num% MDSs report oversized cache";
+  case MDS_HEALTH_SLOW_METADATA_IO:
+    return "%num% MDSs report slow metadata IOs";
   default:
     return "???";
   }
