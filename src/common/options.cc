@@ -6995,6 +6995,10 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_inject_migrator_session_race", Option::TYPE_BOOL, Option::LEVEL_DEV)
      .set_default(false),
+
+    Option("mds_request_load_average_decay_rate", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(60)
+    .set_description("rate of decay in seconds for calculating request load average"),
   });
 }
 

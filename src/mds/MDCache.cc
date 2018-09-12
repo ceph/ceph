@@ -12758,43 +12758,54 @@ void MDCache::flush_dentry_work(MDRequestRef& mdr)
  */
 void MDCache::register_perfcounters()
 {
-    PerfCountersBuilder pcb(g_ceph_context,
-            "mds_cache", l_mdc_first, l_mdc_last);
+    PerfCountersBuilder pcb(g_ceph_context, "mds_cache", l_mdc_first, l_mdc_last);
 
-    /* Stray/purge statistics */
-    pcb.add_u64(l_mdc_num_strays, "num_strays",
-        "Stray dentries", "stry", PerfCountersBuilder::PRIO_INTERESTING);
-    pcb.add_u64(l_mdc_num_strays_delayed, "num_strays_delayed", "Stray dentries delayed");
-    pcb.add_u64(l_mdc_num_strays_enqueuing, "num_strays_enqueuing", "Stray dentries enqueuing for purge");
+    // Stray/purge statistics
+    pcb.add_u64(l_mdc_num_strays, "num_strays", "Stray dentries", "stry",
+                PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mdc_num_recovering_enqueued,
+                "num_recovering_enqueued", "Files waiting for recovery", "recy",
+                PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(l_mdc_recovery_completed,
+                        "recovery_completed", "File recoveries completed", "recd",
+                        PerfCountersBuilder::PRIO_INTERESTING);
 
-    pcb.add_u64_counter(l_mdc_strays_created, "strays_created", "Stray dentries created");
+    // useful recovery queue statistics
+    pcb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64(l_mdc_num_recovering_processing, "num_recovering_processing",
+                "Files currently being recovered");
+    pcb.add_u64(l_mdc_num_recovering_prioritized, "num_recovering_prioritized",
+                "Files waiting for recovery with elevated priority");
+    pcb.add_u64_counter(l_mdc_recovery_started, "recovery_started",
+                        "File recoveries started");
+
+    // along with other stray dentries stats
+    pcb.add_u64(l_mdc_num_strays_delayed, "num_strays_delayed",
+                "Stray dentries delayed");
+    pcb.add_u64(l_mdc_num_strays_enqueuing, "num_strays_enqueuing",
+                "Stray dentries enqueuing for purge");
+    pcb.add_u64_counter(l_mdc_strays_created, "strays_created",
+                        "Stray dentries created");
     pcb.add_u64_counter(l_mdc_strays_enqueued, "strays_enqueued",
-        "Stray dentries enqueued for purge");
-    pcb.add_u64_counter(l_mdc_strays_reintegrated, "strays_reintegrated", "Stray dentries reintegrated");
-    pcb.add_u64_counter(l_mdc_strays_migrated, "strays_migrated", "Stray dentries migrated");
+                        "Stray dentries enqueued for purge");
+    pcb.add_u64_counter(l_mdc_strays_reintegrated, "strays_reintegrated",
+                        "Stray dentries reintegrated");
+    pcb.add_u64_counter(l_mdc_strays_migrated, "strays_migrated",
+                        "Stray dentries migrated");
 
-
-    /* Recovery queue statistics */
-    pcb.add_u64(l_mdc_num_recovering_processing, "num_recovering_processing", "Files currently being recovered");
-    pcb.add_u64(l_mdc_num_recovering_enqueued, "num_recovering_enqueued",
-        "Files waiting for recovery", "recy", PerfCountersBuilder::PRIO_INTERESTING);
-    pcb.add_u64(l_mdc_num_recovering_prioritized, "num_recovering_prioritized", "Files waiting for recovery with elevated priority");
-    pcb.add_u64_counter(l_mdc_recovery_started, "recovery_started", "File recoveries started");
-    pcb.add_u64_counter(l_mdc_recovery_completed, "recovery_completed",
-        "File recoveries completed", "recd", PerfCountersBuilder::PRIO_INTERESTING);
-
+    // low prio internal request stats
     pcb.add_u64_counter(l_mdss_ireq_enqueue_scrub, "ireq_enqueue_scrub",
-        "Internal Request type enqueue scrub");
+                        "Internal Request type enqueue scrub");
     pcb.add_u64_counter(l_mdss_ireq_exportdir, "ireq_exportdir",
-        "Internal Request type export dir");
+                        "Internal Request type export dir");
     pcb.add_u64_counter(l_mdss_ireq_flush, "ireq_flush",
-        "Internal Request type flush");
+                        "Internal Request type flush");
     pcb.add_u64_counter(l_mdss_ireq_fragmentdir, "ireq_fragmentdir",
-        "Internal Request type fragmentdir");
+                        "Internal Request type fragmentdir");
     pcb.add_u64_counter(l_mdss_ireq_fragstats, "ireq_fragstats",
-        "Internal Request type frag stats");
+                        "Internal Request type frag stats");
     pcb.add_u64_counter(l_mdss_ireq_inodestats, "ireq_inodestats",
-        "Internal Request type inode stats");
+                        "Internal Request type inode stats");
 
     logger.reset(pcb.create_perf_counters());
     g_ceph_context->get_perfcounters_collection()->add(logger.get());

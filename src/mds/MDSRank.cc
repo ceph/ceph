@@ -2258,6 +2258,9 @@ void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f)
     f->dump_int("num_caps", s->caps.size());
 
     f->dump_string("state", s->get_state_name());
+    if (s->is_open() || s->is_stale()) {
+      f->dump_unsigned("request_load_avg", s->get_load_avg());
+    }
     f->dump_int("replay_requests", is_clientreplay() ? s->get_request_count() : 0);
     f->dump_unsigned("completed_requests", s->get_num_completed_requests());
     f->dump_bool("reconnecting", server->waiting_for_reconnect(p->first.num()));
@@ -2747,66 +2750,65 @@ void MDSRank::create_logger()
   {
     PerfCountersBuilder mds_plb(g_ceph_context, "mds", l_mds_first, l_mds_last);
 
-    mds_plb.add_u64_counter(
-      l_mds_request, "request", "Requests", "req",
-      PerfCountersBuilder::PRIO_CRITICAL);
-    mds_plb.add_u64_counter(l_mds_reply, "reply", "Replies");
-    mds_plb.add_time_avg(
-      l_mds_reply_latency, "reply_latency", "Reply latency", "rlat",
-      PerfCountersBuilder::PRIO_CRITICAL);
-    mds_plb.add_u64_counter(
-      l_mds_forward, "forward", "Forwarding request", "fwd",
-      PerfCountersBuilder::PRIO_INTERESTING);
+    // super useful (high prio) perf stats
+    mds_plb.add_u64_counter(l_mds_request, "request", "Requests", "req",
+                            PerfCountersBuilder::PRIO_CRITICAL);
+    mds_plb.add_time_avg(l_mds_reply_latency, "reply_latency", "Reply latency", "rlat",
+                         PerfCountersBuilder::PRIO_CRITICAL);
+    mds_plb.add_u64(l_mds_inodes, "inodes", "Inodes", "inos",
+                    PerfCountersBuilder::PRIO_CRITICAL);
+    mds_plb.add_u64_counter(l_mds_forward, "forward", "Forwarding request", "fwd",
+                            PerfCountersBuilder::PRIO_INTERESTING);
+    mds_plb.add_u64(l_mds_caps, "caps", "Capabilities", "caps",
+                    PerfCountersBuilder::PRIO_INTERESTING);
+    mds_plb.add_u64_counter(l_mds_exported_inodes, "exported_inodes", "Exported inodes",
+                            "exi", PerfCountersBuilder::PRIO_INTERESTING);
+    mds_plb.add_u64_counter(l_mds_imported_inodes, "imported_inodes", "Imported inodes",
+                            "imi", PerfCountersBuilder::PRIO_INTERESTING);
+
+    // useful dir/inode/subtree stats
+    mds_plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
     mds_plb.add_u64_counter(l_mds_dir_fetch, "dir_fetch", "Directory fetch");
     mds_plb.add_u64_counter(l_mds_dir_commit, "dir_commit", "Directory commit");
     mds_plb.add_u64_counter(l_mds_dir_split, "dir_split", "Directory split");
     mds_plb.add_u64_counter(l_mds_dir_merge, "dir_merge", "Directory merge");
-
     mds_plb.add_u64(l_mds_inode_max, "inode_max", "Max inodes, cache size");
-    mds_plb.add_u64(l_mds_inodes, "inodes", "Inodes", "inos",
-		    PerfCountersBuilder::PRIO_CRITICAL);
+    mds_plb.add_u64(l_mds_inodes_pinned, "inodes_pinned", "Inodes pinned");
+    mds_plb.add_u64(l_mds_inodes_expired, "inodes_expired", "Inodes expired");
+    mds_plb.add_u64(l_mds_inodes_with_caps, "inodes_with_caps",
+                    "Inodes with capabilities");
+    mds_plb.add_u64(l_mds_subtrees, "subtrees", "Subtrees");
+    mds_plb.add_u64(l_mds_load_cent, "load_cent", "Load per cent");
+    mds_plb.add_u64_counter(l_mds_openino_dir_fetch, "openino_dir_fetch",
+                            "OpenIno incomplete directory fetchings");
+
+    // low prio stats
+    mds_plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
+    mds_plb.add_u64_counter(l_mds_reply, "reply", "Replies");
     mds_plb.add_u64(l_mds_inodes_top, "inodes_top", "Inodes on top");
     mds_plb.add_u64(l_mds_inodes_bottom, "inodes_bottom", "Inodes on bottom");
     mds_plb.add_u64(
       l_mds_inodes_pin_tail, "inodes_pin_tail", "Inodes on pin tail");
-    mds_plb.add_u64(l_mds_inodes_pinned, "inodes_pinned", "Inodes pinned");
-    mds_plb.add_u64(l_mds_inodes_expired, "inodes_expired", "Inodes expired");
-    mds_plb.add_u64(
-      l_mds_inodes_with_caps, "inodes_with_caps", "Inodes with capabilities");
-    mds_plb.add_u64(l_mds_caps, "caps", "Capabilities", "caps",
-		    PerfCountersBuilder::PRIO_INTERESTING);
-    mds_plb.add_u64(l_mds_subtrees, "subtrees", "Subtrees");
-
     mds_plb.add_u64_counter(l_mds_traverse, "traverse", "Traverses");
     mds_plb.add_u64_counter(l_mds_traverse_hit, "traverse_hit", "Traverse hits");
     mds_plb.add_u64_counter(l_mds_traverse_forward, "traverse_forward",
-			    "Traverse forwards");
+                            "Traverse forwards");
     mds_plb.add_u64_counter(l_mds_traverse_discover, "traverse_discover",
-			    "Traverse directory discovers");
+                            "Traverse directory discovers");
     mds_plb.add_u64_counter(l_mds_traverse_dir_fetch, "traverse_dir_fetch",
-			    "Traverse incomplete directory content fetchings");
+                            "Traverse incomplete directory content fetchings");
     mds_plb.add_u64_counter(l_mds_traverse_remote_ino, "traverse_remote_ino",
-			    "Traverse remote dentries");
+                            "Traverse remote dentries");
     mds_plb.add_u64_counter(l_mds_traverse_lock, "traverse_lock",
-			    "Traverse locks");
-
-    mds_plb.add_u64(l_mds_load_cent, "load_cent", "Load per cent");
+                            "Traverse locks");
     mds_plb.add_u64(l_mds_dispatch_queue_len, "q", "Dispatch queue length");
-
     mds_plb.add_u64_counter(l_mds_exported, "exported", "Exports");
-    mds_plb.add_u64_counter(
-      l_mds_exported_inodes, "exported_inodes", "Exported inodes", "exi",
-      PerfCountersBuilder::PRIO_INTERESTING);
     mds_plb.add_u64_counter(l_mds_imported, "imported", "Imports");
-    mds_plb.add_u64_counter(
-      l_mds_imported_inodes, "imported_inodes", "Imported inodes", "imi",
-      PerfCountersBuilder::PRIO_INTERESTING);
-    mds_plb.add_u64_counter(l_mds_openino_dir_fetch, "openino_dir_fetch",
-			    "OpenIno incomplete directory fetchings");
     mds_plb.add_u64_counter(l_mds_openino_backtrace_fetch, "openino_backtrace_fetch",
-			    "OpenIno backtrace fetchings");
+                            "OpenIno backtrace fetchings");
     mds_plb.add_u64_counter(l_mds_openino_peer_discover, "openino_peer_discover",
-			    "OpenIno peer inode discovers");
+                            "OpenIno peer inode discovers");
+
     logger = mds_plb.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(logger);
   }
@@ -2815,21 +2817,26 @@ void MDSRank::create_logger()
     PerfCountersBuilder mdm_plb(g_ceph_context, "mds_mem", l_mdm_first, l_mdm_last);
     mdm_plb.add_u64(l_mdm_ino, "ino", "Inodes", "ino",
                     PerfCountersBuilder::PRIO_INTERESTING);
+    mdm_plb.add_u64(l_mdm_dn, "dn", "Dentries", "dn",
+                    PerfCountersBuilder::PRIO_INTERESTING);
+
+    mdm_plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
     mdm_plb.add_u64_counter(l_mdm_inoa, "ino+", "Inodes opened");
     mdm_plb.add_u64_counter(l_mdm_inos, "ino-", "Inodes closed");
     mdm_plb.add_u64(l_mdm_dir, "dir", "Directories");
     mdm_plb.add_u64_counter(l_mdm_dira, "dir+", "Directories opened");
     mdm_plb.add_u64_counter(l_mdm_dirs, "dir-", "Directories closed");
-    mdm_plb.add_u64(l_mdm_dn, "dn", "Dentries", "dn",
-                    PerfCountersBuilder::PRIO_INTERESTING);
     mdm_plb.add_u64_counter(l_mdm_dna, "dn+", "Dentries opened");
     mdm_plb.add_u64_counter(l_mdm_dns, "dn-", "Dentries closed");
     mdm_plb.add_u64(l_mdm_cap, "cap", "Capabilities");
     mdm_plb.add_u64_counter(l_mdm_capa, "cap+", "Capabilities added");
     mdm_plb.add_u64_counter(l_mdm_caps, "cap-", "Capabilities removed");
-    mdm_plb.add_u64(l_mdm_rss, "rss", "RSS");
     mdm_plb.add_u64(l_mdm_heap, "heap", "Heap size");
     mdm_plb.add_u64(l_mdm_buf, "buf", "Buffer size");
+
+    mdm_plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
+    mdm_plb.add_u64(l_mdm_rss, "rss", "RSS");
+
     mlogger = mdm_plb.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(mlogger);
   }
