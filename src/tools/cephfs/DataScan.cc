@@ -903,7 +903,7 @@ int DataScan::scan_links()
     return -EINVAL;
   }
 
-  interval_set<inodeno_t> used_inos;
+  interval_set<uint64_t> used_inos;
   map<inodeno_t, int> remote_links;
 
   struct link_info_t {
@@ -1035,6 +1035,28 @@ int DataScan::scan_links()
       }
     }
   }
+
+  map<unsigned, uint64_t> max_ino_map;
+  {
+    auto prev_max_ino = (uint64_t)1 << 40;
+    for (auto p = used_inos.begin(); p != used_inos.end(); ++p) {
+      auto cur_max = p.get_start() + p.get_len() - 1;
+      if (cur_max < prev_max_ino)
+	continue; // system inodes
+
+      if ((prev_max_ino >> 40)  != (cur_max >> 40)) {
+	unsigned rank = (prev_max_ino >> 40) - 1;
+	max_ino_map[rank] = prev_max_ino;
+      } else if ((p.get_start() >> 40) != (cur_max >> 40)) {
+	unsigned rank = (p.get_start() >> 40) - 1;
+	max_ino_map[rank] = ((uint64_t)(rank + 2) << 40) - 1;
+      }
+      prev_max_ino = cur_max;
+    }
+    unsigned rank = (prev_max_ino >> 40) - 1;
+    max_ino_map[rank] = prev_max_ino;
+  }
+
   used_inos.clear();
 
   for (auto& p : dup_primaries) {
@@ -1107,6 +1129,10 @@ int DataScan::scan_links()
     r = metadata_driver->inject_linkage(p.second.dirino, p.second.name, p.second.frag, inode);
     if (r < 0)
       return r;
+  }
+
+  for (auto& p : max_ino_map) {
+    std::cout << "mds." << p.first << " max used ino " << p.second << std::endl;
   }
 
   return 0;
