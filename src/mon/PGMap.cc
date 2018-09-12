@@ -762,20 +762,16 @@ void PGMapDigest::dump_pool_stats_full(
   } else {
     tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("ID", TextTable::LEFT, TextTable::LEFT);
-    if (verbose) {
-      tbl.define_column("QUOTA OBJECTS", TextTable::LEFT, TextTable::LEFT);
-      tbl.define_column("QUOTA BYTES", TextTable::LEFT, TextTable::LEFT);
-    }
-
+    tbl.define_column("STORED", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("%USED", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("MAX AVAIL", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
+
     if (verbose) {
+      tbl.define_column("QUOTA OBJECTS", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("QUOTA BYTES", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("DIRTY", TextTable::LEFT, TextTable::RIGHT);
-      tbl.define_column("READ", TextTable::LEFT, TextTable::RIGHT);
-      tbl.define_column("WRITE", TextTable::LEFT, TextTable::RIGHT);
-      tbl.define_column("STORED", TextTable::LEFT, TextTable::RIGHT);
       tbl.define_column("USED COMPR", TextTable::LEFT, TextTable::RIGHT);
       tbl.define_column("UNDER COMPR", TextTable::LEFT, TextTable::RIGHT);
     }
@@ -813,28 +809,15 @@ void PGMapDigest::dump_pool_stats_full(
     } else {
       tbl << pool_name
           << pool_id;
-      if (verbose) {
-        if (pool->quota_max_objects == 0)
-          tbl << "N/A";
-        else
-          tbl << si_u_t(pool->quota_max_objects);
-
-        if (pool->quota_max_bytes == 0)
-          tbl << "N/A";
-        else
-          tbl << byte_u_t(pool->quota_max_bytes);
-      }
-
     }
     float raw_used_rate = ::pool_raw_used_rate(osd_map, pool_id);
     dump_object_stat_sum(tbl, f, stat, avail, raw_used_rate, verbose, pool);
-    if (f)
+    if (f) {
       f->close_section();  // stats
-    else
-      tbl << TextTable::endrow;
-
-    if (f)
       f->close_section();  // pool
+    } else {
+      tbl << TextTable::endrow;
+    }
   }
   if (f)
     f->close_section();
@@ -920,11 +903,12 @@ void PGMapDigest::dump_object_stat_sum(
   // an approximation for actually stored user data
   auto stored_normalized = pool_stat.get_user_bytes(raw_used_rate);
   if (f) {
+    f->dump_int("stored", stored_normalized);
+    f->dump_int("objects", sum.num_objects);
     f->dump_int("kb_used", shift_round_up(used_bytes, 10));
     f->dump_int("bytes_used", used_bytes);
     f->dump_float("percent_used", used);
     f->dump_unsigned("max_avail", avail_res);
-    f->dump_int("objects", sum.num_objects);
     if (verbose) {
       f->dump_int("quota_objects", pool->quota_max_objects);
       f->dump_int("quota_bytes", pool->quota_max_bytes);
@@ -933,22 +917,29 @@ void PGMapDigest::dump_object_stat_sum(
       f->dump_int("rd_bytes", sum.num_rd_kb * 1024ull);
       f->dump_int("wr", sum.num_wr);
       f->dump_int("wr_bytes", sum.num_wr_kb * 1024ull);
-      f->dump_int("stored", stored_normalized);
       f->dump_int("compress_bytes_used", statfs.data_compressed_allocated);
       f->dump_int("compress_under_bytes", statfs.data_compressed_original);
       // Stored by user amplified by replication
       f->dump_int("stored_raw", pool_stat.get_user_bytes(1.0));
     }
   } else {
-    tbl << stringify(byte_u_t(statfs.allocated));
+    tbl << stringify(byte_u_t(stored_normalized));
+    tbl << stringify(si_u_t(sum.num_objects));
+    tbl << stringify(byte_u_t(used_bytes));
     tbl << percentify(used*100);
-    tbl << byte_u_t(avail_res);
-    tbl << sum.num_objects;
+    tbl << stringify(byte_u_t(avail_res));
     if (verbose) {
+      if (pool->quota_max_objects == 0)
+        tbl << "N/A";
+      else
+        tbl << stringify(si_u_t(pool->quota_max_objects));
+
+      if (pool->quota_max_bytes == 0)
+        tbl << "N/A";
+      else
+        tbl << stringify(byte_u_t(pool->quota_max_bytes));
+
       tbl << stringify(si_u_t(sum.num_objects_dirty))
-          << stringify(byte_u_t(sum.num_rd))
-          << stringify(byte_u_t(sum.num_wr))
-	  << stringify(byte_u_t(stored_normalized))
 	  << stringify(byte_u_t(statfs.data_compressed_allocated))
 	  << stringify(byte_u_t(statfs.data_compressed_original))
 	  ;
