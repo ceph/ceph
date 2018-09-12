@@ -1092,8 +1092,8 @@ public:
   explicit RGWPutObj_Filter(RGWPutObjDataProcessor* next) :
   next(next){}
   ~RGWPutObj_Filter() override {}
-  int handle_data(bufferlist& bl, off_t ofs, bool *again) override {
-    return next->handle_data(bl, ofs, again);
+  int handle_data(bufferlist& bl, off_t ofs) override {
+    return next->handle_data(bl, ofs);
   }
 }; /* RGWPutObj_Filter */
 
@@ -1854,7 +1854,7 @@ static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
 {
   bool again = false;
   do {
-    int ret = processor->handle_data(data, ofs, &again);
+    int ret = processor->handle_data(data, ofs);
     if (ret < 0)
       return ret;
   } while (again);

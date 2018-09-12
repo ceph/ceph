@@ -3845,7 +3845,7 @@ class RGWPutObjDataProcessor
 public:
   RGWPutObjDataProcessor(){}
   virtual ~RGWPutObjDataProcessor(){}
-  virtual int handle_data(bufferlist& bl, off_t ofs, bool *again) = 0;
+  virtual int handle_data(bufferlist& bl, off_t ofs) = 0;
 }; /* RGWPutObjDataProcessor */
 
 
@@ -3982,7 +3982,7 @@ public:
                                 unique_tag(_t) {}
   int prepare(RGWRados *store, string *oid_rand) override;
   virtual bool immutable_head() { return false; }
-  int handle_data(bufferlist& bl, off_t ofs, bool *again) override;
+  int handle_data(bufferlist& bl, off_t ofs) override;
 
   void set_olh_epoch(uint64_t epoch) {
     olh_epoch = epoch;

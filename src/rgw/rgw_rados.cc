@@ -2660,9 +2660,8 @@ int RGWPutObjProcessor_Aio::prepare(RGWRados *store, string *oid_rand)
   return 0;
 }
 
-int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, bool *again)
+int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs)
 {
-  *again = false;
   uint64_t max_write_size = std::min(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
 
   pending_data_bl.claim_append(bl);
@@ -7532,21 +7531,20 @@ class RGWPutObj_Buffer : public RGWPutObj_Filter {
     ceph_assert(isp2(buffer_size)); // must be power of 2
   }
 
-  int handle_data(bufferlist& bl, off_t ofs, bool *again) override {
-    if (*again || !bl.length()) {
+  int handle_data(bufferlist& bl, off_t ofs) override {
+    if (!bl.length()) {
       // flush buffered data
-      return RGWPutObj_Filter::handle_data(buffer, ofs, again);
+      return RGWPutObj_Filter::handle_data(buffer, ofs);
     }
     // transform offset to the beginning of the buffer
     ofs = ofs - buffer.length();
     buffer.claim_append(bl);
     if (buffer.length() < buffer_size) {
-      *again = false; // don't come back until there's more data
       return 0;
     }
     const auto count = p2align(buffer.length(), buffer_size);
     buffer.splice(0, count, &bl);
-    return RGWPutObj_Filter::handle_data(bl, ofs, again);
+    return RGWPutObj_Filter::handle_data(bl, ofs);
   }
 };
 
@@ -7642,7 +7640,7 @@ public:
 
     do {
       uint64_t size = bl.length();
-      int ret = filter->handle_data(bl, lofs, &again);
+      int ret = filter->handle_data(bl, lofs);
       if (ret < 0)
         return ret;
 
@@ -8543,10 +8541,10 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     }
 
     uint64_t read_len = ret;
-    bool again;
+    bool again = false;
 
     do {
-      ret = processor.handle_data(bl, ofs, &again);
+      ret = processor.handle_data(bl, ofs);
       if (ret < 0) {
         return ret;
       }

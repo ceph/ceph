@@ -54,10 +54,9 @@ class ut_put_sink: public RGWPutObjDataProcessor
 public:
   ut_put_sink(){}
   virtual ~ut_put_sink(){}
-  int handle_data(bufferlist& bl, off_t ofs, bool *again) override
+  int handle_data(bufferlist& bl, off_t ofs) override
   {
     sink.append(bl);
-    *again = false;
     return 0;
   }
   bufferlist&  get_sink()
@@ -124,14 +123,11 @@ TEST(Compress, LimitedChunkSize)
     bufferlist bl;
     bl.append(bp);
 
-    bool again = false;
-
     ut_put_sink c_sink;
     RGWPutObj_Compress compressor(g_ceph_context, plugin, &c_sink);
-    compressor.handle_data(bl, 0, &again);
-
+    compressor.handle_data(bl, 0);
     bufferlist empty;
-    compressor.handle_data(empty, s, &again);
+    compressor.handle_data(empty, s);
 
     RGWCompressionInfo cs_info;
     cs_info.compression_type = plugin->get_type_name();
@@ -166,13 +162,11 @@ TEST(Compress, BillionZeros)
   bufferlist bl;
   bl.append(bp);
 
-  bool again = false;
 
   for (int i=0; i<1000;i++)
-    compressor.handle_data(bl, size*i, &again);
-
+    compressor.handle_data(bl, size*i);
   bufferlist empty;
-  compressor.handle_data(empty, size*1000, &again);
+  compressor.handle_data(empty, size*1000);
 
   RGWCompressionInfo cs_info;
   cs_info.compression_type = plugin->get_type_name();

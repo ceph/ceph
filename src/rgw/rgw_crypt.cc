@@ -675,22 +675,9 @@ RGWPutObj_BlockEncrypt::RGWPutObj_BlockEncrypt(CephContext* cct,
 RGWPutObj_BlockEncrypt::~RGWPutObj_BlockEncrypt() {
 }
 
-int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
-                                        off_t in_ofs,
-                                        bool *again) {
+int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl, off_t in_ofs) {
   int res = 0;
   ldout(cct, 25) << "Encrypt " << bl.length() << " bytes" << dendl;
-
-  if (*again) {
-    bufferlist no_data;
-    res = next->handle_data(no_data, in_ofs, again);
-    //if *again is not set to false, we will have endless loop
-    //drop info on log
-    if (*again) {
-      ldout(cct, 20) << "*again==true" << dendl;
-    }
-    return res;
-  }
 
   cache.append(bl);
   off_t proc_size = cache.length() & ~(block_size - 1);
@@ -702,7 +689,7 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
     if (! crypt->encrypt(cache, 0, proc_size, data, ofs) ) {
       return -ERR_INTERNAL_ERROR;
     }
-    res = next->handle_data(data, ofs, again);
+    res = next->handle_data(data, ofs);
     ofs += proc_size;
     cache.splice(0, proc_size);
     if (res < 0)
@@ -711,7 +698,7 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
 
   if (bl.length() == 0) {
     /*replicate 0-sized handle_data*/
-    res = next->handle_data(bl, ofs, again);
+    res = next->handle_data(bl, ofs);
   }
   return res;
 }
