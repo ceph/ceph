@@ -1314,8 +1314,6 @@ protected:
   RGWBucketInfo src_bucket_info;
   RGWBucketInfo dest_bucket_info;
   string source_zone;
-  string client_id;
-  string op_id;
   string etag;
 
   off_t last_ofs;
