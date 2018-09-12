@@ -431,15 +431,15 @@ void Server::handle_client_session(const MClientSession::const_ref &m)
     break;
 
   case CEPH_SESSION_REQUEST_RENEWCAPS:
-    if (session->is_open() ||
-	session->is_stale()) {
+    if (session->is_open() || session->is_stale()) {
       mds->sessionmap.touch_session(session);
       if (session->is_stale()) {
 	mds->sessionmap.set_state(session, Session::STATE_OPEN);
 	mds->locker->resume_stale_caps(session);
 	mds->sessionmap.touch_session(session);
       }
-      m->get_connection()->send_message2(MClientSession::create(CEPH_SESSION_RENEWCAPS, m->get_seq()));
+      auto reply = MClientSession::create(CEPH_SESSION_RENEWCAPS, m->get_seq());
+      mds->send_message_client(reply, session);
     } else {
       dout(10) << "ignoring renewcaps on non open|stale session (" << session->get_state_name() << ")" << dendl;
     }
@@ -543,9 +543,11 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     auto reply = MClientSession::create(CEPH_SESSION_OPEN);
     if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
       reply->supported_features = supported_features;
-    session->get_connection()->send_message2(reply);
-    if (mdcache->is_readonly())
-      session->get_connection()->send_message2(MClientSession::create(CEPH_SESSION_FORCE_RO));
+    mds->send_message_client(reply, session);
+    if (mdcache->is_readonly()) {
+      auto m = MClientSession::create(CEPH_SESSION_FORCE_RO);
+      mds->send_message_client(m, session);
+    }
   } else if (session->is_closing() ||
 	     session->is_killing()) {
     // kill any lingering capabilities, leases, requests
@@ -1017,7 +1019,8 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
   }
 
   if (deny) {
-    m->get_connection()->send_message2(MClientSession::create(CEPH_SESSION_CLOSE));
+    auto m = MClientSession::create(CEPH_SESSION_CLOSE);
+    mds->send_message_client(m, session);
     if (session->is_open())
       kill_session(session, nullptr);
     return;
@@ -1034,7 +1037,7 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
   auto reply = MClientSession::create(CEPH_SESSION_OPEN);
   if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
     reply->supported_features = supported_features;
-  m->get_connection()->send_message2(reply);
+  mds->send_message_client(reply, session);
 
   session->last_cap_renew = clock::now();
   mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay;
@@ -1536,7 +1539,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   }
 
   reply->set_extra_bl(mdr->reply_extra_bl);
-  req->get_connection()->send_message2(reply);
+  mds->send_message_client(reply, mdr->session);
 
   mdr->did_early_reply = true;
 
@@ -1639,7 +1642,7 @@ void Server::reply_client_request(MDRequestRef& mdr, const MClientReply::ref &re
     reply->set_extra_bl(mdr->reply_extra_bl);
 
     reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
-    req->get_connection()->send_message2(reply);
+    mds->send_message_client(reply, session);
   }
 
   if (req->is_queued_for_replay() &&
@@ -1809,7 +1812,7 @@ void Server::handle_client_request(const MClientRequest::const_ref &req)
 	  encode(created, extra);
 	  reply->set_extra_bl(extra);
 	}
-	req->get_connection()->send_message2(reply);
+        mds->send_message_client(reply, session);
 
 	if (req->is_queued_for_replay())
 	  mds->queue_one_replay();

@@ -966,8 +966,9 @@ void MDSRank::forward_message_mds(const MClientRequest::const_ref& m, mds_rank_t
   bool client_must_resend = true;  //!creq->can_forward();
 
   // tell the client where it should go
+  auto session = get_session(m);
   auto f = MClientRequestForward::create(m->get_tid(), mds, m->get_num_fwd()+1, client_must_resend);
-  messenger->send_message(f.detach(), m->get_source_inst());
+  send_message_client(f, session);
 }
 
 void MDSRank::send_message_client_counted(const Message::ref& m, client_t client)
