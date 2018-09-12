@@ -6741,6 +6741,7 @@ void PG::_delete_some(ObjectStore::Transaction *t)
 	      info.pgid,
 	      info.pgid.get_split_bits(pool.info.get_pg_num()));
       _init(*t, info.pgid, &pool.info);
+      last_epoch = 0;  // to ensure pg epoch is also written
       dirty_info = true;
       dirty_big_info = true;
     } else {
