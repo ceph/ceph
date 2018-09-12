@@ -1638,8 +1638,9 @@ public:
   void set_pgp_num_target(int p) {
     pgp_num_target = p;
   }
-  void dec_pg_num() {
+  void dec_pg_num(epoch_t last_epoch_clean) {
     --pg_num;
+    pg_num_dec_last_epoch_clean = last_epoch_clean;
     calc_pg_masks();
   }
 

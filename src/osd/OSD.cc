@@ -1702,11 +1702,11 @@ void OSDService::set_ready_to_merge_source(PG *pg)
   _send_ready_to_merge();
 }
 
-void OSDService::set_ready_to_merge_target(PG *pg)
+void OSDService::set_ready_to_merge_target(PG *pg, epoch_t last_epoch_clean)
 {
   Mutex::Locker l(merge_lock);
   dout(10) << __func__ << " " << pg->pg_id << dendl;
-  ready_to_merge_target.insert(pg->pg_id.pgid);
+  ready_to_merge_target.insert(make_pair(pg->pg_id.pgid, last_epoch_clean));
   _send_ready_to_merge();
 }
 
@@ -1719,9 +1719,13 @@ void OSDService::send_ready_to_merge()
 void OSDService::_send_ready_to_merge()
 {
   for (auto src : ready_to_merge_source) {
-    if (ready_to_merge_target.count(src.get_parent()) &&
+    auto p = ready_to_merge_target.find(src.get_parent());
+    if (p != ready_to_merge_target.end() &&
 	sent_ready_to_merge_source.count(src) == 0) {
-      monc->send_mon_message(new MOSDPGReadyToMerge(src, osdmap->get_epoch()));
+      monc->send_mon_message(new MOSDPGReadyToMerge(
+			       src,
+			       p->second,  // PG's last_epoch_clean
+			       osdmap->get_epoch()));
       sent_ready_to_merge_source.insert(src);
     }
   }
