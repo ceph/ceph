@@ -128,20 +128,6 @@ public:
     return size;
   }
 
-  /// adjust container comparator (for purposes of get_next sort order)
-  void reset_comparator(C comp) {
-    // get_next uses weak_refs; that's the only container we need to
-    // reorder.
-    map<K, pair<WeakVPtr, V*>, C> temp;
-
-    std::lock_guard locker{lock};
-    temp.swap(weak_refs);
-
-    // reconstruct with new comparator
-    weak_refs = map<K, pair<WeakVPtr, V*>, C>(comp);
-    weak_refs.insert(temp.begin(), temp.end());
-  }
-
   void set_cct(CephContext *c) {
     cct = c;
   }
