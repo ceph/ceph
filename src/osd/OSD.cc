@@ -360,8 +360,6 @@ void OSDService::identify_splits_and_merges(
 	 q != p->second.end() &&
 	   q->first <= new_map->get_epoch();
 	 ++q) {
-      derr << __func__ << " q " << q->first
-	   << " pgnum " << pgnum << " -> " << q->second << dendl;
       if (pgnum < q->second) {
 	// split?
 	if (cur.ps() < pgnum) {
