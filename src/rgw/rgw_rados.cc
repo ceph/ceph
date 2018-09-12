@@ -2533,12 +2533,20 @@ RGWPutObjProcessor_Aio::~RGWPutObjProcessor_Aio()
 
 int RGWPutObjProcessor_Aio::handle_obj_data(rgw_raw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive)
 {
-  if ((uint64_t)abs_ofs + bl.length() > obj_len)
-    obj_len = abs_ofs + bl.length();
+  const uint64_t len = bl.length();
+  if (obj_len < abs_ofs + len)
+    obj_len = abs_ofs + len;
 
   // For the first call pass -1 as the offset to
   // do a write_full.
-  return store->aio_put_obj_data(NULL, obj, bl, ((ofs != 0) ? ofs : -1), exclusive, phandle);
+  void *handle;
+  int r = store->aio_put_obj_data(NULL, obj, bl, ((ofs != 0) ? ofs : -1), exclusive, &handle);
+  if (r < 0) {
+    return r;
+  }
+  // we may need to handle EEXIST before submitting more writes
+  const bool need_to_wait = exclusive;
+  return throttle_pending(handle, obj, len, need_to_wait);
 }
 
 struct put_obj_aio_info RGWPutObjProcessor_Aio::pop_pending()
@@ -2585,7 +2593,8 @@ int RGWPutObjProcessor_Aio::drain_pending()
   return ret;
 }
 
-int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait)
+int RGWPutObjProcessor_Aio::throttle_pending(void *handle, const rgw_raw_obj& obj,
+                                             uint64_t size, bool need_to_wait)
 {
   bool _wait = need_to_wait;
 
@@ -2624,6 +2633,11 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_raw_obj& obj, 
       return r;
   }
   return 0;
+}
+
+int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait)
+{
+  return 0; // already did in throttle_pending()
 }
 
 int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool exclusive)

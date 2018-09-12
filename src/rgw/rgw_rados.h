@@ -3906,6 +3906,8 @@ class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
   int wait_pending_front();
   bool pending_has_completed();
 
+  int throttle_pending(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait);
+
 protected:
   uint64_t obj_len{0};
 
