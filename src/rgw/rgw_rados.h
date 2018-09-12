@@ -18,7 +18,6 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/log/cls_log_types.h"
-#include "cls/statelog/cls_statelog_types.h"
 #include "cls/timeindex/cls_timeindex_types.h"
 #include "cls/otp/cls_otp_types.h"
 #include "rgw_log.h"
