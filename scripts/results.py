@@ -1,5 +1,5 @@
 """
-usage: teuthology-results [-h] [-v] [--dry-run] [--email EMAIL] [--timeout TIMEOUT] --archive-dir DIR --name NAME --subset SUBSET --seed SEED
+usage: teuthology-results [-h] [-v] [--dry-run] [--email EMAIL] [--timeout TIMEOUT] --archive-dir DIR --name NAME [--subset SUBSET] [--seed SEED]
 
 Email teuthology suite results
 
