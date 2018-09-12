@@ -8212,7 +8212,10 @@ bool OSD::advance_pg(
 	    unsigned new_pg_num = nextmap->get_pg_num(pg->pg_id.pool());
 	    unsigned split_bits = pg->pg_id.get_split_bits(new_pg_num);
 	    dout(1) << __func__ << " merging " << pg->pg_id << dendl;
-	    pg->merge_from(sources, rctx, split_bits);
+	    pg->merge_from(
+	      sources, rctx, split_bits,
+	      nextmap->get_pg_pool(
+		pg->pg_id.pool())->get_pg_num_dec_last_epoch_clean());
 	    pg->pg_slot->waiting_for_merge_epoch = 0;
 	  } else {
 	    dout(20) << __func__ << " not ready to merge yet" << dendl;

@@ -2644,7 +2644,8 @@ void PG::finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transac
 }
 
 void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
-		    unsigned split_bits)
+		    unsigned split_bits,
+		    epoch_t dec_last_epoch_clean)
 {
   dout(10) << __func__ << " from " << sources << " split_bits " << split_bits
 	   << dendl;
@@ -2725,8 +2726,11 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
   // make sure we have a meaningful last_epoch_started/clean (if we were a
   // placeholder)
   if (info.last_epoch_started == 0) {
+    // we use the pg_num_dec_last_epoch_clean we got from the caller, which is
+    // the epoch that was clean according to the target pg whe it requested
+    // the mon decrement pg_num.
     info.history.last_epoch_started =
-      info.history.last_epoch_clean = past_intervals.get_bounds().first;
+      info.history.last_epoch_clean = dec_last_epoch_clean;
     dout(10) << __func__
 	     << " set last_epoch_started/clean based on past intervals"
 	     << dendl;
