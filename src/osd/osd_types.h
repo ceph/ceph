@@ -1603,9 +1603,6 @@ public:
   unsigned get_pg_num_target() const { return pg_num_target; }
   unsigned get_pgp_num_target() const { return pgp_num_target; }
   unsigned get_pg_num_pending() const { return pg_num_pending; }
-  epoch_t get_pg_num_pending_dec_epoch() const {
-    return pg_num_pending_dec_epoch;
-  }
 
   unsigned get_pg_num_mask() const { return pg_num_mask; }
   unsigned get_pgp_num_mask() const { return pgp_num_mask; }
@@ -1626,9 +1623,8 @@ public:
     pgp_num = p;
     calc_pg_masks();
   }
-  void set_pg_num_pending(int p, epoch_t e) {
+  void set_pg_num_pending(int p) {
     pg_num_pending = p;
-    pg_num_pending_dec_epoch = e;
     calc_pg_masks();
   }
   void set_pg_num_target(int p) {
