@@ -138,6 +138,7 @@ public:
   MDSAuthCaps auth_caps;
 
   ConnectionRef connection;
+  entity_addr_t socket_addr;
   xlist<Session*>::item item_session_list;
 
   list<Message*> preopen_out_queue;  ///< messages for client, queued before they connect
@@ -318,7 +319,7 @@ public:
 		   const vector<uint64_t> *gid_list, int new_uid, int new_gid);
 
 
-  Session() : 
+  Session(Connection *con) :
     state(STATE_CLOSED), state_seq(0), importing_count(0),
     recall_count(0), recall_release_count(0),
     auth_caps(g_ceph_context),
@@ -328,7 +329,11 @@ public:
     lease_seq(0),
     completed_requests_dirty(false),
     num_trim_flushes_warnings(0),
-    num_trim_requests_warnings(0) { }
+    num_trim_requests_warnings(0) {
+    if (con) {
+      set_connection(con);
+    }
+  }
   ~Session() override {
     if (state == STATE_CLOSED) {
       item_session_list.remove_myself();
@@ -339,6 +344,11 @@ public:
       preopen_out_queue.front()->put();
       preopen_out_queue.pop_front();
     }
+  }
+
+  void set_connection(Connection *con) {
+    connection = con;
+    socket_addr = con->get_peer_addr();
   }
 
   void clear() {
@@ -415,7 +425,7 @@ public:
     if (session_map_entry != session_map.end()) {
       s = session_map_entry->second;
     } else {
-      s = session_map[i.name] = new Session;
+      s = session_map[i.name] = new Session(nullptr);
       s->info.inst = i;
       s->last_cap_renew = ceph_clock_now();
       if (logger) {

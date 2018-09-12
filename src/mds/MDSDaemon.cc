@@ -1332,13 +1332,12 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
     // It doesn't go into a SessionMap instance until it sends an explicit
     // request to open a session (initial state of Session is `closed`)
     if (!s) {
-      s = new Session;
+      s = new Session(con);
       s->info.auth_name = name;
       s->info.inst.addr = con->get_peer_addr();
       s->info.inst.name = n;
       dout(10) << " new session " << s << " for " << s->info.inst << " con " << con << dendl;
       con->set_priv(s);
-      s->connection = con;
       if (mds_rank) {
         mds_rank->kick_waiters_for_any_client_connection();
       }
@@ -1406,7 +1405,7 @@ void MDSDaemon::ms_handle_accept(Connection *con)
   if (s) {
     if (s->connection != con) {
       dout(10) << " session connection " << s->connection << " -> " << con << dendl;
-      s->connection = con;
+      s->set_connection(con);
 
       // send out any queued messages
       while (!s->preopen_out_queue.empty()) {
