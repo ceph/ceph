@@ -3295,7 +3295,7 @@ bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
     return true;
   }
 
-  p.dec_pg_num();
+  p.dec_pg_num(m->last_epoch_clean);
   p.last_change = pending_inc.epoch;
 
   // force pre-nautilus clients to resend their ops, since they

@@ -7992,7 +7992,8 @@ PG::RecoveryState::Clean::Clean(my_context ctx)
     if (pg->pool.info.is_pending_merge(pg->info.pgid.pgid, &target)) {
       if (target) {
 	ldout(pg->cct, 10) << "ready to merge (target)" << dendl;
-	pg->osd->set_ready_to_merge_target(pg);
+	pg->osd->set_ready_to_merge_target(pg,
+					   pg->info.history.last_epoch_clean);
       } else {
 	ldout(pg->cct, 10) << "ready to merge (source)" << dendl;
 	pg->osd->set_ready_to_merge_source(pg);
