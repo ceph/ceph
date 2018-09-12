@@ -6737,7 +6737,7 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->set_pg_num(
     max > 0 ? std::min<uint64_t>(pg_num, std::max<int64_t>(1, max))
     : pg_num);
-  pi->set_pg_num_pending(pi->get_pg_num(), pending_inc.epoch);
+  pi->set_pg_num_pending(pi->get_pg_num());
   pi->set_pg_num_target(pg_num);
   pi->set_pgp_num(pi->get_pg_num());
   pi->set_pgp_num_target(pgp_num);
@@ -6924,7 +6924,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	   << ") - 1; only single pg decrease is currently supported";
 	return -EINVAL;
       }
-      p.set_pg_num_pending(n, pending_inc.epoch);
+      p.set_pg_num_pending(n);
       // force pre-nautilus clients to resend their ops, since they
       // don't understand pg_num_pending changes form a new interval
       p.last_force_op_resend_prenautilus = pending_inc.epoch;

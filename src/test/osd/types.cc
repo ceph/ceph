@@ -149,7 +149,7 @@ for (unsigned i = 0; i < 4; ++i) {
     OSDMap::Incremental inc(epoch + 1);
     inc.new_pools[pool_id].min_size = min_size;
     inc.new_pools[pool_id].set_pg_num(pg_num);
-    inc.new_pools[pool_id].set_pg_num_pending(pg_num, 1);
+    inc.new_pools[pool_id].set_pg_num_pending(pg_num);
     inc.new_up_thru[osd_id] = epoch + 1;
     osdmap->apply_incremental(inc);
     lastmap->apply_incremental(inc);
@@ -324,7 +324,7 @@ for (unsigned i = 0; i < 4; ++i) {
     OSDMap::Incremental inc(epoch + 1);
     inc.new_pools[pool_id].min_size = min_size;
     inc.new_pools[pool_id].set_pg_num(pg_num);
-    inc.new_pools[pool_id].set_pg_num_pending(pg_num - 1, epoch + 1);
+    inc.new_pools[pool_id].set_pg_num_pending(pg_num - 1);
     osdmap->apply_incremental(inc);
     cout << "pg_num " << pg_num << std::endl;
     PastIntervals past_intervals;
@@ -390,7 +390,7 @@ for (unsigned i = 0; i < 4; ++i) {
     osdmap->set_epoch(epoch);
     OSDMap::Incremental inc(epoch + 1);
     inc.new_pools[pool_id].min_size = min_size;
-    inc.new_pools[pool_id].set_pg_num_pending(pg_num - 1, epoch + 1);
+    inc.new_pools[pool_id].set_pg_num_pending(pg_num - 1);
     osdmap->apply_incremental(inc);
 
     PastIntervals past_intervals;
