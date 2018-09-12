@@ -213,7 +213,6 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
   std::vector<C_SaferCond*> on_finishes;
   int r, ret_code;
 
-  std::vector<librbd::IoCtx*> io_ctxs;
   std::vector<librbd::ImageCtx*> ictxs;
 
   cls::rbd::GroupSnapshotNamespace ne{group_ioctx.get_id(), group_id,
@@ -223,7 +222,7 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
   int snap_count = group_snap.snaps.size();
 
   for (int i = 0; i < snap_count; ++i) {
-    librbd::IoCtx image_io_ctx;
+    librados::IoCtx image_io_ctx;
     r = rados.ioctx_create2(group_snap.snaps[i].pool, image_io_ctx);
     if (r < 0) {
       ldout(cct, 1) << "Failed to create io context for image" << dendl;
@@ -841,7 +840,6 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   vector<cls::rbd::ImageSnapshotSpec> image_snaps;
   std::string ind_snap_name;
 
-  std::vector<librbd::IoCtx*> io_ctxs;
   std::vector<librbd::ImageCtx*> ictxs;
   std::vector<C_SaferCond*> on_finishes;
 
@@ -894,7 +892,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   }
 
   for (auto image: images) {
-    librbd::IoCtx image_io_ctx;
+    librados::IoCtx image_io_ctx;
     r = rados.ioctx_create2(image.spec.pool_id, image_io_ctx);
     if (r < 0) {
       ldout(cct, 1) << "Failed to create io context for image" << dendl;
