@@ -71,6 +71,12 @@ const char *parse_good[] = {
   "allow pool foo namespace=\"\" rwx; allow pool bar namespace='' object_prefix rbd r",
   "allow pool foo namespace \"\" rwx; allow pool bar namespace '' object_prefix rbd r",
   "profile abc, profile abc pool=bar, profile abc pool=bar namespace=foo",
+  "allow rwx network 127.0.0.1/8",
+  "allow rwx network ::1/128",
+  "allow rwx network [ff::1]/128",
+  "profile foo network 127.0.0.1/8",
+  "allow rwx namespace foo tag cephfs data =cephfs_a network 127.0.0.1/8",
+  "allow pool foo rwx network 1.2.3.4/24",
   0
 };
 
@@ -689,7 +695,9 @@ TEST(OSDCap, OutputParsed)
     {"allow pool images r, allow pool rbd rwx",
      "osdcap[grant(pool images r),grant(pool rbd rwx)]"},
     {"allow class-read object_prefix rbd_children, allow pool libvirt-pool-test rwx",
-     "osdcap[grant(object_prefix rbd_children  class-read),grant(pool libvirt-pool-test rwx)]"}
+     "osdcap[grant(object_prefix rbd_children  class-read),grant(pool libvirt-pool-test rwx)]"},
+    {"allow rwx network 1.2.3.4/24",
+     "osdcap[grant(rwx network 1.2.3.4/24)]"},
   };
 
   size_t num_tests = sizeof(test_values) / sizeof(*test_values);
