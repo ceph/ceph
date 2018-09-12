@@ -5822,9 +5822,8 @@ void OSD::ms_handle_fast_connect(Connection *con)
       con->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
     Session *s = static_cast<Session*>(con->get_priv());
     if (!s) {
-      s = new Session(cct);
+      s = new Session(cct, con);
       con->set_priv(s->get());
-      s->con = con;
       dout(10) << " new session (outgoing) " << s << " con=" << s->con
           << " addr=" << s->con->get_peer_addr() << dendl;
       // we don't connect to clients
@@ -5841,9 +5840,8 @@ void OSD::ms_handle_fast_accept(Connection *con)
       con->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
     Session *s = static_cast<Session*>(con->get_priv());
     if (!s) {
-      s = new Session(cct);
+      s = new Session(cct, con);
       con->set_priv(s->get());
-      s->con = con;
       dout(10) << "new session (incoming)" << s << " con=" << con
           << " addr=" << con->get_peer_addr()
           << " must have raced with connect" << dendl;
@@ -7283,10 +7281,10 @@ bool OSD::ms_verify_authorizer(
   if (isvalid) {
     Session *s = static_cast<Session *>(con->get_priv());
     if (!s) {
-      s = new Session(cct);
+      s = new Session(cct, con);
       con->set_priv(s->get());
-      s->con = con;
-      dout(10) << " new session " << s << " con=" << s->con << " addr=" << s->con->get_peer_addr() << dendl;
+      dout(10) << " new session " << s << " con=" << s->con
+	       << " addr=" << s->con->get_peer_addr() << dendl;
     }
 
     s->entity_name = name;
