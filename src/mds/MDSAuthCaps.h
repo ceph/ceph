@@ -111,9 +111,23 @@ struct MDSCapGrant {
   MDSCapSpec spec;
   MDSCapMatch match;
 
-  MDSCapGrant(const MDSCapSpec &spec_, const MDSCapMatch &match_)
-    : spec(spec_), match(match_) {}
+  std::string network;
+
+  entity_addr_t network_parsed;
+  unsigned network_prefix = 0;
+  bool network_valid = true;
+
+  MDSCapGrant(const MDSCapSpec &spec_, const MDSCapMatch &match_,
+	      boost::optional<std::string> n)
+    : spec(spec_), match(match_) {
+    if (n) {
+      network = *n;
+      parse_network();
+    }
+  }
   MDSCapGrant() {}
+
+  void parse_network();
 };
 
 class MDSAuthCaps
