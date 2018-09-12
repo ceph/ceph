@@ -33,13 +33,14 @@ the Ceph cluster using a web server hosted by ``ceph-mgr``.
 The dashboard currently provides the following features to monitor and manage
 various aspects of your Ceph cluster:
 
-* **Multi-User and Role Management**: The dashboard supports the management of
-  multiple user accounts, and the management of permission roles.
-  providing a configurable username and password.
+* **Multi-User and Role Management**: The dashboard supports multiple user
+  accounts with different permissions (roles). The user accounts and roles
+  can be modified on both the command line and via the WebUI.
+  See :ref:`dashboard-user-role-management` for details.
 * **SSL/TLS support**: All HTTP communication between the web browser and the
   dashboard is secured via SSL. A self-signed certificate can be created with
   a built-in command, but it's also possible to import custom certificates
-  signed and issued by a CA.
+  signed and issued by a CA. See :ref:`dashboard-ssl-tls-support` for details.
 * **Overall cluster health**: Displays the overall cluster status, storage
   utilization (e.g. number of objects, raw capacity, usage per pool), a list of
   pools and their status and usage statistics.
@@ -81,6 +82,8 @@ Within a running Ceph cluster, the Ceph Manager Dashboard is enabled with::
 
 Configuration
 -------------
+
+.. _dashboard-ssl-tls-support:
 
 SSL/TLS Support
 ^^^^^^^^^^^^^^^
@@ -249,6 +252,13 @@ The default value is 45 seconds.
 Enabling the Embedding of Grafana Dashboards
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. note:: 
+  The embedding of Grafana dashboards into the Ceph Manager Dashboard is
+  currently work in progress. This section documents the backend configuration.
+  The corresponding changes to the WebUI have not been merged yet. You can
+  follow the development process in `PR#23666
+  <https://github.com/ceph/ceph/pull/23666>`_.
+
 Grafana and Prometheus are likely going to be bundled and installed by some
 orchestration tools along Ceph in the near future, but currently, you will have
 to install and configure both manually. After you have installed Prometheus and
@@ -330,6 +340,7 @@ previously defined username and password. Select the **Keep me logged in**
 checkbox if you want to skip the username/password request when accessing the
 dashboard in the future.
 
+.. _dashboard-user-role-management:
 
 User and Role Management
 ------------------------
@@ -371,7 +382,7 @@ User Roles and Permissions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 User accounts are also associated with a set of roles that define which
-dashboard fuctionality can be accessed by the user.
+dashboard functionality can be accessed by the user.
 
 The Dashboard functionality/modules are grouped within a *security scope*.
 Security scopes are predefined and static. The current avaliable security
