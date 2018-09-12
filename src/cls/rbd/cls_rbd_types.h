@@ -551,11 +551,33 @@ inline void decode(TrashImageSource &source, bufferlist::const_iterator& it)
   source = static_cast<TrashImageSource>(int_source);
 }
 
+enum TrashImageState {
+  TRASH_IMAGE_STATE_NORMAL    = 0,
+  TRASH_IMAGE_STATE_MOVING    = 1,
+  TRASH_IMAGE_STATE_REMOVING  = 2,
+  TRASH_IMAGE_STATE_RESTORING = 3
+};
+
+inline void encode(const TrashImageState &state, bufferlist &bl)
+{
+  using ceph::encode;
+  encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(TrashImageState &state, bufferlist::const_iterator &it)
+{
+  uint8_t int_state;
+  using ceph::decode;
+  decode(int_state, it);
+  state = static_cast<TrashImageState>(int_state);
+}
+
 struct TrashImageSpec {
   TrashImageSource source = TRASH_IMAGE_SOURCE_USER;
   std::string name;
   utime_t deletion_time; // time of deletion
   utime_t deferment_end_time;
+  TrashImageState state = TRASH_IMAGE_STATE_NORMAL;
 
   TrashImageSpec() {}
   TrashImageSpec(TrashImageSource source, const std::string &name,
