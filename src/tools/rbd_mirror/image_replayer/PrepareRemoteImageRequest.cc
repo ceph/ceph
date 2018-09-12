@@ -14,6 +14,7 @@
 #include "librbd/journal/Types.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_replayer/GetMirrorImageIdRequest.h"
+#include "tools/rbd_mirror/image_replayer/Utils.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -134,7 +135,7 @@ void PrepareRemoteImageRequest<I>::handle_get_client(int r) {
   } else if (r < 0) {
     derr << "failed to retrieve client: " << cpp_strerror(r) << dendl;
     finish(r);
-  } else if (!decode_client_meta()) {
+  } else if (!util::decode_client_meta(m_client, m_client_meta)) {
     // require operator intervention since the data is corrupt
     finish(-EBADMSG);
   } else {
@@ -179,31 +180,6 @@ void PrepareRemoteImageRequest<I>::handle_register_client(int r) {
   m_client_meta->state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
 
   finish(0);
-}
-
-template <typename I>
-bool PrepareRemoteImageRequest<I>::decode_client_meta() {
-  dout(20) << dendl;
-
-  librbd::journal::ClientData client_data;
-  auto it = m_client.data.cbegin();
-  try {
-    decode(client_data, it);
-  } catch (const buffer::error &err) {
-    derr << "failed to decode client meta data: " << err.what() << dendl;
-    return false;
-  }
-
-  librbd::journal::MirrorPeerClientMeta *client_meta =
-    boost::get<librbd::journal::MirrorPeerClientMeta>(&client_data.client_meta);
-  if (client_meta == nullptr) {
-    derr << "unknown peer registration" << dendl;
-    return false;
-  }
-
-  *m_client_meta = *client_meta;
-  dout(20) << "client found: client_meta=" << *m_client_meta << dendl;
-  return true;
 }
 
 template <typename I>

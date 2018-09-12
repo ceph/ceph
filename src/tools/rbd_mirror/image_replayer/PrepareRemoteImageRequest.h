@@ -123,8 +123,6 @@ private:
   void handle_register_client(int r);
 
   void finish(int r);
-
-  bool decode_client_meta();
 };
 
 } // namespace image_replayer
