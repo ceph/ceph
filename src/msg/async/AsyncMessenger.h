@@ -379,13 +379,6 @@ public:
   }
 
   /**
-   * This wraps ms_deliver_get_authorizer. We use it for AsyncConnection.
-   */
-  AuthAuthorizer *get_authorizer(int peer_type, bool force_new) {
-    return ms_deliver_get_authorizer(peer_type, force_new);
-  }
-
-  /**
    * This wraps ms_deliver_verify_authorizer; we use it for AsyncConnection.
    */
   bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth, bufferlist& auth_reply,
