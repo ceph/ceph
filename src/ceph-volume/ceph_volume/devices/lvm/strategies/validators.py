@@ -2,16 +2,30 @@ from ceph_volume.util import disk
 from ceph_volume.api import lvm
 
 
-def minimum_device_size(devices):
+def minimum_device_size(devices, osds_per_device=1):
     """
     Ensure that the minimum requirements for this type of scenario is
     met, raise an error if the provided devices would not work
     """
-    msg = 'Unable to use device smaller than 5GB: %s (%s)'
+    msg = 'Unable to use device %s %s, LVs would be smaller than 5GB'
     for device in devices:
         device_size = disk.Size(b=device.sys_api['size'])
-        if device_size < disk.Size(gb=5):
-            raise RuntimeError(msg % (device, device_size))
+        lv_size = device_size / osds_per_device
+        if lv_size < disk.Size(gb=5):
+            raise RuntimeError(msg % (device_size, device.path))
+
+
+def minimum_device_collocated_size(devices, journal_size, osds_per_device=1):
+    """
+    Similar to ``minimum_device_size``, but take into account that the size of
+    the journal affects the size left of the device
+    """
+    msg = 'Unable to use device %s %s, LVs would be smaller than 5GB'
+    for device in devices:
+        device_size = disk.Size(b=device.sys_api['size'])
+        lv_size = (device_size / osds_per_device) - journal_size
+        if lv_size < disk.Size(gb=5):
+            raise RuntimeError(msg % (device_size, device.path))
 
 
 def no_lvm_membership(devices):
