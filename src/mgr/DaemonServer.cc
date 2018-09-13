@@ -161,6 +161,10 @@ entity_addrvec_t DaemonServer::get_myaddrs() const
   return msgr->get_myaddrs();
 }
 
+KeyStore *DaemonServer::ms_get_auth1_authorizer_keystore()
+{
+  return monc->rotating_secrets.get();
+}
 
 bool DaemonServer::ms_verify_authorizer(
   Connection *con,
