@@ -77,7 +77,7 @@ private:
     raw(const raw &other) = delete;
     const raw& operator=(const raw &other) = delete;
 public:
-    virtual char *get_data() final {
+    char *get_data() {
       return data;
     }
     virtual raw* clone_empty() = 0;
