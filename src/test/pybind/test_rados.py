@@ -1107,8 +1107,8 @@ class TestCommand(object):
         ret, buf, err = self.rados.osd_command(0, json.dumps(cmd), b'',
                                                timeout=30)
         eq(ret, 0)
-        assert len(err) > 0
-        out = json.loads(err)
+        assert len(buf) > 0
+        out = json.loads(buf.decode('utf-8'))
         eq(out['blocksize'], cmd['size'])
         eq(out['bytes_written'], cmd['count'])
 
