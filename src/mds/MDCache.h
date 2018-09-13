@@ -547,7 +547,9 @@ protected:
   set<mds_rank_t> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
   map<mds_rank_t,map<inodeno_t,map<client_t,Capability::Import> > > rejoin_imported_caps;
   map<inodeno_t,pair<mds_rank_t,map<client_t,Capability::Export> > > rejoin_slave_exports;
+
   map<client_t,entity_inst_t> rejoin_client_map;
+  map<client_t,client_metadata_t> rejoin_client_metadata_map;
   map<client_t,pair<Session*,uint64_t> > rejoin_session_map;
 
   map<inodeno_t,pair<mds_rank_t,map<client_t,cap_reconnect_t> > > cap_exports; // ino -> target, client -> capex

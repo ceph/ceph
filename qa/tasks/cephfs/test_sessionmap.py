@@ -230,6 +230,6 @@ class TestSessionMap(CephFSTestCase):
         # Configure the client to claim that its mount point metadata is /baz
         self.set_conf("client.badguy", "client_metadata", "root=/baz")
         # Try to mount the client, see that it fails
-        with self.assert_cluster_log("client session with invalid root '/baz' denied"):
+        with self.assert_cluster_log("client session with non-allowable root '/baz' denied"):
             with self.assertRaises(CommandFailedError):
                 self.mount_b.mount(mount_path="/foo/bar")

@@ -28,6 +28,7 @@
 #include "InoTable.h"
 #include "SnapClient.h"
 #include "Mutation.h"
+#include "cephfs_features.h"
 
 #include "msg/Messenger.h"
 
@@ -187,6 +188,7 @@ Server::Server(MDSRank *m) :
   reconnect_evicting(false),
   terminating_sessions(false)
 {
+  supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
 }
 
 
@@ -299,7 +301,6 @@ public:
 void Server::handle_client_session(MClientSession *m)
 {
   version_t pv;
-  bool blacklisted = false;
   Session *session = mds->get_session(m);
 
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
@@ -338,9 +339,6 @@ void Server::handle_client_session(MClientSession *m)
 	session->is_killing() ||
 	terminating_sessions) {
       dout(10) << "currently open|opening|stale|killing, dropping this req" << dendl;
-      // set client metadata for session opened by prepare_force_open_sessions
-      if (!m->client_meta.empty())
-	session->set_client_metadata(m->client_meta);
       m->put();
       return;
     }
@@ -353,55 +351,90 @@ void Server::handle_client_session(MClientSession *m)
       return;
     }
 
-    blacklisted = mds->objecter->with_osdmap(
-        [session](const OSDMap &osd_map) -> bool {
-          return osd_map.is_blacklisted(session->info.inst.addr);
-        });
+    {
+      auto send_reject_message = [this, session](std::string_view err_str) {
+	MClientSession *m = new MClientSession(CEPH_SESSION_REJECT);
+	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
+	  m->metadata["error_string"] = err_str;
+	mds->send_message_client(m, session);
+      };
 
-    if (blacklisted) {
-      dout(10) << "rejecting blacklisted client " << session->info.inst.addr << dendl;
-      mds->send_message_client(new MClientSession(CEPH_SESSION_REJECT), session);
-      m->put();
-      return;
-    }
+      bool blacklisted = mds->objecter->with_osdmap(
+	  [session](const OSDMap &osd_map) -> bool {
+	    return osd_map.is_blacklisted(session->info.inst.addr);
+	  });
 
-    session->set_client_metadata(m->client_meta);
-    dout(20) << __func__ << " CEPH_SESSION_REQUEST_OPEN "
-      << session->info.client_metadata.size() << " metadata entries:" << dendl;
-    for (map<string, string>::iterator i = session->info.client_metadata.begin();
-        i != session->info.client_metadata.end(); ++i) {
-      dout(20) << "  " << i->first << ": " << i->second << dendl;
-    }
-
-    // Special case for the 'root' metadata path; validate that the claimed
-    // root is actually within the caps of the session
-    if (session->info.client_metadata.count("root")) {
-      const auto claimed_root = session->info.client_metadata.at("root");
-      // claimed_root has a leading "/" which we strip before passing
-      // into caps check
-      if (claimed_root.empty() || claimed_root[0] != '/' ||
-          !session->auth_caps.path_capable(claimed_root.substr(1))) {
-        derr << __func__ << " forbidden path claimed as mount root: "
-             << claimed_root << " by " << m->get_source() << dendl;
-        // Tell the client we're rejecting their open
-        mds->send_message_client(new MClientSession(CEPH_SESSION_REJECT), session);
-        mds->clog->warn() << "client session with invalid root '" <<
-          claimed_root << "' denied (" << session->info.inst << ")";
-        session->clear();
-        // Drop out; don't record this session in SessionMap or journal it.
-        break;
+      if (blacklisted) {
+	dout(10) << "rejecting blacklisted client " << session->info.inst.addr << dendl;
+	send_reject_message("blacklisted");
+	session->clear();
+	break;
       }
+
+      client_metadata_t client_metadata(std::move(m->metadata),
+					std::move(m->supported_features));
+      if (client_metadata.features.empty())
+	infer_supported_features(session, client_metadata);
+
+      dout(20) << __func__ << " CEPH_SESSION_REQUEST_OPEN metadata entries:" << dendl;
+      dout(20) << "  features: '" << client_metadata.features << dendl;
+      for (auto& p : client_metadata) {
+	dout(20) << "  " << p.first << ": " << p.second << dendl;
+      }
+
+      feature_bitset_t missing_features = required_client_features;
+      missing_features -= client_metadata.features;
+      if (!missing_features.empty()) {
+	stringstream ss;
+	ss << "missing required features '" << missing_features << "'";
+	send_reject_message(ss.str());
+	mds->clog->warn() << "client session lacks required features '"
+			  << missing_features << "' denied (" << session->info.inst << ")";
+	session->clear();
+	break;
+      }
+
+      client_metadata_t::iterator it;
+      // Special case for the 'root' metadata path; validate that the claimed
+      // root is actually within the caps of the session
+      it = client_metadata.find("root");
+      if (it != client_metadata.end()) {
+	auto claimed_root = it->second;
+	stringstream ss;
+	bool denied = false;
+	// claimed_root has a leading "/" which we strip before passing
+	// into caps check
+	if (claimed_root.empty() || claimed_root[0] != '/') {
+	  denied = true;
+	  ss << "invalue root '" << claimed_root << "'";
+	} else if (!session->auth_caps.path_capable(claimed_root.substr(1))) {
+	  denied = true;
+	  ss << "non-allowable root '" << claimed_root << "'";
+	}
+
+	if (denied) {
+	  // Tell the client we're rejecting their open
+	  send_reject_message(ss.str());
+	  mds->clog->warn() << "client session with " << ss.str()
+			    << " denied (" << session->info.inst << ")";
+	  session->clear();
+	  break;
+	}
+      }
+
+      session->set_client_metadata(client_metadata);
+
+      if (session->is_closed())
+	mds->sessionmap.add_session(session);
+
+      pv = mds->sessionmap.mark_projected(session);
+      sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
+      mds->sessionmap.touch_session(session);
+      mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv,
+					     std::move(client_metadata)),
+				new C_MDS_session_finish(this, session, sseq, true, pv));
+      mdlog->flush();
     }
-
-    if (session->is_closed())
-      mds->sessionmap.add_session(session);
-
-    pv = mds->sessionmap.mark_projected(session);
-    sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
-    mds->sessionmap.touch_session(session);
-    mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv, m->client_meta),
-			      new C_MDS_session_finish(this, session, sseq, true, pv));
-    mdlog->flush();
     break;
 
   case CEPH_SESSION_REQUEST_RENEWCAPS:
@@ -519,7 +552,10 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     mds->sessionmap.set_state(session, Session::STATE_OPEN);
     mds->sessionmap.touch_session(session);
     assert(session->connection != NULL);
-    session->connection->send_message(new MClientSession(CEPH_SESSION_OPEN));
+    MClientSession *reply = new MClientSession(CEPH_SESSION_OPEN);
+    if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
+      reply->supported_features = supported_features;
+    session->connection->send_message(reply);
     if (mdcache->is_readonly())
       session->connection->send_message(new MClientSession(CEPH_SESSION_FORCE_RO));
   } else if (session->is_closing() ||
@@ -590,6 +626,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
  *  - sessions learned from other MDSs during a cross-MDS rename
  */
 version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
+					      map<client_t,client_metadata_t>& cmm,
 					      map<client_t, pair<Session*,uint64_t> >& smap)
 {
   version_t pv = mds->sessionmap.get_projected();
@@ -599,11 +636,12 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
 	   << dendl;
 
   mds->objecter->with_osdmap(
-      [this, &cm](const OSDMap &osd_map) {
+      [this, &cm, &cmm](const OSDMap &osd_map) {
 	for (auto p = cm.begin(); p != cm.end(); ) {
 	  if (osd_map.is_blacklisted(p->second.addr)) {
 	    dout(10) << " ignoring blacklisted client." << p->first
 		     << " (" <<  p->second.addr << ")" << dendl;
+	    cmm.erase(p->first);
 	    cm.erase(p++);
 	  } else {
 	    ++p;
@@ -619,6 +657,9 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
 	session->is_closing() ||
 	session->is_killing()) {
       sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
+      auto q = cmm.find(p->first);
+      if (q != cmm.end())
+	session->info.client_metadata.merge(q->second);
     } else {
       assert(session->is_open() ||
 	     session->is_opening() ||
@@ -652,7 +693,12 @@ void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_
 	dout(10) << "force_open_sessions opened " << session->info.inst << dendl;
 	mds->sessionmap.set_state(session, Session::STATE_OPEN);
 	mds->sessionmap.touch_session(session);
-	mds->send_message_client(new MClientSession(CEPH_SESSION_OPEN), session);
+
+	MClientSession *reply = new MClientSession(CEPH_SESSION_OPEN);
+	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
+	  reply->supported_features = supported_features;
+	mds->send_message_client(reply, session);
+
 	if (mdcache->is_readonly())
 	  mds->send_message_client(new MClientSession(CEPH_SESSION_FORCE_RO), session);
       }
@@ -927,21 +973,38 @@ void Server::handle_client_reconnect(MClientReconnect *m)
        << ") from " << m->get_source_inst()
        << " after " << delay << " (allowed interval " << g_conf->mds_reconnect_timeout << ")";
     deny = true;
-  } else if (!session->is_open()) {
-    dout(1) << " session is closed, ignoring reconnect, sending close" << dendl;
-    mds->clog->info() << "denied reconnect attempt (mds is "
-	<< ceph_mds_state_name(mds->get_state())
-	<< ") from " << m->get_source_inst() << " (session is closed)";
-    deny = true;
-  } else if (mdcache->is_readonly()) {
-    dout(1) << " read-only FS, ignoring reconnect, sending close" << dendl;
-    mds->clog->info() << "denied reconnect attempt (mds is read-only)";
-    deny = true;
+  } else {
+    std::string error_str;
+    if (!session->is_open()) {
+      error_str = "session is closed";
+    } else if (mdcache->is_readonly()) {
+      error_str = "mds is readonly";
+    } else {
+      if (session->info.client_metadata.features.empty())
+	infer_supported_features(session,  session->info.client_metadata);
+
+      feature_bitset_t missing_features = required_client_features;
+      missing_features -= session->info.client_metadata.features;
+      if (!missing_features.empty()) {
+	stringstream ss;
+	ss << "missing required features '" << missing_features << "'";
+	error_str = ss.str();
+      }
+    }
+
+    if (!error_str.empty()) {
+      deny = true;
+      dout(1) << " " << error_str << ", ignoring reconnect, sending close" << dendl;
+      mds->clog->info() << "denied reconnect attempt from "
+			<< m->get_source_inst() << " (" << error_str << ")";
+    }
   }
 
   if (deny) {
     m->get_connection()->send_message(new MClientSession(CEPH_SESSION_CLOSE));
     m->put();
+    if (session->is_open())
+      kill_session(session, nullptr);
     return;
   }
 
@@ -953,7 +1016,11 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   }
 
   // notify client of success with an OPEN
-  m->get_connection()->send_message(new MClientSession(CEPH_SESSION_OPEN));
+  MClientSession *reply = new MClientSession(CEPH_SESSION_OPEN);
+  if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
+    reply->supported_features = supported_features;
+  m->get_connection()->send_message(reply);
+
   session->last_cap_renew = ceph_clock_now();
   mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay;
   
@@ -1024,7 +1091,76 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   m->put();
 }
 
+void Server::infer_supported_features(Session *session, client_metadata_t& client_metadata)
+{
+  int supported = -1;
+  auto it = client_metadata.find("ceph_version");
+  if (it != client_metadata.end()) {
+    // user space client
+    if (it->second.compare(0, 16, "ceph version 12.") == 0)
+      supported = CEPHFS_FEATURE_LUMINOUS;
+    else if (session->connection->has_feature(CEPH_FEATURE_FS_CHANGE_ATTR))
+      supported = CEPHFS_FEATURE_KRAKEN;
+  } else {
+    it = client_metadata.find("kernel_version");
+    if (it != client_metadata.end()) {
+      // kernel client
+      if (session->connection->has_feature(CEPH_FEATURE_NEW_OSDOP_ENCODING))
+	supported = CEPHFS_FEATURE_LUMINOUS;
+    }
+  }
+  if (supported == -1 &&
+      session->connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2))
+    supported = CEPHFS_FEATURE_JEWEL;
 
+  if (supported >= 0) {
+    unsigned long value = (1UL << (supported + 1)) - 1;
+    client_metadata.features = std::move(feature_bitset_t(value));
+    dout(10) << __func__ << " got '" << client_metadata.features << "'" << dendl;
+  }
+}
+
+void Server::update_required_client_features()
+{
+  vector<size_t> bits = CEPHFS_FEATURES_MDS_REQUIRED;
+
+  int min_compat = mds->mdsmap->get_min_compat_client();
+  if (min_compat >= CEPH_RELEASE_MIMIC)
+    bits.push_back(CEPHFS_FEATURE_MIMIC);
+  else if (min_compat >= CEPH_RELEASE_LUMINOUS)
+    bits.push_back(CEPHFS_FEATURE_LUMINOUS);
+  else if (min_compat >= CEPH_RELEASE_KRAKEN)
+    bits.push_back(CEPHFS_FEATURE_KRAKEN);
+  else if (min_compat >= CEPH_RELEASE_JEWEL)
+    bits.push_back(CEPHFS_FEATURE_JEWEL);
+
+  std::sort(bits.begin(), bits.end());
+  required_client_features = feature_bitset_t(bits);
+  dout(7) << "required_client_features: " << required_client_features << dendl;
+
+  if (mds->get_state() >= MDSMap::STATE_RECONNECT) {
+    set<Session*> sessions;
+    mds->sessionmap.get_client_session_set(sessions);
+    for (auto session : sessions) {
+      feature_bitset_t missing_features = required_client_features;
+      missing_features -= session->info.client_metadata.features;
+      if (!missing_features.empty()) {
+	bool blacklisted = mds->objecter->with_osdmap(
+	    [session](const OSDMap &osd_map) -> bool {
+	      return osd_map.is_blacklisted(session->info.inst.addr);
+	    });
+	if (blacklisted)
+	  continue;
+
+	mds->clog->warn() << "evicting session " << *session << ", missing required features '"
+			  << missing_features << "'";
+	std::stringstream ss;
+	mds->evict_client(session->get_client().v, false,
+			  g_conf->mds_session_blacklist_on_evict, ss);
+      }
+    }
+  }
+}
 
 void Server::reconnect_gather_finish()
 {
@@ -7391,9 +7527,13 @@ version_t Server::_rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, buff
 	  
   // imported caps
   map<client_t,entity_inst_t> client_map;
+  map<client_t, client_metadata_t> client_metadata_map;
   decode(client_map, blp);
-  prepare_force_open_sessions(client_map, mdr->more()->imported_session_map);
+  decode(client_metadata_map, blp);
+  prepare_force_open_sessions(client_map, client_metadata_map,
+			      mdr->more()->imported_session_map);
   encode(client_map, *client_map_bl, mds->mdsmap->get_up_features());
+  encode(client_metadata_map, *client_map_bl);
 
   list<ScatterLock*> updated_scatterlocks;
   mdcache->migrator->decode_import_inode(srcdn, blp, srcdn->authority().first, mdr->ls,
@@ -8264,23 +8404,26 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
   // export srci?
   if (srcdn->is_auth() && srcdnl->is_primary()) {
     // set export bounds for CInode::encode_export()
-    list<CDir*> bounds;
-    if (srcdnl->get_inode()->is_dir()) {
-      srcdnl->get_inode()->get_dirfrags(bounds);
-      for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
-	(*p)->state_set(CDir::STATE_EXPORTBOUND);
-    }
-
-    map<client_t,entity_inst_t> exported_client_map;
-    bufferlist inodebl;
-    mdcache->migrator->encode_export_inode(srcdnl->get_inode(), inodebl, 
-					   exported_client_map);
-
-    for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
-      (*p)->state_clear(CDir::STATE_EXPORTBOUND);
-
     if (reply) {
+      list<CDir*> bounds;
+      if (srcdnl->get_inode()->is_dir()) {
+	srcdnl->get_inode()->get_dirfrags(bounds);
+	for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
+	  (*p)->state_set(CDir::STATE_EXPORTBOUND);
+      }
+
+      map<client_t,entity_inst_t> exported_client_map;
+      map<client_t, client_metadata_t> exported_client_metadata_map;
+      bufferlist inodebl;
+      mdcache->migrator->encode_export_inode(srcdnl->get_inode(), inodebl,
+					     exported_client_map,
+					     exported_client_metadata_map);
+
+      for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
+	(*p)->state_clear(CDir::STATE_EXPORTBOUND);
+
       encode(exported_client_map, reply->inode_export, mds->mdsmap->get_up_features());
+      encode(exported_client_metadata_map, reply->inode_export);
       reply->inode_export.claim_append(inodebl);
       reply->inode_export_v = srcdnl->get_inode()->inode.version;
     }

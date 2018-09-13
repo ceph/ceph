@@ -1059,21 +1059,112 @@ inline std::ostream& operator<<(std::ostream& out, const old_rstat_t& o) {
   return out << "old_rstat(first " << o.first << " " << o.rstat << " " << o.accounted_rstat << ")";
 }
 
+/*
+ * feature_bitset_t
+ */
+class feature_bitset_t {
+public:
+  typedef uint64_t block_type;
+  static const size_t bits_per_block = sizeof(block_type) * 8;
+
+  feature_bitset_t(const feature_bitset_t& other) : _vec(other._vec) {}
+  feature_bitset_t(feature_bitset_t&& other) : _vec(std::move(other._vec)) {}
+  feature_bitset_t(unsigned long value = 0);
+  feature_bitset_t(const vector<size_t>& array);
+  feature_bitset_t& operator=(const feature_bitset_t& other) {
+    _vec = other._vec;
+    return *this;
+  }
+  feature_bitset_t& operator=(feature_bitset_t&& other) {
+    _vec = std::move(other._vec);
+    return *this;
+  }
+  bool empty() const {
+    for (auto& v : _vec) {
+      if (v)
+	return false;
+    }
+    return true;
+  }
+  bool test(size_t bit) const {
+    if (bit >= bits_per_block * _vec.size())
+      return false;
+    return _vec[bit / bits_per_block] & ((block_type)1 << (bit % bits_per_block));
+  }
+  void clear() {
+    _vec.clear();
+  }
+  feature_bitset_t& operator-=(const feature_bitset_t& other);
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator &p);
+  void print(ostream& out) const;
+private:
+  vector<block_type> _vec;
+};
+WRITE_CLASS_ENCODER(feature_bitset_t)
+
+inline std::ostream& operator<<(std::ostream& out, const feature_bitset_t& s) {
+  s.print(out);
+  return out;
+}
+
+/*
+ * client_metadata_t
+ */
+struct client_metadata_t {
+  using kv_map_t = std::map<std::string,std::string>;
+  using iterator = kv_map_t::const_iterator;
+
+  kv_map_t kv_map;
+  feature_bitset_t features;
+
+  client_metadata_t() {}
+  client_metadata_t(const client_metadata_t& other) :
+    kv_map(other.kv_map), features(other.features) {}
+  client_metadata_t(client_metadata_t&& other) :
+    kv_map(std::move(other.kv_map)), features(std::move(other.features)) {}
+  client_metadata_t(kv_map_t&& kv, feature_bitset_t &&f) :
+    kv_map(std::move(kv)), features(std::move(f)) {}
+  client_metadata_t& operator=(const client_metadata_t& other) {
+    kv_map = other.kv_map;
+    features = other.features;
+    return *this;
+  }
+
+  bool empty() const { return kv_map.empty() && features.empty(); }
+  iterator find(const std::string& key) const { return kv_map.find(key); }
+  iterator begin() const { return kv_map.begin(); }
+  iterator end() const { return kv_map.end(); }
+  std::string& operator[](const std::string& key) { return kv_map[key]; }
+  void merge(const client_metadata_t& other) {
+    kv_map.insert(other.kv_map.begin(), other.kv_map.end());
+    features = other.features;
+  }
+  void clear() {
+    kv_map.clear();
+    features.clear();
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(client_metadata_t)
 
 /*
  * session_info_t
  */
-
 struct session_info_t {
   entity_inst_t inst;
   std::map<ceph_tid_t,inodeno_t> completed_requests;
   interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.
   interval_set<inodeno_t> used_inos;       // journaling use
-  std::map<std::string, std::string> client_metadata;
+  client_metadata_t client_metadata;
   std::set<ceph_tid_t> completed_flushes;
   EntityName auth_name;
 
   client_t get_client() const { return client_t(inst.name.num()); }
+  bool has_feature(size_t bit) { return client_metadata.features.test(bit); }
   const entity_name_t& get_source() const { return inst.name; }
 
   void clear_meta() {
@@ -1081,6 +1172,7 @@ struct session_info_t {
     used_inos.clear();
     completed_requests.clear();
     completed_flushes.clear();
+    client_metadata.clear();
   }
 
   void encode(bufferlist& bl, uint64_t features) const;
