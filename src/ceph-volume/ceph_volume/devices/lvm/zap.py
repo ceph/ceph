@@ -100,8 +100,9 @@ class Zap(object):
                 for vg_name in vgs:
                     mlogger.info("Destroying volume group %s because --destroy was given", vg_name)
                     api.remove_vg(vg_name)
-                mlogger.info("Destroying physical volume %s because --destroy was given", device)
-                api.remove_pv(device)
+                if not lv:
+                    mlogger.info("Destroying physical volume %s because --destroy was given", device)
+                    api.remove_pv(device)
 
             wipefs(path)
             zap_data(path)
