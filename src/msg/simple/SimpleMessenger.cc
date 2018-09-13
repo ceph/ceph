@@ -425,11 +425,6 @@ Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr,
 
 
 
-AuthAuthorizer *SimpleMessenger::get_authorizer(int peer_type, bool force_new)
-{
-  return ms_deliver_get_authorizer(peer_type, force_new);
-}
-
 bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
 					int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
 					bool& isvalid,CryptoKey& session_key,
