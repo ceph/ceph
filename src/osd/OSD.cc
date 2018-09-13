@@ -6880,54 +6880,6 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
   return *authorizer != NULL;
 }
 
-
-bool OSD::ms_verify_authorizer(
-  Connection *con, int peer_type,
-  int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-  bool& isvalid, CryptoKey& session_key,
-  std::unique_ptr<AuthAuthorizerChallenge> *challenge)
-{
-  AuthAuthorizeHandler *authorize_handler = 0;
-  switch (peer_type) {
-  case CEPH_ENTITY_TYPE_MDS:
-    /*
-     * note: mds is technically a client from our perspective, but
-     * this makes the 'cluster' consistent w/ monitor's usage.
-     */
-  case CEPH_ENTITY_TYPE_OSD:
-  case CEPH_ENTITY_TYPE_MGR:
-    authorize_handler = authorize_handler_cluster_registry->get_handler(protocol);
-    break;
-  default:
-    authorize_handler = authorize_handler_service_registry->get_handler(protocol);
-  }
-  if (!authorize_handler) {
-    dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
-    isvalid = false;
-    return true;
-  }
-
-  auto keys = monc->rotating_secrets.get();
-  if (keys) {
-    isvalid = authorize_handler->verify_authorizer(
-      cct, keys,
-      authorizer_data, authorizer_reply,
-      con->peer_name,
-      con->peer_global_id,
-      con->peer_caps_info,
-      session_key,
-      challenge);
-  } else {
-    dout(10) << __func__ << " no rotating_keys (yet), denied" << dendl;
-    isvalid = false;
-  }
-
-  if (isvalid) {
-    ms_handle_authentication(con);
-  }
-  return true;
-}
-
 KeyStore *OSD::ms_get_auth1_authorizer_keystore()
 {
   return monc->rotating_secrets.get();

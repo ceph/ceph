@@ -97,30 +97,6 @@ public:
   virtual bool ms_get_authorizer(int dest_type, AuthAuthorizer **a,
 				 bool force_new) { return false; };
 
-  /**
-   * Verify the authorizer for a new incoming Connection.
-   *
-   * @param con The new incoming Connection
-   * @param peer_type The type of the endpoint which initiated this Connection
-   * @param protocol The ID of the protocol in use (at time of writing, cephx
-   *  or none)
-   * @param authorizer The authorization string supplied by the remote
-   * @param authorizer_reply Output param: The string we should send back to
-   * the remote to authorize ourselves. Only filled in if isvalid
-   * @param isvalid Output param: True if authorizer is valid, false otherwise
-   *
-   * @return True if we were able to prove or disprove correctness of
-   * authorizer, false otherwise.
-   */
-  virtual bool ms_verify_authorizer(Connection *con, int peer_type,
-				    int protocol, bufferlist& authorizer,
-				    bufferlist& authorizer_reply,
-				    bool& isvalid, CryptoKey& session_key,
-				    std::unique_ptr<AuthAuthorizerChallenge> *challenge) {
-    /* always succeed */
-    isvalid = true;
-    return true;
-  };
 
 };
 
