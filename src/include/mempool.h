@@ -167,7 +167,8 @@ namespace mempool {
   f(pgmap)			      \
   f(mds_co)			      \
   f(unittest_1)			      \
-  f(unittest_2)
+  f(unittest_2)			      \
+  f(common)
 
 
 // give them integer ids

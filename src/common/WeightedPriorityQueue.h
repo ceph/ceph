@@ -16,7 +16,9 @@
 #define WP_QUEUE_H
 
 #include "OpQueue.h"
+#include "include/slab_containers.h"
 
+#include <memory>
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/rbtree.hpp>
 #include <boost/intrusive/avl_set.hpp>
@@ -39,12 +41,41 @@ class MapKey
   }
 };
 
-template <typename T>
-class DelItem
-{
+// TODO: make this helper a part of the slab_allocator.h as dealing
+// with boost::intrusive's containers isn't so rare.
+template <typename T, size_t StackSlabSizeV, size_t HeapSlabSizeV>
+class SlabAllocHelper {
+  using allocator_t = \
+    ceph::slab::slab_allocator<T, StackSlabSizeV, HeapSlabSizeV>;
+  using alloc_traits_t = std::allocator_traits<allocator_t>;
+
+  allocator_t alloc;
+
+public:
+  class Deleter {
+    allocator_t& alloc;
+
   public:
-  void operator()(T* delete_this)
-    { delete delete_this; }
+    Deleter(allocator_t& alloc)
+      : alloc(alloc) {
+    }
+
+    void operator()(T* const delete_this) {
+      alloc_traits_t::destroy(alloc, delete_this);
+      alloc_traits_t::deallocate(alloc, delete_this, sizeof(T));
+    }
+  };
+
+  Deleter get_deleter() {
+    return Deleter(alloc);
+  }
+
+  template <typename... Args>
+  T* allocate_and_construct(Args&&... args) {
+    auto* storage = alloc_traits_t::allocate(alloc, sizeof(T));
+    alloc_traits_t::construct(alloc, storage, std::forward<Args>(args)...);
+    return storage;
+  }
 };
 
 template <typename T, typename K>
@@ -68,11 +99,12 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       public:
         K key;		// klass
         ListPairs lp;
+        SlabAllocHelper<ListPair, 4, 32> memhelper;
         Klass(K& k) :
           key(k) {
         }
         ~Klass() {
-          lp.clear_and_dispose(DelItem<ListPair>());
+          lp.clear_and_dispose(memhelper.get_deleter());
         }
       friend bool operator< (const Klass &a, const Klass &b)
         { return a.key < b.key; }
@@ -82,9 +114,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         { return a.key == b.key; }
       void insert(unsigned cost, T&& item, bool front) {
         if (front) {
-          lp.push_front(*new ListPair(cost, std::move(item)));
+          lp.push_front(
+	    *memhelper.allocate_and_construct(cost, std::move(item)));
         } else {
-          lp.push_back(*new ListPair(cost, std::move(item)));
+          lp.push_back(
+	    *memhelper.allocate_and_construct(cost, std::move(item)));
         }
       }
       //Get the cost of the next item to dequeue
@@ -95,7 +129,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       T pop() {
 	ceph_assert(!lp.empty());
 	T ret = std::move(lp.begin()->item);
-        lp.erase_and_dispose(lp.begin(), DelItem<ListPair>());
+        lp.erase_and_dispose(lp.begin(), memhelper.get_deleter());
         return ret;
       }
       bool empty() const {
@@ -110,7 +144,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
           if (out) {
             out->push_front(std::move(i->item));
           }
-          i = lp.erase_and_dispose(i, DelItem<ListPair>());
+          i = lp.erase_and_dispose(i, memhelper.get_deleter());
           ++count;
           if (i == lp.begin()) {
             break;
@@ -123,6 +157,8 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
     {
       typedef bi::rbtree<Klass> Klasses;
       typedef typename Klasses::iterator Kit;
+      SlabAllocHelper<Klass, 4, 8> memhelper;
+
       void check_end() {
         if (next == klasses.end()) {
           next = klasses.begin();
@@ -137,7 +173,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	  next(klasses.begin()) {
 	}
 	~SubQueue() {
-	  klasses.clear_and_dispose(DelItem<Klass>());
+	  klasses.clear_and_dispose(memhelper.get_deleter());
 	}
       friend bool operator< (const SubQueue &a, const SubQueue &b)
         { return a.key < b.key; }
@@ -153,7 +189,8 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       	std::pair<Kit, bool> ret =
           klasses.insert_unique_check(cl, MapKey<Klass, K>(), insert_data);
       	if (ret.second) {
-      	  ret.first = klasses.insert_unique_commit(*new Klass(cl), insert_data);
+      	  ret.first = klasses.insert_unique_commit(
+            *memhelper.allocate_and_construct(cl), insert_data);
           check_end();
 	}
 	ret.first->insert(cost, std::move(item), front);
@@ -165,7 +202,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       T pop() {
         T ret = next->pop();
         if (next->empty()) {
-          next = klasses.erase_and_dispose(next, DelItem<Klass>());
+          next = klasses.erase_and_dispose(next, memhelper.get_deleter());
         } else {
 	  ++next;
 	}
@@ -177,7 +214,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         Kit i = klasses.find(cl, MapKey<Klass, K>());
         if (i != klasses.end()) {
           count = i->filter_class(out);
-	  Kit tmp = klasses.erase_and_dispose(i, DelItem<Klass>());
+	  Kit tmp = klasses.erase_and_dispose(i, memhelper.get_deleter());
 	  if (next == i) {
             next = tmp;
           }
@@ -198,6 +235,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       SubQueues queues;
       unsigned total_prio;
       unsigned max_cost;
+      SlabAllocHelper<SubQueue, 2, 2> memhelper;
       public:
 	unsigned size;
 	Queue() :
@@ -206,7 +244,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	  size(0) {
 	}
 	~Queue() {
-	  queues.clear_and_dispose(DelItem<SubQueue>());
+	  queues.clear_and_dispose(memhelper.get_deleter());
 	}
 	bool empty() const {
 	  return !size;
@@ -216,7 +254,8 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       	  std::pair<typename SubQueues::iterator, bool> ret =
       	    queues.insert_unique_check(p, MapKey<SubQueue, unsigned>(), insert_data);
       	  if (ret.second) {
-      	    ret.first = queues.insert_unique_commit(*new SubQueue(p), insert_data);
+      	    ret.first = queues.insert_unique_commit(
+              *memhelper.allocate_and_construct(p), insert_data);
 	    total_prio += p;
       	  }
 	  ret.first->insert(cl, cost, std::move(item), front);
@@ -231,7 +270,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	  if (strict) {
 	    T ret = i->pop();
 	    if (i->empty()) {
-	      queues.erase_and_dispose(i, DelItem<SubQueue>());
+	      queues.erase_and_dispose(i, memhelper.get_deleter());
 	    }
 	    return ret;
 	  }
@@ -263,7 +302,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	  T ret = i->pop();
 	  if (i->empty()) {
 	    total_prio -= i->key;
-	    queues.erase_and_dispose(i, DelItem<SubQueue>());
+	    queues.erase_and_dispose(i, memhelper.get_deleter());
 	  }
 	  return ret;
 	}
@@ -272,7 +311,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	    size -= i->filter_class(cl, out);
 	    if (i->empty()) {
 	      total_prio -= i->key;
-	      i = queues.erase_and_dispose(i, DelItem<SubQueue>());
+	      i = queues.erase_and_dispose(i, memhelper.get_deleter());
 	    } else {
 	      ++i;
 	    }
