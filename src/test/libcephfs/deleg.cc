@@ -336,7 +336,8 @@ TEST(LibCephFS, RecalledGetattr) {
 
   ASSERT_EQ(ceph_ll_create(cmount1, root, filename, 0666,
 		    O_RDWR|O_CREAT|O_EXCL, &file, &fh, &stx, 0, 0, perms), 0);
-  ASSERT_EQ(ceph_ll_write(cmount1, fh, 0, sizeof(filename), filename), sizeof(filename));
+  ASSERT_EQ(ceph_ll_write(cmount1, fh, 0, sizeof(filename), filename),
+	    static_cast<int>(sizeof(filename)));
   ASSERT_EQ(ceph_ll_close(cmount1, fh), 0);
 
   /* New mount for read delegation */
@@ -352,7 +353,8 @@ TEST(LibCephFS, RecalledGetattr) {
   ASSERT_EQ(ceph_ll_lookup(cmount2, root, filename, &file, &stx, 0, 0, perms), 0);
 
   ASSERT_EQ(ceph_ll_open(cmount2, file, O_WRONLY, &fh, perms), 0);
-  ASSERT_EQ(ceph_ll_write(cmount2, fh, 0, sizeof(filename), filename), sizeof(filename));
+  ASSERT_EQ(ceph_ll_write(cmount2, fh, 0, sizeof(filename), filename),
+	    static_cast<int>(sizeof(filename)));
   ASSERT_EQ(ceph_ll_close(cmount2, fh), 0);
 
   ASSERT_EQ(ceph_ll_open(cmount2, file, O_RDONLY, &fh, perms), 0);
@@ -360,7 +362,8 @@ TEST(LibCephFS, RecalledGetattr) {
   /* Break delegation */
   std::atomic_bool recalled(false);
   ASSERT_EQ(ceph_ll_delegation(cmount2, fh, CEPH_DELEGATION_RD, dummy_deleg_cb, &recalled), 0);
-  ASSERT_EQ(ceph_ll_read(cmount2, fh, 0, sizeof(filename), filename), sizeof(filename));
+  ASSERT_EQ(ceph_ll_read(cmount2, fh, 0, sizeof(filename), filename),
+	    static_cast<int>(sizeof(filename)));
   ASSERT_EQ(ceph_ll_getattr(cmount2, file, &stx, CEPH_STATX_ALL_STATS, 0, perms), 0);
   std::atomic_bool opened(false);
   std::thread breaker1(open_breaker_func, cmount1, filename, O_WRONLY, &opened);

@@ -226,7 +226,7 @@ int JournalFilter::parse_args(
 	} else if (!type.compare("purge_queue")) {
 	  purge_action = PurgeItem::str_to_type(arg_str);
 	}
-      } catch (std::out_of_range) {
+      } catch (const std::out_of_range&) {
 	 derr << "Invalid event type '" << arg_str << "'" << dendl;
 	 return -EINVAL;
       }

@@ -271,7 +271,7 @@ TEST_P(AllocTest, test_alloc_fragmentation)
     EXPECT_EQ(50U, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
   } else {
     // fragmentation approx = 257 intervals / 768 max intervals
-    EXPECT_EQ(33, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+    EXPECT_EQ(33u, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
   }
 
   for (size_t i = allocated.size() / 2 + 1; i < allocated.size(); i += 2)
@@ -284,7 +284,7 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   // extents that causes some minor fragmentation (minor bug or by-design behavior?).
   // Hence leaving just two 
   // digits after decimal point due to this.
-  EXPECT_EQ(0, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+  EXPECT_EQ(0u, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
 }
 
 TEST_P(AllocTest, test_alloc_bug_24598)

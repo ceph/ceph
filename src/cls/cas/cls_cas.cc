@@ -186,7 +186,9 @@ static int cls_rc_write_or_get(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
-  CLS_LOG(10, " offset: %llu length: %llu \n", op.extent.offset, op.extent.length);
+  CLS_LOG(10, " offset: %llu length: %llu \n",
+	  static_cast<long long unsigned>(op.extent.offset),
+	  static_cast<long long unsigned>(op.extent.length));
   chunk_obj_refcount objr;
   int ret = chunk_read_refcount(hctx, &objr);
   if (ret == -ENOENT) {

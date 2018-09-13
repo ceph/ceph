@@ -43,7 +43,6 @@ public:
 };
 
 const uint64_t _1m = 1024 * 1024;
-const uint64_t _2m = 2 * 1024 * 1024;
 
 void dump_mempools()
 {
