@@ -3,7 +3,6 @@ import os
 import yaml
 
 from teuthology import misc
-from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
 from teuthology.task import Task
 
@@ -19,7 +18,7 @@ class CBT(Task):
         self.log = log
 
     def hosts_of_type(self, type_):
-        return [r.name for r in self.ctx.cluster.only(misc.is_type(type_)).remotes.keys()]
+        return [r.hostname for r in self.ctx.cluster.only(misc.is_type(type_)).remotes.keys()]
 
     def generate_cbt_config(self):
         mon_hosts = self.hosts_of_type('mon')
@@ -47,26 +46,33 @@ class CBT(Task):
         benchmark_config = self.config.get('benchmarks')
         benchmark_type = benchmark_config.keys()[0]
         if benchmark_type == 'librbdfio':
-          testdir = misc.get_testdir(self.ctx)
-          benchmark_config['librbdfio']['cmd_path'] = os.path.join(testdir, 'fio/fio')
+            testdir = misc.get_testdir(self.ctx)
+            benchmark_config['librbdfio']['cmd_path'] = os.path.join(testdir, 'fio/fio')
         if benchmark_type == 'cosbench':
             # create cosbench_dir and cosbench_xml_dir
             testdir = misc.get_testdir(self.ctx)
             benchmark_config['cosbench']['cosbench_dir'] = os.path.join(testdir, 'cos')
             benchmark_config['cosbench']['cosbench_xml_dir'] = os.path.join(testdir, 'xml')
             self.ctx.cluster.run(args=['mkdir', '-p', '-m0755', '--', benchmark_config['cosbench']['cosbench_xml_dir']])
-            benchmark_config['cosbench']['controller'] = osd_hosts[0]
+            benchmark_config['cosbench']['controller'] = self.first_mon.hostname
 
-            # set auth details
-            remotes_and_roles = self.ctx.cluster.remotes.items()
-            ips = [host for (host, port) in
-                   (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
-            benchmark_config['cosbench']['auth'] = "username=cosbench:operator;password=intel2012;url=http://%s:7280/auth/v1.0;retry=9" %(ips[0])
+            # set auth details using first client
+            benchmark_config['cosbench']['auth'] = "username=cosbench:operator;password=intel2012;url=http://%s:7280/auth/v1.0;retry=9" % (client_hosts[0])
 
         return dict(
             cluster=cluster_config,
             benchmarks=benchmark_config,
             )
+
+    def enable_epel(self):
+        system_type = misc.get_system_type(self.first_mon)
+        if system_type == 'rpm':
+            install_cmd = ['sudo', 'yum', '-y', 'install']
+            epel_pkg = ['https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm']
+            self.ctx.cluster.run(args=install_cmd + epel_pkg)
+            # enable epel
+            enable_epel = ['sudo', 'yum-config-manager', '--enable', 'epel']
+            self.ctx.cluster.run(args=enable_epel)
 
     def install_dependencies(self):
         system_type = misc.get_system_type(self.first_mon)
@@ -77,6 +83,8 @@ class CBT(Task):
         else:
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
             cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev', 'collectl']
+        clients = self.ctx.cluster.only(misc.is_type('client'))
+        clients.run(args=install_cmd + cbt_depends)
         self.first_mon.run(args=install_cmd + cbt_depends)
 
         benchmark_type = self.cbt_config.get('benchmarks').keys()[0]
@@ -85,21 +93,15 @@ class CBT(Task):
         if benchmark_type == 'librbdfio':
             # install fio
             testdir = misc.get_testdir(self.ctx)
-            self.first_mon.run(
-                args=[
-                    'git', 'clone', '-b', 'master',
+            args = ['git', 'clone', '-b', 'master',
                     'https://github.com/axboe/fio.git',
-                    '{tdir}/fio'.format(tdir=testdir)
-                ]
-            )
-            self.first_mon.run(
-                args=[
-                    'cd', os.path.join(testdir, 'fio'), run.Raw('&&'),
-                    './configure', run.Raw('&&'),
-                    'make'
-                ]
-            )
-
+                    '{tdir}/fio'.format(tdir=testdir)]
+            clients.run(args=args)
+            self.first_mon.run(args=args)
+            args = ['cd', os.path.join(testdir, 'fio'), run.Raw('&&'),
+                    './configure', run.Raw('&&'), 'make']
+            clients.run(args=args)
+            self.first_mon.run(args=args)
         if benchmark_type == 'cosbench':
             # install cosbench
             self.log.info('install dependecies for cosbench')
@@ -201,6 +203,7 @@ class CBT(Task):
         misc.write_file(self.first_mon, os.path.join(self.cbt_dir, 'cbt_config.yaml'),
                         yaml.safe_dump(self.cbt_config, default_flow_style=False))
         self.checkout_cbt()
+        self.enable_epel()
         self.install_dependencies()
 
     def begin(self):
@@ -227,7 +230,7 @@ class CBT(Task):
         )
         benchmark_type = self.cbt_config.get('benchmarks').keys()[0]
         if benchmark_type == 'librbdfio':
-            self.first_mon.run(
+            self.ctx.cluster.run(
                 args=[
                     'rm', '--one-file-system', '-rf', '--',
                     '{tdir}/fio'.format(tdir=testdir),
@@ -240,29 +243,33 @@ class CBT(Task):
                 cosbench_version = 'cosbench-0.4.2.c3.1'
             else:
                 cosbench_version = '0.4.2.c3'
-            self.first_mon.run(
+            self.ctx.cluster.run(
                 args=[
                     'rm', '--one-file-system', '-rf', '--',
                     '{tdir}/cos'.format(tdir=testdir),
-                ]
+                ],
+                check_status=False
             )
-            self.first_mon.run(
+            self.ctx.cluster.run(
                 args=[
                     'rm', '--one-file-system', '-rf', '--',
                     '{tdir}/{version}'.format(tdir=testdir, version=cosbench_version),
-                ]
+                ],
+                check_status=False
             )
-            self.first_mon.run(
+            self.ctx.cluster.run(
                 args=[
                     'rm', '--one-file-system', '-rf', '--',
                     '{tdir}/{version}.zip'.format(tdir=testdir, version=cosbench_version),
-                ]
+                ],
+                check_status=False
             )
-            self.first_mon.run(
+            self.ctx.cluster.run(
                 args=[
                     'rm', '--one-file-system', '-rf', '--',
                     '{tdir}/xml'.format(tdir=testdir),
-                ]
+                ],
+                check_status=False
             )
 
 
