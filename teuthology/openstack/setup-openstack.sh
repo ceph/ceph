@@ -698,13 +698,14 @@ function main() {
     #
     # assume the first available IPv4 subnet is going to be used to assign IP to the instance
     #
-    local default_subnets=$(neutron subnet-list -f json -c cidr -c ip_version | jq '.[] | select(.ip_version == 4) | .cidr')
-    if test -n "$default_subnets" ; then
-        for subnet in $default_subnets ; do
-            eval subnet=$subnet # get rid of surrounding ""
-            subnets="$subnets $subnet"
-        done
-    fi
+    [ -z network ] && {
+        local default_subnets=$(openstack subnet list --ip-version 4 -f json | jq -r '.[] | .Subnet' | sort | uniq)
+    } || {
+        local network_id=$(openstack network list -f json | jq -r ".[] | select(.Name == \"$network\") | .ID")
+        local default_subnets=$(openstack subnet list --ip-version 4 -f json \
+            | jq -r ".[] | select(.Network == \"$network_id\") | .Subnet" | sort | uniq)
+    }
+    subnets=$(echo $subnets $default_subnets)
 
     case $provider in
         entercloudsuite)
