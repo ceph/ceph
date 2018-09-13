@@ -424,10 +424,16 @@ struct pg_t {
   unsigned get_split_bits(unsigned pg_num) const;
 
   bool contains(int bits, const ghobject_t& oid) {
-    return oid.match(bits, ps());
+    return
+      ((int64_t)m_pool == oid.hobj.pool ||
+       hobject_t::POOL_TEMP_START-(int64_t)m_pool == oid.hobj.pool) &&
+      oid.match(bits, ps());
   }
   bool contains(int bits, const hobject_t& oid) {
-    return oid.match(bits, ps());
+    return
+      ((int64_t)m_pool == oid.pool ||
+       hobject_t::POOL_TEMP_START-(int64_t)m_pool == oid.pool) &&
+      oid.match(bits, ps());
   }
 
   hobject_t get_hobj_start() const;
