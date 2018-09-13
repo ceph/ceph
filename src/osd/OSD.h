@@ -235,6 +235,7 @@ class FuseStore;
 class OSDMap;
 class MLog;
 class Objecter;
+class KeyStore;
 
 class Watch;
 class PrimaryLogPG;
@@ -2194,6 +2195,7 @@ private:
   void ms_handle_fast_connect(Connection *con) override;
   void ms_handle_fast_accept(Connection *con) override;
   int ms_handle_authentication(Connection *con) override;
+  KeyStore *ms_get_auth1_authorizer_keystore() override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
