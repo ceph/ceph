@@ -118,7 +118,7 @@ out again.
 
 Hard links
 ----------
-Inode with multiple hard links is moved to a dummy gloabl SnapRealm. The
+Inode with multiple hard links is moved to a dummy global SnapRealm. The
 dummy SnapRealm covers all snapshots in the filesystem. The inode's data
 will be preserved for any new snapshot. These preserved data will cover
 snapshots on any linkage of the inode.

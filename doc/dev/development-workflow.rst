@@ -31,7 +31,7 @@ results.
 The workflows are not enforced when they impose an overhead that does
 not make sense. For instance, if the release notes for a point release
 were not written prior to checking all integration tests, they can be
-commited to the stable branch and the result sent for publication
+committed to the stable branch and the result sent for publication
 without going through another run of integration tests.
 
 Release Cycle
