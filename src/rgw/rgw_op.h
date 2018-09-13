@@ -1849,15 +1849,6 @@ extern int rgw_build_object_policies(RGWRados *store, struct req_state *s,
 extern rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
 						       struct req_state* s);
 
-static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
-					bufferlist& data, off_t ofs)
-{
-  return processor->handle_data(data, ofs);
-} /* put_data_and_throttle */
-
-
-
-
 
 static inline int get_system_versioning_params(req_state *s,
 					      uint64_t *olh_epoch,

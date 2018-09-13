@@ -7649,7 +7649,7 @@ public:
 
   int flush() {
     bufferlist bl;
-    return put_data_and_throttle(filter, bl, ofs);
+    return filter->handle_data(bl, ofs);
   }
 
   bufferlist& get_extra_data() { return extra_data_bl; }

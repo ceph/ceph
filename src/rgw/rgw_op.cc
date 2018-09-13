@@ -3715,7 +3715,7 @@ void RGWPutObj::execute()
       orig_data = data;
     }
 
-    op_ret = put_data_and_throttle(filter, data, ofs);
+    op_ret = filter->handle_data(data, ofs);
     if (op_ret < 0) {
       if (op_ret != -EEXIST) {
         ldpp_dout(this, 20) << "processor->handle_data() returned ret="
@@ -3758,7 +3758,7 @@ void RGWPutObj::execute()
           filter = &*compressor;
         }
       }
-      op_ret = put_data_and_throttle(filter, data, ofs);
+      op_ret = filter->handle_data(data, ofs);
       if (op_ret < 0) {
         goto done;
       }
@@ -3770,7 +3770,7 @@ void RGWPutObj::execute()
 
   {
     bufferlist flush;
-    op_ret = put_data_and_throttle(filter, flush, ofs);
+    op_ret = filter->handle_data(flush, ofs);
     if (op_ret < 0) {
       goto done;
     }
@@ -4045,7 +4045,7 @@ void RGWPostObj::execute()
       }
 
       hash.Update((const unsigned char *)data.c_str(), data.length());
-      op_ret = put_data_and_throttle(filter, data, ofs);
+      op_ret = filter->handle_data(data, ofs);
 
       ofs += len;
 
@@ -4057,7 +4057,7 @@ void RGWPostObj::execute()
 
     {
       bufferlist flush;
-      op_ret = put_data_and_throttle(filter, flush, ofs);
+      op_ret = filter->handle_data(flush, ofs);
     }
 
     if (len < min_len) {
@@ -6799,7 +6799,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
       return op_ret;
     } else if (len > 0) {
       hash.Update((const unsigned char *)data.c_str(), data.length());
-      op_ret = put_data_and_throttle(filter, data, ofs);
+      op_ret = filter->handle_data(data, ofs);
       if (op_ret < 0) {
         ldpp_dout(this, 20) << "processor->thottle_data() returned ret=" << op_ret << dendl;
         return op_ret;
