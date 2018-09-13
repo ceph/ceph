@@ -2906,8 +2906,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
-  auto priv = m->get_connection()->get_priv();
-  auto session = static_cast<MonSession *>(priv.get());
+  MonSession *session = op->get_session();
   if (!session) {
     dout(5) << __func__ << " dropping stray message " << *m << dendl;
     return;
