@@ -6928,6 +6928,11 @@ bool OSD::ms_verify_authorizer(
   return true;
 }
 
+KeyStore *OSD::ms_get_auth1_authorizer_keystore()
+{
+  return monc->rotating_secrets.get();
+}
+
 int OSD::ms_handle_authentication(Connection *con)
 {
   int ret = 0;
