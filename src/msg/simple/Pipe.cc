@@ -1148,7 +1148,7 @@ int Pipe::connect()
 
   while (1) {
     if (!authorizer) {
-      authorizer = msgr->get_authorizer(peer_type, false);
+      authorizer = msgr->ms_deliver_get_authorizer(peer_type, false);
     }
     bufferlist authorizer_reply;
 
@@ -1265,7 +1265,7 @@ int Pipe::connect()
       got_bad_auth = true;
       pipe_lock.Unlock();
       delete authorizer;
-      authorizer = msgr->get_authorizer(peer_type, true);  // try harder
+      authorizer = msgr->ms_deliver_get_authorizer(peer_type, true);
       continue;
     }
     if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
