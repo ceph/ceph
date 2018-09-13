@@ -888,6 +888,7 @@ public:
 			    int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			    bool& isvalid, CryptoKey& session_key,
 			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override;
+  KeyStore *ms_get_auth1_authorizer_keystore();
 public: // for AuthMonitor msgr1:
   int ms_handle_authentication(Connection *con) override;
 private:
