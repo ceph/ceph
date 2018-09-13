@@ -2381,7 +2381,7 @@ namespace librbd {
       op->exec("rbd", "mirror_image_map_remove", bl);
     }
 
-    // Consistency groups functions
+    // Groups functions
     int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
                        const std::string &start, uint64_t max_return,
                        map<string, string> *cgs)
@@ -2567,6 +2567,7 @@ namespace librbd {
 
       return 0;
     }
+
     int group_snap_list(librados::IoCtx *ioctx, const std::string &oid,
 			const cls::rbd::GroupSnapshot &start,
 			uint64_t max_return,

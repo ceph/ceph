@@ -969,6 +969,32 @@ namespace librbd {
     return r;
   }
 
+  int RBD::group_snap_rollback(IoCtx& group_ioctx, const char *group_name,
+                               const char *snap_name) {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
+    tracepoint(librbd, group_snap_rollback_enter,
+               group_ioctx.get_pool_name().c_str(),
+               group_ioctx.get_id(), group_name, snap_name);
+    librbd::NoOpProgressContext prog_ctx;
+    int r = librbd::api::Group<>::snap_rollback(group_ioctx, group_name,
+                                                snap_name, prog_ctx);
+    tracepoint(librbd, group_snap_rollback_exit, r);
+    return r;
+  }
+
+  int RBD::group_snap_rollback_with_progress(IoCtx& group_ioctx,
+                                             const char *group_name,
+                                             const char *snap_name,
+                                             ProgressContext& prog_ctx) {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
+    tracepoint(librbd, group_snap_rollback_enter,
+               group_ioctx.get_pool_name().c_str(),
+               group_ioctx.get_id(), group_name, snap_name);
+    int r = librbd::api::Group<>::snap_rollback(group_ioctx, group_name,
+                                                snap_name, prog_ctx);
+    tracepoint(librbd, group_snap_rollback_exit, r);
+    return r;
+  }
 
   RBD::AioCompletion::AioCompletion(void *cb_arg, callback_t complete_cb)
   {
@@ -5263,6 +5289,50 @@ extern "C" int rbd_group_snap_list_cleanup(rbd_group_snap_info_t *snaps,
     free(snaps[i].name);
   }
   return 0;
+}
+
+extern "C" int rbd_group_snap_rollback(rados_ioctx_t group_p,
+                                       const char *group_name,
+                                       const char *snap_name)
+{
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
+  tracepoint(librbd, group_snap_rollback_enter,
+             group_ioctx.get_pool_name().c_str(),
+             group_ioctx.get_id(), group_name, snap_name);
+
+  librbd::NoOpProgressContext prog_ctx;
+  int r = librbd::api::Group<>::snap_rollback(group_ioctx, group_name,
+                                              snap_name, prog_ctx);
+
+  tracepoint(librbd, group_snap_rollback_exit, r);
+
+  return r;
+}
+
+extern "C" int rbd_group_snap_rollback_with_progress(rados_ioctx_t group_p,
+                                                     const char *group_name,
+                                                     const char *snap_name,
+                                                     librbd_progress_fn_t cb,
+                                                     void *cbdata)
+{
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
+  tracepoint(librbd, group_snap_rollback_enter,
+             group_ioctx.get_pool_name().c_str(),
+             group_ioctx.get_id(), group_name, snap_name);
+
+  librbd::CProgressContext prog_ctx(cb, cbdata);
+  int r = librbd::api::Group<>::snap_rollback(group_ioctx, group_name,
+                                              snap_name, prog_ctx);
+
+  tracepoint(librbd, group_snap_rollback_exit, r);
+
+  return r;
 }
 
 extern "C" int rbd_snap_get_namespace_type(rbd_image_t image,

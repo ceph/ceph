@@ -267,6 +267,11 @@ public:
   int group_snap_list(IoCtx& group_ioctx, const char *group_name,
                       std::vector<group_snap_info_t> *snaps,
                       size_t group_snap_info_size);
+  int group_snap_rollback(IoCtx& io_ctx, const char *group_name,
+                          const char *snap_name);
+  int group_snap_rollback_with_progress(IoCtx& io_ctx, const char *group_name,
+                                        const char *snap_name,
+                                        ProgressContext& pctx);
 
   int namespace_create(IoCtx& ioctx, const char *namespace_name);
   int namespace_remove(IoCtx& ioctx, const char *namespace_name);
