@@ -431,9 +431,15 @@ class TestSizeOperations(object):
 
     def test_division_with_non_size_objects(self):
         base = disk.Size(gb=1)
+        result = base / 2
+        assert result.mb == 512
+        assert result.mb.as_int() == 512
+
+    def test_division_with_non_size_objects_without_state(self):
+        base = disk.Size(gb=1)
         base / 2
-        assert base.mb == 512
-        assert base.mb.as_int() == 512
+        assert base.gb == 1
+        assert base.gb.as_int() == 1
 
 
 class TestSizeAttributes(object):
