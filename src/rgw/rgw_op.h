@@ -1852,14 +1852,7 @@ extern rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
 static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
 					bufferlist& data, off_t ofs)
 {
-  bool again = false;
-  do {
-    int ret = processor->handle_data(data, ofs);
-    if (ret < 0)
-      return ret;
-  } while (again);
-
-  return 0;
+  return processor->handle_data(data, ofs);
 } /* put_data_and_throttle */
 
 
