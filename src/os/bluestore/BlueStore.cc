@@ -9873,8 +9873,8 @@ int BlueStore::queue_transactions(
   for (auto c : on_applied_sync) {
     c->complete(0);
   }
-  for (auto c : on_applied) {
-    finishers[osr->shard]->queue(c);
+  if (!on_applied.empty()) {
+    finishers[osr->shard]->queue(on_applied);
   }
 
   logger->tinc(l_bluestore_submit_lat, mono_clock::now() - start);
