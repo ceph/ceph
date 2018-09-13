@@ -487,6 +487,8 @@ cdef extern from "rbd/librbd.h" nogil:
 
     void rbd_group_snap_list_cleanup(rbd_group_snap_info_t *snaps,
                                      size_t group_snap_info_size, size_t len)
+    int rbd_group_snap_rollback(rados_ioctx_t group_p, const char *group_name,
+                                const char *snap_name)
 
     int rbd_watchers_list(rbd_image_t image, rbd_image_watcher_t *watchers,
                           size_t *max_watchers)
@@ -1951,6 +1953,22 @@ cdef class Group(object):
         :returns: :class:`GroupSnapIterator`
         """
         return GroupSnapIterator(self)
+
+    def rollback_to_snap(self, name):
+        """
+        Rollback group to snapshot.
+
+        :param name: the group snapshot to rollback to
+        :type name: str
+        :raises: :class:`ObjectNotFound`
+        :raises: :class:`IOError`
+        """
+        name = cstr(name, 'name')
+        cdef char *_name = name
+        with nogil:
+            ret = rbd_group_snap_rollback(self._ioctx, self._name, _name)
+        if ret != 0:
+            raise make_ex(ret, 'error rolling back group to snapshot', group_errno_to_exception)
 
 cdef class Image(object):
     """
