@@ -42,6 +42,7 @@ private:
   bool max;
   uint32_t nibblewise_key_cache;
   uint32_t hash_reverse_bits;
+public:
   static const int64_t POOL_META = -1;
   static const int64_t POOL_TEMP_START = -2; // and then negative
   friend class spg_t;  // for POOL_TEMP_START
