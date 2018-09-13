@@ -5806,6 +5806,12 @@ KeyStore *Monitor::ms_get_auth1_authorizer_keystore()
 
 int Monitor::ms_handle_authentication(Connection *con)
 {
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+    // mon <-> mon connections need no Session, and setting one up
+    // creates an awkward ref cycle between Session and Connection.
+    return 1;
+  }
+
   auto priv = con->get_priv();
   MonSession *s = static_cast<MonSession*>(priv.get());
   if (!s) {

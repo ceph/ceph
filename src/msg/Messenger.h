@@ -20,6 +20,10 @@
 #include <map>
 #include <deque>
 
+#include <errno.h>
+#include <sstream>
+#include <memory>
+
 #include "Message.h"
 #include "Dispatcher.h"
 #include "Policy.h"
@@ -31,6 +35,8 @@
 #include "include/ceph_features.h"
 #include "auth/Crypto.h"
 #include "common/item_history.h"
+#include "auth/AuthAuthorizeHandler.h"
+#include "include/ceph_assert.h"
 
 #include <errno.h>
 #include <sstream>
@@ -39,6 +45,8 @@
 #define SOCKET_PRIORITY_MIN_DELAY 6
 
 class Timer;
+
+class AuthAuthorizerHandlerRegistry;
 
 class Messenger {
 private:
@@ -80,6 +88,13 @@ public:
   int crcflags;
 
   using Policy = ceph::net::Policy<Throttle>;
+
+protected:
+  // for authentication
+  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_service_registry;
+  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_cluster_registry;
+
+public:
   /**
    * Messenger constructor. Call this from your implementation.
    * Messenger users should construct full implementations directly,
