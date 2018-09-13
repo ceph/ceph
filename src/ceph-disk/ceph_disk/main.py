@@ -909,8 +909,8 @@ def is_mounted(dev):
     """
     Check if the given device is mounted.
     """
-    dev = os.path.realpath(dev)
-    with open(PROCDIR + '/mounts', 'rb') as proc_mounts:
+    dev = os.path.realpath(_bytes2str(dev))
+    with open(PROCDIR + '/mounts', 'r') as proc_mounts:
         for line in proc_mounts:
             fields = line.split()
             if len(fields) < 3:
