@@ -64,8 +64,8 @@ Testing Blkin
 
 It's easy to test Ceph's Blkin tracing. Let's assume you don't have
 Ceph already running, and you compiled Ceph with Blkin support but
-you did't install it. Then launch Ceph with the ``vstart.sh`` script
-in Ceph's src directgory so you can see the possible tracepoints.::
+you didn't install it. Then launch Ceph with the ``vstart.sh`` script
+in Ceph's src directory so you can see the possible tracepoints.::
 
   cd src
   OSD=3 MON=3 RGW=1 ./vstart.sh -n
