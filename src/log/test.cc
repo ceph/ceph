@@ -389,6 +389,77 @@ TEST(Log, Speed_nogather)
 }
 
 
+TEST(Log, Multithread)
+{
+  constexpr size_t thread_cnt = 4;
+  std::thread worker[thread_cnt];
+  g_ceph_context->_conf->subsys.set_gather_level(ceph_subsys_context, 30);
+  g_ceph_context->_conf->subsys.set_log_level(ceph_subsys_context, 0);
+
+  auto action = [] (size_t thread_id) -> void {
+    constexpr size_t buf_cnt = 10000;
+    constexpr size_t buf_size = 4096;
+    std::string buffers[buf_cnt];
+    for (size_t i = 0; i < buf_cnt; i++)
+      buffers[i] = std::string(buf_size, (char)rand());
+
+    for (size_t i = 0; i < 200000; i++) {
+      buffers[rand() % buf_cnt] = buffers[rand() % buf_cnt];
+      ldout(g_ceph_context, 20) << "Thread id = " << thread_id << " iteration=" << i << dendl;
+    }
+  };
+
+  for (size_t i = 0; i < thread_cnt; i++) {
+    worker[i] = std::thread(action, i);
+  }
+  for (size_t i = 0; i < thread_cnt; i++) {
+    worker[i].join();
+  }
+}
+
+void multithread(size_t thread_cnt, size_t buf_size, size_t buf_cnt)
+{
+  std::thread worker[thread_cnt];
+  g_ceph_context->_conf->subsys.set_gather_level(ceph_subsys_context, 30);
+  g_ceph_context->_conf->subsys.set_log_level(ceph_subsys_context, 0);
+
+  auto action = [] (size_t thread_id, size_t buf_size, size_t buf_cnt) -> void {
+    std::string buffers[buf_cnt];
+    for (size_t i = 0; i < buf_cnt; i++)
+      buffers[i] = std::string(buf_size, (char)rand());
+
+    for (size_t i = 0; i < 200000; i++) {
+      buffers[rand() % buf_cnt] = buffers[rand() % buf_cnt];
+      ldout(g_ceph_context, 20) << "Thread id = " << thread_id << " iteration=" << i << dendl;
+    }
+  };
+
+  for (size_t i = 0; i < thread_cnt; i++) {
+    worker[i] = std::thread(action, i, buf_size, buf_cnt);
+  }
+  for (size_t i = 0; i < thread_cnt; i++) {
+    worker[i].join();
+  }
+}
+
+
+TEST(Log, Multithread_4_4K_10000)
+{
+  multithread(4, 4096, 10000);
+}
+TEST(Log, Multithread_4_1K_10000)
+{
+  multithread(4, 1024, 10000);
+}
+TEST(Log, Multithread_4_4K_1000)
+{
+  multithread(4, 4096, 1000);
+}
+TEST(Log, Multithread_4_1K_1000)
+{
+  multithread(4, 1024, 1000);
+}
+
 int main(int argc, char **argv)
 {
   vector<const char*> args;
