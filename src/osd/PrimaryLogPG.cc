@@ -742,20 +742,15 @@ void PrimaryLogPG::block_write_on_degraded_snap(
 }
 
 bool PrimaryLogPG::maybe_await_blocked_head(
-  const hobject_t &hoid,
+  const ObjectContext& obc,
   OpRequestRef op)
 {
-  ObjectContextRef obc;
-  obc = object_contexts.lookup(hoid.get_head());
-  if (obc) {
-    if (obc->is_blocked()) {
-      wait_for_blocked_object(obc->obs.oi.soid, op);
-      return true;
-    } else {
-      return false;
-    }
+  if (obc.is_blocked()) {
+    wait_for_blocked_object(obc.obs.oi.soid, op);
+    return true;
+  } else {
+    return false;
   }
-  return false;
 }
 
 void PrimaryLogPG::wait_for_blocked_object(const hobject_t& soid, OpRequestRef op)
@@ -2170,18 +2165,6 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
-  ObjectContextRef obc;
-  bool can_create = op->may_write();
-  hobject_t missing_oid;
-
-  // kludge around the fact that LIST_SNAPS sets CEPH_SNAPDIR for LIST_SNAPS
-  hobject_t _oid_head;
-  if (m->get_snapid() == CEPH_SNAPDIR) {
-    _oid_head = m->get_hobj().get_head();
-  }
-  const hobject_t& oid =
-    m->get_snapid() == CEPH_SNAPDIR ? _oid_head : m->get_hobj();
-
   // make sure LIST_SNAPS is on CEPH_SNAPDIR and nothing else
   for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); ++p) {
     OSDOp& osd_op = *p;
@@ -2201,16 +2184,32 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
-  // io blocked on obc?
-  if (!m->has_flag(CEPH_OSD_FLAG_FLUSH) &&
-      maybe_await_blocked_head(oid, op)) {
-    return;
+  ObjectContextRef obc;
+  if (!m->has_flag(CEPH_OSD_FLAG_FLUSH)) {
+    if (auto obc_head = object_contexts.lookup(head); obc_head) {
+      // io blocked on obc?
+      if (maybe_await_blocked_head(*obc_head, op)) {
+	return;
+      }
+      // can we skip find_object_context?
+      if (m->get_hobj().is_head()) {
+	obc = std::move(obc_head);
+      }
+    }
   }
 
-  int r = find_object_context(
-    oid, &obc, can_create,
-    m->has_flag(CEPH_OSD_FLAG_MAP_SNAP_CLONE),
-    &missing_oid);
+  // kludge around the fact that LIST_SNAPS sets CEPH_SNAPDIR for LIST_SNAPS
+  const hobject_t& oid = \
+    m->get_snapid() == CEPH_SNAPDIR ? head : m->get_hobj();
+
+  int r = 0;
+  hobject_t missing_oid;
+  if (!obc) {
+    const bool can_create = op->may_write();
+    r = find_object_context(oid, &obc, can_create,
+			    m->has_flag(CEPH_OSD_FLAG_MAP_SNAP_CLONE),
+			    &missing_oid);
+  }
 
   // LIST_SNAPS needs the ssc too
   if (obc &&
