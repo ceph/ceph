@@ -198,14 +198,6 @@ class FakeDispatcher : public Dispatcher {
     cond.Signal();
   }
 
-  bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                            bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
-    isvalid = true;
-    return true;
-  }
-
   int ms_handle_authentication(Connection *con) override {
     return 1;
   }
@@ -921,14 +913,6 @@ class SyntheticDispatcher : public Dispatcher {
     }
   }
 
-  bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                            bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
-    isvalid = true;
-    return true;
-  }
-
   int ms_handle_authentication(Connection *con) override {
     return 1;
   }
@@ -1471,13 +1455,6 @@ class MarkdownDispatcher : public Dispatcher {
   }
   void ms_fast_dispatch(Message *m) override {
     ceph_abort();
-  }
-  bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                            bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
-    isvalid = true;
-    return true;
   }
   int ms_handle_authentication(Connection *con) override {
     return 1;

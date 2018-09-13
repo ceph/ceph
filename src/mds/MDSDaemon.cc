@@ -1297,50 +1297,6 @@ bool MDSDaemon::ms_handle_refused(Connection *con)
   return false;
 }
 
-bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
-			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-				     bool& is_valid, CryptoKey& session_key,
-				     std::unique_ptr<AuthAuthorizerChallenge> *challenge)
-{
-  Mutex::Locker l(mds_lock);
-  if (stopping) {
-    return false;
-  }
-  if (beacon.get_want_state() == CEPH_MDS_STATE_DNE)
-    return false;
-
-  AuthAuthorizeHandler *authorize_handler = 0;
-  switch (peer_type) {
-  case CEPH_ENTITY_TYPE_MDS:
-    authorize_handler = authorize_handler_cluster_registry->get_handler(protocol);
-    break;
-  default:
-    authorize_handler = authorize_handler_service_registry->get_handler(protocol);
-  }
-  if (!authorize_handler) {
-    dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
-    is_valid = false;
-    return true;
-  }
-
-  if (auto keys = monc->rotating_secrets.get(); keys) {
-    is_valid = authorize_handler->verify_authorizer(
-      cct, keys,
-      authorizer_data, authorizer_reply,
-      con->peer_name, con->peer_global_id,
-      con->peer_caps_info,
-      session_key, challenge);
-  } else {
-    dout(10) << __func__ << " no rotating_keys (yet), denied" << dendl;
-    is_valid = false;
-  }
-
-  if (is_valid) {
-    ms_handle_authentication(con);
-  }
-  return true;
-}
-
 KeyStore *MDSDaemon::ms_get_auth1_authorizer_keystore()
 {
   return monc->rotating_secrets.get();

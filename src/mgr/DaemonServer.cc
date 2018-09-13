@@ -166,51 +166,6 @@ KeyStore *DaemonServer::ms_get_auth1_authorizer_keystore()
   return monc->rotating_secrets.get();
 }
 
-bool DaemonServer::ms_verify_authorizer(
-  Connection *con,
-  int peer_type,
-  int protocol,
-  ceph::bufferlist& authorizer_data,
-  ceph::bufferlist& authorizer_reply,
-  bool& is_valid,
-  CryptoKey& session_key,
-  std::unique_ptr<AuthAuthorizerChallenge> *challenge)
-{
-  AuthAuthorizeHandler *handler = nullptr;
-  if (peer_type == CEPH_ENTITY_TYPE_OSD ||
-      peer_type == CEPH_ENTITY_TYPE_MON ||
-      peer_type == CEPH_ENTITY_TYPE_MDS ||
-      peer_type == CEPH_ENTITY_TYPE_MGR) {
-    handler = auth_cluster_registry.get_handler(protocol);
-  } else {
-    handler = auth_service_registry.get_handler(protocol);
-  }
-  if (!handler) {
-    dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
-    is_valid = false;
-    return true;
-  }
-
-  if (auto keys = monc->rotating_secrets.get(); keys) {
-    is_valid = handler->verify_authorizer(
-      cct, keys,
-      authorizer_data,
-      authorizer_reply, con->peer_name,
-      con->peer_global_id, con->peer_caps_info,
-      session_key,
-      challenge);
-  } else {
-    dout(10) << __func__ << " no rotating_keys (yet), denied" << dendl;
-    is_valid = false;
-  }
-
-  if (is_valid) {
-    ms_handle_authentication(con);
-  }
-
-  return true;
-}
-
 int DaemonServer::ms_handle_authentication(Connection *con)
 {
   int ret = 0;
