@@ -50,6 +50,17 @@ function get_processors() {
     fi
 }
 
+function detect_ceph_dev_pkgs() {
+    local cmake_opts
+    local boost_root=/opt/ceph
+    if test -f $boost_root/include/boost/config.hpp; then
+        cmake_opts+=" -DWITH_SYSTEM_BOOST=ON -DBOOST_ROOT=$boost_root"
+    else
+        cmake_opts+=" -DBOOST_J=$(get_processors)"
+    fi
+    echo "$cmake_opts"
+}
+
 function run() {
     local install_cmd
     local which_pkg="which"
@@ -103,6 +114,7 @@ function run() {
     if ! type python2 > /dev/null 2>&1 ; then
         CMAKE_BUILD_OPTS+=" -DWITH_PYTHON2=OFF -DWITH_PYTHON3=ON -DMGR_PYTHON_VERSION=3"
     fi
+    CMAKE_BUILD_OPTS+=$(detect_ceph_dev_pkgs)
     cat <<EOM
 Note that the binaries produced by this script do not contain correct time
 and git version information, which may make them unsuitable for debugging

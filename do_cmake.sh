@@ -12,13 +12,12 @@ fi
 
 mkdir build
 cd build
-NPROC=${NPROC:-$(nproc)}
 if type cmake3 > /dev/null 2>&1 ; then
     CMAKE=cmake3
 else
     CMAKE=cmake
 fi
-${CMAKE} -DBOOST_J=$NPROC $ARGS "$@" .. || exit 1
+${CMAKE} $ARGS "$@" .. || exit 1
 
 # minimal config to find plugins
 cat <<EOF > ceph.conf
