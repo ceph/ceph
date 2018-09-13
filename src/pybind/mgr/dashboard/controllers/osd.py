@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-import re
 from . import ApiController, RESTController, UpdatePermission
 from .. import mgr, logger
 from ..security import Scope
@@ -154,16 +153,10 @@ class Osd(RESTController):
                 'mon', 'osd safe-to-destroy', ids=svc_id, target=('mgr', ''))
             return {'safe-to-destroy': True}
         except SendCommandError as e:
-            match = re.match(
-                r'OSD\(s\) (\d+) have (\d+) pgs currently mapped to them',
-                e.message)
-            if match:
-                return {
-                    'message': e.message,
-                    'safe-to-destroy': False
-                }
-            else:
-                raise e
+            return {
+                'message': e.message,
+                'safe-to-destroy': False,
+            }
 
 
 @ApiController('/osd/flags', Scope.OSD)
