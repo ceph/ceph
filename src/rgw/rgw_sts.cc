@@ -66,8 +66,8 @@ int Credentials::generateCredentials(CephContext* cct,
   }
   string secret_s = cct->_conf->rgw_sts_key;
   buffer::ptr secret(secret_s.c_str(), secret_s.length());
-  int ret = 0;
-  if (ret = cryptohandler->validate_secret(secret); ret < 0) {
+  int ret = cryptohandler->validate_secret(secret);
+  if (ret < 0) {
     ldout(cct, 0) << "ERROR: Invalid secret key" << dendl;
     return ret;
   }
@@ -118,7 +118,8 @@ int Credentials::generateCredentials(CephContext* cct,
   buffer::list input, enc_output;
   encode(token, input);
 
-  if (ret = keyhandler->encrypt(input, enc_output, &error); ret < 0) {
+  ret = keyhandler->encrypt(input, enc_output, &error);
+  if (ret < 0) {
     return ret;
   }
 
@@ -229,11 +230,13 @@ int AssumeRoleRequest::validate_input() const
 
 std::tuple<int, RGWRole> STSService::getRoleInfo(const string& arn)
 {
-  if (auto r_arn = rgw::IAM::ARN::parse(arn); r_arn) {
+  auto r_arn = rgw::IAM::ARN::parse(arn);
+  if (r_arn) {
     auto pos = r_arn->resource.find_last_of('/');
     string roleName = r_arn->resource.substr(pos + 1);
     RGWRole role(cct, store, roleName, r_arn->account);
-    if (int ret = role.get(); ret < 0) {
+	int ret = role.get();
+    if (ret < 0) {
       if (ret == -ENOENT) {
         ret = -ERR_NO_ROLE_FOUND;
       }
@@ -249,17 +252,18 @@ std::tuple<int, RGWRole> STSService::getRoleInfo(const string& arn)
 
 int STSService::storeARN(string& arn)
 {
-  int ret = 0;
   RGWUserInfo info;
-  if (ret = rgw_get_user_info_by_uid(store, user_id, info); ret < 0) {
+  int ret = rgw_get_user_info_by_uid(store, user_id, info);
+  if (ret < 0) {
     return -ERR_NO_SUCH_ENTITY;
   }
 
   info.assumed_role_arn = arn;
 
   RGWObjVersionTracker objv_tracker;
-  if (rgw_store_user_info(store, info, &info, &objv_tracker, real_time(),
-          false); ret < 0) {
+  ret = rgw_store_user_info(store, info, &info, &objv_tracker, real_time(),
+							false); // XXX original had no assignment!
+  if (ret < 0) {
     return -ERR_INTERNAL_ERROR;
   }
   return ret;
@@ -273,8 +277,8 @@ AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
   string roleId;
 
   //Get the role info which is being assumed
-  boost::optional<rgw::IAM::ARN> r_arn;
-  if (r_arn = rgw::IAM::ARN::parse(req.getRoleARN()); r_arn == boost::none) {
+  boost::optional<rgw::IAM::ARN> r_arn = rgw::IAM::ARN::parse(req.getRoleARN());
+  if (r_arn == boost::none) {
     return make_tuple(-EINVAL, user, cred, packedPolicySize);
   }
 
@@ -283,8 +287,8 @@ AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
   req.setMaxDuration(roleMaxSessionDuration);
 
   //Validate input
-  int ret = 0;
-  if (ret = req.validate_input(); ret < 0) {
+  int ret = req.validate_input();
+  if (ret < 0) {
     return make_tuple(ret, user, cred, packedPolicySize);
   }
 
@@ -293,21 +297,25 @@ AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
   packedPolicySize = (policy.size() / req.getMaxPolicySize()) * 100;
 
   //Generate Assumed Role User
-  if (ret = user.generateAssumedRoleUser(cct, store, roleId, r_arn.get(), req.getRoleSessionName()); ret < 0) {
+  ret = user.generateAssumedRoleUser(cct, store, roleId, r_arn.get(),
+									 req.getRoleSessionName());
+  if (ret < 0) {
     return make_tuple(ret, user, cred, packedPolicySize);
   }
 
   //Generate Credentials
-  //Role and Policy provide the authorization info, user id and applier info are not needed
-  if (ret = cred.generateCredentials(cct, req.getDuration(),
-                                      req.getPolicy(), roleId,
-                                      boost::none, nullptr); ret < 0) {
+  //Role and Policy provide the authorization info, user id and
+  //applier info are not needed
+  ret = cred.generateCredentials(cct, req.getDuration(), req.getPolicy(),
+								 roleId, boost::none, nullptr);
+  if (ret < 0) {
     return make_tuple(ret, user, cred, packedPolicySize);
   }
 
   //Save ARN with the user
   string arn = user.getARN();
-  if (ret = storeARN(arn); ret < 0) {
+  ret = storeARN(arn);
+  if (ret < 0) {
     return make_tuple(ret, user, cred, packedPolicySize);
   }
 
@@ -327,16 +335,16 @@ GetSessionTokenRequest::GetSessionTokenRequest(string& duration, string& serialN
 
 GetSessionTokenResponse STSService::getSessionToken(GetSessionTokenRequest& req)
 {
-  int ret;
   Credentials cred;
 
   //Generate Credentials
-  if (ret = cred.generateCredentials(cct,
+  int ret = cred.generateCredentials(cct,
 									 req.getDuration(),
 									 boost::none,
 									 boost::none,
 									 user_id,
-									 identity); ret < 0) {
+									 identity); 
+  if (ret < 0) {
     return make_tuple(ret, cred);
   }
 

@@ -40,7 +40,9 @@ int RGWREST_STS::verify_permission()
   sts = std::move(_sts);
 
   string rArn = s->info.args.get("RoleArn");
-  const auto& [ret, role] = sts.getRoleInfo(rArn);
+  int ret; RGWRole role;
+  //const auto& [ret, role] = sts.getRoleInfo(rArn);
+  std::tie(ret, role) = sts.getRoleInfo(rArn);;
   if (ret < 0) {
     return ret;
   }
@@ -97,14 +99,17 @@ int RGWSTSGetSessionToken::get_params()
 
 void RGWSTSGetSessionToken::execute()
 {
-  if (op_ret = get_params(); op_ret < 0) {
+  op_ret = get_params();;
+  if (op_ret < 0) {
     return;
   }
 
   STS::STSService sts(s->cct, store, s->user->user_id, s->auth.identity.get());
-
   STS::GetSessionTokenRequest req(duration, serialNumber, tokenCode);
-  const auto& [ret, creds] = sts.getSessionToken(req);
+  int ret;
+  STS::Credentials creds;
+  //const auto& [ret, creds] = sts.getSessionToken(req);
+  std::tie(ret, creds) = sts.getSessionToken(req);
   op_ret = std::move(ret);
   //Dump the output
   if (op_ret == 0) {
@@ -149,13 +154,20 @@ int RGWSTSAssumeRole::get_params()
 
 void RGWSTSAssumeRole::execute()
 {
-  if (op_ret = get_params(); op_ret < 0) {
+  op_ret = get_params();
+  if (op_ret < 0) {
     return;
   }
 
   STS::AssumeRoleRequest req(duration, externalId, policy, roleArn,
                         roleSessionName, serialNumber, tokenCode);
-  const auto& [ret, assumedRoleUser, creds, packedPolicySize] = sts.assumeRole(req);
+  int ret;
+  STS::AssumedRoleUser assumedRoleUser;
+  STS::Credentials creds;
+  uint64_t packedPolicySize;
+  //const auto& [ret, assumedRoleUser, creds, packedPolicySize] =
+  //sts.assumeRole(req);
+  std::tie(ret, assumedRoleUser, creds, packedPolicySize) = sts.assumeRole(req);
   op_ret = std::move(ret);
   //Dump the output
   if (op_ret == 0) {
@@ -210,7 +222,8 @@ int RGWHandler_REST_STS::init(RGWRados *store,
 {
   s->dialect = "sts";
 
-  if (int ret = RGWHandler_REST_STS::init_from_header(s, RGW_FORMAT_XML, true); ret < 0) {
+  int ret = RGWHandler_REST_STS::init_from_header(s, RGW_FORMAT_XML, true);
+  if (ret < 0) {
     ldout(s->cct, 10) << "init_from_header returned err=" << ret <<  dendl;
     return ret;
   }
@@ -227,8 +240,8 @@ int RGWHandler_REST_STS::init_from_header(struct req_state* s,
 
   s->prot_flags |= RGW_REST_STS;
 
-  const char *p, *req_name;
-  if (req_name = s->relative_uri.c_str(); *req_name == '?') {
+  const char *p, *req_name = s->relative_uri.c_str();
+  if (*req_name == '?') {
     p = req_name;
   } else {
     p = s->info.request_params.c_str();
@@ -238,7 +251,8 @@ int RGWHandler_REST_STS::init_from_header(struct req_state* s,
   s->info.args.parse();
 
   /* must be called after the args parsing */
-  if (int ret = allocate_formatter(s, default_formatter, configurable_format); ret < 0)
+  int ret = allocate_formatter(s, default_formatter, configurable_format);
+  if (ret < 0)
     return ret;
 
   if (*req_name != '/')

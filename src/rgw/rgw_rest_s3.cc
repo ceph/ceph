@@ -4263,8 +4263,8 @@ rgw::auth::s3::STSEngine::get_session_token(const boost::string_view& session_to
   }
   string secret_s = cct->_conf->rgw_sts_key;
   buffer::ptr secret(secret_s.c_str(), secret_s.length());
-  int ret = 0;
-  if (ret = cryptohandler->validate_secret(secret); ret < 0) {
+  int ret = cryptohandler->validate_secret(secret);
+  if (ret < 0) {
     ldout(cct, 0) << "ERROR: Invalid secret key" << dendl;
     return -EINVAL;
   }
@@ -4307,7 +4307,8 @@ rgw::auth::s3::STSEngine::authenticate(
   }
 
   STS::SessionToken token;
-  if (int ret = get_session_token(session_token, token); ret < 0) {
+  int ret = get_session_token(session_token, token);
+  if (ret < 0) {
     return result_t::reject(ret);
   }
   //Authentication
@@ -4360,7 +4361,8 @@ rgw::auth::s3::STSEngine::authenticate(
     vector<string> role_policy_names = role.get_role_policy_names();
     for (auto& policy_name : role_policy_names) {
       string perm_policy;
-      if (int ret = role.get_role_policy(policy_name, perm_policy); ret == 0) {
+      int ret = role.get_role_policy(policy_name, perm_policy);
+      if (ret == 0) {
         role_policies.push_back(std::move(perm_policy));
       }
     }
