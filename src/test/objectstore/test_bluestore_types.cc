@@ -1448,14 +1448,14 @@ TEST(BlueStoreRepairer, StoreSpaceTracker)
   BlueStoreRepairer::StoreSpaceTracker bmap0;
   bmap0.init((uint64_t)4096 * 1024 * 1024 * 1024, 0x1000);
   ASSERT_EQ(bmap0.granularity, 2 * 1024 * 1024U);
-  ASSERT_EQ(bmap0.collections_bfs.size(), 2048 * 1024);
-  ASSERT_EQ(bmap0.objects_bfs.size(), 2048 * 1024);
+  ASSERT_EQ(bmap0.collections_bfs.size(), 2048u * 1024u);
+  ASSERT_EQ(bmap0.objects_bfs.size(), 2048u * 1024u);
 
   BlueStoreRepairer::StoreSpaceTracker bmap;
   bmap.init(0x2000 * 0x1000 - 1, 0x1000, 512 * 1024);
-  ASSERT_EQ(bmap.granularity, 0x1000);
-  ASSERT_EQ(bmap.collections_bfs.size(), 0x2000);
-  ASSERT_EQ(bmap.objects_bfs.size(), 0x2000);
+  ASSERT_EQ(bmap.granularity, 0x1000u);
+  ASSERT_EQ(bmap.collections_bfs.size(), 0x2000u);
+  ASSERT_EQ(bmap.objects_bfs.size(), 0x2000u);
 
   coll_t cid;
   ghobject_t hoid;

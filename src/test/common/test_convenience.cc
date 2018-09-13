@@ -44,7 +44,7 @@ TEST(Convenience, MaybeDoOr)
   auto r = ceph::maybe_do_or(s, l, 0);
   EXPECT_EQ(r, s->size());
 
-  EXPECT_EQ(ceph::maybe_do_or(t, l, 0), 0);
+  EXPECT_EQ(ceph::maybe_do_or(t, l, 0u), 0u);
 }
 
 TEST(Convenience, StdMaybeDo)
@@ -65,5 +65,5 @@ TEST(Convenience, StdMaybeDoOr)
   auto r = ceph::maybe_do_or(s, l, 0);
   EXPECT_EQ(r, s->size());
 
-  EXPECT_EQ(ceph::maybe_do_or(t, l, 0), 0);
+  EXPECT_EQ(ceph::maybe_do_or(t, l, 0u), 0u);
 }

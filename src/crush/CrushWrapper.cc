@@ -1062,8 +1062,8 @@ int CrushWrapper::insert_item(
 
     ldout(cct, 5) << "insert_item adding " << cur << " weight " << weight
 		  << " to bucket " << id << dendl;
-    int r = bucket_add_item(b, cur, 0);
-    assert (!r);
+    [[maybe_unused]] int r = bucket_add_item(b, cur, 0);
+    ceph_assert(!r);
     break;
   }
 
