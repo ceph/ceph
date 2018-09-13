@@ -1,0 +1,4 @@
+tasks:
+- exec:
+    client.salt_master:
+      - 'false'
