@@ -3740,18 +3740,13 @@ void Monitor::handle_forward(MonOpRequestRef op)
      */
     req->rx_election_epoch = get_epoch();
 
-    /* Because this is a special fake connection, we need to break
-       the ref loop between Connection and MonSession differently
-       than we normally do. Here, the Message refers to the Connection
-       which refers to the Session, and nobody else refers to the Connection
-       or the Session. And due to the special nature of this message,
-       nobody refers to the Connection via the Session. So, clear out that
-       half of the ref loop.*/
-    s->con.reset(NULL);
-
     dout(10) << " mesg " << req << " from " << m->get_source_addr() << dendl;
-
     _ms_dispatch(req);
+
+    // break the session <-> con ref loop by removing the con->session
+    // reference, which is no longer needed once the MonOpRequest is
+    // set up.
+    c->set_priv(NULL);
   }
 }
 
