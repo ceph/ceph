@@ -104,3 +104,19 @@ int Messenger::bindv(const entity_addrvec_t& addrs)
 	     << addrs.legacy_addr() << dendl;
   return bind(addrs.legacy_addr());
 }
+
+bool Messenger::ms_deliver_verify_authorizer(
+  Connection *con, int peer_type,
+  int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
+  bool& isvalid, CryptoKey& session_key,
+  std::unique_ptr<AuthAuthorizerChallenge> *challenge)
+{
+  for (const auto& dispatcher : dispatchers) {
+    if (dispatcher->ms_verify_authorizer(con, peer_type, protocol,
+					 authorizer,
+					 authorizer_reply,
+					 isvalid, session_key, challenge))
+      return true;
+  }
+  return false;
+}
