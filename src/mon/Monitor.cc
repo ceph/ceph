@@ -5799,6 +5799,11 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
   return true;
 }
 
+KeyStore *Monitor::ms_get_auth1_authorizer_keystore()
+{
+  return &keyring;
+}
+
 int Monitor::ms_handle_authentication(Connection *con)
 {
   auto priv = con->get_priv();
