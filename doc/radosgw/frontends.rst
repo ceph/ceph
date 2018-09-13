@@ -109,6 +109,30 @@ Options
 :Type: String
 :Default: None
 
+``access_log_file``
+
+:Description: Path to a file for access logs. Either full path, or relative
+			  to the current working directory. If absent (default), then
+			  accesses are not logged.
+
+:Type: String
+:Default: ``EMPTY``
+
+
+``error_log_file``
+
+:Description: Path to a file for error logs. Either full path, or relative
+			  to the current working directory. If absent (default), then
+			  errors are not logged.
+
+:Type: String
+:Default: ``EMPTY``
+
+
+The following is an example of the ``/etc/ceph/ceph.conf`` file with some of these options set:
+ 
+ [client.rgw.gateway-node1]
+ rgw frontends = civetweb request_timeout_ms=30000 error_log_file=/var/log/radosgw/civetweb.error.log access_log_file=/var/log/radosgw/civetweb.access.log
 
 A complete list of supported options can be found in the `Civetweb User Manual`_.
 
