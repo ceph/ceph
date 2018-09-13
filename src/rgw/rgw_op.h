@@ -1092,8 +1092,8 @@ public:
   explicit RGWPutObj_Filter(RGWPutObjDataProcessor* next) :
   next(next){}
   ~RGWPutObj_Filter() override {}
-  int handle_data(bufferlist& bl, off_t ofs) override {
-    return next->handle_data(bl, ofs);
+  int handle_data(bufferlist&& bl, off_t ofs) override {
+    return next->handle_data(std::move(bl), ofs);
   }
 }; /* RGWPutObj_Filter */
 

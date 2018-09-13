@@ -2531,7 +2531,8 @@ RGWPutObjProcessor_Aio::~RGWPutObjProcessor_Aio()
   }
 }
 
-int RGWPutObjProcessor_Aio::handle_obj_data(rgw_raw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, bool exclusive)
+int RGWPutObjProcessor_Aio::handle_obj_data(rgw_raw_obj& obj, const bufferlist& bl,
+                                            off_t ofs, off_t abs_ofs, bool exclusive)
 {
   const uint64_t len = bl.length();
   if (obj_len < abs_ofs + len)
@@ -2635,7 +2636,7 @@ int RGWPutObjProcessor_Aio::throttle_pending(void *handle, const rgw_raw_obj& ob
   return 0;
 }
 
-int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, bool exclusive)
+int RGWPutObjProcessor_Atomic::write_data(const bufferlist& bl, off_t ofs, bool exclusive)
 {
   if (ofs >= next_part_ofs) {
     int r = prepare_next_part(ofs);
@@ -2660,7 +2661,7 @@ int RGWPutObjProcessor_Aio::prepare(RGWRados *store, string *oid_rand)
   return 0;
 }
 
-int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs)
+int RGWPutObjProcessor_Atomic::handle_data(bufferlist&& bl, off_t ofs)
 {
   uint64_t max_write_size = std::min(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
 
@@ -7474,7 +7475,7 @@ int RGWRados::put_system_obj_data(void *ctx, rgw_raw_obj& obj, const bufferlist&
  * Returns: 0 on success, -ERR# otherwise.
  */
 
-int RGWRados::aio_put_obj_data(void *ctx, rgw_raw_obj& obj, bufferlist& bl,
+int RGWRados::aio_put_obj_data(void *ctx, rgw_raw_obj& obj, const bufferlist& bl,
 			       off_t ofs, bool exclusive,
                                void **handle)
 {
@@ -7531,20 +7532,20 @@ class RGWPutObj_Buffer : public RGWPutObj_Filter {
     ceph_assert(isp2(buffer_size)); // must be power of 2
   }
 
-  int handle_data(bufferlist& bl, off_t ofs) override {
-    if (!bl.length()) {
-      // flush buffered data
-      return RGWPutObj_Filter::handle_data(buffer, ofs);
-    }
+  int handle_data(bufferlist&& bl, off_t ofs) override {
     // transform offset to the beginning of the buffer
     ofs = ofs - buffer.length();
+    if (!bl.length()) {
+      // flush buffered data
+      return RGWPutObj_Filter::handle_data(std::move(buffer), ofs);
+    }
     buffer.claim_append(bl);
     if (buffer.length() < buffer_size) {
       return 0;
     }
     const auto count = p2align(buffer.length(), buffer_size);
     buffer.splice(0, count, &bl);
-    return RGWPutObj_Filter::handle_data(bl, ofs);
+    return RGWPutObj_Filter::handle_data(std::move(bl), ofs);
   }
 };
 
@@ -7638,7 +7639,7 @@ public:
     data_len += bl.length();
 
     uint64_t size = bl.length();
-    int ret = filter->handle_data(bl, lofs);
+    int ret = filter->handle_data(std::move(bl), lofs);
     if (ret < 0)
       return ret;
 
@@ -7648,8 +7649,7 @@ public:
   }
 
   int flush() {
-    bufferlist bl;
-    return filter->handle_data(bl, ofs);
+    return filter->handle_data({}, ofs);
   }
 
   bufferlist& get_extra_data() { return extra_data_bl; }
@@ -8539,7 +8539,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
     uint64_t read_len = ret;
 
-    ret = processor.handle_data(bl, ofs);
+    ret = processor.handle_data(std::move(bl), ofs);
     if (ret < 0) {
       return ret;
     }

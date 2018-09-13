@@ -8,7 +8,7 @@
 
 //------------RGWPutObj_Compress---------------
 
-int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs)
+int RGWPutObj_Compress::handle_data(bufferlist&& bl, off_t ofs)
 {
   bufferlist in_bl;
   if (bl.length() > 0) {
@@ -43,7 +43,7 @@ int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs)
     }
     // end of compression stuff
   }
-  return next->handle_data(in_bl, ofs);
+  return next->handle_data(std::move(in_bl), ofs);
 }
 
 //----------------RGWGetObj_Decompress---------------------

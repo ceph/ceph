@@ -54,9 +54,9 @@ class ut_put_sink: public RGWPutObjDataProcessor
 public:
   ut_put_sink(){}
   virtual ~ut_put_sink(){}
-  int handle_data(bufferlist& bl, off_t ofs) override
+  int handle_data(bufferlist&& bl, off_t ofs) override
   {
-    sink.append(bl);
+    sink.claim_append(bl);
     return 0;
   }
   bufferlist&  get_sink()
@@ -125,9 +125,8 @@ TEST(Compress, LimitedChunkSize)
 
     ut_put_sink c_sink;
     RGWPutObj_Compress compressor(g_ceph_context, plugin, &c_sink);
-    compressor.handle_data(bl, 0);
-    bufferlist empty;
-    compressor.handle_data(empty, s);
+    compressor.handle_data(std::move(bl), 0);
+    compressor.handle_data({}, s);
 
     RGWCompressionInfo cs_info;
     cs_info.compression_type = plugin->get_type_name();
@@ -142,6 +141,7 @@ TEST(Compress, LimitedChunkSize)
     decompress.fixup_range(f_begin, f_end);
 
     decompress.handle_data(c_sink.get_sink(), 0, c_sink.get_sink().length());
+    bufferlist empty;
     decompress.handle_data(empty, 0, 0);
 
     ASSERT_LE(d_sink.get_size(), (size_t)g_ceph_context->_conf->rgw_max_chunk_size);
@@ -162,11 +162,9 @@ TEST(Compress, BillionZeros)
   bufferlist bl;
   bl.append(bp);
 
-
   for (int i=0; i<1000;i++)
-    compressor.handle_data(bl, size*i);
-  bufferlist empty;
-  compressor.handle_data(empty, size*1000);
+    compressor.handle_data(bufferlist{bl}, size*i);
+  compressor.handle_data({}, size*1000);
 
   RGWCompressionInfo cs_info;
   cs_info.compression_type = plugin->get_type_name();
@@ -181,6 +179,7 @@ TEST(Compress, BillionZeros)
   decompress.fixup_range(f_begin, f_end);
 
   decompress.handle_data(c_sink.get_sink(), 0, c_sink.get_sink().length());
+  bufferlist empty;
   decompress.handle_data(empty, 0, 0);
 
   ASSERT_EQ(d_sink.get_sink().length() , size*1000);

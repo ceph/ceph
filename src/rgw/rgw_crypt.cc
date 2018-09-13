@@ -672,16 +672,14 @@ RGWPutObj_BlockEncrypt::RGWPutObj_BlockEncrypt(CephContext* cct,
   block_size = this->crypt->get_block_size();
 }
 
-RGWPutObj_BlockEncrypt::~RGWPutObj_BlockEncrypt() {
-}
-
-int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl, off_t in_ofs) {
+int RGWPutObj_BlockEncrypt::handle_data(bufferlist&& bl, off_t in_ofs) {
   int res = 0;
   ldout(cct, 25) << "Encrypt " << bl.length() << " bytes" << dendl;
 
-  cache.append(bl);
+  const bool flush = (bl.length() == 0);
+  cache.claim_append(bl);
   off_t proc_size = cache.length() & ~(block_size - 1);
-  if (bl.length() == 0) {
+  if (flush) {
     proc_size = cache.length();
   }
   if (proc_size > 0) {
@@ -689,16 +687,16 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl, off_t in_ofs) {
     if (! crypt->encrypt(cache, 0, proc_size, data, ofs) ) {
       return -ERR_INTERNAL_ERROR;
     }
-    res = next->handle_data(data, ofs);
+    res = next->handle_data(std::move(data), ofs);
     ofs += proc_size;
     cache.splice(0, proc_size);
     if (res < 0)
       return res;
   }
 
-  if (bl.length() == 0) {
+  if (flush) {
     /*replicate 0-sized handle_data*/
-    res = next->handle_data(bl, ofs);
+    res = next->handle_data({}, ofs);
   }
   return res;
 }
