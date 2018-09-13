@@ -92,11 +92,8 @@ public:
     virtual int zero_copy_to_fd(int fd, loff_t *offset) {
       return -ENOTSUP;
     }
-    virtual bool is_page_aligned() {
+    virtual bool is_page_aligned() final {
       return ((long)data & ~CEPH_PAGE_MASK) == 0;
-    }
-    bool is_n_page_sized() {
-      return (len & ~CEPH_PAGE_MASK) == 0;
     }
     virtual bool is_shareable() {
       // true if safe to reference/share the existing buffer copy
