@@ -9,8 +9,8 @@ Timeline
 |                      | `Mimic`_ | `Luminous`_ | `Kraken`_ | `Jewel`_ | `Infernalis`_ | `Hammer`_ | `Giant`_ | `Firefly`_ | `Emperor`_ | `Dumpling`_ |
 |                      |          |             | EOL       | EOL      | EOL           | EOL       | EOL      | EOL        | EOL        | EOL         |
 +----------------------+----------+-------------+-----------+----------+---------------+-----------+----------+------------+------------+-------------+
-| First release        | May 2018 | August      | January   | April    | November      | April     | October  | May        | November   | August      |
-|                      |          | 2017        | 2017      | 2016     | 2015          | 2015      | 2014     | 2014       | 2013       | 2013        |
+| First release        | June     | August      | January   | April    | November      | April     | October  | May        | November   | August      |
+|                      | 2018     | 2017        | 2017      | 2016     | 2015          | 2015      | 2014     | 2014       | 2013       | 2013        |
 +----------------------+----------+-------------+-----------+----------+---------------+-----------+----------+------------+------------+-------------+
 | Estimated retirement |          |             | August    | June     |               | May       |          | January    |            | March       |
 |                      |          |             | 2017      | 2018     |               | 2017      |          | 2016       |            | 2015        |
