@@ -267,7 +267,6 @@ void SnapshotRemoveRequest<I>::release_snap_id() {
   ldout(cct, 5) << "snap_name=" << m_snap_name << ", "
                 << "snap_id=" << m_snap_id << dendl;
 
-
   auto aio_comp = create_rados_callback<
     SnapshotRemoveRequest<I>,
     &SnapshotRemoveRequest<I>::handle_release_snap_id>(this);

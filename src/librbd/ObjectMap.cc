@@ -96,7 +96,8 @@ bool ObjectMap<I>::object_may_exist(uint64_t object_no) const
   }
 
   bool flags_set;
-  int r = m_image_ctx.test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
+  int r = m_image_ctx.test_flags(m_image_ctx.snap_id,
+                                 RBD_FLAG_OBJECT_MAP_INVALID,
                                  m_image_ctx.snap_lock, &flags_set);
   if (r < 0 || flags_set) {
     return true;
@@ -122,7 +123,8 @@ bool ObjectMap<I>::object_may_not_exist(uint64_t object_no) const
   }
 
   bool flags_set;
-  int r = m_image_ctx.test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
+  int r = m_image_ctx.test_flags(m_image_ctx.snap_id,
+                                 RBD_FLAG_OBJECT_MAP_INVALID,
                                  m_image_ctx.snap_lock, &flags_set);
   if (r < 0 || flags_set) {
     return true;
