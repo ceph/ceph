@@ -10,7 +10,7 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDRepOpReply.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "osd/osd_types.h"
 
 #ifdef WITH_LTTNG

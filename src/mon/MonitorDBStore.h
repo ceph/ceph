@@ -23,7 +23,7 @@
 #include <fstream>
 #include "kv/KeyValueDB.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/Formatter.h"
 #include "common/Finisher.h"
 #include "common/errno.h"

@@ -27,7 +27,7 @@
 #include <thread>
 #include <atomic>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 /* in ms -- 1 minute */
 #define MAX_WAIT	(60 * 1000)

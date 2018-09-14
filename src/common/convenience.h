@@ -23,7 +23,7 @@
 
 #include "common/shunique_lock.h"
 
-#include "include/assert.h" // I despise you. Not you the reader, I'm talking
+#include "include/ceph_assert.h" // I despise you. Not you the reader, I'm talking
                             // to the include file.
 
 

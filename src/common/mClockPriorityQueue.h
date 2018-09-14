@@ -27,7 +27,7 @@
 
 // the following is done to unclobber _ASSERT_H so it returns to the
 // way ceph likes it
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 
 namespace ceph {

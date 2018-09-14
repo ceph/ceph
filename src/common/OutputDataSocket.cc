@@ -22,7 +22,7 @@
 #include <sys/un.h>
 
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix

@@ -6,7 +6,7 @@
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "ceph_ver.h"
 
 #include "common/Formatter.h"

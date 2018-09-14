@@ -24,7 +24,7 @@
 #include "librbd/io/ObjectDispatcher.h"
 #include "librbd/io/ReadResult.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

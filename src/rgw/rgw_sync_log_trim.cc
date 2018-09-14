@@ -28,7 +28,7 @@
 #include "rgw_sync.h"
 
 #include <boost/asio/yield.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 

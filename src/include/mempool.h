@@ -28,7 +28,7 @@
 #include <boost/container/flat_map.hpp>
 
 #include <common/Formatter.h>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/compact_map.h"
 #include "include/compact_set.h"
 

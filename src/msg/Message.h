@@ -25,7 +25,7 @@
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/zipkin_trace.h"
-#include "include/assert.h" // Because intrusive_ptr clobbers our assert...
+#include "include/ceph_assert.h" // Because intrusive_ptr clobbers our assert...
 #include "include/buffer.h"
 #include "include/types.h"
 #include "msg/Connection.h"

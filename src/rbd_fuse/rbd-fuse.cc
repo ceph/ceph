@@ -29,7 +29,7 @@
 #include "include/compat.h"
 #include "include/rbd/librbd.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 static int gotrados = 0;
 char *pool_name;

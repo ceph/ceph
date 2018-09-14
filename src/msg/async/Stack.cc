@@ -28,7 +28,7 @@
 #endif
 
 #include "common/dout.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix

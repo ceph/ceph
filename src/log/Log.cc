@@ -12,7 +12,7 @@
 #include "common/Graylog.h"
 #include "common/valgrind.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/compat.h"
 #include "include/on_exit.h"
 

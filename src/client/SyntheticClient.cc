@@ -35,7 +35,7 @@
 #include <sys/statvfs.h>
 
 #include "common/errno.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/cephfs/ceph_statx.h"
 
 #define dout_context g_ceph_context

@@ -30,7 +30,7 @@
 #ifdef HAVE_LIBAIO
 #include "aio.h"
 #endif
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/buffer.h"
 #include "include/interval_set.h"
 #define SPDK_PREFIX "spdk:"

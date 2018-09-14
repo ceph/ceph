@@ -3,7 +3,7 @@
 #include "rgw_coroutine.h"
 
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include <boost/asio/yield.hpp>
 

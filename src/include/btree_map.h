@@ -6,7 +6,7 @@
 
 #include "include/cpp-btree/btree.h"
 #include "include/cpp-btree/btree_map.h"
-#include "include/assert.h"   // cpp-btree uses system assert, blech
+#include "include/ceph_assert.h"   // cpp-btree uses system assert, blech
 #include "include/encoding.h"
 
 template<class T, class U>

@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <ostream>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "StateTransition.h"
 
 namespace rbd {

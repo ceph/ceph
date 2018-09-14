@@ -25,7 +25,7 @@
 #include "common/RWLock.h"
 #include "os/ObjectStore.h"
 #include "PageSet.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class MemStore : public ObjectStore {
 public:

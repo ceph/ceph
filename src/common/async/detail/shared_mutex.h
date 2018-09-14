@@ -23,7 +23,7 @@
 #include <boost/intrusive_ptr.hpp>
 #include <boost/intrusive/list.hpp>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "common/async/completion.h"
 

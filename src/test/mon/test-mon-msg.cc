@@ -35,7 +35,7 @@
 #include "gtest/gtest.h"
 
 #include "common/config.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "messages/MMonProbe.h"
 #include "messages/MRoute.h"

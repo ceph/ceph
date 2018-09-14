@@ -6,7 +6,7 @@
 #include "common/config.h"
 
 #include "include/Context.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/mempool.h"
 #include "include/types.h"
 #include "include/xlist.h"

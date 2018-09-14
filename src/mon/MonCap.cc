@@ -29,7 +29,7 @@
 #include <algorithm>
 #include <regex>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 static inline bool is_not_alnum_space(char c)
 {

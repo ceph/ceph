@@ -10,7 +10,7 @@
 #include <boost/container/flat_set.hpp>
 #include "common/sstring.hh"
 #include "common/ceph_json.h"
-#include "include/assert.h" /* needed because of common/ceph_json.h */
+#include "include/ceph_assert.h" /* needed because of common/ceph_json.h */
 #include "rgw_op.h"
 #include "rgw_formats.h"
 #include "rgw_client_io.h"

@@ -49,7 +49,7 @@
 #include "osdc/Objecter.h"
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
-#include "include/assert.h"  // json_spirit clobbers it
+#include "include/ceph_assert.h"  // json_spirit clobbers it
 #include "include/rados/rados_types.hpp"
 
 #ifdef WITH_LTTNG

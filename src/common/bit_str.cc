@@ -13,7 +13,7 @@
  */
 #include "common/bit_str.h"
 #include "common/Formatter.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 static void _dump_bit_str(
     uint64_t bits,

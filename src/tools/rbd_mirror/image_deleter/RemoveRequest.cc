@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "tools/rbd_mirror/image_deleter/RemoveRequest.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"

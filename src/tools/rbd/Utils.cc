@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "tools/rbd/Utils.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/Context.h"
 #include "include/encoding.h"
 #include "common/common_init.h"

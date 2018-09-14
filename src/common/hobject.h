@@ -19,7 +19,7 @@
 #include "include/cmp.h"
 
 #include "json_spirit/json_spirit_value.h"
-#include "include/assert.h"   // spirit clobbers it!
+#include "include/ceph_assert.h"   // spirit clobbers it!
 
 #include "reverse.h"
 

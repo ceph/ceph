@@ -8,7 +8,7 @@
 #include "rgw_rest_user.h"
 
 #include "include/str_list.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 

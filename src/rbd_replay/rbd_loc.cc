@@ -13,7 +13,7 @@
  */
 
 #include "rbd_loc.hpp"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 
 using namespace std;

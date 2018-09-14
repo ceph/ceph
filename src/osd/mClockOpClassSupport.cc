@@ -17,7 +17,7 @@
 #include "osd/mClockOpClassSupport.h"
 #include "osd/OpQueueItem.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace ceph {
 

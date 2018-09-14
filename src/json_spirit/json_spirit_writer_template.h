@@ -17,7 +17,7 @@
 #include <iomanip>
 #include <boost/io/ios_state.hpp>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace json_spirit
 {

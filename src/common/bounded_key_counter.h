@@ -22,7 +22,7 @@
 #include <tuple>
 #include <vector>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 /**
  * BoundedKeyCounter
