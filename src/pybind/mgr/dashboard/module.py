@@ -138,32 +138,6 @@ class SSLCherryPyConfig(object):
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
                                                                         priority=31)
 
-        # SSL initialization
-        cert = self.get_store("crt")
-        if cert is not None:
-            self.cert_tmp = tempfile.NamedTemporaryFile()
-            self.cert_tmp.write(cert.encode('utf-8'))
-            self.cert_tmp.flush()  # cert_tmp must not be gc'ed
-            cert_fname = self.cert_tmp.name
-        else:
-            cert_fname = self.get_localized_config('crt_file')
-
-        pkey = self.get_store("key")
-        if pkey is not None:
-            self.pkey_tmp = tempfile.NamedTemporaryFile()
-            self.pkey_tmp.write(pkey.encode('utf-8'))
-            self.pkey_tmp.flush()  # pkey_tmp must not be gc'ed
-            pkey_fname = self.pkey_tmp.name
-        else:
-            pkey_fname = self.get_localized_config('key_file')
-
-        if not cert_fname or not pkey_fname:
-            raise ServerConfigException('no certificate configured')
-        if not os.path.isfile(cert_fname):
-            raise ServerConfigException('certificate %s does not exist' % cert_fname)
-        if not os.path.isfile(pkey_fname):
-            raise ServerConfigException('private key %s does not exist' % pkey_fname)
-
         # Apply the 'global' CherryPy configuration.
         config = {
             'engine.autoreload.on': False,
@@ -174,6 +148,32 @@ class SSLCherryPyConfig(object):
         }
 
         if ssl:
+            # SSL initialization
+            cert = self.get_store("crt")
+            if cert is not None:
+                self.cert_tmp = tempfile.NamedTemporaryFile()
+                self.cert_tmp.write(cert.encode('utf-8'))
+                self.cert_tmp.flush()  # cert_tmp must not be gc'ed
+                cert_fname = self.cert_tmp.name
+            else:
+                cert_fname = self.get_localized_config('crt_file')
+
+            pkey = self.get_store("key")
+            if pkey is not None:
+                self.pkey_tmp = tempfile.NamedTemporaryFile()
+                self.pkey_tmp.write(pkey.encode('utf-8'))
+                self.pkey_tmp.flush()  # pkey_tmp must not be gc'ed
+                pkey_fname = self.pkey_tmp.name
+            else:
+                pkey_fname = self.get_localized_config('key_file')
+
+            if not cert_fname or not pkey_fname:
+                raise ServerConfigException('no certificate configured')
+            if not os.path.isfile(cert_fname):
+                raise ServerConfigException('certificate %s does not exist' % cert_fname)
+            if not os.path.isfile(pkey_fname):
+                raise ServerConfigException('private key %s does not exist' % pkey_fname)
+
             config['server.ssl_module'] = 'builtin'
             config['server.ssl_certificate'] = cert_fname
             config['server.ssl_private_key'] = pkey_fname
