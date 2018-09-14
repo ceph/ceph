@@ -1,6 +1,0 @@
-overrides:
-  deepsea:
-    exec:
-    - suites/basic/health-ok.sh --min-nodes=3 --client-nodes=0
-    - suites/basic/stage-5.sh || true
-    - sleep 10000000

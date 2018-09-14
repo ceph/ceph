@@ -1,0 +1,4 @@
+openstack:
+- volumes: # attached to each instance
+    count: 3
+    size: 10 # GB

@@ -1,6 +1,0 @@
-overrides:
-  deepsea:
-    exec:
-    - suites/basic/health-ok.sh
-    - salt-run state.orch ceph.functests.1node.replace || true
-    - sleep 10000000
