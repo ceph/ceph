@@ -2287,6 +2287,10 @@ void RGWGetLC_ObjStore_S3::send_response()
   if (op_ret) {
     if (op_ret == -ENOENT) {	
       set_req_state_err(s, ERR_NO_SUCH_LC);
+      dump_errno(s);
+      end_header(s, this, "application/xml");
+      dump_start(s);
+      return;
     } else {
       set_req_state_err(s, op_ret);
     }
