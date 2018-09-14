@@ -426,13 +426,13 @@ struct pg_t {
   bool contains(int bits, const ghobject_t& oid) {
     return
       ((int64_t)m_pool == oid.hobj.pool ||
-       hobject_t::POOL_TEMP_START-(int64_t)m_pool == oid.hobj.pool) &&
+       hobject_t::get_temp_pool(m_pool) == oid.hobj.pool) &&
       oid.match(bits, ps());
   }
   bool contains(int bits, const hobject_t& oid) {
     return
       ((int64_t)m_pool == oid.pool ||
-       hobject_t::POOL_TEMP_START-(int64_t)m_pool == oid.pool) &&
+       hobject_t::get_temp_pool(m_pool) == oid.pool) &&
       oid.match(bits, ps());
   }
 
@@ -588,7 +588,8 @@ struct spg_t {
     return ghobject_t(
       hobject_t(object_t(name), "", CEPH_NOSNAP,
 		pgid.ps(),
-		hobject_t::POOL_TEMP_START - pgid.pool(), ""),
+		hobject_t::get_temp_pool(pgid.pool()),
+		""),
       ghobject_t::NO_GEN,
       shard);
   }
