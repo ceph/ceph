@@ -64,15 +64,15 @@ DNSResolver::~DNSResolver()
 #ifdef HAVE_RES_NQUERY
 int DNSResolver::get_state(CephContext *cct, res_state *ps)
 {
-  lock.Lock();
+  lock.lock();
   if (!states.empty()) {
     res_state s = states.front();
     states.pop_front();
-    lock.Unlock();
+    lock.unlock();
     *ps = s;
     return 0;
   }
-  lock.Unlock();
+  lock.unlock();
   struct __res_state *s = new struct __res_state;
   s->options = 0;
   if (res_ninit(s) < 0) {
