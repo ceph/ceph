@@ -161,7 +161,6 @@ void SocketConnection::read_tags_until_next_message()
     }).then_wrapped([this] (auto fut) {
       // satisfy the message promise
       fut.forward_to(std::move(on_message));
-      on_message = seastar::promise<>{};
     });
 }
 
@@ -209,6 +208,7 @@ seastar::future<MessageRef> SocketConnection::read_message()
 {
   return on_message.get_future()
     .then([this] {
+      on_message = seastar::promise<>{};
       // read header
       return read(sizeof(m.header));
     }).then([this] (bufferlist bl) {
