@@ -6542,18 +6542,6 @@ void PG::queue_null(epoch_t msg_epoch,
 					 NullEvt())));
 }
 
-void PG::queue_query(epoch_t msg_epoch,
-		     epoch_t query_epoch,
-		     pg_shard_t from, const pg_query_t& q)
-{
-  dout(10) << "handle_query " << q << " from replica " << from << dendl;
-  queue_peering_event(
-    PGPeeringEventRef(
-      std::make_shared<PGPeeringEvent>(
-	msg_epoch, query_epoch,
-	MQuery(info.pgid, from, q, query_epoch))));
-}
-
 void PG::find_unfound(epoch_t queued, RecoveryCtx *rctx)
 {
   /*
