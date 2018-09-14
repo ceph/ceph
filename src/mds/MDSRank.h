@@ -134,6 +134,9 @@ class MDSRank {
     int incarnation;
 
   public:
+
+    friend class C_Flush_Journal;
+
     mds_rank_t get_nodeid() const { return whoami; }
     int64_t get_metadata_pool();
 
@@ -470,7 +473,6 @@ class MDSRank {
         std::ostream &ss,
         Formatter *f);
     int _command_export_dir(std::string_view path, mds_rank_t dest);
-    int _command_flush_journal(std::ostream& ss);
     CDir *_command_dirfrag_get(
         const cmdmap_t &cmdmap,
         std::ostream &ss);
