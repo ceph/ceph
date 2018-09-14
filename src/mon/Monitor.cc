@@ -81,7 +81,7 @@
 #include "mon/ConfigKeyService.h"
 #include "common/config.h"
 #include "common/cmdparse.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/compat.h"
 #include "perfglue/heap_profiler.h"
 

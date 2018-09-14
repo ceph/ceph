@@ -22,7 +22,7 @@
 #include <atomic>
 #include <memory>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class PerfHistogramCommon {
 public:

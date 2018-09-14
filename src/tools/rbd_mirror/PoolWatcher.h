@@ -16,7 +16,7 @@
 #include "types.h"
 #include <boost/functional/hash.hpp>
 #include <boost/optional.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "tools/rbd_mirror/pool_watcher/Types.h"
 
 namespace librbd { struct ImageCtx; }

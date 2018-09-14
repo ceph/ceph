@@ -43,7 +43,7 @@
 #include "rgw_crypt.h"
 #include "rgw_crypt_sanitize.h"
 #include "rgw_rest_user_policy.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

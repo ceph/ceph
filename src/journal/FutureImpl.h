@@ -12,7 +12,7 @@
 #include <map>
 #include <boost/noncopyable.hpp>
 #include <boost/intrusive_ptr.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class Context;
 

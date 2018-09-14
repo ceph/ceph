@@ -20,7 +20,7 @@
 #include "messages/MMonElection.h"
 
 #include "common/config.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

@@ -16,7 +16,7 @@
 #include "ShardedCache.h"
 
 #include "common/autovector.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace rocksdb_cache {
 

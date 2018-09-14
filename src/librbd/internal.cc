@@ -56,7 +56,7 @@
 
 #include <boost/scope_exit.hpp>
 #include <boost/variant.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

@@ -25,7 +25,7 @@
 
 #include "common/errno.h"
 #include "common/linux_version.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/compat.h"
 
 #define dout_context cct()

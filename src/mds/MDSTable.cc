@@ -25,7 +25,7 @@
 #include "common/errno.h"
 #include "common/Finisher.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 
 #define dout_context g_ceph_context

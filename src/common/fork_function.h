@@ -11,7 +11,7 @@
 #include <sys/types.h>
 #include <ostream>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/errno.h"
 
 static void _fork_function_dummy_sighandler(int sig) {}

@@ -25,7 +25,7 @@
 
 #include <boost/thread/shared_mutex.hpp>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/buffer.h"
 #include "include/types.h"
 #include "include/rados/rados_types.hpp"

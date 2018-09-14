@@ -12,7 +12,7 @@
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
 #include <boost/algorithm/string/predicate.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

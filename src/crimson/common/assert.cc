@@ -3,7 +3,7 @@
 #include <seastar/util/backtrace.hh>
 #include <seastar/core/reactor.hh>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "crimson/common/log.h"
 

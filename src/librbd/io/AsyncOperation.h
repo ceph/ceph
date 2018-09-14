@@ -4,7 +4,7 @@
 #ifndef LIBRBD_IO_ASYNC_OPERATION_H
 #define LIBRBD_IO_ASYNC_OPERATION_H
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/xlist.h"
 #include <list>
 

@@ -5,7 +5,7 @@
 #include "librbd/ImageCtx.h"
 #include "common/dout.h"
 #include "common/WorkQueue.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

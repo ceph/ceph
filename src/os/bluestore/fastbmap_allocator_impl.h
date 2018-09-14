@@ -31,7 +31,7 @@ struct interval_t
 typedef std::vector<interval_t> interval_vector_t;
 typedef std::vector<slot_t> slot_vector_t;
 #else
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/likely.h"
 #include "os/bluestore/bluestore_types.h"
 #include "include/mempool.h"

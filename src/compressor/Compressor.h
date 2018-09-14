@@ -19,7 +19,7 @@
 #include <string>
 #include <string_view>
 #include <boost/optional.hpp>
-#include "include/assert.h"    // boost clobbers this
+#include "include/ceph_assert.h"    // boost clobbers this
 #include "include/buffer.h"
 #include "include/int_types.h"
 #ifdef HAVE_QATZIP

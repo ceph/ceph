@@ -22,7 +22,7 @@
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/DecayCounter.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
 
 #define dout_context g_ceph_context

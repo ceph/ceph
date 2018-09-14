@@ -2,7 +2,7 @@
 #define CEPH_RGW_CR_RADOS_H
 
 #include <boost/intrusive_ptr.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "rgw_coroutine.h"
 #include "rgw_rados.h"
 #include "common/WorkQueue.h"

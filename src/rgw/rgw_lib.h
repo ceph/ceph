@@ -14,7 +14,7 @@
 #include "rgw_process.h"
 #include "rgw_rest_s3.h" // RGW_Auth_S3
 #include "rgw_ldap.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class OpsLogSocket;
 

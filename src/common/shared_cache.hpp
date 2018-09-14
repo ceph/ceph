@@ -25,7 +25,7 @@
 #include "include/unordered_map.h"
 
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 template <class K, class V,
 	  ceph::LockPolicy lock_policy = ceph::LockPolicy::MUTEX>

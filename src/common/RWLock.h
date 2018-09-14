@@ -19,7 +19,7 @@
 
 #include <pthread.h>
 #include <string>
-#include <include/assert.h>
+#include "include/ceph_assert.h"
 #include "acconfig.h"
 #include "lockdep.h"
 #include "common/valgrind.h"

@@ -17,7 +17,7 @@
 #pragma once
 
 // re-include our assert to clobber boost's
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "osd_types.h"
 #include "os/ObjectStore.h"
 #include <list>

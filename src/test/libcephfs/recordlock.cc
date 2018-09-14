@@ -38,7 +38,7 @@
 #include <limits.h>
 #endif
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 // Startup common: create and mount ceph fs
 #define STARTUP_CEPH() do {				\

@@ -17,7 +17,7 @@
 #include <sstream>
 #include <regex>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
 
 #include "mon/Monitor.h"

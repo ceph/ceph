@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <boost/algorithm/string/predicate.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "librbd/image/RefreshRequest.h"
 #include "common/dout.h"

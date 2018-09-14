@@ -23,7 +23,7 @@
 #include <mutex>
 #include <condition_variable>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/unordered_map.h"
 #include "common/Finisher.h"
 #include "common/RWLock.h"

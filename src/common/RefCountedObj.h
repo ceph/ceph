@@ -23,7 +23,7 @@
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 struct RefCountedObject {
 private:

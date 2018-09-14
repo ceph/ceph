@@ -23,7 +23,7 @@
 #include <vector>
 #include <list>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/int_types.h"
 #include "common/Tub.h"
 

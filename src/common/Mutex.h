@@ -15,7 +15,7 @@
 #ifndef CEPH_MUTEX_H
 #define CEPH_MUTEX_H
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "lockdep.h"
 
 #include <string>

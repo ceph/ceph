@@ -5,7 +5,7 @@
 #define CEPH_TEST_MEM_RADOS_CLIENT_H
 
 #include "test/librados_test_stub/TestRadosClient.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include <list>
 #include <string>
 

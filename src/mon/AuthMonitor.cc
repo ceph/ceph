@@ -31,7 +31,7 @@
 #include "auth/AuthServiceHandler.h"
 #include "auth/KeyRing.h"
 #include "include/stringify.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "mds/MDSAuthCaps.h"
 #include "osd/OSDCap.h"

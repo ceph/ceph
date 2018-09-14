@@ -19,7 +19,7 @@
 #include "common/debug.h"
 #include "ErasureCodeIsa.h"
 #include "xor_op.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 using namespace std;
 
 // -----------------------------------------------------------------------------

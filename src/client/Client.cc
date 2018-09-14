@@ -93,7 +93,7 @@
 #include "ObjecterWriteback.h"
 #include "posix_acl.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stat.h"
 
 #include "include/cephfs/ceph_statx.h"
