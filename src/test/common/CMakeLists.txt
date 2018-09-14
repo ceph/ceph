@@ -21,6 +21,13 @@ if(HAVE_BLKID)
   target_link_libraries(unittest_blkdev ceph-common ${BLKID_LIBRARIES})
 endif()
 
+# unittest_lockdep
+add_executable(unittest_lockdep
+  test_lockdep.cc
+  )
+add_ceph_unittest(unittest_lockdep)
+target_link_libraries(unittest_lockdep ceph-common global)
+
 # unittest_bloom_filter
 add_executable(unittest_bloom_filter
   test_bloom_filter.cc
