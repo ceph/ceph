@@ -83,12 +83,16 @@ seastar::future<> SocketMessenger::accept(seastar::connected_socket socket,
                                             peer_addr, std::move(socket));
   // initiate the handshake
   return conn->server_handshake()
-    .handle_exception([conn] (std::exception_ptr eptr) {
+    .then([=] {
+      // notify the dispatcher and allow them to reject the connection
+      return seastar::with_gate(pending_dispatch, [=] {
+          return dispatcher->ms_handle_accept(conn);
+        });
+    }).handle_exception([conn] (std::exception_ptr eptr) {
       // close the connection before returning errors
       return seastar::make_exception_future<>(eptr)
         .finally([conn] { return conn->close(); });
     }).then([this, conn] {
-      dispatcher->ms_handle_accept(conn);
       // dispatch messages until the connection closes or the dispatch
       // queue shuts down
       return dispatch(std::move(conn));
@@ -133,13 +137,17 @@ SocketMessenger::connect(const entity_addr_t& addr, entity_type_t peer_type)
                                                 std::move(socket));
       // complete the handshake before returning to the caller
       return conn->client_handshake(peer_type, get_myname().type())
-        .handle_exception([conn] (std::exception_ptr eptr) {
+        .then([=] {
+          // notify the dispatcher and allow them to reject the connection
+          return seastar::with_gate(pending_dispatch, [=] {
+            return dispatcher->ms_handle_connect(conn);
+          });
+        }).handle_exception([conn] (std::exception_ptr eptr) {
           // close the connection before returning errors
           return seastar::make_exception_future<>(eptr)
             .finally([conn] { return conn->close(); });
 	  // TODO: retry on fault
         }).then([=] {
-          dispatcher->ms_handle_connect(conn);
           // dispatch replies on this connection
           dispatch(conn)
             .handle_exception([] (std::exception_ptr eptr) {});
