@@ -858,8 +858,8 @@ class Module(MgrModule):
                 else:
                     bad_steps = 0
                     best_pe = next_pe
-                    best_ws = next_ws
-                    best_ow = next_ow
+                    best_ws = copy.deepcopy(next_ws)
+                    best_ow = copy.deepcopy(next_ow)
                     if best_pe.score == 0:
                         break
             left -= 1
