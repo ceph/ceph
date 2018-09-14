@@ -13,17 +13,6 @@ from six import iteritems
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
-DEFAULTS = {
-    'enable_monitoring': str(False),
-    'scrape_frequency': str(86400),
-    'retention_period': str(86400 * 14),
-    'pool_name': 'device_health_metrics',
-    'mark_out_threshold': str(86400*14),
-    'warn_threshold': str(86400*14*2),
-    'self_heal': str(True),
-    'sleep_interval': str(600),
-}
-
 DEVICE_HEALTH = 'DEVICE_HEALTH'
 DEVICE_HEALTH_IN_USE = 'DEVICE_HEALTH_IN_USE'
 DEVICE_HEALTH_TOOMANY = 'DEVICE_HEALTH_TOOMANY'
@@ -36,14 +25,38 @@ HEALTH_MESSAGES = {
 
 class Module(MgrModule):
     OPTIONS = [
-        {'name': 'enable_monitoring'},
-        {'name': 'scrape_frequency'},
-        {'name': 'pool_name'},
-        {'name': 'retention_period'},
-        {'name': 'mark_out_threshold'},
-        {'name': 'warn_threshold'},
-        {'name': 'self_heal'},
-        {'name': 'sleep_interval'},
+        {
+            'name': 'enable_monitoring',
+            'default': str(False),
+        },
+        {
+            'name': 'scrape_frequency',
+            'default': str(86400),
+        },
+        {
+            'name': 'pool_name',
+            'default': 'device_health_metrics',
+        },
+        {
+            'name': 'retention_period',
+            'default': str(86400 * 14),
+        },
+        {
+            'name': 'mark_out_threshold',
+            'default': str(86400 * 14 * 2),
+        },
+        {
+            'name': 'warn_threshold',
+            'default': str(86400 * 14 * 2),
+        },
+        {
+            'name': 'self_heal',
+            'default': str(True),
+        },
+        {
+            'name': 'sleep_interval',
+            'default': str(600),
+        },
     ]
 
     COMMANDS = [
@@ -94,8 +107,8 @@ class Module(MgrModule):
         super(Module, self).__init__(*args, **kwargs)
 
         # options
-        for k, v in DEFAULTS.iteritems():
-            setattr(self, k, v)
+        for opt in self.OPTIONS:
+            setattr(self, opt['name'], opt['default'])
 
         # other
         self.run = True
@@ -160,9 +173,11 @@ class Module(MgrModule):
             assert before != after
 
     def refresh_config(self):
-        for opt, value in iteritems(DEFAULTS):
-            setattr(self, opt, self.get_config(opt) or value)
-            self.log.debug(' %s = %s', opt, getattr(self, opt))
+        for opt in self.OPTIONS:
+            setattr(self,
+                    opt['name'],
+                    self.get_config(opt['name']) or opt['default'])
+            self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
     def serve(self):
         self.log.info("Starting")
