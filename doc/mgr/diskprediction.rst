@@ -31,13 +31,19 @@ The connection settings are used for connection between Ceph and DiskPrediction 
 Local Mode
 ----------
 
-The *diskprediction* plugin leverages Ceph device health check to collect disk health metrics and uses internal predictor module to produce the disk failure prediction and returns back to Ceph. Thus, no connection settings are required in local mode. The local predictor module requires at least six datasets of device health metrics to implement the prediction. 
+The *diskprediction* plugin leverages Ceph device health check to collect disk health metrics and uses internal predictor module to produce the disk failure prediction and returns back to Ceph. Thus, no connection settings are required in local mode. The local predictor module requires at least six datasets of device health metrics to implement the prediction.
+
+Run the following command to use local predictor predict device life expectancy.
+
+::
+
+    ceph device predict-life-expectancy <device id>
 
 
 Cloud Mode 
 ----------
 
-The user registration is required in cloud mode. The users have to sign up their accounts at http://federator-ai-homepage.s3-website-us-west-2.amazonaws.com/#/ to receive the following DiskPrediction server information for connection settings. 
+The user registration is required in cloud mode. The users have to sign up their accounts at https://www.diskprophet.com/#/ to receive the following DiskPrediction server information for connection settings. 
 
 **Certificate file path**: After user registration is confirmed, the system will send a confirmation email including a certificate file download link. Download the certificate file and save it to the Ceph system. Run the following command to verify the file. Without certificate file verification, the connection settings cannot be completed.
 	
@@ -320,7 +326,7 @@ The *near_failure* attribute for disk failure prediction state indicates disk li
 +--------------------+-----------------------------------------------------+
 |Bad                 | < 2 weeks                                           |
 +--------------------+-----------------------------------------------------+
-
+ 
 
 Debugging
 =========
