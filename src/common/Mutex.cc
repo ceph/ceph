@@ -73,7 +73,8 @@ Mutex::~Mutex() {
   }
 }
 
-void Mutex::Lock(bool no_lockdep) {
+void Mutex::lock(bool no_lockdep)
+{
   if (lockdep && g_lockdep && !no_lockdep && !recursive) _will_lock();
   int r = pthread_mutex_lock(&_m);
   ceph_assert(r == 0);
@@ -81,7 +82,8 @@ void Mutex::Lock(bool no_lockdep) {
   _post_lock();
 }
 
-void Mutex::Unlock() {
+void Mutex::unlock()
+{
   _pre_unlock();
   if (lockdep && g_lockdep) _will_unlock();
   int r = pthread_mutex_unlock(&_m);

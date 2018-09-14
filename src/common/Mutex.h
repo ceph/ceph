@@ -63,6 +63,9 @@ public:
   }
 
   bool TryLock() {
+    return try_lock();
+  }
+  bool try_lock() {
     int r = pthread_mutex_trylock(&_m);
     if (r == 0) {
       if (lockdep && g_lockdep) _locked();
@@ -71,7 +74,10 @@ public:
     return r == 0;
   }
 
-  void Lock(bool no_lockdep=false);
+  void Lock(bool no_lockdep=false) {
+    lock(no_lockdep);
+  }
+  void lock(bool no_lockdep=false);
 
   void _post_lock() {
     if (!recursive) {
@@ -90,7 +96,10 @@ public:
       ceph_assert(nlock == 0);
     }
   }
-  void Unlock();
+  void Unlock() {
+    unlock();
+  }
+  void unlock();
 
   friend class Cond;
 
@@ -101,10 +110,10 @@ public:
 
   public:
     explicit Locker(Mutex& m) : mutex(m) {
-      mutex.Lock();
+      mutex.lock();
     }
     ~Locker() {
-      mutex.Unlock();
+      mutex.unlock();
     }
   };
 };
