@@ -4,12 +4,13 @@ meta:
    Must be run on bare-metal machines.
    On VMs performance results will be inconsistent
    and can't be compared across runs.
-   Run ceph on a single node.
+   Run ceph on a 2 node cluster with separate client.
    Use xfs beneath the osds.
    Setup rgw on client.0
 
 roles:
-- [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
+- [mon.a, mgr.x, osd.0, osd.1, osd.2]
+- [client.0]
 tasks:
 - install:
 - ceph:
