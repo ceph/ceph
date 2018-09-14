@@ -20,6 +20,7 @@
 
 #include <string>
 #include <pthread.h>
+#include <mutex>
 
 using namespace ceph;
 
@@ -105,17 +106,7 @@ public:
 
 
 public:
-  class Locker {
-    Mutex &mutex;
-
-  public:
-    explicit Locker(Mutex& m) : mutex(m) {
-      mutex.lock();
-    }
-    ~Locker() {
-      mutex.unlock();
-    }
-  };
+  typedef std::lock_guard<Mutex> Locker;
 };
 
 
