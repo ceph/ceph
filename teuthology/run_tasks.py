@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+import time
 import types
 
 from copy import deepcopy
@@ -151,6 +152,13 @@ def run_tasks(tasks, ctx):
     finally:
         try:
             exc_info = sys.exc_info()
+            sleep_before_teardown = ctx.config.get('sleep_before_teardown')
+            if sleep_before_teardown:
+                log.info(
+                    'Sleeping for {} seconds before unwinding because'
+                    ' --sleep-before-teardown was given...'
+                    .format(sleep_before_teardown))
+                time.sleep(sleep_before_teardown)
             while stack:
                 taskname, manager = stack.pop()
                 log.debug('Unwinding manager %s', taskname)

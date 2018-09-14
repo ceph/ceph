@@ -79,6 +79,11 @@ Standard arguments:
   --validate-sha1 <bool>
                               Validate that git SHA1s passed to -S exist.
                               [default: true]
+  --sleep-before-teardown <seconds>
+                              Number of seconds to sleep before tearing down
+                              the test cluster(s). Use with care, as this
+                              applies to all jobs in the run.
+                              [default: 0]
 
 Scheduler arguments:
   --owner <owner>             Job owner

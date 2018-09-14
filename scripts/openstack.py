@@ -187,6 +187,11 @@ def get_suite_parser():
         help=("Use tasks and suite definition in this repository"),
         default=os.getenv('TEUTH_SUITE_REPO', 'https://github.com/ceph/ceph'),
     )
+    parser.add_argument(
+        '--sleep-before-teardown',
+        help='Number of seconds to sleep before tearing down the target VMs',
+        default=0
+    )
     return parser
 
 def get_openstack_parser():
