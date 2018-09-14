@@ -42,7 +42,7 @@ Or a single daemon's devices can be scraped with::
 The stored health metrics for a device can be retrieved (optionally
 for a specific timestamp) with::
 
-  ceph device show-health-metrics <devid> [sample-timestamp]
+  ceph device get-health-metrics <devid> [sample-timestamp]
 
 Health monitoring
 -----------------

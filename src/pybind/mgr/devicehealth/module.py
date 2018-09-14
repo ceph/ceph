@@ -67,7 +67,7 @@ class Module(MgrModule):
             "perm": "r"
         },
         {
-            "cmd": "device show-health-metrics "
+            "cmd": "device get-health-metrics "
                    "name=devid,type=CephString "
                    "name=sample,type=CephString,req=False",
             "desc": "Show stored device metrics for the device",
@@ -126,7 +126,7 @@ class Module(MgrModule):
             if 'devid' in cmd:
                 return self.scrape_device(cmd['devid'])
             return self.scrape_all()
-        elif cmd['prefix'] == 'device show-health-metrics':
+        elif cmd['prefix'] == 'device get-health-metrics':
             return self.show_device_metrics(cmd['devid'], cmd.get('sample'))
         elif cmd['prefix'] == 'device check-health':
             return self.check_health()
