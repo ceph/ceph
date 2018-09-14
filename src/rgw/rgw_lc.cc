@@ -261,7 +261,7 @@ bool RGWLC::obj_has_expired(double timediff, int days)
   return (timediff >= cmp);
 }
 
-int RGWLC::remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, bool remove_indeed)
+int RGWLC::remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, const string& owner, const string& owner_display_name, bool remove_indeed)
 {
   if (remove_indeed) {
     return rgw_remove_object(store, bucket_info, bucket_info.bucket, obj_key);
@@ -269,7 +269,18 @@ int RGWLC::remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, b
     obj_key.instance.clear();
     RGWObjectCtx rctx(store);
     rgw_obj obj(bucket_info.bucket, obj_key);
-    return store->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status());
+    ACLOwner obj_owner;
+    obj_owner.set_id(rgw_user {owner});
+    obj_owner.set_name(owner_display_name);
+
+    RGWRados::Object del_target(store, bucket_info, rctx, obj);
+    RGWRados::Object::Delete del_op(&del_target);
+
+    del_op.params.bucket_owner = bucket_info.owner;
+    del_op.params.versioning_status = bucket_info.versioning_status();
+    del_op.params.obj_owner = obj_owner;
+
+    return del_op.delete_obj();
   }
 }
 
@@ -413,7 +424,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
             }
             if (state->mtime != obj_iter->meta.mtime)//Check mtime again to avoid delete a recently update object as much as possible
               continue;
-            ret = remove_expired_obj(bucket_info, obj_iter->key, true);
+            ret = remove_expired_obj(bucket_info, obj_iter->key, obj_iter->meta.owner, obj_iter->meta.owner_display_name, true);
             if (ret < 0) {
               ldout(cct, 0) << "ERROR: remove_expired_obj " << dendl;
             } else {
@@ -519,7 +530,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
               if (state->mtime != obj_iter->meta.mtime)//Check mtime again to avoid delete a recently update object as much as possible
                 continue;
             }
-            ret = remove_expired_obj(bucket_info, obj_iter->key, remove_indeed);
+            ret = remove_expired_obj(bucket_info, obj_iter->key, obj_iter->meta.owner, obj_iter->meta.owner_display_name, remove_indeed);
             if (ret < 0) {
               ldout(cct, 0) << "ERROR: remove_expired_obj " << dendl;
             } else {
