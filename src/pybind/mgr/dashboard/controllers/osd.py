@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from datetime import datetime
 from __future__ import absolute_import
 from . import ApiController, RESTController, UpdatePermission
 from .. import mgr, logger
@@ -7,11 +8,14 @@ from ..services.ceph_service import CephService, SendCommandError
 from ..services.exception import handle_send_command_error
 from ..tools import str_to_bool
 
+WEEK_DAYS_TIME = 7 * 24 * 60 * 60
+
 
 @ApiController('/osd', Scope.OSD)
 class Osd(RESTController):
     def list(self):
         osds = self.get_osd_map()
+        devices = mgr.get('devices')
         # Extending by osd stats information
         for s in mgr.get('osd_stats')['osd_stats']:
             osds[str(s['osd'])].update({'osd_stats': s})
@@ -31,11 +35,24 @@ class Osd(RESTController):
             o = osds[o_id]
             o['stats'] = {}
             o['stats_history'] = {}
+            life_expectancy_weeks = None
+            # Get device info
+            devs = self._parse_osd_devices(o_id, devices)
+            o['devices'] = \
+                {
+                    dev_info.get('dev_id'):
+                        self._get_device_life_expectancy_weeks(dev_info) for dev_info in devs}
+            if o['devices'] and o['devices'].values():
+                try:
+                    life_expectancy_weeks = min(filter(None, o['devices'].values()))
+                except ValueError:
+                    life_expectancy_weeks = None
             osd_spec = str(o['osd'])
             for s in ['osd.op_w', 'osd.op_in_bytes', 'osd.op_r', 'osd.op_out_bytes']:
                 prop = s.split('.')[1]
                 o['stats'][prop] = CephService.get_rate('osd', osd_spec, s)
                 o['stats_history'][prop] = CephService.get_rates('osd', osd_spec, s)
+            o['stats']['lf_s'] = self._convert_expectency_state(life_expectancy_weeks)
             # Gauge stats
             for s in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
                 o['stats'][s.split('.')[1]] = mgr.get_latest('osd', osd_spec, s)
@@ -47,6 +64,71 @@ class Osd(RESTController):
             osd['id'] = osd['osd']
             osds[str(osd['id'])] = osd
         return osds
+
+    def _convert_expectency_state(self, life_expectancy_weeks):
+        if life_expectancy_weeks is None:
+            state = 'unknown'
+        elif life_expectancy_weeks >= 6:
+            state = 'green'
+        elif 6 > life_expectancy_weeks >= 4:
+            state = 'yellow'
+        elif life_expectancy_weeks < 4:
+            state = 'red'
+        return state
+
+    def _get_device_life_expectancy_weeks(self, dev_info):
+        life_expectancy_weeks = None
+        dev_id = dev_info.get('dev_id', 'None')
+        try:
+            if dev_info:
+                i_to_day = None
+                i_from_day = None
+                from_day = dev_info.get('life_expectancy_min', '')
+                to_day = dev_info.get('life_expectancy_max', '')
+                if to_day:
+                    try:
+                        i_to_day = \
+                            int(datetime.strptime(
+                                to_day[:10], '%Y-%m-%d').strftime('%s'))
+                    except ValueError:
+                        i_to_day = None
+                if from_day:
+                    try:
+                        i_from_day = \
+                            int(datetime.strptime(
+                                from_day[:10], '%Y-%m-%d').strftime('%s'))
+                    except ValueError:
+                        i_from_day = None
+                if i_to_day and i_from_day:
+                    life_expectancy_weeks = \
+                        int((i_to_day - i_from_day) // WEEK_DAYS_TIME)
+                elif i_from_day and not i_to_day:
+                    # When i_to_day is not defied, it means forever life.
+                    life_expectancy_weeks = 9999
+        except ValueError:
+            logger.error(
+                'failed to parse device %s life expectancy weeks', dev_id)
+        return life_expectancy_weeks
+
+    def _parse_osd_devices(self, osd_id, devices):
+        result = []
+        if str(osd_id).isdigit():
+            osd_name = 'osd.%s' % osd_id
+        else:
+            osd_name = osd_id
+        if devices:
+            for dev in devices.get('devices', []):
+                if osd_name in dev.get('daemons', []):
+                    dev_id = dev.get('devid')
+                    dev_info = {
+                        'dev_id': dev_id,
+                        'life_expectancy_max':
+                            dev.get('life_expectancy_max', None),
+                        'life_expectancy_min':
+                            dev.get('life_expectancy_min', None)
+                    }
+                    result.append(dev_info)
+        return result
 
     @handle_send_command_error('osd')
     def get(self, svc_id):

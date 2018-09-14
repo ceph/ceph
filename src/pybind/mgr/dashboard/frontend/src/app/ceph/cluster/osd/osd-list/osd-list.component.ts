@@ -21,6 +21,8 @@ import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.compo
 export class OsdListComponent implements OnInit {
   @ViewChild('statusColor')
   statusColor: TemplateRef<any>;
+  @ViewChild('statusLight')
+  statusLight: TemplateRef<any>;
   @ViewChild('osdUsageTpl')
   osdUsageTpl: TemplateRef<any>;
   @ViewChild(TableComponent)
@@ -60,7 +62,8 @@ export class OsdListComponent implements OnInit {
         cellTransformation: CellTemplate.sparkline
       },
       { prop: 'stats.op_r', name: 'Read ops', cellTransformation: CellTemplate.perSecond },
-      { prop: 'stats.op_w', name: 'Write ops', cellTransformation: CellTemplate.perSecond }
+      { prop: 'stats.op_w', name: 'Write ops', cellTransformation: CellTemplate.perSecond },
+      { prop: 'stats.lf_s', name: 'Expectancy state', cellTemplate: this.statusLight }
     ];
   }
 

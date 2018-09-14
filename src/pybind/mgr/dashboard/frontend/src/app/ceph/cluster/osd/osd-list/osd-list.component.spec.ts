@@ -1,6 +1,7 @@
 import { HttpClientModule } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { TooltipModule } from 'ngx-bootstrap/';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { configureTestBed } from '../../../../../testing/unit-test-helper';
@@ -33,6 +34,7 @@ describe('OsdListComponent', () => {
       TabsModule.forRoot(),
       DataTableModule,
       ComponentsModule,
+      TooltipModule.forRoot(),
       SharedModule
     ],
     declarations: [OsdListComponent, OsdDetailsComponent, OsdPerformanceHistogramComponent],
