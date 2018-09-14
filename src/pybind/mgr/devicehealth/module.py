@@ -410,6 +410,9 @@ class Module(MgrModule):
             devid = dev['devid']
             if 'life_expectancy_min' not in dev:
                 continue
+            # ignore devices that are not consumed by any daemons
+            if not dev['daemons']:
+                continue
             # life_expectancy_(min/max) is in the format of:
             # '%Y-%m-%d %H:%M:%S.%f', e.g.:
             # '2019-01-20 21:12:12.000000'
