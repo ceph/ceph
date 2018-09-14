@@ -414,8 +414,6 @@ public:
 
   void queue_peering_event(PGPeeringEventRef evt);
   void do_peering_event(PGPeeringEventRef evt, RecoveryCtx *rcx);
-  void queue_query(epoch_t msg_epoch, epoch_t query_epoch,
-		   pg_shard_t from, const pg_query_t& q);
   void queue_null(epoch_t msg_epoch, epoch_t query_epoch);
   void queue_flushed(epoch_t started_at);
   void handle_advance_map(
