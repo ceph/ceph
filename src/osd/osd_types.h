@@ -425,14 +425,12 @@ struct pg_t {
 
   bool contains(int bits, const ghobject_t& oid) {
     return
-      ((int64_t)m_pool == oid.hobj.pool ||
-       hobject_t::get_temp_pool(m_pool) == oid.hobj.pool) &&
+      (int64_t)m_pool == oid.hobj.get_logical_pool() &&
       oid.match(bits, ps());
   }
   bool contains(int bits, const hobject_t& oid) {
     return
-      ((int64_t)m_pool == oid.pool ||
-       hobject_t::get_temp_pool(m_pool) == oid.pool) &&
+      (int64_t)m_pool == oid.get_logical_pool() &&
       oid.match(bits, ps());
   }
 

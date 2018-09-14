@@ -101,6 +101,12 @@ public:
   bool is_meta() const {
     return is_meta_pool(pool);
   }
+  int64_t get_logical_pool() const {
+    if (is_temp_pool(pool))
+      return get_temp_pool(pool);  // it's reversible
+    else
+      return pool;
+  }
 
   hobject_t() : snap(0), hash(0), max(false), pool(INT64_MIN) {
     build_hash_cache();
