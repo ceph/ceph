@@ -22,17 +22,11 @@ void SnapshotRemoveRequest::send() {
   ceph_assert(m_image_ctx.snap_lock.is_wlocked());
 
   if ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) != 0) {
-    compute_next_snap_id();
-
-    uint64_t flags;
-    int r = m_image_ctx.get_flags(m_snap_id, &flags);
+    int r = m_image_ctx.get_flags(m_snap_id, &m_flags);
     ceph_assert(r == 0);
 
-    if ((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0) {
-      invalidate_next_map();
-    } else {
-      load_map();
-    }
+    compute_next_snap_id();
+    load_map();
   } else {
     remove_map();
   }
@@ -63,6 +57,8 @@ void SnapshotRemoveRequest::handle_load_map(int r) {
     r = cls_client::object_map_load_finish(&it, &m_snap_object_map);
   }
   if (r == -ENOENT) {
+    // implies we have already deleted this snapshot and handled the
+    // necessary fast-diff cleanup
     complete(0);
     return;
   } else if (r < 0) {
@@ -80,6 +76,15 @@ void SnapshotRemoveRequest::handle_load_map(int r) {
 }
 
 void SnapshotRemoveRequest::remove_snapshot() {
+  if ((m_flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0) {
+    // snapshot object map exists on disk but is invalid. cannot clean fast-diff
+    // on next snapshot if current snapshot was invalid.
+    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+    invalidate_next_map();
+    return;
+  }
+
   CephContext *cct = m_image_ctx.cct;
   std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id, m_next_snap_id));
   ldout(cct, 5) << "oid=" << oid << dendl;
