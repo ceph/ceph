@@ -92,32 +92,36 @@ override_dh_systemd_start:
 	# systemd start done as part of dh_installinit
 
 override_dh_strip:
-	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
-	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
-	dh_strip -pceph-mgr --dbg-package=ceph-mgr-dbg
-	dh_strip -pceph-mon --dbg-package=ceph-mon-dbg
-	dh_strip -pceph-osd --dbg-package=ceph-osd-dbg
-	dh_strip -pceph-base --dbg-package=ceph-base-dbg
-	dh_strip -prbd-fuse --dbg-package=rbd-fuse-dbg
-	dh_strip -prbd-mirror --dbg-package=rbd-mirror-dbg
-	dh_strip -pceph-immutable-object-cache --dbg-package=ceph-immutable-object-cache-dbg
-	dh_strip -prbd-nbd --dbg-package=rbd-nbd-dbg
-	dh_strip -pceph-common --dbg-package=ceph-common-dbg
-	dh_strip -plibrados2 --dbg-package=librados2-dbg
-	dh_strip -plibradosstriper1 --dbg-package=libradosstriper1-dbg
-	dh_strip -plibrbd1 --dbg-package=librbd1-dbg
-	dh_strip -plibcephfs2 --dbg-package=libcephfs2-dbg
-	dh_strip -plibrgw2 --dbg-package=librgw2-dbg
-	dh_strip -pradosgw --dbg-package=radosgw-dbg
-	dh_strip -pceph-test --dbg-package=ceph-test-dbg
-	dh_strip -ppython-rados --dbg-package=python-rados-dbg
-	dh_strip -ppython3-rados --dbg-package=python3-rados-dbg
-	dh_strip -ppython-rbd --dbg-package=python-rbd-dbg
-	dh_strip -ppython3-rbd --dbg-package=python3-rbd-dbg
-	dh_strip -ppython-rgw --dbg-package=python-rgw-dbg
-	dh_strip -ppython3-rgw --dbg-package=python3-rgw-dbg
-	dh_strip -ppython-cephfs --dbg-package=python-cephfs-dbg
-	dh_strip -ppython3-cephfs --dbg-package=python3-cephfs-dbg
+	for pkg in                    \
+      ceph-mds                    \
+      ceph-fuse                   \
+      ceph-mgr                    \
+      ceph-mon                    \
+      ceph-osd                    \
+      ceph-base                   \
+      rbd-fuse                    \
+      rbd-mirror                  \
+      ceph-immutable-object-cache \
+      rbd-nbd                     \
+      ceph-common                 \
+      librados2                   \
+      libradosstriper1            \
+      librbd1                     \
+      libcephfs2                  \
+      librgw2                     \
+      radosgw                     \
+      ceph-test                   \
+      python-rados                \
+      python3-rados               \
+      python-rbd                  \
+      python3-rbd                 \
+      python-rgw                  \
+      python3-rgw                 \
+      python-cephfs               \
+      python3-cephfs;             \
+	do                            \
+	  dh_strip -p$$pkg --dbgsym-migration="$$pkg-dbg (<< 15.1.0-1)"; \
+	done
 
 override_dh_shlibdeps:
 	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor
