@@ -32,14 +32,12 @@
 #include <stdexcept>
 #include <system_error>
 
-#define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
-#include <cryptopp/md5.h>
-
 #include "msg/async/dpdk/EventDPDK.h"
 
 #include "include/utime.h"
 #include "common/Throttle.h"
 #include "common/ceph_time.h"
+#include "common/ceph_crypto.h"
 #include "msg/async/Event.h"
 #include "IPChecksum.h"
 #include "IP.h"
@@ -1441,7 +1439,9 @@ tcp_sequence tcp<InetTraits>::tcb::get_isn() {
   hash[1] = _foreign_ip.ip;
   hash[2] = (_local_port << 16) + _foreign_port;
   hash[3] = _isn_secret.key[15];
-  CryptoPP::Weak::MD5::Transform(hash, _isn_secret.key);
+  ceph::crypto::MD5 md5;
+  md5.Update((const unsigned char*)_isn_secret.key, sizeof(_isn_secret.key));
+  md5.Final((unsigned char*)hash);
   auto seq = hash[0];
   auto m = duration_cast<microseconds>(clock_type::now().time_since_epoch());
   seq += m.count() / 4;
