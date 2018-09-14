@@ -192,7 +192,7 @@ public:
 
     void *_void_dequeue() override {
       {
-	Mutex::Locker l(_lock);
+	std::lock_guard<Mutex> l(_lock);
 	if (_empty())
 	  return 0;
 	U u = _dequeue();
@@ -235,12 +235,12 @@ public:
       pool->remove_work_queue(this);
     }
     void queue(T item) {
-      Mutex::Locker l(pool->_lock);
+      std::lock_guard<Mutex> l(pool->_lock);
       _enqueue(item);
       pool->_cond.SignalOne();
     }
     void queue_front(T item) {
-      Mutex::Locker l(pool->_lock);
+      std::lock_guard<Mutex> l(pool->_lock);
       _enqueue_front(item);
       pool->_cond.SignalOne();
     }
@@ -354,7 +354,7 @@ public:
       {
         // if this queue is empty and not processing, don't wait for other
         // queues to finish processing
-        Mutex::Locker l(m_pool->_lock);
+        std::lock_guard<Mutex> l(m_pool->_lock);
         if (m_processing == 0 && m_items.empty()) {
           return;
         }
@@ -362,12 +362,12 @@ public:
       m_pool->drain(this);
     }
     void queue(T *item) {
-      Mutex::Locker l(m_pool->_lock);
+      std::lock_guard<Mutex> l(m_pool->_lock);
       m_items.push_back(item);
       m_pool->_cond.SignalOne();
     }
     bool empty() {
-      Mutex::Locker l(m_pool->_lock);
+      std::lock_guard<Mutex> l(m_pool->_lock);
       return _empty();
     }
   protected:
@@ -407,7 +407,7 @@ public:
 
     virtual void process(T *item) = 0;
     void process_finish() {
-      Mutex::Locker locker(m_pool->_lock);
+      std::lock_guard<Mutex> locker(m_pool->_lock);
       _void_process_finish(nullptr);
     }
 
@@ -419,12 +419,12 @@ public:
       return m_items.front();
     }
     void requeue(T *item) {
-      Mutex::Locker pool_locker(m_pool->_lock);
+      std::lock_guard<Mutex> pool_locker(m_pool->_lock);
       _void_process_finish(nullptr);
       m_items.push_front(item);
     }
     void signal() {
-      Mutex::Locker pool_locker(m_pool->_lock);
+      std::lock_guard<Mutex> pool_locker(m_pool->_lock);
       m_pool->_cond.SignalOne();
     }
     Mutex &get_pool_lock() {
@@ -465,18 +465,18 @@ public:
 
   /// return number of threads currently running
   int get_num_threads() {
-    Mutex::Locker l(_lock);
+    std::lock_guard<Mutex> l(_lock);
     return _num_threads;
   }
   
   /// assign a work queue to this thread pool
   void add_work_queue(WorkQueue_* wq) {
-    Mutex::Locker l(_lock);
+    std::lock_guard<Mutex> l(_lock);
     work_queues.push_back(wq);
   }
   /// remove a work queue from this thread pool
   void remove_work_queue(WorkQueue_* wq) {
-    Mutex::Locker l(_lock);
+    std::lock_guard<Mutex> l(_lock);
     unsigned i = 0;
     while (work_queues[i] != wq)
       i++;
@@ -506,7 +506,7 @@ public:
   }
   /// wake up a waiter (without lock held)
   void wake() {
-    Mutex::Locker l(_lock);
+    std::lock_guard<Mutex> l(_lock);
     _cond.Signal();
   }
   void _wait() {
@@ -585,7 +585,7 @@ public:
 
   void queue(Context *ctx, int result = 0) {
     if (result != 0) {
-      Mutex::Locker locker(m_lock);
+      std::lock_guard<Mutex> locker(m_lock);
       m_context_results[ctx] = result;
     }
     ThreadPool::PointerWQ<Context>::queue(ctx);
@@ -594,14 +594,14 @@ protected:
   void _clear() override {
     ThreadPool::PointerWQ<Context>::_clear();
 
-    Mutex::Locker locker(m_lock);
+    std::lock_guard<Mutex> locker(m_lock);
     m_context_results.clear();
   }
 
   void process(Context *ctx) override {
     int result = 0;
     {
-      Mutex::Locker locker(m_lock);
+      std::lock_guard<Mutex> locker(m_lock);
       ceph::unordered_map<Context *, int>::iterator it =
         m_context_results.find(ctx);
       if (it != m_context_results.end()) {

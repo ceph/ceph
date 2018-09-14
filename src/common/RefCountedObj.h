@@ -90,7 +90,7 @@ struct RefCountedCond : public RefCountedObject {
   RefCountedCond() : complete(false), lock("RefCountedCond"), rval(0) {}
 
   int wait() {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     while (!complete) {
       cond.Wait(lock);
     }
@@ -98,7 +98,7 @@ struct RefCountedCond : public RefCountedObject {
   }
 
   void done(int r) {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     rval = r;
     complete = true;
     cond.SignalAll();

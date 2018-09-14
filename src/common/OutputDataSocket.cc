@@ -389,7 +389,7 @@ void OutputDataSocket::shutdown()
 
 void OutputDataSocket::append_output(bufferlist& bl)
 {
-  Mutex::Locker l(m_lock);
+  std::lock_guard<Mutex> l(m_lock);
 
   if (data_size + bl.length() > data_max_backlog) {
     ldout(m_cct, 20) << "dropping data output, max backlog reached" << dendl;

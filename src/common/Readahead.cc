@@ -168,12 +168,12 @@ void Readahead::set_trigger_requests(int trigger_requests) {
 }
 
 uint64_t Readahead::get_min_readahead_size(void) {
-  Mutex::Locker lock(m_lock);
+  std::lock_guard<Mutex> lock(m_lock);
   return m_readahead_min_bytes;
 }
 
 uint64_t Readahead::get_max_readahead_size(void) {
-  Mutex::Locker lock(m_lock);
+  std::lock_guard<Mutex> lock(m_lock);
   return m_readahead_max_bytes;
 }
 
