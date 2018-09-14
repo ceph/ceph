@@ -21,23 +21,23 @@ class QueueRing {
     }
 
     void enqueue(const T& entry) {
-      lock.Lock();
+      lock.lock();
       if (entries.empty()) {
         cond.Signal();
       }
       entries.push_back(entry);
-      lock.Unlock();
+      lock.unlock();
     }
 
     void dequeue(T *entry) {
-      lock.Lock();
+      lock.lock();
       if (entries.empty()) {
         cond.Wait(lock);
       };
       ceph_assert(!entries.empty());
       *entry = entries.front();
       entries.pop_front();
-      lock.Unlock();
+      lock.unlock();
     };
   };
 

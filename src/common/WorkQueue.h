@@ -138,21 +138,21 @@ public:
     }
 
     bool queue(T *item) {
-      pool->_lock.Lock();
+      pool->_lock.lock();
       bool r = _enqueue(item);
       pool->_cond.SignalOne();
-      pool->_lock.Unlock();
+      pool->_lock.unlock();
       return r;
     }
     void dequeue(T *item) {
-      pool->_lock.Lock();
+      pool->_lock.lock();
       _dequeue(item);
-      pool->_lock.Unlock();
+      pool->_lock.unlock();
     }
     void clear() {
-      pool->_lock.Lock();
+      pool->_lock.lock();
       _clear();
-      pool->_lock.Unlock();
+      pool->_lock.unlock();
     }
 
     void lock() {
@@ -201,25 +201,25 @@ public:
       return ((void*)1); // Not used
     }
     void _void_process(void *, TPHandle &handle) override {
-      _lock.Lock();
+      _lock.lock();
       ceph_assert(!to_process.empty());
       U u = to_process.front();
       to_process.pop_front();
-      _lock.Unlock();
+      _lock.unlock();
 
       _process(u, handle);
 
-      _lock.Lock();
+      _lock.lock();
       to_finish.push_back(u);
-      _lock.Unlock();
+      _lock.unlock();
     }
 
     void _void_process_finish(void *) override {
-      _lock.Lock();
+      _lock.lock();
       ceph_assert(!to_finish.empty());
       U u = to_finish.front();
       to_finish.pop_front();
-      _lock.Unlock();
+      _lock.unlock();
 
       _process_finish(u);
     }
@@ -299,21 +299,21 @@ public:
     }
     
     bool queue(T *item) {
-      pool->_lock.Lock();
+      pool->_lock.lock();
       bool r = _enqueue(item);
       pool->_cond.SignalOne();
-      pool->_lock.Unlock();
+      pool->_lock.unlock();
       return r;
     }
     void dequeue(T *item) {
-      pool->_lock.Lock();
+      pool->_lock.lock();
       _dequeue(item);
-      pool->_lock.Unlock();
+      pool->_lock.unlock();
     }
     void clear() {
-      pool->_lock.Lock();
+      pool->_lock.lock();
       _clear();
-      pool->_lock.Unlock();
+      pool->_lock.unlock();
     }
 
     Mutex &get_lock() {
@@ -488,11 +488,11 @@ public:
 
   /// take thread pool lock
   void lock() {
-    _lock.Lock();
+    _lock.lock();
   }
   /// release thread pool lock
   void unlock() {
-    _lock.Unlock();
+    _lock.unlock();
   }
 
   /// wait for a kick on this thread pool

@@ -156,12 +156,12 @@ public:
     *done = false;
   }
   void finish(int r) override {
-    lock->Lock();
+    lock->lock();
     if (rval)
       *rval = r;
     *done = true;
     cond->Signal();
-    lock->Unlock();
+    lock->unlock();
   }
 };
 
