@@ -18,6 +18,7 @@ const std::set<std::string> always_on_modules = {
   "crash",
   "status",
   "balancer",
+  "devicehealth",
 };
 
 /* The set of statically defined (C++-handled) commands.  This
