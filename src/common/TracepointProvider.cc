@@ -27,7 +27,7 @@ void TracepointProvider::handle_conf_change(
 }
 
 void TracepointProvider::verify_config(const ConfigProxy& conf) {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard<Mutex> locker(m_lock);
   if (m_handle) {
     return;
   }

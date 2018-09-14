@@ -132,19 +132,19 @@ public:
       lock("AsyncReserver::lock") {}
 
   void set_max(unsigned max) {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     max_allowed = max;
     do_queues();
   }
 
   void set_min_priority(unsigned min) {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     min_priority = min;
     do_queues();
   }
 
   void dump(Formatter *f) {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     _dump(f);
   }
   void _dump(Formatter *f) {
@@ -183,7 +183,7 @@ public:
     unsigned prio,            ///< [in] priority
     Context *on_preempt = 0   ///< [in] callback to be called if we are preempted (optional)
     ) {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     Reservation r(item, prio, on_reserved, on_preempt);
     rdout(10) << __func__ << " queue " << r << dendl;
     ceph_assert(!queue_pointers.count(item) &&
@@ -204,7 +204,7 @@ public:
   void cancel_reservation(
     T item                   ///< [in] key for reservation to cancel
     ) {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     auto i = queue_pointers.find(item);
     if (i != queue_pointers.end()) {
       unsigned prio = i->second.first;
@@ -240,7 +240,7 @@ public:
    * Return true if there are reservations in progress
    */
   bool has_reservation() {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     return !in_progress.empty();
   }
   static const unsigned MAX_PRIORITY = (unsigned)-1;

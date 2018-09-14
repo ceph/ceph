@@ -176,7 +176,7 @@ public:
   void *entry() override
   {
     while (1) {
-      Mutex::Locker l(_lock);
+      std::lock_guard<Mutex> l(_lock);
 
       if (_cct->_conf->heartbeat_interval) {
         utime_t interval(_cct->_conf->heartbeat_interval, 0);
@@ -202,14 +202,14 @@ public:
 
   void reopen_logs()
   {
-    Mutex::Locker l(_lock);
+    std::lock_guard<Mutex> l(_lock);
     _reopen_logs = true;
     _cond.Signal();
   }
 
   void exit_thread()
   {
-    Mutex::Locker l(_lock);
+    std::lock_guard<Mutex> l(_lock);
     _exit_thread = true;
     _cond.Signal();
   }
