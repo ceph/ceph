@@ -29,6 +29,7 @@ sensible.
     Writing plugins <plugins>
     Balancer plugin <balancer>
     Dashboard plugin <dashboard>
+    DiskPrediction plugin <diskprediction>
     Local pool plugin <localpool>
     RESTful plugin <restful>
     Zabbix plugin <zabbix>
