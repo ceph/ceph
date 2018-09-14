@@ -27,7 +27,8 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesInMemoryFlag) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   bool flags_set;
-  ASSERT_EQ(0, ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID, &flags_set));
+  ASSERT_EQ(0, ictx->test_flags(CEPH_NOSNAP,
+                                RBD_FLAG_OBJECT_MAP_INVALID, &flags_set));
   ASSERT_FALSE(flags_set);
 
   C_SaferCond cond_ctx;
@@ -44,7 +45,8 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesInMemoryFlag) {
   }
   ASSERT_EQ(0, cond_ctx.wait());
 
-  ASSERT_EQ(0, ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID, &flags_set));
+  ASSERT_EQ(0, ictx->test_flags(CEPH_NOSNAP,
+                                RBD_FLAG_OBJECT_MAP_INVALID, &flags_set));
   ASSERT_TRUE(flags_set);
 }
 
