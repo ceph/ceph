@@ -38,7 +38,6 @@ function _set_deepsea_minions {
 }
 
 function _initialize_minion_array {
-    set +x
     local m=
     local i=0
     if type salt-key > /dev/null 2>&1; then
@@ -53,7 +52,6 @@ function _initialize_minion_array {
         exit 1
     fi
     echo "There are $i minions in this Salt cluster"
-    set -x
 }
 
 function _update_salt {
@@ -118,22 +116,39 @@ function _zypper_ps {
     salt '*' cmd.run 'zypper ps -s' 2>/dev/null || true
 }
 
+function _python_versions {
+    type python2 > /dev/null 2>&1 && python2 --version || echo "Python 2 not installed"
+    type python3 > /dev/null 2>&1 && python3 --version || echo "Python 3 not installed"
+}
+
 function initialization_sequence {
     set +x
     _determine_master_minion
     _os_specific_install_deps
     _os_specific_repos_and_packages_info
-    python --version || true
-    python2 --version || true
-    python3 --version
-    deepsea --version || true
-    _set_deepsea_minions
+    set +e
+    _python_versions
+    type deepsea > /dev/null 2>&1 && deepsea --version || echo "deepsea CLI not installed"
     _initialize_minion_array
+    set -e
+    _set_deepsea_minions
     _update_salt
     cat_salt_config
     _initialize_storage_profile
     _initialize_and_vet_nodes
     set -x
+}
+
+function salt_api_test {
+    local tmpfile=$(mktemp)
+    echo "Salt API test: BEGIN"
+    systemctl --no-pager --full status salt-api.service
+    curl http://$(hostname):8000/ | tee $tmpfile # show curl output in log
+    test -s $tmpfile
+    jq . $tmpfile >/dev/null
+    echo -en "\n" # this is just for log readability
+    rm $tmpfile
+    echo "Salt API test: END"
 }
 
 function deploy_ceph {

@@ -264,13 +264,6 @@ function ceph_health_test {
     ! grep -q 'Timeout expired' $LOGFILE
 }
 
-function salt_api_test {
-    echo "Salt API test: BEGIN"
-    systemctl --no-pager --full status salt-api.service
-    curl http://$(hostname):8000/ | python3 -m json.tool
-    echo "Salt API test: END"
-}
-
 function rados_write_test {
     #
     # NOTE: function assumes the pool "write_test" already exists. Pool can be
