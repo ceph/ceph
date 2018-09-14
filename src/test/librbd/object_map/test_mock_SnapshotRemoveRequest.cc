@@ -107,6 +107,10 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, LoadMapMissing) {
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
+  auto snap_it = ictx->snap_info.find(snap_id);
+  ASSERT_NE(ictx->snap_info.end(), snap_it);
+  snap_it->second.flags |= RBD_FLAG_OBJECT_MAP_INVALID;
+
   expect_load_map(ictx, snap_id, -ENOENT);
 
   ceph::BitVector<2> object_map;
@@ -119,6 +123,15 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, LoadMapMissing) {
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
+
+  {
+    // shouldn't invalidate the HEAD revision when we fail to load
+    // the already deleted snapshot
+    RWLock::RLocker snap_locker(ictx->snap_lock);
+    uint64_t flags;
+    ASSERT_EQ(0, ictx->get_flags(CEPH_NOSNAP, &flags));
+    ASSERT_EQ(0U, flags & RBD_FLAG_OBJECT_MAP_INVALID);
+  }
 
   expect_unlock_exclusive_lock(*ictx);
 }

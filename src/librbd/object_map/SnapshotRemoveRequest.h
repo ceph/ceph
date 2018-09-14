@@ -58,6 +58,8 @@ private:
   uint64_t m_snap_id;
   uint64_t m_next_snap_id;
 
+  uint64_t m_flags = 0;
+
   ceph::BitVector<2> m_snap_object_map;
   bufferlist m_out_bl;
 
