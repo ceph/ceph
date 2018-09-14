@@ -34,7 +34,7 @@ protected:
     uint64_t op_submitted;
   public:
     SubmitManager(CephContext* cct) :
-      cct(cct), lock("JOS::SubmitManager::lock", false, true, false, cct),
+      cct(cct), lock("JOS::SubmitManager::lock", false, true, false),
       op_seq(0), op_submitted(0)
     {}
     uint64_t op_submit_start();
@@ -66,11 +66,11 @@ protected:
   public:
     ApplyManager(CephContext* cct, Journal *&j, Finisher &f) :
       cct(cct), journal(j), finisher(f),
-      apply_lock("JOS::ApplyManager::apply_lock", false, true, false, cct),
+      apply_lock("JOS::ApplyManager::apply_lock", false, true, false),
       blocked(false),
       open_ops(0),
       max_applied_seq(0),
-      com_lock("JOS::ApplyManager::com_lock", false, true, false, cct),
+      com_lock("JOS::ApplyManager::com_lock", false, true, false),
       committing_seq(0), committed_seq(0) {}
     void reset() {
       ceph_assert(open_ops == 0);

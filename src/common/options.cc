@@ -4951,10 +4951,6 @@ std::vector<Option> get_global_options() {
                      "manager before this is reported as an ERR rather than "
                      "a WARN"),
 
-    Option("mutex_perf_counter", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
-
     Option("throttler_perf_counter", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
