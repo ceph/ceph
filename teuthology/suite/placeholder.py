@@ -95,6 +95,7 @@ dict_templ = {
         }
     },
     'repo': Placeholder('ceph_repo'),
+    'sleep_before_teardown': 0,
     'suite': Placeholder('suite'),
     'suite_repo': Placeholder('suite_repo'),
     'suite_relpath': Placeholder('suite_relpath'),

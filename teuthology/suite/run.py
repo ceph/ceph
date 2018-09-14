@@ -273,6 +273,8 @@ class Run(object):
             job_config.email = self.args.email
         if self.args.owner:
             job_config.owner = self.args.owner
+        if self.args.sleep_before_teardown:
+            job_config.sleep_before_teardown = int(self.args.sleep_before_teardown)
         return job_config
 
     def build_base_args(self):

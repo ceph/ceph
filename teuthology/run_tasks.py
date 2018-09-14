@@ -59,14 +59,25 @@ def _import(from_package, module_name, task_name):
     return module
 
 
-def run_one_task(taskname, **kwargs):
+def run_one_task(taskname, stack, timer, **kwargs):
+    if 'log_message' in kwargs:
+        log.info(kwargs['log_message'])
+        del(kwargs['log_message'])
+    else:
+        log.info("Running task {}...".format(taskname))
+    timer.mark('%s enter' % taskname)
     taskname = taskname.replace('-', '_')
     task = get_task(taskname)
-    return task(**kwargs)
+    manager = task(**kwargs)
+    if hasattr(manager, '__enter__'):
+        stack.append((taskname, manager))
+        manager.__enter__()
 
 
 def run_tasks(tasks, ctx):
     archive_path = ctx.config.get('archive_path')
+    sleep_before_teardown = ctx.config.get('sleep_before_teardown')
+    sleep_task = { "sleep": { "duration": sleep_before_teardown } }
     if archive_path:
         timer = Timer(
             path=os.path.join(archive_path, 'timing.yaml'),
@@ -81,12 +92,11 @@ def run_tasks(tasks, ctx):
                 ((taskname, config),) = taskdict.iteritems()
             except (ValueError, AttributeError):
                 raise RuntimeError('Invalid task definition: %s' % taskdict)
-            log.info('Running task %s...', taskname)
-            timer.mark('%s enter' % taskname)
-            manager = run_one_task(taskname, ctx=ctx, config=config)
-            if hasattr(manager, '__enter__'):
-                stack.append((taskname, manager))
-                manager.__enter__()
+            run_one_task(taskname, stack, timer, ctx=ctx, config=config)
+        if sleep_before_teardown:
+            ((taskname, config),) = sleep_task.iteritems()
+            run_one_task(taskname, stack, timer, ctx=ctx, config=config,
+                log_message='Running sleep task because --sleep-before-teardown was given...')
     except BaseException as e:
         if isinstance(e, ConnectionLostError):
             # Prevent connection issues being flagged as failures
@@ -139,6 +149,10 @@ def run_tasks(tasks, ctx):
             from .task import interactive
             log.warning('Saw failure during task execution, going into interactive mode...')
             interactive.task(ctx=ctx, config=None)
+        if sleep_before_teardown:
+            ((taskname, config),) = sleep_task.iteritems()
+            run_one_task(taskname, stack, timer, ctx=ctx, config=config,
+                log_message='Running sleep task because --sleep-before-teardown was given...')
         # Throughout teuthology, (x,) = y has been used to assign values
         # from yaml files where only one entry of type y is correct.  This
         # causes failures with 'too many values to unpack.'  We want to
