@@ -231,7 +231,7 @@ class Module(MgrModule):
         self.run = False
         self.event.set()
 
-    def open_connection(self):
+    def open_connection(self, create_if_missing=True):
         pools = self.rados.list_pools()
         is_pool = False
         for pool in pools:
@@ -239,6 +239,8 @@ class Module(MgrModule):
                 is_pool = True
                 break
         if not is_pool:
+            if not create_if_missing:
+                return None
             self.log.debug('create %s pool' % self.pool_name)
             # create pool
             result = CommandResult('')
@@ -378,29 +380,29 @@ class Module(MgrModule):
         if not r or 'device' not in r.keys():
             return -errno.ENOENT, '', 'device ' + devid + ' not found'
         # fetch metrics
-        ioctx = self.open_connection()
         res = {}
-        with rados.ReadOpCtx() as op:
-            omap_iter, ret = ioctx.get_omap_vals(op, "", sample or '', 500)  # fixme
-            assert ret == 0
-            try:
-                ioctx.operate_read_op(op, devid)
-                for key, value in list(omap_iter):
-                    if sample and key != sample:
-                        break
-                    try:
-                        v = json.loads(value)
-                    except (ValueError, IndexError):
-                        self.log.debug('unable to parse value for %s: "%s"' %
-                                       (key, value))
-                        pass
-                    else:
+        ioctx = self.open_connection(create_if_missing=False)
+        if ioctx:
+            with rados.ReadOpCtx() as op:
+                omap_iter, ret = ioctx.get_omap_vals(op, "", sample or '', 500)  # fixme
+                assert ret == 0
+                try:
+                    ioctx.operate_read_op(op, devid)
+                    for key, value in list(omap_iter):
+                        if sample and key != sample:
+                            break
+                        try:
+                            v = json.loads(value)
+                        except (ValueError, IndexError):
+                            self.log.debug('unable to parse value for %s: "%s"' %
+                                           (key, value))
+                            pass
                         res[key] = v
-            except rados.ObjectNotFound:
-                pass
-            except rados.Error as e:
-                self.log.exception("RADOS error reading omap: {0}".format(e))
-                raise
+                except rados.ObjectNotFound:
+                    pass
+                except rados.Error as e:
+                    self.log.exception("RADOS error reading omap: {0}".format(e))
+                    raise
 
         return 0, json.dumps(res, indent=4), ''
 
