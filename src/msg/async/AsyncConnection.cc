@@ -787,6 +787,12 @@ void AsyncConnection::process()
             dispatch_queue->enqueue(message, message->get_priority(), conn_id);
           }
 
+	  // clean up local buffer references
+          data_buf.clear();
+          front.clear();
+          middle.clear();
+          data.clear();
+
           break;
         }
 
