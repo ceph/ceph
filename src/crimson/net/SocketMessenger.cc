@@ -59,9 +59,13 @@ seastar::future<> SocketMessenger::dispatch(ConnectionRef conn)
     }).handle_exception_type([=] (const std::system_error& e) {
       if (e.code() == error::connection_aborted ||
           e.code() == error::connection_reset) {
-        dispatcher->ms_handle_reset(conn);
+        return seastar::with_gate(pending_dispatch, [=] {
+            return dispatcher->ms_handle_reset(conn);
+          });
       } else if (e.code() == error::read_eof) {
-        dispatcher->ms_handle_remote_reset(conn);
+        return seastar::with_gate(pending_dispatch, [=] {
+            return dispatcher->ms_handle_remote_reset(conn);
+          });
       } else {
         throw e;
       }
