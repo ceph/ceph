@@ -215,21 +215,15 @@ SocketMessenger::verify_authorizer(peer_type_t peer_type,
 				   auth_proto_t protocol,
 				   bufferlist& auth)
 {
-  if (dispatcher) {
-    return dispatcher->ms_verify_authorizer(peer_type, protocol, auth);
-  } else {
-    return seastar::make_ready_future<msgr_tag_t, bufferlist>(
-        CEPH_MSGR_TAG_BADAUTHORIZER,
-        bufferlist{});
-  }
+  return seastar::with_gate(pending_dispatch, [=, &auth] {
+      return dispatcher->ms_verify_authorizer(peer_type, protocol, auth);
+    });
 }
 
 seastar::future<std::unique_ptr<AuthAuthorizer>>
 SocketMessenger::get_authorizer(peer_type_t peer_type, bool force_new)
 {
-  if (dispatcher) {
-    return dispatcher->ms_get_authorizer(peer_type, force_new);
-  } else {
-    return seastar::make_ready_future<std::unique_ptr<AuthAuthorizer>>(nullptr);
-  }
+  return seastar::with_gate(pending_dispatch, [=] {
+      return dispatcher->ms_get_authorizer(peer_type, force_new);
+    });
 }
