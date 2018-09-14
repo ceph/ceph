@@ -25,10 +25,8 @@ enum {
   l_mutex_last
 };
 
-mutex_debugging_base::mutex_debugging_base(const std::string &n, bool bt,
-					   CephContext *cct) :
-  id(-1), backtrace(bt), nlock(0), locked_by(thread::id()),
-  cct(cct), logger(0) {
+mutex_debugging_base::mutex_debugging_base(const std::string &n, bool bt) :
+  id(-1), backtrace(bt), nlock(0), locked_by(thread::id()) {
   if (n.empty()) {
     uuid_d uu;
     uu.generate_random();
@@ -36,25 +34,12 @@ mutex_debugging_base::mutex_debugging_base(const std::string &n, bool bt,
   } else {
     name = n;
   }
-  if (cct) {
-    PerfCountersBuilder b(cct, string("mutex-") + name,
-			  l_mutex_first, l_mutex_last);
-    b.add_time_avg(l_mutex_wait, "wait",
-		   "Average time of mutex in locked state");
-    logger = b.create_perf_counters();
-    cct->get_perfcounters_collection()->add(logger);
-    logger->set(l_mutex_wait, 0);
-  }
   if (g_lockdep)
     _register();
 }
 
 mutex_debugging_base::~mutex_debugging_base() {
   ceph_assert(nlock == 0);
-  if (cct && logger) {
-    cct->get_perfcounters_collection()->remove(logger);
-    delete logger;
-  }
   if (g_lockdep) {
     lockdep_unregister(id);
   }
@@ -74,16 +59,11 @@ void mutex_debugging_base::_will_unlock() {  // about to unlock
 }
 
 ceph::mono_time mutex_debugging_base::before_lock_blocks() {
-  if (logger && cct && cct->_conf->mutex_perf_counter)
-    return ceph::mono_clock::now();
   return ceph::mono_time::min();
 }
 
 void mutex_debugging_base::after_lock_blocks(ceph::mono_time start,
 					     bool no_lockdep) {
-  if (logger && cct && cct->_conf->mutex_perf_counter)
-    logger->tinc(l_mutex_wait,
-		 ceph::mono_clock::now() - start);
   if (!no_lockdep && g_lockdep)
     _locked();
 }

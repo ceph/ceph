@@ -11,8 +11,7 @@ shared_mutex_debug::shared_mutex_debug(const std::string& n,
                                        bool track_lock,
                                        bool enable_lock_dep,
                                        bool prioritize_write)
-  : mutex_debugging_base{n, false /* backtrace */,
-                         nullptr /* cct for perf counter*/},
+  : mutex_debugging_base{n, false /* backtrace */},
     track(track_lock),
     lockdep(enable_lock_dep)
 {

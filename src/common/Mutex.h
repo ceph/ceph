@@ -23,15 +23,6 @@
 
 using namespace ceph;
 
-class CephContext;
-class PerfCounters;
-
-enum {
-  l_mutex_first = 999082,
-  l_mutex_wait,
-  l_mutex_last
-};
-
 class Mutex {
 private:
   std::string name;
@@ -43,8 +34,6 @@ private:
   pthread_mutex_t _m;
   int nlock;
   pthread_t locked_by;
-  CephContext *cct;
-  PerfCounters *logger;
 
   // don't allow copying.
   void operator=(const Mutex &M);
@@ -64,8 +53,7 @@ private:
   }
 
 public:
-  Mutex(const std::string &n, bool r = false, bool ld=true, bool bt=false,
-	CephContext *cct = 0);
+  Mutex(const std::string &n, bool r = false, bool ld=true, bool bt=false);
   ~Mutex();
   bool is_locked() const {
     return (nlock > 0);
