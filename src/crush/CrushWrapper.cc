@@ -3131,7 +3131,19 @@ public:
     f->open_array_section("nodes");
     Parent::dump(f);
     f->close_section();
+
+    // There is no stray bucket whose id is a negative number, so just get
+    // the max_id and iterate from 0 to max_id to dump stray osds.
     f->open_array_section("stray");
+    int32_t max_id = -1;
+    if (!crush->name_map.empty()) {
+      max_id = crush->name_map.rbegin()->first;
+    }
+    for (int32_t i = 0; i <= max_id; i++) {
+      if (crush->item_exists(i) && !is_touched(i) && should_dump(i)) {
+        dump_item(CrushTreeDumper::Item(i, 0, 0, 0), f);
+      }
+    }
     f->close_section();
   }
 };
