@@ -1332,7 +1332,7 @@ protected:
   /// get priority for pg deletion
   unsigned get_delete_priority();
 
-  void mark_clean();  ///< mark an active pg clean
+  void try_mark_clean();  ///< mark an active pg clean
 
   /// return [start,end) bounds for required past_intervals
   static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
