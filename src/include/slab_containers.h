@@ -141,9 +141,8 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
    //
    struct slab_t {
       slabHead_t slabHead;  // membership of slab in list of slabs with free elements
+      ceph::math::bitset<std::max(stackSize, slabSize)> freeMap;
       uint32_t size;    // # of allocated slots in this slab
-      uint32_t freeSlots;   // # of free slots, i.e., size of freelist of slots within this slab
-      slot_t *freeHead;     // Head of list of freeslots OR NULL if none
       slot_t slot[0];       // slots
    };
    slab_t *slabHeadToSlab(slabHead_t *head) { return reinterpret_cast<slab_t *>(head); }
@@ -157,9 +156,9 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
    // Initialize a new slab, remember, "T" might not be correct use the stored sizes.
    //
    void initSlab(slab_t *slab,size_t sz) {
+      // after freeslot rework: slab->freeMap = (1 << sz) - 1;
+      slab->freeMap.reset(); // Pretend that it was completely allocated before :)
       slab->size = sz;
-      slab->freeSlots = 0; // Pretend that it was completely allocated before :)
-      slab->freeHead = NULL;
       slab->slabHead.next = NULL;
       slab->slabHead.prev = NULL;
       this->slab_allocate(sz,trueSlotSize,sizeof(slab_t));
@@ -167,24 +166,21 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
       for (size_t i = 0; i < sz; ++i) {
          slot_t *slot = reinterpret_cast<slot_t *>(raw);
          slot->slab = slab;
-         freeslot(slot,false);
+         freeslot(slab, i, false);
          raw += trueSlotSize;
       }
    }
    //
    // Free a slot, the "freeEmpty" parameter indicates if this slab should be freed if it's emptied
    // 
-   void freeslot(slot_t *s, bool freeEmpty) {
-      slab_t *slab = s->slab;
+   void freeslot(slab_t* slab, size_t idx, bool freeEmpty) {
       //
       // Put this slot onto the per-slab freelist
       //
-      s->storage[0] = slab->freeHead;
-      slab->freeHead = s;
-      slab->freeSlots++;
+      slab->freeMap.set(idx);
       ++freeSlotCount;
       this->slab_item_free(trueSlotSize);
-      if (slab->freeSlots == 1) {
+      if (slab->freeMap.count() == 1) {
          //
          // put slab onto the contianer's slab freelist
          //
@@ -193,15 +189,15 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
          freeSlabHeads.next = &slab->slabHead;
          slab->slabHead.prev = &freeSlabHeads;
       }         
-      if (freeEmpty && slab->freeSlots == slab->size && slab != &stackSlab) {
+      if (freeEmpty && slab->freeMap.count() == slab->size && slab != &stackSlab) {
          //
          // Slab is entirely free
          //
          slab->slabHead.next->prev = slab->slabHead.prev;
          slab->slabHead.prev->next = slab->slabHead.next;
-         assert(freeSlotCount >= slab->size);
+         ceph_assert(freeSlotCount >= slab->size);
          freeSlotCount -= slab->size;
-         this->slab_deallocate(slab->freeSlots,trueSlotSize,sizeof(slab_t),true);
+         this->slab_deallocate(slab->freeMap.count(),trueSlotSize,sizeof(slab_t),true);
          delete[] slab;
       }
    }
@@ -234,15 +230,12 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
          addSlab(slabSize);
       }
       slab_t *freeSlab = slabHeadToSlab(freeSlabHeads.next);
-      slot_t *freeSlot = freeSlab->freeHead;
-      freeSlab->freeHead = freeSlot->storage[0];
-      assert(freeSlab->freeSlots > 0);
-      freeSlab->freeSlots--;
-      if (freeSlab->freeSlots == 0) {
+      const std::size_t idx = freeSlab->freeMap.find_first_set();
+      freeSlab->freeMap.reset(idx);
+      if (freeSlab->freeMap.count() == 0) {
          //
          // remove slab from list
          //
-         assert(freeSlab->freeHead == nullptr);
          freeSlabHeads.next = freeSlab->slabHead.next;
          freeSlab->slabHead.next->prev = &freeSlabHeads;
          freeSlab->slabHead.next = nullptr;
@@ -250,7 +243,7 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
       }
       --freeSlotCount;
       this->slab_item_allocate(trueSlotSize);
-      return freeSlot;
+      return &freeSlab->slot[idx];
    }
 
    void _reserve(size_t freeCount) {
@@ -302,7 +295,11 @@ public:
    }
 
    void deallocate(T* p, size_t s) {
-      freeslot(reinterpret_cast<slot_t *>((char *)p - sizeof(void *)),true);
+      auto* slot = reinterpret_cast<slot_t*>((char *)p - sizeof(void *));
+      auto* slab = slot->slab;
+
+      const std::size_t idx = (slot - &(slab->slot[0]));
+      freeslot(slab, idx, true);
    }
 
    //

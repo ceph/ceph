@@ -15,6 +15,8 @@
 #ifndef CEPH_INTARITH_H
 #define CEPH_INTARITH_H
 
+#include <bitset>
+#include <limits>
 #include <type_traits>
 
 template<typename T, typename U>
@@ -189,5 +191,21 @@ template<class T>
     return 0;
   return (sizeof(v) * 8) - __builtin_clzll(v);
 }
+
+namespace ceph::math {
+
+// std::bitset augmented with fast, clz-style finders.
+// Targets mostly fast bitmaps for resource tracking.
+template<std::size_t N = std::numeric_limits<unsigned long long>::digits>
+class bitset : public std::bitset<N> {
+public:
+  using std::bitset<N>::bitset;
+
+  std::size_t find_first_set() const {
+    return ctz(this->to_ullong());
+  }
+};
+
+} // namespace ceph
 
 #endif
