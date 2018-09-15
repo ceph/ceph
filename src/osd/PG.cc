@@ -2345,16 +2345,20 @@ void PG::try_mark_clean()
   if (is_active()) {
     kick_snap_trim();
   } else if (is_peered()) {
-    bool target;
-    if (pool.info.is_pending_merge(info.pgid.pgid, &target)) {
-      if (target) {
-	ldout(cct, 10) << "ready to merge (target)" << dendl;
-	osd->set_ready_to_merge_target(this,
-				       info.history.last_epoch_clean);
-      } else {
-	ldout(cct, 10) << "ready to merge (source)" << dendl;
-	osd->set_ready_to_merge_source(this);
+    if (is_clean()) {
+      bool target;
+      if (pool.info.is_pending_merge(info.pgid.pgid, &target)) {
+	if (target) {
+	  ldout(cct, 10) << "ready to merge (target)" << dendl;
+	  osd->set_ready_to_merge_target(this,
+					 info.history.last_epoch_clean);
+	} else {
+	  ldout(cct, 10) << "ready to merge (source)" << dendl;
+	  osd->set_ready_to_merge_source(this);
+	}
       }
+    } else {
+#warning we should back off the merge!
     }
   }
 
