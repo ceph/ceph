@@ -71,9 +71,8 @@ round up all allocations to something like 256 Bytes.
 
 slab containers generally have a "reserve" function that emulates the vector::reserve
 function in that it guarantees space is available for that many nodes. Reserve always
-results in either 0 or 1 calls to malloc (0 for when the currently available space
-is sufficient). If more nodes are required, they are allocated into a single slab
-regardless of the value of the slabSize template parameter.
+results in either 0 or #needeSlots / slabSize calls to malloc (0 for when the currently
+available space is sufficient).
 
 STATISTICS
 ----------
@@ -141,8 +140,7 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
    //
    struct slab_t {
       slabHead_t slabHead;  // membership of slab in list of slabs with free elements
-      ceph::math::bitset<std::max(stackSize, slabSize)> freeMap;
-      uint32_t size;    // # of allocated slots in this slab
+      ceph::math::bitset<std::max(stackSize,slabSize)> freeMap;
       slot_t slot[0];       // slots
    };
    slab_t *slabHeadToSlab(slabHead_t *head) { return reinterpret_cast<slab_t *>(head); }
@@ -155,13 +153,13 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
    //
    // Initialize a new slab, remember, "T" might not be correct use the stored sizes.
    //
-   void initSlab(slab_t *slab,size_t sz) {
+   template <std::size_t sz>
+   void initSlab(slab_t *slab) {
       // after freeslot rework: slab->freeMap = (1 << sz) - 1;
       slab->freeMap.reset(); // Pretend that it was completely allocated before :)
-      slab->size = sz;
       slab->slabHead.next = NULL;
       slab->slabHead.prev = NULL;
-      this->slab_allocate(sz,trueSlotSize,sizeof(slab_t));
+      this->slab_allocate(sz, trueSlotSize, sizeof(slab_t));
       for (size_t i = 0; i < sz; ++i) {
 	 // Setting slot_t::slab is performed during the actual object
 	 // allocation. We really want to be lazy here to not collect
@@ -169,6 +167,11 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
          freeslot(slab, i, false);
       }
    }
+
+   size_t deduceSlabSize(const slab_t* const slab) {
+     return slab == &stackSlab ? stackSize : slabSize;
+   }
+
    //
    // Free a slot, the "freeEmpty" parameter indicates if this slab should be freed if it's emptied
    // 
@@ -189,16 +192,18 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
          freeSlabHeads.next = &slab->slabHead;
          slab->slabHead.prev = &freeSlabHeads;
       }
+
+      const size_t size = deduceSlabSize(slab);
       if (freeEmpty && \
-          slab->freeMap.all_first_set(slab->size) && slab != &stackSlab) {
+          slab->freeMap.all_first_set(slabSize) && slab != &stackSlab) {
          //
          // Slab is entirely free
          //
          slab->slabHead.next->prev = slab->slabHead.prev;
          slab->slabHead.prev->next = slab->slabHead.next;
-         ceph_assert(freeSlotCount >= slab->size);
-         freeSlotCount -= slab->size;
-         this->slab_deallocate(slab->size,trueSlotSize,sizeof(slab_t),true);
+         ceph_assert(freeSlotCount >= size);
+         freeSlotCount -= size;
+         this->slab_deallocate(size,trueSlotSize,sizeof(slab_t),true);
          delete[] slab;
       }
    }
@@ -206,7 +211,7 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
    // Danger, because of the my_actual_allocator hack. You can't rely on T to be correct, nor any value or offset that's
    // derived directly or indirectly from T. We use the values saved during initialization, when T was correct.
    //
-   void addSlab(size_t size) {
+   void addSlab() {
        //
        // I need to compute the size of this structure
        //
@@ -221,14 +226,14 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
        //
        // Allocate the slab and free the slots within.
        //
-       size_t total = (size * trueSlotSize) + sizeof(slab_t);
+       size_t total = (slabSize * trueSlotSize) + sizeof(slab_t);
        slab_t *slab = reinterpret_cast<slab_t *>(new char[total]);
-       initSlab(slab,size);
+       initSlab<slabSize>(slab);
    }
    
    slot_t *allocslot() {
       if (freeSlabHeads.next == &freeSlabHeads) {
-         addSlab(slabSize);
+         addSlab();
       }
       slab_t *freeSlab = slabHeadToSlab(freeSlabHeads.next);
       const std::size_t idx = freeSlab->freeMap.find_first_set();
@@ -252,7 +257,21 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
 
    void _reserve(size_t freeCount) {
       if (freeSlotCount < freeCount) {
-         addSlab(freeCount - freeSlotCount);
+	const size_t newSlots = freeCount - freeSlotCount;
+	size_t newSlabs = round_up_to(newSlots, slabSize) / slabSize;
+
+	// We could allocate in a single chunk and divide it across
+	// fixed-size slabs at the price of reference counting.
+	// Each slab would need a pointer-to-counter. nullptr would
+	// be for slabs allocated outside of the reservation bits.
+	// The non-atomical counter would be located at the chunk's
+	// beginning, so `delete &ctr` would be enough to get rid
+	// of whole region.
+	// However, I'm not convinced we hate dynallocs so much to
+	// hold the principle of 0-or-1-alloc-on-reserve for all cost.
+	while (newSlabs--) {
+	  addSlab();
+	}
       }      
    }
 
@@ -278,7 +297,7 @@ public:
       //
       freeSlabHeads.next = &freeSlabHeads;
       freeSlabHeads.prev = &freeSlabHeads;
-      initSlab(&stackSlab,stackSize);
+      initSlab<stackSize>(&stackSlab);
       selfPointer = this;
    }
    ~slab_allocator() {
