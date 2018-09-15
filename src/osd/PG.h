@@ -1274,6 +1274,7 @@ protected:
 			     waiting_for_blocked_object;
 
   set<hobject_t> objects_blocked_on_cache_full;
+  set<hobject_t> objects_blocked_clean_to_primary_repair;
   map<hobject_t,snapid_t> objects_blocked_on_degraded_snap;
   map<hobject_t,ObjectContextRef> objects_blocked_on_snap_promotion;
 

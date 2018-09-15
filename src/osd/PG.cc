@@ -8003,6 +8003,7 @@ PG::RecoveryState::Clean::Clean(my_context ctx)
 
   pg->share_pg_info();
   pg->publish_stats_to_osd();
+  pg->objects_blocked_clean_to_primary_repair.clear();
   pg->requeue_ops(pg->waiting_for_clean_to_primary_repair);
 }
 

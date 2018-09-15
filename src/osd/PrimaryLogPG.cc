@@ -714,6 +714,7 @@ void PrimaryLogPG::block_for_clean(
 {
   dout(20) << __func__ << ": blocking object " << oid
 	   << " on primary repair" << dendl;
+  objects_blocked_clean_to_primary_repair.insert(oid);
   waiting_for_clean_to_primary_repair.push_back(op);
   op->mark_delayed("waiting for clean to repair");
 }
@@ -2077,6 +2078,12 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 	   << " flags " << ceph_osd_flag_string(m->get_flags())
 	   << dendl;
 
+  // object currently blocked clean for repairing?
+  if (objects_blocked_clean_to_primary_repair.count(head)) {
+    block_for_clean(head, op);
+    return;
+  }
+
   // missing object?
   if (is_unreadable_object(head)) {
     if (!is_primary()) {
@@ -2222,6 +2229,13 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       return;
     }
   } else if (r == 0) {
+    if (objects_blocked_clean_to_primary_repair.count(obc->obs.oi.soid)) {
+      dout(10) << __func__ << ": clone " << obc->obs.oi.soid
+	       << " is blocked waiting clean for primary repairing" << dendl;
+      block_for_clean(obc->obs.oi.soid, op);
+      return;
+    }
+
     if (is_unreadable_object(obc->obs.oi.soid)) {
       dout(10) << __func__ << ": clone " << obc->obs.oi.soid
 	       << " is unreadable, waiting" << dendl;
@@ -12082,6 +12096,13 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
   cancel_flush_ops(is_primary(), &tids);
   cancel_proxy_ops(is_primary(), &tids);
   osd->objecter->op_cancel(tids, -ECANCELED);
+
+  if (is_primary()) {
+    requeue_ops(waiting_for_clean_to_primary_repair);
+  } else {
+    waiting_for_clean_to_primary_repair.clear();
+  }
+  objects_blocked_clean_to_primary_repair.clear();
 
   // requeue object waiters
   for (auto& p : waiting_for_unreadable_object) {
