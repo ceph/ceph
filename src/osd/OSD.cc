@@ -1725,6 +1725,7 @@ void OSDService::_send_ready_to_merge()
       monc->send_mon_message(new MOSDPGReadyToMerge(
 			       src,
 			       p->second,  // PG's last_epoch_clean
+			       true,
 			       osdmap->get_epoch()));
       sent_ready_to_merge_source.insert(src);
     }
