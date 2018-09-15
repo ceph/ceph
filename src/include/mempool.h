@@ -580,12 +580,12 @@ public:
     }
   }
 
-  void slab_item_free(size_t sizeof_T) {
+  void slab_item_free(size_t sizeof_T, size_t num = 1) {
     shard_t *shard = this->pool->pick_a_shard();
-    shard->free_bytes += sizeof_T;
-    shard->free_items += 1;
+    shard->free_bytes += sizeof_T * num;
+    shard->free_items += num;
     if (this->type) {
-      this->type->free_items += 1;
+      this->type->free_items += num;
     }
   }
 

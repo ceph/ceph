@@ -155,17 +155,24 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
    //
    template <std::size_t sz>
    void initSlab(slab_t *slab) {
-      // after freeslot rework: slab->freeMap = (1 << sz) - 1;
-      slab->freeMap.reset(); // Pretend that it was completely allocated before :)
+      slab->freeMap.set_first(sz);
       slab->slabHead.next = NULL;
       slab->slabHead.prev = NULL;
       this->slab_allocate(sz, trueSlotSize, sizeof(slab_t));
-      for (size_t i = 0; i < sz; ++i) {
-	 // Setting slot_t::slab is performed during the actual object
-	 // allocation. We really want to be lazy here to not collect
-	 // TLB misses/page faults twice.
-         freeslot(slab, i, false);
-      }
+      this->slab_item_free(trueSlotSize, sz);
+
+      freeSlotCount += sz;
+      //
+      // put slab onto the contianer's slab freelist
+      //
+      slab->slabHead.next = freeSlabHeads.next;
+      freeSlabHeads.next->prev = &slab->slabHead;
+      freeSlabHeads.next = &slab->slabHead;
+      slab->slabHead.prev = &freeSlabHeads;
+
+      // Setting slot_t::slab is performed during the actual object
+      // allocation. We really want to be lazy here to not collect
+      // TLB misses/page faults twice.
    }
 
    size_t deduceSlabSize(const slab_t* const slab) {
@@ -175,7 +182,7 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
    //
    // Free a slot, the "freeEmpty" parameter indicates if this slab should be freed if it's emptied
    // 
-   void freeslot(slab_t* slab, size_t idx, bool freeEmpty) {
+   void freeslot(slab_t* slab, size_t idx) {
       //
       // Put this slot onto the per-slab freelist
       //
@@ -194,8 +201,7 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
       }
 
       const size_t size = deduceSlabSize(slab);
-      if (freeEmpty && \
-          slab->freeMap.all_first_set(slabSize) && slab != &stackSlab) {
+      if (slab->freeMap.all_first_set(slabSize) && slab != &stackSlab) {
          //
          // Slab is entirely free
          //
@@ -322,7 +328,7 @@ public:
       auto* slab = slot->slab;
 
       const std::size_t idx = (slot - &(slab->slot[0]));
-      freeslot(slab, idx, true);
+      freeslot(slab, idx);
    }
 
    //

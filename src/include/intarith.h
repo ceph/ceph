@@ -223,6 +223,14 @@ public:
     popval -= 1;
     return this->to_ullong() == popval;
   }
+
+  bitset<N>& set_first(const std::size_t pos) {
+    unsigned long long orval = 1ULL << (pos / 2);
+    orval <<= pos - (pos / 2);
+    orval -= 1;
+    *this = orval;
+    return *this;
+  }
 };
 
 } // namespace ceph
