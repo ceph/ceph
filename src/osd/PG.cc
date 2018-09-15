@@ -2330,7 +2330,7 @@ unsigned PG::get_scrub_priority()
   return pool_scrub_priority > 0 ? pool_scrub_priority : cct->_conf->osd_scrub_priority;
 }
 
-void PG::mark_clean()
+void PG::try_mark_clean()
 {
   if (actingset.size() == get_osdmap()->get_pg_size(info.pgid.pgid)) {
     state_clear(PG_STATE_FORCED_BACKFILL | PG_STATE_FORCED_RECOVERY);
@@ -2342,7 +2342,27 @@ void PG::mark_clean()
     dirty_info = true;
   }
 
-  kick_snap_trim();
+  if (is_active()) {
+    kick_snap_trim();
+  } else if (is_peered()) {
+    bool target;
+    if (pool.info.is_pending_merge(info.pgid.pgid, &target)) {
+      if (target) {
+	ldout(cct, 10) << "ready to merge (target)" << dendl;
+	osd->set_ready_to_merge_target(this,
+				       info.history.last_epoch_clean);
+      } else {
+	ldout(cct, 10) << "ready to merge (source)" << dendl;
+	osd->set_ready_to_merge_source(this);
+      }
+    }
+  }
+
+  state_clear(PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
+
+  share_pg_info();
+  publish_stats_to_osd();
+  requeue_ops(waiting_for_clean_to_primary_repair);
 }
 
 bool PG::set_force_recovery(bool b)
@@ -7989,26 +8009,7 @@ PG::RecoveryState::Clean::Clean(my_context ctx)
   Context *c = pg->finish_recovery();
   context< RecoveryMachine >().get_cur_transaction()->register_on_commit(c);
 
-  if (pg->is_active()) {
-    pg->mark_clean();
-  } else if (pg->is_peered()) {
-    bool target;
-    if (pg->pool.info.is_pending_merge(pg->info.pgid.pgid, &target)) {
-      if (target) {
-	ldout(pg->cct, 10) << "ready to merge (target)" << dendl;
-	pg->osd->set_ready_to_merge_target(pg,
-					   pg->info.history.last_epoch_clean);
-      } else {
-	ldout(pg->cct, 10) << "ready to merge (source)" << dendl;
-	pg->osd->set_ready_to_merge_source(pg);
-      }
-    }
-  }
-  pg->state_clear(PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
-
-  pg->share_pg_info();
-  pg->publish_stats_to_osd();
-  pg->requeue_ops(pg->waiting_for_clean_to_primary_repair);
+  pg->try_mark_clean();
 }
 
 void PG::RecoveryState::Clean::exit()
