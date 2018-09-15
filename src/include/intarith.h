@@ -204,6 +204,25 @@ public:
   std::size_t find_first_set() const {
     return ctz(this->to_ullong());
   }
+
+  bool all_first_set(const std::size_t num) const {
+    // Faster replacement ::count() in some of its use cases. On my
+    // system count() doesn't try to make use of POPCNT.
+    //
+    // A part of the truth table:
+    //
+    //   *this == 0000 0111, num = 3 -> true
+    //   *this == 0000 1111, num = 3 -> true
+    //   *this == 0000 1110, num = 3 -> false
+    //
+    // The shift is made in two steps only because of the num-eq-64
+    // case. C++ defines shifting by the number of bits >= integer
+    // width as undefined behaviour.
+    unsigned long long popval = 1ULL << (num / 2);
+    popval <<= num - (num / 2);
+    popval -= 1;
+    return this->to_ullong() == popval;
+  }
 };
 
 } // namespace ceph

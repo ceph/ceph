@@ -176,10 +176,11 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
       //
       // Put this slot onto the per-slab freelist
       //
+      const bool was_empty = slab->freeMap.none();
       slab->freeMap.set(idx);
       ++freeSlotCount;
       this->slab_item_free(trueSlotSize);
-      if (slab->freeMap.count() == 1) {
+      if (was_empty) {
          //
          // put slab onto the contianer's slab freelist
          //
@@ -187,8 +188,9 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
          freeSlabHeads.next->prev = &slab->slabHead;
          freeSlabHeads.next = &slab->slabHead;
          slab->slabHead.prev = &freeSlabHeads;
-      }         
-      if (freeEmpty && slab->freeMap.count() == slab->size && slab != &stackSlab) {
+      }
+      if (freeEmpty && \
+          slab->freeMap.all_first_set(slab->size) && slab != &stackSlab) {
          //
          // Slab is entirely free
          //
@@ -196,7 +198,7 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
          slab->slabHead.prev->next = slab->slabHead.next;
          ceph_assert(freeSlotCount >= slab->size);
          freeSlotCount -= slab->size;
-         this->slab_deallocate(slab->freeMap.count(),trueSlotSize,sizeof(slab_t),true);
+         this->slab_deallocate(slab->size,trueSlotSize,sizeof(slab_t),true);
          delete[] slab;
       }
    }
@@ -231,7 +233,7 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
       slab_t *freeSlab = slabHeadToSlab(freeSlabHeads.next);
       const std::size_t idx = freeSlab->freeMap.find_first_set();
       freeSlab->freeMap.reset(idx);
-      if (freeSlab->freeMap.count() == 0) {
+      if (freeSlab->freeMap.none()) {
          //
          // remove slab from list
          //
