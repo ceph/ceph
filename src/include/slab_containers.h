@@ -162,12 +162,11 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
       slab->slabHead.next = NULL;
       slab->slabHead.prev = NULL;
       this->slab_allocate(sz,trueSlotSize,sizeof(slab_t));
-      char *raw = reinterpret_cast<char *>(slab->slot);
       for (size_t i = 0; i < sz; ++i) {
-         slot_t *slot = reinterpret_cast<slot_t *>(raw);
-         slot->slab = slab;
+	 // Setting slot_t::slab is performed during the actual object
+	 // allocation. We really want to be lazy here to not collect
+	 // TLB misses/page faults twice.
          freeslot(slab, i, false);
-         raw += trueSlotSize;
       }
    }
    //
@@ -243,7 +242,10 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
       }
       --freeSlotCount;
       this->slab_item_allocate(trueSlotSize);
-      return &freeSlab->slot[idx];
+
+      slot_t& slot = freeSlab->slot[idx];
+      slot.slab = freeSlab;
+      return &slot;
    }
 
    void _reserve(size_t freeCount) {
