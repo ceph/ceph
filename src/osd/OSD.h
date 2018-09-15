@@ -718,10 +718,12 @@ public:
   Mutex merge_lock = {"OSD::merge_lock"};
   set<pg_t> ready_to_merge_source;
   map<pg_t,epoch_t> ready_to_merge_target;  // pg -> last_epoch_clean
+  set<pg_t> not_ready_to_merge_source;
   set<pg_t> sent_ready_to_merge_source;
 
   void set_ready_to_merge_source(PG *pg);
   void set_ready_to_merge_target(PG *pg, epoch_t last_epoch_clean);
+  void set_not_ready_to_merge_source(pg_t pgid);
   void clear_ready_to_merge(PG *pg);
   void send_ready_to_merge();
   void _send_ready_to_merge();
