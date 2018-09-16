@@ -640,9 +640,6 @@ public:
     ceph_assert(session_map.count(w));
     return session_map[w]->info.inst;
   }
-  version_t inc_push_seq(client_t client) {
-    return get_session(entity_name_t::CLIENT(client.v))->inc_push_seq();
-  }
   version_t get_push_seq(client_t client) {
     return get_session(entity_name_t::CLIENT(client.v))->get_push_seq();
   }

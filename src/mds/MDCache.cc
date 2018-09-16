@@ -8828,6 +8828,7 @@ void MDCache::handle_open_ino(const MMDSOpenIno::const_ref &m, int err)
 
   dout(10) << "handle_open_ino " << *m << " err " << err << dendl;
 
+  auto from = mds_rank_t(m->get_source().num());
   inodeno_t ino = m->ino;
   MMDSOpenInoReply::ref reply;
   CInode *in = get_inode(ino);
@@ -8857,7 +8858,7 @@ void MDCache::handle_open_ino(const MMDSOpenIno::const_ref &m, int err)
       return;
     reply = MMDSOpenInoReply::create(m->get_tid(), ino, hint, ret);
   }
-  m->get_connection()->send_message2(reply); /* FIXME, why not send_client? */
+  mds->send_message_mds(reply, from);
 }
 
 void MDCache::handle_open_ino_reply(const MMDSOpenInoReply::const_ref &m)
@@ -9046,7 +9047,7 @@ void MDCache::handle_find_ino(const MMDSFindIno::const_ref &m)
     in->make_path(r->path);
     dout(10) << " have " << r->path << " " << *in << dendl;
   }
-  m->get_connection()->send_message2(r);
+  mds->send_message_mds(r, mds_rank_t(m->get_source().num()));
 }
 
 
