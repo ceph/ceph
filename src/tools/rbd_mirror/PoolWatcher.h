@@ -13,7 +13,7 @@
 #include "common/ceph_context.h"
 #include "common/Mutex.h"
 #include "include/rados/librados.hpp"
-#include "types.h"
+#include "tools/rbd_mirror/Types.h"
 #include <boost/functional/hash.hpp>
 #include <boost/optional.hpp>
 #include "include/assert.h"

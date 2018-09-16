@@ -14,7 +14,7 @@
 #include "LeaderWatcher.h"
 #include "PoolWatcher.h"
 #include "ImageDeleter.h"
-#include "types.h"
+#include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_map/Types.h"
 #include "tools/rbd_mirror/leader_watcher/Types.h"
 #include "tools/rbd_mirror/pool_watcher/Types.h"
@@ -48,7 +48,7 @@ class PoolReplayer {
 public:
   PoolReplayer(Threads<ImageCtxT> *threads,
                ServiceDaemon<ImageCtxT>* service_daemon,
-	       int64_t local_pool_id, const peer_t &peer,
+	       int64_t local_pool_id, const PeerSpec &peer,
 	       const std::vector<const char*> &args);
   ~PoolReplayer();
   PoolReplayer(const PoolReplayer&) = delete;
@@ -162,6 +162,8 @@ private:
 
   int init_rados(const std::string &cluster_name,
                  const std::string &client_name,
+                 const std::string &mon_host,
+                 const std::string &key,
                  const std::string &description, RadosRef *rados_ref,
                  bool strip_cluster_overrides);
 
@@ -211,7 +213,7 @@ private:
   Threads<ImageCtxT> *m_threads;
   ServiceDaemon<ImageCtxT>* m_service_daemon;
   int64_t m_local_pool_id = -1;
-  peer_t m_peer;
+  PeerSpec m_peer;
   std::vector<const char*> m_args;
 
   mutable Mutex m_lock;
@@ -236,7 +238,7 @@ private:
   std::unique_ptr<ImageDeleter<ImageCtxT>> m_image_deleter;
 
   ImageMapListener m_image_map_listener;
-  std::unique_ptr<ImageMap<librbd::ImageCtx>> m_image_map;
+  std::unique_ptr<ImageMap<ImageCtxT>> m_image_map;
 
   std::string m_asok_hook_name;
   AdminSocketHook *m_asok_hook = nullptr;

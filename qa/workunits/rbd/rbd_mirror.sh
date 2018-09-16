@@ -81,7 +81,7 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
   wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image1} 'up+replaying'
 
-  all_admin_daemons ${CLUSTER1} rbd mirror stop ${POOL} ${CLUSTER2}
+  all_admin_daemons ${CLUSTER1} rbd mirror stop ${POOL} ${CLUSTER2}${PEER_CLUSTER_SUFFIX}
   wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
   wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image1}
   wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
@@ -91,7 +91,7 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
   wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
 
-  all_admin_daemons ${CLUSTER1} rbd mirror start ${POOL} ${CLUSTER2}
+  all_admin_daemons ${CLUSTER1} rbd mirror start ${POOL} ${CLUSTER2}${PEER_CLUSTER_SUFFIX}
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
   wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image1} 'up+replaying'
 
@@ -99,17 +99,17 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
   wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
 
-  all_admin_daemons ${CLUSTER1} rbd mirror restart ${POOL} ${CLUSTER2}
+  all_admin_daemons ${CLUSTER1} rbd mirror restart ${POOL} ${CLUSTER2}${PEER_CLUSTER_SUFFIX}
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
 
-  all_admin_daemons ${CLUSTER1} rbd mirror stop ${POOL} ${CLUSTER2}
+  all_admin_daemons ${CLUSTER1} rbd mirror stop ${POOL} ${CLUSTER2}${PEER_CLUSTER_SUFFIX}
   wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
   wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image1}
   wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
   wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image1} 'up+stopped'
 
-  all_admin_daemons ${CLUSTER1} rbd mirror restart ${POOL} ${CLUSTER2}
+  all_admin_daemons ${CLUSTER1} rbd mirror restart ${POOL} ${CLUSTER2}${PEER_CLUSTER_SUFFIX}
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
   wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'

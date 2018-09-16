@@ -1481,7 +1481,7 @@
   
   rbd help mirror pool info
   usage: rbd mirror pool info [--pool <pool>] [--format <format>] 
-                              [--pretty-format] 
+                              [--pretty-format] [--all] 
                               <pool-name> 
   
   Show information about the pool mirroring configuration.
@@ -1493,11 +1493,14 @@
     -p [ --pool ] arg    pool name
     --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
+    --all                list all attributes
   
   rbd help mirror pool peer add
   usage: rbd mirror pool peer add [--pool <pool>] 
                                   [--remote-client-name <remote-client-name>] 
                                   [--remote-cluster <remote-cluster>] 
+                                  [--remote-mon-host <remote-mon-host>] 
+                                  [--remote-key-file <remote-key-file>] 
                                   <pool-name> <remote-cluster-spec> 
   
   Add a mirroring peer to a pool.
@@ -1511,6 +1514,8 @@
     -p [ --pool ] arg        pool name
     --remote-client-name arg remote client name
     --remote-cluster arg     remote cluster name
+    --remote-mon-host arg    remote mon host(s)
+    --remote-key-file arg    path to file containing remote key
   
   rbd help mirror pool peer remove
   usage: rbd mirror pool peer remove [--pool <pool>] 
@@ -1534,8 +1539,8 @@
   Positional arguments
     <pool-name>          pool name
     <uuid>               peer uuid
-    <key>                peer parameter [client or cluster]
-    <value>              new client or cluster name
+    <key>                peer parameter [client, cluster, mon-host, key-file]
+    <value>              new value for specified key
   
   Optional arguments
     -p [ --pool ] arg    pool name

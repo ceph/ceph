@@ -15,6 +15,12 @@
 * The 'ceph pg <pgid> list_missing' command has been renamed to
   'ceph pg <pgid> list_unfound' to better match its behaviour.
 
+* The 'rbd-mirror' daemon can now retrieve remote peer cluster configuration
+  secrets from the monitor. To use this feature, the 'rbd-mirror' daemon
+  CephX user for the local cluster must use the 'profile rbd-mirror' mon cap.
+  The secrets can be set using the 'rbd mirror pool peer add' and
+  'rbd mirror pool peer set' actions.
+
 >=13.1.0
 --------
 

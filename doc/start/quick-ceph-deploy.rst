@@ -102,6 +102,7 @@ configuration details, perform the following steps using ``ceph-deploy``.
    - ``ceph.bootstrap-mds.keyring``
    - ``ceph.bootstrap-rgw.keyring``
    - ``ceph.bootstrap-rbd.keyring``
+   - ``ceph.bootstrap-rbd-mirror.keyring``
 
    .. note:: If this process fails with a message similar to "Unable to
       find /etc/ceph/ceph.client.admin.keyring", please ensure that the

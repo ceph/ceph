@@ -111,6 +111,12 @@
 
 #define RBD_TRASH "rbd_trash"
 
+/**
+ * MON config-key prefix for storing optional remote cluster connectivity
+ * parameters
+ */
+#define RBD_MIRROR_PEER_CONFIG_KEY_PREFIX "rbd/mirror/peer/"
+
 struct rbd_info {
 	__le64 max_id;
 } __attribute__ ((packed));
