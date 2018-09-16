@@ -107,6 +107,9 @@ public:
   RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
 
   void init(RGWSI_SysObj_Cache *svc) {
+    if (!svc) {
+      return;
+    }
     svc->register_chained_cache(this);
     expiry = std::chrono::seconds(svc->ctx()->_conf.get_val<uint64_t>(
 				    "rgw_cache_expiry_interval"));
