@@ -112,7 +112,8 @@ set(crimson_net_srcs
   net/Dispatcher.cc
   net/Errors.cc
   net/SocketConnection.cc
-  net/SocketMessenger.cc)
+  net/SocketMessenger.cc
+  net/Socket.cc)
 set(crimson_thread_srcs
   thread/ThreadPool.cc
   thread/Throttle.cc)

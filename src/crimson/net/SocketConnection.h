@@ -20,29 +20,19 @@
 #include "msg/Policy.h"
 #include "Connection.h"
 #include "crimson/thread/Throttle.h"
+#include "Socket.h"
 
 class AuthSessionHandler;
 
 namespace ceph::net {
 
 class SocketConnection : public Connection {
-  seastar::connected_socket socket;
-  seastar::input_stream<char> in;
-  seastar::output_stream<char> out;
+  std::optional<Socket> socket;
 
   state_t state = state_t::none;
 
   /// become valid only when state is state_t::closed
   seastar::shared_future<> close_ready;
-
-  /// buffer state for read()
-  struct Reader {
-    bufferlist buffer;
-    size_t remaining;
-  } r;
-
-  /// read the requested number of bytes into a bufferlist
-  seastar::future<bufferlist> read(size_t bytes);
 
   /// state for handshake
   struct Handshake {
