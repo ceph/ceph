@@ -196,12 +196,12 @@ struct BootstrapRequest<librbd::MockTestImageCtx> {
   bool *do_resync = nullptr;
 
   static BootstrapRequest* create(
+      Threads<librbd::MockTestImageCtx>* threads,
       librados::IoCtx &local_io_ctx, librados::IoCtx &remote_io_ctx,
       rbd::mirror::InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
       librbd::MockTestImageCtx **local_image_ctx,
       const std::string &local_image_name, const std::string &remote_image_id,
-      const std::string &global_image_id, MockContextWQ *work_queue,
-      MockSafeTimer *timer, Mutex *timer_lock,
+      const std::string &global_image_id,
       const std::string &local_mirror_uuid,
       const std::string &remote_mirror_uuid,
       ::journal::MockJournalerProxy *journaler,

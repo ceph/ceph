@@ -22,6 +22,7 @@
 #include "librbd/journal/Types.h"
 #include "tools/rbd_mirror/ProgressContext.h"
 #include "tools/rbd_mirror/ImageSync.h"
+#include "tools/rbd_mirror/Threads.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -39,6 +40,7 @@ using librbd::util::unique_lock_name;
 
 template <typename I>
 BootstrapRequest<I>::BootstrapRequest(
+        Threads<I>* threads,
         librados::IoCtx &local_io_ctx,
         librados::IoCtx &remote_io_ctx,
         InstanceWatcher<I> *instance_watcher,
@@ -46,8 +48,6 @@ BootstrapRequest<I>::BootstrapRequest(
         const std::string &local_image_id,
         const std::string &remote_image_id,
         const std::string &global_image_id,
-        ContextWQ *work_queue, SafeTimer *timer,
-        Mutex *timer_lock,
         const std::string &local_mirror_uuid,
         const std::string &remote_mirror_uuid,
         Journaler *journaler,
@@ -58,11 +58,10 @@ BootstrapRequest<I>::BootstrapRequest(
         rbd::mirror::ProgressContext *progress_ctx)
   : BaseRequest("rbd::mirror::image_replayer::BootstrapRequest",
 		reinterpret_cast<CephContext*>(local_io_ctx.cct()), on_finish),
-    m_local_io_ctx(local_io_ctx), m_remote_io_ctx(remote_io_ctx),
-    m_instance_watcher(instance_watcher), m_local_image_ctx(local_image_ctx),
-    m_local_image_id(local_image_id), m_remote_image_id(remote_image_id),
-    m_global_image_id(global_image_id), m_work_queue(work_queue),
-    m_timer(timer), m_timer_lock(timer_lock),
+    m_threads(threads), m_local_io_ctx(local_io_ctx),
+    m_remote_io_ctx(remote_io_ctx), m_instance_watcher(instance_watcher),
+    m_local_image_ctx(local_image_ctx), m_local_image_id(local_image_id),
+    m_remote_image_id(remote_image_id), m_global_image_id(global_image_id),
     m_local_mirror_uuid(local_mirror_uuid),
     m_remote_mirror_uuid(remote_mirror_uuid), m_journaler(journaler),
     m_client_state(client_state), m_client_meta(client_meta),
@@ -281,7 +280,7 @@ void BootstrapRequest<I>::open_local_image() {
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_open_local_image>(
       this);
   OpenLocalImageRequest<I> *request = OpenLocalImageRequest<I>::create(
-    m_local_io_ctx, m_local_image_ctx, m_local_image_id, m_work_queue,
+    m_local_io_ctx, m_local_image_ctx, m_local_image_id, m_threads->work_queue,
     ctx);
   request->send();
 }
@@ -488,7 +487,7 @@ void BootstrapRequest<I>::create_local_image() {
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_create_local_image>(
       this);
   CreateImageRequest<I> *request = CreateImageRequest<I>::create(
-    m_local_io_ctx, m_work_queue, m_global_image_id, m_remote_mirror_uuid,
+    m_threads, m_local_io_ctx, m_global_image_id, m_remote_mirror_uuid,
     image_name, m_local_image_id, m_remote_image_ctx, ctx);
   request->send();
 }
@@ -668,9 +667,10 @@ void BootstrapRequest<I>::image_sync() {
       Context *ctx = create_context_callback<
         BootstrapRequest<I>, &BootstrapRequest<I>::handle_image_sync>(this);
       m_image_sync = ImageSync<I>::create(
-          *m_local_image_ctx, m_remote_image_ctx, m_timer, m_timer_lock,
-          m_local_mirror_uuid, m_journaler, m_client_meta, m_work_queue,
-          m_instance_watcher, ctx, m_progress_ctx);
+          *m_local_image_ctx, m_remote_image_ctx, m_threads->timer,
+          &m_threads->timer_lock, m_local_mirror_uuid, m_journaler,
+          m_client_meta, m_threads->work_queue, m_instance_watcher, ctx,
+          m_progress_ctx);
 
       m_image_sync->get();
 
