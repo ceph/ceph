@@ -35,8 +35,6 @@ template <typename T, typename K>
 class OpQueue {
 
   public:
-    // How many Ops are in the queue
-    virtual unsigned length() const = 0;
     // Ops of this class should be deleted immediately. If out isn't
     // nullptr then items should be added to the front in
     // front-to-back order. The typical strategy is to visit items in

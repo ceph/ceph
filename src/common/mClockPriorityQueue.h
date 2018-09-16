@@ -68,7 +68,7 @@ namespace ceph {
       Classes q;
 
       unsigned tokens, max_tokens;
-      int64_t size;
+      int64_t size; // XXX: this is only for the sake of dump().
 
       typename Classes::iterator cur;
 
@@ -201,7 +201,7 @@ namespace ceph {
       }
 
       void dump(ceph::Formatter *f) const {
-	f->dump_int("size", size);
+	f->dump_int("size", length());
 	f->dump_int("num_keys", q.size());
       }
     };
@@ -229,7 +229,8 @@ namespace ceph {
       // empty
     }
 
-    unsigned length() const override final {
+    // XXX: used only by the unitest?
+    unsigned length() const {
       unsigned total = 0;
       total += queue_front.size();
       total += queue.request_count();
