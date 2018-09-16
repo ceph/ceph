@@ -30,7 +30,7 @@ class SharedLRUTest : public SharedLRU<unsigned int, int> {
 public:
   auto& get_lock() { return lock; }
   auto& get_cond() { return cond; }
-  map<unsigned int, pair< std::weak_ptr<int>, int* > > &get_weak_refs() {
+  auto& get_weak_refs() {
     return weak_refs;
   }
 };

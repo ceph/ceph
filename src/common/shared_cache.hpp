@@ -25,6 +25,7 @@
 #include "common/ceph_mutex.h"
 #include "common/dout.h"
 #include "include/unordered_map.h"
+#include "include/slab_containers.h"
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/ceph_assert.h"
@@ -49,9 +50,10 @@ private:
   using C = std::less<K>;
   using H = std::hash<K>;
   ceph::unordered_map<K, typename std::list<std::pair<K, VPtr> >::iterator, H> contents;
-  std::list<std::pair<K, VPtr> > lru;
+  ceph::slab::slab_list<std::pair<K, VPtr>, 32, 32> lru;
 
   std::map<K, std::pair<WeakVPtr, V*>, C> weak_refs;
+  //ceph::slab::slab_map<K, std::pair<WeakVPtr, V*>, 32, 32, C> weak_refs;
 
   void trim_cache(std::list<VPtr> *to_release) {
     while (size > max_size) {
