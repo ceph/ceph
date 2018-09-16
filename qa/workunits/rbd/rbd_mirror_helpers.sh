@@ -8,18 +8,19 @@
 #
 # There are several env variables useful when troubleshooting a test failure:
 #
-#  RBD_MIRROR_NOCLEANUP - if not empty, don't run the cleanup (stop processes,
-#                         destroy the clusters and remove the temp directory)
-#                         on exit, so it is possible to check the test state
-#                         after failure.
-#  RBD_MIRROR_TEMDIR    - use this path when creating the temporary directory
-#                         (should not exist) instead of running mktemp(1).
-#  RBD_MIRROR_ARGS      - use this to pass additional arguments to started
-#                         rbd-mirror daemons.
-#  RBD_MIRROR_VARGS     - use this to pass additional arguments to vstart.sh
-#                         when starting clusters.
-#  RBD_MIRROR_INSTANCES - number of daemons to start per cluster
-#
+#  RBD_MIRROR_NOCLEANUP  - if not empty, don't run the cleanup (stop processes,
+#                          destroy the clusters and remove the temp directory)
+#                          on exit, so it is possible to check the test state
+#                          after failure.
+#  RBD_MIRROR_TEMDIR     - use this path when creating the temporary directory
+#                          (should not exist) instead of running mktemp(1).
+#  RBD_MIRROR_ARGS       - use this to pass additional arguments to started
+#                          rbd-mirror daemons.
+#  RBD_MIRROR_VARGS      - use this to pass additional arguments to vstart.sh
+#                          when starting clusters.
+#  RBD_MIRROR_INSTANCES  - number of daemons to start per cluster
+#  RBD_MIRROR_CONFIG_KEY - if not empty, use config-key for remote cluster
+#                          secrets
 # The cleanup can be done as a separate step, running the script with
 # `cleanup ${RBD_MIRROR_TEMDIR}' arguments.
 #
@@ -78,6 +79,7 @@ RBD_MIRROR_INSTANCES=${RBD_MIRROR_INSTANCES:-2}
 
 CLUSTER1=cluster1
 CLUSTER2=cluster2
+PEER_CLUSTER_SUFFIX=
 POOL=mirror
 PARENT_POOL=mirror_parent
 TEMPDIR=
@@ -194,7 +196,7 @@ create_users()
     for instance in `seq 0 ${LAST_MIRROR_INSTANCE}`; do
         CEPH_ARGS='' ceph --cluster "${cluster}" \
             auth get-or-create client.${MIRROR_USER_ID_PREFIX}${instance} \
-            mon 'profile rbd' osd 'profile rbd' >> \
+            mon 'profile rbd-mirror' osd 'profile rbd' >> \
             ${CEPH_ROOT}/run/${cluster}/keyring
     done
 }
@@ -209,7 +211,7 @@ update_users()
     for instance in `seq 0 ${LAST_MIRROR_INSTANCE}`; do
         CEPH_ARGS='' ceph --cluster "${cluster}" \
             auth caps client.${MIRROR_USER_ID_PREFIX}${instance} \
-            mon 'profile rbd' osd 'profile rbd'
+            mon 'profile rbd-mirror' osd 'profile rbd'
     done
 }
 
@@ -241,6 +243,10 @@ setup_pools()
 {
     local cluster=$1
     local remote_cluster=$2
+    local mon_map_file
+    local mon_addr
+    local admin_key_file
+    local uuid
 
     CEPH_ARGS='' ceph --cluster ${cluster} osd pool create ${POOL} 64 64
     CEPH_ARGS='' ceph --cluster ${cluster} osd pool create ${PARENT_POOL} 64 64
@@ -251,8 +257,26 @@ setup_pools()
     rbd --cluster ${cluster} mirror pool enable ${POOL} pool
     rbd --cluster ${cluster} mirror pool enable ${PARENT_POOL} image
 
-    rbd --cluster ${cluster} mirror pool peer add ${POOL} ${remote_cluster}
-    rbd --cluster ${cluster} mirror pool peer add ${PARENT_POOL} ${remote_cluster}
+    if [ -z ${RBD_MIRROR_CONFIG_KEY} ]; then
+      rbd --cluster ${cluster} mirror pool peer add ${POOL} ${remote_cluster}
+      rbd --cluster ${cluster} mirror pool peer add ${PARENT_POOL} ${remote_cluster}
+    else
+      mon_map_file=${TEMPDIR}/${remote_cluster}.monmap
+      ceph --cluster ${remote_cluster} mon getmap > ${mon_map_file}
+      mon_addr=$(monmaptool --print ${mon_map_file} | grep -E 'mon\.' | head -n 1 | sed -E 's/^[0-9]+: ([^/]+).+$/\1/')
+
+      admin_key_file=${TEMPDIR}/${remote_cluster}.client.${CEPH_ID}.key
+      CEPH_ARGS='' ceph --cluster ${remote_cluster} auth get-key client.${CEPH_ID} > ${admin_key_file}
+
+      rbd --cluster ${cluster} mirror pool peer add ${POOL} client.${CEPH_ID}@${remote_cluster}-DNE \
+          --remote-mon-host ${mon_addr} --remote-key-file ${admin_key_file}
+
+      uuid=$(rbd --cluster ${cluster} mirror pool peer add ${PARENT_POOL} client.${CEPH_ID}@${remote_cluster}-DNE)
+      rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} mon-host ${mon_addr}
+      rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} key-file ${admin_key_file}
+
+      PEER_CLUSTER_SUFFIX=-DNE
+    fi
 }
 
 setup_tempdir()

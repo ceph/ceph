@@ -24,6 +24,8 @@ int clone_image_pp(librbd::RBD &rbd, librbd::Image &p_image, librados::IoCtx &p_
 int get_image_id(librbd::Image &image, std::string *image_id);
 int create_image_data_pool(librados::Rados &rados, std::string &data_pool, bool *created);
 
+bool is_librados_test_stub(librados::Rados &rados);
+
 #define REQUIRE(x) {			  \
   if (!(x)) {				  \
     std::cout << "SKIPPING" << std::endl; \

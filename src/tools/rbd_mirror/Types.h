@@ -61,34 +61,51 @@ struct Peer {
 
 typedef std::set<Peer> Peers;
 
-struct peer_t {
-  peer_t() = default;
-  peer_t(const std::string &uuid, const std::string &cluster_name,
-	 const std::string &client_name)
+struct PeerSpec {
+  PeerSpec() = default;
+  PeerSpec(const std::string &uuid, const std::string &cluster_name,
+	   const std::string &client_name)
     : uuid(uuid), cluster_name(cluster_name), client_name(client_name)
   {
   }
-  peer_t(const librbd::mirror_peer_t &peer) :
+  PeerSpec(const librbd::mirror_peer_t &peer) :
     uuid(peer.uuid),
     cluster_name(peer.cluster_name),
     client_name(peer.client_name)
   {
   }
+
   std::string uuid;
   std::string cluster_name;
   std::string client_name;
-  bool operator<(const peer_t &rhs) const {
-    return this->uuid < rhs.uuid;
+
+  /// optional config properties
+  std::string mon_host;
+  std::string key;
+
+  bool operator==(const PeerSpec& rhs) const {
+    return (uuid == rhs.uuid &&
+            cluster_name == rhs.cluster_name &&
+            client_name == rhs.client_name &&
+            mon_host == rhs.mon_host &&
+            key == rhs.key);
   }
-  bool operator()(const peer_t &lhs, const peer_t &rhs) const {
-    return lhs.uuid < rhs.uuid;
-  }
-  bool operator==(const peer_t &rhs) const {
-    return uuid == rhs.uuid;
+  bool operator<(const PeerSpec& rhs) const {
+    if (uuid != rhs.uuid) {
+      return uuid < rhs.uuid;
+    } else if (cluster_name != rhs.cluster_name) {
+      return cluster_name < rhs.cluster_name;
+    } else if (client_name != rhs.client_name) {
+      return client_name < rhs.client_name;
+    } else if (mon_host < rhs.mon_host) {
+      return mon_host < rhs.mon_host;
+    } else {
+      return key < rhs.key;
+    }
   }
 };
 
-std::ostream& operator<<(std::ostream& lhs, const peer_t &peer);
+std::ostream& operator<<(std::ostream& lhs, const PeerSpec &peer);
 
 } // namespace mirror
 } // namespace rbd
