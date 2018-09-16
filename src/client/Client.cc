@@ -9521,7 +9521,7 @@ success:
   }
 
   // mtime
-  in->mtime = ceph_clock_now();
+  in->mtime = in->ctime = ceph_clock_now();
   in->change_attr++;
   in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
@@ -13316,7 +13316,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
         in->inline_data = bl;
         in->inline_version++;
       }
-      in->mtime = ceph_clock_now();
+      in->mtime = in->ctime = ceph_clock_now();
       in->change_attr++;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
     } else {
@@ -13336,7 +13336,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 		  offset, length,
 		  ceph::real_clock::now(),
 		  0, true, &onfinish);
-      in->mtime = ceph_clock_now();
+      in->mtime = in->ctime = ceph_clock_now();
       in->change_attr++;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
@@ -13349,7 +13349,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
     uint64_t size = offset + length;
     if (size > in->size) {
       in->size = size;
-      in->mtime = ceph_clock_now();
+      in->mtime = in->ctime = ceph_clock_now();
       in->change_attr++;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
