@@ -3908,17 +3908,20 @@ void OSD::_get_pgids(vector<spg_t> *v)
   }
 }
 
-void OSD::register_pg(PGRef pg)
+void OSD::maybe_register_pg(PGRef pg)
 {
   spg_t pgid = pg->get_pgid();
   uint32_t shard_index = pgid.hash_to_shard(num_shards);
   auto sdata = shards[shard_index];
   Mutex::Locker l(sdata->shard_lock);
   auto r = sdata->pg_slots.emplace(pgid, make_unique<OSDShardPGSlot>());
-  ceph_assert(r.second);
-  auto *slot = r.first->second.get();
-  dout(20) << __func__ << " " << pgid << " " << pg << dendl;
-  sdata->_attach_pg(slot, pg.get());
+  if (r.second) {
+    auto *slot = r.first->second.get();
+    dout(20) << __func__ << " " << pgid << " " << pg << dendl;
+    sdata->_attach_pg(slot, pg.get());
+  } else {
+    dout(20) << __func__ << " " << pgid << " already registered" << dendl;
+  }
 }
 
 bool OSD::try_finish_pg_delete(PG *pg, unsigned old_pg_num)
@@ -4084,7 +4087,7 @@ void OSD::load_pgs()
     dout(10) << __func__ << " loaded " << *pg << dendl;
     pg->unlock();
 
-    register_pg(pg);
+    maybe_register_pg(pg);
     ++num;
   }
   dout(0) << __func__ << " opened " << num << " pgs" << dendl;
@@ -8078,6 +8081,7 @@ void OSD::_finish_splits(set<PGRef>& pgs)
        i != pgs.end();
        ++i) {
     PG *pg = i->get();
+    maybe_register_pg(pg);
 
     pg->lock();
     dout(10) << __func__ << " " << *pg << dendl;

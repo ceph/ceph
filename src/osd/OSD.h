@@ -1895,7 +1895,7 @@ protected:
 
   PGRef _lookup_pg(spg_t pgid);
   PGRef _lookup_lock_pg(spg_t pgid);
-  void register_pg(PGRef pg);
+  void maybe_register_pg(PGRef pg);
   bool try_finish_pg_delete(PG *pg, unsigned old_pg_num);
 
   void _get_pgs(vector<PGRef> *v, bool clear_too=false);
