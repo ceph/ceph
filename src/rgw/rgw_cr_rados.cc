@@ -659,7 +659,7 @@ int RGWAsyncRemoveObj::_send_request()
 
   ldout(store->ctx(), 0) << __func__ << "(): deleting obj=" << obj << dendl;
 
-  obj_ctx.obj.set_atomic(obj);
+  obj_ctx.set_atomic(obj);
 
   RGWObjState *state;
 
