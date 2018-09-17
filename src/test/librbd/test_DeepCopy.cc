@@ -87,8 +87,10 @@ struct TestDeepCopy : public TestFixture {
 
       if (m_dst_ictx->test_features(RBD_FEATURE_LAYERING)) {
         bool flags_set;
-        EXPECT_EQ(0, m_dst_ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
-                                            &flags_set));
+        RWLock::RLocker dst_locker(m_dst_ictx->snap_lock);
+        EXPECT_EQ(0, m_dst_ictx->test_flags(m_dst_ictx->snap_id,
+                                            RBD_FLAG_OBJECT_MAP_INVALID,
+                                            m_dst_ictx->snap_lock, &flags_set));
         EXPECT_FALSE(flags_set);
       }
 

@@ -573,18 +573,20 @@ public:
     return -ENOENT;
   }
 
-  int ImageCtx::test_flags(uint64_t flags, bool *flags_set) const
+  int ImageCtx::test_flags(librados::snap_t in_snap_id,
+                           uint64_t flags, bool *flags_set) const
   {
     RWLock::RLocker l(snap_lock);
-    return test_flags(flags, snap_lock, flags_set);
+    return test_flags(in_snap_id, flags, snap_lock, flags_set);
   }
 
-  int ImageCtx::test_flags(uint64_t flags, const RWLock &in_snap_lock,
+  int ImageCtx::test_flags(librados::snap_t in_snap_id,
+                           uint64_t flags, const RWLock &in_snap_lock,
                            bool *flags_set) const
   {
     ceph_assert(snap_lock.is_locked());
     uint64_t snap_flags;
-    int r = get_flags(snap_id, &snap_flags);
+    int r = get_flags(in_snap_id, &snap_flags);
     if (r < 0) {
       return r;
     }
