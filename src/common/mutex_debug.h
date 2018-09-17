@@ -46,7 +46,7 @@ protected:
   void _register();
   void _will_lock(); // about to lock
   void _locked(); // just locked
-    void _will_unlock(); // about to unlock
+  void _will_unlock(); // about to unlock
 
   mutex_debugging_base(const std::string &n = std::string(), bool bt = false);
   ~mutex_debugging_base();
