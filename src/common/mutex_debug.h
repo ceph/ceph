@@ -44,7 +44,7 @@ protected:
 
 
   void _register();
-  void _will_lock(); // about to lock
+  void _will_lock(bool recursive=false); // about to lock
   void _locked(); // just locked
   void _will_unlock(); // about to unlock
 
@@ -165,7 +165,7 @@ public:
 
   void lock(bool no_lockdep = false) {
     if (g_lockdep && !no_lockdep)
-      _will_lock();
+      _will_lock(recursive);
 
     if (try_lock())
       return;
