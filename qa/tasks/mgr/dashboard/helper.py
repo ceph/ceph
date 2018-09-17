@@ -144,6 +144,7 @@ class DashboardTestCase(MgrTestCase):
     def setUp(self):
         if not self._loggedin and self.AUTO_AUTHENTICATE:
             self.login('admin', 'admin')
+        self.wait_for_health_clear(20)
 
     @classmethod
     def tearDownClass(cls):
