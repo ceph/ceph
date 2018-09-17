@@ -88,12 +88,8 @@ describe('UserFormComponent', () => {
     it('should validate username required', () => {
       form.get('username').setValue('');
       expect(form.get('username').hasError('required')).toBeTruthy();
-    });
-
-    it('should validate password required', () => {
-      ['password', 'confirmpassword'].forEach((key) =>
-        expect(form.get(key).hasError('required')).toBeTruthy()
-      );
+      form.get('username').setValue('user1');
+      expect(form.get('username').hasError('required')).toBeFalsy();
     });
 
     it('should validate password match', () => {
@@ -107,6 +103,13 @@ describe('UserFormComponent', () => {
     it('should validate email', () => {
       form.get('email').setValue('aaa');
       expect(form.get('email').hasError('email')).toBeTruthy();
+    });
+
+    it('should validate all required fields', () => {
+      form.get('username').setValue('');
+      expect(form.valid).toBeFalsy();
+      form.get('username').setValue('user1');
+      expect(form.valid).toBeTruthy();
     });
 
     it('should set mode', () => {
@@ -194,13 +197,6 @@ describe('UserFormComponent', () => {
 
     it('should set mode', () => {
       expect(component.mode).toBe('editing');
-    });
-
-    it('should validate password not required', () => {
-      ['password', 'confirmpassword'].forEach((key) => {
-        form.get(key).setValue('');
-        expect(form.get(key).hasError('required')).toBeFalsy();
-      });
     });
 
     it('should alert if user is removing needed role permission', () => {

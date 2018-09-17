@@ -47,10 +47,6 @@ class User(RESTController):
             raise DashboardException(msg='Username is required',
                                      code='username_required',
                                      component='user')
-        if not password:
-            raise DashboardException(msg='Password is required',
-                                     code='password_required',
-                                     component='user')
         user_roles = None
         if roles:
             user_roles = User._get_user_roles(roles)

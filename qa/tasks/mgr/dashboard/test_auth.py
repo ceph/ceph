@@ -76,6 +76,17 @@ class AuthTest(DashboardTestCase):
             "detail": "Invalid credentials"
         })
 
+    def test_login_without_password(self):
+        self.create_user('admin2', '', ['administrator'])
+        self._post("/api/auth", {'username': 'admin2', 'password': ''})
+        self.assertStatus(400)
+        self.assertJsonBody({
+            "component": "auth",
+            "code": "invalid_credentials",
+            "detail": "Invalid credentials"
+        })
+        self.delete_user('admin2')
+
     def test_logout(self):
         self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
         self._delete("/api/auth")
