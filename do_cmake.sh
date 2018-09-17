@@ -17,7 +17,7 @@ if type cmake3 > /dev/null 2>&1 ; then
 else
     CMAKE=cmake
 fi
-${CMAKE} $ARGS "$@" .. || exit 1
+${CMAKE} -DCMAKE_BUILD_TYPE=Debug $ARGS "$@" .. || exit 1
 
 # minimal config to find plugins
 cat <<EOF > ceph.conf
