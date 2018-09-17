@@ -149,7 +149,12 @@ BuildRequires:	gcc-c++
 %endif
 BuildRequires:	gdbm
 %if 0%{with tcmalloc}
+%if 0%{?fedora} || 0%{?rhel}
+BuildRequires:	gperftools-devel >= 2.6.1
+%endif
+%if 0%{?suse_version}
 BuildRequires:	gperftools-devel >= 2.4
+%endif
 %endif
 BuildRequires:  jq
 BuildRequires:	leveldb-devel > 1.2
