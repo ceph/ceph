@@ -47,7 +47,7 @@ likely to be on the order of 100's of MB to tens of GB.
 SeaStore's logical segments would ideally be perfectly aligned with
 the hardware segments.  In practice, it may be challenging to
 determine geometry and to sufficiently hint to the device that LBAs
-being written shoudl be aligned to the underlying hardware.  In the
+being written should be aligned to the underlying hardware.  In the
 worst case, we can structure our logical segments to correspond to
 e.g. 5x the physical segment size so that we have about ~20% of our
 data misaligned.
