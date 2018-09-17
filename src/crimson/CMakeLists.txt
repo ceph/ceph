@@ -127,7 +127,7 @@ add_library(crimson STATIC
   ${crimson_net_srcs}
   ${crimson_thread_srcs}
   ${CMAKE_SOURCE_DIR}/src/common/buffer_seastar.cc)
-target_compile_options(crimson PRIVATE
+target_compile_options(crimson PUBLIC
   "-ftemplate-backtrace-limit=0")
 target_link_libraries(crimson
   PUBLIC
