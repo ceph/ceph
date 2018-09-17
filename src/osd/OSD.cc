@@ -3412,7 +3412,6 @@ int OSD::shutdown()
   heartbeat_thread.join();
 
   peering_tp.drain();
-  peering_wq.clear();
   peering_tp.stop();
   dout(10) << "osd tp stopped" << dendl;
 
