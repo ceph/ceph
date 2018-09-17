@@ -2548,8 +2548,8 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
 
   /* First, get attrset of the object we'll try to retrieve. */
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj_ctx.obj.set_atomic(obj);
-  obj_ctx.obj.set_prefetch_data(obj);
+  obj_ctx.set_atomic(obj);
+  obj_ctx.set_prefetch_data(obj);
 
   RGWObjState* state = nullptr;
   if (store->get_obj_state(&obj_ctx, s->bucket_info, obj, &state, false) < 0) {
@@ -2578,8 +2578,8 @@ bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index)
   rgw_obj obj(s->bucket, index);
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj_ctx.obj.set_atomic(obj);
-  obj_ctx.obj.set_prefetch_data(obj);
+  obj_ctx.set_atomic(obj);
+  obj_ctx.set_prefetch_data(obj);
 
   RGWObjState* state = nullptr;
   if (store->get_obj_state(&obj_ctx, s->bucket_info, obj, &state, false) < 0) {

@@ -225,7 +225,7 @@ int RGWSI_RADOS::Pool::create(const vector<rgw_pool>& pools, vector<int> *retcod
   vector<librados::PoolAsyncCompletion *>::iterator citer;
 
   bool error = false;
-  assert(rets.size() == completions.size());
+  ceph_assert(rets.size() == completions.size());
   for (riter = rets.begin(), citer = completions.begin(); riter != rets.end(); ++riter, ++citer) {
     int r = *riter;
     librados::PoolAsyncCompletion *c = *citer;
@@ -266,7 +266,7 @@ int RGWSI_RADOS::Pool::create(const vector<rgw_pool>& pools, vector<int> *retcod
     completions.push_back(c);
     int ret = io_ctx.application_enable_async(pg_pool_t::APPLICATION_NAME_RGW,
                                               false, c);
-    assert(ret == 0);
+    ceph_assert(ret == 0);
   }
 
   retcodes->clear();

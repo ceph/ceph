@@ -1064,18 +1064,27 @@ public:
 class RGWGetDirHeader_CB;
 class RGWGetUserHeader_CB;
 
-template <class T, class S>
-class RGWObjectCtxImpl {
+class RGWObjectCtx {
   RGWRados *store;
-  std::map<T, S> objs_state;
-  RWLock lock;
+  RWLock lock{"RGWObjectCtx"};
+  void *s{nullptr};
 
+  std::map<rgw_obj, RGWObjState> objs_state;
 public:
-  explicit RGWObjectCtxImpl(RGWRados *_store) : store(_store), lock("RGWObjectCtxImpl") {}
+  explicit RGWObjectCtx(RGWRados *_store) : store(_store) {}
+  explicit RGWObjectCtx(RGWRados *_store, void *_s) : store(_store), s(_s) {}
 
-  S *get_state(const T& obj) {
-    S *result;
-    typename std::map<T, S>::iterator iter;
+  void *get_private() {
+    return s;
+  }
+
+  RGWRados *get_store() {
+    return store;
+  }
+
+  RGWObjState *get_state(const rgw_obj& obj) {
+    RGWObjState *result;
+    typename std::map<rgw_obj, RGWObjState>::iterator iter;
     lock.get_read();
     assert (!obj.empty());
     iter = objs_state.find(obj);
@@ -1091,34 +1100,34 @@ public:
     return result;
   }
 
-  void set_atomic(T& obj) {
+  void set_atomic(rgw_obj& obj) {
     RWLock::WLocker wl(lock);
     assert (!obj.empty());
     objs_state[obj].is_atomic = true;
   }
-  void set_prefetch_data(T& obj) {
+  void set_prefetch_data(rgw_obj& obj) {
     RWLock::WLocker wl(lock);
     assert (!obj.empty());
     objs_state[obj].prefetch_data = true;
   }
-  void invalidate(const T& obj);
-};
 
-template<>
-void RGWObjectCtxImpl<rgw_obj, RGWObjState>::invalidate(const rgw_obj& obj);
+  void invalidate(const rgw_obj& obj) {
+    RWLock::WLocker wl(lock);
+    auto iter = objs_state.find(obj);
+    if (iter == objs_state.end()) {
+      return;
+    }
+    bool is_atomic = iter->second.is_atomic;
+    bool prefetch_data = iter->second.prefetch_data;
+  
+    objs_state.erase(iter);
 
-template<>
-void RGWObjectCtxImpl<rgw_raw_obj, RGWRawObjState>::invalidate(const rgw_raw_obj& obj);
-
-struct RGWObjectCtx {
-  RGWRados *store;
-  req_state *s;
-
-  RGWObjectCtxImpl<rgw_obj, RGWObjState> obj;
-  RGWObjectCtxImpl<rgw_raw_obj, RGWRawObjState> raw;
-
-  explicit RGWObjectCtx(RGWRados *_store) : store(_store), s(NULL), obj(store), raw(store) { }
-  explicit RGWObjectCtx(RGWRados *_store, req_state *_s) : store(_store), s(_s), obj(store), raw(store) { }
+    if (is_atomic || prefetch_data) {
+      auto& state = objs_state[obj];
+      state.is_atomic = is_atomic;
+      state.prefetch_data = prefetch_data;
+    }
+  }
 };
 
 class RGWAsyncRadosProcessor;
@@ -1248,7 +1257,6 @@ class RGWRados : public AdminSocketHook
 
   int get_olh_target_state(RGWObjectCtx& rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                            RGWObjState *olh_state, RGWObjState **target_state);
-  int get_system_obj_state_impl(RGWObjectCtx *rctx, rgw_raw_obj& obj, RGWRawObjState **state, RGWObjVersionTracker *objv_tracker);
   int get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state,
                          bool follow_olh, bool assume_noent = false);
   int append_atomic_test(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
@@ -1309,8 +1317,34 @@ public:
                cr_registry(NULL),
                meta_mgr(NULL), data_log(NULL), reshard(NULL) {}
 
-  void set_use_cache(bool status) {
+  RGWRados& set_use_cache(bool status) {
     use_cache = status;
+    return *this;
+  }
+
+  RGWRados& set_run_gc_thread(bool _use_gc_thread) {
+    use_gc_thread = _use_gc_thread;
+    return *this;
+  }
+
+  RGWRados& set_run_lc_thread(bool _use_lc_thread) {
+    use_lc_thread = _use_lc_thread;
+    return *this;
+  }
+
+  RGWRados& set_run_quota_threads(bool _run_quota_threads) {
+    quota_threads = _run_quota_threads;
+    return *this;
+  }
+
+  RGWRados& set_run_sync_thread(bool _run_sync_thread) {
+    run_sync_thread = _run_sync_thread;
+    return *this;
+  }
+
+  RGWRados& set_run_reshard_thread(bool _run_reshard_thread) {
+    run_reshard_thread = _run_reshard_thread;
+    return *this;
   }
 
   uint64_t get_new_req_id() {
@@ -1396,17 +1430,10 @@ public:
                        bool *is_truncated);
   string list_raw_objs_get_cursor(RGWListRawObjsCtx& ctx);
 
-  int list_raw_prefixed_objs(const rgw_pool& pool, const string& prefix, list<string>& result);
-
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
-  int initialize(CephContext *_cct, bool _use_gc_thread, bool _use_lc_thread, bool _quota_threads, bool _run_sync_thread, bool _run_reshard_thread) {
+  int initialize(CephContext *_cct) {
     set_context(_cct);
-    use_gc_thread = _use_gc_thread;
-    use_lc_thread = _use_lc_thread;
-    quota_threads = _quota_threads;
-    run_sync_thread = _run_sync_thread;
-    run_reshard_thread = _run_reshard_thread;
     return initialize();
   }
   /** Initialize the RADOS instance and prepare to do other ops */
@@ -1417,8 +1444,6 @@ public:
 
   int register_to_service_map(const string& daemon_type, const map<string, string>& meta);
   int update_service_map(std::map<std::string, std::string>&& status);
-
-  void schedule_context(Context *c);
 
   /** set up a bucket listing. handle is filled in. */
   int list_buckets_init(RGWAccessHandle *handle);
@@ -1467,7 +1492,6 @@ public:
                             rgw_bucket *master_bucket,
                             uint32_t *master_num_shards,
                             bool exclusive = true);
-  int create_pools(vector<rgw_pool>& pools, vector<int>& retcodes);
 
   RGWCoroutinesManagerRegistry *get_cr_registry() { return cr_registry; }
 
@@ -1619,7 +1643,7 @@ public:
                      map<std::string, bufferlist>& attrs);
       int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
       const req_state* get_req_state() {
-        return target->get_ctx().s;
+        return (req_state *)target->get_ctx().get_private();
       }
     };
 
@@ -2017,7 +2041,6 @@ public:
                         map<string, bufferlist>& attrs,
                         map<string, bufferlist>* rmattrs);
 
-  int get_system_obj_state(RGWObjectCtx *rctx, rgw_raw_obj& obj, RGWRawObjState **state, RGWObjVersionTracker *objv_tracker);
   int get_obj_state(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state,
                     bool follow_olh, bool assume_noent = false);
   int get_obj_state(RGWObjectCtx *rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state) {
@@ -2045,9 +2068,9 @@ public:
    * a simple object read without keeping state
    */
 
-  virtual int raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, ceph::real_time *pmtime, uint64_t *epoch,
-                       map<string, bufferlist> *attrs, bufferlist *first_chunk,
-                       RGWObjVersionTracker *objv_tracker);
+  int raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, ceph::real_time *pmtime, uint64_t *epoch,
+                   map<string, bufferlist> *attrs, bufferlist *first_chunk,
+                   RGWObjVersionTracker *objv_tracker);
 
   int obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectWriteOperation *op);
   int obj_operate(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectReadOperation *op);
@@ -2098,11 +2121,11 @@ public:
 public:
   void set_atomic(void *ctx, rgw_obj& obj) {
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
-    rctx->obj.set_atomic(obj);
+    rctx->set_atomic(obj);
   }
   void set_prefetch_data(void *ctx, rgw_obj& obj) {
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
-    rctx->obj.set_prefetch_data(obj);
+    rctx->set_prefetch_data(obj);
   }
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, string *bucket_ver, string *master_ver,
@@ -2148,20 +2171,20 @@ protected:
   // `cache_list_dump_helper` with the supplied Formatter on any that
   // include `filter` as a substring.
   //
-  virtual void call_list(const std::optional<std::string>& filter,
+  void call_list(const std::optional<std::string>& filter,
 			 Formatter* format);
   // `call_inspect` must look up the requested target and, if found,
   // dump it to the supplied Formatter and return true. If not found,
   // it must return false.
   //
-  virtual bool call_inspect(const std::string& target, Formatter* format);
+  bool call_inspect(const std::string& target, Formatter* format);
 
   // `call_erase` must erase the requested target and return true. If
   // the requested target does not exist, it should return false.
-  virtual bool call_erase(const std::string& target);
+  bool call_erase(const std::string& target);
 
   // `call_zap` must erase the cache.
-  virtual void call_zap();
+  void call_zap();
 public:
 
   int get_bucket_info(RGWSysObjectCtx& obj_ctx,

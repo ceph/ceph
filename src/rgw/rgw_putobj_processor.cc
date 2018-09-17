@@ -262,7 +262,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  obj_ctx.obj.set_atomic(head_obj);
+  obj_ctx.set_atomic(head_obj);
 
   RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
 

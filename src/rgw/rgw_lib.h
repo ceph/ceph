@@ -156,7 +156,7 @@ namespace rgw {
 	     RGWLibIO* io, struct req_state* _s) {
 
       RGWRequest::init_state(_s);
-      RGWHandler::init(rados_ctx->store, _s, io);
+      RGWHandler::init(rados_ctx->get_store(), _s, io);
 
       get_state()->obj_ctx = rados_ctx;
       get_state()->req_id = store->svc.zone_utils->unique_id(id);
@@ -192,7 +192,7 @@ namespace rgw {
 	io_ctx.init(_cct);
 
 	RGWRequest::init_state(&rstate);
-	RGWHandler::init(rados_ctx.store, &rstate, &io_ctx);
+	RGWHandler::init(rados_ctx.get_store(), &rstate, &io_ctx);
 
 	get_state()->obj_ctx = &rados_ctx;
 	get_state()->req_id = store->svc.zone_utils->unique_id(id);

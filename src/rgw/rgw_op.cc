@@ -1229,7 +1229,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   ldpp_dout(this, 20) << "reading obj=" << part << " ofs=" << cur_ofs
       << " end=" << cur_end << dendl;
 
-  obj_ctx.obj.set_atomic(part);
+  obj_ctx.set_atomic(part);
   store->set_prefetch_data(&obj_ctx, part);
 
   RGWRados::Object op_target(store, s->bucket_info, obj_ctx, part);
@@ -4350,7 +4350,7 @@ void RGWDeleteObj::execute()
     }
 
     RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
-    obj_ctx->obj.set_atomic(obj);
+    obj_ctx->set_atomic(obj);
 
     bool ver_restored = false;
     op_ret = store->swift_versioning_restore(*s->sysobj_ctx, *obj_ctx, s->bucket_owner.get_id(),
@@ -4639,8 +4639,8 @@ void RGWCopyObj::execute()
   rgw_obj dst_obj(dest_bucket, dest_object);
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj_ctx.obj.set_atomic(src_obj);
-  obj_ctx.obj.set_atomic(dst_obj);
+  obj_ctx.set_atomic(src_obj);
+  obj_ctx.set_atomic(dst_obj);
 
   encode_delete_at_attr(delete_at, attrs);
 
@@ -5678,7 +5678,7 @@ void RGWCompleteMultipart::execute()
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
 
-  obj_ctx.obj.set_atomic(target_obj);
+  obj_ctx.set_atomic(target_obj);
 
   RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), target_obj);
   RGWRados::Object::Write obj_op(&op_target);
@@ -6006,7 +6006,7 @@ void RGWDeleteMultiObj::execute()
       }
     }
 
-    obj_ctx->obj.set_atomic(obj);
+    obj_ctx->set_atomic(obj);
 
     RGWRados::Object del_target(store, s->bucket_info, *obj_ctx, obj);
     RGWRados::Object::Delete del_op(&del_target);
@@ -6081,7 +6081,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
 
   if (!path.obj_key.empty()) {
     rgw_obj obj(binfo.bucket, path.obj_key);
-    obj_ctx.obj.set_atomic(obj);
+    obj_ctx.set_atomic(obj);
 
     RGWRados::Object del_target(store, binfo, obj_ctx, obj);
     RGWRados::Object::Delete del_op(&del_target);
