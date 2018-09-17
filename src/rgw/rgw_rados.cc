@@ -1365,7 +1365,7 @@ int RGWPeriod::create(bool exclusive)
   new_uuid.print(uuid_str);
   id = uuid_str;
 
-  epoch = FIRST_EPOCH;
+  epoch += 1;
 
   period_map.id = id;
   

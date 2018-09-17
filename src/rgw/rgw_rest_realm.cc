@@ -173,6 +173,14 @@ void RGWOp_Period_Post::execute()
       http_ret = -ENOENT; // XXX: error code
       return;
     }
+    if (period.get_epoch() <= current_period.get_epoch()) {
+      ldout(cct, 10) << "discarding period " << period.get_id()
+          << " with period epoch " << period.get_period_epoch()
+          << " not inherit from current period epoch " << current_period.get_epoch() << dendl;
+      // return success to ack that we have this period
+      return;
+    }
+
     // attach a copy of the period into the period history
     auto cursor = store->period_history->attach(RGWPeriod{period});
     if (!cursor) {
