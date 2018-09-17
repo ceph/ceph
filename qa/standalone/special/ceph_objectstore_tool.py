@@ -983,7 +983,7 @@ def main(argv):
     # On import can't specify a PG with a bad seed
     TMPPG="{pool}.80".format(pool=REPID)
     cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=ONEOSD, pg=TMPPG, file=OTHERFILE)
-    ERRORS += test_failure(cmd, "Illegal pgid, the seed is larger than current pg_num")
+    ERRORS += test_failure(cmd, "PG {pg} no longer exists".format(pg=TMPPG))
 
     os.unlink(OTHERFILE)
     cmd = (CFSD_PREFIX + "--op import --file {FOO}").format(osd=ONEOSD, FOO=OTHERFILE)
