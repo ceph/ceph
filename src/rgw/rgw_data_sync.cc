@@ -1468,7 +1468,7 @@ public:
           int ret;
           while (collect(&ret, lease_stack.get())) {
             if (ret < 0) {
-              ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
+              tn->log(10, "a sync operation returned error");
               /* we have reported this error */
             }
             /* not waiting for child here */
@@ -2775,7 +2775,7 @@ int RGWBucketShardFullSyncCR::operate()
           while (again) {
             again = collect(&ret, nullptr);
             if (ret < 0) {
-              tn->log(0, SSTR("ERROR: a sync operation returned error"));
+              tn->log(10, "a sync operation returned error");
               sync_status = ret;
               /* we have reported this error */
             }
@@ -2791,7 +2791,7 @@ int RGWBucketShardFullSyncCR::operate()
       while (again) {
         again = collect(&ret, nullptr);
         if (ret < 0) {
-          tn->log(0, SSTR("ERROR: a sync operation returned error"));
+          tn->log(10, "a sync operation returned error");
           sync_status = ret;
           /* we have reported this error */
         }
@@ -2813,7 +2813,7 @@ int RGWBucketShardFullSyncCR::operate()
                                             attrs));
       }
     } else {
-      tn->log(0, SSTR("ERROR: failure in sync, backing out (sync_status=" << sync_status<< ")"));
+      tn->log(10, SSTR("backing out with sync_status=" << sync_status));
     }
     if (retcode < 0 && sync_status == 0) { /* actually tried to set incremental state and failed */
       tn->log(0, SSTR("ERROR: failed to set sync state on bucket "
@@ -3060,7 +3060,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
           while (again) {
             again = collect(&ret, nullptr);
             if (ret < 0) {
-              tn->log(0, SSTR("ERROR: a sync operation returned error"));
+              tn->log(10, "a sync operation returned error");
               sync_status = ret;
               /* we have reported this error */
             }
@@ -3076,7 +3076,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
       while (again) {
         again = collect(&ret, nullptr);
         if (ret < 0) {
-          tn->log(0, SSTR("ERROR: a sync operation returned error"));
+          tn->log(10, "a sync operation returned error");
           sync_status = ret;
           /* we have reported this error */
         }
@@ -3100,7 +3100,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
       return set_cr_error(retcode);
     }
     if (sync_status < 0) {
-      tn->log(0, SSTR("ERROR: failure in sync, backing out (sync_status=" << sync_status<< ")"));
+      tn->log(10, SSTR("backing out with sync_status=" << sync_status));
       return set_cr_error(sync_status);
     }
     return set_cr_done();
