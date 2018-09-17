@@ -1480,9 +1480,10 @@ using namespace ceph;
 
   void buffer::list::reserve(size_t prealloc)
   {
-    if (append_buffer.unused_tail_length() < prealloc) {
-      append_buffer = buffer::create_page_aligned(prealloc);
-      append_buffer.set_length(0);   // unused, so far.
+    if (_buffers.empty() || _buffers.back().unused_tail_length() < prealloc) {
+      auto& ptr = hangable_ptr::create(buffer::create_page_aligned(prealloc));
+      _buffers.push_back(ptr);
+      ptr.set_length(0);   // unused, so far.
     }
   }
 
@@ -1611,39 +1612,50 @@ using namespace ceph;
   void buffer::list::append(char c)
   {
     // put what we can into the existing append_buffer.
-    unsigned gap = append_buffer.unused_tail_length();
+    unsigned gap = get_append_buffer_unused_tail_length();
     if (!gap) {
-      // make a new append_buffer!
-      append_buffer = raw_combined::create(CEPH_BUFFER_APPEND_SIZE, 0,
-					   get_mempool());
-      append_buffer.set_length(0);   // unused, so far.
+      // make a new buffer!
+      auto& buf = hangable_ptr::create(
+	raw_combined::create(CEPH_BUFFER_APPEND_SIZE, 0, get_mempool()));
+      _buffers.push_back(buf);
+      buf.set_length(0);   // unused, so far.
     }
-    append(append_buffer, append_buffer.append(c) - 1, 1);	// add segment to the list
+    _buffers.back().append(c);
+    _len++;
   }
 
   void buffer::list::append(const char *data, unsigned len)
   {
+    // hmm, maybe let's provide ::appends with guarantee the container is
+    // never empty?
+    if (_buffers.empty()) {
+      size_t need = round_up_to(len, sizeof(size_t)) + sizeof(raw_combined);
+      size_t alen = round_up_to(need, CEPH_BUFFER_ALLOC_UNIT) -
+	sizeof(raw_combined);
+      _buffers.emplace_back(raw_combined::create(alen, 0, get_mempool()));
+      _buffers.back().set_length(0);   // unused, so far.
+    }
+
     while (len > 0) {
-      // put what we can into the existing append_buffer.
-      unsigned gap = append_buffer.unused_tail_length();
-      if (gap > 0) {
-        if (gap > len) gap = len;
-    //cout << "append first char is " << data[0] << ", last char is " << data[len-1] << std::endl;
-        append_buffer.append(data, gap);
-        append(append_buffer, append_buffer.length() - gap, gap);	// add segment to the list
-        len -= gap;
-        data += gap;
+      ptr& last_one = _buffers.back();
+      unsigned gap = \
+	std::min(last_one.raw_nref() == 1 ? last_one.unused_tail_length() : 0, len);
+      last_one.append(data, gap);
+      _len += gap;
+      len -= gap;
+      data += gap;
+
+      if (len == 0) {
+	break;
       }
-      if (len == 0)
-        break;  // done!
-      
-      // make a new append_buffer.  fill out a complete page, factoring in the
+
+      // make a new buffer.  fill out a complete page, factoring in the
       // raw_combined overhead.
       size_t need = round_up_to(len, sizeof(size_t)) + sizeof(raw_combined);
       size_t alen = round_up_to(need, CEPH_BUFFER_ALLOC_UNIT) -
 	sizeof(raw_combined);
-      append_buffer = raw_combined::create(alen, 0, get_mempool());
-      append_buffer.set_length(0);   // unused, so far.
+      _buffers.emplace_back(raw_combined::create(alen, 0, get_mempool()));
+      _buffers.back().set_length(0);   // unused, so far.
     }
   }
 
@@ -1725,11 +1737,18 @@ using namespace ceph;
   
   void buffer::list::append_zero(unsigned len)
   {
-    unsigned need = std::min(append_buffer.unused_tail_length(), len);
+    if (_buffers.empty()) {
+      auto& buf = hangable_ptr::create(buffer::create_page_aligned(len));
+      buf.set_length(0);   // unused, so far.
+      _buffers.push_back(buf);
+    }
+
+    auto& buf = _buffers.back();
+    unsigned need = std::min(buf.unused_tail_length(), len);
     if (need) {
-      append_buffer.append_zeros(need);
-      append(append_buffer, append_buffer.length() - need, need);
+      buf.append_zeros(need);
       len -= need;
+      _len += need;
     }
     if (len) {
       auto& bp = hangable_ptr::create(buffer::create_page_aligned(len));
