@@ -44,6 +44,14 @@ namespace {
 
 SocketConnection::SocketConnection(Messenger *messenger,
                                    const entity_addr_t& my_addr,
+                                   const entity_addr_t& peer_addr)
+  : Connection(messenger, my_addr, peer_addr),
+    send_ready(h.promise.get_future())
+{
+}
+
+SocketConnection::SocketConnection(Messenger *messenger,
+                                   const entity_addr_t& my_addr,
                                    const entity_addr_t& peer_addr,
                                    seastar::connected_socket&& fd)
   : Connection(messenger, my_addr, peer_addr),
@@ -580,6 +588,7 @@ SocketConnection::handle_connect_with_existing(ConnectionRef existing, bufferlis
   }
 }
 
+// TODO: change to reuse_existing
 seastar::future<> SocketConnection::replace_existing(ConnectionRef existing,
                                                      bufferlist&& authorizer_reply,
 						     bool is_reset_from_peer)
@@ -744,12 +753,17 @@ seastar::future<> SocketConnection::connect(entity_type_t peer_type,
     });
 }
 
-seastar::future<> SocketConnection::client_handshake(entity_type_t peer_type,
-                                                     entity_type_t host_type)
+seastar::future<>
+SocketConnection::client_handshake(entity_type_t peer_type,
+                                   entity_type_t host_type)
 {
-  // read server's handshake header
-  return socket->read(server_header_size)
-    .then([this] (bufferlist headerbl) {
+  ceph_assert(!socket);
+  state = state_t::connect;
+  return seastar::connect(peer_addr.in4_addr())
+    .then([this] (seastar::connected_socket fd) {
+      socket.emplace(std::move(fd));
+      return socket->read(server_header_size);
+    }).then([this] (bufferlist headerbl) {
       auto p = headerbl.cbegin();
       validate_banner(p);
       entity_addr_t saddr, caddr;
@@ -769,9 +783,22 @@ seastar::future<> SocketConnection::client_handshake(entity_type_t peer_type,
       ::encode(my_addr, bl, 0);
       h.global_seq = get_messenger()->get_global_seq();
       return socket->write_flush(std::move(bl));
-    }).then([=] {
-      return seastar::do_until([=] { return state == state_t::open; },
-                               [=] { return connect(peer_type, host_type); });
+    }).then([this, peer_type, host_type] {
+      return seastar::do_until([this] { return state == state_t::open; },
+                               [this, peer_type, host_type] {
+          return connect(peer_type, host_type);
+        });
+    }).then([this] {
+      // TODO: dispatch connect here
+    }).handle_exception([this, peer_type, host_type] (std::exception_ptr eptr) {
+      // close the connection before returning errors
+      if (is_lossy()) {
+        return close();
+      } else {
+        // TODO: add backoff
+        // TODO: retry, no throw, no wait
+        return client_handshake(peer_type, host_type);
+      }
     }).then([this] {
       // start background processing of tags
       read_tags_until_next_message();
@@ -783,6 +810,8 @@ seastar::future<> SocketConnection::client_handshake(entity_type_t peer_type,
 
 seastar::future<> SocketConnection::server_handshake()
 {
+  ceph_assert(socket);
+  state = state_t::accept;
   // encode/send server's handshake header
   bufferlist bl;
   bl.append(buffer::create_static(banner_size, banner));

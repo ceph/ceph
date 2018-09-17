@@ -48,7 +48,7 @@ class Connection : public boost::intrusive_ref_counter<Connection,
 
   /// complete a handshake from the client's perspective
   virtual seastar::future<> client_handshake(entity_type_t peer_type,
-					     entity_type_t host_type) = 0;
+                                             entity_type_t host_type) = 0;
 
   /// complete a handshake from the server's perspective
   virtual seastar::future<> server_handshake() = 0;
@@ -75,6 +75,8 @@ class Connection : public boost::intrusive_ref_counter<Connection,
 public:
   enum class state_t {
     none,
+    accept,
+    connect,
     open,
     standby,
     closed,

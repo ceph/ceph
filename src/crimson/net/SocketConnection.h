@@ -140,6 +140,9 @@ class SocketConnection : public Connection {
  public:
   SocketConnection(Messenger *messenger,
                    const entity_addr_t& my_addr,
+                   const entity_addr_t& peer_addr);
+  SocketConnection(Messenger *messenger,
+                   const entity_addr_t& my_addr,
                    const entity_addr_t& peer_addr,
                    seastar::connected_socket&& socket);
   ~SocketConnection();
@@ -147,7 +150,7 @@ class SocketConnection : public Connection {
   bool is_connected() override;
 
   seastar::future<> client_handshake(entity_type_t peer_type,
-				     entity_type_t host_type) override;
+                                     entity_type_t host_type) override;
 
   seastar::future<> server_handshake() override;
 

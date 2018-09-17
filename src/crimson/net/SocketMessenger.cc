@@ -41,10 +41,6 @@ void SocketMessenger::bind(const entity_addr_t& addr)
 
 seastar::future<> SocketMessenger::dispatch(ConnectionRef conn)
 {
-  auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
-  std::ignore = i;
-  ceph_assert(added);
-
   return seastar::keep_doing([=] {
       return conn->read_message()
         .then([=] (MessageRef msg) {
@@ -82,6 +78,7 @@ seastar::future<> SocketMessenger::accept(seastar::connected_socket socket,
   ConnectionRef conn = new SocketConnection(this, get_myaddr(),
                                             peer_addr, std::move(socket));
   // initiate the handshake
+  // TODO: handle fault inside protocol
   return conn->server_handshake()
     .then([=] {
       // notify the dispatcher and allow them to reject the connection
@@ -93,6 +90,8 @@ seastar::future<> SocketMessenger::accept(seastar::connected_socket socket,
       return seastar::make_exception_future<>(eptr)
         .finally([conn] { return conn->close(); });
     }).then([this, conn] {
+      // TODO: register as soon as the state changed to open to avoid potential racing
+      register_conn(conn);
       // dispatch messages until the connection closes or the dispatch
       // queue shuts down
       return dispatch(std::move(conn));
@@ -125,35 +124,26 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
   return seastar::now();
 }
 
-seastar::future<ceph::net::ConnectionRef>
-SocketMessenger::connect(const entity_addr_t& addr, entity_type_t peer_type)
+ceph::net::ConnectionRef
+SocketMessenger::connect(const entity_addr_t& peer_addr, entity_type_t peer_type)
 {
-  if (auto found = lookup_conn(addr); found) {
-    return seastar::make_ready_future<ceph::net::ConnectionRef>(found);
+  if (auto found = lookup_conn(peer_addr); found) {
+    return found;
   }
-  return seastar::connect(addr.in4_addr())
-    .then([=] (seastar::connected_socket socket) {
-      ConnectionRef conn = new SocketConnection(this, get_myaddr(), addr,
-                                                std::move(socket));
-      // complete the handshake before returning to the caller
-      return conn->client_handshake(peer_type, get_myname().type())
-        .then([=] {
-          // notify the dispatcher and allow them to reject the connection
-          return seastar::with_gate(pending_dispatch, [=] {
-            return dispatcher->ms_handle_connect(conn);
-          });
-        }).handle_exception([conn] (std::exception_ptr eptr) {
-          // close the connection before returning errors
-          return seastar::make_exception_future<>(eptr)
-            .finally([conn] { return conn->close(); });
-	  // TODO: retry on fault
-        }).then([=] {
-          // dispatch replies on this connection
-          dispatch(conn)
-            .handle_exception([] (std::exception_ptr eptr) {});
-          return conn;
+  ConnectionRef conn = new SocketConnection(this,
+                                            get_myaddr(), peer_addr);
+  register_conn(conn);
+  conn->client_handshake(peer_type, get_myname().type())
+    .then([this, conn] {
+      // TODO move inside protocol to allow reconnect and correct error handling
+      return seastar::with_gate(pending_dispatch, [=] {
+          return dispatcher->ms_handle_connect(conn);
         });
+    }).then([this, conn] {
+      // dispatch replies on this connection
+      dispatch(conn).handle_exception([] (std::exception_ptr eptr) {});
     });
+  return conn;
 }
 
 seastar::future<> SocketMessenger::shutdown()
@@ -161,6 +151,7 @@ seastar::future<> SocketMessenger::shutdown()
   if (listener) {
     listener->abort_accept();
   }
+  // TODO track and close all accepting connections
   // close all connections
   return seastar::parallel_for_each(connections.begin(), connections.end(),
     [this] (auto conn) {
@@ -199,6 +190,13 @@ ceph::net::ConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
   } else {
     return nullptr;
   }
+}
+
+void SocketMessenger::register_conn(ConnectionRef conn)
+{
+  auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
+  std::ignore = i;
+  ceph_assert(added);
 }
 
 void SocketMessenger::unregister_conn(ConnectionRef conn)
