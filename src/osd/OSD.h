@@ -2080,6 +2080,7 @@ protected:
   MPGStats *collect_pg_stats();
   std::vector<DaemonHealthMetric> get_health_metrics();
 
+
 private:
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
@@ -2248,6 +2249,10 @@ public:
 public:
   OSDService service;
   friend class OSDService;
+
+private:
+  void set_perf_queries(const std::list<OSDPerfMetricQuery> &queries);
+  void get_perf_report(OSDPerfMetricReport *report);
 };
 
 
