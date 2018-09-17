@@ -520,6 +520,12 @@ MDSRank::MDSRank(
     respawn_hook(respawn_hook_),
     suicide_hook(suicide_hook_),
     standby_replaying(false),
+
+    op_tp(cct, "MDS::mds_op_tp", "tp_mds_op", 1),
+    op_shardedwq(this,
+		  cct->_conf->osd_op_thread_timeout,
+		  cct->_conf->osd_op_thread_suicide_timeout,
+		  &op_tp),
     starttime(mono_clock::now())
 {
   hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank", pthread_self());
@@ -609,6 +615,8 @@ void MDSRankDispatcher::init()
   purge_queue.init();
 
   finisher->start();
+
+  op_tp.start();
 }
 
 void MDSRank::update_targets()
@@ -837,7 +845,10 @@ void MDSRankDispatcher::shutdown()
   purge_queue.shutdown();
 
   mds_lock.Unlock();
+
+  op_tp.stop(); // no flushing
   finisher->stop(); // no flushing
+
   mds_lock.Lock();
 
   if (objecter->initialized)
@@ -3456,6 +3467,92 @@ Context *MDSRank::create_async_exec_context(C_ExecAndReply *ctx) {
   return new C_OnFinisher(new FunctionContext([ctx](int _) {
         ctx->exec();
       }), finisher);
+}
+
+// workqueue
+void MDSRank::ShardedOpWQ::return_waiting_threads() {
+  for (auto& sdata : mds->shards) {
+    std::unique_lock<std::mutex> lock(sdata.op_lock);
+    sdata.op_stop_waiting = true;
+    sdata.op_cond.notify_all();
+  }
+}
+
+void MDSRank::ShardedOpWQ::stop_return_waiting_threads() {
+  for (auto& sdata : mds->shards) {
+    std::unique_lock<std::mutex> lock(sdata.op_lock);
+    sdata.op_stop_waiting = false;
+  }
+}
+
+bool MDSRank::ShardedOpWQ::is_shard_empty(uint32_t thread_index) {
+  uint32_t shard_index = thread_index % mds->shards.size();
+  auto &sdata = mds->shards[shard_index];
+  return sdata.is_empty();
+}
+
+void MDSRank::ShardedOpWQ::_enqueue(OpQueueable&& op) {
+  auto shard_idx = op.get_queue_token() % mds->shards.size();
+  auto& sdata = mds->shards[shard_idx];
+  std::unique_lock<std::mutex> lock(sdata.op_lock);
+  op.set_seq(++sdata.op_seq);
+  sdata.op_queue.emplace_back(std::move(op));
+  sdata.op_cond.notify_all();
+}
+
+void MDSRank::ShardedOpWQ::_enqueue_front(OpQueueable&& op) {
+  auto shard_idx = op.get_queue_token() % mds->shards.size();
+  auto& sdata = mds->shards[shard_idx];
+  std::unique_lock<std::mutex> lock(sdata.op_lock);
+  uint64_t seq = op.get_seq();
+  if (seq == 0) {
+    op.set_seq(++sdata.op_seq);
+    sdata.op_front_queue.emplace_back(std::move(op));
+  } else if (sdata.op_ordered_queue.empty() ||
+	     sdata.op_ordered_queue.back().get_seq() <= seq) {
+    sdata.op_ordered_queue.emplace_back(std::move(op));
+  } else {
+    OpQueueItem item(std::move(op));
+    auto it = std::upper_bound(sdata.op_ordered_queue.begin(),
+	sdata.op_ordered_queue.end(), item);
+    sdata.op_ordered_queue.emplace(it, std::move(item));
+  }
+  sdata.op_cond.notify_all();
+}
+
+void MDSRank::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
+{
+  uint32_t shard_index = thread_index % mds->shards.size();
+  auto &sdata = mds->shards[shard_index];
+
+  std::unique_lock<std::mutex> lock(sdata.op_lock);
+
+  // stop if we're laggy now!
+  while (sdata.is_empty() || mds->beacon.is_laggy()) {
+    if (sdata.op_stop_waiting)
+      return;
+    sdata.cct->get_heartbeat_map()->clear_timeout(hb);
+    sdata.op_cond.wait(lock);
+    sdata.cct->get_heartbeat_map()->reset_timeout(hb,
+	sdata.cct->_conf->threadpool_default_timeout, 0);
+  }
+
+  OpQueueItem item;
+  if (!sdata.op_ordered_queue.empty()) {
+    item = std::move(sdata.op_ordered_queue.front());
+    sdata.op_ordered_queue.pop_front();
+  } else if (!sdata.op_front_queue.empty()) {
+    item = std::move(sdata.op_front_queue.front());
+    sdata.op_front_queue.pop_front();
+  } else {
+    item = std::move(sdata.op_queue.front());
+    sdata.op_queue.pop_front();
+  }
+  lock.unlock();
+
+  item.get_op().run(mds);
+
+  mds->heartbeat_reset();
 }
 
 MDSRankDispatcher::MDSRankDispatcher(

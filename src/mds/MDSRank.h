@@ -21,6 +21,7 @@
 #include "common/LogClient.h"
 #include "common/Timer.h"
 #include "common/TrackedOp.h"
+#include "common/WorkQueue.h"
 
 #include "messages/MClientRequest.h"
 #include "messages/MCommand.h"
@@ -35,6 +36,8 @@
 #include "MDSContext.h"
 #include "PurgeQueue.h"
 #include "Server.h"
+#include "OpQueueable.h"
+
 #include "osdc/Journaler.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
@@ -574,6 +577,47 @@ class MDSRank {
     friend class C_MDS_MonCommand;
     void _mon_command_finish(int r, std::string_view cmd, std::string_view outs);
     void set_mdsmap_multimds_snaps_allowed();
+
+    struct MDSShard {
+      const unsigned shard_id;
+      CephContext *cct;
+      MDSRank *mds;
+
+      uint64_t op_seq = 0;
+      std::deque<OpQueueItem> op_queue;
+      std::deque<OpQueueItem> op_front_queue;
+      std::deque<OpQueueItem> op_ordered_queue;
+      std::mutex op_lock;
+      std::condition_variable op_cond;
+      bool op_stop_waiting = false;
+
+      bool is_empty() const {
+	return op_queue.empty() && op_front_queue.empty() &&
+	       op_ordered_queue.empty();
+      }
+
+      MDSShard(int id, CephContext *c, MDSRank* m) :
+	shard_id(id), cct(c), mds(m) {}
+    };
+    std::vector<MDSShard> shards;
+
+    ShardedThreadPool op_tp;
+
+    class ShardedOpWQ : public ShardedThreadPool::ShardedWQ<OpQueueable> {
+    public:
+      ShardedOpWQ(MDSRank *m, time_t ti, time_t si, ShardedThreadPool* tp) :
+	ShardedThreadPool::ShardedWQ<OpQueueable>(ti, si, tp), mds(m) { }
+
+      void _process(uint32_t thread_index, heartbeat_handle_d *hb) override;
+      void return_waiting_threads() override;
+      void stop_return_waiting_threads() override;
+      bool is_shard_empty(uint32_t thread_index) override;
+      void _enqueue(OpQueueable&& op) override;
+      void _enqueue_front(OpQueueable&& op) override;
+    protected:
+      MDSRank *mds;
+    } op_shardedwq;
+
 private:
     mono_time starttime = mono_clock::zero();
 
