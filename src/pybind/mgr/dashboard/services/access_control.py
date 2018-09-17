@@ -19,6 +19,8 @@ from ..exceptions import RoleAlreadyExists, RoleDoesNotExist, ScopeNotValid, \
 
 # password hashing algorithm
 def password_hash(password, salt_password=None):
+    if not password:
+        return None
     if not salt_password:
         salt_password = bcrypt.gensalt()
     else:
@@ -381,7 +383,7 @@ ACCESS_CONTROL_COMMANDS = [
     {
         'cmd': 'dashboard ac-user-create '
                'name=username,type=CephString '
-               'name=password,type=CephString '
+               'name=password,type=CephString,req=false '
                'name=rolename,type=CephString,req=false '
                'name=name,type=CephString,req=false '
                'name=email,type=CephString,req=false',
@@ -545,7 +547,7 @@ Username and password updated''', ''
 
     elif cmd['prefix'] == 'dashboard ac-user-create':
         username = cmd['username']
-        password = cmd['password']
+        password = cmd['password'] if 'password' in cmd else None
         rolename = cmd['rolename'] if 'rolename' in cmd else None
         name = cmd['name'] if 'name' in cmd else None
         email = cmd['email'] if 'email' in cmd else None
@@ -669,9 +671,10 @@ class LocalAuthenticator(object):
     def authenticate(self, username, password):
         try:
             user = ACCESS_CTRL_DB.get_user(username)
-            pass_hash = password_hash(password, user.password)
-            if pass_hash == user.password:
-                return user.permissions_dict()
+            if user.password:
+                pass_hash = password_hash(password, user.password)
+                if pass_hash == user.password:
+                    return user.permissions_dict()
         except UserDoesNotExist:
             logger.debug("User '%s' does not exist", username)
         return None
