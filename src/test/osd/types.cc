@@ -348,6 +348,41 @@ for (unsigned i = 0; i < 4; ++i) {
   }
 
   //
+  // PG was pre-merge source
+  //
+  {
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num(pg_num);
+    inc.new_pools[pool_id].set_pg_num_pending(pg_num - 1);
+    osdmap->apply_incremental(inc);
+
+    cout << "pg_num " << pg_num << std::endl;
+    PastIntervals past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
+						  new_primary,
+						  old_acting,
+						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  lastmap,  // reverse order!
+						  osdmap,
+						  pg_t(pg_num - 1, pool_id),
+                                                  recoverable.get(),
+						  &past_intervals));
+  }
+
+  //
   // PG is merge source
   //
   {
@@ -408,6 +443,39 @@ for (unsigned i = 0; i < 4; ++i) {
 						  last_epoch_clean,
 						  osdmap,
 						  lastmap,
+						  pg_t(pg_num / 2 - 1, pool_id),
+                                                  recoverable.get(),
+						  &past_intervals));
+  }
+
+  //
+  // PG was pre-merge target
+  //
+  {
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num_pending(pg_num - 1);
+    osdmap->apply_incremental(inc);
+
+    PastIntervals past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
+						  new_primary,
+						  old_acting,
+						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  lastmap,  // reverse order!
+						  osdmap,
 						  pg_t(pg_num / 2 - 1, pool_id),
                                                   recoverable.get(),
 						  &past_intervals));

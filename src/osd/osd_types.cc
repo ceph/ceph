@@ -3476,12 +3476,14 @@ bool PastIntervals::is_new_interval(
     old_min_size != new_min_size ||
     old_size != new_size ||
     pgid.is_split(old_pg_num, new_pg_num, 0) ||
-    // pre-merge source
+    // (is or was) pre-merge source
     pgid.is_merge_source(old_pg_num_pending, new_pg_num_pending, 0) ||
+    pgid.is_merge_source(new_pg_num_pending, old_pg_num_pending, 0) ||
     // merge source
     pgid.is_merge_source(old_pg_num, new_pg_num, 0) ||
-    // pre-merge target
+    // (is or was) pre-merge target
     pgid.is_merge_target(old_pg_num_pending, new_pg_num_pending) ||
+    pgid.is_merge_target(new_pg_num_pending, old_pg_num_pending) ||
     // merge target
     pgid.is_merge_target(old_pg_num, new_pg_num) ||
     old_sort_bitwise != new_sort_bitwise ||
