@@ -301,6 +301,10 @@ class MDSRank {
       finished_queue.splice( finished_queue.end(), ls );
       progress_thread.signal();
     }
+    void queue_waiters_front(std::list<MDSInternalContextBase*>& ls) {
+      finished_queue.splice(finished_queue.begin(), ls);
+      progress_thread.signal();
+    }
 
     MDSRank(
         mds_rank_t whoami_,
@@ -355,6 +359,7 @@ class MDSRank {
     void damaged_unlocked();
 
     utime_t get_laggy_until() const;
+    double get_dispatch_queue_max_age(utime_t now) const;
 
     void send_message_mds(Message *m, mds_rank_t mds);
     void forward_message_mds(Message *req, mds_rank_t mds);
