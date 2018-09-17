@@ -75,15 +75,6 @@ class UserTest(DashboardTestCase):
         self.assertError(code='username_already_exists',
                          component='user')
 
-    def test_create_user_no_password(self):
-        self._create_user(username='user1',
-                          name='My Name',
-                          email='admin@email.com',
-                          roles=['administrator'])
-        self.assertStatus(400)
-        self.assertError(code='password_required',
-                         component='user')
-
     def test_create_user_invalid_role(self):
         self._create_user(username='user1',
                           password='mypassword',
