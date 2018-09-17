@@ -317,7 +317,7 @@ void *Accepter::entry()
       }
       ldout(msgr->cct,1) << __func__ << " poll got error"  
  			  << " errno " << errno << " " << cpp_strerror(errno) << dendl;
-      break;
+      ceph_abort();
     }
     ldout(msgr->cct,10) << __func__ << " poll returned oke: " << r << dendl;
     ldout(msgr->cct,20) << __func__ <<  " pfd.revents[0]=" << pfd[0].revents << dendl;
@@ -326,7 +326,7 @@ void *Accepter::entry()
     if (pfd[0].revents & (POLLERR | POLLNVAL | POLLHUP)) {
       ldout(msgr->cct,1) << __func__ << " poll got errors in revents "  
  			 <<  pfd[0].revents << dendl;
-      break;
+      ceph_abort();
     }
     if (pfd[1].revents & (POLLIN | POLLERR | POLLNVAL | POLLHUP)) {
       // We got "signaled" to exit the poll
@@ -358,8 +358,10 @@ void *Accepter::entry()
     } else {
       ldout(msgr->cct,0) << __func__ << " no incoming connection?  sd = " << sd
 	      << " errno " << errno << " " << cpp_strerror(errno) << dendl;
-      if (++errors > 4)
-	break;
+      if (++errors > msgr->cct->_conf->ms_max_accept_failures) {
+        lderr(msgr->cct) << "accetper has encoutered enough errors, just do ceph_abort()." << dendl;
+        ceph_abort();
+      }
     }
   }
 
