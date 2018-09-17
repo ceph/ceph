@@ -1005,7 +1005,16 @@ namespace buffer CEPH_BUFFER_API {
     void try_assign_to_mempool(int pool);
 
     size_t get_append_buffer_unused_tail_length() const {
-      return append_buffer.unused_tail_length();
+      if (_buffers.empty()) {
+	return 0;
+      }
+
+      auto& buf = _buffers.back();
+      if (buf.raw_nref() != 1) {
+	return 0;
+      }
+
+      return buf.unused_tail_length();
     }
 
     unsigned get_memcopy_count() const {return _memcopy_count; }
