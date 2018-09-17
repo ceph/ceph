@@ -171,6 +171,8 @@ void Processor::accept()
   for (auto& listen_socket : listen_sockets) {
     ldout(msgr->cct, 10) << __func__ << " listen_fd=" << listen_socket.fd()
 			 << dendl;
+    unsigned accept_error_num = 0;
+
     while (true) {
       entity_addr_t addr;
       ConnectedSocket cli_socket;
@@ -185,6 +187,7 @@ void Processor::accept()
 			     << cli_socket.fd() << dendl;
 
 	msgr->add_accept(w, std::move(cli_socket), addr);
+	accept_error_num = 0;
 	continue;
       } else {
 	if (r == -EINTR) {
@@ -194,7 +197,11 @@ void Processor::accept()
 	} else if (r == -EMFILE || r == -ENFILE) {
 	  lderr(msgr->cct) << __func__ << " open file descriptions limit reached sd = " << listen_socket.fd()
 			   << " errno " << r << " " << cpp_strerror(r) << dendl;
-	  break;
+	  if (++accept_error_num > msgr->cct->_conf->ms_max_accept_failures) {
+	    lderr(msgr->cct) << "Proccessor accept has encountered enough error numbers, just do ceph_abort()." << dendl;
+	    ceph_abort();
+	  }
+	  continue;
 	} else if (r == -ECONNABORTED) {
 	  ldout(msgr->cct, 0) << __func__ << " it was closed because of rst arrived sd = " << listen_socket.fd()
 			      << " errno " << r << " " << cpp_strerror(r) << dendl;
@@ -202,7 +209,11 @@ void Processor::accept()
 	} else {
 	  lderr(msgr->cct) << __func__ << " no incoming connection?"
 			   << " errno " << r << " " << cpp_strerror(r) << dendl;
-	  break;
+	  if (++accept_error_num > msgr->cct->_conf->ms_max_accept_failures) {
+	    lderr(msgr->cct) << "Proccessor accept has encountered enough error numbers, just do ceph_abort()." << dendl;
+	    ceph_abort();
+	  }
+	  continue;
 	}
       }
     }
