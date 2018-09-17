@@ -57,7 +57,7 @@ Run the following command to complete connection setup.
 
 ::
 
-    ceph device set-clould-prediction-config <diskprediction_server> <connection_account> <connection_password> <certificate file path>
+    ceph device set-cloud-prediction-config <diskprediction_server> <connection_account> <connection_password> <certificate file path>
 	
 
 You can use the following command to display the connection settings:
