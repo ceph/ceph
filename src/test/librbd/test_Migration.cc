@@ -104,8 +104,10 @@ struct TestMigration : public TestFixture {
 
     if (dst_ictx->test_features(RBD_FEATURE_LAYERING)) {
       bool flags_set;
-      EXPECT_EQ(0, dst_ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
-                                        &flags_set));
+      RWLock::RLocker dst_locker(dst_ictx->snap_lock);
+      EXPECT_EQ(0, dst_ictx->test_flags(dst_ictx->snap_id,
+                                        RBD_FLAG_OBJECT_MAP_INVALID,
+                                        dst_ictx->snap_lock, &flags_set));
       EXPECT_FALSE(flags_set);
     }
 
