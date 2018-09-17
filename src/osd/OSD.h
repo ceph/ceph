@@ -1219,12 +1219,12 @@ struct OSDShard {
       osd(osd),
       shard_name(string("OSDShard.") + stringify(id)),
       sdata_wait_lock_name(shard_name + "::sdata_wait_lock"),
-      sdata_wait_lock(sdata_wait_lock_name.c_str(), false, true, false, cct),
+      sdata_wait_lock(sdata_wait_lock_name.c_str(), false, true, false),
       osdmap_lock_name(shard_name + "::osdmap_lock"),
       osdmap_lock(osdmap_lock_name.c_str(), false, false),
       shard_lock_name(shard_name + "::shard_lock"),
       shard_lock(shard_lock_name.c_str(), false, true,
-			     false, cct) {
+			     false) {
     if (opqueue == io_queue::weightedpriority) {
       pqueue = std::make_unique<
 	WeightedPriorityQueue<OpQueueItem,uint64_t>>(
