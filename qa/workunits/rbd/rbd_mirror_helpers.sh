@@ -905,9 +905,9 @@ compare_images()
     local loc_export=${TEMPDIR}/${CLUSTER1}-${pool}-${image}.export
 
     rm -f ${rmt_export} ${loc_export}
-    rbd --cluster ${CLUSTER2} -p ${pool} export ${image} ${rmt_export}
-    rbd --cluster ${CLUSTER1} -p ${pool} export ${image} ${loc_export}
-    cmp ${rmt_export} ${loc_export}
+    rbd --cluster ${CLUSTER2} -p ${pool} export ${image} - | xxd > ${rmt_export}
+    rbd --cluster ${CLUSTER1} -p ${pool} export ${image} - | xxd > ${loc_export}
+    sdiff -s ${rmt_export} ${loc_export} | head -n 64
     rm -f ${rmt_export} ${loc_export}
 }
 
@@ -922,9 +922,9 @@ compare_image_snapshots()
     for snap_name in $(rbd --cluster ${CLUSTER1} -p ${pool} --format xml \
                            snap list ${image} | $XMLSTARLET sel -t -v "//snapshot/name"); do
         rm -f ${rmt_export} ${loc_export}
-        rbd --cluster ${CLUSTER2} -p ${pool} export ${image}@${snap_name} ${rmt_export}
-        rbd --cluster ${CLUSTER1} -p ${pool} export ${image}@${snap_name} ${loc_export}
-        cmp ${rmt_export} ${loc_export}
+        rbd --cluster ${CLUSTER2} -p ${pool} export ${image}@${snap_name} - | xxd > ${rmt_export}
+        rbd --cluster ${CLUSTER1} -p ${pool} export ${image}@${snap_name} - | xxd > ${loc_export}
+        sdiff -s ${rmt_export} ${loc_export} | head -n 64
     done
     rm -f ${rmt_export} ${loc_export}
 }
