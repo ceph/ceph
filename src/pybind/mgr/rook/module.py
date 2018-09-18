@@ -164,6 +164,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     c.message
                 ))
                 c.error = e
+                c._complete = True
                 if not c.is_read:
                     self._progress("complete", c.id)
             else:
@@ -181,18 +182,18 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         if kubernetes_imported:
             return True, ""
         else:
-            return False, "Kubernetes module not found"
+            return False, "`kubernetes` module not found"
 
     def available(self):
         if not kubernetes_imported:
-            return False, "Kubernetes module not found"
+            return False, "`kubernetes` module not found"
         elif not self._in_cluster():
             return False, "ceph-mgr not running in Rook cluster"
 
         try:
             self.k8s.list_namespaced_pod(self.rook_cluster.cluster_name)
-        except ApiException:
-            return False, "Cannot reach Kubernetes API"
+        except ApiException as e:
+            return False, "Cannot reach Kubernetes API: {}".format(e)
         else:
             return True, ""
 
@@ -247,15 +248,20 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         self._k8s = client.CoreV1Api()
 
-        # XXX mystery hack -- I need to do an API call from
-        # this context, or subsequent API usage from handle_command
-        # fails with SSLError('bad handshake').  Suspect some kind of
-        # thread context setup in SSL lib?
-        self._k8s.list_namespaced_pod(cluster_name)
+        try:
+            # XXX mystery hack -- I need to do an API call from
+            # this context, or subsequent API usage from handle_command
+            # fails with SSLError('bad handshake').  Suspect some kind of
+            # thread context setup in SSL lib?
+            self._k8s.list_namespaced_pod(cluster_name)
+        except ApiException:
+            # Ignore here to make self.available() fail with a proper error message
+            pass
 
         self._rook_cluster = RookCluster(
             self._k8s,
             cluster_name)
+
 
         # In case Rook isn't already clued in to this ceph
         # cluster's existence, initialize it.
@@ -320,7 +326,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @deferred_read
     def describe_service(self, service_type, service_id):
-        assert service_type in ("mds", "osd", "mon", "rgw")
+
+        assert service_type in ("mds", "osd", "mon", "rgw"), service_type + " unsupported"
 
         pods = self.rook_cluster.describe_pods(service_type, service_id)
 
