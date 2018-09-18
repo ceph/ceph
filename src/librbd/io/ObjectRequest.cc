@@ -474,8 +474,13 @@ template <typename I>
 void AbstractObjectWriteRequest<I>::handle_pre_write_object_map_update(int r) {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << "r=" << r << dendl;
+  if (r < 0) {
+    lderr(image_ctx->cct) << "failed to update object map: "
+                          << cpp_strerror(r) << dendl;
+    this->finish(r);
+    return;
+  }
 
-  ceph_assert(r == 0);
   write_object();
 }
 
@@ -621,8 +626,13 @@ template <typename I>
 void AbstractObjectWriteRequest<I>::handle_post_write_object_map_update(int r) {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << "r=" << r << dendl;
+  if (r < 0) {
+    lderr(image_ctx->cct) << "failed to update object map: "
+                          << cpp_strerror(r) << dendl;
+    this->finish(r);
+    return;
+  }
 
-  ceph_assert(r == 0);
   this->finish(0);
 }
 

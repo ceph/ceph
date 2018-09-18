@@ -238,9 +238,13 @@ Context *SnapshotCreateRequest<I>::handle_create_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  ceph_assert(*result == 0);
-
   image_ctx.io_work_queue->unblock_writes();
+  if (*result < 0) {
+    lderr(cct) << this << " " << __func__ << ": failed to snapshot object map: "
+               << cpp_strerror(*result) << dendl;
+    return this->create_context_finisher(*result);
+  }
+
   return this->create_context_finisher(0);
 }
 
