@@ -13,7 +13,7 @@
 inline PyObject* PyString_FromString(const char *v) {
   return PyUnicode_FromFormat("%s", v);
 }
-inline char* PyString_AsString(PyObject *string) {
+inline const char* PyString_AsString(PyObject *string) {
   return PyUnicode_AsUTF8(string);
 }
 inline long PyInt_AsLong(PyObject *io) {
