@@ -1779,7 +1779,7 @@ protected:
   } op_shardedwq;
 
 
-  void enqueue_op(spg_t pg, OpRequestRef& op, epoch_t epoch);
+  void enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch);
   void dequeue_op(
     PGRef pg, OpRequestRef op,
     ThreadPool::TPHandle &handle);
