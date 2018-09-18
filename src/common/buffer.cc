@@ -2192,27 +2192,15 @@ void buffer::list::invalidate_crc()
 #include "common/ceph_crypto.h"
 using ceph::crypto::SHA1;
 
-boost::optional<sha1_digest_t> buffer::list::sha1()
+sha1_digest_t buffer::list::sha1()
 {
-  ptr nb;
-  unsigned pos = 0;
   unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE];
-  if (_len == 0) {
-    return boost::none;
-  }
-  nb = buffer::create(_len);
-  for (std::list<ptr>::iterator it = _buffers.begin();
-       it != _buffers.end();
-       ++it) {
-    nb.copy_in(pos, it->length(), it->c_str(), false);
-    pos += it->length();
-  }
-  int size = length();
   SHA1 sha1_gen;
-  sha1_gen.Update((const unsigned char *)nb.c_str(), size);
+  for (auto& p : _buffers) {
+    sha1_gen.Update((const unsigned char *)p.c_str(), p.length());
+  }
   sha1_gen.Final(fingerprint);
-  sha1_digest_t fp_t(fingerprint);
-  return fp_t;
+  return sha1_digest_t(fingerprint);
 }
 
 /**
