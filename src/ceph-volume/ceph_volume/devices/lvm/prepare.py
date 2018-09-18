@@ -335,6 +335,11 @@ class Prepare(object):
             return
         exclude_group_options(parser, argv=self.argv, groups=['filestore', 'bluestore'])
         args = parser.parse_args(self.argv)
+        # the unfortunate mix of one superset for both filestore and bluestore
+        # makes this validation cumbersome
+        if args.filestore:
+            if not args.journal:
+                raise SystemExit('--journal is required when using --filestore')
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True
         if not args.bluestore and not args.filestore:
