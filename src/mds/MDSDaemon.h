@@ -105,7 +105,11 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   void wait_for_omap_osds();
 
  private:
+  bool ms_can_fast_dispatch_any() const override { return true; }
+  bool ms_can_fast_dispatch2(const cref_t<Message>& m) const override;
+  void ms_fast_dispatch2(const ref_t<Message>& m) override;
   bool ms_dispatch2(const ref_t<Message> &m) override;
+
   int ms_handle_authentication(Connection *con) override;
   void ms_handle_accept(Connection *con) override;
   void ms_handle_connect(Connection *con) override;
@@ -142,6 +146,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   void tick();
   
 protected:
+  bool is_core_message(const cref_t<Message> &m) const;
   bool handle_core_message(const cref_t<Message> &m);
   
   // special message types

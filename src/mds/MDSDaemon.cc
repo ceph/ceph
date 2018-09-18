@@ -1134,7 +1134,16 @@ void MDSDaemon::respawn()
   ceph_abort();
 }
 
+bool MDSDaemon::ms_can_fast_dispatch2(const cref_t<Message> &m) const
+{
+  return mds_rank ? mds_rank->ms_can_fast_dispatch(m) : false;
+}
 
+void MDSDaemon::ms_fast_dispatch2(const ref_t<Message> &m)
+{
+  if (mds_rank)
+    mds_rank->ms_fast_dispatch(m);
+}
 
 bool MDSDaemon::ms_dispatch2(const ref_t<Message> &m)
 {
@@ -1149,18 +1158,7 @@ bool MDSDaemon::ms_dispatch2(const ref_t<Message> &m)
     return true;
   }
 
-  // First see if it's a daemon message
-  const bool handled_core = handle_core_message(m);
-  if (handled_core) {
-    return true;
-  }
-
-  // Not core, try it as a rank message
-  if (mds_rank) {
-    return mds_rank->ms_dispatch(m);
-  } else {
-    return false;
-  }
+  return handle_core_message(m);
 }
 
 /*
