@@ -676,7 +676,7 @@ public:
   }
 
   /**
-   * Notify each Dispatcher of a new incomming Connection. Call
+   * Notify each Dispatcher of a new incoming Connection. Call
    * this function whenever a new Connection is accepted.
    *
    * @param con Pointer to the new Connection.

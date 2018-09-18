@@ -417,7 +417,7 @@ err:
  * next item or set of items.  or why pow() is used the way it is.
  *
  * note that the original version 1 of this function made special
- * accomodation for the case where straw lengths were identical.  this
+ * accommodation for the case where straw lengths were identical.  this
  * is also flawed in a non-obvious way; version 2 drops the special
  * handling and appears to work just as well.
  *

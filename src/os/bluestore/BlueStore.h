@@ -1959,7 +1959,7 @@ private:
   uint64_t osd_memory_target = 0;   ///< OSD memory target when autotuning cache
   uint64_t osd_memory_base = 0;     ///< OSD base memory when autotuning cache
   double osd_memory_expected_fragmentation = 0; ///< expected memory fragmentation
-  uint64_t osd_memory_cache_min = 0; ///< Min memory to assign when autotuning cahce
+  uint64_t osd_memory_cache_min = 0; ///< Min memory to assign when autotuning cache
   double osd_memory_cache_resize_interval = 0; ///< Time to wait between cache resizing 
   std::mutex vstatfs_lock;
   volatile_statfs vstatfs;
@@ -2899,7 +2899,7 @@ public:
 			 const coll_t& cid, const ghobject_t& oid) {
       ceph_assert(granularity); // initialized
       
-      // can't call this func after filter_out has been apllied
+      // can't call this func after filter_out has been applied
       ceph_assert(!was_filtered_out);
       if (!len) {
 	return;

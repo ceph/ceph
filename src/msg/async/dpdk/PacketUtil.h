@@ -46,7 +46,7 @@ class packet_merger {
     bool insert = true;
     auto beg = offset;
     auto end = beg + p.len();
-    // Fisrt, try to merge the packet with existing segment
+    // First, try to merge the packet with existing segment
     for (auto it = map.begin(); it != map.end();) {
       auto& seg_pkt = it->second;
       auto seg_beg = it->first;
@@ -101,7 +101,7 @@ class packet_merger {
     }
 
     // Second, merge adjacent segments after this packet has been merged,
-    // becasue this packet might fill a "whole" and make two adjacent
+    // because this packet might fill a "whole" and make two adjacent
     // segments mergable
     for (auto it = map.begin(); it != map.end();) {
       // The first segment

@@ -104,7 +104,7 @@ public:
     encode((uint32_t)s, payload);
     if (s) {
       // this should be big enough for normal min_message padding sizes. since
-      // we are targetting jumbo ethernet frames around 9000 bytes, 16k should
+      // we are targeting jumbo ethernet frames around 9000 bytes, 16k should
       // be more than sufficient!  the compiler will statically zero this so
       // that at runtime we are only adding a bufferptr reference to it.
       static char zeros[16384] = {};

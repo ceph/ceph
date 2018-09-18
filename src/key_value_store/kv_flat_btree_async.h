@@ -812,7 +812,7 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
   /**
    * sets this kvba to call inject before every ObjectWriteOperation.
    * If inject is wait and wait_time is set, wait will have a 10% chance of
-   * sleeping for waite_time miliseconds.
+   * sleeping for waite_time milliseconds.
    */
   void set_inject(injection_t inject, int wait_time) override;
 

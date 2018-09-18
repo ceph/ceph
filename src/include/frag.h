@@ -70,7 +70,7 @@
  *  - get_first_child(), next_sibling(int parent_bits) to make (possibly partial) 
  *    iteration efficient (see, e.g., try_assimilate_children()
  *  - rework frag_t so that we mask the left-most (most significant) bits instead of
- *    the right-most (least significant) bits.  just because it's more intutive, and
+ *    the right-most (least significant) bits.  just because it's more intuitive, and
  *    matches the network/netmask concept.
  */
 

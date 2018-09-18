@@ -58,12 +58,12 @@ public:
    * registered, and an incoming command is 'foo bar baz', it is
    * matched with 'foo bar', while 'foo fud' will match 'foo'.
    *
-   * The entire incoming command string is passed to the registred
+   * The entire incoming command string is passed to the registered
    * hook.
    *
    * @param command command string
    * @param cmddesc command syntax descriptor
-   * @param hook implementaiton
+   * @param hook implementation
    * @param help help text.  if empty, command will not be included in 'help' output.
    *
    * @return 0 for success, -EEXIST if command already registered.

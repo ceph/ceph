@@ -316,7 +316,7 @@ namespace librados
     void assert_version(uint64_t ver);
 
     /**
-     * Guard operatation with a check that the object already exists
+     * Guard operation with a check that the object already exists
      */
     void assert_exists();
 
@@ -1033,7 +1033,7 @@ namespace librados
 		      size_t write_len, uint64_t off);
 
     /**
-     * Asychronously remove an object
+     * Asynchronously remove an object
      *
      * Queues the remove and returns.
      *
