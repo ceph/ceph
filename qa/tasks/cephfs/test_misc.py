@@ -16,7 +16,7 @@ class TestMisc(CephFSTestCase):
     def test_getattr_caps(self):
         """
         Check if MDS recognizes the 'mask' parameter of open request.
-        The paramter allows client to request caps when opening file
+        The parameter allows client to request caps when opening file
         """
 
         if not isinstance(self.mount_a, FuseMount):
@@ -34,7 +34,7 @@ class TestMisc(CephFSTestCase):
         p = self.mount_a.open_background("testfile")
         self.mount_b.wait_for_visible("testfile")
 
-        # this tiggers a lookup request and an open request. The debug
+        # this triggers a lookup request and an open request. The debug
         # code will check if lookup/open reply contains xattrs
         self.mount_b.run_shell(["cat", "testfile"])
 

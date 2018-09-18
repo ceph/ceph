@@ -43,7 +43,7 @@ run_expect_succ() {
 run_expect_nosignal() {
     echo "RUN_EXPECT_NOSIGNAL: " "$@"
     do_run "$@"
-    [ $? -ge 128 ] && die "expected succes or fail, but got signal! cmd: $@"
+    [ $? -ge 128 ] && die "expected success or fail, but got signal! cmd: $@"
 }
 
 run() {
