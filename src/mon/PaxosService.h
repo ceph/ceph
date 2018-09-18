@@ -682,7 +682,7 @@ public:
    * @note We force every service to implement this function, since we strongly
    *	   desire the encoding of full versions.
    * @note Services that do not trim their state, will be bound to only create
-   *	   one full version. Full version stashing is determined/controled by
+   *	   one full version. Full version stashing is determined/controlled by
    *	   trimming: we stash a version each time a trim is bound to erase the
    *	   latest full version.
    *
