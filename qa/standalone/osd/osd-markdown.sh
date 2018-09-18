@@ -70,7 +70,7 @@ function TEST_markdown_exceed_maxdown_count() {
     ceph tell osd.0 injectargs '--osd_max_markdown_period '$period'' || return 1
 
     markdown_N_impl $(($count+1)) $period $sleeptime
-    # down N+1 times ,the osd.0 shoud die
+    # down N+1 times ,the osd.0 should die
     ceph osd tree | grep down | grep osd.0 || return 1
 }
 

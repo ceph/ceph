@@ -275,7 +275,7 @@ function test_mon_injectargs_IEC()
   # actually expect IEC units to be passed.
   # Keep in mind that all integer based options that are based on bytes
   # (i.e., INT, LONG, U32, U64) will accept IEC unit modifiers, as well as SI
-  # unit modifiers (for backwards compatibility and convinience) and be parsed
+  # unit modifiers (for backwards compatibility and convenience) and be parsed
   # to base 2.
   initial_value=$(get_config_value_or_die "mon.a" "mon_data_size_warn")
   $SUDO ceph daemon mon.a config set mon_data_size_warn 15000000000
