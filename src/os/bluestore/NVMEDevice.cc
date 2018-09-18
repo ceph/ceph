@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <fstream>
 #include <functional>
 #include <map>
 #include <thread>
@@ -82,7 +83,7 @@ struct Task;
 
 class SharedDriverData {
   unsigned id;
-  std::string sn;
+  spdk_nvme_transport_id trid;
   spdk_nvme_ctrlr *ctrlr;
   spdk_nvme_ns *ns;
   uint64_t block_size = 0;
@@ -92,18 +93,20 @@ class SharedDriverData {
   public:
   std::vector<NVMEDevice*> registered_devices;
   friend class SharedDriverQueueData;
-  SharedDriverData(unsigned _id, const std::string &sn_tag,
-                   spdk_nvme_ctrlr *c, spdk_nvme_ns *ns)
-      : id(_id),
-        sn(sn_tag),
+  SharedDriverData(unsigned id_, const spdk_nvme_transport_id& trid_,
+                   spdk_nvme_ctrlr *c, spdk_nvme_ns *ns_)
+      : id(id_),
+        trid(trid_),
         ctrlr(c),
-        ns(ns) {
+        ns(ns_) {
     sector_size = spdk_nvme_ns_get_sector_size(ns);
     block_size = std::max(CEPH_PAGE_SIZE, sector_size);
     size = ((uint64_t)sector_size) * spdk_nvme_ns_get_num_sectors(ns);
   }
 
-  bool is_equal(const string &tag) const { return sn == tag; }
+  bool is_equal(const spdk_nvme_transport_id& trid2) const {
+    return spdk_nvme_transport_id_compare(&trid, &trid2) == 0;
+  }
   ~SharedDriverData() {
   }
 
@@ -471,7 +474,7 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
 class NVMEManager {
  public:
   struct ProbeContext {
-    string sn_tag;
+    spdk_nvme_transport_id trid;
     NVMEManager *manager;
     SharedDriverData *driver;
     bool done;
@@ -489,9 +492,8 @@ class NVMEManager {
  public:
   NVMEManager()
       : lock("NVMEDevice::NVMEManager::lock") {}
-  int try_get(const string &sn_tag, SharedDriverData **driver);
-  void register_ctrlr(const string &sn_tag, spdk_nvme_ctrlr *c, struct spdk_pci_device *pci_dev,
-                      SharedDriverData **driver) {
+  int try_get(const spdk_nvme_transport_id& trid, SharedDriverData **driver);
+  void register_ctrlr(const spdk_nvme_transport_id& trid, spdk_nvme_ctrlr *c, SharedDriverData **driver) {
     ceph_assert(lock.is_locked());
     spdk_nvme_ns *ns;
     int num_ns = spdk_nvme_ctrlr_get_num_ns(c);
@@ -504,13 +506,12 @@ class NVMEManager {
       derr << __func__ << " failed to get namespace at 1" << dendl;
       ceph_abort();
     }
-    dout(1) << __func__ << " successfully attach nvme device at" << spdk_pci_device_get_bus(pci_dev)
-            << ":" << spdk_pci_device_get_dev(pci_dev) << ":" << spdk_pci_device_get_func(pci_dev) << dendl;
+    dout(1) << __func__ << " successfully attach nvme device at" << trid.traddr << dendl;
 
     // only support one device per osd now!
     ceph_assert(shared_driver_datas.empty());
     // index 0 is occurred by master thread
-    shared_driver_datas.push_back(new SharedDriverData(shared_driver_datas.size()+1, sn_tag, c, ns));
+    shared_driver_datas.push_back(new SharedDriverData(shared_driver_datas.size()+1, trid, c, ns));
     *driver = shared_driver_datas.back();
   }
 };
@@ -520,40 +521,17 @@ static NVMEManager manager;
 static bool probe_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid, struct spdk_nvme_ctrlr_opts *opts)
 {
   NVMEManager::ProbeContext *ctx = static_cast<NVMEManager::ProbeContext*>(cb_ctx);
-  char serial_number[128];
-  struct spdk_pci_addr pci_addr;
-  struct spdk_pci_device *pci_dev = NULL;
-  int result = 0;
 
   if (trid->trtype != SPDK_NVME_TRANSPORT_PCIE) {
     dout(0) << __func__ << " only probe local nvme device" << dendl;
     return false;
   }
 
-  result = spdk_pci_addr_parse(&pci_addr, trid->traddr);
-  if (result) {
-    dout(0) << __func__ << " failed to get pci address from %s, " << trid->traddr << " return value is: %d" << result << dendl;
-    return false;
-  }
-
-  pci_dev = spdk_pci_get_device(&pci_addr);
-  if (!pci_dev) {
-    dout(0) << __func__ << " failed to get pci device" << dendl; 
-    return false;
-  }
-
-  dout(0) << __func__ << " found device at bus: " << spdk_pci_device_get_bus(pci_dev)
-          << ":" << spdk_pci_device_get_dev(pci_dev) << ":"
-          << spdk_pci_device_get_func(pci_dev) << " vendor:0x" << spdk_pci_device_get_vendor_id(pci_dev) << " device:0x" << spdk_pci_device_get_device_id(pci_dev)
-          << dendl;
-  result = spdk_pci_device_get_serial_number(pci_dev, serial_number, 128);
-  if (result < 0) {
-    dout(10) << __func__ << " failed to get serial number from %p" << pci_dev << dendl;
-    return false;
-  }
-
-  if (ctx->sn_tag.compare(string(serial_number, 16))) {
-    dout(0) << __func__ << " device serial number (" << ctx->sn_tag << ") not match " << serial_number << dendl;
+  dout(0) << __func__ << " found device at: "
+	  << "trtype=" << spdk_nvme_transport_id_trtype_str(trid->trtype) << ", "
+          << "traddr=" << trid->traddr << dendl;
+  if (spdk_nvme_transport_id_compare(&ctx->trid, trid)) {
+    dout(0) << __func__ << " device traddr (" << ctx->trid.traddr << ") not match " << trid->traddr << dendl;
     return false;
   }
 
@@ -563,31 +541,15 @@ static bool probe_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid, st
 static void attach_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid,
                       struct spdk_nvme_ctrlr *ctrlr, const struct spdk_nvme_ctrlr_opts *opts)
 {
-  struct spdk_pci_addr pci_addr;
-  struct spdk_pci_device *pci_dev = NULL;
-
-  spdk_pci_addr_parse(&pci_addr, trid->traddr);
-
-  pci_dev = spdk_pci_get_device(&pci_addr);
-  if (!pci_dev) {
-    dout(0) << __func__ << " failed to get pci device" << dendl; 
-    ceph_assert(pci_dev);
-  }
-
-  NVMEManager::ProbeContext *ctx = static_cast<NVMEManager::ProbeContext*>(cb_ctx);
-  ctx->manager->register_ctrlr(ctx->sn_tag, ctrlr, pci_dev, &ctx->driver);
+  auto ctx = static_cast<NVMEManager::ProbeContext*>(cb_ctx);
+  ctx->manager->register_ctrlr(ctx->trid, ctrlr, &ctx->driver);
 }
 
-int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
+int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **driver)
 {
   Mutex::Locker l(lock);
-  if (sn_tag.empty()) {
-    derr << __func__ << " empty serial number" << dendl;
-    return -ENOENT;
-  }
-
   for (auto &&it : shared_driver_datas) {
-    if (it->is_equal(sn_tag)) {
+    if (it->is_equal(trid)) {
       *driver = it;
       return 0;
     }
@@ -654,7 +616,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
     dpdk_thread.detach();
   }
 
-  ProbeContext ctx = {sn_tag, this, nullptr, false};
+  ProbeContext ctx{trid, this, nullptr, false};
   {
     std::unique_lock<std::mutex> l(probe_queue_lock);
     probe_queue.push_back(&ctx);
@@ -736,46 +698,30 @@ NVMEDevice::NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
 
 int NVMEDevice::open(const string& p)
 {
-  int r = 0;
   dout(1) << __func__ << " path " << p << dendl;
 
-  string serial_number;
-  int fd = ::open(p.c_str(), O_RDONLY | O_CLOEXEC);
-  if (fd < 0) {
-    r = -errno;
-    derr << __func__ << " unable to open " << p << ": " << cpp_strerror(r)
+  std::ifstream ifs(p);
+  if (!ifs) {
+    derr << __func__ << " unable to open " << p << dendl;
+    return -1;
+  }
+  string val;
+  std::getline(ifs, val);
+  spdk_nvme_transport_id trid;
+  if (int r = spdk_nvme_transport_id_parse(&trid, val.c_str()); r) {
+    derr << __func__ << " unable to read " << p << ": " << cpp_strerror(r)
 	 << dendl;
     return r;
   }
-  char buf[100];
-  r = ::read(fd, buf, sizeof(buf));
-  VOID_TEMP_FAILURE_RETRY(::close(fd));
-  fd = -1; // defensive
-  if (r <= 0) {
-    if (r == 0) {
-      r = -EINVAL;
-    } else {
-      r = -errno;
-    }
-    derr << __func__ << " unable to read " << p << ": " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  /* scan buf from the beginning with isxdigit. */
-  int i = 0;
-  while (i < r && isxdigit(buf[i])) {
-    i++;
-  }
-  serial_number = string(buf, i);
-  r = manager.try_get(serial_number, &driver);
-  if (r < 0) {
-    derr << __func__ << " failed to get nvme device with sn " << serial_number << dendl;
+  if (int r = manager.try_get(trid, &driver); r < 0) {
+    derr << __func__ << " failed to get nvme device with transport address " << trid.traddr << dendl;
     return r;
   }
 
   driver->register_device(this);
   block_size = driver->get_block_size();
   size = driver->get_size();
-  name = serial_number;
+  name = trid.traddr;
 
   //nvme is non-rotational device.
   rotational = false;
