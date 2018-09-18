@@ -101,7 +101,7 @@ class Module(MgrModule):
         self.run = True
         self.event = Event()
 
-    def handle_command(self, _, cmd):
+    def handle_command(self, cmd):
         self.log.error("handle_command")
 
         if cmd['prefix'] == 'device query-daemon-health-metrics':
