@@ -767,8 +767,8 @@ namespace buffer CEPH_BUFFER_API {
 
       contiguous_appender(bufferlist *l, size_t len, bool d)
 	: pbl(l),
-	  deep(d) {
-	size_t unused = pbl->append_buffer.unused_tail_length();
+	  deep(true) {
+	size_t unused = pbl->get_append_buffer_unused_tail_length();
 	if (len > unused) {
 	  // note: if len < the normal append_buffer size it *might*
 	  // be better to allocate a normal-sized append_buffer and
@@ -781,7 +781,7 @@ namespace buffer CEPH_BUFFER_API {
 	  bp = buffer::create(len);
 	  pos = bp.c_str();
 	} else {
-	  pos = pbl->append_buffer.end_c_str();
+	  pos = pbl->_buffers.back().end_c_str();
 	}
       }
 
@@ -794,11 +794,12 @@ namespace buffer CEPH_BUFFER_API {
 	  bp.set_offset(bp.offset() + l);
 	} else {
 	  // we are using pbl's append_buffer
-	  size_t l = pos - pbl->append_buffer.end_c_str();
+	  auto& buf = pbl->_buffers.back();
+	  size_t l = pos - buf.end_c_str();
 	  if (l) {
-	    pbl->append_buffer.set_length(pbl->append_buffer.length() + l);
-	    pbl->append(pbl->append_buffer, pbl->append_buffer.end() - l, l);
-	    pos = pbl->append_buffer.end_c_str();
+	    buf.set_length(buf.length() + l);
+	    pbl->_len += l;
+	    pos = buf.end_c_str();
 	  }
 	}
       }
@@ -813,10 +814,11 @@ namespace buffer CEPH_BUFFER_API {
 	  pbl->append(std::move(bp));
 	} else {
 	  // we are using pbl's append_buffer
-	  size_t l = pos - pbl->append_buffer.end_c_str();
+	  auto& buf = pbl->_buffers.back();
+	  size_t l = pos - buf.end_c_str();
 	  if (l) {
-	    pbl->append_buffer.set_length(pbl->append_buffer.length() + l);
-	    pbl->append(pbl->append_buffer, pbl->append_buffer.end() - l, l);
+	    buf.set_length(buf.length() + l);
+	    pbl->_len += l;
 	  }
 	}
       }
@@ -868,7 +870,7 @@ namespace buffer CEPH_BUFFER_API {
 	if (bp.have_raw()) {
 	  return out_of_band_offset + (pos - bp.c_str());
 	} else {
-	  return out_of_band_offset + (pos - pbl->append_buffer.end_c_str());
+	  return out_of_band_offset + (pos - pbl->_buffers.back().end_c_str());
 	}
       }
     };
