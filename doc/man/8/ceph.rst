@@ -33,7 +33,7 @@ Synopsis
 
 | **ceph** **log** *<logtext>* [ *<logtext>*... ]
 
-| **ceph** **mds** [ *compat* \| *deactivate* \| *fail* \| *rm* \| *rmfailed* \| *set_state* \| *stat* \| *repaired* ] ...
+| **ceph** **mds** [ *compat* \| *fail* \| *rm* \| *rmfailed* \| *set_state* \| *stat* \| *repaired* ] ...
 
 | **ceph** **mon** [ *add* \| *dump* \| *getmap* \| *remove* \| *stat* ] ...
 
@@ -370,12 +370,6 @@ Subcommand ``show`` shows mds compatibility settings.
 Usage::
 
 	ceph mds compat show
-
-Subcommand ``deactivate`` stops mds.
-
-Usage::
-
-	ceph mds deactivate <role>
 
 Subcommand ``fail`` forces mds to status fail.
 
