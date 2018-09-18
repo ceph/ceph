@@ -1923,16 +1923,6 @@ protected:
     pg_history_t *h,
     PastIntervals *pi);
 
-  /// project pg history from from to now
-  bool project_pg_history(
-    spg_t pgid, pg_history_t& h, epoch_t from,
-    const OSDMapRef &osdmap,
-    const vector<int>& lastup,
-    int lastupprimary,
-    const vector<int>& lastacting,
-    int lastactingprimary
-    ); ///< @return false if there was a map gap between from and now
-
   epoch_t last_pg_create_epoch;
 
   void handle_pg_create(OpRequestRef op);

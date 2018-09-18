@@ -4363,95 +4363,6 @@ void OSD::build_initial_pg_history(
 	   << dendl;
 }
 
-/**
- * Fill in the passed history so you know same_interval_since, same_up_since,
- * and same_primary_since.
- */
-bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
-			     const OSDMapRef& endmap,
-			     const vector<int>& currentup,
-			     int currentupprimary,
-			     const vector<int>& currentacting,
-			     int currentactingprimary)
-{
-  dout(15) << "project_pg_history " << pgid
-           << " from " << from << " to " << endmap->get_epoch()
-           << ", start " << h
-           << dendl;
-
-  epoch_t e;
-  for (e = endmap->get_epoch();
-       e > from;
-       e--) {
-    // verify during intermediate epoch (e-1)
-    OSDMapRef oldmap = service.try_get_map(e-1);
-    if (!oldmap) {
-      dout(15) << __func__ << ": found map gap, returning false" << dendl;
-      return false;
-    }
-
-    int upprimary, actingprimary;
-    vector<int> up, acting;
-    oldmap->pg_to_up_acting_osds(
-      pgid.pgid,
-      &up,
-      &upprimary,
-      &acting,
-      &actingprimary);
-
-    if (e > h.same_interval_since &&
-	PastIntervals::is_new_interval(
-	  actingprimary, currentactingprimary,
-	  acting, currentacting,
-	  upprimary, currentupprimary,
-	  up, currentup,
-	  oldmap, endmap,
-	  pgid.pgid)) {
-      dout(15) << "project_pg_history " << pgid << " interval changed in " << e << dendl;
-      h.same_interval_since = e;
-    }
-
-    // up set change?
-    if ((up != currentup || upprimary != currentupprimary)
-	&& e > h.same_up_since) {
-      dout(15) << "project_pg_history " << pgid << " up changed in " << e
-	       << " from " << up << " " << upprimary
-	       << " -> " << currentup << " " << currentupprimary << dendl;
-      h.same_up_since = e;
-    }
-
-    // primary change?
-    if (OSDMap::primary_changed(
-	  actingprimary,
-	  acting,
-	  currentactingprimary,
-	  currentacting) &&
-        e > h.same_primary_since) {
-      dout(15) << "project_pg_history " << pgid << " primary changed in " << e << dendl;
-      h.same_primary_since = e;
-    }
-
-    if (h.same_interval_since >= e && h.same_up_since >= e && h.same_primary_since >= e)
-      break;
-  }
-
-  // base case: these floors should be the pg creation epoch if we didn't
-  // find any changes.
-  if (e == h.epoch_created) {
-    if (!h.same_interval_since)
-      h.same_interval_since = e;
-    if (!h.same_up_since)
-      h.same_up_since = e;
-    if (!h.same_primary_since)
-      h.same_primary_since = e;
-  }
-
-  dout(15) << "project_pg_history end " << h << dendl;
-  return true;
-}
-
-
-
 void OSD::_add_heartbeat_peer(int p)
 {
   if (p == whoami)
@@ -9039,27 +8950,6 @@ void OSD::handle_pg_query_nopg(const MQuery& q)
   OSDMapRef osdmap = get_osdmap();
   if (!osdmap->have_pg_pool(pgid.pool()))
     return;
-
-  // get active crush mapping
-  int up_primary, acting_primary;
-  vector<int> up, acting;
-  osdmap->pg_to_up_acting_osds(
-    pgid.pgid, &up, &up_primary, &acting, &acting_primary);
-
-  // same primary?
-  pg_history_t history = q.query.history;
-  bool valid_history = project_pg_history(
-    pgid, history, q.query.epoch_sent,
-    osdmap,
-    up, up_primary, acting, acting_primary);
-
-  if (!valid_history ||
-      q.query.epoch_sent < history.same_interval_since) {
-    dout(10) << " pg " << pgid << " dne, and pg has changed in "
-	     << history.same_interval_since
-	     << " (msg from " << q.query.epoch_sent << ")" << dendl;
-    return;
-  }
 
   dout(10) << " pg " << pgid << " dne" << dendl;
   pg_info_t empty(spg_t(pgid.pgid, q.query.to));
