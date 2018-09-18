@@ -61,6 +61,7 @@ class Messenger {
     return ++global_seq;
   }
   virtual ConnectionRef lookup_conn(const entity_addr_t&) = 0;
+  virtual void register_conn(ConnectionRef) = 0;
   virtual void unregister_conn(ConnectionRef) = 0;
 
   // @returns a tuple of <is_valid, auth_reply, session_key>
