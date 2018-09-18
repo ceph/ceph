@@ -91,20 +91,20 @@ public:
 
   void flush(std::ostream& os) override
   {
-      // This class is not a serializer: this doens't make sense
+      // This class is not a serializer: this doesn't make sense
       ceph_abort();
   }
 
   int get_len() const override
   {
-      // This class is not a serializer: this doens't make sense
+      // This class is not a serializer: this doesn't make sense
       ceph_abort();
       return 0;
   }
 
   void write_raw_data(const char *data) override
   {
-      // This class is not a serializer: this doens't make sense
+      // This class is not a serializer: this doesn't make sense
       ceph_abort();
   }
 
