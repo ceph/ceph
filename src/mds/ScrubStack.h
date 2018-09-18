@@ -70,7 +70,7 @@ public:
    * If there are other scrubs in progress, they will not continue scrubbing new
    * entries until this one is completed.
    * @param in The inodey to scrub
-   * @param header The ScrubHeader propagated from whereever this scrub
+   * @param header The ScrubHeader propagated from wherever this scrub
    *               was initiated
    */
   void enqueue_inode_top(CInode *in, ScrubHeaderRef& header,
