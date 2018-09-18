@@ -734,14 +734,8 @@ static ceph::spinlock debug_lock;
     //     << " (p_off " << p_off << " in " << p->length() << ")"
     //     << std::endl;
 
-    p_off += o;
-
-    if (!o) {
-      return;
-    }
-    while (p_off > 0) {
-      if (p == ls->end())
-        throw end_of_buffer();
+    p_off +=o;
+    while (p != ls->end()) {
       if (p_off >= p->length()) {
         // skip this buffer
         p_off -= p->length();
@@ -750,6 +744,9 @@ static ceph::spinlock debug_lock;
         // somewhere in this buffer!
         break;
       }
+    }
+    if (p == ls->end() && p_off) {
+      throw end_of_buffer();
     }
     off += o;
   }
@@ -806,7 +803,6 @@ static ceph::spinlock debug_lock;
     while (len > 0) {
       if (p == ls->end())
 	throw end_of_buffer();
-      ceph_assert(p->length() > 0);
 
       unsigned howmuch = p->length() - p_off;
       if (len < howmuch) howmuch = len;
@@ -832,7 +828,6 @@ static ceph::spinlock debug_lock;
     }
     if (p == ls->end())
       throw end_of_buffer();
-    ceph_assert(p->length() > 0);
     dest = create(len);
     copy(len, dest.c_str());
   }
@@ -845,7 +840,6 @@ static ceph::spinlock debug_lock;
     }
     if (p == ls->end())
       throw end_of_buffer();
-    ceph_assert(p->length() > 0);
     unsigned howmuch = p->length() - p_off;
     if (howmuch < len) {
       dest = create(len);
@@ -903,7 +897,6 @@ static ceph::spinlock debug_lock;
     while (1) {
       if (p == ls->end())
 	return;
-      ceph_assert(p->length() > 0);
 
       unsigned howmuch = p->length() - p_off;
       const char *c_str = p->c_str();
@@ -1048,7 +1041,6 @@ static ceph::spinlock debug_lock;
 	  ++b;
 	}
       }
-      ceph_assert(b == std::cend(other._buffers));
       return true;
     }
 
