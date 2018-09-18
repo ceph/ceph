@@ -48,18 +48,24 @@ seastar::future<> SocketMessenger::dispatch(ConnectionRef conn)
   return seastar::keep_doing([=] {
       return conn->read_message()
         .then([=] (MessageRef msg) {
-          if (msg) {
-	    return dispatcher->ms_dispatch(conn, std::move(msg));
-	  } else {
-	    return seastar::now();
-	  }
+          // start dispatch, ignoring exceptions from the application layer
+          seastar::with_gate(pending_dispatch, [=, msg = std::move(msg)] {
+              return dispatcher->ms_dispatch(conn, std::move(msg))
+                .handle_exception([] (std::exception_ptr eptr) {});
+            });
+          // return immediately to start on the next message
+          return seastar::now();
         });
     }).handle_exception_type([=] (const std::system_error& e) {
       if (e.code() == error::connection_aborted ||
           e.code() == error::connection_reset) {
-        dispatcher->ms_handle_reset(conn);
+        return seastar::with_gate(pending_dispatch, [=] {
+            return dispatcher->ms_handle_reset(conn);
+          });
       } else if (e.code() == error::read_eof) {
-        dispatcher->ms_handle_remote_reset(conn);
+        return seastar::with_gate(pending_dispatch, [=] {
+            return dispatcher->ms_handle_remote_reset(conn);
+          });
       } else {
         throw e;
       }
@@ -77,12 +83,16 @@ seastar::future<> SocketMessenger::accept(seastar::connected_socket socket,
                                             peer_addr, std::move(socket));
   // initiate the handshake
   return conn->server_handshake()
-    .handle_exception([conn] (std::exception_ptr eptr) {
+    .then([=] {
+      // notify the dispatcher and allow them to reject the connection
+      return seastar::with_gate(pending_dispatch, [=] {
+          return dispatcher->ms_handle_accept(conn);
+        });
+    }).handle_exception([conn] (std::exception_ptr eptr) {
       // close the connection before returning errors
       return seastar::make_exception_future<>(eptr)
         .finally([conn] { return conn->close(); });
     }).then([this, conn] {
-      dispatcher->ms_handle_accept(conn);
       // dispatch messages until the connection closes or the dispatch
       // queue shuts down
       return dispatch(std::move(conn));
@@ -127,13 +137,17 @@ SocketMessenger::connect(const entity_addr_t& addr, entity_type_t peer_type)
                                                 std::move(socket));
       // complete the handshake before returning to the caller
       return conn->client_handshake(peer_type, get_myname().type())
-        .handle_exception([conn] (std::exception_ptr eptr) {
+        .then([=] {
+          // notify the dispatcher and allow them to reject the connection
+          return seastar::with_gate(pending_dispatch, [=] {
+            return dispatcher->ms_handle_connect(conn);
+          });
+        }).handle_exception([conn] (std::exception_ptr eptr) {
           // close the connection before returning errors
           return seastar::make_exception_future<>(eptr)
             .finally([conn] { return conn->close(); });
 	  // TODO: retry on fault
         }).then([=] {
-          dispatcher->ms_handle_connect(conn);
           // dispatch replies on this connection
           dispatch(conn)
             .handle_exception([] (std::exception_ptr eptr) {});
@@ -147,10 +161,16 @@ seastar::future<> SocketMessenger::shutdown()
   if (listener) {
     listener->abort_accept();
   }
+  // close all connections
   return seastar::parallel_for_each(connections.begin(), connections.end(),
     [this] (auto conn) {
       return conn.second->close();
-    }).finally([this] { connections.clear(); });
+    }).finally([this] {
+      connections.clear();
+      // closing connections will unblock any dispatchers that were waiting to
+      // send(). wait for any pending calls to finish
+      return pending_dispatch.close();
+    });
 }
 
 void SocketMessenger::set_default_policy(const SocketPolicy& p)
@@ -195,21 +215,15 @@ SocketMessenger::verify_authorizer(peer_type_t peer_type,
 				   auth_proto_t protocol,
 				   bufferlist& auth)
 {
-  if (dispatcher) {
-    return dispatcher->ms_verify_authorizer(peer_type, protocol, auth);
-  } else {
-    return seastar::make_ready_future<msgr_tag_t, bufferlist>(
-        CEPH_MSGR_TAG_BADAUTHORIZER,
-        bufferlist{});
-  }
+  return seastar::with_gate(pending_dispatch, [=, &auth] {
+      return dispatcher->ms_verify_authorizer(peer_type, protocol, auth);
+    });
 }
 
 seastar::future<std::unique_ptr<AuthAuthorizer>>
 SocketMessenger::get_authorizer(peer_type_t peer_type, bool force_new)
 {
-  if (dispatcher) {
-    return dispatcher->ms_get_authorizer(peer_type, force_new);
-  } else {
-    return seastar::make_ready_future<std::unique_ptr<AuthAuthorizer>>(nullptr);
-  }
+  return seastar::with_gate(pending_dispatch, [=] {
+      return dispatcher->ms_get_authorizer(peer_type, force_new);
+    });
 }

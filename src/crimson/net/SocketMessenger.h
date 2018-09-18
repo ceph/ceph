@@ -15,7 +15,8 @@
 #pragma once
 
 #include <map>
-#include <boost/optional.hpp>
+#include <optional>
+#include <seastar/core/gate.hh>
 #include <seastar/core/reactor.hh>
 
 #include "msg/Policy.h"
@@ -27,11 +28,12 @@ namespace ceph::net {
 using SocketPolicy = ceph::net::Policy<ceph::thread::Throttle>;
 
 class SocketMessenger final : public Messenger {
-  boost::optional<seastar::server_socket> listener;
+  std::optional<seastar::server_socket> listener;
   Dispatcher *dispatcher = nullptr;
   std::map<entity_addr_t, ConnectionRef> connections;
   using Throttle = ceph::thread::Throttle;
   ceph::net::PolicySet<Throttle> policy_set;
+  seastar::gate pending_dispatch;
 
   seastar::future<> dispatch(ConnectionRef conn);
 
