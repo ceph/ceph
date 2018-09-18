@@ -196,8 +196,8 @@ public:
   {
     std::vector <std::string> result;
 
-    const std::set <boost::string_view> allowed_auth = { "external", "local", "sts" };
-    std::vector <std::string> default_order = { "external", "local", "sts"};
+    const std::set <boost::string_view> allowed_auth = { "sts", "external", "local"};
+    std::vector <std::string> default_order = { "sts", "external", "local"};
     // supplied strings may contain a space, so let's bypass that
     boost::split(result, cct->_conf->rgw_s3_auth_order,
 		 boost::is_any_of(", "), boost::token_compress_on);
