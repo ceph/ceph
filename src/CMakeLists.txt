@@ -721,7 +721,7 @@ install(FILES
   sample.ceph.conf
   DESTINATION ${CMAKE_INSTALL_DOCDIR})
 
-# Now create a useable config.h
+# Now create a usable config.h
 configure_file(
   ${CMAKE_SOURCE_DIR}/src/include/config-h.in.cmake
   ${CMAKE_BINARY_DIR}/include/acconfig.h
