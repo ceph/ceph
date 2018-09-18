@@ -58,7 +58,7 @@
                            reweight a given item (and adjust ancestor
                            weights as needed)
      -i mapfn --add-bucket name type [--loc type name ...]
-                           insert a bucket into the hierachy at the given
+                           insert a bucket into the hierarchy at the given
                            location
      -i mapfn --move       name --loc type name ...
                            move the given item to specified location
