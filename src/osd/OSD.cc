@@ -8220,14 +8220,26 @@ bool OSD::advance_pg(
 	    pg->unlock();
 	    // kick source(s) to get them ready
 	    for (auto& i : children) {
-	      dout(20) << __func__ << " kicking source " << i << dendl;
-	      enqueue_peering_evt(
-		i,
-		PGPeeringEventRef(
-		  std::make_shared<PGPeeringEvent>(
-		    nextmap->get_epoch(),
-		    nextmap->get_epoch(),
-		    NullEvt())));
+              bool is_pending_split = false;
+              for (auto j : new_pgs) {
+                if (j->pg_id == i) {
+                  is_pending_split = true;
+                  break;
+                }
+              }
+              if (is_pending_split) {
+                dout(20) << __func__ << " merge source " << i
+                         << " is pending splitting, waiting" << dendl;
+              } else {
+	        dout(20) << __func__ << " kicking source " << i << dendl;
+	        enqueue_peering_evt(
+		  i,
+		  PGPeeringEventRef(
+		    std::make_shared<PGPeeringEvent>(
+		      nextmap->get_epoch(),
+		      nextmap->get_epoch(),
+		      NullEvt())));
+              }
 	    }
 	    ret = false;
 	    goto out;
