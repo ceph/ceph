@@ -28,5 +28,5 @@ def task(ctx, config):
         config = {}
     assert isinstance(config, dict)
     duration = int(config.get('duration', 5))
-    log.info('Sleeping for %d', duration)
+    log.info('Sleeping for {} seconds'.format(duration))
     time.sleep(duration)
