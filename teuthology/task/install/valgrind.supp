@@ -523,3 +523,13 @@
   fun:_dlerror_run
   fun:dlopen@@GLIBC_2.2.5
 }
+
+{
+  rte_log_init() in DPDK fails to reset strdup()'ed string at exit
+  Memcheck:Leak
+  match-leak-kinds: reachable
+  fun:*alloc
+  ...
+  fun:rte_log_init
+  fun:__libc_csu_init
+}
