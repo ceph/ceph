@@ -145,3 +145,8 @@ Files: src/include/timegm.h
   Copyright (C) Copyright Howard Hinnant
   Copyright (C) Copyright 2010-2011 Vicente J. Botet Escriba
   License: Boost Software License, Version 1.0
+
+Files: src/pybind/mgr/diskprediction/predictor/models/*
+Copyright: None
+License: Public domain
+
