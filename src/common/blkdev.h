@@ -30,6 +30,9 @@ extern int block_device_serial(const char *devname, char *serial, size_t max);
 extern void get_dm_parents(const std::string& dev, std::set<std::string> *ls);
 extern std::string get_device_id(const std::string& devname);
 
+extern int block_device_run_smartctl(const char *device, int timeout,
+				     std::string *result);
+
 // for VDO
 
 /// return an op fd for the sysfs stats dir, if this is a VDO device

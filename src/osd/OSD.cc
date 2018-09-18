@@ -48,7 +48,6 @@
 #include "common/ceph_time.h"
 #include "common/version.h"
 #include "common/pick_address.h"
-#include "common/SubProcess.h"
 #include "common/blkdev.h"
 
 #include "os/ObjectStore.h"
@@ -6575,10 +6574,12 @@ void OSD::probe_smart(const string& only_devid, ostream& ss)
     }
 
     std::string result;
-    if (probe_smart_device(("/dev/" + dev).c_str(), smart_timeout, &result)) {
+    if (block_device_run_smartctl(("/dev/" + dev).c_str(), smart_timeout,
+				  &result)) {
       dout(10) << "probe_smart_device failed for /dev/" << dev << dendl;
       //continue;
-      result = "{\"error\": \"smartctl failed\", \"dev\": \"" + dev + "\"}";
+      result = "{\"error\": \"smartctl failed\", \"dev\": \"" + dev +
+	"\", \"smartctl_error\": \"" + result + "\"}";
     }
 
     // TODO: change to read_or_throw?
@@ -6590,44 +6591,6 @@ void OSD::probe_smart(const string& only_devid, ostream& ss)
     // no need to result.clear() or clear smart_json
   }
   json_spirit::write(json_map, ss, json_spirit::pretty_print);
-}
-
-int OSD::probe_smart_device(const char *device, int timeout, std::string *result)
-{
-  // when using --json, smartctl will report its errors in JSON format to stdout 
-  SubProcessTimed smartctl(
-    "sudo", SubProcess::CLOSE, SubProcess::PIPE, SubProcess::CLOSE,
-    timeout);
-  smartctl.add_cmd_args(
-    "smartctl",
-    "-a",
-    //"-x",
-    "--json",
-    device,
-    NULL);
-
-  int ret = smartctl.spawn();
-  if (ret != 0) {
-    derr << "failed run smartctl: " << smartctl.err() << dendl;
-    return ret;
-  }
-
-  bufferlist output;
-  ret = output.read_fd(smartctl.get_stdout(), 100*1024);
-  if (ret < 0) {
-    derr << "failed read from smartctl: " << cpp_strerror(-ret) << dendl;
-  } else {
-    ret = 0;
-    *result = output.to_str();
-    dout(10) << "smartctl output is: " << *result << dendl;
-  }
-
-  if (smartctl.join() != 0) {
-    derr << smartctl.err() << dendl;
-    return -EINVAL;
-  }
-
-  return ret;
 }
 
 bool OSD::heartbeat_dispatch(Message *m)
