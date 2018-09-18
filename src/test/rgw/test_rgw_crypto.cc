@@ -18,7 +18,7 @@
 #include "rgw/rgw_rados.h"
 #include "rgw/rgw_crypt.h"
 #include <gtest/gtest.h>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;

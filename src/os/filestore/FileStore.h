@@ -28,7 +28,7 @@
 
 #include "include/unordered_map.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "os/ObjectStore.h"
 #include "JournalingObjectStore.h"

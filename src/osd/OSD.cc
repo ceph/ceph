@@ -148,7 +148,7 @@
 #include "include/str_list.h"
 #include "include/util.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/config.h"
 #include "common/EventTrace.h"
 

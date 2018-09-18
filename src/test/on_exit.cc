@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include "include/on_exit.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #ifndef MAP_ANONYMOUS
 # ifdef MAP_ANON

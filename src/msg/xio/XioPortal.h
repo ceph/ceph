@@ -29,7 +29,7 @@ extern "C" {
 
 #include "include/spinlock.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/dout.h"
 
 #ifndef CACHE_LINE_SIZE

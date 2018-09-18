@@ -8,7 +8,7 @@
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
 
-#include "include/assert.h"  // boost clobbers this
+#include "include/ceph_assert.h"  // boost clobbers this
 
 struct uuid_d;
 class LogEntry;

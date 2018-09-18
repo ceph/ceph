@@ -28,7 +28,7 @@
 #include "include/mempool.h"
 
 // re-include our assert to clobber boost's
-#include "include/assert.h" 
+#include "include/ceph_assert.h" 
 
 #include "include/types.h"
 #include "include/stringify.h"

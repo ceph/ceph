@@ -35,7 +35,7 @@
 #include "osdc/Objecter.h"
 
 #include "common/config.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/compat.h"
 
 #define dout_context g_ceph_context

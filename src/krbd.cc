@@ -33,7 +33,7 @@
 #include "common/safe_io.h"
 #include "common/secret.h"
 #include "common/TextTable.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
 #include "include/krbd.h"
 #include "mon/MonMap.h"

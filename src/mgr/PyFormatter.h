@@ -25,7 +25,7 @@
 #include <list>
 
 #include "common/Formatter.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class PyFormatter : public ceph::Formatter
 {

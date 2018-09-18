@@ -23,7 +23,7 @@
 #include "common/config.h"
 #include "common/cmdparse.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
 
 #define dout_subsys ceph_subsys_mon

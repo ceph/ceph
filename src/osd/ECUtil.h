@@ -18,7 +18,7 @@
 #include <ostream>
 #include "erasure-code/ErasureCodeInterface.h"
 #include "include/buffer_fwd.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/encoding.h"
 #include "common/Formatter.h"
 

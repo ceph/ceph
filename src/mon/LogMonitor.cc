@@ -27,7 +27,7 @@
 #include "common/Graylog.h"
 #include "common/errno.h"
 #include "common/strtol.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/str_list.h"
 #include "include/str_map.h"
 #include "include/compat.h"

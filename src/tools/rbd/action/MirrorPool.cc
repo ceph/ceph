@@ -21,7 +21,7 @@
 #include <regex>
 #include <set>
 #include <boost/program_options.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include <atomic>
 

@@ -18,7 +18,7 @@
 
 #include <memory>
 #include "include/buffer_fwd.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "msg/MessageRef.h"
 
 class Messenger;

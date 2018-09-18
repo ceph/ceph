@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include "include/types.h"
 #include "include/utime.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/RWLock.h"
 
 enum {

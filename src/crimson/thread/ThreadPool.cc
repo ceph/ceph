@@ -4,7 +4,7 @@
 #include "crimson/net/Config.h"
 #include "include/intarith.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace ceph::thread {
 

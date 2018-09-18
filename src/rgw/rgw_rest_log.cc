@@ -22,7 +22,7 @@
 #include "rgw_data_sync.h"
 #include "rgw_common.h"
 #include "common/errno.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define LOG_CLASS_LIST_MAX_ENTRIES (1000)

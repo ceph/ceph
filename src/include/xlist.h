@@ -19,7 +19,7 @@
 #include <cstdlib>
 #include <ostream>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 template<typename T>
 class xlist {

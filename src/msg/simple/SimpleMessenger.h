@@ -33,7 +33,7 @@
 
 #include "msg/SimplePolicyMessenger.h"
 #include "msg/Message.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "msg/DispatchQueue.h"
 #include "Pipe.h"

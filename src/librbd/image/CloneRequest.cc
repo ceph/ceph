@@ -5,7 +5,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "librbd/ImageState.h"
 #include "librbd/image/CloneRequest.h"
 #include "librbd/image/CreateRequest.h"

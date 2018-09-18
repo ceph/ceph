@@ -29,7 +29,7 @@
 #include "include/str_list.h"
 #include "messages/MMonMap.h"
 #include "msg/Messenger.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "mds/MDSMap.h"
 
 #include "include/cephfs/libcephfs.h"

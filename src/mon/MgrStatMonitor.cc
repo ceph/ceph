@@ -11,7 +11,7 @@
 #include "messages/MStatfsReply.h"
 #include "messages/MServiceMap.h"
 
-#include "include/assert.h"	// re-clobber assert
+#include "include/ceph_assert.h"	// re-clobber assert
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

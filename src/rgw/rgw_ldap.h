@@ -136,7 +136,7 @@ namespace rgw {
 #include "common/safe_io.h"
 #include <boost/algorithm/string.hpp>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 std::string parse_rgw_ldap_bindpw(CephContext* ctx);
 

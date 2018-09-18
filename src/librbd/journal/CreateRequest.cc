@@ -3,7 +3,7 @@
 
 #include "common/dout.h"
 #include "common/errno.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "librbd/Utils.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"

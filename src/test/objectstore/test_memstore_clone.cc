@@ -16,7 +16,7 @@
 #include "common/ceph_argparse.h"
 #include "os/ObjectStore.h"
 #include <gtest/gtest.h>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/errno.h"
 #include "store_test_fixture.h"
 

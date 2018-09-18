@@ -41,7 +41,7 @@
  * ASSERT_H somehow not defined after all the above (which bring
  * in common/debug.h [e.g., dout])
  */
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 
 #define RGW_RWXMODE  (S_IRWXU | S_IRWXG | S_IRWXO)

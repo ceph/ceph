@@ -16,7 +16,7 @@
 #include <string.h>
 #include "arch/intel.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 // -----------------------------------------------------------------------------
 

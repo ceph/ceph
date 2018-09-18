@@ -8,7 +8,7 @@
 #include <mutex>
 #include <system_error>
 #include <boost/intrusive/avl_set.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/types.h"
 
 namespace bi = boost::intrusive;

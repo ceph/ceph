@@ -45,7 +45,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "compressor/Compressor.h"
 

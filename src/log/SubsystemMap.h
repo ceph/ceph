@@ -11,7 +11,7 @@
 #include "common/likely.h"
 #include "common/subsys_types.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace ceph {
 namespace logging {
