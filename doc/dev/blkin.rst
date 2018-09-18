@@ -109,7 +109,7 @@ You may want to check that ceph is up.::
 
   ./ceph status
 
-Now put something in usin rados, check that it made it, get it back, and remove it.::
+Now put something in using rados, check that it made it, get it back, and remove it.::
 
   ./ceph osd pool create test-blkin 8
   ./rados put test-object-1 ./vstart.sh --pool=test-blkin

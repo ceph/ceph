@@ -201,7 +201,7 @@ A Ceph Storage Cluster requires at least one Ceph Monitor and Ceph
 Manager to run. For high availability, Ceph Storage Clusters typically
 run multiple Ceph Monitors so that the failure of a single Ceph
 Monitor will not bring down the Ceph Storage Cluster. Ceph uses the
-Paxos algorithm, which requires a majority of monitors (i.e., greather
+Paxos algorithm, which requires a majority of monitors (i.e., greater
 than *N/2* where *N* is the number of monitors) to form a quorum.
 Odd numbers of monitors tend to be better, although this is not required.
 

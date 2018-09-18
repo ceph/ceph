@@ -62,7 +62,7 @@ Additional optional configuration settings are:
 Debugging 
 ---------
 
-By default, a few debugging statments as well as error statements have been set to print in the log files. Users can add more if necessary.
+By default, a few debugging statements as well as error statements have been set to print in the log files. Users can add more if necessary.
 To make use of the debugging option in the module:
 
 - Add this to the ceph.conf file.::
