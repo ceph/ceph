@@ -23,6 +23,19 @@
 #include "include/uuid.h"
 #include "blkdev.h"
 
+int get_device_by_path(const char *path, char* partition, char* device,
+		       size_t max)
+{
+  int fd = ::open(path, O_RDONLY|O_DIRECTORY);
+  if (fd < 0) {
+    return -errno;
+  }
+  int r = get_device_by_fd(fd, partition, device, max);
+  ::close(fd);
+  return r;
+}
+
+
 #ifdef __linux__
 #include <libudev.h>
 #include <linux/fs.h>
