@@ -399,7 +399,6 @@ void OSDService::identify_splits_and_merges(
 		       << " pg_num " << pgnum << " -> " << q->second
 		       << " is merge source, target " << parent
 		       << ", source(s) " << children << dendl;
-	      merge_pgs->insert(make_pair(cur, q->first));
 	      merge_pgs->insert(make_pair(parent, q->first));
 	      for (auto c : children) {
 		merge_pgs->insert(make_pair(c, q->first));
@@ -10108,11 +10107,11 @@ void OSDShard::prime_merges(const OSDMapRef& as_of_osdmap,
     slot = r.first->second.get();
     if (slot->pg) {
       // already have pg
-      dout(20) << __func__ << "  have merge target pg " << pgid
+      dout(20) << __func__ << "  have merge participant pg " << pgid
 	       << " " << slot->pg << dendl;
     } else if (!slot->waiting_for_split.empty() &&
 	       *slot->waiting_for_split.begin() < epoch) {
-      dout(20) << __func__ << "  pending split on merge target pg " << pgid
+      dout(20) << __func__ << "  pending split on merge participant pg " << pgid
 	       << " " << slot->waiting_for_split << dendl;
     } else {
       dout(20) << __func__ << "  creating empty merge participant " << pgid
