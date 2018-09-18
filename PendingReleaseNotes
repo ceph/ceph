@@ -21,6 +21,9 @@
   The secrets can be set using the 'rbd mirror pool peer add' and
   'rbd mirror pool peer set' actions.
 
+* The `ceph mds deactivate` is fully obsolete and references to it in the docs
+  have been removed or clarified.
+
 >=13.1.0
 --------
 

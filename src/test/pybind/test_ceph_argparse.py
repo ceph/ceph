@@ -376,12 +376,6 @@ class TestMDS(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['mds', 'compat',
                                                     'show', 'toomany']))
 
-    def test_deactivate(self):
-        self.assert_valid_command(['mds', 'deactivate', 'someone'])
-        assert_equal({}, validate_command(sigdict, ['mds', 'deactivate']))
-        assert_equal({}, validate_command(sigdict, ['mds', 'deactivate',
-                                                    'someone', 'toomany']))
-
     def test_set_state(self):
         self.assert_valid_command(['mds', 'set_state', '1', '2'])
         assert_equal({}, validate_command(sigdict, ['mds', 'set_state']))

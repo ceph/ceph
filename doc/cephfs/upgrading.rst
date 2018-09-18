@@ -18,7 +18,7 @@ The proper sequence for upgrading the MDS cluster is:
 
     ceph fs set <fs_name> max_mds 1
 
-2. Wait for cluster to deactivate non-zero ranks where only rank 0 is active and the rest are standbys.
+2. Wait for cluster to stop non-zero ranks where only rank 0 is active and the rest are standbys.
 
 ::
 
