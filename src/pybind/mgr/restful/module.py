@@ -591,7 +591,7 @@ class Module(MgrModule):
 
 
     def run_command(self, command):
-        # tag with 'seq' so that we can ingore these in notify function
+        # tag with 'seq' so that we can ignore these in notify function
         result = CommandResult('seq')
 
         self.send_command(result, 'mon', '', json.dumps(command), 'seq')

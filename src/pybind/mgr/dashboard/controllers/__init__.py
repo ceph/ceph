@@ -587,7 +587,7 @@ class RESTController(BaseController):
     """
 
     # resource id parameter for using in get, set, and delete methods
-    # should be overriden by subclasses.
+    # should be overridden by subclasses.
     # to specify a composite id (two parameters) use '/'. e.g., "param1/param2".
     # If subclasses don't override this property we try to infer the structure
     # of the resourse ID.
