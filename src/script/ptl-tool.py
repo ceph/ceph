@@ -344,7 +344,7 @@ def main():
     default_label = ''
     if len(sys.argv) > 1 and sys.argv[1] in SPECIAL_BRANCHES:
         argv = sys.argv[2:]
-        default_branch = 'HEAD' # Leave HEAD deatched
+        default_branch = 'HEAD' # Leave HEAD detached
         default_base = default_branch
         default_label = False
     else:

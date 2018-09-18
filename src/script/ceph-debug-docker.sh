@@ -25,7 +25,7 @@ function main {
     while [ "$#" -gt 0 ]; do
         case "$1" in
             -h|--help)
-                printf '%s: [--no-cache] <branch>[:sha1] <enviornment>\n' "$0"
+                printf '%s: [--no-cache] <branch>[:sha1] <environment>\n' "$0"
                 exit 0
                 ;;
             --no-cache)
