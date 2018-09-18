@@ -705,6 +705,7 @@ target_link_libraries(unittest_simple_spin global)
 # unittest_bufferlist
 add_executable(unittest_bufferlist
   bufferlist.cc
+  $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_bufferlist)
 target_link_libraries(unittest_bufferlist global)

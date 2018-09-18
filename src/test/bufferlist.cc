@@ -2809,6 +2809,22 @@ TEST(BufferList, TestIsProvidedBuffer) {
   ASSERT_FALSE(bl.is_provided_buffer(buff));
 }
 
+TEST(BufferList, TestSHA1) {
+  {
+    bufferlist bl;
+    bl.append("");
+    sha1_digest_t sha1 = bl.sha1();
+    EXPECT_EQ("da39a3ee5e6b4b0d3255bfef95601890afd80709", sha1.to_str());
+  }
+  {
+    bufferlist bl;
+    bl.append("Hello");
+    sha1_digest_t sha1 = bl.sha1();
+    EXPECT_EQ("f7ff9e8b7bb2e09b70935a5d785e0cc5d9d0abf0", sha1.to_str());
+  }
+
+}
+
 TEST(BufferHash, all) {
   {
     bufferlist bl;
