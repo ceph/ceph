@@ -22,6 +22,9 @@
 #include <boost/scope_exit.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
+#include "json_spirit/json_spirit_reader.h"
+#include "json_spirit/json_spirit_writer.h"
+
 #include "Monitor.h"
 #include "common/version.h"
 #include "common/blkdev.h"
@@ -3601,6 +3604,39 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->flush(rdata);
     rs = "";
     r = 0;
+  } else if (prefix == "smart") {
+    string want_devid;
+    cmd_getval(cct, cmdmap, "devid", want_devid);
+
+    string dev = store->get_devname();
+    string devid = get_device_id(dev);
+    if (want_devid.size() && want_devid != devid) {
+      r = -ENOENT;
+    } else {
+      uint64_t smart_timeout = cct->_conf.get_val<uint64_t>(
+	"mon_smart_report_timeout");
+      json_spirit::mObject json_map;
+      json_spirit::mValue smart_json;
+      std::string result;
+      if (block_device_run_smartctl(("/dev/" + dev).c_str(), smart_timeout,
+				    &result)) {
+	dout(10) << "probe_smart_device failed for /dev/" << dev << dendl;
+	result = "{\"error\": \"smartctl failed\", \"dev\": \"" + dev +
+	  "\", \"smartctl_error\": \"" + result + "\"}";
+      }
+
+      if (!json_spirit::read(result, smart_json)) {
+	derr << "smartctl JSON output of /dev/" + dev + " is invalid"
+	     << dendl;
+      } else {
+	json_map[devid] = smart_json;
+      }
+      ostringstream ss;
+      json_spirit::write(json_map, ss, json_spirit::pretty_print);
+      rdata.append(ss.str());
+      r = 0;
+      rs = "";
+    }
   }
 
  out:

@@ -1803,6 +1803,11 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description(""),
 
+    Option("mon_smart_report_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(5)
+    .set_description("Timeout (in seconds) for smarctl to run, default is set to 5"),
+
+
     Option("paxos_stash_full_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(25)
     .set_description(""),
@@ -2019,7 +2024,7 @@ std::vector<Option> get_global_options() {
     .set_min(2)
     .set_description("Number of striping periods to zero head of MDS journal write position"),
 
-     Option("osd_smart_report_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("osd_smart_report_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_description("Timeout (in seconds) for smarctl to run, default is set to 5"),
 
