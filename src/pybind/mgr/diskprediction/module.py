@@ -309,7 +309,7 @@ class Module(MgrModule):
         else:
             return -errno.ENAVAIL, '', result.content
 
-    def handle_command(self, inbuf, cmd):
+    def handle_command(self, cmd):
         for o_cmd in self.COMMANDS:
             if cmd['prefix'] == o_cmd['cmd'][:len(cmd['prefix'])]:
                 fun_name = ''
@@ -326,7 +326,7 @@ class Module(MgrModule):
                     fun = getattr(
                         self, fun_name)
                     if fun:
-                        return fun(inbuf, cmd)
+                        return fun('', cmd)
         return -errno.EINVAL, '', 'cmd not found'
 
     def show_module_config(self):
