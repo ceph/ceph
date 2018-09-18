@@ -1,4 +1,4 @@
-# detect SIMD extentions
+# detect SIMD extensions
 #
 # HAVE_ARMV8_CRC
 # HAVE_ARMV8_SIMD
