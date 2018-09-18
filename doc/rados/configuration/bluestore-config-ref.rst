@@ -392,16 +392,21 @@ script as root::
 
   $ sudo src/spdk/scripts/setup.sh
 
-Then you need to specify NVMe serial number here with "spdk:" prefix for
+Then you need to specify NVMe device's device selector here with "spdk:" prefix for
 ``bluestore_block_path``.
 
-For example, users can find the serial number with::
+For example, users can find the device selector of an Intel PCIe SSD with::
 
-  $ lspci -vvv -d 8086:0953 | grep "Device Serial Number"
+  $ lspci -mm -n -D -d 8086:0953
+
+The device selector always has the form of ``DDDD:BB:DD.FF`` or ``DDDD.BB.DD.FF``.
 
 and then set::
 
-  bluestore block path = spdk:...
+  bluestore block path = spdk:0000:01:00.0
+
+Where ``0000:01:00.0`` is the device selector found in the output of ``lspci``
+command above.
 
 If you want to run multiple SPDK instances per node, you must specify the
 amount of dpdk memory size in MB each instance will use, to make sure each
