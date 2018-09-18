@@ -166,7 +166,7 @@ void usage()
   cout << "                         reweight a given item (and adjust ancestor\n"
        << "                         weights as needed)\n";
   cout << "   -i mapfn --add-bucket name type [--loc type name ...]\n"
-       << "                         insert a bucket into the hierachy at the given\n"
+       << "                         insert a bucket into the hierarchy at the given\n"
        << "                         location\n";
   cout << "   -i mapfn --move       name --loc type name ...\n"
        << "                         move the given item to specified location\n";
