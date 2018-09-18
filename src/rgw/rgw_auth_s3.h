@@ -445,7 +445,7 @@ static inline std::string get_v4_canonical_uri(const req_info& info) {
 
 static inline const char* get_v4_exp_payload_hash(const req_info& info)
 {
-  /* In AWSv4 the hash of real, transfered payload IS NOT necessary to form
+  /* In AWSv4 the hash of real, transferred payload IS NOT necessary to form
    * a Canonical Request, and thus verify a Signature. x-amz-content-sha256
    * header lets get the information very early -- before seeing first byte
    * of HTTP body. As a consequence, we can decouple Signature verification

@@ -1674,7 +1674,7 @@ struct RGWZoneGroupMap {
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
 
-  /* constract the map */
+  /* construct the map */
   int read(CephContext *cct, RGWRados *store);
 
   void encode(bufferlist& bl) const;
@@ -3602,7 +3602,7 @@ public:
     url_encode(string(buf) + get_zone_params().get_name(), trans_id_suffix);
   }
 
-  /* In order to preserve compability with Swift API, transaction ID
+  /* In order to preserve compatibility with Swift API, transaction ID
    * should contain at least 32 characters satisfying following spec:
    *  - first 21 chars must be in range [0-9a-f]. Swift uses this
    *    space for storing fragment of UUID obtained through a call to
