@@ -482,7 +482,12 @@ template <typename I>
 void ObjectCopyRequest<I>::handle_update_object_map(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  assert(r == 0);
+  if (r < 0) {
+    lderr(m_cct) << "failed to update object map: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
   if (!m_dst_object_state.empty()) {
     send_update_object_map();
     return;

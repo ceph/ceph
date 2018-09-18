@@ -181,7 +181,11 @@ Context *RefreshRequest<I>::handle_invalidate(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *ret_val << dendl;
 
-  assert(*ret_val == 0);
+  if (*ret_val < 0) {
+    lderr(cct) << "failed to invalidate object map: " << cpp_strerror(*ret_val)
+               << dendl;
+  }
+
   apply();
   return m_on_finish;
 }
@@ -211,7 +215,13 @@ Context *RefreshRequest<I>::handle_resize_invalidate(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *ret_val << dendl;
 
-  assert(*ret_val == 0);
+  if (*ret_val < 0) {
+    lderr(cct) << "failed to invalidate object map: " << cpp_strerror(*ret_val)
+               << dendl;
+    apply();
+    return m_on_finish;
+  }
+
   send_resize();
   return nullptr;
 }
@@ -249,6 +259,7 @@ Context *RefreshRequest<I>::handle_resize(int *ret_val) {
                << dendl;
     *ret_val = 0;
   }
+
   apply();
   return m_on_finish;
 }
@@ -275,9 +286,13 @@ Context *RefreshRequest<I>::handle_invalidate_and_close(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *ret_val << dendl;
 
-  assert(*ret_val == 0);
+  if (*ret_val < 0) {
+    lderr(cct) << "failed to invalidate object map: " << cpp_strerror(*ret_val)
+               << dendl;
+  } else {
+    *ret_val = -EFBIG;
+  }
 
-  *ret_val = -EFBIG;
   m_object_map->clear();
   return m_on_finish;
 }

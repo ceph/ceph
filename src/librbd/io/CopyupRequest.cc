@@ -254,12 +254,26 @@ bool CopyupRequest<I>::should_complete(int r)
 
   case STATE_OBJECT_MAP_HEAD:
     ldout(cct, 20) << "OBJECT_MAP_HEAD" << dendl;
-    assert(r == 0);
+    if (r < 0) {
+      lderr(cct) << "failed to update head object map: " << cpp_strerror(r)
+                 << dendl;
+      break;
+    }
+
     return send_object_map();
 
   case STATE_OBJECT_MAP:
     ldout(cct, 20) << "OBJECT_MAP" << dendl;
-    assert(r == 0);
+    if (r < 0) {
+      lderr(cct) << "failed to update object map: " << cpp_strerror(r)
+                 << dendl;
+      break;
+    }
+
+    if (!is_copyup_required()) {
+      ldout(cct, 20) << "skipping copyup" << dendl;
+      return true;
+    }
     return send_copyup();
 
   case STATE_COPYUP:

@@ -141,7 +141,15 @@ void SnapshotRemoveRequest::invalidate_next_map() {
 void SnapshotRemoveRequest::handle_invalidate_next_map(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << "r=" << r << dendl;
-  assert(r == 0);
+
+  if (r < 0) {
+    std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id,
+                                                 m_next_snap_id));
+    lderr(cct) << "failed to invalidate object map " << oid << ": "
+               << cpp_strerror(r) << dendl;
+    complete(r);
+    return;
+  }
 
   remove_map();
 }

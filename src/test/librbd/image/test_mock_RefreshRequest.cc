@@ -1231,10 +1231,55 @@ TEST_F(TestMockImageRefreshRequest, OpenObjectMapError) {
   expect_get_flags(mock_image_ctx, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
+  expect_open_object_map(mock_image_ctx, mock_object_map, -EBLACKLISTED);
+
+  C_SaferCond ctx;
+  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false,
+                                                   &ctx);
+  req->send();
+
+  ASSERT_EQ(-EBLACKLISTED, ctx.wait());
+  ASSERT_EQ(nullptr, mock_image_ctx.object_map);
+}
+
+TEST_F(TestMockImageRefreshRequest, OpenObjectMapTooLarge) {
+  REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
+    ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_JOURNALING,
+            false));
+  }
+
+  ASSERT_EQ(0, ictx->state->refresh());
+
+  MockRefreshImageCtx mock_image_ctx(*ictx);
+  MockRefreshParentRequest mock_refresh_parent_request;
+
+  MockExclusiveLock mock_exclusive_lock;
+  mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
+  MockObjectMap *mock_object_map = new MockObjectMap();
+
+  expect_op_work_queue(mock_image_ctx);
+  expect_test_features(mock_image_ctx);
+  expect_is_exclusive_lock_owner(mock_exclusive_lock, true);
+
+  // object map should be immediately opened if exclusive lock owned
+  InSequence seq;
+  expect_get_mutable_metadata(mock_image_ctx, ictx->features, 0);
+  expect_get_metadata(mock_image_ctx, 0);
+  expect_apply_metadata(mock_image_ctx, 0);
+  expect_get_flags(mock_image_ctx, 0);
+  expect_get_group(mock_image_ctx, 0);
+  expect_refresh_parent_is_required(mock_refresh_parent_request, false);
   expect_open_object_map(mock_image_ctx, mock_object_map, -EFBIG);
 
   C_SaferCond ctx;
-  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false, &ctx);
+  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false,
+                                                   &ctx);
   req->send();
 
   ASSERT_EQ(0, ctx.wait());

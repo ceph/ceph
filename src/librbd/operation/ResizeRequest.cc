@@ -296,7 +296,12 @@ Context *ResizeRequest<I>::handle_grow_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  assert(*result == 0);
+  if (*result < 0) {
+    lderr(cct) << this << " " << __func__ << ": failed to resize object map: "
+               << cpp_strerror(*result) << dendl;
+    return this->create_context_finisher(*result);
+  }
+
   send_post_block_writes();
   return nullptr;
 }
@@ -338,8 +343,14 @@ Context *ResizeRequest<I>::handle_shrink_object_map(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
+  if (*result < 0) {
+    lderr(cct) << this << " " << __func__ << ": failed to resize object map: "
+               << cpp_strerror(*result) << dendl;
+    image_ctx.io_work_queue->unblock_writes();
+    return this->create_context_finisher(*result);
+  }
+
   update_size_and_overlap();
-  assert(*result == 0);
   return this->create_context_finisher(0);
 }
 

@@ -598,7 +598,13 @@ template <typename I>
 void SnapshotCopyRequest<I>::handle_resize_object_map(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  assert(r == 0);
+  if (r < 0) {
+    lderr(m_cct) << "failed to resize object map: " << cpp_strerror(r)
+                 << dendl;
+    finish(r);
+    return;
+  }
+
   finish(0);
 }
 

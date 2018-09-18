@@ -53,7 +53,7 @@ void InvalidateRequest<I>::send() {
       (!m_force && m_snap_id == CEPH_NOSNAP &&
        image_ctx.exclusive_lock != nullptr &&
        !image_ctx.exclusive_lock->is_lock_owner())) {
-    this->async_complete(0);
+    this->async_complete(-EROFS);
     return;
   }
 
@@ -64,7 +64,7 @@ void InvalidateRequest<I>::send() {
   librados::AioCompletion *rados_completion =
     this->create_callback_completion();
   r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, rados_completion,
-                                     &op);
+                                   &op);
   assert(r == 0);
   rados_completion->release();
 }
