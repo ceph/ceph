@@ -367,11 +367,7 @@ int RGWOrphanSearch::build_buckets_instance_index()
   }
 
   map<int, list<string> > instances;
-
   bool truncated;
-
-  RGWObjectCtx obj_ctx(store);
-
   int count = 0;
   uint64_t total = 0;
 
@@ -384,10 +380,33 @@ int RGWOrphanSearch::build_buckets_instance_index()
     }
 
     for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+      RGWBucketInfo bucket_info;
+      RGWObjectCtx obj_ctx(store);
+      auto& bucket_instance_id = *iter;
+
+      ret = store->get_bucket_instance_info(
+	obj_ctx, bucket_instance_id, bucket_info, nullptr, nullptr);
+      if (ret < 0) {
+	if (ret == -ENOENT) {
+	  /* probably raced with bucket removal */
+	  continue;
+	}
+	lderr(store->ctx()) << __func__ << ": ERROR: RGWRados::get_bucket_instance_info() returned ret=" << ret << dendl;
+	continue;
+      }
+
+      /* ignore indexless buckets */
+      if (bucket_info.index_type == RGWBIType_Indexless) {
+	ldout(store->ctx(), 15) << "ignoring bucket_instance="
+				<< bucket_instance_id
+				<< dendl;
+	continue;
+      }
+
       ++total;
-      ldout(store->ctx(), 10) << "bucket_instance=" << *iter << " total=" << total << dendl;
-      int shard = orphan_shard(*iter);
-      instances[shard].push_back(*iter);
+      ldout(store->ctx(), 10) << "bucket_instance=" << bucket_instance_id << " total=" << total << dendl;
+      int shard = orphan_shard(bucket_instance_id);
+      instances[shard].push_back(bucket_instance_id);
 
       if (++count >= COUNT_BEFORE_FLUSH) {
         ret = log_oids(buckets_instance_index, instances);
