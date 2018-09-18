@@ -77,9 +77,9 @@ A backoff request has four properties:
 #. hobject_t end
 
 There are two types of backoff: a *PG* backoff will plug all requests
-targetting an entire PG at the client, as described by a range of the
+targeting an entire PG at the client, as described by a range of the
 hash/hobject_t space [begin,end), while an *object* backoff will plug
-all requests targetting a single object (begin == end).
+all requests targeting a single object (begin == end).
 
 When the client receives a *block* backoff message, it is now
 responsible for *not* sending any requests for hobject_ts described by

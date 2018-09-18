@@ -354,7 +354,7 @@ Please see `Upgrading from Bobtail to Cuttlefish`_ for details.
 
 * The sysvinit script now uses the ceph.conf file on the remote host
   when starting remote daemons via the '-a' option.  Note that if '-a'
-  is used in conjuction with '-c path', the path must also be present
+  is used in conjunction with '-c path', the path must also be present
   on the remote host (it is not copied to a temporary file, as it was
   previously).
 
@@ -472,7 +472,7 @@ Notable changes from v0.56 "Bobtail"
 * mds: many fixes (Yan Zheng)
 * mds: misc bug fixes with clustered MDSs and failure recovery
 * mds: misc bug fixes with readdir
-* mds: new encoding for all data types (to allow forward/backward compatbility) (Greg Farnum)
+* mds: new encoding for all data types (to allow forward/backward compatibility) (Greg Farnum)
 * mds: store and update backpointers/traces on directory, file objects (Sam Lang)
 * mon: 'osd crush add|link|unlink|add-bucket ...' commands
 * mon: ability to tune leveldb
@@ -665,7 +665,7 @@ Notable Changes
  * radosgw: fix object copy onto self (Yehuda Sadeh)
  * radosgw: ACL grants in headers (Caleb Miles)
  * radosgw: ability to listen to fastcgi via a port (Guilhem Lettron)
- * mds: new encoding for all data types (to allow forward/backward compatbility) (Greg Farnum)
+ * mds: new encoding for all data types (to allow forward/backward compatibility) (Greg Farnum)
  * mds: fast failover between MDSs (enforce unique mds names)
  * crush: ability to create, remove rules via CLI
  * many many cleanups (Danny Al-Gaaf)

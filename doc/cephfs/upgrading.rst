@@ -7,7 +7,7 @@ assertions or other faults due to incompatible messages or other functional
 differences. For this reason, it's necessary during any cluster upgrade to
 reduce the number of active MDS for a file system to one first so that two
 active MDS do not communicate with different versions.  Further, it's also
-necessary to take standbys offline as any new CompatSet flags will propogate
+necessary to take standbys offline as any new CompatSet flags will propagate
 via the MDSMap to all MDS and cause older MDS to suicide.
 
 The proper sequence for upgrading the MDS cluster is:

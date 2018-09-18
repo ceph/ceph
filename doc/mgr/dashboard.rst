@@ -385,7 +385,7 @@ User accounts are also associated with a set of roles that define which
 dashboard functionality can be accessed by the user.
 
 The Dashboard functionality/modules are grouped within a *security scope*.
-Security scopes are predefined and static. The current avaliable security
+Security scopes are predefined and static. The current available security
 scopes are:
 
 - **hosts**: includes all features related to the ``Hosts`` menu
