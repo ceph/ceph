@@ -91,7 +91,7 @@ class ServerConfigException(Exception):
     pass
 
 
-class SSLCherryPyConfig(object):
+class CherryPyConfig(object):
     """
     Class for common server configuration done by both active and
     standby module, especially setting up SSL.
@@ -213,7 +213,7 @@ class SSLCherryPyConfig(object):
                 return uri
 
 
-class Module(MgrModule, SSLCherryPyConfig):
+class Module(MgrModule, CherryPyConfig):
     """
     dashboard module entrypoint
     """
@@ -251,7 +251,7 @@ class Module(MgrModule, SSLCherryPyConfig):
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
-        SSLCherryPyConfig.__init__(self)
+        CherryPyConfig.__init__(self)
 
         # Keep a librados instance for those that need it.
         self._rados = None
@@ -322,7 +322,7 @@ class Module(MgrModule, SSLCherryPyConfig):
 
     def shutdown(self):
         super(Module, self).shutdown()
-        SSLCherryPyConfig.shutdown(self)
+        CherryPyConfig.shutdown(self)
         logger.info('Stopping engine...')
         self.shutdown_event.set()
 
@@ -374,10 +374,10 @@ class Module(MgrModule, SSLCherryPyConfig):
         NotificationQueue.new_notification(notify_type, notify_id)
 
 
-class StandbyModule(MgrStandbyModule, SSLCherryPyConfig):
+class StandbyModule(MgrStandbyModule, CherryPyConfig):
     def __init__(self, *args, **kwargs):
         super(StandbyModule, self).__init__(*args, **kwargs)
-        SSLCherryPyConfig.__init__(self)
+        CherryPyConfig.__init__(self)
         self.shutdown_event = threading.Event()
 
         # We can set the global mgr instance to ourselves even though
@@ -429,7 +429,7 @@ class StandbyModule(MgrStandbyModule, SSLCherryPyConfig):
         self.log.info("Engine stopped.")
 
     def shutdown(self):
-        SSLCherryPyConfig.shutdown(self)
+        CherryPyConfig.shutdown(self)
 
         self.log.info("Stopping engine...")
         self.shutdown_event.set()
