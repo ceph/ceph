@@ -243,7 +243,7 @@ int RGWSimpleRadosReadCR<T>::request_complete()
       if (iter.end()) {
         // allow successful reads with empty buffers. ReadSyncStatus coroutines
         // depend on this to be able to read without locking, because the
-        // cls lock from InitSyncStatus will create an empty object if it didnt
+        // cls lock from InitSyncStatus will create an empty object if it didn't
         // exist
         *result = T();
       } else {
