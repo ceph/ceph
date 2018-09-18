@@ -148,7 +148,7 @@ def write_lockbox_keyring(osd_id, osd_fsid, secret):
     For filestore: The path for the OSD would exist at this point even if no
     OSD data device is mounted, so the keyring is written to fetch the key, and
     then the data device is mounted on that directory, making the keyring
-    "dissapear".
+    "disappear".
     """
     if os.path.exists('/var/lib/ceph/osd/%s-%s/lockbox.keyring' % (conf.cluster, osd_id)):
         return
