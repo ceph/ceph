@@ -225,10 +225,13 @@ class CephService(object):
             if cls.POOL_STAT_READ_BYTES_PER_SEC in client_io:
                 client_perf[cls.POOL_STAT_READ_BYTES_PER_SEC] +=\
                     client_io[cls.POOL_STAT_READ_BYTES_PER_SEC]
+            if cls.POOL_STAT_READ_OP_PER_SEC in client_io:
                 client_perf[cls.POOL_STAT_READ_OP_PER_SEC] +=\
                     client_io[cls.POOL_STAT_READ_OP_PER_SEC]
+            if cls.POOL_STAT_WRITE_BYTES_PER_SEC in client_io:
                 client_perf[cls.POOL_STAT_WRITE_BYTES_PER_SEC] +=\
                     client_io[cls.POOL_STAT_WRITE_BYTES_PER_SEC]
+            if cls.POOL_STAT_WRITE_OP_PER_SEC in client_io:
                 client_perf[cls.POOL_STAT_WRITE_OP_PER_SEC] +=\
                     client_io[cls.POOL_STAT_WRITE_OP_PER_SEC]
 
