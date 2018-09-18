@@ -855,14 +855,8 @@ using namespace ceph;
     //     << " (p_off " << p_off << " in " << p->length() << ")"
     //     << std::endl;
 
-    p_off += o;
-
-    if (!o) {
-      return;
-    }
-    while (p_off > 0) {
-      if (p == ls->end())
-        throw end_of_buffer();
+    p_off +=o;
+    while (p != ls->end()) {
       if (p_off >= p->length()) {
         // skip this buffer
         p_off -= p->length();
@@ -872,7 +866,11 @@ using namespace ceph;
         break;
       }
     }
+    if (p == ls->end() && p_off) {
+      throw end_of_buffer();
+    }
     off += o;
+    return;
   }
 
   template<bool is_const>
@@ -918,7 +916,6 @@ using namespace ceph;
     while (len > 0) {
       if (p == ls->end())
 	throw end_of_buffer();
-      ceph_assert(p->length() > 0);
 
       unsigned howmuch = p->length() - p_off;
       if (len < howmuch) howmuch = len;
@@ -944,7 +941,6 @@ using namespace ceph;
     }
     if (p == ls->end())
       throw end_of_buffer();
-    ceph_assert(p->length() > 0);
     dest = create(len);
     copy(len, dest.c_str());
   }
@@ -957,7 +953,6 @@ using namespace ceph;
     }
     if (p == ls->end())
       throw end_of_buffer();
-    ceph_assert(p->length() > 0);
     unsigned howmuch = p->length() - p_off;
     if (howmuch < len) {
       dest = create(len);
@@ -1015,7 +1010,6 @@ using namespace ceph;
     while (1) {
       if (p == ls->end())
 	return;
-      ceph_assert(p->length() > 0);
 
       unsigned howmuch = p->length() - p_off;
       const char *c_str = p->c_str();
@@ -1235,7 +1229,6 @@ using namespace ceph;
 	  ++b;
 	}
       }
-      ceph_assert(b == other._buffers.end());
       return true;
     }
 
