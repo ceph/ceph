@@ -24,6 +24,7 @@
 
 #include "Monitor.h"
 #include "common/version.h"
+#include "common/blkdev.h"
 
 #include "osd/OSDMap.h"
 
@@ -2094,6 +2095,18 @@ void Monitor::collect_metadata(Metadata *m)
   collect_sys_info(m, g_ceph_context);
   (*m)["addr"] = stringify(messenger->get_myaddr());
   (*m)["compression_algorithms"] = collect_compression_algorithms();
+
+  // infer storage device
+  string devname = store->get_devname();
+  if (devname.size()) {
+    (*m)["devices"] = devname;
+    string id = get_device_id(devname);
+    if (id.size()) {
+      (*m)["device_ids"] = string(devname) + "=" + id;
+    } else {
+      derr << "failed to get devid for " << devname << dendl;
+    }
+  }
 }
 
 void Monitor::finish_election()
