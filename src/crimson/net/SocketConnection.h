@@ -123,6 +123,8 @@ class SocketConnection : public Connection {
   ///          false otherwise.
   bool update_rx_seq(seq_num_t seq);
 
+  seastar::future<MessageRef> do_read_message();
+
   std::unique_ptr<AuthSessionHandler> session_security;
 
   // messages to be resent after connection gets reset
