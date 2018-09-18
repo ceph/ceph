@@ -182,7 +182,7 @@ def print_long(shell, file_name, is_dir, human_readable):
 
 def word_len(word):
     """
-    Returns the word lenght, minus any color codes.
+    Returns the word length, minus any color codes.
     """
     if word[0] == '\x1b':
         return len(word) - 9

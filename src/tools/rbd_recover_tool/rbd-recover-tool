@@ -192,7 +192,7 @@ function usage()
 			before to lookup & recover"
   echo "$cmd_name lookup  <pool_id>/<image_name>[@[<snap_name>]]
 		    	show image metadata: image format, rbd id, size, order, snapseq
-			In addtion, for image with snapshots, 
+			In addition, for image with snapshots, 
 			this will list all snapshot infomations"
   echo "$cmd_name recover <pool_id>/<image_name>[@[<snap_name>]] [</path/to/store/image>]
 			all snapshots share one image head, to economize disk space
