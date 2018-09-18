@@ -15,8 +15,10 @@ import json
 # to behave cleanly.
 try:
     from kubernetes.client.rest import ApiException
+    from kubernetes import client
 except ImportError:
     ApiException = None
+    client = None
 
 ROOK_SYSTEM_NS = "rook-ceph-system"
 ROOK_API_VERSION = "v1beta1"
@@ -37,6 +39,7 @@ class RookCluster(object):
     def __init__(self, k8s, cluster_name):
         self.cluster_name = cluster_name
         self.k8s = k8s
+        self.custom_k8s = client.CustomObjectsApi(api_client=self.k8s.api_client)
 
     @property
     def rook_namespace(self):
@@ -71,34 +74,30 @@ class RookCluster(object):
 
         self.rook_api_post("clusters", body=cluster_crd)
 
-    def rook_url(self, path):
-        prefix = "/apis/ceph.rook.io/%s/namespaces/%s/" % (
-            ROOK_API_VERSION, self.rook_namespace)
-        return urlparse.urljoin(prefix, path)
+    def rook_api_get(self, path, name):
+        log.error("[%s] %s" % (path, name))
+        return self.custom_k8s.get_namespaced_custom_object('ceph.rook.io',
+                                                            ROOK_API_VERSION,
+                                                            self.rook_namespace,
+                                                            path,
+                                                            name)
 
-    def rook_api_call(self, verb, path, **kwargs):
-        full_path = self.rook_url(path)
-        log.debug("[%s] %s" % (verb, full_path))
+    def rook_api_patch(self, path, name, body):
+        log.error("[%s] %s" % (path, name))
+        return self.custom_k8s.patch_namespaced_custom_object('ceph.rook.io',
+                                                              ROOK_API_VERSION,
+                                                              self.rook_namespace,
+                                                              path,
+                                                              name=name,
+                                                              body=body)
 
-        return self.k8s.api_client.call_api(
-            full_path,
-            verb,
-            auth_settings=['BearerToken'],
-            response_type="object",
-            _return_http_data_only=True,
-            _preload_content=True,
-            **kwargs)
-
-    def rook_api_get(self, path, **kwargs):
-        return self.rook_api_call("GET", path, **kwargs)
-
-    def rook_api_patch(self, path, **kwargs):
-        return self.rook_api_call("PATCH", path,
-                                  header_params={"Content-Type": "application/json-patch+json"},
-                                  **kwargs)
-
-    def rook_api_post(self, path, **kwargs):
-        return self.rook_api_call("POST", path, **kwargs)
+    def rook_api_post(self, path, body):
+        log.error("[%s]" % (path))
+        return self.custom_k8s.create_namespaced_custom_object('ceph.rook.io',
+                                                               ROOK_API_VERSION,
+                                                               self.rook_namespace,
+                                                               path,
+                                                               body=body)
 
     def get_discovered_devices(self, nodenames=None):
         # TODO: replace direct k8s calls with Rook API calls
@@ -206,10 +205,7 @@ class RookCluster(object):
         }
 
         try:
-            self.rook_api_post(
-                "filesystems/",
-                body=rook_fs
-            )
+            self.rook_api_post("filesystems", body=rook_fs)
         except ApiException as e:
             if e.status == 409:
                 log.info("Filesystem '{0}' already exists".format(spec.name))
@@ -249,10 +245,7 @@ class RookCluster(object):
         }
         
         try:
-            self.rook_api_post(
-                "objectstores/",
-                body=rook_os
-            )
+            self.rook_api_post("objectstores", rook_os)
         except ApiException as e:
             if e.status == 409:
                 log.info("ObjectStore '{0}' already exists".format(spec.name))
@@ -261,8 +254,7 @@ class RookCluster(object):
                 raise
 
     def can_create_osd(self):
-        current_cluster = self.rook_api_get(
-            "clusters/{0}".format(self.cluster_name))
+        current_cluster = self.rook_api_get('clusters', self.cluster_name)
         use_all_nodes = current_cluster['spec'].get('useAllNodes', False)
 
         # If useAllNodes is set, then Rook will not be paying attention
@@ -299,8 +291,7 @@ class RookCluster(object):
         #         storeConfig:
         #           storeType: bluestore
 
-        current_cluster = self.rook_api_get(
-            "clusters/{0}".format(self.cluster_name))
+        current_cluster = self.rook_api_get("clusters", self.cluster_name)
 
         patch = []
 
@@ -352,9 +343,7 @@ class RookCluster(object):
             return
 
         try:
-            self.rook_api_patch(
-                "clusters/{0}".format(self.cluster_name),
-                body=patch)
+            self.rook_api_patch("clusters", self.cluster_name, patch)
         except ApiException as e:
             log.exception("API exception: {0}".format(e.message))
             raise ApplyException(
