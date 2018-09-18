@@ -113,7 +113,7 @@ class HealthHistorySlot(object):
         return dict(checks = self._checks.checks())
 
     def key(self):
-        """Identifer in the persist store"""
+        """Identifier in the persist store"""
         return self._key(self._slot)
 
     def expired(self):

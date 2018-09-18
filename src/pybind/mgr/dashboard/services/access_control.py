@@ -330,7 +330,7 @@ def load_access_control_db():
     ACCESS_CTRL_DB = AccessControlDB.load()
 
 
-# CLI dashboard access controll scope commands
+# CLI dashboard access control scope commands
 ACCESS_CONTROL_COMMANDS = [
     # for backwards compatibility
     {
