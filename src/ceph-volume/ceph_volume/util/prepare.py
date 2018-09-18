@@ -346,7 +346,7 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
                    --setuser ceph --setgroup ceph
 
     In some cases it is required to use the keyring, when it is passed in as
-    a keywork argument it is used as part of the ceph-osd command
+    a keyword argument it is used as part of the ceph-osd command
     """
     path = '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, osd_id)
     monmap = os.path.join(path, 'activate.monmap')

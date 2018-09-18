@@ -31,7 +31,7 @@ def activate_filestore(lvs, no_systemd=False):
     # blow up with a KeyError if this doesn't exist
     osd_fsid = osd_lv.tags['ceph.osd_fsid']
     if not osd_journal_lv:
-        # must be a disk partition, by quering blkid by the uuid we are ensuring that the
+        # must be a disk partition, by querying blkid by the uuid we are ensuring that the
         # device path is always correct
         journal_uuid = osd_lv.tags['ceph.journal_uuid']
         osd_journal = disk.get_device_from_partuuid(journal_uuid)
