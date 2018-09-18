@@ -28,7 +28,7 @@ namespace ceph {
  * Abstract class for all Op Queues
  *
  * In order to provide optimized code, be sure to declare all
- * virutal functions as final in the derived class.
+ * virtual functions as final in the derived class.
  */
 
 template <typename T, typename K>

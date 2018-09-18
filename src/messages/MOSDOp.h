@@ -48,7 +48,7 @@ private:
   hobject_t hobj;
   spg_t pgid;
   bufferlist::const_iterator p;
-  // Decoding flags. Decoding is only needed for messages catched by pipe reader.
+  // Decoding flags. Decoding is only needed for messages caught by pipe reader.
   // Transition from true -> false without locks being held
   // Can never see final_decode_needed == false and partial_decode_needed == true
   atomic<bool> partial_decode_needed;

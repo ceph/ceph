@@ -37,7 +37,7 @@ enum common_init_flags_t {
   // don't drop privileges
   CINIT_FLAG_DEFER_DROP_PRIVILEGES = 0x10,
 
-  // do'nt contact mons for config
+  // don't contact mons for config
   CINIT_FLAG_NO_MON_CONFIG = 0x20,
 };
 

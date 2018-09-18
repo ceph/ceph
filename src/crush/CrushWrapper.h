@@ -724,7 +724,7 @@ public:
 
   /**
    * returns (type_id, type) of all parent buckets between id and
-   * default, can be used to check for anomolous CRUSH maps
+   * default, can be used to check for anomalous CRUSH maps
    */
   map<int, string> get_parent_hierarchy(int id) const;
 

@@ -35,7 +35,7 @@
 inline __u32 cap_to_u32_max(__u64 t) {
   return std::min(t, (__u64)std::numeric_limits<uint32_t>::max());
 }
-/* WARNING: If add member in utime_t, please make sure the encode/decode funtion
+/* WARNING: If add member in utime_t, please make sure the encode/decode function
  * work well. For little-endian machine, we should make sure there is no padding
  * in 32-bit machine and 64-bit machine.
  * You should also modify the padding_check function.

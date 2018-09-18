@@ -495,7 +495,7 @@ struct ceph_mds_request_head_legacy {
 } __attribute__ ((packed));
 
 /*
- * Note that this is embedded wthin ceph_mds_request_head. Also, compatability
+ * Note that this is embedded wthin ceph_mds_request_head. Also, compatibility
  * with the ceph_mds_request_args_legacy must be maintained!
  */
 union ceph_mds_request_args {

@@ -130,7 +130,7 @@ OPTION(ms_bind_ipv6, OPT_BOOL)
 OPTION(ms_bind_port_min, OPT_INT)
 OPTION(ms_bind_port_max, OPT_INT)
 OPTION(ms_bind_retry_count, OPT_INT) // If binding fails, how many times do we retry to bind
-OPTION(ms_bind_retry_delay, OPT_INT) // Delay between attemps to bind
+OPTION(ms_bind_retry_delay, OPT_INT) // Delay between attempts to bind
 OPTION(ms_bind_before_connect, OPT_BOOL)
 OPTION(ms_tcp_listen_backlog, OPT_INT)
 OPTION(ms_rwthread_stack_bytes, OPT_U64)
@@ -498,7 +498,7 @@ OPTION(mds_op_complaint_time, OPT_FLOAT) // how many seconds old makes an op com
 OPTION(mds_op_log_threshold, OPT_INT) // how many op log messages to show in one go
 OPTION(mds_snap_min_uid, OPT_U32) // The minimum UID required to create a snapshot
 OPTION(mds_snap_max_uid, OPT_U32) // The maximum UID allowed to create a snapshot
-OPTION(mds_snap_rstat, OPT_BOOL) // enable/disbale nested stat for snapshot
+OPTION(mds_snap_rstat, OPT_BOOL) // enable/disable nested stat for snapshot
 OPTION(mds_verify_backtrace, OPT_U32)
 // detect clients which aren't trimming completed requests
 OPTION(mds_max_completed_flushes, OPT_U32)
@@ -880,7 +880,7 @@ OPTION(osd_recovery_priority, OPT_U32)
 OPTION(osd_recovery_cost, OPT_U32)
 
 /**
- * osd_recovery_op_warn_multiple scales the normal warning threshhold,
+ * osd_recovery_op_warn_multiple scales the normal warning threshold,
  * osd_op_complaint_time, so that slow recovery ops won't cause noise
  */
 OPTION(osd_recovery_op_warn_multiple, OPT_U32)
@@ -1165,7 +1165,7 @@ OPTION(filestore_collect_device_partition_information, OPT_BOOL)
 
 // (try to) use extsize for alloc hint NOTE: extsize seems to trigger
 // data corruption in xfs prior to kernel 3.5.  filestore will
-// implicity disable this if it cannot confirm the kernel is newer
+// implicitly disable this if it cannot confirm the kernel is newer
 // than that.
 // NOTE: This option involves a tradeoff: When disabled, fragmentation is
 // worse, but large sequential writes are faster. When enabled, large
