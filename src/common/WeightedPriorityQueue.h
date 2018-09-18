@@ -21,7 +21,7 @@
 #include <boost/intrusive/rbtree.hpp>
 #include <boost/intrusive/avl_set.hpp>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace bi = boost::intrusive;
 

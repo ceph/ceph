@@ -44,7 +44,7 @@ class MOSDMap;
 #include "mon/MonOpRequest.h"
 #include <boost/functional/hash.hpp>
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 /// information about a particular peer's failure reports for one osd
 struct failure_reporter_t {

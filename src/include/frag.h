@@ -25,7 +25,7 @@
 
 #include "ceph_frag.h"
 #include "include/encoding.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "common/dout.h"
 

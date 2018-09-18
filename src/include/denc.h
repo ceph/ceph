@@ -38,7 +38,7 @@
 #include <boost/intrusive/set.hpp>
 #include <boost/optional.hpp>
 
-#include "include/assert.h"	// boost clobbers this
+#include "include/ceph_assert.h"	// boost clobbers this
 #include "include/intarith.h"
 #include "include/int_types.h"
 

@@ -19,7 +19,7 @@
 #include <vector>
 #include <map>
 #include <boost/intrusive_ptr.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/code_environment.h"
 #include "common/common_init.h"
 

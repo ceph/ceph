@@ -6,7 +6,7 @@
 
 #include <numeric>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/types.h"
 #include "include/xlist.h"
 

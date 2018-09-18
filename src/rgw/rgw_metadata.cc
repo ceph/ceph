@@ -13,7 +13,7 @@
 
 #include "rgw_cr_rados.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw

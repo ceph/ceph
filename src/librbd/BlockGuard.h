@@ -11,7 +11,7 @@
 #include <boost/intrusive/set.hpp>
 #include <deque>
 #include <list>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

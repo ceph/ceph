@@ -76,7 +76,7 @@
 #include "common/ceph_crypto.h"
 using ceph::crypto::SHA1;
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "common/config.h"
 #include "common/blkdev.h"

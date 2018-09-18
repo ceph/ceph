@@ -9,7 +9,7 @@
 #include "common/errno.h"
 #include "common/perf_counters.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define MAX_FLUSH_UNDER_LOCK 20  ///< max bh's we start writeback on
 #define BUFFER_MEMORY_WEIGHT 12   // memory usage of BufferHead, count in (1<<n)

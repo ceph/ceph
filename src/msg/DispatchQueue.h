@@ -19,7 +19,7 @@
 #include <map>
 #include <queue>
 #include <boost/intrusive_ptr.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/Throttle.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"

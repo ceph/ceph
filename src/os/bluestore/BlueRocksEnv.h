@@ -9,7 +9,7 @@
 #include "rocksdb/status.h"
 #include "rocksdb/utilities/env_mirror.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class BlueFS;
 

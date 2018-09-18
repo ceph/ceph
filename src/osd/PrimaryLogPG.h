@@ -18,7 +18,7 @@
 #define CEPH_REPLICATEDPG_H
 
 #include <boost/tuple/tuple.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "OSD.h"
 #include "PG.h"
 #include "Watch.h"

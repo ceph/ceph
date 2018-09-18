@@ -37,7 +37,7 @@
     #define spirit_namespace boost::spirit
 #endif
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace json_spirit
 {

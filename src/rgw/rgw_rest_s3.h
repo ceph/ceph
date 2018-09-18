@@ -23,7 +23,7 @@
 #include "rgw_ldap.h"
 
 #include "rgw_token.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "rgw_auth.h"
 #include "rgw_auth_filters.h"

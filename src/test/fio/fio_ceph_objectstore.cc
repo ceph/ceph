@@ -23,7 +23,7 @@
 #include <fio.h>
 #include <optgroup.h>
 
-#include "include/assert.h" // fio.h clobbers our assert.h
+#include "include/ceph_assert.h" // fio.h clobbers our assert.h
 #include <algorithm>
 
 #define dout_context g_ceph_context

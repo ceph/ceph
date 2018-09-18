@@ -28,7 +28,7 @@
 
 #include <boost/spirit/include/qi.hpp>
 #include <boost/pool/pool.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include <boost/serialization/strong_typedef.hpp>
 
 #define CEPH_FS_ONDISK_MAGIC "ceph fs volume v011"

@@ -53,7 +53,7 @@
 #include "auth/KeyRing.h"
 #include "auth/AuthAuthorizeHandler.h"
 #include "include/uuid.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"

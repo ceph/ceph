@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rbd_replay/BufferReader.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/intarith.h"
 
 namespace rbd_replay {

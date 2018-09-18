@@ -19,7 +19,7 @@
 #include "librados/AioCompletionImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/valgrind.h"
 #include "common/EventTrace.h"
 

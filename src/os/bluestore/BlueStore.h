@@ -29,7 +29,7 @@
 #include <boost/functional/hash.hpp>
 #include <boost/dynamic_bitset.hpp>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/unordered_map.h"
 #include "include/mempool.h"
 #include "common/bloom_filter.hpp"

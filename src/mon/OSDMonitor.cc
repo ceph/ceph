@@ -69,7 +69,7 @@
 #include "common/Checksummer.h"
 
 #include "include/compat.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
 #include "include/util.h"
 #include "common/cmdparse.h"

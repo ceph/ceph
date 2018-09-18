@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <ostream>
 #include <boost/variant.hpp>
-#include "include/assert.h"	// boost clobbers this
+#include "include/ceph_assert.h"	// boost clobbers this
 #include "common/Formatter.h"
 #include "common/BackTrace.h"
 

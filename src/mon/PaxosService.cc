@@ -16,7 +16,7 @@
 #include "common/Clock.h"
 #include "common/config.h"
 #include "include/stringify.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "mon/MonOpRequest.h"
 
 #define dout_subsys ceph_subsys_paxos

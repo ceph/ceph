@@ -6,14 +6,14 @@
 #include <stdio.h>           // for size_t, snprintf
 #include <stdlib.h>          // for free, malloc
 #include <string.h>          // for strcpy, strlen
-#include "include/assert.h"  // for assert
+#include "include/ceph_assert.h"  // for assert
 #include "include/buffer.h"
 
 #if defined(__linux__)
 #include <linux/fs.h>
 #endif
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 /*
  * chaining xattrs

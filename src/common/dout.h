@@ -18,7 +18,7 @@
 
 #include <type_traits>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #ifdef WITH_SEASTAR
 #include <seastar/util/log.hh>
 #include "crimson/common/log.h"

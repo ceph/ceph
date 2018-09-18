@@ -9,7 +9,7 @@
 #include "common/WorkQueue.h"
 #include <boost/shared_ptr.hpp>
 #include <gmock/gmock.h>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace librados {
 class TestRadosClient;

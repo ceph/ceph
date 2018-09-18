@@ -55,7 +55,7 @@
 #include "buffer_fwd.h"
 
 #ifdef __CEPH__
-# include "include/assert.h"
+# include "include/ceph_assert.h"
 #else
 # include <assert.h>
 #endif

@@ -9,7 +9,7 @@
 #include "test/librados_test_stub/TestRadosClient.h"
 #include <boost/bind.hpp>
 #include <boost/function.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix

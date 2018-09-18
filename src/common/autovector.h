@@ -13,7 +13,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 // A vector that leverages pre-allocated stack-based array to achieve better
 // performance for array with small amount of items.

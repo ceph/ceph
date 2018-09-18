@@ -4,7 +4,7 @@
 #include "journal/ObjectRecorder.h"
 #include "journal/Future.h"
 #include "journal/Utils.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/Timer.h"
 #include "cls/journal/cls_journal_client.h"
 

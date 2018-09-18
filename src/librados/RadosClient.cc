@@ -47,7 +47,7 @@
 #include "PoolAsyncCompletionImpl.h"
 #include "RadosClient.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/EventTrace.h"
 
 #define dout_subsys ceph_subsys_rados

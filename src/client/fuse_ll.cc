@@ -32,7 +32,7 @@
 #include "Fh.h"
 #include "ioctl.h"
 #include "common/config.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/cephfs/ceph_statx.h"
 
 #include "fuse_ll.h"

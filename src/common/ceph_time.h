@@ -20,7 +20,7 @@
 #include <string>
 #include <sys/time.h>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #if defined(__APPLE__)
 #include <sys/_types/_timespec.h>

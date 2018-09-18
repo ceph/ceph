@@ -8,7 +8,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define REGION 1048576
 int main(int argc, char *argv[]) {

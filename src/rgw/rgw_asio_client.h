@@ -6,7 +6,7 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "rgw_client_io.h"
 

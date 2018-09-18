@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <vector>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 /*
  * Create a static instance at the file level to get callbacks called when the
  * process exits via main() or exit().

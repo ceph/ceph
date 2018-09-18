@@ -33,7 +33,7 @@
 #include "messages/MMonCommand.h"
 #include "messages/MGenericMessage.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "mds/mdstypes.h"
