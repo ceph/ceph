@@ -1,2 +1,2 @@
 
-from module import RookOrchestrator
+from .module import RookOrchestrator
