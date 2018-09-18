@@ -47,11 +47,10 @@ class Connection : public boost::intrusive_ref_counter<Connection,
   virtual bool is_connected() = 0;
 
   /// complete a handshake from the client's perspective
-  virtual seastar::future<> client_handshake(entity_type_t peer_type,
-                                             entity_type_t host_type) = 0;
+  virtual void protocol_connect(entity_type_t, entity_type_t) = 0;
 
   /// complete a handshake from the server's perspective
-  virtual seastar::future<> server_handshake() = 0;
+  virtual void protocol_accept() = 0;
 
   /// read a message from a connection that has completed its handshake
   virtual seastar::future<MessageRef> read_message() = 0;

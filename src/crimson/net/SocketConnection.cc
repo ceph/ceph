@@ -18,6 +18,7 @@
 #include <seastar/net/packet.hh>
 
 #include "Config.h"
+#include "Dispatcher.h"
 #include "Messenger.h"
 #include "SocketConnection.h"
 
@@ -43,20 +44,24 @@ namespace {
 }
 
 SocketConnection::SocketConnection(Messenger *messenger,
+                                   Dispatcher *disp,
                                    const entity_addr_t& my_addr,
                                    const entity_addr_t& peer_addr)
   : Connection(messenger, my_addr, peer_addr),
-    send_ready(h.promise.get_future())
+    send_ready(h.promise.get_future()),
+    dispatcher(disp)
 {
 }
 
 SocketConnection::SocketConnection(Messenger *messenger,
+                                   Dispatcher *disp,
                                    const entity_addr_t& my_addr,
                                    const entity_addr_t& peer_addr,
                                    seastar::connected_socket&& fd)
   : Connection(messenger, my_addr, peer_addr),
     socket(std::forward<seastar::connected_socket>(fd)),
-    send_ready(h.promise.get_future())
+    send_ready(h.promise.get_future()),
+    dispatcher(disp)
 {
 }
 
@@ -303,17 +308,26 @@ seastar::future<> SocketConnection::close()
     return close_ready.get_future();
   }
 
-  state = state_t::closed;
-
   // unregister_conn() drops a reference, so hold another until completion
   auto cleanup = [conn = ConnectionRef(this)] {};
 
-  get_messenger()->unregister_conn(this);
+  if (state == state_t::accept) {
+    get_messenger()->unaccept_conn(this);
+  }
+  if (state >= state_t::connect) {
+    get_messenger()->unregister_conn(this);
+  }
+
+  state = state_t::closed;
 
   // close_ready become valid only after state is state_t::closed
   assert(!close_ready.valid());
   close_ready = socket->close()
-    .finally(std::move(cleanup));
+    .then([this] {
+      // closing connections will unblock any dispatchers that were waiting to
+      // send(). wait for any pending calls to finish
+      return dispatch_gate.close();
+    }).finally(std::move(cleanup));
   return close_ready.get_future();
 }
 
@@ -753,93 +767,134 @@ seastar::future<> SocketConnection::connect(entity_type_t peer_type,
     });
 }
 
-seastar::future<>
-SocketConnection::client_handshake(entity_type_t peer_type,
-                                   entity_type_t host_type)
+void SocketConnection::protocol_connect(entity_type_t peer_type,
+                                        entity_type_t host_type)
 {
   ceph_assert(!socket);
   state = state_t::connect;
-  return seastar::connect(peer_addr.in4_addr())
-    .then([this] (seastar::connected_socket fd) {
-      socket.emplace(std::move(fd));
-      return socket->read(server_header_size);
-    }).then([this] (bufferlist headerbl) {
-      auto p = headerbl.cbegin();
-      validate_banner(p);
-      entity_addr_t saddr, caddr;
-      ::decode(saddr, p);
-      ::decode(caddr, p);
-      ceph_assert(p.end());
-      validate_peer_addr(saddr, peer_addr);
+  seastar::with_gate(dispatch_gate, [this, peer_type, host_type] {
+    return seastar::connect(peer_addr.in4_addr())
+      .then([this] (seastar::connected_socket fd) {
+        socket.emplace(std::move(fd));
+        return socket->read(server_header_size);
+      }).then([this] (bufferlist headerbl) {
+        auto p = headerbl.cbegin();
+        validate_banner(p);
+        entity_addr_t saddr, caddr;
+        ::decode(saddr, p);
+        ::decode(caddr, p);
+        ceph_assert(p.end());
+        validate_peer_addr(saddr, peer_addr);
 
-      if (my_addr != caddr) {
-        // take peer's address for me, but preserve my nonce
-        caddr.nonce = my_addr.nonce;
-        my_addr = caddr;
-      }
-      // encode/send client's handshake header
-      bufferlist bl;
-      bl.append(buffer::create_static(banner_size, banner));
-      ::encode(my_addr, bl, 0);
-      h.global_seq = get_messenger()->get_global_seq();
-      return socket->write_flush(std::move(bl));
-    }).then([this, peer_type, host_type] {
-      return seastar::do_until([this] { return state == state_t::open; },
-                               [this, peer_type, host_type] {
-          return connect(peer_type, host_type);
+        if (my_addr != caddr) {
+          // take peer's address for me, but preserve my nonce
+          caddr.nonce = my_addr.nonce;
+          my_addr = caddr;
+        }
+        // encode/send client's handshake header
+        bufferlist bl;
+        bl.append(buffer::create_static(banner_size, banner));
+        ::encode(my_addr, bl, 0);
+        h.global_seq = get_messenger()->get_global_seq();
+        return socket->write_flush(std::move(bl));
+      }).then([this, peer_type, host_type] {
+        return seastar::do_until([this] { return state == state_t::open; },
+                                 [this, peer_type, host_type] {
+            return connect(peer_type, host_type);
+          });
+      }).then([this] {
+        return seastar::with_gate(dispatch_gate, [this] {
+          return dispatcher->ms_handle_connect(this);
         });
-    }).then([this] {
-      // TODO: dispatch connect here
-    }).handle_exception([this, peer_type, host_type] (std::exception_ptr eptr) {
-      // close the connection before returning errors
-      if (is_lossy()) {
-        return close();
-      } else {
-        // TODO: add backoff
-        // TODO: retry, no throw, no wait
-        return client_handshake(peer_type, host_type);
-      }
-    }).then([this] {
-      // start background processing of tags
-      read_tags_until_next_message();
-    }).then_wrapped([this] (auto fut) {
-      // satisfy the handshake's promise
-      fut.forward_to(std::move(h.promise));
-    });
+      }).then([this] {
+        // no throw
+        protocol_open();
+      }).handle_exception([this, peer_type, host_type] (std::exception_ptr eptr) {
+        // close the connection before returning errors
+        if (is_lossy()) {
+          close();
+        } else {
+          // TODO: add backoff
+          // no throw
+          protocol_connect(peer_type, host_type);
+        }
+      });
+  });
 }
 
-seastar::future<> SocketConnection::server_handshake()
+void SocketConnection::protocol_accept()
 {
   ceph_assert(socket);
   state = state_t::accept;
-  // encode/send server's handshake header
-  bufferlist bl;
-  bl.append(buffer::create_static(banner_size, banner));
-  ::encode(my_addr, bl, 0);
-  ::encode(peer_addr, bl, 0);
-  return socket->write_flush(std::move(bl))
-    .then([this] {
-      // read client's handshake header and connect request
-      return socket->read(client_header_size);
-    }).then([this] (bufferlist bl) {
-      auto p = bl.cbegin();
-      validate_banner(p);
-      entity_addr_t addr;
-      ::decode(addr, p);
-      ceph_assert(p.end());
-      if (!addr.is_blank_ip()) {
-        peer_addr = addr;
-      }
-    }).then([this] {
-      return seastar::do_until([this] { return state == state_t::open; },
-                               [this] { return handle_connect(); });
-    }).then([this] {
-      // start background processing of tags
-      read_tags_until_next_message();
-    }).then_wrapped([this] (auto fut) {
-      // satisfy the handshake's promise
-      fut.forward_to(std::move(h.promise));
-    });
+  seastar::with_gate(dispatch_gate, [this] {
+    // encode/send server's handshake header
+    bufferlist bl;
+    bl.append(buffer::create_static(banner_size, banner));
+    ::encode(my_addr, bl, 0);
+    ::encode(peer_addr, bl, 0);
+    return socket->write_flush(std::move(bl))
+      .then([this] {
+        // read client's handshake header and connect request
+        return socket->read(client_header_size);
+      }).then([this] (bufferlist bl) {
+        auto p = bl.cbegin();
+        validate_banner(p);
+        entity_addr_t addr;
+        ::decode(addr, p);
+        ceph_assert(p.end());
+        if (!addr.is_blank_ip()) {
+          peer_addr = addr;
+        }
+      }).then([this] {
+        return seastar::do_until([this] { return state == state_t::open; },
+                                 [this] { return handle_connect(); });
+      }).then([this] {
+        return dispatcher->ms_handle_accept(this);
+      }).then([this] {
+        get_messenger()->register_conn(this);
+        get_messenger()->unaccept_conn(this);
+        protocol_open();
+      }).handle_exception([this] (std::exception_ptr eptr) {
+        return close();
+      });
+  });
+}
+
+void SocketConnection::protocol_open()
+{
+  // TODO: state changed to open here
+  ceph_assert(state == state_t::open);
+  // TODO: start sending
+  h.promise.set_value();
+
+  seastar::with_gate(dispatch_gate, [this] {
+    // start background processing of tags
+    read_tags_until_next_message();
+    return seastar::keep_doing([this] {
+        return read_message()
+          .then([this] (MessageRef msg) {
+            // start dispatch, ignoring exceptions from the application layer
+            seastar::with_gate(dispatch_gate, [this, msg = std::move(msg)] {
+                return dispatcher->ms_dispatch(this, std::move(msg))
+                  .handle_exception([] (std::exception_ptr eptr) {});
+              });
+            // return immediately to start on the next message
+            return seastar::now();
+          });
+      }).handle_exception_type([this] (const std::system_error& e) {
+        // TODO handle failure
+        if (e.code() == error::connection_aborted ||
+            e.code() == error::connection_reset) {
+          return dispatcher->ms_handle_reset(this);
+        } else if (e.code() == error::read_eof) {
+          return dispatcher->ms_handle_remote_reset(this);
+        } else {
+          throw e;
+        }
+      }).handle_exception([] (std::exception_ptr eptr) {
+        // TODO handle failure
+      });
+  });
 }
 
 seastar::future<> SocketConnection::fault()

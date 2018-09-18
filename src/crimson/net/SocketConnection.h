@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <seastar/core/gate.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/shared_future.hh>
 
@@ -137,11 +138,19 @@ class SocketConnection : public Connection {
 
   seastar::future<> fault();
 
+  // prototols specific
+  Dispatcher *dispatcher;
+  seastar::gate dispatch_gate;
+
+  void protocol_open();
+
  public:
   SocketConnection(Messenger *messenger,
+                   Dispatcher *disp,
                    const entity_addr_t& my_addr,
                    const entity_addr_t& peer_addr);
   SocketConnection(Messenger *messenger,
+                   Dispatcher *disp,
                    const entity_addr_t& my_addr,
                    const entity_addr_t& peer_addr,
                    seastar::connected_socket&& socket);
@@ -149,10 +158,9 @@ class SocketConnection : public Connection {
 
   bool is_connected() override;
 
-  seastar::future<> client_handshake(entity_type_t peer_type,
-                                     entity_type_t host_type) override;
+  void protocol_connect(entity_type_t, entity_type_t) override;
 
-  seastar::future<> server_handshake() override;
+  void protocol_accept() override;
 
   seastar::future<MessageRef> read_message() override;
 

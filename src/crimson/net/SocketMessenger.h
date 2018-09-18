@@ -16,7 +16,8 @@
 
 #include <map>
 #include <optional>
-#include <seastar/core/gate.hh>
+#include <set>
+#include <boost/optional.hpp>
 #include <seastar/core/reactor.hh>
 
 #include "msg/Policy.h"
@@ -31,14 +32,9 @@ class SocketMessenger final : public Messenger {
   std::optional<seastar::server_socket> listener;
   Dispatcher *dispatcher = nullptr;
   std::map<entity_addr_t, ConnectionRef> connections;
+  std::set<ConnectionRef> acceptings;
   using Throttle = ceph::thread::Throttle;
   ceph::net::PolicySet<Throttle> policy_set;
-  seastar::gate pending_dispatch;
-
-  seastar::future<> dispatch(ConnectionRef conn);
-
-  seastar::future<> accept(seastar::connected_socket socket,
-                           seastar::socket_address paddr);
 
  public:
   SocketMessenger(const entity_name_t& myname);
@@ -55,6 +51,8 @@ class SocketMessenger final : public Messenger {
   void set_policy(entity_type_t peer_type, const SocketPolicy& p);
   void set_policy_throttler(entity_type_t peer_type, Throttle* throttle);
   ConnectionRef lookup_conn(const entity_addr_t& addr) override;
+  void accept_conn(ConnectionRef conn) override;
+  void unaccept_conn(ConnectionRef conn) override;
   void register_conn(ConnectionRef) override;
   void unregister_conn(ConnectionRef) override;
   seastar::future<msgr_tag_t, bufferlist>

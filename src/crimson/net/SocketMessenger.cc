@@ -39,65 +39,6 @@ void SocketMessenger::bind(const entity_addr_t& addr)
   listener = seastar::listen(address, lo);
 }
 
-seastar::future<> SocketMessenger::dispatch(ConnectionRef conn)
-{
-  return seastar::keep_doing([=] {
-      return conn->read_message()
-        .then([=] (MessageRef msg) {
-          // start dispatch, ignoring exceptions from the application layer
-          seastar::with_gate(pending_dispatch, [=, msg = std::move(msg)] {
-              return dispatcher->ms_dispatch(conn, std::move(msg))
-                .handle_exception([] (std::exception_ptr eptr) {});
-            });
-          // return immediately to start on the next message
-          return seastar::now();
-        });
-    }).handle_exception_type([=] (const std::system_error& e) {
-      if (e.code() == error::connection_aborted ||
-          e.code() == error::connection_reset) {
-        return seastar::with_gate(pending_dispatch, [=] {
-            return dispatcher->ms_handle_reset(conn);
-          });
-      } else if (e.code() == error::read_eof) {
-        return seastar::with_gate(pending_dispatch, [=] {
-            return dispatcher->ms_handle_remote_reset(conn);
-          });
-      } else {
-        throw e;
-      }
-    });
-}
-
-seastar::future<> SocketMessenger::accept(seastar::connected_socket socket,
-                                          seastar::socket_address paddr)
-{
-  // allocate the connection
-  entity_addr_t peer_addr;
-  peer_addr.set_type(entity_addr_t::TYPE_DEFAULT);
-  peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
-  ConnectionRef conn = new SocketConnection(this, get_myaddr(),
-                                            peer_addr, std::move(socket));
-  // initiate the handshake
-  // TODO: handle fault inside protocol
-  return conn->server_handshake()
-    .then([=] {
-      // notify the dispatcher and allow them to reject the connection
-      return seastar::with_gate(pending_dispatch, [=] {
-          return dispatcher->ms_handle_accept(conn);
-        });
-    }).handle_exception([conn] (std::exception_ptr eptr) {
-      // close the connection before returning errors
-      return seastar::make_exception_future<>(eptr)
-        .finally([conn] { return conn->close(); });
-    }).then([this, conn] {
-      // TODO: register as soon as the state changed to open to avoid potential racing
-      register_conn(conn);
-      // dispatch messages until the connection closes or the dispatch
-      // queue shuts down
-      return dispatch(std::move(conn));
-    });
-}
-
 seastar::future<> SocketMessenger::start(Dispatcher *disp)
 {
   dispatcher = disp;
@@ -108,10 +49,17 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
         return listener->accept()
           .then([this] (seastar::connected_socket socket,
                         seastar::socket_address paddr) {
-            // start processing the connection
-            accept(std::move(socket), paddr)
-              .handle_exception([] (std::exception_ptr eptr) {});
-            // don't wait before accepting another
+            // allocate the connection
+            entity_addr_t peer_addr;
+            peer_addr.set_type(entity_addr_t::TYPE_DEFAULT);
+            peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
+            ConnectionRef conn = new SocketConnection(this, dispatcher,
+                                                      get_myaddr(), peer_addr,
+                                                      std::move(socket));
+            accept_conn(conn);
+            // initiate the handshake
+            // don't wait before accepting another, no throw
+            conn->protocol_accept();
           });
       }).handle_exception_type([this] (const std::system_error& e) {
         // stop gracefully on connection_aborted
@@ -130,19 +78,10 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, entity_type_t peer_type
   if (auto found = lookup_conn(peer_addr); found) {
     return found;
   }
-  ConnectionRef conn = new SocketConnection(this,
+  ConnectionRef conn = new SocketConnection(this, dispatcher,
                                             get_myaddr(), peer_addr);
   register_conn(conn);
-  conn->client_handshake(peer_type, get_myname().type())
-    .then([this, conn] {
-      // TODO move inside protocol to allow reconnect and correct error handling
-      return seastar::with_gate(pending_dispatch, [=] {
-          return dispatcher->ms_handle_connect(conn);
-        });
-    }).then([this, conn] {
-      // dispatch replies on this connection
-      dispatch(conn).handle_exception([] (std::exception_ptr eptr) {});
-    });
+  conn->protocol_connect(peer_type, get_myname().type());
   return conn;
 }
 
@@ -151,16 +90,17 @@ seastar::future<> SocketMessenger::shutdown()
   if (listener) {
     listener->abort_accept();
   }
-  // TODO track and close all accepting connections
-  // close all connections
-  return seastar::parallel_for_each(connections.begin(), connections.end(),
+  return seastar::parallel_for_each(acceptings.begin(), acceptings.end(),
     [this] (auto conn) {
-      return conn.second->close();
+      return conn->close();
+    }).then([this] {
+      ceph_assert(acceptings.empty());
+      return seastar::parallel_for_each(connections.begin(), connections.end(),
+        [this] (auto conn) {
+          return conn.second->close();
+        });
     }).finally([this] {
-      connections.clear();
-      // closing connections will unblock any dispatchers that were waiting to
-      // send(). wait for any pending calls to finish
-      return pending_dispatch.close();
+      ceph_assert(connections.empty());
     });
 }
 
@@ -192,6 +132,16 @@ ceph::net::ConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
   }
 }
 
+void SocketMessenger::accept_conn(ConnectionRef conn)
+{
+  acceptings.insert(conn);
+}
+
+void SocketMessenger::unaccept_conn(ConnectionRef conn)
+{
+  acceptings.erase(conn);
+}
+
 void SocketMessenger::register_conn(ConnectionRef conn)
 {
   auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
@@ -213,15 +163,11 @@ SocketMessenger::verify_authorizer(peer_type_t peer_type,
 				   auth_proto_t protocol,
 				   bufferlist& auth)
 {
-  return seastar::with_gate(pending_dispatch, [=, &auth] {
-      return dispatcher->ms_verify_authorizer(peer_type, protocol, auth);
-    });
+  return dispatcher->ms_verify_authorizer(peer_type, protocol, auth);
 }
 
 seastar::future<std::unique_ptr<AuthAuthorizer>>
 SocketMessenger::get_authorizer(peer_type_t peer_type, bool force_new)
 {
-  return seastar::with_gate(pending_dispatch, [=] {
-      return dispatcher->ms_get_authorizer(peer_type, force_new);
-    });
+  return dispatcher->ms_get_authorizer(peer_type, force_new);
 }

@@ -60,6 +60,8 @@ class Messenger {
     }
     return ++global_seq;
   }
+  virtual void accept_conn(ConnectionRef conn) = 0;
+  virtual void unaccept_conn(ConnectionRef conn) = 0;
   virtual ConnectionRef lookup_conn(const entity_addr_t&) = 0;
   virtual void register_conn(ConnectionRef) = 0;
   virtual void unregister_conn(ConnectionRef) = 0;
