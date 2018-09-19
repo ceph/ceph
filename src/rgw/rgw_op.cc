@@ -668,7 +668,7 @@ static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, struct re
   static const std::initializer_list <header_pair_t> acl_header_conditionals {
     {"HTTP_X_AMZ_GRANT_READ", "s3:x-amz-grant-read"},
     {"HTTP_X_AMZ_GRANT_WRITE", "s3:x-amz-grant-write"},
-    {"HTTP_X_AMZ_GRANT_READ_ACP", "s3:x-amz-grant-acp"},
+    {"HTTP_X_AMZ_GRANT_READ_ACP", "s3:x-amz-grant-read-acp"},
     {"HTTP_X_AMZ_GRANT_WRITE_ACP", "s3:x-amz-grant-write-acp"},
     {"HTTP_X_AMZ_GRANT_FULL_CONTROL", "s3:x-amz-grant-full-control"}
   };
