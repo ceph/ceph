@@ -255,7 +255,9 @@ void OpenRequest<I>::send_v2_get_initial_metadata() {
   m_image_ctx->header_oid = util::header_name(m_image_ctx->id);
 
   librados::ObjectReadOperation op;
-  cls_client::get_initial_metadata_start(&op);
+  cls_client::get_size_start(&op, CEPH_NOSNAP);
+  cls_client::get_object_prefix_start(&op);
+  cls_client::get_features_start(&op, true);
 
   using klass = OpenRequest<I>;
   librados::AioCompletion *comp = create_rados_callback<
@@ -271,11 +273,23 @@ Context *OpenRequest<I>::handle_v2_get_initial_metadata(int *result) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
 
-  if (*result == 0) {
-    auto it = m_out_bl.cbegin();
-    *result = cls_client::get_initial_metadata_finish(
-      &it, &m_image_ctx->object_prefix, &m_image_ctx->order, &m_image_ctx->features);
+  auto it = m_out_bl.cbegin();
+  if (*result >= 0) {
+    uint64_t size;
+    *result = cls_client::get_size_finish(&it, &size, &m_image_ctx->order);
   }
+
+  if (*result >= 0) {
+    *result = cls_client::get_object_prefix_finish(&it,
+                                                   &m_image_ctx->object_prefix);
+  }
+
+  if (*result >= 0) {
+    uint64_t incompatible_features;
+    *result = cls_client::get_features_finish(&it, &m_image_ctx->features,
+                                              &incompatible_features);
+  }
+
   if (*result < 0) {
     lderr(cct) << "failed to retrieve initial metadata: "
                << cpp_strerror(*result) << dendl;
@@ -456,11 +470,9 @@ Context *OpenRequest<I>::handle_v2_get_data_pool(int *result) {
   }
 
   if (data_pool_id != -1) {
-    librados::Rados rados(m_image_ctx->md_ctx);
-    *result = rados.ioctx_create2(data_pool_id, m_image_ctx->data_ctx);
+    *result = util::create_ioctx(m_image_ctx->md_ctx, "data pool", data_pool_id,
+                                 {}, &m_image_ctx->data_ctx);
     if (*result < 0) {
-      lderr(cct) << "failed to initialize data pool IO context: "
-                 << cpp_strerror(*result) << dendl;
       send_close_image(*result);
       return nullptr;
     }

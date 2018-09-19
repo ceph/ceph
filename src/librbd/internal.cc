@@ -573,9 +573,13 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     }
 
     RWLock::RLocker l(ictx->snap_lock);
-    snap_t snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), snap_name);
-    ParentSpec parent_spec(ictx->md_ctx.get_id(), ictx->id, snap_id);
-    map< pair<int64_t, string>, set<string> > image_info;
+    snap_t snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(),
+                                       snap_name);
+
+    cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
+                                          ictx->md_ctx.get_namespace(),
+                                          ictx->id, snap_id};
+    map< tuple<int64_t, string, string>, set<string> > image_info;
 
     r = api::Image<>::list_children(ictx, parent_spec, &image_info);
     if (r < 0) {
@@ -587,19 +591,16 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       return 0;
 
     size_t i = 0;
-    Rados rados(ictx->md_ctx);
     for ( auto &info : image_info){
-      string pool = info.first.second;
+      string pool = std::get<1>(info.first);
       IoCtx ioctx;
-      r = rados.ioctx_create2(info.first.first, ioctx);
+      r = util::create_ioctx(ictx->md_ctx, "child image",
+                             std::get<0>(info.first), std::get<2>(info.first),
+                             &ioctx);
       if (r < 0) {
-        lderr(cct) << "Error accessing child image pool " << pool
-                   << dendl;
         return r;
       }
-
-      // TODO support clone v2 child namespaces
-      ioctx.set_namespace(ictx->md_ctx.get_namespace());
+      ioctx.set_namespace(std::get<2>(info.first));
 
       for (auto &id_it : info.second) {
 	ImageCtx *imctx = new ImageCtx("", id_it, nullptr, ioctx, false);
@@ -652,26 +653,24 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     }
 
     RWLock::RLocker l(ictx->snap_lock);
-    ParentSpec parent_spec(ictx->md_ctx.get_id(), ictx->id, ictx->snap_id);
-    map< pair<int64_t, string>, set<string> > image_info;
+    cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
+                                          ictx->md_ctx.get_namespace(),
+                                          ictx->id, ictx->snap_id};
+    map< tuple<int64_t, string, string>, set<string> > image_info;
 
     r = api::Image<>::list_children(ictx, parent_spec, &image_info);
     if (r < 0) {
       return r;
     }
 
-    Rados rados(ictx->md_ctx);
     for (auto &info : image_info) {
       IoCtx ioctx;
-      r = rados.ioctx_create2(info.first.first, ioctx);
+      r = util::create_ioctx(ictx->md_ctx, "child image",
+                             std::get<0>(info.first), std::get<2>(info.first),
+                             &ioctx);
       if (r < 0) {
-        lderr(cct) << "Error accessing child image pool " << info.first.second
-                   << dendl;
         return r;
       }
-
-      // TODO support clone v2 child namespaces
-      ioctx.set_namespace(ictx->md_ctx.get_namespace());
 
       for (auto &id_it : info.second) {
         string name;
@@ -692,12 +691,16 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
           trash = true;
         } else if (r < 0 && r != -ENOENT) {
           lderr(cct) << "Error looking up name for image id " << id_it
-                     << " in pool " << info.first.second << dendl;
+                     << " in pool " << std::get<1>(info.first)
+                     << (std::get<2>(info.first).empty() ?
+                          "" : "/" + std::get<2>(info.first))  << dendl;
           return r;
         }
+
+        // TODO support namespaces
         names->push_back(
         child_info_t {
-          info.first.second,
+          std::get<1>(info.first),
           name,
           id_it,
           trash
@@ -1099,7 +1102,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       return -ENOENT;
     }
 
-    ParentSpec parent_spec;
+    cls::rbd::ParentImageSpec parent_spec;
 
     if (ictx->snap_id == CEPH_NOSNAP) {
       parent_spec = ictx->parent_md.spec;

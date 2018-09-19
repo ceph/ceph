@@ -67,7 +67,7 @@ SnapshotCopyRequest<I>::SnapshotCopyRequest(I *src_image_ctx,
 
 template <typename I>
 void SnapshotCopyRequest<I>::send() {
-  librbd::ParentSpec src_parent_spec;
+  cls::rbd::ParentImageSpec src_parent_spec;
   int r = validate_parent(m_src_image_ctx, &src_parent_spec);
   if (r < 0) {
     lderr(m_cct) << "source image parent spec mismatch" << dendl;
@@ -353,7 +353,7 @@ void SnapshotCopyRequest<I>::send_snap_create() {
 
   uint64_t size = snap_info_it->second.size;
   m_snap_namespace = snap_info_it->second.snap_namespace;
-  librbd::ParentSpec parent_spec;
+  cls::rbd::ParentImageSpec parent_spec;
   uint64_t parent_overlap = 0;
   if (!m_flatten && snap_info_it->second.parent.spec.pool_id != -1) {
     parent_spec = m_dst_parent_spec;
@@ -520,7 +520,7 @@ void SnapshotCopyRequest<I>::send_set_head() {
   ldout(m_cct, 20) << dendl;
 
   uint64_t size;
-  ParentSpec parent_spec;
+  cls::rbd::ParentImageSpec parent_spec;
   uint64_t parent_overlap = 0;
   {
     RWLock::RLocker src_locker(m_src_image_ctx->snap_lock);
@@ -621,7 +621,7 @@ void SnapshotCopyRequest<I>::error(int r) {
 
 template <typename I>
 int SnapshotCopyRequest<I>::validate_parent(I *image_ctx,
-                                            librbd::ParentSpec *spec) {
+                                            cls::rbd::ParentImageSpec *spec) {
   RWLock::RLocker owner_locker(image_ctx->owner_lock);
   RWLock::RLocker snap_locker(image_ctx->snap_lock);
 

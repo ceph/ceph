@@ -173,8 +173,8 @@ struct MockImageCtx {
   MOCK_CONST_METHOD2(get_snap_namespace, int(librados::snap_t,
 					     cls::rbd::SnapshotNamespace *out_snap_namespace));
   MOCK_CONST_METHOD2(get_parent_spec, int(librados::snap_t in_snap_id,
-                                          ParentSpec *pspec));
-  MOCK_CONST_METHOD1(get_parent_info, const ParentInfo*(librados::snap_t));
+                                          cls::rbd::ParentImageSpec *pspec));
+  MOCK_CONST_METHOD1(get_parent_info, const ParentImageInfo*(librados::snap_t));
   MOCK_CONST_METHOD2(get_parent_overlap, int(librados::snap_t in_snap_id,
                                              uint64_t *overlap));
   MOCK_CONST_METHOD2(prune_parent_extents, uint64_t(vector<pair<uint64_t,uint64_t> >& ,
@@ -195,7 +195,7 @@ struct MockImageCtx {
   MOCK_METHOD8(add_snap, void(cls::rbd::SnapshotNamespace in_snap_namespace,
 			      std::string in_snap_name,
 			      librados::snap_t id,
-			      uint64_t in_size, const ParentInfo &parent,
+			      uint64_t in_size, const ParentImageInfo &parent,
 			      uint8_t protection_status, uint64_t flags, utime_t timestamp));
   MOCK_METHOD3(rm_snap, void(cls::rbd::SnapshotNamespace in_snap_namespace,
 			     std::string in_snap_name,
@@ -280,7 +280,7 @@ struct MockImageCtx {
   std::string header_oid;
   std::string id;
   std::string name;
-  ParentInfo parent_md;
+  ParentImageInfo parent_md;
   MigrationInfo migration_info;
   char *format_string;
   cls::rbd::GroupSpec group_spec;

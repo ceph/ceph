@@ -20,7 +20,8 @@ public:
   FlattenRequest(ImageCtxT &image_ctx, Context *on_finish,
                  uint64_t overlap_objects, const ::SnapContext &snapc,
                  ProgressContext &prog_ctx)
-    : Request<ImageCtxT>(image_ctx, on_finish), m_overlap_objects(overlap_objects),
+    : Request<ImageCtxT>(image_ctx, on_finish),
+      m_overlap_objects(overlap_objects),
       m_snapc(snapc), m_prog_ctx(prog_ctx) {
   }
 
@@ -34,45 +35,38 @@ protected:
 
 private:
   /**
-   * Flatten goes through the following state machine to copyup objects
-   * from the parent image:
-   *
    * @verbatim
    *
    * <start>
    *    |
    *    v
-   * STATE_FLATTEN_OBJECTS ---> STATE_DETACH_CHILD  . . . . .
-   *           .                         |                  .
-   *           .                         |                  .
-   *           .                         v                  .
-   *           .               STATE_UPDATE_HEADER          .
-   *           .                         |                  .
-   *           .                         |                  .
-   *           .                         \---> <finish> < . .
-   *           .                                   ^
-   *           .                                   .
-   *           . . . . . . . . . . . . . . . . . . .
+   * FLATTEN_OBJECTS
+   *    |
+   *    v
+   * DETACH_CHILD
+   *    |
+   *    v
+   * DETACH_PARENT
+   *    |
+   *    v
+   * <finish>
    *
    * @endverbatim
-   *
-   * The _DETACH_CHILD state will be skipped if the image has one or
-   * more snapshots. The _UPDATE_HEADER state will be skipped if the
-   * image was concurrently flattened by another client.
    */
-  enum State {
-    STATE_FLATTEN_OBJECTS,
-    STATE_DETACH_CHILD,
-    STATE_UPDATE_HEADER
-  };
 
   uint64_t m_overlap_objects;
   ::SnapContext m_snapc;
   ProgressContext &m_prog_ctx;
-  State m_state = STATE_FLATTEN_OBJECTS;
 
-  bool send_detach_child();
-  bool send_update_header();
+  void flatten_objects();
+  void handle_flatten_objects(int r);
+
+  void detach_child();
+  void handle_detach_child(int r);
+
+  void detach_parent();
+  void handle_detach_parent(int r);
+
 };
 
 } // namespace operation

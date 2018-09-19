@@ -461,10 +461,11 @@ TYPE(rgw_data_sync_status)
 
 #ifdef WITH_RBD
 #include "cls/rbd/cls_rbd.h"
-TYPE(cls_rbd_parent)
-TYPE(cls_rbd_snap)
+TYPE_FEATUREFUL(cls_rbd_parent)
+TYPE_FEATUREFUL(cls_rbd_snap)
 
 #include "cls/rbd/cls_rbd_types.h"
+TYPE(cls::rbd::ParentImageSpec)
 TYPE(cls::rbd::ChildImageSpec)
 TYPE(cls::rbd::MigrationSpec)
 TYPE(cls::rbd::MirrorPeer)

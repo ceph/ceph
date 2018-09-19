@@ -181,13 +181,53 @@ std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state);
 
 WRITE_CLASS_ENCODER(MirrorImageStatus);
 
+struct ParentImageSpec {
+  int64_t pool_id = -1;
+  std::string pool_namespace;
+  std::string image_id;
+  snapid_t snap_id = CEPH_NOSNAP;
+
+  ParentImageSpec() {
+  }
+  ParentImageSpec(int64_t pool_id, const std::string& pool_namespace,
+                  const std::string& image_id, snapid_t snap_id)
+    : pool_id(pool_id), pool_namespace(pool_namespace), image_id(image_id),
+      snap_id(snap_id) {
+  }
+
+  bool exists() const {
+    return (pool_id >= 0 && !image_id.empty() && snap_id != CEPH_NOSNAP);
+  }
+
+  bool operator==(const ParentImageSpec& rhs) const {
+    return ((pool_id == rhs.pool_id) &&
+            (pool_namespace == rhs.pool_namespace) &&
+            (image_id == rhs.image_id) &&
+            (snap_id == rhs.snap_id));
+  }
+
+  bool operator!=(const ParentImageSpec& rhs) const {
+    return !(*this == rhs);
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::const_iterator &it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<ParentImageSpec*> &o);
+};
+
+WRITE_CLASS_ENCODER(ParentImageSpec);
+
 struct ChildImageSpec {
   int64_t pool_id = -1;
+  std::string pool_namespace;
   std::string image_id;
 
   ChildImageSpec() {}
-  ChildImageSpec(int64_t pool_id, const std::string& image_id)
-    : pool_id(pool_id), image_id(image_id) {
+  ChildImageSpec(int64_t pool_id, const std::string& pool_namespace,
+                 const std::string& image_id)
+    : pool_id(pool_id), pool_namespace(pool_namespace), image_id(image_id) {
   }
 
   void encode(bufferlist &bl) const;
@@ -198,11 +238,15 @@ struct ChildImageSpec {
 
   inline bool operator==(const ChildImageSpec& rhs) const {
     return (pool_id == rhs.pool_id &&
+            pool_namespace == rhs.pool_namespace &&
             image_id == rhs.image_id);
   }
   inline bool operator<(const ChildImageSpec& rhs) const {
     if (pool_id != rhs.pool_id) {
       return pool_id < rhs.pool_id;
+    }
+    if (pool_namespace != rhs.pool_namespace) {
+      return pool_namespace < rhs.pool_namespace;
     }
     return image_id < rhs.image_id;
   }

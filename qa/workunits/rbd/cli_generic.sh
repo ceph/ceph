@@ -638,6 +638,26 @@ test_namespace() {
     expect_fail rbd namespace remove --pool rbd missing
 
     rbd create rbd/test1/image1 --size 1G
+
+    # default test1 ns to test2 ns clone
+    rbd bench --io-type write --io-pattern rand --io-total 32M --io-size 4K rbd/test1/image1
+    rbd snap create rbd/test1/image1@1
+    rbd clone --rbd-default-clone-format 2 rbd/test1/image1@1 rbd/test2/image1
+    rbd snap rm rbd/test1/image1@1
+    cmp <(rbd export rbd/test1/image1@1 -) <(rbd export rbd/test2/image1 -)
+    rbd rm rbd/test2/image1
+
+    # default ns to test1 ns clone
+    rbd create rbd/image2 --size 1G
+    rbd bench --io-type write --io-pattern rand --io-total 32M --io-size 4K rbd/image2
+    rbd snap create rbd/image2@1
+    rbd clone --rbd-default-clone-format 2 rbd/image2@1 rbd/test2/image2
+    rbd snap rm rbd/image2@1
+    cmp <(rbd export rbd/image2@1 -) <(rbd export rbd/test2/image2 -)
+    expect_fail rbd rm rbd/image2
+    rbd rm rbd/test2/image2
+    rbd rm rbd/image2
+
     rbd create --namespace test1 image2 --size 1G
     expect_fail rbd namespace remove --pool rbd test1
 
