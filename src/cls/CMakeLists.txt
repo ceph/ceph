@@ -138,20 +138,6 @@ set(cls_log_client_srcs log/cls_log_client.cc)
 add_library(cls_log_client STATIC ${cls_log_client_srcs})
 
 
-# cls_statelog
-set(cls_statelog_srcs statelog/cls_statelog.cc)
-add_library(cls_statelog SHARED ${cls_statelog_srcs})
-set_target_properties(cls_statelog PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
-  INSTALL_RPATH ""
-  CXX_VISIBILITY_PRESET hidden)
-install(TARGETS cls_statelog DESTINATION ${cls_dir})
-
-set(cls_statelog_client_srcs statelog/cls_statelog_client.cc)
-add_library(cls_statelog_client STATIC ${cls_statelog_client_srcs})
-
-
 # cls_timeindex
 set(cls_timeindex_srcs timeindex/cls_timeindex.cc)
 add_library(cls_timeindex SHARED ${cls_timeindex_srcs})

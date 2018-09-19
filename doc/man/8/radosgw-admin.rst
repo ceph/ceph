@@ -388,18 +388,6 @@ which are as follows:
 :command:`datalog status`
   Read data log status.
 
-:command:`opstate list`
-  List stateful operations entries (use client_id, op_id, object).
-
-:command:`opstate set`
-  Set state on an entry (use client_id, op_id, object, state).
-
-:command:`opstate renew`
-  Renew state on an entry (use client_id, op_id, object).
-
-:command:`opstate rm`
-  Remove entry (use client_id, op_id, object).
-
 :command:`orphans find`
   Init and run search for leaked rados objects
 
@@ -752,10 +740,6 @@ Options
 .. option:: --infile
 
 	Specify a file to read in when setting data.
-
-.. option:: --state=<state>
-
-	Specify a state for the opstate set command.
 
 .. option:: --categories=<list>
 

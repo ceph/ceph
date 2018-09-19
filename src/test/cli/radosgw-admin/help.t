@@ -126,11 +126,6 @@
     datalog list               list data log
     datalog trim               trim data log
     datalog status             read data log status
-    opstate list               list stateful operations entries (use client_id,
-                               op_id, object)
-    opstate set                set state on an entry (use client_id, op_id, object, state)
-    opstate renew              renew state on an entry (use client_id, op_id, object)
-    opstate rm                 remove entry (use client_id, op_id, object)
     orphans find               init and run search for leaked rados objects (use job-id, pool)
     orphans finish             clean up search for leaked rados objects
     orphans list-jobs          list the current job-ids for orphans search
@@ -250,7 +245,6 @@
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
      --infile=<file>           specify a file to read in when setting data
-     --state=<state>           specify a state for the opstate set command
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
      --yes-i-really-mean-it    required for certain operations

@@ -18,7 +18,6 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/log/cls_log_types.h"
-#include "cls/statelog/cls_statelog_types.h"
 #include "cls/timeindex/cls_timeindex_types.h"
 #include "cls/otp/cls_otp_types.h"
 #include "rgw_log.h"
@@ -1973,110 +1972,6 @@ class RGWDataChangesLog;
 class RGWMetaSyncStatusManager;
 class RGWDataSyncStatusManager;
 class RGWCoroutinesManagerRegistry;
-  
-class RGWStateLog {
-  RGWRados *store;
-  int num_shards;
-  string module_name;
-
-  void oid_str(int shard, string& oid);
-  int get_shard_num(const string& object);
-  string get_oid(const string& object);
-  int open_ioctx(librados::IoCtx& ioctx);
-
-  struct list_state {
-    int cur_shard;
-    int max_shard;
-    string marker;
-    string client_id;
-    string op_id;
-    string object;
-
-    list_state() : cur_shard(0), max_shard(0) {}
-  };
-
-protected:
-  virtual bool dump_entry_internal(const cls_statelog_entry& entry, Formatter *f) {
-    return false;
-  }
-
-public:
-  RGWStateLog(RGWRados *_store, int _num_shards, const string& _module_name) :
-              store(_store), num_shards(_num_shards), module_name(_module_name) {}
-  virtual ~RGWStateLog() {}
-
-  int store_entry(const string& client_id, const string& op_id, const string& object,
-                  uint32_t state, bufferlist *bl, uint32_t *check_state);
-
-  int remove_entry(const string& client_id, const string& op_id, const string& object);
-
-  void init_list_entries(const string& client_id, const string& op_id, const string& object,
-                         void **handle);
-
-  int list_entries(void *handle, int max_entries, list<cls_statelog_entry>& entries, bool *done);
-
-  void finish_list_entries(void *handle);
-
-  virtual void dump_entry(const cls_statelog_entry& entry, Formatter *f);
-};
-
-/*
- * state transitions:
- *
- * unknown -> in-progress -> complete
- *                        -> error
- *
- * user can try setting the 'abort' state, and it can only succeed if state is
- * in-progress.
- *
- * state renewal cannot switch state (stays in the same state)
- *
- * rgw can switch from in-progress to complete
- * rgw can switch from in-progress to error
- *
- * rgw can switch from abort to cancelled
- *
- */
-
-class RGWOpState : public RGWStateLog {
-protected:
-  bool dump_entry_internal(const cls_statelog_entry& entry, Formatter *f) override;
-public:
-
-  enum OpState {
-    OPSTATE_UNKNOWN     = 0,
-    OPSTATE_IN_PROGRESS = 1,
-    OPSTATE_COMPLETE    = 2,
-    OPSTATE_ERROR       = 3,
-    OPSTATE_ABORT       = 4,
-    OPSTATE_CANCELLED   = 5,
-  };
-
-  explicit RGWOpState(RGWRados *_store);
-
-  int state_from_str(const string& s, OpState *state);
-  int set_state(const string& client_id, const string& op_id, const string& object, OpState state);
-  int renew_state(const string& client_id, const string& op_id, const string& object, OpState state);
-};
-
-class RGWOpStateSingleOp
-{
-  RGWOpState os;
-  string client_id;
-  string op_id;
-  string object;
-
-  CephContext *cct;
-
-  RGWOpState::OpState cur_state;
-  ceph::real_time last_update;
-
-public:
-  RGWOpStateSingleOp(RGWRados *store, const string& cid, const string& oid, const string& obj);
-
-  int set_state(RGWOpState::OpState state);
-  int renew_state();
-};
 
 class RGWGetBucketStats_CB : public RefCountedObject {
 protected:
@@ -2237,7 +2132,6 @@ class RGWRados : public AdminSocketHook
   friend class RGWObjectExpirer;
   friend class RGWMetaSyncProcessorThread;
   friend class RGWDataSyncProcessorThread;
-  friend class RGWStateLog;
   friend class RGWReshard;
   friend class RGWBucketReshard;
   friend class BucketIndexLockGuard;
@@ -3153,7 +3047,6 @@ public:
 
   int stat_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
-               const string& client_id,
                req_info *info,
                const string& source_zone,
                rgw_obj& src_obj,
@@ -3173,9 +3066,6 @@ public:
 
   int fetch_remote_obj(RGWObjectCtx& obj_ctx,
                        const rgw_user& user_id,
-                       const string& client_id,
-                       const string& op_id,
-                       bool record_op_state,
                        req_info *info,
                        const string& source_zone,
                        rgw_obj& dest_obj,
@@ -3217,8 +3107,6 @@ public:
    */
   int copy_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
-               const string& client_id,
-               const string& op_id,
                req_info *info,
                const string& source_zone,
                rgw_obj& dest_obj,

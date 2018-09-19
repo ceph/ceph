@@ -4842,8 +4842,6 @@ void RGWCopyObj::execute()
 
   op_ret = store->copy_obj(obj_ctx,
 			   s->user->user_id,
-			   client_id,
-			   op_id,
 			   &s->info,
 			   source_zone,
 			   dst_obj,

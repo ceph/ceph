@@ -550,8 +550,6 @@ int RGWAsyncFetchRemoteObj::_send_request()
   string user_id;
   char buf[16];
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->instance_id());
-  string client_id = store->zone_id() + buf;
-  string op_id = store->unique_id(store->get_new_req_id());
   map<string, bufferlist> attrs;
 
   rgw_obj src_obj(bucket_info.bucket, key);
@@ -560,9 +558,6 @@ int RGWAsyncFetchRemoteObj::_send_request()
 
   int r = store->fetch_remote_obj(obj_ctx,
                        user_id,
-                       client_id,
-                       op_id,
-                       false, /* don't record op state in ops log */
                        NULL, /* req_info */
                        source_zone,
                        dest_obj,
@@ -602,8 +597,6 @@ int RGWAsyncStatRemoteObj::_send_request()
   string user_id;
   char buf[16];
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->instance_id());
-  string client_id = store->zone_id() + buf;
-  string op_id = store->unique_id(store->get_new_req_id());
 
   rgw_obj src_obj(bucket_info.bucket, key);
 
@@ -611,7 +604,6 @@ int RGWAsyncStatRemoteObj::_send_request()
 
   int r = store->stat_remote_obj(obj_ctx,
                        user_id,
-                       client_id,
                        nullptr, /* req_info */
                        source_zone,
                        src_obj,
