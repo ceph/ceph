@@ -92,6 +92,11 @@ public:
   pool_stat_t pg_sum_delta;
   utime_t stamp_delta;
 
+  void get_recovery_stats(
+    double *misplaced_ratio,
+    double *degraded_ratio,
+    double *inactive_ratio,
+    double *unknown_pgs_ratio) const;
 
   void print_summary(Formatter *f, ostream *out) const;
   void print_oneline_summary(Formatter *f, ostream *out) const;
