@@ -1,12 +1,14 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ModalModule } from 'ngx-bootstrap';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
+import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserListComponent } from './rgw-user-list.component';
 
@@ -24,10 +26,167 @@ describe('RgwUserListComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwUserListComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
   });
 
   it('should create', () => {
+    fixture.detectChanges();
     expect(component).toBeTruthy();
+  });
+
+  describe('show action buttons and drop down actions depending on permissions', () => {
+    let tableActions: TableActionsComponent;
+    let scenario: { fn; empty; single };
+    let permissionHelper: PermissionHelper;
+
+    const getTableActionComponent = (): TableActionsComponent => {
+      fixture.detectChanges();
+      return fixture.debugElement.query(By.directive(TableActionsComponent)).componentInstance;
+    };
+
+    beforeEach(() => {
+      permissionHelper = new PermissionHelper(component.permission, () =>
+        getTableActionComponent()
+      );
+      scenario = {
+        fn: () => tableActions.getCurrentButton().name,
+        single: 'Edit',
+        empty: 'Add'
+      };
+    });
+
+    describe('with all', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 1);
+      });
+
+      it(`shows 'Edit' for single selection else 'Add' as main action`, () =>
+        permissionHelper.testScenarios(scenario));
+
+      it('shows all actions', () => {
+        expect(tableActions.tableActions.length).toBe(3);
+        expect(tableActions.tableActions).toEqual(component.tableActions);
+      });
+    });
+
+    describe('with read, create and update', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 0);
+      });
+
+      it(`shows 'Edit' for single selection else 'Add' as main action`, () =>
+        permissionHelper.testScenarios(scenario));
+
+      it(`shows 'Add' and 'Edit' action`, () => {
+        expect(tableActions.tableActions.length).toBe(2);
+        component.tableActions.pop();
+        expect(tableActions.tableActions).toEqual(component.tableActions);
+      });
+    });
+
+    describe('with read, create and delete', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(1, 0, 1);
+      });
+
+      it(`shows 'Delete' for single selection else 'Add' as main action`, () => {
+        scenario.single = 'Delete';
+        permissionHelper.testScenarios(scenario);
+      });
+
+      it(`shows 'Add' and 'Delete' action`, () => {
+        expect(tableActions.tableActions.length).toBe(2);
+        expect(tableActions.tableActions).toEqual([
+          component.tableActions[0],
+          component.tableActions[2]
+        ]);
+      });
+    });
+
+    describe('with read, edit and delete', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(0, 1, 1);
+      });
+
+      it(`shows always 'Edit' as main action`, () => {
+        scenario.empty = 'Edit';
+        permissionHelper.testScenarios(scenario);
+      });
+
+      it(`shows 'Edit' and 'Delete' action`, () => {
+        expect(tableActions.tableActions.length).toBe(2);
+        expect(tableActions.tableActions).toEqual([
+          component.tableActions[1],
+          component.tableActions[2]
+        ]);
+      });
+    });
+
+    describe('with read and create', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(1, 0, 0);
+      });
+
+      it(`shows always 'Add' as main action`, () => {
+        scenario.single = 'Add';
+        permissionHelper.testScenarios(scenario);
+      });
+
+      it(`shows only 'Add' action`, () => {
+        expect(tableActions.tableActions.length).toBe(1);
+        expect(tableActions.tableActions).toEqual([component.tableActions[0]]);
+      });
+    });
+
+    describe('with read and update', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(0, 1, 0);
+      });
+
+      it(`shows always 'Edit' as main action`, () => {
+        scenario.empty = 'Edit';
+        permissionHelper.testScenarios(scenario);
+      });
+
+      it(`shows only 'Edit' action`, () => {
+        expect(tableActions.tableActions.length).toBe(1);
+        expect(tableActions.tableActions).toEqual([component.tableActions[1]]);
+      });
+    });
+
+    describe('with read and delete', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(0, 0, 1);
+      });
+
+      it(`shows always 'Delete' as main action`, () => {
+        scenario.single = 'Delete';
+        scenario.empty = 'Delete';
+        permissionHelper.testScenarios(scenario);
+      });
+
+      it(`shows only 'Delete' action`, () => {
+        expect(tableActions.tableActions.length).toBe(1);
+        expect(tableActions.tableActions).toEqual([component.tableActions[2]]);
+      });
+    });
+
+    describe('with only read', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(0, 0, 0);
+      });
+
+      it('shows no main action', () => {
+        permissionHelper.testScenarios({
+          fn: () => tableActions.getCurrentButton(),
+          single: undefined,
+          empty: undefined
+        });
+      });
+
+      it('shows no actions', () => {
+        expect(tableActions.tableActions.length).toBe(0);
+        expect(tableActions.tableActions).toEqual([]);
+      });
+    });
   });
 });
