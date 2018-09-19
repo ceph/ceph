@@ -90,12 +90,12 @@ export class RoleListComponent implements OnInit {
   }
 
   deleteRoleModal() {
-    this.modalRef = this.modalService.show(DeletionModalComponent);
     const name = this.selection.first().name;
-    this.modalRef.content.setUp({
-      metaType: 'Role',
-      deletionMethod: () => this.deleteRole(name),
-      modalRef: this.modalRef
+    this.modalRef = this.modalService.show(DeletionModalComponent, {
+      initialState: {
+        itemDescription: 'Role',
+        submitAction: () => this.deleteRole(name)
+      }
     });
   }
 }
