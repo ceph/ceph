@@ -281,6 +281,14 @@ describe('DeletionModalComponent', () => {
         testInvalidControl(false, undefined, false);
         testInvalidControl(true, undefined, false);
       });
+
+      it('should test regex pattern', () => {
+        component.pattern = 'a+b';
+        changeValue('ab');
+        testInvalidControl(false, 'pattern', true);
+        changeValue('a+b');
+        testInvalidControl(false, 'pattern', false);
+      });
     });
 
     describe('deletion call', () => {
