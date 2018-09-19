@@ -22,6 +22,7 @@
 #include "common/config.h"
 #include "common/perf_counters.h"
 #include "rgw_dmclock.h"
+#include "rgw_yield_context.h"
 
 namespace rgw::dmclock {
 
@@ -86,7 +87,14 @@ public:
   // submit a blocking request for dmclock scheduling, this function waits until
   // the request is ready.
   int add_request(const client_id& client, const ReqParams& params,
-		    const Time& time, Cost cost);
+		  const Time& time, Cost cost);
+
+  auto schedule_request(const client_id& client, const ReqParams& params,
+			const Time& time, Cost cost,
+			optional_yield_context _y [[maybe_unused]])
+  {
+    return add_request(client, params, time, cost);
+  }
 
   void cancel();
 
@@ -140,6 +148,8 @@ class AsyncScheduler : public md_config_obs_t {
   auto async_request(const client_id& client, const ReqParams& params,
                      const Time& time, Cost cost, CompletionToken&& token);
 
+  int schedule_request(const client_id& client, const ReqParams& params,
+		       const Time& time, Cost cost, optional_yield_context yield_ctx);
   /// returns a throttle unit granted by async_request()
   void request_complete();
 
