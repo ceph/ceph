@@ -523,7 +523,7 @@ int Pipe::accept()
     need_challenge = HAVE_FEATURE(connect.features, CEPHX_V2);
     had_challenge = (bool)authorizer_challenge;
     authorizer_reply.clear();
-    if (!msgr->verify_authorizer(
+    if (!msgr->ms_deliver_verify_authorizer(
 	  connection_state.get(), peer_type, connect.authorizer_protocol, authorizer,
 	  authorizer_reply, authorizer_valid, session_key,
 	  need_challenge ? &authorizer_challenge : nullptr) ||
