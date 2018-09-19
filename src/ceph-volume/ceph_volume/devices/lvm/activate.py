@@ -3,7 +3,7 @@ import argparse
 import logging
 import os
 from textwrap import dedent
-from ceph_volume import process, conf, decorators, terminal, __release__
+from ceph_volume import process, conf, decorators, terminal, __release__, configuration
 from ceph_volume.util import system, disk
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import encryption as encryption_utils
@@ -24,7 +24,8 @@ def activate_filestore(lvs, no_systemd=False):
     is_vdo = osd_lv.tags.get('ceph.vdo', '0')
 
     osd_id = osd_lv.tags['ceph.osd_id']
-    conf.cluster = osd_lv.tags['ceph.cluster_name']
+    configuration.load_ceph_conf_path(osd_lv.tags['ceph.cluster_name'])
+    configuration.load()
     # it may have a volume with a journal
     osd_journal_lv = lvs.get(lv_tags={'ceph.type': 'journal'})
     # TODO: add sensible error reporting if this is ever the case
