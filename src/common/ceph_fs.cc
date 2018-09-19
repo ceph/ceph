@@ -36,6 +36,30 @@ int ceph_flags_to_mode(int flags)
 	return mode;
 }
 
+int ceph_mode_for_flags(int mode)
+{
+	int flags = -1;
+
+#ifdef O_DIRECTORY
+	if (mode == CEPH_FILE_MODE_PIN)
+		flags = O_DIRECTORY;
+#endif
+
+	switch (mode & O_ACCMODE) {
+	case CEPH_FILE_MODE_WR:
+		flags = O_WRONLY;
+		break;
+	case CEPH_FILE_MODE_RD:
+		flags = O_RDONLY;
+		break;
+	case CEPH_FILE_MODE_RDWR:
+		flags = O_RDWR;
+		break;
+	}
+
+	return flags;
+}
+
 int ceph_caps_for_mode(int mode)
 {
 	int caps = CEPH_CAP_PIN;

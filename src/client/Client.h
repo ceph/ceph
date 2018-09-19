@@ -1091,6 +1091,7 @@ private:
   int _removexattr(InodeRef &in, const char *nm, const UserPerm& perms);
   int _open(Inode *in, int flags, mode_t mode, Fh **fhp,
 	    const UserPerm& perms);
+  int _reopen_files();
   int _renew_caps(Inode *in);
   int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp,
 	      Fh **fhp, int stripe_unit, int stripe_count, int object_size,
@@ -1195,6 +1196,7 @@ private:
   client_umask_callback_t umask_cb = nullptr;
   void *callback_handle = nullptr;
   bool can_invalidate_dentries = false;
+  bool require_reopen_files = false;
 
   Finisher async_ino_invalidator;
   Finisher async_dentry_invalidator;

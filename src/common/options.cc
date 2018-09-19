@@ -7265,7 +7265,11 @@ std::vector<Option> get_mds_client_options() {
     Option("client_reconnect_stale", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("reconnect when the session becomes stale"),
-
+      
+    Option("client_reopen_files", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("reopen files has been opened by client"),
+  
     Option("client_snapdir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(".snap")
     .set_description("pseudo directory for snapshot access to a directory"),

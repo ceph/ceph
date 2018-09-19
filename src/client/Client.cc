@@ -2044,6 +2044,7 @@ void Client::_closed_mds_session(MetaSession *s)
   remove_session_caps(s);
   kick_requests_closed(s);
   mds_sessions.erase(s->mds_num);
+  require_reopen_files = true;
 }
 
 void Client::handle_client_session(MClientSession *m) 
@@ -6091,6 +6092,11 @@ void Client::tick()
 
     flush_cap_releases();
   }
+  // reopen the file has been opened
+  if (cct->_conf->client_reopen_files && require_reopen_files) {
+    require_reopen_files = false;
+    _reopen_files();
+  }
 
   // delayed caps
   xlist<Inode*>::iterator p = delayed_list.begin();
@@ -8704,6 +8710,45 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
 
   trim_cache();
 
+  return result;
+}
+
+int Client::_reopen_files()
+{
+  int result = 0;
+  ldout(cct, 10) << __func__ << dendl;
+
+  for (ceph::unordered_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
+       it != inode_map.end();
+       it++) {
+    int flags = 0;
+    Inode *in = it->second;
+    if (!in->dentries.empty() && !in->open_by_mode.empty()) {
+      for (map<int, int>::const_iterator p = in->open_by_mode.begin(); p != in->open_by_mode.end(); ++p)
+	flags |= ceph_mode_for_flags(p->first);
+
+      MetaRequest *req = new MetaRequest(CEPH_MDS_OP_OPEN);
+      filepath path;
+      in->make_nosnap_relative_path(path);
+      req->set_filepath(path);
+      req->head.args.open.flags = flags & ~O_CREAT;
+      req->head.args.open.mode = 0;
+      req->head.args.open.pool = -1;
+      req->head.args.open.mask = 0;
+      req->set_inode(in);
+
+      ldout(cct, 10) << __func__ << " will reopen " << *in << " flags " << hex << flags << dendl;
+      const UserPerm *pperm = in->get_best_perms();
+      UserPerm perms(-1, -1);
+      if (pperm != NULL)
+	perms = *pperm;
+      int ret = make_request(req, perms);
+      if (result >= 0)
+	ldout(cct, 10) << __func__ << " reopen sucess for " << in->ino << dendl; 
+      else
+	ldout(cct, 10) << __func__ << " reopen failed for " << in->ino << dendl;
+    }
+  }
   return result;
 }
 

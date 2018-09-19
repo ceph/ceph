@@ -678,6 +678,7 @@ struct ceph_filelock {
 #define CEPH_FILE_MODE_NUM        8  /* bc these are bit fields.. mostly */
 
 int ceph_flags_to_mode(int flags);
+int ceph_mode_for_flags(int mode);
 
 /* inline data state */
 #define CEPH_INLINE_NONE	((__u64)-1)
