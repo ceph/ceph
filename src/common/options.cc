@@ -1426,8 +1426,24 @@ std::vector<Option> get_global_options() {
     .set_description("minimal number PGs per (in) osd before we warn the admin"),
 
     Option("mon_max_pg_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_min(1)
     .set_default(250)
-    .set_description("Max number of PGs per OSD the cluster will allow"),
+    .set_description("Max number of PGs per OSD the cluster will allow")
+    .set_long_description("If the number of PGs per OSD exceeds this, a "
+        "health warning will be visible in `ceph status`.  This is also used "
+        "in automated PG management, as the threshold at which some pools' "
+        "pg_num may be shrunk in order to enable increasing the pg_num of "
+        "others."),
+
+    Option("mon_target_pg_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_min(1)
+    .set_default(100)
+    .set_description("Automated PG management creates this many PGs per OSD")
+    .set_long_description("When creating pools, the automated PG management "
+        "logic will attempt to reach this target.  In some circumstances, it "
+        "may exceed this target, up to the ``mon_max_pg_per_osd`` limit. "
+        "Conversely, a lower number of PGs per OSD may be created if the "
+        "cluster is not yet fully utilised"),
 
     Option("mon_pg_warn_max_object_skew", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(10.0)
