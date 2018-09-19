@@ -5,6 +5,7 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { TableComponent } from '../../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
+import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permission } from '../../../../shared/models/permissions';
@@ -27,6 +28,7 @@ export class OsdListComponent implements OnInit {
   tableComponent: TableComponent;
 
   permission: Permission;
+  tableActions: CdTableAction[];
   bsModalRef: BsModalRef;
   osds = [];
   columns: CdTableColumn[];
@@ -39,6 +41,19 @@ export class OsdListComponent implements OnInit {
     private modalService: BsModalService
   ) {
     this.permission = this.authStorageService.getPermissions().osd;
+    const scrubAction: CdTableAction = {
+      permission: 'update',
+      icon: 'fa-stethoscope',
+      click: () => this.scrubAction(false),
+      name: 'Scrub'
+    };
+    const deleteAction: CdTableAction = {
+      permission: 'update',
+      icon: 'fa-cog',
+      click: () => this.scrubAction(true),
+      name: 'Deep Scrub'
+    };
+    this.tableActions = [scrubAction, deleteAction];
   }
 
   ngOnInit() {

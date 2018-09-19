@@ -6,6 +6,7 @@ import { UserService } from '../../../shared/api/user.service';
 import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
 import { EmptyPipe } from '../../../shared/empty.pipe';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
+import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
@@ -22,6 +23,7 @@ export class UserListComponent implements OnInit {
   userRolesTpl: TemplateRef<any>;
 
   permission: Permission;
+  tableActions: CdTableAction[];
   columns: CdTableColumn[];
   users: Array<any>;
   selection = new CdTableSelection();
@@ -36,6 +38,26 @@ export class UserListComponent implements OnInit {
     private authStorageService: AuthStorageService
   ) {
     this.permission = this.authStorageService.getPermissions().user;
+    const addAction: CdTableAction = {
+      permission: 'create',
+      icon: 'fa-plus',
+      routerLink: () => '/user-management/users/add',
+      name: 'Add'
+    };
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: 'fa-pencil',
+      routerLink: () =>
+        this.selection.first() && `/user-management/users/edit/${this.selection.first().username}`,
+      name: 'Edit'
+    };
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: 'fa-trash-o',
+      click: () => this.deleteUserModal(),
+      name: 'Delete'
+    };
+    this.tableActions = [addAction, editAction, deleteAction];
   }
 
   ngOnInit() {
