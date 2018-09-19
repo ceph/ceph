@@ -6100,7 +6100,6 @@ void RGWDeleteMultiObj::execute()
   RGWMultiDelDelete *multi_delete;
   vector<rgw_obj_key>::iterator iter;
   RGWMultiDelXMLParser parser;
-  int num_processed = 0;
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
 
   op_ret = get_params();
@@ -6127,6 +6126,17 @@ void RGWDeleteMultiObj::execute()
   if (!multi_delete) {
     op_ret = -EINVAL;
     goto error;
+  } else {
+#define DELETE_MULTI_OBJ_MAX_NUM      1000
+    int max_num = s->cct->_conf->rgw_delete_multi_obj_max_num;
+    if (max_num < 0) {
+      max_num = DELETE_MULTI_OBJ_MAX_NUM;
+    }
+    int multi_delete_object_num = multi_delete->objects.size();
+    if (multi_delete_object_num > max_num) {
+      op_ret = -ERR_MALFORMED_XML;
+      goto error;
+    }
   }
 
   if (multi_delete->is_quiet())
@@ -6153,8 +6163,8 @@ void RGWDeleteMultiObj::execute()
   }
 
   for (iter = multi_delete->objects.begin();
-        iter != multi_delete->objects.end() && num_processed < max_to_delete;
-        ++iter, num_processed++) {
+        iter != multi_delete->objects.end();
+        ++iter) {
     rgw_obj obj(bucket, *iter);
     if (s->iam_policy || ! s->iam_user_policies.empty()) {
       auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,

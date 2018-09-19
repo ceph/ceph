@@ -1808,7 +1808,6 @@ public:
 
 class RGWDeleteMultiObj : public RGWOp {
 protected:
-  int max_to_delete;
   int len;
   char *data;
   rgw_bucket bucket;
@@ -1818,7 +1817,6 @@ protected:
 
 public:
   RGWDeleteMultiObj() {
-    max_to_delete = 1000;
     len = 0;
     data = NULL;
     quiet = false;
