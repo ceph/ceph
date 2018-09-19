@@ -1405,38 +1405,34 @@ static ceph::spinlock debug_lock;
     _len++;
   }
 
+  buffer::ptr_node& buffer::list::refill_append_space(const unsigned len)
+  {
+    // make a new buffer.  fill out a complete page, factoring in the
+    // raw_combined overhead.
+    size_t need = round_up_to(len, sizeof(size_t)) + sizeof(raw_combined);
+    size_t alen = round_up_to(need, CEPH_BUFFER_ALLOC_UNIT) -
+      sizeof(raw_combined);
+    auto new_back = \
+      ptr_node::create(raw_combined::create(alen, 0, get_mempool()));
+    new_back->set_length(0);   // unused, so far.
+    _buffers.push_back(*new_back.release());
+    return _buffers.back();
+  }
+
   void buffer::list::append(const char *data, unsigned len)
   {
-    // hmm, maybe let's provide ::appends with guarantee the container is
-    // never empty?
-    if (_buffers.empty()) {
-      size_t need = round_up_to(len, sizeof(size_t)) + sizeof(raw_combined);
-      size_t alen = round_up_to(need, CEPH_BUFFER_ALLOC_UNIT) -
-	sizeof(raw_combined);
-      _buffers.emplace_back(raw_combined::create(alen, 0, get_mempool()));
-      _buffers.back().set_length(0);   // unused, so far.
+    _len += len;
+
+    const unsigned free_in_last = get_append_buffer_unused_tail_length();
+    const unsigned first_round = std::min(len, free_in_last);
+    if (first_round) {
+      _buffers.back().append(data, first_round);
     }
 
-    while (len > 0) {
-      ptr& last_one = _buffers.back();
-      unsigned gap = \
-	std::min(last_one.raw_nref() == 1 ? last_one.unused_tail_length() : 0, len);
-      last_one.append(data, gap);
-      _len += gap;
-      len -= gap;
-      data += gap;
-
-      if (len == 0) {
-	break;
-      }
-
-      // make a new buffer.  fill out a complete page, factoring in the
-      // raw_combined overhead.
-      size_t need = round_up_to(len, sizeof(size_t)) + sizeof(raw_combined);
-      size_t alen = round_up_to(need, CEPH_BUFFER_ALLOC_UNIT) -
-	sizeof(raw_combined);
-      _buffers.emplace_back(raw_combined::create(alen, 0, get_mempool()));
-      _buffers.back().set_length(0);   // unused, so far.
+    const unsigned second_round = len - first_round;
+    if (second_round) {
+      auto& new_back = refill_append_space(second_round);
+      new_back.append(data + first_round, second_round);
     }
   }
 
@@ -1488,21 +1484,19 @@ static ceph::spinlock debug_lock;
 
   buffer::list::contiguous_filler buffer::list::append_hole(const unsigned len)
   {
-    if (unlikely(append_buffer.unused_tail_length() < len)) {
+    _len += len;
+
+    if (unlikely(get_append_buffer_unused_tail_length() < len)) {
       // make a new append_buffer.  fill out a complete page, factoring in
       // the raw_combined overhead.
-      const size_t need = \
-	round_up_to(len, sizeof(size_t)) + sizeof(raw_combined);
-      const size_t alen = \
-	round_up_to(need, CEPH_BUFFER_ALLOC_UNIT) - sizeof(raw_combined);
-      append_buffer = raw_combined::create(alen, 0, get_mempool());
-      append_buffer.set_length(0);
+      auto& new_back = refill_append_space(len);
+      new_back.set_length(len);
+      return { new_back.c_str() };
     }
 
-    append_buffer.set_length(append_buffer.length() + len);
-    append(append_buffer, append_buffer.length() - len, len);
-
-    return { _buffers.back().end_c_str() - len };
+    auto& cur_back = _buffers.back();
+    cur_back.set_length(cur_back.length() + len);
+    return { cur_back.end_c_str() - len };
   }
 
   void buffer::list::prepend_zero(unsigned len)

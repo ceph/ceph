@@ -960,6 +960,8 @@ namespace buffer CEPH_BUFFER_API {
   private:
     mutable iterator last_p;
 
+    ptr_node& refill_append_space(const unsigned len);
+
   public:
     // cons/des
     list() : _len(0), _memcopy_count(0), last_p(this) {}
