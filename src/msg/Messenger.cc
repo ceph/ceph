@@ -128,6 +128,15 @@ bool Messenger::ms_deliver_verify_authorizer(
   CryptoKey& session_key,
   std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
+  if (authorizer.length() == 0) {
+    for (auto dis : dispatchers) {
+      if (!dis->require_authorizer) {
+	//ldout(cct,10) << __func__ << " tolerating missing authorizer" << dendl;
+	isvalid = true;
+	return true;
+      }
+    }
+  }
   AuthAuthorizeHandler *ah = 0;
   switch (peer_type) {
   case CEPH_ENTITY_TYPE_MDS:
