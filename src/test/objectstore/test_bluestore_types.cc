@@ -1529,6 +1529,17 @@ TEST(BlueStoreRepairer, StoreSpaceTracker)
   ASSERT_EQ(3u, bmap.filter_out(extents));
   ASSERT_TRUE(bmap.is_used(cid));
   ASSERT_TRUE(bmap.is_used(hoid));
+ 
+  BlueStoreRepairer::StoreSpaceTracker bmap2;
+  bmap2.init((uint64_t)0x3223b1d1000, 0x10000);
+  ASSERT_EQ(bmap2.granularity, 0x1a0000);
+  ASSERT_EQ(bmap2.collections_bfs.size(), 0x1edae4);
+  ASSERT_EQ(bmap2.objects_bfs.size(), 0x1edae4);
+  bmap2.set_used(0x3223b190000, 0x10000, cid, hoid);
+  ASSERT_TRUE(bmap2.is_used(cid, 0x3223b190000));
+  ASSERT_TRUE(bmap2.is_used(hoid, 0x3223b190000));
+  ASSERT_TRUE(bmap2.is_used(cid, 0x3223b19f000));
+  ASSERT_TRUE(bmap2.is_used(hoid, 0x3223b19ffff));
 }
 
 int main(int argc, char **argv) {
