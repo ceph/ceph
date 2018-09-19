@@ -296,6 +296,10 @@ class MDSRank {
       finished_queue.push_back(c);
       progress_thread.signal();
     }
+    void queue_waiter_front(MDSInternalContextBase *c) {
+      finished_queue.push_back(c);
+      progress_thread.signal();
+    }
     void queue_waiters(std::list<MDSInternalContextBase*>& ls) {
       finished_queue.splice( finished_queue.end(), ls );
       progress_thread.signal();

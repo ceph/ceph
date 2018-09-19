@@ -2920,6 +2920,23 @@ pair<bool,bool> CDir::is_freezing_or_frozen_tree() const
   return make_pair(freezing, frozen);
 }
 
+CDir *CDir::get_freezing_tree_root()
+{
+  if (num_freezing_trees == 0)
+    return nullptr;
+  CDir *dir = this;
+  while (true) {
+    if (dir->is_freezing_tree_root())
+      return dir;
+    if (dir->is_subtree_root())
+      return nullptr;
+    if (dir->inode->parent)
+      dir = dir->inode->parent->dir;
+    else
+      return nullptr;
+  }
+}
+
 CDir *CDir::get_frozen_tree_root() 
 {
   assert(is_frozen());

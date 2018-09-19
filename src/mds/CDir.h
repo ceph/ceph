@@ -729,6 +729,7 @@ public:
   }
   bool is_freezing_tree_root() const { return state & STATE_FREEZINGTREE; }
   bool is_freezing_dir() const { return state & STATE_FREEZINGDIR; }
+  CDir *get_freezing_tree_root();
 
   bool is_frozen() const override { return is_frozen_dir() || is_frozen_tree(); }
   bool is_frozen_tree() const {
@@ -738,6 +739,7 @@ public:
   }
   bool is_frozen_tree_root() const { return state & STATE_FROZENTREE; }
   bool is_frozen_dir() const { return state & STATE_FROZENDIR; }
+  CDir *get_frozen_tree_root();
   
   bool is_freezeable(bool freezing=false) const {
     // no nested auth pins.
@@ -760,9 +762,6 @@ public:
 
     return true;
   }
-
-  CDir *get_frozen_tree_root();
-
 
   ostream& print_db_line_prefix(ostream& out) override;
   void print(ostream& out) override;
