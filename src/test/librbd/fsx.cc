@@ -19,7 +19,6 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <limits.h>
-#include <time.h>
 #include <strings.h>
 #if defined(__FreeBSD__)
 #include <sys/disk.h>
@@ -3250,7 +3249,7 @@ main(int argc, char **argv)
 		case 'S':
                         seed = getnum(optarg, &endp);
 			if (seed == 0)
-				seed = time(0) % 10000;
+				seed = std::random_device()() % 10000;
 			if (!quiet)
 				fprintf(stdout, "Seed set to %d\n", seed);
 			if (seed < 0)
