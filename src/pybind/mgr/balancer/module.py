@@ -17,7 +17,6 @@ from mgr_module import CRUSHMap
 # available modes: 'none', 'crush', 'crush-compat', 'upmap', 'osd_weight'
 default_mode = 'none'
 default_sleep_interval = 60   # seconds
-default_max_misplaced = .05    # max ratio of pgs replaced at a time
 
 TIME_FORMAT = '%Y-%m-%d_%H:%M:%S'
 
@@ -208,7 +207,6 @@ class Module(MgrModule):
             {'name': 'crush_compat_max_iterations'},
             {'name': 'crush_compat_step'},
             {'name': 'end_time'},
-            {'name': 'max_misplaced'},
             {'name': 'min_score'},
             {'name': 'mode'},
             {'name': 'sleep_interval'},
@@ -644,8 +642,7 @@ class Module(MgrModule):
     def optimize(self, plan):
         self.log.info('Optimize plan %s' % plan.name)
         plan.mode = self.get_config('mode', default_mode)
-        max_misplaced = float(self.get_config('max_misplaced',
-                                              default_max_misplaced))
+        max_misplaced = float(self.get_option('target_max_misplaced_ratio'))
         self.log.info('Mode %s, max misplaced %f' %
                       (plan.mode, max_misplaced))
 
@@ -729,8 +726,7 @@ class Module(MgrModule):
         step = float(self.get_config('crush_compat_step', .5))
         if step <= 0 or step >= 1.0:
             return -errno.EINVAL, '"crush_compat_step" must be in (0, 1)'
-        max_misplaced = float(self.get_config('max_misplaced',
-                                              default_max_misplaced))
+        max_misplaced = float(self.get_option('target_max_misplaced_ratio'))
         min_pg_per_osd = 2
 
         ms = plan.initial
