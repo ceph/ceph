@@ -13,17 +13,6 @@ from six import iteritems
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
-DEFAULTS = {
-    'enable_monitoring': str(False),
-    'scrape_frequency': str(86400),
-    'retention_period': str(86400 * 14),
-    'pool_name': 'device_health_metrics',
-    'mark_out_threshold': str(86400*14),
-    'warn_threshold': str(86400*14*2),
-    'self_heal': str(True),
-    'sleep_interval': str(600),
-}
-
 DEVICE_HEALTH = 'DEVICE_HEALTH'
 DEVICE_HEALTH_IN_USE = 'DEVICE_HEALTH_IN_USE'
 DEVICE_HEALTH_TOOMANY = 'DEVICE_HEALTH_TOOMANY'
@@ -36,14 +25,38 @@ HEALTH_MESSAGES = {
 
 class Module(MgrModule):
     OPTIONS = [
-        {'name': 'enable_monitoring'},
-        {'name': 'scrape_frequency'},
-        {'name': 'pool_name'},
-        {'name': 'retention_period'},
-        {'name': 'mark_out_threshold'},
-        {'name': 'warn_threshold'},
-        {'name': 'self_heal'},
-        {'name': 'sleep_interval'},
+        {
+            'name': 'enable_monitoring',
+            'default': str(False),
+        },
+        {
+            'name': 'scrape_frequency',
+            'default': str(86400),
+        },
+        {
+            'name': 'pool_name',
+            'default': 'device_health_metrics',
+        },
+        {
+            'name': 'retention_period',
+            'default': str(86400 * 14),
+        },
+        {
+            'name': 'mark_out_threshold',
+            'default': str(86400 * 14 * 2),
+        },
+        {
+            'name': 'warn_threshold',
+            'default': str(86400 * 14 * 2),
+        },
+        {
+            'name': 'self_heal',
+            'default': str(True),
+        },
+        {
+            'name': 'sleep_interval',
+            'default': str(600),
+        },
     ]
 
     COMMANDS = [
@@ -67,7 +80,7 @@ class Module(MgrModule):
             "perm": "r"
         },
         {
-            "cmd": "device show-health-metrics "
+            "cmd": "device get-health-metrics "
                    "name=devid,type=CephString "
                    "name=sample,type=CephString,req=False",
             "desc": "Show stored device metrics for the device",
@@ -94,8 +107,8 @@ class Module(MgrModule):
         super(Module, self).__init__(*args, **kwargs)
 
         # options
-        for k, v in DEFAULTS.iteritems():
-            setattr(self, k, v)
+        for opt in self.OPTIONS:
+            setattr(self, opt['name'], opt['default'])
 
         # other
         self.run = True
@@ -126,7 +139,7 @@ class Module(MgrModule):
             if 'devid' in cmd:
                 return self.scrape_device(cmd['devid'])
             return self.scrape_all()
-        elif cmd['prefix'] == 'device show-health-metrics':
+        elif cmd['prefix'] == 'device get-health-metrics':
             return self.show_device_metrics(cmd['devid'], cmd.get('sample'))
         elif cmd['prefix'] == 'device check-health':
             return self.check_health()
@@ -160,9 +173,11 @@ class Module(MgrModule):
             assert before != after
 
     def refresh_config(self):
-        for opt, value in iteritems(DEFAULTS):
-            setattr(self, opt, self.get_config(opt) or value)
-            self.log.debug(' %s = %s', opt, getattr(self, opt))
+        for opt in self.OPTIONS:
+            setattr(self,
+                    opt['name'],
+                    self.get_config(opt['name']) or opt['default'])
+            self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
     def serve(self):
         self.log.info("Starting")
@@ -216,7 +231,7 @@ class Module(MgrModule):
         self.run = False
         self.event.set()
 
-    def open_connection(self):
+    def open_connection(self, create_if_missing=True):
         pools = self.rados.list_pools()
         is_pool = False
         for pool in pools:
@@ -224,6 +239,8 @@ class Module(MgrModule):
                 is_pool = True
                 break
         if not is_pool:
+            if not create_if_missing:
+                return None
             self.log.debug('create %s pool' % self.pool_name)
             # create pool
             result = CommandResult('')
@@ -363,29 +380,29 @@ class Module(MgrModule):
         if not r or 'device' not in r.keys():
             return -errno.ENOENT, '', 'device ' + devid + ' not found'
         # fetch metrics
-        ioctx = self.open_connection()
         res = {}
-        with rados.ReadOpCtx() as op:
-            omap_iter, ret = ioctx.get_omap_vals(op, "", sample or '', 500)  # fixme
-            assert ret == 0
-            try:
-                ioctx.operate_read_op(op, devid)
-                for key, value in list(omap_iter):
-                    if sample and key != sample:
-                        break
-                    try:
-                        v = json.loads(value)
-                    except (ValueError, IndexError):
-                        self.log.debug('unable to parse value for %s: "%s"' %
-                                       (key, value))
-                        pass
-                    else:
+        ioctx = self.open_connection(create_if_missing=False)
+        if ioctx:
+            with rados.ReadOpCtx() as op:
+                omap_iter, ret = ioctx.get_omap_vals(op, "", sample or '', 500)  # fixme
+                assert ret == 0
+                try:
+                    ioctx.operate_read_op(op, devid)
+                    for key, value in list(omap_iter):
+                        if sample and key != sample:
+                            break
+                        try:
+                            v = json.loads(value)
+                        except (ValueError, IndexError):
+                            self.log.debug('unable to parse value for %s: "%s"' %
+                                           (key, value))
+                            pass
                         res[key] = v
-            except rados.ObjectNotFound:
-                pass
-            except rados.Error as e:
-                self.log.exception("RADOS error reading omap: {0}".format(e))
-                raise
+                except rados.ObjectNotFound:
+                    pass
+                except rados.Error as e:
+                    self.log.exception("RADOS error reading omap: {0}".format(e))
+                    raise
 
         return 0, json.dumps(res, indent=4), ''
 
@@ -409,6 +426,9 @@ class Module(MgrModule):
         for dev in devs['devices']:
             devid = dev['devid']
             if 'life_expectancy_min' not in dev:
+                continue
+            # ignore devices that are not consumed by any daemons
+            if not dev['daemons']:
                 continue
             # life_expectancy_(min/max) is in the format of:
             # '%Y-%m-%d %H:%M:%S.%f', e.g.:
