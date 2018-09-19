@@ -2185,7 +2185,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       if (got < 0)
 	goto out_dethrottle;
       if (got > 0) {
-	blp.advance(got);
+	blp.advance(static_cast<size_t>(got));
 	data.append(bp, 0, got);
 	offset += got;
 	left -= got;

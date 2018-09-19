@@ -810,8 +810,10 @@ TEST(BufferListIterator, constructors) {
     EXPECT_EQ('B', *i);
     EXPECT_EQ('C', *j);
     bl.c_str()[1] = 'X';
+#ifdef BL_BACKWARD_COMPAT
     j.advance(-1);
     EXPECT_EQ('X', *j);
+#endif // BL_BACKWARD_COMPAT
   }
 
   //
@@ -886,23 +888,27 @@ TEST(BufferListIterator, advance) {
 
   {
     bufferlist::iterator i(&bl);
-    EXPECT_THROW(i.advance(200), buffer::end_of_buffer);
+    EXPECT_THROW(i.advance(200u), buffer::end_of_buffer);
   }
+#ifdef BL_BACKWARD_COMPAT
   {
     bufferlist::iterator i(&bl);
     EXPECT_THROW(i.advance(-1), buffer::end_of_buffer);
   }
+#endif // BL_BACKWARD_COMPAT
   {
     bufferlist::iterator i(&bl);
     EXPECT_EQ('A', *i);
-    i.advance(1);
+    i.advance(1u);
     EXPECT_EQ('B', *i);
-    i.advance(3);
+    i.advance(3u);
     EXPECT_EQ('E', *i);
-    i.advance(-3);
+#ifdef BL_BACKWARD_COMPAT
+    i.advance(-3u);
     EXPECT_EQ('B', *i);
-    i.advance(-1);
+    i.advance(-1u);
     EXPECT_EQ('A', *i);
+#endif // BL_BACKWARD_COMPAT
   }
 }
 
@@ -917,14 +923,14 @@ TEST(BufferListIterator, get_ptr_and_advance)
   bl.append(c);
   const char *ptr;
   bufferlist::iterator p = bl.begin();
-  ASSERT_EQ(3u, p.get_ptr_and_advance(11, &ptr));
+  ASSERT_EQ(3u, p.get_ptr_and_advance(11u, &ptr));
   ASSERT_EQ(bl.length() - 3u, p.get_remaining());
   ASSERT_EQ(0, memcmp(ptr, "one", 3));
-  ASSERT_EQ(2u, p.get_ptr_and_advance(2, &ptr));
+  ASSERT_EQ(2u, p.get_ptr_and_advance(2u, &ptr));
   ASSERT_EQ(0, memcmp(ptr, "tw", 2));
-  ASSERT_EQ(1u, p.get_ptr_and_advance(4, &ptr));
+  ASSERT_EQ(1u, p.get_ptr_and_advance(4u, &ptr));
   ASSERT_EQ(0, memcmp(ptr, "o", 1));
-  ASSERT_EQ(5u, p.get_ptr_and_advance(5, &ptr));
+  ASSERT_EQ(5u, p.get_ptr_and_advance(5u, &ptr));
   ASSERT_EQ(0, memcmp(ptr, "three", 5));
   ASSERT_EQ(0u, p.get_remaining());
 }
@@ -953,14 +959,14 @@ TEST(BufferListIterator, iterator_crc32c) {
 
   bl3.append(s.substr(98, 55));
   it = bl1.begin();
-  it.advance(98);
+  it.advance(98u);
   ASSERT_EQ(bl3.crc32c(0), it.crc32c(55, 0));
   ASSERT_EQ(4u, it.get_remaining());
 
   bl3.clear();
   bl3.append(s.substr(98 + 55));
   it = bl1.begin();
-  it.advance(98 + 55);
+  it.advance(98u + 55u);
   ASSERT_EQ(bl3.crc32c(0), it.crc32c(10, 0));
   ASSERT_EQ(0u, it.get_remaining());
 }
@@ -984,7 +990,7 @@ TEST(BufferListIterator, operator_star) {
   {
     bufferlist::iterator i(&bl);
     EXPECT_EQ('A', *i);
-    EXPECT_THROW(i.advance(200), buffer::end_of_buffer);
+    EXPECT_THROW(i.advance(200u), buffer::end_of_buffer);
     EXPECT_THROW(*i, buffer::end_of_buffer);
   }
 }
@@ -1076,7 +1082,7 @@ TEST(BufferListIterator, copy) {
     //
     // demonstrates that it seeks back to offset if p == ls->end()
     //
-    EXPECT_THROW(i.advance(200), buffer::end_of_buffer); 
+    EXPECT_THROW(i.advance(200u), buffer::end_of_buffer);
     i.copy(2, copy);
     EXPECT_EQ(0, ::memcmp(copy, expected, 2));
     EXPECT_EQ('X', copy[2]);
@@ -1116,7 +1122,7 @@ TEST(BufferListIterator, copy) {
     //
     // demonstrates that it seeks back to offset if p == ls->end()
     //
-    EXPECT_THROW(i.advance(200), buffer::end_of_buffer); 
+    EXPECT_THROW(i.advance(200u), buffer::end_of_buffer);
     i.copy(2, copy);
     EXPECT_EQ(0, ::memcmp(copy.c_str(), expected, 2));
     i.seek(0);
@@ -1137,7 +1143,7 @@ TEST(BufferListIterator, copy) {
     //
     // demonstrates that it seeks back to offset if p == ls->end()
     //
-    EXPECT_THROW(i.advance(200), buffer::end_of_buffer); 
+    EXPECT_THROW(i.advance(200u), buffer::end_of_buffer);
     i.copy_all(copy);
     EXPECT_EQ('A', copy[0]);
     EXPECT_EQ('B', copy[1]);
@@ -1153,7 +1159,7 @@ TEST(BufferListIterator, copy) {
     //
     // demonstrates that it seeks back to offset if p == ls->end()
     //
-    EXPECT_THROW(i.advance(200), buffer::end_of_buffer); 
+    EXPECT_THROW(i.advance(200u), buffer::end_of_buffer);
     i.copy(2, copy);
     EXPECT_EQ(0, ::memcmp(copy.c_str(), expected, 2));
     i.seek(0);
@@ -1179,7 +1185,7 @@ TEST(BufferListIterator, copy_in) {
     //
     // demonstrates that it seeks back to offset if p == ls->end()
     //
-    EXPECT_THROW(i.advance(200), buffer::end_of_buffer); 
+    EXPECT_THROW(i.advance(200u), buffer::end_of_buffer);
     const char *expected = "ABC";
     i.copy_in(3, expected);
     EXPECT_EQ(0, ::memcmp(bl.c_str(), expected, 3));
@@ -1196,7 +1202,7 @@ TEST(BufferListIterator, copy_in) {
     //
     // demonstrates that it seeks back to offset if p == ls->end()
     //
-    EXPECT_THROW(i.advance(200), buffer::end_of_buffer); 
+    EXPECT_THROW(i.advance(200u), buffer::end_of_buffer);
     bufferlist expected;
     expected.append("ABC", 3);
     i.copy_in(3, expected);
@@ -1902,10 +1908,10 @@ TEST(BufferList, begin) {
 
 TEST(BufferList, end) {
   bufferlist bl;
-  bl.append("ABC");
+  bl.append("AB");
   bufferlist::iterator i = bl.end();
-  i.advance(-1);
-  EXPECT_EQ('C', *i);
+  bl.append("C");
+  EXPECT_EQ('C', bl[i.get_off()]);
 }
 
 TEST(BufferList, copy) {

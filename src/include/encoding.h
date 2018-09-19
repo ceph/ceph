@@ -1203,19 +1203,31 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
  * @param v current (code) version of the encoding
  * @param compat oldest code version that can decode it
  * @param bl bufferlist to encode to
+ *
+ * NOTE: to not advance() backward, we snapshot the end of bufferlist
+ * in a given moment, and then rely on copy_in()'s ability to rewind:
+ *
+ * void buffer::list::iterator::copy_in(...)
+ * {
+ *   // copy
+ *   if (p == ls->end())
+ *     seek(off);
+ *
+ *   // ...
+ * }
+ *
+ * This can be quite costly, so next commit is expected to remedy.
  */
 #define ENCODE_START(v, compat, bl)			     \
   using ::ceph::encode;					     \
   __u8 struct_v = v, struct_compat = compat;		     \
   encode(struct_v, (bl));				     \
-  encode(struct_compat, (bl));			     \
   ::ceph::buffer::list::iterator struct_compat_it = (bl).end();	\
-  struct_compat_it.advance(-1);				     \
+  encode(struct_compat, (bl));			     \
   ceph_le32 struct_len;				             \
   struct_len = 0;                                            \
-  encode(struct_len, (bl));				     \
   ::ceph::buffer::list::iterator struct_len_it = (bl).end(); \
-  struct_len_it.advance(-4);				     \
+  encode(struct_len, (bl));				     \
   do {
 
 /**
@@ -1282,7 +1294,7 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
     if (v < struct_compat)						\
       throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, v, struct_compat)); \
   } else if (skip_v) {							\
-    if ((int)bl.get_remaining() < skip_v)				\
+    if (bl.get_remaining() < skip_v)					\
       throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
     bl.advance(skip_v);							\
   }									\
@@ -1311,7 +1323,7 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
  * @param bl bufferlist::iterator containing the encoded data
  */
 #define DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, bl)		\
-  __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 0, bl)
+  __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 0u, bl)
 
 /**
  * start a decoding block with legacy support for older encoding schemes
@@ -1331,10 +1343,10 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
  * @param bl bufferlist::iterator containing the encoded data
  */
 #define DECODE_START_LEGACY_COMPAT_LEN_32(v, compatv, lenv, bl)		\
-  __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 3, bl)
+  __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 3u, bl)
 
 #define DECODE_START_LEGACY_COMPAT_LEN_16(v, compatv, lenv, bl)		\
-  __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 1, bl)
+  __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 1u, bl)
 
 /**
  * finish decode block
