@@ -62,35 +62,35 @@ export class RgwBucketListComponent {
   }
 
   deleteAction() {
-    const modalRef = this.bsModalService.show(DeletionModalComponent);
-    modalRef.content.setUp({
-      metaType: this.selection.hasSingleSelection ? 'bucket' : 'buckets',
-      deletionObserver: (): Observable<any> => {
-        return new Observable((observer: Subscriber<any>) => {
-          // Delete all selected data table rows.
-          observableForkJoin(
-            this.selection.selected.map((bucket: any) => {
-              return this.rgwBucketService.delete(bucket.bucket);
-            })
-          ).subscribe(
-            null,
-            (error) => {
-              // Forward the error to the observer.
-              observer.error(error);
-              // Reload the data table content because some deletions might
-              // have been executed successfully in the meanwhile.
-              this.table.refreshBtn();
-            },
-            () => {
-              // Notify the observer that we are done.
-              observer.complete();
-              // Reload the data table content.
-              this.table.refreshBtn();
-            }
-          );
-        });
-      },
-      modalRef: modalRef
+    this.bsModalService.show(DeletionModalComponent, {
+      initialState: {
+        itemDescription: this.selection.hasSingleSelection ? 'bucket' : 'buckets',
+        submitActionObservable: () => {
+          return new Observable((observer: Subscriber<any>) => {
+            // Delete all selected data table rows.
+            observableForkJoin(
+              this.selection.selected.map((bucket: any) => {
+                return this.rgwBucketService.delete(bucket.bucket);
+              })
+            ).subscribe(
+              null,
+              (error) => {
+                // Forward the error to the observer.
+                observer.error(error);
+                // Reload the data table content because some deletions might
+                // have been executed successfully in the meanwhile.
+                this.table.refreshBtn();
+              },
+              () => {
+                // Notify the observer that we are done.
+                observer.complete();
+                // Reload the data table content.
+                this.table.refreshBtn();
+              }
+            );
+          });
+        }
+      }
     });
   }
 }

@@ -253,11 +253,11 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
 
   deleteSnapshotModal() {
     const snapshotName = this.selection.selected[0].name;
-    this.modalRef = this.modalService.show(DeletionModalComponent);
-    this.modalRef.content.setUp({
-      metaType: 'RBD snapshot',
-      deletionMethod: () => this._asyncTask('deleteSnapshot', 'rbd/snap/delete', snapshotName),
-      modalRef: this.modalRef
+    this.modalRef = this.modalService.show(DeletionModalComponent, {
+      initialState: {
+        itemDescription: 'RBD snapshot',
+        submitAction: () => this._asyncTask('deleteSnapshot', 'rbd/snap/delete', snapshotName)
+      }
     });
   }
 

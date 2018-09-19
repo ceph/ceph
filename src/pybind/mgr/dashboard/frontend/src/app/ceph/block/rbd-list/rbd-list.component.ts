@@ -198,18 +198,19 @@ export class RbdListComponent implements OnInit {
   deleteRbdModal() {
     const poolName = this.selection.first().pool_name;
     const imageName = this.selection.first().name;
-    this.modalRef = this.modalService.show(DeletionModalComponent);
-    this.modalRef.content.setUp({
-      metaType: 'RBD',
-      deletionObserver: () =>
-        this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('rbd/delete', {
-            pool_name: poolName,
-            image_name: imageName
-          }),
-          call: this.rbdService.delete(poolName, imageName)
-        }),
-      modalRef: this.modalRef
+
+    this.modalRef = this.modalService.show(DeletionModalComponent, {
+      initialState: {
+        itemDescription: 'RBD',
+        submitActionObservable: () =>
+          this.taskWrapper.wrapTaskAroundCall({
+            task: new FinishedTask('rbd/delete', {
+              pool_name: poolName,
+              image_name: imageName
+            }),
+            call: this.rbdService.delete(poolName, imageName)
+          })
+      }
     });
   }
 
