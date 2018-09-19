@@ -34,14 +34,6 @@ class CephService(object):
     OSD_FLAG_NO_SCRUB = 'noscrub'
     OSD_FLAG_NO_DEEP_SCRUB = 'nodeep-scrub'
 
-    POOL_STAT_CLIENT_IO_RATE = 'client_io_rate'
-    POOL_STAT_READ_BYTES_PER_SEC = 'read_bytes_sec'
-    POOL_STAT_READ_OP_PER_SEC = 'read_op_per_sec'
-    POOL_STAT_RECOVERY_BYTES_PER_SEC = 'recovering_bytes_per_sec'
-    POOL_STAT_RECOVERY_RATE = 'recovery_rate'
-    POOL_STAT_WRITE_BYTES_PER_SEC = 'write_bytes_sec'
-    POOL_STAT_WRITE_OP_PER_SEC = 'write_op_per_sec'
-
     PG_STATUS_SCRUBBING = 'scrubbing'
     PG_STATUS_DEEP_SCRUBBING = 'deep'
 
@@ -212,33 +204,27 @@ class CephService(object):
     def get_client_perf(cls):
         pools_stats = mgr.get('osd_pool_stats')['pool_stats']
 
-        client_perf = {
-            cls.POOL_STAT_READ_BYTES_PER_SEC: 0,
-            cls.POOL_STAT_READ_OP_PER_SEC: 0,
-            cls.POOL_STAT_RECOVERY_BYTES_PER_SEC: 0,
-            cls.POOL_STAT_WRITE_BYTES_PER_SEC: 0,
-            cls.POOL_STAT_WRITE_OP_PER_SEC: 0,
+        io_stats = {
+            'read_bytes_sec': 0,
+            'read_op_per_sec': 0,
+            'write_bytes_sec': 0,
+            'write_op_per_sec': 0,
         }
+        recovery_stats = {'recovering_bytes_per_sec': 0}
 
         for pool_stats in pools_stats:
-            client_io = pool_stats[cls.POOL_STAT_CLIENT_IO_RATE]
-            if cls.POOL_STAT_READ_BYTES_PER_SEC in client_io:
-                client_perf[cls.POOL_STAT_READ_BYTES_PER_SEC] +=\
-                    client_io[cls.POOL_STAT_READ_BYTES_PER_SEC]
-            if cls.POOL_STAT_READ_OP_PER_SEC in client_io:
-                client_perf[cls.POOL_STAT_READ_OP_PER_SEC] +=\
-                    client_io[cls.POOL_STAT_READ_OP_PER_SEC]
-            if cls.POOL_STAT_WRITE_BYTES_PER_SEC in client_io:
-                client_perf[cls.POOL_STAT_WRITE_BYTES_PER_SEC] +=\
-                    client_io[cls.POOL_STAT_WRITE_BYTES_PER_SEC]
-            if cls.POOL_STAT_WRITE_OP_PER_SEC in client_io:
-                client_perf[cls.POOL_STAT_WRITE_OP_PER_SEC] +=\
-                    client_io[cls.POOL_STAT_WRITE_OP_PER_SEC]
+            client_io = pool_stats['client_io_rate']
+            for stat in list(io_stats.keys()):
+                if stat in client_io:
+                    io_stats[stat] += client_io[stat]
 
-            client_recovery = pool_stats[cls.POOL_STAT_RECOVERY_RATE]
-            if cls.POOL_STAT_RECOVERY_BYTES_PER_SEC in client_recovery:
-                client_perf[cls.POOL_STAT_RECOVERY_BYTES_PER_SEC] +=\
-                    client_recovery[cls.POOL_STAT_RECOVERY_BYTES_PER_SEC]
+            client_recovery = pool_stats['recovery_rate']
+            for stat in list(recovery_stats.keys()):
+                if stat in client_recovery:
+                    recovery_stats[stat] += client_recovery[stat]
+
+        client_perf = io_stats.copy()
+        client_perf.update(recovery_stats)
 
         return client_perf
 
