@@ -4992,6 +4992,10 @@ std::vector<Option> get_rgw_options() {
     .set_default(100)
     .set_description("Max number of cors rules in a single request"),
 
+    Option("rgw_delete_multi_obj_max_num", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1000)
+    .set_description("Max number of objects in a single multi-object delete request"),
+
     Option("rgw_rados_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("true if LTTng-UST tracepoints should be enabled"),
