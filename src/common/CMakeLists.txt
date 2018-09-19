@@ -22,7 +22,6 @@ set(common_srcs
   PluginRegistry.cc
   PriorityCache.cc
   Readahead.cc
-  RefCountedObj.cc
   SloppyCRCMap.cc
   SubProcess.cc
   Thread.cc
