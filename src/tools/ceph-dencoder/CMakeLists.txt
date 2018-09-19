@@ -47,7 +47,6 @@ target_link_libraries(ceph-dencoder
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_version_client
   cls_user_client
   cls_journal_client
