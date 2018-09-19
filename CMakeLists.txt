@@ -302,6 +302,7 @@ else(ALLOCATOR)
   endif(GPERFTOOLS_FOUND)
 endif(ALLOCATOR)
 
+option(RGW_USE_ALLOC "Link RGW binaries with configured non-default allocator (e.g., tcmalloc)." ON)
 
 if(WITH_LIBCEPHFS OR WITH_KRBD)
   find_package(keyutils REQUIRED)

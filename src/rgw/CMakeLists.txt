@@ -1,3 +1,9 @@
+
+# permit tcmalloc override
+if (RGW_USE_ALLOC)
+  set(RGW_ALLOC_LIBS ${ALLOC_LIBS})
+endif(RGW_USE_ALLOC)
+
 if(WITH_TESTS)
 add_executable(ceph_rgw_jsonparser
   rgw_jsonparser.cc)
@@ -186,7 +192,7 @@ target_link_libraries(radosgw radosgw_a librados
   cls_version_client cls_replica_log_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
-  ${ALLOC_LIBS})
+  ${RGW_ALLOC_LIBS})
 # radosgw depends on cls libraries at runtime, but not as link dependencies
 add_dependencies(radosgw cls_rgw cls_lock cls_refcount
   cls_log cls_statelog cls_timeindex
@@ -220,7 +226,7 @@ set(radosgw_token_srcs
   rgw_token.cc)
 add_executable(radosgw-token ${radosgw_token_srcs})
 target_link_libraries(radosgw-token librados
-  global ${ALLOC_LIBS})
+  global ${RGW_ALLOC_LIBS})
 install(TARGETS radosgw-token DESTINATION bin)
 
 set(radosgw_object_expirer_srcs
