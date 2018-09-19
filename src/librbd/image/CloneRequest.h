@@ -114,7 +114,7 @@ private:
   std::string m_name;
   std::string m_id;
   ImageOptions m_opts;
-  ParentSpec m_pspec;
+  cls::rbd::ParentImageSpec m_pspec;
   ImageCtxT *m_imctx;
   cls::rbd::MirrorMode m_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
   const std::string m_non_primary_global_image_id;
@@ -149,8 +149,8 @@ private:
   void open_child();
   void handle_open_child(int r);
 
-  void set_parent();
-  void handle_set_parent(int r);
+  void attach_parent();
+  void handle_attach_parent(int r);
 
   void v2_set_op_feature();
   void handle_v2_set_op_feature(int r);

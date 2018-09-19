@@ -27,8 +27,8 @@ template <typename I>
 SnapshotCreateRequest<I>::SnapshotCreateRequest(
     I *dst_image_ctx, const std::string &snap_name,
     const cls::rbd::SnapshotNamespace &snap_namespace,
-    uint64_t size, const librbd::ParentSpec &spec, uint64_t parent_overlap,
-    Context *on_finish)
+    uint64_t size, const cls::rbd::ParentImageSpec &spec,
+    uint64_t parent_overlap, Context *on_finish)
   : m_dst_image_ctx(dst_image_ctx), m_snap_name(snap_name),
     m_snap_namespace(snap_namespace), m_size(size),
     m_parent_spec(spec), m_parent_overlap(parent_overlap),

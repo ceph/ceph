@@ -17,7 +17,6 @@ namespace librbd {
 class ImageCtx;
 
 namespace util {
-
 namespace detail {
 
 template <typename T>
@@ -211,8 +210,12 @@ inline ZTracer::Trace create_trace(const I &image_ctx, const char *trace_name,
 bool is_metadata_config_override(const std::string& metadata_key,
                                  std::string* config_key);
 
-} // namespace util
+int create_ioctx(librados::IoCtx& src_io_ctx, const std::string& pool_desc,
+                 int64_t pool_id,
+                 const std::optional<std::string>& pool_namespace,
+                 librados::IoCtx* dst_io_ctx);
 
+} // namespace util
 } // namespace librbd
 
 #endif // CEPH_LIBRBD_UTILS_H

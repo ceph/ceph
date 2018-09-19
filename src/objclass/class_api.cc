@@ -692,6 +692,12 @@ uint64_t cls_get_client_features(cls_method_context_t hctx)
   return ctx->op->get_req()->get_connection()->get_features();
 }
 
+int8_t cls_get_required_osd_release(cls_method_context_t hctx)
+{
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+  return ctx->pg->get_osdmap()->require_osd_release;
+}
+
 void cls_cxx_subop_version(cls_method_context_t hctx, string *s)
 {
   if (!s)

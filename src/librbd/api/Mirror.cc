@@ -273,8 +273,10 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
       RWLock::RLocker l(ictx->snap_lock);
       map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
       for (auto &info : snap_info) {
-        ParentSpec parent_spec(ictx->md_ctx.get_id(), ictx->id, info.first);
-        map< pair<int64_t, string>, set<string> > image_info;
+        cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
+                                              ictx->md_ctx.get_namespace(),
+                                              ictx->id, info.first};
+        map< tuple<int64_t, string, string>, set<string> > image_info;
 
         r = Image<I>::list_children(ictx, parent_spec, &image_info);
         if (r < 0) {
@@ -284,19 +286,15 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
         if (image_info.empty())
           continue;
 
-        librados::Rados rados(ictx->md_ctx);
         for (auto &info: image_info) {
           librados::IoCtx ioctx;
-          r = rados.ioctx_create2(info.first.first, ioctx);
+          r = util::create_ioctx(ictx->md_ctx, "child image",
+                                 std::get<0>(info.first),
+                                 std::get<2>(info.first), &ioctx);
           if (r < 0) {
             rollback = true;
-            lderr(cct) << "error accessing child image pool "
-                       << info.first.second  << dendl;
             return r;
           }
-
-          // TODO support clone v2 child namespaces
-          ioctx.set_namespace(ictx->md_ctx.get_namespace());
 
           for (auto &id_it : info.second) {
             cls::rbd::MirrorImage mirror_image_internal;
@@ -585,9 +583,9 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
 
     for (const auto& img_pair : images) {
       uint64_t features;
-      r = cls_client::get_features(&io_ctx,
-                                   util::header_name(img_pair.second),
-                                   CEPH_NOSNAP, &features);
+      uint64_t incompatible_features;
+      r = cls_client::get_features(&io_ctx, util::header_name(img_pair.second),
+                                   true, &features, &incompatible_features);
       if (r < 0) {
         lderr(cct) << "error getting features for image " << img_pair.first
                    << ": " << cpp_strerror(r) << dendl;

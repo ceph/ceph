@@ -287,11 +287,7 @@ Context *RefreshRequest<I>::handle_v1_get_locks(int *result) {
   ldout(cct, 10) << this << " " << __func__ << ": "
                  << "r=" << *result << dendl;
 
-  // If EOPNOTSUPP, treat image as if there are no locks (we can't
-  // query them).
-  if (*result == -EOPNOTSUPP) {
-    *result = 0;
-  } else if (*result == 0) {
+  if (*result == 0) {
     auto it = m_out_bl.cbegin();
     ClsLockType lock_type;
     *result = rados::cls::lock::get_lock_info_finish(&it, &m_lockers,
@@ -344,7 +340,11 @@ void RefreshRequest<I>::send_v2_get_mutable_metadata() {
 
   bool read_only = m_image_ctx.read_only || snap_id != CEPH_NOSNAP;
   librados::ObjectReadOperation op;
-  cls_client::get_mutable_metadata_start(&op, read_only);
+  cls_client::get_size_start(&op, CEPH_NOSNAP);
+  cls_client::get_features_start(&op, read_only);
+  cls_client::get_flags_start(&op, CEPH_NOSNAP);
+  cls_client::get_snapcontext_start(&op);
+  rados::cls::lock::get_lock_info_start(&op, RBD_LOCK_NAME);
 
   using klass = RefreshRequest<I>;
   librados::AioCompletion *comp = create_rados_callback<
@@ -362,15 +362,34 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
   ldout(cct, 10) << this << " " << __func__ << ": "
                  << "r=" << *result << dendl;
 
-  if (*result == 0) {
-    auto it = m_out_bl.cbegin();
-    *result = cls_client::get_mutable_metadata_finish(&it, &m_size, &m_features,
-                                                      &m_incompatible_features,
-                                                      &m_lockers,
-                                                      &m_exclusive_locked,
-                                                      &m_lock_tag, &m_snapc,
-                                                      &m_parent_md);
+  auto it = m_out_bl.cbegin();
+  if (*result >= 0) {
+    uint8_t order;
+    *result = cls_client::get_size_finish(&it, &m_size, &order);
   }
+
+  if (*result >= 0) {
+    *result = cls_client::get_features_finish(&it, &m_features,
+                                              &m_incompatible_features);
+  }
+
+  if (*result >= 0) {
+    *result = cls_client::get_flags_finish(&it, &m_flags);
+  }
+
+  if (*result >= 0) {
+    *result = cls_client::get_snapcontext_finish(&it, &m_snapc);
+  }
+
+  if (*result >= 0) {
+    ClsLockType lock_type = LOCK_NONE;
+    *result = rados::cls::lock::get_lock_info_finish(&it, &m_lockers,
+                                                     &lock_type, &m_lock_tag);
+    if (*result == 0) {
+      m_exclusive_locked = (lock_type == LOCK_EXCLUSIVE);
+    }
+  }
+
   if (*result < 0) {
     lderr(cct) << "failed to retrieve mutable metadata: "
                << cpp_strerror(*result) << dendl;
@@ -394,6 +413,71 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
     ldout(cct, 5) << "ignoring dynamically disabled exclusive lock" << dendl;
     m_features |= RBD_FEATURE_EXCLUSIVE_LOCK;
     m_incomplete_update = true;
+  }
+
+  send_v2_get_parent();
+  return nullptr;
+}
+
+template <typename I>
+void RefreshRequest<I>::send_v2_get_parent() {
+  // NOTE: remove support when Mimic is EOLed
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": legacy=" << m_legacy_parent
+                 << dendl;
+
+  librados::ObjectReadOperation op;
+  if (!m_legacy_parent) {
+    cls_client::parent_get_start(&op);
+    cls_client::parent_overlap_get_start(&op, CEPH_NOSNAP);
+  } else {
+    cls_client::get_parent_start(&op, CEPH_NOSNAP);
+  }
+
+  auto aio_comp = create_rados_callback<
+    RefreshRequest<I>, &RefreshRequest<I>::handle_v2_get_parent>(this);
+  m_out_bl.clear();
+  m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, aio_comp, &op,
+                                  &m_out_bl);
+  aio_comp->release();
+}
+
+template <typename I>
+Context *RefreshRequest<I>::handle_v2_get_parent(int *result) {
+  // NOTE: remove support when Mimic is EOLed
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  auto it = m_out_bl.cbegin();
+  if (!m_legacy_parent) {
+    if (*result == 0) {
+      *result = cls_client::parent_get_finish(&it, &m_parent_md.spec);
+    }
+
+    std::optional<uint64_t> parent_overlap;
+    if (*result == 0) {
+      *result = cls_client::parent_overlap_get_finish(&it, &parent_overlap);
+    }
+
+    if (*result == 0 && parent_overlap) {
+      m_parent_md.overlap = *parent_overlap;
+      m_head_parent_overlap = true;
+    }
+  } else if (*result == 0) {
+    *result = cls_client::get_parent_finish(&it, &m_parent_md.spec,
+                                            &m_parent_md.overlap);
+    m_head_parent_overlap = true;
+  }
+
+  if (*result == -EOPNOTSUPP && !m_legacy_parent) {
+    ldout(cct, 10) << "retrying using legacy parent method" << dendl;
+    m_legacy_parent = true;
+    send_v2_get_parent();
+    return nullptr;
+  } if (*result < 0) {
+    lderr(cct) << "failed to retrieve parent: " << cpp_strerror(*result)
+               << dendl;
+    return m_on_finish;
   }
 
   if ((m_features & RBD_FEATURE_MIGRATING) != 0) {
@@ -435,9 +519,7 @@ Context *RefreshRequest<I>::handle_v2_get_metadata(int *result) {
     *result = cls_client::metadata_list_finish(&it, &metadata);
   }
 
-  if (*result == -EOPNOTSUPP || *result == -EIO) {
-    ldout(cct, 10) << "config metadata not supported by OSD" << dendl;
-  } else if (*result < 0) {
+  if (*result < 0) {
     lderr(cct) << "failed to retrieve metadata: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
@@ -455,61 +537,6 @@ Context *RefreshRequest<I>::handle_v2_get_metadata(int *result) {
 
   bool thread_safe = m_image_ctx.image_watcher->is_unregistered();
   m_image_ctx.apply_metadata(m_metadata, thread_safe);
-
-  send_v2_get_flags();
-  return nullptr;
-}
-
-template <typename I>
-void RefreshRequest<I>::send_v2_get_flags() {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::get_flags_start(&op, m_snapc.snaps);
-
-  using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp = create_rados_callback<
-    klass, &klass::handle_v2_get_flags>(this);
-  m_out_bl.clear();
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
-                                         &m_out_bl);
-  ceph_assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-Context *RefreshRequest<I>::handle_v2_get_flags(int *result) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << ": "
-                 << "r=" << *result << dendl;
-
-  if (*result == 0) {
-    /// NOTE: remove support for snap paramter after Luminous is retired
-    auto it = m_out_bl.cbegin();
-    cls_client::get_flags_finish(&it, &m_flags, m_snapc.snaps, &m_snap_flags);
-  }
-  if (*result == -EOPNOTSUPP) {
-    // Older OSD doesn't support RBD flags, need to assume the worst
-    *result = 0;
-    ldout(cct, 10) << "OSD does not support RBD flags, disabling object map "
-                   << "optimizations" << dendl;
-    m_flags = RBD_FLAG_OBJECT_MAP_INVALID;
-    if ((m_features & RBD_FEATURE_FAST_DIFF) != 0) {
-      m_flags |= RBD_FLAG_FAST_DIFF_INVALID;
-    }
-
-    std::vector<uint64_t> default_flags(m_snapc.snaps.size(), m_flags);
-    m_snap_flags = std::move(default_flags);
-  } else if (*result == -ENOENT) {
-    ldout(cct, 10) << "out-of-sync snapshot state detected" << dendl;
-    send_v2_get_mutable_metadata();
-    return nullptr;
-  } else if (*result < 0) {
-    lderr(cct) << "failed to retrieve flags: " << cpp_strerror(*result)
-               << dendl;
-    return m_on_finish;
-  }
 
   send_v2_get_op_features();
   return nullptr;
@@ -586,11 +613,7 @@ Context *RefreshRequest<I>::handle_v2_get_group(int *result) {
     auto it = m_out_bl.cbegin();
     cls_client::image_group_get_finish(&it, &m_group_spec);
   }
-  if (*result == -EOPNOTSUPP) {
-    // Older OSD doesn't support RBD groups
-    *result = 0;
-    ldout(cct, 10) << "OSD does not support groups" << dendl;
-  } else if (*result < 0) {
+  if (*result < 0) {
     lderr(cct) << "failed to retrieve group: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
@@ -602,10 +625,12 @@ Context *RefreshRequest<I>::handle_v2_get_group(int *result) {
 
 template <typename I>
 void RefreshRequest<I>::send_v2_get_snapshots() {
+  m_snap_infos.resize(m_snapc.snaps.size());
+  m_snap_flags.resize(m_snapc.snaps.size());
+  m_snap_parents.resize(m_snapc.snaps.size());
+  m_snap_protection.resize(m_snapc.snaps.size());
+
   if (m_snapc.snaps.empty()) {
-    m_snap_infos.clear();
-    m_snap_parents.clear();
-    m_snap_protection.clear();
     send_v2_refresh_parent();
     return;
   }
@@ -614,7 +639,25 @@ void RefreshRequest<I>::send_v2_get_snapshots() {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   librados::ObjectReadOperation op;
-  cls_client::snapshot_get_start(&op, m_snapc.snaps);
+  for (auto snap_id : m_snapc.snaps) {
+    if (m_legacy_snapshot) {
+      /// NOTE: remove after Luminous is retired
+      cls_client::get_snapshot_name_start(&op, snap_id);
+      cls_client::get_size_start(&op, snap_id);
+      cls_client::get_snapshot_timestamp_start(&op, snap_id);
+    } else {
+      cls_client::snapshot_get_start(&op, snap_id);
+    }
+
+    if (m_legacy_parent) {
+      cls_client::get_parent_start(&op, snap_id);
+    } else {
+      cls_client::parent_overlap_get_start(&op, snap_id);
+    }
+
+    cls_client::get_flags_start(&op, snap_id);
+    cls_client::get_protection_status_start(&op, snap_id);
+  }
 
   using klass = RefreshRequest<I>;
   librados::AioCompletion *comp = create_rados_callback<
@@ -629,140 +672,84 @@ void RefreshRequest<I>::send_v2_get_snapshots() {
 template <typename I>
 Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << ": "
-                 << "r=" << *result << dendl;
-
-  if (*result == 0) {
-    auto it = m_out_bl.cbegin();
-    *result = cls_client::snapshot_get_finish(&it, m_snapc.snaps, &m_snap_infos,
-                                              &m_snap_parents,
-                                              &m_snap_protection);
-  }
-  if (*result == -ENOENT) {
-    ldout(cct, 10) << "out-of-sync snapshot state detected" << dendl;
-    send_v2_get_mutable_metadata();
-    return nullptr;
-  } else if (*result == -EOPNOTSUPP) {
-    ldout(cct, 10) << "retrying using legacy snapshot methods" << dendl;
-    send_v2_get_snapshots_legacy();
-    return nullptr;
-  } else if (*result < 0) {
-    lderr(cct) << "failed to retrieve snapshots: " << cpp_strerror(*result)
-               << dendl;
-    return m_on_finish;
-  }
-
-  send_v2_refresh_parent();
-  return nullptr;
-}
-
-template <typename I>
-void RefreshRequest<I>::send_v2_get_snapshots_legacy() {
-  /// NOTE: remove after Luminous is retired
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::snapshot_list_start(&op, m_snapc.snaps);
-
-  using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp = create_rados_callback<
-    klass, &klass::handle_v2_get_snapshots_legacy>(this);
-  m_out_bl.clear();
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
-                                         &m_out_bl);
-  ceph_assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-Context *RefreshRequest<I>::handle_v2_get_snapshots_legacy(int *result) {
-  /// NOTE: remove after Luminous is retired
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << ": "
-                 << "r=" << *result << dendl;
-
-  std::vector<std::string> snap_names;
-  std::vector<uint64_t> snap_sizes;
-  if (*result == 0) {
-    auto it = m_out_bl.cbegin();
-    *result = cls_client::snapshot_list_finish(&it, m_snapc.snaps,
-                                               &snap_names, &snap_sizes,
-                                               &m_snap_parents,
-                                               &m_snap_protection);
-  }
-  if (*result == -ENOENT) {
-    ldout(cct, 10) << "out-of-sync snapshot state detected" << dendl;
-    send_v2_get_mutable_metadata();
-    return nullptr;
-  } else if (*result < 0) {
-    lderr(cct) << "failed to retrieve snapshots: " << cpp_strerror(*result)
-               << dendl;
-    return m_on_finish;
-  }
-
-  m_snap_infos.clear();
-  for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
-    m_snap_infos.push_back({m_snapc.snaps[i],
-                            {cls::rbd::UserSnapshotNamespace{}},
-                            snap_names[i], snap_sizes[i], {}, 0});
-  }
-
-  send_v2_get_snap_timestamps();
-  return nullptr;
-}
-
-template <typename I>
-void RefreshRequest<I>::send_v2_get_snap_timestamps() {
-  /// NOTE: remove after Luminous is retired
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::snapshot_timestamp_list_start(&op, m_snapc.snaps);
-
-  using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp = create_rados_callback<
-		  klass, &klass::handle_v2_get_snap_timestamps>(this);
-  m_out_bl.clear();
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
-				  &m_out_bl);
-  ceph_assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-Context *RefreshRequest<I>::handle_v2_get_snap_timestamps(int *result) {
-  /// NOTE: remove after Luminous is retired
-  CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": " << "r=" << *result << dendl;
 
-  std::vector<utime_t> snap_timestamps;
-  if (*result == 0) {
-    auto it = m_out_bl.cbegin();
-    *result = cls_client::snapshot_timestamp_list_finish(&it, m_snapc.snaps,
-                                                         &snap_timestamps);
-  }
-  if (*result == -ENOENT) {
-    ldout(cct, 10) << "out-of-sync snapshot state detected" << dendl;
-    send_v2_get_mutable_metadata();
-    return nullptr;
-  } else if (*result == -EOPNOTSUPP) {
-    // Ignore it means no snap timestamps are available
-  } else if (*result < 0) {
-    lderr(cct) << "failed to retrieve snapshot timestamps: "
-               << cpp_strerror(*result) << dendl;
-    return m_on_finish;
-  } else {
-    for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
-      m_snap_infos[i].timestamp = snap_timestamps[i];
+  auto it = m_out_bl.cbegin();
+  for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
+    if (m_legacy_snapshot) {
+      /// NOTE: remove after Luminous is retired
+      std::string snap_name;
+      if (*result >= 0) {
+        *result = cls_client::get_snapshot_name_finish(&it, &snap_name);
+      }
+
+      uint64_t snap_size;
+      if (*result >= 0) {
+        uint8_t order;
+        *result = cls_client::get_size_finish(&it, &snap_size, &order);
+      }
+
+      utime_t snap_timestamp;
+      if (*result >= 0) {
+        *result = cls_client::get_snapshot_timestamp_finish(&it,
+                                                            &snap_timestamp);
+      }
+
+      if (*result >= 0) {
+        m_snap_infos[i] = {m_snapc.snaps[i],
+                           {cls::rbd::UserSnapshotNamespace{}},
+                           snap_name, snap_size, snap_timestamp, 0};
+      }
+    } else if (*result >= 0) {
+      *result = cls_client::snapshot_get_finish(&it, &m_snap_infos[i]);
+    }
+
+    if (*result == 0) {
+      if (m_legacy_parent) {
+        *result = cls_client::get_parent_finish(&it, &m_snap_parents[i].spec,
+                                                &m_snap_parents[i].overlap);
+      } else {
+        std::optional<uint64_t> parent_overlap;
+        *result = cls_client::parent_overlap_get_finish(&it, &parent_overlap);
+        if (*result == 0 && parent_overlap && m_parent_md.spec.pool_id > -1) {
+          m_snap_parents[i].spec = m_parent_md.spec;
+          m_snap_parents[i].overlap = *parent_overlap;
+        }
+      }
+    }
+
+    if (*result >= 0) {
+      *result = cls_client::get_flags_finish(&it, &m_snap_flags[i]);
+    }
+
+    if (*result >= 0) {
+      *result = cls_client::get_protection_status_finish(
+        &it, &m_snap_protection[i]);
+    }
+
+    if (*result < 0) {
+      break;
     }
   }
 
+  if (*result == -ENOENT) {
+    ldout(cct, 10) << "out-of-sync snapshot state detected" << dendl;
+    send_v2_get_mutable_metadata();
+    return nullptr;
+  } else if (!m_legacy_snapshot && *result == -EOPNOTSUPP) {
+    ldout(cct, 10) << "retrying using legacy snapshot methods" << dendl;
+    m_legacy_snapshot = true;
+    send_v2_get_snapshots();
+    return nullptr;
+  } else if (*result < 0) {
+    lderr(cct) << "failed to retrieve snapshots: " << cpp_strerror(*result)
+               << dendl;
+    return m_on_finish;
+  }
+
   send_v2_refresh_parent();
   return nullptr;
 }
-
 
 template <typename I>
 void RefreshRequest<I>::send_v2_refresh_parent() {
@@ -770,7 +757,7 @@ void RefreshRequest<I>::send_v2_refresh_parent() {
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
     RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
 
-    ParentInfo parent_md;
+    ParentImageInfo parent_md;
     MigrationInfo migration_info;
     int r = get_parent_info(m_image_ctx.snap_id, &parent_md, &migration_info);
     if (!m_skip_open_parent_image && (r < 0 ||
@@ -1256,6 +1243,12 @@ void RefreshRequest<I>::apply() {
       m_image_ctx.object_prefix = std::move(m_object_prefix);
       m_image_ctx.init_layout();
     } else {
+      // HEAD revision doesn't have a defined overlap so it's only
+      // applicable to snapshots
+      if (!m_head_parent_overlap) {
+        m_parent_md = {};
+      }
+
       m_image_ctx.features = m_features;
       m_image_ctx.flags = m_flags;
       m_image_ctx.op_features = m_op_features;
@@ -1295,7 +1288,7 @@ void RefreshRequest<I>::apply() {
       uint8_t protection_status = m_image_ctx.old_format ?
         static_cast<uint8_t>(RBD_PROTECTION_STATUS_UNPROTECTED) :
         m_snap_protection[i];
-      ParentInfo parent;
+      ParentImageInfo parent;
       if (!m_image_ctx.old_format) {
         if (!m_image_ctx.migration_info.empty()) {
           parent = m_image_ctx.parent_md;
@@ -1368,7 +1361,7 @@ void RefreshRequest<I>::apply() {
 
 template <typename I>
 int RefreshRequest<I>::get_parent_info(uint64_t snap_id,
-                                       ParentInfo *parent_md,
+                                       ParentImageInfo *parent_md,
                                        MigrationInfo *migration_info) {
   if (get_migration_info(parent_md, migration_info)) {
     return 0;
@@ -1389,7 +1382,7 @@ int RefreshRequest<I>::get_parent_info(uint64_t snap_id,
 }
 
 template <typename I>
-bool RefreshRequest<I>::get_migration_info(ParentInfo *parent_md,
+bool RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
                                            MigrationInfo *migration_info) {
   if (m_migration_spec.header_type != cls::rbd::MIGRATION_HEADER_TYPE_DST ||
       (m_migration_spec.state != cls::rbd::MIGRATION_STATE_PREPARED &&
