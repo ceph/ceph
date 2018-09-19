@@ -2812,6 +2812,11 @@ TEST(BufferList, TestIsProvidedBuffer) {
 TEST(BufferList, TestSHA1) {
   {
     bufferlist bl;
+    sha1_digest_t sha1 = bl.sha1();
+    EXPECT_EQ("da39a3ee5e6b4b0d3255bfef95601890afd80709", sha1.to_str());
+  }
+  {
+    bufferlist bl;
     bl.append("");
     sha1_digest_t sha1 = bl.sha1();
     EXPECT_EQ("da39a3ee5e6b4b0d3255bfef95601890afd80709", sha1.to_str());
@@ -2822,7 +2827,26 @@ TEST(BufferList, TestSHA1) {
     sha1_digest_t sha1 = bl.sha1();
     EXPECT_EQ("f7ff9e8b7bb2e09b70935a5d785e0cc5d9d0abf0", sha1.to_str());
   }
-
+  {
+    bufferlist bl, bl2;
+    bl.append("Hello");
+    bl2.append(", world!");
+    bl.claim_append(bl2);
+    sha1_digest_t sha1 = bl.sha1();
+    EXPECT_EQ("943a702d06f34599aee1f8da8ef9f7296031d699", sha1.to_str());
+    bl2.append("  How are you today?");
+    bl.claim_append(bl2);
+    sha1 = bl.sha1();
+    EXPECT_EQ("778b5d10e5133aa28fb8de71d35b6999b9a25eb4", sha1.to_str());
+  }
+  {
+    bufferptr p(65536);
+    memset(p.c_str(), 0, 65536);
+    bufferlist bl;
+    bl.append(p);
+    sha1_digest_t sha1 = bl.sha1();
+    EXPECT_EQ("1adc95bebe9eea8c112d40cd04ab7a8d75c4f961", sha1.to_str());
+  }
 }
 
 TEST(BufferHash, all) {
