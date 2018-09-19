@@ -2266,14 +2266,13 @@ void DaemonServer::adjust_pgs()
 			 << " pg_num " << p.get_pg_num()
 			 << " - still creating initial pgs"
 			 << dendl;
-	      } else if (p.get_pg_num() != p.get_pg_num_pending()) {
+	      } else if (p.get_pg_num() != p.get_pg_num_pending() &&
+			 p.get_pg_num_target() < p.get_pg_num()) {
 		dout(10) << "pool " << i.first
 			 << " target " << p.get_pg_num_target()
 			 << " pg_num " << p.get_pg_num()
-			 << " - pg_num_pending != pg_num, waiting"
+			 << " - decrease and pg_num_pending != pg_num, waiting"
 			 << dendl;
-		// FIXME: we might consider allowing pg_num increases without
-		// waiting for the previously planned merge to complete.
 	      } else if (p.get_pg_num_target() < p.get_pg_num()) {
 		// pg_num decrease (merge)
 		pg_t merge_source(p.get_pg_num() - 1, i.first);
