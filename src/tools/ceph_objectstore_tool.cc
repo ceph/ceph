@@ -1643,6 +1643,11 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     cerr << "Can't find latest local OSDMap " << sb.current_epoch << std::endl;
     return ret;
   }
+  if (!curmap.have_pg_pool(pgid.pgid.m_pool)) {
+    cerr << "Pool " << pgid.pgid.m_pool << " no longer exists" << std::endl;
+    // Special exit code for this error, used by test code
+    return 10;  // Positive return means exit status
+  }
 
   pool_pg_num_history_t pg_num_history;
   get_pg_num_history(store, &pg_num_history);
