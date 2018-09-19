@@ -47,6 +47,25 @@ void AsyncScheduler::handle_conf_change(const ConfigProxy& conf,
   schedule(crimson::dmclock::TimeZero);
 }
 
+int AsyncScheduler::schedule_request(const client_id& client,
+				      const ReqParams& params,
+				      const Time& time, Cost cost,
+				      optional_yield_context yield_ctx)
+{
+    ceph_assert(yield_ctx);
+
+    auto &yield = yield_ctx.get_yield_context();
+    boost::system::error_code ec;
+    async_request(client, params, time, cost, yield[ec]);
+
+    if (ec == boost::system::errc::resource_unavailable_try_again)
+      return -EAGAIN;
+    else if (ec)
+      return -ec.value();
+    return 0;
+}
+
+
 struct ClientSum {
   uint64_t count{0};
   Cost cost{0};
