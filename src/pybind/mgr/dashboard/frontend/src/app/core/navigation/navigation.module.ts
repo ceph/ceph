@@ -14,6 +14,7 @@ import { DashboardHelpComponent } from './dashboard-help/dashboard-help.componen
 import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
 import { TaskManagerComponent } from './task-manager/task-manager.component';
+import { IdentityComponent } from './identity/identity.component';
 
 @NgModule({
   entryComponents: [AboutComponent],
@@ -35,7 +36,8 @@ import { TaskManagerComponent } from './task-manager/task-manager.component';
     NotificationsComponent,
     TaskManagerComponent,
     DashboardHelpComponent,
-    AdministrationComponent
+    AdministrationComponent,
+    IdentityComponent
   ],
   exports: [NavigationComponent, BreadcrumbsComponent]
 })
