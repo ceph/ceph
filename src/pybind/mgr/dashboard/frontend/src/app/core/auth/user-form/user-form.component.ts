@@ -83,21 +83,10 @@ export class UserFormComponent implements OnInit {
     });
     if (this.mode === this.userFormMode.editing) {
       this.initEdit();
-    } else {
-      this.initAdd();
     }
   }
 
-  initAdd() {
-    ['password', 'confirmpassword'].forEach((controlName) =>
-      this.userForm.get(controlName).setValidators([Validators.required])
-    );
-  }
-
   initEdit() {
-    ['password', 'confirmpassword'].forEach((controlName) =>
-      this.userForm.get(controlName).setValidators([])
-    );
     this.disableForEdit();
     this.route.params.subscribe((params: { username: string }) => {
       const username = params.username;
