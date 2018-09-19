@@ -4746,6 +4746,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("filestore_auto_split_dirs", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(true)
+    .set_description(""),
+
     Option("journal_dio", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_description(""),
