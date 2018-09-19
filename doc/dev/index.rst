@@ -53,7 +53,7 @@ their nicks on `GitHub`_:
 Scope     Lead             GitHub nick
 ========= ================ =============
 Ceph      Sage Weil        liewegas
-RADOS     Josh Durgin      jdurgin
+RADOS     Neha Ojha        neha-ojha
 RGW       Yehuda Sadeh     yehudasa
 RBD       Jason Dillaman   dillaman
 CephFS    Patrick Donnelly batrick
