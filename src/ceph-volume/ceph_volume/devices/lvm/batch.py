@@ -212,6 +212,16 @@ class Batch(object):
             default=1,
             help='Provision more than 1 (the default) OSD per device',
         )
+        parser.add_argument(
+            '--block-db-size',
+            type=int,
+            help='Set (or override) the "bluestore_block_db_size" value, in bytes'
+        )
+        parser.add_argument(
+            '--journal-size',
+            type=int,
+            help='Override the "osd_journal_size" value, in megabytes'
+        )
         args = parser.parse_args(self.argv)
 
         if not args.devices:
