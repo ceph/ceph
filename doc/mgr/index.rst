@@ -40,7 +40,6 @@ sensible.
     Telemetry plugin <telemetry>
     Iostat plugin <iostat>
     Crash plugin <crash>
-    Devicehealth plugin <devicehealth>
     Orchestrator CLI plugin <orchestrator_cli>
     Rook plugin <rook>
     Insights plugin <insights>
