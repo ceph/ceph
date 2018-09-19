@@ -1631,12 +1631,12 @@ public:
     bool ms_can_fast_dispatch_any() const override { return true; }
     bool ms_can_fast_dispatch(const Message *m) const override {
       switch (m->get_type()) {
-	case CEPH_MSG_PING:
-	case MSG_OSD_PING:
-          return true;
-	default:
-          return false;
-	}
+      case CEPH_MSG_PING:
+      case MSG_OSD_PING:
+	return true;
+      default:
+	return false;
+      }
     }
     void ms_fast_dispatch(Message *m) override {
       osd->heartbeat_dispatch(m);
@@ -1653,6 +1653,13 @@ public:
     }
     int ms_handle_authentication(Connection *con) override {
       return true;
+    }
+    bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
+			   bool force_new) override {
+      return osd->ms_get_authorizer(dest_type, authorizer, force_new);
+    }
+    KeyStore *ms_get_auth1_authorizer_keystore() override {
+      return osd->ms_get_auth1_authorizer_keystore();
     }
   } heartbeat_dispatcher;
 
