@@ -8,6 +8,17 @@ from ceph_volume.util import templates
 from ceph_volume.exceptions import SizeAllocationError
 
 
+def get_journal_size(args):
+    """
+    Helper for Filestore strategies, to prefer the --journal-size value from
+    the CLI over anything that might be in a ceph configuration file (if any).
+    """
+    if args.journal_size:
+        return disk.Size(mb=args.journal_size)
+    else:
+        return prepare.get_journal_size(lv_format=False)
+
+
 class SingleType(object):
     """
     Support for all SSDs, or all HDDs, data and journal LVs will be colocated
@@ -21,6 +32,7 @@ class SingleType(object):
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
         self.computed = {'osds': [], 'vgs': []}
+        self.journal_size = get_journal_size(args)
         self.validate()
         self.compute()
 
@@ -67,7 +79,6 @@ class SingleType(object):
         validators.minimum_device_size(self.devices, osds_per_device=self.osds_per_device)
 
         # validate collocation
-        self.journal_size = prepare.get_journal_size(lv_format=False)
         if self.hdds:
             validators.minimum_device_collocated_size(
                 self.hdds, self.journal_size, osds_per_device=self.osds_per_device
@@ -92,7 +103,7 @@ class SingleType(object):
             for osd in range(self.osds_per_device):
                 device_size = disk.Size(b=device.sys_api['size'])
                 osd_size = device_size / self.osds_per_device
-                journal_size = prepare.get_journal_size(lv_format=False)
+                journal_size = self.journal_size
                 data_size = osd_size - journal_size
                 data_percentage = data_size * 100 / device_size
                 osd = {'data': {}, 'journal': {}}
@@ -168,7 +179,7 @@ class MixedType(object):
         self.computed = {'osds': [], 'vg': None}
         self.blank_ssds = []
         self.journals_needed = len(self.hdds) * self.osds_per_device
-        self.journal_size = prepare.get_journal_size(lv_format=False)
+        self.journal_size = get_journal_size(args)
         self.system_vgs = lvm.VolumeGroups()
         self.validate()
         self.compute()
