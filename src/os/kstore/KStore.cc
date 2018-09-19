@@ -2308,6 +2308,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       // these operations implicity create the object
       bool create = false;
       if (op->op == Transaction::OP_TOUCH ||
+	  op->op == Transaction::OP_CREATE ||
 	  op->op == Transaction::OP_WRITE ||
 	  op->op == Transaction::OP_ZERO) {
 	create = true;
@@ -2325,6 +2326,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     }
 
     switch (op->op) {
+    case Transaction::OP_CREATE:
     case Transaction::OP_TOUCH:
 	r = _touch(txc, c, o);
       break;
