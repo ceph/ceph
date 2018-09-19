@@ -4411,7 +4411,7 @@ int RGWRados::init_zg_from_local(bool *creating_defaults)
 
 bool RGWRados::zone_syncs_from(RGWZone& target_zone, RGWZone& source_zone)
 {
-  return target_zone.syncs_from(source_zone.name) &&
+  return target_zone.syncs_from(source_zone.id) &&
          sync_modules_manager->supports_data_export(source_zone.tier_type);
 }
 
