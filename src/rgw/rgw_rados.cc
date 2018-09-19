@@ -24,14 +24,12 @@
 #include "rgw_cache.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h" /* for dumping s3policy in debug log */
-#include "rgw_metadata.h"
 #include "rgw_bucket.h"
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
 
 #include "cls/rgw/cls_rgw_ops.h"
-#include "cls/rgw/cls_rgw_types.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/rgw/cls_rgw_const.h"
 #include "cls/refcount/cls_refcount_client.h"
@@ -52,7 +50,6 @@
 
 #include "common/Clock.h"
 
-#include "include/rados/librados.hpp"
 using namespace librados;
 
 #include <string>
@@ -62,8 +59,6 @@ using namespace librados;
 #include <list>
 #include <map>
 #include "include/random.h"
-
-#include "rgw_log.h"
 
 #include "rgw_gc.h"
 #include "rgw_lc.h"
