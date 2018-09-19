@@ -10131,20 +10131,8 @@ void OSDShard::prime_merges(const OSDMapRef& as_of_osdmap,
     } else {
       dout(20) << __func__ << "  creating empty merge participant " << pgid
 	       << " for merge in " << epoch << dendl;
-      // Construct a history with a single previous interval,
-      // going back to the epoch *before* pg_num_pending was
-      // adjusted (since we are creating the PG as it would have
-      // existed just before the merge). We know that the PG was
-      // clean as of that epoch or else pg_num_pending wouldn't
-      // have been adjusted.
+      // leave history zeroed; PG::merge_from() will fill it in.
       pg_history_t history;
-      history.same_interval_since = epoch - 1;
-      // leave these zeroed since we do not know the precist
-      // last_epoch_started value that the real PG instances have.  If
-      // we are greater than they are, we will trigger an 'incomplete'
-      // state (see choose_acting).
-      history.last_epoch_started = 0;
-      history.last_epoch_clean = 0;
       PGCreateInfo cinfo(pgid, epoch - 1,
 			 history, PastIntervals(), false);
       PGRef pg = osd->handle_pg_create_info(shard_osdmap, &cinfo);
