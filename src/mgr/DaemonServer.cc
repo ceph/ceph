@@ -2225,6 +2225,7 @@ void DaemonServer::adjust_pgs()
   dout(20) << dendl;
   unsigned max = std::max<int64_t>(1, g_conf()->mon_osd_max_creating_pgs);
   double max_misplaced = g_conf().get_val<double>("target_max_misplaced_ratio");
+  bool aggro = g_conf().get_val<bool>("mgr_debug_aggressive_pg_num_changes");
 
   map<string,unsigned> pg_num_to_set;
   map<string,unsigned> pgp_num_to_set;
@@ -2398,15 +2399,15 @@ void DaemonServer::adjust_pgs()
 			 << " pgp_num " << p.get_pgp_num()
 			 << " - increase blocked by pg_num " << p.get_pg_num()
 			 << dendl;
-	      } else if (inactive_pgs_ratio > 0 ||
-		  degraded_ratio > 0 ||
-		  unknown_pgs_ratio > 0) {
+	      } else if (!aggro && (inactive_pgs_ratio > 0 ||
+				    degraded_ratio > 0 ||
+				    unknown_pgs_ratio > 0)) {
 		dout(10) << "pool " << i.first
 			 << " pgp_num_target " << p.get_pgp_num_target()
 			 << " pgp_num " << p.get_pgp_num()
 			 << " - inactive|degraded|unknown pgs, deferring pgp_num"
 			 << " update" << dendl;
-	      } else if (misplaced_ratio > max_misplaced) {
+	      } else if (!aggro && (misplaced_ratio > max_misplaced)) {
 		dout(10) << "pool " << i.first
 			 << " pgp_num_target " << p.get_pgp_num_target()
 			 << " pgp_num " << p.get_pgp_num()
@@ -2421,20 +2422,25 @@ void DaemonServer::adjust_pgs()
 		// single adjustment that's more than half of the
 		// max_misplaced, to somewhat limit the magnitude of
 		// our potential error here.
-		double room =
-		  std::min<double>(max_misplaced - misplaced_ratio,
-				   misplaced_ratio / 2.0);
-		unsigned estmax = std::max<unsigned>(
-		  (double)p.get_pg_num() * room, 1u);
-		int delta = target - p.get_pgp_num();
-		int next = p.get_pgp_num();
-		if (delta < 0) {
-		  next += std::max<int>(-estmax, delta);
+		int next;
+		if (aggro) {
+		  next = target;
 		} else {
-		  next += std::min<int>(estmax, delta);
+		  double room =
+		    std::min<double>(max_misplaced - misplaced_ratio,
+				     misplaced_ratio / 2.0);
+		  unsigned estmax = std::max<unsigned>(
+		    (double)p.get_pg_num() * room, 1u);
+		  int delta = target - p.get_pgp_num();
+		  next = p.get_pgp_num();
+		  if (delta < 0) {
+		    next += std::max<int>(-estmax, delta);
+		  } else {
+		    next += std::min<int>(estmax, delta);
+		  }
+		  dout(20) << " room " << room << " estmax " << estmax
+			   << " delta " << delta << " next " << next << dendl;
 		}
-		dout(20) << " room " << room << " estmax " << estmax
-			 << " delta " << delta << " next " << next << dendl;
 		dout(10) << "pool " << i.first
 			 << " pgp_num_target " << p.get_pgp_num_target()
 			 << " pgp_num " << p.get_pgp_num()

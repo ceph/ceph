@@ -4927,6 +4927,11 @@ std::vector<Option> get_global_options() {
     .set_default(1.0)
     .set_description("Time to wait during shutdown to deregister service with mgr"),
 
+    Option("mgr_debug_aggressive_pg_num_changes", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Bypass most throttling and safety checks in pg[p]_num controller")
+    .add_service("mgr"),
+
     Option("mon_mgr_digest_period", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(5)
     .add_service("mon")
