@@ -6,7 +6,7 @@ import contextlib
 import logging
 import os
 import re
-from ceph_volume import terminal
+from ceph_volume import terminal, conf
 from ceph_volume import exceptions
 
 
@@ -31,7 +31,16 @@ class _TrimIndentFile(object):
         return iter(self.readline, '')
 
 
+def load_ceph_conf_path(cluster_name='ceph'):
+    abspath = '/etc/ceph/%s.conf' % cluster_name
+    conf.path = os.getenv('CEPH_CONF', abspath)
+    conf.cluster = cluster_name
+
+
 def load(abspath=None):
+    if abspath is None:
+        abspath = conf.path
+
     if not os.path.exists(abspath):
         raise exceptions.ConfigurationError(abspath=abspath)
 
@@ -42,6 +51,7 @@ def load(abspath=None):
         trimmed_conf = _TrimIndentFile(ceph_file)
         with contextlib.closing(ceph_file):
             parser.readfp(trimmed_conf)
+            conf.ceph = parser
             return parser
     except configparser.ParsingError as error:
         logger.exception('Unable to parse INI-style file: %s' % abspath)
