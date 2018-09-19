@@ -2224,6 +2224,7 @@ void DaemonServer::adjust_pgs()
 {
   dout(20) << dendl;
   unsigned max = std::max<int64_t>(1, g_conf()->mon_osd_max_creating_pgs);
+  double max_misplaced = g_conf().get_val<double>("target_max_misplaced_ratio");
 
   map<string,unsigned> pg_num_to_set;
   map<string,unsigned> pgp_num_to_set;
@@ -2244,6 +2245,21 @@ void DaemonServer::adjust_pgs()
 	       << " max_creating " << max
                << " left " << left
                << dendl;
+
+      // FIXME: These checks are fundamentally racy given that adjust_pgs()
+      // can run more frequently than we get updated pg stats from OSDs.  We
+      // may make multiple adjustments with stale informaiton.
+      double misplaced_ratio, degraded_ratio;
+      double inactive_pgs_ratio, unknown_pgs_ratio;
+      pg_map.get_recovery_stats(&misplaced_ratio, &degraded_ratio,
+				&inactive_pgs_ratio, &unknown_pgs_ratio);
+      dout(20) << "misplaced_ratio " << misplaced_ratio
+	       << " degraded_ratio " << degraded_ratio
+	       << " inactive_pgs_ratio " << inactive_pgs_ratio
+	       << " unknown_pgs_ratio " << unknown_pgs_ratio
+	       << "; target_max_misplaced_ratio " << max_misplaced
+	       << dendl;
+
       cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	  if (pg_map.last_osdmap_epoch != osdmap.get_epoch()) {
 	    // do nothing if maps aren't in sync
@@ -2377,13 +2393,60 @@ void DaemonServer::adjust_pgs()
 	    unsigned target = std::min(p.get_pg_num_pending(),
 				       p.get_pgp_num_target());
 	    if (target != p.get_pgp_num()) {
-	      // FIXME: we should throttle this to limit mispalced objects, like
-	      // we do in the balancer module.
-	      dout(10) << "pool " << i.first
-		       << " pgp target " << p.get_pgp_num_target()
+	      dout(20) << "pool " << i.first
+		       << " pgp_num_target " << p.get_pgp_num_target()
 		       << " pgp_num " << p.get_pgp_num()
 		       << " -> " << target << dendl;
-	      pgp_num_to_set[osdmap.get_pool_name(i.first)] = target;
+	      if (target > p.get_pgp_num() &&
+		  p.get_pgp_num() == p.get_pg_num()) {
+		dout(10) << "pool " << i.first
+			 << " pgp_num_target " << p.get_pgp_num_target()
+			 << " pgp_num " << p.get_pgp_num()
+			 << " - increase blocked by pg_num " << p.get_pg_num()
+			 << dendl;
+	      } else if (inactive_pgs_ratio > 0 ||
+		  degraded_ratio > 0 ||
+		  unknown_pgs_ratio > 0) {
+		dout(10) << "pool " << i.first
+			 << " pgp_num_target " << p.get_pgp_num_target()
+			 << " pgp_num " << p.get_pgp_num()
+			 << " - inactive|degraded|unknown pgs, deferring pgp_num"
+			 << " update" << dendl;
+	      } else if (misplaced_ratio > max_misplaced) {
+		dout(10) << "pool " << i.first
+			 << " pgp_num_target " << p.get_pgp_num_target()
+			 << " pgp_num " << p.get_pgp_num()
+			 << " - misplaced_ratio " << misplaced_ratio
+			 << " > max " << max_misplaced
+			 << ", deferring pgp_num update" << dendl;
+	      } else {
+		// NOTE: this calculation assumes objects are
+		// basically uniformly distributed across all PGs
+		// (regardless of pool), which is probably not
+		// perfectly correct, but it's a start.  make no
+		// single adjustment that's more than half of the
+		// max_misplaced, to somewhat limit the magnitude of
+		// our potential error here.
+		double room =
+		  std::min<double>(max_misplaced - misplaced_ratio,
+				   misplaced_ratio / 2.0);
+		unsigned estmax = std::max<unsigned>(
+		  (double)p.get_pg_num() * room, 1u);
+		int delta = target - p.get_pgp_num();
+		int next = p.get_pgp_num();
+		if (delta < 0) {
+		  next += std::max<int>(-estmax, delta);
+		} else {
+		  next += std::min<int>(estmax, delta);
+		}
+		dout(20) << " room " << room << " estmax " << estmax
+			 << " delta " << delta << " next " << next << dendl;
+		dout(10) << "pool " << i.first
+			 << " pgp_num_target " << p.get_pgp_num_target()
+			 << " pgp_num " << p.get_pgp_num()
+			 << " -> " << next << dendl;
+		pgp_num_to_set[osdmap.get_pool_name(i.first)] = next;
+	      }
 	    }
 	    if (left == 0) {
 	      return;
