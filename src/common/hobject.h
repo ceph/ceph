@@ -35,6 +35,21 @@ namespace ceph {
 #endif
 
 struct hobject_t {
+public:
+  static const int64_t POOL_META = -1;
+  static const int64_t POOL_TEMP_START = -2; // and then negative
+
+  static bool is_temp_pool(int64_t pool) {
+    return pool <= POOL_TEMP_START;
+  }
+  static int64_t get_temp_pool(int64_t pool) {
+    return POOL_TEMP_START - pool;
+  }
+  static bool is_meta_pool(int64_t pool) {
+    return pool == POOL_META;
+  }
+
+public:
   object_t oid;
   snapid_t snap;
 private:
@@ -42,9 +57,6 @@ private:
   bool max;
   uint32_t nibblewise_key_cache;
   uint32_t hash_reverse_bits;
-  static const int64_t POOL_META = -1;
-  static const int64_t POOL_TEMP_START = -2; // and then negative
-  friend class spg_t;  // for POOL_TEMP_START
 public:
   int64_t pool;
   string nspace;
@@ -84,10 +96,16 @@ public:
   }
 
   bool is_temp() const {
-    return pool <= POOL_TEMP_START && pool != INT64_MIN;
+    return is_temp_pool(pool) && pool != INT64_MIN;
   }
   bool is_meta() const {
-    return pool == POOL_META;
+    return is_meta_pool(pool);
+  }
+  int64_t get_logical_pool() const {
+    if (is_temp_pool(pool))
+      return get_temp_pool(pool);  // it's reversible
+    else
+      return pool;
   }
 
   hobject_t() : snap(0), hash(0), max(false), pool(INT64_MIN) {
@@ -258,7 +276,8 @@ public:
   hobject_t make_temp_hobject(const string& name) const {
     return hobject_t(object_t(name), "", CEPH_NOSNAP,
 		     hash,
-		     hobject_t::POOL_TEMP_START - pool, "");
+		     get_temp_pool(pool),
+		     "");
   }
 
   void swap(hobject_t &o) {

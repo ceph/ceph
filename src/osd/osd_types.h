@@ -424,10 +424,14 @@ struct pg_t {
   unsigned get_split_bits(unsigned pg_num) const;
 
   bool contains(int bits, const ghobject_t& oid) {
-    return oid.match(bits, ps());
+    return
+      (int64_t)m_pool == oid.hobj.get_logical_pool() &&
+      oid.match(bits, ps());
   }
   bool contains(int bits, const hobject_t& oid) {
-    return oid.match(bits, ps());
+    return
+      (int64_t)m_pool == oid.get_logical_pool() &&
+      oid.match(bits, ps());
   }
 
   hobject_t get_hobj_start() const;
@@ -582,7 +586,8 @@ struct spg_t {
     return ghobject_t(
       hobject_t(object_t(name), "", CEPH_NOSNAP,
 		pgid.ps(),
-		hobject_t::POOL_TEMP_START - pgid.pool(), ""),
+		hobject_t::get_temp_pool(pgid.pool()),
+		""),
       ghobject_t::NO_GEN,
       shard);
   }
