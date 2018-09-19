@@ -765,6 +765,9 @@ namespace buffer CEPH_BUFFER_API {
       return page_aligned_appender(this, min_pages);
     }
 
+  private:
+    hangable_ptr& refill_append_space(const unsigned len);
+
   public:
     // cons/des
     list() : _len(0), _memcopy_count(0) {}
