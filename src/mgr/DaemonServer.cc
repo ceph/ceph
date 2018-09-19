@@ -2261,12 +2261,6 @@ void DaemonServer::adjust_pgs()
 	       << dendl;
 
       cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	  if (pg_map.last_osdmap_epoch != osdmap.get_epoch()) {
-	    // do nothing if maps aren't in sync
-	    dout(10) << "last_osdmap_epoch " << pg_map.last_osdmap_epoch
-		     << " osdmap " << osdmap.get_epoch() << dendl;
-	    //return;
-	  }
 	  for (auto& i : osdmap.get_pools()) {
 	    const pg_pool_t& p = i.second;
 
