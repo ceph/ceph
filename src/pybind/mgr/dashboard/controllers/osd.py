@@ -12,20 +12,24 @@ from ..tools import str_to_bool
 class Osd(RESTController):
     def list(self):
         osds = self.get_osd_map()
+
         # Extending by osd stats information
         for s in mgr.get('osd_stats')['osd_stats']:
             osds[str(s['osd'])].update({'osd_stats': s})
+
         # Extending by osd node information
         nodes = mgr.get('osd_map_tree')['nodes']
         osd_tree = [(str(o['id']), o) for o in nodes if o['id'] >= 0]
         for o in osd_tree:
             osds[o[0]].update({'tree': o[1]})
+
         # Extending by osd parent node information
         hosts = [(h['name'], h) for h in nodes if h['id'] < 0]
         for h in hosts:
             for o_id in h[1]['children']:
                 if o_id >= 0:
                     osds[str(o_id)]['host'] = h[1]
+
         # Extending by osd histogram data
         for o_id in osds:
             o = osds[o_id]
@@ -39,6 +43,7 @@ class Osd(RESTController):
             # Gauge stats
             for s in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
                 o['stats'][s.split('.')[1]] = mgr.get_latest('osd', osd_spec, s)
+
         return list(osds.values())
 
     def get_osd_map(self):
@@ -50,7 +55,21 @@ class Osd(RESTController):
 
     @handle_send_command_error('osd')
     def get(self, svc_id):
-        histogram = CephService.send_command('osd', srv_spec=svc_id, prefix='perf histogram dump')
+        """
+        Returns collected data about an OSD.
+
+        :return: Returns the requested data. The `histogram` key man contain a
+                 string with an error that occurred when the OSD is down.
+        """
+        try:
+            histogram = CephService.send_command('osd', srv_spec=svc_id,
+                                                 prefix='perf histogram dump')
+        except SendCommandError as e:
+            if 'osd down' in e.message:
+                histogram = e.message
+            else:
+                raise
+
         return {
             'osd_map': self.get_osd_map()[svc_id],
             'osd_metadata': mgr.get_metadata('osd', svc_id),
