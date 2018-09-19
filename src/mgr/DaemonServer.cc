@@ -2262,14 +2262,14 @@ void DaemonServer::adjust_pgs()
 		       << dendl;
 	      if (p.has_flag(pg_pool_t::FLAG_CREATING)) {
 		dout(10) << "pool " << i.first
-			 << " target " << p.get_pg_num_target()
+			 << " pg_num_target " << p.get_pg_num_target()
 			 << " pg_num " << p.get_pg_num()
 			 << " - still creating initial pgs"
 			 << dendl;
 	      } else if (p.get_pg_num() != p.get_pg_num_pending() &&
 			 p.get_pg_num_target() < p.get_pg_num()) {
 		dout(10) << "pool " << i.first
-			 << " target " << p.get_pg_num_target()
+			 << " pg_num_target " << p.get_pg_num_target()
 			 << " pg_num " << p.get_pg_num()
 			 << " - decrease and pg_num_pending != pg_num, waiting"
 			 << dendl;
@@ -2280,8 +2280,9 @@ void DaemonServer::adjust_pgs()
 		bool ok = true;
 		auto q = pg_map.pg_stat.find(merge_source);
 		if (q == pg_map.pg_stat.end()) {
+		} else if (q == pg_map.pg_stat.end()) {
 		  dout(10) << "pool " << i.first
-			   << " target " << p.get_pg_num_target()
+			   << " pg_num_target " << p.get_pg_num_target()
 			   << " pg_num " << p.get_pg_num()
 			   << " - no state for " << merge_source
 			   << " (merge source)"
@@ -2290,7 +2291,7 @@ void DaemonServer::adjust_pgs()
 		} else if (!(q->second.state & (PG_STATE_ACTIVE |
 						PG_STATE_CLEAN))) {
 		  dout(10) << "pool " << i.first
-			   << " target " << p.get_pg_num_target()
+			   << " pg_num_target " << p.get_pg_num_target()
 			   << " pg_num " << p.get_pg_num()
 			   << " - merge source " << merge_source
 			   << " not clean (" << pg_state_string(q->second.state)
@@ -2300,7 +2301,7 @@ void DaemonServer::adjust_pgs()
 		q = pg_map.pg_stat.find(merge_target);
 		if (q == pg_map.pg_stat.end()) {
 		  dout(10) << "pool " << i.first
-			   << " target " << p.get_pg_num_target()
+			   << " pg_num_target " << p.get_pg_num_target()
 			   << " pg_num " << p.get_pg_num()
 			   << " - no state for " << merge_target
 			   << " (merge target)"
@@ -2309,7 +2310,7 @@ void DaemonServer::adjust_pgs()
 		} else if (!(q->second.state & (PG_STATE_ACTIVE |
 						PG_STATE_CLEAN))) {
 		  dout(10) << "pool " << i.first
-			   << " target " << p.get_pg_num_target()
+			   << " pg_num_target " << p.get_pg_num_target()
 			   << " pg_num " << p.get_pg_num()
 			   << " - merge target " << merge_target
 			   << " not clean (" << pg_state_string(q->second.state)
@@ -2319,7 +2320,7 @@ void DaemonServer::adjust_pgs()
 		if (ok) {
 		  unsigned target = p.get_pg_num() - 1;
 		  dout(10) << "pool " << i.first
-			   << " target " << p.get_pg_num_target()
+			   << " pg_num_target " << p.get_pg_num_target()
 			   << " pg_num " << p.get_pg_num()
 			   << " -> " << target
 			   << " (merging " << merge_source
@@ -2346,7 +2347,7 @@ void DaemonServer::adjust_pgs()
 		}
 		if (!active) {
 		  dout(10) << "pool " << i.first
-			   << " target " << p.get_pg_num_target()
+			   << " pg_num_target " << p.get_pg_num_target()
 			   << " pg_num " << p.get_pg_num()
 			   << " - not all pgs active"
 			   << dendl;
@@ -2357,7 +2358,7 @@ void DaemonServer::adjust_pgs()
 		  unsigned target = p.get_pg_num() + add;
 		  left -= add;
 		  dout(10) << "pool " << i.first
-			   << " target " << p.get_pg_num_target()
+			   << " pg_num_target " << p.get_pg_num_target()
 			   << " pg_num " << p.get_pg_num()
 			   << " -> " << target << dendl;
 		  pg_num_to_set[osdmap.get_pool_name(i.first)] = target;
