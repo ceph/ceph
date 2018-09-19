@@ -8071,6 +8071,10 @@ void OSD::check_osdmap_features()
       ceph_assert(err == 0);
     }
   }
+
+  if (osdmap->require_osd_release < CEPH_RELEASE_NAUTILUS) {
+    heartbeat_dispatcher.ms_set_require_authorizer(false);
+  }
 }
 
 struct C_FinishSplits : public Context {
