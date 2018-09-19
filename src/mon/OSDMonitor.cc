@@ -6918,6 +6918,11 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EBUSY;
     }
     if (n > (int)p.get_pg_num()) {
+      if (p.get_pg_num() != p.get_pg_num_pending()) {
+	// force pre-nautilus clients to resend their ops, since they
+	// don't understand pg_num_pending changes form a new interval
+	p.last_force_op_resend_prenautilus = pending_inc.epoch;
+      }
       p.set_pg_num(n);
     } else {
       if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
