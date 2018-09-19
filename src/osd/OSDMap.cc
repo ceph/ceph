@@ -618,9 +618,8 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     ENCODE_FINISH(bl); // osd-only data
   }
 
-  encode((uint32_t)0, bl); // dummy inc_crc
   crc_it = bl.end();
-  crc_it.advance(-4);
+  encode((uint32_t)0, bl); // dummy inc_crc
   tail_offset = bl.length();
 
   encode(full_crc, bl);
@@ -756,8 +755,7 @@ void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
 
   DECODE_START_LEGACY_COMPAT_LEN(8, 7, 7, bl); // wrapper
   if (struct_v < 7) {
-    int struct_v_size = sizeof(struct_v);
-    bl.advance(-struct_v_size);
+    bl.seek(start_offset);
     decode_classic(bl);
     encode_features = 0;
     if (struct_v >= 6)
@@ -2805,9 +2803,8 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     ENCODE_FINISH(bl); // osd-only data
   }
 
-  encode((uint32_t)0, bl); // dummy crc
   crc_it = bl.end();
-  crc_it.advance(-4);
+  encode((uint32_t)0, bl); // dummy crc
   tail_offset = bl.length();
 
   ENCODE_FINISH(bl); // meta-encoding wrapper
@@ -2970,8 +2967,7 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
 
   DECODE_START_LEGACY_COMPAT_LEN(8, 7, 7, bl); // wrapper
   if (struct_v < 7) {
-    int struct_v_size = sizeof(struct_v);
-    bl.advance(-struct_v_size);
+    bl.seek(start_offset);
     decode_classic(bl);
     return;
   }
