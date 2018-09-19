@@ -5,6 +5,7 @@
 
 #include "rgw_common.h"
 #include "rgw_auth.h"
+#include "rgw_quota.h"
 #include "rgw_user.h"
 #include "rgw_http_client.h"
 #include "rgw_keystone.h"
@@ -403,6 +404,10 @@ void rgw::auth::RemoteApplier::create_account(const rgw_user& acct_user,
 
   user_info.user_id = new_acct_user;
   user_info.display_name = info.acct_name;
+
+  user_info.max_buckets = cct->_conf->rgw_user_max_buckets;
+  rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
+  rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
 
   int ret = rgw_store_user_info(store, user_info, nullptr, nullptr,
                                 real_time(), true);
