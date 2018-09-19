@@ -53,6 +53,24 @@ def fake_call(monkeypatch):
 
 
 @pytest.fixture
+def fakedevice(factory):
+    def apply(**kw):
+        params = dict(
+            path='/dev/sda',
+            abspath='/dev/sda',
+            lv_api=None,
+            pvs_api=[],
+            disk_api={},
+            sys_api={},
+            exists=True,
+            is_lvm_member=True,
+        )
+        params.update(dict(kw))
+        return factory(**params)
+    return apply
+
+
+@pytest.fixture
 def stub_call(monkeypatch):
     """
     Monkeypatches process.call, so that a caller can add behavior to the response
@@ -118,6 +136,13 @@ def volume_groups(monkeypatch):
 
 
 @pytest.fixture
+def stub_vgs(monkeypatch, volume_groups):
+    def apply(vgs):
+        monkeypatch.setattr(lvm_api, 'get_api_vgs', lambda: vgs)
+    return apply
+
+
+@pytest.fixture
 def pvolumes(monkeypatch):
     monkeypatch.setattr('ceph_volume.process.call', lambda x: ('', '', 0))
     pvolumes = lvm_api.PVolumes()
@@ -147,3 +172,16 @@ def tmpfile(tmpdir):
             fp.write(contents)
         return path
     return generate_file
+
+
+@pytest.fixture
+def device_info(monkeypatch):
+    def apply(devices=None, lsblk=None, lv=None):
+        devices = devices if devices else {}
+        lsblk = lsblk if lsblk else {}
+        lv = Factory(**lv) if lv else None
+        monkeypatch.setattr("ceph_volume.sys_info.devices", {})
+        monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda: devices)
+        monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: lv)
+        monkeypatch.setattr("ceph_volume.util.device.disk.lsblk", lambda path: lsblk)
+    return apply

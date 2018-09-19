@@ -530,7 +530,7 @@ int Pipe::accept()
       if (state != STATE_ACCEPTING)
 	goto shutting_down_msgr_unlocked;
       if (!had_challenge && need_challenge && authorizer_challenge) {
-	ldout(msgr->cct,0) << "accept: challenging authorizer "
+	ldout(msgr->cct,10) << "accept: challenging authorizer "
 			   << authorizer_reply.length()
 			   << " bytes" << dendl;
 	assert(authorizer_reply.length());

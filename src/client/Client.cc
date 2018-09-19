@@ -1465,6 +1465,10 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
 	mds = in->fragmap[fg];
 	if (phash_diri)
 	  *phash_diri = in;
+      } else if (in->auth_cap) {
+	mds = in->auth_cap->session->mds_num;
+      }
+      if (mds >= 0) {
 	ldout(cct, 10) << "choose_target_mds from dirfragtree hash" << dendl;
 	goto out;
       }
@@ -13159,13 +13163,14 @@ int Client::fallocate(int fd, int mode, loff_t offset, loff_t length)
 int Client::ll_release(Fh *fh)
 {
   Mutex::Locker lock(client_lock);
+
+  if (unmounting)
+    return -ENOTCONN;
+
   ldout(cct, 3) << "ll_release (fh)" << fh << " " << fh->inode->ino << " " <<
     dendl;
   tout(cct) << "ll_release (fh)" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
-
-  if (unmounting)
-    return -ENOTCONN;
 
   if (ll_unclosed_fh_set.count(fh))
     ll_unclosed_fh_set.erase(fh);

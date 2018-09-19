@@ -1574,15 +1574,20 @@ void PrimaryLogPG::calc_trim_to()
 		 PG_STATE_BACKFILL_TOOFULL)) {
     target = cct->_conf->osd_max_pg_log_entries;
   }
-
-  eversion_t limit = MIN(
-    min_last_complete_ondisk,
+  // limit pg log trimming up to the can_rollback_to value
+  eversion_t limit = std::min(
+    pg_log.get_head(),
     pg_log.get_can_rollback_to());
+  dout(10) << __func__ << " limit = " << limit << dendl;
+
   if (limit != eversion_t() &&
       limit != pg_trim_to &&
       pg_log.get_log().approx_size() > target) {
-    size_t num_to_trim = MIN(pg_log.get_log().approx_size() - target,
-			     cct->_conf->osd_pg_log_trim_max);
+    dout(10) << __func__ << " approx pg log length =  "
+             << pg_log.get_log().approx_size() << dendl;
+    size_t num_to_trim = std::min(pg_log.get_log().approx_size() - target,
+				  cct->_conf->osd_pg_log_trim_max);
+    dout(10) << __func__ << " num_to_trim =  " << num_to_trim << dendl;
     if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
 	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
       return;
@@ -1592,16 +1597,15 @@ void PrimaryLogPG::calc_trim_to()
     for (size_t i = 0; i < num_to_trim; ++i) {
       new_trim_to = it->version;
       ++it;
-      if (new_trim_to > limit) {
+      if (new_trim_to >= limit) {
 	new_trim_to = limit;
-	dout(10) << "calc_trim_to trimming to min_last_complete_ondisk" << dendl;
+        dout(10) << "calc_trim_to trimming to limit: " << limit << dendl;
 	break;
       }
     }
     dout(10) << "calc_trim_to " << pg_trim_to << " -> " << new_trim_to << dendl;
     pg_trim_to = new_trim_to;
     assert(pg_trim_to <= pg_log.get_head());
-    assert(pg_trim_to <= min_last_complete_ondisk);
   }
 }
 
@@ -13805,7 +13809,7 @@ void PrimaryLogPG::log_missing(unsigned missing,
                << " skipped " << missing << " clone(s) in cache tier" << dendl;
   } else {
     clog->info() << mode << " " << pgid << " " << head.get()
-		       << " " << missing << " missing clone(s)";
+		       << " : " << missing << " missing clone(s)";
   }
 }
 
@@ -13832,7 +13836,7 @@ unsigned PrimaryLogPG::process_clones_to(const boost::optional<hobject_t> &head,
     if (!allow_incomplete_clones) {
       next_clone.snap = **curclone;
       clog->error() << mode << " " << pgid << " " << head.get()
-			 << " expected clone " << next_clone << " " << missing
+			 << " : expected clone " << next_clone << " " << missing
                          << " missing";
       ++scrubber.shallow_errors;
       e.set_clone_missing(next_clone.snap);
@@ -13917,7 +13921,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
     if (p->second.attrs.count(OI_ATTR) == 0) {
       oi = boost::none;
       osd->clog->error() << mode << " " << info.pgid << " " << soid
-			<< " no '" << OI_ATTR << "' attr";
+			<< " : no '" << OI_ATTR << "' attr";
       ++scrubber.shallow_errors;
       soid_error.set_info_missing();
     } else {
@@ -13929,7 +13933,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
       } catch (buffer::error& e) {
 	oi = boost::none;
 	osd->clog->error() << mode << " " << info.pgid << " " << soid
-		<< " can't decode '" << OI_ATTR << "' attr " << e.what();
+		<< " : can't decode '" << OI_ATTR << "' attr " << e.what();
 	++scrubber.shallow_errors;
 	soid_error.set_info_corrupted();
         soid_error.set_info_missing(); // Not available too
@@ -13939,7 +13943,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
     if (oi) {
       if (pgbackend->be_get_ondisk_size(oi->size) != p->second.size) {
 	osd->clog->error() << mode << " " << info.pgid << " " << soid
-			   << " on disk size (" << p->second.size
+			   << " : on disk size (" << p->second.size
 			   << ") does not match object info size ("
 			   << oi->size << ") adjusted for ondisk to ("
 			   << pgbackend->be_get_ondisk_size(oi->size)
@@ -14011,10 +14015,10 @@ void PrimaryLogPG::scrub_snapshot_metadata(
       // If we couldn't read the head's snapset, just ignore clones
       if (head && !snapset) {
 	osd->clog->error() << mode << " " << info.pgid << " " << soid
-			  << " clone ignored due to missing snapset";
+			  << " : clone ignored due to missing snapset";
       } else {
 	osd->clog->error() << mode << " " << info.pgid << " " << soid
-			   << " is an unexpected clone";
+			   << " : is an unexpected clone";
       }
       ++scrubber.shallow_errors;
       soid_error.set_headless();
@@ -14046,7 +14050,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 
       if (p->second.attrs.count(SS_ATTR) == 0) {
 	osd->clog->error() << mode << " " << info.pgid << " " << soid
-			  << " no '" << SS_ATTR << "' attr";
+			  << " : no '" << SS_ATTR << "' attr";
         ++scrubber.shallow_errors;
 	snapset = boost::none;
 	head_error.set_snapset_missing();
@@ -14061,7 +14065,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
         } catch (buffer::error& e) {
 	  snapset = boost::none;
           osd->clog->error() << mode << " " << info.pgid << " " << soid
-		<< " can't decode '" << SS_ATTR << "' attr " << e.what();
+		<< " : can't decode '" << SS_ATTR << "' attr " << e.what();
 	  ++scrubber.shallow_errors;
 	  head_error.set_snapset_corrupted();
         }
@@ -14075,7 +14079,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	  dout(20) << "  snapset " << snapset.get() << dendl;
 	  if (snapset->seq == 0) {
 	    osd->clog->error() << mode << " " << info.pgid << " " << soid
-			       << " snaps.seq not set";
+			       << " : snaps.seq not set";
 	    ++scrubber.shallow_errors;
 	    head_error.set_snapset_error();
           }
@@ -14125,13 +14129,13 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 
       if (snapset->clone_size.count(soid.snap) == 0) {
 	osd->clog->error() << mode << " " << info.pgid << " " << soid
-			   << " is missing in clone_size";
+			   << " : is missing in clone_size";
 	++scrubber.shallow_errors;
 	soid_error.set_size_mismatch();
       } else {
         if (oi && oi->size != snapset->clone_size[soid.snap]) {
 	  osd->clog->error() << mode << " " << info.pgid << " " << soid
-			     << " size " << oi->size << " != clone_size "
+			     << " : size " << oi->size << " != clone_size "
 			     << snapset->clone_size[*curclone];
 	  ++scrubber.shallow_errors;
 	  soid_error.set_size_mismatch();
@@ -14139,7 +14143,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 
         if (snapset->clone_overlap.count(soid.snap) == 0) {
 	  osd->clog->error() << mode << " " << info.pgid << " " << soid
-			     << " is missing in clone_overlap";
+			     << " : is missing in clone_overlap";
 	  ++scrubber.shallow_errors;
 	  soid_error.set_size_mismatch();
 	} else {
@@ -14162,7 +14166,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 
 	  if (bad_interval_set) {
 	    osd->clog->error() << mode << " " << info.pgid << " " << soid
-			       << " bad interval_set in clone_overlap";
+			       << " : bad interval_set in clone_overlap";
 	    ++scrubber.shallow_errors;
 	    soid_error.set_size_mismatch();
 	  } else {
@@ -14226,8 +14230,8 @@ void PrimaryLogPG::scrub_snapshot_metadata(
       continue;
     } else if (obc->obs.oi.soid != p->first) {
       osd->clog->error() << info.pgid << " " << mode
-			 << " object " << p->first
-			 << " has a valid oi attr with a mismatched name, "
+			 << " " << p->first
+			 << " : object has a valid oi attr with a mismatched name, "
 			 << " obc->obs.oi.soid: " << obc->obs.oi.soid;
       continue;
     }
@@ -14390,7 +14394,7 @@ void PrimaryLogPG::_scrub_finish()
       scrub_cstat.sum.num_whiteouts != info.stats.stats.sum.num_whiteouts ||
       scrub_cstat.sum.num_bytes != info.stats.stats.sum.num_bytes) {
     osd->clog->error() << info.pgid << " " << mode
-		      << " stat mismatch, got "
+		      << " : stat mismatch, got "
 		      << scrub_cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
 		      << scrub_cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
 		      << scrub_cstat.sum.num_objects_dirty << "/" << info.stats.stats.sum.num_objects_dirty << " dirty, "

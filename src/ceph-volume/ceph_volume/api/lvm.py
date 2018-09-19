@@ -401,7 +401,7 @@ def create_pv(device):
     ])
 
 
-def create_vg(devices, name=None):
+def create_vg(devices, name=None, name_prefix=None):
     """
     Create a Volume Group. Command looks like::
 
@@ -412,10 +412,16 @@ def create_vg(devices, name=None):
     :param devices: A list of devices to create a VG. Optionally, a single
                     device (as a string) can be used.
     :param name: Optionally set the name of the VG, defaults to 'ceph-{uuid}'
+    :param name_prefix: Optionally prefix the name of the VG, which will get combined
+                        with a UUID string
     """
+    if isinstance(devices, set):
+        devices = list(devices)
     if not isinstance(devices, list):
         devices = [devices]
-    if name is None:
+    if name_prefix:
+        name = "%s-%s" % (name_prefix, str(uuid.uuid4()))
+    elif name is None:
         name = "ceph-%s" % str(uuid.uuid4())
     process.run([
         'vgcreate',
@@ -425,6 +431,31 @@ def create_vg(devices, name=None):
     )
 
     vg = get_vg(vg_name=name)
+    return vg
+
+
+def extend_vg(vg, devices):
+    """
+    Extend a Volume Group. Command looks like::
+
+        vgextend --force --yes group_name [device, ...]
+
+    Once created the volume group is extended and returned as a ``VolumeGroup`` object
+
+    :param vg: A VolumeGroup object
+    :param devices: A list of devices to extend the VG. Optionally, a single
+                    device (as a string) can be used.
+    """
+    if not isinstance(devices, list):
+        devices = [devices]
+    process.run([
+        'vgextend',
+        '--force',
+        '--yes',
+        vg.name] + devices
+    )
+
+    vg = get_vg(vg_name=vg.name)
     return vg
 
 
@@ -446,13 +477,24 @@ def remove_vg(vg_name):
 
 def remove_pv(pv_name):
     """
-    Removes a physical volume.
+    Removes a physical volume using a double `-f` to prevent prompts and fully
+    remove anything related to LVM. This is tremendously destructive, but so is all other actions
+    when zapping a device.
+
+    In the case where multiple PVs are found, it will ignore that fact and
+    continue with the removal, specifically in the case of messages like::
+
+        WARNING: PV $UUID /dev/DEV-1 was already found on /dev/DEV-2
+
+    These situations can be avoided with custom filtering rules, which this API
+    cannot handle while accommodating custom user filters.
     """
     fail_msg = "Unable to remove vg %s" % pv_name
     process.run(
         [
             'pvremove',
             '-v',  # verbose
+            '-f',  # force it
             '-f',  # force it
             pv_name
         ],
@@ -482,7 +524,7 @@ def remove_lv(path):
     return True
 
 
-def create_lv(name, group, extents=None, size=None, tags=None):
+def create_lv(name, group, extents=None, size=None, tags=None, uuid_name=False):
     """
     Create a Logical Volume in a Volume Group. Command looks like::
 
@@ -493,7 +535,11 @@ def create_lv(name, group, extents=None, size=None, tags=None):
     conform to the convention of prefixing them with "ceph." like::
 
         {"ceph.block_device": "/dev/ceph/osd-1"}
+
+    :param uuid_name: Optionally combine the ``name`` with UUID to ensure uniqueness
     """
+    if uuid_name:
+        name = '%s-%s' % (name, uuid.uuid4())
     if tags is None:
         tags = {
             "ceph.osd_id": "null",

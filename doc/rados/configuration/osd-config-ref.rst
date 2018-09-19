@@ -23,13 +23,13 @@ configuration file. To add settings directly to a specific Ceph OSD Daemon
 file. For example:
 
 .. code-block:: ini
-	
+
 	[osd]
-		osd journal size = 1024
-	
+		osd journal size = 5120
+
 	[osd.0]
 		host = osd-host-a
-		
+
 	[osd.1]
 		host = osd-host-b
 
@@ -41,8 +41,10 @@ General Settings
 
 The following settings provide an Ceph OSD Daemon's ID, and determine paths to
 data and journals. Ceph deployment scripts typically generate the UUID
-automatically. We **DO NOT** recommend changing the default paths for data or
-journals, as it makes it more problematic to troubleshoot Ceph later. 
+automatically.
+
+.. warning:: **DO NOT** change the default paths for data or journals, as it
+             makes it more problematic to troubleshoot Ceph later.
 
 The journal size should be at least twice the product of the expected drive
 speed multiplied by ``filestore max sync interval``. However, the most common
@@ -55,21 +57,21 @@ that Ceph uses the entire partition for the journal.
 :Description: The universally unique identifier (UUID) for the Ceph OSD Daemon.
 :Type: UUID
 :Default: The UUID.
-:Note: The ``osd uuid`` applies to a single Ceph OSD Daemon. The ``fsid`` 
+:Note: The ``osd uuid`` applies to a single Ceph OSD Daemon. The ``fsid``
        applies to the entire cluster.
 
 
-``osd data`` 
+``osd data``
 
-:Description: The path to the OSDs data. You must create the directory when 
-              deploying Ceph. You should mount a drive for OSD data at this 
-              mount point. We do not recommend changing the default. 
+:Description: The path to the OSDs data. You must create the directory when
+              deploying Ceph. You should mount a drive for OSD data at this
+              mount point. We do not recommend changing the default.
 
 :Type: String
 :Default: ``/var/lib/ceph/osd/$cluster-$id``
 
 
-``osd max write size`` 
+``osd max write size``
 
 :Description: The maximum size of a write in megabytes.
 :Type: 32-bit Integer
@@ -80,10 +82,10 @@ that Ceph uses the entire partition for the journal.
 
 :Description: The largest client data message allowed in memory.
 :Type: 64-bit Unsigned Integer
-:Default: 500MB default. ``500*1024L*1024L`` 
+:Default: 500MB default. ``500*1024L*1024L``
 
 
-``osd class dir`` 
+``osd class dir``
 
 :Description: The class path for RADOS class plug-ins.
 :Type: String
@@ -96,7 +98,7 @@ File System Settings
 ====================
 Ceph builds and mounts file systems which are used for Ceph OSDs.
 
-``osd mkfs options {fs-type}`` 
+``osd mkfs options {fs-type}``
 
 :Description: Options used when creating a new Ceph OSD of type {fs-type}.
 
@@ -107,7 +109,7 @@ Ceph builds and mounts file systems which are used for Ceph OSDs.
 For example::
   ``osd mkfs options xfs = -f -d agcount=24``
 
-``osd mount options {fs-type}`` 
+``osd mount options {fs-type}``
 
 :Description: Options used when mounting a Ceph OSD of type {fs-type}.
 
@@ -129,32 +131,25 @@ the  following path::
 
 	/var/lib/ceph/osd/$cluster-$id/journal
 
-Without performance optimization, Ceph stores the journal on the same disk as
-the Ceph OSD Daemons data. An Ceph OSD Daemon optimized for performance may use
-a separate disk to store journal data (e.g., a solid state drive delivers high
-performance journaling).
+When using a single device type (for example, spinning drives), the journals
+should be *colocated*: the logical volume (or partition) should be in the same
+device as the ``data`` logical volume.
 
-Ceph's default ``osd journal size`` is 0, so you will need to set this in your
-``ceph.conf`` file. A journal size should find the product of the ``filestore
-max sync interval`` and the expected throughput, and multiply the product by
-two (2)::  
-	  
-	osd journal size = {2 * (expected throughput * filestore max sync interval)}
+When using a mix of fast (SSDs, NVMe) devices with slower ones (like spinning
+drives) it makes sense to place the journal on the faster device, while
+``data`` occupies the slower device fully.
 
-The expected throughput number should include the expected disk throughput
-(i.e., sustained data transfer rate), and network throughput. For example, 
-a 7200 RPM disk will likely have approximately 100 MB/s. Taking the ``min()``
-of the disk and network throughput should provide a reasonable expected 
-throughput. Some users just start off with a 10GB journal size. For 
-example::
-
-	osd journal size = 10000
+The default ``osd journal size`` value is 5120 (5 gigabytes), but it can be
+larger, in which case it will need to be set in the ``ceph.conf`` file::
 
 
-``osd journal`` 
+	osd journal size = 10240
+
+
+``osd journal``
 
 :Description: The path to the OSD's journal. This may be a path to a file or a
-              block device (such as a partition of an SSD). If it is a file, 
+              block device (such as a partition of an SSD). If it is a file,
               you must create the directory to contain it. We recommend using a
               drive separate from the ``osd data`` drive.
 
@@ -162,17 +157,12 @@ example::
 :Default: ``/var/lib/ceph/osd/$cluster-$id/journal``
 
 
-``osd journal size`` 
+``osd journal size``
 
-:Description: The size of the journal in megabytes. If this is 0, and the 
-              journal is a block device, the entire block device is used. 
-              Since v0.54, this is ignored if the journal is a block device, 
-              and the entire block device is used.
+:Description: The size of the journal in megabytes.
 
 :Type: 32-bit Integer
 :Default: ``5120``
-:Recommended: Begin with 1GB. Should be at least twice the product of the 
-              expected speed multiplied by ``filestore max sync interval``.
 
 
 See `Journal Config Reference`_ for additional details.
@@ -211,13 +201,13 @@ performance. You can adjust the following settings to increase or decrease
 scrubbing operations.
 
 
-``osd max scrubs`` 
+``osd max scrubs``
 
-:Description: The maximum number of simultaneous scrub operations for 
+:Description: The maximum number of simultaneous scrub operations for
               a Ceph OSD Daemon.
 
 :Type: 32-bit Int
-:Default: ``1`` 
+:Default: ``1``
 
 ``osd scrub begin hour``
 
@@ -248,33 +238,33 @@ scrubbing operations.
 :Default: ``true``
 
 
-``osd scrub thread timeout`` 
+``osd scrub thread timeout``
 
 :Description: The maximum time in seconds before timing out a scrub thread.
 :Type: 32-bit Integer
-:Default: ``60`` 
+:Default: ``60``
 
 
-``osd scrub finalize thread timeout`` 
+``osd scrub finalize thread timeout``
 
-:Description: The maximum time in seconds before timing out a scrub finalize 
+:Description: The maximum time in seconds before timing out a scrub finalize
               thread.
 
 :Type: 32-bit Integer
 :Default: ``60*10``
 
 
-``osd scrub load threshold`` 
+``osd scrub load threshold``
 
 :Description: The maximum load. Ceph will not scrub when the system load 
               (as defined by ``getloadavg()``) is higher than this number. 
               Default is ``0.5``.
 
 :Type: Float
-:Default: ``0.5`` 
+:Default: ``0.5``
 
 
-``osd scrub min interval`` 
+``osd scrub min interval``
 
 :Description: The minimal interval in seconds for scrubbing the Ceph OSD Daemon
               when the Ceph Storage Cluster load is low.
@@ -283,9 +273,9 @@ scrubbing operations.
 :Default: Once per day. ``60*60*24``
 
 
-``osd scrub max interval`` 
+``osd scrub max interval``
 
-:Description: The maximum interval in seconds for scrubbing the Ceph OSD Daemon 
+:Description: The maximum interval in seconds for scrubbing the Ceph OSD Daemon
               irrespective of cluster load.
 
 :Type: Float
@@ -320,7 +310,7 @@ scrubbing operations.
 
 ``osd deep scrub interval``
 
-:Description: The interval for "deep" scrubbing (fully reading all data). The 
+:Description: The interval for "deep" scrubbing (fully reading all data). The
               ``osd scrub load threshold`` does not affect this setting.
 
 :Type: Float
@@ -411,21 +401,21 @@ recovery operations to ensure optimal performance during recovery.
 
 ``osd client op priority``
 
-:Description: The priority set for client operations. It is relative to 
+:Description: The priority set for client operations. It is relative to
               ``osd recovery op priority``.
 
 :Type: 32-bit Integer
-:Default: ``63`` 
+:Default: ``63``
 :Valid Range: 1-63
 
 
 ``osd recovery op priority``
 
-:Description: The priority set for recovery operations. It is relative to 
+:Description: The priority set for recovery operations. It is relative to
               ``osd client op priority``.
 
 :Type: 32-bit Integer
-:Default: ``3`` 
+:Default: ``3``
 :Valid Range: 1-63
 
 
@@ -449,30 +439,30 @@ recovery operations to ensure optimal performance during recovery.
 :Valid Range: 1-63
 
 
-``osd op thread timeout`` 
+``osd op thread timeout``
 
 :Description: The Ceph OSD Daemon operation thread timeout in seconds.
 :Type: 32-bit Integer
-:Default: ``15`` 
+:Default: ``15``
 
 
-``osd op complaint time`` 
+``osd op complaint time``
 
 :Description: An operation becomes complaint worthy after the specified number
               of seconds have elapsed.
 
 :Type: Float
-:Default: ``30`` 
+:Default: ``30``
 
 
-``osd disk threads`` 
+``osd disk threads``
 
-:Description: The number of disk threads, which are used to perform background 
-              disk intensive OSD operations such as scrubbing and snap 
+:Description: The number of disk threads, which are used to perform background
+              disk intensive OSD operations such as scrubbing and snap
               trimming.
 
 :Type: 32-bit Integer
-:Default: ``1`` 
+:Default: ``1``
 
 ``osd disk thread ioprio class``
 
@@ -487,7 +477,7 @@ recovery operations to ensure optimal performance during recovery.
 	      operations. ``be`` is the default and is the same
 	      priority as all other threads in the OSD. ``rt`` means
 	      the disk thread will have precendence over all other
-	      threads in the OSD. Note: Only works with the Linux Kernel 
+	      threads in the OSD. Note: Only works with the Linux Kernel
 	      CFQ scheduler. Since Jewel scrubbing is no longer carried
 	      out by the disk iothread, see osd priority options instead.
 :Type: String
@@ -807,7 +797,7 @@ Daemons to restore the balance. The process of migrating placement groups and
 the objects they contain can reduce the cluster's operational performance
 considerably. To maintain operational performance, Ceph performs this migration
 with 'backfilling', which allows Ceph to set backfill operations to a lower
-priority than requests to read or write data. 
+priority than requests to read or write data.
 
 
 ``osd max backfills``
@@ -817,20 +807,20 @@ priority than requests to read or write data.
 :Default: ``1``
 
 
-``osd backfill scan min`` 
+``osd backfill scan min``
 
 :Description: The minimum number of objects per backfill scan.
 
 :Type: 32-bit Integer
-:Default: ``64`` 
+:Default: ``64``
 
 
-``osd backfill scan max`` 
+``osd backfill scan max``
 
 :Description: The maximum number of objects per backfill scan.
 
 :Type: 32-bit Integer
-:Default: ``512`` 
+:Default: ``512``
 
 
 ``osd backfill retry interval``
@@ -844,19 +834,19 @@ priority than requests to read or write data.
 OSD Map
 =======
 
-OSD maps reflect the OSD daemons operating in the cluster. Over time, the 
+OSD maps reflect the OSD daemons operating in the cluster. Over time, the
 number of map epochs increases. Ceph provides some settings to ensure that
 Ceph performs well as the OSD map grows larger.
 
 
 ``osd map dedup``
 
-:Description: Enable removing duplicates in the OSD map. 
+:Description: Enable removing duplicates in the OSD map.
 :Type: Boolean
 :Default: ``true``
 
 
-``osd map cache size`` 
+``osd map cache size``
 
 :Description: The number of OSD maps to keep cached.
 :Type: 32-bit Integer
@@ -865,21 +855,21 @@ Ceph performs well as the OSD map grows larger.
 
 ``osd map cache bl size``
 
-:Description: The size of the in-memory OSD map cache in OSD daemons. 
+:Description: The size of the in-memory OSD map cache in OSD daemons.
 :Type: 32-bit Integer
 :Default: ``50``
 
 
 ``osd map cache bl inc size``
 
-:Description: The size of the in-memory OSD map cache incrementals in 
+:Description: The size of the in-memory OSD map cache incrementals in
               OSD daemons.
 
 :Type: 32-bit Integer
 :Default: ``100``
 
 
-``osd map message max`` 
+``osd map message max``
 
 :Description: The maximum map entries allowed per MOSDMap message.
 :Type: 32-bit Integer
@@ -908,33 +898,33 @@ intensive.
 
 To maintain operational performance, Ceph performs recovery with limitations on
 the number recovery requests, threads and object chunk sizes which allows Ceph
-perform well in a degraded state. 
+perform well in a degraded state.
 
 
-``osd recovery delay start`` 
+``osd recovery delay start``
 
-:Description: After peering completes, Ceph will delay for the specified number 
+:Description: After peering completes, Ceph will delay for the specified number
               of seconds before starting to recover objects.
 
 :Type: Float
-:Default: ``0`` 
+:Default: ``0``
 
 
-``osd recovery max active`` 
+``osd recovery max active``
 
-:Description: The number of active recovery requests per OSD at one time. More 
-              requests will accelerate recovery, but the requests places an 
+:Description: The number of active recovery requests per OSD at one time. More
+              requests will accelerate recovery, but the requests places an
               increased load on the cluster.
 
 :Type: 32-bit Integer
 :Default: ``3``
 
 
-``osd recovery max chunk`` 
+``osd recovery max chunk``
 
-:Description: The maximum size of a recovered chunk of data to push. 
+:Description: The maximum size of a recovered chunk of data to push.
 :Type: 64-bit Unsigned Integer
-:Default: ``8 << 20`` 
+:Default: ``8 << 20``
 
 
 ``osd recovery max single start``
@@ -945,7 +935,7 @@ perform well in a degraded state.
 :Default: ``1``
 
 
-``osd recovery thread timeout`` 
+``osd recovery thread timeout``
 
 :Description: The maximum time in seconds before timing out a recovery thread.
 :Type: 32-bit Integer
@@ -954,7 +944,7 @@ perform well in a degraded state.
 
 ``osd recover clone overlap``
 
-:Description: Preserves clone overlap during recovery. Should always be set 
+:Description: Preserves clone overlap during recovery. Should always be set
               to ``true``.
 
 :Type: Boolean
@@ -1022,67 +1012,67 @@ Miscellaneous
 =============
 
 
-``osd snap trim thread timeout`` 
+``osd snap trim thread timeout``
 
 :Description: The maximum time in seconds before timing out a snap trim thread.
 :Type: 32-bit Integer
-:Default: ``60*60*1`` 
+:Default: ``60*60*1``
 
 
-``osd backlog thread timeout`` 
+``osd backlog thread timeout``
 
 :Description: The maximum time in seconds before timing out a backlog thread.
 :Type: 32-bit Integer
-:Default: ``60*60*1`` 
+:Default: ``60*60*1``
 
 
-``osd default notify timeout`` 
+``osd default notify timeout``
 
 :Description: The OSD default notification timeout (in seconds).
 :Type: 32-bit Unsigned Integer
-:Default: ``30`` 
+:Default: ``30``
 
 
-``osd check for log corruption`` 
+``osd check for log corruption``
 
 :Description: Check log files for corruption. Can be computationally expensive.
 :Type: Boolean
-:Default: ``false`` 
+:Default: ``false``
 
 
-``osd remove thread timeout`` 
+``osd remove thread timeout``
 
 :Description: The maximum time in seconds before timing out a remove OSD thread.
 :Type: 32-bit Integer
 :Default: ``60*60``
 
 
-``osd command thread timeout`` 
+``osd command thread timeout``
 
 :Description: The maximum time in seconds before timing out a command thread.
 :Type: 32-bit Integer
-:Default: ``10*60`` 
+:Default: ``10*60``
 
 
-``osd command max records`` 
+``osd command max records``
 
-:Description: Limits the number of lost objects to return. 
+:Description: Limits the number of lost objects to return.
 :Type: 32-bit Integer
-:Default: ``256`` 
+:Default: ``256``
 
 
-``osd auto upgrade tmap`` 
+``osd auto upgrade tmap``
 
 :Description: Uses ``tmap`` for ``omap`` on old objects.
 :Type: Boolean
 :Default: ``true``
- 
 
-``osd tmapput sets users tmap`` 
+
+``osd tmapput sets users tmap``
 
 :Description: Uses ``tmap`` for debugging only.
 :Type: Boolean
-:Default: ``false`` 
+:Default: ``false``
 
 
 ``osd fast fail on connection refused``

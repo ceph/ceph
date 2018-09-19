@@ -7,7 +7,7 @@ tasks:
 - ceph:
 - rgw:
     client.0:
-      valgrind: [--tool=memcheck]
+      valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
 - swift:
     client.0:
       rgw_server: client.0

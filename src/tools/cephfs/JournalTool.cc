@@ -45,7 +45,7 @@ void JournalTool::usage()
     << "  cephfs-journal-tool [options] journal <command>\n"
     << "    <command>:\n"
     << "      inspect\n"
-    << "      import <path>\n"
+    << "      import <path> [--force]\n"
     << "      export <path>\n"
     << "      reset [--force]\n"
     << "  cephfs-journal-tool [options] header <get|set <field> <value>\n"
@@ -180,9 +180,18 @@ int JournalTool::main_journal(std::vector<const char*> &argv)
   if (command == "inspect") {
     return journal_inspect();
   } else if (command == "export" || command == "import") {
+    bool force = false;
     if (argv.size() >= 2) {
       std::string const path = argv[1];
-      return journal_export(path, command == "import");
+      if (argv.size() == 3) {
+        if (std::string(argv[2]) == "--force") {
+          force = true;
+        } else {
+          std::cerr << "Unknown argument " << argv[1] << std::endl;
+          return -EINVAL;
+        }
+      }
+      return journal_export(path, command == "import", force);
     } else {
       derr << "Missing path" << dendl;
       return -EINVAL;
@@ -537,7 +546,7 @@ int JournalTool::journal_inspect()
  * back to manually listing RADOS objects and extracting them, which
  * they can do with the ``rados`` CLI.
  */
-int JournalTool::journal_export(std::string const &path, bool import)
+int JournalTool::journal_export(std::string const &path, bool import, bool force)
 {
   int r = 0;
   JournalScanner js(input, rank);
@@ -569,7 +578,7 @@ int JournalTool::journal_export(std::string const &path, bool import)
       return r;
     }
     if (import) {
-      r = dumper.undump(path.c_str());
+      r = dumper.undump(path.c_str(), force);
     } else {
       r = dumper.dump(path.c_str());
     }

@@ -46,7 +46,7 @@ def task(ctx, config):
     # set versions for cloning the repo
     apache_maven = 'apache-maven-{maven_version}-bin.tar.gz'.format(
         maven_version=maven_version)
-    maven_link = 'http://mirror.jax.hugeserver.com/apache/maven/' + \
+    maven_link = 'http://apache.mirrors.lucidnetworks.net/maven/' + \
         '{maven_major}/{maven_version}/binaries/'.format(maven_major=maven_major, maven_version=maven_version) + apache_maven
     hadoop_git = 'https://github.com/apache/hadoop'
     hadoop_rel = 'hadoop-{ver} rel/release-{ver}'.format(ver=hadoop_ver)

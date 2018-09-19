@@ -328,11 +328,26 @@ struct MDRequestImpl : public MutationImpl {
   void print(ostream &out) const override;
   void dump(Formatter *f) const override;
 
+  MClientRequest* release_client_request();
+  void reset_slave_request(MMDSSlaveRequest *req=nullptr);
+
   // TrackedOp stuff
   typedef boost::intrusive_ptr<MDRequestImpl> Ref;
 protected:
   void _dump(Formatter *f) const override;
   void _dump_op_descriptor_unlocked(ostream& stream) const override;
+private:
+  class {
+    std::atomic_flag _lock = ATOMIC_FLAG_INIT;
+  public:
+    void lock() {
+      while(_lock.test_and_set(std::memory_order_acquire))
+	;
+    }
+    void unlock() {
+      _lock.clear(std::memory_order_release);
+    }
+  } mutable msg_lock;
 };
 
 typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;

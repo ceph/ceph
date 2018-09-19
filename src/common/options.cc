@@ -1069,7 +1069,7 @@ std::vector<Option> get_global_options() {
     .set_description("minimal number PGs per (in) osd before we warn the admin"),
 
     Option("mon_max_pg_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(200)
+    .set_default(250)
     .set_description("Max number of PGs per OSD the cluster will allow"),
 
     Option("mon_pg_warn_max_object_skew", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -4189,7 +4189,7 @@ std::vector<Option> get_global_options() {
   .set_long_description("Daemons only set perf counter data to the manager "
     "daemon if the counter has a priority higher than this.")
   .set_min_max((int64_t)PerfCountersBuilder::PRIO_DEBUGONLY,
-               (int64_t)PerfCountersBuilder::PRIO_CRITICAL),
+               (int64_t)PerfCountersBuilder::PRIO_CRITICAL + 1),
 
     Option("journal_zero_on_create", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -4534,6 +4534,11 @@ std::vector<Option> get_rgw_options() {
           "concurrency of lifecycle maintenance, but requires multiple RGW processes "
           "running on the zone to be utilized."),
 
+    Option("rgw_lc_max_rules", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1000)
+    .set_description("Max number of lifecycle rules set on one bucket")
+    .set_long_description("Number of lifecycle rules set on one bucket should be limited."),
+
     Option("rgw_lc_debug_interval", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(-1)
     .set_description(""),
@@ -4800,7 +4805,7 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_thread_pool_size", Option::TYPE_INT, Option::LEVEL_BASIC)
-    .set_default(100)
+    .set_default(512)
     .set_description("RGW requests handling thread pool size.")
     .set_long_description(
         "This parameter determines the number of concurrent requests RGW can process "
@@ -5208,7 +5213,7 @@ std::vector<Option> get_rgw_options() {
         "to consider it to be too slow and abort. Set it zero to disable this."),
 
     Option("rgw_curl_low_speed_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(30)
+    .set_default(300)
     .set_long_description(
         "It contains the time in number seconds that the transfer speed should be below "
         "the rgw_curl_low_speed_limit for the library to consider it too slow and abort. "

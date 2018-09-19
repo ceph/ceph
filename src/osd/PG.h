@@ -2553,7 +2553,6 @@ public:
     ObjectStore::Transaction &t,
     bool transaction_applied = true);
   bool check_log_for_corruption(ObjectStore *store);
-  void trim_log();
 
   std::string get_corrupt_pg_log_name() const;
   static int read_info(

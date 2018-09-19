@@ -183,7 +183,7 @@ protected:
   virtual int prune_object_extents(ObjectExtents &object_extents) {
     return 0;
   }
-  virtual uint32_t get_object_cache_request_count(bool journaling) const {
+  virtual uint32_t get_object_cache_request_count() const {
     return 0;
   }
   virtual void send_object_cache_requests(const ObjectExtents &object_extents,
@@ -278,7 +278,7 @@ protected:
 
   void send_image_cache_request() override;
 
-  uint32_t get_object_cache_request_count(bool journaling) const override;
+  uint32_t get_object_cache_request_count() const override;
   void send_object_cache_requests(const ObjectExtents &object_extents,
                                   uint64_t journal_tid) override;
 
@@ -386,6 +386,7 @@ public:
 protected:
   void send_image_cache_request() override;
 
+  uint32_t get_object_cache_request_count() const override;
   void send_object_cache_requests(const ObjectExtents &object_extents,
                                   uint64_t journal_tid) override;
 

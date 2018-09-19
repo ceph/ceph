@@ -3,6 +3,7 @@ import os
 from ceph_volume import terminal
 from ceph_volume import decorators
 from ceph_volume.util import disk
+from ceph_volume.util.device import Device
 
 
 class LVPath(object):
@@ -39,6 +40,18 @@ class LVPath(object):
         if error:
             raise argparse.ArgumentError(None, error)
         return string
+
+
+class ValidDevice(object):
+
+    def __call__(self, string):
+        device = Device(string)
+        if not device.exists:
+            raise argparse.ArgumentError(
+                None, "Unable to proceed with non-existing device: %s" % string
+            )
+
+        return device
 
 
 class OSDPath(object):

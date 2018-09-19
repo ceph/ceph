@@ -469,8 +469,6 @@ OPTION(mds_bal_split_rd, OPT_FLOAT)
 OPTION(mds_bal_split_wr, OPT_FLOAT)
 OPTION(mds_bal_split_bits, OPT_INT)
 OPTION(mds_bal_merge_size, OPT_INT)
-OPTION(mds_bal_interval, OPT_INT)           // seconds
-OPTION(mds_bal_fragment_interval, OPT_INT)      // seconds
 OPTION(mds_bal_fragment_size_max, OPT_INT) // order of magnitude higher than split size
 OPTION(mds_bal_fragment_fast_factor, OPT_FLOAT) // multiple of size_max that triggers immediate split
 OPTION(mds_bal_idle_threshold, OPT_FLOAT)
@@ -1342,6 +1340,7 @@ OPTION(rgw_content_length_compat, OPT_BOOL) // Check both HTTP_CONTENT_LENGTH an
 OPTION(rgw_lifecycle_work_time, OPT_STR) //job process lc  at 00:00-06:00s
 OPTION(rgw_lc_lock_max_time, OPT_INT)  // total run time for a single lc processor work
 OPTION(rgw_lc_max_objs, OPT_INT)
+OPTION(rgw_lc_max_rules, OPT_U32)  // Max rules set on one bucket
 OPTION(rgw_lc_debug_interval, OPT_INT)  // Debug run interval, in seconds
 OPTION(rgw_script_uri, OPT_STR) // alternative value for SCRIPT_URI if not set in request
 OPTION(rgw_request_uri, OPT_STR) // alternative value for REQUEST_URI if not set in request

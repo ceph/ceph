@@ -18,6 +18,7 @@
 #include "MDCache.h"
 #include "Locker.h"
 #include "MDBalancer.h"
+#include "Migrator.h"
 #include "CInode.h"
 #include "CDir.h"
 #include "CDentry.h"
@@ -382,6 +383,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	drop_locks(mdr.get());
       if (object->is_ambiguous_auth()) {
 	// wait
+	marker.message = "waiting for single auth, object is being migrated";
 	dout(10) << " ambiguous auth, waiting to authpin " << *object << dendl;
 	object->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
 	mdr->drop_local_auth_pins();
@@ -390,7 +392,8 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       mustpin_remote[object->authority().first].insert(object);
       continue;
     }
-    if (!object->can_auth_pin()) {
+    int err = 0;
+    if (!object->can_auth_pin(&err)) {
       // wait
       drop_locks(mdr.get());
       mdr->drop_local_auth_pins();
@@ -398,6 +401,13 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	dout(10) << " can't auth_pin (freezing?) " << *object << ", nonblocking" << dendl;
 	mdr->aborted = true;
 	return false;
+      }
+      if (err == MDSCacheObject::ERR_EXPORTING_TREE) {
+	marker.message = "failed to authpin, subtree is being exported";
+      } else if (err == MDSCacheObject::ERR_FRAGMENTING_DIR) {
+	marker.message = "failed to authpin, dir is being fragmented";
+      } else if (err == MDSCacheObject::ERR_EXPORTING_INODE) {
+	marker.message = "failed to authpin, inode is being exported";
       }
       dout(10) << " can't auth_pin (freezing?), waiting to authpin " << *object << dendl;
       object->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));

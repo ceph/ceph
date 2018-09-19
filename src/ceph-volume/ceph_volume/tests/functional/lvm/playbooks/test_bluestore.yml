@@ -42,7 +42,7 @@
 
     # osd.0 device
     - name: zap test_group/data-lv1
-      command: "ceph-volume lvm zap test_group/data-lv1"
+      command: "ceph-volume lvm zap --destroy test_group/data-lv1"
       environment:
         CEPH_VOLUME_DEBUG: 1
 

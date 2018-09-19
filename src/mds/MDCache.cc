@@ -206,7 +206,13 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   cap_imports_num_opening = 0;
 
   opening_root = open = false;
-  lru.lru_set_midpoint(cache_mid());
+
+  cache_inode_limit = g_conf->get_val<int64_t>("mds_cache_size");
+  cache_memory_limit = g_conf->get_val<uint64_t>("mds_cache_memory_limit");
+  cache_reservation = g_conf->get_val<double>("mds_cache_reservation");
+  cache_health_threshold = g_conf->get_val<double>("mds_health_cache_threshold");
+
+  lru.lru_set_midpoint(g_conf->get_val<double>("mds_cache_mid"));
 
   bottom_lru.lru_set_midpoint(0);
 
@@ -222,11 +228,28 @@ MDCache::~MDCache()
   }
 }
 
+void MDCache::handle_conf_change(const struct md_config_t *conf,
+                                 const std::set <std::string> &changed,
+                                 const MDSMap &mdsmap)
+{
+  if (changed.count("mds_cache_size"))
+    cache_inode_limit = g_conf->get_val<int64_t>("mds_cache_size");
+  if (changed.count("mds_cache_memory_limit"))
+    cache_memory_limit = g_conf->get_val<uint64_t>("mds_cache_memory_limit");
+  if (changed.count("mds_cache_reservation"))
+    cache_reservation = g_conf->get_val<double>("mds_cache_reservation");
+  if (changed.count("mds_health_cache_threshold"))
+    cache_health_threshold = g_conf->get_val<double>("mds_health_cache_threshold");
+  if (changed.count("mds_cache_mid"))
+    lru.lru_set_midpoint(g_conf->get_val<double>("mds_cache_mid"));
 
+  migrator->handle_conf_change(conf, changed, mdsmap);
+  mds->balancer->handle_conf_change(conf, changed, mdsmap);
+}
 
 void MDCache::log_stat()
 {
-  mds->logger->set(l_mds_inode_max, cache_limit_inodes() == 0 ? INT_MAX : cache_limit_inodes());
+  mds->logger->set(l_mds_inode_max, cache_inode_limit ? : INT_MAX);
   mds->logger->set(l_mds_inodes, lru.lru_get_size());
   mds->logger->set(l_mds_inodes_pinned, lru.lru_get_num_pinned());
   mds->logger->set(l_mds_inodes_top, lru.lru_get_top());
@@ -2925,10 +2948,7 @@ void MDCache::handle_mds_failure(mds_rank_t who)
 	if (!mdr->more()->waiting_on_slave.empty()) {
 	  assert(mdr->more()->srcdn_auth_mds == mds->get_nodeid());
 	  // will rollback, no need to wait
-	  if (mdr->slave_request) {
-	    mdr->slave_request->put();
-	    mdr->slave_request = 0;
-	  }
+	  mdr->reset_slave_request();
 	  mdr->more()->waiting_on_slave.clear();
 	}
       } else if (!mdr->committing) {
@@ -6511,12 +6531,12 @@ void MDCache::trim_lru(uint64_t count, map<mds_rank_t, MCacheExpire*> &expiremap
 bool MDCache::trim(uint64_t count)
 {
   uint64_t used = cache_size();
-  uint64_t limit = cache_limit_memory();
+  uint64_t limit = cache_memory_limit;
   map<mds_rank_t, MCacheExpire*> expiremap;
 
   dout(7) << "trim bytes_used=" << bytes2str(used)
           << " limit=" << bytes2str(limit)
-          << " reservation=" << cache_reservation()
+          << " reservation=" << cache_reservation
           << "% count=" << count << dendl;
 
   // process delayed eval_stray()
@@ -9135,8 +9155,7 @@ void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
   if (mdr->client_request && mdr->client_request->get_source().is_client()) {
     dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
             << *mdr->client_request << dendl;
-    mds->forward_message_mds(mdr->client_request, who);
-    mdr->client_request = 0;
+    mds->forward_message_mds(mdr->release_client_request(), who);
     if (mds->logger) mds->logger->inc(l_mds_forward);
   } else if (mdr->internal_op >= 0) {
     dout(10) << "request_forward on internal op; cancelling" << dendl;
