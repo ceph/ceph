@@ -3588,11 +3588,9 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     using ceph::encode;
     if (xattr_version) {
       ceph_le32 xbl_len;
+      auto xbl_len_it = bl.end();
       xbl_len = sizeof(__u32);
       encode(xbl_len, bl);
-
-      auto xbl_len_it = bl.end();
-      xbl_len_it.advance(-4);
       if (pxattrs)
 	encode(*pxattrs, bl);
       else

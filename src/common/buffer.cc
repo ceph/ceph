@@ -848,43 +848,41 @@ using namespace ceph;
   buffer::list::iterator_impl<is_const>::iterator_impl(const buffer::list::iterator& i)
     : iterator_impl<is_const>(i.bl, i.off, i.p, i.p_off) {}
 
+#ifdef BL_BACKWARD_COMPAT
+  /// The backward iteration over is bufferlist is DEPRECATED!
+  /// The old int-taking variant of advance() is solely for compatibility.
   template<bool is_const>
   void buffer::list::iterator_impl<is_const>::advance(int o)
   {
-    //cout << this << " advance " << o << " from " << off << " (p_off " << p_off << " in " << p->length() << ")" << std::endl;
-    if (o > 0) {
-      p_off += o;
-      while (p_off > 0) {
-	if (p == ls->end())
-	  throw end_of_buffer();
-	if (p_off >= p->length()) {
-	  // skip this buffer
-	  p_off -= p->length();
-	  p++;
-	} else {
-	  // somewhere in this buffer!
-	  break;
-	}
-      }
-      off += o;
+    seek(off + o);
+  }
+#endif // BL_BACKWARD_COMPAT
+
+  template<bool is_const>
+  void buffer::list::iterator_impl<is_const>::advance(unsigned o)
+  {
+    //cout << this << " advance " << o << " from " << off
+    //     << " (p_off " << p_off << " in " << p->length() << ")"
+    //     << std::endl;
+
+    p_off += o;
+
+    if (!o) {
       return;
     }
-    while (o < 0) {
-      if (p_off) {
-	unsigned d = -o;
-	if (d > p_off)
-	  d = p_off;
-	p_off -= d;
-	off -= d;
-	o += d;
-      } else if (off > 0) {
-	ceph_assert(p != ls->begin());
-	p--;
-	p_off = p->length();
+    while (p_off > 0) {
+      if (p == ls->end())
+        throw end_of_buffer();
+      if (p_off >= p->length()) {
+        // skip this buffer
+        p_off -= p->length();
+        p++;
       } else {
-	throw end_of_buffer();
+        // somewhere in this buffer!
+        break;
       }
     }
+    off += o;
   }
 
   template<bool is_const>
@@ -909,7 +907,7 @@ using namespace ceph;
   {
     if (p == ls->end())
       throw end_of_buffer();
-    advance(1);
+    advance(1u);
     return *this;
   }
 
@@ -1086,7 +1084,16 @@ using namespace ceph;
     : iterator_impl(l, o, ip, po)
   {}
 
+#ifdef BL_BACKWARD_COMPAT
+  /// The backward iteration over is bufferlist is DEPRECATED!
+  /// The old int-taking variant of advance() is solely for compatibility.
   void buffer::list::iterator::advance(int o)
+  {
+    seek(off + o);
+  }
+#endif // BL_BACKWARD_COMPAT
+
+  void buffer::list::iterator::advance(unsigned o)
   {
     buffer::list::iterator_impl<false>::advance(o);
   }

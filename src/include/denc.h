@@ -1519,7 +1519,7 @@ inline std::enable_if_t<traits::supported && !traits::need_contiguous> decode(
     t.copy_shallow(remaining, tmp);
     auto cp = std::cbegin(tmp);
     traits::decode(o, cp);
-    p.advance((ssize_t)cp.get_offset());
+    p.advance(cp.get_offset());
   }
 }
 
@@ -1540,7 +1540,7 @@ inline std::enable_if_t<traits::supported && traits::need_contiguous> decode(
   t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
   auto cp = std::cbegin(tmp);
   traits::decode(o, cp);
-  p.advance((ssize_t)cp.get_offset());
+  p.advance(cp.get_offset());
 }
 
 // nohead variants
@@ -1571,7 +1571,7 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
   t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
   auto cp = std::cbegin(tmp);
   traits::decode_nohead(num, o, cp);
-  p.advance((ssize_t)cp.get_offset());
+  p.advance(cp.get_offset());
 }
 }
 
