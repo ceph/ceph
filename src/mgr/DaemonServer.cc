@@ -2279,7 +2279,14 @@ void DaemonServer::adjust_pgs()
 		pg_t merge_target = merge_source.get_parent();
 		bool ok = true;
 		auto q = pg_map.pg_stat.find(merge_source);
-		if (q == pg_map.pg_stat.end()) {
+		if (p.get_pg_num() == p.get_pgp_num()) {
+		  dout(10) << "pool " << i.first
+			   << " pg_num_target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - decrease blocked by pgp_num "
+			   << p.get_pgp_num()
+			   << dendl;
+		  ok = false;
 		} else if (q == pg_map.pg_stat.end()) {
 		  dout(10) << "pool " << i.first
 			   << " pg_num_target " << p.get_pg_num_target()
