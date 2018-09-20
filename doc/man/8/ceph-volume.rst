@@ -65,6 +65,9 @@ Optional arguments:
                      current input (requires devices to be passed in)
 * [--format]         Output format when reporting (used along with
                      --report), can be one of 'pretty' (default) or 'json'
+* [--block-db-size]     Set (or override) the "bluestore_block_db_size" value,
+                        in bytes
+* [--journal-size]      Override the "osd_journal_size" value, in megabytes
 
 Required positional arguments:
 
