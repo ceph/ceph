@@ -1674,6 +1674,26 @@ using namespace ceph;
     }
   }
 
+  buffer::list::iterator buffer::list::append_hole(const unsigned len)
+  {
+    if (unlikely(append_buffer.unused_tail_length() < len)) {
+      // make a new append_buffer.  fill out a complete page, factoring in
+      // the raw_combined overhead.
+      const size_t need = \
+	round_up_to(len, sizeof(size_t)) + sizeof(raw_combined);
+      const size_t alen = \
+	round_up_to(need, CEPH_BUFFER_ALLOC_UNIT) - sizeof(raw_combined);
+      append_buffer = raw_combined::create(alen, 0, get_mempool());
+      append_buffer.set_length(0);
+    }
+
+    append_buffer.set_length(append_buffer.length() + len);
+    append(append_buffer, append_buffer.length() - len, len);
+
+    const auto lastbuf = std::prev(std::end(_buffers));
+    return { this, length() - len, lastbuf, lastbuf->length() - len };
+  }
+
   void buffer::list::prepend_zero(unsigned len)
   {
     ptr bp(len);

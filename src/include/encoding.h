@@ -1204,30 +1204,16 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
  * @param compat oldest code version that can decode it
  * @param bl bufferlist to encode to
  *
- * NOTE: to not advance() backward, we snapshot the end of bufferlist
- * in a given moment, and then rely on copy_in()'s ability to rewind:
- *
- * void buffer::list::iterator::copy_in(...)
- * {
- *   // copy
- *   if (p == ls->end())
- *     seek(off);
- *
- *   // ...
- * }
- *
- * This can be quite costly, so next commit is expected to remedy.
  */
 #define ENCODE_START(v, compat, bl)			     \
   using ::ceph::encode;					     \
   __u8 struct_v = v, struct_compat = compat;		     \
-  encode(struct_v, (bl));				     \
-  ::ceph::buffer::list::iterator struct_compat_it = (bl).end();	\
-  encode(struct_compat, (bl));			     \
   ceph_le32 struct_len;				             \
-  struct_len = 0;                                            \
-  ::ceph::buffer::list::iterator struct_len_it = (bl).end(); \
-  encode(struct_len, (bl));				     \
+  encode(struct_v, (bl));				     \
+  ::ceph::buffer::list::iterator struct_compat_it =	     \
+    (bl).append_hole(sizeof(struct_compat));		     \
+  ::ceph::buffer::list::iterator struct_len_it =	     \
+    (bl).append_hole(sizeof(struct_len));		     \
   do {
 
 /**
@@ -1242,8 +1228,8 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
   struct_len_it.copy_in(4, (char *)&struct_len);			\
   if (new_struct_compat) {						\
     struct_compat = new_struct_compat;					\
-    struct_compat_it.copy_in(1, (char *)&struct_compat);		\
-  }
+  }									\
+  struct_compat_it.copy_in(1, (char *)&struct_compat);
 
 #define ENCODE_FINISH(bl) ENCODE_FINISH_NEW_COMPAT(bl, 0)
 
