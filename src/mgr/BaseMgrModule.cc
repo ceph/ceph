@@ -614,6 +614,34 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
   return result;
 }
 
+static PyObject*
+ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
+{
+  // TODO: parse args to build OSDPerfMetricQuery.
+  // For now it is ignored and can be anything.
+  PyObject *query_ = nullptr;
+  if (!PyArg_ParseTuple(args, "O:ceph_add_osd_perf_query", &query_)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  OSDPerfMetricQuery query;
+  auto query_id = self->py_modules->add_osd_perf_query(query);
+  return PyLong_FromLong(query_id);
+}
+
+static PyObject*
+ceph_remove_osd_perf_query(BaseMgrModule *self, PyObject *args)
+{
+  OSDPerfMetricQueryID query_id;
+  if (!PyArg_ParseTuple(args, "i:ceph_remove_osd_perf_query", &query_id)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  self->py_modules->remove_osd_perf_query(query_id);
+  Py_RETURN_NONE;
+}
 
 PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
@@ -682,6 +710,12 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_dispatch_remote", (PyCFunction)ceph_dispatch_remote,
     METH_VARARGS, "Dispatch a call to another module"},
+
+  {"_ceph_add_osd_perf_query", (PyCFunction)ceph_add_osd_perf_query,
+    METH_VARARGS, "Add an osd perf query"},
+
+  {"_ceph_remove_osd_perf_query", (PyCFunction)ceph_remove_osd_perf_query,
+    METH_VARARGS, "Remove an osd perf query"},
 
   {NULL, NULL, 0, NULL}
 };

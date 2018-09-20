@@ -883,3 +883,20 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         return self._ceph_dispatch_remote(module_name, method_name,
                                           args, kwargs)
+
+    def add_osd_perf_query(self, query):
+        """
+        Fetch the daemon metadata for a particular service.
+
+        :param object query: query
+        :rtype: int (query id)
+        """
+        return self._ceph_add_osd_perf_query(query)
+
+    def remove_osd_perf_query(self, query_id):
+        """
+        Fetch the daemon metadata for a particular service.
+
+        :param int query_id: query ID
+        """
+        return self._ceph_remove_osd_perf_query(query_id)
