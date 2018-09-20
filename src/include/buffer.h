@@ -650,6 +650,22 @@ namespace buffer CEPH_BUFFER_API {
       return contiguous_appender(this, len, deep);
     }
 
+    class contiguous_filler {
+      friend buffer::list;
+      char* pos;
+
+      contiguous_filler(char* const pos) : pos(pos) {}
+
+    public:
+      void copy_in(const unsigned len, const char* const src) {
+	memcpy(pos, src, len);
+	pos += len;
+      }
+    };
+    // The contiguous_filler is supposed to be not costlier than a single
+    // pointer. Keep it dumb, please.
+    static_assert(sizeof(contiguous_filler) == sizeof(char*));
+
     class page_aligned_appender {
       bufferlist *pbl;
       unsigned min_alloc;
@@ -913,7 +929,7 @@ namespace buffer CEPH_BUFFER_API {
     void append(const ptr& bp, unsigned off, unsigned len);
     void append(const list& bl);
     void append(std::istream& in);
-    iterator append_hole(unsigned len);
+    contiguous_filler append_hole(unsigned len);
     void append_zero(unsigned len);
     void prepend_zero(unsigned len);
     

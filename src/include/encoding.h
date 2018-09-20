@@ -1206,14 +1206,13 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
  *
  */
 #define ENCODE_START(v, compat, bl)			     \
-  using ::ceph::encode;					     \
-  __u8 struct_v = v, struct_compat = compat;		     \
+  __u8 struct_v = v;                                         \
+  __u8 struct_compat = compat;		                     \
   ceph_le32 struct_len;				             \
-  encode(struct_v, (bl));				     \
-  ::ceph::buffer::list::iterator struct_compat_it =	     \
-    (bl).append_hole(sizeof(struct_compat));		     \
-  ::ceph::buffer::list::iterator struct_len_it =	     \
-    (bl).append_hole(sizeof(struct_len));		     \
+  auto filler = (bl).append_hole(sizeof(struct_v) + 	     \
+    sizeof(struct_compat) + sizeof(struct_len));	     \
+  const auto starting_bl_len = (bl).length();		     \
+  using ::ceph::encode;					     \
   do {
 
 /**
@@ -1222,14 +1221,16 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
  * @param bl bufferlist we were encoding to
  * @param new_struct_compat struct-compat value to use
  */
-#define ENCODE_FINISH_NEW_COMPAT(bl, new_struct_compat)			\
-  } while (false);							\
-  struct_len = (bl).length() - struct_len_it.get_off() - sizeof(struct_len); \
-  struct_len_it.copy_in(4, (char *)&struct_len);			\
-  if (new_struct_compat) {						\
-    struct_compat = new_struct_compat;					\
-  }									\
-  struct_compat_it.copy_in(1, (char *)&struct_compat);
+#define ENCODE_FINISH_NEW_COMPAT(bl, new_struct_compat)      \
+  } while (false);                                           \
+  if (new_struct_compat) {                                   \
+    struct_compat = new_struct_compat;                       \
+  }                                                          \
+  struct_len = (bl).length() - starting_bl_len;              \
+  filler.copy_in(sizeof(struct_v), (char *)&struct_v);       \
+  filler.copy_in(sizeof(struct_compat),			     \
+    (char *)&struct_compat);				     \
+  filler.copy_in(sizeof(struct_len), (char *)&struct_len);
 
 #define ENCODE_FINISH(bl) ENCODE_FINISH_NEW_COMPAT(bl, 0)
 
