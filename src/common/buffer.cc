@@ -999,7 +999,6 @@ static ceph::spinlock debug_lock;
       _len(other._len),
       _memcopy_count(other._memcopy_count),
       last_p(this) {
-    append_buffer.swap(other.append_buffer);
     other.clear();
   }
 
@@ -1008,7 +1007,6 @@ static ceph::spinlock debug_lock;
     std::swap(_len, other._len);
     std::swap(_memcopy_count, other._memcopy_count);
     _buffers.swap(other._buffers);
-    append_buffer.swap(other.append_buffer);
     //last_p.swap(other.last_p);
     last_p = begin();
     other.last_p = other.begin();
@@ -1170,9 +1168,6 @@ static ceph::spinlock debug_lock;
 
   void buffer::list::reassign_to_mempool(int pool)
   {
-    if (append_buffer.get_raw()) {
-      append_buffer.get_raw()->reassign_to_mempool(pool);
-    }
     for (auto& p : _buffers) {
       p.get_raw()->reassign_to_mempool(pool);
     }
@@ -1180,9 +1175,6 @@ static ceph::spinlock debug_lock;
 
   void buffer::list::try_assign_to_mempool(int pool)
   {
-    if (append_buffer.get_raw()) {
-      append_buffer.get_raw()->try_assign_to_mempool(pool);
-    }
     for (auto& p : _buffers) {
       p.get_raw()->try_assign_to_mempool(pool);
     }
