@@ -23,11 +23,27 @@ int Namespace<I>::create(librados::IoCtx& io_ctx, const std::string& name)
     return -EINVAL;
   }
 
+  librados::Rados rados(io_ctx);
+  int8_t require_osd_release;
+  int r = rados.get_min_compatible_osd(&require_osd_release);
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve min OSD release: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  if (require_osd_release < CEPH_RELEASE_NAUTILUS) {
+    ldout(cct, 1) << "namespace support requires nautilus or later OSD"
+                  << dendl;
+    return -ENOSYS;
+  }
+
+
   librados::IoCtx default_ns_ctx;
   default_ns_ctx.dup(io_ctx);
   default_ns_ctx.set_namespace("");
 
-  int r = cls_client::namespace_add(&default_ns_ctx, name);
+  r = cls_client::namespace_add(&default_ns_ctx, name);
   if (r < 0) {
     lderr(cct) << "failed to add namespace: " << cpp_strerror(r) << dendl;
     return r;

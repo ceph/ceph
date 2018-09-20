@@ -29,6 +29,11 @@ public:
     return m_global_id;
   }
 
+  int get_min_compatible_osd(int8_t* require_osd_release) override {
+    *require_osd_release = CEPH_RELEASE_NAUTILUS;
+    return 0;
+  }
+
   int get_min_compatible_client(int8_t* min_compat_client,
                                 int8_t* require_min_compat_client) override {
     *min_compat_client = CEPH_RELEASE_MIMIC;
