@@ -913,6 +913,7 @@ namespace buffer CEPH_BUFFER_API {
     void append(const ptr& bp, unsigned off, unsigned len);
     void append(const list& bl);
     void append(std::istream& in);
+    iterator append_hole(unsigned len);
     void append_zero(unsigned len);
     void prepend_zero(unsigned len);
     
