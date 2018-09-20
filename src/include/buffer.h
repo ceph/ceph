@@ -290,7 +290,7 @@ namespace buffer CEPH_BUFFER_API {
       return begin();
     }
     const_iterator begin_deep(size_t offset=0) const {
-      return const_iterator(this, 0, true);
+      return const_iterator(this, offset, true);
     }
 
     // misc
