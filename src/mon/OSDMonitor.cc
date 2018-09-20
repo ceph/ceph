@@ -8902,6 +8902,22 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	ss << "create-or-move updated item name '" << osd_name
 	   << "' weight " << weight
 	   << " at location " << loc << " to crush map";
+
+        // If the OSD is destroyed use initial_weight to adjust the weight of the
+        // item in the CRUSHMap as the underlying device might be a different size
+        // For example a 4TB device was replaced by a 6TB device, the CRUSH weight
+        // then needs to be adjusted accordingly
+        //
+        // The OSD will be in the 'new' state at that moment as it has already been
+        // booted and the 'destroyed' state has been removed from the OSD.
+        // At this point it is marked as 'exists,new'
+        if (osdmap.is_new(osdid)) {
+          if (osdmap.crush->get_item_weightf(osdid) != weight) {
+            ss << "create-or-move adjusting weight of destroyed item " << osd_name
+               << " to " << weight;
+            newcrush.adjust_item_weightf_in_loc(cct, osdid, weight, loc);
+          }
+        }
 	break;
       }
       if (err > 0) {

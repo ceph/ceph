@@ -800,6 +800,10 @@ public:
     return exists(osd) && (osd_state[osd] & CEPH_OSD_DESTROYED);
   }
 
+  bool is_new(int osd) const {
+    return exists(osd) && (osd_state[osd] & CEPH_OSD_NEW);
+  }
+
   bool is_up(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_UP);
   }
