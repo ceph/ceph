@@ -20,17 +20,9 @@
 
 #include <string>
 #include <pthread.h>
+#include <mutex>
 
 using namespace ceph;
-
-class CephContext;
-class PerfCounters;
-
-enum {
-  l_mutex_first = 999082,
-  l_mutex_wait,
-  l_mutex_last
-};
 
 class Mutex {
 private:
@@ -43,8 +35,6 @@ private:
   pthread_mutex_t _m;
   int nlock;
   pthread_t locked_by;
-  CephContext *cct;
-  PerfCounters *logger;
 
   // don't allow copying.
   void operator=(const Mutex &M);
@@ -64,8 +54,7 @@ private:
   }
 
 public:
-  Mutex(const std::string &n, bool r = false, bool ld=true, bool bt=false,
-	CephContext *cct = 0);
+  Mutex(const std::string &n, bool r = false, bool ld=true, bool bt=false);
   ~Mutex();
   bool is_locked() const {
     return (nlock > 0);
@@ -75,6 +64,9 @@ public:
   }
 
   bool TryLock() {
+    return try_lock();
+  }
+  bool try_lock() {
     int r = pthread_mutex_trylock(&_m);
     if (r == 0) {
       if (lockdep && g_lockdep) _locked();
@@ -83,7 +75,10 @@ public:
     return r == 0;
   }
 
-  void Lock(bool no_lockdep=false);
+  void Lock(bool no_lockdep=false) {
+    lock(no_lockdep);
+  }
+  void lock(bool no_lockdep=false);
 
   void _post_lock() {
     if (!recursive) {
@@ -102,23 +97,16 @@ public:
       ceph_assert(nlock == 0);
     }
   }
-  void Unlock();
+  void Unlock() {
+    unlock();
+  }
+  void unlock();
 
   friend class Cond;
 
 
 public:
-  class Locker {
-    Mutex &mutex;
-
-  public:
-    explicit Locker(Mutex& m) : mutex(m) {
-      mutex.Lock();
-    }
-    ~Locker() {
-      mutex.Unlock();
-    }
-  };
+  typedef std::lock_guard<Mutex> Locker;
 };
 
 

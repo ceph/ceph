@@ -63,18 +63,18 @@ class Finisher {
  public:
   /// Add a context to complete, optionally specifying a parameter for the complete function.
   void queue(Context *c, int r = 0) {
-    finisher_lock.Lock();
+    finisher_lock.lock();
     if (finisher_queue.empty()) {
       finisher_cond.Signal();
     }
     finisher_queue.push_back(make_pair(c, r));
     if (logger)
       logger->inc(l_finisher_queue_len);
-    finisher_lock.Unlock();
+    finisher_lock.unlock();
   }
 
   void queue(list<Context*>& ls) {
-    finisher_lock.Lock();
+    finisher_lock.lock();
     if (finisher_queue.empty()) {
       finisher_cond.Signal();
     }
@@ -83,11 +83,11 @@ class Finisher {
     }
     if (logger)
       logger->inc(l_finisher_queue_len, ls.size());
-    finisher_lock.Unlock();
+    finisher_lock.unlock();
     ls.clear();
   }
   void queue(deque<Context*>& ls) {
-    finisher_lock.Lock();
+    finisher_lock.lock();
     if (finisher_queue.empty()) {
       finisher_cond.Signal();
     }
@@ -96,11 +96,11 @@ class Finisher {
     }
     if (logger)
       logger->inc(l_finisher_queue_len, ls.size());
-    finisher_lock.Unlock();
+    finisher_lock.unlock();
     ls.clear();
   }
   void queue(vector<Context*>& ls) {
-    finisher_lock.Lock();
+    finisher_lock.lock();
     if (finisher_queue.empty()) {
       finisher_cond.Signal();
     }
@@ -109,7 +109,7 @@ class Finisher {
     }
     if (logger)
       logger->inc(l_finisher_queue_len, ls.size());
-    finisher_lock.Unlock();
+    finisher_lock.unlock();
     ls.clear();
   }
 

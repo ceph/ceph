@@ -65,9 +65,9 @@ void SafeTimer::shutdown()
     cancel_all_events();
     stopping = true;
     cond.Signal();
-    lock.Unlock();
+    lock.unlock();
     thread->join();
-    lock.Lock();
+    lock.lock();
     delete thread;
     thread = NULL;
   }
@@ -75,7 +75,7 @@ void SafeTimer::shutdown()
 
 void SafeTimer::timer_thread()
 {
-  lock.Lock();
+  lock.lock();
   ldout(cct,10) << "timer_thread starting" << dendl;
   while (!stopping) {
     utime_t now = ceph_clock_now();
@@ -93,10 +93,10 @@ void SafeTimer::timer_thread()
       ldout(cct,10) << "timer_thread executing " << callback << dendl;
       
       if (!safe_callbacks)
-	lock.Unlock();
+	lock.unlock();
       callback->complete(0);
       if (!safe_callbacks)
-	lock.Lock();
+	lock.lock();
     }
 
     // recheck stopping if we dropped the lock
@@ -111,7 +111,7 @@ void SafeTimer::timer_thread()
     ldout(cct,20) << "timer_thread awake" << dendl;
   }
   ldout(cct,10) << "timer_thread exiting" << dendl;
-  lock.Unlock();
+  lock.unlock();
 }
 
 Context* SafeTimer::add_event_after(double seconds, Context *callback)

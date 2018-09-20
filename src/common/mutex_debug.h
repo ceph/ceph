@@ -39,16 +39,14 @@ protected:
 
   int nlock;
   std::thread::id locked_by;
-  CephContext *cct;
-  PerfCounters *logger;
+
 
   void _register();
   void _will_lock(); // about to lock
   void _locked(); // just locked
     void _will_unlock(); // about to unlock
 
-  mutex_debugging_base(const std::string &n = std::string(), bool bt = false,
-		       CephContext *cct = nullptr);
+  mutex_debugging_base(const std::string &n = std::string(), bool bt = false);
   ~mutex_debugging_base();
 
   ceph::mono_time before_lock_blocks();
@@ -72,9 +70,8 @@ class mutex_debugging : public mutex_debugging_base {
   Mutex* impl;
 
 public:
-  mutex_debugging(const std::string &n = std::string(), bool bt = false,
-		  CephContext *cct = nullptr) :
-    mutex_debugging_base(n, bt, cct), impl(static_cast<Mutex*>(this)) {}
+  mutex_debugging(const std::string &n = std::string(), bool bt = false) :
+    mutex_debugging_base(n, bt), impl(static_cast<Mutex*>(this)) {}
 
   ~mutex_debugging() = default;
 
@@ -136,9 +133,8 @@ public:
   static constexpr bool recursive = Recursive;
 
   // Mutex concept is DefaultConstructible
-  mutex_debug_impl(const std::string &n = std::string(), bool bt = false,
-		   CephContext *cct = nullptr) :
-    mutex_debugging<mutex_debug_impl<Recursive> >(n, bt, cct) {
+  mutex_debug_impl(const std::string &n = std::string(), bool bt = false) :
+    mutex_debugging<mutex_debug_impl<Recursive> >(n, bt) {
     pthread_mutexattr_t a;
     pthread_mutexattr_init(&a);
     int r;
