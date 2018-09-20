@@ -74,6 +74,13 @@ class TestPrepare(object):
         expected = 'Cannot use --block.db (bluestore) with --journal (filestore)'
         assert expected in stdout
 
+    def test_journal_is_required_with_filestore(self, is_root, monkeypatch):
+        monkeypatch.setattr('os.path.exists', lambda x: True)
+        with pytest.raises(SystemExit) as error:
+            lvm.prepare.Prepare(argv=['--filestore', '--data', '/dev/sdfoo']).main()
+        expected = '--journal is required when using --filestore'
+        assert expected in str(error)
+
 
 class TestGetJournalLV(object):
 
