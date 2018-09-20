@@ -184,4 +184,43 @@ public:
   }
 };
 
+class ContextQueue {
+  list<Context *> q;
+  std::mutex q_mutex;
+  Mutex& mutex;
+  Cond& cond;
+public:
+  ContextQueue(Mutex& mut, Cond& con) : mutex(mut), cond(con) {}
+
+  void queue(list<Context *>& ls) {
+    {
+      std::scoped_lock l(q_mutex);
+      if (q.empty()) {
+	q.swap(ls);
+      } else {
+	q.insert(q.end(), ls.begin(), ls.end());
+      }
+    }
+
+    mutex.Lock();
+    cond.SignalOne();
+    mutex.Unlock();
+
+    ls.clear();
+  }
+
+  void swap(list<Context *>& ls) {
+    ls.clear();
+    std::scoped_lock l(q_mutex);
+    if (!q.empty()) {
+      q.swap(ls);
+    }
+  }
+
+  bool empty() {
+    std::scoped_lock l(q_mutex);
+    return q.empty();
+  }
+};
+
 #endif
