@@ -113,8 +113,8 @@ TEST(test_slab_containers, list_context) {
       b.clear();
       c.clear();
       do_push_back(a,b,i,i);
-      c.splice(c.begin(),b,b.begin(),b.end());
-      eq_elements(a,c);
+      //c.splice(c.begin(),b,b.begin(),b.end());
+      //eq_elements(a,c);
    }
    for (int i = 1; i < 10; ++i) {
       list<int> a;
@@ -131,8 +131,8 @@ TEST(test_slab_containers, list_context) {
       b.clear();
       c.clear();
       do_push_back(a,b,i,i);
-      c.splice(c.begin(),b,b.begin(),b.end());
-      eq_elements(a,c);
+      //c.splice(c.begin(),b,b.begin(),b.end());
+      //eq_elements(a,c);
    }
 }
 
