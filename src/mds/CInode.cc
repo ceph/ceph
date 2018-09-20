@@ -3588,16 +3588,14 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     using ceph::encode;
     if (xattr_version) {
       ceph_le32 xbl_len;
-      auto xbl_len_it = bl.end();
-      xbl_len = sizeof(__u32);
-      encode(xbl_len, bl);
+      auto filler = bl.append_hole(sizeof(xbl_len));
+      const auto starting_bl_len = bl.length();
       if (pxattrs)
 	encode(*pxattrs, bl);
       else
 	encode((__u32)0, bl);
-      xbl_len = bl.length() - xbl_len_it.get_off() - sizeof(xbl_len);
-      if (xbl_len != sizeof(__u32))
-	xbl_len_it.copy_in(sizeof(xbl_len), (char *)&xbl_len);
+      xbl_len = bl.length() - starting_bl_len;
+      filler.copy_in(sizeof(xbl_len), (char *)&xbl_len);
     } else {
       encode((__u32)0, bl);
     }
