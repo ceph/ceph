@@ -15,6 +15,8 @@
 #ifndef LIB_RGW_ADMIN_USER_H
 #define LIB_RGW_ADMIN_USER_H
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -26,17 +28,20 @@ extern "C" {
 #define LIBRGW_ADMIN_USER_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBRGW_ADMIN_USER_VERSION_CODE LIBRGW_ADMIN_USER_VERSION(LIBRGW_ADMIN_USER_VER_MAJOR, LIBRGW_ADMIN_USER_VER_MINOR, LIBRGW_ADMIN_USER_VER_EXTRA)
 
+void rgw_admin_user_version(int *major, int *minor, int *extra);
+
 typedef void* librgw_admin_user_t;
 int librgw_admin_user_create(librgw_admin_user_t *rgw_admin_user, int argc, char **argv);
 void librgw_admin_user_shutdown(librgw_admin_user_t rgw_admin_user);
 
 struct rgw_user_info
 {
+  void *priv;
   const char *uid;
   const char *display_name;
   const char *access_key;
-  const char* secret_key;
-  const char* email;
+  const char *secret_key;
+  const char *email;
   const char *caps;
   const char *access;
   bool admin;
@@ -47,14 +52,21 @@ struct rgw_user_info
  * create a new rgw user
  */
 int rgw_admin_create_user(librgw_admin_user_t rgw_admin_user, const char *uid,
-			  const char *display_name,  const char *access_key, const char* secret_key,
-			  const char *email, const char *caps,
-			  const char *access, bool admin, bool system);
+			  const char *display_name,  const char *access_key,
+			  const char* secret_key, const char *email,
+			  const char *caps, const char *access, bool admin,
+			  bool system);
 
 /*
  * get rgw user info
  */
-int rgw_admin_user_info(librgw_admin_user_t rgw_admin_user,const char * uid, rgw_user_info* user_info);
+int rgw_admin_user_info(librgw_admin_user_t rgw_admin_user, const char * uid,
+			struct rgw_user_info* user_info);
+
+/*
+ * free user_info structure
+ */
+void rgw_admin_user_release_info(struct rgw_user_info* user_info);
 
 #ifdef __cplusplus
 }

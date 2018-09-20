@@ -1,6 +1,18 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2018 Red Hat, Inc.
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
+
 #include "include/rgw/librgw_admin_user.h"
 #include "rgw_admin_user.h"
 #include "rgw_user.h"
@@ -62,7 +74,42 @@ extern "C" {
     return 0;
   }
 
-  int rgw_admin_user_info(librgw_admin_user_t librgw_admin_user, const char *uid, rgw_user_info* user_info)
+  /* transfer object */
+  struct RGWLA_User
+  {
+    RGWUserInfo info;
+    std::string uid;
+    std::string display_name;
+    std::string access_key;
+    std::string secret_key;
+    std::string caps;
+    std::string access;
+
+    void make_info(rgw_user_info* user_info) {
+      user_info->priv = this;
+      uid = info.user_id.to_str();
+      user_info->uid = uid.c_str();
+      user_info->display_name = info.display_name.c_str();
+      // unsure if this is the intent
+      auto ac = info.access_keys.begin();
+      if (ac != info.access_keys.end()) {
+	access_key = ac->second.id;
+	secret_key = ac->second.key;
+      }
+      user_info->access_key = access_key.c_str();
+      user_info->secret_key = secret_key.c_str();
+      user_info->email = info.user_email.c_str();
+      // TODO: finish
+      user_info->caps = caps.c_str();
+      user_info->access = access.c_str();
+
+      user_info->admin = info.admin;
+      user_info->system = info.system;
+    }
+  };
+
+  int rgw_admin_user_info(librgw_admin_user_t librgw_admin_user,
+			  const char *uid, rgw_user_info* user_info)
   {
     RGWUserAdminOpState user_op;
     rgw_user user_id;
@@ -78,14 +125,22 @@ extern "C" {
     }
 
     std::string err_msg;
-    RGWUserInfo info;
-    ret = user.info(info, &err_msg);
+    RGWLA_User* la_user = new RGWLA_User();
+    ret = user.info(la_user->info, &err_msg);
     if (ret < 0) {
       cerr << "could not fetch user info: " << err_msg << std::endl;
       return -ret;
     }
 
+    la_user->make_info(user_info);
+
     return 0;
   }
 
-}
+  void rgw_admin_user_release_info(rgw_user_info* user_info)
+  {
+    RGWLA_User* la_user = reinterpret_cast<RGWLA_User*>(user_info->priv);
+    delete la_user;
+  }
+
+} /* extern "C" */

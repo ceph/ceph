@@ -38,6 +38,7 @@ namespace rgw {
     int init(vector<const char *>& args);
     int stop();
   };
-}
+
+} /* namespace */
 
 #endif /*RGW_ADMIN_USER_H */

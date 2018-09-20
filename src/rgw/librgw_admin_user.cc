@@ -142,6 +142,16 @@ namespace rgw {
 
 extern "C" {
 
+void rgw_admin_user_version(int *major, int *minor, int *extra)
+{
+  if (major)
+    *major = LIBRGW_ADMIN_USER_VER_MAJOR;
+  if (minor)
+    *minor = LIBRGW_ADMIN_USER_VER_MINOR;
+  if (extra)
+    *extra = LIBRGW_ADMIN_USER_VER_EXTRA;
+}
+
 int librgw_admin_user_create(librgw_admin_user_t* rgw_admin_user, int argc, char **argv)
 {
   using namespace rgw;
