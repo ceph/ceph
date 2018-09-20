@@ -54,14 +54,23 @@ function above_margin() {
     return $(( $check >= $target && $check <= $target + $margin ? 0 : 1 ))
 }
 
+FIND_UPACT='grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/"'
+FIND_FIRST='grep "pg[[]${PG}.*recovering.*_update_calc_stats $which " $log | grep -F " ${UPACT}${addp}" | grep -v est | head -1 | sed "s/.* \([0-9]*\)$/\1/"'
+FIND_LAST='grep "pg[[]${PG}.*recovering.*_update_calc_stats $which " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/"'
+
 function check() {
-    local PG=$1
-    local log=$2
-    local degraded_start=$3
-    local degraded_end=$4
-    local misplaced_start=$5
-    local misplaced_end=$6
-    local type=$7
+    local dir=$1
+    local PG=$2
+    local primary=$3
+    local type=$4
+    local degraded_start=$5
+    local degraded_end=$6
+    local misplaced_start=$7
+    local misplaced_end=$8
+    local primary_start=${9:-}
+    local primary_end=${10:-}
+
+    local log=$dir/osd.${primary}.log
 
     local addp=" "
     if [ "$type" = "erasure" ];
@@ -69,19 +78,31 @@ function check() {
       addp="p"
     fi
 
-    UPACT=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/")
+    UPACT=$(eval $FIND_UPACT)
 
     # Check 3rd line at start because of false recovery starts
-    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats degraded " $log | grep -F " ${UPACT}${addp}" | head -1 | sed "s/.* \([0-9]*\)$/\1/")
+    local which="degraded"
+    FIRST=$(eval $FIND_FIRST)
     below_margin $FIRST $degraded_start || return 1
-    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats degraded " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
+    LAST=$(eval $FIND_LAST)
     above_margin $LAST $degraded_end || return 1
 
     # Check 3rd line at start because of false recovery starts
-    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats misplaced " $log | grep -F " ${UPACT}${addp}" | head -1 | sed "s/.* \([0-9]*\)$/\1/")
+    which="misplaced"
+    FIRST=$(eval $FIND_FIRST)
     below_margin $FIRST $misplaced_start || return 1
-    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats misplaced " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
+    LAST=$(eval $FIND_LAST)
     above_margin $LAST $misplaced_end || return 1
+
+    # This is the value of set into MISSING_ON_PRIMARY
+    if [ -n "$primary_start" ];
+    then
+      which="shard $primary"
+      FIRST=$(eval $FIND_FIRST)
+      below_margin $FIRST $primary_start || return 1
+      LAST=$(eval $FIND_LAST)
+      above_margin $LAST $primary_end || return 1
+    fi
 }
 
 # [1,0,?] -> [1,2,4]
@@ -134,8 +155,7 @@ function do_recovery_out1() {
 
     wait_for_clean || return 1
 
-    local log=$dir/osd.${primary}.log
-    check $PG $log $objects 0 0 0 $type || return 1
+    check $dir $PG $primary $type $objects 0 0 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -154,11 +174,12 @@ function TEST_recovery_erasure_out1() {
 }
 
 # [0, 1] -> [2,3,4,5]
-# degraded 2000 -> 0
+# degraded 1000 -> 0
+# misplaced 1000 -> 0
 # missing on primary 500 -> 0
 
 # PG_STAT OBJECTS MISSING_ON_PRIMARY DEGRADED MISPLACED UNFOUND BYTES LOG DISK_LOG STATE                      STATE_STAMP                VERSION REPORTED UP        UP_PRIMARY ACTING    ACTING_PRIMARY LAST_SCRUB SCRUB_STAMP                LAST_DEEP_SCRUB DEEP_SCRUB_STAMP
-# 1.0         500                500     2000         0       0     0 500      500 active+recovering+degraded 2017-10-27 09:38:37.453438  22'500   25:394 [2,4,3,5]          2 [2,4,3,5]              2        0'0 2017-10-27 09:37:58.046748             0'0 2017-10-27 09:37:58.046748
+# 1.0         500                500     1000      1000       0     0 500      500 active+recovering+degraded 2017-10-27 09:38:37.453438  22'500   25:394 [2,4,3,5]          2 [2,4,3,5]              2        0'0 2017-10-27 09:37:58.046748             0'0 2017-10-27 09:37:58.046748
 function TEST_recovery_sizeup() {
     local dir=$1
 
@@ -198,29 +219,22 @@ function TEST_recovery_sizeup() {
     # Get new primary
     primary=$(get_primary $poolname obj1)
 
-    local degraded=$(expr $objects \* 4)
+    local degraded=$(expr $objects \* 2)
+    local misplaced=$(expr $objects \* 2)
     local log=$dir/osd.${primary}.log
-    check $PG $log $degraded 0 0 0 || return 1
-
-    UPACT=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/")
-
-    # This is the value of set into MISSING_ON_PRIMARY
-    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats missing shard $primary " $log | grep -F " $UPACT " | head -1 | sed "s/.* \([0-9]*\)$/\1/")
-    below_margin $FIRST $objects || return 1
-    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats missing shard $primary " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
-    above_margin $LAST 0 || return 1
+    check $dir $PG $primary replicated $degraded 0 $misplaced 0 $objects 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
 }
 
 # [0, 1, 2, 4] -> [3, 5]
-# degraded 1000 -> 0
+# misplaced 1000 -> 0
 # missing on primary 500 -> 0
 # active+recovering+degraded
 
 # PG_STAT OBJECTS MISSING_ON_PRIMARY DEGRADED MISPLACED UNFOUND BYTES LOG DISK_LOG STATE                      STATE_STAMP                VERSION REPORTED UP    UP_PRIMARY ACTING ACTING_PRIMARY LAST_SCRUB SCRUB_STAMP                LAST_DEEP_SCRUB DEEP_SCRUB_STAMP
-# 1.0         500                500      1000         0       0     0 500      500 active+recovering+degraded 2017-10-27 09:34:50.012261  22'500   27:118 [3,5]          3  [3,5]              3        0'0 2017-10-27 09:34:08.617248             0'0 2017-10-27 09:34:08.617248
+# 1.0         500                500         0      1000       0     0 500      500 active+recovering+degraded 2017-10-27 09:34:50.012261  22'500   27:118 [3,5]          3  [3,5]              3        0'0 2017-10-27 09:34:08.617248             0'0 2017-10-27 09:34:08.617248
 function TEST_recovery_sizedown() {
     local dir=$1
 
@@ -264,16 +278,16 @@ function TEST_recovery_sizedown() {
     # Get new primary
     primary=$(get_primary $poolname obj1)
 
-    local degraded=$(expr $objects \* 2)
+    local misplaced=$(expr $objects \* 2)
     local log=$dir/osd.${primary}.log
-    check $PG $log $degraded 0 0 0 || return 1
+    check $dir $PG $primary replicated 0 0 $misplaced 0 || return 1
 
     UPACT=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/")
 
     # This is the value of set into MISSING_ON_PRIMARY
-    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats missing shard $primary " $log | grep -F " $UPACT " | head -1 | sed "s/.* \([0-9]*\)$/\1/")
+    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats shard $primary " $log | grep -F " $UPACT " | head -1 | sed "s/.* \([0-9]*\)$/\1/")
     below_margin $FIRST $objects || return 1
-    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats missing shard $primary " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
+    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats shard $primary " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
     above_margin $LAST 0 || return 1
 
     delete_pool $poolname
@@ -281,19 +295,21 @@ function TEST_recovery_sizedown() {
 }
 
 # [1] -> [1,2]
-# degraded 200 -> 100
+# degraded 300 -> 200
 # active+recovering+undersized+degraded
 
 # PG_STAT OBJECTS MISSING_ON_PRIMARY DEGRADED MISPLACED UNFOUND BYTES LOG DISK_LOG STATE                                 STATE_STAMP                VERSION REPORTED UP    UP_PRIMARY ACTING ACTING_PRIMARY LAST_SCRUB SCRUB_STAMP                LAST_DEEP_SCRUB DEEP_SCRUB_STAMP
-# 1.0         100                  0     200         0       0     0 100      100 active+recovering+undersized+degraded 2017-11-17 17:16:15.302943  13'500   16:643 [1,2]          1  [1,2]              1        0'0 2017-11-17 17:15:34.985563             0'0 2017-11-17 17:15:34.985563
+# 1.0         100                  0     300         0       0     0 100      100 active+recovering+undersized+degraded 2017-11-17 17:16:15.302943  13'500   16:643 [1,2]          1  [1,2]              1        0'0 2017-11-17 17:15:34.985563             0'0 2017-11-17 17:15:34.985563
 function TEST_recovery_undersized() {
     local dir=$1
 
+    local osds=3
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
-    run_osd $dir 0 || return 1
-    run_osd $dir 1 || return 1
-    run_osd $dir 2 || return 1
+    for i in $(seq 0 $(expr $osds - 1))
+    do
+      run_osd $dir $i || return 1
+    done
 
     create_pool $poolname 1 1
     ceph osd pool set $poolname size 1
@@ -310,7 +326,7 @@ function TEST_recovery_undersized() {
 
     ceph osd set norecover
     # Mark any osd not the primary (only 1 replica so also has no replica)
-    for i in 0 1 2
+    for i in $(seq 0 $(expr $osds - 1))
     do
       if [ $i = $primary ];
       then
@@ -319,12 +335,12 @@ function TEST_recovery_undersized() {
       ceph osd out osd.$i
       break
     done
-    ceph osd pool set test size 3
+    ceph osd pool set test size 4
     ceph osd unset norecover
     ceph tell osd.$(get_primary $poolname obj1) debug kick_recovery_wq 0
     # Give extra sleep time because code below doesn't have the sophistication of wait_for_clean()
     sleep 10
-    flush_pg_stats
+    flush_pg_stats || return 1
 
     # Wait for recovery to finish
     # Can't use wait_for_clean() because state goes from active+recovering+undersized+degraded
@@ -347,13 +363,9 @@ function TEST_recovery_undersized() {
     primary=$(get_primary $poolname obj1)
     local log=$dir/osd.${primary}.log
 
-    UPACT=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/")
-
-    local degraded=$(expr $objects \* 2)
-    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats degraded " $log | grep -F " $UPACT " | head -1 | sed "s/.* \([0-9]*\)$/\1/")
-    below_margin $FIRST $degraded || return 1
-    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats degraded " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
-    above_margin $LAST $objects || return 1
+    local first_degraded=$(expr $objects \* 3)
+    local last_degraded=$(expr $objects \* 2)
+    check $dir $PG $primary replicated $first_degraded $last_degraded 0 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -417,13 +429,82 @@ function TEST_recovery_erasure_remapped() {
     wait_for_clean || return 1
 
     local log=$dir/osd.${primary}.log
-    check $PG $log $objects 0 $objects $objects erasure || return 1
+    check $dir $PG $primary erasure $objects 0 $objects $objects || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
 }
 
 main osd-recovery-stats "$@"
+
+function TEST_recovery_multi() {
+    local dir=$1
+
+    local osds=6
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for i in $(seq 0 $(expr $osds - 1))
+    do
+      run_osd $dir $i || return 1
+    done
+
+    create_pool $poolname 1 1
+    ceph osd pool set $poolname size 3
+    ceph osd pool set $poolname min_size 1
+
+    wait_for_clean || return 1
+
+    rados -p $poolname put obj1 /dev/null
+
+    local primary=$(get_primary $poolname obj1)
+    local otherosd=$(get_not_primary $poolname obj1)
+
+    ceph osd set noout
+    ceph osd set norecover
+    kill $(cat $dir/osd.${otherosd}.pid)
+    ceph osd down osd.${otherosd}
+
+    local half=$(expr $objects / 2)
+    for i in $(seq 2 $half)
+    do
+	rados -p $poolname put obj$i /dev/null
+    done
+
+    kill $(cat $dir/osd.${primary}.pid)
+    ceph osd down osd.${primary}
+    run_osd $dir ${otherosd}
+    sleep 3
+
+    for i in $(seq $(expr $half + 1) $objects)
+    do
+	rados -p $poolname put obj$i /dev/null
+    done
+
+    local PG=$(get_pg $poolname obj1)
+    local otherosd=$(get_not_primary $poolname obj$objects)
+
+    ceph osd unset noout
+    ceph osd out osd.$primary osd.$otherosd
+    run_osd $dir ${primary}
+    sleep 3
+
+    ceph osd pool set test size 4
+    ceph osd unset norecover
+    ceph tell osd.$(get_primary $poolname obj1) debug kick_recovery_wq 0
+    sleep 2
+
+    wait_for_clean || return 1
+
+    # Get new primary
+    primary=$(get_primary $poolname obj1)
+
+    local log=$dir/osd.${primary}.log
+    check $dir $PG $primary replicated 399 0 300 0 99 0 || return 1
+
+    delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
 
 # Local Variables:
 # compile-command: "make -j4 && ../qa/run-standalone.sh osd-recovery-stats.sh"

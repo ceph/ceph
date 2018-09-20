@@ -580,6 +580,9 @@ bool PG::search_for_missing(
   return found_missing;
 }
 
+
+// MissingLoc
+
 bool PG::MissingLoc::readable_with_acting(
   const hobject_t &hoid,
   const set<pg_shard_t> &acting) const {
@@ -617,8 +620,17 @@ void PG::MissingLoc::add_batch_sources_info(
     }
     if (i->second.is_delete())
       continue;
+
+    auto p = missing_loc.find(i->first);
+    if (p == missing_loc.end()) {
+      p = missing_loc.emplace(i->first, set<pg_shard_t>()).first;
+    } else {
+      _dec_count(p->second);
+    }
     missing_loc[i->first].insert(sources.begin(), sources.end());
     missing_loc_sources.insert(sources.begin(), sources.end());
+    _inc_count(p->second);
+
   }
 }
 
@@ -681,8 +693,18 @@ bool PG::MissingLoc::add_source_info(
     ldout(pg->cct, 10) << "search_for_missing " << soid << " " << need
 		       << " is on osd." << fromosd << dendl;
 
-    missing_loc[soid].insert(fromosd);
     missing_loc_sources.insert(fromosd);
+    {
+      auto p = missing_loc.find(soid);
+      if (p == missing_loc.end()) {
+	p = missing_loc.emplace(soid, set<pg_shard_t>()).first;
+      } else {
+	_dec_count(p->second);
+      }
+      p->second.insert(fromosd);
+      _inc_count(p->second);
+    }
+
     found_missing = true;
   }
 
@@ -691,11 +713,59 @@ bool PG::MissingLoc::add_source_info(
   return found_missing;
 }
 
+void PG::MissingLoc::check_recovery_sources(const OSDMapRef& osdmap)
+{
+  set<pg_shard_t> now_down;
+  for (set<pg_shard_t>::iterator p = missing_loc_sources.begin();
+       p != missing_loc_sources.end();
+       ) {
+    if (osdmap->is_up(p->osd)) {
+      ++p;
+      continue;
+    }
+    ldout(pg->cct, 10) << __func__ << " source osd." << *p << " now down" << dendl;
+    now_down.insert(*p);
+    missing_loc_sources.erase(p++);
+  }
+
+  if (now_down.empty()) {
+    ldout(pg->cct, 10) << __func__ << " no source osds (" << missing_loc_sources << ") went down" << dendl;
+  } else {
+    ldout(pg->cct, 10) << __func__ << " sources osds " << now_down << " now down, remaining sources are "
+		       << missing_loc_sources << dendl;
+    
+    // filter missing_loc
+    map<hobject_t, set<pg_shard_t>>::iterator p = missing_loc.begin();
+    while (p != missing_loc.end()) {
+      set<pg_shard_t>::iterator q = p->second.begin();
+      bool changed = false;
+      while (q != p->second.end()) {
+	if (now_down.count(*q)) {
+	  if (!changed) {
+	    changed = true;
+	    _dec_count(p->second);
+	  }
+	  p->second.erase(q++);
+	} else {
+	  ++q;
+	}
+      }
+      if (p->second.empty()) {
+	missing_loc.erase(p++);
+      } else {
+	if (changed) {
+	  _inc_count(p->second);
+	}
+	++p;
+      }
+    }
+  }
+}
+  
 void PG::discover_all_missing(map<int, map<spg_t,pg_query_t> > &query_map)
 {
   auto &missing = pg_log.get_missing();
   uint64_t unfound = get_num_unfound();
-  assert(unfound > 0);
 
   dout(10) << __func__ << " "
 	   << missing.num_missing() << " missing, "
@@ -1376,7 +1446,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   for (map<pg_shard_t, pg_info_t>::iterator p = all_info.begin();
        p != all_info.end();
        ++p) {
-    dout(10) << "calc_acting osd." << p->first << " " << p->second << dendl;
+    dout(10) << __func__ << " all_info osd." << p->first << " " << p->second << dendl;
   }
 
   map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard =
@@ -1795,6 +1865,7 @@ void PG::activate(ObjectStore::Transaction& t,
 	  complete_shards.insert(*i);
       }
     }
+
     // If necessary, create might_have_unfound to help us find our unfound objects.
     // NOTE: It's important that we build might_have_unfound before trimming the
     // past intervals.
@@ -1838,8 +1909,8 @@ void PG::activate(ObjectStore::Transaction& t,
 
       build_might_have_unfound();
 
-      if (have_unfound())
-	discover_all_missing(query_map);
+      // Always call now so _update_calc_stats() will be accurate
+      discover_all_missing(query_map);
     }
 
     // num_objects_degraded if calculated should reflect this too, unless no
@@ -2569,6 +2640,25 @@ bool PG::check_in_progress_op(
     pg_log.get_log().get_request(r, version, user_version, return_code));
 }
 
+static bool find_shard(const set<pg_shard_t> & pgs, shard_id_t shard)
+{
+    for (auto&p : pgs)
+      if (p.shard == shard)
+        return true;
+    return false;
+}
+
+static pg_shard_t get_another_shard(const set<pg_shard_t> & pgs, pg_shard_t skip, shard_id_t shard)
+{
+    for (auto&p : pgs) {
+      if (p == skip)
+        continue;
+      if (p.shard == shard)
+        return p;
+    }
+    return pg_shard_t();
+}
+
 void PG::_update_calc_stats()
 {
   info.stats.version = info.last_update;
@@ -2591,20 +2681,22 @@ void PG::_update_calc_stats()
   // In rare case that upset is too large (usually transient), use as target
   // for calculations below.
   unsigned target = std::max(num_shards, (unsigned)upset.size());
-  // Not sure this could ever happen, that actingset > upset
-  // which only matters if actingset > num_shards.
+  // For undersized actingset may be larger with OSDs out
   unsigned nrep = std::max(actingset.size(), upset.size());
   // calc num_object_copies
   info.stats.stats.calc_copies(MAX(target, nrep));
   info.stats.stats.sum.num_objects_degraded = 0;
   info.stats.stats.sum.num_objects_unfound = 0;
   info.stats.stats.sum.num_objects_misplaced = 0;
+
   if ((is_remapped() || is_undersized() || !is_clean()) && (is_peered() || is_activating())) {
     dout(20) << __func__ << " actingset " << actingset << " upset "
              << upset << " actingbackfill " << actingbackfill << dendl;
     dout(20) << __func__ << " acting " << acting << " up " << up << dendl;
 
     assert(!actingbackfill.empty());
+
+    bool estimate = false;
 
     // NOTE: we only generate degraded, misplaced and unfound
     // values for the summation, not individual stat categories.
@@ -2615,51 +2707,134 @@ void PG::_update_calc_stats()
     // Objects missing from nodes not in up, sort by # objects
     boost::container::flat_set<pair<int64_t,pg_shard_t>> acting_source_objects;
 
-    int64_t missing;
+    // Fill missing_target_objects/acting_source_objects
 
-    // Primary first
-    missing = pg_log.get_missing().num_missing();
-    assert(actingbackfill.count(pg_whoami));
-    if (upset.count(pg_whoami)) {
-      missing_target_objects.insert(make_pair(missing, pg_whoami));
-    } else {
-      acting_source_objects.insert(make_pair(missing, pg_whoami));
+    {
+      int64_t missing;
+
+      // Primary first
+      missing = pg_log.get_missing().num_missing();
+      assert(actingbackfill.count(pg_whoami));
+      if (upset.count(pg_whoami)) {
+        missing_target_objects.insert(make_pair(missing, pg_whoami));
+      } else {
+        acting_source_objects.insert(make_pair(missing, pg_whoami));
+      }
+      info.stats.stats.sum.num_objects_missing_on_primary = missing;
+      dout(20) << __func__ << " shard " << pg_whoami
+               << " primary objects " << num_objects
+               << " missing " << missing
+               << dendl;
+
     }
-    info.stats.stats.sum.num_objects_missing_on_primary = missing;
 
     // All other peers
     for (auto& peer : peer_info) {
-      // Ignore other peers until we add code to look at detailed missing
-      // information. (recovery)
-      if (!actingbackfill.count(peer.first)) {
-	continue;
-      }
-      missing = 0;
+      // Primary should not be in the peer_info, skip if it is.
+      if (peer.first == pg_whoami) continue;
+      int64_t missing = 0;
+      int64_t peer_num_objects = peer.second.stats.stats.sum.num_objects;
       // Backfill targets always track num_objects accurately
       // all other peers track missing accurately.
       if (is_backfill_targets(peer.first)) {
-	missing = std::max((int64_t)0, num_objects - peer.second.stats.stats.sum.num_objects);
+        missing = std::max((int64_t)0, num_objects - peer_num_objects);
       } else {
-	if (peer_missing.count(peer.first)) {
-	  missing = peer_missing[peer.first].num_missing();
-	} else {
-	  dout(20) << __func__ << " no peer_missing found for " << peer.first << dendl;
+        if (peer_missing.count(peer.first)) {
+          missing = peer_missing[peer.first].num_missing();
+        } else {
+          dout(20) << __func__ << " no peer_missing found for " << peer.first << dendl;
+          if (is_recovering()) {
+            estimate = true;
+          }
+          missing = std::max((int64_t)0, num_objects - peer_num_objects);
         }
       }
       if (upset.count(peer.first)) {
 	missing_target_objects.insert(make_pair(missing, peer.first));
-      } else {
+      } else if (actingset.count(peer.first)) {
 	acting_source_objects.insert(make_pair(missing, peer.first));
       }
       peer.second.stats.stats.sum.num_objects_missing = missing;
+      dout(20) << __func__ << " shard " << peer.first
+               << " objects " << peer_num_objects
+               << " missing " << missing
+               << dendl;
     }
 
+    // A misplaced object is not stored on the correct OSD
+    int64_t misplaced = 0;
+    // a degraded objects has fewer replicas or EC shards than the pool specifies.
+    int64_t degraded = 0;
+
+    if (is_recovering()) {
+      for (auto& sml: missing_loc.get_missing_by_count()) {
+        for (auto& ml: sml.second) {
+          int missing_shards;
+          if (sml.first == shard_id_t::NO_SHARD) {
+            dout(0) << __func__ << " ml " << ml.second << " upset size " << upset.size() << " up " << ml.first.up << dendl;
+            missing_shards = (int)upset.size() - ml.first.up;
+          } else {
+	    // Handle shards not even in upset below
+            if (!find_shard(upset, sml.first))
+	      continue;
+	    missing_shards = std::max(0, 1 - ml.first.up);
+            dout(0) << __func__ << " shard " << sml.first << " ml " << ml.second << " missing shards " << missing_shards << dendl;
+          }
+          int odegraded = ml.second * missing_shards;
+          // Copies on other osds but limited to the possible degraded
+          int more_osds = std::min(missing_shards, ml.first.other);
+          int omisplaced = ml.second * more_osds;
+          assert(omisplaced <= odegraded);
+          odegraded -= omisplaced;
+
+          misplaced += omisplaced;
+          degraded += odegraded;
+        }
+      }
+
+      dout(20) << __func__ << " missing based degraded " << degraded << dendl;
+      dout(20) << __func__ << " missing based misplaced " << misplaced << dendl;
+
+      // Handle undersized case
+      if (pool.info.is_replicated()) {
+        // Add degraded for missing targets (num_objects missing)
+        assert(target >= upset.size());
+        unsigned needed = target - upset.size();
+        degraded += num_objects * needed;
+      } else {
+        for (unsigned i = 0 ; i < num_shards; ++i) {
+          shard_id_t shard(i);
+
+          if (!find_shard(upset, shard)) {
+            pg_shard_t pgs = get_another_shard(actingset, pg_shard_t(), shard);
+
+            if (pgs != pg_shard_t()) {
+              int64_t missing;
+
+              if (pgs == pg_whoami)
+                missing = info.stats.stats.sum.num_objects_missing_on_primary;
+              else
+                missing = peer_info[pgs].stats.stats.sum.num_objects_missing;
+
+              degraded += missing;
+              misplaced += std::max((int64_t)0, num_objects - missing);
+            } else {
+              // No shard anywhere
+              degraded += num_objects;
+            }
+          }
+        }
+      }
+      goto out;
+    }
+
+    // Handle undersized case
     if (pool.info.is_replicated()) {
-      // Add to missing_target_objects up to target elements (num_objects missing)
+      // Add to missing_target_objects
       assert(target >= missing_target_objects.size());
       unsigned needed = target - missing_target_objects.size();
-      for (; needed; --needed)
-	missing_target_objects.insert(make_pair(num_objects, pg_shard_t(pg_shard_t::NO_OSD)));
+      if (needed)
+        missing_target_objects.insert(make_pair(num_objects * needed, pg_shard_t(pg_shard_t::NO_OSD)));
     } else {
       for (unsigned i = 0 ; i < num_shards; ++i) {
         shard_id_t shard(i);
@@ -2680,11 +2855,8 @@ void PG::_update_calc_stats()
     for (const auto& item : acting_source_objects)
       dout(20) << __func__ << " acting shard " << std::get<1>(item) << " missing= " << std::get<0>(item) << dendl;
 
-    // A misplaced object is not stored on the correct OSD
-    int64_t misplaced = 0;
-    // a degraded objects has fewer replicas or EC shards than the pool specifies.
-    int64_t degraded = 0;
-
+    // Handle all objects not in missing for remapped
+    // or backfill
     for (auto m = missing_target_objects.rbegin();
         m != missing_target_objects.rend(); ++m) {
 
@@ -2726,8 +2898,10 @@ void PG::_update_calc_stats()
       dout(20) << __func__ << " extra acting misplaced " << extra_misplaced << dendl;
       misplaced += extra_misplaced;
     }
-    dout(20) << __func__ << " degraded " << degraded << dendl;
-    dout(20) << __func__ << " misplaced " << misplaced << dendl;
+out:
+    // NOTE: Tests use these messages to verify this code
+    dout(20) << __func__ << " degraded " << degraded << (estimate ? " (est)": "") << dendl;
+    dout(20) << __func__ << " misplaced " << misplaced << (estimate ? " (est)": "")<< dendl;
 
     info.stats.stats.sum.num_objects_degraded = degraded;
     info.stats.stats.sum.num_objects_unfound = get_num_unfound();
@@ -5906,6 +6080,9 @@ ostream& operator<<(ostream& out, const PG& pg)
   }
   if (pg.snap_trimq.size())
     out << " snaptrimq=" << pg.snap_trimq;
+  if (!pg.is_clean()) {
+    out << " mbc=" << pg.missing_loc.get_missing_by_count();
+  }
 
   out << "]";
 
