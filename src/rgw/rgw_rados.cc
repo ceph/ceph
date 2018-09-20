@@ -4666,6 +4666,7 @@ int RGWRados::init_complete()
       ldout(cct, 0) << "ERROR: failed to start bucket trim manager" << dendl;
       return ret;
     }
+    data_log->set_observer(&*bucket_trim);
 
     Mutex::Locker dl(data_sync_thread_lock);
     for (auto iter : zone_data_sync_from_map) {
