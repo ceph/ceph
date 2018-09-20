@@ -1674,7 +1674,7 @@ using namespace ceph;
     }
   }
 
-  buffer::list::iterator buffer::list::append_hole(const unsigned len)
+  buffer::list::contiguous_filler buffer::list::append_hole(const unsigned len)
   {
     if (unlikely(append_buffer.unused_tail_length() < len)) {
       // make a new append_buffer.  fill out a complete page, factoring in
@@ -1690,8 +1690,7 @@ using namespace ceph;
     append_buffer.set_length(append_buffer.length() + len);
     append(append_buffer, append_buffer.length() - len, len);
 
-    const auto lastbuf = std::prev(std::end(_buffers));
-    return { this, length() - len, lastbuf, lastbuf->length() - len };
+    return { std::prev(std::end(_buffers))->end_c_str() - len };
   }
 
   void buffer::list::prepend_zero(unsigned len)
