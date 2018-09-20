@@ -156,12 +156,12 @@ public:
     *done = false;
   }
   void finish(int r) override {
-    lock->Lock();
+    lock->lock();
     if (rval)
       *rval = r;
     *done = true;
     cond->Signal();
-    lock->Unlock();
+    lock->unlock();
   }
 };
 
@@ -183,7 +183,7 @@ public:
 
   /// We overload complete in order to not delete the context
   void complete(int r) override {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     done = true;
     rval = r;
     cond.Signal();
@@ -191,7 +191,7 @@ public:
 
   /// Returns rval once the Context is called
   int wait() {
-    Mutex::Locker l(lock);
+    std::lock_guard<Mutex> l(lock);
     while (!done)
       cond.Wait(lock);
     return rval;
@@ -201,7 +201,7 @@ public:
   int wait_for(double secs) {
     utime_t interval;
     interval.set_from_double(secs);
-    Mutex::Locker l{lock};
+    std::lock_guard<Mutex> l{lock};
     if (done) {
       return rval;
     }

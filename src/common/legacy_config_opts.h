@@ -1514,7 +1514,6 @@ OPTION(rgw_list_bucket_min_readahead, OPT_INT) // minimum number of entries to r
 
 OPTION(rgw_rest_getusage_op_compat, OPT_BOOL) // dump description of total stats for s3 GetUsage API
 
-OPTION(mutex_perf_counter, OPT_BOOL) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL) // enable/disable throttler perf counter
 
 /* The following are tunables for torrent data */
