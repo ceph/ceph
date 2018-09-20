@@ -48,7 +48,7 @@
              [ngClass]="{'has-error': roleForm.showError('description', formDir)}">
           <label i18n
                  class="control-label col-sm-3"
-                 for="name">Description
+                 for="description">Description
           </label>
           <div class="col-sm-9">
             <input class="form-control"
@@ -64,38 +64,18 @@
         <!-- Permissions -->
         <div class="form-group">
           <label i18n
-                 class="control-label col-sm-3"
-                 for="name">Permissions
+                 class="control-label col-sm-3">Permissions
           </label>
           <div class="col-sm-9">
-            <table class="table table-bordered table-hover">
-              <thead>
-              <tr>
-                <th></th>
-                <th class="text-center">Read</th>
-                <th class="text-center">Create</th>
-                <th class="text-center">Update</th>
-                <th class="text-center">Delete</th>
-              </tr>
-              </thead>
-              <tbody>
-              <tr *ngFor="let scope of scopes">
-                <td i18n
-                    class="bold col-sm-3">
-                  {{ scope }}
-                </td>
-                <td class="col-sm-2 text-center clickable"
-                    *ngFor="let column of ['read', 'create', 'update', 'delete']">
-                  <div class="checkbox checkbox-primary">
-                    <input type="checkbox"
-                           [checked]="roleForm.getValue('scopes_permissions')[scope] && roleForm.getValue('scopes_permissions')[scope].indexOf(column) !== -1"
-                           (change)="hadlePermissionClick(scope, column)">
-                    <label></label>
-                  </div>
-                </td>
-              </tr>
-              </tbody>
-            </table>
+            <cd-table [data]="scopes_permissions"
+                      [columns]="columns"
+                      columnMode="flex"
+                      [toolHeader]="false"
+                      [autoReload]="false"
+                      [autoSave]="false"
+                      [footer]="false"
+                      [limit]="0">
+            </cd-table>
           </div>
         </div>
 
@@ -110,7 +90,7 @@
           <button i18n
                   type="button"
                   class="btn btn-sm btn-default"
-                  routerLink="/user-management/users/roles">
+                  routerLink="/user-management/roles">
             Back
           </button>
         </div>
@@ -118,3 +98,41 @@
     </div>
   </form>
 </div>
+
+<ng-template #cellScopeCheckboxTpl
+             let-column="column"
+             let-row="row"
+             let-value="value">
+  <div class="checkbox checkbox-primary">
+    <input id="scope_{{ row.scope }}"
+           type="checkbox"
+           [checked]="isRowChecked(row.scope)"
+           (change)="onClickCellCheckbox(row.scope, column.prop, $event)">
+    <label class="datatable-permissions-scope-cell-label"
+           for="scope_{{ row.scope }}">{{ value }}</label>
+  </div>
+</ng-template>
+
+<ng-template #cellPermissionCheckboxTpl
+             let-column="column"
+             let-row="row"
+             let-value="value">
+  <div class="checkbox checkbox-primary">
+    <input type="checkbox"
+           [checked]="value"
+           (change)="onClickCellCheckbox(row.scope, column.prop, $event)">
+    <label></label>
+  </div>
+</ng-template>
+
+<ng-template #headerPermissionCheckboxTpl
+             let-column="column">
+  <div class="checkbox checkbox-primary">
+    <input id="header_{{ column.prop }}"
+           type="checkbox"
+           [checked]="isHeaderChecked(column.prop)"
+           (change)="onClickHeaderCheckbox(column.prop, $event)">
+    <label class="datatable-permissions-header-cell-label"
+           for="header_{{ column.prop }}">{{ column.name }}</label>
+  </div>
+</ng-template>
