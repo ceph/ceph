@@ -51,7 +51,7 @@ namespace ceph {
  */
 
 class Logger;
-
+class ContextQueue;
 
 static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) {
   encode(*attrset, bl);
@@ -1617,6 +1617,13 @@ public:
    */
   virtual CollectionHandle create_new_collection(const coll_t &cid) = 0;
 
+  /**
+   * set ContextQueue for a collection
+   *
+   * After that, oncommits of Transaction will queue into commit_queue.
+   * And osd ShardThread will call oncommits.
+   */
+  virtual void set_collection_commit_queue(const coll_t &cid, ContextQueue *commit_queue) = 0;
 
   /**
    * Synchronous read operations
