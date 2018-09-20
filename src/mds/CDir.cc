@@ -1350,14 +1350,8 @@ void CDir::take_waiting(uint64_t mask, MDSContext::vec& ls)
 
 void CDir::finish_waiting(uint64_t mask, int result) 
 {
-  dout(11) << __func__ << " mask " << hex << mask << dec << " result " << result << " on " << *this << dendl;
-
-  MDSContext::vec finished;
-  take_waiting(mask, finished);
-  if (result < 0)
-    finish_contexts(g_ceph_context, finished, result);
-  else
-    cache->mds->queue_waiters(finished);
+  dout(12) << __func__ << " mask " << hex << mask << dec << " result " << result << " on " << *this << dendl;
+  MDSCacheObject::finish_waiting(mask, result);
 }
 
 
@@ -1433,9 +1427,7 @@ void CDir::mark_new(LogSegment *ls)
   ls->new_dirfrags.push_back(&item_new);
   state_clear(STATE_CREATING);
 
-  MDSContext::vec waiters;
-  take_waiting(CDir::WAIT_CREATED, waiters);
-  cache->mds->queue_waiters(waiters);
+  finish_waiting(CDir::WAIT_CREATED);
 }
 
 void CDir::mark_clean()
@@ -1522,7 +1514,7 @@ void CDir::fetch(MDSContext *c, std::string_view want_dn, bool ignore_authpinnab
     mark_complete();
 
     if (c)
-      cache->mds->queue_waiter(c);
+      cache->mds->queue_context(c);
     return;
   }
 
@@ -2456,10 +2448,10 @@ void CDir::_committed(int r, version_t v)
       _commit(it->first, -1);
       break;
     }
-    MDSContext::vec t;
+    MDSContext::vec finished;
     for (const auto &waiter : it->second)
-      t.push_back(waiter);
-    cache->mds->queue_waiters(t);
+      finished.push_back(waiter);
+    finish_contexts(g_ceph_context, finished);
     waiting_for_commit.erase(it);
     it = _it;
   } 
@@ -2700,9 +2692,7 @@ void CDir::set_dir_auth(const mds_authority_t &a)
 
   // newly single auth?
   if (was_ambiguous && dir_auth.second == CDIR_AUTH_UNKNOWN) {
-    MDSContext::vec ls;
-    take_waiting(WAIT_SINGLEAUTH, ls);
-    cache->mds->queue_waiters(ls);
+    finish_waiting(WAIT_SINGLEAUTH);
   }
 }
 
@@ -3002,7 +2992,7 @@ void CDir::unfreeze_tree()
     auth_unpin(this);
   }
 
-  cache->mds->queue_waiters(unfreeze_waiters);
+  finish_contexts(g_ceph_context, unfreeze_waiters);
 }
 
 void CDir::adjust_freeze_after_rename(CDir *dir)
@@ -3033,7 +3023,7 @@ void CDir::adjust_freeze_after_rename(CDir *dir)
   unfreeze(dir);
   dir->_walk_tree(unfreeze);
 
-  cache->mds->queue_waiters(unfreeze_waiters);
+  finish_contexts(g_ceph_context, unfreeze_waiters);
 }
 
 bool CDir::can_auth_pin(int *err_ret) const

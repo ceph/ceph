@@ -2183,7 +2183,7 @@ void Migrator::export_finish(CDir *dir)
   }
 
   if (!finished.empty())
-    mds->queue_waiters(finished);
+    finish_contexts(g_ceph_context, finished);
 
   MutationRef mut = std::move(it->second.mut);
   auto parent = std::move(it->second.parent);
@@ -2509,8 +2509,7 @@ void Migrator::handle_export_prep(const cref_t<MExportDirPrep> &m, bool did_assi
   MDSGatherBuilder gather(g_ceph_context);
 
   if (!finished.empty())
-    mds->queue_waiters(finished);
-
+    finish_contexts(g_ceph_context, finished);
 
   bool success = true;
   if (mds->is_active()) {
@@ -2750,8 +2749,7 @@ public:
   MDSContext::vec contexts;
   C_MDC_QueueContexts(Migrator *m) : MigratorContext(m) {}
   void finish(int r) override {
-    // execute contexts immediately after 'this' context
-    get_mds()->queue_waiters_front(contexts);
+    finish_contexts(g_ceph_context, contexts);
   }
 };
 

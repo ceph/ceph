@@ -324,7 +324,7 @@ struct MDRequestImpl : public MutationImpl {
     sr_t *desti_srnode = nullptr;
 
     // called when slave commits or aborts
-    Context *slave_commit = nullptr;
+    MDSContext *slave_commit = nullptr;
     bufferlist rollback_bl;
 
     MDSContext::vec waiting_for_finish;

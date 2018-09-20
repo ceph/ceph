@@ -148,10 +148,11 @@ void MDSTableClient::_logged_ack(version_t tid)
 {
   dout(10) << "_logged_ack " << tid << dendl;
   // kick any waiters (LogSegment trim)
-  if (ack_waiters.count(tid)) {
+  auto it = ack_waiters.find(tid);
+  if (it != ack_waiters.end()) {
     dout(15) << "kicking ack waiters on tid " << tid << dendl;
-    mds->queue_waiters(ack_waiters[tid]);
-    ack_waiters.erase(tid);
+    finish_contexts(g_ceph_context, it->second);
+    ack_waiters.erase(it);
   }
 }
 

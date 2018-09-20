@@ -509,7 +509,7 @@ void MDBalancer::queue_split(const CDir *dir, bool fast)
     if (split_pending.erase(frag) == 0) {
       // Someone beat me to it.  This can happen in the fast splitting
       // path, because we spawn two contexts, one with mds->timer and
-      // one with mds->queue_waiter.  The loser can safely just drop
+      // one with mds->queue_context.  The loser can safely just drop
       // out.
       return;
     }
@@ -539,14 +539,15 @@ void MDBalancer::queue_split(const CDir *dir, bool fast)
   if (fast) {
     // Do the split ASAP: enqueue it in the MDSRank waiters which are
     // run at the end of dispatching the current request
-    mds->queue_waiter(new MDSInternalContextWrapper(mds, 
+    mds->queue_context(new MDSInternalContextWrapper(mds,
           new FunctionContext(callback)));
   } else if (is_new) {
     // Set a timer to really do the split: we don't do it immediately
     // so that bursts of ops on a directory have a chance to go through
     // before we freeze it.
     mds->timer.add_event_after(bal_fragment_interval,
-                               new FunctionContext(callback));
+	new MDSInternalContextWrapper(mds,
+	  new FunctionContext(callback)));
   }
 }
 
@@ -608,7 +609,8 @@ void MDBalancer::queue_merge(CDir *dir)
     dout(20) << __func__ << " enqueued dir " << *dir << dendl;
     merge_pending.insert(frag);
     mds->timer.add_event_after(bal_fragment_interval,
-        new FunctionContext(callback));
+	new MDSInternalContextWrapper(mds,
+	  new FunctionContext(callback)));
   } else {
     dout(20) << __func__ << " dir already in queue " << *dir << dendl;
   }

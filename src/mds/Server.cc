@@ -688,7 +688,7 @@ void Server::finish_flush_session(Session *session, version_t seq)
 {
   MDSContext::vec finished;
   session->finish_flush(seq, finished);
-  mds->queue_waiters(finished);
+  finish_contexts(g_ceph_context, finished);
 }
 
 void Server::_session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
@@ -4581,7 +4581,7 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
       lock_state->remove_lock(set_lock, activated_locks);
       cur->take_waiting(CInode::WAIT_FLOCK, waiters);
     }
-    mds->queue_waiters(waiters);
+    finish_contexts(g_ceph_context, waiters);
 
     respond_to_request(mdr, 0);
   } else {
@@ -8873,7 +8873,6 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
 
       dout(10) << " finishing inode export on " << *in << dendl;
       mdcache->migrator->finish_export_inode(in, mdr->slave_to_mds, peer_imported, finished);
-      mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
 
       // unfreeze
       ceph_assert(in->is_frozen_inode());
@@ -8892,7 +8891,7 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
 	mdcache->clear_dirty_bits_for_stray(strayin);
     }
 
-    mds->queue_waiters(finished);
+    finish_contexts(g_ceph_context, finished);
     mdr->cleanup();
 
     if (mdr->more()->slave_update_journaled) {
@@ -8933,7 +8932,7 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
 	mdr->more()->rename_inode->clear_ambiguous_auth(finished);
 	mdr->more()->is_ambiguous_auth = false;
       }
-      mds->queue_waiters(finished);
+      finish_contexts(g_ceph_context, finished);
       mdcache->request_finish(mdr);
     }
   }
@@ -9366,7 +9365,7 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
       mdr->more()->rename_inode->clear_ambiguous_auth(finished);
       mdr->more()->is_ambiguous_auth = false;
     }
-    mds->queue_waiters(finished);
+    finish_contexts(g_ceph_context, finished);
     if (finish_mdr || mdr->aborted)
       mdcache->request_finish(mdr);
     else

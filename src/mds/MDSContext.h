@@ -46,6 +46,17 @@ template<template<typename> class A>
 
   void complete(int r) override;
   virtual MDSRank *get_mds() = 0;
+  virtual uint64_t get_op_seq() const { return 0; }
+
+  bool is_async() const { return async; }
+  void clear_async() { async = false; }
+  void complete_sync(int r) {
+    clear_async();
+    complete(r);
+  }
+private:
+  // re-queue myself to mds->op_shardedwq if true
+  bool async = true;
 };
 
 /* Children of this could have used multiple inheritance with MDSHolder and
@@ -181,23 +192,15 @@ protected:
 class C_IO_Wrapper : public MDSIOContext
 {
 protected:
-  bool async;
   MDSContext *wrapped;
-  void finish(int r) override {
-    wrapped->complete(r);
-    wrapped = nullptr;
-  }
+  void finish(int r) override {}
 public:
   C_IO_Wrapper(MDSRank *mds_, MDSContext *wrapped_) :
-    MDSIOContext(mds_), async(true), wrapped(wrapped_) {
-    ceph_assert(wrapped != NULL);
+    MDSIOContext(mds_), wrapped(wrapped_) {
+    ceph_assert(wrapped);
   }
-
   ~C_IO_Wrapper() override {
-    if (wrapped != nullptr) {
-      delete wrapped;
-      wrapped = nullptr;
-    }
+    delete wrapped;
   }
   void complete(int r) final;
   void print(ostream& out) const override {

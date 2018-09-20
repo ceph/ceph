@@ -61,17 +61,24 @@ void MutationImpl::drop_pins()
 
 void MutationImpl::start_locking(SimpleLock *lock, int target)
 {
-  ceph_assert(locking == NULL);
-  pin(lock->get_parent());
-  locking = lock;
-  locking_target_mds = target;
+  if (locking) {
+    ceph_assert(locking == lock);
+  } else {
+    pin(lock->get_parent());
+    lock->pin_stable_state();
+    locking = lock;
+    locking_target_mds = target;
+  }
 }
 
 void MutationImpl::finish_locking(SimpleLock *lock)
 {
-  ceph_assert(locking == lock);
-  locking = NULL;
-  locking_target_mds = -1;
+  if (locking) {
+    ceph_assert(locking == lock);
+    lock->unpin_stable_state();
+    locking = nullptr;
+    locking_target_mds = -1;
+  }
 }
 
 void MutationImpl::LockOpVec::erase_rdlock(SimpleLock* lock)

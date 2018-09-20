@@ -743,7 +743,7 @@ void MDCache::populate_mydir()
   dout(10) << "populate_mydir done" << dendl;
   ceph_assert(!open);    
   open = true;
-  mds->queue_waiters(waiting_for_open);
+  finish_contexts(g_ceph_context, waiting_for_open);
 
   stray_manager.set_num_strays(num_strays);
   stray_manager.activate();
@@ -2366,10 +2366,11 @@ void MDCache::log_master_commit(metareqid_t reqid)
 void MDCache::_logged_master_commit(metareqid_t reqid)
 {
   dout(10) << "_logged_master_commit " << reqid << dendl;
-  ceph_assert(uncommitted_masters.count(reqid));
-  uncommitted_masters[reqid].ls->uncommitted_masters.erase(reqid);
-  mds->queue_waiters(uncommitted_masters[reqid].waiters);
-  uncommitted_masters.erase(reqid);
+  auto it = uncommitted_masters.find(reqid);
+  ceph_assert(it != uncommitted_masters.end());
+  it->second.ls->uncommitted_masters.erase(reqid);
+  finish_contexts(g_ceph_context, it->second.waiters);
+  uncommitted_masters.erase(it);
 }
 
 // while active...
@@ -2887,7 +2888,7 @@ void MDCache::handle_mds_failure(mds_rank_t who)
   mds->balancer->handle_mds_failure(who);
 
   // clean up any requests slave to/from this node
-  list<MDRequestRef> finish;
+  std::vector<MDRequestRef> to_finish, to_queue;
   for (ceph::unordered_map<metareqid_t, MDRequestRef>::iterator p = active_requests.begin();
        p != active_requests.end();
        ++p) {
@@ -2910,7 +2911,7 @@ void MDCache::handle_mds_failure(mds_rank_t who)
 	if (mdr->slave_request || mdr->slave_rolling_back())
 	  mdr->aborted = true;
 	else
-	  finish.push_back(mdr);
+	  to_finish.push_back(mdr);
       }
     }
 
@@ -2921,7 +2922,7 @@ void MDCache::handle_mds_failure(mds_rank_t who)
 		 << who << dendl;
 	mdr->more()->waiting_on_slave.erase(who);
 	if (mdr->more()->waiting_on_slave.empty() && mdr->slave_request)
-	  mds->queue_waiter(new C_MDS_RetryRequest(this, mdr));
+	  to_queue.push_back(mdr);
       }
 
       if (mdr->more()->srcdn_auth_mds == who &&
@@ -2996,10 +2997,14 @@ void MDCache::handle_mds_failure(mds_rank_t who)
     }
   }
 
-  while (!finish.empty()) {
-    dout(10) << "cleaning up slave request " << *finish.front() << dendl;
-    request_finish(finish.front());
-    finish.pop_front();
+  for(auto &mdr : to_finish) {
+    dout(10) << "cleaning up slave request " << mdr << dendl;
+    request_finish(mdr);
+  }
+
+  for(auto &mdr : to_queue) {
+    dout(10) << "queue slave request " << mdr << dendl;
+    mds->queue_request(mdr);
   }
 
   kick_find_ino_peers(who);
@@ -3091,8 +3096,7 @@ void MDCache::handle_mds_recovery(mds_rank_t who)
   kick_open_ino_peers(who);
   kick_find_ino_peers(who);
 
-  // queue them up.
-  mds->queue_waiters(waiters);
+  finish_contexts(g_ceph_context, waiters);
 }
 
 void MDCache::set_recovery_set(set<mds_rank_t>& s) 
@@ -5152,7 +5156,7 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
     }
   } else {
     // survivor.
-    mds->queue_waiters(rejoin_waiters);
+    finish_contexts(g_ceph_context, rejoin_waiters);
   }
 }
 
@@ -5701,7 +5705,7 @@ void MDCache::export_remaining_imported_caps()
   for (map<inodeno_t, MDSContext::vec >::iterator p = cap_reconnect_waiters.begin();
        p != cap_reconnect_waiters.end();
        ++p)
-    mds->queue_waiters(p->second);
+    finish_contexts(g_ceph_context, p->second);
 
   cap_imports.clear();
   cap_reconnect_waiters.clear();
@@ -5739,10 +5743,9 @@ Capability* MDCache::try_reconnect_cap(CInode *in, Session *session)
       dout(15) << " chose lock states on " << *in << dendl;
     }
 
-    map<inodeno_t, MDSContext::vec >::iterator it =
-      cap_reconnect_waiters.find(in->ino());
+    auto it = cap_reconnect_waiters.find(in->ino());
     if (it != cap_reconnect_waiters.end()) {
-      mds->queue_waiters(it->second);
+      finish_contexts(g_ceph_context, it->second);
       cap_reconnect_waiters.erase(it);
     }
   }
@@ -6467,9 +6470,7 @@ void MDCache::truncate_inode_logged(CInode *in, MutationRef& mut)
   in->put(CInode::PIN_TRUNCATING);
   in->auth_unpin(this);
 
-  MDSContext::vec waiters;
-  in->take_waiting(CInode::WAIT_TRUNC, waiters);
-  mds->queue_waiters(waiters);
+  in->finish_waiting(CInode::WAIT_TRUNC);
 }
 
 
@@ -9101,7 +9102,7 @@ void MDCache::handle_find_ino_reply(const cref_t<MMDSFindInoReply> &m)
     // success?
     if (get_inode(fip.ino)) {
       dout(10) << "handle_find_ino_reply successfully found " << fip.ino << dendl;
-      mds->queue_waiter(fip.fin);
+      fip.fin->complete(0);
       find_ino_peer.erase(p);
       return;
     }
@@ -9253,7 +9254,7 @@ void MDCache::request_finish(MDRequestRef& mdr)
 
   // slave finisher?
   if (mdr->has_more() && mdr->more()->slave_commit) {
-    Context *fin = mdr->more()->slave_commit;
+    auto fin = mdr->more()->slave_commit;
     mdr->more()->slave_commit = 0;
     int ret;
     if (mdr->aborted) {
@@ -9264,7 +9265,7 @@ void MDCache::request_finish(MDRequestRef& mdr)
       ret = 0;
       mdr->committing = true;
     }
-    fin->complete(ret);   // this must re-call request_finish.
+    fin->complete_sync(ret);   // this must re-call request_finish.
     return; 
   }
 
@@ -9423,7 +9424,7 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
     if (mdr->more()->is_ambiguous_auth)
       mdr->clear_ambiguous_auth();
     if (!mdr->more()->waiting_for_finish.empty())
-      mds->queue_waiters(mdr->more()->waiting_for_finish);
+      finish_contexts(g_ceph_context, mdr->more()->waiting_for_finish);
   }
 
   request_drop_locks(mdr);
@@ -9830,9 +9831,7 @@ void MDCache::discover_path(CInode *base,
     base->add_waiter(CInode::WAIT_SINGLEAUTH, onfinish);
     return;
   } else if (from == mds->get_nodeid()) {
-    MDSContext::vec finished;
-    base->take_waiting(CInode::WAIT_DIR, finished);
-    mds->queue_waiters(finished);
+    base->finish_waiting(CInode::WAIT_DIR);
     return;
   }
 
@@ -9887,7 +9886,7 @@ void MDCache::discover_path(CDir *base,
   } else if (from == mds->get_nodeid()) {
     MDSContext::vec finished;
     base->take_sub_waiting(finished);
-    mds->queue_waiters(finished);
+    finish_contexts(g_ceph_context, finished);
     return;
   }
 
@@ -10364,7 +10363,7 @@ void MDCache::handle_discover_reply(const cref_t<MDiscoverReply> &m)
 
   // waiters
   finish_contexts(g_ceph_context, error, -ENOENT);  // finish errors directly
-  mds->queue_waiters(finished);
+  finish_contexts(g_ceph_context, finished);
 }
 
 
@@ -10518,7 +10517,7 @@ CDentry *MDCache::add_replica_stray(const bufferlist &bl, mds_rank_t from)
   CDir *straydir = add_replica_dir(p, strayin, from, finished);
   CDentry *straydn = add_replica_dentry(p, straydir, finished);
   if (!finished.empty())
-    mds->queue_waiters(finished);
+    finish_contexts(g_ceph_context, finished);
 
   return straydn;
 }
@@ -10678,7 +10677,7 @@ void MDCache::handle_dentry_link(const cref_t<MDentryLink> &m)
   }
 
   if (!finished.empty())
-    mds->queue_waiters(finished);
+    finish_contexts(g_ceph_context, finished);
 
   return;
 }
@@ -10869,7 +10868,7 @@ CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg, bool replay)
     }
   }
   if (!replay)
-    mds->queue_waiters(waiters);
+    finish_contexts(g_ceph_context, waiters);
   return dir;
 }
 
@@ -11469,7 +11468,7 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
 		       &info.resultfrags, waiters, false);
   if (g_conf()->mds_debug_frag)
     diri->verify_dirfrags();
-  mds->queue_waiters(waiters);
+  finish_contexts(g_ceph_context, waiters);
 
   for (const auto& fg : le->orig_frags)
     ceph_assert(!diri->dirfragtree.is_leaf(fg));
@@ -11781,7 +11780,7 @@ void MDCache::handle_fragment_notify(const cref_t<MMDSFragmentNotify> &notify)
     while (!p.end())
       add_replica_dir(p, diri, from, waiters);
 
-    mds->queue_waiters(waiters);
+    finish_contexts(g_ceph_context, waiters);
   } else {
     ceph_abort();
   }
@@ -11818,7 +11817,7 @@ void MDCache::finish_uncommitted_fragment(dirfrag_t basedirfrag, int op)
       uf.committed = true;
     } else {
       uf.ls->uncommitted_fragments.erase(basedirfrag);
-      mds->queue_waiters(uf.waiters);
+      finish_contexts(g_ceph_context, uf.waiters);
       uncommitted_fragments.erase(it);
     }
   }
@@ -12297,18 +12296,11 @@ int MDCache::dump_cache(std::string_view fn, Formatter *f)
   return r;
 }
 
-
-
-C_MDS_RetryRequest::C_MDS_RetryRequest(MDCache *c, MDRequestRef& r)
-  : MDSInternalContext(c->mds), cache(c), mdr(r)
-{}
-
 void C_MDS_RetryRequest::finish(int r)
 {
   mdr->retry++;
-  cache->dispatch_request(mdr);
+  get_mds()->queue_request(std::move(mdr));
 }
-
 
 class C_MDS_EnqueueScrub : public Context
 {

@@ -24,9 +24,15 @@
 void MDSContext::complete(int r) {
   MDSRank *mds = get_mds();
   ceph_assert(mds != nullptr);
+
+  if (is_async()) {
+    mds->queue_context(this, r);
+    return;
+  }
+
   ceph_assert(mds->mds_lock.is_locked_by_me());
   dout(10) << "MDSContext::complete: " << typeid(*this).name() << dendl;
-  return Context::complete(r);
+  Context::complete(r);
 }
 
 void MDSInternalContextWrapper::finish(int r)
@@ -102,7 +108,7 @@ void MDSIOContextBase::complete(int r) {
     derr << "MDSIOContextBase: blacklisted!  Restarting..." << dendl;
     mds->respawn();
   } else {
-    MDSContext::complete(r);
+    Context::complete(r);
   }
 }
 
@@ -122,10 +128,7 @@ void MDSIOContextWrapper::finish(int r)
 
 void C_IO_Wrapper::complete(int r)
 {
-  if (async) {
-    async = false;
-    get_mds()->finisher->queue(this, r);
-  } else {
-    MDSIOContext::complete(r);
-  }
+  get_mds()->queue_context(wrapped, r);
+  wrapped = nullptr;
+  delete this;
 }
