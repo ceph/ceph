@@ -64,15 +64,11 @@ at the expense of burning that memory whether it's used or not. This is ideal fo
 continers that are normally one or two nodes but have the ability to grow on that rare
 occasion when it's needed.
 
-There are two ways to create more slabs: Normal usage or "reserve".
-In the normal usage case, when no more free nodes are available, a slab is allocated
-using the slabSize template parameter, which has a default value intended to try to
-round up all allocations to something like 256 Bytes.
+There is only one way to create more slabs: When no more free nodes are
+available, a slab is allocated using the slabSize template parameter,
+which has a default value intended to try to round up all allocations
+to something like 256 Bytes.
 
-slab containers generally have a "reserve" function that emulates the vector::reserve
-function in that it guarantees space is available for that many nodes. Reserve always
-results in either 0 or #needeSlots / slabSize calls to malloc (0 for when the currently
-available space is sufficient).
 
 STATISTICS
 ----------
@@ -109,11 +105,11 @@ a step by step examination of how these statistics work.
 // The first slab is part of the object itself, meaning that no memory allocation is required
 // if the container doesn't exceed "stackSize" nodes.
 //
-// Subsequent slabs are allocated using the supplied allocator. A slab on the heap, by default, contains 'slabSize' nodes.
-// However, a "reserve" function (same functionality as vector::reserve) is provided that ensure a minimum number
-// of free nodes is available without further memory allocation. If the slab_xxxx::reserve function needs to allocate
-// additional nodes, only a single memory allocation will be done. Meaning that it's possible to have slabs that
-// are larger (or smaller) than 'slabSize' nodes.
+// Subsequent slabs are allocated using the supplied allocator. A slab on
+// the heap contains 'slabSize' nodes. It's impossible to have slabs that
+// are larger (or smaller) than 'slabSize' nodes EXCEPT the very specific
+// case of stack slabs. They are controlled by the `stacksize` parameter
+// and are internal part of the allocator's object.
 //
 template<pool_index_t pool_ix,typename T,size_t stackSize, size_t slabSize>
 class slab_allocator : public pool_slab_allocator<pool_ix,T> {
@@ -158,10 +154,10 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
       slab->freeMap.set_first(sz);
       slab->slabHead.next = NULL;
       slab->slabHead.prev = NULL;
-      this->slab_allocate(sz, trueSlotSize, sizeof(slab_t));
-      this->slab_item_free(trueSlotSize, sz);
 
-      freeSlotCount += sz;
+      this->slab_allocate(sz, sizeof(slot_t), sizeof(slab_t));
+      this->slab_item_free(sizeof(slot_t), sz);
+
       //
       // put slab onto the contianer's slab freelist
       //
@@ -175,21 +171,29 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
       // TLB misses/page faults twice.
    }
 
-   size_t deduceSlabSize(const slab_t* const slab) {
-     return slab == &stackSlab ? stackSize : slabSize;
-   }
-
-   //
-   // Free a slot, the "freeEmpty" parameter indicates if this slab should be freed if it's emptied
-   // 
-   void freeslot(slab_t* slab, size_t idx) {
+   void freeStackSlot(slab_t* const slab, const size_t idx) {
       //
       // Put this slot onto the per-slab freelist
       //
       const bool was_empty = slab->freeMap.none();
       slab->freeMap.set(idx);
-      ++freeSlotCount;
-      this->slab_item_free(trueSlotSize);
+      if (was_empty) {
+         //
+         // put slab onto the contianer's slab freelist
+         //
+         slab->slabHead.next = freeSlabHeads.next;
+         freeSlabHeads.next->prev = &slab->slabHead;
+         freeSlabHeads.next = &slab->slabHead;
+         slab->slabHead.prev = &freeSlabHeads;
+      }
+   }
+
+   void freeHeapSlot(slab_t* const slab, const size_t idx) {
+      //
+      // Put this slot onto the per-slab freelist
+      //
+      const bool was_empty = slab->freeMap.none();
+      slab->freeMap.set(idx);
       if (was_empty) {
          //
          // put slab onto the contianer's slab freelist
@@ -200,24 +204,18 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
          slab->slabHead.prev = &freeSlabHeads;
       }
 
-      const size_t size = deduceSlabSize(slab);
-      if (slab->freeMap.all_first_set(slabSize) && slab != &stackSlab) {
+      if (slab->freeMap.all_first_set(slabSize)) {
          //
          // Slab is entirely free
          //
          slab->slabHead.next->prev = slab->slabHead.prev;
          slab->slabHead.prev->next = slab->slabHead.next;
-         ceph_assert(freeSlotCount >= size);
-         freeSlotCount -= size;
-         this->slab_deallocate(size,trueSlotSize,sizeof(slab_t),true);
+         this->slab_deallocate(slabSize,sizeof(slot_t),sizeof(slab_t),true);
          delete[] slab;
       }
    }
-   //
-   // Danger, because of the my_actual_allocator hack. You can't rely on T to be correct, nor any value or offset that's
-   // derived directly or indirectly from T. We use the values saved during initialization, when T was correct.
-   //
-   void addSlab() {
+
+   void addHeapSlab() {
        //
        // I need to compute the size of this structure
        //
@@ -226,20 +224,16 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
        //        T          slots[slabSize];
        //   };
        //
-       // However, here sizeof(T) isn't correct [see warning above, 'T' might not be correct]
-       // so I use the sizeof(T) that's actually correct: 'trueSlotSize'
-       //
-       //
        // Allocate the slab and free the slots within.
        //
-       size_t total = (slabSize * trueSlotSize) + sizeof(slab_t);
+       size_t total = (slabSize * sizeof(slot_t)) + sizeof(slab_t);
        slab_t *slab = reinterpret_cast<slab_t *>(new char[total]);
        initSlab<slabSize>(slab);
    }
    
    slot_t *allocslot() {
       if (freeSlabHeads.next == &freeSlabHeads) {
-         addSlab();
+         addHeapSlab();
       }
       slab_t *freeSlab = slabHeadToSlab(freeSlabHeads.next);
       const std::size_t idx = freeSlab->freeMap.find_first_set();
@@ -253,41 +247,15 @@ class slab_allocator : public pool_slab_allocator<pool_ix,T> {
          freeSlab->slabHead.next = nullptr;
          freeSlab->slabHead.prev = nullptr;
       }
-      --freeSlotCount;
-      this->slab_item_allocate(trueSlotSize);
+
+      this->slab_item_allocate(sizeof(slot_t));
 
       slot_t& slot = freeSlab->slot[idx];
       slot.slab = freeSlab;
       return &slot;
    }
 
-   void _reserve(size_t freeCount) {
-      if (freeSlotCount < freeCount) {
-	const size_t newSlots = freeCount - freeSlotCount;
-	size_t newSlabs = round_up_to(newSlots, slabSize) / slabSize;
-
-	// We could allocate in a single chunk and divide it across
-	// fixed-size slabs at the price of reference counting.
-	// Each slab would need a pointer-to-counter. nullptr would
-	// be for slabs allocated outside of the reservation bits.
-	// The non-atomical counter would be located at the chunk's
-	// beginning, so `delete &ctr` would be enough to get rid
-	// of whole region.
-	// However, I'm not convinced we hate dynallocs so much to
-	// hold the principle of 0-or-1-alloc-on-reserve for all cost.
-	while (newSlabs--) {
-	  addSlab();
-	}
-      }      
-   }
-
-   slab_allocator *selfPointer;                 // for selfCheck
    slabHead_t freeSlabHeads;	                // List of slabs that have free slots
-   size_t freeSlotCount;                        // # of slots currently in the freelist * Only used for debug integrity check *
-   size_t allocSlotCount;                       // # of slabs allocated                 * Only used for debug integrity check *
-   size_t trueSlotSize;	                        // Actual Slot Size
-
-   // Must always be last item declared, because of get_my_allocator hack which won't have the right types, hence it'll get the stack wrong....
    stackSlab_t stackSlab; 			// stackSlab is always allocated with the object :)
   
 public:
@@ -297,29 +265,25 @@ public:
 
   typedef slab_allocator<pool_ix,T,stackSize,slabSize> allocator_type;
 
-   slab_allocator() : freeSlotCount(0), allocSlotCount(stackSize), trueSlotSize(sizeof(slot_t)) {
+   slab_allocator() {
       //
       // For the "in the stack" slots, put them on the free list
       //
       freeSlabHeads.next = &freeSlabHeads;
       freeSlabHeads.prev = &freeSlabHeads;
       initSlab<stackSize>(&stackSlab);
-      selfPointer = this;
    }
    ~slab_allocator() {
       //
       // If you fail here, it's because you've allowed a node to escape the enclosing object. Something like a swap
       // or a splice operation. Probably the slab_xxx container is missing a "using" that serves to hide some operation.
       //
-      assert(freeSlotCount == allocSlotCount);
-      assert(freeSlotCount == stackSize);
       assert(freeSlabHeads.next == &stackSlab.slabHead); // Empty list should have stack slab on it
-      this->slab_deallocate(stackSize,trueSlotSize,sizeof(slab_t),true);
+      this->slab_deallocate(stackSize,sizeof(slot_t),sizeof(slab_t),true);
    }
 
    T* allocate(size_t cnt,void *p = nullptr) {
       assert(cnt == 1); // if you fail this you've used this class with the wrong STL container.
-      assert(sizeof(slot_t) == trueSlotSize);
       return reinterpret_cast<T *>(sizeof(void *) + (char *)allocslot());
    }
 
@@ -328,22 +292,16 @@ public:
       auto* slab = slot->slab;
 
       const std::size_t idx = (slot - &(slab->slot[0]));
-      freeslot(slab, idx);
-   }
+      if (slab == &stackSlab) {
+	freeStackSlot(slab, idx);
+      } else {
+	freeHeapSlot(slab, idx);
+      }
 
-   //
-   // Extra function for our use
-   //
-   void reserve(size_t freeCount) {
-      _reserve(freeCount);
-   }
-
-   void selfCheck() {
-      assert(this == selfPointer); // If you fail here, the horrible get_my_allocator hack is failing. 
+      this->slab_item_free(sizeof(slot_t));
    }
 
 private:
-
    // Can't copy or assign this guy
    slab_allocator(slab_allocator&) = delete;
    slab_allocator(slab_allocator&&) = delete;
@@ -363,34 +321,12 @@ template<
    size_t   heapCount, 
    typename compare = std::less<key> >
    struct slab_map : public std::map<key,value,compare,slab_allocator<pool_ix,std::pair<key,value>,stackCount,heapCount> > {
-   //
-   // Extended operator. reserve is now meaningful.
-   //
-   void reserve(size_t freeCount) { this->get_my_actual_allocator()->reserve(freeCount); }
 private:
    typedef std::map<key,value,compare,slab_allocator<pool_ix,std::pair<key,value>,stackCount,heapCount>> map_type;
    //
    // Disallowed operations
    //
    using map_type::swap;
-
-   //
-   // Unfortunately, the get_allocator operation returns a COPY of the allocator, not a reference :( :( :( :(
-   // We need the actual underlying object. This terrible hack accomplishes that because the STL library on
-   // all of the platforms we care about actually instantiate the allocator right at the start of the object :)
-   // we do have a check for this :)
-   //
-   // It's also the case that the instantiation type of the underlying allocator won't match the type of the allocator
-   // That's here (that's because the container instantiates the node type itself, i.e., with container-specific
-   // additional members.
-   // But that doesn't matter for this hack...
-   //
-   typedef slab_allocator<pool_ix,std::pair<key,value>,stackCount,heapCount> my_alloc_type;
-   my_alloc_type * get_my_actual_allocator() {
-      my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
-      alloc->selfCheck();
-      return alloc;
-   }
 };
 
 template<
@@ -401,33 +337,12 @@ template<
    size_t   heapCount, 
    typename compare = std::less<key> >
    struct slab_multimap : public std::multimap<key,value,compare,slab_allocator<pool_ix,std::pair<key,value>,stackCount,heapCount> > {
-   //
-   // Extended operator. reserve is now meaningful.
-   //
-   void reserve(size_t freeCount) { this->get_my_actual_allocator()->reserve(freeCount); }
 private:
    typedef std::multimap<key,value,compare,slab_allocator<pool_ix,std::pair<key,value>,stackCount,heapCount>> map_type;
    //
    // Disallowed operations
    //
    using map_type::swap;
-   //
-   // Unfortunately, the get_allocator operation returns a COPY of the allocator, not a reference :( :( :( :(
-   // We need the actual underlying object. This terrible hack accomplishes that because the STL library on
-   // all of the platforms we care about actually instantiate the allocator right at the start of the object :)
-   // we do have a check for this :)
-   //
-   // It's also the case that the instantiation type of the underlying allocator won't match the type of the allocator
-   // That's here (that's because the container instantiates the node type itself, i.e., with container-specific
-   // additional members.
-   // But that doesn't matter for this hack...
-   //
-   typedef slab_allocator<pool_ix,std::pair<key,value>,stackCount,heapCount> my_alloc_type;
-   my_alloc_type * get_my_actual_allocator() {
-      my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
-      alloc->selfCheck();
-      return alloc;
-   }
 };
 
 template<
@@ -437,33 +352,12 @@ template<
    size_t   heapCount, 
    typename compare = std::less<key> >
    struct slab_set : public std::set<key,compare,slab_allocator<pool_ix,key,stackCount,heapCount> > {
-   //
-   // Extended operator. reserve is now meaningful.
-   //
-   void reserve(size_t freeCount) { this->get_my_actual_allocator()->reserve(freeCount); }
 private:
    typedef std::set<key,compare,slab_allocator<pool_ix,key,stackCount,heapCount>> set_type;
    //
    // Disallowed operations
    //
    using set_type::swap;
-   //
-   // Unfortunately, the get_allocator operation returns a COPY of the allocator, not a reference :( :( :( :(
-   // We need the actual underlying object. This terrible hack accomplishes that because the STL library on
-   // all of the platforms we care about actually instantiate the allocator right at the start of the object :)
-   // we do have a check for this :)
-   //
-   // It's also the case that the instantiation type of the underlying allocator won't match the type of the allocator
-   // That's here (that's because the container instantiates the node type itself, i.e., with container-specific
-   // additional members.
-   // But that doesn't matter for this hack...
-   //
-   typedef slab_allocator<pool_ix,key,stackCount,heapCount> my_alloc_type;
-   my_alloc_type * get_my_actual_allocator() {
-      my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
-      alloc->selfCheck();
-      return alloc;
-   }
 };
 
 template<
@@ -473,33 +367,12 @@ template<
    size_t   heapCount, 
    typename compare = std::less<key> >
    struct slab_multiset : public std::multiset<key,compare,slab_allocator<pool_ix,key,stackCount,heapCount> > {
-   //
-   // Extended operator. reserve is now meaningful.
-   //
-   void reserve(size_t freeCount) { this->get_my_actual_allocator()->reserve(freeCount); }
 private:
    typedef std::multiset<key,compare,slab_allocator<pool_ix,key,stackCount,heapCount>> set_type;
    //
    // Disallowed operations
    //
    using set_type::swap;
-   //
-   // Unfortunately, the get_allocator operation returns a COPY of the allocator, not a reference :( :( :( :(
-   // We need the actual underlying object. This terrible hack accomplishes that because the STL library on
-   // all of the platforms we care about actually instantiate the allocator right at the start of the object :)
-   // we do have a check for this :)
-   //
-   // It's also the case that the instantiation type of the underlying allocator won't match the type of the allocator
-   // That's here (that's because the container instantiates the node type itself, i.e., with container-specific
-   // additional members.
-   // But that doesn't matter for this hack...
-   //
-   typedef slab_allocator<pool_ix,key,stackCount,heapCount> my_alloc_type;
-   my_alloc_type * get_my_actual_allocator() {
-      my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
-      alloc->selfCheck();
-      return alloc;
-   }
 };
 
 template<
@@ -569,10 +442,6 @@ struct slab_list : public std::list<node,slab_allocator<pool_ix,node,stackCount,
          mfirst = this->erase(mfirst);
       }
    }
-   //
-   // Extended operator. reserve is now meaningful.
-   //
-   void reserve(size_t freeCount) { this->get_my_actual_allocator()->reserve(freeCount); }
 private:
    typedef std::list<node,slab_allocator<pool_ix,node,stackCount,heapCount>> list_type;
 
@@ -581,25 +450,6 @@ private:
       for (auto& e : o) {
          this->push_back(e);
       }
-   }
-   //
-   // Disallowed operations
-   //
-   // Unfortunately, the get_allocator operation returns a COPY of the allocator, not a reference :( :( :( :(
-   // We need the actual underlying object. This terrible hack accomplishes that because the STL library on
-   // all of the platforms we care about actually instantiate the allocator right at the start of the object :)
-   // we do have a cheap run-time check for this, in case you're platform doesn't match the same layout :)
-   //
-   // It's also the case that the instantiation type of the underlying allocator won't match the type of the allocator
-   // That's here (that's because the container instantiates the node type itself, i.e., with container-specific
-   // additional members.
-   // But that doesn't matter for this hack...
-   //
-   typedef slab_allocator<pool_ix,node,stackCount,heapCount> my_alloc_type;
-   my_alloc_type * get_my_actual_allocator() {
-      my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
-      alloc->selfCheck();
-      return alloc;
    }
 };
 
@@ -692,27 +542,6 @@ public:
       rhs.reserve(stackCount + 1);
       this->vector_type::swap(rhs);
    }
-   
-
-private:
-   //
-   // Unfortunately, the get_allocator operation returns a COPY of the allocator, not a reference :( :( :( :(
-   // We need the actual underlying object. This terrible hack accomplishes that because the STL library on
-   // all of the platforms we care about actually instantiate the allocator right at the start of the object :)
-   // we do have a check for this :)
-   //
-   // It's also the case that the instantiation type of the underlying allocator won't match the type of the allocator
-   // That's here (that's because the container instantiates the node type itself, i.e., with container-specific
-   // additional members.
-   // But that doesn't matter for this hack...
-   //
-   typedef slab_vector_allocator<pool_ix,value,stackCount> my_alloc_type;
-   my_alloc_type * get_my_actual_allocator() {
-      my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
-      alloc->selfCheck();
-      return alloc;
-   }
-
 };
 
 }; // namespace

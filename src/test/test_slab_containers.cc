@@ -116,15 +116,10 @@ TEST(test_slab_containers, list_context) {
       c.splice(c.begin(),b,b.begin(),b.end());
       eq_elements(a,c);
    }
-   //
-   // Now with reserve calls
-   //
    for (int i = 1; i < 10; ++i) {
       list<int> a;
       mempool::unittest_1::slab_list<int,4> b,c;
       eq_elements(a,b);
-      b.reserve(i);
-      c.reserve(i);
       do_push_back(a,b,i,i);
       eq_elements(a,b);
       c.swap(b);
@@ -180,7 +175,6 @@ TEST(test_slab_containers, set_context) {
       EXPECT_EQ(0u,mempool::unittest_1::containers());
       set<int> a;
       mempool::unittest_1::slab_set<int,4> b;
-      b.reserve(i);
       do_insert(a,b,i,0);
       EXPECT_NE(a.find(i/2),a.end());
       EXPECT_NE(b.find(i/2),b.end());
