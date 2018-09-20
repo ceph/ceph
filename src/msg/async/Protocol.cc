@@ -1907,7 +1907,7 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   bool authorizer_valid;
   bool need_challenge = HAVE_FEATURE(connect_msg.features, CEPHX_V2);
   bool had_challenge = (bool)authorizer_challenge;
-  if (!messenger->verify_authorizer(
+  if (!messenger->ms_deliver_verify_authorizer(
           connection, connection->peer_type, connect_msg.authorizer_protocol,
           authorizer_buf, authorizer_reply, authorizer_valid, session_key,
           need_challenge ? &authorizer_challenge : nullptr) ||
