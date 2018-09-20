@@ -1387,9 +1387,10 @@ bool RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
   if (m_migration_spec.header_type != cls::rbd::MIGRATION_HEADER_TYPE_DST ||
       (m_migration_spec.state != cls::rbd::MIGRATION_STATE_PREPARED &&
        m_migration_spec.state != cls::rbd::MIGRATION_STATE_EXECUTING)) {
-    ceph_assert(m_migration_spec.header_type == cls::rbd::MIGRATION_HEADER_TYPE_SRC ||
-           m_migration_spec.pool_id == -1 ||
-           m_migration_spec.state == cls::rbd::MIGRATION_STATE_EXECUTED);
+    ceph_assert(m_migration_spec.header_type ==
+                    cls::rbd::MIGRATION_HEADER_TYPE_SRC ||
+                m_migration_spec.pool_id == -1 ||
+                m_migration_spec.state == cls::rbd::MIGRATION_STATE_EXECUTED);
 
     return false;
   }

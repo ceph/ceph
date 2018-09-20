@@ -126,8 +126,8 @@ private:
 
   int validate_parent(ImageCtxT *image_ctx, cls::rbd::ParentImageSpec *spec);
 
-  Context *start_lock_op();
-  Context *start_lock_op(RWLock &owner_lock);
+  Context *start_lock_op(int* r);
+  Context *start_lock_op(RWLock &owner_locki, int* r);
 
   void finish(int r);
 };

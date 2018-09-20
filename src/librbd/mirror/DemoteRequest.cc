@@ -105,11 +105,12 @@ void DemoteRequest<I>::handle_acquire_lock(int r) {
   }
 
   m_image_ctx.owner_lock.get_read();
-  if (m_image_ctx.exclusive_lock == nullptr ||
+  if (m_image_ctx.exclusive_lock != nullptr &&
       !m_image_ctx.exclusive_lock->is_lock_owner()) {
+    r = m_image_ctx.exclusive_lock->get_unlocked_op_error();
     m_image_ctx.owner_lock.put_read();
     lderr(cct) << "failed to acquire exclusive lock" << dendl;
-    finish(-EROFS);
+    finish(r);
     return;
   }
   m_image_ctx.owner_lock.put_read();

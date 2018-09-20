@@ -74,7 +74,7 @@ private:
   void send_attach_parent();
   void handle_attach_parent(int r);
 
-  Context *start_lock_op();
+  Context *start_lock_op(int* r);
 
   void finish(int r);
 };

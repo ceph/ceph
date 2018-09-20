@@ -91,6 +91,14 @@ void ExclusiveLock<I>::unblock_requests() {
 }
 
 template <typename I>
+int ExclusiveLock<I>::get_unlocked_op_error() const {
+  if (m_image_ctx.image_watcher->is_blacklisted()) {
+    return -EBLACKLISTED;
+  }
+  return -EROFS;
+}
+
+template <typename I>
 void ExclusiveLock<I>::init(uint64_t features, Context *on_init) {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
   ldout(m_image_ctx.cct, 10) << dendl;
@@ -129,11 +137,12 @@ void ExclusiveLock<I>::handle_peer_notification(int r) {
 }
 
 template <typename I>
-Context *ExclusiveLock<I>::start_op() {
+Context *ExclusiveLock<I>::start_op(int* ret_val) {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
   Mutex::Locker locker(ML<I>::m_lock);
 
   if (!accept_ops(ML<I>::m_lock)) {
+    *ret_val = get_unlocked_op_error();
     return nullptr;
   }
 
