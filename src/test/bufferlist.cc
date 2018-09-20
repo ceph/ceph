@@ -2110,6 +2110,48 @@ TEST(BufferList, append) {
   }
 }
 
+TEST(BufferList, append_hole) {
+  {
+    bufferlist bl;
+    auto iter = bl.append_hole(1);
+    EXPECT_EQ((unsigned)1, bl.get_num_buffers());
+    EXPECT_EQ((unsigned)1, bl.length());
+
+    bl.append("BC", 2);
+    EXPECT_EQ((unsigned)1, bl.get_num_buffers());
+    EXPECT_EQ((unsigned)3, bl.length());
+
+    const char a = 'A';
+    EXPECT_EQ((unsigned)2, bl.length() - iter.get_off() - sizeof(a));
+    iter.copy_in((unsigned)1, &a);
+    EXPECT_EQ((unsigned)3, bl.length());
+
+    EXPECT_EQ(0, ::memcmp("ABC", bl.c_str(), 3));
+  }
+
+  {
+    bufferlist bl;
+    bl.append('A');
+    EXPECT_EQ((unsigned)1, bl.get_num_buffers());
+    EXPECT_EQ((unsigned)1, bl.length());
+
+    auto iter = bl.append_hole(1);
+    EXPECT_EQ((unsigned)1, bl.get_num_buffers());
+    EXPECT_EQ((unsigned)2, bl.length());
+
+    bl.append('C');
+    EXPECT_EQ((unsigned)1, bl.get_num_buffers());
+    EXPECT_EQ((unsigned)3, bl.length());
+
+    const char b = 'B';
+    EXPECT_EQ((unsigned)1, bl.length() - iter.get_off() - sizeof(b));
+    iter.copy_in((unsigned)1, &b);
+    EXPECT_EQ((unsigned)3, bl.length());
+
+    EXPECT_EQ(0, ::memcmp("ABC", bl.c_str(), 3));
+  }
+}
+
 TEST(BufferList, append_zero) {
   bufferlist bl;
   bl.append('A');
