@@ -99,6 +99,7 @@ public:
 
   uint64_t get_instance_id();
 
+  int get_min_compatible_osd(int8_t* require_osd_release);
   int get_min_compatible_client(int8_t* min_compat_client,
                                 int8_t* require_min_compat_client);
 

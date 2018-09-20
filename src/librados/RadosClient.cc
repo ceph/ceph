@@ -444,6 +444,20 @@ uint64_t librados::RadosClient::get_instance_id()
   return instance_id;
 }
 
+int librados::RadosClient::get_min_compatible_osd(int8_t* require_osd_release)
+{
+  int r = wait_for_osdmap();
+  if (r < 0) {
+    return r;
+  }
+
+  objecter->with_osdmap(
+    [require_osd_release](const OSDMap& o) {
+      *require_osd_release = o.require_osd_release;
+    });
+  return 0;
+}
+
 int librados::RadosClient::get_min_compatible_client(int8_t* min_compat_client,
                                                      int8_t* require_min_compat_client)
 {
