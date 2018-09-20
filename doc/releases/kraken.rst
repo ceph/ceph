@@ -37,7 +37,7 @@ Notable Changes
 * This release greatly improves control and throttling of the snap trimmer. It
   introduces the "osd max trimming pgs" option (defaulting to 2), which limits
   how many PGs on an OSD can be trimming snapshots at a time. And it restores
-  the safe use of the "osd snap trim sleep" option, wihch defaults to 0 but
+  the safe use of the "osd snap trim sleep" option, which defaults to 0 but
   otherwise adds the given number of seconds in delay between every dispatch
   of trim operations to the underlying system.
 
@@ -459,7 +459,7 @@ Upgrade notes
 * The 'rgw rest getusage op compat' config option allows you to dump
   (or not dump) the description of user stats in the S3 GetUsage
   API. This option defaults to false.  If the value is true, the
-  reponse data for GetUsage looks like::
+  response data for GetUsage looks like::
 
     "stats": {
                 "TotalBytes": 516,
@@ -467,7 +467,7 @@ Upgrade notes
                 "TotalEntries": 1
              }
 
-  If the value is false, the reponse for GetUsage looks as it did before::
+  If the value is false, the response for GetUsage looks as it did before::
 
     {
          516,
