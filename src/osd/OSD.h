@@ -1776,7 +1776,11 @@ protected:
       auto &&sdata = osd->shards[shard_index];
       ceph_assert(sdata);
       Mutex::Locker l(sdata->shard_lock);
-      return sdata->pqueue->empty() && sdata->context_queue.empty();
+      if (thread_index < osd->num_shards) {
+	return sdata->pqueue->empty() && sdata->context_queue.empty();
+      } else {
+	return sdata->pqueue->empty();
+      }
     }
 
     void handle_oncommits(list<Context*>& oncommits) {
