@@ -25,15 +25,15 @@ enum {
   l_mutex_last
 };
 
-mutex_debugging_base::mutex_debugging_base(const std::string &n, bool bt) :
-  id(-1), backtrace(bt), nlock(0), locked_by(thread::id()) {
-  if (n.empty()) {
-    uuid_d uu;
-    uu.generate_random();
-    name = string("Unnamed-Mutex-") + uu.to_string();
-  } else {
-    name = n;
-  }
+mutex_debugging_base::mutex_debugging_base(const std::string &n, bool bt)
+  : name(n), id(-1), backtrace(bt), nlock(0), locked_by(thread::id())
+{
+  if (g_lockdep)
+    _register();
+}
+mutex_debugging_base::mutex_debugging_base(const char *n, bool bt)
+  : name(n), id(-1), backtrace(bt), nlock(0), locked_by(thread::id())
+{
   if (g_lockdep)
     _register();
 }

@@ -48,7 +48,8 @@ protected:
   void _locked(); // just locked
   void _will_unlock(); // about to unlock
 
-  mutex_debugging_base(const std::string &n = std::string(), bool bt = false);
+  mutex_debugging_base(const std::string &n, bool bt = false);
+  mutex_debugging_base(const char *n, bool bt = false);
   ~mutex_debugging_base();
 
   ceph::mono_time before_lock_blocks();
@@ -74,12 +75,8 @@ class mutex_debug_impl : public mutex_debugging_base
 {
 private:
   pthread_mutex_t m;
-public:
-  static constexpr bool recursive = Recursive;
 
-  // Mutex concept is DefaultConstructible
-  mutex_debug_impl(const std::string &n = std::string(), bool bt = false)
-    : mutex_debugging_base(n, bt) {
+  void _init() {
     pthread_mutexattr_t a;
     pthread_mutexattr_init(&a);
     int r;
@@ -91,6 +88,20 @@ public:
     r = pthread_mutex_init(&m, &a);
     ceph_assert(r == 0);
   }
+
+public:
+  static constexpr bool recursive = Recursive;
+
+  // Mutex concept is DefaultConstructible
+  mutex_debug_impl(const std::string &n, bool bt = false)
+    : mutex_debugging_base(n, bt) {
+    _init();
+  }
+  mutex_debug_impl(const char *n, bool bt = false)
+    : mutex_debugging_base(n, bt) {
+    _init();
+  }
+
   // Mutex is Destructible
   ~mutex_debug_impl() {
     int r = pthread_mutex_destroy(&m);
