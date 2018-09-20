@@ -973,16 +973,30 @@ void ImageReplayer<I>::handle_get_remote_tag(int r) {
 
 template <typename I>
 void ImageReplayer<I>::allocate_local_tag() {
-  dout(20) << dendl;
+  dout(15) << dendl;
 
   std::string mirror_uuid = m_replay_tag_data.mirror_uuid;
-  if (mirror_uuid == librbd::Journal<>::LOCAL_MIRROR_UUID ||
-      mirror_uuid == m_local_mirror_uuid) {
+  if (mirror_uuid == librbd::Journal<>::LOCAL_MIRROR_UUID) {
     mirror_uuid = m_remote_mirror_uuid;
+  } else if (mirror_uuid == m_local_mirror_uuid) {
+    mirror_uuid = librbd::Journal<>::LOCAL_MIRROR_UUID;
   } else if (mirror_uuid == librbd::Journal<>::ORPHAN_MIRROR_UUID) {
-    dout(5) << "encountered image demotion: stopping" << dendl;
-    Mutex::Locker locker(m_lock);
-    m_stop_requested = true;
+    // handle possible edge condition where daemon can failover and
+    // the local image has already been promoted/demoted
+    auto local_tag_data = m_local_journal->get_tag_data();
+    if (local_tag_data.mirror_uuid == librbd::Journal<>::ORPHAN_MIRROR_UUID &&
+        (local_tag_data.predecessor.commit_valid &&
+         local_tag_data.predecessor.mirror_uuid ==
+           librbd::Journal<>::LOCAL_MIRROR_UUID)) {
+      dout(15) << "skipping stale demotion event" << dendl;
+      handle_process_entry_safe(m_replay_entry, 0);
+      handle_replay_ready();
+      return;
+    } else {
+      dout(5) << "encountered image demotion: stopping" << dendl;
+      Mutex::Locker locker(m_lock);
+      m_stop_requested = true;
+    }
   }
 
   librbd::journal::TagPredecessor predecessor(m_replay_tag_data.predecessor);
@@ -992,10 +1006,9 @@ void ImageReplayer<I>::allocate_local_tag() {
     predecessor.mirror_uuid = librbd::Journal<>::LOCAL_MIRROR_UUID;
   }
 
-  dout(20) << "mirror_uuid=" << mirror_uuid << ", "
-           << "predecessor_mirror_uuid=" << predecessor.mirror_uuid << ", "
-           << "replay_tag_tid=" << m_replay_tag_tid << ", "
-           << "replay_tag_data=" << m_replay_tag_data << dendl;
+  dout(15) << "mirror_uuid=" << mirror_uuid << ", "
+           << "predecessor=" << predecessor << ", "
+           << "replay_tag_tid=" << m_replay_tag_tid << dendl;
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_allocate_local_tag>(this);
   m_local_journal->allocate_tag(mirror_uuid, predecessor, ctx);
@@ -1003,7 +1016,8 @@ void ImageReplayer<I>::allocate_local_tag() {
 
 template <typename I>
 void ImageReplayer<I>::handle_allocate_local_tag(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(15) << "r=" << r << ", "
+           << "tag_tid=" << m_local_journal->get_tag_tid() << dendl;
 
   if (r < 0) {
     derr << "failed to allocate journal tag: " << cpp_strerror(r) << dendl;
