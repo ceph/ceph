@@ -18,6 +18,7 @@
 #include <boost/optional.hpp>
 
 #include "msg/Message.h"
+#include "mgr/OSDPerfMetricReport.h"
 
 #include "common/perf_counters.h"
 #include "mgr/DaemonHealthMetric.h"
@@ -29,6 +30,7 @@ public:
   std::string description;
   std::string nick;
   enum perfcounter_type_d type;
+
 
   // For older clients that did not send priority, pretend everything
   // is "useful" so that mgr plugins filtering on prio will get some
@@ -75,7 +77,7 @@ public:
   friend factory;
 private:
 
-  static constexpr int HEAD_VERSION = 6;
+  static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -106,6 +108,8 @@ public:
   // encode map<string,map<int32_t,string>> of current config
   bufferlist config_bl;
 
+  OSDPerfMetricReport perf_report;
+
   void decode_payload() override
   {
     auto p = payload.cbegin();
@@ -124,6 +128,9 @@ public:
     if (header.version >= 6) {
       decode(config_bl, p);
     }
+    if (header.version >= 7) {
+      decode(perf_report, p);
+    }
   }
 
   void encode_payload(uint64_t features) override {
@@ -136,6 +143,7 @@ public:
     encode(daemon_status, payload);
     encode(daemon_health_metrics, payload);
     encode(config_bl, payload);
+    encode(perf_report, payload);
   }
 
   const char *get_type_name() const override { return "mgrreport"; }
