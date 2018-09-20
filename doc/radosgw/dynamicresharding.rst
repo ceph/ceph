@@ -38,7 +38,7 @@ Enable/Disable Dynamic bucket index resharding:
 
 -``rgw_dynamic_resharding``:  true/false, default: true.
 
-Parameters to control the resahrding process in Ceph configuration fie:
+Parameters to control the resharding process in Ceph configuration fie:
 
 -``rgw_reshard_num_logs``: number of shards for the resharding log, default: 16
 
