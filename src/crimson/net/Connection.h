@@ -22,25 +22,20 @@
 
 namespace ceph::net {
 
-using seq_num_t = uint64_t;
-
 class Connection : public boost::intrusive_ref_counter<Connection,
 						       boost::thread_unsafe_counter> {
  protected:
   Messenger *const messenger;
-  entity_addr_t my_addr;
-  entity_addr_t peer_addr;
 
  public:
-  Connection(Messenger *messenger, const entity_addr_t& my_addr,
-             const entity_addr_t& peer_addr)
-    : messenger(messenger), my_addr(my_addr), peer_addr(peer_addr) {}
+  Connection(Messenger *messenger)
+    : messenger(messenger) {}
   virtual ~Connection() {}
 
   Messenger* get_messenger() const { return messenger; }
 
-  const entity_addr_t& get_my_addr() const { return my_addr; }
-  const entity_addr_t& get_peer_addr() const { return peer_addr; }
+  virtual const entity_addr_t& get_my_addr() const = 0;
+  virtual const entity_addr_t& get_peer_addr() const = 0;
   virtual int get_peer_type() const = 0;
 
   /// true if the handshake has completed and no errors have been encountered

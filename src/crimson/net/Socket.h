@@ -16,8 +16,6 @@
 
 #pragma once
 
-#include <memory>
-
 #include <seastar/core/reactor.hh>
 #include <seastar/net/packet.hh>
 

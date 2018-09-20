@@ -37,5 +37,7 @@ class Dispatcher;
 
 class Messenger;
 
+using seq_num_t = uint64_t;
+
 } // namespace ceph::net
 

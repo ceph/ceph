@@ -14,21 +14,16 @@
 
 #pragma once
 
-#include <seastar/core/gate.hh>
-#include <seastar/core/reactor.hh>
 #include <seastar/core/shared_future.hh>
 
-#include "msg/Policy.h"
+#include "Session.h"
 #include "Connection.h"
-#include "crimson/thread/Throttle.h"
-#include "Socket.h"
-
-class AuthSessionHandler;
 
 namespace ceph::net {
 
 class SocketConnection : public Connection {
-  std::optional<Socket> socket;
+  Session _s;
+  Session * const s = &_s;
 
   state_t state = state_t::none;
 
@@ -41,12 +36,6 @@ class SocketConnection : public Connection {
     ceph_msg_connect_reply reply;
     bool got_bad_auth = false;
     std::unique_ptr<AuthAuthorizer> authorizer;
-    peer_type_t peer_type;
-    std::chrono::milliseconds backoff;
-    uint32_t connect_seq = 0;
-    uint32_t peer_global_seq = 0;
-    uint32_t global_seq;
-    seastar::promise<> promise;
   } h;
 
   /// server side of handshake negotiation
@@ -66,7 +55,7 @@ class SocketConnection : public Connection {
 
   bool require_auth_feature() const;
   int get_peer_type() const override {
-    return h.connect.host_type;
+    return _s.peer_type;
   }
   uint32_t get_proto_version(entity_type_t peer_type, bool connec) const;
   /// client side of handshake negotiation
@@ -94,35 +83,21 @@ class SocketConnection : public Connection {
   /// becomes available when handshake completes, and when all previous messages
   /// have been sent to the output stream. send() chains new messages as
   /// continuations to this future to act as a queue
-  seastar::future<> send_ready;
+  seastar::future<> send_ready = _s.send_promise.get_future();
 
   /// encode/write a message
   seastar::future<> write_message(MessageRef msg);
 
-  ceph::net::Policy<ceph::thread::Throttle> policy;
-  uint64_t features;
   void set_features(uint64_t new_features) {
-    features = new_features;
+    _s.features = new_features;
   }
 
-  /// the seq num of the last transmitted message
-  seq_num_t out_seq = 0;
-  /// the seq num of the last received message
-  seq_num_t in_seq = 0;
   /// update the seq num of last received message
   /// @returns true if the @c seq is valid, and @c in_seq is updated,
   ///          false otherwise.
   bool update_rx_seq(seq_num_t seq);
 
   seastar::future<MessageRef> do_read_message();
-
-  std::unique_ptr<AuthSessionHandler> session_security;
-
-  // messages to be resent after connection gets reset
-  std::queue<MessageRef> out_q;
-  // messages sent, but not yet acked by peer
-  std::queue<MessageRef> sent;
-  static void discard_up_to(std::queue<MessageRef>*, seq_num_t);
 
   struct Keepalive {
     struct {
@@ -133,14 +108,12 @@ class SocketConnection : public Connection {
       const char tag = CEPH_MSGR_TAG_KEEPALIVE2_ACK;
       ceph_timespec stamp;
     } __attribute__((packed)) ack;
-    ceph_timespec ack_stamp;
   } k;
 
   seastar::future<> fault();
 
   // prototols specific
   Dispatcher *dispatcher;
-  seastar::gate dispatch_gate;
 
   void protocol_open();
 
@@ -155,6 +128,9 @@ class SocketConnection : public Connection {
                    const entity_addr_t& peer_addr,
                    seastar::connected_socket&& socket);
   ~SocketConnection();
+
+  const entity_addr_t& get_my_addr() const { return _s.my_addr; };
+  const entity_addr_t& get_peer_addr() const { return _s.peer_addr; };
 
   bool is_connected() override;
 
@@ -171,28 +147,28 @@ class SocketConnection : public Connection {
   seastar::future<> close() override;
 
   uint32_t connect_seq() const override {
-    return h.connect_seq;
+    return _s.connect_seq;
   }
   uint32_t peer_global_seq() const override {
-    return h.peer_global_seq;
+    return _s.peer_global_seq;
   }
   seq_num_t rx_seq_num() const {
-    return in_seq;
+    return _s.in_seq;
   }
   state_t get_state() const override {
     return state;
   }
   bool is_server_side() const override {
-    return policy.server;
+    return _s.policy.server;
   }
   bool is_lossy() const override {
-    return policy.lossy;
+    return _s.policy.lossy;
   }
 
 private:
   void requeue_sent() override;
   std::tuple<seq_num_t, std::queue<MessageRef>> get_out_queue() override {
-    return {out_seq, std::move(out_q)};
+    return {_s.out_seq, std::move(_s.out_q)};
   }
 
 };
