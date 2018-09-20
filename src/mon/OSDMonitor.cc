@@ -5593,10 +5593,12 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     bool show_shadow = shadow == "--show-shadow";
     boost::scoped_ptr<Formatter> f(Formatter::create(format));
     if (f) {
+      f->open_object_section("crush_tree");
       osdmap.crush->dump_tree(nullptr,
                               f.get(),
                               osdmap.get_pool_names(),
                               show_shadow);
+      f->close_section();
       f->flush(rdata);
     } else {
       ostringstream ss;
