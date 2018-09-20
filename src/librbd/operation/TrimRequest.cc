@@ -41,7 +41,7 @@ public:
     I &image_ctx = this->m_image_ctx;
     ceph_assert(image_ctx.owner_lock.is_locked());
     ceph_assert(image_ctx.exclusive_lock == nullptr ||
-           image_ctx.exclusive_lock->is_lock_owner());
+                image_ctx.exclusive_lock->is_lock_owner());
 
     string oid = image_ctx.get_object_name(m_object_no);
     ldout(image_ctx.cct, 10) << "removing (with copyup) " << oid << dendl;
@@ -71,7 +71,7 @@ public:
     I &image_ctx = this->m_image_ctx;
     ceph_assert(image_ctx.owner_lock.is_locked());
     ceph_assert(image_ctx.exclusive_lock == nullptr ||
-           image_ctx.exclusive_lock->is_lock_owner());
+                image_ctx.exclusive_lock->is_lock_owner());
 
     {
       RWLock::RLocker snap_locker(image_ctx.snap_lock);
@@ -315,7 +315,7 @@ void TrimRequest<I>::send_clean_boundary() {
 
   // should have been canceled prior to releasing lock
   ceph_assert(image_ctx.exclusive_lock == nullptr ||
-         image_ctx.exclusive_lock->is_lock_owner());
+              image_ctx.exclusive_lock->is_lock_owner());
   uint64_t delete_len = m_delete_off - m_new_size;
   ldout(image_ctx.cct, 5) << this << " send_clean_boundary: "
 			    << " delete_off=" << m_delete_off

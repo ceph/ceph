@@ -90,7 +90,7 @@ private:
 
   void finish(int r);
 
-  Context *start_lock_op();
+  Context *start_lock_op(int* r);
 
 };
 

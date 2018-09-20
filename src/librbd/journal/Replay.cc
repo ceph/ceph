@@ -307,9 +307,9 @@ void Replay<I>::replay_op_ready(uint64_t op_tid, Context *on_resume) {
 
   OpEvent &op_event = op_it->second;
   ceph_assert(op_event.op_in_progress &&
-         op_event.on_op_finish_event == nullptr &&
-         op_event.on_finish_ready == nullptr &&
-         op_event.on_finish_safe == nullptr);
+              op_event.on_op_finish_event == nullptr &&
+              op_event.on_finish_ready == nullptr &&
+              op_event.on_finish_safe == nullptr);
 
   // resume processing replay events
   Context *on_start_ready = nullptr;
@@ -1034,13 +1034,13 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
   if (op_event.on_start_ready != nullptr) {
     // blocking op event failed before it became ready
     ceph_assert(op_event.on_finish_ready == nullptr &&
-           op_event.on_finish_safe == nullptr);
+                op_event.on_finish_safe == nullptr);
 
     op_event.on_start_ready->complete(0);
   } else {
     // event kicked off by OpFinishEvent
     ceph_assert((op_event.on_finish_ready != nullptr &&
-            op_event.on_finish_safe != nullptr) || shutting_down);
+                 op_event.on_finish_safe != nullptr) || shutting_down);
   }
 
   if (op_event.on_op_finish_event != nullptr) {

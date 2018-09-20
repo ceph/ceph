@@ -279,7 +279,7 @@ Context *ResizeRequest<I>::send_grow_object_map() {
 
   // should have been canceled prior to releasing lock
   ceph_assert(image_ctx.exclusive_lock == nullptr ||
-         image_ctx.exclusive_lock->is_lock_owner());
+              image_ctx.exclusive_lock->is_lock_owner());
 
   image_ctx.object_map->aio_resize(
     m_new_size, OBJECT_NONEXISTENT, create_context_callback<
@@ -321,7 +321,7 @@ Context *ResizeRequest<I>::send_shrink_object_map() {
 
   // should have been canceled prior to releasing lock
   ceph_assert(image_ctx.exclusive_lock == nullptr ||
-         image_ctx.exclusive_lock->is_lock_owner());
+              image_ctx.exclusive_lock->is_lock_owner());
 
   image_ctx.object_map->aio_resize(
     m_new_size, OBJECT_NONEXISTENT, create_context_callback<
@@ -381,7 +381,7 @@ void ResizeRequest<I>::send_update_header() {
   // should have been canceled prior to releasing lock
   RWLock::RLocker owner_locker(image_ctx.owner_lock);
   ceph_assert(image_ctx.exclusive_lock == nullptr ||
-         image_ctx.exclusive_lock->is_lock_owner());
+              image_ctx.exclusive_lock->is_lock_owner());
 
   librados::ObjectWriteOperation op;
   if (image_ctx.old_format) {

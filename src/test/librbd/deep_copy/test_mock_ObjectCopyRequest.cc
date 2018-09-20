@@ -167,7 +167,7 @@ public:
     if ((m_src_image_ctx->features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
       return;
     }
-    EXPECT_CALL(mock_exclusive_lock, start_op()).WillOnce(
+    EXPECT_CALL(mock_exclusive_lock, start_op(_)).WillOnce(
       ReturnNew<FunctionContext>([](int) {}));
   }
 
