@@ -127,19 +127,20 @@ int MonClient::get_monmap_and_config()
       continue;
     }
     if (r < 0) {
-      goto out_shutdown;
-    }
-    if (!monmap.persistent_features.contains_all(
-	  ceph::features::mon::FEATURE_MIMIC)) {
-      ldout(cct,10) << __func__ << " pre-mimic monitor, no config to fetch"
-		    << dendl;
-      r = 0;
       break;
     }
     {
       Mutex::Locker l(monc_lock);
-      while (!got_config && r == 0) {
-	ldout(cct,20) << __func__ << " waiting for config" << dendl;
+      if (monmap.get_epoch() &&
+	  !monmap.persistent_features.contains_all(
+	    ceph::features::mon::FEATURE_MIMIC)) {
+	ldout(cct,10) << __func__ << " pre-mimic monitor, no config to fetch"
+		      << dendl;
+	r = 0;
+	break;
+      }
+      while ((!got_config || monmap.get_epoch() == 0) && r == 0) {
+	ldout(cct,20) << __func__ << " waiting for monmap|config" << dendl;
 	r = map_cond.WaitInterval(monc_lock, interval);
       }
       if (got_config) {
