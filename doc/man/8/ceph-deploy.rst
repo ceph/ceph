@@ -405,35 +405,6 @@ Here, [PKGs] is comma-separated package names and [HOST] is hostname of the
 remote node where packages are to be installed or removed from.
 
 
-calamari
---------
-
-Install and configure Calamari nodes. It first checks if distro is supported
-for Calamari installation by ceph-deploy. An argument ``connect`` is used for
-installation and configuration. It checks for ``ceph-deploy`` configuration
-file (cd_conf) and Calamari release repo or ``calamari-minion`` repo. It relies
-on default for repo installation as it doesn't install Ceph unless specified
-otherwise. ``options`` dictionary is also defined because ``ceph-deploy``
-pops items internally which causes issues when those items are needed to be
-available for every host. If the distro is Debian/Ubuntu, it is ensured that
-proxy is disabled for ``calamari-minion`` repo. ``calamari-minion`` package is
-then installed and custom repository files are added. minion config  is placed
-prior to installation so that it is present when the minion first starts.
-config directory, calamari salt config are created and salt-minion package
-is installed. If the distro is Redhat/CentOS, the salt-minion service needs to
-be started.
-
-Usage::
-
-	ceph-deploy calamari {connect} [HOST] [HOST...]
-
-Here, [HOST] is the hostname where Calamari is to be installed.
-
-An option ``--release`` can be used to use a given release from repositories
-defined in :program:`ceph-deploy`'s configuration. Defaults to ``calamari-minion``.
-
-Another option :option:`--master` can also be used with this command.
-
 Options
 =======
 
@@ -492,10 +463,6 @@ Options
 .. option:: --local-mirror
 
 	Fetch packages and push them to hosts for a local repo mirror.
-
-.. option:: --master
-
-	The domain for the Calamari master server.
 
 .. option:: --mkfs
 
