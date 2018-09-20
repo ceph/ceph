@@ -76,6 +76,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_INVALID_TAG, {400, "InvalidTag"}},
     { ERR_MALFORMED_ACL_ERROR, {400, "MalformedACLError" }},
     { ERR_INVALID_CORS_RULES_ERROR, {400, "InvalidRequest" }},
+    { ERR_INVALID_WEBSITE_ROUTING_RULES_ERROR, {400, "InvalidRequest" }},
     { ERR_INVALID_ENCRYPTION_ALGORITHM, {400, "InvalidEncryptionAlgorithmError" }},
     { ERR_LENGTH_REQUIRED, {411, "MissingContentLength" }},
     { EACCES, {403, "AccessDenied" }},
