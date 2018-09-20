@@ -2277,20 +2277,20 @@ void DaemonServer::adjust_pgs()
 			 << " pg_num " << p.get_pg_num()
 			 << " - still creating initial pgs"
 			 << dendl;
-	      } else if (p.get_pg_num() != p.get_pg_num_pending() &&
-			 p.get_pg_num_target() < p.get_pg_num()) {
-		dout(10) << "pool " << i.first
-			 << " pg_num_target " << p.get_pg_num_target()
-			 << " pg_num " << p.get_pg_num()
-			 << " - decrease and pg_num_pending != pg_num, waiting"
-			 << dendl;
 	      } else if (p.get_pg_num_target() < p.get_pg_num()) {
 		// pg_num decrease (merge)
 		pg_t merge_source(p.get_pg_num() - 1, i.first);
 		pg_t merge_target = merge_source.get_parent();
 		bool ok = true;
 		auto q = pg_map.pg_stat.find(merge_source);
-		if (p.get_pg_num() == p.get_pgp_num()) {
+		if (p.get_pg_num() != p.get_pg_num_pending()) {
+		  dout(10) << "pool " << i.first
+			   << " pg_num_target " << p.get_pg_num_target()
+			   << " pg_num " << p.get_pg_num()
+			   << " - decrease and pg_num_pending != pg_num, waiting"
+			   << dendl;
+		  ok = false;
+		} else if (p.get_pg_num() == p.get_pgp_num()) {
 		  dout(10) << "pool " << i.first
 			   << " pg_num_target " << p.get_pg_num_target()
 			   << " pg_num " << p.get_pg_num()
