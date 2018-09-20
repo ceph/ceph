@@ -274,7 +274,7 @@ v0.80.8 Firefly
 ===============
 
 This is a long-awaited bugfix release for firefly.  It has several
-imporant (but relatively rare) OSD peering fixes, performance issues
+important (but relatively rare) OSD peering fixes, performance issues
 when snapshots are trimmed, several RGW fixes, a paxos corner case
 fix, and some packaging updates.
 
@@ -525,7 +525,7 @@ This is the third Firefly point release.  It includes a single fix
 for a radosgw regression that was discovered in v0.80.2 right after it
 was released.
 
-We recommand that all v0.80.x Firefly users upgrade.
+We recommend that all v0.80.x Firefly users upgrade.
 
 Notable Changes
 ---------------
@@ -667,7 +667,7 @@ Upgrade Sequencing
   upgrading to v0.80 Firefly.  Please refer to the :ref:`dumpling-upgrade`
   documentation.
 
-* We recommand adding the following to the [mon] section of your
+* We recommend adding the following to the [mon] section of your
   ceph.conf prior to upgrade::
 
     mon warn on legacy crush tunables = false
