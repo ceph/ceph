@@ -30,6 +30,8 @@
 class PyFormatter : public ceph::Formatter
 {
 public:
+  PyFormatter (const PyFormatter&) = delete;
+  PyFormatter& operator= (const PyFormatter&) = delete;
   PyFormatter(bool pretty = false, bool array = false)
   {
     // It is forbidden to instantiate me outside of the GIL,
