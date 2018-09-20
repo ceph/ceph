@@ -1166,6 +1166,8 @@ struct OSDShard {
 
   bool stop_waiting = false;
 
+  ContextQueue context_queue;
+
   void _enqueue_front(OpQueueItem&& item, unsigned cutoff) {
     unsigned priority = item.get_priority();
     unsigned cost = item.get_cost();
@@ -1223,8 +1225,8 @@ struct OSDShard {
       osdmap_lock_name(shard_name + "::osdmap_lock"),
       osdmap_lock(osdmap_lock_name.c_str(), false, false),
       shard_lock_name(shard_name + "::shard_lock"),
-      shard_lock(shard_lock_name.c_str(), false, true,
-			     false, cct) {
+      shard_lock(shard_lock_name.c_str(), false, true, false, cct),
+      context_queue(sdata_wait_lock, sdata_cond) {
     if (opqueue == io_queue::weightedpriority) {
       pqueue = std::make_unique<
 	WeightedPriorityQueue<OpQueueItem,uint64_t>>(
@@ -1774,7 +1776,17 @@ protected:
       auto &&sdata = osd->shards[shard_index];
       ceph_assert(sdata);
       Mutex::Locker l(sdata->shard_lock);
-      return sdata->pqueue->empty();
+      if (thread_index < osd->num_shards) {
+	return sdata->pqueue->empty() && sdata->context_queue.empty();
+      } else {
+	return sdata->pqueue->empty();
+      }
+    }
+
+    void handle_oncommits(list<Context*>& oncommits) {
+      for (auto p : oncommits) {
+	p->complete(0);
+      }
     }
   } op_shardedwq;
 
