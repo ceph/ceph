@@ -506,6 +506,20 @@ get_counter(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
+get_latest_counter(BaseMgrModule *self, PyObject *args)
+{
+  char *svc_name = nullptr;
+  char *svc_id = nullptr;
+  char *counter_path = nullptr;
+  if (!PyArg_ParseTuple(args, "sss:get_counter", &svc_name,
+                                                  &svc_id, &counter_path)) {
+    return nullptr;
+  }
+  return self->py_modules->get_latest_counter_python(
+      svc_name, svc_id, counter_path);
+}
+
+static PyObject*
 get_perf_schema(BaseMgrModule *self, PyObject *args)
 {
   char *type_str = nullptr;
@@ -640,6 +654,9 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_get_counter", (PyCFunction)get_counter, METH_VARARGS,
     "Get a performance counter"},
+
+  {"_ceph_get_latest_counter", (PyCFunction)get_latest_counter, METH_VARARGS,
+    "Get the latest performance counter"},
 
   {"_ceph_get_perf_schema", (PyCFunction)get_perf_schema, METH_VARARGS,
     "Get the performance counter schema"},
