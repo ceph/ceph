@@ -3,7 +3,8 @@
 # README:
 #
 # This tool's purpose is to make it easier to merge PRs into test branches and
-# into master.
+# into master. Make sure you generate a Personal access token in GitHub and
+# add it your ~/.github.key.
 #
 # Because developers often have custom names for the ceph upstream remote
 # (https://github.com/ceph/ceph.git), You will probably want to export the
@@ -123,7 +124,7 @@ log.setLevel(logging.INFO)
 BASE_PROJECT = os.getenv("PTL_TOOL_BASE_PROJECT", "ceph")
 BASE_REPO = os.getenv("PTL_TOOL_BASE_REPO", "ceph")
 BASE_REMOTE = os.getenv("PTL_TOOL_BASE_REMOTE", "upstream")
-BASE_PATH = os.getenv("PTL_TOOL_BASE_PATH", "refs/remotes/upstream/heads/")
+BASE_PATH = os.getenv("PTL_TOOL_BASE_PATH", "refs/remotes/upstream/")
 GITDIR = os.getenv("PTL_TOOL_GITDIR", ".")
 USER = os.getenv("PTL_TOOL_USER", getpass.getuser())
 with open(expanduser("~/.github.key")) as f:
