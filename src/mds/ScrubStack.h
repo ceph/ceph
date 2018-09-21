@@ -28,9 +28,6 @@ class Finisher;
 
 class ScrubStack {
 protected:
-  /// A finisher needed so that we don't re-enter kick_off_scrubs
-  Finisher *finisher;
-
   /// The stack of inodes we want to scrub
   elist<CInode*> inode_stack;
   /// current number of dentries we're actually scrubbing
@@ -57,8 +54,7 @@ protected:
 
 public:
   MDCache *mdcache;
-  ScrubStack(MDCache *mdc, Finisher *finisher_) :
-    finisher(finisher_),
+  ScrubStack(MDCache *mdc) :
     inode_stack(member_offset(CInode, item_scrub)),
     scrubs_in_progress(0),
     scrubstack(this),

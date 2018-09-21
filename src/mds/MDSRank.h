@@ -619,18 +619,16 @@ class MDSRank {
     class OpQueueableContext : public OpQueueableType<OpQueueableContext> {
       std::unique_ptr<MDSContext> ctx;
       int ret;
+      bool needs_lock;
     public:
-      OpQueueableContext(MDSContext* c, int r) :
-	ctx(c), ret(r) {}
+      OpQueueableContext(MDSContext* c, int r, bool l) :
+	ctx(c), ret(r), needs_lock(l) {}
       OpQueueableContext(OpQueueableContext&&) = default;
       uint64_t get_seq() const override { return ctx->get_op_seq(); }
       uint32_t get_queue_token() const override {
 	return 0;
       }
-      void run(MDSRank *mds) override {
-	std::lock_guard l(mds->mds_lock);
-	ctx.release()->complete_sync(ret);
-      }
+      void run(MDSRank *mds) override;
     };
 
 public:
@@ -650,7 +648,10 @@ public:
       op_shardedwq.queue_front(OpQueueableRequest(r));
     }
     void queue_context(MDSContext *c, int r=0) {
-      op_shardedwq.queue_front(OpQueueableContext(c, r));
+      op_shardedwq.queue_front(OpQueueableContext(c, r, true));
+    }
+    void queue_io_context(MDSIOContextBase *c, int r=0) {
+      op_shardedwq.queue_front(OpQueueableContext(c, r, false));
     }
 
 private:

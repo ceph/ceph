@@ -178,12 +178,10 @@ private:
 
   void trim_segments() {
     dout(20) << __func__ << dendl;
-
-    Context *ctx = new C_OnFinisher(new FunctionContext([this](int _) {
-          std::lock_guard locker(mds->mds_lock);
+    Context *ctx = new FunctionContext([this](int _) {
           trim_expired_segments();
-        }), mds->finisher);
-    ctx->complete(0);
+        });
+    get_mds()->queue_context(new MDSInternalContextWrapper(mds, ctx));
   }
 
   void trim_expired_segments() {
@@ -539,7 +537,7 @@ MDSRank::MDSRank(
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this, messenger, monc);
 
-  scrubstack = new ScrubStack(mdcache, finisher);
+  scrubstack = new ScrubStack(mdcache);
 
   inotable = new InoTable(this);
   snapserver = new SnapServer(this, monc);
@@ -3296,17 +3294,15 @@ bool MDSRank::evict_client(int64_t session_id,
 
     Context *on_blacklist_done = new FunctionContext([this, fn](int r) {
       objecter->wait_for_latest_osdmap(
-       new C_OnFinisher(
+       new MDSIOContextWrapper(this,
          new FunctionContext([this, fn](int r) {
-              std::lock_guard l(mds_lock);
               auto epoch = objecter->with_osdmap([](const OSDMap &o){
                   return o.get_epoch();
               });
-
               set_osd_epoch_barrier(epoch);
 
               fn();
-            }), finisher)
+            }))
        );
     });
 
@@ -3358,9 +3354,11 @@ void MDSRank::bcast_mds_map()
 }
 
 Context *MDSRank::create_async_exec_context(C_ExecAndReply *ctx) {
-  return new C_OnFinisher(new FunctionContext([ctx](int _) {
-        ctx->exec();
-      }), finisher);
+  // MDSIOContext is async
+  return new MDSIOContextWrapper(this,
+	    new FunctionContext([ctx](int _) {
+	      ctx->exec();
+	    }));
 }
 
 // workqueue
@@ -3467,6 +3465,16 @@ void MDSRank::OpQueueableRequest::run(MDSRank *mds)
 {
   std::lock_guard l(mds->mds_lock);
   mds->mdcache->dispatch_request(mdr);
+}
+
+void MDSRank::OpQueueableContext::run(MDSRank *mds)
+{
+  if (needs_lock) {
+    std::lock_guard l(mds->mds_lock);
+    ctx.release()->complete_sync(ret);
+  } else {
+    ctx.release()->complete_sync(ret);
+  }
 }
 
 MDSRankDispatcher::MDSRankDispatcher(

@@ -87,8 +87,7 @@ void MDSTable::save(MDSContext *onfinish, version_t v)
   mds->objecter->write_full(oid, oloc,
 			    snapc,
 			    bl, ceph::real_clock::now(), 0,
-			    new C_OnFinisher(new C_IO_MT_Save(this, version),
-					     mds->finisher));
+			    new C_IO_MT_Save(this, version));
 }
 
 void MDSTable::save_2(int r, version_t v)
@@ -160,8 +159,7 @@ void MDSTable::load(MDSContext *onfinish)
   C_IO_MT_Load *c = new C_IO_MT_Load(this, onfinish);
   object_t oid = get_object_name();
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
-  mds->objecter->read_full(oid, oloc, CEPH_NOSNAP, &c->bl, 0,
-			   new C_OnFinisher(c, mds->finisher));
+  mds->objecter->read_full(oid, oloc, CEPH_NOSNAP, &c->bl, 0, c);
 }
 
 void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)

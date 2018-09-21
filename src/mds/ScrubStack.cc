@@ -475,7 +475,7 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
     dout(10) << __func__ << " scrub passed on inode " << *in << dendl;
   }
 
-  MDSContext *c = NULL;
+  MDSContext *c = nullptr;
   in->scrub_finished(&c);
 
   if (in == header->get_origin()) {
@@ -490,9 +490,8 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
       }
     }
   }
-  if (c) {
-    finisher->queue(new MDSIOContextWrapper(mdcache->mds, c), 0);
-  }
+  if (c)
+    c->complete(0);
 }
 
 ScrubStack::C_KickOffScrubs::C_KickOffScrubs(MDCache *mdcache, ScrubStack *s)

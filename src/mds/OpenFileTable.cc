@@ -268,9 +268,7 @@ void OpenFileTable::_journal_finish(int r, uint64_t log_seq, MDSContext *c,
     return;
   }
 
-  C_GatherBuilder gather(g_ceph_context,
-			 new C_OnFinisher(new C_IO_OFT_Save(this, log_seq, c),
-			 mds->finisher));
+  C_GatherBuilder gather(g_ceph_context, new C_IO_OFT_Save(this, log_seq, c));
   SnapContext snapc;
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
   for (auto& it : ops_map) {
@@ -398,8 +396,7 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
   };
 
   auto submit_ops_func = [&]() {
-    gather.set_finisher(new C_OnFinisher(new C_IO_OFT_Save(this, log_seq, c),
-					 mds->finisher));
+    gather.set_finisher(new C_IO_OFT_Save(this, log_seq, c));
     for (auto& it : ops_map) {
       object_t oid = get_object_name(it.first);
       for (auto& op : it.second) {
@@ -628,8 +625,7 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 
   ceph_assert(!ops_map.empty());
   if (journal_state == JOURNAL_FINISH) {
-    gather.set_finisher(new C_OnFinisher(new C_IO_OFT_Journal(this, log_seq, c, ops_map),
-					 mds->finisher));
+    gather.set_finisher(new C_IO_OFT_Journal(this, log_seq, c, ops_map));
     gather.activate();
   } else {
     submit_ops_func();
@@ -816,8 +812,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
       op.omap_get_header(&c->header_bl, &c->header_r);
     op.omap_get_vals(last_key, "", uint64_t(-1),
 		     &c->values, &c->more, &c->values_r);
-    mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, nullptr, 0,
-			new C_OnFinisher(c, mds->finisher));
+    mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, nullptr, 0, c);
     return;
   }
 
@@ -825,9 +820,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
   if (loaded_journals.size() > 0) {
     dout(10) << __func__ << ": recover journal" << dendl;
 
-    C_GatherBuilder gather(g_ceph_context,
-			   new C_OnFinisher(new C_IO_OFT_Recover(this),
-					    mds->finisher));
+    C_GatherBuilder gather(g_ceph_context, new C_IO_OFT_Recover(this));
     object_locator_t oloc(mds->mdsmap->get_metadata_pool());
     SnapContext snapc;
 
@@ -940,8 +933,7 @@ void OpenFileTable::load(MDSContext *onload)
   op.omap_get_vals("", "", uint64_t(-1),
 		   &c->values, &c->more, &c->values_r);
 
-  mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, nullptr, 0,
-		      new C_OnFinisher(c, mds->finisher));
+  mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, nullptr, 0, c);
 }
 
 bool OpenFileTable::get_ancestors(inodeno_t ino, vector<inode_backpointer_t>& ancestors,

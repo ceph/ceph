@@ -94,6 +94,11 @@ bool MDSIOContextBase::check_ios_in_flight(ceph::coarse_mono_time cutoff,
 void MDSIOContextBase::complete(int r) {
   MDSRank *mds = get_mds();
 
+  if (is_async()) {
+    mds->queue_io_context(this, r);
+    return;
+  }
+
   dout(10) << "MDSIOContextBase::complete: " << typeid(*this).name() << dendl;
   ceph_assert(mds != NULL);
   std::lock_guard l(mds->mds_lock);
@@ -113,6 +118,11 @@ void MDSIOContextBase::complete(int r) {
 }
 
 void MDSLogContextBase::complete(int r) {
+  if (is_async()) {
+    MDSIOContextBase::complete(r);
+    return;
+  }
+
   MDLog *mdlog = get_mds()->mdlog;
   uint64_t safe_pos = write_pos;
   pre_finish(r);

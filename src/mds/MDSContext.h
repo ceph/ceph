@@ -120,6 +120,8 @@ public:
 				  std::string& slow_count,
 				  ceph::coarse_mono_time& oldest);
 private:
+  using MDSContext::clear_async; // must be async
+
   ceph::coarse_mono_time created_at;
   elist<MDSIOContextBase*>::item list_item;
 

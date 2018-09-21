@@ -1109,12 +1109,9 @@ void CInode::store(MDSContext *fin)
   object_t oid = CInode::get_object_name(ino(), frag_t(), ".inode");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
 
-  Context *newfin =
-    new C_OnFinisher(new C_IO_Inode_Stored(this, get_version(), fin),
-		     mdcache->mds->finisher);
+  auto fin2 = new C_IO_Inode_Stored(this, get_version(), fin);
   mdcache->mds->objecter->mutate(oid, oloc, m, snapc,
-				 ceph::real_clock::now(), 0,
-				 newfin);
+				 ceph::real_clock::now(), 0, fin2);
 }
 
 void CInode::_stored(int r, version_t v, Context *fin)
@@ -1178,20 +1175,20 @@ void CInode::fetch(MDSContext *fin)
 {
   dout(10) << __func__  << dendl;
 
-  C_IO_Inode_Fetched *c = new C_IO_Inode_Fetched(this, fin);
-  C_GatherBuilder gather(g_ceph_context, new C_OnFinisher(c, mdcache->mds->finisher));
+  auto fin2 = new C_IO_Inode_Fetched(this, fin);
+  C_GatherBuilder gather(g_ceph_context, fin2);
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
 
   // Old on-disk format: inode stored in xattr of a dirfrag
   ObjectOperation rd;
-  rd.getxattr("inode", &c->bl, NULL);
+  rd.getxattr("inode", &fin2->bl, NULL);
   mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, (bufferlist*)NULL, 0, gather.new_sub());
 
   // Current on-disk format: inode stored in a .inode object
   object_t oid2 = CInode::get_object_name(ino(), frag_t(), ".inode");
-  mdcache->mds->objecter->read(oid2, oloc, 0, 0, CEPH_NOSNAP, &c->bl2, 0, gather.new_sub());
+  mdcache->mds->objecter->read(oid2, oloc, 0, 0, CEPH_NOSNAP, &fin2->bl2, 0, gather.new_sub());
 
   gather.activate();
 }
@@ -1295,9 +1292,7 @@ void CInode::store_backtrace(MDSContext *fin, int op_prio)
   SnapContext snapc;
   object_t oid = get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(pool);
-  Context *fin2 = new C_OnFinisher(
-    new C_IO_Inode_StoredBacktrace(this, inode.backtrace_version, fin),
-    mdcache->mds->finisher);
+  auto fin2 = new C_IO_Inode_StoredBacktrace(this, inode.backtrace_version, fin);
 
   if (!state_test(STATE_DIRTYPOOL) || inode.old_pools.empty()) {
     dout(20) << __func__ << ": no dirtypool or no old pools" << dendl;
@@ -4161,15 +4156,13 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       if (in->snaprealm && !in->snaprealm->have_past_parents_open())
 	in->snaprealm->open_parents(nullptr);
 
-      C_OnFinisher *conf = new C_OnFinisher(get_io_callback(BACKTRACE),
-					    in->mdcache->mds->finisher);
-
       std::string_view tag = in->scrub_infop->header->get_tag();
       bool is_internal = in->scrub_infop->header->is_internal_tag();
       // Rather than using the usual CInode::fetch_backtrace,
       // use a special variant that optionally writes a tag in the same
       // operation.
-      fetch_backtrace_and_tag(in, tag, is_internal, conf, &results->backtrace.ondisk_read_retval, &bl);
+      fetch_backtrace_and_tag(in, tag, is_internal, get_io_callback(BACKTRACE),
+			      &results->backtrace.ondisk_read_retval, &bl);
       return false;
     }
 

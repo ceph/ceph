@@ -1649,8 +1649,7 @@ void CDir::_omap_fetch(MDSContext *c, const std::set<dentry_key_t>& keys)
     fin->ret3 = -ECANCELED;
   }
 
-  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
-			     new C_OnFinisher(fin, cache->mds->finisher));
+  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, fin);
 }
 
 void CDir::_omap_fetch_more(
@@ -1671,8 +1670,7 @@ void CDir::_omap_fetch_more(
 		   &fin->omap_more,
 		   &fin->more,
 		   &fin->ret);
-  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
-			     new C_OnFinisher(fin, cache->mds->finisher));
+  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, fin);
 }
 
 CDentry *CDir::_load_dentry(
@@ -2153,9 +2151,7 @@ void CDir::_omap_commit(int op_prio)
   map<string, bufferlist> to_set;
 
   C_GatherBuilder gather(g_ceph_context,
-			 new C_OnFinisher(new C_IO_Dir_Committed(this,
-								 get_version()),
-					  cache->mds->finisher));
+			 new C_IO_Dir_Committed(this, get_version()));
 
   SnapContext snapc;
   object_t oid = get_ondisk_object();
