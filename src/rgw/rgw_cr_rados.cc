@@ -142,7 +142,7 @@ RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletio
                      RGWSI_SysObj *_svc,
                      RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
                      bool _exclusive, bufferlist _bl)
-  : RGWAsyncRadosRequest(caller, cn), store(_store),
+  : RGWAsyncRadosRequest(caller, cn), svc(_svc),
     obj(_obj), exclusive(_exclusive), bl(std::move(_bl))
 {
   if (_objv_tracker) {
