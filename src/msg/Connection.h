@@ -55,7 +55,7 @@ public:
 
 public:
   Connection(CephContext *cct, Messenger *m)
-    // we are managed exlusively by ConnectionRef; make it so you can
+    // we are managed exclusively by ConnectionRef; make it so you can
     //   ConnectionRef foo = new Connection;
     : RefCountedObject(cct, 0),
       lock("Connection::lock"),

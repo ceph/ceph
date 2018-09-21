@@ -1436,7 +1436,7 @@ Ceph Clients include a number of service interfaces. These include:
   
 - **Filesystem**: The :term:`Ceph Filesystem` (CephFS) service provides 
   a POSIX compliant filesystem usable with ``mount`` or as 
-  a filesytem in user space (FUSE).      
+  a filesystem in user space (FUSE).
 
 Ceph can run additional instances of OSDs, MDSs, and monitors for scalability
 and high availability. The following diagram depicts the high-level

@@ -272,7 +272,7 @@ def _setup_nfs_mount(remote, client, mount_dir):
     """
     Sets up an nfs mount on the remote that the guest can use to
     store logs. This nfs mount is also used to touch a file
-    at the end of the test to indiciate if the test was successful
+    at the end of the test to indicate if the test was successful
     or not.
     """
     export_dir = "/export/{client}".format(client=client)

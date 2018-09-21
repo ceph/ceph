@@ -56,7 +56,7 @@ the shell.
 
 See `User Management - Add a User to a Keyring`_. for additional details on user management
 
-To restrict a client to the specfied sub-directory only, we mention the specified
+To restrict a client to the specified sub-directory only, we mention the specified
 directory while mounting using the following syntax. ::
 
  ./ceph-fuse -n client.*client_name* *mount_path* -r *directory_to_be_mounted*

@@ -335,7 +335,7 @@ class NotificationQueue(threading.Thread):
     def deregister(cls, func, n_types=None):
         """Removes the listener function from this notification queue
 
-        If the second parameter `n_types` is ommitted, the function is removed
+        If the second parameter `n_types` is omitted, the function is removed
         from all event types, otherwise the function is removed only for the
         specified event types.
 

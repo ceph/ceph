@@ -38,7 +38,7 @@ enum perfcounter_type_d : uint8_t
   PERFCOUNTER_TIME = 0x1,       // float (measuring seconds)
   PERFCOUNTER_U64 = 0x2,        // integer (note: either TIME or U64 *must* be set)
   PERFCOUNTER_LONGRUNAVG = 0x4, // paired counter + sum (time)
-  PERFCOUNTER_COUNTER = 0x8,    // counter (vs guage)
+  PERFCOUNTER_COUNTER = 0x8,    // counter (vs gauge)
   PERFCOUNTER_HISTOGRAM = 0x10, // histogram (vector) of values
 };
 

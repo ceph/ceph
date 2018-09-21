@@ -60,7 +60,7 @@ describe('RbdListComponent', () => {
     summaryService = TestBed.get(SummaryService);
     rbdService = TestBed.get(RbdService);
 
-    // this is needed because summaryService isn't being reseted after each test.
+    // this is needed because summaryService isn't being reset after each test.
     summaryService['summaryDataSource'] = new BehaviorSubject(null);
     summaryService['summaryData$'] = summaryService['summaryDataSource'].asObservable();
   });

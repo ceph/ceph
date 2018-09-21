@@ -231,7 +231,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	      // Pick a new priority out of the total priority.
 	      unsigned prio = rand() % total_prio + 1;
 	      unsigned tp = total_prio - i->key;
-	      // Find the priority coresponding to the picked number.
+	      // Find the priority corresponding to the picked number.
 	      // Subtract high priorities to low priorities until the picked number
 	      // is more than the total and try to dequeue that priority.
 	      // Reverse the direction from previous implementation because there is a higher

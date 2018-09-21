@@ -84,7 +84,7 @@ public:
   /**
    * keep track of sum deltas, per-pool, taking into account any previous
    * deltas existing in @p per_pool_sum_deltas.  The utime_t as second member
-   * of the pair is the timestamp refering to the last update (i.e., the first
+   * of the pair is the timestamp referring to the last update (i.e., the first
    * member of the pair) for a given pool.
    */
   mempool::pgmap::unordered_map<uint64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;

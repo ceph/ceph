@@ -371,7 +371,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
 private:
   /**
-   * Create a scrub_info_t struct for the scrub_infop poitner.
+   * Create a scrub_info_t struct for the scrub_infop pointer.
    */
   void scrub_info_create() const;
   /**

@@ -278,7 +278,7 @@ private:
   ceph::unordered_map<entity_addrvec_t, AsyncConnectionRef> conns;
 
   /**
-   * list of connection are in teh process of accepting
+   * list of connection are in the process of accepting
    *
    * These are not yet in the conns map.
    */

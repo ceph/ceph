@@ -146,7 +146,7 @@ than string.
    POST /{bucket}?mdsearch
    x-amz-meta-search: <key [; type]> [, ...]
 
-Multiple metadata fields must be comma seperated, a type can be forced for a
+Multiple metadata fields must be comma separated, a type can be forced for a
 field with a `;`. The currently allowed types are string(default), integer and
 date
 

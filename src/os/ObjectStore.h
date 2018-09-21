@@ -146,7 +146,7 @@ public:
      * 1) collection is currently idle: the method returns true.  c is
      *    not touched.
      * 2) collection is not idle: the method returns false and c is
-     *    called asyncronously with a value of 0 once all transactions
+     *    called asynchronously with a value of 0 once all transactions
      *    queued on this collection prior to the call have been applied
      *    and committed.
      */
@@ -269,7 +269,7 @@ public:
    *   sobject_encoding detects an older/simpler version of oid
    *   present in pre-bobtail versions of ceph.  use_pool_override
    *   also detects a situation where the pool of an oid can be
-   *   overriden for legacy operations/buffers.  For non-legacy
+   *   overridden for legacy operations/buffers.  For non-legacy
    *   implementations of ObjectStore, neither of these fields are
    *   relevant.
    *
@@ -298,7 +298,7 @@ public:
    * applies independently to each transaction element. For example,
    * if a transaction contains two mutating elements "create A" and
    * "delete B". And an enumeration operation is performed while this
-   * transaction is pending. It is permissable for ObjectStore to
+   * transaction is pending. It is permissible for ObjectStore to
    * report any of the four possible combinations of the existence of
    * A and B.
    *
@@ -834,7 +834,7 @@ public:
     bool empty() {
       return !data.ops;
     }
-    /// Number of operations in the transation
+    /// Number of operations in the transaction
     int get_num_ops() {
       return data.ops;
     }

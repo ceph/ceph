@@ -40,7 +40,7 @@ def _output_parser(output, fields):
         if not line:
             continue
 
-        # spliting on ';' because that is what the lvm call uses as
+        # splitting on ';' because that is what the lvm call uses as
         # '--separator'
         output_items = [i.strip() for i in line.split(';')]
         # map the output to the fiels
@@ -902,7 +902,7 @@ class PVolumes(list):
                 if matches:
                     tag_filtered.append(pvolume)
             # return the tag_filtered pvolumes here, the `filtered` list is no
-            # longer useable
+            # longer usable
             return tag_filtered
 
         return filtered

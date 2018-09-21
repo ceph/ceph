@@ -63,7 +63,7 @@ Where:
 ``packetsize={bytes}``
 
 :Description: The encoding will be done on packets of *bytes* size at
-              a time. Chosing the right packet size is difficult. The
+              a time. Choosing the right packet size is difficult. The
               *jerasure* documentation contains extensive information
               on this topic.
 
