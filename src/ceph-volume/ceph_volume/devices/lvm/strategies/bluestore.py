@@ -136,7 +136,7 @@ class MixedType(object):
         self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
         self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
         self.computed = {'osds': []}
-        self.block_db_size = prepare.get_block_db_size(lv_format=False) or disk.Size(b=0)
+        self.block_db_size = self.get_block_size()
         self.system_vgs = lvm.VolumeGroups()
         self.dbs_needed = len(self.hdds) * self.osds_per_device
         self.validate()
@@ -144,6 +144,12 @@ class MixedType(object):
 
     def report_json(self):
         print(json.dumps(self.computed, indent=4, sort_keys=True))
+
+    def get_block_size(self):
+        if self.args.block_db_size:
+            return disk.Size(b=self.args.block_db_size)
+        else:
+            return prepare.get_block_db_size(lv_format=False) or disk.Size(b=0)
 
     def report_pretty(self):
         vg_extents = lvm.sizing(self.total_available_db_space.b, parts=self.dbs_needed)
