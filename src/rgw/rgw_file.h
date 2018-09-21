@@ -487,8 +487,8 @@ namespace rgw {
       return child_name;
     }
 
-    inline std::string make_key_name(const char *name) const {
-      std::string key_name{full_object_name()};
+    inline std::string make_key_name(const char *name, bool omit_bucket = false) const {
+      std::string key_name{full_object_name(omit_bucket)};
       if (key_name.length() > 0)
 	key_name += "/";
       key_name += name;
@@ -1384,9 +1384,7 @@ public:
     } else {
       const char* mk = get<const char*>(offset);
       if (mk) {
-	std::string tmark{rgw_fh->relative_object_name()};
-	tmark += "/";
-	tmark += mk;	
+	std::string tmark{rgw_fh->make_key_name(mk, true /*omit bucket*/)};
 	marker = rgw_obj_key{std::move(tmark), "", ""};
       }
     }
