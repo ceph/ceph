@@ -16,8 +16,9 @@
 
 #include <seastar/core/shared_future.hh>
 
-#include "Session.h"
 #include "Connection.h"
+#include "Protocol.h"
+#include "Session.h"
 
 namespace ceph::net {
 

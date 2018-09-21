@@ -30,6 +30,8 @@
 
 namespace ceph::net {
 
+class Protocol;
+
 struct Session
 {
   entity_addr_t my_addr;
@@ -60,6 +62,8 @@ struct Session
   std::queue<MessageRef> sent;
 
   seastar::gate dispatch_gate;
+
+  Protocol *protocol;
 
   Session(const entity_addr_t& _my_addr,
           const entity_addr_t& _peer_addr)
