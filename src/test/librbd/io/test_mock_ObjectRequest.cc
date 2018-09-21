@@ -1272,6 +1272,40 @@ TEST_F(TestMockIoObjectRequest, CompareAndWriteMismatch) {
   ASSERT_EQ(1ULL, mismatch_offset);
 }
 
+TEST_F(TestMockIoObjectRequest, ObjectMapError) {
+  REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
+  expect_get_object_size(mock_image_ctx);
+
+  MockExclusiveLock mock_exclusive_lock;
+  mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+  expect_is_lock_owner(mock_exclusive_lock);
+
+  MockObjectMap mock_object_map;
+  mock_image_ctx.object_map = &mock_object_map;
+
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+
+  InSequence seq;
+  expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+  expect_object_may_exist(mock_image_ctx, 0, true);
+  expect_object_map_update(mock_image_ctx, 0, 1, OBJECT_EXISTS, {}, true,
+                           -EBLACKLISTED);
+
+  C_SaferCond ctx;
+  auto req = MockObjectWriteRequest::create_write(
+    &mock_image_ctx, ictx->get_object_name(0), 0, 0, std::move(bl),
+    mock_image_ctx.snapc, 0, {}, &ctx);
+  req->send();
+  ASSERT_EQ(-EBLACKLISTED, ctx.wait());
+}
+
 } // namespace io
 } // namespace librbd
 

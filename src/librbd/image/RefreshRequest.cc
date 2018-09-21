@@ -993,6 +993,10 @@ Context *RefreshRequest<I>::handle_v2_open_object_map(int *result) {
                << dendl;
     delete m_object_map;
     m_object_map = nullptr;
+
+    if (*result != -EFBIG) {
+      save_result(result);
+    }
   }
 
   send_v2_open_journal();
@@ -1151,7 +1155,11 @@ Context *RefreshRequest<I>::handle_v2_close_object_map(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  ceph_assert(*result == 0);
+  if (*result < 0) {
+    lderr(cct) << "failed to close object map: " << cpp_strerror(*result)
+               << dendl;
+  }
+
   ceph_assert(m_object_map != nullptr);
   delete m_object_map;
   m_object_map = nullptr;
