@@ -114,8 +114,9 @@ describe('PoolFormComponent', () => {
       pool_names: [],
       osd_count: OSDS,
       is_all_bluestore: true,
-      compression_algorithms: [],
-      compression_modes: [],
+      bluestore_compression_algorithm: 'snappy',
+      compression_algorithms: ['snappy'],
+      compression_modes: ['none', 'passive'],
       crush_rules_replicated: [],
       crush_rules_erasure: []
     };
@@ -349,6 +350,17 @@ describe('PoolFormComponent', () => {
         const control = setValue('maxBlobSize', '2');
         fixture.detectChanges();
         expect(control.value).toBe('2 KiB');
+      });
+
+      it('validates that odd size validator works as expected', () => {
+        const odd = (min, max) => component['oddBlobSize'](min, max);
+        expect(odd('10', '8')).toBe(true);
+        expect(odd('8', '-')).toBe(false);
+        expect(odd('8', '10')).toBe(false);
+        expect(odd(null, '8')).toBe(false);
+        expect(odd('10', '')).toBe(false);
+        expect(odd('10', null)).toBe(false);
+        expect(odd(null, null)).toBe(false);
       });
 
       it('validates ratio to be only valid between 0 and 1', () => {
@@ -924,22 +936,58 @@ describe('PoolFormComponent', () => {
         hasError(setPgNum(4), 'noDecrease');
       });
 
-      it(`always provides the application metadata array with submit even if it's empty`, () => {
-        component.data.applications.selected = [];
-        testSubmit(
-          {
-            application_metadata: [],
-            compression_algorithm: 'lz4',
-            compression_max_blob_size: 1048576,
-            compression_min_blob_size: 524288,
-            compression_mode: 'passive',
-            compression_required_ratio: 0.8,
-            pg_num: 32,
-            pool: 'somePoolName'
-          },
-          'pool/edit',
-          'update'
-        );
+      describe('submit', () => {
+        const markControlAsPreviouslySet = (controlName) => form.get(controlName).markAsPristine();
+
+        beforeEach(() => {
+          ['algorithm', 'maxBlobSize', 'minBlobSize', 'mode', 'pgNum', 'ratio', 'name'].forEach(
+            (name) => markControlAsPreviouslySet(name)
+          );
+          fixture.detectChanges();
+        });
+
+        it(`always provides the application metadata array with submit even if it's empty`, () => {
+          expect(form.get('mode').dirty).toBe(false);
+          component.data.applications.selected = [];
+          testSubmit(
+            {
+              application_metadata: [],
+              pool: 'somePoolName'
+            },
+            'pool/edit',
+            'update'
+          );
+        });
+
+        it(`will always provide reset value for compression options`, () => {
+          setValue('minBlobSize', '').markAsDirty();
+          setValue('maxBlobSize', '').markAsDirty();
+          setValue('ratio', '').markAsDirty();
+          testSubmit(
+            {
+              application_metadata: ['rbd', 'rgw'],
+              compression_max_blob_size: 0,
+              compression_min_blob_size: 0,
+              compression_required_ratio: 0,
+              pool: 'somePoolName'
+            },
+            'pool/edit',
+            'update'
+          );
+        });
+
+        it(`will unset mode not used anymore`, () => {
+          setValue('mode', 'none').markAsDirty();
+          testSubmit(
+            {
+              application_metadata: ['rbd', 'rgw'],
+              compression_mode: 'unset',
+              pool: 'somePoolName'
+            },
+            'pool/edit',
+            'update'
+          );
+        });
       });
     });
   });
