@@ -174,7 +174,7 @@ ErasureCodeIsaTableCache::getEncodingCoefficient(int matrix, int k, int m)
 unsigned char**
 ErasureCodeIsaTableCache::getEncodingCoefficientNoLock(int matrix, int k, int m)
 {
-  // create a pointer to store an encoding coefficients adddress
+  // create a pointer to store an encoding coefficients address
   if (!encoding_coefficient[matrix][k][m]) {
     encoding_coefficient[matrix][k][m] = new (unsigned char*);
     *encoding_coefficient[matrix][k][m] = 0;

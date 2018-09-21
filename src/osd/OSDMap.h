@@ -452,7 +452,7 @@ public:
       new_erasure_code_profiles[name] = profile;
     }
 
-    /// propage update pools' snap metadata to any of their tiers
+    /// propagate update pools' snap metadata to any of their tiers
     int propagate_snaps_to_tiers(CephContext *cct, const OSDMap &base);
 
     /// filter out osds with any pending state changing

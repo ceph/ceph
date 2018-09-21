@@ -19,4 +19,4 @@ Be aware that the cache limit is not a hard limit. Potential bugs in the CephFS 
     The memory tracking used is currently imprecise by a constant factor. This
     will be addressed in http://tracker.ceph.com/issues/22599. MDS deployments
     with large `mds_cache_memory_limit` (64GB+) should underallocate RAM to
-    accomodate.
+    accommodate.

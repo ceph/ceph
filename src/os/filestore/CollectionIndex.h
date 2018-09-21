@@ -109,8 +109,8 @@ protected:
   /**
    * Cleanup before replaying journal
    *
-   * Index implemenations may need to perform compound operations
-   * which may leave the collection unstable if interupted.  cleanup
+   * Index implementations may need to perform compound operations
+   * which may leave the collection unstable if interrupted.  cleanup
    * is called on mount to allow the CollectionIndex implementation
    * to stabilize.
    *

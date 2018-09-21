@@ -413,7 +413,7 @@ Stale
 While Ceph uses heartbeats to ensure that hosts and daemons are running, the
 ``ceph-osd`` daemons may also get into a ``stuck`` state where they are not
 reporting statistics in a timely manner (e.g., a temporary network fault). By
-default, OSD daemons report their placement group, up thru, boot and failure
+default, OSD daemons report their placement group, up through, boot and failure
 statistics every half second (i.e., ``0.5``),  which is more frequent than the
 heartbeat thresholds. If the **Primary OSD** of a placement group's acting set
 fails to report to the monitor or if other OSDs have reported the primary OSD

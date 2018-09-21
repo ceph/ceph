@@ -39,7 +39,7 @@ struct MDSlaveUpdate;
  *
  * - make sure you adjust the inode.version for any modified inode you
  *   journal.  CDir and CDentry maintain a projected_version, but CInode
- *   doesn't, since the journaled inode usually has to be modifed 
+ *   doesn't, since the journaled inode usually has to be modified 
  *   manually anyway (to delay the change in the MDS's cache until after
  *   it is journaled).
  *

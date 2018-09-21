@@ -497,7 +497,7 @@ private:
   /**
    * Generate new header for c oid with new seq number
    *
-   * Has the side effect of syncronously saving the new DBObjectMap state
+   * Has the side effect of synchronously saving the new DBObjectMap state
    */
   Header _generate_new_header(const ghobject_t &oid, Header parent);
   Header generate_new_header(const ghobject_t &oid, Header parent) {

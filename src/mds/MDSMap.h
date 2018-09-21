@@ -469,7 +469,7 @@ public:
    *
    * A STUCK_UNAVAILABLE result indicates that we can't see a way that
    * the cluster is about to recover on its own, so it'll probably require
-   * administrator intervention: clients should probaly not bother trying
+   * administrator intervention: clients should probably not bother trying
    * to mount.
    */
   availability_t is_cluster_available() const;

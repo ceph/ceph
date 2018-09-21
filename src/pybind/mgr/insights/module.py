@@ -21,7 +21,7 @@ class Module(MgrModule):
     COMMANDS = [
         {
             "cmd": "insights",
-            "desc": "Retreive insights report",
+            "desc": "Retrieve insights report",
             "perm": "r",
             "poll": "false",
         },
@@ -158,7 +158,7 @@ class Module(MgrModule):
         """
         Return the components of a Ceph version string.
 
-        This returns nothing when the verison string cannot be parsed into its
+        This returns nothing when the version string cannot be parsed into its
         constituent components, such as when Ceph has been built with
         ENABLE_GIT_VERSION=OFF.
         """

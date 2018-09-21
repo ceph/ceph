@@ -21,7 +21,7 @@
 #define rdout(x) lgeneric_subdout(cct,reserver,x)
 
 /**
- * Manages a configurable number of asyncronous reservations.
+ * Manages a configurable number of asynchronous reservations.
  *
  * Memory usage is linear with the number of items queued and
  * linear with respect to the total number of priorities used

@@ -45,7 +45,7 @@ def task(ctx, config):
         r = remote.run(args=['sudo', 'ps', '-eaf', run.Raw('|'),
                              'grep', 'ceph'], stdout=StringIO())
         if r.stdout.getvalue().find('Active: inactive'):
-            log.info("Sucessfully stopped all ceph services")
+            log.info("Successfully stopped all ceph services")
         else:
             log.info("Failed to stop ceph services")
 
@@ -55,7 +55,7 @@ def task(ctx, config):
                        stdout=StringIO())
         log.info(r.stdout.getvalue())
         if r.stdout.getvalue().find('Active: active'):
-            log.info("Sucessfully started all Ceph services")
+            log.info("Successfully started all Ceph services")
         else:
             log.info("info", "Failed to start Ceph services")
         r = remote.run(args=['sudo', 'ps', '-eaf', run.Raw('|'),
@@ -83,7 +83,7 @@ def task(ctx, config):
                            stdout=StringIO(), check_status=False)
             log.info(r.stdout.getvalue())
             if r.stdout.getvalue().find('Active: inactive'):
-                log.info("Sucessfully stopped single osd ceph service")
+                log.info("Successfully stopped single osd ceph service")
             else:
                 log.info("Failed to stop ceph osd services")
             remote.run(args=['sudo', 'systemctl', 'start',
@@ -96,7 +96,7 @@ def task(ctx, config):
             r = remote.run(args=['sudo', 'systemctl', 'status', mon_name],
                            stdout=StringIO(), check_status=False)
             if r.stdout.getvalue().find('Active: inactive'):
-                log.info("Sucessfully stopped single mon ceph service")
+                log.info("Successfully stopped single mon ceph service")
             else:
                 log.info("Failed to stop ceph mon service")
             remote.run(args=['sudo', 'systemctl', 'start', mon_name])
@@ -108,7 +108,7 @@ def task(ctx, config):
             r = remote.run(args=['sudo', 'systemctl', 'status', mgr_name],
                            stdout=StringIO(), check_status=False)
             if r.stdout.getvalue().find('Active: inactive'):
-                log.info("Sucessfully stopped single ceph mgr service")
+                log.info("Successfully stopped single ceph mgr service")
             else:
                 log.info("Failed to stop ceph mgr service")
             remote.run(args=['sudo', 'systemctl', 'start', mgr_name])
@@ -120,7 +120,7 @@ def task(ctx, config):
             r = remote.run(args=['sudo', 'systemctl', 'status', mds_name],
                            stdout=StringIO(), check_status=False)
             if r.stdout.getvalue().find('Active: inactive'):
-                log.info("Sucessfully stopped single ceph mds service")
+                log.info("Successfully stopped single ceph mds service")
             else:
                 log.info("Failed to stop ceph mds service")
             remote.run(args=['sudo', 'systemctl', 'start', mds_name])

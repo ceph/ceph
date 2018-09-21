@@ -302,7 +302,7 @@ public:
     const bufferlist& inbl,
     bufferlist *poutbl, std::string *prs, Context *onfinish);
 
-  // these shoud (more or less) mirror the actual system calls.
+  // these should (more or less) mirror the actual system calls.
   int statfs(const char *path, struct statvfs *stbuf, const UserPerm& perms);
 
   // crap

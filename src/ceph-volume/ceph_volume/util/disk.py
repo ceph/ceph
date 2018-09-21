@@ -438,7 +438,7 @@ class Size(object):
 
         for k, v in kw.items():
             self._convert(v, k)
-            # only pursue the first occurence
+            # only pursue the first occurrence
             break
 
     def _convert(self, size, unit):

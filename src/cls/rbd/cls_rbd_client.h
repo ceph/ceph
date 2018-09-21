@@ -365,7 +365,7 @@ void object_map_snap_remove(librados::ObjectWriteOperation *rados_op,
                             const ceph::BitVector<2> &object_map);
 
 // class operations on the old format, kept for
-// backwards compatability
+// backwards compatibility
 void old_snapshot_add(librados::ObjectWriteOperation *rados_op,
                       snapid_t snap_id, const std::string &snap_name);
 void old_snapshot_remove(librados::ObjectWriteOperation *rados_op,

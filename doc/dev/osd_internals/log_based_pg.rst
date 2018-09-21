@@ -27,7 +27,7 @@ writes on overlapping regions), we might as well serialize writes on
 the whole PG since it lets us represent the current state of the PG
 using two numbers: the epoch of the map on the primary in which the
 most recent write started (this is a bit stranger than it might seem
-since map distribution itself is asyncronous -- see Peering and the
+since map distribution itself is asynchronous -- see Peering and the
 concept of interval changes) and an increasing per-pg version number
 -- this is referred to in the code with type eversion_t and stored as
 pg_info_t::last_update.  Furthermore, we maintain a log of "recent"

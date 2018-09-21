@@ -139,7 +139,7 @@ class _ResponseValidator(object):
         In the above example the structure will validate against any response
         that contains a key named "return" in the root of the response
         dictionary and its value is a dictionary that must contain a key named
-        "key1" that is an array, a key named "key2", and optionaly a key named
+        "key1" that is an array, a key named "key2", and optionally a key named
         "key3" that is a dictionary that contains a key named "subkey".
 
     Example 7:
@@ -312,7 +312,7 @@ class _Request(object):
         resp = self.rest_client.do_request(method, self._gen_path(), params,
                                            data, raw_content)
         if raw_content and self.resp_structure:
-            raise Exception("Cannot validate reponse in raw format")
+            raise Exception("Cannot validate response in raw format")
         _ResponseValidator.validate(self.resp_structure, resp)
         return resp
 

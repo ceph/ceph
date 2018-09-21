@@ -247,7 +247,7 @@ class ObjectCacher {
     map<loff_t, BufferHead*>     data;
 
     ceph_tid_t last_write_tid;  // version of bh (if non-zero)
-    ceph_tid_t last_commit_tid; // last update commited.
+    ceph_tid_t last_commit_tid; // last update committed.
 
     int dirty_or_tx;
 

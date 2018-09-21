@@ -452,7 +452,7 @@ void ErasureCodeJerasureLiberation::prepare()
 //
 bool ErasureCodeJerasureBlaumRoth::check_w(ostream *ss) const
 {
-  // back in Firefly, w = 7 was the default and produced useable 
+  // back in Firefly, w = 7 was the default and produced usable
   // chunks. Tolerate this value for backward compatibility.
   if (w == 7)
     return true;
