@@ -810,10 +810,6 @@ TEST(BufferListIterator, constructors) {
     EXPECT_EQ('B', *i);
     EXPECT_EQ('C', *j);
     bl.c_str()[1] = 'X';
-#ifdef BL_BACKWARD_COMPAT
-    j.advance(-1);
-    EXPECT_EQ('X', *j);
-#endif // BL_BACKWARD_COMPAT
   }
 
   //
@@ -890,12 +886,6 @@ TEST(BufferListIterator, advance) {
     bufferlist::iterator i(&bl);
     EXPECT_THROW(i.advance(200u), buffer::end_of_buffer);
   }
-#ifdef BL_BACKWARD_COMPAT
-  {
-    bufferlist::iterator i(&bl);
-    EXPECT_THROW(i.advance(-1), buffer::end_of_buffer);
-  }
-#endif // BL_BACKWARD_COMPAT
   {
     bufferlist::iterator i(&bl);
     EXPECT_EQ('A', *i);
@@ -903,12 +893,6 @@ TEST(BufferListIterator, advance) {
     EXPECT_EQ('B', *i);
     i.advance(3u);
     EXPECT_EQ('E', *i);
-#ifdef BL_BACKWARD_COMPAT
-    i.advance(-3u);
-    EXPECT_EQ('B', *i);
-    i.advance(-1u);
-    EXPECT_EQ('A', *i);
-#endif // BL_BACKWARD_COMPAT
   }
 }
 

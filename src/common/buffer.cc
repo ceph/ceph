@@ -848,16 +848,6 @@ using namespace ceph;
   buffer::list::iterator_impl<is_const>::iterator_impl(const buffer::list::iterator& i)
     : iterator_impl<is_const>(i.bl, i.off, i.p, i.p_off) {}
 
-#ifdef BL_BACKWARD_COMPAT
-  /// The backward iteration over is bufferlist is DEPRECATED!
-  /// The old int-taking variant of advance() is solely for compatibility.
-  template<bool is_const>
-  void buffer::list::iterator_impl<is_const>::advance(int o)
-  {
-    seek(off + o);
-  }
-#endif // BL_BACKWARD_COMPAT
-
   template<bool is_const>
   void buffer::list::iterator_impl<is_const>::advance(unsigned o)
   {
@@ -1083,15 +1073,6 @@ using namespace ceph;
   buffer::list::iterator::iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po)
     : iterator_impl(l, o, ip, po)
   {}
-
-#ifdef BL_BACKWARD_COMPAT
-  /// The backward iteration over is bufferlist is DEPRECATED!
-  /// The old int-taking variant of advance() is solely for compatibility.
-  void buffer::list::iterator::advance(int o)
-  {
-    seek(off + o);
-  }
-#endif // BL_BACKWARD_COMPAT
 
   void buffer::list::iterator::advance(unsigned o)
   {

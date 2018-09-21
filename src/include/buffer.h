@@ -438,12 +438,7 @@ namespace buffer CEPH_BUFFER_API {
 	//return off == bl->length();
       }
 
-#ifdef BL_BACKWARD_COMPAT
-      void advance(int o);
-#else
       void advance(int o) = delete;
-#endif // BL_BACKWARD_COMPAT
-
       void advance(unsigned o);
       void advance(size_t o) { advance(static_cast<unsigned>(o)); }
       void seek(unsigned o);
@@ -491,12 +486,7 @@ namespace buffer CEPH_BUFFER_API {
       iterator(bl_t *l, unsigned o=0);
       iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po);
 
-#ifdef BL_BACKWARD_COMPAT
-      void advance(int o);
-#else
       void advance(int o) = delete;
-#endif // BL_BACKWARD_COMPAT
-
       void advance(unsigned o);
       void advance(size_t o) { advance(static_cast<unsigned>(o)); }
 
