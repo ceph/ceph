@@ -2768,6 +2768,9 @@ int OSD::init()
   for (auto& shard : shards) {
     for (auto& i : shard->pg_slots) {
       PGRef pg = i.second->pg;
+      if (!pg) {
+	continue;
+      }
 
       pg->lock();
       set<pair<spg_t,epoch_t>> new_children;
@@ -7397,7 +7400,16 @@ void OSD::handle_osd_map(MOSDMap *m)
     epoch_t max_lag = cct->_conf->osd_map_cache_size *
       m_osd_pg_epoch_max_lag_factor;
     ceph_assert(max_lag > 0);
-    if (osdmap->get_epoch() > max_lag) {
+    epoch_t osd_min = 0;
+    for (auto shard : shards) {
+      epoch_t min = shard->get_min_pg_epoch();
+      if (osd_min == 0 || min < osd_min) {
+	osd_min = min;
+      }
+    }
+    if (osd_min > 0 &&
+	osdmap->get_epoch() > max_lag &&
+	osdmap->get_epoch() - max_lag > osd_min) {
       epoch_t need = osdmap->get_epoch() - max_lag;
       dout(10) << __func__ << " waiting for pgs to catch up (need " << need
 	       << " max_lag " << max_lag << ")" << dendl;
