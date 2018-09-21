@@ -15,11 +15,13 @@
  *
  */
 
+#include <algorithm>
+#include <optional>
+#include <random>
+
 #include <boost/algorithm/string.hpp>
 
 #include "OSDMap.h"
-#include <algorithm>
-#include <random>
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -508,7 +510,8 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
 
   size_t start_offset = bl.length();
   size_t tail_offset;
-  buffer::list::iterator crc_it;
+  size_t crc_offset;
+  std::optional<buffer::list::contiguous_filler> crc_filler;
 
   // meta-encoding: how we include client-used and osd-specific data
   ENCODE_START(8, 7, bl);
@@ -618,8 +621,8 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     ENCODE_FINISH(bl); // osd-only data
   }
 
-  crc_it = bl.end();
-  encode((uint32_t)0, bl); // dummy inc_crc
+  crc_offset = bl.length();
+  crc_filler = bl.append_hole(sizeof(uint32_t));
   tail_offset = bl.length();
 
   encode(full_crc, bl);
@@ -628,14 +631,14 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
 
   // fill in crc
   bufferlist front;
-  front.substr_of(bl, start_offset, crc_it.get_off() - start_offset);
+  front.substr_of(bl, start_offset, crc_offset - start_offset);
   inc_crc = front.crc32c(-1);
   bufferlist tail;
   tail.substr_of(bl, tail_offset, bl.length() - tail_offset);
   inc_crc = tail.crc32c(inc_crc);
   ceph_le32 crc_le;
   crc_le = inc_crc;
-  crc_it.copy_in(4, (char*)&crc_le);
+  crc_filler->copy_in(4u, (char*)&crc_le);
   have_crc = true;
 }
 
@@ -2654,7 +2657,8 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
 
   size_t start_offset = bl.length();
   size_t tail_offset;
-  buffer::list::iterator crc_it;
+  size_t crc_offset;
+  std::optional<buffer::list::contiguous_filler> crc_filler;
 
   // meta-encoding: how we include client-used and osd-specific data
   ENCODE_START(8, 7, bl);
@@ -2803,15 +2807,15 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     ENCODE_FINISH(bl); // osd-only data
   }
 
-  crc_it = bl.end();
-  encode((uint32_t)0, bl); // dummy crc
+  crc_offset = bl.length();
+  crc_filler = bl.append_hole(sizeof(uint32_t));
   tail_offset = bl.length();
 
   ENCODE_FINISH(bl); // meta-encoding wrapper
 
   // fill in crc
   bufferlist front;
-  front.substr_of(bl, start_offset, crc_it.get_off() - start_offset);
+  front.substr_of(bl, start_offset, crc_offset - start_offset);
   crc = front.crc32c(-1);
   if (tail_offset < bl.length()) {
     bufferlist tail;
@@ -2820,7 +2824,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   }
   ceph_le32 crc_le;
   crc_le = crc;
-  crc_it.copy_in(4, (char*)&crc_le);
+  crc_filler->copy_in(4, (char*)&crc_le);
   crc_defined = true;
 }
 
