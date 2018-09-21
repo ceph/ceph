@@ -2279,22 +2279,11 @@ int RGWListBucket::verify_permission()
 
 int RGWListBucket::parse_max_keys()
 {
-  if (!max_keys.empty()) {
-    char *endptr;
-    max = strtol(max_keys.c_str(), &endptr, 10);
-    if (endptr) {
-      if (endptr == max_keys.c_str()) return -EINVAL;
-      while (*endptr && isspace(*endptr)) // ignore white space
-        endptr++;
-      if (*endptr) {
-        return -EINVAL;
-      }
-    }
-  } else {
-    max = default_max;
-  }
-
-  return 0;
+  // Bound max value of max-keys to configured value for security
+  // Bound min value of max-keys to '0'
+  // Some S3 clients explicitly send max-keys=0 to detect if the bucket is
+  // empty without listing any items.
+  op_ret = parse_value_and_bound(max_keys, &max, 0, g_conf()->rgw_max_listing_results, default_max);
 }
 
 void RGWListBucket::pre_exec()
