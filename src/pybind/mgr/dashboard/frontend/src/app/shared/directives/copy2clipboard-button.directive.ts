@@ -7,6 +7,7 @@ import { ToastsManager } from 'ng2-toastr';
 })
 export class Copy2ClipboardButtonDirective implements OnInit {
 
+  // tslint:disable-next-line:no-input-rename
   @Input('cdCopy2ClipboardButton') private cdCopy2ClipboardButton: string;
 
   constructor(private elementRef: ElementRef,
