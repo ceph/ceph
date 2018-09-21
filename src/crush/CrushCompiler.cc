@@ -1053,9 +1053,13 @@ void CrushCompiler::find_used_bucket_ids(iter_t const& i)
 {
   for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
     if ((int)p->value.id().to_long() == crush_grammar::_bucket) {
-      iter_t firstline = p->children.begin() + 3;
-      string tag = string_node(firstline->children[0]);
-      if (tag == "id") {
+      for (iter_t firstline = p->children.begin() + 3;
+	   firstline != p->children.end();
+	   ++firstline) {
+	string tag = string_node(firstline->children[0]);
+	if (tag != "id") {
+	  break;
+	}
 	int id = int_node(firstline->children[1]);
 	//err << "saw bucket id " << id << std::endl;
 	id_item[id] = string();
