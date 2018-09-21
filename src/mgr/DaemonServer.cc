@@ -983,6 +983,7 @@ bool DaemonServer::_handle_command(
       ss << "pg " << pgid << " primary osd." << acting_primary
 	 << " is not currently connected";
       cmdctx->reply(-EAGAIN, ss);
+      return true;
     }
     for (auto& con : p->second) {
       if (HAVE_FEATURE(con->get_features(), SERVER_MIMIC)) {
