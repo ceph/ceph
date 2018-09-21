@@ -132,7 +132,8 @@ export class PoolFormComponent implements OnInit {
   }
 
   private initInfo(info: PoolFormInfo) {
-    info.compression_algorithms = info.compression_algorithms.filter((m) => m.length > 0);
+    this.form.silentSet('algorithm', info.bluestore_compression_algorithm);
+    info.compression_modes.push('unset');
     this.info = info;
   }
 
@@ -227,9 +228,9 @@ export class PoolFormComponent implements OnInit {
       this.pgCalc();
     });
     this.form.get('mode').valueChanges.subscribe(() => {
-      ['minBlobSize', 'maxBlobSize', 'ratio'].forEach((name) =>
-        this.form.get(name).updateValueAndValidity()
-      );
+      ['minBlobSize', 'maxBlobSize', 'ratio'].forEach((name) => {
+        this.form.get(name).updateValueAndValidity({ emitEvent: false });
+      });
     });
     this.form.get('minBlobSize').valueChanges.subscribe(() => {
       this.form.get('maxBlobSize').updateValueAndValidity({ emitEvent: false });
@@ -382,13 +383,13 @@ export class PoolFormComponent implements OnInit {
     CdValidators.validateIf(this.form.get('minBlobSize'), () => this.activatedCompression(), [
       Validators.min(0),
       CdValidators.custom('maximum', (size) =>
-        this.compareBlobSize(size, this.form.getValue('maxBlobSize'))
+        this.oddBlobSize(size, this.form.getValue('maxBlobSize'))
       )
     ]);
     CdValidators.validateIf(this.form.get('maxBlobSize'), () => this.activatedCompression(), [
       Validators.min(0),
       CdValidators.custom('minimum', (size) =>
-        this.compareBlobSize(this.form.getValue('minBlobSize'), size)
+        this.oddBlobSize(this.form.getValue('minBlobSize'), size)
       )
     ]);
     CdValidators.validateIf(this.form.get('ratio'), () => this.activatedCompression(), [
@@ -397,10 +398,10 @@ export class PoolFormComponent implements OnInit {
     ]);
   }
 
-  private compareBlobSize(minimum, maximum) {
-    return Boolean(
-      minimum && maximum && this.formatter.toBytes(minimum) >= this.formatter.toBytes(maximum)
-    );
+  private oddBlobSize(minimum, maximum) {
+    minimum = this.formatter.toBytes(minimum);
+    maximum = this.formatter.toBytes(maximum);
+    return Boolean(minimum && maximum && minimum >= maximum);
   }
 
   activatedCompression() {
@@ -429,9 +430,8 @@ export class PoolFormComponent implements OnInit {
       this.form.setErrors({ cdSubmitButton: true });
       return;
     }
-    const pool = {};
+    const pool = { pool: this.form.getValue('name') };
     this.extendByItemsForSubmit(pool, [
-      { api: 'pool', name: 'name', edit: true },
       { api: 'pool_type', name: 'poolType' },
       { api: 'pg_num', name: 'pgNum', edit: true },
       this.form.getValue('poolType') === 'replicated'
@@ -445,7 +445,7 @@ export class PoolFormComponent implements OnInit {
         name: 'ecOverwrites',
         fn: () => ['ec_overwrites']
       });
-      if (this.form.getValue('mode')) {
+      if (this.form.getValue('mode') !== 'none') {
         this.extendByItemsForSubmit(pool, [
           {
             api: 'compression_mode',
@@ -458,15 +458,26 @@ export class PoolFormComponent implements OnInit {
             api: 'compression_min_blob_size',
             name: 'minBlobSize',
             fn: this.formatter.toBytes,
-            edit: true
+            edit: true,
+            resetValue: 0
           },
           {
             api: 'compression_max_blob_size',
             name: 'maxBlobSize',
             fn: this.formatter.toBytes,
-            edit: true
+            edit: true,
+            resetValue: 0
           },
-          { api: 'compression_required_ratio', name: 'ratio', edit: true }
+          { api: 'compression_required_ratio', name: 'ratio', edit: true, resetValue: 0 }
+        ]);
+      } else if (this.editing) {
+        this.extendByItemsForSubmit(pool, [
+          {
+            api: 'compression_mode',
+            name: 'mode',
+            edit: true,
+            fn: () => 'unset'
+          }
         ]);
       }
     }
@@ -488,22 +499,28 @@ export class PoolFormComponent implements OnInit {
       name,
       attr,
       fn,
-      edit
+      edit,
+      resetValue
     }: {
       api: string;
       name: string;
       attr?: string;
       fn?: Function;
       edit?: boolean;
+      resetValue?: any;
     }
   ) {
-    if (this.editing && !edit) {
+    if (this.editing && (!edit || this.form.get(name).pristine)) {
       return;
     }
     const value = this.form.getValue(name);
-    const apiValue = fn ? fn(value) : attr ? _.get(value, attr) : value;
+    let apiValue = fn ? fn(value) : attr ? _.get(value, attr) : value;
     if (!value || !apiValue) {
-      return;
+      if (edit && !_.isUndefined(resetValue)) {
+        apiValue = resetValue;
+      } else {
+        return;
+      }
     }
     pool[api] = apiValue;
   }

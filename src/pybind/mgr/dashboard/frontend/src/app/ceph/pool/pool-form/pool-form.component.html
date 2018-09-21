@@ -317,10 +317,6 @@
                         id="mode"
                         name="mode"
                         formControlName="mode">
-                  <option i18n
-                          ngValue="">
-                    -- Select a compression mode --
-                  </option>
                   <option *ngFor="let mode of info.compression_modes"
                           [value]="mode">
                     {{ mode }}
@@ -351,12 +347,6 @@
                             i18n
                             ngValue="">
                       -- No erasure compression algorithm available --
-                    </option>
-                    <option *ngIf="info.compression_algorithms &&
-                                   info.compression_algorithms.length > 0"
-                            i18n
-                            ngValue="">
-                      -- Select a compression algorithm --
                     </option>
                     <option *ngFor="let algorithm of info.compression_algorithms"
                             [value]="algorithm">
