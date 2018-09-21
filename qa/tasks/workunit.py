@@ -408,16 +408,13 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                     args=args,
                     label="workunit test {workunit}".format(workunit=workunit)
                 )
-                if cleanup:
-                    remote.run(
-                        logger=log.getChild(role),
-                        args=['sudo', 'rm', '-rf', '--', scratch_tmp],
-                    )
     finally:
         log.info('Stopping %s on %s...', tests, role)
+        args=['rm', '-rf', '--', workunits_file, clonedir]
+        if cleanup:
+            log.info("and cleaning up scratch: {}".format(scratch_tmp))
+            args.append(scratch_tmp)
         remote.run(
             logger=log.getChild(role),
-            args=[
-                'rm', '-rf', '--', workunits_file, clonedir,
-            ],
+            args=args,
         )
