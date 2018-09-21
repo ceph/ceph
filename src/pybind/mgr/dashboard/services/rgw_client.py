@@ -72,13 +72,67 @@ def _determine_rgw_addr():
         raise LookupError('No RGW daemon found.')
 
     addr = daemon['addr'].split(':')[0]
-    match = re.search(r'port=(\d+)', daemon['metadata']['frontend_config#0'])
-    if match:
-        port = int(match.group(1))
-    else:
-        raise LookupError('Failed to determine RGW port')
+    port, ssl = _parse_frontend_config(daemon['metadata']['frontend_config#0'])
 
-    return addr, port
+    return addr, port, ssl
+
+
+def _parse_frontend_config(config):
+    """
+    Get the port the RGW is running on. Due the complexity of the
+    syntax not all variations are supported.
+
+    Get more details about the configuration syntax here:
+    http://docs.ceph.com/docs/master/radosgw/frontends/
+    https://civetweb.github.io/civetweb/UserManual.html
+
+    >>> _parse_frontend_config('beast port=8000')
+    (8000, False)
+
+    >>> _parse_frontend_config('civetweb port=8000s')
+    (8000, True)
+
+    >>> _parse_frontend_config('beast port=192.0.2.3:80')
+    (80, False)
+
+    >>> _parse_frontend_config('civetweb port=172.5.2.51:8080s')
+    (8080, True)
+
+    >>> _parse_frontend_config('civetweb port=[::]:8080')
+    (8080, False)
+
+    >>> _parse_frontend_config('civetweb port=ip6-localhost:80s')
+    (80, True)
+
+    >>> _parse_frontend_config('civetweb port=[2001:0db8::1234]:80')
+    (80, False)
+
+    >>> _parse_frontend_config('civetweb port=[::1]:8443s')
+    (8443, True)
+
+    >>> _parse_frontend_config('civetweb port=xyz')
+    Traceback (most recent call last):
+    ...
+    LookupError: Failed to determine RGW port
+
+    >>> _parse_frontend_config('civetweb')
+    Traceback (most recent call last):
+    ...
+    LookupError: Failed to determine RGW port
+
+    :param config: The configuration string to parse.
+    :type config: str
+    :raises LookupError if parsing fails to determine the port.
+    :return: A tuple containing the port number and the information
+             whether SSL is used.
+    :rtype: (int, boolean)
+    """
+    match = re.search(r'port=(.*:)?(\d+)(s)?', config)
+    if match:
+        port = int(match.group(2))
+        ssl = match.group(3) == 's'
+        return port, ssl
+    raise LookupError('Failed to determine RGW port')
 
 
 class RgwClient(RestClient):
@@ -99,14 +153,17 @@ class RgwClient(RestClient):
             raise NoCredentialsException()
 
         if Options.has_default_value('RGW_API_HOST') and \
-                Options.has_default_value('RGW_API_PORT'):
-            host, port = _determine_rgw_addr()
+                Options.has_default_value('RGW_API_PORT') and \
+                Options.has_default_value('RGW_API_SCHEME'):
+            host, port, ssl = _determine_rgw_addr()
         else:
-            host, port = Settings.RGW_API_HOST, Settings.RGW_API_PORT
+            host = Settings.RGW_API_HOST
+            port = Settings.RGW_API_PORT
+            ssl = Settings.RGW_API_SCHEME == 'https'
 
         RgwClient._host = host
         RgwClient._port = port
-        RgwClient._ssl = Settings.RGW_API_SCHEME == 'https'
+        RgwClient._ssl = ssl
         RgwClient._ADMIN_PATH = Settings.RGW_API_ADMIN_RESOURCE
 
         # Create an instance using the configured settings.
