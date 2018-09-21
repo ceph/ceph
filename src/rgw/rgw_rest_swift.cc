@@ -845,7 +845,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   if (bucket_name.compare(s->bucket.name) != 0) {
     RGWBucketInfo bucket_info;
     map<string, bufferlist> bucket_attrs;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
     r = store->get_bucket_info(obj_ctx, s->user->user_id.tenant,
 			       bucket_name, bucket_info, nullptr,
 			       &bucket_attrs);
@@ -865,7 +865,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
 
   /* no prefetch */
   RGWObjectCtx obj_ctx(store);
-  obj_ctx.obj.set_atomic(slo_seg);
+  obj_ctx.set_atomic(slo_seg);
 
   RGWRados::Object op_target(store, s->bucket_info, obj_ctx, slo_seg);
   RGWRados::Object::Read read_op(&op_target);
