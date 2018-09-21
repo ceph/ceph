@@ -524,12 +524,20 @@ static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *
         return -EIO;
       }
       struct rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
-      stats.num_entries++;
-      stats.total_size += entry.meta.accounted_size;
-      stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
-      stats.actual_size += entry.meta.size;
-      if (entry.meta.placement_storage_class.compare("STANDARD_IA")==0)
-        stats.total_size_storage_class_ia += entry.meta.accounted_size;
+      if (entry.meta.placement_storage_class.compare("STANDARD_IA")==0) {
+        if (entry.meta.accounted_size < entry.meta.storage_class_standard_ia_min_size)
+          stats.total_size_ia += entry.meta.storage_class_standard_ia_min_size;
+        else
+          stats.total_size_ia += entry.meta.accounted_size;
+        stats.num_entries_ia++;
+        stats.total_size_rounded_ia += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+        stats.actual_size_ia += entry.meta.size;
+      } else {
+        stats.total_size += entry.meta.accounted_size;
+        stats.num_entries++;
+        stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+        stats.actual_size += entry.meta.size;
+      }
 
       start_obj = kiter->first;
     }
@@ -731,12 +739,20 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 static void unaccount_entry(struct rgw_bucket_dir_header& header, struct rgw_bucket_dir_entry& entry)
 {
   struct rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
-  stats.num_entries--;
-  stats.total_size -= entry.meta.accounted_size;
-  stats.total_size_rounded -= cls_rgw_get_rounded_size(entry.meta.accounted_size);
-  stats.actual_size -= entry.meta.size;
-  if (entry.meta.placement_storage_class.compare("STANDARD_IA")==0)
-    stats.total_size_storage_class_ia -= entry.meta.accounted_size;
+  if (entry.meta.placement_storage_class.compare("STANDARD_IA")==0) {
+    stats.num_entries_ia--;
+    if (entry.meta.accounted_size < entry.meta.storage_class_standard_ia_min_size)
+      stats.total_size_ia -= entry.meta.storage_class_standard_ia_min_size;
+    else
+      stats.total_size_ia -= entry.meta.accounted_size;
+    stats.total_size_rounded_ia -= cls_rgw_get_rounded_size(entry.meta.accounted_size);
+    stats.actual_size_ia -= entry.meta.size;
+  } else {
+    stats.num_entries--;
+    stats.total_size -= entry.meta.accounted_size;
+    stats.total_size_rounded -= cls_rgw_get_rounded_size(entry.meta.accounted_size);
+    stats.actual_size -= entry.meta.size;
+  }
 }
 
 static void log_entry(const char *func, const char *str, struct rgw_bucket_dir_entry *entry)
@@ -924,12 +940,22 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       entry.key = op.key;
       entry.exists = true;
       entry.tag = op.tag;
-      stats.num_entries++;
-      stats.total_size += meta.accounted_size;
-      stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
-      stats.actual_size += meta.size;
-      if (entry.meta.placement_storage_class.compare("STANDARD_IA")==0)
-        stats.total_size_storage_class_ia += meta.accounted_size;
+
+      if (entry.meta.placement_storage_class.compare("STANDARD_IA")==0) {
+        stats.num_entries_ia++;
+        if (meta.accounted_size < meta.storage_class_standard_ia_min_size)
+          stats.total_size_ia += meta.storage_class_standard_ia_min_size;
+        else
+          stats.total_size_ia += meta.accounted_size;
+        stats.total_size_rounded_ia += cls_rgw_get_rounded_size(meta.accounted_size);
+        stats.actual_size_ia += meta.size;
+      } else {
+        stats.num_entries++;
+        stats.total_size += meta.accounted_size;
+        stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
+        stats.actual_size += meta.size;
+      }
+
       bufferlist new_key_bl;
       encode(entry, new_key_bl);
       int ret = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
@@ -1948,13 +1974,23 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
     if (cur_disk.pending_map.empty()) {
       if (cur_disk.exists) {
         struct rgw_bucket_category_stats& old_stats = header.stats[cur_disk.meta.category];
-        CLS_LOG(10, "total_entries: %" PRId64 " -> %" PRId64 "\n", old_stats.num_entries, old_stats.num_entries - 1);
-        old_stats.num_entries--;
-        old_stats.total_size -= cur_disk.meta.accounted_size;
-        old_stats.total_size_rounded -= cls_rgw_get_rounded_size(cur_disk.meta.accounted_size);
-        old_stats.actual_size -= cur_disk.meta.size;
-        if (cur_disk.meta.placement_storage_class.compare("STANDARD_IA")==0)
-          old_stats.total_size_storage_class_ia -= cur_disk.meta.accounted_size;
+        if (cur_disk.meta.placement_storage_class.compare("STANDARD_IA")==0) {
+          CLS_LOG(10, "total_entries: %" PRId64 " -> %" PRId64 "\n", old_stats.num_entries_ia, old_stats.num_entries_ia - 1);
+          old_stats.num_entries_ia--;
+          if (cur_disk.meta.accounted_size < cur_disk.meta.storage_class_standard_ia_min_size)
+            old_stats.total_size_ia -= cur_disk.meta.storage_class_standard_ia_min_size;
+          else
+            old_stats.total_size_ia -= cur_disk.meta.accounted_size;
+          old_stats.total_size_rounded_ia -= cls_rgw_get_rounded_size(cur_disk.meta.accounted_size);
+          old_stats.actual_size_ia -= cur_disk.meta.size;
+        } else {
+          CLS_LOG(10, "total_entries: %" PRId64 " -> %" PRId64 "\n", old_stats.num_entries, old_stats.num_entries - 1);
+          old_stats.num_entries--;
+          old_stats.total_size -= cur_disk.meta.accounted_size;
+          old_stats.total_size_rounded -= cls_rgw_get_rounded_size(cur_disk.meta.accounted_size);
+          old_stats.actual_size -= cur_disk.meta.size;
+        }
+
         header_changed = true;
       }
       struct rgw_bucket_category_stats& stats =
@@ -1977,15 +2013,24 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
         }
         break;
       case CEPH_RGW_UPDATE:
-        CLS_LOG(10, "CEPH_RGW_UPDATE name=%s instance=%s total_entries: %" PRId64 " -> %" PRId64 "\n",
-                cur_change.key.name.c_str(), cur_change.key.instance.c_str(), stats.num_entries, stats.num_entries + 1);
-
-        stats.num_entries++;
-        stats.total_size += cur_change.meta.accounted_size;
-        stats.total_size_rounded += cls_rgw_get_rounded_size(cur_change.meta.accounted_size);
-        stats.actual_size += cur_change.meta.size;
-        if (cur_change.meta.placement_storage_class.compare("STANDARD_IA")==0)
-          stats.total_size_storage_class_ia += cur_change.meta.accounted_size;
+        if (cur_change.meta.placement_storage_class.compare("STANDARD_IA")==0) {
+          CLS_LOG(10, "CEPH_RGW_UPDATE name=%s instance=%s total_entries: %" PRId64 " -> %" PRId64 "\n",
+            cur_change.key.name.c_str(), cur_change.key.instance.c_str(), stats.num_entries_ia, stats.num_entries_ia + 1);
+          stats.num_entries_ia++;
+          if (cur_change.meta.accounted_size < cur_change.meta.storage_class_standard_ia_min_size)
+            stats.total_size_ia += cur_change.meta.storage_class_standard_ia_min_size;
+          else
+            stats.total_size_ia += cur_change.meta.accounted_size;
+          stats.total_size_rounded_ia += cls_rgw_get_rounded_size(cur_change.meta.accounted_size);
+          stats.actual_size_ia += cur_change.meta.size;
+        } else {
+          CLS_LOG(10, "CEPH_RGW_UPDATE name=%s instance=%s total_entries: %" PRId64 " -> %" PRId64 "\n",
+            cur_change.key.name.c_str(), cur_change.key.instance.c_str(), stats.num_entries, stats.num_entries + 1);
+          stats.num_entries++;
+          stats.total_size += cur_change.meta.accounted_size;
+          stats.total_size_rounded += cls_rgw_get_rounded_size(cur_change.meta.accounted_size);
+          stats.actual_size += cur_change.meta.size;
+        }
         header_changed = true;
         cur_change.index_ver = header.ver;
         bufferlist cur_state_bl;

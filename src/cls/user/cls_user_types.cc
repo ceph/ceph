@@ -5,6 +5,7 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "include/utime.h"
+#include "cls_user_types.h"
 
 void cls_user_gen_test_bucket(cls_user_bucket *bucket, int i)
 {
@@ -38,6 +39,9 @@ void cls_user_bucket_entry::dump(Formatter *f) const
   encode_json("size_rounded", size_rounded, f);
   encode_json("creation_time", utime_t(creation_time), f);
   encode_json("count", count, f);
+  encode_json("size_ia", size_ia, f);
+  encode_json("size_rounded_ia", size_rounded_ia, f);
+  encode_json("count_ia", count_ia, f);
   encode_json("user_stats_sync", user_stats_sync, f);
 }
 
@@ -64,6 +68,9 @@ void cls_user_gen_test_stats(cls_user_stats *s)
   s->total_entries = 1;
   s->total_bytes = 2;
   s->total_bytes_rounded = 3;
+  s->total_entries_ia = 1;
+  s->total_bytes_ia = 2;
+  s->total_bytes_rounded_ia = 3;
 }
 
 void cls_user_stats::dump(Formatter *f) const
@@ -71,6 +78,9 @@ void cls_user_stats::dump(Formatter *f) const
   f->dump_int("total_entries", total_entries);
   f->dump_int("total_bytes", total_bytes);
   f->dump_int("total_bytes_rounded", total_bytes_rounded);
+  f->dump_int("total_entries_ia", total_entries_ia);
+  f->dump_int("total_bytes_ia", total_bytes_ia);
+  f->dump_int("total_bytes_rounded_ia", total_bytes_rounded_ia);
 }
 
 void cls_user_stats::generate_test_instances(list<cls_user_stats*>& ls)

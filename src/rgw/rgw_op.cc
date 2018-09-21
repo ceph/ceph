@@ -3278,15 +3278,12 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
   head_obj_op.meta.mtime = mtime;
   head_obj_op.meta.owner = s->owner.get_id();
   head_obj_op.meta.delete_at = delete_at;
-  bool using_tail_data_pool = false;
 
   if (placement_id && placement_id->compare("default-placement") == 0) {
     head_obj_op.meta.storage_class = static_cast<const std::string*>(&standard_storage_class);
-    using_tail_data_pool = false;
   }
   else {
     head_obj_op.meta.storage_class = static_cast<const std::string*>(&standard_ia_storage_class);
-    using_tail_data_pool = true;
   }
 
   head_obj_op.meta.zones_trace = zones_trace;

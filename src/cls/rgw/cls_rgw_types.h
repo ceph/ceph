@@ -98,7 +98,8 @@ struct rgw_bucket_dir_entry_meta {
   string content_type;
   uint64_t accounted_size;
   string user_data;
-  std::string placement_storage_class;
+  string placement_storage_class;
+  uint64_t storage_class_standard_ia_min_size;
 
   rgw_bucket_dir_entry_meta() :
   category(0), size(0), accounted_size(0) { }
@@ -115,6 +116,7 @@ struct rgw_bucket_dir_entry_meta {
     encode(accounted_size, bl);
     encode(user_data, bl);
     encode(placement_storage_class, bl);
+    encode(storage_class_standard_ia_min_size, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
@@ -133,10 +135,15 @@ struct rgw_bucket_dir_entry_meta {
       accounted_size = size;
     if (struct_v >= 5)
       decode(user_data, bl);
-    if (struct_v >= 6) 
+    if (struct_v >= 6)  {
       decode(placement_storage_class, bl);
-    else
+      decode(storage_class_standard_ia_min_size, bl);
+    }
+    else {
       placement_storage_class = "STANDARD";
+      storage_class_standard_ia_min_size = 65536;
+    }
+
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -584,7 +591,10 @@ struct rgw_bucket_category_stats {
   uint64_t total_size_rounded;
   uint64_t num_entries;
   uint64_t actual_size{0}; //< account for compression, encryption
-  uint64_t total_size_storage_class_ia{0}; // STorage Class IA
+  uint64_t total_size_ia{0};
+  uint64_t total_size_rounded_ia{0};
+  uint64_t num_entries_ia{0};
+  uint64_t actual_size_ia{0};
 
   rgw_bucket_category_stats() : total_size(0), total_size_rounded(0), num_entries(0) {}
 
@@ -594,7 +604,10 @@ struct rgw_bucket_category_stats {
     encode(total_size_rounded, bl);
     encode(num_entries, bl);
     encode(actual_size, bl);
-    encode(total_size_storage_class_ia, bl);
+    encode(total_size_ia, bl);
+    encode(total_size_rounded_ia, bl);
+    encode(num_entries_ia, bl);
+    encode(actual_size_ia, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
@@ -608,9 +621,15 @@ struct rgw_bucket_category_stats {
       actual_size = total_size;
     }
     if (struct_v >= 4) {
-      decode(total_size_storage_class_ia, bl);
+      decode(total_size_ia, bl);
+      decode(total_size_rounded_ia, bl);
+      decode(num_entries_ia, bl);
+      decode(actual_size_ia, bl);
     } else {
-      total_size_storage_class_ia = total_size;
+      total_size_ia = 0;
+      total_size_rounded_ia = 0;
+      num_entries_ia = 0;
+      actual_size_ia = 0;
     }
     DECODE_FINISH(bl);
   }
@@ -760,11 +779,14 @@ struct rgw_usage_data {
   uint64_t successful_ops;
   uint64_t bytes_sent_ia;
   uint64_t bytes_received_ia;
+  uint64_t ops_ia;
+  uint64_t successful_ops_ia;
 
   rgw_usage_data() : bytes_sent(0), bytes_received(0), ops(0), successful_ops(0), bytes_sent_ia(0),
-                     bytes_received_ia(0) {}
+                     bytes_received_ia(0), ops_ia(0), successful_ops_ia(0) {}
   rgw_usage_data(uint64_t sent, uint64_t received) : bytes_sent(sent), bytes_received(received), ops(0),
-                                                     successful_ops(0), bytes_sent_ia(0), bytes_received_ia(0) {}
+                                                     successful_ops(0), bytes_sent_ia(0), bytes_received_ia(0), ops_ia(0),
+                                                     successful_ops_ia(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
@@ -774,6 +796,8 @@ struct rgw_usage_data {
     encode(successful_ops, bl);
     encode(bytes_sent_ia, bl);
     encode(bytes_received_ia, bl);
+    encode(ops_ia, bl);
+    encode(successful_ops_ia, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -786,9 +810,13 @@ struct rgw_usage_data {
     if (struct_v >= 2) {
       decode(bytes_sent_ia, bl);
       decode(bytes_received_ia, bl);
+      decode(ops_ia, bl);
+      decode(successful_ops_ia, bl);
     } else {
-      bytes_sent_ia = bytes_sent;
-      bytes_received_ia = bytes_received;
+      bytes_sent_ia = 0;
+      bytes_received_ia = 0;
+      ops_ia = 0;
+      successful_ops_ia = 0;
     }
     DECODE_FINISH(bl);
   }
@@ -800,6 +828,8 @@ struct rgw_usage_data {
     successful_ops += usage.successful_ops;
     bytes_sent_ia += usage.bytes_sent_ia;
     bytes_received_ia += usage.bytes_received_ia;
+    ops_ia += usage.ops_ia;
+    successful_ops_ia += usage.successful_ops_ia;
   }
 };
 WRITE_CLASS_ENCODER(rgw_usage_data)
@@ -859,8 +889,8 @@ struct rgw_usage_log_entry {
       decode(total_usage.bytes_sent_ia, bl);
       decode(total_usage.bytes_received_ia, bl);
     } else {
-      total_usage.bytes_sent_ia = total_usage.bytes_sent;
-      total_usage.bytes_received_ia = total_usage.bytes_received;
+      total_usage.bytes_sent_ia = 0;
+      total_usage.bytes_received_ia = 0;
     }
     DECODE_FINISH(bl);
   }

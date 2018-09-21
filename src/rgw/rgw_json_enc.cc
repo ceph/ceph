@@ -665,9 +665,14 @@ void RGWStorageStats::dump(Formatter *f) const
   encode_json("size_kb", rgw_rounded_kb(size), f);
   encode_json("size_kb_actual", rgw_rounded_kb(size_rounded), f);
   encode_json("size_kb_utilized", rgw_rounded_kb(size_utilized), f);
-  encode_json("size_ia", size_ia, f);
-  encode_json("size_ia_kb", rgw_rounded_kb(size_ia), f);
   encode_json("num_objects", num_objects, f);
+  encode_json("size_ia", size_ia, f);
+  encode_json("size_actual_ia", size_rounded_ia, f);
+  encode_json("size_utilized_ia", size_utilized_ia, f);
+  encode_json("size_kb_ia", rgw_rounded_kb(size_ia), f);
+  encode_json("size_kb_actual_ia", rgw_rounded_kb(size_rounded_ia), f);
+  encode_json("size_kb_utilized_ia", rgw_rounded_kb(size_utilized_ia), f);
+  encode_json("num_objects_ia", num_objects_ia, f);
 }
 
 void RGWRedirectInfo::dump(Formatter *f) const

@@ -9108,8 +9108,11 @@ static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
     s.size += header_stats.total_size;
     s.size_rounded += header_stats.total_size_rounded;
     s.size_utilized += header_stats.actual_size;
-    s.size_ia += header_stats.total_size_storage_class_ia;
     s.num_objects += header_stats.num_entries;
+    s.size_ia += header_stats.total_size_ia;
+    s.size_rounded_ia += header_stats.total_size_rounded_ia;
+    s.size_utilized_ia += header_stats.actual_size_ia;
+    s.num_objects_ia += header_stats.num_entries_ia;
   }
 }
 
@@ -10537,10 +10540,14 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
     RGWObjState *state;
     bufferlist bl;
     int ret = store->get_obj_state(&rctx, target->bucket_info, obj, &state, false);
+    if (ret < 0) {
+      return ret;
+    }
     state->get_attr(RGW_ATTR_PLACEMENT_STORAGE_CLASS, bl);
     storage_class = bl.to_str();
   }
   ent.meta.placement_storage_class = storage_class;
+  ent.meta.storage_class_standard_ia_min_size = store->ctx()->_conf->rgw_storage_class_standard_ia_min_size;
   ACLOwner owner;
   if (acl_bl && acl_bl->length()) {
     int ret = store->decode_policy(*acl_bl, &owner);
@@ -11173,7 +11180,10 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb)
 
   RGWObjectCtx& obj_ctx = source->get_ctx();
   RGWObjState *astate = NULL;
-  store->get_obj_state(&obj_ctx, source->get_bucket_info(), state.obj, &astate, false);
+  int ret = store->get_obj_state(&obj_ctx, source->get_bucket_info(), state.obj, &astate, false);
+  if (ret < 0) {
+    return ret;
+  }
 
   data->rados = store;
   data->io_ctx.dup(state.io_ctx);
@@ -12263,6 +12273,9 @@ public:
       stats.size = hs.total_bytes;
       stats.size_rounded = hs.total_bytes_rounded;
       stats.num_objects = hs.total_entries;
+      stats.size_ia = hs.total_bytes_ia;
+      stats.size_rounded_ia = hs.total_bytes_rounded_ia;
+      stats.num_objects_ia = hs.total_entries_ia;
 
       cb->set_response(stats);
     }
@@ -12287,6 +12300,10 @@ int RGWRados::get_user_stats(const rgw_user& user, RGWStorageStats& stats)
   stats.size = hs.total_bytes;
   stats.size_rounded = hs.total_bytes_rounded;
   stats.num_objects = hs.total_entries;
+
+  stats.size_ia = hs.total_bytes_ia;
+  stats.size_rounded_ia = hs.total_bytes_rounded_ia;
+  stats.num_objects_ia = hs.total_entries_ia;
 
   return 0;
 }
@@ -13927,6 +13944,9 @@ int RGWRados::cls_user_sync_bucket_stats(rgw_raw_obj& user_obj, const RGWBucketI
       entry.size += header_stats.total_size;
       entry.size_rounded += header_stats.total_size_rounded;
       entry.count += header_stats.num_entries;
+      entry.size_ia += header_stats.total_size_ia;
+      entry.size_rounded_ia += header_stats.total_size_rounded_ia;
+      entry.count_ia += header_stats.num_entries_ia;
     }
   }
 
@@ -13966,6 +13986,9 @@ int RGWRados::cls_user_get_bucket_stats(const rgw_bucket& bucket, cls_user_bucke
       entry.size += header_stats.total_size;
       entry.size_rounded += header_stats.total_size_rounded;
       entry.count += header_stats.num_entries;
+      entry.size_ia += header_stats.total_size_ia;
+      entry.size_rounded_ia += header_stats.total_size_rounded_ia;
+      entry.count_ia += header_stats.num_entries_ia;
     }
   }
 

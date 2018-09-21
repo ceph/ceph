@@ -104,11 +104,15 @@ struct cls_user_bucket_entry {
   ceph::real_time creation_time;
   uint64_t count;
   bool user_stats_sync;
+  size_t size_ia;
+  size_t size_rounded_ia;
+  uint64_t count_ia;
 
-  cls_user_bucket_entry() : size(0), size_rounded(0), count(0), user_stats_sync(false) {}
+  cls_user_bucket_entry() : size(0), size_rounded(0), count(0), user_stats_sync(false),
+                            size_ia(0), size_rounded_ia(0), count_ia(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(9, 5, bl);
+    ENCODE_START(10, 5, bl);
     uint64_t s = size;
     __u32 mt = ceph::real_clock::to_time_t(creation_time);
     string empty_str;  // originally had the bucket name here, but we encode bucket later
@@ -122,10 +126,15 @@ struct cls_user_bucket_entry {
     encode(user_stats_sync, bl);
     encode(creation_time, bl);
     //::encode(placement_rule, bl); removed in v9
+    s = size_ia;
+    encode(s, bl);
+    s = size_rounded_ia;
+    encode(s, bl);
+    encode(count_ia, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(9, 5, 5, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(10, 5, 5, bl);
     __u32 mt;
     uint64_t s;
     string empty_str;  // backward compatibility
@@ -151,6 +160,11 @@ struct cls_user_bucket_entry {
       std::string placement_rule;
       decode(placement_rule, bl);
     }
+    if (struct_v == 10) {
+      decode(size_ia, bl);
+      decode(size_rounded_ia, bl);
+      decode(count_ia, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -162,24 +176,42 @@ struct cls_user_stats {
   uint64_t total_entries;
   uint64_t total_bytes;
   uint64_t total_bytes_rounded;
+  uint64_t total_entries_ia;
+  uint64_t total_bytes_ia;
+  uint64_t total_bytes_rounded_ia;
 
   cls_user_stats()
     : total_entries(0),
       total_bytes(0),
-      total_bytes_rounded(0) {}
+      total_bytes_rounded(0),
+      total_entries_ia(0),
+      total_bytes_ia(0),
+      total_bytes_rounded_ia(0){}
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(total_entries, bl);
     encode(total_bytes, bl);
     encode(total_bytes_rounded, bl);
+    encode(total_entries_ia, bl);
+    encode(total_bytes_ia, bl);
+    encode(total_bytes_rounded_ia, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(total_entries, bl);
     decode(total_bytes, bl);
     decode(total_bytes_rounded, bl);
+    if (struct_v >= 2) {
+      decode(total_entries_ia, bl);
+      decode(total_bytes_ia, bl);
+      decode(total_bytes_rounded_ia, bl);
+    } else {
+      total_entries_ia = 0;
+      total_bytes_ia = 0;
+      total_bytes_rounded_ia = 0;
+    }
     DECODE_FINISH(bl);
   }
 

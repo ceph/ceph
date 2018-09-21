@@ -356,6 +356,9 @@ void rgw_cls_bucket_update_stats_op::generate_test_instances(list<rgw_cls_bucket
   s.total_size = 1;
   s.total_size_rounded = 4096;
   s.num_entries = 1;
+  s.total_size_ia = 1;
+  s.total_size_rounded_ia = 4096;
+  s.num_entries_ia = 1;
   o.push_back(r);
 
   o.push_back(new rgw_cls_bucket_update_stats_op);

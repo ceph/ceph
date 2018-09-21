@@ -255,9 +255,18 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_buc
         decode(entry, iter);
         *key = entry.key;
         *category = entry.meta.category;
-        accounted_stats->num_entries++;
-        accounted_stats->total_size += entry.meta.accounted_size;
-        accounted_stats->total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+        if(entry.meta.placement_storage_class.compare("STANDARD_IA")==0) {
+          accounted_stats->num_entries_ia++;
+          if (entry.meta.accounted_size < entry.meta.storage_class_standard_ia_min_size)
+            accounted_stats->total_size_ia += entry.meta.storage_class_standard_ia_min_size;
+          else
+            accounted_stats->total_size_ia += entry.meta.accounted_size;
+          accounted_stats->total_size_rounded_ia += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+        } else {
+          accounted_stats->num_entries++;
+          accounted_stats->total_size += entry.meta.accounted_size;
+          accounted_stats->total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+        }
         account = true;
       }
       break;
@@ -487,6 +496,10 @@ void rgw_bucket_category_stats::generate_test_instances(list<rgw_bucket_category
   s->total_size_rounded = 4096;
   s->num_entries = 2;
   s->actual_size = 1024;
+  s->total_size_ia = 1024;
+  s->total_size_rounded_ia = 4096;
+  s->num_entries_ia = 2;
+  s->actual_size_ia = 1024;
   o.push_back(s);
   o.push_back(new rgw_bucket_category_stats);
 }
@@ -497,7 +510,10 @@ void rgw_bucket_category_stats::dump(Formatter *f) const
   f->dump_unsigned("total_size_rounded", total_size_rounded);
   f->dump_unsigned("num_entries", num_entries);
   f->dump_unsigned("actual_size", actual_size);
-  f->dump_unsigned("total_size_ia", total_size_storage_class_ia);
+  f->dump_unsigned("total_size_ia", total_size_ia);
+  f->dump_unsigned("total_size_rounded_ia", total_size_rounded_ia);
+  f->dump_unsigned("num_entries_ia", num_entries_ia);
+  f->dump_unsigned("actual_size_ia", actual_size_ia);
 }
 
 void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>& o)

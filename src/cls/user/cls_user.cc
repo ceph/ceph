@@ -92,6 +92,9 @@ static void add_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry
   stats->total_entries += entry.count;
   stats->total_bytes += entry.size;
   stats->total_bytes_rounded += entry.size_rounded;
+  stats->total_entries_ia += entry.count_ia;
+  stats->total_bytes_ia += entry.size_ia;
+  stats->total_bytes_rounded_ia += entry.size_rounded_ia;
 }
 
 static void dec_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry)
@@ -99,6 +102,9 @@ static void dec_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry
   stats->total_bytes -= entry.size;
   stats->total_bytes_rounded -= entry.size_rounded;
   stats->total_entries -= entry.count;
+  stats->total_bytes_ia -= entry.size_ia;
+  stats->total_bytes_rounded_ia -= entry.size_rounded_ia;
+  stats->total_entries_ia -= entry.count_ia;
 }
 
 static void apply_entry_stats(const cls_user_bucket_entry& src_entry, cls_user_bucket_entry *target_entry)
@@ -106,6 +112,9 @@ static void apply_entry_stats(const cls_user_bucket_entry& src_entry, cls_user_b
   target_entry->size = src_entry.size;
   target_entry->size_rounded = src_entry.size_rounded;
   target_entry->count = src_entry.count;
+  target_entry->size_ia = src_entry.size_ia;
+  target_entry->size_rounded_ia = src_entry.size_rounded_ia;
+  target_entry->count_ia = src_entry.count_ia;
 }
 
 static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)

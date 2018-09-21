@@ -1435,13 +1435,18 @@ struct RGWStorageStats
   uint64_t size_utilized{0}; //< size after compression, encryption
   uint64_t num_objects;
   uint64_t size_ia{0}; // storage class ia size
+  uint64_t size_rounded_ia{0};
+  uint64_t size_utilized_ia{0}; //< size after compression, encryption
+  uint64_t num_objects_ia{0};
 
   RGWStorageStats()
     : category(RGW_OBJ_CATEGORY_NONE),
       size(0),
       size_rounded(0),
       num_objects(0),
-      size_ia(0) {}
+      size_ia(0),
+      size_rounded_ia(0),
+      num_objects_ia(0) {}
 
   void dump(Formatter *f) const;
 };

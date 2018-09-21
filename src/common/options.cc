@@ -6156,6 +6156,10 @@ std::vector<Option> get_rgw_options() {
     .set_default(true)
     .set_description("Enable stats on bucket listing in Swift"),
 
+    Option("rgw_storage_class_standard_ia_min_size", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(65536)
+    .set_description(""),
+
     Option("rgw_reshard_num_logs", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(16)
     .set_description(""),

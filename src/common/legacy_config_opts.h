@@ -1534,6 +1534,9 @@ OPTION(rgw_swift_custom_header, OPT_STR) // option to enable swift custom header
 
 OPTION(rgw_swift_need_stats, OPT_BOOL) // option to enable stats on bucket listing for swift
 
+/* rgw storage class */
+OPTION(rgw_storage_class_standard_ia_min_size, OPT_INT) // min size for STANDARD_IA storage class object
+
 /* resharding tunables */
 OPTION(rgw_reshard_num_logs, OPT_INT)
 OPTION(rgw_reshard_bucket_lock_duration, OPT_INT) // duration of lock on bucket obj during resharding

@@ -642,10 +642,12 @@ void RGWGetUsage_ObjStore_S3::send_response()
        formatter->open_object_section("Total");
        formatter->dump_int("BytesSent", total_usage.bytes_sent);
        formatter->dump_int("BytesReceived", total_usage.bytes_received);
-       formatter->dump_int("BytesSent_IA", total_usage.bytes_sent_ia);
-       formatter->dump_int("BytesReceived_IA", total_usage.bytes_received_ia);
        formatter->dump_int("Ops", total_usage.ops);
        formatter->dump_int("SuccessfulOps", total_usage.successful_ops);
+       formatter->dump_int("BytesSent_IA", total_usage.bytes_sent_ia);
+       formatter->dump_int("BytesReceived_IA", total_usage.bytes_received_ia);
+       formatter->dump_int("Ops_IA", total_usage.ops_ia);
+       formatter->dump_int("SuccessfulOps_IA", total_usage.successful_ops_ia);
        formatter->close_section(); // total
        formatter->close_section(); // user
      }
@@ -657,6 +659,9 @@ void RGWGetUsage_ObjStore_S3::send_response()
      formatter->dump_int("TotalBytes", header.stats.total_bytes);
      formatter->dump_int("TotalBytesRounded", header.stats.total_bytes_rounded);
      formatter->dump_int("TotalEntries", header.stats.total_entries);
+     formatter->dump_int("TotalBytes_IA", header.stats.total_bytes_ia);
+     formatter->dump_int("TotalBytesRounded_IA", header.stats.total_bytes_rounded_ia);
+     formatter->dump_int("TotalEntries_IA", header.stats.total_entries_ia);
 
      if (s->cct->_conf->rgw_rest_getusage_op_compat) {
        formatter->close_section(); //Stats

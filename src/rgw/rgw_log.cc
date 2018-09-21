@@ -23,6 +23,16 @@ static void set_param_str(struct req_state *s, const char *name, string& str)
     str = p;
 }
 
+static inline int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs)
+{
+  RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
+  RGWRados::Object::Read read_op(&op_target);
+
+  read_op.params.attrs = &attrs;
+
+  return read_op.prepare();
+}
+
 string render_log_object_name(const string& format,
 			      struct tm *dt, string& bucket_id,
 			      const string& bucket_name)
@@ -224,22 +234,52 @@ static void log_usage(RGWRados *store, struct req_state *s, const string& op_nam
       break;
     }
   }
+
+  if(storage_class.empty() && !s->object.name.empty() && !s->bucket.name.empty()) {
+    //only object have storage class, op on bucket will get err
+    //op likes get acl, set acl, the placement id is none, so we need get storage class from obj xattr
+    map<string, bufferlist> xattrs;
+    map<string, bufferlist>::iterator iter;
+    rgw_obj obj;
+    obj = rgw_obj(s->bucket, s->object);
+    store->set_atomic(s->obj_ctx, obj);
+    int res = get_obj_attrs(store, s, obj, xattrs);
+    if (res == 0) {
+      map<string, bufferlist>::iterator placement_storage_class_iter = xattrs.find(RGW_ATTR_PLACEMENT_STORAGE_CLASS);
+      if (placement_storage_class_iter != xattrs.end()) {
+        bufferlist &bl = placement_storage_class_iter->second;
+        storage_class = bl.to_str();
+        ldout(s->cct, 20) << "log_usage: get_obj_attrs, storage_class=" << storage_class << dendl;
+      }
+    } else {
+      storage_class = "STANDARD";
+      ldout(s->cct, 0) << "log_usage: get_obj_attrs failed, set storage_class to STANDARD" << dendl;
+    }
+  } else {
+    storage_class = "STANDARD";
+  }
+
   if(storage_class.compare("STANDARD_IA") == 0) {
     data.bytes_sent_ia = bytes_sent;
     data.bytes_received_ia = bytes_received;
+    data.ops_ia = 1;
+    if (!s->is_err())
+      data.successful_ops_ia = 1;
+    ldout(s->cct, 30) << "log_usage: bucket_name=" << bucket_name
+                      << " tenant=" << s->bucket_tenant
+                      << ", bytes_sent_ia=" << bytes_sent << ", bytes_received_ia="
+                      << bytes_received << ", success_ia=" << data.successful_ops_ia << dendl;
   } else {
-    data.bytes_sent_ia = 0;
-    data.bytes_received_ia = 0;
+    data.bytes_sent = bytes_sent;
+    data.bytes_received = bytes_received;
+    data.ops = 1;
+    if (!s->is_err())
+      data.successful_ops = 1;
+    ldout(s->cct, 30) << "log_usage: bucket_name=" << bucket_name
+                      << " tenant=" << s->bucket_tenant
+                      << ", bytes_sent=" << bytes_sent << ", bytes_received="
+                      << bytes_received << ", success=" << data.successful_ops << dendl;
   }
-
-  data.ops = 1;
-  if (!s->is_err())
-    data.successful_ops = 1;
-
-  ldout(s->cct, 30) << "log_usage: bucket_name=" << bucket_name
-	<< " tenant=" << s->bucket_tenant
-	<< ", bytes_sent=" << bytes_sent << ", bytes_received="
-	<< bytes_received << ", success=" << data.successful_ops << dendl;
 
   entry.add(op_name, data);
 
