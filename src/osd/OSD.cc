@@ -1702,11 +1702,19 @@ void OSDService::set_ready_to_merge_source(PG *pg)
   _send_ready_to_merge();
 }
 
-void OSDService::set_ready_to_merge_target(PG *pg)
+void OSDService::set_ready_to_merge_target(PG *pg, epoch_t last_epoch_clean)
 {
   Mutex::Locker l(merge_lock);
   dout(10) << __func__ << " " << pg->pg_id << dendl;
-  ready_to_merge_target.insert(pg->pg_id.pgid);
+  ready_to_merge_target.insert(make_pair(pg->pg_id.pgid, last_epoch_clean));
+  _send_ready_to_merge();
+}
+
+void OSDService::set_not_ready_to_merge_source(pg_t pgid)
+{
+  Mutex::Locker l(merge_lock);
+  dout(10) << __func__ << " " << pgid << dendl;
+  not_ready_to_merge_source.insert(pgid);
   _send_ready_to_merge();
 }
 
@@ -1718,10 +1726,28 @@ void OSDService::send_ready_to_merge()
 
 void OSDService::_send_ready_to_merge()
 {
+  for (auto src : not_ready_to_merge_source) {
+    if (sent_ready_to_merge_source.count(src) == 0) {
+      monc->send_mon_message(new MOSDPGReadyToMerge(
+			       src,
+			       0,
+			       false,
+			       osdmap->get_epoch()));
+      sent_ready_to_merge_source.insert(src);
+    }
+  }
   for (auto src : ready_to_merge_source) {
-    if (ready_to_merge_target.count(src.get_parent()) &&
+    if (not_ready_to_merge_source.count(src)) {
+      continue;
+    }
+    auto p = ready_to_merge_target.find(src.get_parent());
+    if (p != ready_to_merge_target.end() &&
 	sent_ready_to_merge_source.count(src) == 0) {
-      monc->send_mon_message(new MOSDPGReadyToMerge(src, osdmap->get_epoch()));
+      monc->send_mon_message(new MOSDPGReadyToMerge(
+			       src,
+			       p->second,  // PG's last_epoch_clean
+			       true,
+			       osdmap->get_epoch()));
       sent_ready_to_merge_source.insert(src);
     }
   }
@@ -1733,6 +1759,7 @@ void OSDService::clear_ready_to_merge(PG *pg)
   dout(10) << __func__ << " " << pg->pg_id << dendl;
   ready_to_merge_source.erase(pg->pg_id.pgid);
   ready_to_merge_target.erase(pg->pg_id.pgid);
+  not_ready_to_merge_source.erase(pg->pg_id.pgid);
 }
 
 void OSDService::clear_sent_ready_to_merge()
@@ -8130,7 +8157,10 @@ bool OSD::advance_pg(
 	    unsigned new_pg_num = nextmap->get_pg_num(pg->pg_id.pool());
 	    unsigned split_bits = pg->pg_id.get_split_bits(new_pg_num);
 	    dout(1) << __func__ << " merging " << pg->pg_id << dendl;
-	    pg->merge_from(sources, rctx, split_bits);
+	    pg->merge_from(
+	      sources, rctx, split_bits,
+	      nextmap->get_pg_pool(
+		pg->pg_id.pool())->get_pg_num_dec_last_epoch_clean());
 	    pg->pg_slot->waiting_for_merge_epoch = 0;
 	  } else {
 	    dout(20) << __func__ << " not ready to merge yet" << dendl;
@@ -10009,20 +10039,8 @@ void OSDShard::prime_merges(const OSDMapRef& as_of_osdmap,
     } else {
       dout(20) << __func__ << "  creating empty merge participant " << pgid
 	       << " for merge in " << epoch << dendl;
-      // Construct a history with a single previous interval,
-      // going back to the epoch *before* pg_num_pending was
-      // adjusted (since we are creating the PG as it would have
-      // existed just before the merge). We know that the PG was
-      // clean as of that epoch or else pg_num_pending wouldn't
-      // have been adjusted.
+      // leave history zeroed; PG::merge_from() will fill it in.
       pg_history_t history;
-      history.same_interval_since = epoch - 1;
-      // leave these zeroed since we do not know the precist
-      // last_epoch_started value that the real PG instances have.  If
-      // we are greater than they are, we will trigger an 'incomplete'
-      // state (see choose_acting).
-      history.last_epoch_started = 0;
-      history.last_epoch_clean = 0;
       PGCreateInfo cinfo(pgid, epoch - 1,
 			 history, PastIntervals(), false);
       PGRef pg = osd->handle_pg_create_info(shard_osdmap, &cinfo);

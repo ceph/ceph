@@ -2338,7 +2338,7 @@ unsigned PG::get_scrub_priority()
   return pool_scrub_priority > 0 ? pool_scrub_priority : cct->_conf->osd_scrub_priority;
 }
 
-void PG::mark_clean()
+void PG::try_mark_clean()
 {
   if (actingset.size() == get_osdmap()->get_pg_size(info.pgid.pgid)) {
     state_clear(PG_STATE_FORCED_BACKFILL | PG_STATE_FORCED_RECOVERY);
@@ -2350,7 +2350,31 @@ void PG::mark_clean()
     dirty_info = true;
   }
 
-  kick_snap_trim();
+  if (is_active()) {
+    kick_snap_trim();
+  } else if (is_peered()) {
+    if (is_clean()) {
+      bool target;
+      if (pool.info.is_pending_merge(info.pgid.pgid, &target)) {
+	if (target) {
+	  ldout(cct, 10) << "ready to merge (target)" << dendl;
+	  osd->set_ready_to_merge_target(this, info.history.last_epoch_clean);
+	} else {
+	  ldout(cct, 10) << "ready to merge (source)" << dendl;
+	  osd->set_ready_to_merge_source(this);
+	}
+      }
+    } else {
+      ldout(cct, 10) << "not clean, not ready to merge" << dendl;
+      // we should have notified OSD in Active state entry point
+    }
+  }
+
+  state_clear(PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
+
+  share_pg_info();
+  publish_stats_to_osd();
+  requeue_ops(waiting_for_clean_to_primary_repair);
 }
 
 bool PG::set_force_recovery(bool b)
@@ -2652,7 +2676,8 @@ void PG::finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transac
 }
 
 void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
-		    unsigned split_bits)
+		    unsigned split_bits,
+		    epoch_t dec_last_epoch_clean)
 {
   dout(10) << __func__ << " from " << sources << " split_bits " << split_bits
 	   << dendl;
@@ -2733,10 +2758,23 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
   // make sure we have a meaningful last_epoch_started/clean (if we were a
   // placeholder)
   if (info.last_epoch_started == 0) {
-    info.history.last_epoch_started =
-      info.history.last_epoch_clean = past_intervals.get_bounds().first;
+    // start with (a) source's history, since these PGs *should* have been
+    // remapped in concert with each other...
+    info.history = sources.begin()->second->info.history;
+
+    // we use the pg_num_dec_last_epoch_clean we got from the caller, which is
+    // the epoch that was clean according to the target pg whe it requested
+    // the mon decrement pg_num.
+    info.history.last_epoch_clean = dec_last_epoch_clean;
+
+    // use last_epoch_clean value for last_epoch_started, though--we must be
+    // conservative here to avoid breaking peering, calc_acting, etc.
+    info.history.last_epoch_started = dec_last_epoch_clean;
+    info.last_epoch_started = dec_last_epoch_clean;
     dout(10) << __func__
-	     << " set last_epoch_started/clean based on past intervals"
+	     << " set last_epoch_{started,clean} to " << dec_last_epoch_clean
+	     << " from pg_num_dec_last_epoch_clean, source pg history was "
+	     << sources.begin()->second->info.history
 	     << dendl;
   }
 
@@ -7982,25 +8020,7 @@ PG::RecoveryState::Clean::Clean(my_context ctx)
   Context *c = pg->finish_recovery();
   context< RecoveryMachine >().get_cur_transaction()->register_on_commit(c);
 
-  if (pg->is_active()) {
-    pg->mark_clean();
-  } else if (pg->is_peered()) {
-    bool target;
-    if (pg->pool.info.is_pending_merge(pg->info.pgid.pgid, &target)) {
-      if (target) {
-	ldout(pg->cct, 10) << "ready to merge (target)" << dendl;
-	pg->osd->set_ready_to_merge_target(pg);
-      } else {
-	ldout(pg->cct, 10) << "ready to merge (source)" << dendl;
-	pg->osd->set_ready_to_merge_source(pg);
-      }
-    }
-  }
-  pg->state_clear(PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
-
-  pg->share_pg_info();
-  pg->publish_stats_to_osd();
-  pg->requeue_ops(pg->waiting_for_clean_to_primary_repair);
+  pg->try_mark_clean();
 }
 
 void PG::RecoveryState::Clean::exit()
@@ -8392,25 +8412,40 @@ boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
 boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActivated &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  pg_t pgid = pg->info.pgid.pgid;
+
   all_replicas_activated = true;
 
   pg->state_clear(PG_STATE_ACTIVATING);
   pg->state_clear(PG_STATE_CREATING);
   pg->state_clear(PG_STATE_PREMERGE);
 
-  if (pg->acting.size() < pg->pool.info.min_size) {
-    pg->state_set(PG_STATE_PEERED);
-  } else if (pg->pool.info.is_pending_merge(pg->info.pgid.pgid, nullptr)) {
+  bool merge_target;
+  if (pg->pool.info.is_pending_merge(pgid, &merge_target)) {
     pg->state_set(PG_STATE_PEERED);
     pg->state_set(PG_STATE_PREMERGE);
+
+    if (pg->actingset.size() != pg->get_osdmap()->get_pg_size(pgid)) {
+      if (merge_target) {
+	pg_t src = pgid;
+	src.set_ps(pg->pool.info.get_pg_num_pending());
+	assert(src.get_parent() == pgid);
+	pg->osd->set_not_ready_to_merge_source(src);
+      } else {
+	pg->osd->set_not_ready_to_merge_source(pgid);
+      }
+    }
+  } else if (pg->acting.size() < pg->pool.info.min_size) {
+    pg->state_set(PG_STATE_PEERED);
   } else {
     pg->state_set(PG_STATE_ACTIVE);
   }
 
   // info.last_epoch_started is set during activate()
   if (pg->info.history.last_epoch_started == 0) {
-    pg->osd->send_pg_created(pg->info.pgid.pgid);
+    pg->osd->send_pg_created(pgid);
   }
+
   pg->info.history.last_epoch_started = pg->info.last_epoch_started;
   pg->info.history.last_interval_started = pg->info.last_interval_started;
   pg->dirty_info = true;
