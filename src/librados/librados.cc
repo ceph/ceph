@@ -2701,10 +2701,22 @@ namespace {
     if (!parser.parse(outbl.c_str(), outbl.length())) {
       return -EINVAL;
     }
+    
+    vector<string> v;
     if (!parser.is_array()) {
-      return -EINVAL;
+      JSONObj *pgstat_obj = parser.find_obj("pg_stats");
+      if (NULL == pgstat_obj)
+        return 0;
+      string s = pgstat_obj->get_data();
+      JSONParser pg_stats;
+      if (!pg_stats.parse(s.c_str(), s.length()))
+        return -EINVAL;
+      v = pg_stats.get_array_elements();
     }
-    vector<string> v = parser.get_array_elements();
+    else {
+      v = parser.get_array_elements();
+    }
+
     for (auto i : v) {
       JSONParser pg_json;
       if (!pg_json.parse(i.c_str(), i.length())) {
