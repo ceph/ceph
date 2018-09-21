@@ -7006,6 +7006,13 @@ TEST_P(StoreTestSpecificAUSize, fsckOnUnalignedDevice2) {
   store->mount();
 }
 
+namespace {
+  ghobject_t make_object(const char* name, int64_t pool) {
+    sobject_t soid{name, CEPH_NOSNAP};
+    uint32_t hash = std::hash<sobject_t>{}(soid);
+    return ghobject_t{hobject_t{soid, "", hash, pool, ""}};
+  }
+}
 TEST_P(StoreTest, BluestoreRepairTest) {
   if (string(GetParam()) != "bluestore")
     return;
@@ -7021,15 +7028,16 @@ TEST_P(StoreTest, BluestoreRepairTest) {
   BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
 
   // fill the store with some data
-  coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
+  const uint64_t pool = 555;
+  coll_t cid(spg_t(pg_t(0, pool), shard_id_t::NO_SHARD));
   auto ch = store->create_new_collection(cid);
 
-  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
-  ghobject_t hoid_dup(hobject_t(sobject_t("Object 1(dup)", CEPH_NOSNAP)));
-  ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  ghobject_t hoid = make_object("Object 1", pool);
+  ghobject_t hoid_dup = make_object("Object 1(dup)", pool);
+  ghobject_t hoid2 = make_object("Object 2", pool);
   ghobject_t hoid_cloned = hoid2;
   hoid_cloned.hobj.snap = 1;
-  ghobject_t hoid3(hobject_t(sobject_t("Object 3", CEPH_NOSNAP)));
+  ghobject_t hoid3 = make_object("Object 3", pool);
   ghobject_t hoid3_cloned = hoid3;
   hoid3_cloned.hobj.snap = 1;
   bufferlist bl;
