@@ -853,6 +853,7 @@ bool DaemonServer::handle_command(MCommand *m)
       ss << "pg " << pgid << " primary osd." << acting_primary
 	 << " is not currently connected";
       cmdctx->reply(-EAGAIN, ss);
+      return true;
     }
     vector<pg_t> pgs = { pgid };
     for (auto& con : p->second) {
