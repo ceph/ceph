@@ -1001,11 +1001,20 @@ void ECBackend::handle_sub_read(
       }
 
       if (r < 0) {
-	get_parent()->clog_error() << "Error " << r
-				   << " reading object "
-				   << i->first;
-	dout(5) << __func__ << ": Error " << r
-		<< " reading " << i->first << dendl;
+	// if we are doing fast reads, it's possible for one of the shard
+	// reads to cross paths with another update and get a (harmless)
+	// ENOENT.  Suppress the message to the cluster log in that case.
+	if (r == -ENOENT && get_parent()->get_pool().fast_read) {
+	  dout(5) << __func__ << ": Error " << r
+		  << " reading " << i->first << ", fast read, probably ok"
+		  << dendl;
+	} else {
+	  get_parent()->clog_error() << "Error " << r
+				     << " reading object "
+				     << i->first;
+	  dout(5) << __func__ << ": Error " << r
+		  << " reading " << i->first << dendl;
+	}
 	goto error;
       } else {
         dout(20) << __func__ << " read request=" << j->get<1>() << " r=" << r << " len=" << bl.length() << dendl;
