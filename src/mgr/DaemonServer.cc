@@ -213,7 +213,7 @@ bool DaemonServer::ms_verify_authorizer(
 	is_valid = false;
       }
     }
-    con->set_priv(s->get());
+    con->set_priv(s);
 
     if (peer_type == CEPH_ENTITY_TYPE_OSD) {
       Mutex::Locker l(lock);
