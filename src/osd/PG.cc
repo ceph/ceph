@@ -1569,8 +1569,8 @@ void PG::choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
     if (auth_version > candidate_version) {
       approx_missing_objects += auth_version - candidate_version;
     }
-    if (approx_missing_objects > cct->_conf.get_val<uint64_t>(
-        "osd_async_recovery_min_cost")) {
+    if (static_cast<uint64_t>(approx_missing_objects) >
+	cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
       candidates_by_cost.insert(make_pair(approx_missing_objects, shard_i));
     }
   }
@@ -1622,8 +1622,8 @@ void PG::choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_
     } else {
       approx_missing_objects += candidate_version - auth_version;
     }
-    if (approx_missing_objects  > cct->_conf.get_val<uint64_t>(
-        "osd_async_recovery_min_cost")) {
+    if (static_cast<uint64_t>(approx_missing_objects)  >
+	cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
       candidates_by_cost.insert(make_pair(approx_missing_objects, shard_i));
     }
   }
