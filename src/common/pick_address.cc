@@ -226,6 +226,8 @@ static int fill_in_one_address(
   const struct sockaddr *found = find_ip_in_subnet_list(cct, ifa, ipv, networks,
 							interfaces);
   if (!found) {
+    lderr(cct) << "unable to find any IP address in networks '" << networks
+	       << "' interfaces '" << interfaces << "'" << dendl;
     return -1;
   }
 
@@ -241,6 +243,7 @@ static int fill_in_one_address(
 		    nullptr, 0,
 		    NI_NUMERICHOST);
   if (err != 0) {
+    lderr(cct) << "unable to convert chosen address to string: " << gai_strerror(err) << dendl;
     return -1;
   }
 
@@ -315,6 +318,7 @@ int pick_addresses(
     interfaces =
       cct->_conf.get_val<std::string>("cluster_network_interface");
     if (networks.empty()) {
+      lderr(cct) << "Falling back to public interface" << dendl;
       // fall back to public_ network and interface if cluster is not set
       networks = cct->_conf.get_val<std::string>("public_network");
       interfaces =
@@ -326,17 +330,26 @@ int pick_addresses(
     // note: pass in ipv to filter the matching addresses
     if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
 	(flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
-      fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4, networks, interfaces,
-			  addrs);
+      int r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4, networks, interfaces,
+				  addrs);
+      if (r < 0) {
+	return r;
+      }
     }
     if (ipv & CEPH_PICK_ADDRESS_IPV6) {
-      fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV6, networks, interfaces,
-			  addrs);
+      int r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV6, networks, interfaces,
+				  addrs);
+      if (r < 0) {
+	return r;
+      }
     }
     if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
 	!(flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
-      fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4, networks, interfaces,
-			  addrs);
+      int r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4, networks, interfaces,
+				  addrs);
+      if (r < 0) {
+	return r;
+      }
     }
   }
 
